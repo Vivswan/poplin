@@ -8,8 +8,13 @@ import { type Bench, cleanUp, folderOf, jsonOf, openBench } from "./support/harn
 const PAGES = { "index.html": "<title>Field notes</title><h1>notes</h1>", "css/site.css": "body{}", ".env": "KEY=1" };
 
 /** A JSON answer in the install's place. */
-function answer(status: number, body: unknown): Response {
-  return new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
+function answer(status: number, body: unknown, headers: Readonly<Record<string, string>> = {}): Response {
+  return new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json", ...headers } });
+}
+
+/** The page a zone's rate rule answers with in the install's place: no JSON, and whatever headers the rule sends. */
+function tooMany(headers: Readonly<Record<string, string>>): Response {
+  return new Response("<html><title>Too many requests</title></html>", { status: 429, headers: { "Content-Type": "text/html", ...headers } });
 }
 
 /** What the install holds that only a finished publish may change: the sites, and the keys of the store. */
@@ -248,5 +253,126 @@ describe("publish", () => {
     expect(watched.status.at(-2)).toBe("uploading 2/2 files, 46 B of 46 B");
     expect(watched.status.at(-1)).toBe("");
     expect(watched.out.length).toBe(3);
+  });
+
+  // Drift: the 429 here is the zone's and no code of this repository's: its page is no JSON, its rule counts every request to the zone, and nothing but these rows says what the upload makes of it.
+  test.each<[string, (request: Request) => Response | undefined, number[], number]>([
+    ["a zone's page that names a wait, three times", (request) => (request.method === "PUT" ? tooMany({ "Retry-After": "7" }) : undefined), [7000, 7000, 7000], 3],
+    ["a zone's page that names none, three times", (request) => (request.method === "PUT" ? tooMany({}) : undefined), [2000, 4000, 8000], 3],
+    ["the install's own refusal that names an hour", (request) => (request.method === "PUT" ? answer(429, { error: { code: "too_many_requests", message: "no" } }, { "Retry-After": "3600" }) : undefined), [60_000], 1],
+    ["a finish the zone refuses", (request) => (request.url.endsWith("/finish") ? tooMany({ "Retry-After": "3" }) : undefined), [3000], 1],
+  ])("an upload answered 429 by %s rests that long and goes through: without this a large publish on a zone that counts its requests is given up", async (_name, refuse, waits, times) => {
+    const bench = await openBench();
+    const folder = folderOf("notes", { "index.html": "<h1>notes</h1>" });
+    let left = times;
+
+    bench.hook = (request) => {
+      const refused = left === 0 ? undefined : refuse(request);
+      if (refused !== undefined) left -= 1;
+
+      return refused;
+    };
+
+    const made = await bench.run(folder, { terminal: { asks: false, progress: true } });
+
+    expect([made.code, made.err, made.waits]).toEqual([0, [], waits]);
+    expect(made.status.filter((line) => line.startsWith("the install asks for a pause"))).toEqual(waits.map((ms) => `the install asks for a pause: going on in ${ms / 1000} s (Ctrl-C stops)`));
+    expect((await bench.install.keys()).length).toBe(1);
+  });
+
+  // Drift: four files are on their way at once; a rest of each lane's own would tell one refusal four times, and send three more requests into a full count.
+  test("four uploads refused at once share one rest", async () => {
+    const bench = await openBench();
+    const folder = folderOf("notes", { "index.html": "<h1>notes</h1>", "a.css": "a{}", "b.css": "b{}", "c.css": "c{}" });
+    let left = 4;
+
+    bench.hook = (request) => {
+      if (request.method !== "PUT" || left === 0) return undefined;
+
+      left -= 1;
+
+      return tooMany({ "Retry-After": "5" });
+    };
+    // The rest ends only once every lane has had its answer.
+    bench.paused = () => new Promise((resolve) => setTimeout(() => resolve(undefined), 20));
+
+    const made = await bench.run(folder);
+
+    expect([made.code, made.waits, bench.sent.filter((line) => line.startsWith("PUT")).length]).toEqual([0, [5000], 8]);
+  });
+
+  // Drift: the lanes rest together but ask apart; a stop that ended one lane's rest alone would leave the others to rest and send for two minutes more after Ctrl-C.
+  test("a rest the person stops ends every lane: no rest begins and no file is sent after it", async () => {
+    const bench = await openBench();
+    const folder = folderOf("notes", { "index.html": "<h1>notes</h1>", "a.css": "a{}", "b.css": "b{}", "c.css": "c{}", "d.css": "d{}" });
+    const before = await stateOf(bench);
+    let first = true;
+
+    bench.hook = async (request) => {
+      if (request.method !== "PUT") return undefined;
+
+      // The first lane is refused at once; the others are still on their way when its rest is stopped.
+      if (!first) await new Promise((resolve) => setTimeout(resolve, 20));
+      first = false;
+
+      return tooMany({});
+    };
+    bench.paused = async (ran) => (ran.waits.length === 1 ? "interrupted" : "over");
+
+    const failed = await bench.run(folder);
+
+    expect([failed.code, failed.waits, bench.sent.filter((line) => line.startsWith("PUT")).length]).toEqual([5, [2000], 4]);
+    expect(await stateOf(bench)).toEqual(before);
+  });
+
+  // Drift: a file that arrives while another lane rests rewrites the one progress line; the line that says why nothing moves would be gone for the rest of the wait.
+  test("a file that arrives during a rest is counted after it, so the line of the rest stays until the rest is over", async () => {
+    const bench = await openBench();
+    const folder = folderOf("notes", { "index.html": "<h1>notes</h1>", "a.css": "a{}" });
+    let first = true;
+
+    bench.hook = async (request) => {
+      if (request.method !== "PUT") return undefined;
+
+      if (first) {
+        first = false;
+
+        return tooMany({ "Retry-After": "4" });
+      }
+
+      return undefined;
+    };
+    const shown: string[][] = [];
+    // The rest ends only once the other lane's file has arrived; what the line showed until then is kept.
+    bench.paused = (ran) =>
+      new Promise((resolve) => {
+        setTimeout(() => {
+          shown.push([...ran.status]);
+          resolve(undefined);
+        }, 20);
+      });
+
+    const made = await bench.run(folder, { terminal: { asks: false, progress: true } });
+
+    expect([made.code, shown, made.status[1]]).toEqual([0, [["the install asks for a pause: going on in 4 s (Ctrl-C stops)"]], "uploading 1/2 files, 14 B of 17 B"]);
+  });
+
+  // Drift: a zone that never lets up, or a person who stops the command, must end the upload; a rest with no bound would hang a script for good.
+  test.each<[string, "over" | "interrupted", number[], number]>([
+    ["never lets up", "over", [2000, 4000, 8000, 16_000, 32_000, 60_000], 7],
+    ["is stopped by the person during the first rest", "interrupted", [2000], 1],
+  ])("an upload whose zone %s is given up after its rests and says the status", async (_name, paused, waits, puts) => {
+    const bench = await openBench();
+    const folder = folderOf("notes", { "index.html": "<h1>notes</h1>" });
+    const before = await stateOf(bench);
+    bench.hook = (request) => (request.method === "PUT" ? tooMany({}) : undefined);
+    bench.paused = async () => paused;
+
+    const failed = await bench.run(folder);
+
+    expect([failed.code, failed.err[0], failed.waits]).toEqual([5, "the answer is not the install's: status 429", waits]);
+    expect(bench.sent.filter((line) => line.startsWith("PUT")).length).toBe(puts);
+    expect(bench.sent.at(-1)).toStartWith("DELETE /api/uploads/");
+    expect(await stateOf(bench)).toEqual(before);
   });
 });

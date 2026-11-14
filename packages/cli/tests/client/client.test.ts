@@ -105,4 +105,19 @@ describe("client", () => {
 
     expect(await client.download({ site: "k3f9x2ab71qz", version: 1, path: "index.html" })).toEqual({ ok: false, failure } as never);
   });
+
+  // Drift: `Retry-After` is set by whatever answers, the install or the zone in front of it, and HTTP lets it be a date; only whole seconds are a wait a caller can count.
+  test.each<[string, Response, unknown]>([
+    ["a zone's page that names whole seconds", new Response("<html>too many</html>", { status: 429, headers: { "Retry-After": "10" } }), { kind: "not-json", status: 429, retryAfter: 10 }],
+    [
+      "the install's refusal that names whole seconds",
+      new Response(JSON.stringify({ error: { code: "too_many_requests", message: "no" } }), { status: 429, headers: { "Retry-After": "30" } }),
+      { kind: "refused", status: 429, code: "too_many_requests", message: "no", retryAfter: 30 },
+    ],
+    ["a page that names a date", new Response("<html>too many</html>", { status: 429, headers: { "Retry-After": "Wed, 21 Oct 2026 07:28:00 GMT" } }), { kind: "not-json", status: 429 }],
+  ])("a call answered with %s keeps the wait with the failure, or none", async (_name, response, failure) => {
+    const client = createClient({ server: ORIGIN, token: TOKEN, fetch: async () => response });
+
+    expect(await client.call("uploadFile", { upload: "0123456789abcdef", path: "index.html" }, new Uint8Array(1), 1)).toEqual({ ok: false, failure } as never);
+  });
 });

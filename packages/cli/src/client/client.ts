@@ -105,6 +105,9 @@ const FILE_ROUTE = ROUTES.exportFile;
 /** A count of bytes as a header writes it. */
 const BYTE_COUNT = /^\d{1,15}$/;
 
+/** How long an answer asks its caller to wait, as `Retry-After` writes whole seconds. */
+const WAIT_SECONDS = /^\d{1,9}$/;
+
 /** The body of every refusal of the API. */
 const REFUSAL = v.looseObject({ error: v.looseObject({ code: v.string(), message: v.string(), about: v.optional(v.string()) }) });
 
@@ -126,13 +129,15 @@ export type Fetch = (input: string, init: RequestInit) => Promise<Response>;
  *
  * `refused` is the API's own refusal, with its code. `unreachable` is a request that never got an answer, `timeout` one that took too long.
  * `not-json` is an answer that is no JSON, such as a proxy's error page, and `unexpected` one that is JSON of a form the API never sends, or a redirect.
+ *
+ * `retryAfter` is how many seconds an answer asked its caller to wait, when its `Retry-After` header names whole seconds.
  */
 export type Failure =
-  | { readonly kind: "refused"; readonly status: number; readonly code: string; readonly message: string; readonly about?: string }
+  | { readonly kind: "refused"; readonly status: number; readonly code: string; readonly message: string; readonly about?: string; readonly retryAfter?: number }
   | { readonly kind: "unreachable" }
   | { readonly kind: "timeout"; readonly seconds: number }
-  | { readonly kind: "not-json"; readonly status: number }
-  | { readonly kind: "unexpected"; readonly status: number };
+  | { readonly kind: "not-json"; readonly status: number; readonly retryAfter?: number }
+  | { readonly kind: "unexpected"; readonly status: number; readonly retryAfter?: number };
 
 /** What a call answers: the route's answer, or why there is none. */
 export type Called<Done> = { readonly ok: true; readonly value: Done } | { readonly ok: false; readonly failure: Failure };
@@ -228,22 +233,30 @@ function parseJson(text: string): { readonly value: unknown } | undefined {
   }
 }
 
+/** The wait an answer asks for, under the key a failure keeps it; nothing for an answer that names no whole seconds. */
+function waitOf(response: Response): { readonly retryAfter?: number } {
+  const header = response.headers.get("Retry-After") ?? "";
+
+  return WAIT_SECONDS.test(header) ? { retryAfter: Number(header) } : {};
+}
+
 /** Read an answer that is JSON into the value a done answer holds, or into the failure any other answer is. */
 async function readJson(response: Response): Promise<Called<unknown>> {
   const { status } = response;
+  const wait = waitOf(response);
   const text = await readText(response);
   const parsed = text === undefined ? undefined : parseJson(text);
-  if (parsed === undefined) return failed({ kind: "not-json", status });
+  if (parsed === undefined) return failed({ kind: "not-json", status, ...wait });
 
   if (status === 200) return { ok: true, value: parsed.value };
 
   const refusal = v.safeParse(REFUSAL, parsed.value);
-  if (!refusal.success || status < 400) return failed({ kind: "unexpected", status });
+  if (!refusal.success || status < 400) return failed({ kind: "unexpected", status, ...wait });
 
   const { code, message, about } = refusal.output.error;
-  if (about === undefined) return failed({ kind: "refused", status, code, message });
+  if (about === undefined) return failed({ kind: "refused", status, code, message, ...wait });
 
-  return failed({ kind: "refused", status, code, message, about });
+  return failed({ kind: "refused", status, code, message, about, ...wait });
 }
 
 /** Read an answer into the route's value or a failure. */

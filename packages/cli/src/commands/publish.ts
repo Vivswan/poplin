@@ -149,7 +149,7 @@ export async function sendPublish(plan: PublishPlan, { client, io }: Session): P
   const progress = progressOn(io, plan);
 
   try {
-    const finished = await sendUpload(client, upload, plan.files, progress.arrived);
+    const finished = await sendUpload(client, upload, plan.files, { arrived: progress.arrived, io });
     if (finished.ok) return published(plan, finished.value);
 
     // An upload the install finished though its answer was lost is reported as done.

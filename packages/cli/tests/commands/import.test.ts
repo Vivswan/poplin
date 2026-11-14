@@ -171,6 +171,47 @@ describe("import", () => {
     expect(await held(into.install)).toEqual(await held(from.install));
   });
 
+  // Drift: a refusal stops the run only when every other site would meet it too; the install's own 429 is a refusal, and a run that went on after Ctrl-C would import the rest of a backup the person had stopped.
+  test("an import the person stops during a rest stops the run, and no later site is tried", async () => {
+    const from = await openBench();
+    const into = await openBench();
+    await filled(from);
+    const zip = await exportedZip(from);
+    into.hook = (request) => (request.method === "PUT" ? answer(429, { error: { code: "too_many_requests", message: "no" } }) : undefined);
+    into.paused = async () => "interrupted";
+
+    const stopped = await into.run(`import ${zip} --json`);
+    const said = jsonOf(stopped);
+
+    expect([said.imported, said.failed, said.stopped, stopped.waits, into.sent.filter((line) => line === "POST /api/import/sites").length]).toEqual([0, 1, true, [2000], 1]);
+    expect((await into.install.call("exportSites", {})).body.sites).toEqual([]);
+  });
+
+  // Drift: four files are on their way at once; a file the install refused during the rest would be the failure told, a refusal of one site alone, and the run would go on after Ctrl-C.
+  test("a stop during a rest stops the run though another file of the site was refused meanwhile", async () => {
+    const from = await openBench();
+    const into = await openBench();
+    await published(from, "alpha", { "index.html": "<title>Alpha</title>", "a.css": "a{}" });
+    await published(from, "beta", { "index.html": "<title>Beta</title>", "b.css": "b{}" });
+    const zip = await exportedZip(from);
+    let puts = 0;
+
+    into.hook = (request) => {
+      if (request.method !== "PUT") return undefined;
+
+      puts += 1;
+      if (puts === 1) return answer(429, { error: { code: "too_many_requests", message: "no" } });
+
+      return puts === 2 ? answer(400, { error: { code: "size_mismatch", message: "no", about: "index.html" } }) : undefined;
+    };
+    // The stop comes only once the other file has been refused.
+    into.paused = () => new Promise((resolve) => setTimeout(() => resolve("interrupted"), 20));
+
+    const said = jsonOf(await into.run(`import ${zip} --json`));
+
+    expect([said.imported, said.stopped, (said.sites as Line[]).map((site) => site.code), into.sent.filter((line) => line === "POST /api/import/sites").length]).toEqual([0, true, ["too_many_requests"], 1]);
+  });
+
   test("a site the install refuses is reported with the install's code and the next is tried, and any failure exits 1: without this one taken name would stop a restore", async () => {
     const from = await openBench();
     const { docs } = await filled(from);

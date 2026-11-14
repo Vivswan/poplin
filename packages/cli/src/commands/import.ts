@@ -19,8 +19,8 @@ const ALREADY_THERE = "id_taken";
 /** The refusal of a site whose versions are together more than one import may carry. */
 const TOO_LARGE = "too_large";
 
-/** The statuses of a refusal that every other site would meet too: no login, or not an admin's. */
-const REFUSED_FOR_ALL: readonly number[] = [401, 403];
+/** The statuses of a refusal that every other site would meet too: no login, not an admin's, or an install that is asked too often. */
+const REFUSED_FOR_ALL: readonly number[] = [401, 403, 429];
 
 /** What became of an upload that was not finished, in words. */
 const AFTERMATH = {
@@ -150,9 +150,12 @@ async function importSite(client: Client, io: Io, format: number, site: BackupSi
   let arrived = 0;
 
   try {
-    const sent = await sendUpload(client, upload, sending.files, () => {
-      arrived += 1;
-      if (io.terminal.progress) io.status(`importing ${site.label}: ${arrived}/${sending.files.length} files`);
+    const sent = await sendUpload(client, upload, sending.files, {
+      arrived: () => {
+        arrived += 1;
+        if (io.terminal.progress) io.status(`importing ${site.label}: ${arrived}/${sending.files.length} files`);
+      },
+      io,
     });
     if (sent.ok) return finished(site, sending);
 
