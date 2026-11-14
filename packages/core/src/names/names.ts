@@ -8,6 +8,7 @@ const SECRET_ALPHABET = "0123456789abcdefghijklmnopqrstuvwxyz";
 const SECRET_PATTERN = /^[0-9a-z]{12}$/;
 const UNBIASED_BYTE_LIMIT = 256 - (256 % SECRET_ALPHABET.length);
 const HTML_SUFFIX = ".html";
+export const MAX_SECRET_NAME_LENGTH = MAX_NAME_LENGTH + SECRET_SEPARATOR.length + SECRET_LENGTH;
 
 declare const siteNameBrand: unique symbol;
 declare const secretNameBrand: unique symbol;

@@ -3,25 +3,27 @@
 # installs, or reaches the network; a missing node_modules fails the first check on its own.
 #
 #   staged path                -> tests run
-#   packages/<pkg>/...         -> that package's tests and the layout guard
+#   packages/core/...          -> every test, the Worker's included: the other packages depend on core
 #   packages/worker/...        -> the Worker's tests, in the Workers runtime, and the layout guard
+#   packages/<pkg>/...         -> that package's tests and the layout guard
 #   anything else              -> every test
 set -e
 
 bun node_modules/.bin/biome lint --staged --no-errors-on-unmatched
 bun run typecheck
 
-staged=$(git diff --cached --name-only)
-outside=$(printf '%s\n' "$staged" | sed -n '\|^packages/[^/]*/|!p')
+# A rename counts as both of its paths, so a file moved out of a package still runs that package's tests.
+staged=$(git diff --cached --name-only --no-renames)
+reaches_all=$(printf '%s\n' "$staged" | sed -n -e '\|^packages/[^/]*/|!p' -e '\|^packages/core/|p')
 packages=$(printf '%s\n' "$staged" | sed -n 's|^\(packages/[^/]*\)/.*|./\1/|p' | sort -u)
 worker=$(printf '%s\n' "$staged" | sed -n '\|^packages/worker/|p')
 
 # The Worker's tests run under Vitest; the root test script leaves that package out.
-if [ -n "$outside$worker" ]; then
+if [ -n "$reaches_all$worker" ]; then
     bun run test:worker
 fi
 
-if [ -n "$outside" ]; then
+if [ -n "$reaches_all" ]; then
     exec bun run test
 fi
 
