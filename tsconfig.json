@@ -10,5 +10,6 @@
     "moduleResolution": "bundler",
     "types": ["bun"]
   },
-  "include": ["packages", "tests", ".github/scripts"]
+  "include": ["packages", "tests", ".github/scripts"],
+  "exclude": ["packages/worker"]
 }

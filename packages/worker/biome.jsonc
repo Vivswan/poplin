@@ -1,0 +1,6 @@
+// This package's biome layer: the repository's rules, minus the one file `wrangler types` generates.
+{
+  "root": false,
+  "extends": "//",
+  "files": { "includes": ["**", "!worker-configuration.d.ts"] }
+}

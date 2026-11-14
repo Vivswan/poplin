@@ -4,6 +4,9 @@
   "workspaces": {
     ".": {
       "entry": [".github/scripts/release-pipeline.ts"]
+    },
+    "packages/worker": {
+      "ignoreDependencies": ["cloudflare"]
     }
   }
 }

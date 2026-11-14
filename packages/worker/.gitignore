@@ -1,0 +1,2 @@
+# The runtime and binding types `wrangler types` writes before a typecheck.
+worker-configuration.d.ts
