@@ -1,0 +1,57 @@
+// The current login: who the command is talking to, and with which token.
+
+import { type Login, parseLogin } from "./login";
+import { type Machine, readLoginFile, thisMachine } from "./login-file";
+
+const SERVER = "POPLIN_SERVER";
+const TOKEN = "POPLIN_TOKEN";
+
+/** Who the command is talking to. `source` says where a login came from; `refused` carries a message that names the fix. */
+type CurrentLogin =
+  | { readonly state: "logged-in"; readonly login: Login; readonly source: "environment" | "file" }
+  | { readonly state: "logged-out" }
+  | { readonly state: "refused"; readonly message: string };
+
+function refuse(message: string): { readonly state: "refused"; readonly message: string } {
+  return { state: "refused", message };
+}
+
+/** A variable's value, with an empty one counted as not set. */
+function setting(machine: Machine, name: string): string | undefined {
+  const value = machine.env[name];
+
+  return value === "" ? undefined : value;
+}
+
+function fromEnvironment(server: string, token: string): CurrentLogin {
+  const parsed = parseLogin({ server, token });
+
+  if (!parsed.ok) return refuse(`${SERVER} and ${TOKEN} are not a login (${parsed.problem}); set both again, or unset both to use the saved login`);
+
+  return { state: "logged-in", login: parsed.login, source: "environment" };
+}
+
+/**
+ * Find the login to use: `POPLIN_SERVER` and `POPLIN_TOKEN` when both are set, else the login file, else none.
+ *
+ * @returns `refused` when one of the two variables is set without the other, when the two are not a login, or when the login file is refused; the
+ *   file is not read when the environment answers
+ */
+export async function currentLogin(machine: Machine = thisMachine()): Promise<CurrentLogin> {
+  const server = setting(machine, SERVER);
+  const token = setting(machine, TOKEN);
+
+  if (server !== undefined && token !== undefined) return fromEnvironment(server, token);
+
+  if (server !== undefined) return refuse(`${SERVER} is set and ${TOKEN} is not; set ${TOKEN} too, or unset ${SERVER} to use the saved login`);
+
+  if (token !== undefined) return refuse(`${TOKEN} is set and ${SERVER} is not; set ${SERVER} too, or unset ${TOKEN} to use the saved login`);
+
+  const saved = await readLoginFile(machine);
+
+  if (saved.state === "missing") return { state: "logged-out" };
+
+  if (saved.state === "refused") return saved;
+
+  return { state: "logged-in", login: saved.login, source: "file" };
+}

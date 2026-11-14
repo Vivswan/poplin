@@ -9,11 +9,9 @@ import { join } from "node:path";
 
 const PACKAGE_DIR = join(import.meta.dir, "..");
 const NAME = "poplin";
-const LICENSE = "LICENSE.md";
+const CARRIED = ["LICENSE.md", "README.md"];
 const PROJECT_MANIFEST = { name: "smoke-project", private: true, type: "module" };
 const USAGE_STATUS = 2;
-
-// Run by node from the project folder; it throws on the first check that fails.
 const PROBE = `
 import assert from "node:assert/strict";
 import { VERSION } from "poplin";
@@ -70,9 +68,11 @@ function smoke(): void {
   const installed = install(project, pack(scratch.path));
   const { version }: { version: string } = JSON.parse(readFileSync(join(installed, "package.json"), "utf8"));
 
-  // The build copies the license in from the repository root, and the manifest's license field points at it.
-  if (!existsSync(join(installed, LICENSE))) {
-    throw new Error(`the installed package lacks ${LICENSE}`);
+  // npm's page shows the readme. The manifest's license field points at the license, which the build copies in from the repository root.
+  const lacking = CARRIED.filter((name) => !existsSync(join(installed, name)));
+
+  if (lacking.length > 0) {
+    throw new Error(`the installed package lacks ${lacking.join(" and ")}`);
   }
 
   writeFileSync(join(project, "probe.mjs"), PROBE);

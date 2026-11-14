@@ -2,6 +2,9 @@
   "$schema": "https://unpkg.com/knip@6/schema.json",
   "ignore": ["demo/**"],
   "workspaces": {
+    "packages/cli": {
+      "ignoreBinaries": ["mkfifo"]
+    },
     "packages/core": {
       "includeEntryExports": true,
       "ignoreIssues": { "src/actions.ts": ["exports"] }
