@@ -62,8 +62,8 @@ const BUDGET: Readonly<Record<RouteName, number>> = {
   listTokens: 2,
   issueToken: 2,
   revokeToken: 2,
-  listSites: 3,
-  getSite: 4,
+  listSites: 4,
+  getSite: 5,
   updateSite: 6,
   rollbackSite: 5,
   newLink: 9,
@@ -405,7 +405,7 @@ describe("the staged publish over HTTP", () => {
     const { created, ...site } = part(first, "site");
     const shown = await install.call("showUpload", { upload });
 
-    expect([created, (await install.call("listSites", {})).body.sites]).toEqual([true, [site]]);
+    expect([created, (await install.call("listSites", {})).body.sites]).toEqual([true, [{ ...site, views: { today: 0, week: 0 } }]]);
     expect([part(shown, "upload").state, shown.body.missing, shown.body.more]).toEqual(["finished", [], false]);
   });
 

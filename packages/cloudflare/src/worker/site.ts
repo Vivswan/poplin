@@ -1,13 +1,14 @@
 // A request to any hostname but the admin one: its login checked, looked up, counted against the limits, then served.
 //
-//   the address  ->  under `p`: the Access token and the logins  ->  one database query  ->  the limits  ->  serving, handed the site already found
+//   the address  ->  under `p`: the Access token and the logins  ->  one database query  ->  the limits  ->  serving, handed the site already found  ->  the day's count
 //
 // Access stands in front of every `p` address at the edge. The token it puts on a request is checked here all the same, and the email against the logins of the last minute.
 // A request under `p` without that proof came around Access: it is looked up nowhere.
 // Only a request the site's files are read for counts against the site. Every other counts against its visitor's minute alone, so the limits tell nobody whether a private id exists.
+// The limits count the request against its day before it is served, and its one write comes after the answer, since only the answer says whether a page was opened.
 // Serving's answer goes out as it is. Nothing here reads, holds, or changes a file's bytes.
 
-import { checkLimits, type Counters, type Refusal } from "@poplin/app/src/limits/limits";
+import { checkLimits, type Counters, countRequest, isPageView, type Refusal } from "@poplin/app/src/limits/limits";
 import { refusalResponse } from "@poplin/app/src/limits/refusal";
 import { type VisitorKey, visitorKey } from "@poplin/app/src/limits/visitor-key";
 import { serveSite } from "@poplin/app/src/sites/serve";
@@ -19,8 +20,8 @@ import type { Held } from "./held";
 import type { Instance } from "./start";
 import { plain } from "./util";
 
-/** A request the limits let through. */
-const ALLOWED = { ok: true } as const;
+/** A request the limits let through, counted against no site's day. */
+const ALLOWED = { ok: true, requests: 0 } as const;
 
 /** A request no login was asked of: its address is not under `p`. */
 const NOT_ASKED = { kind: "not-asked" } as const;
@@ -92,15 +93,16 @@ export async function answerSite(request: Request, instance: Instance, held: Hel
   const site = address === undefined ? undefined : await database.findServed(address, now);
 
   const visitor = await visitorKey(clientAddress(request.headers), held.visitorSecret, now);
+  const served = site !== undefined && opensAt(addressed, site) ? site : undefined;
   const verdict =
-    site === undefined || !opensAt(addressed, site)
+    served === undefined
       ? await takeVisitorMinute(instance.counters, { key: visitor, limit: held.settings.visitor_requests_per_minute }, now)
-      : await checkLimits({ settings: held.settings, site: site.id, visitor, now }, instance.counters);
+      : await checkLimits({ settings: held.settings, site: served.id, visitor, now }, instance.counters);
   if (!verdict.ok) return refusalResponse(verdict);
 
   if (proof.kind === "unchecked") return plain(request, 503, "The login cannot be checked right now. Try again.", { "Retry-After": "60" });
 
-  return serveSite(request, {
+  const response = await serveSite(request, {
     // Serving asks for the site of the same address: it is answered from the query above, so a page view costs one.
     database: { findServed: async (again, at) => (sameAddress(again, address) ? site : database.findServed(again, at)) },
     store,
@@ -110,4 +112,7 @@ export async function answerSite(request: Request, instance: Instance, held: Hel
     identify: async () => ({ ok: proof.kind === "vouched" }),
     now: () => now,
   });
+  if (served !== undefined) await countRequest({ site: served.id, now, requests: verdict.requests, page: isPageView(request, response) }, instance.counters);
+
+  return response;
 }

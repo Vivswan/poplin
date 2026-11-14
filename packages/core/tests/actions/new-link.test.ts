@@ -21,7 +21,9 @@ describe("newLink", () => {
       { ok: false, code: "not_found" },
     ]);
     expect(renamed.before).toMatchObject({ id: old, label: `report--${old}` });
-    expect(await getSite(world.install, OWNER, "report")).toEqual({ ok: true, before: renamed.site, site: renamed.site });
+    const shown = { ...renamed.site, views: { today: 0, week: 0 } };
+
+    expect(await getSite(world.install, OWNER, "report")).toEqual({ ok: true, before: shown, site: shown });
     expect([await world.keys(), await world.audit()]).toEqual([keys, ["create", "new_id"]]);
   });
 

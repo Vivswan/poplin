@@ -4,6 +4,7 @@ import type { PublicName, SiteName } from "../names/names";
 import type { Holder } from "../records/fields";
 import type { SettingValues } from "../records/settings";
 import type { Site } from "../records/site";
+import type { SiteViews } from "../records/views";
 import type { SiteId } from "../sites/ids";
 import { type SiteLabel, siteLabel } from "../sites/labels";
 import type { Install } from "./records";
@@ -18,6 +19,7 @@ export const DAY_MS = 86_400_000;
  * The label's address carries a letter for the access, so it changes when a site turns private or stops being private. `bytes` and `files` sum the kept versions, and `updated` is when the site last changed.
  * `gone_on` is when a site in the trash is deleted for good, and is absent outside the trash.
  * `title` is the typed title, and the entry page's own while none is typed; `title_typed` says which.
+ * `views` is about how often the site's pages were opened, today and over the last seven UTC days: estimates from a sample, never exact counts. Only showing and listing read them; every other answer has `null`.
  */
 export interface SiteObject {
   readonly id: SiteId;
@@ -38,6 +40,7 @@ export interface SiteObject {
   readonly files: number;
   readonly updated: number;
   readonly state: Site["state"];
+  readonly views: SiteViews | null;
   readonly gone_on?: number;
 }
 
@@ -56,8 +59,9 @@ export interface SiteAnswer {
  * Build the site object of a stored site.
  *
  * @param trashDays - the install's `trash_days` setting
+ * @param views - the site's page views as the database counted them, `null` when they were not read
  */
-export function siteObject(site: Site, install: Pick<Install, "addressOf" | "publicAddressOf">, trashDays: number): SiteObject {
+export function siteObject(site: Site, install: Pick<Install, "addressOf" | "publicAddressOf">, trashDays: number, views: SiteViews | null = null): SiteObject {
   const label = siteLabel(site.name, site.id);
   const publicName = site.access === "public" ? site.public_name : null;
   const addresses = { site: install.addressOf(label, site.access), public: publicName === null ? null : install.publicAddressOf(publicName) };
@@ -81,6 +85,7 @@ export function siteObject(site: Site, install: Pick<Install, "addressOf" | "pub
     files: site.versions.reduce((sum, version) => sum + version.files, 0),
     updated: site.updated_at,
     state: site.state,
+    views,
   };
   if (site.state !== "trash") return object;
 

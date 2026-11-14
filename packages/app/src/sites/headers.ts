@@ -80,6 +80,15 @@ export function isPage(contentType: string): boolean {
 }
 
 /**
+ * Decide whether an entity tag is one only a page carries: a version's. An answer with it, the 304 for an unchanged page included, is a page.
+ *
+ * @param tag - an answer's `ETag`, or `null` for none
+ */
+export function isPageTag(tag: string | null): boolean {
+  return tag !== null && VERSION_TAG.test(tag.replace(WEAK, ""));
+}
+
+/**
  * Write the tag every page of a site carries while one version is live.
  *
  * @returns a quoted entity tag that differs between any two versions of the site, a version gone back to included

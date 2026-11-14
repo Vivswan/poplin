@@ -369,6 +369,35 @@ describe("the product, from a token to an opened site", () => {
     expect({ status: back.status, clear: back.headers.get("Clear-Site-Data"), text: await back.text(), tag: back.headers.get("ETag") }).toEqual({ status: 200, clear: '"cache"', text: "<p>one</p>", tag: one });
   });
 
+  // Drift: a view is counted in the request's own count, after the answer; a file, a refusal, or the move of a private site's address counted as one would show opens nobody made.
+  test("a site's views count its pages answered 200 or 304, private or not, and nothing else it answers", async () => {
+    const worker = instance(w);
+    const token = await tokenOf(w, "publisher");
+    const style = { path: "site.css", body: new TextEncoder().encode("body{}"), type: "text/css" };
+    const open = await publish(worker, token, { name: "docs", access: "public" }, [page("<p>docs</p>"), style]);
+    const closed = await publish(worker, token, { name: "notes" }, [page("<p>notes</p>")]);
+    const first = await ask(worker, "https://docs-page.example.com/");
+
+    const answers = [
+      first.status,
+      (await ask(worker, "https://docs-page.example.com/", { headers: { "If-None-Match": first.headers.get("ETag") ?? "" } })).status,
+      (await ask(worker, "https://docs-page.example.com/site.css")).status,
+      (await ask(worker, "https://docs-page.example.com/", { method: "HEAD" })).status,
+      (await ask(worker, "https://docs-page.example.com/missing")).status,
+      (await ask(worker, `${under(closed, "u")}/`)).status,
+      (await ask(worker, `${under(closed, "p")}/`, { headers: await accessHeaders(w) })).status,
+    ];
+    const { database, now } = await installOf(w);
+    const day = new Date(now()).toISOString().slice(0, 10);
+    const views = await database.readViews([open.id, closed.id] as never, day);
+
+    expect([answers, [...views.values()], await database.readRequests(day, open.id as never)]).toEqual([
+      [200, 304, 200, 200, 404, 302, 200],
+      [{ today: 2, week: 2 }, { today: 1, week: 1 }],
+      { site: 5, all: 6 },
+    ]);
+  });
+
   // Drift: the limits would sit behind serving, or count nothing for an address that names no site, and a probe of made-up names would run free.
   test.each([
     { name: "a public site", address: "https://docs-page.example.com/", served: 200 },

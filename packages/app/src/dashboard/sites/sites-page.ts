@@ -2,6 +2,7 @@
 
 import { listSites } from "@poplin/core/src/actions/list";
 import { showBytes } from "@poplin/core/src/records/settings";
+import { showViews } from "@poplin/core/src/records/views";
 import { html } from "hono/html";
 
 import { showMoment } from "../page/amounts";
@@ -56,6 +57,7 @@ function siteRow(site: Row): Html {
 <td class="wrap">${site.title ?? ""}</td>
 <td>${showBytes(site.bytes)}, ${site.files} files</td>
 <td>v${site.live_version}</td>
+<td>${site.views === null ? "" : showViews(site.views.week)}</td>
 <td>${showMoment(site.updated)}</td>
 </tr>`;
 }
@@ -64,7 +66,7 @@ function sitesTable(sites: readonly Row[], trash: boolean): Html {
   if (sites.length === 0) return html`<p>${trash ? "The trash is empty." : "No sites here."}</p>`;
 
   return html`<div class="scroll" role="region" aria-label="Sites" tabindex="0"><table>
-<thead><tr><th scope="col">Name</th><th scope="col">Address</th><th scope="col">Access</th><th scope="col">Title</th><th scope="col">Size</th><th scope="col">Live</th><th scope="col">Updated</th></tr></thead>
+<thead><tr><th scope="col">Name</th><th scope="col">Address</th><th scope="col">Access</th><th scope="col">Title</th><th scope="col">Size</th><th scope="col">Live</th><th scope="col">Opened in 7 days</th><th scope="col">Updated</th></tr></thead>
 <tbody>${sites.map(siteRow)}</tbody>
 </table></div>`;
 }

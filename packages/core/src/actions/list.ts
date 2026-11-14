@@ -4,6 +4,7 @@ import * as v from "valibot";
 
 import type { Actor } from "../auth/scopes";
 import { MOMENT, POSITIVE, SITE_ID } from "../records/fields";
+import { dayOf } from "../records/views";
 import { enterInstall } from "./reach";
 import { type Install, type Refused, refuse } from "./records";
 import { type SiteObject, siteObject } from "./site-object";
@@ -26,7 +27,7 @@ interface Listed {
 }
 
 /**
- * List the sites an actor may see: every site for an admin, its own for a publisher.
+ * List the sites an actor may see, each with about how often its pages were opened: every site for an admin, its own for a publisher.
  *
  * @param query - `trash` lists the trash instead; `limit` is 1 to 100; `after` is the `next` of the page before
  * @returns the page, or `bad_argument` naming the key that was refused
@@ -40,7 +41,11 @@ export async function listSites(install: Install, actor: Actor, query: v.InferIn
 
   const owner = actor.scope === "admin" ? undefined : actor.holder;
   const page = await install.database.listSites({ ...asked.output, owner });
-  const sites = page.sites.map((site) => siteObject(site, install, entered.settings.trash_days));
+  const views = await install.database.readViews(
+    page.sites.map((site) => site.id),
+    dayOf(entered.signed.at),
+  );
+  const sites = page.sites.map((site) => siteObject(site, install, entered.settings.trash_days, views.get(site.id) ?? null));
   if (page.next === undefined) return { ok: true, sites };
 
   return { ok: true, sites, next: page.next };

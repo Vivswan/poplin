@@ -60,6 +60,7 @@ describe("publishSite", () => {
         files: 2,
         updated: NOW,
         state: "live",
+        views: null,
         created: true,
       },
     } as never);
@@ -111,13 +112,14 @@ describe("publishSite", () => {
 
     expect(updated.site).toEqual({
       ...before.site,
+      views: null,
       created: false,
       live_version: 2,
       bytes: before.site.bytes + 9,
       files: 3,
       versions: [...before.site.versions, { number: 2, published: NOW, published_by: OWNER.holder }],
     } as never);
-    expect(updated.before).toEqual(before.site);
+    expect(updated.before).toEqual({ ...before.site, views: null });
     expect(await world.audit()).toEqual(["create", "publish"]);
     expect(await world.keys()).toEqual([`${folder}/v1/css/site.css`, `${folder}/v1/index.html`, `${folder}/v2/index.html`]);
     expect(await textAt(world, `${folder}/v2/index.html`)).toBe("report v2");

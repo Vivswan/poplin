@@ -230,13 +230,13 @@ export const TOOLS: { readonly [Name in ToolName]: Tool<Name> } = {
     },
   },
   get_site: {
-    description: "Show one site: its address (url), access, settings, and kept versions.",
+    description: "Show one site: its address (url), access, settings, kept versions, and about how often its pages were opened (views: estimates, not exact).",
     parameters: { site: SITE },
     hints: { readOnlyHint: true },
     run: (input, host) => onSite(host, input.site, (site) => ({ kind: "show", site, json: false })),
   },
   list_sites: {
-    description: "List the sites, each with its label, access, and address (url).",
+    description: "List the sites, each with its label, access, and address (url); views in the data are about how often its pages were opened.",
     parameters: { trash: "true: list the deleted sites restore_site can still take back." },
     hints: { readOnlyHint: true },
     run: (input, host) => online(host, (session) => runSiteCommand({ kind: "list", trash: input.trash, json: false }, session)),

@@ -17,6 +17,7 @@ import type { Site, SiteAccess, SiteFolder } from "../records/site";
 import type { SweepPlace } from "../records/sweep-place";
 import type { SiteSize, Totals } from "../records/sizes";
 import type { ManifestFile, Upload, UploadId, UploadPlan } from "../records/upload";
+import type { SiteViews } from "../records/views";
 
 /** Who makes a change and when, in milliseconds since the epoch. */
 export interface Signed {
@@ -247,9 +248,12 @@ export interface CountedRequests {
 
   /** How many: a whole number of at least 1. */
   readonly requests: number;
+
+  /** How many of them opened a page: a whole number from 0 to `requests`, and 0 when left out. */
+  readonly views?: number;
 }
 
-/** The one doorway to stored sites, tokens, pending logins, settings, the signing key, the audit log, and the day's request counts. */
+/** The one doorway to stored sites, tokens, pending logins, settings, the signing key, the audit log, and the request counts of the last seven days. */
 export interface Database {
   /**
    * Make a site under a fresh id, with version 1 as its only version and its live one: published at `signed.at` by `signed.by`, of the draft's `bytes` and `files`.
@@ -289,7 +293,7 @@ export interface Database {
    */
   changeDetails(id: SiteId, details: SiteDetails, signed: Signed): Promise<Done | Unchanged | Refused<"not_found" | "in_trash">>;
 
-  /** Give a site a new id. The old id names no site from then on; the public name, the folder, and everything else stay with the site. */
+  /** Give a site a new id. The old id names no site from then on; the public name, the folder, the request counts of the seven days up to `signed.at`, and everything else stay with the site. */
   giveNewId(id: SiteId, signed: Signed): Promise<Done | Refused<"not_found" | "in_trash">>;
 
   /** Move a site into the trash. It keeps its public name. */
@@ -551,10 +555,10 @@ export interface Database {
   listAudit(query: { readonly limit: number; readonly before?: number }): Promise<readonly AuditEntry[]>;
 
   /**
-   * Add requests to a day's count of one site and of all sites together, and drop the counts of every earlier day. No audit entry is written.
+   * Add requests, and the page views among them, to a day's count of one site and of all sites together, and drop the counts of every day before the six ahead of it. No audit entry is written.
    *
-   * @returns both counts after the addition
-   * @throws {RangeError} `day` is not a date such as `2026-11-13`, or `requests` is not a whole number of at least 1
+   * @returns both request counts after the addition
+   * @throws {RangeError} `day` is not a date such as `2026-11-13`, `requests` is not a whole number of at least 1, or `views` is not a whole number from 0 to `requests`
    */
   addRequests(counted: CountedRequests): Promise<RequestCounts>;
 
@@ -566,4 +570,14 @@ export interface Database {
    * @throws {RangeError} `day` is not such a date
    */
   readRequests(day: string, site?: SiteId): Promise<RequestCounts>;
+
+  /**
+   * The page views counted for some sites: on one day, and over that day and the six before it.
+   *
+   * @param sites - the sites to read, at most 100
+   * @param day - a UTC date, such as `2026-11-13`
+   * @returns the counts of every site asked for, 0 where nothing was counted
+   * @throws {RangeError} `day` is not such a date, or more than 100 sites are asked for
+   */
+  readViews(sites: readonly SiteId[], day: string): Promise<ReadonlyMap<SiteId, SiteViews>>;
 }

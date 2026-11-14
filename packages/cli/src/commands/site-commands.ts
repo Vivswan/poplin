@@ -2,6 +2,7 @@
 
 import type { ROUTES } from "../../../core/src/api/routes";
 import { showBytes } from "../../../core/src/records/settings";
+import { showViews } from "../../../core/src/records/views";
 import type { Called } from "../client/client";
 import { problem, problemOf } from "./problems";
 import type { Outcome, RequestOf, Session } from "./records";
@@ -37,6 +38,13 @@ function switchText(on: boolean): string {
 
 function expiryText(expires: SiteObject["expires"]): string {
   return expires === "never" ? "never" : dayText(expires);
+}
+
+/** About how often a site's pages were opened, never as an exact number: the counts come from a sample. */
+function viewsText(views: SiteObject["views"]): string {
+  if (views === null) return "not known";
+
+  return `${showViews(views.today)} times today, ${showViews(views.week)} in the last 7 days`;
 }
 
 function accessFacts(site: SiteObject): string[] {
@@ -80,6 +88,7 @@ async function show(request: OneSite, { client }: Session): Promise<Outcome> {
     ["embeddable", switchText(site.embeddable)],
     ["expires", expiryText(site.expires)],
     ["kept", `${showBytes(site.bytes)} in ${countText(site.files, "file")}, every kept version counted`],
+    ["pages opened", viewsText(site.views)],
   ];
   const versions = site.versions.map((version) => {
     const live = version.number === site.live_version ? "live" : "";

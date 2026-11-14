@@ -33,6 +33,7 @@ const SITE = v.looseObject({
   files: v.number(),
   updated: v.number(),
   state: v.picklist(["live", "trash"]),
+  views: v.nullable(v.looseObject({ today: v.number(), week: v.number() })),
   gone_on: v.optional(v.number()),
 });
 

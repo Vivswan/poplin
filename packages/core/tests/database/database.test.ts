@@ -41,6 +41,7 @@ import { NEW_SITE, SITE_DETAILS, type Site, type SiteAccess, type SiteFolder, si
 import { SWEEP_PLACE, type SweepPlace } from "../../src/records/sweep-place";
 import type { SiteSize, Totals } from "../../src/records/sizes";
 import { type ManifestFile, manifestFromText, type Upload, type UploadId, uploadFromRow } from "../../src/records/upload";
+import { dayOf, type SiteViews, viewDays } from "../../src/records/views";
 import { mintSiteId, type SiteId } from "../../src/sites/ids";
 import { describeDatabase } from "./support/database-contract";
 
@@ -145,6 +146,8 @@ class MemoryDatabase implements Database {
   readonly #audit: AuditEntry[] = [];
 
   readonly #requests = new Map<string, Map<string, number>>();
+
+  readonly #views = new Map<string, Map<string, number>>();
 
   readonly #uploads = new Map<UploadId, { readonly upload: Upload; readonly manifest: readonly ManifestFile[] }>();
 
@@ -260,6 +263,11 @@ class MemoryDatabase implements Database {
 
     const next = this.#freshId(null);
     this.#sites.delete(id);
+
+    for (const day of viewDays(dayOf(signed.at))) {
+      for (const counts of [this.#requests.get(day), this.#views.get(day)]) this.#moveCount(counts, id, next);
+    }
+
 
     return this.#changed(changedAt(kept, signed.at, { id: next }), signed, "new_id", { from: id });
   }
@@ -574,9 +582,18 @@ class MemoryDatabase implements Database {
     requireDay(counted.day);
     if (!Number.isSafeInteger(counted.requests) || counted.requests < 1) throw new RangeError(`requests are counted in whole numbers from 1, not ${counted.requests}`);
 
+    const views = counted.views ?? 0;
+    if (!Number.isSafeInteger(views) || views < 0 || views > counted.requests) throw new RangeError(`views are counted in whole numbers from 0 to the requests, not ${views}`);
+
     for (const day of [...this.#requests.keys()]) {
-      if (day < counted.day) this.#requests.delete(day);
+      if (day >= (viewDays(counted.day)[0] ?? "")) continue;
+
+      this.#requests.delete(day);
+      this.#views.delete(day);
     }
+
+    const viewed = this.#views.get(counted.day) ?? new Map<string, number>();
+    this.#views.set(counted.day, viewed.set(counted.site, (viewed.get(counted.site) ?? 0) + views));
 
     const counts = this.#requests.get(counted.day) ?? new Map<string, number>();
     const site = (counts.get(counted.site) ?? 0) + counted.requests;
@@ -592,6 +609,23 @@ class MemoryDatabase implements Database {
     const own = site === undefined ? 0 : (counts?.get(site) ?? 0);
 
     return { site: own, all: counts?.get(ALL_SITES) ?? 0 };
+  }
+
+  #moveCount(counts: Map<string, number> | undefined, from: SiteId, to: SiteId): void {
+    const moved = counts?.get(from);
+    if (counts === undefined || moved === undefined) return;
+
+    counts.delete(from);
+    counts.set(to, moved);
+  }
+
+  async readViews(sites: readonly SiteId[], day: string): Promise<ReadonlyMap<SiteId, SiteViews>> {
+    requireDay(day);
+    if (sites.length > 100) throw new RangeError("the views of at most 100 sites are read at once");
+
+    const week = (site: SiteId): number => viewDays(day).reduce((sum, one) => sum + (this.#views.get(one)?.get(site) ?? 0), 0);
+
+    return new Map(sites.map((site) => [site, { today: this.#views.get(day)?.get(site) ?? 0, week: week(site) }]));
   }
 
   async getSiteByFolder(folder: Site["folder"]): Promise<Site | undefined> {

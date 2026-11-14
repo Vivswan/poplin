@@ -9,17 +9,21 @@ import { openDashboard } from "../support/install";
 const CHANGES = /action="\/sites\/[^/"]+\/([a-z-]+)"/g;
 const PAGE = { path: "index.html", size: 4, contentType: "text/html", open: (): ReadableStream<Uint8Array> => new Blob(["page"]).stream() };
 
-test("a live site's page offers every setting of the set action, rollback, a copy, a new link, and delete; one in the trash only restore and delete forever", async () => {
+test("a live site's page offers every setting of the set action, rollback, a copy, a new link, and delete; one in the trash only restore and delete forever; its views are worded as estimates", async () => {
   const opened = await openDashboard();
   const live = await opened.publish("report");
   const trashed = await opened.publish("old");
   await opened.install.database.trashSite(trashed.id, { by: opened.owner, at: opened.clock.now });
+
+  await opened.install.database.addRequests({ day: "2023-11-14", site: live.id, requests: 40, views: 37 });
+  await opened.install.database.addRequests({ day: "2023-11-12", site: live.id, requests: 9, views: 5 });
 
   const livePage = await (await opened.get(`/sites/report--${live.id}`)).text();
   const trashPage = await (await opened.get(`/sites/old--${trashed.id}`)).text();
 
   expect(Array.from(livePage.matchAll(CHANGES), ([, change]) => change)).toEqual(["settings", "duplicate", "new-link", "delete"]);
   expect(Array.from(livePage.matchAll(/<input[^>]* name="([a-z_]+)"/g), ([, name]) => name).filter((name) => name !== "csrf")).toEqual(["name", "access", "access", "access", "public_name", "title", "search_engines", "embeddable", "expires", "name"]);
+  expect(livePage).toContain("<dt>Pages opened</dt><dd>about 37 times today, about 42 in the last 7 days. Counted from a sample: opens of a page, not people.</dd>");
   expect(livePage).toContain("The current address stops working at once.");
   expect(livePage).toContain("Only one version is kept");
   expect(Array.from(trashPage.matchAll(CHANGES), ([, change]) => change)).toEqual(["restore", "delete-forever"]);

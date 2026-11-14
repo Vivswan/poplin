@@ -411,17 +411,21 @@ function queryPlans(label: string, makeDriver: DriverFactory): void {
 
 function requestCountRows(label: string, makeDriver: DriverFactory): void {
   describe(`${label}: the rows of the day's request counts`, () => {
-    // Drift: the table is meant to hold one day; rows of earlier days left behind would grow it by a row per site every day.
-    test("the table holds the newest day alone: a row per counted site, and one under the empty site for all of them", async () => {
+    // Drift: the table is meant to hold seven days; rows of earlier days left behind would grow it by a row per site every day.
+    test("the table holds the newest seven days alone: a row per day and counted site with its views, and one under the empty site for all of them", async () => {
       const driver = await migrated(makeDriver);
       const database = new SqlDatabase(driver);
-      await database.addRequests({ day: TODAY, site: NO_SITE, requests: 50 });
+      await database.addRequests({ day: "2026-11-07", site: NO_SITE, requests: 9, views: 9 });
+      await database.addRequests({ day: TODAY, site: NO_SITE, requests: 50, views: 20 });
       await database.addRequests({ day: TODAY, site: OTHER_SITE, requests: 1 });
-      await database.addRequests({ day: TOMORROW, site: OTHER_SITE, requests: 2 });
+      await database.addRequests({ day: TOMORROW, site: OTHER_SITE, requests: 2, views: 2 });
 
-      expect(await rows(driver, "SELECT day, site, requests FROM request_counts ORDER BY site")).toEqual([
-        { day: TOMORROW, site: "", requests: 2 },
-        { day: TOMORROW, site: OTHER_SITE, requests: 2 },
+      expect(await rows(driver, "SELECT day, site, requests, views FROM request_counts ORDER BY day, site")).toEqual([
+        { day: TODAY, site: "", requests: 51, views: 20 },
+        { day: TODAY, site: OTHER_SITE, requests: 1, views: 0 },
+        { day: TODAY, site: NO_SITE, requests: 50, views: 20 },
+        { day: TOMORROW, site: "", requests: 2, views: 2 },
+        { day: TOMORROW, site: OTHER_SITE, requests: 2, views: 2 },
       ]);
     });
 
@@ -432,14 +436,16 @@ function requestCountRows(label: string, makeDriver: DriverFactory): void {
       const database = new SqlDatabase(driver);
       await database.addRequests({ day: TODAY, site: NO_SITE, requests: 1 });
       await database.readRequests(TODAY, NO_SITE);
+      await database.readViews([NO_SITE, OTHER_SITE], TODAY);
       const scans: string[] = [];
 
       for (const statement of driver.statements) {
         const plan = await rows(inner, `EXPLAIN QUERY PLAN ${statement.sql}`, ...statement.params);
-        scans.push(...plan.map((step) => String(step.detail)).filter((step) => /\bSCAN\b/.test(step)));
+        // The lists of days and sites a read of views is given are walked, as they must be: they are its arguments, not the table.
+        scans.push(...plan.map((step) => String(step.detail)).filter((step) => /\bSCAN\b/.test(step) && !step.includes("VIRTUAL TABLE")));
       }
 
-      expect([driver.statements.length, scans]).toEqual([5, []]);
+      expect([driver.statements.length, scans]).toEqual([6, []]);
     });
   });
 }

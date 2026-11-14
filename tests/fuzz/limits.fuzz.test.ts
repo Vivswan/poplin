@@ -4,7 +4,7 @@
 import { expect } from "bun:test";
 import fc from "fast-check";
 
-import { checkLimits } from "../../packages/app/src/limits/limits";
+import { checkLimits, countRequest } from "../../packages/app/src/limits/limits";
 import { MemoryCounters } from "../../packages/app/src/limits/memory-counters";
 import { type VisitorKey, visitorKey } from "../../packages/app/src/limits/visitor-key";
 import { parseSiteId, type SiteId } from "../../packages/core/src/sites/ids";
@@ -51,6 +51,14 @@ const arrivals = fc.array(fc.record({ site: sites, visitor: fc.constantFrom("ada
 const groups = fc.array(fc.integer({ min: 0, max: 0xffff }), { minLength: 8, maxLength: 8 });
 const addresses = hostile(fc.oneof(fc.ipV4(), fc.ipV6(), fc.constantFrom("", "::", "::ffff:192.0.2.7", "2001:db8::1")));
 
+/** A request as the Worker takes it: checked against the limits, and counted against its day once they let it through. */
+async function takeRequest(asked: Parameters<typeof checkLimits>[0], counters: Parameters<typeof checkLimits>[1]): ReturnType<typeof checkLimits> {
+  const verdict = await checkLimits(asked, counters);
+  if (verdict.ok) await countRequest({ site: asked.site, now: asked.now, requests: verdict.requests, page: false }, counters);
+
+  return verdict;
+}
+
 function most<Key>(allowed: readonly Allowed[], keyOf: (request: Allowed) => Key): number {
   const counts = new Map<Key, number>();
   for (const request of allowed) counts.set(keyOf(request), (counts.get(keyOf(request)) ?? 0) + 1);
@@ -87,7 +95,7 @@ property(
 
     for (const request of requests) {
       at += request.gap;
-      const verdict = await checkLimits({ settings: limits, site: request.site, visitor: request.visitor as VisitorKey, now: at }, counters);
+      const verdict = await takeRequest({ settings: limits, site: request.site, visitor: request.visitor as VisitorKey, now: at }, counters);
       if (verdict.ok) allowed.push({ site: request.site, visitor: request.visitor, at });
 
       if (!verdict.ok) expect(verdict.retryAfterSeconds).toBeGreaterThanOrEqual(1);
@@ -115,7 +123,7 @@ property(
 
     for (const request of requests) {
       at += request.gap;
-      expect(await checkLimits({ settings: roomy, site: request.site, visitor: request.visitor as VisitorKey, now: at }, counters)).toEqual({ ok: true });
+      expect(await takeRequest({ settings: roomy, site: request.site, visitor: request.visitor as VisitorKey, now: at }, counters)).toMatchObject({ ok: true });
     }
   }),
 );

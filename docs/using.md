@@ -100,6 +100,7 @@ A publish takes these flags too.
 - **Versions:** an install keeps a few per site. `poplin config versions_kept` shows how many.
 - **Trash:** a deleted site waits some days, then it is gone. `poplin config trash_days` shows how many.
 - **A new link** is for an address that reached the wrong person. A public site keeps its public name.
+- **Pages opened:** `poplin show report--k3f9x2ab71qz` says about how often a site's pages were opened, today and in the last 7 days. The numbers come from a sample, so they read `about 120`. A page a browser shows from its own copy, inside 5 minutes, is not counted.
 
 ## Back up and put back
 

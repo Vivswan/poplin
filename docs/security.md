@@ -138,6 +138,7 @@ A `-p-` address is answered by Cloudflare's login before the Worker sees it. A r
 | the signing key | kept in the database, where the Worker can rotate it; "sign everyone out" rotates it and ends every dashboard session. A private site's login is Access's own: removing the login ends it. Agent tokens are revoked one by one |
 | the bucket and the database | R2 public access stays off, and poplin's install check reports it when it is on; the database is reached only through the Worker's binding |
 | site headers | `X-Content-Type-Options: nosniff`, `Referrer-Policy: no-referrer`, correct content types |
+| page views | a site shows about how often its pages were opened, from a sampled count per site and UTC day kept seven days; it counts opens, not people: no address, cookie, or browser name of a visitor is stored |
 | the dashboard | a strict Content-Security-Policy; it may never be framed |
 | content | the Worker never reads, parses, or rewrites a site's files |
 | the activity log | the dashboard shows the last 100 actions: publish, state change, delete, login, token issued |

@@ -18,6 +18,7 @@ import { type SiteSize, sizeFromRow, type Totals, totalsFromRow } from "../recor
 import { mintSiteId, type SiteId } from "../sites/ids";
 import { tokenFromRow } from "../records/token";
 import { type ManifestFile, MANIFEST_FILE, manifestFromText, type Upload, type UploadId, uploadFromRow } from "../records/upload";
+import { dayOf, type SiteViews, viewDays } from "../records/views";
 import type {
   Address,
   AuditNote,
@@ -111,6 +112,9 @@ WHERE id = ?1 AND trashed = 0 AND (access <> ?2 OR public_name IS NOT ?3)
 const SET_ID = `
 UPDATE sites SET id = ?2, updated_at = ?3
 WHERE id = ?1 AND trashed = 0 AND NOT EXISTS (SELECT 1 FROM sites WHERE id = ?2) AND NOT EXISTS (SELECT 1 FROM sites WHERE public_name = ?2)`;
+
+/** The counts of site `?1` on the days in the JSON list `?3`, moved to its new id `?2`, only when the statement before it wrote the audit entry of that change. */
+const MOVE_COUNTS = "UPDATE request_counts SET site = ?2 WHERE site = ?1 AND day IN (SELECT j.value FROM json_each(?3) AS j) AND changes() = 1";
 
 /** A live site into the trash. */
 const TRASH = "UPDATE sites SET trashed_at = ?2, updated_at = ?2 WHERE id = ?1 AND trashed = 0";
@@ -414,14 +418,24 @@ const DAY_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 /** The site column of the row that counts all sites together; no site id is empty. */
 const ALL_SITES = "";
 
-/** The counts of every day before `?1`, dropped so the table holds one day. */
+/** The counts of every day before `?1`, dropped so the table holds seven days. */
 const DROP_EARLIER_DAYS = "DELETE FROM request_counts WHERE day < ?1";
 
-/** `?3` more requests on day `?1` for site `?2`, and the count after them. */
+/** `?3` more requests on day `?1` for site `?2`, `?4` of them page views, and the count of requests after them. */
 const ADD_REQUESTS = `
-INSERT INTO request_counts (day, site, requests) VALUES (?1, ?2, ?3)
-ON CONFLICT (day, site) DO UPDATE SET requests = requests + excluded.requests
+INSERT INTO request_counts (day, site, requests, views) VALUES (?1, ?2, ?3, ?4)
+ON CONFLICT (day, site) DO UPDATE SET requests = requests + excluded.requests, views = views + excluded.views
 RETURNING requests`;
+
+/** The page views of each site in the JSON list `?2` over the days in the JSON list `?1`, and those of day `?3` among them. Every row is found by its key. */
+const READ_VIEWS = `
+SELECT c.site AS site, SUM(c.views) AS week, SUM(CASE WHEN c.day = ?3 THEN c.views ELSE 0 END) AS today
+FROM json_each(?2) AS s CROSS JOIN json_each(?1) AS d
+JOIN request_counts AS c ON c.day = d.value AND c.site = s.value
+GROUP BY c.site`;
+
+/** The most sites one read of views takes: a page of a listing. */
+const MOST_VIEWED_SITES = 100;
 
 /** The count of day `?1` for site `?2`; no row when nothing was counted. */
 const READ_REQUESTS = "SELECT requests FROM request_counts WHERE day = ?1 AND site = ?2";
@@ -660,6 +674,7 @@ export class SqlDatabase implements Database {
         auditSite(signed, "new_id", next, { from: id }),
         sql(SITE_BY_ID, next),
         sql(SITE_BY_ID, id),
+        sql(MOVE_COUNTS, id, next, JSON.stringify(viewDays(dayOf(signed.at)))),
       ]);
       if (changed(updated)) return done(after);
 
@@ -1070,13 +1085,30 @@ export class SqlDatabase implements Database {
     requireDay(counted.day);
     if (!Number.isSafeInteger(counted.requests) || counted.requests < 1) throw new RangeError(`requests are counted in whole numbers from 1, not ${counted.requests}`);
 
+    const views = counted.views ?? 0;
+    if (!Number.isSafeInteger(views) || views < 0 || views > counted.requests) throw new RangeError(`views are counted in whole numbers from 0 to the requests, not ${views}`);
+
     const [, site, all] = await this.#driver.batch([
-      sql(DROP_EARLIER_DAYS, counted.day),
-      sql(ADD_REQUESTS, counted.day, counted.site, counted.requests),
-      sql(ADD_REQUESTS, counted.day, ALL_SITES, counted.requests),
+      sql(DROP_EARLIER_DAYS, viewDays(counted.day)[0] ?? counted.day),
+      sql(ADD_REQUESTS, counted.day, counted.site, counted.requests, views),
+      sql(ADD_REQUESTS, counted.day, ALL_SITES, counted.requests, views),
     ]);
 
     return { site: requestsIn(site), all: requestsIn(all) };
+  }
+
+  async readViews(sites: readonly SiteId[], day: string): Promise<ReadonlyMap<SiteId, SiteViews>> {
+    requireDay(day);
+    if (sites.length > MOST_VIEWED_SITES) throw new RangeError(`the views of at most ${MOST_VIEWED_SITES} sites are read at once, not of ${sites.length}`);
+
+    const views = new Map<SiteId, SiteViews>(sites.map((site) => [site, { today: 0, week: 0 }]));
+    if (sites.length === 0) return views;
+
+    // A site named twice is read once: its rows would be summed once for each naming.
+    const [read] = await this.#driver.batch([sql(READ_VIEWS, JSON.stringify(viewDays(day)), JSON.stringify([...views.keys()]), day)]);
+    for (const row of read?.rows ?? []) views.set(row.site as SiteId, { today: Number(row.today), week: Number(row.week) });
+
+    return views;
   }
 
   async readRequests(day: string, site?: SiteId): Promise<RequestCounts> {

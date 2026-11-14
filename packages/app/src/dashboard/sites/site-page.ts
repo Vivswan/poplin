@@ -3,6 +3,7 @@
 import { getSite } from "@poplin/core/src/actions/show";
 import { showBytes } from "@poplin/core/src/records/settings";
 import { parseUploadId } from "@poplin/core/src/records/upload";
+import { showViews } from "@poplin/core/src/records/views";
 import { html } from "hono/html";
 
 import { showMoment } from "../page/amounts";
@@ -34,6 +35,13 @@ function expiry(site: Shown): Html {
   return site.expires === "never" ? html`never` : showMoment(site.expires);
 }
 
+/** About how often the site's pages were opened; the words say that the numbers are estimates. */
+function opened(site: Shown): Html {
+  if (site.views === null) return html`not known`;
+
+  return html`${showViews(site.views.today)} times today, ${showViews(site.views.week)} in the last 7 days. Counted from a sample: opens of a page, not people.`;
+}
+
 function facts(site: Shown): Html {
   const versions = site.versions.map((version) => (version.number === site.live_version ? `v${version.number} (live)` : `v${version.number}`)).join(", ");
   const publicAddress = site.addresses.public === null ? html`` : html`<dt>Public address</dt><dd><a href="${site.addresses.public}" rel="noreferrer">${site.addresses.public}</a></dd>`;
@@ -47,6 +55,7 @@ ${publicAddress}
 <dt>Title</dt><dd>${site.title ?? "none"}</dd>
 <dt>Kept versions</dt><dd>${versions}</dd>
 <dt>Size</dt><dd>${showBytes(site.bytes)}, ${site.files} files</dd>
+<dt>Pages opened</dt><dd>${opened(site)}</dd>
 <dt>Updated</dt><dd>${showMoment(site.updated)}</dd>
 <dt>Expires</dt><dd>${expiry(site)}</dd>
 ${gone}

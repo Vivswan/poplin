@@ -3,7 +3,7 @@ import { describe, expect, test } from "bun:test";
 import { defaultSettings, type SettingValues } from "@poplin/core/src/records/settings";
 import type { SiteId } from "@poplin/core/src/sites/ids";
 
-import { type Counters, checkLimits } from "../../src/limits/limits";
+import { type Counters, checkLimits, countRequest, isPageView } from "../../src/limits/limits";
 import { MemoryCounters } from "../../src/limits/memory-counters";
 import type { VisitorKey } from "../../src/limits/visitor-key";
 
@@ -42,10 +42,16 @@ class Watched implements Counters {
     return this.#inner.readDay(window);
   };
 
-  countDay: Counters["countDay"] = (window) => {
-    this.calls.push("countDay");
+  sampleDay: Counters["sampleDay"] = (window, room) => {
+    this.calls.push("sampleDay");
 
-    return this.#inner.countDay(window);
+    return this.#inner.sampleDay(window, room);
+  };
+
+  countDay: Counters["countDay"] = (counted) => {
+    this.calls.push(`countDay ${counted.requests}${counted.page ? " page" : ""}`);
+
+    return this.#inner.countDay();
   };
 }
 
@@ -53,12 +59,20 @@ function arrivals(count: number, from: Omit<Arrival, "visitor"> & { readonly vis
   return Array.from({ length: count }, (_unused, at) => ({ ...from, visitor: from.visitor ?? `visitor-${at}` }));
 }
 
+/** A request as the Worker takes it: checked against the limits, and counted against its day once they let it through. */
+async function takeRequest(asked: Parameters<typeof checkLimits>[0], counters: Parameters<typeof checkLimits>[1]): ReturnType<typeof checkLimits> {
+  const verdict = await checkLimits(asked, counters);
+  if (verdict.ok) await countRequest({ site: asked.site, now: asked.now, requests: verdict.requests, page: false }, counters);
+
+  return verdict;
+}
+
 /** Send the arrivals in order and write each answer as `ok` or `<which>:<retryAfterSeconds>`. */
 async function answers(counters: Counters, settings: Settings, requests: readonly Arrival[]): Promise<string[]> {
   const written: string[] = [];
 
   for (const request of requests) {
-    const verdict = await checkLimits({ settings, site: request.site, visitor: request.visitor as VisitorKey, now: NOON + request.after }, counters);
+    const verdict = await takeRequest({ settings, site: request.site, visitor: request.visitor as VisitorKey, now: NOON + request.after }, counters);
     written.push(verdict.ok ? "ok" : `${verdict.which}:${verdict.retryAfterSeconds}`);
   }
 
@@ -162,7 +176,7 @@ describe("checkLimits", () => {
   });
 
   const touched: readonly { readonly name: string; readonly before: readonly Arrival[]; readonly calls: readonly string[]; readonly answer: string }[] = [
-    { name: "an allowed request", before: [], calls: ["takeMinute visitor", "takeMinute site", "readDay", "countDay"], answer: "ok" },
+    { name: "an allowed request", before: [], calls: ["takeMinute visitor", "takeMinute site", "readDay", "sampleDay", "countDay 1"], answer: "ok" },
     {
       name: "a request the visitor limit refuses",
       before: arrivals(3, { site: DOCS, visitor: "ada", after: 0 }),
@@ -178,13 +192,13 @@ describe("checkLimits", () => {
     {
       name: "a request the site's share refuses",
       before: arrivals(4, { site: REPORT, after: 0 }),
-      calls: ["takeMinute visitor", "takeMinute site", "readDay"],
+      calls: ["takeMinute visitor", "takeMinute site", "readDay", "sampleDay"],
       answer: `site-share:${HALF_DAY_SECONDS}`,
     },
     {
       name: "a request the day refuses",
       before: [...arrivals(4, { site: REPORT, after: 0 }), ...arrivals(4, { site: DOCS, after: 0 })],
-      calls: ["takeMinute visitor", "takeMinute site", "readDay"],
+      calls: ["takeMinute visitor", "takeMinute site", "readDay", "sampleDay"],
       answer: `day:${HALF_DAY_SECONDS}`,
     },
   ];
@@ -210,7 +224,7 @@ describe("checkLimits", () => {
     expect(await counters.readDay({ day: "2026-11-13", site: REPORT })).toEqual({ site: 3, all: 3 });
   });
 
-  const broken: readonly (keyof Counters)[] = ["takeMinute", "readDay", "countDay"];
+  const broken = ["takeMinute", "readDay", "countDay"] as const;
 
   // Drift: a database at its own daily limit, or a binding that fails, must not take every site down with it.
   test.each(broken)("a counter whose %s fails lets requests through, and the counters that work still refuse", async (method) => {
@@ -231,9 +245,61 @@ describe("checkLimits", () => {
     );
   });
 
+  // Drift: a site's views are whatever this says a page is; a file, a refusal, or the redirect to the login counted as one would show opens nobody made.
+  test.each([
+    ["a page", "GET", 200, '"v3-lq1x2k00"', true],
+    ["a page the visitor already holds", "GET", 304, '"v3-lq1x2k00"', true],
+    ["a page a cache in between tagged weak", "GET", 304, 'W/"v3-lq1x2k00"', true],
+    ["a page asked for by its headers alone", "HEAD", 200, '"v3-lq1x2k00"', false],
+    ["a stylesheet", "GET", 200, '"0f343b0931126a20f133d67c2b018a3b"', false],
+    ["a stylesheet the visitor already holds", "GET", 304, '"0f343b0931126a20f133d67c2b018a3b"', false],
+    ["a part of a page", "GET", 206, '"v3-lq1x2k00"', false],
+    ["a redirect", "GET", 302, null, false],
+    ["a refusal", "GET", 404, null, false],
+  ] as const)("%s is a view or not, as the answer says", (_name, method, status, tag, expected) => {
+    const response = new Response(null, { status, headers: tag === null ? {} : { ETag: tag } });
+
+    expect(isPageView(new Request("https://report--k3f9x2ab71qz-u-poplin.example.com/", { method }), response)).toBe(expected);
+  });
+
+  // Drift: the Worker counts after it answers; a count that lost the page flag, or that threw when the counter is down, would lose every view or fail a page that was already served.
+  test("an answered request is written for its site on its UTC day with what it stands for and whether it opened a page; one the sample left out is not written, and a counter that fails is not heard of", async () => {
+    const counters = new Watched();
+    const sampled = [counters.sampleDay({ day: "2026-11-13", site: REPORT }, { all: 9, site: 9 }, NOON)];
+    await countRequest({ site: REPORT, now: NOON, requests: 50, page: true }, counters);
+    await countRequest({ site: REPORT, now: NOON, requests: 1, page: false }, counters);
+    await countRequest({ site: REPORT, now: NOON, requests: 0, page: true }, counters);
+    await countRequest({ site: REPORT, now: NOON, requests: 1, page: true }, { countDay: () => Promise.reject(new Error("the counter is unavailable")) });
+
+    expect([sampled, counters.calls, await counters.readDay({ day: "2026-11-13", site: REPORT }, NOON)]).toEqual([
+      [1],
+      ["sampleDay", "countDay 50 page", "countDay 1", "readDay"],
+      { site: 1, all: 1 },
+    ]);
+  });
+
+  // Drift: the day's check and its count must be one step; with a wait between them, every request that arrives during it passes a day that has room for one.
+  test("of requests that arrive together only as many pass as the day has room for, and the rest are refused without being counted", async () => {
+    const counters = new MemoryCounters();
+    const settings = { ...ROOMY, requests_per_day: 2 };
+    const together = await Promise.all(Array.from({ length: 5 }, (_request, at) => checkLimits({ settings, site: REPORT, visitor: `visitor-${at}` as VisitorKey, now: NOON }, counters)));
+
+    expect([together.map((verdict) => (verdict.ok ? "ok" : verdict.which)).sort(), await counters.readDay({ day: "2026-11-13", site: REPORT })]).toEqual([
+      ["day", "day", "day", "ok", "ok"],
+      { site: 2, all: 2 },
+    ]);
+  });
+
   test("with every counter failing, every request is allowed", async () => {
     const failing = (): Promise<never> => Promise.reject(new Error("the counter is unavailable"));
-    const counters: Counters = { takeMinute: failing, readDay: failing, countDay: failing };
+    const counters: Counters = {
+      takeMinute: failing,
+      readDay: failing,
+      sampleDay: () => {
+        throw new Error("the counter is unavailable");
+      },
+      countDay: failing,
+    };
 
     expect(await answers(counters, SETTINGS, arrivals(20, { site: REPORT, visitor: "ada", after: 0 }))).toEqual(repeated("ok", 20));
   });

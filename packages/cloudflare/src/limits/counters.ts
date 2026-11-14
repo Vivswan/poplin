@@ -11,14 +11,23 @@
 //              is about 9,000 samples, each two rows written, and the first of a day also drops the rows of the
 //              day before, against D1's 100,000 rows a day. A sampled count is an estimate: exact up to 2,000,
 //              off by about 1.6% at 100,000.
+//              A sampled request that opened a page adds the same N to its site's views, in the same row and the same write.
+//              So a site's views are exact while the install's day is under 2,000 requests, and move in steps of up to 50 after.
 //
-// Each Worker instance trusts the day's counts it last saw for half a minute, so most requests read no database row.
-// In that half minute it does not see what other instances count, so a day can end that much traffic late.
+// An instance counts a day as two numbers: `own`, the requests it took itself, which only ever grows, and `others`, what the database
+// showed beyond the instance's own writes, which a later answer of the database can only raise.
+// Within one instance the count never falls below the requests that instance itself took that day, so no order in which the database's
+// answers come back lets this instance pass more than a limit by its own traffic. Across instances the count is approximate by what the
+// other instances did since the database was last read, up to half a minute ago, on either side by at most that.
+//
+// `others` is an answer less every request this instance had sent to be written when the answer came. An answer made before one of
+// those was stored reads low by it, until the next answer. A request whose answer or whose write failed stays in `own` until midnight.
+// Each Worker instance trusts what it last read for half a minute, so most requests read no database row.
 
 import type { Database, RequestCounts } from "@poplin/core/src/database/database";
 import type { SiteId } from "@poplin/core/src/sites/ids";
 
-import type { Counters, DayWindow, MinuteWindow, Taken } from "@poplin/app/src/limits/limits";
+import type { CountedDay, Counters, DayRoom, DayWindow, MinuteWindow, Taken } from "@poplin/app/src/limits/limits";
 
 /** The `simple.limit` of the binding in wrangler.jsonc. The two must be equal, or every per-minute setting is off by their ratio. */
 const BINDING_LIMIT = 1_000_000;
@@ -35,8 +44,11 @@ const MOST_REQUESTS_PER_SAMPLE = 50;
 /** How long an instance trusts the counts it last saw. */
 const FRESH_MS = 30_000;
 
-/** How many sites' counts an instance remembers before it forgets them all and reads again. */
+/** How many sites' counts an instance remembers before it forgets the ones it took no request of and was not asked about for half a minute. A site it took a request of is held all day. */
 const MOST_SITES_REMEMBERED = 1000;
+
+/** How many days an instance holds counts of: the day, and the one before it while its last writes come back. */
+const DAYS_HELD = 2;
 
 /** The part of Cloudflare's rate limiting binding the minute counts use. */
 interface MinuteLimiter {
@@ -55,15 +67,38 @@ interface Parts {
   readonly random?: () => number;
 }
 
-/** One site's count as an instance last saw it. */
-interface Seen {
-  readonly requests: number;
-  readonly at: number;
+/** One count as an instance holds it, of a site or of all sites on one day. */
+interface Tally {
+  /** The requests this instance took. It only grows. */
+  own: number;
+
+  /** How many of them it has sent to the database to be written. A write that failed is taken back out. */
+  sent: number;
+
+  /** What the database showed beyond this instance's own: the most any of its answers left once `sent` was taken off. */
+  others: number;
+}
+
+/** A site's count, with when the database last answered for it, `undefined` before the first answer, and when a request last asked about it. */
+interface SiteTally extends Tally {
+  at: number | undefined;
+  asked: number;
+}
+
+/** One UTC day as an instance counts it. */
+interface Day {
+  readonly all: Tally;
+  readonly sites: Map<SiteId, SiteTally>;
 }
 
 /** How many requests one sample stands for once a day has counted this many: 1 counts every request. */
 function requestsPerSample(counted: number): number {
   return Math.min(MOST_REQUESTS_PER_SAMPLE, Math.floor(counted / REQUESTS_PER_STEP) + 1);
+}
+
+/** Raise what a tally says of the other instances to what an answer of the database shows, never lower it. */
+function raise(tally: Tally, counted: number): void {
+  tally.others = Math.max(tally.others, counted - tally.sent);
 }
 
 /** The counters of a deployed install. One instance per Worker instance: what it remembers is its own. */
@@ -74,11 +109,7 @@ export class CloudflareCounters implements Counters {
 
   readonly #random: () => number;
 
-  #day = "";
-
-  #all = 0;
-
-  readonly #sites = new Map<SiteId, Seen>();
+  readonly #days = new Map<string, Day>();
 
   constructor(parts: Parts) {
     this.#limiter = parts.limiter;
@@ -95,37 +126,106 @@ export class CloudflareCounters implements Counters {
   }
 
   async readDay(window: DayWindow, now: number): Promise<RequestCounts> {
-    const seen = window.day === this.#day ? this.#sites.get(window.site) : undefined;
-    if (seen !== undefined && now - seen.at < FRESH_MS) return { site: seen.requests, all: this.#all };
+    const seen = this.#site(this.#day(window.day), window.site, now).at;
+    if (seen === undefined || now - seen >= FRESH_MS) this.#learn(window, await this.#database.readRequests(window.day, window.site), now);
 
-    const counts = await this.#database.readRequests(window.day, window.site);
-    this.#remember(window, counts, now);
+    const day = this.#day(window.day);
 
-    return counts;
+    return this.#counted(day, this.#site(day, window.site, now));
   }
 
-  async countDay(window: DayWindow, now: number): Promise<void> {
-    if (window.day !== this.#day) this.#startDay(window.day);
+  sampleDay(window: DayWindow, room: DayRoom, now: number): number | "day" | "site-share" {
+    const day = this.#day(window.day);
+    const site = this.#site(day, window.site, now);
+    const counted = this.#counted(day, site);
+    if (counted.all >= room.all) return "day";
 
-    const requests = requestsPerSample(this.#all);
-    if (this.#random() * requests >= 1) return;
+    if (counted.site >= room.site) return "site-share";
 
-    // Counted here before the database answers, so requests that arrive together sample ever more coarsely instead of each writing its own rows.
-    this.#all += requests;
-    const counts = await this.#database.addRequests({ day: window.day, site: window.site, requests });
-    this.#remember(window, counts, now);
+    const requests = requestsPerSample(counted.all);
+    if (this.#random() * requests >= 1) return 0;
+
+    // Counted here before the request is answered and written, so requests that arrive together are checked against it, and sample ever more coarsely instead of each writing its own rows.
+    day.all.own += requests;
+    site.own += requests;
+
+    return requests;
   }
 
-  #remember(window: DayWindow, counts: RequestCounts, now: number): void {
-    if (window.day !== this.#day || this.#sites.size >= MOST_SITES_REMEMBERED) this.#startDay(window.day);
+  async countDay(counted: CountedDay, now: number): Promise<void> {
+    const { day, site, requests } = counted;
+    const tallies = this.#held(day, site);
+    for (const tally of tallies) tally.sent += requests;
 
-    this.#all = counts.all;
-    this.#sites.set(window.site, { requests: counts.site, at: now });
+    try {
+      this.#learn(counted, await this.#database.addRequests({ day, site, requests, views: counted.page ? requests : 0 }), now);
+    } catch (error) {
+      // Not written, so no answer of the database holds it: taken off again, an answer is not read low by it.
+      for (const tally of tallies) tally.sent -= requests;
+
+      throw error;
+    }
   }
 
-  #startDay(day: string): void {
-    this.#day = day;
-    this.#all = 0;
-    this.#sites.clear();
+  #counted(day: Day, site: Tally): RequestCounts {
+    return { site: site.own + site.others, all: day.all.own + day.all.others };
+  }
+
+  /** The day's counts, begun when the day is new. Of more days than an instance holds, the earliest goes whole. */
+  #day(name: string): Day {
+    const held = this.#days.get(name);
+    if (held !== undefined) return held;
+
+    const day: Day = { all: { own: 0, sent: 0, others: 0 }, sites: new Map() };
+    this.#days.set(name, day);
+    if (this.#days.size > DAYS_HELD) this.#days.delete([...this.#days.keys()].sort()[0] ?? name);
+
+    return day;
+  }
+
+  /**
+   * A site's count on a day, begun when the site is new there.
+   *
+   * A full map forgets only sites this instance took no request of, so `own` is never lost, and of those only the ones no request asked about in the last half minute, so none goes between a request's read and its check.
+   */
+  #site(day: Day, id: SiteId, now: number): SiteTally {
+    const held = day.sites.get(id);
+    if (held !== undefined) {
+      held.asked = Math.max(held.asked, now);
+
+      return held;
+    }
+
+    if (day.sites.size >= MOST_SITES_REMEMBERED) {
+      for (const [other, tally] of day.sites) {
+        if (tally.own === 0 && now - tally.asked >= FRESH_MS) day.sites.delete(other);
+      }
+    }
+
+    const site: SiteTally = { own: 0, sent: 0, others: 0, at: undefined, asked: now };
+    day.sites.set(id, site);
+
+    return site;
+  }
+
+  /** The tallies a write of one request touches, on a day the instance still holds; none for a day it let go. */
+  #held(name: string, id: SiteId): Tally[] {
+    const day = this.#days.get(name);
+    if (day === undefined) return [];
+
+    const site = day.sites.get(id);
+
+    return site === undefined ? [day.all] : [day.all, site];
+  }
+
+  /** Take in an answer of the database for one day and site. An answer for a day the instance let go changes nothing. */
+  #learn(window: DayWindow, counts: RequestCounts, now: number): void {
+    const day = this.#days.get(window.day);
+    if (day === undefined) return;
+
+    const site = this.#site(day, window.site, now);
+    raise(day.all, counts.all);
+    raise(site, counts.site);
+    site.at = now;
   }
 }

@@ -13,7 +13,7 @@ const HOSTILE_TITLES = [
   ["javascript:alert(1)", "javascript:alert(1)"],
 ] as const;
 
-test("a row shows the site's name, its address from the site object as a link, access, title, size, live version, and last change", async () => {
+test("a row shows the site's name, its address from the site object as a link, access, title, size, live version, about how often it was opened in seven days, and last change", async () => {
   const opened = await openDashboard();
   const admin = { scope: "admin", holder: opened.owner } as const;
   const site = await opened.publish("report");
@@ -23,6 +23,9 @@ test("a row shows the site's name, its address from the site object as a link, a
   opened.clock.now += 60_000;
   await opened.install.database.addVersion(site.id, { number: reserved.number, keep: 3, bytes: 1_250_000, files: 14 }, { by: opened.owner, at: opened.clock.now });
   await updateSite(opened.install, admin, { site: site.id, access: "public", public_name: "docs", title: "Q3 sales" });
+
+  await opened.install.database.addRequests({ day: "2023-11-09", site: site.id, requests: 1300, views: 1234 });
+  await opened.install.database.addRequests({ day: "2023-11-07", site: site.id, requests: 9000, views: 9000 });
 
   const page = await (await opened.get("/")).text();
   const [row = ""] = page.match(/<tr>\s*<td>[\s\S]*?<\/tr>/) ?? [];
@@ -35,6 +38,7 @@ test("a row shows the site's name, its address from the site object as a link, a
     "Q3 sales",
     "1.3 MB, 14 files",
     "v2",
+    "about 1,200",
     '<time datetime="2023-11-14T22:14:20.000Z">2023-11-14 22:14 UTC</time>',
   ]);
 });

@@ -1362,7 +1362,7 @@ function computerLogins(label: string, makeDatabase: DatabaseFactory): void {
 function requestCounts(label: string, makeDatabase: DatabaseFactory): void {
   describe(`${label}: the day's request counts`, () => {
     // Drift: the limits on a day's requests read these two numbers; a site's requests left out of the total, or yesterday's carried over, would refuse the wrong site.
-    test("two sites add to their own counts and to one total, a read changes nothing, and a new day starts from nothing and drops the day before", async () => {
+    test("two sites add to their own counts and to one total, a read changes nothing, and a new day starts from nothing", async () => {
       const database = await opened(makeDatabase);
 
       expect(await database.readRequests(TODAY, NO_SITE)).toEqual({ site: 0, all: 0 });
@@ -1380,11 +1380,65 @@ function requestCounts(label: string, makeDatabase: DatabaseFactory): void {
       ]);
       expect(await database.addRequests({ day: TOMORROW, site: OTHER_SITE, requests: 2 })).toEqual({ site: 2, all: 2 });
       expect([await database.readRequests(TODAY, NO_SITE), await database.readRequests(TODAY, OTHER_SITE)]).toEqual([
-        { site: 0, all: 0 },
-        { site: 0, all: 0 },
+        { site: 100, all: 101 },
+        { site: 1, all: 101 },
       ]);
       await expect(database.readRequests("today", NO_SITE)).rejects.toThrow(RangeError);
       expect(await auditTrail(database)).toEqual([]);
+    });
+
+    // Drift: a site's views are a sum over seven UTC days read by day and site; a day too many, a day of another month sorted wrongly, or another site's rows would show opens that never were.
+    test("views add up per site over the day and the six before it, across a month's end, apart from the requests, and a count older than that is dropped with the next addition", async () => {
+      const database = await opened(makeDatabase);
+      const counted = [
+        { day: "2026-10-25", site: NO_SITE, requests: 9, views: 9 },
+        { day: "2026-10-26", site: NO_SITE, requests: 50, views: 50 },
+        { day: "2026-10-31", site: NO_SITE, requests: 4, views: 3 },
+        { day: "2026-11-01", site: NO_SITE, requests: 10, views: 2 },
+        { day: "2026-11-01", site: NO_SITE, requests: 5 },
+        { day: "2026-11-01", site: OTHER_SITE, requests: 7, views: 7 },
+      ];
+      for (const one of counted) await database.addRequests(one);
+
+      expect([...(await database.readViews([NO_SITE, OTHER_SITE, "bbbbbbbbbbbb" as SiteId], "2026-11-01"))]).toEqual([
+        [NO_SITE, { today: 2, week: 55 }],
+        [OTHER_SITE, { today: 7, week: 7 }],
+        ["bbbbbbbbbbbb" as SiteId, { today: 0, week: 0 }],
+      ]);
+      expect([...(await database.readViews([NO_SITE], "2026-10-31"))]).toEqual([[NO_SITE, { today: 3, week: 53 }]]);
+      expect([await database.readViews([], "2026-11-01"), await database.readRequests("2026-11-01", NO_SITE)]).toEqual([new Map(), { site: 15, all: 22 }]);
+
+      await database.addRequests({ day: "2026-11-02", site: OTHER_SITE, requests: 1 });
+
+      expect([...(await database.readViews([NO_SITE], "2026-11-01"))]).toEqual([[NO_SITE, { today: 2, week: 5 }]]);
+      await expect(database.readViews([NO_SITE], "tomorrow")).rejects.toThrow(RangeError);
+    });
+
+    // Drift: the counts are kept under a site's id, and a new link changes the id; counts left under the old one would show a site nobody ever opened, and free its share of the day.
+    test("a site that gets a new id keeps its views and its day's requests under it, a site named twice is read once, and no other site's counts move", async () => {
+      const database = await opened(makeDatabase);
+      const site = await made(database, draft("report" as SiteName));
+      const other = await made(database, draft("notes" as SiteName));
+      const day = new Date(NOW).toISOString().slice(0, 10);
+      const old = new Date(NOW - 7 * 86_400_000).toISOString().slice(0, 10);
+      await database.addRequests({ day, site: site.id, requests: 15, views: 12 });
+      await database.addRequests({ day, site: other.id, requests: 4, views: 3 });
+      // Counted last, so no later count drops it: only the move could take it along.
+      await database.addRequests({ day: old, site: site.id, requests: 9, views: 9 });
+
+      const moved = await database.giveNewId(site.id, BY_ADA);
+      if (moved.kind !== "done") throw new Error("no new id was given");
+
+      expect([...(await database.readViews([moved.site.id, moved.site.id, site.id, other.id], day))]).toEqual([
+        [moved.site.id, { today: 12, week: 12 }],
+        [site.id, { today: 0, week: 0 }],
+        [other.id, { today: 3, week: 3 }],
+      ]);
+      expect([await database.readRequests(day, moved.site.id), await database.readRequests(day, site.id), await database.readRequests(old, moved.site.id)]).toEqual([
+        { site: 15, all: 19 },
+        { site: 0, all: 19 },
+        { site: 0, all: 9 },
+      ]);
     });
 
     // Drift: additions from several Worker instances land at once; one read back and written again would lose the others.
@@ -1401,10 +1455,13 @@ function requestCounts(label: string, makeDatabase: DatabaseFactory): void {
       { day: "today", requests: 1 },
       { day: TODAY, requests: 0 },
       { day: TODAY, requests: 1.5 },
-    ])("day $day with $requests requests is refused and nothing is counted", async ({ day, requests }) => {
+      { day: TODAY, requests: 2, views: 3 },
+      { day: TODAY, requests: 2, views: -1 },
+      { day: TODAY, requests: 2, views: 0.5 },
+    ])("day $day with $requests requests and $views views is refused and nothing is counted", async ({ day, requests, views }) => {
       const database = await opened(makeDatabase);
 
-      await expect(database.addRequests({ day, site: NO_SITE, requests })).rejects.toThrow(RangeError);
+      await expect(database.addRequests({ day, site: NO_SITE, requests, views })).rejects.toThrow(RangeError);
       expect(await database.readRequests(TODAY, NO_SITE)).toEqual({ site: 0, all: 0 });
     });
   });
