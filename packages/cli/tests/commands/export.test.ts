@@ -24,6 +24,26 @@ function isFileRequest(request: Request): boolean {
   return new URL(request.url).pathname.endsWith("/file") && request.method === "GET";
 }
 
+/** An answer that never comes, with the command stopped a moment after it was asked for. */
+function heldUntilStopped(bench: Bench): Promise<Response> {
+  setTimeout(bench.stop, 5);
+
+  return new Promise<Response>(() => undefined);
+}
+
+/** A file that arrives in part and breaks off when the command is stopped, a moment later: what the platform does to a download on its way. */
+function brokenOffByStop(bench: Bench, request: Request): Response {
+  const body = new ReadableStream<Uint8Array>({
+    start: (controller) => {
+      controller.enqueue(new TextEncoder().encode("bo"));
+      request.signal.addEventListener("abort", () => controller.error(request.signal.reason));
+      setTimeout(bench.stop, 5);
+    },
+  });
+
+  return new Response(body, { headers: { "Content-Length": "6", "Poplin-Content-Type": "text%2Fcss" } });
+}
+
 afterEach(cleanUp);
 
 describe("export", () => {
@@ -94,5 +114,34 @@ describe("export", () => {
     expect([fresh.code, fresh.out, left]).toEqual([code, [], []]);
     expect(fresh.err[0]).toMatch(said);
     expect([over.code, readdirSync(folder), readFileSync(zip, "utf8")]).toEqual([code, ["backup.zip"], "an older backup"]);
+  });
+
+  // Drift: a stop that broke a file off half way ended as "the backup cannot be written", which names a fault of the disk and says nothing of the zip.
+  test.each<[string, (bench: Bench, request: Request, files: number) => Response | Promise<Response> | undefined]>([
+    ["at its first call", (bench, _request, files) => (files === 0 ? heldUntilStopped(bench) : undefined)],
+    ["half way through its first file", (bench, request, files) => (files === 1 ? brokenOffByStop(bench, request) : undefined)],
+    ["at its last file", (bench, _request, files) => (files === 4 ? heldUntilStopped(bench) : undefined)],
+  ])("an export stopped %s ends as a stopped command that wrote no backup, and leaves no file, and an older backup under --overwrite keeps its bytes", async (_when, respond) => {
+    const bench = await openBench();
+    await publishedTwice(bench, "notes");
+    await publishedTwice(bench, "more");
+    const folder = scratch();
+    const zip = join(folder, "backup.zip");
+    const stopped = [1, [`the command was stopped: the backup was given up and nothing was written to ${zip}`], []];
+    let files = 0;
+    bench.hook = (request) => {
+      if (isFileRequest(request)) files += 1;
+
+      return respond(bench, request, files);
+    };
+
+    const fresh = await bench.run(`export --out ${zip}`);
+    const left = readdirSync(folder);
+    writeFileSync(zip, "an older backup");
+    files = 0;
+    const over = await bench.run(`export --out ${zip} --overwrite`);
+
+    expect([[fresh.code, fresh.err, fresh.out], left]).toEqual([stopped, []]);
+    expect([[over.code, over.err, over.out], readdirSync(folder), readFileSync(zip, "utf8")]).toEqual([stopped, ["backup.zip"], "an older backup"]);
   });
 });

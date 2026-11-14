@@ -138,7 +138,8 @@ function exported(target: string, manifest: Manifest, sites: readonly Exported[]
 /**
  * Export the install, or one site of it, into one zip.
  *
- * The zip is written beside its target and renamed at the end, so a failure at any step leaves nothing under the target's name. A target that is already there is refused before the install is asked anything, unless `--overwrite` was given.
+ * The zip is written beside its target and renamed at the end, so a failure or a stop at any step leaves the target as it was: no file, or the file that was there.
+ * A target that is already there is refused before the install is asked anything, unless `--overwrite` was given.
  *
  * @returns one line per site and a last line with the totals; the same as data under `--json`
  */
@@ -173,6 +174,10 @@ export async function runExport(request: ExportRequest, { client, io }: Session)
     return exported(target, manifest, sites, await writer.finish());
   } catch (error) {
     await writer.abandon();
+
+    // A stop reaches here as a call that failed, or as a file whose stream broke off.
+    if (io.stopped.aborted) return { ok: false, problem: problem("stopped", `the backup was given up and nothing was written to ${target}`) };
+
     if (error instanceof Stopped) return { ok: false, problem: error.problem };
 
     return { ok: false, problem: problem("unwritable", error instanceof Error ? error.message : String(error)) };
