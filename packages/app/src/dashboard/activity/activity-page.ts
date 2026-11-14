@@ -1,8 +1,8 @@
 // The Activity tab: the audit log, the newest entry first.
 
 import { listAudit } from "@poplin/core/src/actions/audit-log";
-import { getSite } from "@poplin/core/src/actions/show";
 import type { AuditAction } from "@poplin/core/src/records/audit";
+import { siteLabel } from "@poplin/core/src/sites/labels";
 import { html } from "hono/html";
 
 import { showMoment } from "../page/amounts";
@@ -51,18 +51,12 @@ function beforeIn(url: URL): unknown {
   return SEQ_PATTERN.test(before) ? Number(before) : before;
 }
 
+/** The label of every site the entries name that is still a site, read in one query however many sites a page names. */
 async function labelsOf(visit: Visit, entries: readonly Entry[]): Promise<Labels> {
   const ids = new Set(entries.flatMap((entry) => (entry.site === null ? [] : [entry.site.id])));
-  const labels = new Map<string, string>();
+  const names = await visit.install.database.getSiteNames([...ids]);
 
-  await Promise.all(
-    Array.from(ids, async (id) => {
-      const shown = await getSite(visit.install, visit.actor, id);
-      if (shown.ok) labels.set(id, shown.site.label);
-    }),
-  );
-
-  return labels;
+  return new Map(Array.from(names, ([id, name]) => [id, siteLabel(name, id)]));
 }
 
 function siteCell(entry: Entry, labels: Labels): Html {

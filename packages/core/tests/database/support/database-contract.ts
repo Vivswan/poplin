@@ -363,6 +363,29 @@ function sites(label: string, makeDatabase: DatabaseFactory): void {
       expect(await database.getSite("aaaaaaaaaaaa" as SiteId)).toEqual(first);
     });
 
+    // Drift: a page that names many sites asks for all of them at once, and one invocation has a fixed count of queries; a lookup that dropped the trash, kept an old name, or made up a deleted site would mislabel the log.
+    test("the names of many sites are read at once: the name each has now, the trash included, and nothing for an id that is no site's", async () => {
+      const database = await opened(makeDatabase);
+      const kept = await made(database, draft(REPORT));
+      const renamed = await made(database, draft(REPORT));
+      const trashed = await made(database, draft(REPORT));
+      const deleted = await made(database, draft(REPORT));
+      await database.changeDetails(renamed.id, { name: "notes" as SiteName }, BY_ADA);
+      await database.trashSite(trashed.id, BY_ADA);
+      await database.deleteSite(deleted.id, BY_ADA);
+
+      const names = await database.getSiteNames([kept.id, renamed.id, trashed.id, deleted.id, NO_SITE, kept.id]);
+
+      expect<unknown>([[...names].sort(), [...(await database.getSiteNames([]))]]).toEqual([
+        [
+          [kept.id, REPORT],
+          [renamed.id, "notes"],
+          [trashed.id, REPORT],
+        ].sort(),
+        [],
+      ]);
+    });
+
     // Drift: the folder is where the files are and the owner is whose site it is; a change that rewrote either would strand the files or hand the site over.
     test("a site keeps its name, folder, owner, and creation time through every change another person makes", async () => {
       const database = await opened(makeDatabase);

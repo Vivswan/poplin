@@ -199,6 +199,16 @@ class MemoryDatabase implements Database {
     return kept === undefined ? undefined : siteOf(kept);
   }
 
+  async getSiteNames(ids: readonly SiteId[]): Promise<ReadonlyMap<SiteId, SiteName>> {
+    const named = ids.flatMap((id) => {
+      const kept = this.#sites.get(id);
+
+      return kept === undefined ? [] : [[id, kept.fields.name] as const];
+    });
+
+    return new Map(named);
+  }
+
   async getSiteByPublicName(name: PublicName): Promise<Site | undefined> {
     const kept = this.#byPublicName(name);
 

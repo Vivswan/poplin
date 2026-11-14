@@ -3,10 +3,31 @@ import { expect, test } from "bun:test";
 import { deleteSite } from "@poplin/core/src/actions/delete";
 import { newLink } from "@poplin/core/src/actions/new-link";
 import { updateSite } from "@poplin/core/src/actions/set";
+import type { Database } from "@poplin/core/src/database/database";
 
 import { openDashboard } from "../support/install";
 
+/** The queries one page of the log makes of the install's database, whatever its entries name: the settings, the entries, and the names of their sites. */
+const PAGE_QUERIES = 3;
+
+/** One row of the table: when, who, what, and the cell of the site. */
 const ROW = /<tr><td>(?:<time[^>]*>)?([^<]*)(?:<\/time>)?<\/td><td>([^<]*)<\/td><td>([^<]*)<\/td><td>(.*?)<\/td><\/tr>/g;
+
+/** The database with every query counted: each method is one query, and one past the page's count throws, as the 51st does on the Free plan. */
+function counted(database: Database, asked: { count: number }): Database {
+  return new Proxy(database, {
+    get: (target, name) => {
+      const method = Reflect.get(target, name) as (...sent: unknown[]) => unknown;
+
+      return (...sent: unknown[]) => {
+        asked.count += 1;
+        if (asked.count > PAGE_QUERIES) throw new Error(`query ${asked.count} of a page that makes ${PAGE_QUERIES}: ${String(name)}`);
+
+        return method.apply(target, sent);
+      };
+    },
+  });
+}
 
 test("the log shows when, who, what, and which site, the newest first; a site is a link only while the id its entry names is still a site", async () => {
   const opened = await openDashboard();
@@ -31,6 +52,24 @@ test("the log shows when, who, what, and which site, the newest first; a site is
     ["2023-11-14 22:13 UTC", "owner@example.com", "made the site", "kept"],
     ["2023-11-14 22:13 UTC", "owner@example.com", "set the first settings", ""],
   ]);
+});
+
+// Drift: Cloudflare's Free plan gives one invocation 50 database queries, of which a cold start takes 5 and the session 2; a lookup for each site a page names passed that at 24 sites and answered 500.
+test("a page of fifty entries about fifty sites, half of them gone, asks the database as often as a page about none", async () => {
+  const opened = await openDashboard();
+  const signed = { by: opened.owner, at: opened.clock.now };
+  const gone = [];
+  for (let index = 0; index < 25; index += 1) gone.push(await opened.publish(`gone-${index}`));
+  for (let index = 0; index < 25; index += 1) await opened.publish(`kept-${index}`);
+  for (const site of gone) await opened.install.database.deleteSite(site.id, signed);
+
+  const asked = { count: 0 };
+  Object.assign(opened.install, { database: counted(opened.install.database, asked) });
+  const page = await opened.get("/activity");
+  const rows = Array.from((await page.text()).matchAll(ROW), (row) => row[4] ?? "");
+
+  expect([page.status, rows.length, rows.filter((cell) => cell.startsWith("<a href=")).length, new Set(rows).size]).toEqual([200, 50, 25, 50]);
+  expect(asked.count).toBe(PAGE_QUERIES);
 });
 
 test("the older link follows the log's own sequence, so every entry is on exactly one page of fifty at most", async () => {

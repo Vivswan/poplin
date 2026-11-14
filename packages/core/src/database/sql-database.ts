@@ -7,9 +7,10 @@ import * as v from "valibot";
 
 import type { ComputerLogin, LoginId, PendingLogin, UserCode } from "../auth/computer-logins";
 import type { TokenId, TokenRecord } from "../auth/tokens";
-import type { PublicName } from "../names/names";
+import type { PublicName, SiteName } from "../names/names";
 import { type AuditAction, type AuditEntry, auditFromRow } from "../records/audit";
 import { computerLoginFromRow } from "../records/computer-login";
+import { SITE_ID, SITE_NAME } from "../records/fields";
 import { SETTING_CHANGES, SETTING_VALUES, type SettingValues } from "../records/settings";
 import { signingKeyFromRow, signingKeyToText } from "../records/secret";
 import { NEW_SITE, SITE_DETAILS, SITE_FOLDER, type Site, type SiteAccess, type SiteFolder, siteFromRow, siteToRow } from "../records/site";
@@ -65,6 +66,12 @@ FROM sites s`;
 
 /** The site with id `?1`. */
 const SITE_BY_ID = `${SELECT_SITE} WHERE s.id = ?1`;
+
+/** The id and the name of every site whose id is in the JSON array `?1`. */
+const SITE_NAMES = "SELECT id, name FROM sites WHERE id IN (SELECT value FROM json_each(?1))";
+
+/** A row of `SITE_NAMES`. */
+const NAMED_SITE = v.object({ id: SITE_ID, name: SITE_NAME });
 
 /** The site holding public name `?1`. */
 const SITE_BY_PUBLIC_NAME = `${SELECT_SITE} WHERE s.public_name = ?1`;
@@ -587,6 +594,13 @@ export class SqlDatabase implements Database {
     const [found] = await this.#driver.batch([sql(SITE_BY_ID, id)]);
 
     return siteIn(found);
+  }
+
+  async getSiteNames(ids: readonly SiteId[]): Promise<ReadonlyMap<SiteId, SiteName>> {
+    const [found] = await this.#driver.batch([sql(SITE_NAMES, JSON.stringify(ids))]);
+    const named = (found?.rows ?? []).map((row) => v.parse(NAMED_SITE, row));
+
+    return new Map(named.map(({ id, name }) => [id, name]));
   }
 
   async getSiteByPublicName(name: PublicName): Promise<Site | undefined> {

@@ -266,6 +266,9 @@ export interface Database {
   /** The site with this id, in the trash or not. */
   getSite(id: SiteId): Promise<Site | undefined>;
 
+  /** The name each of these ids' sites has now, in the trash or not, read in one step however many ids are asked. An id that is no site's is left out. */
+  getSiteNames(ids: readonly SiteId[]): Promise<ReadonlyMap<SiteId, SiteName>>;
+
   /** The site holding this public name, in the trash or not. */
   getSiteByPublicName(name: PublicName): Promise<Site | undefined>;
 
