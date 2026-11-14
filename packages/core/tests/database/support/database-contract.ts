@@ -531,6 +531,21 @@ function sites(label: string, makeDatabase: DatabaseFactory): void {
       expect(await database.findServed({ public_name: DOCS }, NOW)).toEqual({ ...site, updated_at: NOW + 2 });
     });
 
+    // Drift: a site restored with an expiry already behind it would be live in the answer and served to nobody, and the sweep would trash it again.
+    test.each([
+      ["an expiry before the restore", NOW + 1, "never"],
+      ["an expiry at the moment of the restore", NOW + 5, "never"],
+      ["an expiry after the restore", NOW + 6, NOW + 6],
+    ] as const)("a restore clears %s, and keeps one still ahead", async (_which, expires, kept) => {
+      const database = await opened(makeDatabase);
+      const site = await made(database, { ...draft(REPORT), expires });
+      await database.trashSite(site.id, BY_ADA);
+      const restored = { ...site, expires: kept, updated_at: NOW + 5 };
+
+      expect(await database.restoreSite(site.id, { by: ADA, at: NOW + 5 })).toEqual({ kind: "done", site: restored });
+      expect([await database.getSite(site.id), await database.findServed({ id: site.id }, NOW + 5)]).toEqual([restored, restored]);
+    });
+
     // Drift: a name held by a site that no longer exists could never be claimed again, and versions left behind would count against the install for good.
     test("deleting a site for good frees its public name and removes its versions with it", async () => {
       const database = await opened(makeDatabase);

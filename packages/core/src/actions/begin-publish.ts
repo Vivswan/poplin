@@ -10,19 +10,13 @@ import { mintSiteFolder, type SiteAccess, type SiteFolder } from "../records/sit
 import { MANIFEST_FILE, type ManifestFile, mintUploadId, type UploadPlan } from "../records/upload";
 import type { SiteId } from "../sites/ids";
 import { type CheckedChanges, defaultExpiry, readChanges, SITE_CHANGES, type SiteChanges } from "./changes";
-import { fileKey } from "./files";
+import { checkFilePath } from "./files";
 import { enterInstall, reachSite } from "./reach";
 import { type Install, type Refused, refuse } from "./records";
 import { type UploadObject, uploadObject } from "./uploads";
 
 /** The page every site has at its top. */
 export const ENTRY_PAGE = "index.html";
-
-/** A folder key of the usual length, to measure a path against before the site's own folder is known. */
-const ANY_FOLDER = "0".repeat(16) as SiteFolder;
-
-/** The widest version number. A path is taken only when its key fits under it, so a site never stops taking a path as its versions grow. */
-const WIDEST_VERSION = Number.MAX_SAFE_INTEGER;
 
 /** The most files one publish may declare, whatever the caller allows: finishing lists them a thousand a store call. */
 const MAX_FILES = 10_000;
@@ -112,7 +106,7 @@ interface Planned {
 export function checkManifest(
   files: readonly ManifestFile[],
   limits: UploadLimits,
-  rules: ManifestRules = { isStorable: (path) => fileKey(ANY_FOLDER, WIDEST_VERSION, path).ok, entries: [ENTRY_PAGE] },
+  rules: ManifestRules = { isStorable: (path) => checkFilePath(path).ok, entries: [ENTRY_PAGE] },
 ): Listed | Refused<"bad_path" | "no_index" | "too_large"> {
   if (files.length > Math.min(limits.files, MAX_FILES)) return refuse("too_large", "max_files");
 

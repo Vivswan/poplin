@@ -6,7 +6,6 @@ import { type Login, parseLogin } from "../../src/auth/logins";
 
 const NOW = 1_700_000_000_000;
 const ONE_DAY_MS = 24 * 60 * 60 * 1000;
-const THIRTY_DAYS_MS = 30 * ONE_DAY_MS;
 const SECRET = new Uint8Array(32).fill(1);
 const OTHER_SECRET = new Uint8Array(32).fill(2);
 const BASE64URL = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
@@ -89,22 +88,22 @@ describe("verifySession", () => {
     const respelled = `${signature.slice(0, -1)}${BASE64URL[lastSymbol ^ 1]}`;
 
     const outcomes = {
-      genuine: await verifySession(value, { key, now: NOW }),
-      "another email under the old signature": await verifySession(`${strangerEmail}.${issued}.${signature}`, { key, now: NOW }),
-      "a later issue time under the old signature": await verifySession(`${email}.${NOW + 1}.${signature}`, { key, now: NOW }),
-      "one signature symbol changed": await verifySession(`${email}.${issued}.${signature.replace(/^./, (first) => (first === "A" ? "B" : "A"))}`, { key, now: NOW }),
-      "the same signature bytes spelled another way": await verifySession(`${email}.${issued}.${respelled}`, { key, now: NOW }),
-      "signed with another key": await verifySession(value, { key: otherKey, now: NOW }),
-      "built with another key": await verifySession(expected(OTHER_SECRET, "owner@example.com", NOW), { key, now: NOW }),
-      "truncated by one symbol": await verifySession(value.slice(0, -1), { key, now: NOW }),
-      "truncated to the signed part": await verifySession(`${email}.${issued}`, { key, now: NOW }),
-      "truncated mid-way": await verifySession(value.slice(0, 20), { key, now: NOW }),
-      "given twice": await verifySession(`${value}.${value}`, { key, now: NOW }),
-      "a signed address not in normal form": await verifySession(expected(SECRET, "Owner@Example.com", NOW), { key, now: NOW }),
-      "a signed text that is no address": await verifySession(expected(SECRET, "owner", NOW), { key, now: NOW }),
-      "a signed address behind a byte-order mark": await verifySession(expected(SECRET, BYTE_ORDER_MARKED, NOW), { key, now: NOW }),
-      "a signed address in broken UTF-8": await verifySession(expected(SECRET, BROKEN_UTF8, NOW), { key, now: NOW }),
-      "issued at the epoch": await verifySession(await buildSession({ email: login("owner@example.com"), issuedAt: 0, key }), { key, now: 0 }),
+      genuine: await verifySession(value, { key, now: NOW, maxAgeMs: ONE_DAY_MS }),
+      "another email under the old signature": await verifySession(`${strangerEmail}.${issued}.${signature}`, { key, now: NOW, maxAgeMs: ONE_DAY_MS }),
+      "a later issue time under the old signature": await verifySession(`${email}.${NOW + 1}.${signature}`, { key, now: NOW, maxAgeMs: ONE_DAY_MS }),
+      "one signature symbol changed": await verifySession(`${email}.${issued}.${signature.replace(/^./, (first) => (first === "A" ? "B" : "A"))}`, { key, now: NOW, maxAgeMs: ONE_DAY_MS }),
+      "the same signature bytes spelled another way": await verifySession(`${email}.${issued}.${respelled}`, { key, now: NOW, maxAgeMs: ONE_DAY_MS }),
+      "signed with another key": await verifySession(value, { key: otherKey, now: NOW, maxAgeMs: ONE_DAY_MS }),
+      "built with another key": await verifySession(expected(OTHER_SECRET, "owner@example.com", NOW), { key, now: NOW, maxAgeMs: ONE_DAY_MS }),
+      "truncated by one symbol": await verifySession(value.slice(0, -1), { key, now: NOW, maxAgeMs: ONE_DAY_MS }),
+      "truncated to the signed part": await verifySession(`${email}.${issued}`, { key, now: NOW, maxAgeMs: ONE_DAY_MS }),
+      "truncated mid-way": await verifySession(value.slice(0, 20), { key, now: NOW, maxAgeMs: ONE_DAY_MS }),
+      "given twice": await verifySession(`${value}.${value}`, { key, now: NOW, maxAgeMs: ONE_DAY_MS }),
+      "a signed address not in normal form": await verifySession(expected(SECRET, "Owner@Example.com", NOW), { key, now: NOW, maxAgeMs: ONE_DAY_MS }),
+      "a signed text that is no address": await verifySession(expected(SECRET, "owner", NOW), { key, now: NOW, maxAgeMs: ONE_DAY_MS }),
+      "a signed address behind a byte-order mark": await verifySession(expected(SECRET, BYTE_ORDER_MARKED, NOW), { key, now: NOW, maxAgeMs: ONE_DAY_MS }),
+      "a signed address in broken UTF-8": await verifySession(expected(SECRET, BROKEN_UTF8, NOW), { key, now: NOW, maxAgeMs: ONE_DAY_MS }),
+      "issued at the epoch": await verifySession(await buildSession({ email: login("owner@example.com"), issuedAt: 0, key }), { key, now: 0, maxAgeMs: ONE_DAY_MS }),
     };
 
     expect<unknown>(outcomes).toEqual({
@@ -129,15 +128,13 @@ describe("verifySession", () => {
 
   // Drift: the age limit is the only thing that ends a session short of rotating the key; an off-by-one or a wrong unit leaves stolen values good for ever.
   test.each([
-    ["on the default limit", { now: NOW + THIRTY_DAYS_MS }, { ok: true, value: "owner@example.com" }],
-    ["past the default limit", { now: NOW + THIRTY_DAYS_MS + 1 }, { ok: false, refusal: "expired" }],
     ["on a given limit", { now: NOW + ONE_DAY_MS, maxAgeMs: ONE_DAY_MS }, { ok: true, value: "owner@example.com" }],
     ["past a given limit", { now: NOW + ONE_DAY_MS + 1, maxAgeMs: ONE_DAY_MS }, { ok: false, refusal: "expired" }],
     ["a limit of nothing", { now: NOW + 1, maxAgeMs: 0 }, { ok: false, refusal: "expired" }],
-    ["issued a moment after now", { now: NOW - 1000 }, { ok: true, value: "owner@example.com" }],
-    ["a clock that is no number", { now: Number.NaN }, { ok: false, refusal: "expired" }],
+    ["issued a moment after now", { now: NOW - 1000, maxAgeMs: ONE_DAY_MS }, { ok: true, value: "owner@example.com" }],
+    ["a clock that is no number", { now: Number.NaN, maxAgeMs: ONE_DAY_MS }, { ok: false, refusal: "expired" }],
     ["a limit that is no number", { now: NOW, maxAgeMs: Number.NaN }, { ok: false, refusal: "expired" }],
-  ] as ReadonlyArray<readonly [string, { now: number; maxAgeMs?: number }, unknown]>)("%s", async (_label, clock, outcome) => {
+  ] as ReadonlyArray<readonly [string, { now: number; maxAgeMs: number }, unknown]>)("%s", async (_label, clock, outcome) => {
     const { key, value } = await fixture();
 
     expect<unknown>(await verifySession(value, { key, ...clock })).toEqual(outcome);
@@ -147,6 +144,6 @@ describe("verifySession", () => {
   test.each(NASTY_INPUTS.map((input) => [input.slice(0, 40), input] as const))("refuses %j as malformed without throwing", async (_label, input) => {
     const key = await importSessionKey(SECRET);
 
-    expect<unknown>(await verifySession(input, { key, now: NOW })).toEqual({ ok: false, refusal: "malformed" });
+    expect<unknown>(await verifySession(input, { key, now: NOW, maxAgeMs: ONE_DAY_MS })).toEqual({ ok: false, refusal: "malformed" });
   });
 });

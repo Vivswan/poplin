@@ -1,9 +1,10 @@
 // One site's own page: what it is, every setting, and every change the owner can make to it.
 
 import { getSite } from "@poplin/core/src/actions/show";
+import { showBytes } from "@poplin/core/src/records/settings";
 import { html } from "hono/html";
 
-import { showBytes, showMoment } from "../page/amounts";
+import { showMoment } from "../page/amounts";
 import { csrfField, refusedPage } from "../page/frame";
 import type { Html, Page, Visit } from "../records";
 
@@ -126,7 +127,7 @@ function trashForms(visit: Visit, site: Shown): Html {
   return html`<h2>Restore</h2>
 <form method="post" action="${action(site, "restore")}">
 ${csrfField(visit)}
-<p>The site comes back as it was, with its address and its settings.</p>
+<p>The site comes back with its address and its settings. An expiry that has passed is cleared.</p>
 <button type="submit">Restore</button>
 </form>
 <h2>Delete forever</h2>

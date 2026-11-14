@@ -4,12 +4,9 @@
 //                   HTML                  cache_html: 0 -> no-store, else public, max-age=<seconds>
 //                   every other file      cache_files: off -> no-store, else public, max-age=<seconds>
 
-import type { SettingValues } from "@poplin/core/src/records/settings";
+import { type SettingValues, spanSeconds } from "@poplin/core/src/records/settings";
 import type { Site } from "@poplin/core/src/records/site";
 import type { SiteAddresses } from "./addresses";
-
-/** How many seconds each unit of a cache time holds. */
-const SECONDS_PER_UNIT: Readonly<Record<CacheTime["unit"], number>> = { s: 1, m: 60, h: 3600, d: 86_400 };
 
 /** A stored content type that names an HTML page, with or without parameters, read as `Headers` sends it: without the spaces around it. */
 const HTML_TYPE = /^\s*text\/html\s*(?:;|$)/i;
@@ -52,7 +49,7 @@ interface FileFacts {
 function publicCache(time: CacheTime | "off"): string {
   if (time === "off" || time.count === 0) return NO_STORE;
 
-  return `public, max-age=${time.count * SECONDS_PER_UNIT[time.unit]}`;
+  return `public, max-age=${spanSeconds(time)}`;
 }
 
 function cacheControl(facts: FileFacts): string {

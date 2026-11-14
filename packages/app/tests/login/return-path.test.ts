@@ -1,9 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { safeReturn } from "../../src/login/return-path";
-import { hostnameAddresses } from "../../src/sites/hostname-addresses";
-import { SUFFIXED } from "../../../cloudflare/tests/zone/support/layouts";
+import { ADDRESSES } from "../sites/support/layout";
 
-const ADDRESSES = hostnameAddresses(SUFFIXED);
 const SITE = "report--k3f9x2ab71qz-page.example.com";
 
 const KEPT: readonly string[] = ["/", "/sites", "/sites/report--k3f9x2ab71qz", "/settings?tab=zone", "/tokens#new", "/a/b.c_d-e~f", "/search?q=a%20b&next=%2Fsites", "/sites?see=https://example.com/"];
@@ -141,6 +139,18 @@ describe("the place to go back to after the login", () => {
     const resolved = new URL(safeReturn(target, ADDRESSES), "https://admin.example.com");
 
     expect([resolved.protocol, resolved.port, resolved.username, resolved.hostname === "admin.example.com" || ADDRESSES.resolve(resolved).kind !== "none"]).toEqual(["https:", "", "", true]);
+  });
+
+  // Drift: serving writes the return and the login reads it; if the two forms part, a visitor of a private site lands on the dashboard instead of the page they asked for.
+  test.each([
+    ["a page with a query", `https://${SITE}/notes/page.html?x=1`, `https://${SITE}/notes/page.html?x=1`],
+    ["a query that holds a backslash", `https://${SITE}/a?q=a\\b`, `https://${SITE}/a?q=a%5Cb`],
+    ["a path with a backslash, which a URL reads as a slash", `https://${SITE}/a\\b`, `https://${SITE}/a/b`],
+  ])("the return serving writes for %s brings the visitor back to that page", (_what, asked, back) => {
+    const returned = safeReturn(new URL(ADDRESSES.loginFor(new URL(asked))).searchParams.get("return"), ADDRESSES);
+    const [from, to] = [new URL(asked), new URL(returned, "https://admin.example.com")];
+
+    expect([returned, to.hostname, to.pathname, [...to.searchParams]]).toEqual([back, from.hostname, from.pathname, [...from.searchParams]]);
   });
 
   // Drift: dot segments in a site address would survive into the location, where a browser and a log would read two different paths.

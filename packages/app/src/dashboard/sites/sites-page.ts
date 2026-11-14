@@ -1,9 +1,10 @@
 // The Sites tab: every site in a table, the one changed last first, or the trash.
 
 import { listSites } from "@poplin/core/src/actions/list";
+import { showBytes } from "@poplin/core/src/records/settings";
 import { html } from "hono/html";
 
-import { showBytes, showMoment } from "../page/amounts";
+import { showMoment } from "../page/amounts";
 import { refusedPage } from "../page/frame";
 import type { Html, Page, Visit } from "../records";
 

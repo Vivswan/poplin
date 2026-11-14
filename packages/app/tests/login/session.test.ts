@@ -53,7 +53,7 @@ describe("the session cookie", () => {
   // Drift: the reader and the writer would disagree on the name or the form, and every login would bounce.
   test("a cookie just written reads back as its email, among other cookies", async () => {
     const key = await keyOf(1);
-    const headers = cookieHeader("theme=dark", await minted(key), "CF_Authorization=abc");
+    const headers = cookieHeader("theme=dark", await minted(key), "lang=en");
 
     expect(await readSession(headers, { key, logins: loginsOf("owner@example.com"), now: NOW + 1000 })).toEqual({ ok: true, value: loginOf("owner@example.com") });
   });
@@ -86,7 +86,7 @@ describe("the session cookie", () => {
   // Drift: a request without a usable cookie would throw, or be told apart wrongly by the caller.
   test.each([
     ["no Cookie header", [], "missing"],
-    ["other cookies only", ["theme=dark", "CF_Authorization=abc"], "missing"],
+    ["other cookies only", ["theme=dark", "lang=en"], "missing"],
     ["a name that only ends like ours", [`x${NAME}=abc`], "missing"],
     ["an empty value", [`${NAME}=`], "malformed"],
     ["a value that is no session", [`${NAME}=owner@example.com`], "malformed"],

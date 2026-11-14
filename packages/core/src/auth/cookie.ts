@@ -7,7 +7,6 @@ import { type Login, parseLogin } from "./logins";
 const MAX_VALUE_LENGTH = 1024;
 const VALUE_PATTERN = /^([A-Za-z0-9_-]+\.(0|[1-9][0-9]{0,15}))\.([A-Za-z0-9_-]{43})$/;
 const BASE64URL_PATTERN = /^[A-Za-z0-9_-]*$/;
-const DEFAULT_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000;
 const HMAC = { name: "HMAC", hash: "SHA-256" } as const;
 const ENCODER = new TextEncoder();
 const DECODER = new TextDecoder("utf-8", { ignoreBOM: true });
@@ -21,8 +20,8 @@ export type CheckedSession = { readonly ok: true; readonly value: Login } | { re
 /** What a session value is built from. `issuedAt` is whole milliseconds since the epoch; `key` comes from `importSessionKey`. */
 export type SessionFacts = { readonly email: Login; readonly issuedAt: number; readonly key: CryptoKey };
 
-/** What a session value is checked against. `now` and `maxAgeMs` are milliseconds; the age limit defaults to 30 days. */
-export type SessionCheck = { readonly key: CryptoKey; readonly now: number; readonly maxAgeMs?: number };
+/** What a session value is checked against. `now` is milliseconds since the epoch, and `maxAgeMs` the oldest a live value may be, in milliseconds. */
+export type SessionCheck = { readonly key: CryptoKey; readonly now: number; readonly maxAgeMs: number };
 
 type SessionParts = { readonly signed: string; readonly issuedAt: number; readonly signature: Uint8Array<ArrayBuffer> };
 
@@ -116,7 +115,7 @@ export async function verifySession(value: string, check: SessionCheck): Promise
   if (email === undefined) return refuse("malformed");
 
   const age = check.now - parts.issuedAt;
-  if (!(age <= (check.maxAgeMs ?? DEFAULT_MAX_AGE_MS))) return refuse("expired");
+  if (!(age <= check.maxAgeMs)) return refuse("expired");
 
   return { ok: true, value: email };
 }

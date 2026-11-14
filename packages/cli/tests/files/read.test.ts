@@ -8,7 +8,7 @@ import { readFiles } from "../../src/files/read";
 const PAGE = "<!doctype html><title>Notes</title>";
 const MANY = 5000;
 const WINDOWS = process.platform === "win32";
-const POSIX_ONLY: ReadonlySet<string> = new Set(["a link to a system file", "a file with a line break in its name"]);
+const POSIX_ONLY: ReadonlySet<string> = new Set(["a link to a system file", "a file with a line break in its name", "a file with a backslash in its name"]);
 const UNREADABLE = WINDOWS ? undefined : 0o000;
 
 /** A fixture entry: a file's text, or where a link points; a target starting with `/` is kept, any other is joined to the fixture's root. */
@@ -280,6 +280,12 @@ describe("readFiles refusals", () => {
       'the file "two\\nlines.txt" has a name that cannot be stored (bad-character); rename or remove it',
     ],
     [
+      "a file with a backslash in its name",
+      { "site/index.html": PAGE, "site/notes\\draft.txt": "x" },
+      "site",
+      'the file "notes\\\\draft.txt" has a name that cannot be stored (backslash); rename or remove it',
+    ],
+    [
       "a file whose name is not in the form a store keeps",
       { "site/index.html": PAGE, "site/resume\u0301.txt": "x" },
       "site",
@@ -302,6 +308,21 @@ describe("readFiles refusals", () => {
     expect(await listing({ "site/index.html": PAGE }, "site")).toEqual({
       ok: false,
       reason: 'the file "half\\ud800.txt" has a name that cannot be stored (bad-character); rename or remove it',
+    });
+  });
+});
+
+describe("readFiles and the longest path", () => {
+  // Drift: a publish stores a file under its site's folder and version, so it takes a shorter path than a bare key; a reader that measured the path alone would list a file in a dry run that the publish then refuses.
+  test("refuses a path that is a key on its own but too long once the folder and the version stand before it", async () => {
+    // No file system holds a name this long, so the folder's entries are stood in for.
+    const name = "a".repeat(990);
+    const entry = { name, isFile: () => true, isDirectory: () => false, isSymbolicLink: () => false } as Dirent;
+    spyOn(fs, "readdir").mockResolvedValue([entry] as never);
+
+    expect(await listing({ "site/index.html": PAGE }, "site")).toEqual({
+      ok: false,
+      reason: `the file "${name}" has a name that cannot be stored (too-long); rename or remove it`,
     });
   });
 });

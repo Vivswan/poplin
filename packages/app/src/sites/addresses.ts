@@ -1,6 +1,7 @@
-// What serving and the login ask of an install's address layout. A layout answers these four; neither knows a hostname form or a path form.
+// What serving, the login, and the site actions ask of an install's address layout. A layout answers these six; none of them knows a hostname form or a path form.
 
-import type { LabelParts } from "@poplin/core/src/sites/labels";
+import type { PublicName } from "@poplin/core/src/names/names";
+import type { LabelParts, SiteLabel } from "@poplin/core/src/sites/labels";
 
 /** What a request's URL addresses. `path` is the file's path inside the site, still percent-encoded; `none` is every URL that names nothing of this install. */
 export type Addressed = (LabelParts & { readonly path: string }) | { readonly kind: "gallery" } | { readonly kind: "none" };
@@ -18,4 +19,10 @@ export interface SiteAddresses {
 
   /** The `frame-ancestors` source that covers every page of the install's sites. */
   readonly frameAncestors: string;
+
+  /** Writes the address a site answers at under its label, or a public site under its public name: one `resolve` reads back as that site. */
+  readonly addressOf: (site: SiteLabel | PublicName) => string;
+
+  /** The public names the layout keeps for itself: no site may hold one. */
+  readonly reservedNames: ReadonlySet<string>;
 }

@@ -1,12 +1,13 @@
 // Publish: read the folder, begin the upload, send every file, and finish. A site changes only in the last step, and an upload that cannot be finished is given up.
 
 import type { ROUTES } from "../../../core/src/api/routes";
+import { showBytes } from "../../../core/src/records/settings";
 import type { Called, Client, Failure } from "../client/client";
 import { type PublishFile, readFiles } from "../files/read";
 import { readTitle } from "../files/title";
 import { type Problem, problem, problemOf } from "./problems";
 import type { Io, Outcome, RequestOf, Session } from "./records";
-import { columns, countText, searchNotes, siteLines, sizeText } from "./text";
+import { columns, countText, searchNotes, siteLines } from "./text";
 import { siteChanges, siteWord } from "./wire";
 
 /** The page whose title a site takes. */
@@ -65,7 +66,7 @@ interface Progress {
 function summary(plan: PublishPlan): string {
   const skipped = plan.skipped === 0 ? "" : ` (${plan.skipped} skipped as hidden or node_modules)`;
 
-  return `${countText(plan.files.length, "file")}, ${sizeText(plan.bytes)}${skipped}`;
+  return `${countText(plan.files.length, "file")}, ${showBytes(plan.bytes)}${skipped}`;
 }
 
 function progressOn(io: Io, plan: PublishPlan): Progress {
@@ -79,7 +80,7 @@ function progressOn(io: Io, plan: PublishPlan): Progress {
     arrived: (file) => {
       files = Math.min(files + 1, total);
       bytes = Math.min(bytes + file.size, plan.bytes);
-      io.status(`uploading ${files}/${total} files, ${sizeText(bytes)} of ${sizeText(plan.bytes)}`);
+      io.status(`uploading ${files}/${total} files, ${showBytes(bytes)} of ${showBytes(plan.bytes)}`);
     },
     clear: () => io.status(""),
   };
@@ -231,7 +232,7 @@ export async function planPublish(request: PublishRequest): Promise<{ readonly o
 export function previewPublish(plan: PublishPlan): Outcome {
   const { files, ...asked } = plan.manifest;
   const target = asked.site === undefined ? `would make a new site named ${asked.name}` : `would update ${asked.site}`;
-  const rows = files.map((file) => [`  ${file.path}`, sizeText(file.size), file.content_type]);
+  const rows = files.map((file) => [`  ${file.path}`, showBytes(file.size), file.content_type]);
 
   return {
     ok: true,

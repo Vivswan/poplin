@@ -17,8 +17,6 @@ const HTML_ENDING = ".html";
 /** What joins the segments of a URL path and of a key. */
 const SEPARATOR = "/";
 
-/** What a decoded segment may not hold: a slash would let one URL segment name a file in another folder, and no published path holds a backslash. */
-const SEGMENT_BREAKERS = /[/\\]/;
 
 function decodeSegment(segment: string): string | undefined {
   try {
@@ -33,7 +31,8 @@ function decodePath(pathname: string): string | undefined {
 
   for (const segment of pathname.slice(SEPARATOR.length).split(SEPARATOR)) {
     const text = decodeSegment(segment);
-    if (text === undefined || SEGMENT_BREAKERS.test(text)) return undefined;
+    // A decoded slash would let one URL segment name a file in another folder.
+    if (text === undefined || text.includes(SEPARATOR)) return undefined;
 
     decoded.push(text);
   }
@@ -54,7 +53,7 @@ function candidates(path: string): string[] {
  * List the keys to try for a URL path, in order.
  *
  * @param pathname - the path of the request's URL, still percent-encoded; it is decoded once, segment by segment
- * @returns at most three keys of the site's live version, each one core's `fileKey` builds; none when the path is no file path: a bad escape, a slash or backslash inside a segment, or no key that passes
+ * @returns at most three keys of the site's live version, each one core's `fileKey` builds; none when the path is no file path: a bad escape, a slash inside a segment, or no key that passes, as with a backslash, which `fileKey` refuses
  */
 export function fileKeys(site: Pick<Site, "folder" | "live_version">, pathname: string): readonly ObjectKey[] {
   const path = decodePath(pathname);

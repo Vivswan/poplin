@@ -109,8 +109,8 @@ WHERE id = ?1 AND trashed = 0 AND NOT EXISTS (SELECT 1 FROM sites WHERE id = ?2)
 /** A live site into the trash. */
 const TRASH = "UPDATE sites SET trashed_at = ?2, updated_at = ?2 WHERE id = ?1 AND trashed = 0";
 
-/** A trashed site out of the trash. */
-const RESTORE = "UPDATE sites SET trashed_at = NULL, updated_at = ?2 WHERE id = ?1 AND trashed = 1";
+/** A trashed site out of the trash, without an expiry that is not after `?2`. */
+const RESTORE = "UPDATE sites SET trashed_at = NULL, updated_at = ?2, expires_at = CASE WHEN expires_at > ?2 THEN expires_at END WHERE id = ?1 AND trashed = 1";
 
 /** The audit entry of a delete, written while the site is still there to name. */
 const AUDIT_DELETE = "INSERT INTO audit (at, actor, action, site_id, site_name, detail) SELECT ?1, ?2, 'delete', id, name, '{}' FROM sites WHERE id = ?3";

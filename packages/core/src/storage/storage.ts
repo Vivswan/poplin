@@ -116,7 +116,7 @@ export type ReadResult =
 /** The bytes to store. A stream carries its length up front because R2 and S3 refuse one of unknown length. */
 export type WriteBody = Uint8Array | ArrayBuffer | { readonly stream: ReadableStream<Uint8Array>; readonly size: number };
 
-/** What is stored beside the bytes. `checkWriteOptions` says which content type a store cannot keep; every other one is kept as written, without trimming, case folding, or normalising. */
+/** What is stored beside the bytes. `isContentType` says which content type a store keeps; it is kept as written, without trimming, case folding, or normalising. */
 export interface WriteOptions {
   readonly contentType: string;
 }
@@ -163,7 +163,7 @@ export interface ObjectStore {
    * Store an object, replacing whatever the key held.
    *
    * @throws {Error} a stream body ended at another length than its `size`; nothing was stored
-   * @throws {TypeError} `checkWriteOptions` refused the options; nothing was stored
+   * @throws {TypeError} `checkWriteOptions` refused the options: the content type is empty, or holds a control character or a lone surrogate; nothing was stored
    */
   write(key: ObjectKey, body: WriteBody, options: WriteOptions): Promise<ObjectInfo>;
 
@@ -252,14 +252,25 @@ export function resolveRange(range: ByteRange, size: number): ByteSpan | "unsati
 }
 
 /**
+ * Decide whether text is a content type a file may be stored and served with. This is the one place that rule is written.
+ *
+ * @returns `false` for the empty string, for a control character, a line break included, which no header value carries, and for a lone surrogate, which R2 stores as U+FFFD
+ */
+export function isContentType(text: string): boolean {
+  return text.length > 0 && !UNSTORABLE_CHARACTER.test(text);
+}
+
+/**
  * Refuse what a store could not keep as written beside the bytes. Every implementation's `write` calls it first, and nowhere else decides this.
  *
  * @returns a copy of the options to store from, so a change the caller makes while the write is under way stores nothing unchecked
- * @throws {TypeError} the content type holds a lone surrogate, which R2 stores as U+FFFD
+ * @throws {TypeError} `isContentType` refuses the content type
  */
 export function checkWriteOptions(options: WriteOptions): WriteOptions {
   const checked = { contentType: options.contentType };
   requireWellFormed(checked.contentType, "the content type");
+
+  if (!isContentType(checked.contentType)) throw new TypeError(`the content type is empty or holds a control character, which no header carries: ${JSON.stringify(checked.contentType)}`);
 
   return checked;
 }

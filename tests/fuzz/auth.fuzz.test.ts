@@ -15,6 +15,7 @@ const HTML_STANDARD_EMAIL = /^[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-
 
 const KEY_BYTES = 32;
 const YEAR_2100_MS = 4_102_444_800_000;
+const MAX_AGE_MS = 86_400_000;
 
 type Change = { readonly kind: "replace" | "insert" | "delete" | "nudge"; readonly at: number; readonly fromEnd: boolean; readonly character: string; readonly step: number };
 
@@ -107,7 +108,7 @@ property(
 
 property(
   "a hostile session value is refused without a throw under any clock and age limit",
-  fc.asyncProperty(sessionValues, keys, clocks, fc.option(fc.double(), { nil: undefined }), async (value, secret, now, maxAgeMs) => {
+  fc.asyncProperty(sessionValues, keys, clocks, fc.double(), async (value, secret, now, maxAgeMs) => {
     const key = await importSessionKey(secret);
 
     expect((await verifySession(value, { key, now, maxAgeMs })).ok).toBe(false);
@@ -118,7 +119,7 @@ property(
   "a correctly signed value is accepted only when its payload is an address and byte for byte the email it names, so no second spelling of a login gets in",
   fc.asyncProperty(payloads, issueTimes, keys, async (payload, issuedAt, secret) => {
     const key = await importSessionKey(secret);
-    const session = await verifySession(await signedValue(payload, issuedAt, key), { key, now: issuedAt });
+    const session = await verifySession(await signedValue(payload, issuedAt, key), { key, now: issuedAt, maxAgeMs: MAX_AGE_MS });
     if (!session.ok) return;
 
     expect(Buffer.from(session.value).equals(payload)).toBe(true);
@@ -132,7 +133,7 @@ property(
     const key = await importSessionKey(secret);
     const value = await buildSession({ email, issuedAt, key });
 
-    expect(await verifySession(value, { key, now: issuedAt })).toEqual({ ok: true, value: email });
+    expect(await verifySession(value, { key, now: issuedAt, maxAgeMs: MAX_AGE_MS })).toEqual({ ok: true, value: email });
   }),
 );
 
@@ -144,7 +145,7 @@ property(
     const changed = changeOneCharacter(value, change);
     fc.pre(changed !== value);
 
-    expect((await verifySession(changed, { key, now: issuedAt })).ok).toBe(false);
+    expect((await verifySession(changed, { key, now: issuedAt, maxAgeMs: MAX_AGE_MS })).ok).toBe(false);
   }),
 );
 
@@ -154,7 +155,7 @@ property(
     fc.pre(!Buffer.from(secret).equals(otherSecret));
     const value = await buildSession({ email, issuedAt, key: await importSessionKey(secret) });
 
-    expect(await verifySession(value, { key: await importSessionKey(otherSecret), now: issuedAt })).toEqual({ ok: false, refusal: "bad-signature" });
+    expect(await verifySession(value, { key: await importSessionKey(otherSecret), now: issuedAt, maxAgeMs: MAX_AGE_MS })).toEqual({ ok: false, refusal: "bad-signature" });
   }),
 );
 

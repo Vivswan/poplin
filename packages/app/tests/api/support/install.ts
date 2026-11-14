@@ -12,7 +12,7 @@ import type { ObjectStore } from "@poplin/core/src/storage/storage";
 import { BunSqliteDriver } from "@poplin/core/tests/database/support/bun-sqlite-driver";
 
 import { type ApiLimits, createApi } from "../../../src/api/api";
-import { HOSTNAME_RESERVED_NAMES } from "../../../src/sites/hostname-addresses";
+import { ADDRESSES } from "../../sites/support/layout";
 
 /** The moment every test request arrives at, unless the test moves the clock. */
 export const NOW = 1_700_000_000_000;
@@ -149,8 +149,8 @@ export async function openApi(overrides: Partial<ReturnType<typeof defaultSettin
     database,
     store: counted(store, calls),
     now: () => clock.now,
-    addressOf: (label) => `https://${label}-page.example.com`,
-    reservedNames: HOSTNAME_RESERVED_NAMES,
+    addressOf: ADDRESSES.addressOf,
+    reservedNames: ADDRESSES.reservedNames,
     readToken: (id) => database.getToken(id),
     limits: LIMITS,
     report: (error) => reported.push(error),

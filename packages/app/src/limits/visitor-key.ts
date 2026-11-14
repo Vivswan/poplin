@@ -6,6 +6,7 @@
 // The address comes from the caller, which reads it from wherever its host puts the address the host itself saw, never from a header a visitor can set.
 // The key is a keyed hash of the day and the network, so it cannot be turned back into an address, and yesterday's key says nothing about today's.
 
+import { toHex } from "@poplin/core/src/records/hex";
 import ipaddr from "ipaddr.js";
 
 /** What stands in for the network when the address is absent or is no address: all such requests share one count. */
@@ -14,7 +15,7 @@ const NO_NETWORK = "unknown";
 /** How many 16-bit groups of an IPv6 address name the network: the first 64 bits. */
 const NETWORK_GROUPS = 4;
 
-/** The base IPv6 groups and the key are written in. */
+/** The base IPv6 groups are written in. */
 const HEX = 16;
 
 /** How many bytes of the hash make the key: 128 bits, far more than tells any two networks apart. */
@@ -51,5 +52,5 @@ export async function visitorKey(address: string | undefined, secret: CryptoKey,
   const hash = await crypto.subtle.sign("HMAC", secret, new TextEncoder().encode(`${day}\n${network}`));
   const bytes = new Uint8Array(hash, 0, KEY_BYTES);
 
-  return Array.from(bytes, (byte) => byte.toString(HEX).padStart(2, "0")).join("") as VisitorKey;
+  return toHex(bytes) as VisitorKey;
 }

@@ -19,7 +19,7 @@ export const AUDIT_QUERY = v.strictObject({
 /**
  * Read the newest audit entries, the newest first.
  *
- * @param query - `limit` is 1 to 100; `before` is the `seq` of the last entry of the page before
+ * @param query - `limit` is 1 to 100; `before` is the `seq` of the last entry of the page before, an opaque cursor taken from that entry and never a count
  * @returns the entries, `not_allowed` for anyone but an admin, or `bad_argument` naming the key that was refused
  */
 export async function listAudit(

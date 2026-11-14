@@ -4,6 +4,8 @@
 //
 // It is bound to the email of the session and lives twelve hours. Nothing is stored: the token is checked against the key alone.
 
+import { toHex } from "@poplin/core/src/records/hex";
+
 const LIFETIME_MS = 12 * 60 * 60 * 1000;
 const MIN_SECRET_BYTES = 32;
 const PURPOSE = "poplin-dashboard-csrf";
@@ -20,10 +22,6 @@ interface Binding {
 
 function signedText(email: string, issuedAt: number): Uint8Array<ArrayBuffer> {
   return ENCODER.encode(`${PURPOSE}\n${email}\n${issuedAt}`);
-}
-
-function toHex(bytes: Uint8Array): string {
-  return Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 
 function fromHex(text: string): Uint8Array<ArrayBuffer> {

@@ -4,13 +4,10 @@ import * as v from "valibot";
 
 import type { Database, Signed, SiteDetails } from "../database/database";
 import { parsePublicName, type SiteName } from "../names/names";
-import type { SettingValues } from "../records/settings";
+import { type SettingValues, spanSeconds } from "../records/settings";
 import type { Site, SiteAccess } from "../records/site";
 import type { SiteId } from "../sites/ids";
 import { type Refused, refuse } from "./records";
-
-/** How many seconds each unit of a time span holds. */
-const SECONDS_PER_UNIT = { s: 1, m: 60, h: 3600, d: 86_400 } as const;
 
 /** A time span as typed: a whole number from 1 and its unit, such as `7d`. */
 const SPAN_PATTERN = /^([1-9]\d*)([smhd])$/;
@@ -21,11 +18,17 @@ const DAY_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 /** How many characters of an ISO timestamp are its day. */
 const DAY_LENGTH = 10;
 
+/** The last moment a date holds, in milliseconds since the epoch: a later one can be neither shown nor compared as a date. */
+const LAST_MOMENT = 8_640_000_000_000_000;
+
+/** A control character or a line break, which a title shown on one line cannot hold. */
+const LINE_BREAKER = /[\p{Cc}\p{Zl}\p{Zp}]/u;
+
 /** What a caller may ask of a site's settings; every key is optional, and no other key is taken. */
 export const SITE_CHANGES = v.strictObject({
   access: v.optional(v.picklist(["private", "unlisted", "public"])),
   public_name: v.optional(v.string()),
-  title: v.optional(v.nullable(v.string())),
+  title: v.optional(v.nullable(v.pipe(v.string(), v.check((title) => !LINE_BREAKER.test(title), "a title holds no control character and no line break")))),
   search_engines: v.optional(v.boolean()),
   embeddable: v.optional(v.boolean()),
   expires: v.optional(v.string()),
@@ -34,11 +37,14 @@ export const SITE_CHANGES = v.strictObject({
 /**
  * The settings a caller asks for, on a publish or on their own.
  *
- * `public_name` goes with `access: "public"` alone and is the site's name when left out. A `title` of `null` or `""` takes the title away.
+ * `public_name` goes with `access: "public"` alone and is the site's name when left out. A `title` of `null` or `""` takes the title away, and a title holds no control character and no line break.
  *
  * `expires` is `"never"`, a span from now such as `"7d"` (units `s`, `m`, `h`, `d`), or a day such as `"2026-12-01"`, which is that day's start in UTC.
  */
 export type SiteChanges = v.InferInput<typeof SITE_CHANGES>;
+
+/** A time span as the settings count one. */
+type Span = Exclude<SettingValues["default_expires"], "never">;
 
 /** What the changes are checked against. */
 interface Ground {
@@ -59,10 +65,13 @@ export interface CheckedChanges {
   readonly details: SiteDetails;
 }
 
-function momentOf(text: string, now: number): number | undefined {
-  const span = SPAN_PATTERN.exec(text);
-  if (span !== null) return now + Number(span[1]) * SECONDS_PER_UNIT[span[2] as keyof typeof SECONDS_PER_UNIT] * 1000;
-
+/**
+ * The moment a calendar day starts in UTC. This is the one place a typed day is checked.
+ *
+ * @param text - a day as typed, such as `2026-12-01`
+ * @returns milliseconds since the epoch, or `undefined` for text in another form and for a day no month has
+ */
+export function dayStart(text: string): number | undefined {
   if (!DAY_PATTERN.test(text)) return undefined;
 
   // The parser takes a day no month has, such as a 31st of February, as a day of the next month: the round trip refuses it.
@@ -72,11 +81,25 @@ function momentOf(text: string, now: number): number | undefined {
   return moment;
 }
 
-function readExpires(text: string, now: number): "never" | number | undefined {
+function momentOf(text: string, now: number): number | undefined {
+  const [, count, unit] = SPAN_PATTERN.exec(text) ?? [];
+  if (count === undefined) return dayStart(text);
+
+  return now + spanSeconds({ count: Number(count), unit: unit as Span["unit"] }) * 1000;
+}
+
+/**
+ * Read an expiry as a caller types it. This is the one place the bound of an expiry is decided.
+ *
+ * @param text - `never`, a span from `now` such as `7d`, or a day such as `2026-12-01`
+ * @param now - the moment a span is counted from, in milliseconds since the epoch
+ * @returns `"never"`, the moment in whole milliseconds, or `undefined` for text in no such form, for a moment that is not after `now`, and for one past the last moment a date holds
+ */
+export function readExpires(text: string, now: number): "never" | number | undefined {
   if (text === "never") return "never";
 
   const moment = momentOf(text, now);
-  if (moment === undefined || !Number.isSafeInteger(moment) || moment <= now) return undefined;
+  if (moment === undefined || !Number.isSafeInteger(moment) || moment <= now || moment > LAST_MOMENT) return undefined;
 
   return moment;
 }
@@ -104,7 +127,7 @@ function readAccess(asked: SiteChanges, ground: Ground): SiteAccess | undefined 
 export function defaultExpiry(span: SettingValues["default_expires"], now: number): "never" | number {
   if (span === "never") return "never";
 
-  return now + span.count * SECONDS_PER_UNIT[span.unit] * 1000;
+  return now + spanSeconds(span) * 1000;
 }
 
 /**

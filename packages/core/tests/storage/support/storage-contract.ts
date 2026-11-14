@@ -175,6 +175,20 @@ function readingAndWriting(label: string, makeStore: StoreFactory): void {
       expect<unknown>(await store.head(key)).toEqual({ kind: "missing" });
     });
 
+    // Drift: a content type goes out as a header; one with a line break would add a header of the publisher's choosing, and an empty one would leave the browser to guess.
+    test.each([
+      ["a line break", "text/html\r\nx-added: yes"],
+      ["a lone line feed", "text/html\nx-added: yes"],
+      ["a null character", "text/\u0000html"],
+      ["nothing", ""],
+    ])("a write whose content type holds %s is refused, and stores nothing", async (_what, contentType) => {
+      const store = await makeStore();
+      const key = objectKey("blog/v1/index.html");
+
+      await expect(store.write(key, bytesOf("<h1>hi</h1>"), { contentType })).rejects.toBeInstanceOf(TypeError);
+      expect<unknown>(await store.head(key)).toEqual({ kind: "missing" });
+    });
+
     // Drift: a store that checks the options and then reads them again after the body arrives would store what it never checked.
     test("a content type the caller changes while a write is under way is stored as it was when the call began", async () => {
       const store = await makeStore();

@@ -10,8 +10,8 @@ import { MemoryStore } from "@poplin/core/src/storage/memory";
 
 import { createDashboard } from "../../../src/dashboard/dashboard";
 import { mintSessionCookie, readSession } from "../../../src/login/session";
-import { HOSTNAME_RESERVED_NAMES } from "../../../src/sites/hostname-addresses";
 import { NOW, openInstall } from "../../sites/support/install";
+import { ADDRESSES } from "../../sites/support/layout";
 
 /** The origin every test request is sent to. */
 export const ORIGIN = "https://admin.example.com";
@@ -57,8 +57,8 @@ export async function openDashboard(): Promise<Opened> {
     database: base.database,
     store: new MemoryStore(),
     now: () => clock.now,
-    addressOf: (label) => `https://${label}-page.example.com`,
-    reservedNames: HOSTNAME_RESERVED_NAMES,
+    addressOf: ADDRESSES.addressOf,
+    reservedNames: ADDRESSES.reservedNames,
   };
   await base.database.initSettings(defaultSettings({ installer: base.owner, hostname: "admin.example.com" }), { by: base.owner, at: NOW });
 

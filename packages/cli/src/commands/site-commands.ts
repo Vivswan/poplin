@@ -1,10 +1,11 @@
 // The commands about sites: set, show, list, rollback, new-link, delete, and restore. Each is one call to the install, and prints what the install answered.
 
 import type { ROUTES } from "../../../core/src/api/routes";
+import { showBytes } from "../../../core/src/records/settings";
 import type { Called } from "../client/client";
 import { problem, problemOf } from "./problems";
 import type { Outcome, RequestOf, Session } from "./records";
-import { columns, countText, dayText, type SiteObject, searchNotes, siteLines, sizeText } from "./text";
+import { columns, countText, dayText, type SiteObject, searchNotes, siteLines } from "./text";
 import { siteChanges, siteWord } from "./wire";
 
 /** How many sites one page of a listing holds: the most the API gives. */
@@ -75,7 +76,7 @@ async function show(request: OneSite, { client }: Session): Promise<Outcome> {
     ["search engines", switchText(site.search_engines)],
     ["embeddable", switchText(site.embeddable)],
     ["expires", expiryText(site.expires)],
-    ["kept", `${sizeText(site.bytes)} in ${countText(site.files, "file")}, every kept version counted`],
+    ["kept", `${showBytes(site.bytes)} in ${countText(site.files, "file")}, every kept version counted`],
   ];
   const versions = site.versions.map((version) => {
     const live = version.number === site.live_version ? "live" : "";

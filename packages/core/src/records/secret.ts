@@ -2,6 +2,8 @@
 
 import * as v from "valibot";
 
+import { toHex } from "./hex";
+
 /** The fewest bytes a signing key holds: the output size of HMAC-SHA-256. */
 const KEY_BYTES = 32;
 
@@ -20,7 +22,7 @@ const SECRET_ROW = v.object({ value: v.pipe(v.string(), v.regex(/^(?:[0-9a-f]{2}
 export function signingKeyToText(key: Uint8Array): string {
   if (key.length < KEY_BYTES) throw new RangeError(`a signing key holds at least ${KEY_BYTES} bytes, not ${key.length}`);
 
-  return Array.from(key, (byte) => byte.toString(16).padStart(2, "0")).join("");
+  return toHex(key);
 }
 
 /**

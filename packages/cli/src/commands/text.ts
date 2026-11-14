@@ -1,9 +1,6 @@
-// How the commands word a size, a day, a table, and a site, so every command prints them alike.
+// How the commands word a count, a day, a table, and a site, so every command prints them alike.
 
 import type { ROUTES } from "../../../core/src/api/routes";
-
-/** The units of a size, each a thousand of the one before, as the install's limits count them. */
-const UNITS = ["B", "KB", "MB", "GB"] as const;
 
 /** How many characters of an ISO moment are its day. */
 const DAY_LENGTH = 10;
@@ -13,25 +10,6 @@ const GAP = "  ";
 
 /** A site as the API answers with it. */
 export type SiteObject = NonNullable<(typeof ROUTES)["getSite"]["types"]>["done"]["site"];
-
-/**
- * Word a count of bytes, such as `1.3 MB` or `80 KB`.
- *
- * @returns one decimal below ten of a unit, none from ten on, and whole bytes below a thousand
- */
-export function sizeText(bytes: number): string {
-  let amount = bytes;
-  let unit = 0;
-
-  while (amount >= 1000 && unit < UNITS.length - 1) {
-    amount /= 1000;
-    unit += 1;
-  }
-
-  const digits = unit === 0 || amount >= 10 ? 0 : 1;
-
-  return `${amount.toFixed(digits)} ${UNITS[unit]}`;
-}
 
 /**
  * Word a moment as its day in UTC, such as `2026-12-01`.

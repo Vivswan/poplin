@@ -6,7 +6,7 @@ import { Readable } from "node:stream";
 import mime from "mime";
 
 import { nameFromEntry, type SiteName } from "../../../core/src/names/names";
-import { type ObjectKey, parseObjectKey } from "../../../core/src/storage/storage";
+import { checkFilePath } from "../../../core/src/actions/files";
 
 const ENTRY_PAGE = "index.html";
 const HTML_FILE = /\.html$/i;
@@ -19,8 +19,8 @@ const UNDECODED = "\ufffd";
 
 /** One file a publish would upload. */
 export interface PublishFile {
-  /** Where the file sits in the site: relative to the folder, joined by `/`. */
-  readonly path: ObjectKey;
+  /** Where the file sits in the site: relative to the folder, joined by `/`. A publish takes it: core's `checkFilePath` passed. */
+  readonly path: string;
 
   /** The length in bytes when the file was listed. */
   readonly size: number;
@@ -106,15 +106,15 @@ function defaultName(entry: string): DefaultName {
 }
 
 async function publishFile(path: string, source: string): Promise<PublishFile> {
-  const key = parseObjectKey(path);
-  if (!key.ok) throw new Refusal(`the file ${quote(path)} has a name that cannot be stored (${key.refusal}); rename or remove it`);
+  const checked = checkFilePath(path);
+  if (!checked.ok) throw new Refusal(`the file ${quote(path)} has a name that cannot be stored (${checked.refusal}); rename or remove it`);
 
   const { size } = await fs.stat(source);
 
   // Node types its own web stream apart from the global one, though at run time they are one class.
   const open = (): ReadableStream<Uint8Array> => Readable.toWeb(createReadStream(source)) as unknown as ReadableStream<Uint8Array>;
 
-  return { path: key.key, size, contentType: contentTypeOf(path), open };
+  return { path, size, contentType: contentTypeOf(path), open };
 }
 
 /** The real path a link leads to, refused unless a walk of the root could have reached that path without the link. */

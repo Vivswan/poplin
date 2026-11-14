@@ -9,8 +9,17 @@ const REMOVAL_PAGES = 15;
 /** A separator no address reaches: a file stored under a path that holds one would never be served. */
 const BACKSLASH = "\\";
 
+/** A folder key of the usual length, to measure a path against before the site's own folder is known. */
+const ANY_FOLDER = "0".repeat(16) as SiteFolder;
+
+/** The widest version number. A path is taken only when its key fits under it, so a site never stops taking a path as its versions grow. */
+const WIDEST_VERSION = Number.MAX_SAFE_INTEGER;
+
 /** A file's key, or why its path is none: the key rule it breaks, or the backslash it holds. */
 type CheckedFileKey = CheckedKey | { readonly ok: false; readonly refusal: "backslash" };
+
+/** A path a publish takes, or the rule it breaks. */
+type CheckedFilePath = { readonly ok: true } | { readonly ok: false; readonly refusal: Extract<CheckedFileKey, { readonly ok: false }>["refusal"] };
 
 /**
  * The prefix of every file of one version: `<folder>/v<number>/`.
@@ -31,6 +40,21 @@ export function fileKey(folder: SiteFolder, number: number, path: string): Check
   if (path.includes(BACKSLASH)) return { ok: false, refusal: "backslash" };
 
   return parseObjectKey(`${versionPrefix(folder, number)}${path}`);
+}
+
+/**
+ * Decide whether a publish takes a file at this path. Every publish asks this, and so does whatever lists files for one.
+ *
+ * The path is measured as the key of the longest prefix a site can have, so a path that passes fits every site at every version.
+ *
+ * @param path - where the file sits in the site: segments joined by `/`, with none before the first
+ * @returns `ok`, or the first rule the path breaks: a backslash in it, or a key rule, of which `too-long` counts the prefix too
+ */
+export function checkFilePath(path: string): CheckedFilePath {
+  const key = fileKey(ANY_FOLDER, WIDEST_VERSION, path);
+  if (!key.ok) return key;
+
+  return { ok: true };
 }
 
 /** The prefix of every file of a site, whatever the version: `<folder>/`. */

@@ -30,19 +30,7 @@ const FORBIDDEN: readonly (readonly [rule: string, pattern: RegExp])[] = [
 ];
 
 /** The findings on the tree today that another change removes: `<path>: <what was found>`, then the owner and the reason. A row that finds nothing fails, so the list only shrinks. */
-const ALLOWED: readonly (readonly [finding: string, owner: string, reason: string])[] = [
-  [
-    "packages/app/tests/sites/support/install.ts: ../../../../cloudflare/src/zone/layout",
-    "serving fixtures",
-    "the fixture should build its addresses without the provider's layout parser",
-  ],
-  [
-    "packages/app/tests/login/return-path.test.ts: ../../../cloudflare/tests/zone/support/layouts",
-    "return-path tests",
-    "the test should build its addresses without the provider's layout parser",
-  ],
-  ["packages/app/tests/login/session.test.ts: CF_Authorization", "session tests", "a provider's cookie name as test noise"],
-];
+const ALLOWED: readonly (readonly [finding: string, owner: string, reason: string])[] = [];
 
 /** The files that count as source. */
 const SOURCE_FILE = /\.(?:ts|tsx|mts|cts|js|jsx|mjs|cjs)$/;

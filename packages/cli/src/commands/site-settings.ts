@@ -1,6 +1,6 @@
 // The settings of one site, as `publish` and `set` both read them from the same flags.
 
-import { defaultExpiry } from "../../../core/src/actions/changes";
+import { dayStart, readExpires } from "../../../core/src/actions/changes";
 import type { PublicName } from "../../../core/src/names/names";
 import type { SettingValues } from "../../../core/src/records/settings";
 import { readSetting } from "./install-settings";
@@ -12,12 +12,6 @@ const ACCESS_FLAGS = [
   ["--unlisted", "unlisted"],
   ["--public", "public"],
 ] as const;
-
-/** A calendar date as it is typed: four digits, two, and two. */
-const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
-
-/** How many characters of an ISO moment are its date. */
-const DATE_LENGTH = 10;
 
 /** What `--expires` takes, for the hint of a refused one. */
 const EXPIRY_FORMS = "a span is a count of s, m, h, or d: 7d. A date is 2026-12-01";
@@ -38,21 +32,6 @@ export interface SiteSettings {
   readonly expires?: Expiry;
 }
 
-function isCalendarDate(text: string): boolean {
-  if (!DATE_PATTERN.test(text)) return false;
-
-  const moment = new Date(`${text}T00:00:00Z`);
-  if (Number.isNaN(moment.getTime())) return false;
-
-  // A day the month does not have rolls over into the next month, so it reads back as another date.
-  return moment.toISOString().slice(0, DATE_LENGTH) === text;
-}
-
-/** Whether an install takes a moment as an expiry: a whole number of milliseconds after `now`. */
-function isAhead(moment: number | "never", now: number): boolean {
-  return moment === "never" || (Number.isSafeInteger(moment) && moment > now);
-}
-
 function readSwitch(flags: Flags, name: string): boolean | undefined | UsageError {
   const word = flagValue(flags, name);
   if (word === undefined) return undefined;
@@ -65,8 +44,11 @@ function readExpiry(flags: Flags, now: number): Expiry | undefined | UsageError 
   const when = flagValue(flags, "--expires");
   if (when === undefined) return undefined;
 
-  if (isCalendarDate(when)) {
-    if (!isAhead(Date.parse(`${when}T00:00:00Z`), now)) return usageError(`--expires ${when} is not ahead: that day has started`, EXPIRY_FORMS);
+  // Core decides whether an install takes the expiry; what is read here is only which form was typed.
+  const taken = readExpires(when, now) !== undefined;
+
+  if (dayStart(when) !== undefined) {
+    if (!taken) return usageError(`--expires ${when} is not ahead: that day has started`, EXPIRY_FORMS);
 
     return { kind: "date", date: when };
   }
@@ -76,7 +58,7 @@ function readExpiry(flags: Flags, now: number): Expiry | undefined | UsageError 
 
   if (span === "never") return { kind: "never" };
 
-  if (!isAhead(defaultExpiry(span, now), now)) return usageError(`--expires ${when} is too far ahead`, EXPIRY_FORMS);
+  if (!taken) return usageError(`--expires ${when} is too far ahead`, EXPIRY_FORMS);
 
   return { kind: "span", span };
 }

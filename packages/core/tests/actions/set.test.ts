@@ -68,6 +68,10 @@ describe("updateSite", () => {
     ["an expiry that has passed", { title: "kept out", expires: "2020-01-01" }, { code: "bad_argument", about: "expires" }],
     ["a day no month has", { expires: "2030-02-31" }, { code: "bad_argument", about: "expires" }],
     ["a span of nothing", { expires: "0d" }, { code: "bad_argument", about: "expires" }],
+    ["a span that ends past the last moment a date holds", { expires: "100000000d" }, { code: "bad_argument", about: "expires" }],
+    ["a title with a line break", { title: "two\nlines" }, { code: "bad_argument", about: "title" }],
+    ["a title with a control character", { title: "a\u0000b" }, { code: "bad_argument", about: "title" }],
+    ["a title with a line separator", { title: "two\u2028lines" }, { code: "bad_argument", about: "title" }],
     ["a held public name beside a title", { access: "public", public_name: "taken", title: "kept out" }, { code: "name_taken", about: "public_name" }],
   ] as readonly (readonly [string, Changes, object])[])("a change with %s is refused and leaves the site as it was", async (_why, changes, refusal) => {
     const world = await makeWorld();

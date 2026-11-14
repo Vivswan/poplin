@@ -2,6 +2,7 @@ import { describe, expect, spyOn, test } from "bun:test";
 
 import { getSite } from "../../src/actions/show";
 import { listSites } from "../../src/actions/list";
+import { beginPublish } from "../../src/actions/begin-publish";
 import { publishSite } from "../../src/actions/publish";
 import { deleteSite } from "../../src/actions/delete";
 import { ADMIN, DAY, file, made, makeWorld, NOW, OWNER, pages, type World } from "./support/actions-fixture";
@@ -163,6 +164,30 @@ describe("publishSite", () => {
 
     expect(refused).toEqual({ ok: false, ...refusal } as never);
     expect([await world.keys(), await world.audit(), await siteCount(world)]).toEqual([keys, audit, 2]);
+  });
+
+  // Drift: a content type is stored with the file and sent as a header; one that is no text would throw out of the publish, and an empty or split one would be served as written.
+  test.each([
+    ["no content type", undefined],
+    ["a number for a content type", 7],
+    ["an empty content type", ""],
+    ["a content type with a line break", "text/html\r\nx-added: yes"],
+    ["a content type with a lone surrogate", "text/html\ud800"],
+    ["a content type of 256 characters", `text/${"a".repeat(251)}`],
+  ])("a publish of a file with %s is refused as a bad argument, in one call or staged, and nothing is written", async (_why, contentType) => {
+    const world = await makeWorld();
+    const page = { ...file("index.html", "home"), contentType: contentType as string };
+
+    const answers = [
+      await publishSite(world.install, OWNER, { files: [page], name: "report" }),
+      await beginPublish(world.install, OWNER, { name: "report", files: [{ path: page.path, size: page.size, content_type: page.contentType }] }),
+    ];
+
+    expect(answers).toEqual([
+      { ok: false, code: "bad_argument", about: "files" },
+      { ok: false, code: "bad_argument", about: "files" },
+    ]);
+    expect([await world.keys(), await world.audit(), await siteCount(world)]).toEqual([[], [], 0]);
   });
 
   // Drift: the limits keep an install inside its bucket's free tier; one counted against the wrong sum would refuse a publish that fits, or let the bucket fill.

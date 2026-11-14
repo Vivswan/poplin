@@ -43,7 +43,9 @@ export type AuditAction = (typeof AUDIT_ACTIONS)[number];
 /**
  * One entry of the audit log.
  *
- * `seq` counts entries from 1 in the order written. `site` is the site the action touched, by the id and name it had then, or `null` for an action on no site.
+ * `seq` is an opaque cursor: an entry written later has a greater one, and nothing else is promised of it, neither where it starts nor that none is skipped.
+ *
+ * `site` is the site the action touched, by the id and name it had then, or `null` for an action on no site.
  *
  * `detail` holds what the action set, such as the new access or the token's note.
  */

@@ -4,7 +4,7 @@ import { describe, expect, test } from "bun:test";
 import * as v from "valibot";
 
 import type { Login } from "../../src/auth/logins";
-import { defaultSettings, SETTING_VALUES, type SettingValues, settingsFromText, settingsToText } from "../../src/records/settings";
+import { defaultSettings, SETTING_VALUES, type SettingValues, settingsFromText, settingsToText, showBytes, sizeBytes } from "../../src/records/settings";
 
 const INSTALL = { installer: "ada@example.com" as Login, hostname: "admin.example.com" };
 const PUBLISHED_DEFAULTS = {
@@ -177,5 +177,25 @@ describe("SETTING_VALUES", () => {
     const checked = v.safeParse(SETTING_VALUES, { ...defaultSettings(INSTALL), ...change });
 
     expect(checked.success ? undefined : v.getDotPath(checked.issues[0])).toBe(field);
+  });
+});
+
+describe("showBytes", () => {
+  // Drift: the dashboard and the CLI show a size against a limit typed as `9GB`; a binary unit or another rounding would show a full install as one with room.
+  test.each([
+    [0, "0 B"],
+    [999, "999 B"],
+    [1000, "1 KB"],
+    [1500, "1.5 KB"],
+    [1_250_000, "1.3 MB"],
+    [1_449_999, "1.4 MB"],
+    [999_949, "999.9 KB"],
+    [999_950, "1 MB"],
+    [200_000_000, "200 MB"],
+    [sizeBytes({ count: 9, unit: "GB" }), "9 GB"],
+    [12_345_678_901, "12.3 GB"],
+    [1_000_000_000_000, "1000 GB"],
+  ])("%d bytes are shown as %s", (bytes, shown) => {
+    expect(showBytes(bytes)).toBe(shown);
   });
 });

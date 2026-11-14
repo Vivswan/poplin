@@ -1,5 +1,6 @@
 // Bearer tokens for agents and the CLI: minting one, the hashed record kept of it, and checking a presented one.
 
+import { toHex } from "../records/hex";
 import type { Scope } from "./scopes";
 
 const TOKEN_PREFIX = "poplin_";
@@ -37,16 +38,12 @@ function refuse(refusal: TokenRefusal): { readonly ok: false; readonly refusal: 
   return { ok: false, refusal };
 }
 
-function hex(bytes: Uint8Array): string {
-  return Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
-}
-
 function randomHex(byteCount: number): string {
-  return hex(crypto.getRandomValues(new Uint8Array(byteCount)));
+  return toHex(crypto.getRandomValues(new Uint8Array(byteCount)));
 }
 
 async function sha256Hex(text: string): Promise<string> {
-  return hex(new Uint8Array(await crypto.subtle.digest(HMAC.hash, ENCODER.encode(text))));
+  return toHex(new Uint8Array(await crypto.subtle.digest(HMAC.hash, ENCODER.encode(text))));
 }
 
 async function sameText(left: string, right: string): Promise<boolean> {

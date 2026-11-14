@@ -266,7 +266,10 @@ class MemoryDatabase implements Database {
 
     if (kept.place.state === "live") return { kind: "not_in_trash" };
 
-    return this.#changed({ ...changedAt(kept, signed.at), place: { state: "live" } }, signed, "restore", {});
+    const { expires } = kept.fields;
+    const lasting = expires === "never" || expires > signed.at ? expires : "never";
+
+    return this.#changed({ ...changedAt(kept, signed.at, { expires: lasting }), place: { state: "live" } }, signed, "restore", {});
   }
 
   async deleteSite(id: SiteId, signed: Signed): Promise<Done | Refused<"not_found">> {

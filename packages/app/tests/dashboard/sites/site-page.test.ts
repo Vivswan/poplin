@@ -78,10 +78,10 @@ test("a title with markup stays text in the page and inside the input's value", 
   expect(page).not.toContain("<script>");
 });
 
-test("an expiry no calendar holds, which the set action takes, is shown as its number and the page still renders", async () => {
+test("an expiry no calendar holds, which the database keeps though the set action refuses it, is shown as its number and the page still renders", async () => {
   const opened = await openDashboard();
   const site = await opened.publish("report");
-  await updateSite(opened.install, { scope: "admin", holder: opened.owner }, { site: site.id, expires: "100000000d" });
+  await opened.install.database.changeDetails(site.id, { expires: opened.clock.now + 100_000_000 * 86_400_000 }, { by: opened.owner, at: opened.clock.now });
 
   const answer = await opened.get(`/sites/report--${site.id}`);
 

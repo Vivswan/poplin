@@ -1,10 +1,9 @@
 // The Usage tab: what the install holds and has answered today, each against its limit.
 
 import { readConfig } from "@poplin/core/src/actions/config";
-import { sizeBytes } from "@poplin/core/src/records/settings";
+import { showBytes, sizeBytes } from "@poplin/core/src/records/settings";
 import { html } from "hono/html";
 
-import { showBytes } from "../page/amounts";
 import { refusedPage } from "../page/frame";
 import type { Html, Page, Visit } from "../records";
 

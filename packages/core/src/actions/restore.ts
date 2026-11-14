@@ -6,7 +6,9 @@ import { type Install, type Refused, refuse } from "./records";
 import { type SiteAnswer, siteAnswer } from "./site-object";
 
 /**
- * Take a site out of the trash. It is as it was when it went in, its public name and its expiry included.
+ * Take a site out of the trash. It is as it was when it went in, its public name included.
+ *
+ * An expiry that passed is cleared: the site's `expires` is `"never"`, since a site past its expiry is served to nobody and no setting changes in the trash. An expiry still ahead stays.
  *
  * @param reference - the label `name--id`, the bare id, or the public name of a public site
  */

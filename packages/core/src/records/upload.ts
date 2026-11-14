@@ -1,11 +1,9 @@
 // A staged publish as the database holds it between its first request and its last, and the one place a row of the uploads table becomes that value.
 
-// `String.prototype.isWellFormed` is newer than the compile target, so this file names the library that types it.
-/// <reference lib="es2024.string" />
-
 import * as v from "valibot";
 
 import { mintSiteId } from "../sites/ids";
+import { isContentType } from "../storage/storage";
 import { COUNT, HOLDER, MOMENT, POSITIVE } from "./fields";
 import { NEW_SITE, SITE_ACCESS, SITE_DETAILS, SITE_FOLDER } from "./site";
 
@@ -18,19 +16,11 @@ const UPLOAD_ID_PATTERN = /^[0-9a-z]{16}$/;
 /** The longest content type a file is stored with, in characters. */
 const MAX_CONTENT_TYPE_LENGTH = 255;
 
-/** A control character, which no header value carries. */
-const CONTROL_CHARACTER = /\p{Cc}/u;
-
 /** The id of a staged publish. */
 export const UPLOAD_ID = v.custom<UploadId>(isUploadId, "an upload id is 16 lowercase base36 characters");
 
 /** The media type a file is served with: text a header can carry and a store can keep as written. */
-const CONTENT_TYPE = v.pipe(
-  v.string(),
-  v.minLength(1),
-  v.maxLength(MAX_CONTENT_TYPE_LENGTH),
-  v.check((text) => text.isWellFormed() && !CONTROL_CHARACTER.test(text), "a content type holds no control character and no lone surrogate"),
-);
+const CONTENT_TYPE = v.pipe(v.string(), v.maxLength(MAX_CONTENT_TYPE_LENGTH), v.check(isContentType, "a content type is not empty and holds no control character and no lone surrogate"));
 
 /** One file of a publish as it is declared before its bytes are sent. */
 export const MANIFEST_FILE = v.strictObject({ path: v.string(), size: COUNT, content_type: CONTENT_TYPE });

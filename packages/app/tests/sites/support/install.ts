@@ -5,30 +5,28 @@ import { type Login, parseLogins } from "@poplin/core/src/auth/logins";
 import type { Database, NewSite } from "@poplin/core/src/database/database";
 import { openDatabase } from "@poplin/core/src/database/open";
 import { parsePublicName, parseSiteName } from "@poplin/core/src/names/names";
-import { applySuffix } from "@poplin/core/src/names/suffix";
 import { defaultSettings } from "@poplin/core/src/records/settings";
 import { mintSiteFolder, type Site } from "@poplin/core/src/records/site";
 import { siteLabel } from "@poplin/core/src/sites/labels";
 import { MemoryStore } from "@poplin/core/src/storage/memory";
-import { type ObjectKey, parseObjectKey, type ReadOptions, type ReadResult } from "@poplin/core/src/storage/storage";
+import { type HeadResult, type ObjectKey, parseObjectKey, type ReadOptions, type ReadResult } from "@poplin/core/src/storage/storage";
 import { BunSqliteDriver } from "@poplin/core/tests/database/support/bun-sqlite-driver";
-import { parseDomainLayout } from "../../../../cloudflare/src/zone/layout";
 import { mintSessionCookie, readSession } from "../../../src/login/session";
-import { HOSTNAME_RESERVED_NAMES, hostnameAddresses } from "../../../src/sites/hostname-addresses";
 import type { serveSite } from "../../../src/sites/serve";
+import { ADDRESSES, LAYOUT } from "./layout";
 
 /** The moment every test request arrives at. */
 export const NOW = 1_700_000_000_000;
-
-/** The checked layout every serving test runs under: sites are `<label>-page.example.com`. */
-const ZONE = zone();
 
 /** The one login of a test install. */
 const OWNER_EMAIL = "owner@example.com";
 
 type Serving = Parameters<typeof serveSite>[1];
 
-/** A file to publish: its body and the content type stored with it. */
+/** The type a file is written to the memory store with: the store refuses some of the types a test serves, which another store may still hold. */
+const WRITTEN_TYPE = "application/octet-stream";
+
+/** A file to publish: its body and the content type the store answers for it. */
 type Files = Readonly<Record<string, readonly [body: string | Uint8Array, contentType: string]>>;
 
 /** What a test site is made from; the name doubles as the public name of a public site. */
@@ -62,7 +60,7 @@ function keyOf(raw: string): ObjectKey {
 
 function draftOf(draft: Draft): NewSite {
   const name = parseSiteName(draft.name);
-  const publicName = parsePublicName(draft.name, HOSTNAME_RESERVED_NAMES);
+  const publicName = parsePublicName(draft.name, ADDRESSES.reservedNames);
   if (!name.ok || !publicName.ok) throw new Error(`the test's site name was refused: ${draft.name}`);
 
   const shared = { name: name.value, folder: mintSiteFolder(), title: null, search_engines: draft.search_engines ?? false, embeddable: draft.embeddable ?? true, expires: draft.expires ?? "never", bytes: 0, files: 0 };
@@ -71,16 +69,9 @@ function draftOf(draft: Draft): NewSite {
   return { ...shared, access: draft.access };
 }
 
-function zone(): Parameters<typeof hostnameAddresses>[0] {
-  const layout = parseDomainLayout({ domain: "example.com", admin_hostname: "admin.example.com", suffix: "-page" });
-  if (!layout.ok) throw new Error(`the test's layout was refused: ${layout.refusal}`);
-
-  return layout.value;
-}
-
 /** The hostname of a site's label address under `example.com`. */
 export function labelHost(site: Site): string {
-  return `${applySuffix(ZONE.suffix, siteLabel(site.name, site.id))}.${ZONE.domain}`;
+  return new URL(ADDRESSES.addressOf(siteLabel(site.name, site.id))).hostname;
 }
 
 /**
@@ -103,17 +94,26 @@ export async function openInstall(): Promise<Install> {
   const keys: string[] = [];
   const bodies: ReadableStream<Uint8Array>[] = [];
   const key = await importSessionKey(new Uint8Array(32).fill(7));
-  const setCookie = await mintSessionCookie({ email: owner, key, now: NOW, domain: ZONE.domain });
+  const setCookie = await mintSessionCookie({ email: owner, key, now: NOW, domain: LAYOUT.domain });
+
+  const types = new Map<ObjectKey, string>();
+
+  // An object is answered with the type its draft names, whatever the memory store was able to keep.
+  const typed = <Result extends HeadResult | ReadResult>(result: Result): Result => {
+    if (!("info" in result)) return result;
+
+    return { ...result, info: { ...result.info, contentType: types.get(result.info.key) ?? result.info.contentType } };
+  };
 
   const store: Serving["store"] = {
-    head: (objectKey) => {
+    head: async (objectKey) => {
       keys.push(objectKey);
 
-      return memory.head(objectKey);
+      return typed(await memory.head(objectKey));
     },
     read: async (objectKey: ObjectKey, options?: ReadOptions): Promise<ReadResult> => {
       keys.push(objectKey);
-      const result = await memory.read(objectKey, options);
+      const result = typed(await memory.read(objectKey, options));
       if (result.kind === "found") bodies.push(result.body);
 
       return result;
@@ -126,7 +126,9 @@ export async function openInstall(): Promise<Install> {
 
     for (const [path, [body, contentType]] of Object.entries(draft.files)) {
       const bytes = typeof body === "string" ? new TextEncoder().encode(body) : body;
-      await memory.write(keyOf(`${made.site.folder}/v${made.site.live_version}/${path}`), bytes, { contentType });
+      const objectKey = keyOf(`${made.site.folder}/v${made.site.live_version}/${path}`);
+      await memory.write(objectKey, bytes, { contentType: WRITTEN_TYPE });
+      types.set(objectKey, contentType);
     }
 
     return made.site;
@@ -135,8 +137,8 @@ export async function openInstall(): Promise<Install> {
   const serving: Serving = {
     database,
     store,
-    settings: defaultSettings({ installer: owner, hostname: ZONE.adminHostname }),
-    addresses: hostnameAddresses(ZONE),
+    settings: defaultSettings({ installer: owner, hostname: LAYOUT.adminHostname }),
+    addresses: ADDRESSES,
     readSession: (headers) => readSession(headers, { key, logins: logins.value, now: NOW }),
     now: () => NOW,
   };

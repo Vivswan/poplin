@@ -259,7 +259,7 @@ export interface Database {
   /** Move a site into the trash. It keeps its public name. */
   trashSite(id: SiteId, signed: Signed): Promise<Done | Refused<"not_found" | "in_trash">>;
 
-  /** Take a site out of the trash. */
+  /** Take a site out of the trash. An expiry that is not after `signed.at` becomes `"never"` in the same step, so the site is served again and no sweep trashes it for that expiry. */
   restoreSite(id: SiteId, signed: Signed): Promise<Done | Refused<"not_found" | "not_in_trash">>;
 
   /** Remove a site for good, from the trash or not. Its public name is free again; `site` is the site as it was, whose folder the caller empties. */
@@ -441,7 +441,7 @@ export interface Database {
   /**
    * The newest audit entries, the newest first.
    *
-   * @param query - how many entries, from 1 to 100, and the `seq` of the entry the page before ended on
+   * @param query - how many entries, from 1 to 100, and `before`, the `seq` of the entry the page before ended on: only entries written before that one are answered. A `seq` is a cursor taken from an entry, never a count
    * @throws {RangeError} `limit` is not a whole number from 1 to 100
    */
   listAudit(query: { readonly limit: number; readonly before?: number }): Promise<readonly AuditEntry[]>;

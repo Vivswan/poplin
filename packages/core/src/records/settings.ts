@@ -17,6 +17,12 @@ const SECONDS_PER_UNIT = { s: 1, m: 60, h: 3600, d: 86_400 } as const;
 /** How many bytes each unit of a size holds. They are decimal, so `9GB` stays under R2's 10 GB whichever way that is counted. */
 const BYTES_PER_UNIT = { B: 1, KB: 1000, MB: 1_000_000, GB: 1_000_000_000 } as const;
 
+/** How many of one size unit make the next. */
+const UNIT_STEP = 1000;
+
+/** How many tenths a whole holds: a size is shown to one decimal place. */
+const TENTHS = 10;
+
 /** What an install with no domain may serve privately. */
 const PRIVATE_SITES = ["single-file", "folders"] as const;
 
@@ -224,6 +230,37 @@ function printOne<Key extends SettingKey>(key: Key, values: SettingValues): stri
  */
 export function sizeBytes(size: SettingValues["max_total_size"]): number {
   return size.count * BYTES_PER_UNIT[size.unit];
+}
+
+/**
+ * Write a count of bytes for a person, in the decimal units the size settings count in.
+ *
+ * @param bytes - a whole number from 0 up
+ * @returns the count in the largest unit it fills, to one decimal place at most: `0 B`, `999 B`, `1.5 KB`, `200 MB`, `9 GB`
+ * @throws {RangeError} `bytes` is not a whole number from 0 up
+ */
+export function showBytes(bytes: number): string {
+  if (!Number.isSafeInteger(bytes) || bytes < 0) throw new RangeError(`a size is a whole number of bytes from 0 up, not ${bytes}`);
+
+  const units = Object.entries(BYTES_PER_UNIT);
+  const filled = Math.max(units.filter(([, size]) => bytes >= size).length - 1, 0);
+  const [unit = "B", size = 1] = units[filled] ?? [];
+  const tenths = Math.round((bytes * TENTHS) / size);
+  const [above] = units[filled + 1] ?? [];
+
+  // A count that rounds up to a thousand of its unit is one of the next: 999,960 bytes is `1 MB`, never `1000 KB`.
+  if (above !== undefined && tenths >= UNIT_STEP * TENTHS) return `1 ${above}`;
+
+  return `${tenths / TENTHS} ${unit}`;
+}
+
+/**
+ * The seconds a time span such as `default_expires` or `cache_html` stands for.
+ *
+ * @returns the count times its unit: `7d` is 604,800
+ */
+export function spanSeconds(span: SettingValues["cache_html"]): number {
+  return span.count * SECONDS_PER_UNIT[span.unit];
 }
 
 /**
