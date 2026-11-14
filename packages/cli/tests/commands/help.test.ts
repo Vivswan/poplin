@@ -22,6 +22,7 @@ const SPECS: readonly (CommandSpec & { readonly name: CommandName })[] = COMMAND
 const FLAG_VALUES: Readonly<Record<string, string>> = {
   "--site": LABEL,
   "--name": "docs",
+  "--public-name": "docs",
   "--title": "Q3 sales",
   "--search-engines": "on",
   "--embeddable": "off",
@@ -34,9 +35,10 @@ const FLAG_VALUES: Readonly<Record<string, string>> = {
 /** A word for each argument a command needs. */
 const ARGUMENTS: Readonly<Record<string, string>> = { path: "./report", site: LABEL, zip: "backup.zip", key: "versions_kept" };
 
-/** What a flag needs beside it to be a whole command: `set` needs a setting, and its `--name` is the public name, so it needs `--public`. */
+/** What a flag needs beside it to be a whole command: `set` needs a setting, and a public name goes with `--public`. */
 const COMPANIONS: Readonly<Record<string, readonly string[]>> = {
-  "set --name": ["--public"],
+  "set --public-name": ["--public"],
+  "publish --public-name": ["--public"],
   "set --json": ["--private"],
   "set --server": ["--private"],
   "config --reset": ["versions_kept"],

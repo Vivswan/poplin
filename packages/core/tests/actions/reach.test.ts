@@ -65,7 +65,7 @@ describe("reachSite", () => {
   });
 
   // Drift: a reference is typed by people and agents in three forms; one read loosely would act on the wrong site.
-  test("a site answers to its label, its bare id, and its public name while public, and to nothing else", async () => {
+  test("a site answers to its label whatever name the label carries, its bare id, and its public name while public, and to nothing else", async () => {
     const world = await makeWorld();
     const id = await made(world, OWNER, "report");
     const other = await made(world, OWNER, "budget0000000", { access: "public", public_name: "abcdefghijkl" });
@@ -81,7 +81,7 @@ describe("reachSite", () => {
       found,
       { ok: true, site: { id: other } },
       { ok: false, code: "not_found" },
-      { ok: false, code: "not_found" },
+      found,
       { ok: false, code: "not_found" },
       { ok: false, code: "bad_argument", about: "site" },
       { ok: false, code: "not_found" },

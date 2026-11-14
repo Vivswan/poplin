@@ -57,6 +57,11 @@ function settingsForm(visit: Visit, site: Shown): Html {
   return html`<h2>Settings</h2>
 <form method="post" action="${action(site, "settings")}">
 ${csrfField(visit)}
+<div class="field">
+<label for="name">Name</label>
+<input type="text" id="name" name="name" value="${site.name}" autocomplete="off">
+<p class="hint">A new name changes the label. The id stays, so no link breaks.</p>
+</div>
 <fieldset>
 <legend>Access</legend>
 ${ACCESSES.map((choice) => accessChoice(site, choice))}

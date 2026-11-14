@@ -405,6 +405,7 @@ const READ_REQUESTS = "SELECT requests FROM request_counts WHERE day = ?1 AND si
 
 /** The column each site detail is stored in, and its stored value. */
 const DETAIL_COLUMNS: { readonly [Key in keyof Required<SiteDetails>]: (value: Required<SiteDetails>[Key]) => readonly [column: string, stored: SqlValue] } = {
+  name: (name) => ["name", name],
   title: (title) => ["title", title],
   search_engines: (allowed) => ["search_engines", allowed ? 1 : 0],
   embeddable: (allowed) => ["embeddable", allowed ? 1 : 0],
@@ -416,7 +417,7 @@ function detailColumns(given: SiteDetails, params: SqlValue[]): { readonly sets:
   const sets: string[] = [];
   const differs: string[] = [];
 
-  for (const key of ["title", "search_engines", "embeddable", "expires"] as const) {
+  for (const key of ["name", "title", "search_engines", "embeddable", "expires"] as const) {
     const value = given[key];
     if (value === undefined) continue;
 

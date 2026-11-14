@@ -41,12 +41,11 @@ const UTF8 = new TextEncoder();
 /** A publish bounded by nothing but the install's own limits. */
 const UNBOUNDED: UploadLimits = { fileBytes: Number.MAX_SAFE_INTEGER, files: MAX_FILES };
 
-/** What a publish asks for before any file is sent: its settings, `site` to add a version to that site or else the `name` of a new one, every file with its size and content type, and `page_title`, the entry page's own title. */
+/** What a publish asks for before any file is sent: its settings, `site` to add a version to that site, the `name` of a new site or the new name of that one, every file with its size and content type, and `page_title`, the entry page's own title. */
 export const PUBLISH_REQUEST = v.strictObject({
   ...SITE_CHANGES.entries,
   page_title: v.optional(TITLE_TEXT),
   site: v.optional(v.string()),
-  name: v.optional(v.string()),
   files: v.array(MANIFEST_FILE),
 });
 
@@ -241,7 +240,7 @@ async function planVersion(
 }
 
 /**
- * Begin a publish of a new site, or of the next version of a site.
+ * Begin a publish of a new site, or of the next version of a site, which a `name` sent with it renames.
  *
  * It checks the arguments, the actor's right to the site, the paths, and the limits against the declared sizes. A site needs an `index.html` at its top.
  * Then it mints the folder of a new site or sets aside the site's next version number, and records the upload. No file is stored, no site is made, and no site changes.
@@ -260,9 +259,12 @@ export async function beginPublish(
   if (!asked.success) return refuse("bad_argument", v.getDotPath(asked.issues[0])?.split(".")[0] ?? "request");
 
   const { files, site: reference, name, page_title: pageTitle, ...changes } = asked.output;
-  if (reference !== undefined && name !== undefined) return refuse("bad_argument", "name");
+  const renamed = name === undefined ? changes : { ...changes, name };
 
-  const planned = reference === undefined ? await planSite(install, actor, { name, changes, pageTitle, files, limits }) : await planVersion(install, actor, { reference, changes, pageTitle, files, limits });
+  const planned =
+    reference === undefined
+      ? await planSite(install, actor, { name, changes, pageTitle, files, limits })
+      : await planVersion(install, actor, { reference, changes: renamed, pageTitle, files, limits });
   if (!planned.ok) return planned;
 
   const upload = { id: mintUploadId(), folder: planned.folder, number: planned.number, owner: actor.holder, plan: planned.plan, manifest: files, created_at: install.now() };

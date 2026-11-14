@@ -82,6 +82,29 @@ describe("updateSite", () => {
     expect(await world.audit()).toEqual(["create", "create", "create", "access", "access", "access", "details", "access"]);
   });
 
+  // Drift: the name is a label and the id is the address; a rename that touched the id or the public name would break the links a rename is promised to keep.
+  test("a rename changes the name and the label alone, names may repeat, and a site renamed while it goes public takes its new name as its public name", async () => {
+    const world = await makeWorld();
+    const id = await made(world, OWNER, "report", { access: "public", public_name: "docs" });
+    const other = await made(world, OWNER, "notes");
+    const steps = [
+      await updateSite(world.install, OWNER, { site: id, name: "q3-report" }),
+      await updateSite(world.install, OWNER, { site: id, name: "q3-report" }),
+      await updateSite(world.install, OWNER, { site: other, name: "q3-report", access: "public" }),
+      await updateSite(world.install, OWNER, { site: id, name: "Q3 Report" }),
+      await getSite(world.install, OWNER, `q3-report--${id}`),
+    ];
+
+    expect(steps).toMatchObject([
+      { ok: true, before: { name: "report", label: `report--${id}` }, site: { id, name: "q3-report", label: `q3-report--${id}`, public_name: "docs", addresses: { public: "https://docs-page.example.com" } } },
+      { ok: true, before: { name: "q3-report" }, site: { id, name: "q3-report" } },
+      { ok: true, site: { id: other, name: "q3-report", label: `q3-report--${other}`, public_name: "q3-report" } },
+      { ok: false, code: "bad_name", about: "name" },
+      { ok: true, site: { id } },
+    ]);
+    expect(await world.audit()).toEqual(["create", "create", "details", "access", "details"]);
+  });
+
   // Drift: `--expires 7d` counts from the moment it is set; a span counted from the site's creation would trash an old site at once.
   test("each detail is set as asked, an expiry counts from now, and a detail left out stays", async () => {
     const world = await makeWorld();

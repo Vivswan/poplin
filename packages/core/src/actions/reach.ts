@@ -28,9 +28,8 @@ async function findSite(install: Install, reference: string): Promise<Site | und
   if (named.kind === "public-name") return install.database.getSiteByPublicName(named.name);
 
   const byId = await install.database.getSite(named.id);
-  if (named.kind === "site") return byId?.name === named.name ? byId : undefined;
-
-  if (byId !== undefined) return byId;
+  // A label names its site by the id alone, so the label a site had before a rename still reaches it.
+  if (named.kind === "site" || byId !== undefined) return byId;
 
   // Twelve base36 characters are also the form of a name, so a miss as an id is tried as a public name.
   const publicName = parsePublicName(reference, install.reservedNames);
@@ -59,7 +58,7 @@ export async function enterInstall(install: Install, actor: Actor): Promise<Ente
 /**
  * Find the site a reference names and decide whether the actor may touch it.
  *
- * @param reference - the label `name--id`, the bare id, or the public name of a public site
+ * @param reference - the label `name--id`, of which the id alone is read, the bare id, or the public name of a public site
  * @returns the site, in the trash or not. `bad_argument` for a string that is no reference, `not_found` for a reference to no site.
  * A publisher asking for another's site is answered `not_allowed` when everyone may open the site, and `not_found` otherwise, as if there were none
  */

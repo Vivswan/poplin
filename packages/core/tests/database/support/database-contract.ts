@@ -613,9 +613,9 @@ function sites(label: string, makeDatabase: DatabaseFactory): void {
       const database = await opened(makeDatabase);
       const site = await made(database, draft(REPORT));
       const later: Signed = { by: ADA, at: NOW + 3 };
-      const changed = { ...site, title: "Q3 report", search_engines: true, expires: NOW + 100, updated_at: NOW + 3 };
+      const changed = { ...site, name: DOCS, title: "Q3 report", search_engines: true, expires: NOW + 100, updated_at: NOW + 3 };
 
-      expect(await database.changeDetails(site.id, { title: "Q3 report", search_engines: true, expires: NOW + 100 }, later)).toEqual({
+      expect(await database.changeDetails(site.id, { name: DOCS, title: "Q3 report", search_engines: true, expires: NOW + 100 }, later)).toEqual({
         kind: "done",
         site: changed,
       });

@@ -169,6 +169,16 @@ describe("publishSite", () => {
     expect(await world.audit()).toEqual(["create", "create", "publish", "details", "publish", "details", "publish", "details", "publish", "details", "publish", "details", "publish", "publish"]);
   });
 
+  // Drift: a name sent with an update renames the site in the step that makes the version live; one that was dropped would publish under the old label without a word.
+  test("an update with a name renames the site with the version, and leaves its id and its public name", async () => {
+    const world = await makeWorld();
+    const id = await made(world, OWNER, "report", { access: "public", public_name: "docs" });
+    const updated = await publishSite(world.install, OWNER, { files: pages("report v2"), site: id, name: "q3-report" });
+
+    expect(updated).toMatchObject({ ok: true, before: { label: `report--${id}` }, site: { id, name: "q3-report", label: `q3-report--${id}`, public_name: "docs", live_version: 2 } });
+    expect(await world.audit()).toEqual(["create", "details", "publish"]);
+  });
+
   // Drift: an update that asks for public and names no public name leaves the name alone; one that reset it would move a public site's address on a republish.
   test("an update that asks a public site to be public keeps its public name", async () => {
     const world = await makeWorld();
@@ -189,7 +199,7 @@ describe("publishSite", () => {
     ["a size that is no byte count", {}, { files: [file("index.html", "x", -1)], name: "report" }, { code: "bad_argument", about: "files" }],
     ["a name that breaks the name rules", {}, { files: pages("x"), name: "Report" }, { code: "bad_name", about: "name" }],
     ["no name and no site", {}, { files: pages("x") }, { code: "bad_argument", about: "name" }],
-    ["a name on an update", {}, { files: pages("x"), name: "other", onto: true }, { code: "bad_argument", about: "name" }],
+    ["a new name on an update that breaks the name rules", {}, { files: pages("x"), name: "Other", onto: true }, { code: "bad_name", about: "name" }],
     ["a public name another site holds", {}, { files: pages("x"), name: "report", access: "public", public_name: "taken" }, { code: "name_taken", about: "public_name" }],
     ["an update to a public name another site holds", {}, { files: pages("x"), onto: true, access: "public", public_name: "taken" }, { code: "name_taken", about: "public_name" }],
     ["the gallery's public name", {}, { files: pages("x"), name: "gallery", access: "public" }, { code: "reserved_name", about: "public_name" }],

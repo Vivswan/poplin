@@ -43,8 +43,9 @@ export type NewSite = {
   readonly files: number;
 } & SiteAccess;
 
-/** The settings of a site that change on their own; a key left out stays as it is. `title` is the typed title, and `null` takes it away, which leaves the page's own to show. */
+/** The settings of a site that change on their own; a key left out stays as it is. `name` renames the site, whatever other sites are called. `title` is the typed title, and `null` takes it away, which leaves the page's own to show. */
 export interface SiteDetails {
+  readonly name?: SiteName;
   readonly title?: string | null;
   readonly search_engines?: boolean;
   readonly embeddable?: boolean;
@@ -272,7 +273,7 @@ export interface Database {
   changeAccess(id: SiteId, access: SiteAccess, signed: Signed): Promise<Done | Unchanged | Refused<"not_found" | "in_trash" | "name_taken">>;
 
   /**
-   * Set a site's title, search-engines flag, embeddable flag, or expiry.
+   * Set a site's name, title, search-engines flag, embeddable flag, or expiry. A new name changes neither the id nor the public name.
    *
    * @throws {Error} a value breaks its field rule
    */

@@ -44,7 +44,8 @@ describe("parseCommand", () => {
     [`poplin set ${LABEL} --public`, { kind: "set", site: REPORT, settings: { access: "public" }, ...PLAIN }],
     [`poplin set --public ${LABEL}`, { kind: "set", site: REPORT, settings: { access: "public" }, ...PLAIN }],
     [`poplin set ${SECOND_LABEL} --public`, { kind: "set", site: SECOND, settings: { access: "public" }, ...PLAIN }],
-    [`poplin set ${SECOND_LABEL} --public --name docs`, { kind: "set", site: SECOND, settings: { access: "public", publicName: "docs" }, ...PLAIN }],
+    [`poplin set ${SECOND_LABEL} --public --public-name docs`, { kind: "set", site: SECOND, settings: { access: "public", publicName: "docs" }, ...PLAIN }],
+    [`poplin set ${LABEL} --name q3-report`, { kind: "set", site: REPORT, settings: { name: "q3-report" }, ...PLAIN }],
     [`poplin set ${LABEL} --title "Q3 sales"`, { kind: "set", site: REPORT, settings: { title: "Q3 sales" }, ...PLAIN }],
     [`poplin set ${LABEL} --title ""`, { kind: "set", site: REPORT, settings: { title: null }, ...PLAIN }],
     [`poplin set ${LABEL} --search-engines on`, { kind: "set", site: REPORT, settings: { searchEngines: true }, ...PLAIN }],
@@ -154,8 +155,8 @@ describe("parseCommand", () => {
     ["poplin ./report --unlisted --public", refusal("--unlisted and --public cannot go together: a site has one access")],
     [`poplin set ${LABEL}`, refusal("nothing to change: poplin set needs at least one setting", "poplin help set lists them")],
     [
-      `poplin set ${LABEL} --name docs`,
-      refusal("--name gives a public site its public name, so it needs --public", "poplin set <site> --public --name <public name>"),
+      `poplin set ${LABEL} --public-name docs`,
+      refusal("--public-name gives a public site its public name, so it needs --public", "poplin set <site> --public --public-name <public name>"),
     ],
     [`poplin set ${LABEL} --search-engines yes`, refusal('--search-engines takes on or off, not "yes"')],
     [`poplin set ${LABEL} --embeddable ON`, refusal('--embeddable takes on or off, not "ON"')],
@@ -188,12 +189,11 @@ describe("parseCommand", () => {
     ],
     ["poplin ./report --site ./other", refusal('"./other" is a path. Give the site\'s label; poplin list shows it.')],
     [
-      `poplin ./report --site ${LABEL} --name docs`,
-      refusal(
-        "--site with --name is an error: a site's name is set once, when it is made",
-        "to give the site a public name: --site <site> --public --name <public name>",
-      ),
+      `poplin ./report --site ${LABEL} --unlisted --public-name docs`,
+      refusal("--public-name gives a public site its public name, so it needs --public", "poplin set <site> --public --public-name <public name>"),
     ],
+    [`poplin set ${LABEL} --public --public-name Q3`, refusal('--public-name "Q3" is not a name: a name has at least 3 characters')],
+    [`poplin set ${LABEL} --name Q3`, refusal('--name "Q3" is not a name: a name has at least 3 characters')],
     ["poplin ./report --name Q3", refusal('--name "Q3" is not a name: a name has at least 3 characters')],
     [`poplin rollback ${LABEL} --to 0`, refusal('--to takes a version number such as 4, not "0"', "poplin show <site> lists the versions")],
     [`poplin rollback ${LABEL} --to=-1`, refusal('--to takes a version number such as 4, not "-1"', "poplin show <site> lists the versions")],
@@ -228,14 +228,16 @@ describe("parseCommand", () => {
     expect<unknown>(orders.map((line) => parseCommand(words(line), NOW))).toEqual(orders.map(() => expected));
   });
 
-  test("a public publish with --name gives the new site that name and that public name; on an update --name is the public name alone", () => {
-    const created = { ...CREATE, path: "./report", target: { kind: "create", name: "docs" }, settings: { access: "public", publicName: "docs" } };
-    const updated = { ...CREATE, path: "./report", target: { kind: "update", site: REPORT }, settings: { access: "public", publicName: "docs" } };
+  test("--name is the site's name wherever it is typed, a new site's or the new name of one that is updated, and --public-name alone is the public name", () => {
+    const created = { ...CREATE, path: "./report", target: { kind: "create", name: "docs" }, settings: { access: "public" } };
+    const renamed = { ...CREATE, path: "./report", target: { kind: "update", site: REPORT }, settings: { access: "public", name: "docs" } };
+    const both = { ...CREATE, path: "./report", target: { kind: "create", name: "docs" }, settings: { access: "public", publicName: "manual" } };
 
     expect<unknown>([
       parseCommand(words("poplin ./report --public --name docs")),
       parseCommand(words(`poplin ./report --site ${LABEL} --public --name docs`)),
-    ]).toEqual([created, updated]);
+      parseCommand(words("poplin ./report --public --name docs --public-name manual")),
+    ]).toEqual([created, renamed, both]);
   });
 
   test("after -- every word is an argument, so a title or a folder that starts with a dash can be typed", () => {

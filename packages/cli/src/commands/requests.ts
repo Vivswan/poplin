@@ -1,6 +1,6 @@
 // The requests: what each command asks for once its words are read, with every argument checked.
 
-import { type Checked, type PublicName, parsePublicName, parseSiteName, type SiteName } from "../../../core/src/names/names";
+import { type Checked, parsePublicName, parseSiteName, type SiteName } from "../../../core/src/names/names";
 import { siteReference } from "../../../core/src/sites/labels";
 import type { CommandName } from "./command-table";
 import { isSettingKey, readSetting, SETTING_SAMPLES, type SettingKey } from "./install-settings";
@@ -111,14 +111,10 @@ function readSite(raw: string, what: string): SiteRef | UsageError {
   return reference.value;
 }
 
-function readName<Name>(raw: string, parsed: Checked<Name>): Name | UsageError {
-  if (!parsed.ok) return usageError(`--name ${JSON.stringify(raw)} is not a name: ${REFUSALS[parsed.refusal]}`);
+function readName<Name>(flag: "--name" | "--public-name", raw: string, parsed: Checked<Name>): Name | UsageError {
+  if (!parsed.ok) return usageError(`${flag} ${JSON.stringify(raw)} is not a name: ${REFUSALS[parsed.refusal]}`);
 
   return parsed.value;
-}
-
-function readPublicName(raw: string): PublicName | UsageError {
-  return readName(raw, parsePublicName(raw, NOTHING_RESERVED));
 }
 
 function withInstall(words: Words, build: (install: Install) => Request): Request | UsageError {
@@ -139,54 +135,43 @@ function oneSite(kind: "show" | "new-link" | "restore", words: Words): Request |
   return withSite(words, (site, install) => ({ kind, site, ...install }));
 }
 
-/** The public name `--name` gives a site that `--public` makes public; without `--public` the flag has no meaning for an existing site. */
-function publicNameOf(flags: Flags, settings: SiteSettings, refusal: UsageError): PublicName | undefined | UsageError {
-  const name = flagValue(flags, "--name");
-  if (name === undefined) return undefined;
+/**
+ * Add the names the flags give to the settings: `--name`, the site's own, and `--public-name`, the one in its public address.
+ *
+ * @returns the settings, or why a name is none; `--public-name` without `--public` has no meaning
+ */
+function withNames(flags: Flags, given: SiteSettings): SiteSettings | UsageError {
+  const [nameText, publicText] = [flagValue(flags, "--name"), flagValue(flags, "--public-name")];
+  const name = nameText === undefined ? undefined : readName("--name", nameText, parseSiteName(nameText));
+  if (isUsageError(name)) return name;
 
-  if (settings.access !== "public") return refusal;
+  if (publicText !== undefined && given.access !== "public") {
+    return usageError("--public-name gives a public site its public name, so it needs --public", "poplin set <site> --public --public-name <public name>");
+  }
 
-  return readPublicName(name);
+  const publicName = publicText === undefined ? undefined : readName("--public-name", publicText, parsePublicName(publicText, NOTHING_RESERVED));
+  if (isUsageError(publicName)) return publicName;
+
+  return { ...given, ...(name === undefined ? {} : { name }), ...(publicName === undefined ? {} : { publicName }) };
 }
 
-function withPublicName(settings: SiteSettings, publicName: PublicName | undefined): SiteSettings {
-  if (publicName === undefined) return settings;
-
-  return { ...settings, publicName };
-}
-
-/** Whether a publish creates or updates, and what `--name` means for it: the new site's name, and its public name once `--public` is given. */
+/** Whether a publish creates or updates. `--name` is the new site's name, and the new name of a site that is updated. */
 function planPublish(flags: Flags, given: SiteSettings): { readonly target: PublishTarget; readonly settings: SiteSettings } | UsageError {
   const siteText = flagValue(flags, "--site");
-  const nameText = flagValue(flags, "--name");
+  const named = withNames(flags, given);
+  if (isUsageError(named)) return named;
 
   if (siteText !== undefined) {
     const site = readSite(siteText, "--site");
     if (isUsageError(site)) return site;
 
-    const renamed = usageError(
-      "--site with --name is an error: a site's name is set once, when it is made",
-      "to give the site a public name: --site <site> --public --name <public name>",
-    );
-    const publicName = publicNameOf(flags, given, renamed);
-    if (isUsageError(publicName)) return publicName;
-
-    return { target: { kind: "update", site }, settings: withPublicName(given, publicName) };
+    return { target: { kind: "update", site }, settings: named };
   }
 
-  if (nameText === undefined) return { target: { kind: "create" }, settings: given };
+  const { name, ...settings } = named;
+  if (name === undefined) return { target: { kind: "create" }, settings };
 
-  if (given.access === "public") {
-    const name = readPublicName(nameText);
-    if (isUsageError(name)) return name;
-
-    return { target: { kind: "create", name }, settings: { ...given, publicName: name } };
-  }
-
-  const name = readName(nameText, parseSiteName(nameText));
-  if (isUsageError(name)) return name;
-
-  return { target: { kind: "create", name }, settings: given };
+  return { target: { kind: "create", name }, settings };
 }
 
 function publish(words: Words, now: number): Request | UsageError {
@@ -206,13 +191,12 @@ function set(words: Words, now: number): Request | UsageError {
   const given = readSiteSettings(words.flags, now);
   if (isUsageError(given)) return given;
 
-  const unnamed = usageError("--name gives a public site its public name, so it needs --public", "poplin set <site> --public --name <public name>");
-  const publicName = publicNameOf(words.flags, given, unnamed);
-  if (isUsageError(publicName)) return publicName;
+  const settings = withNames(words.flags, given);
+  if (isUsageError(settings)) return settings;
 
-  if (Object.keys(given).length === 0) return usageError("nothing to change: poplin set needs at least one setting", "poplin help set lists them");
+  if (Object.keys(settings).length === 0) return usageError("nothing to change: poplin set needs at least one setting", "poplin help set lists them");
 
-  return withSite(words, (site, install) => ({ kind: "set", site, settings: withPublicName(given, publicName), ...install }));
+  return withSite(words, (site, install) => ({ kind: "set", site, settings, ...install }));
 }
 
 function rollback(words: Words): Request | UsageError {

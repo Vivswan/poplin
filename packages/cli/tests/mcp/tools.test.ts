@@ -33,7 +33,7 @@ const CLI_WORDS: Readonly<Record<string, readonly string[]>> = {
   path: ["path"],
   site: ["site", "--site"],
   name: ["--name"],
-  public_name: ["--name"],
+  public_name: ["--public-name"],
   access: ["--private", "--unlisted", "--public"],
   title: ["--title"],
   search_engines: ["--search-engines"],

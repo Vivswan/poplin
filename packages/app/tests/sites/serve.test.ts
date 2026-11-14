@@ -232,6 +232,19 @@ describe("access", () => {
     expect([await whole(old), fresh.status, await fresh.text()]).toEqual([NOT_FOUND, 200, "moved home"]);
   });
 
+  // Drift: a rename is promised to break no link; an address that compared the name it carries would lose every label sent out before the rename.
+  test("after a rename the address with the old name still serves, and so does the one with the new name", async () => {
+    const install = await openInstall();
+    const before = await install.publish({ name: "drafts", access: "unlisted", files: { "index.html": ["renamed home", HTML] } });
+    const changed = await install.database.changeDetails(before.id, { name: "notes" as Site["name"] }, { by: install.owner, at: NOW });
+    if (changed.kind !== "done") throw new Error(`the name did not change: ${changed.kind}`);
+
+    const old = await serveSite(ask(labelHost(before), "/"), install.serving);
+    const fresh = await serveSite(ask(labelHost(changed.site), "/"), install.serving);
+
+    expect([old.status, await old.text(), fresh.status, await fresh.text()]).toEqual([200, "renamed home", 200, "renamed home"]);
+  });
+
   // Drift: the gallery's hostname would be read as a public name, or its handler would be skipped.
   test("the gallery's hostname goes to the handler it was given", async () => {
     const response = await serve(ask("gallery-page.example.com", "/"), { gallery: async () => new Response("the gallery") });

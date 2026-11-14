@@ -28,6 +28,8 @@ export function siteWord(site: SiteRef): string {
 export function siteChanges(settings: SiteSettings): SiteChanges {
   const changes: { -readonly [Key in keyof SiteChanges]: SiteChanges[Key] } = {};
 
+  if (settings.name !== undefined) changes.name = settings.name;
+
   if (settings.access !== undefined) changes.access = settings.access;
 
   if (settings.publicName !== undefined) changes.public_name = settings.publicName;

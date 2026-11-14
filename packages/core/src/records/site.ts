@@ -56,6 +56,7 @@ export const NEW_SITE = v.intersect([
 
 /** The settings of a site that change without touching its access, its id, or its versions; each is optional. */
 export const SITE_DETAILS = v.strictObject({
+  name: v.optional(SITE_NAME),
   title: v.optional(v.nullable(TITLE)),
   search_engines: v.optional(v.boolean()),
   embeddable: v.optional(v.boolean()),

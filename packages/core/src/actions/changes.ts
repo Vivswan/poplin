@@ -3,7 +3,7 @@
 import * as v from "valibot";
 
 import type { Database, Signed, SiteDetails } from "../database/database";
-import { parsePublicName, type ReservedNames, type SiteName } from "../names/names";
+import { parsePublicName, parseSiteName, type ReservedNames, type SiteName } from "../names/names";
 import { type SettingValues, spanSeconds } from "../records/settings";
 import type { Site, SiteAccess } from "../records/site";
 import type { SiteId } from "../sites/ids";
@@ -32,6 +32,7 @@ export const TITLE_TEXT = v.pipe(
 
 /** What a caller may ask of a site's settings; every key is optional, and no other key is taken. */
 export const SITE_CHANGES = v.strictObject({
+  name: v.optional(v.string()),
   access: v.optional(v.picklist(["private", "unlisted", "public"])),
   public_name: v.optional(v.string()),
   title: v.optional(v.nullable(TITLE_TEXT)),
@@ -41,7 +42,7 @@ export const SITE_CHANGES = v.strictObject({
 });
 
 /**
- * The settings a caller asks for, on a publish or on their own.
+ * The settings a caller asks for, on a publish or on their own. `name` renames a site: its label changes, and its id and its public name stay.
  *
  * `public_name` goes with `access: "public"` alone. Left out, a public site keeps the one it holds, and a site going public takes its own name.
  *
@@ -144,31 +145,42 @@ export function defaultExpiry(span: SettingValues["default_expires"], now: numbe
   return now + spanSeconds(span) * 1000;
 }
 
+/** The details a caller asks for beside the name, or `undefined` for an expiry in no known form. */
+function readDetails(asked: SiteChanges, now: number): { -readonly [Key in keyof SiteDetails]: SiteDetails[Key] } | undefined {
+  const details: { -readonly [Key in keyof SiteDetails]: SiteDetails[Key] } = {};
+  if (asked.title !== undefined) details.title = asked.title === "" ? null : asked.title;
+  if (asked.search_engines !== undefined) details.search_engines = asked.search_engines;
+  if (asked.embeddable !== undefined) details.embeddable = asked.embeddable;
+  if (asked.expires === undefined) return details;
+
+  const expires = readExpires(asked.expires, now);
+  if (expires === undefined) return undefined;
+
+  return { ...details, expires };
+}
+
 /**
  * Check the settings a caller asks for.
  *
  * @param raw - the caller's object as sent; anything is taken and checked
- * @returns the changes, or the first refusal: `bad_argument` names the key in `about`, `bad_name` and `reserved_name` are about the public name
+ * @returns the changes, or the first refusal: `bad_argument` names the key in `about`, `bad_name` is about the name or the public name, and `reserved_name` about the public name
  */
 export function readChanges(raw: unknown, ground: Ground): CheckedChanges | Refused<"bad_argument" | "bad_name" | "reserved_name"> {
   const parsed = v.safeParse(SITE_CHANGES, raw);
   if (!parsed.success) return refuse("bad_argument", v.getDotPath(parsed.issues[0]) ?? "settings");
 
   const asked = parsed.output;
-  const access = readAccess(asked, ground);
+  const name = asked.name === undefined ? undefined : parseSiteName(asked.name);
+  if (name?.ok === false) return refuse("bad_name", "name");
+
+  // A site renamed and made public in one change takes its new name as its public name.
+  const access = readAccess(asked, name === undefined ? ground : { ...ground, name: name.value });
   if (access !== undefined && "ok" in access) return access;
 
-  const details: { -readonly [Key in keyof SiteDetails]: SiteDetails[Key] } = {};
-  if (asked.title !== undefined) details.title = asked.title === "" ? null : asked.title;
-  if (asked.search_engines !== undefined) details.search_engines = asked.search_engines;
-  if (asked.embeddable !== undefined) details.embeddable = asked.embeddable;
+  const details = readDetails(asked, ground.now);
+  if (details === undefined) return refuse("bad_argument", "expires");
 
-  if (asked.expires !== undefined) {
-    const expires = readExpires(asked.expires, ground.now);
-    if (expires === undefined) return refuse("bad_argument", "expires");
-
-    details.expires = expires;
-  }
+  if (name !== undefined) details.name = name.value;
 
   if (access === undefined) return { ok: true, details };
 

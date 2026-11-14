@@ -26,7 +26,7 @@ const REFUSALS: Readonly<Record<ActionCode | OwnCode, string>> = {
   in_trash: "The site sits in the trash. Restore it first.",
   not_in_trash: "The site is not in the trash.",
   name_taken: "Another site holds that public name. Choose another.",
-  bad_name: "The public name breaks the rules: 3 to 40 characters, lowercase letters, digits, and single dashes inside.",
+  bad_name: "The name breaks the rules: 3 to 40 characters, lowercase letters, digits, and single dashes inside.",
   reserved_name: "That public name is reserved.",
   no_such_version: "That version is not kept.",
   bad_argument: "The value of {about} is not one it takes.",

@@ -1,7 +1,7 @@
 // The settings of one site, as `publish` and `set` both read them from the same flags.
 
 import { dayStart, readExpires } from "../../../core/src/actions/changes";
-import type { PublicName } from "../../../core/src/names/names";
+import type { PublicName, SiteName } from "../../../core/src/names/names";
 import type { SettingValues } from "../../../core/src/records/settings";
 import { readSetting } from "./install-settings";
 import { type Flags, flagValue, isUsageError, type UsageError, usageError } from "./util";
@@ -22,8 +22,9 @@ type Span = Exclude<SettingValues["default_expires"], "never">;
 /** When a site moves to the trash: never, a span after the moment it is set, or the start of a calendar date. */
 type Expiry = { readonly kind: "never" } | { readonly kind: "span"; readonly span: Span } | { readonly kind: "date"; readonly date: string };
 
-/** The settings a command line gave. A setting that was not given is absent, and changes nothing. A `title` of `null` takes the typed title away, so the site shows its page's own. */
+/** The settings a command line gave. A setting that was not given is absent, and changes nothing. A `title` of `null` takes the typed title away, so the site shows its page's own. `name` renames a site that exists. */
 export interface SiteSettings {
+  readonly name?: SiteName;
   readonly access?: "private" | "unlisted" | "public";
   readonly publicName?: PublicName;
   readonly title?: string | null;
@@ -76,7 +77,7 @@ function readAccess(flags: Flags): SiteSettings["access"] | UsageError {
  * Read the settings flags of `publish` and `set`.
  *
  * @param now - the time, in milliseconds since the epoch; an expiry must lie after it
- * @returns the settings that were given, without the public name, or the first flag that was written wrong
+ * @returns the settings that were given, without the names, or the first flag that was written wrong
  */
 export function readSiteSettings(flags: Flags, now: number): SiteSettings | UsageError {
   const access = readAccess(flags);

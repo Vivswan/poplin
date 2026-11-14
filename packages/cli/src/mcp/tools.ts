@@ -34,9 +34,10 @@ const SITE = "Its label, e.g. report--k3f9x2ab71qz. Also taken: its bare id, or 
 
 /** What `publish_site` and `update_site` say of each setting. */
 const SETTINGS = {
+  name: "A new name, e.g. q3-report. Renaming never breaks a link.",
   access: "private: only the owner. unlisted: anyone with the address. public: everyone. E.g. unlisted.",
-  public_name: "With access public: the name in the public address, e.g. docs. Left out: kept if already public, else the site's name.",
-  title: "The title on the owner's dashboard, e.g. Q3 sales. Left out: unchanged. null: the page's own title.",
+  public_name: "With access public: the public address's name, e.g. docs. Left out: kept, or the site's name.",
+  title: "Its title on the dashboard, e.g. Q3 sales. null: the page's own title.",
   search_engines: "true: search engines may list it once it is public.",
   embeddable: "false: other pages cannot show it in a frame.",
   expires: "When it moves to the trash: 7d (units s, m, h, d), 2026-12-01, or never.",
@@ -85,6 +86,17 @@ function readSite(raw: string): SiteReference | Problem {
   return reference.value;
 }
 
+/** Read the names a tool was asked for: the site's own, and the one in its public address. */
+function readNames(asked: Pick<AskedSettings, "name" | "public_name">): Pick<SiteSettings, "name" | "publicName"> | Problem {
+  const name = asked.name === undefined ? undefined : parseSiteName(asked.name);
+  if (name?.ok === false) return problem("bad_name", "name");
+
+  const publicName = asked.public_name === undefined ? undefined : parsePublicName(asked.public_name, NOTHING_RESERVED);
+  if (publicName?.ok === false) return problem("bad_name", "public_name");
+
+  return { ...(name === undefined ? {} : { name: name.value }), ...(publicName === undefined ? {} : { publicName: publicName.value }) };
+}
+
 /** Read the settings a tool was asked for with the reader of the settings flags, so a tool and a command take the same values. */
 function readSettings(asked: AskedSettings): SiteSettings | Problem {
   const flags = new Map<string, string | true>();
@@ -102,12 +114,10 @@ function readSettings(asked: AskedSettings): SiteSettings | Problem {
   const settings = readSiteSettings(flags, Date.now());
   if (isUsageError(settings)) return problem("bad_argument", settings.message, settings.hint);
 
-  if (asked.public_name === undefined) return settings;
+  const names = readNames(asked);
+  if (isProblem(names)) return names;
 
-  const publicName = parsePublicName(asked.public_name, NOTHING_RESERVED);
-  if (!publicName.ok) return problem("bad_name", "public_name");
-
-  return { ...settings, publicName: publicName.value };
+  return { ...settings, ...names };
 }
 
 /** Run one call against the install, or say why there is no install to call. */
@@ -159,10 +169,8 @@ async function deleteForever(raw: string, host: Host): Promise<Outcome> {
   });
 }
 
-/** Whether a publish makes a new site, under which name, or updates one. */
+/** Whether a publish makes a new site, under which name, or updates one, which a name sent with it renames. */
 function readTarget(site: string | undefined, name: string | undefined): RequestOf<"publish">["target"] | Problem {
-  if (site !== undefined && name !== undefined) return problem("bad_argument", "name", "a site's name is set once, when it is made: leave name out with site");
-
   if (site !== undefined) {
     const reference = readSite(site);
 
@@ -184,7 +192,7 @@ async function publish(input: InputOf<"publish_site">, host: Host): Promise<Outc
   const target = readTarget(site, name);
   if (isProblem(target)) return refused(target);
 
-  const settings = readSettings(changes);
+  const settings = readSettings(site === undefined || name === undefined ? changes : { ...changes, name });
   if (isProblem(settings)) return refused(settings);
 
   const path = resolve(asked);
@@ -207,8 +215,8 @@ export const TOOLS: { readonly [Name in ToolName]: Tool<Name> } = {
     parameters: {
       path: "A folder with an index.html, or one .html file, e.g. ./report. Relative to the server's working directory; the answer names the absolute path read.",
       site: "To update: the label an earlier publish answered, e.g. report--k3f9x2ab71qz. Left out: a new site.",
-      name: "A new site's name, e.g. q3-report: 3 to 40 lowercase letters, digits, single dashes. Left out: the folder's or file's name. Never with site.",
       ...SETTINGS,
+      name: "The site's name, e.g. q3-report: 3 to 40 lowercase letters, digits, single dashes. New site, left out: the folder or file name. With site: renames it.",
     },
     hints: { destructiveHint: false },
     run: publish,

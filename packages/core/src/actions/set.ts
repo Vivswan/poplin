@@ -1,4 +1,4 @@
-// Set: change who may open a site, and its title, search-engines flag, embeddable flag, or expiry.
+// Set: change who may open a site, and its name, title, search-engines flag, embeddable flag, or expiry.
 
 import type { Actor } from "../auth/scopes";
 import { applyChanges, asksNothing, readChanges, type SiteChanges } from "./changes";
@@ -11,6 +11,8 @@ type SetCode = "not_set_up" | "bad_argument" | "not_found" | "not_allowed" | "in
 
 /**
  * Change the settings of a site. A setting left out stays as it is.
+ *
+ * A `name` renames the site: its label changes, and its id and its public name stay.
  *
  * Going public claims the public name, the site's own name unless `public_name` gives another; leaving public frees it. A public site asked to be public again keeps its public name unless `public_name` gives another.
  *

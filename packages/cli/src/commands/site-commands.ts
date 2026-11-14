@@ -57,9 +57,10 @@ async function set(request: Asked<"set">, { client }: Session): Promise<Outcome>
   const changed = await client.call("updateSite", { site: siteWord(request.site) }, changes);
   if (!changed.ok) return failed(changed);
 
-  const { site } = changed.value;
+  const { site, before } = changed.value;
+  const renamed = before === null || before.name === site.name ? [] : [`renamed from ${before.name}`];
 
-  return answered(changed, site.access, accessFacts, searchNotes(changes, site));
+  return answered(changed, site.access, (shown) => [...accessFacts(shown), ...renamed], searchNotes(changes, site));
 }
 
 async function show(request: OneSite, { client }: Session): Promise<Outcome> {

@@ -7,7 +7,7 @@ import { cleanUp, folderOf } from "../commands/support/harness";
 import { type Answer, type McpBench, openMcp } from "./support/bench";
 
 /** The most bytes the tools listing may cost an agent's context. */
-const LISTING_BUDGET = 6000;
+const LISTING_BUDGET = 7000;
 
 /** An id in the form of a site id that no site has. */
 const NO_SITE = "zzzzzzzzzzzz";
@@ -126,6 +126,15 @@ describe("the MCP server", () => {
     expect(titles).toEqual(["Q3 sales", "Q3 sales", "Second"]);
   });
 
+  test("a name renames a site through update_site and through publish_site onto it, and the label it had still names it: an agent keeps the label of its first publish", async () => {
+    const { bench, site } = await withSite();
+    const path = folderOf("report", { "index.html": "<title>Second</title>" });
+    const renamed = siteOf(await bench.call("update_site", { site: site.label, name: "q3-report" }));
+    const again = siteOf(await bench.call("publish_site", { path, site: site.label, name: "notes" }));
+
+    expect([renamed.label, renamed.addresses.site.includes(renamed.label), again.label, again.live_version]).toEqual([`q3-report--${site.id}`, true, `notes--${site.id}`, 2]);
+  });
+
   test("each tool about a site does what its command does and answers the site: a tool that drifts from its command is a second rule book", async () => {
     const { bench, site } = await withSite();
     await bench.call("publish_site", { path: folderOf("report", { "index.html": "<title>Second</title>" }), site: site.label });
@@ -190,7 +199,7 @@ describe("the MCP server", () => {
     ["a public name another site holds", "update_site", { site: "SECOND", access: "public", public_name: "report" }, "name_taken"],
     ["a file past the install's limit", "publish_site", { path: "LARGE" }, "too_large"],
     ["an expiry that is no span or day", "update_site", { site: "SECOND", expires: "soon" }, "bad_argument"],
-    ["a name with a site to update", "publish_site", { path: "LARGE", site: "SECOND", name: "other" }, "bad_argument"],
+    ["a new name that breaks the rules", "update_site", { site: "SECOND", name: "Q3 Report" }, "bad_name"],
     ["a site that is a path", "delete_site", { site: "./report" }, "bad_argument"],
     ["a site that is a Windows path", "delete_site", { site: "C:\\report" }, "bad_argument"],
     ["an empty path", "publish_site", { path: "" }, "bad_argument"],

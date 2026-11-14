@@ -41,6 +41,9 @@ function askedOf(form: Form, fields: Record<"access" | "title", string>, referen
     embeddable: form.has("embeddable"),
   };
 
+  const name = form.get("name") ?? "";
+  if (name !== "") asked.name = name;
+
   const publicName = form.get("public_name") ?? "";
   if (fields.access === "public" && publicName !== "") asked.public_name = publicName;
 

@@ -224,6 +224,7 @@ describe("createApi", () => {
     expect(await (await done("exportFile", { site: label, version: 1, path: "index.html" })).response.text()).toBe(PAGES["index.html"]);
     expect(part(await done("getSite", { site: label }), "site").id).toBe(first.id);
     expect(part(await done("updateSite", { site: label }, { body: { title: "Q3 sales", access: "unlisted" } }), "site")).toMatchObject({ title: "Q3 sales", access: "unlisted" });
+    expect(part(await done("updateSite", { site: label }, { body: { name: "q3-report" } }), "site")).toMatchObject({ id: first.id, name: "q3-report", label: `q3-report--${first.id}` });
     expect(part(await done("rollbackSite", { site: label }, { body: { version: 1 } }), "site").live_version).toBe(1);
     const moved = part(await done("newLink", { site: label }), "site").id as string;
     expect(moved).not.toBe(first.id);

@@ -20,6 +20,20 @@ async function shown(opened: Opened, reference: string): Promise<Extract<Awaited
   return answer.ok ? answer.site : answer.code;
 }
 
+// Drift: the settings form posts the name with every save; one that renamed on every save, or lost the page it lands on after a rename, would leave the owner on a dead address.
+test("the settings form renames a site when its name field changes, lands on the page under the new label, and leaves the id and the public name", async () => {
+  const opened = await openDashboard();
+  const site = await opened.publish("report", "public");
+  const path = `/sites/report--${site.id}`;
+
+  const same = await opened.post(`${path}/settings`, { name: "report", access: "public", public_name: "report", title: "", embeddable: "on" });
+  const renamed = await opened.post(`${path}/settings`, { name: "q3-report", access: "public", public_name: "report", title: "", embeddable: "on" });
+
+  expect([same.headers.get("Location"), renamed.headers.get("Location")]).toEqual([`${path}?done=saved`, `/sites/q3-report--${site.id}?done=saved`]);
+  expect(await shown(opened, site.id)).toMatchObject({ id: site.id, name: "q3-report", label: `q3-report--${site.id}`, public_name: "report" });
+  expect((await opened.install.database.listAudit({ limit: 10 })).map((entry) => entry.action).filter((action) => action === "details")).toHaveLength(1);
+});
+
 test("each form of a live site does its change through the action, writes the action's audit entry, and lands on a page that says so", async () => {
   const opened = await openDashboard();
   const site = await opened.publish("report");
@@ -106,7 +120,8 @@ test("every refusal of an action comes back as its code in the address and its s
   const before = JSON.stringify([await shown(opened, site.id), await shown(opened, other.id), await shown(opened, trashed.id), await opened.audit()]);
   const refusals = [
     [`${path}/settings`, { access: "public", public_name: "docs", title: "" }, `${path}?refused=name_taken&about=public_name`, "Another site holds that public name. Choose another."],
-    [`${path}/settings`, { access: "public", public_name: "No Good", title: "" }, `${path}?refused=bad_name&about=public_name`, "The public name breaks the rules: 3 to 40 characters, lowercase letters, digits, and single dashes inside."],
+    [`${path}/settings`, { access: "public", public_name: "No Good", title: "" }, `${path}?refused=bad_name&about=public_name`, "The name breaks the rules: 3 to 40 characters, lowercase letters, digits, and single dashes inside."],
+    [`${path}/settings`, { access: "private", name: "No Good", title: "" }, `${path}?refused=bad_name&about=name`, "The name breaks the rules: 3 to 40 characters, lowercase letters, digits, and single dashes inside."],
     [`${path}/settings`, { access: "public", public_name: "gallery", title: "" }, `${path}?refused=reserved_name&about=public_name`, "That public name is reserved."],
     [`${path}/settings`, { access: "everyone", title: "" }, `${path}?refused=bad_argument&about=access`, "The value of access is not one it takes."],
     [`${path}/settings`, { access: "private", title: "", expires: "yesterday" }, `${path}?refused=bad_argument&about=expires`, "The value of expires is not one it takes."],

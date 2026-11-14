@@ -57,11 +57,13 @@ You publish with the MCP tools, or with the `poplin` command when the tools are 
 | `unlisted` | anyone who has the address, with no login                  | `-u-poplin.example.com`         | `--unlisted` |
 | `public`   | everyone, also at a public name: `report-page.example.com` | `-u-poplin.example.com`         | `--public`   |
 
-"Share this with my team" is not yet a yes to unlisted: say what unlisted means and let the user choose. Going public claims a public name, the site's name unless you pass `public_name` (`--public --name docs`).
+"Share this with my team" is not yet a yes to unlisted: say what unlisted means and let the user choose. Going public claims a public name, the site's name unless you pass `public_name` (`--public --public-name docs`).
 
 Change `access` only when the user asks, in either direction. A public site that goes private or unlisted gives up its public name, and that address stops working.
 
 **To or from private changes the address.** The answer then ends in a line `address changed: <old> is now <new>`. Give the user the new `url`, and say that the old address sends visitors on to it. The label you pass as `site` stays the same.
+
+**A rename never breaks a link.** `update_site` with `name` (`poplin set <site> --name q3-report`) changes the name in the label and nothing else: the id, the public name, and every address handed out before stay as they are. The answer carries the new label.
 
 **`new_link` changes the address at once, and the old one stops working.** Every link with the old label breaks, for everyone the user sent it to, and it cannot be put back. Use it only when the user asks for a new link.
 

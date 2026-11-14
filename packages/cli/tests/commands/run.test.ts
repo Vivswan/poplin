@@ -71,7 +71,7 @@ describe("run", () => {
     const open = `https://${label}-u-poplin.example.com`;
 
     expect((await bench.run(`set ${label} --unlisted --search-engines on`)).out).toEqual([`unlisted  ${label}`, open, `address changed: ${url} is now ${open}`]);
-    expect((await bench.run(`set ${label} --public --name docs`)).out).toEqual([`public  ${label}  public name "docs"`, "https://docs-page.example.com"]);
+    expect((await bench.run(`set ${label} --public --public-name docs`)).out).toEqual([`public  ${label}  public name "docs"`, "https://docs-page.example.com"]);
     expect((await bench.run(`set docs --private`)).out).toEqual([`private  ${label}`, url, `address changed: ${open} is now ${url}`]);
     expect((await bench.run(`delete ${label}`)).out).toEqual([`in the trash  ${label}  gone for good on 2023-11-21`, `to take it back: poplin restore ${label}`]);
     expect((await bench.run("list --trash")).out).toEqual([`${label}  gone for good on 2023-11-21  Report`]);
@@ -84,6 +84,15 @@ describe("run", () => {
     expect(shown.out.slice(0, 4)).toEqual([label, url, `id              ${label.slice(-12)}`, "name            report"]);
     expect(shown.out.at(-1)).toMatch(/^version 1 {2}2023-11-14 {2}by [0-9a-f]{16} {2}live$/);
     expect(json).toEqual((await bench.install.call("getSite", { site: label })).body);
+  });
+
+  test("set --name prints the new label and the name it had, and the label typed before the rename still names the site: an agent holds the old label", async () => {
+    const { bench, label } = await withSite();
+    const renamed = `notes--${label.slice(-12)}`;
+
+    expect((await bench.run(`set ${label} --name notes`)).out.slice(0, 2)).toEqual([`private  ${renamed}  renamed from report`, `https://${renamed}-p-poplin.example.com`]);
+    expect((await bench.run(`set ${label} --unlisted`)).out[0]).toBe(`unlisted  ${renamed}`);
+    expect((await bench.run(`${folderOf("report", { "index.html": "<title>Second</title>" })} --site ${label} --name q3-report`)).out[1]).toBe(`updated  q3-report--${label.slice(-12)}  version 2  unlisted`);
   });
 
   test("rollback and new-link print the version now live and the new label: the old label is dead, so the new one must be on stdout", async () => {
@@ -190,7 +199,7 @@ describe("run", () => {
       await bench.run(`new-link ${label}`, asStranger),
       await bench.run(`rollback ${label} --to 7`),
       await bench.run(`restore ${label}`),
-      await bench.run(`set ${label} --public --name gallery`),
+      await bench.run(`set ${label} --public --public-name gallery`),
       await bench.run(`delete ${label} --forever`),
       await bench.run(`delete ${label} --forever`, { terminal: { asks: true, progress: true }, typed: "report" }),
     ];

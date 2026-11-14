@@ -19,7 +19,7 @@ test("a live site's page offers every setting of the set action, rollback, a new
   const trashPage = await (await opened.get(`/sites/old--${trashed.id}`)).text();
 
   expect(Array.from(livePage.matchAll(CHANGES), ([, change]) => change)).toEqual(["settings", "new-link", "delete"]);
-  expect(Array.from(livePage.matchAll(/<input[^>]* name="([a-z_]+)"/g), ([, name]) => name).filter((name) => name !== "csrf")).toEqual(["access", "access", "access", "public_name", "title", "search_engines", "embeddable", "expires"]);
+  expect(Array.from(livePage.matchAll(/<input[^>]* name="([a-z_]+)"/g), ([, name]) => name).filter((name) => name !== "csrf")).toEqual(["name", "access", "access", "access", "public_name", "title", "search_engines", "embeddable", "expires"]);
   expect(livePage).toContain("The current address stops working at once.");
   expect(livePage).toContain("Only one version is kept");
   expect(Array.from(trashPage.matchAll(CHANGES), ([, change]) => change)).toEqual(["restore", "delete-forever"]);
