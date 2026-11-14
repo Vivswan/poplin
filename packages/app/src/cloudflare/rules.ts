@@ -4,13 +4,15 @@ import { BasePhases } from "cloudflare/resources/rulesets/phases/phases";
 import { BaseRules } from "cloudflare/resources/rulesets/rules";
 import { BaseRulesets } from "cloudflare/resources/rulesets/rulesets";
 import { type CloudflareResult, type Connection, callCloudflare } from "./client";
+import { INSTALL_OBJECTS } from "./install-objects";
 import { applySteps, reportOf, type Synced } from "./sync";
 
 const NOT_FOUND_STATUS = 404;
 const LITERAL = /^[a-z0-9.-]+$/;
+const NEW_RULESET_NAMES = { http_ratelimit: INSTALL_OBJECTS.rateRuleset, http_request_firewall_custom: INSTALL_OBJECTS.guardRuleset } as const;
 
 /** The phases poplin keeps a rule in: the rate limiting rules, and the custom rules that run before them. */
-type Phase = "http_ratelimit" | "http_request_firewall_custom";
+type Phase = keyof typeof NEW_RULESET_NAMES;
 
 /** How a rate rule counts and for how long it blocks. */
 interface RateLimit {
@@ -160,7 +162,7 @@ async function applyRuleSteps(connection: Connection, zoneId: string, phase: Pha
     // The first founding step sent this rule already.
     if (step !== founding[0]) return { ok: true, value: undefined };
 
-    return callCloudflare(connection, (api) => new BaseRulesets(api).create({ zone_id: zoneId, kind: "zone", phase, name: "default", rules: foundingRules }));
+    return callCloudflare(connection, (api) => new BaseRulesets(api).create({ zone_id: zoneId, kind: "zone", phase, name: NEW_RULESET_NAMES[phase], rules: foundingRules }));
   });
 }
 

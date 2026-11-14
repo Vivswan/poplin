@@ -71,7 +71,7 @@ function draftOf(draft: Draft): NewSite {
 }
 
 function zone(): Serving["zone"] {
-  const layout = parseDomainLayout({ domain: "example.com", adminHostname: "admin.example.com", suffix: "-page" });
+  const layout = parseDomainLayout({ domain: "example.com", admin_hostname: "admin.example.com", suffix: "-page" });
   if (!layout.ok) throw new Error(`the test's layout was refused: ${layout.refusal}`);
 
   return layout.value;

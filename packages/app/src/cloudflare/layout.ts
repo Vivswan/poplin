@@ -5,10 +5,10 @@ import { type Hostname, isUnder, parseHostname } from "./hostname";
 
 declare const layoutBrand: unique symbol;
 
-/** The layout as settings or a form hold it, unchecked. */
+/** The layout as the Worker's `ZONE` binding, the settings, or a form hold it, unchecked. `admin_hostname` is the whole hostname, domain included. */
 export interface RawLayout {
   readonly domain: string;
-  readonly adminHostname: string;
+  readonly admin_hostname: string;
   readonly suffix: string;
 }
 
@@ -35,7 +35,7 @@ export function parseDomainLayout(raw: RawLayout): CheckedLayout {
   const domain = parseHostname(raw.domain);
   if (!domain.ok) return { ok: false, refusal: "bad-domain" };
 
-  const admin = parseHostname(raw.adminHostname);
+  const admin = parseHostname(raw.admin_hostname);
   if (!admin.ok) return { ok: false, refusal: "bad-admin-hostname" };
 
   if (!isUnder(admin.value, domain.value)) return { ok: false, refusal: "admin-outside-domain" };

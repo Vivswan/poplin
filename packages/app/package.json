@@ -2,10 +2,14 @@
   "name": "@poplin/app",
   "private": true,
   "type": "module",
+  "exports": {
+    "./src/cloudflare/zone-binding": "./src/cloudflare/zone-binding.ts"
+  },
   "dependencies": {
     "@poplin/core": "workspace:*",
     "cloudflare": "7.3.0",
     "ipaddr.js": "2.5.0",
-    "jose": "6.2.17"
+    "jose": "6.2.17",
+    "valibot": "1.5.0"
   }
 }

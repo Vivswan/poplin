@@ -3,7 +3,7 @@
 import { type Hostname, parseHostname } from "../src/cloudflare/hostname";
 import { type DomainLayout, parseDomainLayout, type RawLayout } from "../src/cloudflare/layout";
 
-const BASE: RawLayout = { domain: "example.com", adminHostname: "admin.example.com", suffix: "-page" };
+const BASE: RawLayout = { domain: "example.com", admin_hostname: "admin.example.com", suffix: "-page" };
 
 /** Check a layout that a test wrote by hand; a refusal is a mistake in the test. */
 function layoutOf(changes: Partial<RawLayout>): DomainLayout {
@@ -25,4 +25,4 @@ export function hostOf(raw: string): Hostname {
 export const SUFFIXED = layoutOf({});
 
 /** Another suffix and a deeper admin hostname. */
-export const OTHER_SUFFIX = layoutOf({ suffix: "-s1-x", adminHostname: "admin.tools.example.com" });
+export const OTHER_SUFFIX = layoutOf({ suffix: "-s1-x", admin_hostname: "admin.tools.example.com" });

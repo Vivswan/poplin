@@ -19,6 +19,11 @@ data "cloudflare_zone" "this" {
       condition     = self.account.id == var.account_id
       error_message = "zone_id must name a zone of the account in account_id: a route finds its Worker in the zone's own account."
     }
+
+    postcondition {
+      condition     = length("${var.admin_hostname}.${self.name}") <= 253
+      error_message = "admin_hostname and the domain together must be 253 characters or fewer: no longer hostname exists."
+    }
   }
 }
 
@@ -42,7 +47,7 @@ locals {
   # The wildcard record every site hostname resolves through. DNS has no partial wildcard, so it covers the whole level.
   wildcard_host = "*.${local.domain}"
 
-  # The records that answer for a hostname and that the module did not create.
+  # The records that answer for a hostname and are not the install's. The module and poplin's setup client both start the comment of a record they create with `poplin: `.
   zone_records = [
     for record in data.cloudflare_dns_records.zone.result : record
     if contains(["A", "AAAA", "CNAME"], record.type) && !startswith(coalesce(record.comment, "none"), "poplin: ")
@@ -95,10 +100,10 @@ locals {
     null
   )
 
-  # The zone values the module owns: the records, routes, and rule above follow them in the same apply.
+  # The zone values the module owns: the records, routes, and rules above follow them in the same apply. The admin hostname is the whole hostname.
   zone_binding = {
     domain         = local.domain
-    admin_hostname = var.admin_hostname
+    admin_hostname = local.admin_host
     suffix         = var.suffix
   }
 
@@ -112,7 +117,11 @@ locals {
     dashboard_title             = coalesce(var.dashboard_title, local.admin_host)
     gallery                     = var.gallery ? "on" : "off"
     cache_html                  = var.cache_html
+    cache_files                 = var.cache_files
     private_sites               = "single-file"
+    outside_pages               = var.outside_pages
+    search_engines_allowed      = var.search_engines_allowed ? "on" : "off"
+    zone_bots                   = var.zone_bots
     max_total_size              = var.max_total_size
     max_site_size               = var.max_site_size
     max_sites                   = var.max_sites == null ? "none" : tostring(var.max_sites)

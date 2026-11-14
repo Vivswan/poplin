@@ -23,6 +23,9 @@ const PRIVATE_SITES = ["single-file", "folders"] as const;
 /** Whether a page that is not one of the install's own sites may frame a site or load its files. */
 const OUTSIDE_PAGES = ["blocked", "allowed"] as const;
 
+/** The zone's bot switches: `auto` sets them on a zone with no hostnames of its own, `on` on any zone, `off` leaves them alone. */
+const ZONE_BOTS = ["auto", "on", "off"] as const;
+
 /** How long HTML is cached; `0s` switches the cache off. */
 const CACHE_TIME = amountSchema(SECONDS_PER_UNIT, 0);
 
@@ -49,6 +52,8 @@ const VALUES = {
   cache_files: v.union([v.literal("off"), TIME_SPAN]),
   private_sites: v.picklist(PRIVATE_SITES),
   outside_pages: v.picklist(OUTSIDE_PAGES),
+  search_engines_allowed: v.boolean(),
+  zone_bots: v.picklist(ZONE_BOTS),
   max_total_size: SIZE,
   max_site_size: SIZE,
   max_sites: v.union([v.literal("none"), POSITIVE]),
@@ -80,6 +85,8 @@ const FORMS: { readonly [Key in SettingKey]: TextForm<SettingValues[Key]> } = {
   cache_files: orWord("off", amount(SECONDS_PER_UNIT)),
   private_sites: oneOf(PRIVATE_SITES),
   outside_pages: oneOf(OUTSIDE_PAGES),
+  search_engines_allowed: onOff(),
+  zone_bots: oneOf(ZONE_BOTS),
   max_total_size: amount(BYTES_PER_UNIT),
   max_site_size: amount(BYTES_PER_UNIT),
   max_sites: orWord("none", whole()),
@@ -228,6 +235,8 @@ export function defaultSettings(install: Install): SettingValues {
     cache_files: { count: 1, unit: "h" },
     private_sites: "single-file",
     outside_pages: "blocked",
+    search_engines_allowed: false,
+    zone_bots: "auto",
     max_total_size: { count: 9, unit: "GB" },
     max_site_size: { count: 200, unit: "MB" },
     max_sites: "none",

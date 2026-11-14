@@ -1,7 +1,7 @@
 # The Cloudflare account and zone.
 
 variable "account_id" {
-  description = "The Cloudflare account that holds the Worker, the bucket, and the login."
+  description = "The Cloudflare account that holds the Worker, the bucket, the database, and the login."
   type        = string
 
   validation {
@@ -23,15 +23,16 @@ variable "zone_id" {
 # Where the dashboard and the sites sit in the zone.
 
 variable "admin_hostname" {
-  description = "The label of the dashboard's hostname under the domain: `admin` gives admin.example.com."
+  description = "The dashboard's hostname, written without the domain: `admin` gives admin.example.com, and `admin.tools` gives admin.tools.example.com."
   type        = string
   default     = "admin"
 
   validation {
-    condition     = can(regex("^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$", var.admin_hostname))
-    error_message = "admin_hostname must be one hostname label: 1 to 63 lowercase letters, digits, or dashes, with no dash first or last."
+    condition     = can(regex("^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)*$", var.admin_hostname))
+    error_message = "admin_hostname must be one or more hostname labels joined by dots: each 1 to 63 lowercase letters, digits, or dashes, with no dash first or last."
   }
 
+  # The site route takes every hostname that ends in the suffix and the domain, so the dashboard's must not.
   validation {
     condition     = !endswith(var.admin_hostname, var.suffix)
     error_message = "admin_hostname must not end with the suffix: it would be a site's address."
@@ -118,7 +119,7 @@ variable "worker_name" {
 }
 
 variable "bucket_name" {
-  description = "The name of the R2 bucket that holds every site and every record."
+  description = "The name of the R2 bucket that holds every site's files."
   type        = string
   default     = "poplin-sites"
 
@@ -159,8 +160,8 @@ variable "default_expires" {
   default     = "never"
 
   validation {
-    condition     = var.default_expires == "never" || can(regex("^[1-9][0-9]*[smhd]$", var.default_expires))
-    error_message = "default_expires must be `never` or a whole number of at least 1 followed by s, m, h, or d, such as 7d."
+    condition     = var.default_expires == "never" || can(regex("^[1-9][0-9]{0,8}[smhd]$", var.default_expires))
+    error_message = "default_expires must be `never` or a whole number of at least 1 and at most 9 digits followed by s, m, h, or d, such as 7d."
   }
 }
 
@@ -215,8 +216,19 @@ variable "cache_html" {
   default     = "60s"
 
   validation {
-    condition     = can(regex("^(0|[1-9][0-9]*)[smhd]$", var.cache_html))
-    error_message = "cache_html must be a whole number followed by s, m, h, or d, such as 60s."
+    condition     = can(regex("^(0|[1-9][0-9]{0,8})[smhd]$", var.cache_html))
+    error_message = "cache_html must be a whole number of at most 9 digits followed by s, m, h, or d, such as 60s."
+  }
+}
+
+variable "cache_files" {
+  description = "How long a site's other files are cached, such as `1h`. `off` switches the cache off."
+  type        = string
+  default     = "1h"
+
+  validation {
+    condition     = var.cache_files == "off" || can(regex("^[1-9][0-9]{0,8}[smhd]$", var.cache_files))
+    error_message = "cache_files must be `off` or a whole number of at least 1 and at most 9 digits followed by s, m, h, or d, such as 1h."
   }
 }
 
@@ -226,8 +238,8 @@ variable "max_total_size" {
   default     = "9GB"
 
   validation {
-    condition     = can(regex("^[1-9][0-9]*(B|KB|MB|GB)$", var.max_total_size))
-    error_message = "max_total_size must be a whole number of at least 1 followed by B, KB, MB, or GB, such as 9GB."
+    condition     = can(regex("^[1-9][0-9]{0,5}(B|KB|MB|GB)$", var.max_total_size))
+    error_message = "max_total_size must be a whole number of at least 1 and at most 6 digits followed by B, KB, MB, or GB, such as 9GB."
   }
 }
 
@@ -237,8 +249,8 @@ variable "max_site_size" {
   default     = "200MB"
 
   validation {
-    condition     = can(regex("^[1-9][0-9]*(B|KB|MB|GB)$", var.max_site_size))
-    error_message = "max_site_size must be a whole number of at least 1 followed by B, KB, MB, or GB, such as 200MB."
+    condition     = can(regex("^[1-9][0-9]{0,5}(B|KB|MB|GB)$", var.max_site_size))
+    error_message = "max_site_size must be a whole number of at least 1 and at most 6 digits followed by B, KB, MB, or GB, such as 200MB."
   }
 }
 

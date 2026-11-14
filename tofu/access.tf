@@ -1,15 +1,16 @@
 # The login in front of the two paths a person opens to prove who they are. Every other path is the Worker's to guard.
+# Access keeps no mark on either object, so poplin's setup client finds them by these names.
 
 resource "cloudflare_zero_trust_access_policy" "logins" {
   account_id = var.account_id
-  name       = "${var.worker_name} logins"
+  name       = "poplin logins"
   decision   = "allow"
   include    = [for email in sort(var.logins) : { email = { email = email } }]
 }
 
 resource "cloudflare_zero_trust_access_application" "login" {
   account_id = var.account_id
-  name       = var.worker_name
+  name       = "poplin"
   type       = "self_hosted"
   domain     = "${local.admin_host}/login"
 

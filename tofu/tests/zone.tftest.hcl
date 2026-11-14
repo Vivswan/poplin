@@ -78,13 +78,15 @@ run "worker_bindings" {
   command = plan
 
   variables {
-    gallery   = true
-    max_sites = 50
+    admin_hostname         = "admin.tools"
+    gallery                = true
+    max_sites              = 50
+    search_engines_allowed = true
   }
 
   assert {
-    condition     = tolist([for binding in cloudflare_workers_script.poplin.bindings : binding.name]) == tolist(["SITES", "ZONE", "FIRST_SETTINGS"])
-    error_message = "The Worker gets the bucket, the zone values, and the first settings."
+    condition     = tolist([for binding in cloudflare_workers_script.poplin.bindings : "${binding.name} ${binding.type}"]) == tolist(["SITES r2_bucket", "DB d1", "MINUTE_LIMITS ratelimit", "ZONE json", "FIRST_SETTINGS json"])
+    error_message = "The Worker gets the bucket, the database, the minute limiter, the zone values, and the first settings, under the names its code reads."
   }
 
   assert {
@@ -93,25 +95,36 @@ run "worker_bindings" {
   }
 
   assert {
-    condition = jsondecode(cloudflare_workers_script.poplin.bindings[1].json) == {
-      domain         = "example.com"
-      admin_hostname = "admin"
-      suffix         = "-page"
-    }
-    error_message = "The zone binding carries the domain, the admin hostname, and the suffix."
+    condition     = cloudflare_workers_script.poplin.bindings[2].namespace_id == "1001" && cloudflare_workers_script.poplin.bindings[2].simple.limit == 1000000 && cloudflare_workers_script.poplin.bindings[2].simple.period == 60
+    error_message = "The minute limiter has the limit and the period the Worker's counters weigh each request against."
   }
 
+  # The setup client's tests read this literal and parse it with the Worker's own reader.
   assert {
-    condition = jsondecode(cloudflare_workers_script.poplin.bindings[2].json) == {
+    condition = jsondecode(cloudflare_workers_script.poplin.bindings[3].json) == {
+      domain         = "example.com"
+      admin_hostname = "admin.tools.example.com"
+      suffix         = "-page"
+    }
+    error_message = "The zone binding carries the domain, the whole admin hostname, and the suffix, and no other key."
+  }
+
+  # The setup client's tests read this literal too, and compare its keys with the settings the Worker stores.
+  assert {
+    condition = jsondecode(cloudflare_workers_script.poplin.bindings[4].json) == {
       default_expires             = "never"
       default_search_engines      = "off"
       versions_kept               = "3"
       trash_days                  = "7"
       logins                      = "owner@example.com"
-      dashboard_title             = "admin.example.com"
+      dashboard_title             = "admin.tools.example.com"
       gallery                     = "on"
       cache_html                  = "60s"
+      cache_files                 = "1h"
       private_sites               = "single-file"
+      outside_pages               = "blocked"
+      search_engines_allowed      = "on"
+      zone_bots                   = "auto"
       max_total_size              = "9GB"
       max_site_size               = "200MB"
       max_sites                   = "50"
@@ -120,7 +133,49 @@ run "worker_bindings" {
       site_requests_per_minute    = "60"
       visitor_requests_per_minute = "30"
     }
-    error_message = "The first settings carry every key in the text form `poplin config` takes."
+    error_message = "The first settings carry every setting the Worker stores, and no other key, each in the text form `poplin config` takes."
+  }
+}
+
+# The setup client finds the install's objects by these values and writes the same ones: packages/app/src/cloudflare/install-objects.ts holds its copy.
+run "values_shared_with_the_setup_client" {
+  command = plan
+
+  assert {
+    condition = { for name, record in cloudflare_dns_record.poplin : name => "${record.type} ${record.content} ${record.comment}" } == {
+      "*.example.com"     = "AAAA 100:: poplin: every site"
+      "admin.example.com" = "AAAA 100:: poplin: the dashboard, the login, the API, and the MCP server"
+    }
+    error_message = "Each record points at the discard address and carries the comment the setup client writes for its name."
+  }
+
+  assert {
+    condition     = cloudflare_zero_trust_access_policy.logins.name == "poplin logins" && cloudflare_zero_trust_access_application.login.name == "poplin"
+    error_message = "The policy and the application carry the names the setup client finds them by."
+  }
+
+  assert {
+    condition     = cloudflare_d1_database.records.name == "poplin"
+    error_message = "The database carries the name the setup client finds it by."
+  }
+
+  assert {
+    condition = cloudflare_ruleset.rate[0].name == "poplin rate rule" && [for rule in cloudflare_ruleset.rate[0].rules : [
+      rule.ref, rule.description, rule.expression, rule.action, join(" ", rule.ratelimit.characteristics),
+      tostring(rule.ratelimit.period), tostring(rule.ratelimit.requests_per_period), tostring(rule.ratelimit.mitigation_timeout),
+      ]] == [[
+      "poplin_rate", "poplin: 300 requests per 10 seconds per address", "starts_with(http.request.uri.path, \"/\")", "block", "cf.colo.id ip.src",
+      "10", "300", "10",
+    ]]
+    error_message = "The rate rule is, value for value, the one the setup client writes on the Free plan."
+  }
+
+  assert {
+    condition = cloudflare_ruleset.guards[0].name == "poplin guard rules" && [for rule in cloudflare_ruleset.guards[0].rules : "${rule.ref}: ${rule.description}"] == [
+      "poplin_outside_pages: poplin: stop pages of other domains",
+      "poplin_bots: poplin: stop verified bots",
+    ]
+    error_message = "The guard rules carry the refs and the descriptions the setup client writes."
   }
 }
 
@@ -155,6 +210,7 @@ run "suffix_follows_the_input" {
   }
 }
 
+# The setup client writes the same two records, so this is also the zone it set up.
 run "own_records_are_no_records_of_the_zone" {
   command = plan
 
@@ -163,12 +219,12 @@ run "own_records_are_no_records_of_the_zone" {
     values = {
       result = [
         {
-          name                = "*.example.com", type = "AAAA", proxied = true, comment = "poplin: every site", id = "0", content = "192.0.2.1", ttl = 1, proxiable = true,
+          name                = "*.example.com", type = "AAAA", proxied = true, comment = "poplin: every site", id = "0", content = "100::", ttl = 1, proxiable = true,
           comment_modified_on = null, created_on = null, data = null, meta = null, modified_on = null, priority = null,
           private_routing     = null, settings = null, tags = null, tags_modified_on = null
         },
         {
-          name                = "admin.example.com", type = "AAAA", proxied = true, comment = "poplin: the dashboard, the login, the API, and the MCP server", id = "0", content = "192.0.2.1", ttl = 1, proxiable = true,
+          name                = "admin.example.com", type = "AAAA", proxied = true, comment = "poplin: the dashboard, the login, the API, and the MCP server", id = "0", content = "100::", ttl = 1, proxiable = true,
           comment_modified_on = null, created_on = null, data = null, meta = null, modified_on = null, priority = null,
           private_routing     = null, settings = null, tags = null, tags_modified_on = null
         },
@@ -184,6 +240,11 @@ run "own_records_are_no_records_of_the_zone" {
   assert {
     condition     = length(cloudflare_ruleset.rate) == 1
     error_message = "The module's own records are no hostnames of the zone's, so the zone-wide rate rule stays."
+  }
+
+  assert {
+    condition     = output.zone_bots == "set"
+    error_message = "The install's own records are no hostnames of the zone's, so the bot settings stay."
   }
 }
 

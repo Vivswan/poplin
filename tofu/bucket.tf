@@ -1,4 +1,4 @@
-# The one bucket that holds every site and every record.
+# The one bucket that holds every site's files.
 
 resource "cloudflare_r2_bucket" "sites" {
   account_id = var.account_id

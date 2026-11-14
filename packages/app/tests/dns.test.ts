@@ -5,7 +5,8 @@ import { reportOf } from "../src/cloudflare/sync";
 import { page, reply, withFake } from "./fake-cloudflare";
 import { OTHER_SUFFIX, SUFFIXED } from "./layouts";
 
-const MARK = "managed by poplin";
+const WILDCARD_COMMENT = "poplin: every site";
+const ADMIN_COMMENT = "poplin: the dashboard, the login, the API, and the MCP server";
 
 interface Row {
   readonly id: string;
@@ -17,7 +18,7 @@ interface Row {
 }
 
 function own(id: string, name: string): Row {
-  return { id, name, type: "AAAA", content: "100::", proxied: true, comment: MARK };
+  return { id, name, type: "AAAA", content: "100::", proxied: true, comment: name.startsWith("*.") ? WILDCARD_COMMENT : ADMIN_COMMENT };
 }
 
 function foreign(id: string, name: string, type: string, comment?: string): Row {
@@ -93,6 +94,25 @@ describe("planDns", () => {
       { kind: "leave", subject: "admin.example.com" },
     ]);
   });
+
+  test("a marked record whose comment is not the one for its name is changed to it: the OpenTofu module writes that comment, and would otherwise plan a change on every run", () => {
+    const records = [own("p0", "*.example.com"), { ...own("p1", "admin.example.com"), comment: "poplin: the admin" }];
+
+    expect(planDns(SUFFIXED, records)).toEqual([
+      { kind: "leave", subject: "*.example.com" },
+      { kind: "change", subject: "admin.example.com", id: "p1" },
+    ]);
+  });
+
+  test.each(["managed by poplin", "poplin", "Poplin: every site", " poplin: every site", undefined])(
+    "a record whose comment is %j does not start with the mark, so it is the zone's own and is refused, never changed",
+    (comment) => {
+      const records = [{ ...own("f1", "admin.example.com"), comment }];
+
+      expect(refusedRecords(SUFFIXED, records)?.names).toEqual(["admin.example.com"]);
+      expect(sharesZone(records)).toBe(true);
+    },
+  );
 
   test("an admin hostname change removes the record only the old one used, and only poplin's: a same-named record without the mark stays", () => {
     const records = [own("p0", "*.example.com"), own("p1", "admin.example.com"), own("p2", "old.example.com"), foreign("f1", "old.example.com", "A")];
@@ -282,7 +302,7 @@ describe("syncDns", () => {
           content: "100::",
           proxied: true,
           ttl: 1,
-          comment: MARK,
+          comment: WILDCARD_COMMENT,
         });
       },
     );

@@ -1,6 +1,11 @@
 output "bucket_name" {
-  description = "The R2 bucket that holds every site and every record."
+  description = "The R2 bucket that holds every site's files."
   value       = cloudflare_r2_bucket.sites.name
+}
+
+output "database_id" {
+  description = "The D1 database that holds every record."
+  value       = cloudflare_d1_database.records.id
 }
 
 output "worker_name" {

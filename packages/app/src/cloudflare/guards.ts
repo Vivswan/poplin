@@ -2,19 +2,18 @@
 // A browser calls every hostname under one domain the same site, so the outside pages rule stops pages of other domains and the Worker refuses the rest.
 
 import type { Connection, ZonePlan } from "./client";
+import { INSTALL_OBJECTS } from "./install-objects";
 import { type DomainLayout, siteEnding } from "./layout";
 import { type PhaseRules, planOwnRule, quoted, type RuleStep, removeOwnRule, syncPhase } from "./rules";
 import type { Synced } from "./sync";
 
 const CUSTOM_PHASE = "http_request_firewall_custom";
 const CUSTOM_RULE_SLOTS: Readonly<Record<ZonePlan, number>> = { free: 5, pro: 20, business: 100, enterprise: 1000 };
-const OUTSIDE_REF = "poplin_outside_pages";
+const OUTSIDE_REF = INSTALL_OBJECTS.outsideRef;
 const OUTSIDE_SUBJECT = "outside pages rule";
-const BOTS_REF = "poplin_bots";
+const BOTS_REF = INSTALL_OBJECTS.botsRef;
 const BOTS_SUBJECT = "bots rule";
 const SLOTS_FULL = "the zone's plan allows no further custom rule and other rules hold every slot";
-const FROM_OUTSIDE_PAGE = 'any(http.request.headers["sec-fetch-site"][*] eq "cross-site") and any(http.request.headers["sec-fetch-dest"][*] ne "document")';
-const SEARCH_ENGINE_CATEGORY = '"Search Engine Crawler"';
 
 /** The guards an install wants. */
 interface DesiredGuards {
@@ -42,7 +41,7 @@ function held(steps: readonly RuleStep[], kind: RuleStep["kind"]): number {
  * @throws {Error} a hostname or suffix that was cast instead of checked holds a character outside `a-z`, `0-9`, `.`, and `-`
  */
 export function outsidePagesExpression(layout: DomainLayout): string {
-  return `ends_with(http.host, ${quoted(siteEnding(layout))}) and ${FROM_OUTSIDE_PAGE}`;
+  return `ends_with(http.host, ${quoted(siteEnding(layout))}) and ${INSTALL_OBJECTS.outsideCondition}`;
 }
 
 /**
@@ -52,10 +51,10 @@ export function outsidePagesExpression(layout: DomainLayout): string {
  * @throws {Error} a hostname or suffix that was cast instead of checked holds a character outside `a-z`, `0-9`, `.`, and `-`
  */
 export function botsExpression(layout: DomainLayout, searchEnginesAllowed: boolean): string {
-  const verified = `ends_with(http.host, ${quoted(siteEnding(layout))}) and cf.client.bot`;
+  const verified = `ends_with(http.host, ${quoted(siteEnding(layout))}) and ${INSTALL_OBJECTS.botsCondition}`;
   if (!searchEnginesAllowed) return verified;
 
-  return `${verified} and cf.verified_bot_category ne ${SEARCH_ENGINE_CATEGORY}`;
+  return `${verified} and ${INSTALL_OBJECTS.searchEnginesPass}`;
 }
 
 /**
@@ -69,14 +68,14 @@ export function planGuards(desired: DesiredGuards, current: PhaseRules | undefin
   const taken = current?.rules.length ?? 0;
   const outsideRule = {
     ref: OUTSIDE_REF,
-    description: "poplin: stop pages of other domains",
+    description: INSTALL_OBJECTS.outsideDescription,
     expression: outsidePagesExpression(desired.layout),
     action: "block",
     enabled: true,
   } as const;
   const botsRule = {
     ref: BOTS_REF,
-    description: "poplin: stop verified bots",
+    description: INSTALL_OBJECTS.botsDescription,
     expression: botsExpression(desired.layout, desired.searchEnginesAllowed),
     action: "block",
     enabled: true,

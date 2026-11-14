@@ -2,10 +2,11 @@
 
 import { BaseBotManagement } from "cloudflare/resources/bot-management/bot-management";
 import { type Connection, callCloudflare, type ZonePlan } from "./client";
+import { INSTALL_OBJECTS } from "./install-objects";
 import { applySteps, reportOf, type Synced } from "./sync";
 
 const SUBJECT = "zone bot switches";
-const AI_BOTS_BLOCKED = { ai_bots_protection: "block" } as const;
+const AI_BOTS_BLOCKED = { ai_bots_protection: INSTALL_OBJECTS.aiBots } as const;
 const COVERS_OTHERS = "the AI bot block covers the whole zone, and this zone has hostnames of its own";
 const SWITCHED_OFF = "the zone-wide bot switches are set to off";
 

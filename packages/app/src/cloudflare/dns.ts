@@ -1,15 +1,13 @@
-// The zone's DNS records for a layout. Poplin's own records carry a fixed comment, the one mark the API keeps on every plan, and no other record is ever changed.
+// The zone's DNS records for a layout. Poplin's own records carry a comment that starts with a fixed mark, the one mark the API keeps on every plan, and no other record is ever changed.
 
 import { BaseRecords } from "cloudflare/resources/dns/records";
 import { type Connection, callCloudflare } from "./client";
+import { INSTALL_OBJECTS } from "./install-objects";
 import { type DomainLayout, siteEnding } from "./layout";
 import { applySteps, type Report, reportOf, type SyncFailure } from "./sync";
 
-// The mark on every record poplin creates.
-const POPLIN_COMMENT = "managed by poplin";
-
 // A Worker route answers only on a hostname with a proxied record; this address is the discard prefix, never reached.
-const PLACEHOLDER = { type: "AAAA", content: "100::", proxied: true, ttl: 1, comment: POPLIN_COMMENT } as const;
+const PLACEHOLDER = { type: INSTALL_OBJECTS.recordType, content: INSTALL_OBJECTS.recordContent, proxied: true, ttl: 1 } as const;
 
 // The record types that answer for a hostname.
 const ADDRESS_TYPES: ReadonlySet<string> = new Set(["A", "AAAA", "CNAME"]);
@@ -59,30 +57,42 @@ function wildcardName(layout: DomainLayout): string {
   return `*.${layout.domain}`;
 }
 
+// The setup client and the OpenTofu module both start the comment of a record they create with the mark.
+function isOwn(record: ZoneRecord): boolean {
+  return record.comment?.startsWith(INSTALL_OBJECTS.recordMark) === true;
+}
+
+// The comment says what the name is for, so the wildcard's differs from the admin hostname's.
+function commentOf(layout: DomainLayout, name: string): string {
+  return name === wildcardName(layout) ? INSTALL_OBJECTS.wildcardComment : INSTALL_OBJECTS.adminComment;
+}
+
 // The zone's own records that answer for a hostname.
 function zoneAddresses(records: readonly ZoneRecord[]): ZoneRecord[] {
-  return records.filter((record) => record.comment !== POPLIN_COMMENT && ADDRESS_TYPES.has(record.type));
+  return records.filter((record) => !isOwn(record) && ADDRESS_TYPES.has(record.type));
 }
 
 function namesOf(records: readonly ZoneRecord[]): string[] {
   return [...new Set(records.map((record) => record.name))].sort();
 }
 
-function isPlaceholder(record: ZoneRecord): boolean {
-  return record.type === PLACEHOLDER.type && record.content === PLACEHOLDER.content && record.proxied === PLACEHOLDER.proxied;
+function isPlaceholder(layout: DomainLayout, record: ZoneRecord): boolean {
+  const answers = record.type === PLACEHOLDER.type && record.content === PLACEHOLDER.content && record.proxied === PLACEHOLDER.proxied;
+
+  return answers && record.comment === commentOf(layout, record.name);
 }
 
 // Of several marked records under one name the correct one is kept, so no change collides with it.
-function ownRecord(name: string, records: readonly ZoneRecord[]): ZoneRecord | undefined {
-  const mine = records.filter((record) => record.name === name && record.comment === POPLIN_COMMENT);
+function ownRecord(layout: DomainLayout, name: string, records: readonly ZoneRecord[]): ZoneRecord | undefined {
+  const mine = records.filter((record) => record.name === name && isOwn(record));
 
-  return mine.find(isPlaceholder) ?? mine[0];
+  return mine.find((record) => isPlaceholder(layout, record)) ?? mine[0];
 }
 
-function planName(name: string, records: readonly ZoneRecord[]): DnsStep {
-  const own = ownRecord(name, records);
+function planName(layout: DomainLayout, name: string, records: readonly ZoneRecord[]): DnsStep {
+  const own = ownRecord(layout, name, records);
 
-  if (own !== undefined && isPlaceholder(own)) return { kind: "leave", subject: name };
+  if (own !== undefined && isPlaceholder(layout, own)) return { kind: "leave", subject: name };
 
   if (own !== undefined) return { kind: "change", subject: name, id: own.id };
 
@@ -136,14 +146,14 @@ export function planDns(layout: DomainLayout, records: readonly ZoneRecord[]): D
   const carried = zoneAddresses(records).some((record) => record.name === wildcard);
   const names = carried ? [layout.adminHostname] : [wildcard, layout.adminHostname];
 
-  const mine = records.filter((record) => record.comment === POPLIN_COMMENT);
-  const kept = names.map((name) => ownRecord(name, records));
+  const mine = records.filter(isOwn);
+  const kept = names.map((name) => ownRecord(layout, name, records));
   const stale = mine.filter((record) => !kept.includes(record));
 
   return [
     ...stale.map((record): DnsStep => ({ kind: "remove", subject: record.name, id: record.id })),
     ...(carried ? [{ kind: "skip", subject: wildcard, reason: ZONE_WILDCARD } as const] : []),
-    ...names.map((name) => planName(name, records)),
+    ...names.map((name) => planName(layout, name, records)),
   ];
 }
 
@@ -160,12 +170,12 @@ export async function syncDns(connection: Connection, zoneId: string, layout: Do
   const refused = refusedRecords(layout, records);
   if (refused !== undefined) return { ok: false, ...refused, report: reportOf([]) };
 
-  const body = { zone_id: zoneId, ...PLACEHOLDER };
+  const body = (name: string) => ({ zone_id: zoneId, ...PLACEHOLDER, name, comment: commentOf(layout, name) });
 
   const synced = await applySteps(planDns(layout, records), (step) => {
-    if (step.kind === "create") return callCloudflare(connection, (api) => new BaseRecords(api).create({ ...body, name: step.subject }));
+    if (step.kind === "create") return callCloudflare(connection, (api) => new BaseRecords(api).create(body(step.subject)));
 
-    if (step.kind === "change") return callCloudflare(connection, (api) => new BaseRecords(api).update(step.id, { ...body, name: step.subject }));
+    if (step.kind === "change") return callCloudflare(connection, (api) => new BaseRecords(api).update(step.id, body(step.subject)));
 
     return callCloudflare(connection, (api) => new BaseRecords(api).delete(step.id, { zone_id: zoneId }));
   });

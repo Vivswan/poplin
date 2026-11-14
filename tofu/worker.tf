@@ -9,12 +9,24 @@ resource "cloudflare_workers_script" "poplin" {
   compatibility_date = "2026-11-01"
 
   # FIRST_SETTINGS seeds the stored settings once: the Worker writes them only while no settings record exists, so a later apply never overwrites a change made on the dashboard.
-  # ZONE is read as it is: the module owns the zone values and moves the records, routes, and rule with them.
+  # ZONE is read as it is: the module owns the zone values and moves the records, routes, and rules with them.
   bindings = [
     {
       name        = "SITES"
       type        = "r2_bucket"
       bucket_name = cloudflare_r2_bucket.sites.name
+    },
+    {
+      name = "DB"
+      type = "d1"
+      id   = cloudflare_d1_database.records.id
+    },
+    {
+      # The Worker's one-minute counters weigh each request against this limit, so it is the one the Worker's code is written for.
+      name         = "MINUTE_LIMITS"
+      type         = "ratelimit"
+      namespace_id = "1001"
+      simple       = { limit = 1000000, period = 60 }
     },
     {
       name = "ZONE"

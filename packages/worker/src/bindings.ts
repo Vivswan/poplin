@@ -10,4 +10,10 @@ export interface Bindings {
 
   /** The one-minute request counts of every visitor and every site. */
   readonly MINUTE_LIMITS: RateLimit;
+
+  /** The zone values of an install with a domain, unchecked: the domain, the whole admin hostname, and the suffix. Absent on a Worker bound to no zone. */
+  readonly ZONE: unknown;
+
+  /** Every setting in its text form, unchecked: what the Worker stores while it has no settings. Absent on a Worker that setup gives its settings. */
+  readonly FIRST_SETTINGS: unknown;
 }

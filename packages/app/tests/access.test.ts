@@ -22,7 +22,7 @@ type Policy = Current["policies"][number];
 type Application = Current["applications"][number];
 
 function policy(id: string, emails: readonly string[], more: Partial<Policy> = {}): Policy {
-  return { id, name: "poplin login", decision: "allow", include: emails.map((email) => ({ email: { email } })), exclude: [], require: [], ...more };
+  return { id, name: "poplin logins", decision: "allow", include: emails.map((email) => ({ email: { email } })), exclude: [], require: [], ...more };
 }
 
 function application(id: string, hostname: string, policyId: string, more: Partial<Application> = {}): Application {
@@ -50,7 +50,7 @@ describe("planAccess", () => {
 
   test.each(installs)("$name: an account with no Access gets the policy, then the application over the login paths linked to it", ({ hostname }) => {
     expect(planAccess({ hostname, paths: PATHS, logins: owner }, NOTHING)).toEqual([
-      { kind: "create", subject: "poplin login", emails },
+      { kind: "create", subject: "poplin logins", emails },
       { kind: "create", subject: "poplin", uris: [`${hostname}/login`, `${hostname}/oauth/authorize`], policyId: undefined },
     ]);
   });
@@ -69,7 +69,7 @@ describe("planAccess", () => {
     const steps = planAccess({ hostname, paths: PATHS, logins: owner }, current);
 
     expect(steps).toEqual([
-      { kind: "leave", subject: "poplin login" },
+      { kind: "leave", subject: "poplin logins" },
       { kind: "leave", subject: "poplin" },
     ]);
     expect(reportOf(steps).changedNothing).toBe(true);
@@ -92,7 +92,7 @@ describe("planAccess", () => {
     const current = { policies: [drifted], applications: [application("app-1", ADMIN, "pol-1")] };
 
     expect(planAccess({ hostname: ADMIN, paths: PATHS, logins: owner }, current)).toEqual([
-      { kind: "change", subject: "poplin login", id: "pol-1", emails },
+      { kind: "change", subject: "poplin logins", id: "pol-1", emails },
       { kind: "leave", subject: "poplin" },
     ]);
   });
@@ -126,7 +126,7 @@ describe("planAccess", () => {
     const current = { policies: [policy("pol-1", emails)], applications: [drifted] };
 
     expect(planAccess({ hostname: ADMIN, paths: PATHS, logins: owner }, current)).toEqual([
-      { kind: "leave", subject: "poplin login" },
+      { kind: "leave", subject: "poplin logins" },
       { kind: "change", subject: "poplin", id: "app-1", uris: ["admin.example.com/login", "admin.example.com/oauth/authorize"], policyId: "pol-1" },
     ]);
   });
@@ -168,11 +168,11 @@ describe("syncAccess", () => {
         const sent = asked.length;
         const second = await syncAccess(connection, "account-a", desired);
 
-        expect(first).toMatchObject({ ok: true, report: { created: ["poplin login", "poplin"], changedNothing: false } });
-        expect(second).toMatchObject({ ok: true, report: { left: ["poplin login", "poplin"], changedNothing: true } });
+        expect(first).toMatchObject({ ok: true, report: { created: ["poplin logins", "poplin"], changedNothing: false } });
+        expect(second).toMatchObject({ ok: true, report: { left: ["poplin logins", "poplin"], changedNothing: true } });
         expect(asked.slice(sent).every((entry) => entry.method === "GET")).toBe(true);
         expect(asked.filter((entry) => entry.method === "POST").map((entry) => [entry.path, entry.body])).toEqual([
-          ["/accounts/account-a/access/policies", { name: "poplin login", decision: "allow", include: [{ email: { email: "owner@example.com" } }] }],
+          ["/accounts/account-a/access/policies", { name: "poplin logins", decision: "allow", include: [{ email: { email: "owner@example.com" } }] }],
           [
             "/accounts/account-a/access/apps",
             {

@@ -199,7 +199,7 @@ describe("syncGuards", () => {
           "GET /zones/zone-1/rulesets/phases/http_request_firewall_custom/entrypoint",
         ]);
         expect(asked.slice(sent)).toHaveLength(1);
-        expect(asked[1]?.body).toEqual({ kind: "zone", phase: "http_request_firewall_custom", name: "default", rules: [outsideRule(), botsRule()] });
+        expect(asked[1]?.body).toEqual({ kind: "zone", phase: "http_request_firewall_custom", name: "poplin guard rules", rules: [outsideRule(), botsRule()] });
       },
     );
   });

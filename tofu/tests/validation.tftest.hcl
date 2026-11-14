@@ -42,14 +42,135 @@ run "zone_id_too_short" {
   expect_failures = [var.zone_id]
 }
 
-run "admin_hostname_with_a_dot" {
+# The admin hostname rule: any hostname under the domain that does not end in the suffix and the domain. packages/app/tests/layout.test.ts holds a row for each run here.
+
+run "admin_hostname_of_two_labels" {
   command = plan
 
   variables {
     admin_hostname = "admin.tools"
   }
 
+  assert {
+    condition     = output.admin_url == "https://admin.tools.example.com"
+    error_message = "The hostname is under the domain and no site address, so it is taken."
+  }
+}
+
+run "admin_hostname_holding_the_suffix_letters" {
+  command = plan
+
+  variables {
+    admin_hostname = "my-pages"
+  }
+
+  assert {
+    condition     = output.admin_url == "https://my-pages.example.com"
+    error_message = "The hostname is under the domain and no site address, so it is taken."
+  }
+}
+
+run "admin_hostname_with_the_suffix_on_an_inner_label" {
+  command = plan
+
+  variables {
+    admin_hostname = "admin-page.tools"
+  }
+
+  assert {
+    condition     = output.admin_url == "https://admin-page.tools.example.com"
+    error_message = "The hostname is under the domain and no site address, so it is taken."
+  }
+}
+
+run "admin_hostname_empty" {
+  command = plan
+
+  variables {
+    admin_hostname = ""
+  }
+
   expect_failures = [var.admin_hostname]
+}
+
+run "admin_hostname_with_a_capital" {
+  command = plan
+
+  variables {
+    admin_hostname = "Admin"
+  }
+
+  expect_failures = [var.admin_hostname]
+}
+
+run "admin_hostname_starting_with_a_dash" {
+  command = plan
+
+  variables {
+    admin_hostname = "-admin"
+  }
+
+  expect_failures = [var.admin_hostname]
+}
+
+run "admin_hostname_with_an_empty_label" {
+  command = plan
+
+  variables {
+    admin_hostname = "admin..tools"
+  }
+
+  expect_failures = [var.admin_hostname]
+}
+
+run "admin_hostname_with_a_wildcard" {
+  command = plan
+
+  variables {
+    admin_hostname = "*"
+  }
+
+  expect_failures = [var.admin_hostname]
+}
+
+run "admin_hostname_with_a_label_of_64_characters" {
+  command = plan
+
+  variables {
+    admin_hostname = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+  }
+
+  expect_failures = [var.admin_hostname]
+}
+
+run "admin_hostname_ending_in_the_suffix" {
+  command = plan
+
+  variables {
+    admin_hostname = "admin-page"
+  }
+
+  expect_failures = [var.admin_hostname]
+}
+
+run "admin_hostname_under_a_name_ending_in_the_suffix" {
+  command = plan
+
+  variables {
+    admin_hostname = "admin.tools-page"
+  }
+
+  expect_failures = [var.admin_hostname]
+}
+
+run "admin_hostname_of_254_characters_with_the_domain" {
+  command = plan
+
+  variables {
+    admin_hostname = "ab.${join(".", [for index in range(120) : "a"])}"
+  }
+
+  expect_failures = [data.cloudflare_zone.this]
 }
 
 run "suffix_with_a_quote" {
@@ -140,16 +261,6 @@ run "suffix_empty" {
   }
 
   expect_failures = [var.suffix]
-}
-
-run "admin_hostname_ending_in_the_suffix" {
-  command = plan
-
-  variables {
-    admin_hostname = "admin-page"
-  }
-
-  expect_failures = [var.admin_hostname]
 }
 
 run "logins_empty" {
@@ -260,6 +371,27 @@ run "cache_html_without_a_unit" {
   }
 
   expect_failures = [var.cache_html]
+}
+
+run "cache_files_of_zero" {
+  command = plan
+
+  variables {
+    cache_files = "0s"
+  }
+
+  expect_failures = [var.cache_files]
+}
+
+# The Worker stores a span only as a whole number of seconds it can count exactly, so a longer one would leave FIRST_SETTINGS unread.
+run "cache_files_too_long_to_count" {
+  command = plan
+
+  variables {
+    cache_files = "9007199254740992s"
+  }
+
+  expect_failures = [var.cache_files]
 }
 
 run "max_total_size_unknown_unit" {
