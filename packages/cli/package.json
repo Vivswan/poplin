@@ -1,7 +1,22 @@
 {
   "name": "poplin",
   "version": "0.0.0",
-  "description": "Publish static sites to your own Cloudflare account: private by default, unlisted, or public.",
+  "description": "Agents publish static sites to your own Cloudflare account: private by default, shareable by secret link, or public.",
+  "keywords": [
+    "static-site",
+    "static-hosting",
+    "publish",
+    "cloudflare",
+    "cloudflare-workers",
+    "mcp",
+    "mcp-server",
+    "ai-agents",
+    "cli"
+  ],
+  "homepage": "https://vivswan.github.io/poplin/",
+  "bugs": {
+    "url": "https://github.com/Vivswan/poplin/issues"
+  },
   "license": "SEE LICENSE IN LICENSE.md",
   "repository": {
     "type": "git",
