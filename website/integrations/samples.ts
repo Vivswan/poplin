@@ -1,76 +1,69 @@
-import { cpSync, existsSync, readdirSync, readFileSync, statSync } from "node:fs";
-import { join } from "node:path";
+import { cpSync, existsSync, readFileSync, statSync } from "node:fs";
+import { join, normalize, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { AstroIntegration } from "astro";
+import { Parser } from "htmlparser2";
+import mime from "mime";
 
-const MODULE_ID = "virtual:poplin-samples";
-const RESOLVED_ID = `\0${MODULE_ID}`;
-const TITLE = /<title[^>]*>([^<]*)<\/title>/i;
-
-/** One sample site found under the samples folder, as a page shows it. */
-interface Sample {
-  /** The folder name, which is also the last segment of the sample's address. */
-  readonly name: string;
-
-  /** The text of the sample's own `<title>`, still HTML-escaped as the sample wrote it; empty when it has none. */
-  readonly titleHtml: string;
-
-  /** How many files the sample folder holds, at any depth. */
-  readonly files: number;
-
-  /** The size of those files together, in bytes. */
-  readonly bytes: number;
-}
-
-function measureFolder(folder: string): { files: number; bytes: number } {
-  const entries = readdirSync(folder, { withFileTypes: true, recursive: true }).filter((entry) => entry.isFile());
-  const sizes = entries.map((entry) => statSync(join(entry.parentPath, entry.name)).size);
-  return { files: sizes.length, bytes: sizes.reduce((total, size) => total + size, 0) };
-}
-
-function readSample(samplesDir: string, name: string): Sample | undefined {
-  const indexFile = join(samplesDir, name, "index.html");
-  if (name.startsWith(".") || !existsSync(indexFile)) {
+/** The file a request path names inside `folder`, or undefined when it names none or points outside it. */
+function fileFor(folder: string, urlPath: string): string | undefined {
+  const inside = normalize(join(folder, decodeURIComponent(urlPath.split("?")[0] ?? "")));
+  if (inside !== folder && !inside.startsWith(folder + sep)) {
     return undefined;
   }
-  const html = readFileSync(indexFile, "utf8");
-  const title = (TITLE.exec(html)?.[1] ?? "").trim();
-  return { name, titleHtml: title, ...measureFolder(join(samplesDir, name)) };
+  const file = existsSync(inside) && statSync(inside).isDirectory() ? join(inside, "index.html") : inside;
+  return existsSync(file) ? file : undefined;
 }
 
-function listSamples(samplesDir: string, only: string): Sample[] {
-  if (!existsSync(join(samplesDir, only))) {
-    return [];
-  }
-  const sample = readSample(samplesDir, only);
-  return sample === undefined ? [] : [sample];
+/** The stylesheets, scripts, and images a page loads from its own folder, as the paths it names. */
+function localFiles(html: string): string[] {
+  const named: string[] = [];
+  const parser = new Parser({
+    onattribute: (name, value) => {
+      // A local file is any address with no scheme, no host, and no leading slash: `./a.css` and `a.css` alike.
+      if ((name === "href" || name === "src") && !/^([a-z][a-z0-9+.-]*:|\/|#)/i.test(value)) {
+        named.push(value.replace(/^\.\//, "").split(/[?#]/)[0] ?? "");
+      }
+    },
+  });
+  parser.end(html);
+  return named.filter((file) => file !== "");
 }
 
 /**
- * Offers the one sample site named `only` in `samplesDir` to the pages and copies it into the built site at `sample/<name>/`.
- * A missing folder yields an empty list, so the site builds without it.
+ * Puts the one sample site named `only` in `samplesDir` at `sample/<name>/`: served as it is while developing, copied into
+ * the built site. The home page shows it in a frame, so a sample that is missing, or that names a file it does not have,
+ * stops the build.
  */
 export function samplesIntegration(samplesDir: string, only: string): AstroIntegration {
-  const samples = listSamples(samplesDir, only);
+  const folder = normalize(join(samplesDir, only));
+  let mount = `/sample/${only}`;
   return {
     name: "poplin-samples",
     hooks: {
-      "astro:config:setup": ({ updateConfig }) => {
-        updateConfig({
-          vite: {
-            plugins: [
-              {
-                name: "poplin-samples",
-                resolveId: (id: string) => (id === MODULE_ID ? RESOLVED_ID : undefined),
-                load: (id: string) => (id === RESOLVED_ID ? `export const samples = ${JSON.stringify(samples)};` : undefined),
-              },
-            ],
-          },
+      "astro:config:done": ({ config }) => {
+        mount = `${config.base.replace(/\/$/, "")}/sample/${only}`;
+      },
+      "astro:server:setup": ({ server }) => {
+        server.middlewares.use(mount, (request, response, next) => {
+          const file = fileFor(folder, request.url ?? "/");
+          if (file === undefined) {
+            next();
+            return;
+          }
+          response.setHeader("Content-Type", mime.getType(file) ?? "application/octet-stream");
+          response.end(readFileSync(file));
         });
       },
       "astro:build:done": ({ dir }) => {
-        for (const sample of samples) {
-          cpSync(join(samplesDir, sample.name), join(fileURLToPath(dir), "sample", sample.name), { recursive: true });
+        if (!existsSync(join(folder, "index.html"))) {
+          throw new Error(`The sample ${only} is missing from ${samplesDir}; the home page shows it in a frame.`);
+        }
+        const built = join(fileURLToPath(dir), "sample", only);
+        cpSync(folder, built, { recursive: true });
+        const missing = localFiles(readFileSync(join(built, "index.html"), "utf8")).filter((file) => !existsSync(join(built, file)));
+        if (missing.length > 0) {
+          throw new Error(`The sample ${only} names files the built site lacks: ${missing.join(", ")}`);
         }
       },
     },

@@ -1,0 +1,29 @@
+---
+// The mark beside the address: a lock while private, a link once unlisted, a globe once public. It follows the access
+// switch of the form around it.
+---
+
+<span class="swap sign" aria-hidden="true">
+  <svg aria-hidden="true" data-show="private" viewBox="0 0 16 16"><rect x="3" y="7" width="10" height="7" rx="1.5"></rect><path d="M5.5 7V5a2.5 2.5 0 0 1 5 0v2"></path></svg>
+  <svg aria-hidden="true" data-show="unlisted" viewBox="0 0 16 16"><path d="M6.8 9.2a2.6 2.6 0 0 0 3.7 0l2-2a2.6 2.6 0 0 0-3.7-3.7l-.6.6"></path><path d="M9.2 6.8a2.6 2.6 0 0 0-3.7 0l-2 2a2.6 2.6 0 0 0 3.7 3.7l.6-.6"></path></svg>
+  <svg aria-hidden="true" data-show="public" viewBox="0 0 16 16"><circle cx="8" cy="8" r="5.5"></circle><path d="M2.5 8h11M8 2.5c2 2 2 9 0 11M8 2.5c-2 2-2 9 0 11"></path></svg>
+</span>
+
+<style>
+  .sign {
+    flex: none;
+    width: 16px;
+    height: 16px;
+  }
+
+  svg {
+    display: block;
+    width: 16px;
+    height: 16px;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.5;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+</style>

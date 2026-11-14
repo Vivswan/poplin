@@ -1,0 +1,64 @@
+---
+import { PROVIDERS } from "../lib/providers.ts";
+
+interface Props {
+  /** The punctuation that closes the sentence. The provider's name is the sentence's last word, so nothing follows it. */
+  end?: string;
+}
+
+// The provider's name at the end of a sentence. With one provider it is plain text; with more, the names roll through
+// one line. Nothing comes after it, so a longer or shorter name moves nothing.
+const { end = "" } = Astro.props;
+const HOLD_MS = 2500;
+const ROLL_MS = 350;
+const count = PROVIDERS.length;
+const total = count * HOLD_MS;
+// Each name holds, then the column slides up one line; the first name is repeated last so the loop has no jump.
+const frames = PROVIDERS.map((_, index) => {
+  const start = ((index * HOLD_MS) / total) * 100;
+  const holdUntil = (((index + 1) * HOLD_MS - ROLL_MS) / total) * 100;
+  return `${start}%,${holdUntil}%{transform:translateY(-${index}lh)}`;
+}).join("");
+const css = `@keyframes provider-roll{${frames}100%{transform:translateY(-${count}lh)}}.provider-roll{animation:provider-roll ${total}ms cubic-bezier(0.16,1,0.3,1) infinite}`;
+---
+
+{
+  count === 1 ? (
+    `${PROVIDERS[0]}${end}`
+  ) : (
+    <span class="slot">
+      <span class="vh">
+        {PROVIDERS.join(", ")}
+        {end}
+      </span>
+      <span class="provider-roll column" aria-hidden="true">
+        {[...PROVIDERS, PROVIDERS[0]].map((name) => (
+          <span>
+            {name}
+            {end}
+          </span>
+        ))}
+      </span>
+    </span>
+  )
+}
+
+{count > 1 && <style is:inline set:html={`@media (prefers-reduced-motion: no-preference){${css}}`} />}
+
+<style>
+  .slot {
+    display: inline-block;
+    height: 1lh;
+    overflow: hidden;
+    vertical-align: bottom;
+  }
+
+  .column {
+    display: grid;
+  }
+
+  .column span {
+    height: 1lh;
+    white-space: nowrap;
+  }
+</style>

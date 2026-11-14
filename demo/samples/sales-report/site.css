@@ -1,21 +1,20 @@
+/* The kettle works' own look: warm paper, dark roast ink, and copper. It is the same in a light or a dark setting. */
 :root {
-  --accent: #2a4fb0;
+  color-scheme: light;
+  --ground: #f6f1e7;
+  --surface: #fffdf8;
+  --wash: #ece4d4;
+  --ink: #2b2118;
+  --ink-2: #5c4d3f;
+  --ink-3: #6f6054;
+  --line: #dcd2bf;
+  --good: #2f6b2f;
+  --accent: #a84a22;
   --on-accent: #ffffff;
-  --series-0: #8a94a6;
-  --series-1: #2a78d6;
-  --series-2: #eb6834;
-  --series-3: #1baf7a;
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --accent: #8fa8f7;
-    --on-accent: #0f1624;
-    --series-0: #6f7b91;
-    --series-1: #3987e5;
-    --series-2: #d95926;
-    --series-3: #199e70;
-  }
+  --series-0: #8a7f70;
+  --series-1: #a84a22;
+  --series-2: #2f7d78;
+  --series-3: #a87510;
 }
 
 .headline {

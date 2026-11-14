@@ -1,0 +1,122 @@
+---
+import { EXAMPLE_PAGE_PATH } from "../lib/example.ts";
+import { sitePath } from "../lib/paths.ts";
+import Address from "./Address.astro";
+import Sign from "./Sign.astro";
+
+// The address becomes a site: the frame arrives with it, then the page renders. The sign beside it follows the access choice.
+const page = sitePath(EXAMPLE_PAGE_PATH);
+---
+
+<figure class="browser" data-play="after" aria-label="A browser showing the published site at its address">
+  <div class="bar">
+    <Sign />
+    <span class="host"><Address /></span>
+  </div>
+  <div class="view">
+    <iframe src={page} title="The published site" loading="lazy" tabindex="-1"></iframe>
+  </div>
+</figure>
+
+<script>
+  // The example is always laid out as on a desk-sized screen and scaled to the frame, so its charts are in view at
+  // every width. Without this the stylesheet's half-scale stands.
+  const PAGE_WIDTH = 1120;
+  const view = document.querySelector<HTMLElement>(".browser .view");
+  const page = view?.querySelector("iframe");
+  if (view && page) {
+    const fit = () => {
+      const scale = view.clientWidth / PAGE_WIDTH;
+      page.style.width = `${PAGE_WIDTH}px`;
+      page.style.height = `${Math.ceil(view.clientHeight / scale) + 20}px`;
+      page.style.transform = `scale(${scale})`;
+    };
+    fit();
+    new ResizeObserver(fit).observe(view);
+  }
+</script>
+
+<style>
+  .browser {
+    border: 1px solid var(--rule);
+    border-radius: var(--radius);
+    background: var(--surface);
+    overflow: hidden;
+  }
+
+  .bar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 11px 14px;
+    border-bottom: 1px solid var(--rule);
+    color: var(--muted);
+  }
+
+  .host {
+    min-width: 0;
+    overflow: hidden;
+    color: var(--fg);
+    font-size: clamp(0.625rem, 2.75vw, 0.8125rem);
+    white-space: nowrap;
+  }
+
+  .view {
+    aspect-ratio: 100 / 95;
+    overflow: hidden;
+    background: var(--surface);
+  }
+
+  iframe {
+    display: block;
+    width: 200%;
+    height: calc(200% + 20px);
+    border: 0;
+    transform: scale(0.5);
+    transform-origin: 0 0;
+    margin-top: -10px;
+    pointer-events: none;
+  }
+
+  /* On a phone the bar gives its padding to the address, so the whole address shows. */
+  @media (max-width: 420px) {
+    .bar {
+      gap: 6px;
+      padding-inline: 10px;
+    }
+  }
+
+  /* The launch plays once, when the frame is in view and the answer has arrived: the frame with its address, then the page. */
+  @media (prefers-reduced-motion: no-preference) {
+    .browser.play {
+      animation: arrive 350ms var(--ease) var(--wait, 0ms) both;
+    }
+
+    .browser.play .view {
+      animation: render 550ms var(--ease) calc(var(--wait, 0ms) + 400ms) both;
+    }
+
+    :global(.js) .browser:not(.play) {
+      opacity: 0;
+    }
+  }
+
+  @keyframes arrive {
+    from {
+      opacity: 0;
+      transform: translateY(6px);
+    }
+  }
+
+  @keyframes render {
+    from {
+      opacity: 0;
+      clip-path: inset(0 0 100% 0);
+    }
+
+    to {
+      opacity: 1;
+      clip-path: inset(0);
+    }
+  }
+</style>

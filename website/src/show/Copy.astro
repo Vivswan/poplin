@@ -1,0 +1,134 @@
+---
+interface Props {
+  /** What the button copies, shown beside it. */
+  command: string;
+  /** A word or two saying where it goes, shown before it. */
+  label?: string;
+  /** Set for a sentence rather than a command: it wraps and is set in the text face. */
+  wrap?: boolean;
+}
+
+const { command, label, wrap = false } = Astro.props;
+// An address inside a sentence is set in the code face and may break after any slash.
+const pieces = command.split(/(https?:\/\/[^\s,]+)/);
+---
+
+<div class:list={["copy", { wrap }]}>
+  {label && <span class="label">{label}</span>}
+  {
+    wrap ? (
+      <p>
+        {pieces.map((piece) =>
+          piece.startsWith("http") ? (
+            <code>
+              {piece.split("/").map((part, index) => (
+                <>
+                  {index > 0 && "/"}
+                  {index > 0 && <wbr />}
+                  {part}
+                </>
+              ))}
+            </code>
+          ) : (
+            piece
+          ),
+        )}
+      </p>
+    ) : (
+      <code>{command}</code>
+    )
+  }
+  <button type="button" data-copy={command} aria-label={`Copy: ${command}`}>
+    <span class="idle">
+      <svg viewBox="0 0 16 16" aria-hidden="true">
+        <rect x="5.5" y="5.5" width="8" height="8" rx="1.5"></rect>
+        <path d="M10.5 5.5v-2a1 1 0 0 0-1-1h-6a1 1 0 0 0-1 1v6a1 1 0 0 0 1 1h2"></path>
+      </svg>
+      Copy
+    </span>
+    <span data-said aria-live="polite"></span>
+  </button>
+</div>
+
+<style>
+  .copy {
+    display: inline-flex;
+    align-items: center;
+    max-width: 100%;
+    min-height: 42px;
+    padding: 5px 5px 5px 14px;
+    gap: 12px;
+    border-radius: 9px;
+    background: var(--fill);
+  }
+
+  .wrap {
+    padding-block: 12px;
+  }
+
+  .label {
+    flex: none;
+    color: var(--muted);
+    font-size: 0.8125rem;
+  }
+
+  code {
+    font-size: 0.8125rem;
+    white-space: nowrap;
+    overflow-x: auto;
+  }
+
+  p {
+    min-width: 0;
+    font-size: 0.9375rem;
+    line-height: 1.5;
+    text-wrap: balance;
+  }
+
+  p code {
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+
+  button {
+    flex: none;
+    display: inline-grid;
+    place-items: center;
+    padding: 7px 8px;
+    border: 0;
+    border-radius: 6px;
+    background: var(--surface);
+    color: var(--accent-text);
+    font: 600 0.8125rem / 1 var(--sans);
+    cursor: pointer;
+  }
+
+  button:hover {
+    color: var(--fg);
+  }
+
+  /* What the button says after a press takes the place of its icon and word, so the button never changes width. */
+  .idle,
+  [data-said] {
+    grid-area: 1 / 1;
+  }
+
+  .idle {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+  }
+
+  button[data-told] .idle {
+    visibility: hidden;
+  }
+
+  svg {
+    width: 14px;
+    height: 14px;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.4;
+    stroke-linejoin: round;
+  }
+</style>

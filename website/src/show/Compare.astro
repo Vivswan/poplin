@@ -1,0 +1,184 @@
+---
+import { ROWS, TOOLS } from "../lib/compare.ts";
+
+// Poplin beside the tools people reach for to put a page online. The facts live in one table of data; this draws it.
+---
+
+<div class="scroll">
+  <table>
+    <thead>
+      <tr>
+        <td></td>
+        {TOOLS.map((tool, index) => <th scope="col" class={index === 0 ? "ours" : undefined}>{tool.name}</th>)}
+      </tr>
+    </thead>
+    <tbody>
+      {
+        ROWS.map((row) => (
+          <tr>
+            <th scope="row" title={row.means}>
+              {row.ask}
+              <span class="vh">: {row.means}</span>
+            </th>
+            {TOOLS.map((tool, index) => {
+              const [answer, fact] = tool.answers[row.id] ?? ["not stated", "Its pages do not say"];
+              return (
+                <td class:list={[index === 0 && "ours", answer === "no" && "no"]} title={fact}>
+                  {answer === "yes" && (
+                    <svg viewBox="0 0 16 16" role="img" aria-label={`yes: ${fact}`}>
+                      <path d="M3.5 8.5l3 3 6-7" />
+                    </svg>
+                  )}
+                  {answer === "no" && (
+                    <svg viewBox="0 0 16 16" role="img" aria-label={`no: ${fact}`}>
+                      <path d="M4.5 4.5l7 7M11.5 4.5l-7 7" />
+                    </svg>
+                  )}
+                  {answer === "not stated" && (
+                    <svg class="unsaid" viewBox="0 0 16 16" role="img" aria-label={`not stated: ${fact}`}>
+                      <path d="M4.5 8h7" />
+                    </svg>
+                  )}
+                  {answer === "partly" && (
+                    <>
+                      partly<span class="vh">: {fact}</span>
+                    </>
+                  )}
+                </td>
+              );
+            })}
+          </tr>
+        ))
+      }
+    </tbody>
+  </table>
+</div>
+<p class="hosts">A dash: their own pages do not say. Vercel, Netlify, or Cloudflare by hand: more power, more setup.</p>
+
+<style>
+  .scroll {
+    overflow-x: auto;
+    border: 1px solid var(--rule);
+    border-radius: var(--radius);
+    background: var(--surface);
+  }
+
+  .hosts {
+    margin-top: 12px;
+    color: var(--muted);
+    font-size: 0.875rem;
+  }
+
+  table {
+    width: 100%;
+    min-width: 760px;
+    border-collapse: collapse;
+    font-size: 0.9375rem;
+    line-height: 1.35;
+  }
+
+  th,
+  td {
+    padding: 11px 14px;
+    text-align: center;
+    font-weight: 400;
+    white-space: nowrap;
+  }
+
+  thead th {
+    padding-block: 14px;
+    color: var(--muted);
+    font-size: 0.875rem;
+  }
+
+  tbody th,
+  thead td {
+    position: sticky;
+    left: 0;
+    z-index: 1;
+    background: var(--surface);
+    text-align: left;
+  }
+
+  tbody tr {
+    border-top: 1px solid var(--rule);
+  }
+
+  /* A cell holds its own hidden text, so a fact for a screen reader never widens the page. */
+  tbody td {
+    position: relative;
+    color: var(--fg);
+    font-size: 0.875rem;
+    vertical-align: middle;
+  }
+
+  .ours,
+  tbody td.ours {
+    background: var(--accent-tint);
+    color: var(--fg);
+    font-weight: 600;
+  }
+
+  thead .ours {
+    color: var(--accent-text);
+    font-size: 0.9375rem;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+  }
+
+  svg {
+    width: 16px;
+    height: 16px;
+    display: block;
+    margin-inline: auto;
+    fill: none;
+    stroke: var(--fg);
+    stroke-width: 1.8;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+
+  .no svg,
+  .unsaid {
+    stroke: var(--muted);
+  }
+
+  .ours svg {
+    stroke: var(--accent-text);
+    stroke-width: 2.2;
+  }
+
+  /* Between a phone and a desk the whole table fits its column with tighter cells; only a phone scrolls sideways. */
+  @media (max-width: 960px) {
+    table {
+      min-width: 0;
+    }
+
+    th,
+    td {
+      padding-inline: 9px;
+    }
+  }
+
+  @media (max-width: 720px) {
+    .scroll {
+      margin-right: calc(-1 * var(--edge));
+      border-right: 0;
+      border-radius: var(--radius) 0 0 var(--radius);
+    }
+
+    table {
+      min-width: 640px;
+    }
+
+    th,
+    td {
+      padding: 11px 10px;
+    }
+
+    tbody th {
+      white-space: normal;
+      width: 10.5rem;
+    }
+  }
+</style>

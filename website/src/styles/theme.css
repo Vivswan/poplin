@@ -1,0 +1,286 @@
+/* Two designed palettes behind one set of names: each colour gives its light and its dark value. */
+
+/* The system setting picks the scheme; the header switch can pin either one. */
+:root {
+  color-scheme: light dark;
+  --bg: light-dark(#f5f7fa, #0d111f);
+  --fg: light-dark(#141a2b, #eef1f8);
+  --muted: light-dark(#4a5268, #a7b1c9);
+  --faint: light-dark(#7d879e, #7c87a3);
+  --fill: light-dark(#e7ecf4, #1a2038);
+  --rule: light-dark(#d6deeb, #2a3352);
+  --surface: light-dark(#ffffff, #141a2e);
+  --accent: light-dark(#3b66d6, #5c82ea);
+  --on-accent: light-dark(#ffffff, #0b0f1c);
+  --accent-text: light-dark(#2c4fb3, #9db6f8);
+  --accent-tint: light-dark(#edf2fd, #18223f);
+  --ok: light-dark(#1f7a44, #7fd09b);
+  --ok-tint: light-dark(#e3f3e8, #153224);
+  --mark-back: light-dark(#3b66d6, #9db6f8);
+  --edge: clamp(20px, 4vw, 40px);
+  --measure: 880px;
+  --radius: 10px;
+  --sans: "Libre Franklin", "Helvetica Neue", Arial, sans-serif;
+  --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  --ease: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+:root[data-theme="light"] {
+  color-scheme: light;
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+  scrollbar-color: var(--rule) transparent;
+}
+
+body {
+  display: flex;
+  flex-direction: column;
+  min-height: 100dvh;
+  margin: 0;
+  background: var(--bg);
+  color: var(--fg);
+  font: 400 1.0625rem / 1.5 var(--sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+h1,
+h2,
+p,
+ul,
+ol,
+dl,
+dd,
+figure {
+  margin: 0;
+}
+
+ul,
+ol {
+  padding: 0;
+  list-style: none;
+}
+
+h1,
+h2 {
+  font-weight: 600;
+  letter-spacing: -0.025em;
+  line-height: 1.1;
+  text-wrap: balance;
+}
+
+h1 {
+  font-size: clamp(2rem, 1.3rem + 2.6vw, 3rem);
+}
+
+h2 {
+  font-size: 1.25rem;
+  letter-spacing: -0.015em;
+}
+
+a {
+  color: inherit;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 0.2em;
+}
+
+/* Two hyphens stay two hyphens: a command is typed as it is read. */
+code {
+  font-family: var(--mono);
+  font-variant-ligatures: none;
+  letter-spacing: 0.04em;
+}
+
+button,
+input {
+  font: inherit;
+  color: inherit;
+}
+
+::selection {
+  background: var(--accent);
+  color: var(--on-accent);
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+  border-radius: 4px;
+}
+
+main {
+  flex: 1;
+}
+
+.wrap {
+  width: min(100%, calc(var(--measure) + 2 * var(--edge)));
+  margin-inline: auto;
+  padding-inline: var(--edge);
+}
+
+.vh {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.skip {
+  position: absolute;
+  left: var(--edge);
+  top: -4rem;
+  padding: 0.5rem 0.75rem;
+  background: var(--fg);
+  color: var(--bg);
+  z-index: 10;
+}
+
+.skip:focus {
+  top: 0.5rem;
+}
+
+/* Navigation and the closing line share one size. */
+.top,
+.foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px 24px;
+  font-size: 0.9375rem;
+}
+
+.top {
+  padding-block: 22px;
+}
+
+.top ul {
+  display: flex;
+  align-items: center;
+  gap: 4px 26px;
+}
+
+.top a,
+.foot a {
+  text-decoration: none;
+}
+
+.top a:hover,
+.foot a:hover {
+  text-decoration: underline;
+}
+
+.mark {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  font-weight: 700;
+  font-size: 1.0625rem;
+  letter-spacing: -0.03em;
+}
+
+.mark svg {
+  width: 22px;
+  height: 22px;
+}
+
+.mark .back {
+  fill: var(--mark-back);
+}
+
+.foot {
+  padding-block: 28px;
+  color: var(--muted);
+}
+
+.theme {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  margin: -6px;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.theme:hover {
+  color: var(--fg);
+}
+
+/* One of three marks shows: the screen while the system decides, the sun or the moon once one is chosen. */
+.theme svg {
+  display: none;
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.4;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+:root:not([data-theme]) .theme .system,
+:root[data-theme="light"] .theme .light,
+:root[data-theme="dark"] .theme .dark {
+  display: block;
+}
+
+/* The switch and the copy buttons need a script; without one they are not offered. */
+html:not(.js) .theme,
+html:not(.js) [data-copy] {
+  display: none;
+}
+
+/* What shows for one access choice. Alternatives share one grid cell, so the switch moves nothing around it. */
+.access [data-show] {
+  opacity: 0;
+  visibility: hidden;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .access [data-show] {
+    transition:
+      opacity 220ms var(--ease),
+      visibility 0s 220ms;
+  }
+}
+
+.access:has(input[value="private"]:checked) [data-show~="private"],
+.access:has(input[value="unlisted"]:checked) [data-show~="unlisted"],
+.access:has(input[value="public"]:checked) [data-show~="public"] {
+  opacity: 1;
+  visibility: visible;
+  transition-delay: 0s;
+}
+
+@supports not selector(:has(*)) {
+  .access [data-show~="private"] {
+    opacity: 1;
+    visibility: visible;
+  }
+}
+
+.swap {
+  display: grid;
+}
+
+.swap > * {
+  grid-area: 1 / 1;
+}

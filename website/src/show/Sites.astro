@@ -1,0 +1,128 @@
+---
+import { EXAMPLE_DASHBOARD, EXAMPLE_SITE } from "../lib/example.ts";
+
+// The dashboard's site list. The first row is the site the publish above just made, so it follows the access switch.
+const rows = [
+  { name: "report", id: EXAMPLE_SITE.split("--")[1], access: undefined, when: "just now" },
+  { name: "launch-deck", id: "9d2mq7x4hb1c", access: "Unlisted", when: "2 days ago" },
+  { name: "trip-notes", id: "4c1t8wq2m9xa", access: "Public", when: "last week" },
+];
+const states = ["Private", "Unlisted", "Public"];
+---
+
+<figure class="sites" aria-label="The dashboard: every site, who can open it, and when it last changed">
+  <div class="bar" aria-hidden="true"><code>{EXAMPLE_DASHBOARD}</code></div>
+  <table>
+    <thead>
+      <tr>
+        <th scope="col">Site</th>
+        <th scope="col">Access</th>
+        <th scope="col" class="wide">Changed</th>
+      </tr>
+    </thead>
+    <tbody>
+      {
+        rows.map((row) => (
+          <tr>
+            <td>
+              <b>{row.name}</b>
+              <code class="id">--{row.id}</code>
+            </td>
+            <td>
+              {row.access === undefined ? (
+                <span class="swap">
+                  {states.map((state) => (
+                    <span data-show={state.toLowerCase()} class:list={["chip", state.toLowerCase()]}>
+                      {state}
+                    </span>
+                  ))}
+                </span>
+              ) : (
+                <span class:list={["chip", row.access.toLowerCase()]}>{row.access}</span>
+              )}
+            </td>
+            <td class="wide">{row.when}</td>
+          </tr>
+        ))
+      }
+    </tbody>
+  </table>
+</figure>
+
+<style>
+  .sites {
+    border: 1px solid var(--rule);
+    border-radius: var(--radius);
+    background: var(--surface);
+    font: 400 0.875rem / 1.4 var(--sans);
+    overflow: hidden;
+  }
+
+  .bar {
+    padding: 11px 16px;
+    border-bottom: 1px solid var(--rule);
+    color: var(--muted);
+    font-size: 0.8125rem;
+  }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+  }
+
+  th {
+    padding: 12px 16px 6px;
+    text-align: left;
+    font-weight: 400;
+    font-size: 0.8125rem;
+    color: var(--muted);
+  }
+
+  td {
+    padding: 11px 16px;
+    border-top: 1px solid var(--rule);
+    white-space: nowrap;
+  }
+
+  b {
+    font-weight: 600;
+  }
+
+  .id {
+    font-size: 0.8125rem;
+    color: var(--muted);
+  }
+
+  .swap {
+    display: inline-grid;
+    justify-items: start;
+  }
+
+  .chip {
+    display: inline-block;
+    padding: 2px 9px;
+    border-radius: 99px;
+    font-size: 0.8125rem;
+    font-weight: 600;
+  }
+
+  .private {
+    background: var(--fill);
+  }
+
+  .unlisted {
+    background: var(--accent-tint);
+    color: var(--accent-text);
+  }
+
+  .public {
+    background: var(--ok-tint);
+    color: var(--ok);
+  }
+
+  @media (max-width: 900px) {
+    .wide {
+      display: none;
+    }
+  }
+</style>

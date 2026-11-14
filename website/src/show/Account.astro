@@ -1,0 +1,452 @@
+---
+import { PROVIDERS } from "../lib/providers.ts";
+
+// What a visitor's request passes before it reaches a site, and where the site lives: all inside your own account.
+// A private site's visitor also passes the login before the Worker; an unlisted or a public site's does not.
+// Every box has one fixed height and every wire is centred on the same axis, so each line meets the middle of the edge
+// it joins at any width. Wide, the path runs left to right; narrow, top to bottom.
+const guards = [
+  { name: "Firewall", note: "own hostnames" },
+  { name: "Bot block", note: "crawlers" },
+  { name: "Rate limit", note: "per address" },
+  { name: "Login", note: "private only" },
+];
+const stores = [
+  { name: "Bucket", note: "files" },
+  { name: "Database", note: "records" },
+];
+---
+
+<figure
+  class="account"
+  aria-label={`A visitor's request passes a firewall that lets through only this install's hostnames, a block on crawlers, a rate limit per address, and, for private sites only, a login. Then one Worker serves the site from a bucket of files and a database of records. All of it is inside your own ${PROVIDERS[0]} account.`}
+>
+  <div class="node out" data-from>Visitor</div>
+  <div class="wire out" aria-hidden="true"></div>
+  <div class="inside">
+    <p>Your {PROVIDERS[0]} account</p>
+    <div class="wire lead" aria-hidden="true"></div>
+    {
+      guards.map((guard) => (
+        <>
+          <div class="node">
+            {guard.name}
+            <small>{guard.note}</small>
+          </div>
+          <div class="wire" aria-hidden="true" />
+        </>
+      ))
+    }
+    <div class="node worker" data-to>
+      Worker
+      <small>every site</small>
+    </div>
+    <div class="stores">
+      <div class="fork" aria-hidden="true">
+        <i class="dot split"></i>
+        <i class="dot split"></i>
+      </div>
+      <div class="pair">
+        {
+          stores.map((store) => (
+            <div class="node" data-store>
+              {store.name}
+              <small>{store.note}</small>
+            </div>
+          ))
+        }
+      </div>
+    </div>
+  </div>
+  <i class="dot flow" aria-hidden="true"></i>
+</figure>
+
+<script>
+  // One clock drives the whole figure: where the dot is, which box it is under, and the two dots it splits into.
+  // Nothing has a timer of its own, so nothing can fall out of step; leaving the screen or the tab starts it afresh.
+  // The dot is one element on one path that runs behind the boxes, which are painted above it: it slides under a box's
+  // edge, takes the time the box's width takes, and slides out. Under a box it moves a little slower, so the stay shows.
+  const SPEED = 150;
+  const SLOW = 0.75;
+  const SPLIT_MS = 900;
+  const REST_MS = 1000;
+  const FADE_MS = 250;
+  const LEAVE_MS = 450;
+
+  interface Route {
+    /** The dot's place for each pixel travelled, and the time by which it has got there. */
+    readonly xs: number[];
+    readonly ys: number[];
+    readonly at: number[];
+    readonly ms: number;
+  }
+
+  const figure = document.querySelector<HTMLElement>(".account");
+  const still = matchMedia("(prefers-reduced-motion: reduce)");
+  if (figure) {
+    const dot = figure.querySelector<HTMLElement>(".flow");
+    const splits = [...figure.querySelectorAll<HTMLElement>(".split")];
+    const boxes = [...figure.querySelectorAll<HTMLElement>(".node")];
+    const stored = [...figure.querySelectorAll<HTMLElement>("[data-store]")];
+    let route: Route | undefined;
+    let rects: DOMRect[] = [];
+    let origin = { x: 0, y: 0 };
+    let started = 0;
+    let frame = 0;
+
+    const under = (x: number, y: number) => rects.findIndex((rect) => x > rect.left && x < rect.right && y > rect.top && y < rect.bottom);
+
+    // Walks the corners a pixel at a time; a pixel under a box costs more time than one on a wire.
+    const walk = (corners: [number, number][]): Route => {
+      const route = { xs: [] as number[], ys: [] as number[], at: [] as number[], ms: 0 };
+      corners.slice(1).forEach(([toX, toY], index) => {
+        const [fromX, fromY] = corners[index] ?? [toX, toY];
+        const length = Math.round(Math.hypot(toX - fromX, toY - fromY));
+        for (let step = 0; step < length; step++) {
+          const x = fromX + ((toX - fromX) * step) / length;
+          const y = fromY + ((toY - fromY) * step) / length;
+          route.ms += 1000 / SPEED / (under(x, y) === -1 ? 1 : SLOW);
+          route.xs.push(x);
+          route.ys.push(y);
+          route.at.push(route.ms);
+        }
+      });
+      return route;
+    };
+
+    const measure = () => {
+      const first = figure.querySelector("[data-from]")?.getBoundingClientRect();
+      const worker = figure.querySelector("[data-to]")?.getBoundingClientRect();
+      const fork = figure.querySelector(".fork")?.getBoundingClientRect();
+      if (!first || !worker || !fork) return;
+      const frameBox = figure.getBoundingClientRect();
+      origin = { x: frameBox.left, y: frameBox.top };
+      rects = boxes.map((box) => box.getBoundingClientRect());
+      const down = worker.top >= first.bottom;
+      const mid = (rect: DOMRect): [number, number] => [rect.left + rect.width / 2, rect.top + rect.height / 2];
+      const from: [number, number] = down ? [mid(first)[0], first.bottom] : [first.right, mid(first)[1]];
+      const out: [number, number] = down ? [mid(worker)[0], worker.bottom] : [worker.right, mid(worker)[1]];
+      route = walk([from, out]);
+      // Each half of the request follows the fork's own lines to the middle of its store, and a little way in.
+      stored.forEach((store, index) => {
+        const [x, y] = mid(store.getBoundingClientRect());
+        const route = down
+          ? `M ${fork.width / 2} 0 V ${fork.height / 2} H ${x - fork.left} V ${fork.height + 10}`
+          : `M 0 ${fork.height / 2} H ${fork.width / 2} V ${y - fork.top} H ${fork.width + 10}`;
+        splits[index]?.style.setProperty("offset-path", `path("${route}")`);
+      });
+    };
+
+    /** Where the dot is at `time` into the route: the last pixel it has reached. */
+    const placeAt = (route: Route, time: number): [number, number] => {
+      const reached = route.at.findIndex((at) => at >= time);
+      const step = reached === -1 ? route.at.length - 1 : reached;
+      return [route.xs[step] ?? 0, route.ys[step] ?? 0];
+    };
+
+    /** The two halves, `since` milliseconds after the dot left the Worker. */
+    const paintHalves = (since: number) => {
+      const splitting = since >= 0 && since < SPLIT_MS;
+      for (const half of splits) {
+        half.style.opacity = splitting ? String(Math.min(1, (SPLIT_MS - since) / FADE_MS)) : "0";
+        half.style.offsetDistance = `${splitting ? (since / SPLIT_MS) * 100 : 0}%`;
+      }
+      const landed = since >= SPLIT_MS * 0.7 && since < SPLIT_MS + FADE_MS * 2;
+      for (const store of stored) store.classList.toggle("lit", landed);
+    };
+
+    const draw = (now: number) => {
+      if (!route || !dot) return;
+      const time = (now - started) % (route.ms + SPLIT_MS + REST_MS);
+      const moving = time < route.ms;
+      const [x, y] = placeAt(route, time);
+      dot.style.opacity = moving ? String(Math.min(1, time / FADE_MS)) : "0";
+      dot.style.transform = `translate(${Math.round((x - origin.x) * 2) / 2}px, ${Math.round((y - origin.y) * 2) / 2}px) translate(-50%, -50%)`;
+      // The visitor's own box answers as the request sets off; after that, whichever box the dot is under.
+      const underNow = time < LEAVE_MS ? 0 : under(x, y);
+      const inside = moving ? underNow : -1;
+      for (const [index, box] of boxes.entries()) {
+        if (!stored.includes(box)) box.classList.toggle("lit", index === inside);
+      }
+      paintHalves(time - route.ms);
+      frame = requestAnimationFrame(draw);
+    };
+
+    const stop = () => {
+      cancelAnimationFrame(frame);
+      frame = 0;
+      if (dot) dot.style.opacity = "0";
+      for (const half of splits) half.style.opacity = "0";
+      for (const box of boxes) box.classList.remove("lit");
+    };
+
+    // A fresh request from the visitor every time the figure comes back: never a resume from a stale place.
+    const start = () => {
+      stop();
+      measure();
+      started = performance.now();
+      frame = requestAnimationFrame(draw);
+    };
+
+    let onScreen = false;
+    // It runs while the figure is on screen, the tab is showing, and the reader has not asked for less motion.
+    const wake = () => {
+      if (onScreen && !document.hidden && !still.matches) start();
+      else stop();
+    };
+    new IntersectionObserver(([entry]) => {
+      onScreen = entry?.isIntersecting ?? false;
+      wake();
+    }).observe(figure);
+    document.addEventListener("visibilitychange", wake);
+    still.addEventListener("change", wake);
+    new ResizeObserver(() => {
+      if (frame !== 0) wake();
+    }).observe(figure);
+  }
+</script>
+
+<style>
+  .account {
+    --box: 60px;
+    --gap: 8px;
+    --pad: 16px;
+    --top: 40px;
+    --line: var(--faint);
+    position: relative;
+    display: flex;
+    align-items: center;
+    font: 600 0.9375rem / 1.25 var(--sans);
+  }
+
+  /* A box is painted above the request's dot, so the dot slides under one edge and out from under the other. */
+  .node {
+    position: relative;
+    z-index: 1;
+    flex: none;
+    display: grid;
+    align-content: center;
+    justify-items: center;
+    height: var(--box);
+    padding-inline: 12px;
+    border: 1px solid var(--rule);
+    border-radius: 8px;
+    background: var(--surface);
+    white-space: nowrap;
+    transition:
+      border-color 250ms var(--ease),
+      box-shadow 250ms var(--ease);
+  }
+
+  small {
+    color: var(--muted);
+    font-weight: 400;
+    font-size: 0.8125rem;
+  }
+
+  .worker {
+    border-color: var(--accent);
+    background: var(--accent);
+    color: var(--on-accent);
+  }
+
+  .worker small {
+    color: inherit;
+  }
+
+  /* A box answers while the request is under it. */
+  .lit {
+    border-color: var(--accent-text);
+    box-shadow: 0 0 0 3px var(--accent-tint);
+  }
+
+  .wire {
+    flex: 1 1 16px;
+    min-width: 12px;
+    max-width: 104px;
+    height: 1px;
+    background: var(--line);
+  }
+
+  .lead {
+    flex: none;
+    width: var(--pad);
+    min-width: 0;
+  }
+
+  /* The account's label sits above the row, so what stands outside is lowered to the row's centre. */
+  .out {
+    margin-top: calc(var(--top) - var(--pad));
+  }
+
+  .inside {
+    position: relative;
+    flex: 1 1 auto;
+    display: flex;
+    align-items: center;
+    padding: var(--top) var(--pad) var(--pad) 0;
+    border-radius: var(--radius);
+    background: var(--fill);
+  }
+
+  p {
+    position: absolute;
+    left: var(--pad);
+    top: 12px;
+    font-weight: 400;
+    font-size: 0.8125rem;
+    line-height: 16px;
+    color: var(--muted);
+    white-space: nowrap;
+  }
+
+  .stores {
+    display: flex;
+    align-items: center;
+  }
+
+  .pair {
+    display: grid;
+    gap: var(--gap);
+  }
+
+  .pair .node {
+    min-width: 88px;
+  }
+
+  /* A stem from the Worker, then a branch to the middle of each store. */
+  .fork {
+    position: relative;
+    flex: none;
+    width: 28px;
+    height: calc(2 * var(--box) + var(--gap));
+  }
+
+  .fork::before,
+  .fork::after {
+    content: "";
+    position: absolute;
+  }
+
+  .fork::before {
+    left: 0;
+    top: calc(50% - 0.5px);
+    width: 50%;
+    height: 1px;
+    background: var(--line);
+  }
+
+  .fork::after {
+    left: 50%;
+    right: 0;
+    top: calc(var(--box) / 2 - 0.5px);
+    bottom: calc(var(--box) / 2 - 0.5px);
+    border: 1px solid var(--line);
+    border-right: 0;
+  }
+
+  /* The request: one dot, behind the boxes. */
+  .dot {
+    position: absolute;
+    left: 0;
+    top: 0;
+    z-index: 0;
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--accent-text);
+    opacity: 0;
+    pointer-events: none;
+    will-change: transform, opacity;
+  }
+
+  .split {
+    offset-rotate: 0deg;
+  }
+
+  /* Narrow: the same path, top to bottom. */
+  @media (max-width: 960px) {
+    .account,
+    .inside,
+    .stores {
+      flex-direction: column;
+    }
+
+    /* The stacked path is a narrow thing, so its frame is too. */
+    .account {
+      max-width: 400px;
+      margin-inline: auto;
+    }
+
+    .inside {
+      flex: none;
+      align-self: stretch;
+      padding: 0 var(--pad) var(--pad);
+    }
+
+    /* The label goes under the path here, so the wire from the visitor reaches the firewall unbroken. */
+    p {
+      position: static;
+      order: 1;
+      align-self: start;
+      margin-block: 12px 0;
+    }
+
+    /* Stacked, the boxes share one width, so the column reads as one built thing. */
+    .node {
+      width: 148px;
+    }
+
+    .wire {
+      flex: none;
+      width: 1px;
+      min-width: 0;
+      height: 18px;
+    }
+
+    .lead {
+      width: 1px;
+      height: var(--pad);
+    }
+
+    .out {
+      margin-top: 0;
+    }
+
+    .stores {
+      align-self: center;
+    }
+
+    .pair {
+      grid-template-columns: 1fr 1fr;
+      align-self: stretch;
+    }
+
+    .pair .node {
+      width: auto;
+      min-width: 112px;
+    }
+
+    .fork {
+      align-self: stretch;
+      width: auto;
+      height: 20px;
+    }
+
+    .fork::before {
+      left: calc(50% - 0.5px);
+      top: 0;
+      width: 1px;
+      height: 50%;
+    }
+
+    .fork::after {
+      left: calc(25% - var(--gap) / 4 - 0.5px);
+      right: calc(25% - var(--gap) / 4 - 0.5px);
+      top: 50%;
+      bottom: 0;
+      border: 1px solid var(--line);
+      border-bottom: 0;
+    }
+  }
+</style>

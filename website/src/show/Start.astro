@@ -1,0 +1,238 @@
+---
+import { AGENTS } from "../lib/agents.ts";
+import { EXAMPLE_DASHBOARD } from "../lib/example.ts";
+import { SETUP_PROMPT } from "../lib/paths.ts";
+import Copy from "./Copy.astro";
+
+// The first thing offered is one sentence to paste into any agent. Adding it by hand stays one click away.
+---
+
+<div class="start">
+  <Copy command={SETUP_PROMPT} wrap />
+
+  <details class="byhand">
+    <summary>
+      <svg class="chev" viewBox="0 0 12 12" aria-hidden="true"><path d="M4.5 2.5L8 6l-3.500 3.500"></path></svg>
+      Or add it yourself
+    </summary>
+    <div class="steps">
+      <Copy label="Once" command={`npx poplin login --server https://${EXAMPLE_DASHBOARD}`} />
+      <div class="pick">
+        <label>
+          <span>Then, in</span>
+          <span class="select">
+            <select name="agent" aria-label="Your agent">
+              {AGENTS.map((agent) => <option value={agent.id}>{agent.name}</option>)}
+            </select>
+            <svg viewBox="0 0 12 12" aria-hidden="true"><path d="M2.5 4.5L6 8l3.5-3.5"></path></svg>
+          </span>
+        </label>
+        <span class="where">
+          {AGENTS.map((agent) => <code data-agent={agent.id}>{agent.where}</code>)}
+        </span>
+      </div>
+      <div class="agent">
+        {
+          AGENTS.map((agent) => (
+            <div data-agent={agent.id}>
+              <Copy label={agent.where ? "Add" : "Run"} command={agent.line} />
+            </div>
+          ))
+        }
+      </div>
+      <Copy label="Terminal" command="npm i -g poplin" />
+    </div>
+  </details>
+</div>
+
+<style>
+  .start {
+    display: grid;
+    gap: 18px;
+    justify-items: start;
+    min-width: 0;
+    font-size: 0.875rem;
+  }
+
+  /* The block is as wide as its column and no wider, whatever the longest line inside it. */
+  .byhand {
+    width: 100%;
+    min-width: 0;
+  }
+
+  summary {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    color: var(--muted);
+    cursor: pointer;
+    list-style: none;
+  }
+
+  summary::-webkit-details-marker {
+    display: none;
+  }
+
+  .chev {
+    position: static;
+    width: 12px;
+    height: 12px;
+    margin: 0;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.6;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+
+  details[open] .chev {
+    transform: rotate(90deg);
+  }
+
+  /* The rows share one surface: a row is a line of it, with its label, its command, and its button each in one column. */
+  .steps :global(.copy) {
+    display: flex;
+    align-items: start;
+    width: 100%;
+    border-radius: 0;
+    background: none;
+  }
+
+  .steps :global(.copy code) {
+    flex: 1;
+    padding-block: 7px;
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+
+  .steps :global(.label) {
+    padding-top: 7px;
+  }
+
+  .steps :global(.label),
+  .pick label > span:first-child {
+    flex: none;
+    width: 4.75rem;
+  }
+
+  summary:hover {
+    color: var(--fg);
+  }
+
+  .steps {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    justify-items: stretch;
+    width: 100%;
+    min-width: 0;
+    margin-top: 16px;
+    border-radius: 9px;
+    background: var(--fill);
+    overflow: hidden;
+  }
+
+  .steps > :global(* + *) {
+    border-top: 1px solid var(--rule);
+  }
+
+  /* The picker's row; the file an agent reads, if it reads one, follows its name. */
+  .pick {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    min-height: 42px;
+    padding: 3px 14px;
+    color: var(--muted);
+  }
+
+  .pick label {
+    display: flex;
+    align-items: center;
+  }
+
+  .where {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    font-size: 0.8125rem;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  /* The picker belongs to the same family as the switches: a filled pill, its own arrow, even padding either side. */
+  .select {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+  }
+
+  select {
+    appearance: none;
+    min-height: 32px;
+    margin: 0;
+    padding: 0 36px 0 12px;
+    border: 0;
+    border-radius: 8px;
+    background: var(--surface);
+    color: var(--fg);
+    font: 600 0.875rem / 1.3 var(--sans);
+    cursor: pointer;
+  }
+
+  select:hover {
+    box-shadow: inset 0 0 0 1px var(--faint);
+  }
+
+  select:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+
+  .select svg {
+    position: absolute;
+    right: 14px;
+    top: 50%;
+    width: 12px;
+    height: 12px;
+    margin-top: -6px;
+    fill: none;
+    stroke: var(--muted);
+    stroke-width: 1.6;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    pointer-events: none;
+  }
+
+  option {
+    background: var(--surface);
+    color: var(--fg);
+    font-weight: 400;
+  }
+
+  /* Only the chosen agent's line is there, so its row is exactly as tall as that line. */
+  [data-agent] {
+    display: none;
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  /* On a phone the file's name takes its own line under the picker. */
+  @media (max-width: 720px) {
+    .pick {
+      flex-wrap: wrap;
+      gap: 6px 12px;
+      padding-block: 8px;
+    }
+
+    .where {
+      flex-basis: 100%;
+    }
+  }
+
+  /* Where the picker cannot be read from CSS, the plain setting that any agent takes is what shows. */
+  @supports not selector(:has(*)) {
+    [data-agent="other"] {
+      display: revert;
+    }
+  }
+</style>

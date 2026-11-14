@@ -1,11 +1,21 @@
 ---
-import Page from "../layouts/Page.astro";
+import Site from "../layouts/Site.astro";
 import { sitePath } from "../lib/paths.ts";
 ---
 
-<Page title="Page not found: poplin" description="This address has no page on the poplin website." path="404.html">
-  <section class="hero part frame">
-    <h1>No page at this address.</h1>
-    <p class="lead">The <a href={sitePath()}>home page</a> has the whole picture.</p>
+<Site title="Page not found: poplin" description="This address has no page on the poplin website." path="404.html">
+  <section class="wrap none">
+    <h1>No page here.</h1>
+    <p><a href={sitePath()}>Home</a></p>
   </section>
-</Page>
+</Site>
+
+<style>
+  .none {
+    padding-block: clamp(48px, 12vh, 120px);
+  }
+
+  p {
+    margin-top: 16px;
+  }
+</style>

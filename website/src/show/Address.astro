@@ -1,0 +1,45 @@
+---
+import { EXAMPLE_ADDRESS } from "../lib/example.ts";
+
+// The example site's address. One letter in it says who can open the site, so it follows the access switch of the form
+// around it: p while private, u once unlisted or public. Both letters are one character wide, so nothing moves.
+const { before, letters, after } = EXAMPLE_ADDRESS;
+---
+
+<code class="address">{before}<span class="swap letter">{letters.map((letter) => <span data-show={letter.shows}>{letter.is}</span>)}</span>{after}</code>
+
+<script>
+  // The first choice marks the form, so the letter is lit on every change after it and never on the page's first paint.
+  document.querySelector(".access")?.addEventListener("change", (event) => (event.currentTarget as HTMLElement).classList.add("chosen"), { once: true });
+</script>
+
+<style>
+  .address {
+    letter-spacing: 0.02em;
+    white-space: nowrap;
+  }
+
+  .letter {
+    display: inline-grid;
+    border-radius: 3px;
+    background: color-mix(in srgb, var(--accent) 26%, transparent);
+    color: var(--accent-text);
+    font-weight: 700;
+  }
+
+  /* The letter that has just changed is lit for a moment. */
+  @media (prefers-reduced-motion: no-preference) {
+    :global(.access.chosen:has(input[value="unlisted"]:checked)) [data-show~="unlisted"],
+    :global(.access.chosen:has(input[value="public"]:checked)) [data-show~="public"],
+    :global(.access.chosen:has(input[value="private"]:checked)) [data-show~="private"] {
+      animation: flip 700ms var(--ease);
+    }
+  }
+
+  @keyframes flip {
+    from {
+      background: var(--accent);
+      color: var(--on-accent);
+    }
+  }
+</style>

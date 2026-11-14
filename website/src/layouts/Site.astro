@@ -1,0 +1,173 @@
+---
+import "@fontsource/libre-franklin/latin-400.css";
+import "@fontsource/libre-franklin/latin-600.css";
+import "@fontsource/libre-franklin/latin-700.css";
+import "../styles/theme.css";
+import { getImage } from "astro:assets";
+import { REPOSITORY_URL, sitePath } from "../lib/paths.ts";
+
+interface Props {
+  title: string;
+  description: string;
+  path: string;
+}
+
+const { title, description, path } = Astro.props;
+const pageUrl = new URL(sitePath(path), Astro.site).href;
+const links = [
+  { href: sitePath("docs/"), label: "Docs" },
+  { href: REPOSITORY_URL, label: "GitHub" },
+];
+
+const brand = import.meta.glob<ImageMetadata>("../../../brand/{favicon,icon,social}.svg", { eager: true, import: "default" });
+const favicon = brand["../../../brand/favicon.svg"];
+const icon = brand["../../../brand/icon.svg"];
+const social = brand["../../../brand/social.svg"];
+if (favicon === undefined || icon === undefined || social === undefined) {
+  throw new Error("The brand folder is missing its favicon, icon, or social drawing.");
+}
+const touchIcon = await getImage({ src: icon, width: 180, height: 180, format: "png" });
+const card = await getImage({ src: social, width: 1200, height: 630, format: "png" });
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="light dark" />
+    <title>{title}</title>
+    <meta name="description" content={description} />
+    <link rel="canonical" href={pageUrl} />
+    <link rel="icon" type="image/svg+xml" href={favicon.src} />
+    <link rel="apple-touch-icon" href={touchIcon.src} />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Poplin" />
+    <meta property="og:title" content={title} />
+    <meta property="og:description" content={description} />
+    <meta property="og:url" content={pageUrl} />
+    <meta property="og:image" content={new URL(card.src, Astro.site).href} />
+    <meta name="twitter:card" content="summary_large_image" />
+    <slot name="head" />
+    <script is:inline>
+      // Runs before the first paint, so a remembered theme never flashes the other one.
+      document.documentElement.classList.add("js");
+      try {
+        const theme = localStorage.getItem("theme");
+        if (theme === "light" || theme === "dark") document.documentElement.dataset.theme = theme;
+      } catch {}
+    </script>
+  </head>
+  <body>
+    <a class="skip" href="#main">Skip to the content</a>
+    <header class="top wrap">
+      <a class="mark" href={sitePath()} aria-label="Poplin, home">
+        <svg viewBox="0 0 64 64" aria-hidden="true">
+          <rect class="back" x="28" y="4" width="32" height="32" rx="8" opacity=".45"></rect>
+          <rect x="16" y="16" width="32" height="32" rx="8" fill="#D23C56"></rect>
+          <rect x="4" y="28" width="32" height="32" rx="8" fill="#3B66D6"></rect>
+        </svg>
+        poplin
+      </a>
+      <nav aria-label="Site">
+        <ul>
+          {
+            links.map((link) => (
+              <li>
+                <a href={link.href}>{link.label}</a>
+              </li>
+            ))
+          }
+          <li>
+            <button class="theme" type="button" data-theme-switch aria-label="Theme: system">
+              <svg class="system" viewBox="0 0 16 16" aria-hidden="true">
+                <rect x="2" y="3" width="12" height="8" rx="1.5"></rect>
+                <path d="M6 13.500h4M8 11v2.500"></path>
+              </svg>
+              <svg class="light" viewBox="0 0 16 16" aria-hidden="true">
+                <circle cx="8" cy="8" r="2.75"></circle>
+                <path d="M8 1.75v1.500M8 12.750v1.500M1.750 8h1.500M12.750 8h1.500M3.600 3.600l1.050 1.050M11.350 11.350l1.050 1.050M3.600 12.400l1.050-1.050M11.350 4.650l1.050-1.050"></path>
+              </svg>
+              <svg class="dark" viewBox="0 0 16 16" aria-hidden="true">
+                <path d="M13.250 9.500A5.750 5.750 0 0 1 6.500 2.750a5.750 5.750 0 1 0 6.750 6.750z"></path>
+              </svg>
+            </button>
+          </li>
+        </ul>
+      </nav>
+    </header>
+    <main id="main">
+      <slot />
+    </main>
+    <footer class="foot wrap">
+      <p>poplin 0.0.1</p>
+      <a href={`${REPOSITORY_URL}/blob/main/LICENSE.md`}>License</a>
+    </footer>
+    <script>
+      const root = document.documentElement;
+      // The theme follows the system until one is chosen; the switch goes system, light, dark, and back to system.
+      const themeSwitch = document.querySelector<HTMLButtonElement>("[data-theme-switch]");
+      const NEXT: Record<string, string> = { system: "light", light: "dark", dark: "system" };
+      const name = () => themeSwitch?.setAttribute("aria-label", `Theme: ${root.dataset.theme ?? "system"}`);
+      name();
+      themeSwitch?.addEventListener("click", () => {
+        const next = NEXT[root.dataset.theme ?? "system"] ?? "system";
+        if (next === "system") delete root.dataset.theme;
+        else root.dataset.theme = next;
+        name();
+        try {
+          if (next === "system") localStorage.removeItem("theme");
+          else localStorage.setItem("theme", next);
+        } catch {
+          // The choice still holds for this page; it is only not remembered.
+        }
+      });
+
+      // A fragment plays what the product does once, when it comes into view. One marked "after" waits for the request
+      // before it to finish, and no longer than that.
+      const REQUEST_MS = 1750;
+      let requestStart: number | undefined;
+      const play = (part: HTMLElement) => {
+        requestStart ??= performance.now();
+        if (part.dataset.play === "after") {
+          part.style.setProperty("--wait", `${Math.max(0, REQUEST_MS - (performance.now() - requestStart))}ms`);
+        }
+        part.classList.add("play");
+      };
+      const waiting = document.querySelectorAll<HTMLElement>("[data-play]");
+      if ("IntersectionObserver" in window) {
+        const watch = new IntersectionObserver(
+          (entries) => {
+            for (const entry of entries) {
+              if (!entry.isIntersecting) continue;
+              play(entry.target as HTMLElement);
+              watch.unobserve(entry.target);
+            }
+          },
+          { threshold: 0 },
+        );
+        for (const part of waiting) watch.observe(part);
+      } else {
+        for (const part of waiting) play(part);
+      }
+
+      for (const button of document.querySelectorAll<HTMLButtonElement>("button[data-copy]")) {
+        button.addEventListener("click", async () => {
+          const said = button.querySelector<HTMLElement>("[data-said]");
+          if (!said) return;
+          try {
+            await navigator.clipboard.writeText(button.dataset.copy ?? "");
+            said.textContent = "Copied";
+          } catch {
+            said.textContent = "Failed";
+          }
+          button.toggleAttribute("data-told", true);
+          setTimeout(() => {
+            said.textContent = "";
+            button.toggleAttribute("data-told", false);
+          }, 1600);
+        });
+      }
+    </script>
+  </body>
+</html>

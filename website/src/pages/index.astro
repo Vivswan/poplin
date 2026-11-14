@@ -1,293 +1,301 @@
 ---
-import { samples } from "virtual:poplin-samples";
-import Page from "../layouts/Page.astro";
-import { REPOSITORY_URL, sitePath } from "../lib/paths.ts";
-
-const SITE = "report--k3f9x2ab71qz";
-const ADDRESS = `${SITE}-page.example.com`;
-const PUBLIC_ADDRESS = "report-page.example.com";
+import Site from "../layouts/Site.astro";
+import Account from "../show/Account.astro";
+import Ask from "../show/Ask.astro";
+import { PROVIDERS } from "../lib/providers.ts";
+import { SETUP_PROMPT } from "../lib/paths.ts";
+import Browser from "../show/Browser.astro";
+import Compare from "../show/Compare.astro";
+import Copy from "../show/Copy.astro";
+import Provider from "../show/Provider.astro";
+import Seg from "../show/Seg.astro";
+import Sites from "../show/Sites.astro";
+import Start from "../show/Start.astro";
+import Who from "../show/Who.astro";
+import { AGENTS } from "../lib/agents.ts";
 
 // The running demo gets a link only when the build is given its https address.
 const demoUrl = URL.parse(process.env.DEMO_URL ?? "");
 const demo = demoUrl?.protocol === "https:" ? demoUrl.href : undefined;
 
-// One example folder plays the published site: in the access panel, and behind the action beside the transcript.
-const example = samples[0];
-const exampleAddress = example === undefined ? undefined : sitePath(`sample/${encodeURIComponent(example.name)}/`);
-const exampleSize = example === undefined ? "" : `${example.files} files, ${Math.round(example.bytes / 1024)} KB`;
-const keeps = [
-  { say: "Roll back a bad update.", result: "Poplin keeps the last 3 versions of a site by default. Going back needs no upload." },
-  { say: "Bring back a deleted site.", result: "A deleted site waits in the trash, 7 days by default, before it is gone." },
-  { say: "Let a site end by itself.", result: "Give a site an end date. It moves to the trash that day." },
-  { say: "Give a site a new address.", result: "One command replaces the address. The old one stops at once." },
-  { say: "Take everything out.", result: "One zip holds every site and the settings, as plain files." },
-];
-const trust = [
-  { say: "It runs in your account.", result: "One Worker, one bucket for the files, and one database for the records, inside your own Cloudflare account." },
-  { say: "Nothing reads your pages.", result: "The Worker stores each file as sent and serves it as stored. It never opens or rewrites a page." },
-  { say: "The free limits stop.", result: "The Worker stops at 100,000 requests a day and never bills. The sites pause until midnight UTC." },
-  { say: "Storage is capped.", result: "By default poplin refuses an upload past 9 GB in all, or 200 MB for one site, because the bucket bills past 10 GB." },
-  { say: "Requests are limited.", result: "By default one visitor gets 600 requests a minute and one site 6,000." },
-];
+// The agent picker is a native select read by CSS: one rule puts the chosen agent's line on the page.
+const pickerRules = `${AGENTS.map((agent) => `.byhand:has(option[value="${agent.id}"]:checked) [data-agent="${agent.id}"]`).join(",")}{display:revert}`;
+
 ---
 
-<Page
-  title="Poplin: a private site, in one call"
-  description="Poplin lets an AI agent or a person publish a static site to their own Cloudflare account with one call. A site is private by default, unlisted for anyone who has its address, or public."
+<Site
+  title="Poplin: ask your agent, and your site is online"
+  description={`Poplin publishes a folder as a website on your own ${PROVIDERS[0]}, from an agent or the terminal: private by default, unlisted, or public.`}
   path=""
 >
-  <section class="hero part split frame" aria-labelledby="title">
-    <div class="say">
-      <h1 id="title">A private site, in one call.</h1>
-      <p class="lead">
-        Poplin lets an AI agent, or you, publish a folder or one HTML file to your own Cloudflare account. It stays
-        private until you share it.
-      </p>
-      <p class="status">In development, not released.</p>
-      <a class="button" href={sitePath("docs/")}>Read the documentation</a>
-    </div>
-
-    <form class="panel access" data-ui aria-label="A published site and who can open it">
-      <header class="panel-head">
-        <p class="panel-name"><code>{SITE}</code></p>
-        <p class="panel-title">One address. You choose who can open it.</p>
-      </header>
-
-      <fieldset class="segments">
-        <legend>Who can open it</legend>
-        <label><input type="radio" name="access" value="private" checked /><span>Private</span></label>
-        <label><input type="radio" name="access" value="unlisted" /><span>Unlisted</span></label>
-        <label><input type="radio" name="access" value="public" /><span>Public</span></label>
-      </fieldset>
-
-      <dl class="facts">
-        <div>
-          <dt>Address</dt>
-          <dd><code>https://{ADDRESS}</code></dd>
-        </div>
-        <div data-show="public">
-          <dt>Public name</dt>
-          <dd><code>https://{PUBLIC_ADDRESS}</code></dd>
-        </div>
-        <div>
-          <dt>You, logged in</dt>
-          <dd class="yes">opens it</dd>
-        </div>
-        <div>
-          <dt>Someone who has the address</dt>
-          <dd data-show="private">is sent to the login</dd>
-          <dd data-show="unlisted public" class="yes">opens it, with no login</dd>
-        </div>
-        <div>
-          <dt>Everyone else</dt>
-          <dd data-show="private unlisted">would have to guess the address</dd>
-          <dd data-show="public" class="yes">opens it, at the public name</dd>
-        </div>
-      </dl>
-
-      <div class="view">
-        <p class="view-label" data-show="private">What anyone but you gets at that address</p>
-        <p class="view-label" data-show="unlisted">What someone who has the address gets</p>
-        <p class="view-label" data-show="public">What everyone gets</p>
-        <div class="view-missing" data-show="private">
-          <p><strong>Log in</strong></p>
-          <p>This address opens after a login.</p>
-        </div>
-        {
-          exampleAddress === undefined ? (
-            <div class="view-site view-plain" data-show="unlisted public">
-              <p>The published page opens here.</p>
-            </div>
-          ) : (
-            <div class="view-site" data-show="unlisted public">
-              <iframe src={exampleAddress} title="The published page, as a visitor gets it" sandbox="allow-scripts" loading="lazy" tabindex="-1" />
-            </div>
-          )
-        }
+  <style slot="head" is:inline set:html={pickerRules}></style>
+  <div class="wrap">
+    <section class="hero" aria-labelledby="title">
+      <h1 id="title">Ask your agent. Your site is online.</h1>
+      <p>Poplin publishes a folder as a website, on your own <Provider end="." /></p>
+      <div class="paste">
+        <p>Paste into your agent</p>
+        <Copy command={SETUP_PROMPT} wrap />
       </div>
+    </section>
+
+    <!-- One path from the request to the site. The form carries the two switches, so they work with no script. -->
+    <form class="access path" data-play aria-label="From a request to a site" onsubmit="return false">
+      <section class="step" aria-labelledby="ask">
+        <div class="say">
+          <h2 id="ask">Ask, or type</h2>
+          <p>Give your agent a folder. Or run one command in a terminal.</p>
+          <Seg
+            name="door"
+            legend="How you publish"
+            options={[
+              { value: "agent", label: "Agent" },
+              { value: "terminal", label: "Terminal" },
+            ]}
+          />
+        </div>
+        <Ask />
+        <i class="runner" aria-hidden="true"></i>
+      </section>
+
+      <section class="step" aria-labelledby="site">
+        <div class="say">
+          <h2 id="site">It becomes a site</h2>
+          <p>The address you get back opens the page. At first, only you can open it: the p in it means private.</p>
+        </div>
+        <Browser />
+      </section>
+
+      <section class="step" aria-labelledby="who">
+        <div class="say">
+          <h2 id="who">Choose who opens it</h2>
+          <p>Unlisted opens it to anyone with the address; public, to everyone, at a shorter address too. One letter in the address says which: p&nbsp;private, u&nbsp;unlisted.</p>
+          <Seg
+            name="access"
+            legend="Who can open it"
+            options={[
+              { value: "private", label: "Private" },
+              { value: "unlisted", label: "Unlisted" },
+              { value: "public", label: "Public" },
+            ]}
+          />
+        </div>
+        <Who />
+      </section>
+
+      <section class="step" aria-labelledby="sites">
+        <div class="say">
+          <h2 id="sites">Every site in one place</h2>
+          <p>A private dashboard lists your sites. Update one, roll it back, or delete it.</p>
+          {
+            demo !== undefined && (
+              <a class="more" href={demo}>
+                See the dashboard
+                <svg viewBox="0 0 12 12" aria-hidden="true">
+                  <path d="M4.5 2.5L8 6l-3.500 3.500" />
+                </svg>
+              </a>
+            )
+          }
+        </div>
+        <Sites />
+      </section>
+
+      <section class="step wide" aria-labelledby="yours">
+        <div class="say">
+          <h2 id="yours">It runs in your account</h2>
+          <p>Every request passes your guards first, and a private site adds a login. The free plan covers 100,000 requests a day. Past that, the sites pause until midnight UTC.</p>
+        </div>
+        <Account />
+      </section>
+
+      <section class="step wide" aria-labelledby="differs">
+        <div class="say">
+          <h2 id="differs">Beside other tools</h2>
+          <p>Checked against each tool's own pages.</p>
+        </div>
+        <Compare />
+      </section>
+
+      <section class="step last" aria-labelledby="start">
+        <div class="say">
+          <h2 id="start">Start</h2>
+          <p>Paste this into your agent; it guides you through the rest. It needs a free account on <Provider end="." /></p>
+        </div>
+        <Start />
+      </section>
     </form>
-  </section>
+  </div>
+</Site>
 
-  <section class="part split frame" aria-labelledby="publish">
-    <div class="say">
-      <h2 id="publish">One command.</h2>
-      <p>Point poplin at a folder or one HTML file. It answers with the new site and its address. The site is private.</p>
-      <p>An update names the site, so a new publish can never overwrite one by accident. An agent makes the same calls through the MCP server on your machine.</p>
-      {
-        example !== undefined && exampleAddress !== undefined && (
-          <p>
-            <a class="more" href={exampleAddress} data-example data-example-title={example.titleHtml === "" ? example.name : example.titleHtml}>
-              See what that command put up
-            </a>
-          </p>
-        )
-      }
-    </div>
-    <pre class="terminal" data-ui><code>$ poplin ./report
-{exampleSize === "" ? "" : `uploading ${exampleSize}\n`}made  {SITE}  private
-https://{ADDRESS}
-
-$ poplin ./report --site {SITE}
-updated  {SITE}  version 2  private
-https://{ADDRESS}</code></pre>
-  </section>
-
-  <section class="part split frame" aria-labelledby="dashboard">
-    <div class="say">
-      <h2 id="dashboard">Every site, on one page.</h2>
-      <p>Your dashboard lists each site, who can open it, and its versions. Only you can open the dashboard.</p>
-      {demo !== undefined && <p><a class="more" href={demo}>See the dashboard</a></p>}
-    </div>
-    <table class="panel dashboard" data-ui>
-      <caption>Your dashboard</caption>
-      <thead>
-        <tr>
-          <th scope="col">Site</th>
-          <th scope="col">Access</th>
-          <th scope="col">Versions</th>
-          <th scope="col">Published by</th>
-        </tr>
-      </thead>
-      <tbody>
-        <tr class="row-new">
-          <td><code>report</code></td>
-          <td><span class="chip chip-private">Private</span></td>
-          <td>2</td>
-          <td>an agent, just now</td>
-        </tr>
-        <tr>
-          <td><code>launch-deck</code></td>
-          <td><span class="chip chip-unlisted">Unlisted</span></td>
-          <td>3</td>
-          <td>an agent</td>
-        </tr>
-        <tr>
-          <td><code>trip-summary</code></td>
-          <td><span class="chip chip-public">Public</span></td>
-          <td>2</td>
-          <td>you</td>
-        </tr>
-      </tbody>
-    </table>
-  </section>
-
-  <section class="part rows frame" aria-labelledby="keeps">
-    <h2 id="keeps">After you publish.</h2>
-    <dl class="rows-list">
-      {
-        keeps.map((keep) => (
-          <div>
-            <dt>{keep.say}</dt>
-            <dd>{keep.result}</dd>
-          </div>
-        ))
-      }
-    </dl>
-  </section>
-
-  <section class="part rows frame" aria-labelledby="trust">
-    <h2 id="trust">Yours, and inside the free tier.</h2>
-    <dl class="rows-list">
-      {
-        trust.map((fact) => (
-          <div>
-            <dt>{fact.say}</dt>
-            <dd>{fact.result}</dd>
-          </div>
-        ))
-      }
-    </dl>
-  </section>
-
-  <section class="part split starts frame" aria-labelledby="starts">
-    <form class="say plans" aria-labelledby="starts">
-      <h2 id="starts">Where sites open.</h2>
-      <label class="plan">
-        <input type="radio" name="start" value="own" checked />
-        <span class="plan-name">Your domain</span>
-      </label>
-      <label class="plan">
-        <input type="radio" name="start" value="none" />
-        <span class="plan-name">No domain</span>
-      </label>
-    </form>
-    <div class="plan-stage">
-      <div data-show="own">
-        <p class="plan-figure"><code>{ADDRESS}</code></p>
-        <p>Each site gets an address of its own, so the browser keeps your sites apart. Private sites can be whole folders.</p>
-        <p>Site addresses end in a marker, <code>-page</code> by default. Cloudflare routes only those to the Worker.</p>
-      </div>
-      <div data-show="none">
-        <p class="plan-figure"><code>poplin.you.workers.dev/{SITE}/</code></p>
-        <p>Sites are paths on the free address every Cloudflare account has. A private site is one self-contained file, unless the install allows folders.</p>
-        <p>Pages there cannot use browser storage, popups, or form submission.</p>
-      </div>
-      <p><a class="more" href={sitePath("docs/security.html#the-three-access-states")}>Read what each one protects</a></p>
-    </div>
-  </section>
-
-  <section class="part rows close frame" aria-labelledby="close">
-    <h2 id="close">Not released.</h2>
-    <dl class="rows-list">
-      <div>
-        <dt>There is no install command yet.</dt>
-        <dd>
-          Poplin is in development. The <a href={sitePath("docs/")}>documentation</a> and the
-          <a href={REPOSITORY_URL}>source</a> are public, and one page <a href={sitePath("compare/")}>compares it with other tools</a>.
-        </dd>
-      </div>
-    </dl>
-  </section>
-
-  {
-    example !== undefined && exampleAddress !== undefined && (
-      <dialog class="example" aria-labelledby="example-title">
-        <header class="example-head">
-          <h2 id="example-title">
-            <Fragment set:html={example.titleHtml === "" ? example.name : example.titleHtml} />
-          </h2>
-          <a class="example-out" href={exampleAddress} target="_blank" rel="noopener">Open in a new tab</a>
-          <button class="example-close" type="button" autofocus>Close</button>
-        </header>
-        <iframe title="An example of a page published with poplin" sandbox="allow-scripts" />
-      </dialog>
-    )
+<style>
+  .hero {
+    padding-block: clamp(36px, 8vh, 80px) clamp(40px, 6vw, 64px);
   }
-</Page>
 
-<script>
-  // The example link is a plain link; with script it opens the same page over this one, in a dialog.
-  const dialog = document.querySelector<HTMLDialogElement>("dialog.example");
-  const frame = dialog?.querySelector("iframe");
+  .hero > p {
+    margin-top: 14px;
+    color: var(--muted);
+    font-size: 1.125rem;
+    text-wrap: pretty;
+  }
 
-  if (dialog && frame && typeof dialog.showModal === "function") {
-    let opener: HTMLAnchorElement | undefined;
+  /* The first thing a visitor can do, right under what the product is. */
+  .paste {
+    margin-top: 28px;
+  }
 
-    for (const link of document.querySelectorAll<HTMLAnchorElement>("a[data-example]")) {
-      link.addEventListener("click", (event) => {
-        // A click that asks for a new tab or window keeps its meaning.
-        if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+  .paste :global(.copy) {
+    display: flex;
+    align-items: center;
+  }
 
-        event.preventDefault();
-        opener = link;
-        frame.src = link.href;
-        dialog.showModal();
-      });
+  .paste :global(.copy p) {
+    flex: 1;
+  }
+
+  .paste > p {
+    margin-bottom: 8px;
+    color: var(--muted);
+    font-size: 0.8125rem;
+  }
+
+  /* The rail runs the whole way down; each step hangs a dot on it. */
+  .path {
+    position: relative;
+    padding-left: 28px;
+  }
+
+  .path::before {
+    content: "";
+    position: absolute;
+    left: 3px;
+    top: 8px;
+    bottom: 12px;
+    width: 1px;
+    background: var(--rule);
+  }
+
+  .step {
+    position: relative;
+    display: grid;
+    grid-template-columns: 252px minmax(0, 1fr);
+    gap: 20px 40px;
+    align-items: start;
+    padding-bottom: clamp(48px, 6vw, 72px);
+  }
+
+  .wide {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .last {
+    padding-bottom: 0;
+  }
+
+  .step::before,
+  .runner {
+    content: "";
+    position: absolute;
+    left: -28px;
+    top: 7px;
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+  }
+
+  .step::before {
+    background: var(--bg);
+    box-shadow: inset 0 0 0 1.5px var(--muted);
+  }
+
+  .runner {
+    background: var(--accent);
+    opacity: 0;
+  }
+
+  .say p {
+    margin-top: 8px;
+    color: var(--muted);
+    font-size: 1rem;
+    line-height: 1.5;
+    text-wrap: pretty;
+  }
+
+  /* A sentence above a full-width figure keeps a reading measure. */
+  .wide .say p {
+    max-width: 62ch;
+  }
+
+  /* A plain link in the accent ink, with the page's small arrow: the way to the running demo, when there is one. */
+  .more {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    margin-top: 14px;
+    color: var(--accent-text);
+    font-size: 0.9375rem;
+    font-weight: 600;
+    text-decoration: none;
+  }
+
+  .more:hover {
+    text-decoration: underline;
+  }
+
+  .more svg {
+    width: 12px;
+    height: 12px;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.6;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+
+  .say :global(.seg) {
+    margin-top: 16px;
+  }
+
+  .wrap {
+    padding-bottom: clamp(56px, 8vw, 96px);
+  }
+
+  /* The publish travels down the rail from the request to the site. */
+  @media (prefers-reduced-motion: no-preference) {
+    .path.play .runner {
+      animation: travel 400ms var(--ease) 1450ms both;
+    }
+  }
+
+  @keyframes travel {
+    from {
+      top: 7px;
+      opacity: 1;
     }
 
-    dialog.querySelector("button")?.addEventListener("click", () => dialog.close());
-    // The dialog fills its box with its own parts, so a press and a release that both land on the dialog itself are on the backdrop.
-    let pressedOutside = false;
-    dialog.addEventListener("pointerdown", (event) => {
-      pressedOutside = event.target === dialog;
-    });
-    dialog.addEventListener("click", (event) => {
-      if (pressedOutside && event.target === dialog) dialog.close();
-    });
-    // Focus may have gone into the framed page, where the browser cannot hand it back by itself.
-    dialog.addEventListener("close", () => {
-      frame.removeAttribute("src");
-      opener?.focus();
-    });
+    85% {
+      opacity: 1;
+    }
+
+    to {
+      top: 100%;
+      opacity: 0;
+    }
   }
-</script>
+
+  @media (max-width: 720px) {
+    .path {
+      padding-left: 20px;
+    }
+
+    .step {
+      grid-template-columns: minmax(0, 1fr);
+    }
+
+    .step::before,
+    .runner {
+      left: -20px;
+    }
+  }
+</style>
