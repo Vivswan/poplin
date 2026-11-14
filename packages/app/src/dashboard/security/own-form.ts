@@ -19,7 +19,8 @@ export async function readOwnForm(request: Request, binding: Parameters<typeof c
 
   if (!isSameOrigin(request)) return { ok: false, code: "not_from_here", status: 403 };
 
-  const form = readForm(await request.text());
+  // Read as bytes: the Workers runtime logs a warning on every `text()` of a body whose type is not text.
+  const form = readForm(new TextDecoder().decode(await request.arrayBuffer()));
   if (!(await checkCsrfToken(form.get("csrf") ?? "", binding))) return { ok: false, code: "not_from_here", status: 403 };
 
   return { ok: true, form };
