@@ -14,7 +14,7 @@ after:   https://poplin.example.com                       your dashboard
          report--k3f9x2ab71qz-p-poplin.example.com        every site you publish
 ```
 
-Steps 1 to 6 happen in your browser, and after them your dashboard works. Step 7 logs in the computer you publish from. Allow half an hour.
+Steps 1 to 6 happen in your browser, and after them your dashboard works. Step 7 logs in the computer you publish from. The first time, allow an hour to an hour and a half.
 
 Three words the steps use: a **Worker** is the program Cloudflare runs for you, a **token** is a long password that lets a program change your Cloudflare account, and a **terminal** is the window where you type commands (Terminal on a Mac, PowerShell on Windows).
 
@@ -23,14 +23,21 @@ Three words the steps use: a **Worker** is the program Cloudflare runs for you, 
 | Thing                              | Why                                                                              |
 | ---------------------------------- | -------------------------------------------------------------------------------- |
 | a Cloudflare account               | the Free plan is enough                                                          |
-| a domain on that account           | poplin gives every site an address under it                                      |
+| a domain on that account           | poplin gives every site an address under it. It is on the account when Cloudflare's home page lists it as Active |
+| an email inbox you can read        | Cloudflare's login sends its code there in step 6                                |
 | a payment method on the account    | Cloudflare asks for one in step 1, also for what is free. Poplin's use fits the free allowances |
 | a GitHub account                   | free. Step 2 puts a copy of poplin's code there, which Cloudflare builds from    |
-| Node.js, on your own computer      | for step 7 alone                                                                 |
+| Node.js, on your own computer      | for step 7 alone. It comes from nodejs.org                                       |
+
+**A domain that is not on Cloudflare yet** is added on Cloudflare's home page. Cloudflare then asks you to change the domain's nameservers where you bought it, and the domain turns Active up to a day later.
 
 ## The steps
 
-1. **Switch on two things in Cloudflare.** No program can do this for you. Each asks for a payment method.
+1. **Switch on two things in Cloudflare.** Open the address below and log in. No program can do this for you. Each asks for a payment method, and each shows a price of 0: Zero Trust's Free plan costs nothing, and R2 bills nothing under 10 GB, which poplin stays under.
+
+   ```text
+   https://dash.cloudflare.com
+   ```
 
    | Open                          | Do                                         | It is                                  |
    | ----------------------------- | ------------------------------------------ | -------------------------------------- |
@@ -39,7 +46,7 @@ Three words the steps use: a **Worker** is the program Cloudflare runs for you, 
 
    The team name can be any word: it only names your login page. Each is done when Cloudflare shows its overview instead of the sign-up.
 
-2. **Make the Worker.** Click the button and sign in to GitHub when asked. Leave every box of the form as it is, and press the button at its end. The names it suggests must stay: the project `poplin`, the bucket `poplin-sites`, the database `poplin`.
+2. **Make the Worker.** Click the button and sign in to GitHub when asked. Where the form asks for an account, pick your own, for the code and for Cloudflare. Change nothing else, and press the button at its end. The names it suggests must stay: the project `poplin`, the bucket `poplin-sites`, the database `poplin`.
 
    [![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/Vivswan/poplin)
 
@@ -55,9 +62,9 @@ Three words the steps use: a **Worker** is the program Cloudflare runs for you, 
 
    | Type | Name             | Value                              | Yours in place of                                                   |
    | ---- | ---------------- | ---------------------------------- | ------------------------------------------------------------------- |
-   | JSON | `ZONE`           | `{"domain": "example.com"}`        | `example.com`: your domain                                          |
-   | JSON | `FIRST_SETTINGS` | `{"logins": "you@example.com"}`    | `you@example.com`: your email, in lowercase. It is the first login  |
-   | Text | `ACCOUNT_ID`     | `0123456789abcdef0123456789abcdef` | the whole value: your Account ID, 32 letters and digits, shown on the right of the Workers & Pages overview |
+   | JSON | `ZONE`           | `{"domain": "example.com"}`        | `example.com`: your domain alone, with no `https://` and no `www`   |
+   | JSON | `FIRST_SETTINGS` | `{"logins": "you@example.com"}`    | `you@example.com`: any email whose inbox you can read, in lowercase. It is the first login |
+   | Text | `ACCOUNT_ID`     | `0123456789abcdef0123456789abcdef` | the whole value: your Account ID, 32 letters and digits, shown on the right of the Workers & Pages overview. Copy it; do not retype it |
 
    Until all three are right, the Worker's address answers the short page, which names what is still missing or wrong.
 
@@ -108,17 +115,22 @@ Three words the steps use: a **Worker** is the program Cloudflare runs for you, 
    Access application   created   poplin: poplin.example.com/login, *-p-poplin.example.com
    ```
 
-   The token is used for that one request and kept nowhere. **A row that says failed** names what Cloudflare refused: most often a row missing from the token. On the page of step 4, open the token's menu, choose Edit, add the row, and press Repair again. Repair is safe to repeat.
+   The token is used for that one request and kept nowhere. **A row that says failed** names what Cloudflare refused: most often a row missing from the token. Repair is safe to repeat.
 
-6. **Open your dashboard and log in.** Cloudflare's login asks for your email and sends it a code. A new address can take a few minutes to answer. No code means the email differs from the one in step 3.
+   | You                         | Do, on Cloudflare's API Tokens page                                                                           |
+   | --------------------------- | ------------------------------------------------------------------------------------------------------------- |
+   | still have the token's text | open the token's menu, choose Edit, add the row, save. The same text works: paste it and press Repair again   |
+   | no longer have it           | open the token's menu and choose Roll: Cloudflare shows a new text once. Add the row, then paste the new text |
+
+6. **Open your dashboard and log in.** Cloudflare's login asks for your email and sends a code to its inbox. A new address can take a few minutes to answer. No code means the email differs from the one in step 3.
 
    ```text
    https://poplin.example.com
    ```
 
-   This first login closes the setup page for good.
+   This first login closes the setup page for good. Your dashboard works now: step 7 is for the computer that publishes.
 
-7. **Log a computer in, and check.** Open a terminal on the computer you publish from. It needs Node.js installed. The first command opens your dashboard, where you allow the computer.
+7. **Log a computer in, and check.** Open a terminal on the computer you publish from. It needs Node.js, which comes from nodejs.org. Type each line and press Enter. The first opens your dashboard, where you allow the computer.
 
    ```sh
    npx poplin login --server https://poplin.example.com
