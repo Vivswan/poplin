@@ -47,7 +47,7 @@ If it is logged in to an install the user did not expect, say so and ask before 
 
 You need the address of the user's install. If the user has not told you, ask: "What is the address of your poplin install?" Do not guess one, and do not search the computer for one.
 
-If the user has no install, say so plainly: poplin needs an install in their own Cloudflare account before anything can be published, and you cannot make one for them from here. Point them to the `docs/` folder of the poplin repository, and stop.
+If the user has no install, say so plainly: poplin needs an install in their own Cloudflare account before anything can be published, and you cannot make one for them from here. Point them to <https://github.com/Vivswan/poplin/blob/main/docs/install.md>, and stop.
 
 With the address, run the login. It prints a web address and a short code, and then waits for the user, so run it in a way that lets you read its output while it is still running:
 
