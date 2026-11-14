@@ -21,11 +21,14 @@ const TOOLS: readonly string[] = Object.keys(TOOL_INPUTS);
 /** The day the pages' command lines are read on: before every date they give `--expires`, whatever day the test runs. */
 const READ_ON = Date.UTC(2026, 0, 1);
 
-/** The words written with an underscore that are neither a tool nor a code: an input of a tool, and a folder that is never uploaded. */
-const OTHER_WORDS: readonly string[] = ["public_name", "node_modules"];
+/** Every input a tool takes, as its schema names it. */
+const INPUTS: readonly string[] = Object.values(TOOL_INPUTS).flatMap((input) => Object.keys(input.entries));
 
-/** A word in a code span that is written the way tools and refusal codes are: lowercase words joined by underscores. */
-const SNAKE_WORD = /`([a-z]+(?:_[a-z]+)+)`/g;
+/** The words in code font that are no tool, input, or code: what an answer and `whoami` name, the three values of `access`, the two words of the server's entry, and a folder that is never uploaded. */
+const OTHER_WORDS: readonly string[] = ["url", "code", "install", "role", "token", "expires", "private", "unlisted", "public", "poplin", "npx", "node_modules"];
+
+/** One lowercase word, or several joined by underscores: the way tools, their inputs, and refusal codes are written. */
+const WORD = /^[a-z]+(?:_[a-z]+)*$/;
 
 /** The page that holds the table of refusals. */
 const REFUSALS_PAGE = "references/refusals.md";
@@ -75,6 +78,25 @@ async function readAll(): Promise<string> {
   return (await Promise.all(PAGES.map(read))).join("\n");
 }
 
+/** The text of every code span of a page, as Bun's Markdown parser reads it: table cells included, fenced blocks left out. */
+function codeSpans(text: string): string[] {
+  const spans: string[] = [];
+
+  Bun.markdown.render(
+    text,
+    {
+      codespan: (span) => {
+        spans.push(span);
+
+        return "";
+      },
+    },
+    { tables: true },
+  );
+
+  return spans;
+}
+
 function matches(text: string, pattern: RegExp, group = 0): string[] {
   return [...new Set([...text.matchAll(pattern)].map((match) => match[group] ?? ""))].sort();
 }
@@ -102,10 +124,11 @@ describe("the agent skill", () => {
     expect(frontmatter).toEqual({ name: "poplin", description: expect.stringMatching(/^Use when /) });
   });
 
-  test("the pages cover every tool and name no other: without this a renamed or removed tool stays in a page an agent follows", async () => {
-    const named = matches(await readAll(), SNAKE_WORD, 1).filter((word) => !OTHER_WORDS.includes(word) && !isCode(word));
+  test("the pages cover every tool, and every other word in code font is an input of a tool or a code: without this a renamed tool or input, of one word or several, stays in a page an agent follows", async () => {
+    const words = (await Promise.all(PAGES.map(read))).flatMap(codeSpans).filter((span) => WORD.test(span));
+    const named = [...new Set(words)].filter((word) => !OTHER_WORDS.includes(word) && !INPUTS.includes(word) && !isCode(word));
 
-    expect(named).toEqual([...TOOLS].sort());
+    expect(named.sort()).toEqual([...TOOLS].sort());
   });
 
   test("every code in the table of refusals is one the CLI answers with: without this a renamed code, of one word or several, stays in the table an agent looks a refusal up in", async () => {

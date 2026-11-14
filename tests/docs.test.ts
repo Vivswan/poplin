@@ -15,7 +15,7 @@ import { words } from "../packages/cli/tests/commands/support/command-line";
 const ROOT = join(import.meta.dir, "..");
 
 /** The pages a person reads, as paths from the root. */
-const PAGES: readonly string[] = ["README.md", "docs/README.md", "docs/using.md", "docs/install.md", "packages/cli/README.md"];
+const PAGES: readonly string[] = ["README.md", "docs/README.md", "docs/using.md", "docs/install.md", "docs/security.md", "packages/cli/README.md"];
 
 /** Every Markdown page of the repository, the ones a person reads among them. */
 const MARKDOWN = new Bun.Glob("**/*.md");
@@ -47,6 +47,9 @@ const REFUSALS_HEADING = "## When poplin refuses";
 /** The files of the OpenTofu module that declare its inputs and outputs. */
 const MODULE_FILES: readonly string[] = ["packages/cloudflare/tofu/variables.tf", "packages/cloudflare/tofu/outputs.tf"];
 
+/** The pages that name the module's inputs and outputs. On every other page a word spelled like one must be a tool, an input of a tool, a setting, or a code. */
+const MODULE_PAGES: readonly string[] = ["docs/install.md"];
+
 /** The words written with an underscore that are none of the above: a folder that is never uploaded. */
 const OTHER_WORDS: readonly string[] = ["node_modules"];
 
@@ -61,6 +64,9 @@ const SPAN = /`([^`\n]+)`/g;
 
 /** A command line of the CLI at the start of a line or a span, after a prompt and `npx` when they are there; the command is the first group. */
 const COMMAND_LINE = /^\s*(?:\$ )?(?:npx )?(poplin [^\n]*)$/;
+
+/** A command line that is a command's name and nothing else, the way a sentence names a command; the name is the first group. */
+const COMMAND_ALONE = /^poplin ([a-z-]+)$/;
 
 /** What ends a command on its line: a comment, or an arrow to what it does. */
 const AFTER_COMMAND = /\s+(?:#|->)\s.*$/;
@@ -165,6 +171,13 @@ function commandLines(page: Pick<Page, "spans" | "blocks">): string[] {
   return unique([...fenced, ...page.spans].flatMap((line) => COMMAND_LINE.exec(line)?.[1]?.replace(AFTER_COMMAND, "") ?? []));
 }
 
+/** Whether a line is the name of a command of the CLI's table and nothing else. A sentence names a command that way, and the parser would refuse some of them for an argument they lack. */
+function namesCommand(line: string): boolean {
+  const name = COMMAND_ALONE.exec(line)?.[1];
+
+  return COMMANDS.some((spec: CommandSpec) => spec.name === name);
+}
+
 /** Whether the CLI's table holds the code: the table is not exported, and a code it lacks has no sentence, or throws. */
 function isCode(word: string): boolean {
   try {
@@ -212,17 +225,24 @@ describe("the pages a person reads", () => {
       const lines = commandLines(await parse(path));
       expect(lines.length).toBeGreaterThan(0);
 
-      for (const line of lines) {
+      for (const line of lines.filter((written) => !namesCommand(written))) {
         const parsed = parseCommand(words(line), NOW);
         if (parsed.kind === "usage-error") refusals.push(`${path}: ${line}: ${parsed.message}`);
       }
     }
 
     expect(refusals).toEqual([]);
+    expect(["poplin new-link", "poplin no-such-command", "poplin new-link --no-such-flag"].filter(namesCommand)).toEqual(["poplin new-link"]);
     expect(commandLines({ spans: ["poplin list --trash", "poplin.example.com"], blocks: ["$ npx poplin ./report --site report   # new content\n"] })).toEqual([
       "poplin ./report --site report",
       "poplin list --trash",
     ]);
+  });
+
+  test("the using page runs every command of the CLI in an example: without this a new command is never shown to the person who would run it", async () => {
+    const run = new Set<string>(commandLines(await parse(USING_PAGE)).map((line) => parseCommand(words(line), NOW).kind));
+
+    expect(COMMANDS.map((spec: CommandSpec) => spec.name).filter((name) => !run.has(name))).toEqual([]);
   });
 
   test("every flag a page names on its own is one a command takes: without this a removed flag stays in a sentence", async () => {
@@ -236,11 +256,17 @@ describe("the pages a person reads", () => {
   test("every word written like a tool, a code, a setting, or a module input is one: without this a renamed one stays in a page", async () => {
     const module = (await Promise.all(MODULE_FILES.map(read))).flatMap((text) => groups(text, MODULE_NAME));
     const inputs = Object.values(TOOLS).flatMap((tool) => Object.keys(tool.parameters));
-    const known = new Set<string>([...Object.keys(TOOLS), ...inputs, ...Object.keys(SETTING_SAMPLES), ...module, ...OTHER_WORDS]);
-    const named = (await Promise.all(PAGES.map(parse))).flatMap((page) => page.spans).filter((span) => SNAKE_WORD.test(span));
+    const known = [...Object.keys(TOOLS), ...inputs, ...Object.keys(SETTING_SAMPLES), ...OTHER_WORDS];
+    const unknown: string[] = [];
+
+    for (const path of PAGES) {
+      const here = new Set<string>(MODULE_PAGES.includes(path) ? [...known, ...module] : known);
+      const named = (await parse(path)).spans.filter((span) => SNAKE_WORD.test(span));
+      unknown.push(...unique(named).flatMap((word) => (here.has(word) || isCode(word) ? [] : `${path}: ${word}`)));
+    }
 
     expect(module.length).toBeGreaterThan(0);
-    expect(unique(named).filter((word) => !known.has(word) && !isCode(word))).toEqual([]);
+    expect(unknown).toEqual([]);
   });
 
   test("every value an example gives the module is an input the module declares: without this a removed input stays in the file a person copies", async () => {
