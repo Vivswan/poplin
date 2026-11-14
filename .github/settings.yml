@@ -186,7 +186,7 @@ rulesets:
           actor_type: RepositoryRole
           bypass_mode: always
 environments:
-  - name: bench
+  - name: cloudflare-live-tests
     wait_timer: 0
     prevent_self_review: false
     reviewers: []
