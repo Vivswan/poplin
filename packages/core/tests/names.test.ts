@@ -28,7 +28,7 @@ describe("parseSiteName", () => {
     ["my report", { ok: false, refusal: "bad-character" }],
     ["my_report", { ok: false, refusal: "bad-character" }],
     ["report.v2", { ok: false, refusal: "bad-character" }],
-    ["caf\u00e9", { ok: false, refusal: "bad-character" }],
+    ["z\u00fcrich", { ok: false, refusal: "bad-character" }],
     ["report\n", { ok: false, refusal: "bad-character" }],
     ["-report", { ok: false, refusal: "leading-dash" }],
     ["report-", { ok: false, refusal: "trailing-dash" }],
