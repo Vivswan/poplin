@@ -1,0 +1,9 @@
+{
+  "name": "@poplin/app",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@poplin/core": "workspace:*",
+    "cloudflare": "7.3.0"
+  }
+}

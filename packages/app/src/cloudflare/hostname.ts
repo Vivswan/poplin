@@ -1,0 +1,43 @@
+// A hostname as DNS and Cloudflare's rule language may see it: lowercase ASCII labels only, so it holds no quote, backslash, or wildcard.
+
+const MAX_HOSTNAME_LENGTH = 253;
+const LABEL = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/;
+
+declare const hostnameBrand: unique symbol;
+
+/** A string that passed `parseHostname`; no other code can make one. */
+export type Hostname = string & { readonly [hostnameBrand]: true };
+
+/** Why a string was refused. `single-label` means it has no dot, so it names no host under a domain. */
+type HostnameRefusal = "empty" | "too-long" | "single-label" | "bad-label";
+
+/** A hostname, or the first rule the string breaks. */
+export type CheckedHostname = { readonly ok: true; readonly value: Hostname } | { readonly ok: false; readonly refusal: HostnameRefusal };
+
+/**
+ * Decide whether a string is a hostname.
+ *
+ * @param raw - compared as given: capitals, a trailing dot, and a wildcard label are refused, never repaired
+ * @returns the hostname, or the first rule it breaks
+ */
+export function parseHostname(raw: string): CheckedHostname {
+  if (raw.length === 0) return { ok: false, refusal: "empty" };
+
+  if (raw.length > MAX_HOSTNAME_LENGTH) return { ok: false, refusal: "too-long" };
+
+  const labels = raw.split(".");
+  if (labels.length < 2) return { ok: false, refusal: "single-label" };
+
+  if (!labels.every((label) => LABEL.test(label))) return { ok: false, refusal: "bad-label" };
+
+  return { ok: true, value: raw as Hostname };
+}
+
+/**
+ * Decide whether a hostname sits below another.
+ *
+ * @returns `false` for the parent itself
+ */
+export function isUnder(hostname: Hostname, parent: Hostname): boolean {
+  return hostname.endsWith(`.${parent}`);
+}

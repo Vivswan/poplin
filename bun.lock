@@ -12,6 +12,13 @@
         "typescript": "7.0.2",
       },
     },
+    "packages/app": {
+      "name": "@poplin/app",
+      "dependencies": {
+        "@poplin/core": "workspace:*",
+        "cloudflare": "7.3.0",
+      },
+    },
     "packages/core": {
       "name": "@poplin/core",
       "dependencies": {
@@ -269,6 +276,8 @@
 
     "@oxc-resolver/binding-win32-x64-msvc": ["@oxc-resolver/binding-win32-x64-msvc@11.24.2", "", { "os": "win32", "cpu": "x64" }, "sha512-UqGPmo56KDfLlfXFAFIrNflHT8tFxWGEivWg3Zeyp4Uy2NlKN1FGPr6/BxcLGG3+kZ6Wp14g5Uj+n71boqZfiw=="],
 
+    "@poplin/app": ["@poplin/app@workspace:packages/app"],
+
     "@poplin/core": ["@poplin/core@workspace:packages/core"],
 
     "@poplin/worker": ["@poplin/worker@workspace:packages/worker"],
@@ -382,6 +391,8 @@
     "chai": ["chai@6.3.0", "", {}, "sha512-XWAtwJ6OHO+tj0EKCs0Y2UamnyOxseZWltU4x2U2wh8g4AigdjwvtUjvLP2tqkA/avxHEtzxNaqGq/YGNwckKg=="],
 
     "cjs-module-lexer": ["cjs-module-lexer@1.2.3", "", {}, "sha512-0TNiGstbQmCFwt4akjjBg5pLRTSyj/PkWQ1ZoO2zntmg9yLqSRxwEa4iCfQLGjqhiqBfOJa7W/E8wfGrTDmlZQ=="],
+
+    "cloudflare": ["cloudflare@7.3.0", "", { "bin": { "cloudflare": "bin/cli" } }, "sha512-0P4cMFjzdIe388E57xNCV2wKzv1ZVZqMFu7+p2gsZuggbXs39xTKtXJN8FACkKh+xjLQ7dNruNlT/aT+9ajJtg=="],
 
     "cookie": ["cookie@1.1.1", "", {}, "sha512-ei8Aos7ja0weRpFzJnEA9UHJ/7XQmqglbRwnf2ATjcB9Wq874VKH9kfjjirM6UhU2/E5fFYadylyhFldcqSidQ=="],
 
