@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { join, relative } from "node:path";
+import { dirname, join } from "node:path";
 
 import { LIMITS, ORIGIN } from "../../../app/tests/api/support/install";
 import { TOOL_INPUTS } from "../../../core/src/actions/tool-inputs";
@@ -103,10 +103,12 @@ describe("the MCP server", () => {
 
   test("a relative path is read from the server's working directory and answered as the absolute path: an agent told nothing cannot know which folder went up", async () => {
     const bench = await open();
-    const page = join(folderOf("pages", { "one-page.html": "<title>One page</title>" }), "one-page.html");
-    const made = await bench.call("publish_site", { path: relative(process.cwd(), page) });
+    const home = process.cwd();
+    // The working directory moves to the scratch folder: on Windows that folder may be on another drive, and no relative path crosses drives.
+    process.chdir(dirname(folderOf("pages", { "one-page.html": "<title>One page</title>" })));
+    const page = join(process.cwd(), "pages", "one-page.html");
+    const made = await bench.call("publish_site", { path: "./pages/one-page.html" }).finally(() => process.chdir(home));
 
-    expect(relative(process.cwd(), page)).not.toBe(page);
     expect(made.data.path).toBe(page);
     expect(made.text.split("\n")[0]).toBe(`read ${page}`);
     expect(siteOf(made).label.startsWith("one-page--")).toBe(true);
@@ -178,6 +180,7 @@ describe("the MCP server", () => {
     ["an expiry that is no span or day", "update_site", { site: "SECOND", expires: "soon" }, "bad_argument"],
     ["a name with a site to update", "publish_site", { path: "LARGE", site: "SECOND", name: "other" }, "bad_argument"],
     ["a site that is a path", "delete_site", { site: "./report" }, "bad_argument"],
+    ["a site that is a Windows path", "delete_site", { site: "C:\\report" }, "bad_argument"],
     ["an empty path", "publish_site", { path: "" }, "bad_argument"],
     ["a name that breaks the rules", "publish_site", { path: "LARGE", name: "Q3 Report" }, "bad_name"],
     ["a folder that is not there", "publish_site", { path: "/no/such/folder" }, "unreadable"],
