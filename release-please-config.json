@@ -7,7 +7,7 @@
     ".": {
       "$comment": "Written once by Vivswan/repo-platform, never overwritten by a later sync - edit freely",
       "release-type": "simple",
-      "initial-version": "0.0.1",
+      "initial-version": "0.1.0",
       "draft": true,
       "force-tag-creation": true,
       "extra-files": [{ "type": "json", "path": "packages/cli/package.json", "jsonpath": "$.version" }]
