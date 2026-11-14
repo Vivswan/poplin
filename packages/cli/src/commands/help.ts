@@ -94,6 +94,10 @@ function commandHelp(spec: CommandSpec): string {
     ...section("flags", spec.flags.map(flagRow)),
     ...section("keys", keys),
     ...section(
+      "notes",
+      (spec.notes ?? []).map((line) => `  ${line}`),
+    ),
+    ...section(
       "examples",
       spec.examples.map((example) => `  ${example}`),
     ),

@@ -1,7 +1,7 @@
 {
   "name": "poplin",
   "version": "0.0.0",
-  "description": "Publish static sites to your own Cloudflare account: private by default, shareable by secret link, or public.",
+  "description": "Publish static sites to your own Cloudflare account: private by default, unlisted, or public.",
   "license": "SEE LICENSE IN LICENSE.md",
   "repository": {
     "type": "git",

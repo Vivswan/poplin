@@ -1,9 +1,10 @@
 // The settings of one site, as `publish` and `set` both read them from the same flags.
 
+import { defaultExpiry } from "../../../core/src/actions/changes";
 import type { PublicName } from "../../../core/src/names/names";
 import type { SettingValues } from "../../../core/src/records/settings";
 import { readSetting } from "./install-settings";
-import { type Flags, isUsageError, type UsageError, usageError, flagValue } from "./util";
+import { type Flags, flagValue, isUsageError, type UsageError, usageError } from "./util";
 
 /** The three access flags, each with the access it sets. */
 const ACCESS_FLAGS = [
@@ -17,6 +18,9 @@ const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 
 /** How many characters of an ISO moment are its date. */
 const DATE_LENGTH = 10;
+
+/** What `--expires` takes, for the hint of a refused one. */
+const EXPIRY_FORMS = "a span is a count of s, m, h, or d: 7d. A date is 2026-12-01";
 
 /** A time span as core counts one: a count of seconds, minutes, hours, or days. */
 type Span = Exclude<SettingValues["default_expires"], "never">;
@@ -44,6 +48,11 @@ function isCalendarDate(text: string): boolean {
   return moment.toISOString().slice(0, DATE_LENGTH) === text;
 }
 
+/** Whether an install takes a moment as an expiry: a whole number of milliseconds after `now`. */
+function isAhead(moment: number | "never", now: number): boolean {
+  return moment === "never" || (Number.isSafeInteger(moment) && moment > now);
+}
+
 function readSwitch(flags: Flags, name: string): boolean | undefined | UsageError {
   const word = flagValue(flags, name);
   if (word === undefined) return undefined;
@@ -52,17 +61,22 @@ function readSwitch(flags: Flags, name: string): boolean | undefined | UsageErro
   return readSetting("default_search_engines", word) ?? usageError(`${name} takes on or off, not ${JSON.stringify(word)}`);
 }
 
-function readExpiry(flags: Flags): Expiry | undefined | UsageError {
+function readExpiry(flags: Flags, now: number): Expiry | undefined | UsageError {
   const when = flagValue(flags, "--expires");
   if (when === undefined) return undefined;
 
-  if (isCalendarDate(when)) return { kind: "date", date: when };
+  if (isCalendarDate(when)) {
+    if (!isAhead(Date.parse(`${when}T00:00:00Z`), now)) return usageError(`--expires ${when} is not ahead: that day has started`, EXPIRY_FORMS);
+
+    return { kind: "date", date: when };
+  }
 
   const span = readSetting("default_expires", when);
-  if (span === undefined)
-    return usageError(`--expires takes a span, a date, or never, not ${JSON.stringify(when)}`, "a span is a count of s, m, h, or d: 7d. A date is 2026-12-01");
+  if (span === undefined) return usageError(`--expires takes a span, a date, or never, not ${JSON.stringify(when)}`, EXPIRY_FORMS);
 
   if (span === "never") return { kind: "never" };
+
+  if (!isAhead(defaultExpiry(span, now), now)) return usageError(`--expires ${when} is too far ahead`, EXPIRY_FORMS);
 
   return { kind: "span", span };
 }
@@ -79,9 +93,10 @@ function readAccess(flags: Flags): SiteSettings["access"] | UsageError {
 /**
  * Read the settings flags of `publish` and `set`.
  *
+ * @param now - the time, in milliseconds since the epoch; an expiry must lie after it
  * @returns the settings that were given, without the public name, or the first flag that was written wrong
  */
-export function readSiteSettings(flags: Flags): SiteSettings | UsageError {
+export function readSiteSettings(flags: Flags, now: number): SiteSettings | UsageError {
   const access = readAccess(flags);
   if (isUsageError(access)) return access;
 
@@ -91,7 +106,7 @@ export function readSiteSettings(flags: Flags): SiteSettings | UsageError {
   const embeddable = readSwitch(flags, "--embeddable");
   if (isUsageError(embeddable)) return embeddable;
 
-  const expires = readExpiry(flags);
+  const expires = readExpiry(flags, now);
   if (isUsageError(expires)) return expires;
 
   const title = flagValue(flags, "--title");

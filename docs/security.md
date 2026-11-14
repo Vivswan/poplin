@@ -22,8 +22,8 @@ https://report--k3f9x2ab71qz-page.example.com
 
 | Threat | Covered | How |
 | --- | --- | --- |
-| guessing the address | yes | 62 random bits, and a rate limit per visitor that counts a miss three times |
-| search engines | yes | `X-Robots-Tag: noindex` on every unlisted site, a robots file, and no public listing of unlisted sites |
+| guessing the address | yes | 62 random bits, and a limit on the requests one visitor makes in a minute |
+| search engines | yes | `X-Robots-Tag: noindex` on every file of an unlisted site, and no public listing of unlisted sites |
 | certificate logs | yes | one wildcard certificate covers every site, so no name is published |
 | DNS listing | yes | one wildcard record |
 | the next site's referrer | yes | `Referrer-Policy: no-referrer` on every page |
@@ -46,7 +46,14 @@ https://report--k3f9x2ab71qz-page.example.com
 | unlisted | the same address | anyone who has the address | the address alone |
 | public | the same address, and a name the site claims: `report-page.example.com` | everyone | nothing |
 
-A state changes in place: the site, its files, and its address stay. A public name belongs to one site at a time, and stays with that site through `poplin new-link`. A public site is kept out of search engines until the owner switches that on for the site.
+A state changes in place: the site, its files, and its address stay. A public name belongs to one site at a time, and stays with that site through `poplin new-link`.
+
+| Switch for search engines | Set on | Off, the default | On |
+| --- | --- | --- | --- |
+| `search_engines` | one public site | its files carry `X-Robots-Tag: noindex` | they do not |
+| `search_engines_allowed` | the install | the bots rule at Cloudflare's edge stops the crawlers Cloudflare has verified | the rule lets the crawlers of search engines pass |
+
+A search engine's crawler reads a public site without `noindex` only when both are on, where the zone holds the bots rule.
 
 ## Who holds which credential
 
@@ -80,11 +87,12 @@ Every site hostname answers GET and HEAD only. The Worker refuses every other me
 ## No enumeration
 
 ```text
-budget--x7k2p94mdq1c-page.example.com    private, no cookie   ->  404, with a small "log in" link
-budget--w8t1c5n0ze4u-page.example.com    no such site         ->  the same 404
+budget--x7k2p94mdq1c-page.example.com    private, no cookie   ->  302 to the dashboard's login
+budget--w8t1c5n0ze4u-page.example.com    no such site         ->  the same 302
+budget-page.example.com                  no such public name  ->  404
 ```
 
-A private site without the cookie answers exactly like an address that has no site, so a probe cannot learn which sites exist. The owner reaches private sites from the dashboard.
+Without the cookie, an address with a name and an id answers one redirect when its site is private, in the trash, expired, or was never made. A probe cannot tell a private site from an address that has none. The redirect names the requested address as the place to return to after the login.
 
 ## Hardening
 
@@ -104,15 +112,31 @@ A private site without the cookie answers exactly like an address that has no si
 
 ## Between sites
 
-Each site is its own origin, so a page's scripts cannot read another site or its cookie. No content policy is forced on a site.
+Each site is its own origin, so a page's scripts cannot read another site or its cookie.
 
-| One page asks for | Result |
+| Switch | Set on | Values |
+| --- | --- | --- |
+| `embeddable` | one site | on, the default; off: no page may show the site in a frame |
+| `outside_pages` | the install | `blocked`, the default; `allowed` |
+
+| A page asks for | Another site of the install | A page of another domain, `blocked` | A page of another domain, `allowed` |
+| --- | --- | --- | --- |
+| a link to a site | works | works | works |
+| a site's images, styles, and classic scripts | works | refused with 403 | works |
+| a site in a frame, `embeddable` on | works | refused | works |
+| a site in a frame, `embeddable` off | refused | refused | refused |
+| a site's files, read by its script | refused | refused | refused |
+
+- **A private site needs the viewer's login in every row.** A browser sends no login cookie with a request that a page of another domain makes, so a private site answers none of them.
+- **No script reads another site's files.** No response carries a header that lets another origin's script read it.
+- **A frame rule goes out with every file** unless the site is `embeddable` and `outside_pages` is `allowed`. For an `embeddable` site under `blocked` it names every hostname under the install's domain.
+
+All sites of a domain share the login cookie. The Worker decides from the request's `Sec-Fetch-Site`, `Sec-Fetch-Mode`, `Sec-Fetch-Dest`, `Origin`, and `Referer` headers and reads no content. Opening an address as the top-level page always passes, and so does a request with no `Sec-Fetch-Site` header.
+
+| Under `blocked`, a page under the install's domain that is not a site | Result |
 | --- | --- |
-| a link to another site | always works; the visitor goes there themselves |
-| a public or an unlisted site's files | works from any page; for an unlisted site the page must know its address |
-| a private site's files | refused, unless the private site's own list of allowed sites names the asking site; the list is empty by default |
-
-All sites of a domain share the login cookie. The Worker decides the third row from the request's `Origin` and `Sec-Fetch-Site` headers and reads no content. The owner opening a private address is a top-level navigation and is unaffected.
+| its request names it in `Origin`, or in `Referer` when `Origin` holds no address | refused with 403 |
+| its request names no page | passes |
 
 **What a page's scripts can still do:** spend requests against the day's quota. The rate limit per visitor bounds that per address.
 

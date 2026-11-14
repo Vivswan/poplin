@@ -12,11 +12,16 @@ const ROOT = join(import.meta.dir, "..");
 const PORTABLE: readonly string[] = [
   "packages/core",
   "packages/cli",
+  "packages/app/src/api",
   "packages/app/src/sites",
   "packages/app/src/limits",
   "packages/app/src/login/login.ts",
   "packages/app/src/login/session.ts",
   "packages/app/src/login/return-path.ts",
+  "packages/app/tests/sites",
+  "packages/app/tests/limits",
+  "packages/app/tests/login/session.test.ts",
+  "packages/app/tests/login/return-path.test.ts",
 ];
 
 /** The only places the provider lives: portable source imports nothing from them. */
@@ -33,7 +38,10 @@ const PROVIDER_MODULE = /^(?:cloudflare(?:[:/].*)?|@cloudflare\/.*|wrangler(?:\/
 
 /** The provider's names in source text: its binding and handler types, its globals, the `cf` object on a request, the headers and cookies only it sends, and its own hosts. */
 const FORBIDDEN: readonly (readonly [rule: string, pattern: RegExp])[] = [
-  ["provider type", /\b(?:R2[A-Z]\w*|D1[A-Z]\w*|KVNamespace\w*|DurableObject\w*|ExecutionContext|ExportedHandler|CloudflareBindings|Env|Bindings)\b|\bCloudflare\.[A-Z]\w*/g],
+  [
+    "provider type",
+    /\b(?:R2[A-Z]\w*|D1[A-Z]\w*|KVNamespace\w*|DurableObject\w*|ExecutionContext|ExportedHandler|CloudflareBindings|Env|Bindings)\b|\bCloudflare\.[A-Z]\w*/g,
+  ],
   ["provider global", /\bHTMLRewriter\b|\bcaches\.default\b/g],
   ["provider request property", /\.cf\b(?!\s*\()|\[["']cf["']\]|(?<![\w.$"'`-])cf(?=\s*[?:,}])/g],
   ["provider header", /(?<![\w-])cf-[a-z][a-z0-9-]*|(?<![\w-])cf_[a-z]\w*|\b__cf_bm\b|\b__cflb\b/gi],
@@ -41,7 +49,14 @@ const FORBIDDEN: readonly (readonly [rule: string, pattern: RegExp])[] = [
 ];
 
 /** The findings on the tree today that another change removes: `<path>: <what was found>`, then the owner and the reason. A row that finds nothing fails, so the list only shrinks. */
-const ALLOWED: readonly (readonly [finding: string, owner: string, reason: string])[] = [];
+const ALLOWED: readonly (readonly [finding: string, owner: string, reason: string])[] = [
+  [
+    "packages/app/tests/sites/install.ts: ../../src/cloudflare/layout",
+    "serving fixtures",
+    "the fixture should build its addresses without the provider's layout parser",
+  ],
+  ["packages/app/tests/login/session.test.ts: CF_Authorization", "session tests", "a provider's cookie name as test noise"],
+];
 
 /** The files that count as source. */
 const SOURCE_FILE = /\.(?:ts|tsx|mts|cts|js|jsx|mjs|cjs)$/;
@@ -77,7 +92,9 @@ function portableFiles(root: string, kind: RegExp = SOURCE_FILE): string[] {
     }
 
     for (const entry of readdirSync(join(root, place), { recursive: true, withFileTypes: true })) {
-      const path = join(entry.parentPath, entry.name).slice(root.length + 1).replaceAll("\\", "/");
+      const path = join(entry.parentPath, entry.name)
+        .slice(root.length + 1)
+        .replaceAll("\\", "/");
       if (!entry.isFile() || !kind.test(entry.name) || path.split("/").some((part) => SKIPPED_FOLDERS.includes(part))) continue;
 
       files.push(path);
@@ -164,7 +181,8 @@ function sourceFindings(root: string, packages: ReadonlyMap<string, string>): [s
 
     for (const match of text.matchAll(IMPORT)) {
       const specifier = match[1] ?? "";
-      if (isProviderImport(specifier, path, packages)) found.push(["provider import", path, lineOf(text, match.index + match[0].indexOf(specifier)), specifier]);
+      if (isProviderImport(specifier, path, packages))
+        found.push(["provider import", path, lineOf(text, match.index + match[0].indexOf(specifier)), specifier]);
     }
 
     for (const [rule, pattern] of FORBIDDEN) {
@@ -200,7 +218,12 @@ function planted(files: Readonly<Record<string, string>>): DisposableTempDir {
 
 describe("provider code stays out of the portable packages", () => {
   test("drift: a provider's module, type, or header in portable code would make a second provider a rewrite of the product, not a new adapter", () => {
-    expect(violations(ROOT, ALLOWED.map(([finding]) => finding))).toEqual([]);
+    expect(
+      violations(
+        ROOT,
+        ALLOWED.map(([finding]) => finding),
+      ),
+    ).toEqual([]);
     expect(portableFiles(ROOT).length).toBeGreaterThan(0);
   });
 
@@ -215,7 +238,12 @@ describe("provider code stays out of the portable packages", () => {
     ["a re-export", 'export { buildClient } from "../../../app/src/cloudflare/client";', "provider import", "../../../app/src/cloudflare/client"],
     ["the Worker package by name", 'import { r2Storage } from "@poplin/worker/src/r2";', "provider import", "@poplin/worker/src/r2"],
     ["the Worker package by path", 'import { r2Storage } from "../../../worker/src/r2.ts";', "provider import", "../../../worker/src/r2.ts"],
-    ["the Access token check", 'import { verifyAccessToken } from "@poplin/app/src/login/access-token";', "provider import", "@poplin/app/src/login/access-token"],
+    [
+      "the Access token check",
+      'import { verifyAccessToken } from "@poplin/app/src/login/access-token";',
+      "provider import",
+      "@poplin/app/src/login/access-token",
+    ],
     ["an import broken over lines", 'import {\n  buildClient,\n} from\n  "cloudflare";', "provider import", "cloudflare"],
     ["a bucket binding", "function open(bucket: R2Bucket): Storage {", "provider type", "R2Bucket"],
     ["a database binding", "const rows = await (driver as D1Database).batch(statements);", "provider type", "D1Database"],
@@ -253,7 +281,8 @@ describe("provider code stays out of the portable packages", () => {
   test("drift: a portable package whose manifest or TypeScript settings name the provider takes it in with no import to give it away", () => {
     using tree = planted({
       "packages/worker/package.json": '{ "name": "@poplin/worker" }',
-      "packages/core/package.json": '{\n  "name": "@poplin/core",\n  "dependencies": { "valibot": "1.5.0" },\n  "devDependencies": {\n    "wrangler": "4.0.0",\n    "@poplin/worker": "workspace:*"\n  }\n}\n',
+      "packages/core/package.json":
+        '{\n  "name": "@poplin/core",\n  "dependencies": { "valibot": "1.5.0" },\n  "devDependencies": {\n    "wrangler": "4.0.0",\n    "@poplin/worker": "workspace:*"\n  }\n}\n',
       "packages/cli/tsconfig.json": '{\n  "extends": "../../tsconfig.json",\n  "compilerOptions": { "types": ["bun", "@cloudflare/workers-types"] }\n}\n',
     });
 
@@ -270,18 +299,28 @@ describe("provider code stays out of the portable packages", () => {
       "packages/core/src/storage/planted.ts": leak,
       "packages/core/tests/planted.test.ts": leak,
       "packages/cli/scripts/planted.mts": leak,
+      "packages/app/src/api/planted.ts": leak,
       "packages/app/src/sites/planted.ts": leak,
       "packages/app/src/limits/planted.ts": leak,
       "packages/app/src/login/login.ts": leak,
       "packages/app/src/login/session.ts": leak,
       "packages/app/src/login/return-path.ts": leak,
+      "packages/app/tests/sites/planted.ts": leak,
+      "packages/app/tests/limits/planted.test.ts": leak,
+      "packages/app/tests/login/session.test.ts": leak,
+      "packages/app/tests/login/return-path.test.ts": leak,
     });
     const everyPlace = [
+      "provider import: packages/app/src/api/planted.ts:1: cloudflare",
       "provider import: packages/app/src/limits/planted.ts:1: cloudflare",
       "provider import: packages/app/src/login/login.ts:1: cloudflare",
       "provider import: packages/app/src/login/return-path.ts:1: cloudflare",
       "provider import: packages/app/src/login/session.ts:1: cloudflare",
       "provider import: packages/app/src/sites/planted.ts:1: cloudflare",
+      "provider import: packages/app/tests/limits/planted.test.ts:1: cloudflare",
+      "provider import: packages/app/tests/login/return-path.test.ts:1: cloudflare",
+      "provider import: packages/app/tests/login/session.test.ts:1: cloudflare",
+      "provider import: packages/app/tests/sites/planted.ts:1: cloudflare",
       "provider import: packages/cli/scripts/planted.mts:1: cloudflare",
       "provider import: packages/core/src/storage/planted.ts:1: cloudflare",
       "provider import: packages/core/tests/planted.test.ts:1: cloudflare",
@@ -295,7 +334,8 @@ describe("provider code stays out of the portable packages", () => {
   });
 
   test("drift: the rules bind portable places alone; a guard that fired on the provider's own folders, or on provider-free code, would be switched off", () => {
-    const providerCode = 'import Cloudflare from "cloudflare";\nexport function open(env: Env): R2Bucket {\n  return env.BUCKET;\n}\nconst TOKEN_HEADER = "Cf-Access-Jwt-Assertion";\n';
+    const providerCode =
+      'import Cloudflare from "cloudflare";\nexport function open(env: Env): R2Bucket {\n  return env.BUCKET;\n}\nconst TOKEN_HEADER = "Cf-Access-Jwt-Assertion";\n';
     const portableCode = [
       "// One removal stays inside the subrequests a Worker request gets on Cloudflare's Free plan.",
       'import { parseHostname } from "@poplin/app/src/names/hostname";',

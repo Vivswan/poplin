@@ -15,7 +15,7 @@ const EVERYWHERE: readonly FlagSpec[] = [
 /** The flags of every command that talks to an install. */
 const INSTALL_FLAGS: readonly FlagSpec[] = [
   { name: "--json", about: "print the site object, or the error object" },
-  { name: "--server", value: "<address>", about: "which install to talk to, when you have several" },
+  { name: "--server", value: "<address>", about: "the address of the install to talk to" },
   ...EVERYWHERE,
 ];
 
@@ -28,7 +28,7 @@ const SITE_SETTINGS: readonly FlagSpec[] = [
   { name: "--unlisted", about: "anyone who has the address can open it" },
   { name: "--public", about: "everyone can open it, at its public name" },
   { name: "--title", value: "<title>", about: 'its title on your dashboard; "" is the page\'s own' },
-  { name: "--search-engines", value: "on|off", about: "may search engines list it" },
+  { name: "--search-engines", value: "on|off", about: "may search engines list it, if the install allows" },
   { name: "--embeddable", value: "on|off", about: "may other pages show it in a frame" },
   { name: "--expires", value: "<when>", about: "when it moves to the trash: 7d, 2026-12-01, never" },
 ];
@@ -173,6 +173,12 @@ export const COMMANDS = [
     ],
     flags: [{ name: "--reset", about: "put that setting back to its default" }, ...INSTALL_FLAGS],
     examples: ["poplin config", "poplin config versions_kept 10", "poplin config outside_pages allowed"],
+    notes: [
+      "outside_pages, search_engines_allowed, and zone_bots are also held in",
+      "Cloudflare: two rules, and the zone's bot settings. The Worker follows a",
+      "changed outside_pages itself. Cloudflare's side changes only when the zone",
+      "is synced.",
+    ],
   },
   {
     name: "doctor",
@@ -223,7 +229,7 @@ interface FlagSpec {
   readonly about: string;
 }
 
-/** One command: the word that runs it, the arguments it takes in order, and the flags it accepts. */
+/** One command: the word that runs it, the arguments it takes in order, the flags it accepts, and what its help adds in whole lines. */
 export interface CommandSpec {
   readonly name: string;
   readonly group: string;
@@ -231,6 +237,7 @@ export interface CommandSpec {
   readonly arguments: readonly { readonly name: string; readonly about: string; readonly required: boolean }[];
   readonly flags: readonly FlagSpec[];
   readonly examples: readonly string[];
+  readonly notes?: readonly string[];
 }
 
 /** The word of a command in the table. */

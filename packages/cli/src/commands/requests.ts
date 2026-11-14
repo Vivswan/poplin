@@ -5,7 +5,7 @@ import { siteReference } from "../../../core/src/sites/labels";
 import type { CommandName } from "./command-table";
 import { isSettingKey, readSetting, SETTING_SAMPLES, type SettingKey } from "./install-settings";
 import { readSiteSettings, type SiteSettings } from "./site-settings";
-import { type Flags, isUsageError, looksLikePath, nearest, type UsageError, usageError, flagValue } from "./util";
+import { type Flags, flagValue, isUsageError, looksLikePath, nearest, type UsageError, usageError } from "./util";
 
 /** A version number as it is typed: a whole number from 1, with no sign and no leading zero. */
 const VERSION_PATTERN = /^[1-9]\d*$/;
@@ -30,7 +30,7 @@ const REFUSALS: Readonly<Record<Refusal, string>> = {
 };
 
 /** The command of every request: each command of the table but `help`, which asks nothing of an install. */
-const BUILDERS: { readonly [Name in Exclude<CommandName, "help">]: (words: Words) => Request | UsageError } = {
+const BUILDERS: { readonly [Name in Exclude<CommandName, "help">]: (words: Words, now: number) => Request | UsageError } = {
   publish,
   set,
   show: (words) => oneSite("show", words),
@@ -189,11 +189,11 @@ function planPublish(flags: Flags, given: SiteSettings): { readonly target: Publ
   return { target: { kind: "create", name }, settings: given };
 }
 
-function publish(words: Words): Request | UsageError {
+function publish(words: Words, now: number): Request | UsageError {
   const [path = ""] = words.positionals;
   if (path === "") return usageError("the path is empty", "to publish the current folder: poplin .");
 
-  const given = readSiteSettings(words.flags);
+  const given = readSiteSettings(words.flags, now);
   if (isUsageError(given)) return given;
 
   const plan = planPublish(words.flags, given);
@@ -202,8 +202,8 @@ function publish(words: Words): Request | UsageError {
   return withInstall(words, (install) => ({ kind: "publish", path, ...plan, dryRun: words.flags.has("--dry-run"), ...install }));
 }
 
-function set(words: Words): Request | UsageError {
-  const given = readSiteSettings(words.flags);
+function set(words: Words, now: number): Request | UsageError {
+  const given = readSiteSettings(words.flags, now);
   if (isUsageError(given)) return given;
 
   const unnamed = usageError("--name gives a public site its public name, so it needs --public", "poplin set <site> --public --name <public name>");
@@ -278,8 +278,9 @@ function importBackup(words: Words): Request | UsageError {
  * Build the request of one command from the words after its name.
  *
  * @param words - the arguments, already counted against the command's table entry, and the flags, already checked against it
+ * @param now - the time, in milliseconds since the epoch; an expiry must lie after it
  * @returns the request, or the first argument or flag value that was written wrong
  */
-export function buildRequest(command: Exclude<CommandName, "help">, words: Words): Request | UsageError {
-  return BUILDERS[command](words);
+export function buildRequest(command: Exclude<CommandName, "help">, words: Words, now: number): Request | UsageError {
+  return BUILDERS[command](words, now);
 }

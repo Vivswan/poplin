@@ -19,8 +19,8 @@ import { parseSiteName } from "poplin/core";
 
 assert.equal(process.versions.bun, undefined, "the probe runs under node, not bun");
 assert.equal(VERSION, process.argv[2]);
-assert.deepEqual(parseSiteName("field-notes", new Set()), { ok: true, value: "field-notes" });
-assert.deepEqual(parseSiteName("Field Notes", new Set()), { ok: false, refusal: "bad-character" });
+assert.deepEqual(parseSiteName("field-notes"), { ok: true, value: "field-notes" });
+assert.deepEqual(parseSiteName("Field Notes"), { ok: false, refusal: "bad-character" });
 `;
 
 function run(cwd: string, command: string, ...args: string[]): string {

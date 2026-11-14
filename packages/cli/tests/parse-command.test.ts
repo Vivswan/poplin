@@ -13,6 +13,8 @@ const PLAIN = { json: false };
 const SWAPPED = misspelled("list");
 const CREATE = { kind: "publish", target: { kind: "create" }, settings: {}, dryRun: false, ...PLAIN };
 const SEVEN_DAYS = { kind: "span", span: { count: 7, unit: "d" } };
+const EXPIRY_FORMS = "a span is a count of s, m, h, or d: 7d. A date is 2026-12-01";
+const NOW = Date.UTC(2026, 10, 1);
 const KINDS = new Set<string>([...COMMANDS.map((spec) => spec.name), "version", "usage-error"]);
 
 type Row = readonly [line: string, expected: object];
@@ -87,7 +89,7 @@ describe("parseCommand", () => {
   ];
 
   test.each(documented)("the documented line `%s` parses to its request", (line, expected) => {
-    expect<unknown>(parseCommand(words(line))).toEqual(expected);
+    expect<unknown>(parseCommand(words(line), NOW)).toEqual(expected);
   });
 
   // Drift: a typo that became a publish would upload a folder nobody meant to share, and one that became another command would change a site.
@@ -109,7 +111,7 @@ describe("parseCommand", () => {
   ];
 
   test.each(bareForm)("the first word of `%s` is a command, a path, or refused, never guessed", (line, expected) => {
-    expect<unknown>(parseCommand(words(line))).toEqual(expected);
+    expect<unknown>(parseCommand(words(line), NOW)).toEqual(expected);
   });
 
   test("an unknown word with characters a shell or a terminal reads gets no line to copy", () => {
@@ -149,18 +151,12 @@ describe("parseCommand", () => {
     ],
     [`poplin set ${LABEL} --search-engines yes`, refusal('--search-engines takes on or off, not "yes"')],
     [`poplin set ${LABEL} --embeddable ON`, refusal('--embeddable takes on or off, not "ON"')],
-    [
-      `poplin set ${LABEL} --expires 2026-02-30`,
-      refusal('--expires takes a span, a date, or never, not "2026-02-30"', "a span is a count of s, m, h, or d: 7d. A date is 2026-12-01"),
-    ],
-    [
-      `poplin set ${LABEL} --expires 0d`,
-      refusal('--expires takes a span, a date, or never, not "0d"', "a span is a count of s, m, h, or d: 7d. A date is 2026-12-01"),
-    ],
-    [
-      `poplin set ${LABEL} --expires 7w`,
-      refusal('--expires takes a span, a date, or never, not "7w"', "a span is a count of s, m, h, or d: 7d. A date is 2026-12-01"),
-    ],
+    [`poplin set ${LABEL} --expires 2026-02-30`, refusal('--expires takes a span, a date, or never, not "2026-02-30"', EXPIRY_FORMS)],
+    [`poplin set ${LABEL} --expires 0d`, refusal('--expires takes a span, a date, or never, not "0d"', EXPIRY_FORMS)],
+    [`poplin set ${LABEL} --expires 7w`, refusal('--expires takes a span, a date, or never, not "7w"', EXPIRY_FORMS)],
+    [`poplin set ${LABEL} --expires 2020-01-01`, refusal("--expires 2020-01-01 is not ahead: that day has started", EXPIRY_FORMS)],
+    [`poplin set ${LABEL} --expires 2026-11-01`, refusal("--expires 2026-11-01 is not ahead: that day has started", EXPIRY_FORMS)],
+    ["poplin ./demo --expires 100000000000d", refusal("--expires 100000000000d is too far ahead", EXPIRY_FORMS)],
     ["poplin set", refusal("poplin set needs a site", "poplin set <site>")],
     [`poplin show ${LABEL} ${SECOND_LABEL}`, refusal(`too many arguments for poplin show: "${SECOND_LABEL}"`, "poplin show <site>")],
     ["poplin ./one ./two", refusal('too many arguments for poplin publish: "./two"', "poplin publish <path>")],
@@ -203,7 +199,7 @@ describe("parseCommand", () => {
   ];
 
   test.each(refused)("the mistake in `%s` is refused with what to type", (line, expected) => {
-    expect<unknown>(parseCommand(words(line))).toEqual(expected);
+    expect<unknown>(parseCommand(words(line), NOW)).toEqual(expected);
   });
 
   test("flags mean the same before, between, and after the arguments, so a habit from another tool still works", () => {
@@ -216,7 +212,7 @@ describe("parseCommand", () => {
       "poplin --title Demo publish --unlisted --json --expires 7d ./demo",
     ];
 
-    expect<unknown>(orders.map((line) => parseCommand(words(line)))).toEqual(orders.map(() => expected));
+    expect<unknown>(orders.map((line) => parseCommand(words(line), NOW))).toEqual(orders.map(() => expected));
   });
 
   test("a public publish with --name gives the new site that name and that public name; on an update --name is the public name alone", () => {
@@ -256,7 +252,7 @@ describe("parseCommand", () => {
       `poplin ${SWAPPED} --help`,
     ];
 
-    expect<unknown>(lines.map((line) => parseCommand(words(line)))).toEqual([
+    expect<unknown>(lines.map((line) => parseCommand(words(line), NOW))).toEqual([
       { kind: "help", asked: false },
       { kind: "help", asked: true },
       { kind: "help", topic: "set", asked: true },

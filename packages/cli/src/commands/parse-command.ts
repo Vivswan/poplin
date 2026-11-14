@@ -178,9 +178,10 @@ function helpOf(topic: string | undefined): Parsed {
  * Flags go before or after the arguments, `--` ends them, and `--flag=value` joins a value to its flag. Nothing is read from disk or sent anywhere, and nothing throws.
  *
  * @param argv - the words after `poplin`, as the shell split them
+ * @param now - the time `--expires` must lie after, in milliseconds since the epoch; the clock's when absent
  * @returns one command's request, a help topic, the version, or what was written wrong. A first word that is neither a command nor a path is refused, never published
  */
-export function parseCommand(argv: readonly string[]): Parsed {
+export function parseCommand(argv: readonly string[], now: number = Date.now()): Parsed {
   const typed = splitWords(argv);
   if (typed.positionals.length === 0) return withoutCommand(argv, typed.flags);
 
@@ -206,5 +207,5 @@ export function parseCommand(argv: readonly string[]): Parsed {
 
   if (spec.name === "help") return helpOf(rest[0]);
 
-  return buildRequest(spec.name, { positionals: rest, flags });
+  return buildRequest(spec.name, { positionals: rest, flags }, now);
 }

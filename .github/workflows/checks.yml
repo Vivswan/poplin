@@ -34,10 +34,11 @@ jobs:
       - name: Test the Worker (Workers runtime)
         run: bun run test:worker
 
-  # The product's tests on every OS a user publishes from. The runtime is the bun that .bun-version pins: the tests
-  # import bun:test, which no other runtime provides. The release pipeline's tests run in `check` alone: that pipeline
-  # runs on ubuntu and nowhere else. The Worker's tests run in `check` alone too: they need the Workers runtime, and the
-  # root `test` script this job calls leaves `packages/worker` out.
+  # The product's tests and the three tree guards on every OS a user publishes from. The runtime is the bun that
+  # .bun-version pins: the tests import bun:test, which no other runtime provides. The release pipeline's tests run in
+  # `check` alone: that pipeline runs on ubuntu and nowhere else. The fuzz tests run in `check` alone. The Worker's tests
+  # run in `check` alone too: they need the Workers runtime, and the root `test` script this job calls leaves
+  # `packages/worker` out.
   matrix:
     name: test / ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
@@ -51,8 +52,8 @@ jobs:
         with:
           persist-credentials: false
       - uses: ./.github/actions/setup
-      - name: Test the packages
-        run: bun run test ./packages/ ./tests/layout.test.ts
+      - name: Test the packages and the tree guards
+        run: bun run test ./packages/ ./tests/layout.test.ts ./tests/portable.test.ts ./tests/no-old-shapes.test.ts
 
   # The OpenTofu module: formatted, valid against the provider's schema, and its plan logic tested with a mocked provider,
   # so no Cloudflare credentials are read.

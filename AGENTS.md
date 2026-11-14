@@ -37,7 +37,7 @@ Poplin: Agents publish static sites to your own Cloudflare account: private by d
 
 Poplin publishes a static site to the user's own Cloudflare account with one call: one Worker serves every site from one R2 bucket.
 
-- Run every check: `bun run check`
+- Run every local check: `bun run check`
 - Turn the hooks on, once per clone: `git config core.hooksPath .githooks`
 - Backwards-compatible code lives only in `migrations/`. Everywhere else an old shape is deleted outright.
 - Provider-specific code lives only in `packages/worker/`, `packages/app/src/cloudflare/`, the Access check in `packages/app/src/login/`, and `tofu/`; `tests/portable.test.ts` holds the line.
