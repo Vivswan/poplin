@@ -10,7 +10,7 @@
 // Only addresses are rewritten: in an HTML page, in the `Location` header, and the install's own origins in a JSON answer.
 // Every HTML page also gets the preview's bar before its `</body>`, and a refusal in plain text is shown inside a page of the preview that says so.
 
-import { ADMIN_LABEL } from "../../../packages/core/src/names/hostname";
+import { ADMIN_LABEL } from "../../../core/src/names/hostname";
 import { ADDRESSES, DOMAIN } from "./world";
 
 /** The origin the dashboard, the login, and the API are asked at. */

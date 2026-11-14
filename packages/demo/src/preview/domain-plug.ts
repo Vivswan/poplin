@@ -6,7 +6,7 @@
 //   done            every object stands              nothing to repair
 //   token-refused, unreachable, not-set-up           no table, only the refusal
 
-import type { DomainPlug, DomainReading, DomainRow, DomainState } from "../../../packages/app/src/dashboard/domain/records";
+import type { DomainPlug, DomainReading, DomainRow, DomainState } from "../../../app/src/dashboard/domain/records";
 
 /** Every state a preview plug can be in, as the address of the setup page names it. */
 export const PLUG_STATES = ["fresh", "partial", "access-off", "done", "token-refused", "unreachable", "not-set-up"] as const;

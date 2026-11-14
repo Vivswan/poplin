@@ -5,12 +5,12 @@ import { existsSync } from "node:fs";
 import { join } from "node:path";
 
 import { BunSqliteDriver } from "../packages/core/tests/database/support/bun-sqlite-driver";
-import { createPreview } from "../scripts/preview/demo/preview";
-import { HOST, PID_PATH, pidFile, stopRunning } from "../scripts/preview/running";
-import { readSamples } from "../scripts/preview/samples";
+import { createPreview } from "../packages/demo/src/preview/preview";
+import { HOST, PID_PATH, pidFile, stopRunning } from "../packages/demo/scripts/running";
+import { readSamples } from "../packages/demo/scripts/samples";
 
 /** The folder of the demo itself, which a later host runs with no server. */
-const DEMO = join(import.meta.dir, "..", "scripts", "preview", "demo");
+const DEMO = join(import.meta.dir, "..", "packages", "demo", "src", "preview");
 
 /** What only one runtime has: its own modules and globals. */
 const RUNTIME_NAME = /\bBun\.|["'](?:bun|node):|\bprocess\.|import\.meta\.(?:dir|path|main)|\bBuffer\b/g;
@@ -19,10 +19,10 @@ const RUNTIME_NAME = /\bBun\.|["'](?:bun|node):|\bprocess\.|import\.meta\.(?:dir
 const IMPORT = /from "([^"]+)"/g;
 
 /** Where the demo may import from, beside its own folder: the portable source of the app and of core. */
-const PORTABLE_SOURCE = /^\.\.\/\.\.\/\.\.\/packages\/(?:app|core)\/src\//;
+const PORTABLE_SOURCE = /^\.\.\/\.\.\/\.\.\/(?:app|core)\/src\//;
 
 /** The command that starts a preview. */
-const SERVE = join(import.meta.dir, "..", "scripts", "preview", "serve.ts");
+const SERVE = join(import.meta.dir, "..", "packages", "demo", "scripts", "serve.ts");
 
 /** How long a started preview is given to answer, in milliseconds. */
 const START_MS = 10_000;

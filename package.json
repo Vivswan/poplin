@@ -18,8 +18,8 @@
     "test:worker": "bun run --cwd packages/cloudflare test",
     "live": "POPLIN_LIVE=1 bun test ./tests/live/live.test.ts",
     "knip": "knip --treat-config-hints-as-errors",
-    "preview": "bun scripts/preview/serve.ts",
-    "preview:stop": "bun scripts/preview/stop.ts"
+    "preview": "bun run --cwd packages/demo preview",
+    "preview:stop": "bun run --cwd packages/demo preview:stop"
   },
   "devDependencies": {
     "@biomejs/biome": "2.6.4",

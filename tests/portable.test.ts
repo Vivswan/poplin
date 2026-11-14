@@ -9,7 +9,7 @@ import { dirname, join, posix } from "node:path";
 const ROOT = join(import.meta.dir, "..");
 
 /** The folders and files that hold no provider: another provider is added without touching them. One that does not exist is skipped. */
-const PORTABLE: readonly string[] = ["packages/core", "packages/app", "packages/cli"];
+const PORTABLE: readonly string[] = ["packages/core", "packages/app", "packages/cli", "packages/demo"];
 
 /** The only places the provider lives: portable source imports nothing from them. */
 const PROVIDER: readonly string[] = ["packages/cloudflare"];

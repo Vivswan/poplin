@@ -1,0 +1,9 @@
+{
+  "name": "@poplin/demo",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "preview": "bun scripts/serve.ts",
+    "preview:stop": "bun scripts/stop.ts"
+  }
+}

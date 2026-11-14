@@ -2,8 +2,8 @@
 //
 // A state that an address can carry (a notice, a refusal, a view) is a plain link. A page that only a form reaches is a stage: an address under `/state/` that sends the form itself and shows the answer.
 
-import { beginLogin } from "../../../packages/core/src/actions/computer-logins";
-import { listSites } from "../../../packages/core/src/actions/list";
+import { beginLogin } from "../../../core/src/actions/computer-logins";
+import { listSites } from "../../../core/src/actions/list";
 import { PLUG_STATES, type PlugState } from "./domain-plug";
 import { ADMIN_ORIGIN, localAddress } from "./mount";
 import type { World } from "./world";

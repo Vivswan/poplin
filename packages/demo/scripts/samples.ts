@@ -3,11 +3,11 @@
 import { readdir } from "node:fs/promises";
 import { join } from "node:path";
 
-import { readFiles } from "../../packages/cli/src/files/read";
-import type { Samples } from "./demo/seed";
+import { readFiles } from "../../cli/src/files/read";
+import type { Samples } from "../src/preview/seed";
 
 /** The folder that holds one folder per sample site. */
-const SAMPLES = join(import.meta.dir, "..", "..", "demo", "samples");
+const SAMPLES = join(import.meta.dir, "..", "..", "..", "demo", "samples");
 
 /**
  * Read every sample site whole.

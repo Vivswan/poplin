@@ -2,15 +2,15 @@
 //
 // Every name and address is invented. The actions write the audit log themselves, so the Activity tab shows what a real install would.
 
-import type { SiteChanges } from "../../../packages/core/src/actions/changes";
-import { beginLogin } from "../../../packages/core/src/actions/computer-logins";
-import { changeConfig } from "../../../packages/core/src/actions/config";
-import { deleteSite } from "../../../packages/core/src/actions/delete";
-import { listSites } from "../../../packages/core/src/actions/list";
-import { issueToken } from "../../../packages/core/src/actions/manage-tokens";
-import { publishSite } from "../../../packages/core/src/actions/publish";
-import { updateSite } from "../../../packages/core/src/actions/set";
-import type { Actor } from "../../../packages/core/src/auth/scopes";
+import type { SiteChanges } from "../../../core/src/actions/changes";
+import { beginLogin } from "../../../core/src/actions/computer-logins";
+import { changeConfig } from "../../../core/src/actions/config";
+import { deleteSite } from "../../../core/src/actions/delete";
+import { listSites } from "../../../core/src/actions/list";
+import { issueToken } from "../../../core/src/actions/manage-tokens";
+import { publishSite } from "../../../core/src/actions/publish";
+import { updateSite } from "../../../core/src/actions/set";
+import type { Actor } from "../../../core/src/auth/scopes";
 import type { World } from "./world";
 
 /** The milliseconds of one day. */

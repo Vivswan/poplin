@@ -63,6 +63,9 @@
         "valibot": "1.5.0",
       },
     },
+    "packages/demo": {
+      "name": "@poplin/demo",
+    },
     "website": {
       "name": "@poplin/website",
       "dependencies": {
@@ -400,6 +403,8 @@
     "@poplin/cloudflare": ["@poplin/cloudflare@workspace:packages/cloudflare"],
 
     "@poplin/core": ["@poplin/core@workspace:packages/core"],
+
+    "@poplin/demo": ["@poplin/demo@workspace:packages/demo"],
 
     "@poplin/website": ["@poplin/website@workspace:website"],
 

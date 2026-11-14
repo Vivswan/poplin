@@ -11,15 +11,15 @@
 //
 // Every piece is the product's own handler, asked at the hostname it expects; `mount.ts` maps the addresses both ways.
 
-import { createApi } from "../../../packages/app/src/api/api";
-import { createDashboard } from "../../../packages/app/src/dashboard/dashboard";
-import { createSetup } from "../../../packages/app/src/dashboard/domain/setup";
-import { logIn } from "../../../packages/app/src/login/login";
-import { serveSite } from "../../../packages/app/src/sites/serve";
-import { importSessionKey } from "../../../packages/core/src/auth/cookie";
-import { parseLogins } from "../../../packages/core/src/auth/logins";
-import type { SqlDriver } from "../../../packages/core/src/database/driver";
-import type { ObjectStore } from "../../../packages/core/src/storage/storage";
+import { createApi } from "../../../app/src/api/api";
+import { createDashboard } from "../../../app/src/dashboard/dashboard";
+import { createSetup } from "../../../app/src/dashboard/domain/setup";
+import { logIn } from "../../../app/src/login/login";
+import { serveSite } from "../../../app/src/sites/serve";
+import { importSessionKey } from "../../../core/src/auth/cookie";
+import { parseLogins } from "../../../core/src/auth/logins";
+import type { SqlDriver } from "../../../core/src/database/driver";
+import type { ObjectStore } from "../../../core/src/storage/storage";
 import { PLUG_STATES, type PlugState, previewPlug } from "./domain-plug";
 import { type Entry, galleryOf, STAGES } from "./gallery";
 import { rebased, unbased } from "./base";

@@ -2,18 +2,18 @@
 //
 // Nothing here names a runtime: the host that starts the demo brings the driver, so the same install opens under bun, in a Worker, or in a browser.
 
-import { MemoryCounters } from "../../../packages/app/src/limits/memory-counters";
-import { hostnameAddresses } from "../../../packages/app/src/sites/hostname-addresses";
-import type { Install } from "../../../packages/core/src/actions/records";
-import { type Login, parseLogins } from "../../../packages/core/src/auth/logins";
-import type { Actor } from "../../../packages/core/src/auth/scopes";
-import type { SqlDriver } from "../../../packages/core/src/database/driver";
-import { openDatabase } from "../../../packages/core/src/database/open";
-import { parseHostname } from "../../../packages/core/src/names/hostname";
-import { DEFAULT_PUBLIC_WORD } from "../../../packages/core/src/names/marker";
-import { defaultSettings } from "../../../packages/core/src/records/settings";
-import { MemoryStore } from "../../../packages/core/src/storage/memory";
-import type { ObjectStore } from "../../../packages/core/src/storage/storage";
+import { MemoryCounters } from "../../../app/src/limits/memory-counters";
+import { hostnameAddresses } from "../../../app/src/sites/hostname-addresses";
+import type { Install } from "../../../core/src/actions/records";
+import { type Login, parseLogins } from "../../../core/src/auth/logins";
+import type { Actor } from "../../../core/src/auth/scopes";
+import type { SqlDriver } from "../../../core/src/database/driver";
+import { openDatabase } from "../../../core/src/database/open";
+import { parseHostname } from "../../../core/src/names/hostname";
+import { DEFAULT_PUBLIC_WORD } from "../../../core/src/names/marker";
+import { defaultSettings } from "../../../core/src/records/settings";
+import { MemoryStore } from "../../../core/src/storage/memory";
+import type { ObjectStore } from "../../../core/src/storage/storage";
 
 /** The invented domain the demo's install sits under. */
 export const DOMAIN = "example.com";

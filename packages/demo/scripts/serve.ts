@@ -5,10 +5,10 @@
 //   bun run preview --gallery    the same, with every page and state listed at /gallery
 //   bun run preview:stop         stop it
 //
-// This file and its neighbours start the server and keep the pid file. The demo itself is `demo/`, which names no runtime.
+// This file and its neighbours start the server and keep the pid file. The demo itself is `../src/preview/`, which names no runtime.
 
-import { BunSqliteDriver } from "../../packages/core/tests/database/support/bun-sqlite-driver";
-import { createPreview } from "./demo/preview";
+import { BunSqliteDriver } from "../../core/tests/database/support/bun-sqlite-driver";
+import { createPreview } from "../src/preview/preview";
 import { readSamples } from "./samples";
 import { DEFAULT_PORT, HOST, markRunning, PID_PATH, pidFile, readFlags, stopRunning, unmarkRunning } from "./running";
 
