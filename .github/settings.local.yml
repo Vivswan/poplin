@@ -38,10 +38,10 @@ repository:
 #     target: branch
 #     enforcement: active
 
-# The real-zone tests' environment: only a job in a main run that names it can read its secret, and GitHub itself holds the rule.
-# The secret is set on GitHub, never declared here: an absent `secrets` key leaves live secrets untouched.
+# The environment for the tests that run against a real Cloudflare account: only a job in a main run that names it can read its secrets.
+# The secrets are set on GitHub, never declared here: an absent `secrets` key leaves live secrets untouched.
 environments:
-  - name: bench
+  - name: cloudflare-live-tests
     deployment_branch_policy:
       protected_branches: false
       custom_branch_policies: true
