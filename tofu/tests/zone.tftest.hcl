@@ -356,3 +356,116 @@ run "rate_rule_on_the_hostnames" {
     error_message = "The hostnames form counts the install's hostnames alone, so the zone's other hostnames do not stop it."
   }
 }
+
+run "guards_by_default" {
+  command = plan
+
+  assert {
+    condition = tolist([for rule in cloudflare_ruleset.guards[0].rules : rule.expression]) == tolist([
+      "ends_with(http.host, \"-page.example.com\") and any(http.request.headers[\"sec-fetch-site\"][*] eq \"cross-site\") and any(http.request.headers[\"sec-fetch-dest\"][*] ne \"document\")",
+      "ends_with(http.host, \"-page.example.com\") and cf.client.bot",
+    ])
+    error_message = "By default the outside pages rule and the bots rule exist, each reads the site hostnames alone, and a request for a document or one that lacks a Fetch Metadata header passes the first."
+  }
+
+  assert {
+    condition     = alltrue([for rule in cloudflare_ruleset.guards[0].rules : rule.action == "block" && startswith(rule.ref, "poplin_")])
+    error_message = "Every guard rule blocks and carries a ref that marks it as poplin's."
+  }
+
+  assert {
+    condition     = cloudflare_bot_management.zone[0].ai_bots_protection == "block" && cloudflare_bot_management.zone[0].fight_mode == false
+    error_message = "On a zone with no hostnames of its own the AI bot block is set, and Bot Fight Mode is off: it may challenge the install's own command line."
+  }
+
+  assert {
+    condition     = output.zone_bots == "set" && sort(keys(output.guard_rule_expressions)) == tolist(["poplin_bots", "poplin_outside_pages"])
+    error_message = "The outputs say the switches are set and carry both guard expressions."
+  }
+}
+
+run "outside_pages_allowed" {
+  command = plan
+
+  variables {
+    outside_pages = "allowed"
+  }
+
+  assert {
+    condition     = tolist([for rule in cloudflare_ruleset.guards[0].rules : rule.ref]) == tolist(["poplin_bots"])
+    error_message = "outside_pages = allowed leaves the bots rule alone in the ruleset, so an apply removes the outside pages rule."
+  }
+}
+
+run "search_engines_let_through" {
+  command = plan
+
+  variables {
+    search_engines_allowed = true
+    suffix                 = "-site"
+  }
+
+  assert {
+    condition     = cloudflare_ruleset.guards[0].rules[1].expression == "ends_with(http.host, \"-site.example.com\") and cf.client.bot and cf.verified_bot_category ne \"Search Engine Crawler\""
+    error_message = "search_engines_allowed lets the search engine category pass and stops every other verified bot, on the suffix the caller chose."
+  }
+}
+
+run "zone_bots_on_a_zone_with_other_hostnames" {
+  command = plan
+
+  variables {
+    rate_rule = "off"
+  }
+
+  override_data {
+    target = data.cloudflare_dns_records.zone
+    values = {
+      result = [{
+        name                = "www.example.com", type = "A", proxied = true, comment = null, id = "0", content = "192.0.2.1", ttl = 1, proxiable = true,
+        comment_modified_on = null, created_on = null, data = null, meta = null, modified_on = null, priority = null,
+        private_routing     = null, settings = null, tags = null, tags_modified_on = null
+      }]
+    }
+  }
+
+  assert {
+    condition     = length(cloudflare_bot_management.zone) == 0
+    error_message = "A bot switch covers the zone's own hostnames too, so `auto` sets none on a zone that has some."
+  }
+
+  assert {
+    condition     = output.zone_bots == "the AI bot block covers the whole zone, and the zone has hostnames of its own: www.example.com"
+    error_message = "A skipped switch says why and names the hostnames."
+  }
+
+  assert {
+    condition     = length(cloudflare_ruleset.guards[0].rules) == 2
+    error_message = "The guard rules read the site hostnames alone, so the zone's other hostnames do not stop them."
+  }
+}
+
+run "zone_bots_forced_on_a_zone_with_other_hostnames" {
+  command = plan
+
+  variables {
+    rate_rule = "off"
+    zone_bots = "on"
+  }
+
+  override_data {
+    target = data.cloudflare_dns_records.zone
+    values = {
+      result = [{
+        name                = "www.example.com", type = "A", proxied = true, comment = null, id = "0", content = "192.0.2.1", ttl = 1, proxiable = true,
+        comment_modified_on = null, created_on = null, data = null, meta = null, modified_on = null, priority = null,
+        private_routing     = null, settings = null, tags = null, tags_modified_on = null
+      }]
+    }
+  }
+
+  assert {
+    condition     = cloudflare_bot_management.zone[0].ai_bots_protection == "block" && cloudflare_bot_management.zone[0].fight_mode == true
+    error_message = "zone_bots = on is the caller's word that the whole zone may be covered: both switches are set whatever the zone holds."
+  }
+}

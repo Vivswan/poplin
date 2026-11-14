@@ -58,7 +58,7 @@ locals {
     if record.name == local.admin_host || endswith(record.name, local.site_host_ending)
   ]))
 
-  # The zone's own hostnames, a wildcard of its own included: a rate rule that reads the path alone would count their requests too.
+  # The zone's own hostnames, a wildcard of its own included: a rate rule that reads the path alone, or a bot switch of the zone, would cover them too.
   other_names = sort(distinct(local.zone_records[*].name))
 
   # Every DNS record of the install, each with the comment that marks it as poplin's.
@@ -75,6 +75,25 @@ locals {
 
   # A Free plan rate rule may read the path alone, so `zone` counts every request of the zone.
   rate_rule_expression = var.rate_rule == "zone" ? "starts_with(http.request.uri.path, \"/\")" : local.served_expression
+
+  # A browser marks a request another site's page made, and says what it is for. One for a document is a visitor following a link, and one that lacks either mark passes.
+  outside_pages_expression = format("ends_with(http.host, %q) and any(http.request.headers[\"sec-fetch-site\"][*] eq \"cross-site\") and any(http.request.headers[\"sec-fetch-dest\"][*] ne \"document\")", local.site_host_ending)
+
+  # The bots Cloudflare has verified: all of them, or all but the crawlers of search engines.
+  bots_expression = format("ends_with(http.host, %q) and cf.client.bot%s", local.site_host_ending, var.search_engines_allowed ? " and cf.verified_bot_category ne \"Search Engine Crawler\"" : "")
+
+  # The guard rules in the order they run.
+  guard_rules = concat(
+    var.outside_pages == "blocked" ? [{ ref = "poplin_outside_pages", description = "poplin: stop pages of other domains", expression = local.outside_pages_expression }] : [],
+    [{ ref = "poplin_bots", description = "poplin: stop verified bots", expression = local.bots_expression }],
+  )
+
+  # Why the zone's bot switches are left alone, or null when the module sets them.
+  zone_bots_skipped = (
+    var.zone_bots == "off" ? "zone_bots is off" :
+    var.zone_bots == "auto" && length(local.other_names) > 0 ? "the AI bot block covers the whole zone, and the zone has hostnames of its own: ${join(", ", local.other_names)}" :
+    null
+  )
 
   # The zone values the module owns: the records, routes, and rule above follow them in the same apply.
   zone_binding = {

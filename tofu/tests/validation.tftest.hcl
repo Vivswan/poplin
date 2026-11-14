@@ -291,3 +291,23 @@ run "site_share_of_day_over_one_hundred" {
 
   expect_failures = [var.site_share_of_day]
 }
+
+run "outside_pages_unknown_word" {
+  command = plan
+
+  variables {
+    outside_pages = "off"
+  }
+
+  expect_failures = [var.outside_pages]
+}
+
+run "zone_bots_unknown_word" {
+  command = plan
+
+  variables {
+    zone_bots = "always"
+  }
+
+  expect_failures = [var.zone_bots]
+}

@@ -60,6 +60,40 @@ variable "rate_rule" {
   }
 }
 
+variable "guard_rules" {
+  description = "Whether the module creates the custom rules that stop outside pages and verified bots before the Worker runs. They are the zone's whole custom ruleset: false on a zone with custom rules of its own."
+  type        = bool
+  default     = true
+}
+
+variable "outside_pages" {
+  description = "Whether a page of another domain may frame a site or load its files: `blocked` or `allowed`. A page under the same domain reaches the Worker either way."
+  type        = string
+  default     = "blocked"
+
+  validation {
+    condition     = contains(["blocked", "allowed"], var.outside_pages)
+    error_message = "outside_pages must be one of: blocked, allowed."
+  }
+}
+
+variable "search_engines_allowed" {
+  description = "Whether the crawlers of search engines pass the bots rule. Every other bot Cloudflare has verified is stopped either way."
+  type        = bool
+  default     = false
+}
+
+variable "zone_bots" {
+  description = "The zone's bot switches, which cover every hostname of the zone: `auto` (block AI bots, on a zone with no hostnames of its own), `on` (block AI bots and switch Bot Fight Mode on, on any zone of the Free plan), or `off` (leave them alone)."
+  type        = string
+  default     = "auto"
+
+  validation {
+    condition     = contains(["auto", "on", "off"], var.zone_bots)
+    error_message = "zone_bots must be one of: auto, on, off."
+  }
+}
+
 # The Worker and the bucket.
 
 variable "worker_bundle_path" {

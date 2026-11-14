@@ -17,3 +17,13 @@ output "site_url_pattern" {
   description = "The address of a site, with `<name>` and `<id>` standing for the site's name and id."
   value       = "https://<name>--<id>${var.suffix}.${local.domain}"
 }
+
+output "guard_rule_expressions" {
+  description = "The expression of each guard rule by its ref, for a zone that keeps custom rules of its own and adds these to them."
+  value       = { for rule in local.guard_rules : rule.ref => rule.expression }
+}
+
+output "zone_bots" {
+  description = "What the module did with the zone's bot switches: `set`, or the reason it left them alone."
+  value       = coalesce(local.zone_bots_skipped, "set")
+}
