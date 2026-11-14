@@ -75,11 +75,6 @@ describe("the hostname layout", () => {
   ])("%s names nothing of the install", (host) => {
     expect(resolved(ADDRESSES, host)).toEqual({ kind: "none" });
   });
-
-  // Drift: a site holding a name the layout keeps would take the hostname of the install's own page; the rule book refuses exactly the names the layout says it keeps.
-  test("the gallery's name is refused as a public name, and its address is the gallery's", () => {
-    expect([parsePublicName("gallery", ADDRESSES.reservedNames), resolved(ADDRESSES, "gallery-page.example.com")]).toEqual([{ ok: false, refusal: "reserved" }, { kind: "gallery" }]);
-  });
 });
 
 describe("the public word `poplin`, under which a public address ends like a label address", () => {
@@ -91,14 +86,12 @@ describe("the public word `poplin`, under which a public address ends like a lab
     ["docs-p", false, true],
     ["docs-u", false, true],
     ["k3f9x2ab71qz", false, true],
-    ["gallery", false, false],
   ] as const)("the public name %j is accepted under `poplin`: %j, and under `page`: %j", (name, underPoplin, underPage) => {
     expect([parsePublicName(name, SAME_WORD.reservedNames).ok, parsePublicName(name, ADDRESSES.reservedNames).ok]).toEqual([underPoplin, underPage]);
   });
 
   test.each([
     ["docs-poplin.example.com", { kind: "public-name", name: "docs", path: "/a" }],
-    ["gallery-poplin.example.com", { kind: "gallery" }],
     ["k3f9x2ab71qz-poplin.example.com", { kind: "site", id: ID, path: "/a" }],
     ["docs-p-poplin.example.com", { kind: "none" }],
     ["docs-u-poplin.example.com", { kind: "none" }],

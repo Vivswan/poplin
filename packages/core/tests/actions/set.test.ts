@@ -127,7 +127,7 @@ describe("updateSite", () => {
     ["an access that is none", { access: "open" }, { code: "bad_argument", about: "access" }],
     ["a public name with no public access", { public_name: "docs" }, { code: "bad_argument", about: "public_name" }],
     ["a public name that breaks the name rules", { access: "public", public_name: "My Docs" }, { code: "bad_name", about: "public_name" }],
-    ["the gallery's public name", { access: "public", public_name: "gallery" }, { code: "reserved_name", about: "public_name" }],
+    ["a public name the layout keeps", { access: "public", public_name: "docs-p" }, { code: "reserved_name", about: "public_name" }],
     ["a title that is no text", { title: 3 }, { code: "bad_argument", about: "title" }],
     ["an expiry that has passed", { title: "kept out", expires: "2020-01-01" }, { code: "bad_argument", about: "expires" }],
     ["a day no month has", { expires: "2030-02-31" }, { code: "bad_argument", about: "expires" }],

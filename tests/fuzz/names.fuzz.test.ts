@@ -10,9 +10,8 @@ import { siteLabel, siteReference, splitLabel } from "../../packages/core/src/si
 import { fuzzTarget } from "./config";
 import { hostile } from "./hostile";
 
-const GALLERY_NAME = "gallery";
-const OWN_NAMES: ReadonlySet<string> = new Set([GALLERY_NAME]);
-const RESERVED = OWN_NAMES;
+const KEPT_NAME = "docs-p";
+const RESERVED: ReadonlySet<string> = new Set([KEPT_NAME]);
 const MIN_PUBLISHED_LENGTH = 3;
 const MAX_PUBLISHED_LENGTH = 40;
 const MAX_DNS_LABEL_LENGTH = 63;
@@ -55,7 +54,7 @@ const publicWords = fc
   .oneof(fc.constantFrom("page", "poplin"), fc.stringMatching(PUBLISHED_WORD_SHAPE))
   .map((raw) => parsePublicWord(raw))
   .filter((word) => word !== undefined);
-const layouts = publicWords.map((publicWord) => ({ publicWord, reserved: keptPublicNames(publicWord, OWN_NAMES) }));
+const layouts = publicWords.map((publicWord) => ({ publicWord, reserved: keptPublicNames(publicWord) }));
 const accesses = fc.constantFrom("private" as const, "unlisted" as const, "public" as const);
 const letters = fc.constantFrom<AccessLetter>("p", "u");
 
@@ -95,28 +94,28 @@ property(
 );
 
 property(
-  "every accepted name follows the published rule, no accepted public name is the one the gallery keeps, and every accepted id is 12 base36 characters, so no site gets an address DNS cannot carry or the install answers on itself",
+  "every accepted name follows the published rule, no accepted public name is one the layout keeps, and every accepted id is 12 base36 characters, so no site gets an address DNS cannot carry or the install answers on itself",
   fc.property(labels, layouts, (raw, layout) => {
-    const checked = [parseSiteName(raw), nameFromEntry(raw), parsePublicName(raw, RESERVED), splitLabel(raw, RESERVED), siteReference(raw)];
+    const checked = [parseSiteName(raw), nameFromEntry(raw), parsePublicName(raw, layout.reserved), splitLabel(raw, layout.reserved), siteReference(raw)];
     const accepted: readonly unknown[] = [...checked.map((outcome) => (outcome.ok ? outcome.value : undefined)), readHostLabel(raw, layout)];
     const parts = accepted
       .filter((value) => value !== undefined)
       .map((value): { readonly kind?: string; readonly name?: string; readonly id?: string } => (typeof value === "string" ? { name: value } : (value as object)));
     const names = parts.map((part) => part.name).filter((name) => name !== undefined);
-    const addressed = [splitLabel(raw, RESERVED), { ok: true as const, value: readHostLabel(raw, layout) }].map((outcome) => (outcome.ok && outcome.value.kind === "public-name" ? outcome.value.name : undefined));
-    const publicOnes = [parsePublicName(raw, RESERVED).ok ? raw : undefined, ...addressed].filter((name) => name !== undefined);
+    const addressed = [splitLabel(raw, layout.reserved), { ok: true as const, value: readHostLabel(raw, layout) }].map((outcome) => (outcome.ok && outcome.value.kind === "public-name" ? outcome.value.name : undefined));
+    const publicOnes = [parsePublicName(raw, layout.reserved).ok ? raw : undefined, ...addressed].filter((name) => name !== undefined);
     const ids = parts.map((part) => part.id).filter((id) => id !== undefined);
 
     expect(names.filter((name) => !followsPublishedRule(name))).toEqual([]);
-    expect(publicOnes.filter((name) => name === GALLERY_NAME)).toEqual([]);
+    expect(publicOnes.filter((name) => layout.reserved.has(name))).toEqual([]);
     expect(ids.filter((id) => !PUBLISHED_ID.test(id))).toEqual([]);
   }),
 );
 
 property(
-  "every well formed name is accepted as a name, and as a public name unless the gallery keeps it, so a tightened rule cannot orphan published sites",
-  fc.property(fc.oneof(wellFormed, fc.constant(GALLERY_NAME)), (name) => {
-    expect([parseSiteName(name).ok, parsePublicName(name, RESERVED).ok]).toEqual([true, name !== GALLERY_NAME]);
+  "every well formed name is accepted as a name, and as a public name unless the layout keeps it, so a tightened rule cannot orphan published sites",
+  fc.property(fc.oneof(wellFormed, fc.constant(KEPT_NAME)), (name) => {
+    expect([parseSiteName(name).ok, parsePublicName(name, RESERVED).ok]).toEqual([true, name !== KEPT_NAME]);
   }),
 );
 

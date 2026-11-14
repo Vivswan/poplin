@@ -122,7 +122,6 @@ test("every refusal of an action comes back as its code in the address and its s
     [`${path}/settings`, { access: "public", public_name: "docs", title: "" }, `${path}?refused=name_taken&about=public_name`, "Another site holds that public name. Choose another."],
     [`${path}/settings`, { access: "public", public_name: "No Good", title: "" }, `${path}?refused=bad_name&about=public_name`, "The name breaks the rules: 3 to 40 characters, lowercase letters, digits, and single dashes inside."],
     [`${path}/settings`, { access: "private", name: "No Good", title: "" }, `${path}?refused=bad_name&about=name`, "The name breaks the rules: 3 to 40 characters, lowercase letters, digits, and single dashes inside."],
-    [`${path}/settings`, { access: "public", public_name: "gallery", title: "" }, `${path}?refused=reserved_name&about=public_name`, "That public name is reserved."],
     [`${path}/settings`, { access: "everyone", title: "" }, `${path}?refused=bad_argument&about=access`, "The value of access is not one it takes."],
     [`${path}/settings`, { access: "private", title: "", expires: "yesterday" }, `${path}?refused=bad_argument&about=expires`, "The value of expires is not one it takes."],
     [`${path}/settings`, { access: "private", title: "", expires: "0d" }, `${path}?refused=bad_argument&about=expires`, "The value of expires is not one it takes."],

@@ -179,7 +179,6 @@ describe("import", () => {
     await published(taken, "other", { "index.html": "<title>Other</title>" }, "--public --name docs");
     const full = await openBench();
     await full.run("config max_sites 2");
-    const reserved = await withEntry(zip, new RegExp(`^sites/${docs}/site\\.json$`), (site) => ({ ...site, public_name: "gallery" }));
     const malformed = await withEntry(zip, new RegExp(`^sites/${docs}/site\\.json$`), (site) => ({ ...site, embeddable: "sometimes" }));
     const older = await openBench();
     older.hook = (request) => (new URL(request.url).pathname === "/api/import/sites" ? answer(409, { error: { code: "backup_too_new", message: "newer", about: "format" } }) : undefined);
@@ -187,14 +186,12 @@ describe("import", () => {
     const runs = {
       name_taken: await taken.run(`import ${zip} --json`),
       too_many_sites: await full.run(`import ${zip} --json`),
-      reserved_name: await (await openBench()).run(`import ${reserved} --json`),
       bad_argument: await (await openBench()).run(`import ${malformed} --json`),
       backup_too_new: await older.run(`import ${zip} --json`),
     };
 
-    expect(Object.fromEntries(Object.entries(runs).map(([code, ran]) => [code, ran.code]))).toEqual({ name_taken: 1, too_many_sites: 1, reserved_name: 1, bad_argument: 1, backup_too_new: 1 });
+    expect(Object.fromEntries(Object.entries(runs).map(([code, ran]) => [code, ran.code]))).toEqual({ name_taken: 1, too_many_sites: 1, bad_argument: 1, backup_too_new: 1 });
     expect(linesOf(jsonOf(runs.name_taken))).toEqual({ demo: "imported", docs: "name_taken", notes: "imported", old: "imported", typed: "imported" });
-    expect(linesOf(jsonOf(runs.reserved_name)).docs).toBe("reserved_name");
     expect(linesOf(jsonOf(runs.bad_argument)).docs).toBe("bad_argument");
     expect(Object.values(linesOf(jsonOf(runs.too_many_sites))).sort()).toEqual(["imported", "imported", "too_many_sites", "too_many_sites", "too_many_sites"]);
     expect(Object.values(linesOf(jsonOf(runs.backup_too_new)))).toEqual(Array(5).fill("backup_too_new"));

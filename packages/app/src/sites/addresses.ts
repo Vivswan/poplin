@@ -11,14 +11,14 @@ import type { SiteLabel } from "@poplin/core/src/sites/labels";
  *
  * A `site` is named by its id alone: `name` and `letter` are what the URL carried, and either may be absent.
  */
-export type Addressed = (HostParts & { readonly path: string }) | { readonly kind: "gallery" } | { readonly kind: "none" };
+export type Addressed = (HostParts & { readonly path: string }) | { readonly kind: "none" };
 
 /** One install's address layout, as the product sees it. */
 export interface SiteAddresses {
   /** Reads what a request's URL addresses; no lookup is made, so a site may still not exist. Only the host and the path are read, never the scheme or the port. */
   readonly resolve: (url: URL) => Addressed;
 
-  /** Decides whether a hostname, in lowercase and without a port, is where a site of the install or its gallery answers. */
+  /** Decides whether a hostname, in lowercase and without a port, is where a site of the install answers. */
   readonly isSiteHost: (hostname: string) => boolean;
 
   /** The `frame-ancestors` source that covers every page of the install's sites. */

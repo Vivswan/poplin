@@ -26,6 +26,9 @@ const LETTER_ENDING = /-[pu]$/;
 /** What stands before a letter and before a public word. */
 const DASH = "-";
 
+/** What a layout keeps when a public name can never read as a label address. */
+const NO_NAMES: ReservedNames = new Set();
+
 declare const publicWordBrand: unique symbol;
 
 /** The word the hostname label of every public-name address ends with, chosen once at install; made by `parsePublicWord` alone, or the default. */
@@ -58,13 +61,12 @@ export function parsePublicWord(raw: string): PublicWord | undefined {
 /**
  * Name the public names a layout keeps for itself.
  *
- * @param own - the names of the layout's own pages, such as the gallery's
- * @returns `own`, and under the public word `poplin` also every name that would read as a label address: one that ends in `-p` or `-u`, or has the form of an id
+ * @returns none, but under the public word `poplin` every name that would read as a label address: one that ends in `-p` or `-u`, or has the form of an id
  */
-export function keptPublicNames(publicWord: PublicWord, own: ReadonlySet<string>): ReservedNames {
-  if (`${DASH}${publicWord}` !== MARKER) return own;
+export function keptPublicNames(publicWord: PublicWord): ReservedNames {
+  if (`${DASH}${publicWord}` !== MARKER) return NO_NAMES;
 
-  return { has: (name) => own.has(name) || LETTER_ENDING.test(name) || parseSiteId(name).ok };
+  return { has: (name) => LETTER_ENDING.test(name) || parseSiteId(name).ok };
 }
 
 /**

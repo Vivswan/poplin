@@ -3,20 +3,13 @@
 //   <name>--<id>-p-poplin.<domain>          a private site, by its label
 //   <name>--<id>-u-poplin.<domain>          an unlisted or a public site, by its label
 //   <public name>-<public word>.<domain>    a public site, by its public name
-//   gallery-<public word>.<domain>          the gallery
 
 import type { Hostname } from "@poplin/core/src/names/hostname";
 import { type AccessLetter, keptPublicNames, letterOf, MARKER, type PublicWord, publicHostLabel, readHostLabel, siteHostLabel } from "@poplin/core/src/names/marker";
-import type { PublicName, SiteName } from "@poplin/core/src/names/names";
+import type { SiteName } from "@poplin/core/src/names/names";
 import type { SiteId } from "@poplin/core/src/sites/ids";
 import { siteLabel } from "@poplin/core/src/sites/labels";
 import type { Addressed, SiteAddresses } from "./addresses";
-
-/** The name before the public word in the gallery's hostname. */
-const GALLERY_NAME = "gallery";
-
-/** The public names of the layout's own pages: a site holding one would take the hostname of that page. */
-const OWN_NAMES: ReadonlySet<string> = new Set([GALLERY_NAME]);
 
 /** The one answer for every URL that names nothing of the install. */
 const NONE: Addressed = { kind: "none" };
@@ -38,15 +31,12 @@ interface HostnameLayout {
 export function hostnameAddresses(layout: HostnameLayout): SiteAddresses {
   const domainEnding = `.${layout.domain}`;
   const siteEndings = [`${MARKER}${domainEnding}`, `-${layout.publicWord}${domainEnding}`];
-  const reserved = keptPublicNames(layout.publicWord, OWN_NAMES);
-  const galleryLabel = publicHostLabel(GALLERY_NAME as PublicName, layout.publicWord);
+  const reserved = keptPublicNames(layout.publicWord);
 
   function resolve(url: URL): Addressed {
     if (!url.hostname.endsWith(domainEnding)) return NONE;
 
     const label = url.hostname.slice(0, -domainEnding.length);
-    if (label === galleryLabel) return { kind: "gallery" };
-
     const parts = readHostLabel(label, { publicWord: layout.publicWord, reserved });
     if (parts.kind === "not-ours" || parts.kind === "not-found") return NONE;
 

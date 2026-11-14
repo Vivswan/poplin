@@ -78,7 +78,7 @@ export function nameFromEntry(entry: string): Checked<SiteName> {
 /**
  * Decide whether a string may be a public site's public name.
  *
- * @param reserved - the names the install's address layout keeps for itself, such as the one its gallery answers at
+ * @param reserved - the names the install's address layout keeps for itself
  * @returns the name, or the first rule it breaks
  */
 export function parsePublicName(raw: string, reserved: ReservedNames): Checked<PublicName> {

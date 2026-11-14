@@ -156,7 +156,6 @@ describe("not found", () => {
     ["a hostname one level deeper", (w) => ask(`www.${labelHost(w.report)}`, "/")],
     ["a public name no site holds", () => ask("nobody-page.example.com", "/")],
     ["the public name of a site that is not public", () => ask("report-page.example.com", "/")],
-    ["the gallery with no handler", () => ask("gallery-page.example.com", "/")],
     ["a missing file of a private site, asked by the owner", (w) => ask(labelHost(w.secret), "/nothing.txt", withProof(w))],
   ];
 
@@ -266,13 +265,6 @@ describe("access", () => {
     const fresh = await serveSite(ask(labelHost(changed.site), "/"), install.serving);
 
     expect([old.status, await old.text(), fresh.status, await fresh.text()]).toEqual([200, "renamed home", 200, "renamed home"]);
-  });
-
-  // Drift: the gallery's hostname would be read as a public name, or its handler would be skipped.
-  test("the gallery's hostname goes to the handler it was given", async () => {
-    const response = await serve(ask("gallery-page.example.com", "/"), { gallery: async () => new Response("the gallery") });
-
-    expect(await response.text()).toBe("the gallery");
   });
 });
 
@@ -590,7 +582,7 @@ describe("other pages", () => {
     ["a file of the same site", { "Sec-Fetch-Site": "same-origin", "Sec-Fetch-Mode": "no-cors", "Sec-Fetch-Dest": "image" }, 200, 200],
     ["another site of the install, which sends no referrer", SAME_SITE_IMAGE, 200, 200],
     ["another site of the install that names itself", { ...SAME_SITE_IMAGE, Origin: "https://shop-page.example.com" }, 200, 200],
-    ["the gallery of the install", { ...SAME_SITE_IMAGE, Referer: "https://gallery-page.example.com/" }, 200, 200],
+    ["another site of the install, by its referrer", { ...SAME_SITE_IMAGE, Referer: "https://shop-page.example.com/" }, 200, 200],
     ["a page of the domain that is no site, by its referrer", { ...SAME_SITE_IMAGE, Referer: "https://www.example.com/page" }, 403, 200],
     ["a page of the domain that is no site, by its origin", { ...SAME_SITE_IMAGE, Origin: "https://www.example.com" }, 403, 200],
     ["the dashboard's hostname", { ...SAME_SITE_IMAGE, Origin: "https://poplin.example.com" }, 403, 200],
@@ -616,9 +608,8 @@ describe("other pages", () => {
   test("the refusal is the same for every site address, and reads nothing", async () => {
     const before = world.install.keys.length;
     const refusal = { status: 403, body: "Forbidden\n", headers: { ...PLAIN_HEADERS, "content-type": "text/plain; charset=utf-8" } };
-    const hosts = [labelHost(world.report), typedHost(world.secret, "u"), typedHost({ id: MISSING_ID, name: "secret" }, "u"), "shop-page.example.com", "gallery-page.example.com"];
-    const gallery = async (): Promise<Response> => new Response("the gallery");
-    const answers = await Promise.all(hosts.map(async (host) => whole(await serve(ask(host, "/", CROSS_SITE_SUBREQUEST), { gallery }))));
+    const hosts = [labelHost(world.report), typedHost(world.secret, "u"), typedHost({ id: MISSING_ID, name: "secret" }, "u"), "shop-page.example.com"];
+    const answers = await Promise.all(hosts.map(async (host) => whole(await serve(ask(host, "/", CROSS_SITE_SUBREQUEST)))));
 
     expect({ answers, reads: world.install.keys.length - before }).toEqual({ answers: hosts.map(() => refusal), reads: 0 });
   });

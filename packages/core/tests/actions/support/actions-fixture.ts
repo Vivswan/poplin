@@ -91,7 +91,7 @@ export async function makeWorld(overrides: Partial<SettingValues> = {}): Promise
       now: () => clock.now,
       addressOf: (label, access) => `https://${label}-${access === "private" ? "p" : "u"}-poplin.example.com`,
       publicAddressOf: (name) => `https://${name}-page.example.com`,
-      reservedNames: new Set(["gallery"]),
+      reservedNames: new Set(["docs-p"]),
     },
     faults,
     clock,

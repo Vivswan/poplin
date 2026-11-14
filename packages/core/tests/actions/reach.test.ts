@@ -81,7 +81,7 @@ describe("reachSite", () => {
     const found = { ok: true, site: { id } };
 
     const answers = [];
-    for (const reference of [`report--${id}`, id, "abcdefghijkl", "report", `budget--${id}`, "zzzzzzzzzzzz", `Report--${id}`, "gallery", ""]) {
+    for (const reference of [`report--${id}`, id, "abcdefghijkl", "report", `budget--${id}`, "zzzzzzzzzzzz", `Report--${id}`, "docs-p", ""]) {
       answers.push(await getSite(world.install, OWNER, reference));
     }
 

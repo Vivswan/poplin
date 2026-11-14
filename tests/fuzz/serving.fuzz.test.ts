@@ -23,7 +23,7 @@ const FETCH_SITES = ["cross-site", "same-site", "same-origin", "none", "CROSS-SI
 const FETCH_MODES = ["navigate", "no-cors", "cors", "same-origin", "websocket"];
 const FETCH_DESTS = ["document", "iframe", "image", "script", "empty", "style"];
 const OUTSIDE_PAGES = ["https://www.example.com/", "https://poplin.example.com/sites"];
-const OWN_PAGES = ["https://shop-page.example.com", "https://gallery-page.example.com/"];
+const OWN_PAGES = ["https://shop-page.example.com", "https://docs-page.example.com/"];
 const NO_ADDRESSES = ["null", "", "//", "not a url"];
 const REQUESTERS = [...OUTSIDE_PAGES, ...OWN_PAGES, ...NO_ADDRESSES];
 const RANGES = ["bytes=0-1", "bytes=2-", "bytes=-1", "bytes=9-", "bytes=0-0,2-3", "bytes=-0", "bytes=5-2", "items=0-1", "bytes=99999999999999999999-", "bytes=0-99999999999999999999"];
@@ -53,7 +53,7 @@ const ids = fc.constantFrom(...BY_ID.keys(), MISSING_ID);
 const names = fc.option(fc.constantFrom(...TYPED_NAMES, ...SITES.map((site) => site.name as string)), { nil: undefined });
 const letters = fc.constantFrom(...LETTERS);
 const typedHosts = fc.tuple(ids, names, letters).map(([id, name, letter]) => typedHost(name === undefined ? { id } : { id, name }, letter));
-const otherHosts = fc.constantFrom("shop-page.example.com", "gallery-page.example.com", "poplin.example.com", "example.com", "report-page.example.com");
+const otherHosts = fc.constantFrom("shop-page.example.com", "docs-page.example.com", "poplin.example.com", "example.com", "report-page.example.com");
 const knownHosts = fc.oneof({ arbitrary: typedHosts, weight: 4 }, { arbitrary: otherHosts, weight: 1 });
 const hosts = fc.oneof({ arbitrary: knownHosts, weight: 3 }, { arbitrary: hostile(knownHosts), weight: 2 });
 const climbs = fc.array(fc.constantFrom("..", "%2e%2e", ".%2E", "..%2f", "..%5c", "%252e%252e", ".", "", "docs"), { maxLength: 6 }).map((parts) => parts.join("/"));

@@ -202,7 +202,7 @@ describe("publishSite", () => {
     ["a new name on an update that breaks the name rules", {}, { files: pages("x"), name: "Other", onto: true }, { code: "bad_name", about: "name" }],
     ["a public name another site holds", {}, { files: pages("x"), name: "report", access: "public", public_name: "taken" }, { code: "name_taken", about: "public_name" }],
     ["an update to a public name another site holds", {}, { files: pages("x"), onto: true, access: "public", public_name: "taken" }, { code: "name_taken", about: "public_name" }],
-    ["the gallery's public name", {}, { files: pages("x"), name: "gallery", access: "public" }, { code: "reserved_name", about: "public_name" }],
+    ["a public name the layout keeps", {}, { files: pages("x"), name: "docs-p", access: "public" }, { code: "reserved_name", about: "public_name" }],
     ["a public name with no public access", {}, { files: pages("x"), name: "report", public_name: "docs" }, { code: "bad_argument", about: "public_name" }],
     ["an expiry in no known form", {}, { files: pages("x"), name: "report", expires: "soon" }, { code: "bad_argument", about: "expires" }],
     ["a setting that does not exist", {}, { files: pages("x"), name: "report", colour: "red" } as never, { code: "bad_argument", about: "colour" }],

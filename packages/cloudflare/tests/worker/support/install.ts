@@ -94,7 +94,7 @@ export async function installOf(from: World): Promise<Install> {
     now: () => from.clock.now,
     addressOf: (label, access) => `https://${label}-${access === "private" ? "p" : "u"}-poplin.example.com`,
     publicAddressOf: (name) => `https://${name}-page.example.com`,
-    reservedNames: new Set(["gallery"]),
+    reservedNames: new Set(["docs-p"]),
   };
 }
 

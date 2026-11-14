@@ -39,8 +39,11 @@ const TEXT_FILES = new Bun.Glob("**/*.{ts,tsx,mts,cts,js,jsx,mjs,cjs,json,jsonc,
 /** What is not read of them: what is installed or built, a folder whose name starts with a dot but for `.github`, and a `.d.ts` file, which is written from the configuration that is read itself. */
 const UNREAD = /(?:^|\/)(?:node_modules|dist|\.(?!github\/)[^/]+)\/|\.d\.ts$/;
 
-/** The setting `gallery` as it was written: given a value, declared to the module, or named to `poplin config`. The word alone is still the name the install keeps back. */
+/** The setting `gallery` as it was written: given a value, declared to the module, or named to `poplin config`. The word alone is the preview's page of its samples. */
 const GALLERY_SETTING = /\bgallery["']?\s*[:=]\s*(?:["'](?:on|off)["']|true\b|false\b|onOff\(|v\.boolean\(|var\.)|variable "gallery"|\bvar\.gallery\b|\bconfig gallery\b/;
+
+/** The gallery's address as it was written: the kind an address resolved to, the handler serving took, the name kept back from sites, and its hostname. */
+const GALLERY_ADDRESS = /\bkind(?::| ===) ["']gallery["']|\bgallery\??: (?:async )?\(|\bGALLERY_NAME\b|\[["']gallery["']\]|\bgallery-(?:page\b|poplin\b|<)/;
 
 /** Rule (d): the names of what the install no longer has. One written anywhere would describe, test, or configure something that is gone. */
 const RETIRED_NAMES: readonly RegExp[] = [
@@ -51,6 +54,7 @@ const RETIRED_NAMES: readonly RegExp[] = [
   /signed-everyone-out/,
   /\bprivate_sites\b/,
   GALLERY_SETTING,
+  GALLERY_ADDRESS,
   /\bcache_(?:html|files)\b/,
 ];
 
@@ -186,6 +190,11 @@ describe("no old shapes outside migrations/", () => {
     ["the old audit action of a sign-out", 'log("signed-everyone-out");', "retired name"],
     ["the setting of an install with no domain", 'const kind = settings.private_sites === "folders";', "retired name"],
     ["the gallery's switch as a setting", "const VALUES = { gallery: v.boolean() };", "retired name"],
+    ["the gallery as what an address resolves to", 'if (label === own) return { kind: "gallery" };', "retired name"],
+    ["the gallery as a handler of serving", "const serving = { gallery: async (request) => page(request) };", "retired name"],
+    ["the gallery's name kept back from sites", 'const OWN_NAMES = new Set(["gallery"]);', "retired name"],
+    ["the gallery's hostname", 'const host = "gallery-page.example.com";', "retired name"],
+    ["the gallery's hostname in a layout's picture", "//   gallery-<public word>.<domain>          the gallery", "retired name"],
     ["the cache time of HTML as a setting", "const seconds = settings.cache_html.count;", "retired name"],
     ["the cache time of other files as a setting", 'const kept = settings.cache_files === "off";', "retired name"],
     ["an import broken over lines", 'import { REGISTRY } from\n  "../migrations/registry";', "imports migrations"],
@@ -215,7 +224,7 @@ describe("no old shapes outside migrations/", () => {
   test("a file listed for one retired name is still named for another, and the word gallery alone is no setting", () => {
     const root = planted({
       "packages/cloudflare/tests/zone/zone-binding.test.ts": 'const refused = { admin_hostname: "dashboard.example.com" };\nconst old = { zone_bots: "on" };\n',
-      "packages/demo/src/sites/names.ts": 'const OWN_NAMES = new Set(["gallery"]);\nconst serving = { gallery: async () => new Response("the gallery") };\n',
+      "packages/demo/src/sites/names.ts": 'const OWN_PATHS = ["/gallery"];\nconst host = { samples, gallery: flags.gallery };\n',
     });
 
     expect(violations(root)).toEqual(["retired name: packages/cloudflare/tests/zone/zone-binding.test.ts:2"]);

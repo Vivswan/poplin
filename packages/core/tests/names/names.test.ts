@@ -3,7 +3,7 @@ import { describe, expect, test } from "bun:test";
 import { nameFromEntry, parsePublicName, parseSiteName } from "../../src/names/names";
 
 const LONGEST_NAME = "a".repeat(40);
-const RESERVED: ReadonlySet<string> = new Set(["gallery"]);
+const RESERVED: ReadonlySet<string> = new Set(["docs-p"]);
 
 describe("parseSiteName", () => {
   // Drift: a name is part of a DNS label; a loosened rule would publish a site no hostname can reach, and a name under 3 characters would put `--` third and fourth.
@@ -13,7 +13,7 @@ describe("parseSiteName", () => {
     ["q3-report-2", { ok: true, value: "q3-report-2" }],
     ["777", { ok: true, value: "777" }],
     ["k3f9x2ab71qz", { ok: true, value: "k3f9x2ab71qz" }],
-    ["gallery", { ok: true, value: "gallery" }],
+    ["docs-p", { ok: true, value: "docs-p" }],
     ["publish", { ok: true, value: "publish" }],
     [LONGEST_NAME, { ok: true, value: LONGEST_NAME }],
     ["", { ok: false, refusal: "empty" }],
@@ -65,11 +65,11 @@ describe("parsePublicName", () => {
     ["admins", { ok: true, value: "admins" }],
     ["publish", { ok: true, value: "publish" }],
     ["none", { ok: true, value: "none" }],
-    ["gallery", { ok: false, refusal: "reserved" }],
+    ["docs-p", { ok: false, refusal: "reserved" }],
     ["admin", { ok: true, value: "admin" }],
     ["ab", { ok: false, refusal: "too-short" }],
     ["my--docs", { ok: false, refusal: "double-dash" }],
-    ["Gallery", { ok: false, refusal: "bad-character" }],
+    ["Docs-p", { ok: false, refusal: "bad-character" }],
   ] as ReadonlyArray<readonly [string, unknown]>)("decides %j", (raw, outcome) => {
     expect<unknown>(parsePublicName(raw, RESERVED)).toEqual(outcome);
   });

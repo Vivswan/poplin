@@ -40,7 +40,7 @@ locals {
   # The fixed word every site hostname label ends in. The Worker reads the same word, so it is no input.
   marker = "-poplin"
 
-  # What a site hostname ends with: the label addresses' ending, then the public names' and the gallery's when their word is another.
+  # What a site hostname ends with: the label addresses' ending, then the public names' when their word is another.
   site_host_endings = distinct(["${local.marker}.${local.domain}", "-${var.public_word}.${local.domain}"])
 
   # One term of the rule language per ending. The inputs are validated, so no quote can appear in one.

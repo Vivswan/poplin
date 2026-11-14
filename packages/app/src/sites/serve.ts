@@ -74,13 +74,10 @@ interface Serving {
 
   /** The time, in milliseconds since the epoch. */
   readonly now: () => number;
-
-  /** Answers the gallery's address; absent, that address is not found. */
-  readonly gallery?: (request: Request) => Promise<Response>;
 }
 
 /** An address that names a site. */
-type SiteAddress = Exclude<Addressed, { readonly kind: "gallery" | "none" }>;
+type SiteAddress = Exclude<Addressed, { readonly kind: "none" }>;
 
 /** What a request for a site comes to, before any file is read. */
 type Verdict = { readonly kind: "serve"; readonly site: Site } | { readonly kind: "move"; readonly origin: string } | { readonly kind: "none" };
@@ -263,8 +260,6 @@ export async function serveSite(request: Request, serving: Serving): Promise<Res
   if (address.kind === "site" && address.letter === "p" && !(await serving.identify(request.headers)).ok) return plain(request, 404);
 
   if (serving.settings.outside_pages === "blocked" && isOutsideSubrequest(request.headers, serving.addresses)) return plain(request, 403);
-
-  if (address.kind === "gallery") return (await serving.gallery?.(request)) ?? plain(request, 404);
 
   const verdict = verdictOf(address, await findSite(address, serving), serving.addresses);
   if (verdict.kind === "none") return plain(request, 404);

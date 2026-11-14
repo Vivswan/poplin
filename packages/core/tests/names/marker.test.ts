@@ -9,12 +9,11 @@ const DNS_LABEL_LIMIT = 63;
 const LONGEST_NAME = "a".repeat(40);
 const LONGEST_WORD = "publishes" as PublicWord;
 const ID = "k3f9x2ab71qz";
-const OWN: ReadonlySet<string> = new Set(["gallery"]);
-const PAGE = { publicWord: DEFAULT_PUBLIC_WORD, reserved: keptPublicNames(DEFAULT_PUBLIC_WORD, OWN) };
-const POPLIN = { publicWord: "poplin" as PublicWord, reserved: keptPublicNames("poplin" as PublicWord, OWN) };
+const PAGE = { publicWord: DEFAULT_PUBLIC_WORD, reserved: keptPublicNames(DEFAULT_PUBLIC_WORD) };
+const POPLIN = { publicWord: "poplin" as PublicWord, reserved: keptPublicNames("poplin" as PublicWord) };
 
 function publicNameOf(raw: string): PublicName {
-  const parsed = parsePublicName(raw, OWN);
+  const parsed = parsePublicName(raw, PAGE.reserved);
   if (!parsed.ok) throw new Error(`fixture ${JSON.stringify(raw)} is not a public name`);
 
   return parsed.value;
@@ -70,7 +69,6 @@ describe("readHostLabel", () => {
     [`report--${ID}-poplin`, { kind: "site", name: "report", id: ID }],
     [`${ID}-poplin`, { kind: "site", id: ID }],
     [`${ID}-u-poplin`, { kind: "site", id: ID, letter: "u" }],
-    [`gallery--${ID}-u-poplin`, { kind: "site", name: "gallery", id: ID, letter: "u" }],
     [`my-u--${ID}-poplin`, { kind: "site", name: "my-u", id: ID }],
     ["docs-page", { kind: "public-name", name: "docs" }],
     ["my-page-page", { kind: "public-name", name: "my-page" }],
@@ -90,7 +88,6 @@ describe("readHostLabel", () => {
     ["-poplin", { kind: "not-found" }],
     ["-page", { kind: "not-found" }],
     ["ab-page", { kind: "not-found" }],
-    ["gallery-page", { kind: "not-found" }],
     ["Docs-page", { kind: "not-found" }],
     ["docs--page", { kind: "not-found" }],
     [`report--${ID}-page`, { kind: "not-found" }],
@@ -114,7 +111,6 @@ describe("readHostLabel", () => {
     [`report--${ID}-poplin`, { kind: "site", name: "report", id: ID }],
     ["docs-p-poplin", { kind: "not-found" }],
     ["docs-u-poplin", { kind: "not-found" }],
-    ["gallery-poplin", { kind: "not-found" }],
     ["docs-page", { kind: "not-ours" }],
   ] as ReadonlyArray<readonly [string, unknown]>)("under the public word `poplin`, %j reads as %j", (label, outcome) => {
     expect<unknown>(readHostLabel(label, POPLIN)).toEqual(outcome);

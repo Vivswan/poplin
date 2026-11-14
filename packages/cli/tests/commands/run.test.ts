@@ -199,7 +199,6 @@ describe("run", () => {
       await bench.run(`new-link ${label}`, asStranger),
       await bench.run(`rollback ${label} --to 7`),
       await bench.run(`restore ${label}`),
-      await bench.run(`set ${label} --public --public-name gallery`),
       await bench.run(`delete ${label} --forever`),
       await bench.run(`delete ${label} --forever`, { terminal: { asks: true, progress: true }, typed: "report" }),
     ];
@@ -210,7 +209,6 @@ describe("run", () => {
       [1, "no site with that id or public name"],
       [1, "the site keeps no such version"],
       [1, "the site is not in the trash"],
-      [1, "the install keeps that public name for itself: public_name"],
       [1, "delete --forever asks for the site's label to be typed, and there is no terminal to ask on"],
       [1, "what was typed is not the site's label, so nothing was deleted"],
     ]);
