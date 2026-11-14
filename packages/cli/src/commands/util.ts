@@ -1,10 +1,15 @@
 // What the command modules share: the refusal of a command line, the flags as typed, and how a typed word is read.
 
+import { posix, win32 } from "node:path";
+
 /** The most edits between a typed word and the word suggested for it. A swap of two neighbours counts as one. */
 const MAX_EDITS = 1;
 
-/** What a word starts with when it is a path. */
-const PATH_STARTS = [".", "/", "~"];
+/** What a word starts with when it is a path that holds no separator: this folder, the one above, or the home folder. */
+const PATH_STARTS = [".", "~"];
+
+/** What parts the folders of a path, on POSIX and on Windows. */
+const SEPARATORS = [posix.sep, win32.sep];
 
 /** A command line that was written wrong: what is wrong, and when there is one, what to type instead. */
 export interface UsageError {
@@ -71,12 +76,15 @@ export function flagValue(flags: Flags, name: string): string | undefined {
 }
 
 /**
- * Decide whether a word names a file or folder rather than a command or a site.
+ * Decide whether a word names a file or folder rather than a command or a site. The answer is the same on every system, and no disk is read.
  *
- * @returns true for a word that starts with `.`, `/`, or `~`, or holds a `/`
+ * @returns true for a word that starts with `.`, `~`, or a drive such as `C:`, or holds a `/` or a `\`
  */
 export function looksLikePath(word: string): boolean {
-  return word.includes("/") || PATH_STARTS.some((start) => word.startsWith(start));
+  // The Windows reading finds a drive: `C:` and `C:report` hold no separator.
+  if (win32.parse(word).root !== "") return true;
+
+  return SEPARATORS.some((separator) => word.includes(separator)) || PATH_STARTS.some((start) => word.startsWith(start));
 }
 
 /**

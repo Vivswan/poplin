@@ -5,13 +5,13 @@ import fc from "fast-check";
 
 import { COMMANDS } from "../../packages/cli/src/commands/command-table";
 import { parseCommand } from "../../packages/cli/src/commands/parse-command";
+import { looksLikePath } from "../../packages/cli/src/commands/util";
 import { fuzzTarget } from "./config";
 import { hostile } from "./hostile";
 
 const COMMAND_NAMES: readonly string[] = COMMANDS.map((spec) => spec.name);
 const FLAG_NAMES = [...new Set(COMMANDS.flatMap((spec) => spec.flags.map((flag): string => flag.name)))];
 const DECLARED_KINDS = new Set([...COMMAND_NAMES, "version", "usage-error"]);
-const PUBLISHED_PATH_RULE = /^[./~]|\//;
 const VALUES = [
   "report--k3f9x2ab71qz",
   "k3f9x2ab71qz",
@@ -58,7 +58,7 @@ property(
 property(
   "a first word that is neither a command nor a path by the published rule is refused whatever follows it, so a typo is never a publish or any other request",
   fc.property(plainWords, fc.array(fc.oneof(values, plainWords), { maxLength: 4 }), (first, rest) => {
-    fc.pre(!COMMAND_NAMES.includes(first) && !PUBLISHED_PATH_RULE.test(first));
+    fc.pre(!COMMAND_NAMES.includes(first) && !looksLikePath(first));
 
     expect(parseCommand([first, ...rest.filter((word) => !word.startsWith("-"))]).kind).toBe("usage-error");
   }),

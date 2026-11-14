@@ -106,6 +106,12 @@ describe("parseCommand", () => {
     ["poplin ~/site", { ...CREATE, path: "~/site" }],
     ["poplin /srv/site", { ...CREATE, path: "/srv/site" }],
     ["poplin sites/report", { ...CREATE, path: "sites/report" }],
+    ["poplin C:\\work\\report", { ...CREATE, path: "C:\\work\\report" }],
+    ["poplin .\\report --dry-run", { ...CREATE, path: ".\\report", dryRun: true }],
+    ["poplin \\\\server\\share\\report", { ...CREATE, path: "\\\\server\\share\\report" }],
+    ["poplin C:report", { ...CREATE, path: "C:report" }],
+    ["poplin .\\list", { ...CREATE, path: ".\\list" }],
+    ["poplin list", { kind: "list", trash: false, ...PLAIN }],
     ["poplin publish report", { ...CREATE, path: "report" }],
     [`poplin ./${SWAPPED}`, { ...CREATE, path: `./${SWAPPED}` }],
   ];
@@ -163,6 +169,7 @@ describe("parseCommand", () => {
     ["poplin ./one ./two", refusal('too many arguments for poplin publish: "./two"', "poplin publish <path>")],
     ["poplin list extra", refusal('too many arguments for poplin list: "extra"', "poplin list")],
     ["poplin delete ./report", refusal('"./report" is a path. Give the site\'s label; poplin list shows it.')],
+    ["poplin delete .\\report", refusal('".\\\\report" is a path. Give the site\'s label; poplin list shows it.')],
     [
       "poplin show Report",
       refusal(

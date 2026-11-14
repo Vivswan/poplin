@@ -64,7 +64,7 @@ function overview(): string {
     "       poplin <command> [flags]",
     ...listing,
     "",
-    "A first word is a path when it starts with . / or ~ or holds a /",
+    "A first word is a path when it starts with . ~ or a drive (C:), or holds / or \\",
     ...section("flags of every command", everywhere.map(flagRow)),
     ...section(
       "examples",
