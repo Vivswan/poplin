@@ -511,3 +511,9 @@ dist
 /.fuzz-failures/
 
 # END REPO-PLATFORM MANAGED
+
+# Package build output
+packages/*/lib/
+
+# Local tool state
+.taste-skill/

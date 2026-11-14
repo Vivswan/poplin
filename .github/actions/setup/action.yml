@@ -1,0 +1,17 @@
+name: Set up bun
+description: |
+  Installs the bun that .bun-version pins, then the locked dependencies.
+
+  The install is bun install --frozen-lockfile, so a lockfile that disagrees with a package.json fails the step.
+
+  The caller owes a checkout. No inputs, no outputs, no permissions, no secrets.
+
+runs:
+  using: composite
+  steps:
+    - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+      with:
+        bun-version-file: .bun-version
+    - name: Install dependencies
+      shell: bash
+      run: bun install --frozen-lockfile

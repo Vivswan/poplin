@@ -32,3 +32,11 @@ Poplin: Agents publish static sites to your own Cloudflare account: private by d
 
 <!-- Add project-specific instructions below the END marker; they are this repository's own and survive every sync. -->
 <!-- END REPO-PLATFORM MANAGED -->
+
+## Poplin
+
+Poplin publishes a static site to the user's own Cloudflare account with one call: one Worker serves every site from one R2 bucket.
+
+- Run every check: `bun run check`
+- Turn the hooks on, once per clone: `git config core.hooksPath .githooks`
+- Backwards-compatible code lives only in `migrations/`. Everywhere else an old shape is deleted outright.

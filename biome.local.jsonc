@@ -1,4 +1,73 @@
 // The repository's own biome layer: exclusions, the formatter, extra rules, and per-path overrides with their
 // reasons. The managed biome.json extends this file and applies last, so the floor cannot be lowered here; the one
 // relaxation is a per-path `overrides` entry below with its reason beside it (docs/modules/typescript.md).
-{}
+{
+  "$schema": "https://biomejs.dev/schemas/2.6.4/schema.json",
+  "vcs": {
+    "enabled": true,
+    "clientKind": "git",
+    "useIgnoreFile": true
+  },
+  "formatter": {
+    "enabled": true,
+    "indentStyle": "space",
+    "indentWidth": 2,
+    "lineWidth": 160,
+    "lineEnding": "lf"
+  },
+  "javascript": {
+    "formatter": {
+      "quoteStyle": "double",
+      "semicolons": "always",
+      "trailingCommas": "all"
+    }
+  },
+  "linter": {
+    "rules": {
+      "preset": "recommended",
+      "correctness": {
+        "noUnusedImports": "error",
+        "noUnusedVariables": "error"
+      },
+      "style": {
+        "noNonNullAssertion": "error"
+      }
+    }
+  },
+  // Reads an .astro file whole, so a name its template uses counts as used.
+  "html": { "experimentalFullSupportEnabled": true },
+  "overrides": [
+    // Core is the logic every surface shares, so it imports no HTTP framework, platform, or runtime module.
+    {
+      "includes": ["packages/core/src/**"],
+      "linter": {
+        "rules": {
+          "correctness": { "noNodejsModules": "error" },
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "paths": {
+                  "hono": "Core has no HTTP framework: the Worker package owns it.",
+                  "bun": "Core has no runtime module: it runs in a Worker."
+                },
+                "patterns": [
+                  {
+                    "group": ["hono/**", "@cloudflare/**", "cloudflare:*", "bun:*"],
+                    "message": "Core has no HTTP framework, Cloudflare, or runtime module: the package that needs one owns it."
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    // A describe callback is a list of cases, not one function: its length is the number of cases, and splitting
+    // it would scatter one module's cases across helpers.
+    {
+      "includes": ["**/tests/**/*.ts"],
+      "linter": { "rules": { "complexity": { "noExcessiveLinesPerFunction": "off" } } }
+    }
+  ]
+}

@@ -1,0 +1,26 @@
+#!/bin/sh
+# Check-only: lints the staged files, typechecks, and runs the tests the staged files reach. It never stages, commits,
+# installs, or reaches the network; a missing node_modules fails the first check on its own.
+#
+#   staged path                -> tests run
+#   packages/<pkg>/...         -> that package's tests and the layout guard
+#   anything else              -> every test
+set -e
+
+bun node_modules/.bin/biome lint --staged --no-errors-on-unmatched
+bun run typecheck
+
+staged=$(git diff --cached --name-only)
+outside=$(printf '%s\n' "$staged" | sed -n '\|^packages/[^/]*/|!p')
+packages=$(printf '%s\n' "$staged" | sed -n 's|^\(packages/[^/]*\)/.*|./\1/|p' | sort -u)
+
+if [ -n "$outside" ]; then
+    exec bun run test
+fi
+
+# One argument per line of $packages: split on newlines alone, with no globbing.
+IFS='
+'
+set -f
+# shellcheck disable=SC2086
+bun test $packages ./tests/layout.test.ts
