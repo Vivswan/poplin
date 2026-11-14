@@ -172,6 +172,13 @@ describe("run", () => {
 
     expect((await bench.run("config trash_days 9")).out).toEqual(["trash_days  9"]);
     expect(jsonOf(await bench.run("config trash_days --json"))).toMatchObject({ values: { trash_days: 9 } });
+
+    // Drift: the stored logins and the login page's own list are two lists; a change that printed the first alone would leave a new person stopped at the login with nothing saying why.
+    const added = await bench.run("config logins owner@example.com,second@example.com");
+
+    const step = "one more step: on the dashboard's Domain tab, paste a token and press Repair, so the login page lets a new email in; until then only an email that was already a login gets in";
+
+    expect([added.out, added.err]).toEqual([["logins  owner@example.com,second@example.com"], [step]]);
   });
 
   test.each(Object.keys(CODES))("the code %s has a sentence of its own in the one table, exits 1, and is the error object under --json", async (code) => {

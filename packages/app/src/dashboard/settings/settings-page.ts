@@ -15,7 +15,7 @@ const MEANINGS: { readonly [Key in keyof SettingValues]: string } = {
   default_search_engines: "Whether search engines may list a new site: on or off.",
   versions_kept: "How many versions each site keeps, the live one included.",
   trash_days: "How many days a deleted site waits in the trash.",
-  logins: "The emails that may log in, with commas between them.",
+  logins: "The emails that may log in, with commas between them. A new email gets in after a Repair on the Domain tab.",
   dashboard_title: "The title of this dashboard.",
   outside_pages: "Whether pages outside the install may frame a site or load its files.",
   search_engines_allowed: "Whether search engines are let through to public sites.",

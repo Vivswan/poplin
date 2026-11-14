@@ -47,12 +47,14 @@ const REFUSALS: Readonly<Record<ActionCode | OwnCode, string>> = {
   bad_method: "The dashboard does not answer that kind of request.",
   too_many_tries: "Too many tries. Wait a minute.",
   no_such_login: "No login waits under that code. It was allowed or denied already, or its 10 minutes ran out. Run poplin login again.",
+  own_login: "Your own email has to stay in the logins, so nothing was changed. Another admin can take it out.",
   no_such_token: "No token has that id. It may be revoked already.",
 };
 
 /** What each finished change says. */
 const DONE = {
   saved: "Saved.",
+  saved_logins: "Saved. One more step: open the Domain tab, paste a token, and press Repair. Until then the login page lets in only the emails it had before.",
   rolled_back: "Rolled back.",
   new_link: "The site has a new link. The address with the old id stopped working.",
   trashed: "Moved to the trash.",
@@ -97,7 +99,7 @@ type ActionCode =
   | CodeOf<typeof signEveryoneOut>;
 
 /** The codes of the dashboard's own refusals: a form it cannot take, or a request it does not answer. */
-type OwnCode = "wrong_confirmation" | "not_confirmed" | "missing_field" | "not_a_form" | "too_large" | "not_from_here" | "no_page" | "bad_method" | "too_many_tries" | "no_such_token";
+type OwnCode = "wrong_confirmation" | "not_confirmed" | "missing_field" | "not_a_form" | "too_large" | "not_from_here" | "no_page" | "bad_method" | "too_many_tries" | "no_such_token" | "own_login";
 
 /** A change that was done, or a refusal with what it is about. */
 type Result = { readonly done: keyof typeof DONE } | { readonly refused: string; readonly about?: string };

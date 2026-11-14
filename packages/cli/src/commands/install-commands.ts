@@ -11,6 +11,9 @@ import { columns, countText, dayText } from "./text";
 /** What the login is still good for after a logout that the install did not answer. */
 const STILL_LIVE = "the token may still be live: revoke it on the install's dashboard";
 
+/** What a change of the logins still needs: the login page in front of the install keeps a list of its own. */
+const LOGINS_STEP = "one more step: on the dashboard's Domain tab, paste a token and press Repair, so the login page lets a new email in; until then only an email that was already a login gets in";
+
 /** The commands this module runs, as the parser read them. */
 type InstallRequest = RequestOf<"whoami" | "logout" | "config" | "doctor">;
 
@@ -93,7 +96,9 @@ async function config(action: ConfigAction, { client }: Session): Promise<Outcom
   const changed = await client.call("changeConfig", undefined, { [action.key]: value });
   if (!changed.ok) return failed(changed.failure, "changes");
 
-  return { ok: true, value: changed.value, lines: columns([[action.key, settingsToText(changed.value.values)[action.key]]]) };
+  const lines = columns([[action.key, settingsToText(changed.value.values)[action.key]]]);
+
+  return { ok: true, value: changed.value, lines, notes: action.key === "logins" ? [LOGINS_STEP] : [] };
 }
 
 /** A check that reads something an admin alone may read: a publisher's refusal is a finding, not a failure. */

@@ -22,14 +22,15 @@ async function fields(opened: Opened, changes: Readonly<Record<string, string>> 
   return { ...texts, ...changes };
 }
 
-test("saving sends the typed values through the config action: the changed keys change, one audit entry names them, and the page says saved", async () => {
+test("saving sends the typed values through the config action: the changed keys change, one audit entry names them, and the page says saved, with the one more step when the logins changed", async () => {
   const opened = await openDashboard();
   const before = await settings(opened);
 
   const saved = await opened.post("/settings/save", await fields(opened, { trash_days: "30", default_search_engines: "on", logins: "owner@example.com,Ada@Example.com", dashboard_title: "My sites" }));
 
-  expect([saved.status, saved.headers.get("Location")]).toEqual([303, "/settings?done=saved"]);
-  expect(NOTICE.exec(await landing(opened, saved))?.slice(1)).toEqual(["done", "Saved."]);
+  // Drift: the provider's login keeps its own list of emails; a page that only said "Saved." would leave a new person stopped there with nothing saying why.
+  expect([saved.status, saved.headers.get("Location")]).toEqual([303, "/settings?done=saved_logins"]);
+  expect(NOTICE.exec(await landing(opened, saved))?.slice(1)).toEqual(["done", "Saved. One more step: open the Domain tab, paste a token, and press Repair. Until then the login page lets in only the emails it had before."]);
   expect(await settings(opened)).toEqual({ ...before, trash_days: 30, default_search_engines: true, logins: ["owner@example.com", "ada@example.com"] as SettingValues["logins"], dashboard_title: "My sites" });
   expect((await opened.audit())[0]).toMatchObject({ action: "settings_changed", by: opened.owner });
 
@@ -38,6 +39,17 @@ test("saving sends the typed values through the config action: the changed keys 
 
   expect(again.headers.get("Location")).toBe("/settings?done=saved");
   expect((await opened.audit()).length).toBe(entries);
+});
+
+test("an admin who takes their own email out of the logins is refused and nothing changes: the session ends at once and the login page knows no new email until a repair, so nobody could get back in", async () => {
+  const opened = await openDashboard();
+  const before = await settings(opened);
+
+  const saved = await opened.post("/settings/save", await fields(opened, { logins: "second@example.com" }));
+
+  expect(saved.headers.get("Location")).toBe("/settings?refused=own_login");
+  expect(NOTICE.exec(await landing(opened, saved))?.slice(1)).toEqual(["refused", "Your own email has to stay in the logins, so nothing was changed. Another admin can take it out."]);
+  expect(await settings(opened)).toEqual(before);
 });
 
 test("a value above a free limit is saved, never blocked, and the page it lands on warns beside that field", async () => {
