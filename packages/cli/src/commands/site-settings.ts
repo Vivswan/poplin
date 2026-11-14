@@ -22,7 +22,7 @@ type Span = Exclude<SettingValues["default_expires"], "never">;
 /** When a site moves to the trash: never, a span after the moment it is set, or the start of a calendar date. */
 type Expiry = { readonly kind: "never" } | { readonly kind: "span"; readonly span: Span } | { readonly kind: "date"; readonly date: string };
 
-/** The settings a command line gave. A setting that was not given is absent, and changes nothing. A `title` of `null` goes back to the page's own title. */
+/** The settings a command line gave. A setting that was not given is absent, and changes nothing. A `title` of `null` takes the typed title away, so the site shows its page's own. */
 export interface SiteSettings {
   readonly access?: "private" | "unlisted" | "public";
   readonly publicName?: PublicName;

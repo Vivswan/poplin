@@ -35,8 +35,8 @@ const SITE = "Its label, e.g. report--k3f9x2ab71qz. Also taken: its bare id, or 
 /** What `publish_site` and `update_site` say of each setting. */
 const SETTINGS = {
   access: "private: only the owner. unlisted: anyone with the address. public: everyone. E.g. unlisted.",
-  public_name: "With access public: the name in the public address, e.g. docs. Left out: a public site keeps its public name; any other takes the site's name.",
-  title: "The title on the owner's dashboard, e.g. Q3 sales.",
+  public_name: "With access public: the name in the public address, e.g. docs. Left out: kept if already public, else the site's name.",
+  title: "The title on the owner's dashboard, e.g. Q3 sales. Left out: unchanged. null: the page's own title.",
   search_engines: "true: search engines may list it once it is public.",
   embeddable: "false: other pages cannot show it in a frame.",
   expires: "When it moves to the trash: 7d (units s, m, h, d), 2026-12-01, or never.",
@@ -209,14 +209,13 @@ export const TOOLS: { readonly [Name in ToolName]: Tool<Name> } = {
       site: "To update: the label an earlier publish answered, e.g. report--k3f9x2ab71qz. Left out: a new site.",
       name: "A new site's name, e.g. q3-report: 3 to 40 lowercase letters, digits, single dashes. Left out: the folder's or file's name. Never with site.",
       ...SETTINGS,
-      title: `${SETTINGS.title} null: the page's own title.`,
     },
     hints: { destructiveHint: false },
     run: publish,
   },
   update_site: {
     description: "Change a site's settings; one left out stays as it is. Ask the user before access unlisted or public.",
-    parameters: { site: SITE, ...SETTINGS, title: `${SETTINGS.title} null: no title.` },
+    parameters: { site: SITE, ...SETTINGS },
     hints: { destructiveHint: false },
     run: ({ site, ...asked }, host) => {
       const settings = readSettings(asked);

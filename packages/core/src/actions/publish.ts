@@ -26,8 +26,9 @@ interface PublishFile {
  * What a publish asks for.
  *
  * Without `site` it makes a new site called `name`. With `site`, a reference to a site, it adds a version to that site and takes no `name`. The settings apply to either; one left out is the default on a new site and stays as it is on an update.
+ * `page_title` is the entry page's own title, which a site shows while no `title` is typed for it.
  */
-type PublishRequest = SiteChanges & { readonly files: AsyncIterable<PublishFile> | Iterable<PublishFile>; readonly site?: string; readonly name?: string };
+type PublishRequest = SiteChanges & { readonly files: AsyncIterable<PublishFile> | Iterable<PublishFile>; readonly site?: string; readonly name?: string; readonly page_title?: string };
 
 /** What each step of a publish may answer when it is not done. */
 type Step = typeof beginPublish | typeof uploadFile | typeof finishPublish;

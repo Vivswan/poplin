@@ -13,7 +13,7 @@
 
 import type { Step } from "./migrate";
 
-/** One row per site. A site is public exactly when it holds a public name, and a public name is never a site id. */
+/** One row per site. A site is public exactly when it holds a public name, and a public name is never a site id. `title` is the one its owner typed, `page_title` the one its entry page had when it was last published. */
 const SITES = `
 CREATE TABLE sites (
   id TEXT NOT NULL PRIMARY KEY,
@@ -22,6 +22,7 @@ CREATE TABLE sites (
   access TEXT NOT NULL CHECK (access IN ('private', 'unlisted', 'public')),
   public_name TEXT UNIQUE,
   title TEXT,
+  page_title TEXT,
   search_engines INTEGER NOT NULL CHECK (search_engines IN (0, 1)),
   embeddable INTEGER NOT NULL DEFAULT 1 CHECK (embeddable IN (0, 1)),
   expires_at INTEGER,

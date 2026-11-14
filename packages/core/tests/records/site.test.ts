@@ -16,6 +16,7 @@ describe("mintSiteFolder", () => {
       access: "private",
       public_name: null,
       title: null,
+      page_title: null,
       search_engines: 0,
       embeddable: 1,
       expires_at: null,

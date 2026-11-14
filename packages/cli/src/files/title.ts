@@ -7,7 +7,7 @@ import type { PublishFile } from "./read";
 const READ_LIMIT_BYTES = 64 * 1024;
 const MAX_TITLE_CHARACTERS = 200;
 const TITLE = "title";
-const WHITESPACE_RUN = /\s+/g;
+const UNPRINTED_RUN = /[\s\p{Cc}\p{Zl}\p{Zp}]+/gu;
 
 const FOREIGN_ROOTS: ReadonlySet<string> = new Set(["svg", "math"]);
 
@@ -44,7 +44,7 @@ function isForeign(element: Element): boolean {
 }
 
 function tidy(raw: string): string | undefined {
-  const collapsed = raw.replace(WHITESPACE_RUN, " ").trim();
+  const collapsed = raw.replace(UNPRINTED_RUN, " ").trim();
   const capped = [...collapsed].slice(0, MAX_TITLE_CHARACTERS).join("").trimEnd();
   if (capped === "") return undefined;
 
@@ -57,7 +57,7 @@ function tidy(raw: string): string | undefined {
  * Only the first 64 KB of the page are read, as UTF-8, and parsed as if they were the whole page: a title that starts after them is not seen, and one they cut through is read as far as they go.
  *
  * @param page - the entry page of a listing
- * @returns the title with entities decoded, whitespace runs collapsed to one space, trimmed, and cut to 200 characters; `undefined` when the page has none or an empty one
+ * @returns the title with entities decoded, runs of whitespace and control characters collapsed to one space, trimmed, and cut to 200 characters; `undefined` when the page has none or an empty one
  */
 export async function readTitle(page: Pick<PublishFile, "open">): Promise<string | undefined> {
   const start = parseDocument(await readStart(page));

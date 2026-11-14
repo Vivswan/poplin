@@ -47,12 +47,32 @@ describe("publish", () => {
     writeFileSync(join(folder, "index.html"), "<title>Second</title>");
     const updated = jsonOf(await bench.run(`${folder} --site ${label} --unlisted --json`));
 
-    expect(updated.site).toMatchObject({ label, created: false, live_version: 2, access: "unlisted", title: "Second", files: 4 });
+    expect(updated.site).toMatchObject({ label, created: false, live_version: 2, access: "unlisted", title: "Second", title_typed: false, files: 4 });
     expect(updated.before).toMatchObject({ live_version: 1, access: "private", title: "Field notes" });
 
     const human = await bench.run(`${folder} --site ${label}`);
 
     expect(human.out).toEqual(["uploaded 2 files, 27 B (1 skipped as hidden or node_modules)", `updated  ${label}  version 3  unlisted`, `https://${label}-u-poplin.example.com`]);
+  });
+
+  test("an update leaves a typed title alone, takes a new one only from --title, and --title \"\" goes back to the page's own: without this every update undoes set --title", async () => {
+    const bench = await openBench();
+    const folder = folderOf("notes", PAGES);
+    const label = await publishedLabel(bench, folder);
+    const titles: unknown[] = [];
+
+    for (const command of [`set ${label} --title "Q3 sales"`, `${folder} --site ${label}`, `${folder} --site ${label} --title "Q4 sales"`, `${folder} --site ${label} --title ""`, `${folder} --site ${label}`]) {
+      const { site } = jsonOf(await bench.run(`${command} --json`)) as { site: { title: string; title_typed: boolean } };
+      titles.push([site.title, site.title_typed]);
+    }
+
+    expect(titles).toEqual([
+      ["Q3 sales", true],
+      ["Q3 sales", true],
+      ["Q4 sales", true],
+      ["Field notes", false],
+      ["Field notes", false],
+    ]);
   });
 
   test("the settings and the name typed go into the publish, and a typed title wins over the page's own: without this a flag is read and then dropped", async () => {
@@ -86,7 +106,7 @@ describe("publish", () => {
     expect(json).toEqual({
       dry_run: true,
       site: "k3f9x2ab71qz",
-      title: "Field notes",
+      page_title: "Field notes",
       count: 2,
       bytes: 46,
       skipped: 1,

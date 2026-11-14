@@ -114,6 +114,18 @@ describe("the MCP server", () => {
     expect(siteOf(made).label.startsWith("one-page--")).toBe(true);
   });
 
+  test("publish_site onto a site leaves a title update_site set, and a null title goes back to the page's own: an agent that republishes must not undo the owner's title", async () => {
+    const { bench, site } = await withSite();
+    const path = folderOf("report", { "index.html": "<title>Second</title>" });
+    const titles: unknown[] = [];
+
+    for (const [tool, input] of [["update_site", { title: "Q3 sales" }], ["publish_site", { path }], ["publish_site", { path, title: null }]] as const) {
+      titles.push((siteOf(await bench.call(tool, { site: site.label, ...input })) as Site & { title: string }).title);
+    }
+
+    expect(titles).toEqual(["Q3 sales", "Q3 sales", "Second"]);
+  });
+
   test("each tool about a site does what its command does and answers the site: a tool that drifts from its command is a second rule book", async () => {
     const { bench, site } = await withSite();
     await bench.call("publish_site", { path: folderOf("report", { "index.html": "<title>Second</title>" }), site: site.label });

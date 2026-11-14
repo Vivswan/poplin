@@ -1,10 +1,13 @@
 import { expect, test } from "bun:test";
 
+import { publishSite } from "@poplin/core/src/actions/publish";
 import { updateSite } from "@poplin/core/src/actions/set";
+import { getSite } from "@poplin/core/src/actions/show";
 
 import { openDashboard } from "../support/install";
 
 const CHANGES = /action="\/sites\/[^/"]+\/([a-z-]+)"/g;
+const PAGE = { path: "index.html", size: 4, contentType: "text/html", open: (): ReadableStream<Uint8Array> => new Blob(["page"]).stream() };
 
 test("a live site's page offers every setting of the set action, rollback, a new link, and delete; one in the trash only restore and delete forever", async () => {
   const opened = await openDashboard();
@@ -64,6 +67,24 @@ test("a site with more kept versions offers each of them but the live one to rol
   const lowest = await (await opened.get(`/sites/report--${site.id}`)).text();
 
   expect(lowest.match(/<option[^>]*>[^<]*/g)).toEqual(['<option value="2">v2', '<option value="3">v3']);
+});
+
+// Drift: the form posts every field it shows; a title field filled with the page's own title would turn it into a typed one on any save.
+test("a site with no typed title shows its page's title and an empty title field, so saving another setting leaves the title untyped", async () => {
+  const opened = await openDashboard();
+  const admin = { scope: "admin", holder: opened.owner } as const;
+  const made = await publishSite(opened.install, admin, { name: "report", page_title: "Field notes", files: [PAGE] });
+  if (!made.ok) throw new Error(`the fixture site was refused: ${made.code}`);
+
+  const path = `/sites/${made.site.label}`;
+  const page = await (await opened.get(path)).text();
+  const saved = await opened.post(`${path}/settings`, { access: "private", title: /name="title" value="([^"]*)"/.exec(page)?.[1] ?? "missing", search_engines: "on", expires: "" });
+  const after = await getSite(opened.install, admin, made.site.id);
+
+  expect(page).toContain("<dt>Title</dt><dd>Field notes</dd>");
+  expect(page).toContain('name="title" value=""');
+  expect(saved.headers.get("Location")).toBe(`${path}?done=saved`);
+  expect(after).toMatchObject({ ok: true, site: { title: "Field notes", title_typed: false, search_engines: true } });
 });
 
 test("a title with markup stays text in the page and inside the input's value", async () => {

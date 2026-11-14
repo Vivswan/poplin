@@ -105,8 +105,8 @@ function siteOf(kept: Kept): Site {
 }
 
 function keptOf(site: Site, nextVersion: number): Kept {
-  const { id, name, folder, title, search_engines, embeddable, expires, live_version, versions, owner, created_at, updated_at } = site;
-  const fields = { id, name, folder, title, search_engines, embeddable, expires, live_version, versions, owner, created_at, updated_at };
+  const { id, name, folder, title, page_title, search_engines, embeddable, expires, live_version, versions, owner, created_at, updated_at } = site;
+  const fields = { id, name, folder, title, page_title, search_engines, embeddable, expires, live_version, versions, owner, created_at, updated_at };
   const place: Place = site.state === "trash" ? { state: "trash", trashed_at: site.trashed_at } : { state: "live" };
 
   return { fields, access: accessOf(site), place, nextVersion };
@@ -169,6 +169,7 @@ class MemoryDatabase implements Database {
       name: site.name,
       folder: site.folder,
       title: site.title,
+      page_title: site.page_title ?? null,
       search_engines: site.search_engines,
       embeddable: site.embeddable,
       expires: site.expires,
@@ -664,11 +665,15 @@ class MemoryDatabase implements Database {
     const detailed = this.changeDetails(site, details, signed);
     const published = await this.addVersion(site, { number: upload.number, keep: version.keep, bytes: upload.bytes, files: upload.files }, signed);
     await Promise.all([set, detailed]);
-    if (published.kind !== "done") throw new Error(`a version that was checked was refused: ${published.kind}`);
+    const live = this.#sites.get(site);
+    if (published.kind !== "done" || live === undefined) throw new Error(`a version that was checked was refused: ${published.kind}`);
 
+    // The page's title comes with the version: it changes with no audit entry and no later change time.
+    const titled = { ...live, fields: { ...live.fields, page_title: version.page_title ?? null } };
+    this.#sites.set(site, titled);
     this.#finish(upload, published.dropped);
 
-    return published;
+    return { ...published, site: siteOf(titled) };
   }
 
   async setUploadDropped(id: UploadId, dropped: readonly number[]): Promise<void> {

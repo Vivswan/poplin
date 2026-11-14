@@ -24,6 +24,7 @@ const SENT_SITE = v.pipe(
     name: v.string(),
     folder: v.optional(v.unknown()),
     title: v.nullable(v.string()),
+    page_title: v.nullable(v.string()),
     access: v.picklist(["private", "unlisted", "public"]),
     public_name: v.optional(v.string()),
     search_engines: v.boolean(),

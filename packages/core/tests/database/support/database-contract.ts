@@ -286,6 +286,7 @@ function sites(label: string, makeDatabase: DatabaseFactory): void {
         name: REPORT,
         folder: first.folder,
         title: null,
+        page_title: null,
         search_engines: false,
         embeddable: true,
         expires: "never",
@@ -1508,6 +1509,35 @@ function uploads(label: string, makeDatabase: DatabaseFactory): void {
       expect([again, await database.getUpload(third)]).toMatchObject([{ kind: "not_pending" }, { manifest: [], upload: { state: "finished", dropped: [1, 2] } }]);
       expect(await auditActions(database)).toEqual(["create", "publish", "access", "details", "publish"]);
       expect([await database.getSiteByFolder(site.folder), await database.readTotals()]).toMatchObject([{ id: site.id, title: "Q3 sales" }, { sites: 1, bytes: 1000, files: 2 }]);
+    });
+
+    // Drift: the typed title and the page's own are two columns; a version that wrote its page's title over the typed one would lose a title the owner set.
+    test("a version brings its page's title and leaves the typed one, a typed title taken away leaves the page's, and a backup carries both", async () => {
+      const database = await opened(makeDatabase);
+      const begun = await begunSite(database, { ...draft(REPORT), page_title: "Field notes" });
+      const created = await database.publishUploadAsSite(begun.id, begun.site, BY_ADA);
+      if (created.kind !== "done") throw new Error(`the fixture site was refused: ${created.kind}`);
+
+      const { site } = created;
+      const typed = await database.changeDetails(site.id, { title: "Q3 sales" }, BY_ADA);
+      const second = await database.publishUploadAsVersion(await begunVersion(database, site), { keep: 3, details: {}, page_title: "Second page" }, BY_ADA);
+      const [exported] = (await database.exportSites({ limit: 1 })).sites;
+      const cleared = await database.changeDetails(site.id, { title: null }, BY_ADA);
+      const third = await database.publishUploadAsVersion(await begunVersion(database, site), { keep: 3, details: {} }, BY_ADA);
+      if (exported === undefined) throw new Error("the fixture site is not exported");
+
+      await database.deleteSite(site.id, BY_ADA);
+      const imported = await database.importSite(exported, BY_ADA);
+
+      expect([site, typed, second, cleared, third, imported]).toMatchObject([
+        { title: null, page_title: "Field notes" },
+        { site: { title: "Q3 sales", page_title: "Field notes" } },
+        { site: { title: "Q3 sales", page_title: "Second page", live_version: 2 } },
+        { site: { title: null, page_title: "Second page" } },
+        { site: { title: null, page_title: null, live_version: 3 } },
+        { kind: "done", site: { title: "Q3 sales", page_title: "Second page", live_version: 2 } },
+      ]);
+      expect(await auditActions(database)).toEqual(["create", "details", "publish", "details", "publish", "delete", "imported"]);
     });
 
     // Drift: the sweep removes a record only after its files; a pending record that could be removed would orphan the files still being uploaded under it.

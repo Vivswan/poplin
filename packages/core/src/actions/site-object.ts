@@ -17,6 +17,7 @@ export const DAY_MS = 86_400_000;
  * `url` is the one address to hand to a person: the public one for a public site, the label's otherwise.
  * The label's address carries a letter for the access, so it changes when a site turns private or stops being private. `bytes` and `files` sum the kept versions, and `updated` is when the site last changed.
  * `gone_on` is when a site in the trash is deleted for good, and is absent outside the trash.
+ * `title` is the typed title, and the entry page's own while none is typed; `title_typed` says which.
  */
 export interface SiteObject {
   readonly id: SiteId;
@@ -24,6 +25,7 @@ export interface SiteObject {
   readonly name: SiteName;
   readonly public_name: PublicName | null;
   readonly title: string | null;
+  readonly title_typed: boolean;
   readonly access: Site["access"];
   readonly url: string;
   readonly addresses: { readonly site: string; readonly public: string | null };
@@ -65,7 +67,8 @@ export function siteObject(site: Site, install: Pick<Install, "addressOf" | "pub
     label,
     name: site.name,
     public_name: publicName,
-    title: site.title,
+    title: site.title ?? site.page_title,
+    title_typed: site.title !== null,
     access: site.access,
     url: addresses.public ?? addresses.site,
     addresses,

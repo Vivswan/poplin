@@ -129,7 +129,7 @@ const backupBodies = fc
 const wholeBackup = JSON.stringify({
   format: 1,
   site: {
-    ...{ id: "k3f9x2ab71qz", name: "report", title: null, access: "unlisted", search_engines: false, embeddable: true, expires: "never" },
+    ...{ id: "k3f9x2ab71qz", name: "report", title: null, page_title: null, access: "unlisted", search_engines: false, embeddable: true, expires: "never" },
     ...{ live_version: 1, versions: [{ number: 1, published_at: 1, published_by: "ada@example.com", bytes: 4, files: 1 }] },
     ...{ owner: "ada@example.com", created_at: 1, updated_at: 1, state: "live" },
   },

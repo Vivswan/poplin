@@ -11,7 +11,7 @@ import { addressChange, columns, countText, searchNotes, siteLines } from "./tex
 import { giveUpUpload, type Published, sendUpload } from "./upload";
 import { siteChanges, siteWord } from "./wire";
 
-/** The page whose title a site takes. */
+/** The page whose own title a site shows while none is typed for it. */
 const ENTRY_PAGE = "index.html";
 
 /** What became of an upload that was not finished, in words. */
@@ -72,14 +72,12 @@ function progressOn(io: Io, plan: PublishPlan): Progress {
   };
 }
 
-/** The title a publish sets: the one typed, else the page's own. `--title ""` asks for the page's own, and takes the title away when the page has none. */
-async function titleOf(request: PublishRequest, files: readonly PublishFile[]): Promise<string | null | undefined> {
-  if (typeof request.settings.title === "string") return request.settings.title;
-
+/** The entry page's own title, which every publish sends beside a typed one; `undefined` for a page with none, or one that cannot be read. */
+async function pageTitleOf(files: readonly PublishFile[]): Promise<string | undefined> {
   const entry = files.find((file) => file.path === ENTRY_PAGE);
-  const own = entry === undefined ? undefined : await readTitle(entry).catch(() => undefined);
+  if (entry === undefined) return undefined;
 
-  return own ?? request.settings.title;
+  return readTitle(entry).catch(() => undefined);
 }
 
 function published(plan: PublishPlan, answer: Published): Outcome {
@@ -109,9 +107,8 @@ export async function planPublish(request: PublishRequest): Promise<{ readonly o
 
   const { files, bytes, skipped } = listing;
   const declared = files.map((file) => ({ path: file.path, size: file.size, content_type: file.contentType }));
-  const changes = siteChanges(request.settings);
-  const title = await titleOf(request, files);
-  if (title !== undefined) changes.title = title;
+  const pageTitle = await pageTitleOf(files);
+  const changes = pageTitle === undefined ? siteChanges(request.settings) : { ...siteChanges(request.settings), page_title: pageTitle };
 
   if (request.target.kind === "update") return { ok: true, plan: { files, bytes, skipped, manifest: { ...changes, site: siteWord(request.target.site), files: declared } } };
 

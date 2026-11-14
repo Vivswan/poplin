@@ -42,6 +42,7 @@ describe("readTitle", () => {
     ["entities", "<title>Salt &amp; pepper &lt;3 &quot;quoted&quot; &#65;&#x42; &eacute;</title>", 'Salt & pepper <3 "quoted" AB \u00e9'],
     ["markup inside the title, kept as text", "<title>A <b>bold</b> claim</title>", "A <b>bold</b> claim"],
     ["line breaks and runs of spaces", "<title>\n  Quarterly\n\t  sales &nbsp; report \n</title>", "Quarterly sales report"],
+    ["control characters, written plain or as entities, which no stored title may hold", "<title>Field&#x7f;notes&#x1; \u0002v2</title>", "Field notes v2"],
     ["a title inside a comment, then the real one", "<!-- <title>Draft</title> --><title>Final</title>", "Final"],
     ["a title inside a script string, then the real one", "<script>const t = '<title>Script</title>';</script><title>Final</title>", "Final"],
     ["a title inside a style sheet, then the real one", "<style>/* <title>Style</title> */</style><title>Final</title>", "Final"],

@@ -27,6 +27,7 @@ export interface Signed {
  * What a new site is made from.
  *
  * `folder` is minted by the caller, so the site's files can be stored before the site is. `embeddable` is `true` when left out.
+ * `title` is the one typed, and `page_title` the entry page's own, left out for a page with none.
  *
  * `bytes` is the sum of the sizes of the files of version 1 and `files` their count, both whole numbers from 0 up.
  */
@@ -34,6 +35,7 @@ export type NewSite = {
   readonly name: SiteName;
   readonly folder: SiteFolder;
   readonly title: string | null;
+  readonly page_title?: string;
   readonly search_engines: boolean;
   readonly embeddable?: boolean;
   readonly expires: "never" | number;
@@ -41,7 +43,7 @@ export type NewSite = {
   readonly files: number;
 } & SiteAccess;
 
-/** The settings of a site that change on their own; a key left out stays as it is. */
+/** The settings of a site that change on their own; a key left out stays as it is. `title` is the typed title, and `null` takes it away, which leaves the page's own to show. */
 export interface SiteDetails {
   readonly title?: string | null;
   readonly search_engines?: boolean;
@@ -155,6 +157,9 @@ export interface UploadedVersion {
 
   /** The details to set; a key left out stays as it is. */
   readonly details: SiteDetails;
+
+  /** The title of the version's entry page, which replaces the one of the version before; left out for a page with none. */
+  readonly page_title?: string;
 }
 
 /** The room a new upload must fit in. Each bound is checked with the upload itself counted, in the same step that records it. */
@@ -283,7 +288,7 @@ export interface Database {
   reserveVersion(id: SiteId): Promise<Reserved | Refused<"not_found" | "in_trash">>;
 
   /**
-   * Record a publish under a reserved number and make it live.
+   * Record a publish under a reserved number and make it live. The page's title stays as the version before left it.
    *
    * @returns `stale_number` when the number was not reserved or a higher version is already kept
    * @throws {RangeError} `keep` is not a whole number from 1 up, or `bytes` or `files` is not a whole number from 0 up
@@ -360,6 +365,7 @@ export interface Database {
    * Record a pending upload as the next version of the site in its folder and make it live, with the settings asked with it, and mark the upload finished with the versions dropped.
    *
    * All of it is one step: when the version is refused no setting changes, and when the public name is taken no version is added. Each setting that changes writes its own audit entry.
+   * The page's title comes with the version and writes none; the typed title changes only when the details name it.
    *
    * @returns `stale_number` when a higher version is already kept; `name_taken` as in `changeAccess`; `not_pending` as in `publishUploadAsSite`
    * @throws {RangeError} `keep` is not a whole number from 1 up

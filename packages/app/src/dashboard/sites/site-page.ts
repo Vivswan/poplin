@@ -69,8 +69,8 @@ ${ACCESSES.map((choice) => accessChoice(site, choice))}
 </fieldset>
 <div class="field">
 <label for="title">Title</label>
-<input type="text" id="title" name="title" value="${site.title ?? ""}" autocomplete="off">
-<p class="hint">Left empty, the site has no title.</p>
+<input type="text" id="title" name="title" value="${site.title_typed ? site.title : ""}" autocomplete="off">
+<p class="hint">Left empty, the site shows its page's own title.</p>
 </div>
 <div class="field">
 <label class="choice"><input type="checkbox" name="search_engines" value="on"${checked(site.search_engines)}> Search engines may list this site</label>

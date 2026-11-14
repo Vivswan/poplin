@@ -19,7 +19,7 @@ const ACCESSES = ["private", "unlisted", "public"] as const;
 export const SITE_FOLDER = v.custom<SiteFolder>(isSiteFolder, "a site folder is 16 lowercase base36 characters");
 
 /** A title as shown on the dashboard. */
-const TITLE = v.pipe(v.string(), v.minLength(1));
+export const TITLE = v.pipe(v.string(), v.minLength(1));
 
 /** One kept publish, as the versions table holds it. */
 const VERSION = v.object({ number: POSITIVE, published_at: MOMENT, published_by: HOLDER, bytes: COUNT, files: COUNT });
@@ -38,12 +38,13 @@ export const SITE_ACCESS = v.variant("access", [
   v.object({ access: v.literal("public"), public_name: PUBLIC_NAME }),
 ]);
 
-/** What a new site is made from. A public site names its public name; no other access has one. `bytes` and `files` are the size of its first version. */
+/** What a new site is made from. A public site names its public name; no other access has one. `title` is the typed one, and `page_title` the entry page's own, left out for a page with none. `bytes` and `files` are the size of its first version. */
 export const NEW_SITE = v.intersect([
   v.object({
     name: SITE_NAME,
     folder: SITE_FOLDER,
     title: v.nullable(TITLE),
+    page_title: v.optional(TITLE),
     search_engines: v.boolean(),
     embeddable: v.optional(v.boolean(), true),
     expires: v.union([v.literal("never"), MOMENT]),
@@ -69,6 +70,7 @@ const SITE_ROW = v.object({
   access: v.picklist(ACCESSES),
   public_name: v.nullable(PUBLIC_NAME),
   title: v.nullable(TITLE),
+  page_title: v.nullable(TITLE),
   search_engines: v.picklist([0, 1]),
   embeddable: v.picklist([0, 1]),
   expires_at: v.nullable(MOMENT),
@@ -100,7 +102,8 @@ type SiteState = { readonly state: "live" } | { readonly state: "trash"; readonl
 /**
  * A site.
  *
- * `title` is `null` when none was given, and `expires` is `"never"` or the moment the site stops being served. `embeddable` says whether other pages may show the site in a frame.
+ * `title` is the title its owner typed, `null` when none was, and `page_title` the title its entry page had when it was last published, `null` for a page with none.
+ * A site is shown under the typed title, and under the page's when none is typed. `expires` is `"never"` or the moment the site stops being served. `embeddable` says whether other pages may show the site in a frame.
  *
  * `versions` is in ascending order and holds `live_version`. `owner` is whoever made the site. Times are milliseconds since the epoch.
  */
@@ -109,6 +112,7 @@ export type Site = {
   readonly name: SiteName;
   readonly folder: SiteFolder;
   readonly title: string | null;
+  readonly page_title: string | null;
   readonly search_engines: boolean;
   readonly embeddable: boolean;
   readonly expires: "never" | number;
@@ -188,6 +192,7 @@ export function siteToRow(site: Site): SiteRow {
     access: site.access,
     public_name: site.access === "public" ? site.public_name : null,
     title: site.title,
+    page_title: site.page_title,
     search_engines: site.search_engines ? 1 : 0,
     embeddable: site.embeddable ? 1 : 0,
     expires_at: site.expires === "never" ? null : site.expires,

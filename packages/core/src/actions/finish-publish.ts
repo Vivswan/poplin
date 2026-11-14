@@ -66,8 +66,9 @@ async function addVersion(install: Install, plan: Extract<UploadPlan, { kind: "u
   const site = await install.database.getSiteByFolder(commit.upload.folder);
   if (site === undefined) return refuse("not_found");
 
-  const { access, details } = plan;
-  const added = await install.database.publishUploadAsVersion(commit.upload.id, { keep: commit.settings.versions_kept, access, details }, commit.signed);
+  const { access, details, page_title } = plan;
+  const version = { keep: commit.settings.versions_kept, access, details, page_title };
+  const added = await install.database.publishUploadAsVersion(commit.upload.id, version, commit.signed);
   if (added.kind === "not_pending") return "not_pending";
 
   if (added.kind === "stale_number") return refuse("stale_version");

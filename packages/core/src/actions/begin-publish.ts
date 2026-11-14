@@ -9,7 +9,7 @@ import { type SettingValues, sizeBytes } from "../records/settings";
 import { mintSiteFolder, type SiteAccess, type SiteFolder } from "../records/site";
 import { MANIFEST_FILE, type ManifestFile, mintUploadId, type UploadPlan } from "../records/upload";
 import type { SiteId } from "../sites/ids";
-import { type CheckedChanges, defaultExpiry, readChanges, SITE_CHANGES, type SiteChanges } from "./changes";
+import { type CheckedChanges, defaultExpiry, readChanges, SITE_CHANGES, type SiteChanges, TITLE_TEXT } from "./changes";
 import { checkFilePath } from "./files";
 import { enterInstall, reachSite } from "./reach";
 import { type Install, type Refused, refuse } from "./records";
@@ -41,9 +41,10 @@ const UTF8 = new TextEncoder();
 /** A publish bounded by nothing but the install's own limits. */
 const UNBOUNDED: UploadLimits = { fileBytes: Number.MAX_SAFE_INTEGER, files: MAX_FILES };
 
-/** What a publish asks for before any file is sent: its settings, `site` to add a version to that site or else the `name` of a new one, and every file with its size and content type. */
+/** What a publish asks for before any file is sent: its settings, `site` to add a version to that site or else the `name` of a new one, every file with its size and content type, and `page_title`, the entry page's own title. */
 export const PUBLISH_REQUEST = v.strictObject({
   ...SITE_CHANGES.entries,
+  page_title: v.optional(TITLE_TEXT),
   site: v.optional(v.string()),
   name: v.optional(v.string()),
   files: v.array(MANIFEST_FILE),
@@ -157,12 +158,22 @@ async function isHeldByAnother(database: Database, access: SiteAccess | undefine
   return holder !== undefined && holder.id !== own;
 }
 
-function draftOf(name: SiteName, changes: CheckedChanges, rest: { readonly settings: SettingValues; readonly now: number; readonly listed: Listed; readonly files: number }): NewSiteDraft {
+/** The page's own title as an upload's plan keeps it: the key is absent for a page with none. */
+function pageTitleOf(sent: string | undefined): { readonly page_title?: string } {
+  return sent === undefined || sent === "" ? {} : { page_title: sent };
+}
+
+function draftOf(
+  name: SiteName,
+  changes: CheckedChanges,
+  rest: { readonly settings: SettingValues; readonly now: number; readonly listed: Listed; readonly files: number; readonly pageTitle: string | undefined },
+): NewSiteDraft {
   const { details } = changes;
   const access: SiteAccess = changes.access ?? { access: "private" };
 
   return {
     name,
+    ...pageTitleOf(rest.pageTitle),
     folder: mintSiteFolder(),
     title: details.title ?? null,
     search_engines: details.search_engines ?? rest.settings.default_search_engines,
@@ -177,7 +188,7 @@ function draftOf(name: SiteName, changes: CheckedChanges, rest: { readonly setti
 async function planSite(
   install: Install,
   actor: Actor,
-  asked: { readonly name: string | undefined; readonly changes: SiteChanges; readonly files: readonly ManifestFile[]; readonly limits: UploadLimits },
+  asked: { readonly name: string | undefined; readonly changes: SiteChanges; readonly pageTitle: string | undefined; readonly files: readonly ManifestFile[]; readonly limits: UploadLimits },
 ): Promise<Planned | Refused<BeginCode>> {
   const entered = await enterInstall(install, actor);
   if (!entered.ok) return entered;
@@ -196,7 +207,7 @@ async function planSite(
 
   if (await isHeldByAnother(install.database, changes.access)) return refuse("name_taken", "public_name");
 
-  const site = draftOf(name.value, changes, { settings, now: signed.at, listed, files: asked.files.length });
+  const site = draftOf(name.value, changes, { settings, now: signed.at, listed, files: asked.files.length, pageTitle: asked.pageTitle });
 
   return { ok: true, folder: site.folder, number: 1, plan: { kind: "create", site }, room: roomUnder(settings, true) };
 }
@@ -204,7 +215,7 @@ async function planSite(
 async function planVersion(
   install: Install,
   actor: Actor,
-  asked: { readonly reference: string; readonly changes: SiteChanges; readonly files: readonly ManifestFile[]; readonly limits: UploadLimits },
+  asked: { readonly reference: string; readonly changes: SiteChanges; readonly pageTitle: string | undefined; readonly files: readonly ManifestFile[]; readonly limits: UploadLimits },
 ): Promise<Planned | Refused<BeginCode>> {
   const reached = await reachSite(install, actor, asked.reference);
   if (!reached.ok) return reached;
@@ -223,8 +234,8 @@ async function planVersion(
   const reserved = await install.database.reserveVersion(site.id);
   if (reserved.kind !== "reserved") return refuse(reserved.kind);
 
-  const { details } = changes;
-  const plan: UploadPlan = changes.access === undefined ? { kind: "update", details } : { kind: "update", access: changes.access, details };
+  const asks = changes.access === undefined ? { details: changes.details } : { access: changes.access, details: changes.details };
+  const plan: UploadPlan = { kind: "update", ...asks, ...pageTitleOf(asked.pageTitle) };
 
   return { ok: true, folder: site.folder, number: reserved.number, plan, room: roomUnder(settings, false) };
 }
@@ -248,10 +259,10 @@ export async function beginPublish(
   const asked = v.safeParse(PUBLISH_REQUEST, request);
   if (!asked.success) return refuse("bad_argument", v.getDotPath(asked.issues[0])?.split(".")[0] ?? "request");
 
-  const { files, site: reference, name, ...changes } = asked.output;
+  const { files, site: reference, name, page_title: pageTitle, ...changes } = asked.output;
   if (reference !== undefined && name !== undefined) return refuse("bad_argument", "name");
 
-  const planned = reference === undefined ? await planSite(install, actor, { name, changes, files, limits }) : await planVersion(install, actor, { reference, changes, files, limits });
+  const planned = reference === undefined ? await planSite(install, actor, { name, changes, pageTitle, files, limits }) : await planVersion(install, actor, { reference, changes, pageTitle, files, limits });
   if (!planned.ok) return planned;
 
   const upload = { id: mintUploadId(), folder: planned.folder, number: planned.number, owner: actor.holder, plan: planned.plan, manifest: files, created_at: install.now() };

@@ -1,5 +1,6 @@
 import { describe, expect, spyOn, test } from "bun:test";
 
+import { updateSite } from "../../src/actions/set";
 import { getSite } from "../../src/actions/show";
 import { listSites } from "../../src/actions/list";
 import { beginPublish } from "../../src/actions/begin-publish";
@@ -46,6 +47,7 @@ describe("publishSite", () => {
         name: "report",
         public_name: null,
         title: null,
+        title_typed: false,
         access: "private",
         url: address,
         addresses: { site: address, public: null },
@@ -129,6 +131,42 @@ describe("publishSite", () => {
 
     expect(updated).toMatchObject({ ok: true, site: { access: "public", public_name: "report", title: "Q3 sales", live_version: 2, created: false } });
     expect(await world.audit()).toEqual(["create", "access", "details", "publish"]);
+  });
+
+  // Drift: the page's own title rides with every publish; one that replaced a typed title would undo `set --title` on the next update.
+  test("an update changes the title only when one is typed, and a site with no typed title follows its page", async () => {
+    const world = await makeWorld();
+    const id = await made(world, OWNER, "report", { page_title: "Field notes" });
+    const typedFromTheStart = await made(world, OWNER, "sales", { title: "Q3 sales", page_title: "The page" });
+    const update = (settings: object): ReturnType<typeof publishSite> => publishSite(world.install, OWNER, { files: pages("next"), site: id, ...settings });
+    const steps = [
+      await getSite(world.install, OWNER, id),
+      await getSite(world.install, OWNER, typedFromTheStart),
+      await update({ page_title: "Second" }),
+      await updateSite(world.install, OWNER, { site: id, title: "Q3 sales" }),
+      await update({ page_title: "Third" }),
+      await update({ page_title: "Fourth", title: "Q4 sales" }),
+      await updateSite(world.install, OWNER, { site: id, title: null }),
+      await update({ page_title: "Fifth" }),
+      await update({ title: "Q1 sales" }),
+      await update({ page_title: "Sixth", title: null }),
+      await update({ page_title: "" }),
+    ];
+
+    expect(steps.map((step) => (step.ok ? [step.site.title, step.site.title_typed] : step.code))).toEqual([
+      ["Field notes", false],
+      ["Q3 sales", true],
+      ["Second", false],
+      ["Q3 sales", true],
+      ["Q3 sales", true],
+      ["Q4 sales", true],
+      ["Fourth", false],
+      ["Fifth", false],
+      ["Q1 sales", true],
+      ["Sixth", false],
+      [null, false],
+    ]);
+    expect(await world.audit()).toEqual(["create", "create", "publish", "details", "publish", "details", "publish", "details", "publish", "details", "publish", "details", "publish", "publish"]);
   });
 
   // Drift: an update that asks for public and names no public name leaves the name alone; one that reset it would move a public site's address on a republish.

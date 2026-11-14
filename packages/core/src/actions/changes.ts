@@ -24,11 +24,17 @@ const LAST_MOMENT = 8_640_000_000_000_000;
 /** A control character or a line break, which a title shown on one line cannot hold. */
 const LINE_BREAKER = /[\p{Cc}\p{Zl}\p{Zp}]/u;
 
+/** A title as a caller sends it. */
+export const TITLE_TEXT = v.pipe(
+  v.string(),
+  v.check((title) => !LINE_BREAKER.test(title), "a title holds no control character and no line break"),
+);
+
 /** What a caller may ask of a site's settings; every key is optional, and no other key is taken. */
 export const SITE_CHANGES = v.strictObject({
   access: v.optional(v.picklist(["private", "unlisted", "public"])),
   public_name: v.optional(v.string()),
-  title: v.optional(v.nullable(v.pipe(v.string(), v.check((title) => !LINE_BREAKER.test(title), "a title holds no control character and no line break")))),
+  title: v.optional(v.nullable(TITLE_TEXT)),
   search_engines: v.optional(v.boolean()),
   embeddable: v.optional(v.boolean()),
   expires: v.optional(v.string()),
@@ -39,7 +45,7 @@ export const SITE_CHANGES = v.strictObject({
  *
  * `public_name` goes with `access: "public"` alone. Left out, a public site keeps the one it holds, and a site going public takes its own name.
  *
- * A `title` of `null` or `""` takes the title away, and a title holds no control character and no line break.
+ * A `title` is the typed title: `null` or `""` takes it away, and the site then shows its page's own title. A title holds no control character and no line break.
  *
  * `expires` is `"never"`, a span from now such as `"7d"` (units `s`, `m`, `h`, `d`), or a day such as `"2026-12-01"`, which is that day's start in UTC.
  */

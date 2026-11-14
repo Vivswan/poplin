@@ -55,7 +55,7 @@ const NEWEST = Number.MAX_SAFE_INTEGER;
 
 /** A site with its kept versions gathered into one JSON column, so one query gives the whole site. */
 const SELECT_SITE = `
-SELECT s.id, s.name, s.folder, s.access, s.public_name, s.title, s.search_engines, s.embeddable, s.expires_at, s.live_version, s.owner, s.created_at, s.updated_at, s.trashed_at,
+SELECT s.id, s.name, s.folder, s.access, s.public_name, s.title, s.page_title, s.search_engines, s.embeddable, s.expires_at, s.live_version, s.owner, s.created_at, s.updated_at, s.trashed_at,
   (SELECT json_group_array(json_object('number', v.number, 'published_at', v.published_at, 'published_by', v.published_by, 'bytes', v.bytes, 'files', v.files)) FROM versions v WHERE v.folder = s.folder) AS versions
 FROM sites s`;
 
@@ -86,8 +86,8 @@ const AUDIT_NOTE = "INSERT INTO audit (at, actor, action, site_id, site_name, de
 
 /** A new site, only while its id and its public name are free: no site has either as its id or its public name. The schema adds version 1 with the row. Its owner is whoever began upload `?12`, and `?9` when it is made from none. */
 const INSERT_SITE = `
-INSERT INTO sites (id, name, folder, access, public_name, title, search_engines, expires_at, live_version, next_version, owner, created_at, updated_at, embeddable)
-SELECT ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, 1, 2, COALESCE((SELECT owner FROM uploads WHERE id = ?12), ?9), ?10, ?10, ?11
+INSERT INTO sites (id, name, folder, access, public_name, title, search_engines, expires_at, live_version, next_version, owner, created_at, updated_at, embeddable, page_title)
+SELECT ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, 1, 2, COALESCE((SELECT owner FROM uploads WHERE id = ?12), ?9), ?10, ?10, ?11, ?13
 WHERE NOT EXISTS (SELECT 1 FROM sites WHERE id = ?1)
   AND NOT EXISTS (SELECT 1 FROM sites WHERE public_name = ?1)
   AND (?5 IS NULL OR (?5 <> ?1 AND NOT EXISTS (SELECT 1 FROM sites WHERE public_name = ?5) AND NOT EXISTS (SELECT 1 FROM sites WHERE id = ?5)))`;
@@ -170,8 +170,8 @@ const EXPORT_SITES = `${SELECT_SITE} WHERE s.id > ?1 ORDER BY s.id LIMIT ?2`;
 
 /** A site from a backup under the id it had, only while its id, its folder, and its public name are free, and upload `?16` is pending as the first version of its folder unless that is NULL. The schema adds its live version with the row. */
 const IMPORT_SITE = `
-INSERT INTO sites (id, name, folder, access, public_name, title, search_engines, embeddable, expires_at, live_version, next_version, owner, created_at, updated_at, trashed_at)
-SELECT ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15
+INSERT INTO sites (id, name, folder, access, public_name, title, search_engines, embeddable, expires_at, live_version, next_version, owner, created_at, updated_at, trashed_at, page_title)
+SELECT ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?17
 WHERE NOT EXISTS (SELECT 1 FROM sites WHERE id = ?1)
   AND NOT EXISTS (SELECT 1 FROM sites WHERE public_name = ?1)
   AND NOT EXISTS (SELECT 1 FROM sites WHERE folder = ?3)
@@ -265,9 +265,9 @@ INSERT INTO versions (folder, number, published_at, published_by, bytes, files)
 SELECT u.folder, u.number, ?4, ?5, u.bytes, u.files FROM uploads u
 WHERE u.id = ?1 AND ${UPLOAD_HAS_ACCESS} AND ${UPLOAD_CAN_PUBLISH}`;
 
-/** The version just kept for upload `?1` made live. */
+/** The version just kept for upload `?1` made live, with `?3` as the title of its entry page. */
 const SET_LIVE_TO_UPLOADED = `
-UPDATE sites SET live_version = (SELECT number FROM uploads WHERE id = ?1), updated_at = ?2
+UPDATE sites SET live_version = (SELECT number FROM uploads WHERE id = ?1), page_title = ?3, updated_at = ?2
 WHERE folder = (SELECT folder FROM uploads WHERE id = ?1) AND changes() = 1`;
 
 /** The audit entry of the publish of upload `?3`, naming the version the site is at now. */
@@ -793,7 +793,7 @@ export class SqlDatabase implements Database {
     const results = await this.#driver.batch([
       ...settings,
       sql(INSERT_UPLOADED_VERSION, id, access, publicName, signed.at, signed.by),
-      sql(SET_LIVE_TO_UPLOADED, id, signed.at),
+      sql(SET_LIVE_TO_UPLOADED, id, signed.at, version.page_title ?? null),
       sql(AUDIT_UPLOADED_VERSION, signed.at, signed.by, id),
       sql(FINISH_UPLOADED_VERSION, id, version.keep),
       sql(DROP_BEHIND_UPLOAD, id, version.keep),
@@ -1057,7 +1057,7 @@ WHERE folder = (SELECT folder FROM uploads WHERE id = ?1) AND (${differs.join(" 
     const detail = { access: site.access, public_name: publicName };
     const columns = [site.name, site.folder, site.access, publicName, site.title, site.search_engines ? 1 : 0, expires, signed.by, signed.at, site.embeddable ? 1 : 0];
     const text = upload === undefined ? INSERT_SITE : `${INSERT_SITE}\n  ${WHILE_UPLOAD_IS_PENDING}`;
-    const insert = (id: SiteId): Statement => sql(text, id, ...columns, upload ?? null);
+    const insert = (id: SiteId): Statement => sql(text, id, ...columns, upload ?? null, site.page_title ?? null);
 
     for (let attempt = 0; attempt < MINT_ATTEMPTS; attempt += 1) {
       const id = this.#mintId();
@@ -1088,7 +1088,7 @@ WHERE folder = (SELECT folder FROM uploads WHERE id = ?1) AND (${differs.join(" 
 
     // The upload is finished straight after the audit entry, so each statement up to the versions sees the one row the statement before it wrote.
     const results = await this.#driver.batch([
-      sql(IMPORT_SITE, ...identity, row.owner, row.created_at, row.updated_at, row.trashed_at, upload ?? null),
+      sql(IMPORT_SITE, ...identity, row.owner, row.created_at, row.updated_at, row.trashed_at, upload ?? null, row.page_title),
       auditSite(signed, "imported", row.id, { versions: row.versions.length }),
       ...(upload === undefined ? [] : [sql(FINISH_UPLOAD, upload)]),
       sql(IMPORT_VERSIONS, row.folder, JSON.stringify(row.versions)),
