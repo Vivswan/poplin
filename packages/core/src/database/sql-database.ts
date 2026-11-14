@@ -18,7 +18,7 @@ import { SWEEP_PLACE, type SweepPlace } from "../records/sweep-place";
 import { type Totals, totalsFromRow } from "../records/sizes";
 import { mintSiteId, type SiteId } from "../sites/ids";
 import { tokenFromRow } from "../records/token";
-import { type ManifestFile, MANIFEST_FILE, manifestFromText, type Upload, type UploadId, uploadFromRow } from "../records/upload";
+import { type ManifestFile, MANIFEST_FILE, type Upload, type UploadId, uploadFromRow } from "../records/upload";
 import { dayOf, type SiteViews, viewDays } from "../records/views";
 import type {
   Address,
@@ -233,19 +233,23 @@ WHERE ${PENDING_OF_OWNER} < ?11 AND ${BYTES_IN_FOLDER} + ?8 <= ?12 AND ${BYTES_H
 /** The upload with id `?1`, without its manifest. */
 const UPLOAD_BY_ID = `SELECT ${UPLOAD_COLUMNS} FROM uploads WHERE id = ?1`;
 
-/** The upload with id `?1` and its whole manifest. */
+/** Where the 32-bit FNV-1a hash starts. */
+const FNV_OFFSET = 0x811c9dc5;
+
+/** What the 32-bit FNV-1a hash multiplies by at every character. */
+const FNV_PRIME = 0x01000193;
+
+/** The upload with id `?1` and its whole manifest, as stored. */
 const UPLOAD_WITH_MANIFEST = `SELECT ${UPLOAD_COLUMNS}, manifest FROM uploads WHERE id = ?1`;
 
-/** The upload with id `?1` and the one file of its manifest at path `?2`, picked out by the engine so the manifest stays where it is. */
-const UPLOAD_WITH_FILE = `
-SELECT ${UPLOAD_COLUMNS}, (SELECT j.value FROM json_each(uploads.manifest) j WHERE j.value ->> 'path' = ?2) AS file
-FROM uploads WHERE id = ?1`;
+/** The upload with id `?1` and the files its manifest holds under key `?2`. The engine reads one value out of the row: it walks no entry of the manifest. */
+const UPLOAD_WITH_FILE = `SELECT ${UPLOAD_COLUMNS}, json_extract(manifest, '$.' || ?2) AS file FROM uploads WHERE id = ?1`;
 
 /** Added to `INSERT_SITE` for a site made from upload `?12`: only while that upload is pending and is the first version of the same folder. */
 const WHILE_UPLOAD_IS_PENDING = "AND EXISTS (SELECT 1 FROM uploads WHERE id = ?12 AND state = 'pending' AND folder = ?3 AND number = 1)";
 
 /** An upload marked finished and its manifest dropped, only when the statement before it changed a row. */
-const FINISH_UPLOAD = "UPDATE uploads SET state = 'finished', manifest = '[]' WHERE id = ?1 AND changes() = 1";
+const FINISH_UPLOAD = "UPDATE uploads SET state = 'finished', manifest = '{}' WHERE id = ?1 AND changes() = 1";
 
 /** Whether upload `?1` can be made its site's next version: it is pending, its site is live, and its number was reserved and is above every kept one. */
 const UPLOAD_CAN_PUBLISH = `
@@ -293,7 +297,7 @@ WHERE s.folder = (SELECT folder FROM uploads WHERE id = ?3) AND changes() = 1`;
 
 /** Upload `?1` marked finished with the versions beyond the `?2` highest, which the next statement drops. */
 const FINISH_UPLOADED_VERSION = `
-UPDATE uploads SET state = 'finished', manifest = '[]', dropped = (
+UPDATE uploads SET state = 'finished', manifest = '{}', dropped = (
   SELECT json_group_array(v.number) FROM versions v
   WHERE v.folder = uploads.folder AND v.number NOT IN (SELECT k.number FROM versions k WHERE k.folder = uploads.folder ORDER BY k.number DESC LIMIT ?2))
 WHERE id = ?1 AND changes() = 1`;
@@ -308,7 +312,7 @@ WHERE changes() = 1 AND folder = (SELECT folder FROM uploads WHERE id = ?1)
 const SET_DROPPED = "UPDATE uploads SET dropped = ?2 WHERE id = ?1 AND state = 'finished'";
 
 /** A pending upload given up, and its manifest dropped. */
-const ABANDON_UPLOAD = "UPDATE uploads SET state = 'abandoned', manifest = '[]' WHERE id = ?1 AND state = 'pending'";
+const ABANDON_UPLOAD = "UPDATE uploads SET state = 'abandoned', manifest = '{}' WHERE id = ?1 AND state = 'pending'";
 
 /** The record of an upload that takes no more files, removed. */
 const DELETE_UPLOAD = "DELETE FROM uploads WHERE id = ?1 AND state <> 'pending'";
@@ -520,6 +524,47 @@ function unreachable(site: Site | undefined): Refused<"not_found" | "in_trash"> 
   if (site.state === "trash") return { kind: "in_trash" };
 
   return undefined;
+}
+
+/**
+ * The key a file has in a stored manifest: the 32-bit FNV-1a hash of its path, taken over its UTF-16 units.
+ *
+ * @returns a letter and hex digits, which is one plain step of a JSON path whatever the path holds. Two paths may share a key
+ */
+function manifestKey(path: string): string {
+  let hash = FNV_OFFSET;
+  for (let at = 0; at < path.length; at += 1) hash = Math.imul(hash ^ path.charCodeAt(at), FNV_PRIME);
+
+  return `f${(hash >>> 0).toString(16)}`;
+}
+
+/**
+ * The manifest as the JSON object its row holds: under each key the files whose paths have it, each as its path, size, type, and place in the manifest.
+ *
+ * @throws {Error} two files share a path
+ */
+function manifestToText(manifest: readonly ManifestFile[]): string {
+  const paths = new Set(manifest.map((file) => file.path));
+  if (paths.size < manifest.length) throw new Error("two files of an upload share a path");
+
+  const keyed: Record<string, unknown[][]> = {};
+  manifest.forEach((file, place) => {
+    const key = manifestKey(file.path);
+    keyed[key] = [...(keyed[key] ?? []), [file.path, file.size, file.content_type, place]];
+  });
+
+  return JSON.stringify(keyed);
+}
+
+/**
+ * Read one file of a stored manifest, and its place in the manifest.
+ *
+ * @throws {Error} the entry is no file
+ */
+function placedFile(entry: unknown): { readonly file: ManifestFile; readonly place: number } {
+  const [path, size, type, place]: unknown[] = Array.isArray(entry) ? entry : [];
+
+  return { file: v.parse(MANIFEST_FILE, { path, size, content_type: type }), place: Number(place) };
 }
 
 function uploadIn(result: StatementResult | undefined): Upload | undefined {
@@ -829,7 +874,7 @@ export class SqlDatabase implements Database {
   }
 
   async addUpload(upload: NewUpload, room: UploadRoom): Promise<{ readonly kind: "done" } | Refused<"own_full" | "folder_full" | "total_full" | "sites_full">> {
-    const manifest = JSON.stringify(upload.manifest);
+    const manifest = manifestToText(upload.manifest);
     const bytes = upload.manifest.reduce((sum, file) => sum + file.size, 0);
     const row = { ...upload, state: "pending", plan: JSON.stringify(upload.plan), bytes, files: upload.manifest.length, dropped: "[]" };
     const checked = uploadFromRow(row);
@@ -854,18 +899,24 @@ export class SqlDatabase implements Database {
     const upload = uploadIn(found);
     if (upload === undefined) return undefined;
 
-    return { upload, manifest: manifestFromText(found?.rows[0]?.manifest) };
+    const stored: Record<string, unknown[]> = JSON.parse(String(found?.rows[0]?.manifest));
+    const placed = Object.values(stored).flat().map(placedFile);
+    placed.sort((one, other) => one.place - other.place);
+
+    return { upload, manifest: placed.map(({ file }) => file) };
   }
 
   async getUploadFile(id: UploadId, path: string): Promise<{ readonly upload: Upload; readonly file: ManifestFile | undefined } | undefined> {
-    const [found] = await this.#driver.batch([sql(UPLOAD_WITH_FILE, id, path)]);
+    const [found] = await this.#driver.batch([sql(UPLOAD_WITH_FILE, id, manifestKey(path))]);
     const upload = uploadIn(found);
     if (upload === undefined) return undefined;
 
-    const file = found?.rows[0]?.file;
-    if (typeof file !== "string") return { upload, file: undefined };
+    const stored = found?.rows[0]?.file;
+    if (typeof stored !== "string") return { upload, file: undefined };
 
-    return { upload, file: v.parse(MANIFEST_FILE, JSON.parse(file)) };
+    const sharing: unknown[] = JSON.parse(stored);
+
+    return { upload, file: sharing.map(placedFile).find(({ file }) => file.path === path)?.file };
   }
 
   publishUploadAsSite(id: UploadId, draft: NewSite, signed: Signed): Promise<Done | Refused<"name_taken" | "not_pending">> {

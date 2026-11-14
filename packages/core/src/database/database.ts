@@ -371,7 +371,7 @@ export interface Database {
    * Record a staged publish as pending, only while it fits the room it is given. It writes no audit entry: nothing a reader of any site sees has changed.
    *
    * @returns the first bound the upload does not fit, in the order `own`, `folder`, `total`, `sites`; of uploads recorded at the same moment only those that fit together are kept
-   * @throws {Error} a value breaks its field rule, the manifest is empty, or the id or the folder and number are already an upload's
+   * @throws {Error} a value breaks its field rule, the manifest is empty or names a path twice, or the id or the folder and number are already an upload's
    */
   addUpload(upload: NewUpload, room: UploadRoom): Promise<{ readonly kind: "done" } | Refused<"own_full" | "folder_full" | "total_full" | "sites_full">>;
 

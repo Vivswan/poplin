@@ -1,4 +1,4 @@
-// A staged publish as the database holds it between its first request and its last, and the one place a row of the uploads table becomes that value.
+// A staged publish as the database holds it between its first request and its last, and the one place a row of the uploads table becomes that value. Its manifest is read where it is stored.
 
 import * as v from "valibot";
 
@@ -49,9 +49,6 @@ const UPLOAD_COLUMNS = {
 
 /** A row of the uploads table without its manifest. */
 const UPLOAD_ROW = v.object(UPLOAD_COLUMNS);
-
-/** The manifest of an upload, as the JSON text its row holds. */
-const MANIFEST_TEXT = v.pipe(v.string(), v.parseJson(), v.array(MANIFEST_FILE));
 
 declare const uploadIdBrand: unique symbol;
 
@@ -106,18 +103,6 @@ export function parseUploadId(raw: string): UploadId | undefined {
 export function uploadFromRow(row: unknown): Upload {
   const parsed = v.safeParse(UPLOAD_ROW, row);
   if (!parsed.success) throw new Error(`a stored upload is not an upload: ${v.summarize(parsed.issues)}`);
-
-  return parsed.output;
-}
-
-/**
- * Read the manifest a row of the uploads table holds.
- *
- * @throws {Error} the text is no manifest
- */
-export function manifestFromText(text: unknown): readonly ManifestFile[] {
-  const parsed = v.safeParse(MANIFEST_TEXT, text);
-  if (!parsed.success) throw new Error(`a stored manifest is not a manifest: ${v.summarize(parsed.issues)}`);
 
   return parsed.output;
 }

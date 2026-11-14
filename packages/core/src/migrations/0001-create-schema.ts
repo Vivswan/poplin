@@ -116,7 +116,7 @@ CREATE TABLE request_counts (
   PRIMARY KEY (day, site)
 ) STRICT, WITHOUT ROWID`;
 
-/** A staged publish from its first request on. `number` is 1 exactly for a new site, whose folder no site has yet; `manifest` lists every declared file while the upload is pending, and nothing after. */
+/** A staged publish from its first request on. `number` is 1 exactly for a new site, whose folder no site has yet; `manifest` is one JSON object, the declared files under keys made from their paths, while the upload is pending and empty after. */
 const UPLOADS = `
 CREATE TABLE uploads (
   id TEXT NOT NULL PRIMARY KEY,
@@ -125,7 +125,7 @@ CREATE TABLE uploads (
   owner TEXT NOT NULL,
   state TEXT NOT NULL DEFAULT 'pending' CHECK (state IN ('pending', 'finished', 'abandoned')),
   plan TEXT NOT NULL CHECK (json_valid(plan)),
-  manifest TEXT NOT NULL CHECK (json_valid(manifest)),
+  manifest TEXT NOT NULL CHECK (json_valid(manifest) AND json_type(manifest) = 'object'),
   bytes INTEGER NOT NULL CHECK (bytes >= 0),
   files INTEGER NOT NULL CHECK (files >= 1),
   dropped TEXT NOT NULL DEFAULT '[]' CHECK (json_valid(dropped)),

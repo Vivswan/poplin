@@ -15,6 +15,7 @@ import {
   ADA,
   ADMIN,
   BY_ADA,
+  begunFiles,
   begunImport,
   begunSite,
   begunVersion,
@@ -24,6 +25,7 @@ import {
   made,
   NO_SITE,
   NOW,
+  numberedFiles,
   OTHER_SITE,
   pendingLogin,
   publish,
@@ -216,7 +218,7 @@ function schemaRules(label: string, makeDriver: DriverFactory): void {
     });
     const stored = site("aaaaaaaaaaaa", "folder-a", "public", "docs");
     const upload = (id: string, folder: string, state: string): Statement => ({
-      sql: "INSERT INTO uploads (id, folder, number, owner, state, plan, manifest, bytes, files, created_at) VALUES (?1, ?2, 2, ?3, ?4, '{}', '[]', 0, 1, 0)",
+      sql: "INSERT INTO uploads (id, folder, number, owner, state, plan, manifest, bytes, files, created_at) VALUES (?1, ?2, 2, ?3, ?4, '{}', '{}', 0, 1, 0)",
       params: [id, folder, ADA, state],
     });
     const login = (id: string, code: string, state: string, decidedBy: string | null): Statement => ({
@@ -261,6 +263,7 @@ function schemaRules(label: string, makeDriver: DriverFactory): void {
       ["a second upload under one folder and number", [upload("upload-b", "folder-a", "pending")]],
       ["an upload of no file", [{ sql: "UPDATE uploads SET files = 0 WHERE id = 'upload-a'", params: [] }]],
       ["an upload whose manifest is no JSON", [{ sql: "UPDATE uploads SET manifest = 'index.html' WHERE id = 'upload-a'", params: [] }]],
+      ["an upload whose manifest is a list", [{ sql: "UPDATE uploads SET manifest = '[]' WHERE id = 'upload-a'", params: [] }]],
       ["a login that was allowed by nobody", [login("login-b", "CODEB", "allowed", null)]],
       ["a pending login somebody decided", [login("login-b", "CODEB", "pending", ADMIN)]],
       ["a login in a state that is none of the three", [login("login-b", "CODEB", "redeemed", ADMIN)]],
@@ -401,7 +404,7 @@ function queryPlans(label: string, makeDriver: DriverFactory): void {
         );
       }
 
-      // The one walk of a table is the token list, which hands back every row it reads. An import walks the list of versions it was given, and a file lookup the manifest of its own row: neither is a table.
+      // The one walk of a table is the token list, which hands back every row it reads. An import walks the list of versions it was given, which is no table.
       expect([exported.sites, imported.kind, again.kind, redeemed.kind, swept]).toEqual([[], "done", "done", "done", 1]);
       expect(driver.statements.length).toBeGreaterThan(105);
       expect(scans).toEqual([
@@ -452,6 +455,45 @@ function requestCountRows(label: string, makeDriver: DriverFactory): void {
   });
 }
 
+function manifestRows(label: string, makeDriver: DriverFactory): void {
+  describe(`${label}: the row of an upload's manifest`, () => {
+    // Drift: a request for a file runs once per file of a publish, and a database counts every entry of a manifest it walks as a row read; a lookup that walked the manifest would read as many rows as the publish has files, squared.
+    test.each([3, 5000])("an upload of %d files is recorded in two statements, its whole manifest is read in one, and one file of it in one that walks nothing but the upload's key", async (files) => {
+      const inner = await migrated(makeDriver);
+      const driver = new RecordingDriver(inner);
+      const database = new SqlDatabase(driver);
+      const upload = await begunFiles(database, numberedFiles(files));
+      const recorded = driver.statements.length;
+      const whole = await database.getUpload(upload);
+      const read = await database.getUploadFile(upload, "page-2.html");
+      const lookup = driver.statements.at(-1);
+      const plan = await rows(inner, `EXPLAIN QUERY PLAN ${lookup?.sql}`, ...(lookup?.params ?? []));
+
+      expect([recorded, driver.statements.length - recorded, read?.file, whole?.manifest.length]).toEqual([2, 2, { path: "page-2.html", size: 2, content_type: "text/html" }, files]);
+      expect(plan.map((step) => String(step.detail).split(" ")[0])).toEqual(["SEARCH"]);
+    });
+
+    // Drift: the cap on a manifest is measured on its list, and a database refuses a value of 2,000,000 bytes; a stored form longer than the list would be refused for a manifest the cap let through.
+    test.each([
+      [1600, 850],
+      [10_000, 65],
+    ])("a manifest of %d files near the cap is stored in fewer bytes than its list, reads back whole, and is one text until the upload is given up", async (files, length) => {
+      const driver = await migrated(makeDriver);
+      const database = new SqlDatabase(driver);
+      const manifest = numberedFiles(files).map((file) => ({ ...file, path: `${"p".repeat(length)}/${file.path}`, content_type: 'text/html; charset="utf-8"' }));
+      const listed = new TextEncoder().encode(JSON.stringify(manifest)).length;
+      const upload = await begunFiles(database, manifest);
+      const held = async (): Promise<unknown> => (await rows(driver, "SELECT typeof(manifest) AS kind, length(CAST(manifest AS BLOB)) AS bytes FROM uploads WHERE id = ?1", upload))[0];
+      const [kind, bytes] = Object.values((await held()) as object) as [string, number];
+      const whole = await database.getUpload(upload);
+      await database.abandonUpload(upload);
+
+      expect([listed > 1_400_000 && listed <= 1_500_000, kind, bytes < listed, bytes > listed / 2]).toEqual([true, "text", true, true]);
+      expect([whole?.manifest.length, whole?.manifest.at(-1), await held()]).toEqual([files, manifest.at(-1), { kind: "text", bytes: 2 }]);
+    });
+  });
+}
+
 /**
  * Make the factory `describeDatabase` takes from a driver factory: the SQL implementation over a migrated driver.
  *
@@ -475,5 +517,6 @@ export function describeSqlDriver(label: string, makeDriver: DriverFactory): voi
   storedRows(label, makeDriver);
   queryPlans(label, makeDriver);
   requestCountRows(label, makeDriver);
+  manifestRows(label, makeDriver);
 }
 

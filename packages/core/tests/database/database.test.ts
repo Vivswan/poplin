@@ -40,7 +40,7 @@ import { SETTING_CHANGES, SETTING_VALUES, type SettingValues } from "../../src/r
 import { NEW_SITE, SITE_DETAILS, type Site, type SiteAccess, type SiteFolder, siteToRow } from "../../src/records/site";
 import { SWEEP_PLACE, type SweepPlace } from "../../src/records/sweep-place";
 import type { Totals } from "../../src/records/sizes";
-import { type ManifestFile, manifestFromText, type Upload, type UploadId, uploadFromRow } from "../../src/records/upload";
+import { MANIFEST_FILE, type ManifestFile, type Upload, type UploadId, uploadFromRow } from "../../src/records/upload";
 import { dayOf, type SiteViews, viewDays } from "../../src/records/views";
 import { mintSiteId, type SiteId } from "../../src/sites/ids";
 import { describeDatabase } from "./support/database-contract";
@@ -636,12 +636,14 @@ class MemoryDatabase implements Database {
 
   async addUpload(upload: NewUpload, room: UploadRoom): Promise<{ readonly kind: "done" } | Refused<"own_full" | "folder_full" | "total_full" | "sites_full">> {
     // The checks of a stored upload are the ones that read its row; they are used here for their verdict.
-    const manifest = manifestFromText(JSON.stringify(upload.manifest));
+    const manifest = v.parse(v.array(MANIFEST_FILE), upload.manifest);
     const bytes = manifest.reduce((sum, file) => sum + file.size, 0);
     const checked = uploadFromRow({ ...upload, state: "pending", plan: JSON.stringify(upload.plan), bytes, files: manifest.length, dropped: "[]" });
     const all = [...this.#uploads.values()].map((kept) => kept.upload);
     const taken = all.some((kept) => kept.folder === checked.folder && kept.number === checked.number);
     if (taken || this.#uploads.has(checked.id)) throw new Error("the id, or the folder and number, are already an upload's");
+
+    if (new Set(manifest.map((file) => file.path)).size < manifest.length) throw new Error("two files of an upload share a path");
 
     const pending = all.filter((kept) => kept.state === "pending");
     const sum = (sized: readonly { readonly bytes: number }[]): number => sized.reduce((total, kept) => total + kept.bytes, 0);

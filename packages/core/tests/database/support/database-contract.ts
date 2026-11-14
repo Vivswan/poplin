@@ -12,7 +12,7 @@ import { defaultSettings } from "../../../src/records/settings";
 import { mintSiteFolder, type Site } from "../../../src/records/site";
 import type { Totals } from "../../../src/records/sizes";
 import type { SiteId } from "../../../src/sites/ids";
-import { mintUploadId, type UploadId } from "../../../src/records/upload";
+import { type ManifestFile, mintUploadId, type UploadId } from "../../../src/records/upload";
 
 /** The moment the fixtures are made at. */
 export const NOW = 1_700_000_000_000;
@@ -132,6 +132,20 @@ export async function begunSite(database: Database, site: NewSite, at: number = 
   await database.addUpload(upload, ROOMY);
 
   return { id: upload.id, site: planned };
+}
+
+/** `count` declared files, `page-0.html` to the last, each of as many bytes as its number. */
+export function numberedFiles(count: number): ManifestFile[] {
+  return Array.from(Array(count).keys(), (index) => ({ path: `page-${index}.html`, size: index, content_type: "text/html" }));
+}
+
+/** Record an upload of a new site that declares the files of `manifest`, whatever they add up to; answers its id. */
+export async function begunFiles(database: Database, manifest: readonly ManifestFile[]): Promise<UploadId> {
+  const site = { ...draft(REPORT), embeddable: true };
+  const upload: NewUpload = { id: mintUploadId(), folder: site.folder, number: 1, owner: ADA, plan: { kind: "create", site }, manifest, created_at: NOW };
+  await database.addUpload(upload, { ...ROOMY, folderBytes: Number.MAX_SAFE_INTEGER, totalBytes: Number.MAX_SAFE_INTEGER });
+
+  return upload.id;
 }
 
 /** Record a fixture upload that stores a site from a backup under a folder made for it; answers its id and the site as finishing stores it. */
@@ -1530,6 +1544,58 @@ function requestCounts(label: string, makeDatabase: DatabaseFactory): void {
   });
 }
 
+function uploadFiles(label: string, makeDatabase: DatabaseFactory): void {
+  describe(`${label}: the files of an upload`, () => {
+    // Drift: a file request finds its one file among thousands by path; a lookup that matched a near path, or another upload's file, would store bytes at the wrong length.
+    test("one file is found among 5,000 by its exact path, the first and the last alike, and each of two uploads that share a path answers its own file", async () => {
+      const database = await opened(makeDatabase);
+      const large = await begunFiles(database, numberedFiles(5000));
+      const small = await begunFiles(database, numberedFiles(3).map((file) => ({ ...file, size: file.size + 100, content_type: "text/plain" })));
+      const found = async (id: UploadId, path: string): Promise<unknown> => (await database.getUploadFile(id, path))?.file ?? "none";
+      const paths = ["page-0.html", "page-2.html", "page-4999.html", "page-5000.html", "page-499", "Page-2.html", "page-2.html/", ""];
+
+      expect(await Promise.all(paths.map((path) => found(large, path)))).toEqual([
+        { path: "page-0.html", size: 0, content_type: "text/html" },
+        { path: "page-2.html", size: 2, content_type: "text/html" },
+        { path: "page-4999.html", size: 4999, content_type: "text/html" },
+        "none",
+        "none",
+        "none",
+        "none",
+        "none",
+      ]);
+      expect([await found(small, "page-2.html"), await found(small, "page-3.html")]).toEqual([{ path: "page-2.html", size: 102, content_type: "text/plain" }, "none"]);
+      expect([(await database.getUpload(large))?.manifest.length, (await database.getUploadFile(large, ""))?.upload.files]).toEqual([5000, 5000]);
+    });
+
+    // Drift: a path is any text a key may be; one read as a number, as a JSON path, or as a property of an object would be found under another file, or moved to the front of the list a finish compares in order.
+    test("paths made of digits, of JSON path signs, of quotes, of the names an object is born with, and two of one hash are each found as written, and the manifest keeps their order", async () => {
+      const database = await opened(makeDatabase);
+      // The second path and the last have one hash of 32 bits, 96444b56, by the FNV-1a rule.
+      const signs = ["index.html", "page-2794.html", "2024", "10", "9", "$", "$.a", "$[0]", "a.b[0]", "[1]", "0/0", 'say "hi"', "it's", "100%_done"];
+      const paths = [...signs, "constructor", "__proto__", "toString", "length", "\u00fc/\u{1F600}.html", " ", `${"long/".repeat(200)}page.html`, "page-64060.html"];
+      const manifest = paths.map((path, index) => ({ path, size: index, content_type: `text/x-${index}; charset="utf-8"` }));
+      const upload = await begunFiles(database, manifest);
+      const each = await Promise.all(paths.map(async (path) => (await database.getUploadFile(upload, path))?.file));
+      const absent = await Promise.all(["0", "$.b", "[0]", "a", "valueOf", '"index.html"', "'index.html'", "index.html ", "f96444b56"].map(async (path) => (await database.getUploadFile(upload, path))?.file));
+
+      expect([(await database.getUpload(upload))?.manifest, each]).toEqual([manifest, manifest]);
+      expect(absent.filter((file) => file !== undefined)).toEqual([]);
+    });
+
+    // Drift: a path names one file; an upload recorded with a path twice would answer one size for it and hold another in its manifest.
+    test("an upload whose manifest names a path twice is refused whole", async () => {
+      const database = await opened(makeDatabase);
+      const site = { ...draft(REPORT), embeddable: true };
+      const twice = [...MANIFEST, { path: "index.html", size: 1, content_type: "text/plain" }];
+      const upload: NewUpload = { id: mintUploadId(), folder: site.folder, number: 1, owner: ADA, plan: { kind: "create", site }, manifest: twice, created_at: NOW };
+
+      await expect(database.addUpload(upload, ROOMY)).rejects.toThrow();
+      expect([await database.getUpload(upload.id), await database.getUploadFile(upload.id, "index.html")]).toEqual([undefined, undefined]);
+    });
+  });
+}
+
 function uploads(label: string, makeDatabase: DatabaseFactory): void {
   describe(`${label}: uploads`, () => {
     // Drift: every later step reads the upload back; a manifest that lost a path's quotes or a file's size would store a file under the wrong key or at the wrong length.
@@ -1814,4 +1880,5 @@ export function describeDatabase(label: string, makeDatabase: DatabaseFactory): 
   sweepPlace(label, makeDatabase);
   requestCounts(label, makeDatabase);
   uploads(label, makeDatabase);
+  uploadFiles(label, makeDatabase);
 }
