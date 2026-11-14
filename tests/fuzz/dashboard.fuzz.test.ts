@@ -13,7 +13,7 @@ const ANSWERS = [200, 302, 303, 400, 403, 404, 405, 413, 415];
 const METHODS = ["GET", "HEAD", "POST", "POST", "POST", "POST", "POST", "PUT", "DELETE", "OPTIONS"];
 const FORM = "application/x-www-form-urlencoded";
 const TYPES = [FORM, FORM, FORM, FORM, FORM, `${FORM}; charset=utf-8`, "multipart/form-data; boundary=x", "text/plain", "application/json", ""];
-const ORIGINS = [ORIGIN, ORIGIN, ORIGIN, ORIGIN, ORIGIN, ORIGIN, ORIGIN, "https://evil.example.com", "https://shop-page.example.com", "null", "", "https://admin.example.com:444", "HTTPS://ADMIN.EXAMPLE.COM"];
+const ORIGINS = [ORIGIN, ORIGIN, ORIGIN, ORIGIN, ORIGIN, ORIGIN, ORIGIN, "https://evil.example.com", "https://shop-page.example.com", "null", "", "https://poplin.example.com:444", "HTTPS://POPLIN.EXAMPLE.COM"];
 const FETCH_SITES = ["same-origin", "same-origin", "same-origin", "same-origin", "same-origin", "same-site", "cross-site", "none", ""];
 const CHANGES = ["settings", "rollback", "new-link", "delete", "restore", "delete-forever", "constructor", "__proto__", ""];
 

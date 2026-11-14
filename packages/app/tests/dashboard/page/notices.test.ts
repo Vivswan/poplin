@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 
 import { noticeIn, refusalSentence, withNotice } from "../../../src/dashboard/page/notices";
 
-const ORIGIN = "https://admin.example.com";
+const ORIGIN = "https://poplin.example.com";
 
 test("a refusal names what it is about only when that is a plain name; anything else from an address is left out", () => {
   const cases = [

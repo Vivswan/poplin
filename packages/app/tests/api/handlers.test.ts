@@ -4,12 +4,10 @@ import { sweepExpired } from "@poplin/core/src/actions/sweep";
 import { type ROUTES, STORED_TYPE_HEADER } from "@poplin/core/src/api/routes";
 import { importSessionKey } from "@poplin/core/src/auth/cookie";
 import { type Login, parseLogins } from "@poplin/core/src/auth/logins";
-import type { Hostname } from "@poplin/core/src/names/hostname";
-import { applySuffix, DEFAULT_SUFFIX } from "@poplin/core/src/names/suffix";
 
 import { mintSessionCookie, readSession } from "../../src/login/session";
-import { hostnameAddresses } from "../../src/sites/hostname-addresses";
 import { serveSite } from "../../src/sites/serve";
+import { ADDRESSES, LAYOUT } from "../sites/support/layout";
 import { type Answered, type ApiInstall, NOW, openApi, requestOf } from "./support/install";
 
 type RouteName = keyof typeof ROUTES;
@@ -188,21 +186,21 @@ async function stateOf(install: ApiInstall): Promise<unknown> {
   return [await sitesOf(install), await storeOf(install), await install.audit(), uploads.map((upload) => [upload.id, upload.state])];
 }
 
-/** Serve one request from an install's database and store, as the Worker does, with a session of the admin when `signedIn`. */
-async function served(install: ApiInstall, host: string, signedIn: boolean): Promise<[status: number, body: string]> {
-  const layout = { domain: "example.com" as Hostname, adminHostname: "admin.example.com" as Hostname, suffix: DEFAULT_SUFFIX };
+/** Serve one request from an install's database and store, as the Worker does, with a session of the admin when `signedIn`. `site` is a label or a public name. */
+async function served(install: ApiInstall, site: string, signedIn: boolean): Promise<[status: number, body: string]> {
+  const host = site.includes("--") ? `${site}-p-poplin.example.com` : `${site}-page.example.com`;
   const logins = parseLogins([ADMIN_EMAIL]);
   const settings = await install.database.readSettings();
   if (!logins.ok || settings === undefined) throw new Error("the test's serving was refused");
 
   const key = await importSessionKey(new Uint8Array(32).fill(7));
-  const cookie = await mintSessionCookie({ email: ADMIN_EMAIL as Login, key, now: NOW, domain: layout.domain });
+  const cookie = await mintSessionCookie({ email: ADMIN_EMAIL as Login, key, now: NOW, domain: LAYOUT.domain });
   const headers: Record<string, string> = signedIn ? { Cookie: cookie.slice(0, cookie.indexOf(";")) } : {};
-  const response = await serveSite(new Request(`https://${applySuffix(layout.suffix, host as never)}.example.com/`, { headers }), {
+  const response = await serveSite(new Request(`https://${host}/`, { headers }), {
     database: install.database,
     store: install.store,
     settings,
-    addresses: hostnameAddresses(layout),
+    addresses: ADDRESSES,
     readSession: (sent) => readSession(sent, { key, logins: logins.value, now: NOW }),
     now: () => NOW,
   });
@@ -357,7 +355,7 @@ describe("an import into an install that holds sites", () => {
     ["given up", async (install: ApiInstall, upload: string) => void (await install.call("abandonPublish", { upload })), 0, ["abandoned"]],
     ["left for a day and swept", async (install: ApiInstall) => {
       install.clock.now = NOW + 26 * 3_600_000;
-      const swept = await sweepExpired({ ...install, now: () => install.clock.now, addressOf: String, reservedNames: new Set() }, { scope: "admin", holder: ADMIN_EMAIL as Login }, { limit: 100, from: { uploads: true } });
+      const swept = await sweepExpired({ ...install, now: () => install.clock.now, addressOf: String, publicAddressOf: String, reservedNames: new Set() }, { scope: "admin", holder: ADMIN_EMAIL as Login }, { limit: 100, from: { uploads: true } });
       if (!swept.ok || swept.uploads !== 1) throw new Error(`the sweep removed no upload: ${JSON.stringify(swept)}`);
     }, 26 * 3_600_000, []],
   ] as const)("an import that is %s leaves no file and no site, takes no more files, and the same site is then imported whole", async (_how, end, later, records) => {

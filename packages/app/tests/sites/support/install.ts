@@ -71,7 +71,7 @@ function draftOf(draft: Draft): NewSite {
 
 /** The hostname of a site's label address under `example.com`. */
 export function labelHost(site: Site): string {
-  return new URL(ADDRESSES.addressOf(siteLabel(site.name, site.id))).hostname;
+  return new URL(ADDRESSES.addressOf(siteLabel(site.name, site.id), site.access)).hostname;
 }
 
 /**
@@ -137,7 +137,7 @@ export async function openInstall(): Promise<Install> {
   const serving: Serving = {
     database,
     store,
-    settings: defaultSettings({ installer: owner, hostname: LAYOUT.adminHostname }),
+    settings: defaultSettings({ installer: owner, hostname: "poplin.example.com" }),
     addresses: ADDRESSES,
     readSession: (headers) => readSession(headers, { key, logins: logins.value, now: NOW }),
     now: () => NOW,

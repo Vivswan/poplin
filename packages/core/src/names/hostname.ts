@@ -1,6 +1,12 @@
 // A hostname as DNS and Cloudflare's rule language may see it: lowercase ASCII labels only, so it holds no quote, backslash, or wildcard.
 
+/** The first label of the hostname every install's dashboard, login, and API answer at: `poplin.<domain>`. No site address is that hostname, since each ends in a dash and a word. */
+export const ADMIN_LABEL = "poplin";
+
+/** The most characters DNS carries in a hostname. */
 const MAX_HOSTNAME_LENGTH = 253;
+
+/** One label: 1 to 63 lowercase letters, digits, and dashes, with no dash first or last. */
 const LABEL = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/;
 
 declare const hostnameBrand: unique symbol;

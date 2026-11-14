@@ -6,10 +6,10 @@ import { accessKeys } from "../../src/login/keys";
 import { logIn } from "@poplin/app/src/login/login";
 import { readSession } from "@poplin/app/src/login/session";
 import { hostnameAddresses } from "@poplin/app/src/sites/hostname-addresses";
-import { SUFFIXED } from "../zone/support/layouts";
+import { LAYOUT } from "../zone/support/layouts";
 import { AUDIENCE, certs, headersOf, NOW, type Signer, sign, signer, TEAM } from "./support/access";
 
-const ADDRESSES = hostnameAddresses(SUFFIXED);
+const ADDRESSES = hostnameAddresses(LAYOUT);
 
 let team: Signer;
 let stranger: Signer;
@@ -71,7 +71,7 @@ describe("the login", () => {
 
   // Drift: serving writes the return and the login reads it; if the two forms part, a visitor of a private site lands on the dashboard instead of the page they asked for.
   test("the return serving writes for a private site's address brings the visitor back to that address", async () => {
-    const asked = "https://secret--k3f9x2ab71qz-page.example.com/notes/page.html?x=1";
+    const asked = "https://secret--k3f9x2ab71qz-p-poplin.example.com/notes/page.html?x=1";
     const returnTo = new URL(ADDRESSES.loginFor(new URL(asked))).searchParams.get("return");
 
     expect(await attempt(await sign(team), returnTo ?? undefined)).toMatchObject({ ok: true, location: asked });

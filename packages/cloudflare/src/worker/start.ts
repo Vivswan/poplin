@@ -51,7 +51,7 @@ export type VisitorOf = (request: Request, database: Database) => Promise<string
 
 /** Everything a request is answered from. One is built per Worker instance: the counters and the Access keys remember what they saw. */
 export interface Instance {
-  /** The install's domain, admin hostname, and suffix. */
+  /** The install's domain, its admin hostname, and its public word. */
   readonly layout: DomainLayout;
 
   /** The install as the actions take it: the database, the bucket, the clock, and how an address is written. */
@@ -140,6 +140,7 @@ export async function startInstance(env: Bindings, outside: Outside, visitorOf: 
     store: new R2Store(env.SITES),
     now: outside.now,
     addressOf: addresses.addressOf,
+    publicAddressOf: addresses.publicAddressOf,
     reservedNames: addresses.reservedNames,
   };
   const keys = accessKeys({ teamDomain: access.value.teamDomain, fetch: outside.fetch });

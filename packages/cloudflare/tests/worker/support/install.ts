@@ -17,7 +17,7 @@ import { type Certs, certs, NOW, type Signer, sign, signer } from "../../login/s
 export const BINDINGS: Bindings = env;
 
 /** Where the dashboard, the login, and the API answer in wrangler.jsonc's example values. */
-export const ADMIN = "https://admin.example.com";
+export const ADMIN = "https://poplin.example.com";
 
 /** The one login of the example first settings. */
 export const OWNER = "owner@example.com" as Login;
@@ -89,7 +89,8 @@ export async function installOf(from: World): Promise<Install> {
     database: opened.database,
     store: new R2Store(BINDINGS.SITES),
     now: () => from.clock.now,
-    addressOf: (label) => `https://${label}-page.example.com`,
+    addressOf: (label, access) => `https://${label}-${access === "private" ? "p" : "u"}-poplin.example.com`,
+    publicAddressOf: (name) => `https://${name}-page.example.com`,
     reservedNames: new Set(["gallery"]),
   };
 }

@@ -5,7 +5,7 @@ import { reportOf } from "../../../src/zone/sync";
 import { page, reply, withFake } from "../support/fake-cloudflare";
 import { hostOf } from "../support/layouts";
 
-const ADMIN = hostOf("admin.example.com");
+const ADMIN = hostOf("poplin.example.com");
 const WORKER = hostOf("poplin.an-account.workers.dev");
 const NOTHING = { policies: [], applications: [] };
 
@@ -103,14 +103,14 @@ describe("planAccess", () => {
     {
       name: "an override made the login path public",
       application: application("app-1", ADMIN, "pol-1", {
-        destinations: [{ type: "public", uri: "admin.example.com/login", overrides: [{ behavior: "public", path_pattern: "/login" }] }],
+        destinations: [{ type: "public", uri: "poplin.example.com/login", overrides: [{ behavior: "public", path_pattern: "/login" }] }],
       }),
     },
     {
       name: "a destination was added",
       application: application("app-1", ADMIN, "pol-1", {
         destinations: [
-          { type: "public", uri: "admin.example.com/login" },
+          { type: "public", uri: "poplin.example.com/login" },
           { type: "public", uri: "wiki.example.com" },
         ],
       }),
@@ -122,7 +122,7 @@ describe("planAccess", () => {
 
     expect(planAccess({ hostname: ADMIN, logins: owner }, current)).toEqual([
       { kind: "leave", subject: "poplin logins" },
-      { kind: "change", subject: "poplin", id: "app-1", uris: ["admin.example.com/login"], policyId: "pol-1" },
+      { kind: "change", subject: "poplin", id: "app-1", uris: ["poplin.example.com/login"], policyId: "pol-1" },
     ]);
   });
 });
@@ -159,8 +159,8 @@ describe("syncAccess", () => {
             {
               name: "poplin",
               type: "self_hosted",
-              domain: "admin.example.com/login",
-              destinations: [{ type: "public", uri: "admin.example.com/login" }],
+              domain: "poplin.example.com/login",
+              destinations: [{ type: "public", uri: "poplin.example.com/login" }],
               policies: [{ id: "made-0", precedence: 1 }],
             },
           ],

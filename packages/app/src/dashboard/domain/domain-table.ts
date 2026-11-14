@@ -2,8 +2,8 @@
 //
 //   3 to repair
 //   Object        State     Detail
-//   DNS record    missing   admin.example.com
-//   Route         present   admin.example.com/*
+//   DNS record    missing   poplin.example.com
+//   Route         present   poplin.example.com/*
 //
 // The token field is always sent empty: a page never holds the token it was asked with.
 

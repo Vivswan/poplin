@@ -14,7 +14,7 @@ describe("newLink", () => {
     const renamed = await newLink(world.install, OWNER, `report--${old}`);
     if (!renamed.ok) throw new Error("the new link was refused");
 
-    expect(renamed.site).toMatchObject({ label: `report--${renamed.site.id}`, public_name: "report", addresses: { site: `https://report--${renamed.site.id}-page.example.com` } });
+    expect(renamed.site).toMatchObject({ label: `report--${renamed.site.id}`, public_name: "report", addresses: { site: `https://report--${renamed.site.id}-u-poplin.example.com` } });
     expect(renamed.site.id).not.toBe(old);
     expect([await getSite(world.install, OWNER, old), await getSite(world.install, ADMIN, `report--${old}`)]).toEqual([
       { ok: false, code: "not_found" },

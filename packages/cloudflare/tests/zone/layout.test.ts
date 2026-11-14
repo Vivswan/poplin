@@ -1,65 +1,39 @@
 import { describe, expect, test } from "bun:test";
 import { parseDomainLayout, type RawLayout } from "../../src/zone/layout";
 
-const BASE: RawLayout = { domain: "example.com", admin_hostname: "admin.example.com", suffix: "-page" };
-const CHECKED = { domain: "example.com", adminHostname: "admin.example.com", suffix: "-page" };
+const LONGEST_DOMAIN = `${"a".repeat(63)}.${"b".repeat(63)}.${"c".repeat(57)}.com`;
+const CHECKED = { domain: "example.com", adminHostname: "poplin.example.com", publicWord: "page" };
 
 describe("parseDomainLayout", () => {
-  const accepted: readonly { readonly name: string; readonly changes: Partial<RawLayout>; readonly layout: object }[] = [
-    { name: "the default", changes: {}, layout: CHECKED },
-    { name: "another suffix", changes: { suffix: "-s1-x" }, layout: { ...CHECKED, suffix: "-s1-x" } },
+  const taken: readonly { readonly name: string; readonly raw: RawLayout; readonly layout: object }[] = [
+    { name: "a domain alone: the public word is `page`", raw: { domain: "example.com" }, layout: CHECKED },
+    { name: "the public word `poplin`", raw: { domain: "example.com", public_word: "poplin" }, layout: { ...CHECKED, publicWord: "poplin" } },
+    { name: "a public word of the install's own", raw: { domain: "example.com", public_word: "site" }, layout: { ...CHECKED, publicWord: "site" } },
+    { name: "a domain several labels deep", raw: { domain: "tools.example.co.uk" }, layout: { ...CHECKED, domain: "tools.example.co.uk", adminHostname: "poplin.tools.example.co.uk" } },
+    { name: "a domain of 189 characters, the longest that leaves a site hostname room", raw: { domain: LONGEST_DOMAIN }, layout: { ...CHECKED, domain: LONGEST_DOMAIN, adminHostname: `poplin.${LONGEST_DOMAIN}` } },
   ];
 
-  test.each(accepted)("$name is a layout", ({ changes, layout }) => {
-    expect(parseDomainLayout({ ...BASE, ...changes })).toEqual({ ok: true, value: layout as never });
+  test.each(taken)("$name is a layout whose admin hostname is `poplin` under the domain: routes, records, and the login all read that one hostname", ({ raw, layout }) => {
+    expect(parseDomainLayout(raw)).toEqual({ ok: true, value: layout as never });
   });
 
-  const refused: readonly { readonly name: string; readonly changes: Partial<RawLayout>; readonly refusal: string }[] = [
-    { name: "a domain that is no hostname", changes: { domain: "example" }, refusal: "bad-domain" },
-    { name: "no suffix: the site route would take every hostname of the zone", changes: { suffix: "" }, refusal: "bad-suffix" },
-    { name: "a suffix with no dash in front, which a site's name would run into", changes: { suffix: "page" }, refusal: "bad-suffix" },
-    { name: "a suffix that ends in a dash, which no hostname label may", changes: { suffix: "-page-" }, refusal: "bad-suffix" },
-    { name: "a suffix with two dashes together, the mark between a name and its id", changes: { suffix: "-a--b" }, refusal: "bad-suffix" },
-    { name: "a suffix with a dot", changes: { suffix: "-page.x" }, refusal: "bad-suffix" },
-    { name: "a suffix with a wildcard, which a route may hold only in front", changes: { suffix: "-*" }, refusal: "bad-suffix" },
-    { name: "a suffix with a quote", changes: { suffix: '-p"' }, refusal: "bad-suffix" },
-    { name: "a suffix too long to leave a site address room in one label", changes: { suffix: "-published" }, refusal: "bad-suffix" },
+  const refused: readonly { readonly name: string; readonly raw: RawLayout; readonly refusal: string }[] = [
+    { name: "a domain that is no hostname", raw: { domain: "example" }, refusal: "bad-domain" },
+    { name: "a domain with a quote", raw: { domain: 'example".com' }, refusal: "bad-domain" },
+    { name: "a domain with a capital", raw: { domain: "Example.com" }, refusal: "bad-domain" },
+    { name: "a wildcard domain", raw: { domain: "*.example.com" }, refusal: "bad-domain" },
+    { name: "a domain of 190 characters: the longest site label and its dot before it would pass the 253 a hostname holds", raw: { domain: `${"a".repeat(63)}.${"b".repeat(63)}.${"c".repeat(58)}.com` }, refusal: "bad-domain" },
+    { name: "an empty public word", raw: { domain: "example.com", public_word: "" }, refusal: "bad-public-word" },
+    { name: "a public word of one letter", raw: { domain: "example.com", public_word: "p" }, refusal: "bad-public-word" },
+    { name: "a public word of ten letters", raw: { domain: "example.com", public_word: "publishing" }, refusal: "bad-public-word" },
+    { name: "a public word with a dash, which a public name would run into", raw: { domain: "example.com", public_word: "my-page" }, refusal: "bad-public-word" },
+    { name: "a public word with a digit", raw: { domain: "example.com", public_word: "page2" }, refusal: "bad-public-word" },
+    { name: "a public word with a capital", raw: { domain: "example.com", public_word: "Page" }, refusal: "bad-public-word" },
+    { name: "a public word with a wildcard, which a route may hold only in front", raw: { domain: "example.com", public_word: "pa*" }, refusal: "bad-public-word" },
+    { name: "a public word with a quote", raw: { domain: "example.com", public_word: 'pa"' }, refusal: "bad-public-word" },
   ];
 
-  test.each(refused)("$name is refused as $refusal: a layout that got through would be written into records, routes, and the rule", ({ changes, refusal }) => {
-    expect(parseDomainLayout({ ...BASE, ...changes })).toEqual({ ok: false, refusal: refusal as never });
-  });
-});
-
-// The OpenTofu module takes the same hostnames, written without the domain: packages/cloudflare/tofu/tests/validation.tftest.hcl holds a run for each row here.
-describe("the admin hostname rule: any hostname under the domain that does not end in the suffix and the domain", () => {
-  const taken: readonly { readonly name: string; readonly hostname: string }[] = [
-    { name: "one label under the domain", hostname: "admin.example.com" },
-    { name: "two labels under the domain", hostname: "admin.tools.example.com" },
-    { name: "a label that only holds the suffix's letters", hostname: "my-pages.example.com" },
-    { name: "a label that ends in the suffix, with another between it and the domain", hostname: "admin-page.tools.example.com" },
-  ];
-
-  test.each(taken)("$name is taken: the site route never matches it", ({ hostname }) => {
-    expect(parseDomainLayout({ ...BASE, admin_hostname: hostname })).toEqual({ ok: true, value: { ...CHECKED, adminHostname: hostname } as never });
-  });
-
-  const refused: readonly { readonly name: string; readonly hostname: string; readonly refusal: string }[] = [
-    { name: "the bare domain", hostname: "example.com", refusal: "admin-outside-domain" },
-    { name: "a hostname on another domain", hostname: "admin.example.org", refusal: "admin-outside-domain" },
-    { name: "a hostname that only ends in the domain's letters", hostname: "admin.badexample.com", refusal: "admin-outside-domain" },
-    { name: "a label alone, with no domain", hostname: "admin", refusal: "bad-admin-hostname" },
-    { name: "a label with a capital", hostname: "Admin.example.com", refusal: "bad-admin-hostname" },
-    { name: "a label that starts with a dash", hostname: "-admin.example.com", refusal: "bad-admin-hostname" },
-    { name: "an empty label", hostname: "admin..example.com", refusal: "bad-admin-hostname" },
-    { name: "a wildcard label", hostname: "*.example.com", refusal: "bad-admin-hostname" },
-    { name: "a label of 64 characters", hostname: `${"a".repeat(64)}.example.com`, refusal: "bad-admin-hostname" },
-    { name: "a hostname of 254 characters", hostname: `ab.${"a.".repeat(120)}example.com`, refusal: "bad-admin-hostname" },
-    { name: "a hostname that ends in the suffix", hostname: "admin-page.example.com", refusal: "admin-is-site-address" },
-    { name: "a hostname under a name that ends in the suffix", hostname: "admin.tools-page.example.com", refusal: "admin-is-site-address" },
-  ];
-
-  test.each(refused)("$name is refused as $refusal", ({ hostname, refusal }) => {
-    expect(parseDomainLayout({ ...BASE, admin_hostname: hostname })).toEqual({ ok: false, refusal: refusal as never });
+  test.each(refused)("$name is refused as $refusal: a layout that got through would be written into records, routes, and the rule", ({ raw, refusal }) => {
+    expect(parseDomainLayout(raw)).toEqual({ ok: false, refusal: refusal as never });
   });
 });

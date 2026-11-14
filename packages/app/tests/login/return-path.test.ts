@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { safeReturn } from "../../src/login/return-path";
 import { ADDRESSES } from "../sites/support/layout";
 
-const SITE = "report--k3f9x2ab71qz-page.example.com";
+const SITE = "report--k3f9x2ab71qz-p-poplin.example.com";
 
 const KEPT: readonly string[] = ["/", "/sites", "/sites/report--k3f9x2ab71qz", "/settings?tab=zone", "/tokens#new", "/a/b.c_d-e~f", "/search?q=a%20b&next=%2Fsites", "/sites?see=https://example.com/"];
 
@@ -73,7 +73,7 @@ const SITES_REFUSED: readonly (readonly [why: string, target: string])[] = [
   ["a scheme with no slash", `https:${SITE}/`],
   ["a scheme in capitals", `HTTPS://${SITE}/`],
   ["a hostname in capitals", `https://${SITE.toUpperCase()}/`],
-  ["a domain in mixed case", "https://report--k3f9x2ab71qz-page.Example.com/"],
+  ["a domain in mixed case", "https://report--k3f9x2ab71qz-p-poplin.Example.com/"],
   ["a site hostname as the user of another host", `https://${SITE}@evil.example/`],
   ["a user before a site hostname", `https://evil.example@${SITE}/`],
   ["a user and a password", `https://owner:secret@${SITE}/`],
@@ -87,13 +87,13 @@ const SITES_REFUSED: readonly (readonly [why: string, target: string])[] = [
   ["an empty port", `https://${SITE}:/`],
   ["a host that goes on after the domain", `https://${SITE}.evil.example/`],
   ["a host that ends with the domain's letters", "https://report--k3f9x2ab71qz-pageexample.com/"],
-  ["a host that ends with the domain and has no suffix", "https://evilexample.com/"],
-  ["another domain with the suffix", "https://report--k3f9x2ab71qz-page.example.org/"],
+  ["a host that ends with the domain and has no marker", "https://evilexample.com/"],
+  ["another domain with the marker", "https://report--k3f9x2ab71qz-p-poplin.example.org/"],
   ["a hostname of the domain that is no site", "https://www.example.com/"],
   ["the domain itself", "https://example.com/"],
-  ["the dashboard as an absolute address", "https://admin.example.com/sites"],
+  ["the dashboard as an absolute address", "https://poplin.example.com/sites"],
   ["a hostname that only ends like a site", "https://homepage.example.com/"],
-  ["a label around no valid id", "https://report--short-page.example.com/"],
+  ["a label around no valid id", "https://report--short-p-poplin.example.com/"],
   ["a hostname below a site hostname", `https://evil.${SITE}/`],
   ["a trailing dot", `https://${SITE}./`],
   ["an encoded dot before another host", `https://${SITE}%2eevil.example/`],
@@ -119,9 +119,9 @@ describe("the place to go back to after the login", () => {
 
   // Drift: a kept path would stop being a path of this origin once a browser resolved it against the dashboard.
   test.each([...KEPT, ...REFUSED])("%p resolves on the dashboard's own origin", (target) => {
-    const resolved = new URL(safeReturn(target, ADDRESSES), "https://admin.example.com");
+    const resolved = new URL(safeReturn(target, ADDRESSES), "https://poplin.example.com");
 
-    expect(resolved.origin).toBe("https://admin.example.com");
+    expect(resolved.origin).toBe("https://poplin.example.com");
   });
 
   // Drift: a visitor sent to the login from a private site would land on the dashboard instead of the page they asked for.
@@ -136,9 +136,9 @@ describe("the place to go back to after the login", () => {
 
   // Drift: a kept address would lead somewhere else once a browser parsed it: off `https`, onto a port, or to a host that is no site of the install.
   test.each([...SITES_KEPT, ...SITES_REFUSED.map(([, target]) => target)])("%p resolves on the dashboard or on an address of the install", (target) => {
-    const resolved = new URL(safeReturn(target, ADDRESSES), "https://admin.example.com");
+    const resolved = new URL(safeReturn(target, ADDRESSES), "https://poplin.example.com");
 
-    expect([resolved.protocol, resolved.port, resolved.username, resolved.hostname === "admin.example.com" || ADDRESSES.resolve(resolved).kind !== "none"]).toEqual(["https:", "", "", true]);
+    expect([resolved.protocol, resolved.port, resolved.username, resolved.hostname === "poplin.example.com" || ADDRESSES.resolve(resolved).kind !== "none"]).toEqual(["https:", "", "", true]);
   });
 
   // Drift: serving writes the return and the login reads it; if the two forms part, a visitor of a private site lands on the dashboard instead of the page they asked for.
@@ -148,7 +148,7 @@ describe("the place to go back to after the login", () => {
     ["a path with a backslash, which a URL reads as a slash", `https://${SITE}/a\\b`, `https://${SITE}/a/b`],
   ])("the return serving writes for %s brings the visitor back to that page", (_what, asked, back) => {
     const returned = safeReturn(new URL(ADDRESSES.loginFor(new URL(asked))).searchParams.get("return"), ADDRESSES);
-    const [from, to] = [new URL(asked), new URL(returned, "https://admin.example.com")];
+    const [from, to] = [new URL(asked), new URL(returned, "https://poplin.example.com")];
 
     expect([returned, to.hostname, to.pathname, [...to.searchParams]]).toEqual([back, from.hostname, from.pathname, [...from.searchParams]]);
   });

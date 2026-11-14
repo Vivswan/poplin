@@ -38,7 +38,7 @@ describe("publish", () => {
 
     expect(made).toMatchObject({
       code: 0,
-      out: ["uploaded 2 files, 46 B (1 skipped as hidden or node_modules)", `made  ${label}  private`, `https://${label}-page.example.com`],
+      out: ["uploaded 2 files, 46 B (1 skipped as hidden or node_modules)", `made  ${label}  private`, `https://${label}-p-poplin.example.com`],
       err: [],
       status: [],
     });
@@ -52,7 +52,7 @@ describe("publish", () => {
 
     const human = await bench.run(`${folder} --site ${label}`);
 
-    expect(human.out).toEqual(["uploaded 2 files, 27 B (1 skipped as hidden or node_modules)", `updated  ${label}  version 3  unlisted`, `https://${label}-page.example.com`]);
+    expect(human.out).toEqual(["uploaded 2 files, 27 B (1 skipped as hidden or node_modules)", `updated  ${label}  version 3  unlisted`, `https://${label}-u-poplin.example.com`]);
   });
 
   test("the settings and the name typed go into the publish, and a typed title wins over the page's own: without this a flag is read and then dropped", async () => {

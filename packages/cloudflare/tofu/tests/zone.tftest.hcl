@@ -27,7 +27,7 @@ run "defaults" {
   command = plan
 
   assert {
-    condition     = sort(keys(cloudflare_dns_record.poplin)) == tolist(["*.example.com", "admin.example.com"])
+    condition     = sort(keys(cloudflare_dns_record.poplin)) == tolist(["*.example.com", "poplin.example.com"])
     error_message = "An install needs the wildcard record and the admin record, nothing else."
   }
 
@@ -37,8 +37,8 @@ run "defaults" {
   }
 
   assert {
-    condition     = sort([for route in cloudflare_workers_route.worker : route.pattern]) == tolist(["*-page.example.com/*", "admin.example.com/*"])
-    error_message = "The routes take the hostnames that end in the suffix, and the admin hostname, and no other hostname of the zone."
+    condition     = sort([for route in cloudflare_workers_route.worker : route.pattern]) == tolist(["*-poplin.example.com/*", "poplin.example.com/*"])
+    error_message = "The routes take the hostnames that end in the marker, and the admin hostname, and no other hostname of the zone."
   }
 
   assert {
@@ -52,7 +52,7 @@ run "defaults" {
   }
 
   assert {
-    condition     = output.bucket_name == "poplin-sites" && output.worker_name == "poplin" && output.admin_url == "https://admin.example.com" && output.site_url_pattern == "https://<name>--<id>-page.example.com"
+    condition     = output.bucket_name == "poplin-sites" && output.worker_name == "poplin" && output.admin_url == "https://poplin.example.com" && output.site_url_pattern == "https://<name>--<id>-<letter>-poplin.example.com"
     error_message = "The outputs name the bucket, the Worker, the dashboard, and a site's address."
   }
 }
@@ -70,7 +70,7 @@ run "login_allows_exactly_the_logins" {
   }
 
   assert {
-    condition     = tolist([for destination in cloudflare_zero_trust_access_application.login.destinations : destination.uri]) == tolist(["admin.example.com/login"]) && cloudflare_zero_trust_access_application.login.domain == "admin.example.com/login"
+    condition     = tolist([for destination in cloudflare_zero_trust_access_application.login.destinations : destination.uri]) == tolist(["poplin.example.com/login"]) && cloudflare_zero_trust_access_application.login.domain == "poplin.example.com/login"
     error_message = "The login covers the login path on the admin hostname and no other path."
   }
 }
@@ -79,7 +79,6 @@ run "worker_bindings" {
   command = plan
 
   variables {
-    admin_hostname         = "admin.tools"
     gallery                = true
     max_sites              = 50
     search_engines_allowed = true
@@ -103,11 +102,9 @@ run "worker_bindings" {
   # The setup client's tests read this literal and parse it with the Worker's own reader.
   assert {
     condition = jsondecode(cloudflare_workers_script.poplin.bindings[3].json) == {
-      domain         = "example.com"
-      admin_hostname = "admin.tools.example.com"
-      suffix         = "-page"
+      domain = "example.com"
     }
-    error_message = "The zone binding carries the domain, the whole admin hostname, and the suffix, and no other key."
+    error_message = "The zone binding carries the domain, and no other key."
   }
 
   # The setup client's tests read this literal too, and compare its keys with the settings the Worker stores.
@@ -118,7 +115,7 @@ run "worker_bindings" {
       versions_kept               = "3"
       trash_days                  = "7"
       logins                      = "owner@example.com"
-      dashboard_title             = "admin.tools.example.com"
+      dashboard_title             = "poplin.example.com"
       gallery                     = "on"
       cache_html                  = "60s"
       cache_files                 = "1h"
@@ -174,8 +171,8 @@ run "values_shared_with_the_setup_client" {
 
   assert {
     condition = { for name, record in cloudflare_dns_record.poplin : name => "${record.type} ${record.content} ${record.comment}" } == {
-      "*.example.com"     = "AAAA 100:: poplin: every site"
-      "admin.example.com" = "AAAA 100:: poplin: the dashboard, the login, and the API"
+      "*.example.com"      = "AAAA 100:: poplin: every site"
+      "poplin.example.com" = "AAAA 100:: poplin: the dashboard, the login, and the API"
     }
     error_message = "Each record points at the discard address and carries the comment the setup client writes for its name."
   }
@@ -223,24 +220,6 @@ run "rate_rule_switched_off" {
   }
 }
 
-run "suffix_follows_the_input" {
-  command = plan
-
-  variables {
-    suffix = "-site"
-  }
-
-  assert {
-    condition     = sort([for route in cloudflare_workers_route.worker : route.pattern]) == tolist(["*-site.example.com/*", "admin.example.com/*"])
-    error_message = "The site route ends in the suffix the caller chose."
-  }
-
-  assert {
-    condition     = output.site_url_pattern == "https://<name>--<id>-site.example.com"
-    error_message = "A site's address ends in the suffix the caller chose."
-  }
-}
-
 # The setup client writes the same two records, so this is also the zone it set up.
 run "own_records_are_no_records_of_the_zone" {
   command = plan
@@ -255,7 +234,7 @@ run "own_records_are_no_records_of_the_zone" {
           private_routing     = null, settings = null, tags = null, tags_modified_on = null
         },
         {
-          name                = "admin.example.com", type = "AAAA", proxied = true, comment = "poplin: the dashboard, the login, and the API", id = "0", content = "100::", ttl = 1, proxiable = true,
+          name                = "poplin.example.com", type = "AAAA", proxied = true, comment = "poplin: the dashboard, the login, and the API", id = "0", content = "100::", ttl = 1, proxiable = true,
           comment_modified_on = null, created_on = null, data = null, meta = null, modified_on = null, priority = null,
           private_routing     = null, settings = null, tags = null, tags_modified_on = null
         },
@@ -264,7 +243,7 @@ run "own_records_are_no_records_of_the_zone" {
   }
 
   assert {
-    condition     = sort(keys(cloudflare_dns_record.poplin)) == tolist(["*.example.com", "admin.example.com"])
+    condition     = sort(keys(cloudflare_dns_record.poplin)) == tolist(["*.example.com", "poplin.example.com"])
     error_message = "A second run reads the module's own records back and must plan the same records, or the wildcard would be destroyed on every other apply."
   }
 
@@ -298,12 +277,12 @@ run "zone_with_its_own_proxied_wildcard" {
   }
 
   assert {
-    condition     = sort(keys(cloudflare_dns_record.poplin)) == tolist(["admin.example.com"])
+    condition     = sort(keys(cloudflare_dns_record.poplin)) == tolist(["poplin.example.com"])
     error_message = "The zone's own proxied wildcard already carries the site hostnames to Cloudflare: a second record beside it would answer for the zone's other names too."
   }
 
   assert {
-    condition     = sort([for route in cloudflare_workers_route.worker : route.pattern]) == tolist(["*-page.example.com/*", "admin.example.com/*"])
+    condition     = sort([for route in cloudflare_workers_route.worker : route.pattern]) == tolist(["*-poplin.example.com/*", "poplin.example.com/*"])
     error_message = "The routes do not depend on whose wildcard record it is."
   }
 }
@@ -340,7 +319,7 @@ run "zone_record_under_a_name_the_site_route_takes" {
     target = data.cloudflare_dns_records.zone
     values = {
       result = [{
-        name                = "status-page.example.com", type = "CNAME", proxied = true, comment = null, id = "0", content = "192.0.2.1", ttl = 1, proxiable = true,
+        name                = "status-poplin.example.com", type = "CNAME", proxied = true, comment = null, id = "0", content = "192.0.2.1", ttl = 1, proxiable = true,
         comment_modified_on = null, created_on = null, data = null, meta = null, modified_on = null, priority = null,
         private_routing     = null, settings = null, tags = null, tags_modified_on = null
       }]
@@ -361,7 +340,7 @@ run "zone_record_under_the_admin_hostname" {
     target = data.cloudflare_dns_records.zone
     values = {
       result = [{
-        name                = "admin.example.com", type = "A", proxied = true, comment = null, id = "0", content = "192.0.2.1", ttl = 1, proxiable = true,
+        name                = "poplin.example.com", type = "A", proxied = true, comment = null, id = "0", content = "192.0.2.1", ttl = 1, proxiable = true,
         comment_modified_on = null, created_on = null, data = null, meta = null, modified_on = null, priority = null,
         private_routing     = null, settings = null, tags = null, tags_modified_on = null
       }]
@@ -419,7 +398,7 @@ run "zone_with_other_hostnames_and_the_rate_rule_off" {
   }
 
   assert {
-    condition     = sort(keys(cloudflare_dns_record.poplin)) == tolist(["*.example.com", "admin.example.com"])
+    condition     = sort(keys(cloudflare_dns_record.poplin)) == tolist(["*.example.com", "poplin.example.com"])
     error_message = "The zone's other hostnames change no record of the install."
   }
 }
@@ -444,7 +423,7 @@ run "rate_rule_on_the_hostnames" {
   }
 
   assert {
-    condition     = cloudflare_ruleset.rate[0].rules[0].expression == "ends_with(http.host, \"-page.example.com\") or http.host eq \"admin.example.com\""
+    condition     = cloudflare_ruleset.rate[0].rules[0].expression == "ends_with(http.host, \"-poplin.example.com\") or http.host eq \"poplin.example.com\""
     error_message = "The hostnames form counts the install's hostnames alone, so the zone's other hostnames do not stop it."
   }
 }
@@ -454,8 +433,8 @@ run "guards_by_default" {
 
   assert {
     condition = tolist([for rule in cloudflare_ruleset.guards[0].rules : rule.expression]) == tolist([
-      "ends_with(http.host, \"-page.example.com\") and any(http.request.headers[\"sec-fetch-site\"][*] eq \"cross-site\") and any(http.request.headers[\"sec-fetch-dest\"][*] ne \"document\")",
-      "ends_with(http.host, \"-page.example.com\") and cf.client.bot",
+      "ends_with(http.host, \"-poplin.example.com\") and any(http.request.headers[\"sec-fetch-site\"][*] eq \"cross-site\") and any(http.request.headers[\"sec-fetch-dest\"][*] ne \"document\")",
+      "ends_with(http.host, \"-poplin.example.com\") and cf.client.bot",
     ])
     error_message = "By default the outside pages rule and the bots rule exist, each reads the site hostnames alone, and a request for a document or one that lacks a Fetch Metadata header passes the first."
   }
@@ -494,12 +473,11 @@ run "search_engines_let_through" {
 
   variables {
     search_engines_allowed = true
-    suffix                 = "-site"
   }
 
   assert {
-    condition     = cloudflare_ruleset.guards[0].rules[1].expression == "ends_with(http.host, \"-site.example.com\") and cf.client.bot and cf.verified_bot_category ne \"Search Engine Crawler\""
-    error_message = "search_engines_allowed lets the search engine category pass and stops every other verified bot, on the suffix the caller chose."
+    condition     = cloudflare_ruleset.guards[0].rules[1].expression == "ends_with(http.host, \"-poplin.example.com\") and cf.client.bot and cf.verified_bot_category ne \"Search Engine Crawler\""
+    error_message = "search_engines_allowed lets the search engine category pass and stops every other verified bot."
   }
 }
 

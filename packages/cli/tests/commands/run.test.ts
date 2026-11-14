@@ -67,11 +67,12 @@ afterEach(cleanUp);
 describe("run", () => {
   test("each command about one site prints what was done and the address the install answered, and --json prints the install's answer whole", async () => {
     const { bench, label } = await withSite();
-    const url = `https://${label}-page.example.com`;
+    const url = `https://${label}-p-poplin.example.com`;
+    const open = `https://${label}-u-poplin.example.com`;
 
-    expect((await bench.run(`set ${label} --unlisted --search-engines on`)).out).toEqual([`unlisted  ${label}`, url]);
+    expect((await bench.run(`set ${label} --unlisted --search-engines on`)).out).toEqual([`unlisted  ${label}`, open, `address changed: ${url} is now ${open}`]);
     expect((await bench.run(`set ${label} --public --name docs`)).out).toEqual([`public  ${label}  public name "docs"`, "https://docs-page.example.com"]);
-    expect((await bench.run(`set docs --private`)).out).toEqual([`private  ${label}`, url]);
+    expect((await bench.run(`set docs --private`)).out).toEqual([`private  ${label}`, url, `address changed: ${open} is now ${url}`]);
     expect((await bench.run(`delete ${label}`)).out).toEqual([`in the trash  ${label}  gone for good on 2023-11-21`, `to take it back: poplin restore ${label}`]);
     expect((await bench.run("list --trash")).out).toEqual([`${label}  gone for good on 2023-11-21  Report`]);
     expect((await bench.run(`restore ${label}`)).out).toEqual([`restored  ${label}  private`, url]);
@@ -90,7 +91,7 @@ describe("run", () => {
     const folder = folderOf("report", { "index.html": "<title>Second</title>" });
     await bench.run(`${folder} --site ${label}`);
 
-    expect((await bench.run(`rollback ${label}`)).out).toEqual([`rolled back  ${label}  version 1 is live`, `https://${label}-page.example.com`]);
+    expect((await bench.run(`rollback ${label}`)).out).toEqual([`rolled back  ${label}  version 1 is live`, `https://${label}-p-poplin.example.com`]);
     expect((await bench.run(`rollback ${label} --to 2`)).out[0]).toBe(`rolled back  ${label}  version 2 is live`);
 
     const linked = await bench.run(`new-link ${label}`);
@@ -98,7 +99,7 @@ describe("run", () => {
 
     expect(fresh).toMatch(/^report--[0-9a-z]{12}$/);
     expect(fresh).not.toBe(label);
-    expect(linked.out).toEqual([`new link  ${fresh}`, `https://${fresh}-page.example.com`, `the old label ${label} and its address https://${label}-page.example.com stopped working`]);
+    expect(linked.out).toEqual([`new link  ${fresh}`, `https://${fresh}-p-poplin.example.com`, `the old label ${label} and its address https://${label}-p-poplin.example.com stopped working`]);
     expect((await bench.run(`show ${label}`)).code).toBe(1);
   });
 

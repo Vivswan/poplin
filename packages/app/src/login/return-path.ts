@@ -1,7 +1,7 @@
 // Where a visitor goes after the login: back to the dashboard path or the site address they came from, and never anywhere else.
 //
 //   /sites?sort=new                               a dashboard path: one slash, then visible ASCII only
-//   https://report--k3f9x2ab71qz-page.example.com/a   an address the install's layout reads as one of its own
+//   https://report--k3f9x2ab71qz-p-poplin.example.com/a   an address the install's layout reads as one of its own
 //
 // Neither form holds a second slash to start a host, a backslash a browser reads as one, or a control character a parser drops.
 

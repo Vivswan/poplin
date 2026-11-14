@@ -1,11 +1,12 @@
 // A visitor's request for a site, answered from the database and the bucket.
 //
 //   URL -> what it addresses   not this install's, or no site address    404
-//   one database query         no served site, or another name           404, or the login for a label without a session
+//   one database query         no served site                            404, or the login for a label without a session
 //   access                     private without a session                 the login
 //   path -> one to three keys  no file path                              404
 //   one bucket read per key    the body goes out as the store gave it; three reads at most, for a path without an extension, and one for every other
 //
+// A label names its site by the id alone: the name before it and the letter after it are never compared.
 // A label without a session answers the same whether its site is private, in the trash, expired, or was never made, so an id cannot be probed.
 
 import type { Database } from "@poplin/core/src/database/database";
@@ -107,10 +108,7 @@ function isOutsideSubrequest(headers: Headers, addresses: SiteAddresses): boolea
 async function findSite(address: Exclude<Addressed, { readonly kind: "gallery" | "none" }>, serving: Serving): Promise<Site | undefined> {
   if (address.kind === "public-name") return serving.database.findServed({ public_name: address.name }, serving.now());
 
-  const site = await serving.database.findServed({ id: address.id }, serving.now());
-  if (site?.name !== address.name) return undefined;
-
-  return site;
+  return serving.database.findServed({ id: address.id }, serving.now());
 }
 
 function requestedRange(headers: Headers): ByteRange | undefined {

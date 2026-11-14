@@ -7,7 +7,8 @@ import { readZoneBinding } from "../../src/zone/zone-binding";
 const ROOT = join(import.meta.dir, "..", "..", "..", "..");
 const MODULE = join(ROOT, "packages", "cloudflare", "tofu");
 const SETTING_KEYS = Object.keys(SETTING_VALUES.entries).sort();
-const BOUND = { domain: "example.com", admin_hostname: "admin.example.com", suffix: "-page" };
+const BOUND = { domain: "example.com" };
+const READ = { domain: "example.com", adminHostname: "poplin.example.com", publicWord: "page" };
 
 /** The `key = "text"` lines of the object literal that follows `opening` in a file of the module. */
 function literalAfter(file: string, opening: string): Record<string, string> {
@@ -51,8 +52,11 @@ function wholeNumberSettings(): { readonly key: string; readonly most: bigint }[
 }
 
 describe("readZoneBinding", () => {
-  test("the three texts, with the whole admin hostname, are the layout the routes and rules are written from", () => {
-    expect<unknown>(readZoneBinding(BOUND)).toEqual({ ok: true, value: { domain: "example.com", adminHostname: "admin.example.com", suffix: "-page" } });
+  test("the domain alone is the layout the routes and rules are written from: the admin hostname is `poplin` under it and the public word `page`, or the word the binding names", () => {
+    expect<unknown>([readZoneBinding(BOUND), readZoneBinding({ ...BOUND, public_word: "poplin" })]).toEqual([
+      { ok: true, value: READ },
+      { ok: true, value: { ...READ, publicWord: "poplin" } },
+    ]);
   });
 
   const refused: readonly { readonly name: string; readonly binding: unknown; readonly refusal: string }[] = [
@@ -60,13 +64,12 @@ describe("readZoneBinding", () => {
     { name: "null", binding: null, refusal: "bad-shape" },
     { name: "the binding still as JSON text", binding: JSON.stringify(BOUND), refusal: "bad-shape" },
     { name: "a list", binding: [BOUND], refusal: "bad-shape" },
-    { name: "a key left out", binding: { domain: "example.com", suffix: "-page" }, refusal: "bad-shape" },
-    { name: "a key beyond the three", binding: { ...BOUND, note: "the main zone" }, refusal: "bad-shape" },
-    { name: "the admin hostname under another key", binding: { domain: "example.com", adminHostname: "admin.example.com", suffix: "-page" }, refusal: "bad-shape" },
-    { name: "a value that is no text", binding: { ...BOUND, suffix: 7 }, refusal: "bad-shape" },
-    { name: "the admin hostname as a label alone", binding: { ...BOUND, admin_hostname: "admin" }, refusal: "bad-admin-hostname" },
-    { name: "an admin hostname on another domain", binding: { ...BOUND, admin_hostname: "admin.example.org" }, refusal: "admin-outside-domain" },
-    { name: "a suffix with a quote", binding: { ...BOUND, suffix: '-p"' }, refusal: "bad-suffix" },
+    { name: "the domain left out", binding: { public_word: "page" }, refusal: "bad-shape" },
+    { name: "a key beyond the two", binding: { ...BOUND, note: "the main zone" }, refusal: "bad-shape" },
+    { name: "an admin hostname of the install's own: it is no setting", binding: { ...BOUND, admin_hostname: "dashboard.example.com" }, refusal: "bad-shape" },
+    { name: "a value that is no text", binding: { domain: 7 }, refusal: "bad-shape" },
+    { name: "a domain that is one label", binding: { domain: "example" }, refusal: "bad-domain" },
+    { name: "a public word with a dash", binding: { ...BOUND, public_word: "my-page" }, refusal: "bad-public-word" },
   ];
 
   test.each(refused)("$name is refused as $refusal and nothing throws: the Worker shows the reason instead of failing on every request", ({ binding, refusal }) => {
@@ -87,7 +90,7 @@ describe("the bindings the module gives the Worker", () => {
   test("the first settings the module's test pins are read by the reader the Worker stores them with", () => {
     const read = settingsFromText(literalAfter("tests/zone.tftest.hcl", "bindings[4].json) == {"));
 
-    expect(read).toMatchObject({ ok: true, values: { search_engines_allowed: true, block_bots: "auto", dashboard_title: "admin.tools.example.com" } });
+    expect(read).toMatchObject({ ok: true, values: { search_engines_allowed: true, block_bots: "auto", dashboard_title: "poplin.example.com" } });
   });
 
   test.each(wholeNumberSettings())("$key: the module refuses a number above $most, the most the Worker's reader takes; one more would leave every first setting unread", ({ key, most }) => {
@@ -97,10 +100,10 @@ describe("the bindings the module gives the Worker", () => {
     expect(rules).toContain(`var.${key} <= ${most}`);
   });
 
-  test("the ZONE binding the module's test pins is read as a layout, with the whole admin hostname", () => {
+  test("the ZONE binding the module's test pins is read as a layout", () => {
     const read = readZoneBinding(literalAfter("tests/zone.tftest.hcl", "bindings[3].json) == {"));
 
-    expect<unknown>(read).toEqual({ ok: true, value: { domain: "example.com", adminHostname: "admin.tools.example.com", suffix: "-page" } });
+    expect<unknown>(read).toEqual({ ok: true, value: READ });
   });
 
   test("the Worker's own example values for local runs are read the same way", () => {

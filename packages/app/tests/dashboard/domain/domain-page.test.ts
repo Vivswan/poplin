@@ -48,8 +48,8 @@ test("a check shows every row with its state and the count to repair, hands the 
   expect(NOTICE.exec(page)?.slice(1)).toEqual(["refused", "1 to repair"]);
   expect(rows(page)).toEqual([
     ["DNS record", "good", "present", "*.example.com"],
-    ["DNS record", "bad", "missing", "admin.example.com"],
-    ["Worker route", "good", "present", "admin.example.com/*"],
+    ["DNS record", "bad", "missing", "poplin.example.com"],
+    ["Worker route", "good", "present", "poplin.example.com/*"],
     ["Rate rule", "idle", "left out", "rate rule: the domain has other hostnames"],
   ]);
   expect(page).toContain('<button type="submit">Check again</button>');
@@ -61,7 +61,7 @@ test("a check shows every row with its state and the count to repair, hands the 
     detail: {
       run: "check",
       from: "dashboard",
-      missing: ["DNS record: admin.example.com"],
+      missing: ["DNS record: poplin.example.com"],
       "left-out": ["Rate rule: rate rule: the domain has other hostnames"],
     },
   });
@@ -74,17 +74,17 @@ test("a repair shows what it did and writes one audit entry that names what chan
   const page = await (await opened.post("/domain/repair", { token: TOKEN })).text();
 
   expect(NOTICE.exec(page)?.slice(1)).toEqual(["done", "1 repaired"]);
-  expect(rows(page)[1]).toEqual(["DNS record", "good", "created", "admin.example.com"]);
+  expect(rows(page)[1]).toEqual(["DNS record", "good", "created", "poplin.example.com"]);
   expect(plug.calls.map((call) => call.run)).toEqual(["repair"]);
   expect((await opened.audit()).length).toBe(before + 1);
   expect((await opened.audit())[0]).toMatchObject({
     action: "domain_synced",
     by: opened.owner,
-    detail: { run: "repair", from: "dashboard", created: ["DNS record: admin.example.com"] },
+    detail: { run: "repair", from: "dashboard", created: ["DNS record: poplin.example.com"] },
   });
 
   const settled = await openDashboard(
-    fakePlug(() => ({ ok: true, rows: [{ object: "DNS record", state: "present", detail: "admin.example.com" }], steps: [] })),
+    fakePlug(() => ({ ok: true, rows: [{ object: "DNS record", state: "present", detail: "poplin.example.com" }], steps: [] })),
   );
 
   expect(NOTICE.exec(await (await settled.post("/domain/repair", { token: TOKEN })).text())?.slice(1)).toEqual(["done", "Nothing to repair."]);
@@ -96,8 +96,8 @@ test("a repair that stopped half way says so above the table, and the rows tell 
     ok: true,
     steps: [],
     rows: [
-      { object: "DNS record", state: "created", detail: "admin.example.com" },
-      { object: "Worker route", state: "failed", detail: "admin.example.com/*: refused with status 403" },
+      { object: "DNS record", state: "created", detail: "poplin.example.com" },
+      { object: "Worker route", state: "failed", detail: "poplin.example.com/*: refused with status 403" },
       { object: "Access application", state: "not-run", detail: "" },
     ],
   };
@@ -111,8 +111,8 @@ test("a repair that stopped half way says so above the table, and the rows tell 
     ["Access application", "idle", "not run"],
   ]);
   expect((await opened.audit())[0]?.detail).toMatchObject({
-    created: ["DNS record: admin.example.com"],
-    failed: ["Worker route: admin.example.com/*: refused with status 403"],
+    created: ["DNS record: poplin.example.com"],
+    failed: ["Worker route: poplin.example.com/*: refused with status 403"],
   });
 });
 

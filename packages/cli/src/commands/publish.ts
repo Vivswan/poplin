@@ -7,7 +7,7 @@ import { type PublishFile, readFiles } from "../files/read";
 import { readTitle } from "../files/title";
 import { type Problem, problem, problemOf } from "./problems";
 import type { Io, Outcome, RequestOf, Session } from "./records";
-import { columns, countText, searchNotes, siteLines } from "./text";
+import { addressChange, columns, countText, searchNotes, siteLines } from "./text";
 import { giveUpUpload, type Published, sendUpload } from "./upload";
 import { siteChanges, siteWord } from "./wire";
 
@@ -86,7 +86,9 @@ function published(plan: PublishPlan, answer: Published): Outcome {
   const { site } = answer;
   const facts = site.created ? [site.access] : [`version ${site.live_version}`, site.access];
 
-  return { ok: true, value: answer, lines: [`uploaded ${summary(plan)}`, ...siteLines(site.created ? "made" : "updated", site, facts)], notes: searchNotes(plan.manifest, site) };
+  const lines = [`uploaded ${summary(plan)}`, ...siteLines(site.created ? "made" : "updated", site, facts), ...addressChange(answer.before, site)];
+
+  return { ok: true, value: answer, lines, notes: searchNotes(plan.manifest, site) };
 }
 
 function givenUp(failure: Failure, aftermath: string): Outcome {

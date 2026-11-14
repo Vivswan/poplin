@@ -34,7 +34,7 @@ describe("publishSite", () => {
     if (!first.ok || !second.ok) throw new Error("a publish was refused");
 
     const { id } = first.site;
-    const address = `https://report--${id}-page.example.com`;
+    const address = `https://report--${id}-p-poplin.example.com`;
 
     expect(first).toEqual({
       ok: true,

@@ -69,7 +69,7 @@ resource "cloudflare_workers_route" "worker" {
 
     precondition {
       condition     = length(local.shadowed_names) == 0
-      error_message = "The zone has records of its own under names the routes would take: ${join(", ", local.shadowed_names)}. Choose another suffix or admin_hostname, or rename them."
+      error_message = "The zone has records of its own under names the routes would take: ${join(", ", local.shadowed_names)}. Rename them."
     }
 
     precondition {

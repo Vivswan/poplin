@@ -20,36 +20,6 @@ variable "zone_id" {
   }
 }
 
-# Where the dashboard and the sites sit in the zone.
-
-variable "admin_hostname" {
-  description = "The dashboard's hostname, written without the domain: `admin` gives admin.example.com, and `admin.tools` gives admin.tools.example.com."
-  type        = string
-  default     = "admin"
-
-  validation {
-    condition     = can(regex("^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)*$", var.admin_hostname))
-    error_message = "admin_hostname must be one or more hostname labels joined by dots: each 1 to 63 lowercase letters, digits, or dashes, with no dash first or last."
-  }
-
-  # The site route takes every hostname that ends in the suffix and the domain, so the dashboard's must not.
-  validation {
-    condition     = !endswith(var.admin_hostname, var.suffix)
-    error_message = "admin_hostname must not end with the suffix: it would be a site's address."
-  }
-}
-
-variable "suffix" {
-  description = "The ending of every site hostname label: `-page` gives report--k3f9x2ab71qz-page.example.com."
-  type        = string
-  default     = "-page"
-
-  validation {
-    condition     = can(regex("^(-[a-z0-9]+)+$", var.suffix)) && length(var.suffix) <= 9
-    error_message = "suffix must be 2 to 9 characters: a dash, then lowercase letters, digits, or single dashes, with no dash last."
-  }
-}
-
 variable "rate_rule" {
   description = "What the rate rule counts: `zone` (every request of the zone, the one form the Free plan takes), `hostnames` (the install's hostnames alone, on a paid plan), or `off` (no rule)."
   type        = string
@@ -204,7 +174,7 @@ variable "trash_days" {
 }
 
 variable "dashboard_title" {
-  description = "The title of the dashboard. Null means the admin hostname."
+  description = "The title of the dashboard. Null means the dashboard's hostname."
   type        = string
   default     = null
 
@@ -215,7 +185,7 @@ variable "dashboard_title" {
 }
 
 variable "gallery" {
-  description = "Whether the public page listing the public sites is on. It sits at the site hostname of the name `gallery`: gallery-page.example.com."
+  description = "Whether the public page listing the public sites is on. It sits at the site hostname of the name `gallery`: gallery-poplin.example.com."
   type        = bool
   default     = false
 }

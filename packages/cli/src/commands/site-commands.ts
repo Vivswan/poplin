@@ -5,7 +5,7 @@ import { showBytes } from "../../../core/src/records/settings";
 import type { Called } from "../client/client";
 import { problem, problemOf } from "./problems";
 import type { Outcome, RequestOf, Session } from "./records";
-import { columns, countText, dayText, type SiteObject, searchNotes, siteLines } from "./text";
+import { addressChange, columns, countText, dayText, type SiteObject, searchNotes, siteLines } from "./text";
 import { siteChanges, siteWord } from "./wire";
 
 /** How many sites one page of a listing holds: the most the API gives. */
@@ -43,11 +43,13 @@ function accessFacts(site: SiteObject): string[] {
   return site.public_name === null ? [] : [`public name ${JSON.stringify(site.public_name)}`];
 }
 
-/** The answer of an action on one site, printed as what was done and the site's address. */
-function answered(called: Called<{ readonly site: SiteObject }>, done: string, facts: (site: SiteObject) => readonly string[], notes: readonly string[] = []): Outcome {
+/** The answer of an action on one site, printed as what was done and the site's address, and its old address when the action changed it. */
+function answered(called: Called<{ readonly before: SiteObject | null; readonly site: SiteObject }>, done: string, facts: (site: SiteObject) => readonly string[], notes: readonly string[] = []): Outcome {
   if (!called.ok) return failed(called);
 
-  return { ok: true, value: called.value, lines: siteLines(done, called.value.site, facts(called.value.site)), notes };
+  const { before, site } = called.value;
+
+  return { ok: true, value: called.value, lines: [...siteLines(done, site, facts(site)), ...addressChange(before, site)], notes };
 }
 
 async function set(request: Asked<"set">, { client }: Session): Promise<Outcome> {

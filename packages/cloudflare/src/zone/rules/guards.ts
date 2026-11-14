@@ -38,7 +38,7 @@ function held(steps: readonly RuleStep[], kind: RuleStep["kind"]): number {
  * Write the expression of the outside pages rule: true for a request to a site that a page of another site made.
  *
  * @returns an expression false for a request that lacks either Fetch Metadata header, for one from the same site, and for a cross-site one that opens a document
- * @throws {Error} a hostname or suffix that was cast instead of checked holds a character outside `a-z`, `0-9`, `.`, and `-`
+ * @throws {Error} a hostname that was cast instead of checked holds a character outside `a-z`, `0-9`, `.`, and `-`
  */
 export function outsidePagesExpression(layout: DomainLayout): string {
   return `ends_with(http.host, ${quoted(siteEnding(layout))}) and ${INSTALL_OBJECTS.outsideCondition}`;
@@ -48,7 +48,7 @@ export function outsidePagesExpression(layout: DomainLayout): string {
  * Write the expression of the bots rule: true for a request to a site from a bot Cloudflare has verified.
  *
  * @returns an expression false for every bot Cloudflare has not verified, whatever it is
- * @throws {Error} a hostname or suffix that was cast instead of checked holds a character outside `a-z`, `0-9`, `.`, and `-`
+ * @throws {Error} a hostname that was cast instead of checked holds a character outside `a-z`, `0-9`, `.`, and `-`
  */
 export function botsExpression(layout: DomainLayout, searchEnginesAllowed: boolean): string {
   const verified = `ends_with(http.host, ${quoted(siteEnding(layout))}) and ${INSTALL_OBJECTS.botsCondition}`;

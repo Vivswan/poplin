@@ -16,7 +16,7 @@ import { NOW, openInstall } from "../../sites/support/install";
 import { ADDRESSES } from "../../sites/support/layout";
 
 /** The origin every test request is sent to. */
-export const ORIGIN = "https://admin.example.com";
+export const ORIGIN = "https://poplin.example.com";
 
 /** What counts a test dashboard's tries at a login's code, all of them as one visitor's. */
 export function codeCounts(counters = new MemoryCounters()): Pick<Parameters<typeof createDashboard>[0], "counters" | "visitorOf"> {
@@ -68,9 +68,10 @@ export async function openDashboard(domain?: DomainPlug): Promise<Opened> {
     store: new MemoryStore(),
     now: () => clock.now,
     addressOf: ADDRESSES.addressOf,
+    publicAddressOf: ADDRESSES.publicAddressOf,
     reservedNames: ADDRESSES.reservedNames,
   };
-  await base.database.initSettings(defaultSettings({ installer: base.owner, hostname: "admin.example.com" }), { by: base.owner, at: NOW });
+  await base.database.initSettings(defaultSettings({ installer: base.owner, hostname: "poplin.example.com" }), { by: base.owner, at: NOW });
 
   const signing = await base.database.ensureSigningKey(new Uint8Array(32).fill(5), NOW);
   const setCookie = await mintSessionCookie({ email: base.owner, key: await importSessionKey(signing.key), now: NOW });

@@ -19,7 +19,7 @@ import { ADDRESSES } from "../../sites/support/layout";
 export const NOW = 1_700_000_000_000;
 
 /** Where the test install answers. */
-export const ORIGIN = "https://admin.example.com";
+export const ORIGIN = "https://poplin.example.com";
 
 /** What one request to the test install can carry: small, so a test passes each cap with a few bytes. */
 export const LIMITS: ApiLimits = { fileBytes: 64, files: 8, manifestBytes: 4096 };
@@ -141,7 +141,7 @@ export async function openApi(overrides: Partial<ReturnType<typeof defaultSettin
 
   const { database } = opened;
   const signed = { by: INSTALLER, at: NOW };
-  await database.initSettings({ ...defaultSettings({ installer: INSTALLER, hostname: "admin.example.com" }), ...overrides }, signed);
+  await database.initSettings({ ...defaultSettings({ installer: INSTALLER, hostname: "poplin.example.com" }), ...overrides }, signed);
 
   const minted = await Promise.all((["admin", "publisher", "publisher"] as const).map((scope) => mintToken({ scope, note: "a test", now: NOW })));
   for (const { record } of minted) await database.addToken(record, signed);
@@ -158,6 +158,7 @@ export async function openApi(overrides: Partial<ReturnType<typeof defaultSettin
     store: counted(store, calls),
     now: () => clock.now,
     addressOf: ADDRESSES.addressOf,
+    publicAddressOf: ADDRESSES.publicAddressOf,
     reservedNames: ADDRESSES.reservedNames,
     readToken: (id) => database.getToken(id),
     limits: LIMITS,

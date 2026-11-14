@@ -10,15 +10,18 @@ This page says what poplin protects against and what it does not. Everything bel
 
 ## What unlisted covers
 
-An unlisted site opens for anyone who has its address. It is the address the site had while private; only the login is gone.
+An unlisted site opens for anyone who has its address. No login stands in front of it.
 
 ```text
-https://report--k3f9x2ab71qz-page.example.com
-        |       |            |
-        |       |            the marker every site address ends in, -page by default
+https://report--k3f9x2ab71qz-u-poplin.example.com
+        |       |            | |
+        |       |            | the marker: always -poplin
+        |       |            the letter: u for an unlisted or a public site, p for a private one
         |       the id: 12 random characters, about 62 bits; it is the link
-        the name: a label; several sites may share it
+        the name: a label; several sites may share it, and it is not checked
 ```
+
+The id alone finds the site. The letter never opens anything: the stored site decides who may read it, and a private site's files are not served at a `-u-` address.
 
 | Threat | Covered | How |
 | --- | --- | --- |
@@ -33,7 +36,7 @@ https://report--k3f9x2ab71qz-page.example.com
 ## What unlisted does not cover
 
 - **The address is the whole secret.** Anyone who sees it can open the site. No login stands behind it.
-- **Lists and commands show it.** The id shown in lists and commands is the link of an unlisted site. Someone who saw it while the site was private can open the site once it is unlisted; running `poplin new-link` first avoids that.
+- **Lists and commands show it.** The id shown in lists and commands is the link of an unlisted site. Someone who saw it while the site was private can open the site once it is unlisted, since the address differs by one known letter; running `poplin new-link` first avoids that.
 - **A pasted address travels.** Paste it in a chat and the chat's preview bot fetches it; forward it and the next reader has it.
 - **A plain DNS lookup shows the name.** A network between the visitor and Cloudflare can learn that the address exists, though it cannot read the page.
 - **A leak is fixed by `poplin new-link`.** The site gets a new id, and the old address stops at once. Making the site private closes it to everyone but the owner.
@@ -42,11 +45,26 @@ https://report--k3f9x2ab71qz-page.example.com
 
 | State | Address | Who opens it | What the visitor needs |
 | --- | --- | --- | --- |
-| private, the default | `report--k3f9x2ab71qz-page.example.com` | the owner | the login cookie |
-| unlisted | the same address | anyone who has the address | the address alone |
-| public | the same address, and a name the site claims: `report-page.example.com` | everyone | nothing |
+| private, the default | `report--k3f9x2ab71qz-p-poplin.example.com` | the owner | the login |
+| unlisted | `report--k3f9x2ab71qz-u-poplin.example.com` | anyone who has the address | the address alone |
+| public | the unlisted address, and a name the site claims: `report-page.example.com` | everyone | nothing |
 
-A state changes in place: the site, its files, and its address stay. A public name belongs to one site at a time, and stays with that site through `poplin new-link`.
+A public name ends in the install's public word: `page`, or the word the installer chose once at install. A public name belongs to one site at a time, and stays with that site through `poplin new-link`.
+
+A state changes in place: the site, its files, its id, and its label stay.
+
+| Change | The address |
+| --- | --- |
+| within private; between unlisted and public | stays |
+| private to unlisted or public | `-p-` becomes `-u-`; the `-p-` address sends a logged-in visitor to the `-u-` one |
+| unlisted or public to private | `-u-` becomes `-p-`; the `-u-` address sends every visitor to the `-p-` one, where the login stands |
+
+The CLI and the MCP tools print both addresses when a change moved a site.
+
+What a private site costs:
+
+- **One login step per site.** The first open of each private site passes once through Cloudflare's login. It is silent while the login session lasts.
+- **Embedding needs a direct visit first.** A private site shown inside another page, as a frame, an image, or a style, loads only in a browser that opened that private site itself during the login session. Unlisted and public sites embed as before.
 
 | Switch for search engines | Set on | Off, the default | On |
 | --- | --- | --- | --- |
@@ -87,8 +105,8 @@ Every site hostname answers GET and HEAD only. The Worker refuses every other me
 ## No enumeration
 
 ```text
-budget--x7k2p94mdq1c-page.example.com    private, no cookie   ->  302 to the dashboard's login
-budget--w8t1c5n0ze4u-page.example.com    no such site         ->  the same 302
+budget--x7k2p94mdq1c-p-poplin.example.com    private, no cookie   ->  302 to the dashboard's login
+budget--w8t1c5n0ze4u-p-poplin.example.com    no such site         ->  the same 302
 budget-page.example.com                  no such public name  ->  404
 ```
 
@@ -108,7 +126,7 @@ Without the cookie, an address with a name and an id answers one redirect when i
 | the dashboard | a strict Content-Security-Policy; it may never be framed |
 | content | the Worker never reads, parses, or rewrites a site's files |
 | the activity log | the dashboard shows the last 100 actions: publish, state change, delete, login, token issued |
-| junk hostnames | Cloudflare routes to the Worker only the hostnames that end in the marker, `-page` by default, so no other hostname under the domain reaches it; a rate rule limits each address to 300 requests per 10 seconds. Setup skips it when other rules hold every rate rule the plan allows, or when a Free plan zone has hostnames of its own; the OpenTofu module, which owns the zone's rate rules, stops with a message in that second case |
+| junk hostnames | Cloudflare routes to the Worker only the hostnames that end in `-poplin` or the public word, so no other hostname under the domain reaches it; a rate rule limits each address to 300 requests per 10 seconds. Setup skips it when other rules hold every rate rule the plan allows, or when a Free plan zone has hostnames of its own; the OpenTofu module, which owns the zone's rate rules, stops with a message in that second case |
 
 ## Between sites
 

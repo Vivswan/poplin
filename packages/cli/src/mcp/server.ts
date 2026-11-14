@@ -18,7 +18,7 @@ const NAME = "poplin";
 /** What an agent is told once, when it connects. */
 const INSTRUCTIONS =
   "Poplin publishes static sites to the user's own install. " +
-  "A site is private unless the user asks otherwise. Name a site by the label a publish answered, and hand the user the url of an answer as it is.";
+  "A site is private unless the user asks otherwise. Name a site by the label a publish answered, and hand the user the url of an answer as it is: it changes when a site becomes private or stops being private.";
 
 /** What a tool answers when its command printed no line. */
 const DONE = "done";

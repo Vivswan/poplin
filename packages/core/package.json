@@ -41,7 +41,7 @@
     "./src/database/open": "./src/database/open.ts",
     "./src/names/hostname": "./src/names/hostname.ts",
     "./src/names/names": "./src/names/names.ts",
-    "./src/names/suffix": "./src/names/suffix.ts",
+    "./src/names/marker": "./src/names/marker.ts",
     "./src/records/audit": "./src/records/audit.ts",
     "./src/records/hex": "./src/records/hex.ts",
     "./src/records/settings": "./src/records/settings.ts",

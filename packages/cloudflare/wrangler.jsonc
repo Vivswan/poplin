@@ -10,7 +10,7 @@
   // The limit is a fixed ceiling: each request weighs the ceiling divided by the per-minute setting in force, so a setting changes with no deploy.
   "ratelimits": [{ "name": "MINUTE_LIMITS", "namespace_id": "1001", "simple": { "limit": 1000000, "period": 60 } }],
   "vars": {
-    "ZONE": { "domain": "example.com", "admin_hostname": "admin.example.com", "suffix": "-page" },
+    "ZONE": { "domain": "example.com" },
     "ACCESS": { "team_domain": "team.cloudflareaccess.com", "audience": "4714c1358e65fe4b408ad6d432a5f878f08194bdb4752441fd56faefa9b2b6f2" },
     "FIRST_SETTINGS": {
       "default_expires": "never",
@@ -18,7 +18,7 @@
       "versions_kept": "3",
       "trash_days": "7",
       "logins": "owner@example.com",
-      "dashboard_title": "admin.example.com",
+      "dashboard_title": "poplin.example.com",
       "gallery": "off",
       "cache_html": "60s",
       "cache_files": "1h",

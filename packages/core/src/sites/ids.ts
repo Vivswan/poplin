@@ -3,7 +3,7 @@
 import type { Checked } from "../names/names";
 
 /** How many characters a site id holds: about 62 bits, so an id cannot be guessed. */
-export const SITE_ID_LENGTH = 12;
+const SITE_ID_LENGTH = 12;
 
 /** The form of a site id. */
 const SITE_ID_PATTERN = /^[0-9a-z]{12}$/;

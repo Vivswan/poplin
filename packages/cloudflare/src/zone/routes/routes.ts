@@ -30,7 +30,7 @@ type RouteStep =
   | { readonly kind: "remove"; readonly subject: string; readonly id: string }
   | { readonly kind: "skip"; readonly subject: string; readonly reason: string };
 
-// A route may begin with a wildcard and hold no other, so the suffix alone picks the site hostnames out of the zone.
+// A route may begin with a wildcard and hold no other, so the address marker alone picks the site hostnames out of the zone.
 function workerPatterns(layout: DomainLayout): string[] {
   return [`*${siteEnding(layout)}/*`, `${layout.adminHostname}/*`];
 }

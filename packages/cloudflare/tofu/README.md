@@ -33,7 +33,7 @@ bun run --cwd packages/cloudflare build   # writes packages/cloudflare/dist/work
 | Worker cron trigger | runs the Worker's sweep every 15 minutes: expired sites go to the trash, and sites past `trash_days` in the trash and uploads nobody finished are removed with their files |
 | Worker routes | send the install's hostnames, and no other hostname of the zone, to the Worker |
 | DNS records | proxied, each with a comment starting `poplin: ` |
-| Access policy and application | the login on `/login` of the admin hostname, allowing exactly `logins` |
+| Access policy and application | the login on `/login` of the dashboard's hostname, allowing exactly `logins` |
 | Rate rule | blocks an address for 10 seconds after 300 requests in 10 seconds |
 | Guard rules | two custom rules that block a request to a site hostname before the Worker runs: one from a page of another domain, one from a verified bot |
 | Bot settings | the zone's AI bot block, on a zone with no hostnames of its own |
@@ -42,19 +42,19 @@ Records and routes, for `example.com` with the default hostnames:
 
 | Hostname | Example | DNS record | Worker route |
 | --- | --- | --- | --- |
-| a site | `report--k3f9x2ab71qz-page.example.com` | `*.example.com` | `*-page.example.com/*` |
-| a public site's public name | `docs-page.example.com` | `*.example.com` | `*-page.example.com/*` |
-| the dashboard | `admin.example.com` | `admin.example.com` | `admin.example.com/*` |
-| the gallery, while `gallery` is on | `gallery-page.example.com` | `*.example.com` | `*-page.example.com/*` |
+| a site | `report--k3f9x2ab71qz-p-poplin.example.com` | `*.example.com` | `*-poplin.example.com/*` |
+| a public site's public name | `docs-poplin.example.com` | `*.example.com` | `*-poplin.example.com/*` |
+| the dashboard | `poplin.example.com` | `poplin.example.com` | `poplin.example.com/*` |
+| the gallery, while `gallery` is on | `gallery-poplin.example.com` | `*.example.com` | `*-poplin.example.com/*` |
 
-DNS has no partial wildcard, so the wildcard record covers every name under the domain that has no record of its own, while the route sends only the names ending in the suffix to the Worker. The module reads the zone's records and follows what it finds:
+DNS has no partial wildcard, so the wildcard record covers every name under the domain that has no record of its own, while the route sends only the names ending in `-poplin` to the Worker. The module reads the zone's records and follows what it finds:
 
 | The zone has | The module |
 | --- | --- |
 | no record named `*.example.com` | creates the wildcard record. A name under it that no route takes gets a Cloudflare error page, and no Worker runs |
 | its own proxied `*.example.com` | creates no wildcard record: the site hostnames already reach Cloudflare, and every other name keeps its origin |
 | its own `*.example.com` that is not proxied | stops with an error: the site hostnames would resolve to that record's origin |
-| its own record under a name the routes take, such as `status-page.example.com` or `admin.example.com` | stops with an error that names it |
+| its own record under a name the routes take, such as `status-poplin.example.com` or `poplin.example.com` | stops with an error that names it |
 | its own hostnames, while `rate_rule` is `zone` | stops with an error that names them |
 | its own hostnames, while `block_bots` is `auto` | sets no bot setting, and the `block_bots` output names them |
 
@@ -76,7 +76,7 @@ The Worker reads three of its bindings as JSON:
 
 | Binding | Holds |
 | --- | --- |
-| `ZONE` | `domain`, `admin_hostname` (the whole hostname, such as `admin.example.com`), and `suffix` |
+| `ZONE` | `domain` |
 | `FIRST_SETTINGS` | every setting of `poplin config`, by its name, in its text form |
 | `ACCESS` | `team_domain`, the input `access_team_domain`, and `audience`, the audience tag of the Access application the module creates |
 
@@ -84,7 +84,7 @@ The Worker reads three of its bindings as JSON:
 
 ## What is stopped before the Worker
 
-A request Cloudflare blocks never reaches the Worker. Both guard rules read only hostnames ending in the suffix, such as `report-page.example.com`:
+A request Cloudflare blocks never reaches the Worker. Both guard rules read only hostnames ending in `-poplin`, such as `report--k3f9x2ab71qz-u-poplin.example.com`:
 
 | Request to a site hostname | Outside pages rule | Bots rule |
 | --- | --- | --- |
@@ -115,8 +115,6 @@ No rule can exempt a request from Bot Fight Mode, and it may challenge `poplin` 
 | `logins` | list of strings | required | the emails that may log in: lowercase, at least one, each once |
 | `worker_bundle_path` | string | required | the path to the built Worker bundle, one JavaScript module file |
 | `access_team_domain` | string | required | the account's Zero Trust team domain, such as `team.cloudflareaccess.com`, shown in the Zero Trust settings. The module does not read it from the account: that takes a permission beyond the ones below |
-| `admin_hostname` | string | `admin` | the dashboard's hostname, written without the domain: `admin` gives `admin.example.com`, and `admin.tools` gives `admin.tools.example.com`. Any hostname under the domain that does not end in the suffix |
-| `suffix` | string | `-page` | the ending of every site hostname label: 2 to 9 characters, a dash, then lowercase letters, digits, or single dashes, with no dash last |
 | `rate_rule` | string | `zone` | what the rate rule counts: `zone`, every request of the zone, the one form the Free plan takes; `hostnames`, the install's hostnames alone, on a paid plan; `off`, no rule |
 | `guard_rules` | bool | `true` | whether the module creates the two guard rules |
 | `outside_pages` | string | `blocked` | whether a page of another domain may frame a site or load its files: `blocked` or `allowed` |
@@ -141,8 +139,8 @@ The first settings. The names and text forms are those of `poplin config`:
 | `default_search_engines` | bool | `false` | whether a new public site is open to search engines |
 | `versions_kept` | number | `3` | versions kept per site, the live one included |
 | `trash_days` | number | `7` | days a deleted site waits in the trash |
-| `dashboard_title` | string | `null` | the title of the dashboard; null means the admin hostname |
-| `gallery` | bool | `false` | the public page listing the public sites, at `gallery-page.example.com` |
+| `dashboard_title` | string | `null` | the title of the dashboard; null means the dashboard's hostname |
+| `gallery` | bool | `false` | the public page listing the public sites, at `gallery-poplin.example.com` |
 | `cache_html` | string | `60s` | how long HTML is cached |
 | `cache_files` | string | `1h` | how long a site's other files are cached; `off` switches the cache off |
 | `max_total_size` | string | `9GB` | limit: all sites together |
@@ -162,8 +160,8 @@ The Worker stores the first settings once, while it has none. After that the das
 | `bucket_name` | the R2 bucket |
 | `database_id` | the D1 database |
 | `worker_name` | the Worker script |
-| `admin_url` | the address of the dashboard, `https://admin.example.com` |
-| `site_url_pattern` | the address of a site, `https://<name>--<id>-page.example.com` |
+| `admin_url` | the address of the dashboard, `https://poplin.example.com` |
+| `site_url_pattern` | the address of a site, `https://<name>--<id>-<letter>-poplin.example.com`: the letter is `p` for a private site and `u` for every other |
 | `guard_rule_expressions` | the expression of each guard rule, by its ref |
 | `block_bots` | `set`, or the reason the module left the zone's bot settings alone |
 
@@ -189,7 +187,6 @@ The Worker stores the first settings once, while it has none. After that the das
 | read the Zero Trust team domain | pass it in `access_team_domain` |
 | apply the database's schema | the Worker brings the database up to its own schema when it opens it |
 | set up two installs in one account | the Access policy, the Access application, and the database have fixed names |
-| issue a certificate for a deeper `admin_hostname` | Cloudflare's Universal SSL covers `example.com` and `*.example.com`. A hostname such as `admin.tools.example.com` needs a certificate of its own |
 | take over an object it did not create | an object that already exists under one of the names above is imported into the state first |
 | configure the provider or hold a token | the caller's provider block does |
 | add to rate rules the zone already has | the rate rule is the zone's whole rate limiting ruleset. Set `rate_rule` to `off` on a zone with rate rules of its own |
@@ -197,7 +194,7 @@ The Worker stores the first settings once, while it has none. After that the das
 | keep bot settings the zone already has | the module sets the AI bot block and Bot Fight Mode both. Set `block_bots` to `off` on a zone that sets its own |
 | stop a bot Cloudflare has not verified | a bot that presents as a browser passes both rules; telling it apart takes a bot score, which the Free plan does not have |
 | read the zone's plan | a Free plan rate rule reads the path alone: `rate_rule` is `zone` there, and `hostnames` on a paid plan. The input is explicit here; poplin's own setup takes the same three values and only offers the plan's as its default. Bot Fight Mode is a setting of the Free plan: `block_bots` is `auto` or `off` on a paid plan |
-| keep a name several levels deep from the Worker | `a.b-page.example.com` also matches the site route; the Worker answers that it is no site |
+| keep a name several levels deep from the Worker | `a.b-poplin.example.com` also matches the site route; the Worker answers that it is no site |
 | change a record the zone already has | a record whose comment does not start with `poplin: ` is read and never changed |
 | check that the Worker's name is free | an existing Worker named `worker_name` in the account is replaced |
 | follow a login added on the dashboard | add the email to `logins` as well, so the login screen lets it in |

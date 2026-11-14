@@ -174,7 +174,7 @@ async function stateOf(install: ApiInstall): Promise<unknown> {
 
 /** The test install as the rule book takes it, for a step that only a dashboard session can take. */
 function installOf(install: ApiInstall): Install {
-  return { database: install.database, store: install.store, now: () => install.clock.now, addressOf: ADDRESSES.addressOf, reservedNames: ADDRESSES.reservedNames };
+  return { database: install.database, store: install.store, now: () => install.clock.now, addressOf: ADDRESSES.addressOf, publicAddressOf: ADDRESSES.publicAddressOf, reservedNames: ADDRESSES.reservedNames };
 }
 
 describe("createApi", () => {
@@ -215,7 +215,7 @@ describe("createApi", () => {
     const first = part(await done("finishPublish", { upload }), "site");
     const label = first.label as string;
 
-    expect(first).toMatchObject({ name: "report", created: true, access: "private", live_version: 1, bytes: 21, files: 2, updated: NOW, url: `https://${label}-page.example.com` });
+    expect(first).toMatchObject({ name: "report", created: true, access: "private", live_version: 1, bytes: 21, files: 2, updated: NOW, url: `https://${label}-p-poplin.example.com` });
     expect((await done("listSites", { limit: 1 })).body.sites).toHaveLength(1);
     const settings = (await done("exportSettings", undefined)).body.settings as Record<string, string>;
     const backup = part(await done("exportSite", { site: label }), "site");

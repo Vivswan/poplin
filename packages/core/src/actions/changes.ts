@@ -3,7 +3,7 @@
 import * as v from "valibot";
 
 import type { Database, Signed, SiteDetails } from "../database/database";
-import { parsePublicName, type SiteName } from "../names/names";
+import { parsePublicName, type ReservedNames, type SiteName } from "../names/names";
 import { type SettingValues, spanSeconds } from "../records/settings";
 import type { Site, SiteAccess } from "../records/site";
 import type { SiteId } from "../sites/ids";
@@ -55,7 +55,7 @@ interface Ground {
   readonly now: number;
 
   /** The public names the install's address layout keeps for itself. */
-  readonly reserved: ReadonlySet<string>;
+  readonly reserved: ReservedNames;
 }
 
 /** The changes in the database's terms. `access` is absent when none was asked for. */

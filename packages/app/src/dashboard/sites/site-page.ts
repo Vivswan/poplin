@@ -60,6 +60,7 @@ ${csrfField(visit)}
 <fieldset>
 <legend>Access</legend>
 ${ACCESSES.map((choice) => accessChoice(site, choice))}
+<p class="hint">A private site's address holds -p-, every other -u-: a change to or from private changes the address.</p>
 <div class="field when-public">
 <label for="public_name">Public name</label>
 <input type="text" id="public_name" name="public_name" value="${site.public_name ?? ""}" autocomplete="off">

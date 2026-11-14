@@ -14,7 +14,8 @@ export const DAY_MS = 86_400_000;
 /**
  * A site as a caller sees it. Times are milliseconds since the epoch.
  *
- * `url` is the one address to hand to a person: the public one for a public site, the label's otherwise. `bytes` and `files` sum the kept versions, and `updated` is when the site last changed.
+ * `url` is the one address to hand to a person: the public one for a public site, the label's otherwise.
+ * The label's address carries a letter for the access, so it changes when a site turns private or stops being private. `bytes` and `files` sum the kept versions, and `updated` is when the site last changed.
  * `gone_on` is when a site in the trash is deleted for good, and is absent outside the trash.
  */
 export interface SiteObject {
@@ -54,10 +55,10 @@ export interface SiteAnswer {
  *
  * @param trashDays - the install's `trash_days` setting
  */
-export function siteObject(site: Site, install: Pick<Install, "addressOf">, trashDays: number): SiteObject {
+export function siteObject(site: Site, install: Pick<Install, "addressOf" | "publicAddressOf">, trashDays: number): SiteObject {
   const label = siteLabel(site.name, site.id);
   const publicName = site.access === "public" ? site.public_name : null;
-  const addresses = { site: install.addressOf(label), public: publicName === null ? null : install.addressOf(publicName) };
+  const addresses = { site: install.addressOf(label, site.access), public: publicName === null ? null : install.publicAddressOf(publicName) };
 
   const object: SiteObject = {
     id: site.id,
@@ -88,7 +89,7 @@ export function siteObject(site: Site, install: Pick<Install, "addressOf">, tras
  *
  * @param sites - the site as the action found it, `null` for a site the action made, and the site after the action
  */
-export function siteAnswer(sites: { readonly before: Site | null; readonly after: Site }, install: Pick<Install, "addressOf">, settings: SettingValues): SiteAnswer {
+export function siteAnswer(sites: { readonly before: Site | null; readonly after: Site }, install: Pick<Install, "addressOf" | "publicAddressOf">, settings: SettingValues): SiteAnswer {
   const before = sites.before === null ? null : siteObject(sites.before, install, settings.trash_days);
 
   return { ok: true, before, site: siteObject(sites.after, install, settings.trash_days) };

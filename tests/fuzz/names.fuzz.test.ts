@@ -3,21 +3,22 @@
 import { expect } from "bun:test";
 import fc from "fast-check";
 
+import { type AccessLetter, keptPublicNames, letterOf, parsePublicWord, publicHostLabel, readHostLabel, siteHostLabel } from "../../packages/core/src/names/marker";
 import { nameFromEntry, parsePublicName, parseSiteName } from "../../packages/core/src/names/names";
-import { applySuffix, parseSuffix, readHostLabel, stripSuffix } from "../../packages/core/src/names/suffix";
 import { parseSiteId } from "../../packages/core/src/sites/ids";
 import { siteLabel, siteReference, splitLabel } from "../../packages/core/src/sites/labels";
 import { fuzzTarget } from "./config";
 import { hostile } from "./hostile";
 
 const GALLERY_NAME = "gallery";
-const RESERVED: ReadonlySet<string> = new Set([GALLERY_NAME]);
+const OWN_NAMES: ReadonlySet<string> = new Set([GALLERY_NAME]);
+const RESERVED = OWN_NAMES;
 const MIN_PUBLISHED_LENGTH = 3;
 const MAX_PUBLISHED_LENGTH = 40;
 const MAX_DNS_LABEL_LENGTH = 63;
-const MAX_PUBLISHED_SUFFIX_LENGTH = 9;
 const DNS_LABEL_SHAPE = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/;
-const PUBLISHED_SUFFIX_SHAPE = /^(-[a-z0-9]+)+$/;
+const PUBLISHED_WORD_SHAPE = /^[a-z]{2,9}$/;
+const LABEL_ADDRESS_ENDING = /-[pu]-poplin$/;
 const PUBLISHED_SHAPE = /^[a-z0-9]+(-[a-z0-9]+)*$/;
 const PUBLISHED_ID = /^[0-9a-z]{12}$/;
 const ENCODED_FORM_AT = 2;
@@ -45,45 +46,34 @@ const siteIds = fc
   .filter((parsed) => parsed.ok)
   .map((parsed) => parsed.value);
 const siteLabels = fc.tuple(wellFormed, fc.stringMatching(PUBLISHED_ID)).map(([name, id]) => `${name}--${id}`);
-const rawSuffixes = hostile(fc.oneof(fc.constantFrom("-page", "", "-p", "-my-pages", "page-", "--page"), fc.stringMatching(/^[a-z0-9-]{0,12}$/)));
-const labels = hostile(fc.oneof(wellFormed, siteLabels, fc.stringMatching(PUBLISHED_ID), fc.tuple(fc.oneof(wellFormed, siteLabels), fc.constantFrom("-page", "-p", "--site")).map(([site, suffix]) => `${site}${suffix}`)));
+const rawWords = hostile(fc.oneof(fc.constantFrom("page", "poplin", "", "p", "my-page", "-page", "page2"), fc.stringMatching(/^[a-z0-9-]{0,12}$/)));
+const endings = fc.constantFrom("-poplin", "-p-poplin", "-u-poplin", "-x-poplin", "-page", "-p-page", "-p", "-u", "--site");
+const labels = hostile(fc.oneof(wellFormed, siteLabels, fc.stringMatching(PUBLISHED_ID), fc.tuple(fc.oneof(wellFormed, siteLabels, fc.stringMatching(PUBLISHED_ID)), endings).map(([site, ending]) => `${site}${ending}`)));
 const entries = hostile(fc.oneof(wellFormed, wellFormed.map((name) => `${name}.html`)));
 
-const suffixes = rawSuffixes
-  .map((raw) => parseSuffix(raw))
-  .filter((parsed) => parsed.ok)
-  .map((parsed) => parsed.value);
+const publicWords = fc
+  .oneof(fc.constantFrom("page", "poplin"), fc.stringMatching(PUBLISHED_WORD_SHAPE))
+  .map((raw) => parsePublicWord(raw))
+  .filter((word) => word !== undefined);
+const layouts = publicWords.map((publicWord) => ({ publicWord, reserved: keptPublicNames(publicWord, OWN_NAMES) }));
+const accesses = fc.constantFrom("private" as const, "unlisted" as const, "public" as const);
+const letters = fc.constantFrom<AccessLetter>("p", "u");
 
 function followsPublishedRule(name: string): boolean {
   return name.length >= MIN_PUBLISHED_LENGTH && name.length <= MAX_PUBLISHED_LENGTH && PUBLISHED_SHAPE.test(name);
 }
 
-function followsSuffixRule(raw: string): boolean {
-  return raw.length <= MAX_PUBLISHED_SUFFIX_LENGTH && PUBLISHED_SUFFIX_SHAPE.test(raw);
-}
-
 property(
-  "a hostile suffix is refused, not thrown on, unless it is a dash and then letters, digits, and single dashes, 9 characters at most, and an accepted one is the string that came in and reads back what it was put after",
-  fc.property(rawSuffixes, siteNames, siteIds, publicNames, (raw, name, id, publicName) => {
-    const parsed = parseSuffix(raw);
-
-    expect(parsed.ok).toBe(followsSuffixRule(raw));
-    if (!parsed.ok) return;
-
-    const label = siteLabel(name, id);
-
-    expect<string>(parsed.value).toBe(raw);
-    expect<unknown>([stripSuffix(parsed.value, applySuffix(parsed.value, label)), stripSuffix(parsed.value, applySuffix(parsed.value, publicName))]).toEqual([
-      { ok: true, label },
-      { ok: true, label: publicName },
-    ]);
+  "a hostile public word is refused, not thrown on, unless it is 2 to 9 lowercase letters, and an accepted one is the string that came in",
+  fc.property(rawWords, (raw) => {
+    expect<unknown>(parsePublicWord(raw)).toBe(PUBLISHED_WORD_SHAPE.test(raw) ? raw : undefined);
   }),
 );
 
 property(
-  "the address of any site under any accepted suffix is a hostname label of at most 63 characters without two dashes third and fourth, so no configured suffix makes an address DNS or a URL parser cannot carry",
-  fc.property(suffixes, siteNames, siteIds, publicNames, (suffix, name, id, publicName) => {
-    for (const label of [applySuffix(suffix, siteLabel(name, id)), applySuffix(suffix, publicName)]) {
+  "the address of any site under either letter, and of any public name under any public word, is a hostname label of at most 63 characters without two dashes third and fourth, so DNS and URL parsers carry it",
+  fc.property(publicWords, siteNames, siteIds, publicNames, letters, (publicWord, name, id, publicName, letter) => {
+    for (const label of [siteHostLabel(siteLabel(name, id), letter), siteHostLabel(id, letter), publicHostLabel(publicName, publicWord)]) {
       expect(label.length).toBeLessThanOrEqual(MAX_DNS_LABEL_LENGTH);
       expect(label).toMatch(DNS_LABEL_SHAPE);
       expect(label.startsWith("--", ENCODED_FORM_AT)).toBe(false);
@@ -92,31 +82,28 @@ property(
 );
 
 property(
-  "a hostile label or entry is refused, not thrown on, and a stripped label put back before its suffix is the label that came in",
-  fc.property(labels, suffixes, (label, suffix) => {
+  "a hostile label or entry is refused, not thrown on, under any public word",
+  fc.property(labels, layouts, (label, layout) => {
     parseSiteName(label);
     nameFromEntry(label);
-    parsePublicName(label, RESERVED);
+    parsePublicName(label, layout.reserved);
     parseSiteId(label);
-    splitLabel(label, RESERVED);
+    splitLabel(label, layout.reserved);
     siteReference(label);
-    readHostLabel(suffix, label, RESERVED);
-
-    const stripped = stripSuffix(suffix, label);
-    if (stripped.ok) expect(`${stripped.label}${suffix}`).toBe(label);
+    readHostLabel(label, layout);
   }),
 );
 
 property(
   "every accepted name follows the published rule, no accepted public name is the one the gallery keeps, and every accepted id is 12 base36 characters, so no site gets an address DNS cannot carry or the install answers on itself",
-  fc.property(labels, suffixes, (raw, suffix) => {
+  fc.property(labels, layouts, (raw, layout) => {
     const checked = [parseSiteName(raw), nameFromEntry(raw), parsePublicName(raw, RESERVED), splitLabel(raw, RESERVED), siteReference(raw)];
-    const accepted: readonly unknown[] = [...checked.map((outcome) => (outcome.ok ? outcome.value : undefined)), readHostLabel(suffix, raw, RESERVED)];
+    const accepted: readonly unknown[] = [...checked.map((outcome) => (outcome.ok ? outcome.value : undefined)), readHostLabel(raw, layout)];
     const parts = accepted
       .filter((value) => value !== undefined)
       .map((value): { readonly kind?: string; readonly name?: string; readonly id?: string } => (typeof value === "string" ? { name: value } : (value as object)));
     const names = parts.map((part) => part.name).filter((name) => name !== undefined);
-    const addressed = [splitLabel(raw, RESERVED), { ok: true as const, value: readHostLabel(suffix, raw, RESERVED) }].map((outcome) => (outcome.ok && outcome.value.kind === "public-name" ? outcome.value.name : undefined));
+    const addressed = [splitLabel(raw, RESERVED), { ok: true as const, value: readHostLabel(raw, layout) }].map((outcome) => (outcome.ok && outcome.value.kind === "public-name" ? outcome.value.name : undefined));
     const publicOnes = [parsePublicName(raw, RESERVED).ok ? raw : undefined, ...addressed].filter((name) => name !== undefined);
     const ids = parts.map((part) => part.id).filter((id) => id !== undefined);
 
@@ -134,13 +121,32 @@ property(
 );
 
 property(
-  "a site address built under any suffix reads back as its name and its id, and a public address as its public name",
-  fc.property(siteNames, siteIds, publicNames, suffixes, fc.context(), (name, id, publicName, suffix, context) => {
-    const address = applySuffix(suffix, siteLabel(name, id));
+  "any name, id, and access writes a label address that reads back as the same site and the letter of that access, the id alone reads back as the id, and a public address as its public name, under any public word",
+  fc.property(siteNames, siteIds, publicNames, accesses, layouts, fc.context(), (name, id, publicName, access, layout, context) => {
+    const letter = letterOf(access);
+    const address = siteHostLabel(siteLabel(name, id), letter);
     context.log(`address: ${address}`);
 
-    expect<unknown>(readHostLabel(suffix, address, RESERVED)).toEqual({ kind: "site", name, id });
-    expect<unknown>(readHostLabel(suffix, applySuffix(suffix, publicName), RESERVED)).toEqual({ kind: "public-name", name: publicName });
+    expect(letter === "p").toBe(access === "private");
+    expect<unknown>(readHostLabel(address, layout)).toEqual({ kind: "site", name, id, letter });
+    expect<unknown>(readHostLabel(siteHostLabel(id, letter), layout)).toEqual({ kind: "site", id, letter });
+
+    if (layout.reserved.has(publicName)) return;
+
+    expect<unknown>(readHostLabel(publicHostLabel(publicName, layout.publicWord), layout)).toEqual({ kind: "public-name", name: publicName });
+  }),
+);
+
+property(
+  "no public address ends in -p-poplin or -u-poplin or reads as a label address, under any public word, so no public site sits behind the private login or takes the address of an id",
+  fc.property(labels, layouts, (raw, layout) => {
+    const publicName = parsePublicName(raw, layout.reserved);
+    if (!publicName.ok) return;
+
+    const address = publicHostLabel(publicName.value, layout.publicWord);
+
+    expect(address).not.toMatch(LABEL_ADDRESS_ENDING);
+    expect<unknown>(readHostLabel(address, layout)).toEqual({ kind: "public-name", name: publicName.value });
   }),
 );
 

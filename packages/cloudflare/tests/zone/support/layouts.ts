@@ -3,7 +3,7 @@
 import { type Hostname, parseHostname } from "@poplin/core/src/names/hostname";
 import { type DomainLayout, parseDomainLayout, type RawLayout } from "../../../src/zone/layout";
 
-const BASE: RawLayout = { domain: "example.com", admin_hostname: "admin.example.com", suffix: "-page" };
+const BASE: RawLayout = { domain: "example.com" };
 
 /** Check a layout that a test wrote by hand; a refusal is a mistake in the test. */
 function layoutOf(changes: Partial<RawLayout>): DomainLayout {
@@ -21,8 +21,5 @@ export function hostOf(raw: string): Hostname {
   return hostname.value;
 }
 
-/** The default layout: sites are `<name>-page.example.com`. */
-export const SUFFIXED = layoutOf({});
-
-/** Another suffix and a deeper admin hostname. */
-export const OTHER_SUFFIX = layoutOf({ suffix: "-s1-x", admin_hostname: "admin.tools.example.com" });
+/** The layout the tests run under: label addresses end in `-poplin.example.com`, public names in `-page.example.com`, and the dashboard is `poplin.example.com`. */
+export const LAYOUT = layoutOf({});

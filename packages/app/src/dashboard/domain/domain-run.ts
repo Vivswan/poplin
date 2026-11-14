@@ -49,7 +49,7 @@ function withoutToken(reading: DomainReading, token: string): DomainReading {
   };
 }
 
-// Every object by its state, the ones that already stood left out: `{ "created": ["DNS record: admin.example.com"] }`.
+// Every object by its state, the ones that already stood left out: `{ "created": ["DNS record: poplin.example.com"] }`.
 function byState(reading: Extract<DomainReading, { ok: true }>): Record<string, string[]> {
   const changed = reading.rows.filter((row) => row.state !== "present");
 

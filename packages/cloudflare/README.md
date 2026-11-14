@@ -10,6 +10,6 @@ The Worker that runs a poplin install on Cloudflare, the setup client for a zone
 A local run reads the hostname from the `Host` header:
 
 ```sh
-curl -H "Host: admin.example.com" http://localhost:8787/api/whoami
+curl -H "Host: poplin.example.com" http://localhost:8787/api/whoami
 curl -H "Host: docs-page.example.com" http://localhost:8787/
 ```

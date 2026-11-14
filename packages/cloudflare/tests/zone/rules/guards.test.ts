@@ -5,14 +5,14 @@ import type { DomainLayout } from "../../../src/zone/layout";
 import type { RuleBody } from "../../../src/zone/rules/rules";
 import { reportOf } from "../../../src/zone/sync";
 import { refusal, reply, withFake } from "../support/fake-cloudflare";
-import { OTHER_SUFFIX, SUFFIXED } from "../support/layouts";
+import { LAYOUT } from "../support/layouts";
 
 const OUTSIDE =
-  'ends_with(http.host, "-page.example.com") and any(http.request.headers["sec-fetch-site"][*] eq "cross-site") and any(http.request.headers["sec-fetch-dest"][*] ne "document")';
-const BOTS = 'ends_with(http.host, "-page.example.com") and cf.client.bot';
-const BOTS_BUT_SEARCH = 'ends_with(http.host, "-page.example.com") and cf.client.bot and cf.verified_bot_category ne "Search Engine Crawler"';
+  'ends_with(http.host, "-poplin.example.com") and any(http.request.headers["sec-fetch-site"][*] eq "cross-site") and any(http.request.headers["sec-fetch-dest"][*] ne "document")';
+const BOTS = 'ends_with(http.host, "-poplin.example.com") and cf.client.bot';
+const BOTS_BUT_SEARCH = 'ends_with(http.host, "-poplin.example.com") and cf.client.bot and cf.verified_bot_category ne "Search Engine Crawler"';
 const SLOTS_FULL = "the zone's plan allows no further custom rule and other rules hold every slot";
-const BLOCKING = { layout: SUFFIXED, plan: "free", outsidePages: "blocked", searchEnginesAllowed: false } as const;
+const BLOCKING = { layout: LAYOUT, plan: "free", outsidePages: "blocked", searchEnginesAllowed: false } as const;
 
 function outsideRule(expression: string = OUTSIDE): RuleBody {
   return { ref: "poplin_outside_pages", description: "poplin: stop pages of other domains", expression, action: "block", enabled: true };
@@ -28,8 +28,7 @@ function ownersRules(count: number): { id: string; expression: string; action: s
 
 describe("the guard expressions", () => {
   test("the outside pages rule reads the site hostnames alone and lets through a request that lacks either Fetch Metadata header and a cross-site one for a document: a typed address or a followed link is never blocked", () => {
-    expect(outsidePagesExpression(SUFFIXED)).toBe(OUTSIDE);
-    expect(outsidePagesExpression(OTHER_SUFFIX)).toStartWith('ends_with(http.host, "-s1-x.example.com") and ');
+    expect(outsidePagesExpression(LAYOUT)).toBe(OUTSIDE);
   });
 
   const bots: readonly { readonly name: string; readonly searchEnginesAllowed: boolean; readonly expression: string }[] = [
@@ -40,12 +39,12 @@ describe("the guard expressions", () => {
   test.each(bots)(
     "the bots rule with $name reads the site hostnames alone, never the dashboard's or the zone's own",
     ({ searchEnginesAllowed, expression }) => {
-      expect(botsExpression(SUFFIXED, searchEnginesAllowed)).toBe(expression);
+      expect(botsExpression(LAYOUT, searchEnginesAllowed)).toBe(expression);
     },
   );
 
-  test("a suffix forged into a layout makes both builders throw: the text is never written into a rule", () => {
-    const forged = { ...SUFFIXED, suffix: '-p") or (http.host ne "' } as DomainLayout;
+  test("a domain forged into a layout makes both builders throw: the text is never written into a rule", () => {
+    const forged = { ...LAYOUT, domain: 'example.com") or (http.host ne "' } as unknown as DomainLayout;
 
     expect(() => outsidePagesExpression(forged)).toThrow();
     expect(() => botsExpression(forged, false)).toThrow();
@@ -70,7 +69,7 @@ describe("planGuards", () => {
   test.each(settings)(
     "$plan, outside pages $outsidePages, search engines allowed $searchEnginesAllowed, on a zone with no custom rule: the settings alone choose the rules, since each reads only the site hostnames",
     ({ rules, ...desired }) => {
-      const steps = planGuards({ layout: SUFFIXED, ...desired }, undefined);
+      const steps = planGuards({ layout: LAYOUT, ...desired }, undefined);
 
       expect<unknown>(steps.map((step) => ("rule" in step ? step.rule : step))).toEqual([...rules]);
       expect(steps.map((step) => step.kind)).toEqual(rules.map(() => "create"));
@@ -110,14 +109,6 @@ describe("planGuards", () => {
       steps: [
         { kind: "leave", subject: "outside pages rule" },
         { kind: "change", subject: "bots rule", rulesetId: "set-custom", ruleId: "b1", rule: botsRule(BOTS_BUT_SEARCH) },
-      ],
-    },
-    {
-      name: "a suffix change changes both rules in place",
-      desired: { layout: OTHER_SUFFIX },
-      steps: [
-        { kind: "change", subject: "outside pages rule", rulesetId: "set-custom", ruleId: "o1", rule: outsideRule(outsidePagesExpression(OTHER_SUFFIX)) },
-        { kind: "change", subject: "bots rule", rulesetId: "set-custom", ruleId: "b1", rule: botsRule(botsExpression(OTHER_SUFFIX, false)) },
       ],
     },
   ];

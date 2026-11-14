@@ -137,7 +137,8 @@ describe("an instance's first request", () => {
   });
 
   const stopped: readonly { readonly name: string; readonly broken: () => Bindings; readonly status: number; readonly says: string; readonly hides: string }[] = [
-    { name: "a ZONE binding with a key missing", broken: () => withBindings({ ZONE: { domain: "example.com" } }), status: 500, says: "its ZONE binding is refused (bad-shape)", hides: "example.com" },
+    { name: "a ZONE binding with no domain", broken: () => withBindings({ ZONE: { public_word: "wiki" } }), status: 500, says: "its ZONE binding is refused (bad-shape)", hides: "wiki" },
+    { name: "a ZONE binding whose public word is no word", broken: () => withBindings({ ZONE: { domain: "example.com", public_word: "my-wiki" } }), status: 500, says: "its ZONE binding is refused (bad-public-word)", hides: "my-wiki" },
     { name: "no ZONE binding", broken: () => withBindings({ ZONE: undefined }), status: 500, says: "its ZONE binding is refused (absent)", hides: "example.com" },
     {
       name: "an ACCESS binding whose audience is no tag",
@@ -271,22 +272,21 @@ describe("the product, from a token to an opened site", () => {
     expect(answers.map((answer) => answer.headers.get("Retry-After"))).toEqual([null, null, "60", null]);
   });
 
-  // Drift: a label with a site's id under another name is no address of the site; counted for the site, anyone who learned an id could use up its minute.
-  test("a label with a site's id under another name spends nothing of that site's minute", async () => {
+  // Drift: the id alone names a site, under any name; counted apart from the site, every other name before the id would be a fresh allowance.
+  test("a label with a site's id under another name is the same site and spends that site's minute", async () => {
     const strict = withBindings({ FIRST_SETTINGS: { ...FIRST, site_requests_per_minute: "1" } });
     const worker = instance(w);
     await ask(worker, `${ADMIN}/api/whoami`, {}, strict);
     const site = await publish(worker, await tokenOf(w, "publisher"), { name: "docs", access: "public" }, [page("<p>docs</p>")]);
 
-    const misnamed = await ask(worker, `https://other--${site.id}-page.example.com/`, { headers: { "CF-Connecting-IP": "203.0.113.7" } });
+    const renamed = await ask(worker, `https://other--${site.id}-u-poplin.example.com/`, { headers: { "CF-Connecting-IP": "203.0.113.7" } });
     const real = await ask(worker, "https://docs-page.example.com/", { headers: { "CF-Connecting-IP": "198.51.100.9" } });
-    const again = await ask(worker, "https://docs-page.example.com/", { headers: { "CF-Connecting-IP": "192.0.2.44" } });
 
-    expect([misnamed.status, real.status, again.status]).toEqual([302, 200, 429]);
+    expect([renamed.status, real.status]).toEqual([200, 429]);
   });
 
   // Drift: the routes should make a stray hostname impossible; if one arrives, it must not be read as the dashboard or as a site.
-  test.each(["https://example.org/", "https://example.com/", "https://plain.example.com/", "https://admin.example.com.example.org/api/whoami"])("%s is neither the admin hostname nor a site's and gets serving's 404", async (address) => {
+  test.each(["https://example.org/", "https://example.com/", "https://plain.example.com/", "https://poplin.example.com.example.org/api/whoami"])("%s is neither the admin hostname nor a site's and gets serving's 404", async (address) => {
     const answer = await ask(instance(w), address);
 
     expect({ status: answer.status, text: await answer.text(), cache: answer.headers.get("Cache-Control") }).toEqual({ status: 404, text: "Not found\n", cache: "no-store" });

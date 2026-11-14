@@ -33,7 +33,7 @@ test("every ordinary setting has a labelled input holding its stored text and sh
   });
   expect(Object.fromEntries(inputs.map((input) => [input.name, input.fallback]))).toMatchObject({
     trash_days: "7",
-    dashboard_title: "admin.example.com",
+    dashboard_title: "poplin.example.com",
     cache_files: "1h",
     max_sites: "none",
     logins: "the email of whoever set the install up",

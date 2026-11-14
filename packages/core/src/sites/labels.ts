@@ -1,13 +1,10 @@
 // The site label: a site's name, two dashes, and its id. It is what names a site in a hostname and in a command; a string without the two dashes is a public name instead.
 
-import { type Checked, MAX_NAME_LENGTH, type PublicName, parsePublicName, parseSiteName, type SiteName } from "../names/names";
-import { parseSiteId, SITE_ID_LENGTH, type SiteId } from "./ids";
+import { type Checked, type PublicName, parsePublicName, parseSiteName, type ReservedNames, type SiteName } from "../names/names";
+import { parseSiteId, type SiteId } from "./ids";
 
 /** What stands between the name and the id. A name never holds it, so a label that holds it is never a public name. */
 const SEPARATOR = "--";
-
-/** The longest site label: the longest name, the separator, and an id. */
-export const MAX_SITE_LABEL_LENGTH = MAX_NAME_LENGTH + SEPARATOR.length + SITE_ID_LENGTH;
 
 /** What a reference reserves: no site holds a name its install keeps, so the lookup answers for one. */
 const NOTHING_RESERVED: ReadonlySet<string> = new Set();
@@ -35,11 +32,11 @@ export function siteLabel(name: SiteName, id: SiteId): SiteLabel {
 /**
  * Split a label into what it names.
  *
- * @param label - a hostname label with its suffix already stripped, in lowercase
+ * @param label - what a hostname label holds before its letter and marker, or what a command was given, in lowercase
  * @param reserved - the names the install's address layout keeps for itself; none is a public name
  * @returns a name and an id for a label that holds `--`, a public name for one that does not, or why it is neither; only the form is checked, not that a site exists
  */
-export function splitLabel(label: string, reserved: ReadonlySet<string>): Checked<LabelParts> {
+export function splitLabel(label: string, reserved: ReservedNames): Checked<LabelParts> {
   const separatorAt = label.indexOf(SEPARATOR);
 
   if (separatorAt === -1) {

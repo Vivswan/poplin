@@ -19,8 +19,8 @@ output "admin_url" {
 }
 
 output "site_url_pattern" {
-  description = "The address of a site, with `<name>` and `<id>` standing for the site's name and id."
-  value       = "https://<name>--<id>${var.suffix}.${local.domain}"
+  description = "The address of a site, with `<name>` and `<id>` standing for the site's name and id, and `<letter>` for `p` on a private site and `u` on every other."
+  value       = "https://<name>--<id>-<letter>${local.marker}.${local.domain}"
 }
 
 output "guard_rule_expressions" {

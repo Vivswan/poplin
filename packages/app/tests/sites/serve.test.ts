@@ -144,16 +144,14 @@ describe("methods", () => {
 describe("not found", () => {
   const cases: readonly (readonly [string, Ask])[] = [
     ["a hostname outside the domain", () => ask("report-page.example.org", "/")],
-    ["a hostname without the suffix", () => ask("report.example.com", "/")],
+    ["a hostname without the marker", () => ask("report.example.com", "/")],
     ["the domain itself", () => ask("example.com", "/")],
     ["a label that is no name", () => ask("a_b-page.example.com", "/")],
     ["a hostname one level deeper", (w) => ask(`www.${labelHost(w.report)}`, "/")],
     ["a public name no site holds", () => ask("nobody-page.example.com", "/")],
     ["the public name of a site that is not public", () => ask("report-page.example.com", "/")],
     ["the gallery with no handler", () => ask("gallery-page.example.com", "/")],
-    ["an id no site has, asked by the owner", (w) => ask("report--000000000000-page.example.com", "/", withCookie(w))],
-    ["another name before a real id, asked by the owner", (w) => ask(`other--${w.report.id}-page.example.com`, "/", withCookie(w))],
-    ["another name before a private id, asked by the owner", (w) => ask(`other--${w.secret.id}-page.example.com`, "/", withCookie(w))],
+    ["an id no site has, asked by the owner", (w) => ask("report--000000000000-p-poplin.example.com", "/", withCookie(w))],
     ["a site in the trash, asked by the owner", (w) => ask(labelHost(w.trashed), "/", withCookie(w))],
     ["a site past its expiry, asked by the owner", (w) => ask(labelHost(w.expired), "/", withCookie(w))],
     ["a missing file of an unlisted site", (w) => ask(labelHost(w.report), "/nothing.txt")],
@@ -173,8 +171,8 @@ describe("access", () => {
     ["a private site", (w) => labelHost(w.secret), "/", {}],
     ["a private site's file", (w) => labelHost(w.secret), "/app.js", {}],
     ["a private site's missing file", (w) => labelHost(w.secret), "/nothing.txt?x=1", {}],
-    ["an id no site has", () => "secret--000000000000-page.example.com", "/", {}],
-    ["another name before a private id", (w) => `other--${w.secret.id}-page.example.com`, "/", {}],
+    ["an id no site has", () => "secret--000000000000-p-poplin.example.com", "/", {}],
+    ["another name before a private id", (w) => `other--${w.secret.id}-p-poplin.example.com`, "/", {}],
     ["a site in the trash", (w) => labelHost(w.trashed), "/", {}],
     ["a site past its expiry", (w) => labelHost(w.expired), "/", {}],
     ["a private site with a cookie nobody signed", (w) => labelHost(w.secret), "/", { Cookie: "__Secure-poplin-session=b3duZXJAZXhhbXBsZS5jb20.1700000000000.AAAA" }],
@@ -189,7 +187,7 @@ describe("access", () => {
     expect({ ...(await whole(response)), reads: world.install.keys.length - before }).toEqual({
       status: 302,
       body: "",
-      headers: { ...PLAIN_HEADERS, location: `https://admin.example.com/login?return=${encodeURIComponent(`https://${hostname}${path}`)}` },
+      headers: { ...PLAIN_HEADERS, location: `https://poplin.example.com/login?return=${encodeURIComponent(`https://${hostname}${path}`)}` },
       reads: 0,
     });
   });
@@ -210,6 +208,8 @@ describe("access", () => {
     ["an unlisted site at its label", (w) => ask(labelHost(w.report), "/"), "report home"],
     ["a public site at its label", (w) => ask(labelHost(w.shop), "/"), "shop home"],
     ["a public site at its public name", () => ask("shop-page.example.com", "/"), "shop home"],
+    ["an unlisted site under another name before its id", (w) => ask(`other--${w.report.id}-u-poplin.example.com`, "/"), "report home"],
+    ["an unlisted site by its id alone", (w) => ask(`${w.report.id}-u-poplin.example.com`, "/"), "report home"],
   ];
 
   // Drift: a shared link would start asking for a login, or a public site would lose one of its two addresses.
@@ -458,7 +458,7 @@ describe("other pages", () => {
     ["the gallery of the install", { ...SAME_SITE_IMAGE, Referer: "https://gallery-page.example.com/" }, 200, 200],
     ["a page of the domain that is no site, by its referrer", { ...SAME_SITE_IMAGE, Referer: "https://www.example.com/page" }, 403, 200],
     ["a page of the domain that is no site, by its origin", { ...SAME_SITE_IMAGE, Origin: "https://www.example.com" }, 403, 200],
-    ["the dashboard's hostname", { ...SAME_SITE_IMAGE, Origin: "https://admin.example.com" }, 403, 200],
+    ["the dashboard's hostname", { ...SAME_SITE_IMAGE, Origin: "https://poplin.example.com" }, 403, 200],
     ["a hostname that only ends like a site", { ...SAME_SITE_IMAGE, Origin: "https://homepage.example.com" }, 403, 200],
     ["a frame in a page of the domain that is no site", { "Sec-Fetch-Site": "same-site", "Sec-Fetch-Mode": "navigate", "Sec-Fetch-Dest": "iframe", Referer: "https://www.example.com/" }, 403, 200],
     ["an origin that names a site beside a referrer that does not", { ...SAME_SITE_IMAGE, Origin: "https://shop-page.example.com", Referer: "https://www.example.com/" }, 200, 200],
@@ -481,7 +481,7 @@ describe("other pages", () => {
   test("the refusal is the same for every site address, and reads nothing", async () => {
     const before = world.install.keys.length;
     const refusal = { status: 403, body: "Forbidden\n", headers: { ...PLAIN_HEADERS, "content-type": "text/plain; charset=utf-8" } };
-    const hosts = [labelHost(world.report), labelHost(world.secret), "secret--000000000000-page.example.com", "shop-page.example.com", "gallery-page.example.com"];
+    const hosts = [labelHost(world.report), labelHost(world.secret), "secret--000000000000-p-poplin.example.com", "shop-page.example.com", "gallery-page.example.com"];
     const gallery = async (): Promise<Response> => new Response("the gallery");
     const answers = await Promise.all(hosts.map(async (host) => whole(await serve(ask(host, "/", withCookie(world, CROSS_SITE_SUBREQUEST)), { gallery }))));
 

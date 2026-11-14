@@ -51,15 +51,17 @@ You publish with the MCP tools, or with the `poplin` command when the tools are 
 
 **Ask before you widen who can open a site.** The user may not know what each state lets out:
 
-| `access`   | Who can open it                                              | Command flag |
-| ---------- | ------------------------------------------------------------ | ------------ |
-| `private`  | the install's admins, after login                            | `--private`  |
-| `unlisted` | anyone who has the address, with no login                    | `--unlisted` |
-| `public`   | everyone, also at a public name: `report-page.example.com`   | `--public`   |
+| `access`   | Who can open it                                            | Address ends in                 | Command flag |
+| ---------- | ---------------------------------------------------------- | ------------------------------- | ------------ |
+| `private`  | the install's admins, after login                          | `-p-poplin.example.com`         | `--private`  |
+| `unlisted` | anyone who has the address, with no login                  | `-u-poplin.example.com`         | `--unlisted` |
+| `public`   | everyone, also at a public name: `report-page.example.com` | `-u-poplin.example.com`         | `--public`   |
 
 "Share this with my team" is not yet a yes to unlisted: say what unlisted means and let the user choose. Going public claims a public name, the site's name unless you pass `public_name` (`--public --name docs`).
 
 Change `access` only when the user asks, in either direction. A public site that goes private or unlisted gives up its public name, and that address stops working.
+
+**To or from private changes the address.** The answer then ends in a line `address changed: <old> is now <new>`. Give the user the new `url`, and say that the old address sends visitors on to it. The label you pass as `site` stays the same.
 
 **`new_link` changes the address at once, and the old one stops working.** Every link with the old label breaks, for everyone the user sent it to, and it cannot be put back. Use it only when the user asks for a new link.
 
@@ -88,12 +90,12 @@ Give three things: the address on a line of its own, who can open it, and how to
 ```text
 Published. It is private: only the admins of your install can open it, after login.
 
-https://report--k3f9x2ab71qz-page.example.com
+https://report--k3f9x2ab71qz-p-poplin.example.com
 
 Say the word if you want a link that works for others without a login.
 ```
 
-Take the address from `url` in the answer; do not build one yourself. After an update, say that the same address now shows the new version. Do not paste the address anywhere else, and do not open it to "check" a private site: you are not logged in to it.
+Take the address from `url` in the answer; do not build one yourself. After an update, say that the same address now shows the new version, unless the answer carries an `address changed` line. Do not paste the address anywhere else, and do not open it to "check" a private site: you are not logged in to it.
 
 ## When poplin refuses
 

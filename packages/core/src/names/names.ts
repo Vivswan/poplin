@@ -1,7 +1,7 @@
 // The name rules: what a site's name may be, how one is derived from a file or folder, and which names a public site may hold as its address.
 
-/** The most characters a name holds; with `--`, an id, and a suffix it still fits one DNS label. */
-export const MAX_NAME_LENGTH = 40;
+/** The most characters a name holds: 40 + 2 + 12 + 2 + 7 = 63, a name, `--`, an id, a dash and a letter, and `-poplin`, is the longest label DNS carries. */
+const MAX_NAME_LENGTH = 40;
 
 /** The fewest characters a name holds: a shorter one would put `--` third and fourth in a hostname label, the form URL parsers keep for encoded names. */
 const MIN_NAME_LENGTH = 3;
@@ -23,6 +23,9 @@ export type SiteName = string & { readonly [siteNameBrand]: true };
 
 /** A name that may stand alone as a public site's address; made by `parsePublicName` alone. */
 export type PublicName = SiteName & { readonly [publicNameBrand]: true };
+
+/** The public names an install's address layout keeps for itself, as a test of one name; a set is one. */
+export type ReservedNames = Pick<ReadonlySet<string>, "has">;
 
 /** Why a string was refused. `reserved` means the install's address layout keeps the name for itself; `bad-id` that the part after `--` is no site id. */
 type NameRefusal = "empty" | "too-short" | "too-long" | "bad-character" | "leading-dash" | "trailing-dash" | "double-dash" | "reserved" | "bad-id";
@@ -78,7 +81,7 @@ export function nameFromEntry(entry: string): Checked<SiteName> {
  * @param reserved - the names the install's address layout keeps for itself, such as the one its gallery answers at
  * @returns the name, or the first rule it breaks
  */
-export function parsePublicName(raw: string, reserved: ReadonlySet<string>): Checked<PublicName> {
+export function parsePublicName(raw: string, reserved: ReservedNames): Checked<PublicName> {
   const name = parseSiteName(raw);
   if (!name.ok) return name;
 

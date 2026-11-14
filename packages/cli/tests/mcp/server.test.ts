@@ -129,7 +129,7 @@ describe("the MCP server", () => {
     expect(shown.text.split("\n").slice(0, 2)).toEqual([site.label, site.url]);
     expect({ access: siteOf(unlisted).access, lines: unlisted.text.split("\n") }).toEqual({
       access: "unlisted",
-      lines: [`unlisted  ${site.label}`, siteOf(unlisted).url],
+      lines: [`unlisted  ${site.label}`, siteOf(unlisted).url, `address changed: ${site.url} is now ${siteOf(unlisted).url}`],
     });
     expect({ version: siteOf(rolled).live_version, lines: rolled.text.split("\n") }).toEqual({
       version: 1,

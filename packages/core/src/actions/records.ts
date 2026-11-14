@@ -1,7 +1,8 @@
 // What every action is given, and the one form every refusal takes.
 
 import type { Database } from "../database/database";
-import type { PublicName } from "../names/names";
+import type { PublicName, ReservedNames } from "../names/names";
+import type { Site } from "../records/site";
 import type { SiteLabel } from "../sites/labels";
 import type { ObjectStore } from "../storage/storage";
 
@@ -16,11 +17,14 @@ export interface Install {
   /** The clock, in milliseconds since the epoch. */
   readonly now: () => number;
 
-  /** The address a site answers at under its label, or a public site under its public name. */
-  readonly addressOf: (label: SiteLabel | PublicName) => string;
+  /** The address a site answers at under its label: it carries the letter of the access given. */
+  readonly addressOf: (label: SiteLabel, access: Site["access"]) => string;
+
+  /** The address a public site answers at under its public name. */
+  readonly publicAddressOf: (name: PublicName) => string;
 
   /** The public names the address layout keeps for itself: no site may hold one. */
-  readonly reservedNames: ReadonlySet<string>;
+  readonly reservedNames: ReservedNames;
 }
 
 /** An action that was not done: nothing was changed and no audit entry was written. `about` names the argument, limit, or path the code is about. */

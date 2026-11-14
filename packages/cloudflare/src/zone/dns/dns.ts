@@ -112,7 +112,7 @@ export function refusedRecords(layout: DomainLayout, records: readonly ZoneRecor
   const shadowed = namesOf(theirs.filter((record) => record.name === layout.adminHostname || record.name.endsWith(siteEnding(layout))));
 
   if (shadowed.length > 0) {
-    const message = `The zone has records of its own under names poplin's routes would take: ${shadowed.join(", ")}. Choose another suffix or admin hostname, or rename them, then run this again.`;
+    const message = `The zone has records of its own under names poplin's routes would take: ${shadowed.join(", ")}. Rename them, then run this again.`;
 
     return { failure: "shadowed-records", names: shadowed, message };
   }

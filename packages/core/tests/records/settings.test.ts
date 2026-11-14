@@ -6,14 +6,14 @@ import * as v from "valibot";
 import type { Login } from "../../src/auth/logins";
 import { defaultSettings, SETTING_VALUES, type SettingValues, settingsFromText, settingsToText, showBytes, sizeBytes } from "../../src/records/settings";
 
-const INSTALL = { installer: "ada@example.com" as Login, hostname: "admin.example.com" };
+const INSTALL = { installer: "ada@example.com" as Login, hostname: "poplin.example.com" };
 const PUBLISHED_DEFAULTS = {
   default_expires: "never",
   default_search_engines: "off",
   versions_kept: "3",
   trash_days: "7",
   logins: "ada@example.com",
-  dashboard_title: "admin.example.com",
+  dashboard_title: "poplin.example.com",
   gallery: "off",
   cache_html: "60s",
   cache_files: "1h",

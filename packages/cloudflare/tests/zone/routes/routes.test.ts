@@ -3,7 +3,7 @@ import type { DomainLayout } from "../../../src/zone/layout";
 import { planRoutes, syncRoutes } from "../../../src/zone/routes/routes";
 import { reportOf } from "../../../src/zone/sync";
 import { page, reply, withFake } from "../support/fake-cloudflare";
-import { OTHER_SUFFIX, SUFFIXED } from "../support/layouts";
+import { LAYOUT } from "../support/layouts";
 
 const SCRIPT = "poplin";
 
@@ -15,12 +15,11 @@ interface Row {
 
 describe("planRoutes", () => {
   const fresh: readonly { readonly name: string; readonly layout: DomainLayout; readonly patterns: readonly string[] }[] = [
-    { name: "the default suffix", layout: SUFFIXED, patterns: ["*-page.example.com/*", "admin.example.com/*"] },
-    { name: "another suffix and admin hostname", layout: OTHER_SUFFIX, patterns: ["*-s1-x.example.com/*", "admin.tools.example.com/*"] },
+    { name: "the layout", layout: LAYOUT, patterns: ["*-poplin.example.com/*", "poplin.example.com/*"] },
   ];
 
   test.each(fresh)(
-    "$name on a zone with no routes: one route for the hostnames that end in the suffix and one for the admin hostname, both to the Worker, and no route for any other hostname",
+    "$name on a zone with no routes: one route for the hostnames that end in the marker and one for the admin hostname, both to the Worker, and no route for any other hostname",
     ({ layout, patterns }) => {
       expect<unknown>(planRoutes({ layout, script: SCRIPT }, [])).toEqual(patterns.map((subject) => ({ kind: "create", subject, script: SCRIPT })));
     },
@@ -40,31 +39,31 @@ describe("planRoutes", () => {
 
   test("a pattern another route holds is skipped with the reason and that route stays: poplin never takes over a route it did not create", () => {
     const routes: Row[] = [
-      { id: "x1", pattern: "*-page.example.com/*", script: "another-worker" },
-      { id: "x2", pattern: "admin.example.com/*", script: undefined },
+      { id: "x1", pattern: "*-poplin.example.com/*", script: "another-worker" },
+      { id: "x2", pattern: "poplin.example.com/*", script: undefined },
     ];
     const reason = "a route poplin did not create holds this pattern";
 
-    expect(planRoutes({ layout: SUFFIXED, script: SCRIPT }, routes)).toEqual([
-      { kind: "skip", subject: "*-page.example.com/*", reason },
-      { kind: "skip", subject: "admin.example.com/*", reason },
+    expect(planRoutes({ layout: LAYOUT, script: SCRIPT }, routes)).toEqual([
+      { kind: "skip", subject: "*-poplin.example.com/*", reason },
+      { kind: "skip", subject: "poplin.example.com/*", reason },
     ]);
   });
 
-  test("a suffix change removes the routes that name poplin's Worker and the layout no longer uses, before it creates, and no other route: a pattern must be free to be made again", () => {
+  test("the routes that name poplin's Worker and the layout does not use are removed, before any is created, and no other route: a pattern must be free to be made again", () => {
     const routes: Row[] = [
-      { id: "r0", pattern: "*-page.example.com/*", script: SCRIPT },
-      { id: "r1", pattern: "admin.tools.example.com/*", script: SCRIPT },
+      { id: "r0", pattern: "*-poplin.example.com/*", script: SCRIPT },
+      { id: "r1", pattern: "old.example.com/*", script: SCRIPT },
       { id: "r2", pattern: "*.example.com/*", script: SCRIPT },
       { id: "x1", pattern: "shop.example.com/*", script: undefined },
       { id: "x2", pattern: "api.example.com/*", script: "another-worker" },
     ];
 
-    expect(planRoutes({ layout: OTHER_SUFFIX, script: SCRIPT }, routes)).toEqual([
-      { kind: "remove", subject: "*-page.example.com/*", id: "r0" },
+    expect(planRoutes({ layout: LAYOUT, script: SCRIPT }, routes)).toEqual([
+      { kind: "remove", subject: "old.example.com/*", id: "r1" },
       { kind: "remove", subject: "*.example.com/*", id: "r2" },
-      { kind: "create", subject: "*-s1-x.example.com/*", script: SCRIPT },
-      { kind: "leave", subject: "admin.tools.example.com/*" },
+      { kind: "leave", subject: "*-poplin.example.com/*" },
+      { kind: "create", subject: "poplin.example.com/*", script: SCRIPT },
     ]);
   });
 });
@@ -72,7 +71,7 @@ describe("planRoutes", () => {
 describe("syncRoutes", () => {
   test("two runs against one zone: the first creates poplin's routes beside the others, the second sends no change and reports none", async () => {
     const routes: Record<string, unknown>[] = [{ id: "x1", pattern: "api.example.com/*", script: "another-worker" }];
-    const patterns = ["*-page.example.com/*", "admin.example.com/*"];
+    const patterns = ["*-poplin.example.com/*", "poplin.example.com/*"];
 
     await withFake(
       (asked) => {
@@ -83,9 +82,9 @@ describe("syncRoutes", () => {
         return reply({ id: "new" });
       },
       async (connection, asked) => {
-        const first = await syncRoutes(connection, "zone-1", { layout: SUFFIXED, script: SCRIPT }, "apply");
+        const first = await syncRoutes(connection, "zone-1", { layout: LAYOUT, script: SCRIPT }, "apply");
         const sent = asked.length;
-        const second = await syncRoutes(connection, "zone-1", { layout: SUFFIXED, script: SCRIPT }, "apply");
+        const second = await syncRoutes(connection, "zone-1", { layout: LAYOUT, script: SCRIPT }, "apply");
 
         expect(first).toMatchObject({ ok: true, report: { created: patterns, changedNothing: false } });
         expect(second).toMatchObject({ ok: true, report: { left: patterns, changedNothing: true } });

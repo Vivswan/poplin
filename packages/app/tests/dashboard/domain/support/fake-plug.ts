@@ -23,8 +23,8 @@ export interface FakePlug extends DomainPlug {
 /** An install with every object in place but the admin hostname's record. */
 const ONE_MISSING: readonly DomainRow[] = [
   { object: "DNS record", state: "present", detail: "*.example.com" },
-  { object: "DNS record", state: "missing", detail: "admin.example.com" },
-  { object: "Worker route", state: "present", detail: "admin.example.com/*" },
+  { object: "DNS record", state: "missing", detail: "poplin.example.com" },
+  { object: "Worker route", state: "present", detail: "poplin.example.com/*" },
   { object: "Rate rule", state: "left-out", detail: "rate rule: the domain has other hostnames" },
 ];
 

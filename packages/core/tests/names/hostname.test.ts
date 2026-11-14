@@ -11,7 +11,7 @@ function hostOf(raw: string): Hostname {
 describe("parseHostname", () => {
   const accepted: readonly string[] = [
     "example.com",
-    "admin.example.com",
+    "poplin.example.com",
     "page-report.example.com",
     "xn--bcher-kva.example.com",
     "0.example.com",
@@ -29,13 +29,13 @@ describe("parseHostname", () => {
     { text: `${"a.".repeat(126)}example.com`, refusal: "too-long" },
     { text: "localhost", refusal: "single-label" },
     { text: "Admin.example.com", refusal: "bad-label" },
-    { text: "admin.example.com.", refusal: "bad-label" },
+    { text: "poplin.example.com.", refusal: "bad-label" },
     { text: "*.example.com", refusal: "bad-label" },
     { text: "_dmarc.example.com", refusal: "bad-label" },
     { text: "a..example.com", refusal: "bad-label" },
     { text: `${"a".repeat(64)}.example.com`, refusal: "bad-label" },
-    { text: " admin.example.com", refusal: "bad-label" },
-    { text: "admin.example.com\n", refusal: "bad-label" },
+    { text: " poplin.example.com", refusal: "bad-label" },
+    { text: "poplin.example.com\n", refusal: "bad-label" },
   ];
 
   test.each(refused)("$text is refused as $refusal, never repaired: a repaired name would differ from the one the owner typed", ({ text, refusal }) => {
@@ -45,7 +45,7 @@ describe("parseHostname", () => {
 
 describe("isUnder", () => {
   const cases: readonly { readonly hostname: string; readonly parent: string; readonly under: boolean }[] = [
-    { hostname: "admin.example.com", parent: "example.com", under: true },
+    { hostname: "poplin.example.com", parent: "example.com", under: true },
     { hostname: "a.b.example.com", parent: "example.com", under: true },
     { hostname: "example.com", parent: "example.com", under: false },
     { hostname: "badexample.com", parent: "example.com", under: false },

@@ -64,7 +64,7 @@ export function defaultRateRule(plan: ZonePlan): "zone" | "hostnames" {
  * Write the expression of the rate rule.
  *
  * @returns for `zone` an expression true for every request of the zone; for `hostnames` one true for the requests the routes send to the Worker and no other
- * @throws {Error} a hostname or suffix that was cast instead of checked holds a character outside `a-z`, `0-9`, `.`, and `-`
+ * @throws {Error} a hostname that was cast instead of checked holds a character outside `a-z`, `0-9`, `.`, and `-`
  */
 export function rateRuleExpression(layout: DomainLayout, rateRule: "zone" | "hostnames"): string {
   if (rateRule === "zone") return INSTALL_OBJECTS.rateWholeZone;

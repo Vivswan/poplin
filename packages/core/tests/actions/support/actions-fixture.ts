@@ -76,7 +76,7 @@ export async function makeWorld(overrides: Partial<SettingValues> = {}): Promise
   const opened = await openDatabase(driver, NOW);
   if (opened.kind !== "open") throw new Error(`the fixture database did not open: ${opened.kind}`);
 
-  const settings = { ...defaultSettings({ installer: "ada@example.com" as Login, hostname: "admin.example.com" }), ...overrides };
+  const settings = { ...defaultSettings({ installer: "ada@example.com" as Login, hostname: "poplin.example.com" }), ...overrides };
   await opened.database.initSettings(settings, { by: ADMIN.holder, at: NOW });
 
   const store = new MemoryStore();
@@ -89,7 +89,8 @@ export async function makeWorld(overrides: Partial<SettingValues> = {}): Promise
       database: opened.database,
       store,
       now: () => clock.now,
-      addressOf: (label) => `https://${label}-page.example.com`,
+      addressOf: (label, access) => `https://${label}-${access === "private" ? "p" : "u"}-poplin.example.com`,
+      publicAddressOf: (name) => `https://${name}-page.example.com`,
       reservedNames: new Set(["gallery"]),
     },
     faults,

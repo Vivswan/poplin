@@ -21,8 +21,8 @@ data "cloudflare_zone" "this" {
     }
 
     postcondition {
-      condition     = length("${var.admin_hostname}.${self.name}") <= 253
-      error_message = "admin_hostname and the domain together must be 253 characters or fewer: no longer hostname exists."
+      condition     = length(self.name) <= 189
+      error_message = "The domain must be 189 characters or fewer: a site's hostname puts up to 64 more in front of it, and no hostname is longer than 253."
     }
   }
 }
@@ -39,10 +39,14 @@ locals {
 
   domain = data.cloudflare_zone.this.name
 
-  admin_host = "${var.admin_hostname}.${local.domain}"
+  # The dashboard, the login, and the API: always `poplin` under the domain. No site hostname is that name, since each ends in a dash and a word.
+  admin_host = "poplin.${local.domain}"
+
+  # The fixed word every site hostname label ends in. The Worker reads the same word, so it is no input.
+  marker = "-poplin"
 
   # What every site hostname ends with, the gallery's included.
-  site_host_ending = "${var.suffix}.${local.domain}"
+  site_host_ending = "${local.marker}.${local.domain}"
 
   # The wildcard record every site hostname resolves through. DNS has no partial wildcard, so it covers the whole level.
   wildcard_host = "*.${local.domain}"
@@ -72,7 +76,7 @@ locals {
     { (local.admin_host) = "poplin: the dashboard, the login, and the API" },
   )
 
-  # A route may begin with a wildcard and hold no other, so Cloudflare itself sends only the hostnames that end in the suffix to the Worker.
+  # A route may begin with a wildcard and hold no other, so Cloudflare itself sends only the hostnames that end in the marker to the Worker.
   worker_route_hosts = toset(["*${local.site_host_ending}", local.admin_host])
 
   # The hostnames the routes send to the Worker, as the rule language reads them. The inputs are validated, so no quote can appear in one.
@@ -100,11 +104,9 @@ locals {
     null
   )
 
-  # The zone values the module owns: the records, routes, and rules above follow them in the same apply. The admin hostname is the whole hostname.
+  # The zone values the module owns: the records, routes, and rules above follow them in the same apply.
   zone_binding = {
-    domain         = local.domain
-    admin_hostname = local.admin_host
-    suffix         = var.suffix
+    domain = local.domain
   }
 
   # Every setting in the text form `poplin config` takes.

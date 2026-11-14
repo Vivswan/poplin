@@ -38,7 +38,7 @@ interface Options {
 function guardedPlug(): FakePlug {
   return fakePlug((run, token) =>
     token === OWN
-      ? { ok: true, rows: [{ object: "DNS record", state: run === "check" ? "missing" : "created", detail: "admin.example.com" }], steps: [] }
+      ? { ok: true, rows: [{ object: "DNS record", state: run === "check" ? "missing" : "created", detail: "poplin.example.com" }], steps: [] }
       : { ok: false, refusal: "token" },
   );
 }
@@ -157,7 +157,7 @@ test("the token of the install's own account opens the table; a repair writes on
   expect((await opened.audit())[0]).toMatchObject({
     action: "domain_synced",
     by: opened.owner,
-    detail: { run: "repair", from: "setup", created: ["DNS record: admin.example.com"] },
+    detail: { run: "repair", from: "setup", created: ["DNS record: poplin.example.com"] },
   });
   expect(await emitted(repaired)).not.toContain(OWN);
   expect(JSON.stringify(await opened.audit())).not.toContain(OWN);

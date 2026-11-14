@@ -30,8 +30,11 @@ const STAMP_BRANCHES: readonly RegExp[] = [
   /["'](?:shape)["']\s+in\b/,
 ];
 
+/** The settings an address no longer has: a marker of the install's own choosing, and an admin hostname of its own. */
+const RETIRED_SETTINGS: readonly RegExp[] = [/\b(?:parse|apply|strip)Suffix\b|\bDEFAULT_SUFFIX\b/, /admin_hostname/];
+
 /** Rule (c): the words code grows when it keeps a retired shape alive. `compat` spares `compatible`; `v1` must stand as its own word or camel-case part. */
-const RETIRED_WORDS: readonly RegExp[] = [/legacy/i, /deprecated/i, /backcompat/i, /backwards/i, /compat(?!ible)/i, /oldShape/i, /(?<![A-Za-z0-9])[vV]1(?![0-9])|(?<=[a-z])V1(?![0-9a-z])/, /fallback for old/i];
+const RETIRED_WORDS: readonly RegExp[] = [/legacy/i, /deprecated/i, /backcompat/i, /backwards/i, /compat(?!ible)/i, /oldShape/i, /(?<![A-Za-z0-9])[vV]1(?![0-9])|(?<=[a-z])V1(?![0-9a-z])/, /fallback for old/i, ...RETIRED_SETTINGS];
 
 /** The throwaway trees made by this run, removed when it ends. */
 const PLANTED_ROOTS: string[] = [];
@@ -133,6 +136,8 @@ describe("no old shapes outside migrations/", () => {
     ["the word v1", "type SiteV1 = { text: string };", "retired-shape word"],
     ["the word v1, lowercase", "const v1 = parseFirst(record);", "retired-shape word"],
     ["a fallback for old records", "// fallback for old records without a title", "retired-shape word"],
+    ["a marker read from a setting", "const marker = parseSuffix(raw.suffix);", "retired-shape word"],
+    ["an admin hostname read from a binding", "const host = binding.admin_hostname;", "retired-shape word"],
     ["an import broken over lines", 'import { REGISTRY } from\n  "../migrations/registry";', "imports migrations"],
     ["a comparison broken over lines", "const title = record.shape\n  === 1 ? record.text : record.title;", "branches on a stamp"],
     ["a condition broken over lines", "if (\n  isOld(record.shape)\n) record = step(record);", "branches on a stamp"],

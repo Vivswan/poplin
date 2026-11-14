@@ -61,6 +61,18 @@ export function siteLines(done: string, site: SiteObject, facts: readonly string
 }
 
 /**
+ * The line for a change of access that moved a site to another address: a private site's address carries `-p-`, every other `-u-`.
+ *
+ * @param before - the site as the action found it, `null` for a site the action made
+ * @returns one line with the old and the new address, or none when the site kept its address
+ */
+export function addressChange(before: SiteObject | null, site: SiteObject): string[] {
+  if (before === null || before.id !== site.id || before.addresses.site === site.addresses.site) return [];
+
+  return [`address changed: ${before.addresses.site} is now ${site.addresses.site}`];
+}
+
+/**
  * The note for a search-engine switch that was turned on for a site that is not public.
  *
  * @returns one note, or none when the switch was not turned on or the site is public

@@ -6,19 +6,19 @@ Poplin lets an AI agent or a person publish a static site (a folder, or one HTML
 
 ```text
 poplin ./report                               ->  a new site, every time: report--k3f9x2ab71qz
-                                                  https://report--k3f9x2ab71qz-page.example.com
+                                                  https://report--k3f9x2ab71qz-p-poplin.example.com
 poplin ./report --site report--k3f9x2ab71qz   ->  the same site, new content
 ```
 
 **Who can open what you publish:**
 
-| State                 | Who can open it            | Address                                                             |
-| --------------------- | -------------------------- | ------------------------------------------------------------------- |
-| private (the default) | only you, after one login  | the one above                                                       |
-| unlisted              | anyone who has the address | the same one, with no login                                         |
-| public                | everyone                   | the same one, and a name the site claims: `report-page.example.com` |
+| State                 | Who can open it            | Address                                                                 |
+| --------------------- | -------------------------- | ----------------------------------------------------------------------- |
+| private (the default) | only you, after one login  | `report--k3f9x2ab71qz-p-poplin.example.com`                             |
+| unlisted              | anyone who has the address | `report--k3f9x2ab71qz-u-poplin.example.com`                             |
+| public                | everyone                   | the unlisted one, and a name the site claims: `report-page.example.com` |
 
-The login screen is Cloudflare's. You can change a site's state at any time. The 12 random characters are the site's id: hard to guess, and the link itself. The name in front is a label, and several sites may share it.
+The login screen is Cloudflare's. You can change a site's state at any time: between private and the other two the letter in the address changes, and the old address sends visitors on. The 12 random characters are the site's id: hard to guess, and the link itself. The name in front is a label, and several sites may share it.
 
 **What you need, and what it costs:**
 

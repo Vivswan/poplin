@@ -40,7 +40,7 @@ test("every page renders for an admin, under the install's title, and names its 
     const page = await answer.text();
 
     expect([path, answer.status, answer.headers.get("Content-Type")]).toEqual([path, 200, "text/html; charset=UTF-8"]);
-    expect(page).toContain(`<title>${heading} - admin.example.com</title>`);
+    expect(page).toContain(`<title>${heading} - poplin.example.com</title>`);
     expect(page).toContain(`<h1>${heading}</h1>`);
     expect(page).toMatch(new RegExp(`aria-current="page">${tab}</a>`));
   }
@@ -108,7 +108,7 @@ test("a page asks the browser for nothing: no script, no link element, no image,
     const addresses = page.match(/https?:\/\/[^"<\s]*/g) ?? [];
 
     expect(page).not.toMatch(/<script|<link|<img|<iframe|<object|<embed|@import|url\(|\ssrc=|srcset=/i);
-    expect(addresses.filter((address) => !address.startsWith(`https://report--${site.id}-page.example.com`))).toEqual([]);
+    expect(addresses.filter((address) => !address.startsWith(`https://report--${site.id}-u-poplin.example.com`))).toEqual([]);
     expect(page.match(/<form[^>]*>/g)?.every((form) => /method="post" action="\/[^/"]/.test(form)) ?? true).toBe(true);
   }
 });
@@ -128,7 +128,7 @@ test("a POST that is not a same-origin form with the session's own live token is
     ["a token past twelve hours", { csrf: await mintCsrfToken({ key, email: opened.owner, now: opened.clock.now - HALF_DAY_MS - 1 }) }, 403],
     ["no Origin", { headers: { Origin: null } }, 403],
     ["another Origin", { headers: { Origin: "https://evil.example.com" } }, 403],
-    ["a site's Origin", { headers: { Origin: `https://report--${site.id}-page.example.com` } }, 403],
+    ["a site's Origin", { headers: { Origin: `https://report--${site.id}-p-poplin.example.com` } }, 403],
     ["the Origin null", { headers: { Origin: "null" } }, 403],
     ["a cross-site mark", { headers: { "Sec-Fetch-Site": "cross-site" } }, 403],
     ["a same-site mark", { headers: { "Sec-Fetch-Site": "same-site" } }, 403],

@@ -57,10 +57,7 @@ export async function answerSite(request: Request, instance: Instance, held: Hel
   const now = instance.install.now();
   const addressed = instance.addresses.resolve(new URL(request.url));
   const address = queryOf(addressed);
-  const found = address === undefined ? undefined : await database.findServed(address, now);
-
-  // A label names its site only under the site's own name. Under any other it is a miss, as serving reads it, and spends nothing of the site's.
-  const site = addressed.kind === "site" && found?.name !== addressed.name ? undefined : found;
+  const site = address === undefined ? undefined : await database.findServed(address, now);
 
   const visitor = await visitorKey(clientAddress(request.headers), held.visitorSecret, now);
   const verdict =
@@ -71,7 +68,7 @@ export async function answerSite(request: Request, instance: Instance, held: Hel
 
   return serveSite(request, {
     // Serving asks for the site of the same address: it is answered from the query above, so a page view costs one.
-    database: { findServed: async (again, at) => (sameAddress(again, address) ? found : database.findServed(again, at)) },
+    database: { findServed: async (again, at) => (sameAddress(again, address) ? site : database.findServed(again, at)) },
     store,
     settings: held.settings,
     addresses: instance.addresses,

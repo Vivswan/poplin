@@ -90,13 +90,13 @@ function sameRule(rule: ZoneRule, body: RuleBody): boolean {
 }
 
 /**
- * Write a hostname or a suffix as a string of the rule language.
+ * Write a hostname, or the ending of the site hostnames, as a string of the rule language.
  *
- * @throws {Error} a hostname or suffix that was cast instead of checked holds a character outside `a-z`, `0-9`, `.`, and `-`
+ * @throws {Error} a hostname that was cast instead of checked holds a character outside `a-z`, `0-9`, `.`, and `-`
  */
 export function quoted(text: string): string {
   // The brand already proves these characters; the check holds the line if a string is ever cast to one.
-  if (!LITERAL.test(text)) throw new Error("only a checked hostname or suffix may enter a rule expression");
+  if (!LITERAL.test(text)) throw new Error("only a checked hostname may enter a rule expression");
 
   return `"${text}"`;
 }

@@ -30,11 +30,11 @@ describe("updateSite", () => {
     expect(steps).toMatchObject([
       { ok: true, before: { access: "private", public_name: null }, site: { id: first, access: "public", public_name: "report", url: "https://report-page.example.com" } },
       { ok: false, code: "name_taken" },
-      { ok: true, site: { id: second, public_name: "docs", addresses: { site: `https://report--${second}-page.example.com`, public: "https://docs-page.example.com" } } },
+      { ok: true, site: { id: second, public_name: "docs", addresses: { site: `https://report--${second}-u-poplin.example.com`, public: "https://docs-page.example.com" } } },
       { ok: true, site: { id: first, state: "trash", public_name: "report" } },
       { ok: false, code: "name_taken" },
       { ok: true, site: { id: first, state: "live" } },
-      { ok: true, site: { id: first, access: "unlisted", public_name: null, url: `https://report--${first}-page.example.com` } },
+      { ok: true, site: { id: first, access: "unlisted", public_name: null, url: `https://report--${first}-u-poplin.example.com` } },
       { ok: true, site: { id: second, public_name: "report" } },
       { ok: false, code: "not_found" },
     ]);

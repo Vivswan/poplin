@@ -1,27 +1,29 @@
 // The zone values of an install with a domain, after their checks: each is already safe to write into a record, a route, or a rule.
 
-import { type Hostname, isUnder, parseHostname } from "@poplin/core/src/names/hostname";
-import { parseSuffix, type Suffix } from "@poplin/core/src/names/suffix";
+import { ADMIN_LABEL, type Hostname, parseHostname } from "@poplin/core/src/names/hostname";
+import { DEFAULT_PUBLIC_WORD, MARKER, type PublicWord, parsePublicWord } from "@poplin/core/src/names/marker";
+
+/** The most characters a domain may hold: a site's first label and its dot take up to 64, and DNS carries 253 in a hostname. */
+const MAX_DOMAIN_LENGTH = 189;
 
 declare const layoutBrand: unique symbol;
 
-/** The layout as the Worker's `ZONE` binding, the settings, or a form hold it, unchecked. `admin_hostname` is the whole hostname, domain included. */
+/** The layout as the Worker's `ZONE` binding or a form holds it, unchecked. `public_word` is the word every public-name address ends in; absent, it is `page`. */
 export interface RawLayout {
   readonly domain: string;
-  readonly admin_hostname: string;
-  readonly suffix: string;
+  readonly public_word?: string | undefined;
 }
 
-/** A layout made by `parseDomainLayout` alone: the admin hostname is under the domain and is no site address. */
+/** A layout made by `parseDomainLayout` alone. `adminHostname` is `poplin.<domain>`, which no site address can be. */
 export interface DomainLayout {
   readonly domain: Hostname;
   readonly adminHostname: Hostname;
-  readonly suffix: Suffix;
+  readonly publicWord: PublicWord;
   readonly [layoutBrand]: true;
 }
 
-/** Why a layout was refused. */
-type LayoutRefusal = "bad-domain" | "bad-admin-hostname" | "bad-suffix" | "admin-outside-domain" | "admin-is-site-address";
+/** Why a layout was refused. `bad-domain` is also a domain too long to leave the longest site hostname room. */
+type LayoutRefusal = "bad-domain" | "bad-public-word";
 
 /** A layout, or the first rule it breaks. */
 export type CheckedLayout = { readonly ok: true; readonly value: DomainLayout } | { readonly ok: false; readonly refusal: LayoutRefusal };
@@ -33,27 +35,19 @@ export type CheckedLayout = { readonly ok: true; readonly value: DomainLayout } 
  */
 export function parseDomainLayout(raw: RawLayout): CheckedLayout {
   const domain = parseHostname(raw.domain);
-  if (!domain.ok) return { ok: false, refusal: "bad-domain" };
+  if (!domain.ok || domain.value.length > MAX_DOMAIN_LENGTH) return { ok: false, refusal: "bad-domain" };
 
-  const admin = parseHostname(raw.admin_hostname);
-  if (!admin.ok) return { ok: false, refusal: "bad-admin-hostname" };
+  const publicWord = raw.public_word === undefined ? DEFAULT_PUBLIC_WORD : parsePublicWord(raw.public_word);
+  if (publicWord === undefined) return { ok: false, refusal: "bad-public-word" };
 
-  if (!isUnder(admin.value, domain.value)) return { ok: false, refusal: "admin-outside-domain" };
-
-  const suffix = parseSuffix(raw.suffix);
-  if (!suffix.ok) return { ok: false, refusal: "bad-suffix" };
-
-  // The site route would take it, and the Worker would read it as a site.
-  if (admin.value.endsWith(`${suffix.value}.${domain.value}`)) return { ok: false, refusal: "admin-is-site-address" };
-
-  return { ok: true, value: { domain: domain.value, adminHostname: admin.value, suffix: suffix.value } as DomainLayout };
+  return { ok: true, value: { domain: domain.value, adminHostname: `${ADMIN_LABEL}.${domain.value}`, publicWord } as DomainLayout };
 }
 
 /**
- * Write what every site hostname ends with: the suffix, a dot, and the domain.
+ * Write what the hostname of every label address ends with: `-poplin`, a dot, and the domain.
  *
- * @returns the ending a Worker route takes after its leading wildcard; the gallery's hostname ends with it too
+ * @returns the ending a Worker route takes after its leading wildcard
  */
 export function siteEnding(layout: DomainLayout): string {
-  return `${layout.suffix}.${layout.domain}`;
+  return `${MARKER}.${layout.domain}`;
 }

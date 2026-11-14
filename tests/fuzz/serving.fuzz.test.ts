@@ -13,14 +13,16 @@ const FILES = { LICENSE: ["terms", "text/plain"], "index.html": ["home", HTML], 
 const ANSWERS = [200, 206, 302, 304, 403, 404, 405, 416];
 const SHOWN = [200, 206, 304, 416];
 const MAX_READS = 3;
-const LOGIN = "https://admin.example.com/login?return=";
+const LOGIN = "https://poplin.example.com/login?return=";
 const METHODS = ["GET", "GET", "GET", "HEAD", "POST", "OPTIONS", "DELETE"];
 const FETCH_SITES = ["cross-site", "same-site", "same-origin", "none", "CROSS-SITE", ""];
 const FETCH_MODES = ["navigate", "no-cors", "cors", "same-origin", "websocket"];
 const FETCH_DESTS = ["document", "iframe", "image", "script", "empty", "style"];
-const OUTSIDE_PAGES = ["https://www.example.com/", "https://admin.example.com/sites"];
+const OUTSIDE_PAGES = ["https://www.example.com/", "https://poplin.example.com/sites"];
 const OWN_PAGES = ["https://shop-page.example.com", "https://gallery-page.example.com/"];
 const NO_ADDRESSES = ["null", "", "//", "not a url"];
+const PUBLIC_HOST = "shop-page.example.com";
+const LABEL_HOST = /^(?:(?=[a-z0-9-]{3,40}--)[a-z0-9]+(?:-[a-z0-9]+)*--)?([0-9a-z]{12})(?:-[pu])?-poplin\.example\.com$/;
 const REQUESTERS = [...OUTSIDE_PAGES, ...OWN_PAGES, ...NO_ADDRESSES];
 const RANGES = ["bytes=0-1", "bytes=2-", "bytes=-1", "bytes=9-", "bytes=0-0,2-3", "bytes=-0", "bytes=5-2", "items=0-1", "bytes=99999999999999999999-", "bytes=0-99999999999999999999"];
 const VALIDATORS = ["*", '"memory-1"', 'W/"memory-2", "memory-3"', '"other"', ",,,"];
@@ -35,10 +37,22 @@ const trashed = await install.publish({ name: "trashed", access: "unlisted", fil
 await install.database.trashSite(trashed.id, { by: install.owner, at: NOW });
 
 const SITES = [unlisted, hidden, shown, trashed];
-const BY_HOST = new Map([...SITES.map((site) => [labelHost(site), site] as const), ["shop-page.example.com", shown] as const]);
+const BY_ID = new Map(SITES.map((site) => [site.id as string, site] as const));
+const LABEL_HOSTS = SITES.map((site) => labelHost(site));
 const PREFIXES = SITES.map((site) => `${site.folder}/v${site.live_version}/`);
 
-const knownHosts = fc.constantFrom(...BY_HOST.keys(), "gallery-page.example.com", "admin.example.com", "example.com", "report-page.example.com", "secret--000000000000-page.example.com");
+const knownHosts = fc.constantFrom(
+  ...LABEL_HOSTS,
+  PUBLIC_HOST,
+  `other--${hidden.id}-p-poplin.example.com`,
+  `${hidden.id}-poplin.example.com`,
+  `${unlisted.id}-u-poplin.example.com`,
+  "gallery-page.example.com",
+  "poplin.example.com",
+  "example.com",
+  "report-page.example.com",
+  "secret--000000000000-p-poplin.example.com",
+);
 const hosts = fc.oneof({ arbitrary: knownHosts, weight: 3 }, { arbitrary: hostile(knownHosts), weight: 2 });
 const climbs = fc.array(fc.constantFrom("..", "%2e%2e", ".%2E", "..%2f", "..%5c", "%252e%252e", ".", "", "docs"), { maxLength: 6 }).map((parts) => parts.join("/"));
 const targets = fc.constantFrom(...Object.keys(FILES), "about", "docs", "docs/", "", ...PREFIXES.map((prefix) => `${prefix}index.html`));
@@ -66,6 +80,13 @@ const settings = fc.record({
   outside_pages: fc.constantFrom("blocked" as const, "allowed" as const),
 });
 
+// A label address names its site by the id alone, under any name or none and under either letter or none; the public name is the one other address of a site.
+function addressedSite(hostname: string): (typeof SITES)[number] | undefined {
+  if (hostname === PUBLIC_HOST) return shown;
+
+  return BY_ID.get(LABEL_HOST.exec(hostname)?.[1] ?? "");
+}
+
 // The page a same-site request names: its origin, or its referrer when the origin holds no address.
 function isOutsideSubrequest(sent: Readonly<Record<string, string>>): boolean {
   if (sent["Sec-Fetch-Mode"] === "navigate" && sent["Sec-Fetch-Dest"] === "document") return false;
@@ -83,7 +104,7 @@ property(
     const address = `https://${host}${path}`;
     fc.pre(URL.canParse(address));
 
-    const site = BY_HOST.get(new URL(address).hostname);
+    const site = addressedSite(new URL(address).hostname);
     const prefix = site === undefined ? "no site, so no read" : `${site.folder}/v${site.live_version}/`;
     const before = install.keys.length;
     const response = await serveSite(new Request(address, { method, headers: sent }), { ...install.serving, settings: chosen });

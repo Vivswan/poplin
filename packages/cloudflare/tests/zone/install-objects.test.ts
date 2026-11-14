@@ -16,12 +16,12 @@ import { syncRoutes } from "../../src/zone/routes/routes";
 import type { Report } from "../../src/zone/sync";
 import { syncWaf } from "../../src/zone/rules/waf";
 import { type Asked, page, refusal, reply, withFake } from "./support/fake-cloudflare";
-import { hostOf, SUFFIXED } from "./support/layouts";
+import { hostOf, LAYOUT } from "./support/layouts";
 
 const MODULE = join(import.meta.dir, "..", "..", "tofu");
 const ZONE = "zone-1";
 const ACCOUNT = "account-a";
-const SITES = 'ends_with(http.host, "-page.example.com")';
+const SITES = 'ends_with(http.host, "-poplin.example.com")';
 const LIMIT = { characteristics: ["cf.colo.id", "ip.src"], period: 10, requests_per_period: 300, mitigation_timeout: 10 };
 
 type SharedKey = keyof typeof INSTALL_OBJECTS;
@@ -79,18 +79,18 @@ function hcl(value: string | number | readonly string[]): string {
 /** What the module's resources read back as from the API, for its default inputs on `example.com`. `rate` is the expression of its rate rule. */
 function moduleZone(rate: string): Readonly<Record<string, unknown>> {
   const placeholder = { type: "AAAA", content: "100::", proxied: true, ttl: 1 };
-  const login = "admin.example.com/login";
+  const login = "poplin.example.com/login";
   const rateRule = { id: "r1", ref: "poplin_rate", description: "poplin: 300 requests per 10 seconds per address", expression: rate, action: "block" };
   const outside = `${SITES} and any(http.request.headers["sec-fetch-site"][*] eq "cross-site") and any(http.request.headers["sec-fetch-dest"][*] ne "document")`;
 
   return {
     [`/zones/${ZONE}/dns_records`]: [
       { id: "d1", name: "*.example.com", ...placeholder, comment: "poplin: every site" },
-      { id: "d2", name: "admin.example.com", ...placeholder, comment: "poplin: the dashboard, the login, and the API" },
+      { id: "d2", name: "poplin.example.com", ...placeholder, comment: "poplin: the dashboard, the login, and the API" },
     ],
     [`/zones/${ZONE}/workers/routes`]: [
-      { id: "w1", pattern: "*-page.example.com/*", script: "poplin" },
-      { id: "w2", pattern: "admin.example.com/*", script: "poplin" },
+      { id: "w1", pattern: "*-poplin.example.com/*", script: "poplin" },
+      { id: "w2", pattern: "poplin.example.com/*", script: "poplin" },
     ],
     [`/accounts/${ACCOUNT}/access/policies`]: [
       { id: "pol-1", name: "poplin logins", decision: "allow", include: [{ email: { email: "owner@example.com" } }], exclude: [], require: [] },
@@ -143,9 +143,9 @@ function logins(): Parameters<typeof syncAccess>[2]["logins"] {
 
 type Run = (connection: Connection) => Promise<{ readonly ok: boolean; readonly report: Report }>;
 
-const FREE = { layout: SUFFIXED, plan: "free", sharesZone: false, rateRule: "zone" } as const;
+const FREE = { layout: LAYOUT, plan: "free", sharesZone: false, rateRule: "zone" } as const;
 const WHOLE_ZONE = 'starts_with(http.request.uri.path, "/")';
-const HOSTNAMES = `${SITES} or http.host eq "admin.example.com"`;
+const HOSTNAMES = `${SITES} or http.host eq "poplin.example.com"`;
 
 describe("the values the setup client shares with the OpenTofu module", () => {
   const rows = Object.entries(INSTALL_OBJECTS).map(([key, value]) => ({ key: key as SharedKey, value }));
@@ -185,12 +185,12 @@ describe("the Worker's Access binding and sweep trigger", () => {
 
 describe("a zone the OpenTofu module set up", () => {
   const pieces: readonly { readonly name: string; readonly rate: string; readonly run: Run }[] = [
-    { name: "the records", rate: WHOLE_ZONE, run: (connection) => syncDns(connection, ZONE, SUFFIXED, "apply") },
-    { name: "the routes", rate: WHOLE_ZONE, run: (connection) => syncRoutes(connection, ZONE, { layout: SUFFIXED, script: "poplin" }, "apply") },
+    { name: "the records", rate: WHOLE_ZONE, run: (connection) => syncDns(connection, ZONE, LAYOUT, "apply") },
+    { name: "the routes", rate: WHOLE_ZONE, run: (connection) => syncRoutes(connection, ZONE, { layout: LAYOUT, script: "poplin" }, "apply") },
     {
       name: "the login",
       rate: WHOLE_ZONE,
-      run: (connection) => syncAccess(connection, ACCOUNT, { hostname: hostOf("admin.example.com"), logins: logins() }, "apply"),
+      run: (connection) => syncAccess(connection, ACCOUNT, { hostname: hostOf("poplin.example.com"), logins: logins() }, "apply"),
     },
     { name: "the rate rule of `rate_rule = zone`, on the Free plan", rate: WHOLE_ZONE, run: (connection) => syncWaf(connection, ZONE, FREE, "apply") },
     {
@@ -206,7 +206,7 @@ describe("a zone the OpenTofu module set up", () => {
     {
       name: "the guard rules",
       rate: WHOLE_ZONE,
-      run: (connection) => syncGuards(connection, ZONE, { layout: SUFFIXED, plan: "free", outsidePages: "blocked", searchEnginesAllowed: false }, "apply"),
+      run: (connection) => syncGuards(connection, ZONE, { layout: LAYOUT, plan: "free", outsidePages: "blocked", searchEnginesAllowed: false }, "apply"),
     },
     { name: "the database", rate: WHOLE_ZONE, run: (connection) => syncDatabase(connection, ACCOUNT, "apply") },
     { name: "the bot settings", rate: WHOLE_ZONE, run: (connection) => syncZoneBots(connection, ZONE, { blockBots: "auto", plan: "free", sharesZone: false }, "apply") },
@@ -229,7 +229,7 @@ describe("a zone the OpenTofu module set up", () => {
     await withFake(
       (asked) => answer(moduleZone(WHOLE_ZONE), asked),
       async (connection) => {
-        const synced = await syncDns(connection, ZONE, SUFFIXED, "apply");
+        const synced = await syncDns(connection, ZONE, LAYOUT, "apply");
 
         expect(synced).toMatchObject({ ok: true, sharesZone: false });
       },
