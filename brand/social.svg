@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 630">
+  <title>poplin: Agents publish static sites to your own Cloudflare account.</title>
+  <rect width="1200" height="630" fill="#F5F7FA"/>
+  <rect width="16" height="630" fill="#D23C56"/>
+  <g transform="translate(112 150) scale(3)" color="#141A2B">
+    <rect x="28" y="4" width="32" height="32" rx="8" fill="#3B66D6" opacity=".45"/>
+    <rect x="16" y="16" width="32" height="32" rx="8" fill="#D23C56"/>
+    <rect x="4" y="28" width="32" height="32" rx="8" fill="#3B66D6"/>
+    <g transform="translate(84 -8.8) scale(1.2)">
+      <g fill="none" stroke="currentColor" stroke-width="5" stroke-linecap="round">
+        <path d="M3 24.5v31"/>
+        <circle cx="12.5" cy="34" r="9.5"/>
+        <circle cx="40.5" cy="34" r="9.5"/>
+        <path d="M60 24.5v31"/>
+        <circle cx="69.5" cy="34" r="9.5"/>
+        <path d="M89 12.5v31"/>
+        <path d="M100 24.5v19"/>
+        <path d="M110.5 43.5v-19m0 9a9.5 9.5 0 0 1 19 0v10"/>
+      </g>
+      <circle cx="100" cy="14" r="3.3" fill="currentColor"/>
+    </g>
+  </g>
+  <text x="124" y="470" font-family="system-ui, -apple-system, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="38" fill="#141A2B">Agents publish static sites to your own Cloudflare account.</text>
+</svg>

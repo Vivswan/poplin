@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 320 104">
+  <title>poplin icon on paper, on ink, and in one colour on shirting blue</title>
+  <defs>
+    <g id="colour">
+      <rect x="28" y="4" width="32" height="32" rx="8" fill="#3B66D6" opacity=".45"/>
+      <rect x="16" y="16" width="32" height="32" rx="8" fill="#D23C56"/>
+      <rect x="4" y="28" width="32" height="32" rx="8" fill="#3B66D6"/>
+    </g>
+    <g id="mono" fill="currentColor">
+      <path d="M28 12a8 8 0 0 1 8-8h16a8 8 0 0 1 8 8v16a8 8 0 0 1-8 8h-4V24a8 8 0 0 0-8-8H28z" opacity=".3"/>
+      <path d="M16 24a8 8 0 0 1 8-8h16a8 8 0 0 1 8 8v16a8 8 0 0 1-8 8h-4V36a8 8 0 0 0-8-8H16z" opacity=".6"/>
+      <rect x="4" y="28" width="32" height="32" rx="8"/>
+    </g>
+  </defs>
+  <rect x="1" y="1" width="102" height="102" rx="11" fill="#F5F7FA" stroke="#DDE2EA" stroke-width="2"/>
+  <use xlink:href="#colour" href="#colour" x="20" y="20"/>
+  <rect x="108" width="104" height="104" rx="12" fill="#141A2B"/>
+  <use xlink:href="#colour" href="#colour" x="128" y="20"/>
+  <rect x="216" width="104" height="104" rx="12" fill="#3B66D6"/>
+  <use xlink:href="#mono" href="#mono" x="236" y="20" color="#F5F7FA"/>
+</svg>

@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" color="#141A2B" fill="currentColor">
+  <title>poplin</title>
+  <path d="M28 12a8 8 0 0 1 8-8h16a8 8 0 0 1 8 8v16a8 8 0 0 1-8 8h-4V24a8 8 0 0 0-8-8H28z" opacity=".3"/>
+  <path d="M16 24a8 8 0 0 1 8-8h16a8 8 0 0 1 8 8v16a8 8 0 0 1-8 8h-4V36a8 8 0 0 0-8-8H16z" opacity=".6"/>
+  <rect x="4" y="28" width="32" height="32" rx="8"/>
+</svg>
