@@ -214,7 +214,7 @@ function migrations(label: string, makeDriver: DriverFactory): void {
       const failed = await migrate(driver, [...STEPS, STEP_THAT_FAILS_HALFWAY], NOW);
 
       expect(failed).toMatchObject({ kind: "failed", stored: SCHEMA_VERSION, step: STEP_THAT_FAILS_HALFWAY.number });
-      expect(failed.kind === "failed" ? failed.message : "").toContain('Run "poplin doctor --fix" to try again');
+      expect(failed.kind === "failed" ? failed.message : "").toMatch(/^the database could not be brought up to date: .* Try again$/);
       expect([await storedVersion(driver), await schemaOf(driver)]).toEqual([SCHEMA_VERSION, schema]);
       expect(await migrate(driver, [...STEPS, MENDED_STEP], NOW)).toEqual({
         kind: "current",

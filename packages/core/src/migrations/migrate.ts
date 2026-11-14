@@ -19,9 +19,6 @@ const HIGHEST_STEP = "SELECT COALESCE(MAX(step), 0) AS version FROM schema_steps
 /** The stamp of a step. Its primary key refuses a step another runner applied, which fails the batch before the step's own statements run. */
 const STAMP = "INSERT INTO schema_steps (step, description, applied_at) VALUES (?1, ?2, ?3)";
 
-/** The command that runs the pending steps again. */
-const RETRY_COMMAND = "poplin doctor --fix";
-
 /** One change of schema: it takes a database at version `number - 1` to version `number`. */
 export interface Step {
   /** The schema version the step leaves the database at; steps count from 1 with no gap. */
@@ -100,7 +97,7 @@ export async function migrate(driver: SqlDriver, steps: readonly Step[], now: nu
       stored = await storedVersion(driver);
       if (stored >= step.number) continue;
 
-      const message = `step ${stepLabel(step)} (${step.description}) failed and nothing of it was kept: ${messageOf(error)}. Run "${RETRY_COMMAND}" to try again`;
+      const message = `the database could not be brought up to date: step ${stepLabel(step)} (${step.description}) failed and nothing of it was kept: ${messageOf(error)}. Try again`;
 
       return { kind: "failed", stored, step: step.number, message };
     }
