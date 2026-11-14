@@ -49,12 +49,39 @@
               "options": {
                 "paths": {
                   "hono": "Core has no HTTP framework: the Worker package owns it.",
-                  "bun": "Core has no runtime module: it runs in a Worker."
+                  "bun": "Core has no runtime module: it runs in a Worker.",
+                  "cloudflare": "Core has no provider module: the provider folders own it.",
+                  "wrangler": "Core has no provider module: the provider folders own it."
                 },
                 "patterns": [
                   {
-                    "group": ["hono/**", "@cloudflare/**", "cloudflare:*", "bun:*"],
+                    "group": ["hono/**", "@cloudflare/**", "cloudflare:*", "cloudflare/**", "wrangler/**", "@poplin/worker/**", "**/cloudflare/**", "**/worker/src/**", "bun:*"],
                     "message": "Core has no HTTP framework, Cloudflare, or runtime module: the package that needs one owns it."
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    // The other portable places import no provider module either; tests/portable.test.ts is the authority, and also reads type names and headers.
+    {
+      "includes": ["packages/core/tests/**", "packages/cli/**", "packages/app/src/limits/**"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "paths": {
+                  "cloudflare": "Portable code has no provider module: the provider folders own it.",
+                  "wrangler": "Portable code has no provider module: the provider folders own it."
+                },
+                "patterns": [
+                  {
+                    "group": ["@cloudflare/**", "cloudflare:*", "cloudflare/**", "wrangler/**", "@poplin/worker/**", "**/cloudflare/**", "**/worker/src/**"],
+                    "message": "Portable code has no provider module: the provider folders own it."
                   }
                 ]
               }
