@@ -19,7 +19,7 @@ export type SiteName = string & { readonly [siteNameBrand]: true };
 export type SecretName = string & { readonly [secretNameBrand]: true };
 
 /** Why a string was refused. `reserved` means the caller's reserved set holds the name. */
-export type NameRefusal =
+type NameRefusal =
   | "empty"
   | "too-long"
   | "bad-character"
