@@ -193,7 +193,7 @@ pre {
   display: revert;
 }
 
-.access:has(input[value="unlisted"]:checked) .facts > [data-show~="unlisted"] {
+.access:has(input[value="public"]:checked) .facts > [data-show~="public"] {
   display: flex;
 }
 

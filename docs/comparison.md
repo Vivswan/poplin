@@ -10,14 +10,14 @@ This page lists what poplin and four other tools do. Each cell is taken from the
 
 | | Poplin | [handbill](https://handbill.dev) | [anvilnine/artifacts](https://github.com/anvilnine/artifacts) | [Pagecast](https://github.com/Amal-David/pagecast) | [Birta](https://birta.dev) |
 | --- | --- | --- | --- | --- | --- |
-| Where it runs | your own Cloudflare account: one Worker, one R2 bucket | your own Cloudflare account (one Worker, one R2 bucket), or the hosted handbill.dev | one container on a server you run | an app on your computer, which publishes to Cloudflare Pages in your account | Birta's hosted service |
+| Where it runs | your own Cloudflare account: one Worker, one R2 bucket, one D1 database | your own Cloudflare account (one Worker, one R2 bucket), or the hosted handbill.dev | one container on a server you run | an app on your computer, which publishes to Cloudflare Pages in your account | Birta's hosted service |
 | Private pages behind a login | yes, the default; open to the admins of the install | no | no; a password per page | no; a password per page | yes; an access setting limits a project to invited people, signed in |
-| A secret link | yes | yes; every page has one | yes, the default | yes, the default | yes; a review link per version |
+| A link that is hard to guess | yes; the address of an unlisted site, open to anyone who has it | yes; every page has one | yes, the default | yes, the default | yes; a review link per version |
 | Public pages | yes | yes, at a name you choose; self-hosted only | yes | yes | yes |
-| Changing access without changing the address | yes; the short name stays, and visitors of an unlisted site use its secret link | no; the secret link and the name are separate addresses | yes; the address stays, and a private link carries a token | a password is set or removed in place; a short public link is a new address, and the old one redirects | yes; access is a setting on the project address |
+| Changing access without changing the address | yes; private and unlisted share one address, and a public site adds a name | no; the secret link and the name are separate addresses | yes; the address stays, and a private link carries a token | a password is set or removed in place; a short public link is a new address, and the old one redirects | yes; access is a setting on the project address |
 | Whole folders (multi-file sites) | yes | no; one HTML file per link | yes, as a folder or a zip | yes | yes |
 | A page listing all your sites | yes, private to the owner | not stated; the CLI lists them | yes, behind the admin login | yes, in the app on your computer | yes |
-| MCP for agents | yes; one in the Worker, one on your machine | not stated; ships an agent skill | yes, in the server | yes, on your machine | yes; one hosted, one on your machine |
+| MCP for agents | yes, on your machine | not stated; ships an agent skill | yes, in the server | yes, on your machine | yes; one hosted, one on your machine |
 | A CLI | yes | yes | yes | yes | yes |
 | Versions and rollback | yes; the last 3 versions by default | no; a revised page gets a new link and the old link is removed | a version history with the git storage backend; rollback not stated | a deploy history; rollback not stated | yes; the last 10 publishes |
 | Source code | public; Individual and Small Organization License | public; MIT | public; MIT | public; MIT | not stated |

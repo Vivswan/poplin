@@ -4,8 +4,9 @@ import SampleTile from "../components/SampleTile.astro";
 import Page from "../layouts/Page.astro";
 import { REPOSITORY_URL, sitePath } from "../lib/paths.ts";
 
-const SHORT_ADDRESS = "page-report.example.com";
-const SECRET_ADDRESS = "page-report--7f3k9x2mq4ab.example.com";
+const SITE = "report--k3f9x2ab71qz";
+const ADDRESS = `${SITE}-page.example.com`;
+const PUBLIC_ADDRESS = "report-page.example.com";
 
 // The report sample plays the published site; any sample stands in when that folder is absent.
 const shown = samples.find((sample) => sample.name === "sales-report") ?? samples[0];
@@ -45,7 +46,7 @@ const guards = [
 
 <Page
   title="Poplin: a private site, in one call"
-  description="Poplin lets an AI agent or a person publish a static site to their own Cloudflare account with one call. A site is private by default, unlisted by secret link, or public."
+  description="Poplin lets an AI agent or a person publish a static site to their own Cloudflare account with one call. A site is private by default, unlisted for anyone who has its address, or public."
   path=""
 >
   <section class="hero frame" aria-labelledby="title">
@@ -63,7 +64,7 @@ const guards = [
       <dt>Private</dt>
       <dd>Only you, after one login. The default.</dd>
       <dt>Unlisted</dt>
-      <dd>Anyone with the secret link.</dd>
+      <dd>Anyone who has the address.</dd>
       <dt>Public</dt>
       <dd>Everyone.</dd>
     </dl>
@@ -85,32 +86,31 @@ const guards = [
         <dl class="facts">
           <div>
             <dt>Address</dt>
-            <dd><code>https://{SHORT_ADDRESS}</code></dd>
+            <dd><code>https://{ADDRESS}</code></dd>
           </div>
-          <div data-show="unlisted">
-            <dt>Secret link</dt>
-            <dd><code>https://{SECRET_ADDRESS}</code></dd>
+          <div data-show="public">
+            <dt>Public name</dt>
+            <dd><code>https://{PUBLIC_ADDRESS}</code></dd>
           </div>
           <div>
             <dt>You, logged in</dt>
             <dd class="yes">opens it</dd>
           </div>
           <div>
-            <dt>Someone with the secret link</dt>
-            <dd data-show="private">there is no secret link</dd>
-            <dd data-show="unlisted" class="yes">opens it</dd>
-            <dd data-show="public">there is no secret link</dd>
+            <dt>Someone who has the address</dt>
+            <dd data-show="private">sees a plain Not found page</dd>
+            <dd data-show="unlisted public" class="yes">opens it, with no login</dd>
           </div>
           <div>
             <dt>Everyone else</dt>
-            <dd data-show="private unlisted">sees a plain Not found page</dd>
-            <dd data-show="public" class="yes">opens it</dd>
+            <dd data-show="private unlisted">would have to guess the address</dd>
+            <dd data-show="public" class="yes">opens it, at the public name</dd>
           </div>
         </dl>
 
         <div class="view">
-          <p class="view-label" data-show="private">What everyone else sees</p>
-          <p class="view-label" data-show="unlisted">What someone with the secret link sees</p>
+          <p class="view-label" data-show="private">What anyone but you sees</p>
+          <p class="view-label" data-show="unlisted">What someone who has the address sees</p>
           <p class="view-label" data-show="public">What everyone sees</p>
           <div class="view-missing" data-show="private">
             <p><strong>404</strong> Not found</p>
@@ -140,8 +140,8 @@ const guards = [
   <section class="split" aria-labelledby="one-call">
     <div class="split-in">
       <pre data-rise><code>$ poplin ./report
-{shownSize === "" ? "" : `uploading ${shownSize}\n`}created  report  private
-https://{SHORT_ADDRESS}</code></pre>
+{shownSize === "" ? "" : `uploading ${shownSize}\n`}made  {SITE}  private
+https://{ADDRESS}</code></pre>
       <p class="split-word" aria-hidden="true">One call.</p>
     </div>
     <div class="split-out">
@@ -219,8 +219,8 @@ https://{SHORT_ADDRESS}</code></pre>
     <div class="field field-4">
       <div class="card" data-ui data-rise>
         <p class="card-name"><code>report</code></p>
-        <p>Opened with the secret link</p>
-        <p>Same site, same files</p>
+        <p>Opened by anyone who has the address</p>
+        <p>Same site, same address</p>
         <p class="chip chip-unlisted">Unlisted</p>
       </div>
       <p class="clause">Then you share it, when you choose.</p>
@@ -272,7 +272,7 @@ https://{SHORT_ADDRESS}</code></pre>
       </ul>
     </div>
     <div class="tier-note" data-rise>
-      <p>There is no server to keep up. One Worker serves every site from one bucket, inside your own account.</p>
+      <p>There is no server to keep up. One Worker serves every site from one bucket, with one database for the records, inside your own account.</p>
       <p>
         The Worker stops at its daily limit and never bills. A flood of requests can stop the sites until midnight
         UTC. It costs no money.
@@ -295,7 +295,7 @@ https://{SHORT_ADDRESS}</code></pre>
     </form>
     <div class="plan-stage">
       <div data-show="none">
-        <p class="plan-figure"><code>poplin.you.workers.dev/report/</code></p>
+        <p class="plan-figure"><code>poplin.you.workers.dev/{SITE}/</code></p>
         <p>
           Sites are paths on the free address every Cloudflare account has. Public and unlisted sites can be whole
           folders. A private site is one self-contained file, unless the install allows folders.
@@ -303,12 +303,12 @@ https://{SHORT_ADDRESS}</code></pre>
         <p>Pages there cannot use browser storage, popups, or form submission, and links inside a site are relative.</p>
       </div>
       <div data-show="own">
-        <p class="plan-figure"><code>{SHORT_ADDRESS}</code></p>
+        <p class="plan-figure"><code>{ADDRESS}</code></p>
         <p>
           Each site gets an address of its own, so the browser keeps your sites apart. Private sites can be whole
           folders, and pages may use browser storage and forms.
         </p>
-        <p>A Cloudflare firewall rule stands in front. An address under your domain that is not shaped like a site's never reaches the Worker.</p>
+        <p>Site addresses end in a marker, <code>-page</code> by default. Cloudflare routes only those to the Worker, so no other address under your domain reaches it.</p>
       </div>
       <a class="button" href={sitePath("docs/security.html#without-a-domain")}>Read what each one protects</a>
     </div>
