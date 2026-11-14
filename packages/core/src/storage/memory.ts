@@ -17,33 +17,28 @@ import {
   type ReadResult,
   resolveRange,
   type WriteBody,
-  type WriteCondition,
   type WriteOptions,
-  type WriteResult,
 } from "./storage";
 
-const KEY_SEPARATOR = "/";
+const UTF8 = new TextEncoder();
 
 interface StoredObject {
   readonly info: ObjectInfo;
   readonly bytes: Uint8Array;
 }
 
-// `through` is the greatest key the entry covers: the object's own, or the last one in the folder.
-type ListEntry = { readonly through: ObjectKey } & ({ readonly kind: "object"; readonly summary: ObjectSummary } | { readonly kind: "folder"; readonly name: string });
-
-// UTF-8 byte order is code point order; the default string order compares UTF-16 units and puts astral characters first.
+// A listing ascends by the UTF-8 bytes of its keys. The loop stands in for Node's `Buffer.compare`: core runs in a Worker, which has only Web-standard APIs.
 function compareNames(left: string, right: string): number {
-  const leftPoints = Array.from(left, (character) => character.codePointAt(0) ?? 0);
-  const rightPoints = Array.from(right, (character) => character.codePointAt(0) ?? 0);
-  const shared = Math.min(leftPoints.length, rightPoints.length);
+  const leftBytes = UTF8.encode(left);
+  const rightBytes = UTF8.encode(right);
+  const shared = Math.min(leftBytes.length, rightBytes.length);
 
   for (let at = 0; at < shared; at += 1) {
-    const difference = (leftPoints[at] ?? 0) - (rightPoints[at] ?? 0);
+    const difference = (leftBytes[at] ?? 0) - (rightBytes[at] ?? 0);
     if (difference !== 0) return difference;
   }
 
-  return leftPoints.length - rightPoints.length;
+  return leftBytes.length - rightBytes.length;
 }
 
 async function bufferBody(body: WriteBody): Promise<Uint8Array> {
@@ -70,48 +65,10 @@ function streamOf(bytes: Uint8Array): ReadableStream<Uint8Array> {
   });
 }
 
-function copyOf(info: ObjectInfo): ObjectInfo {
-  return { ...info, metadata: { ...info.metadata } };
-}
-
-function conditionHolds(condition: WriteCondition, current: StoredObject | undefined): boolean {
-  if (condition.kind === "absent") return current === undefined;
-
-  return current !== undefined && current.info.etag === condition.etag;
-}
-
-function entryFor(stored: StoredObject, options: ListOptions): ListEntry {
+function summaryOf(stored: StoredObject): ObjectSummary {
   const { key, size, etag } = stored.info;
-  const object: ListEntry = { kind: "object", through: key, summary: { key, size, etag } };
 
-  if (options.scope !== "children") return object;
-
-  const separatorAt = key.indexOf(KEY_SEPARATOR, options.prefix.length);
-  if (separatorAt === -1) return object;
-
-  return { kind: "folder", through: key, name: key.slice(0, separatorAt + KEY_SEPARATOR.length) };
-}
-
-function entryName(entry: ListEntry): string {
-  if (entry.kind === "folder") return entry.name;
-
-  return entry.summary.key;
-}
-
-function pageOf(entries: readonly ListEntry[], limit: number): ListPage {
-  const shown = entries.slice(0, limit);
-  const objects: ObjectSummary[] = [];
-  const folders: string[] = [];
-
-  for (const entry of shown) {
-    if (entry.kind === "folder") folders.push(entry.name);
-    if (entry.kind === "object") objects.push(entry.summary);
-  }
-
-  const last = shown.at(-1);
-  if (last === undefined || entries.length <= limit) return { objects, folders, more: false };
-
-  return { objects, folders, more: true, cursor: last.through as string as ListCursor };
+  return { key, size, etag };
 }
 
 /**
@@ -119,34 +76,19 @@ function pageOf(entries: readonly ListEntry[], limit: number): ListPage {
  *
  * It differs from R2 in one stated way: every write gets a fresh etag, equal bytes included.
  *
- * A list cursor is the last key its page covered, as in R2's local simulation: a folder that gains a later key between two pages is listed again.
+ * A list cursor is the last key of its page.
  */
 export class MemoryStore implements ObjectStore {
   readonly #objects = new Map<ObjectKey, StoredObject>();
 
   #writes = 0;
 
-  #store(key: ObjectKey, bytes: Uint8Array, options: WriteOptions): ObjectInfo {
-    this.#writes += 1;
-
-    const info: ObjectInfo = {
-      key,
-      size: bytes.length,
-      etag: `memory-${this.#writes}` as Etag,
-      contentType: options.contentType,
-      metadata: { ...options.metadata },
-    };
-    this.#objects.set(key, { info, bytes });
-
-    return copyOf(info);
-  }
-
-  /** Read an object's metadata without its bytes. */
+  /** Read what the store keeps about an object, without its bytes. */
   async head(key: ObjectKey): Promise<HeadResult> {
     const stored = this.#objects.get(key);
     if (stored === undefined) return { kind: "missing" };
 
-    return { kind: "found", info: copyOf(stored.info) };
+    return { kind: "found", info: stored.info };
   }
 
   /** Read an object or a range of it; the body is a copy, so a later write never changes bytes already handed out. */
@@ -154,7 +96,7 @@ export class MemoryStore implements ObjectStore {
     const stored = this.#objects.get(key);
     if (stored === undefined) return { kind: "missing" };
 
-    const info = copyOf(stored.info);
+    const { info } = stored;
     if (options.ifNoneMatch === info.etag) return { kind: "not-modified", info };
 
     let span: ByteSpan | "unsatisfiable" = { offset: 0, length: info.size };
@@ -171,28 +113,18 @@ export class MemoryStore implements ObjectStore {
    * Store an object, replacing whatever the key held.
    *
    * @throws {Error} a stream body ended at another length than its `size`; nothing was stored
-   * @throws {TypeError | RangeError} `checkWriteOptions` refused the options; nothing was stored
+   * @throws {TypeError} `checkWriteOptions` refused the options; nothing was stored
    */
   async write(key: ObjectKey, body: WriteBody, options: WriteOptions): Promise<ObjectInfo> {
-    const checked = checkWriteOptions(options);
+    const { contentType } = checkWriteOptions(options);
     const bytes = await bufferBody(body);
+    this.#writes += 1;
 
-    return this.#store(key, bytes, checked);
-  }
+    // Frozen, so the one object can be handed to every reader.
+    const info: ObjectInfo = Object.freeze({ key, size: bytes.length, etag: `memory-${this.#writes}` as Etag, contentType });
+    this.#objects.set(key, { info, bytes });
 
-  /**
-   * Store an object only while `condition` holds; the check and the store share one turn, so racing writers cannot both pass.
-   *
-   * @throws {Error} a stream body ended at another length than its `size`; nothing was stored
-   * @throws {TypeError | RangeError} `checkWriteOptions` refused the options; nothing was stored
-   */
-  async writeIf(key: ObjectKey, body: WriteBody, options: WriteOptions, condition: WriteCondition): Promise<WriteResult> {
-    const checked = checkWriteOptions(options);
-    const bytes = await bufferBody(body);
-
-    if (!conditionHolds(condition, this.#objects.get(key))) return { kind: "precondition-failed" };
-
-    return { kind: "written", info: this.#store(key, bytes, checked) };
+    return info;
   }
 
   /** Remove an object. A key that holds none is not an error. */
@@ -219,14 +151,10 @@ export class MemoryStore implements ObjectStore {
       .filter((stored) => cursor === undefined || compareNames(stored.info.key, cursor) > 0)
       .sort((left, right) => compareNames(left.info.key, right.info.key));
 
-    // Keys under one folder are neighbours in this order, so each folder keeps its first place and ends on its last key.
-    const entries = new Map<string, ListEntry>();
+    const objects = listed.slice(0, limit).map(summaryOf);
+    const last = objects.at(-1);
+    if (last === undefined || listed.length <= limit) return { objects, more: false };
 
-    for (const stored of listed) {
-      const entry = entryFor(stored, options);
-      entries.set(entryName(entry), entry);
-    }
-
-    return pageOf([...entries.values()], limit);
+    return { objects, more: true, cursor: last.key as string as ListCursor };
   }
 }

@@ -28,8 +28,8 @@ describe("R2Store: the limits of R2 itself", () => {
   test("delete-many hands R2 at most 1000 keys a call, and every key in exactly one call", async () => {
     await reset();
     const deletes = vi.spyOn(BUCKET, "delete");
-    const kept = objectKey("sites/blog/record");
-    const doomed = Array.from({ length: 2001 }, (_unused, at) => objectKey(`sites/blog/v1/file-${at}`));
+    const kept = objectKey("blog/v2/index.html");
+    const doomed = Array.from({ length: 2001 }, (_unused, at) => objectKey(`blog/v1/file-${at}`));
     const edges = [doomed[0], doomed[999], doomed[1000], doomed[1999], doomed[2000]].filter((key) => key !== undefined);
     for (const key of [kept, ...edges]) await BUCKET.put(key, "x");
 
@@ -49,56 +49,33 @@ describe("R2Store: the limits of R2 itself", () => {
     ["an empty length", { offset: 0, length: 0 }],
   ] as const)("%s makes the bucket throw, and the store answer not satisfiable", async (_name, range) => {
     const store = await emptyStore();
-    const key = objectKey("sites/blog/v1/data.txt");
+    const key = objectKey("blog/v1/data.txt");
     const info = await store.write(key, bytesOf(DIGITS), TEXT);
 
     await expect(BUCKET.get(key, { range })).rejects.toThrow("not satisfiable");
     expect<unknown>(await store.read(key, { range })).toEqual({ kind: "range-not-satisfiable", info });
   });
 
-  // Drift: core tells callers a guarded record must differ in bytes on every write, because of this.
-  test("a rewrite of the same bytes keeps the etag, so a condition holding the old etag still passes", async () => {
+  // Drift: core says a write of the same bytes may keep its etag; a visitor's cached copy then stays good across a republish of an unchanged file.
+  test("a rewrite of the same bytes keeps the etag, whatever content type it carries", async () => {
     const store = await emptyStore();
-    const key = objectKey("sites/blog/record");
+    const key = objectKey("blog/v1/data.txt");
     const first = await store.write(key, bytesOf("live: v1"), TEXT);
     const second = await store.write(key, bytesOf("live: v1"), { contentType: "application/json" });
-    const result = await store.writeIf(key, bytesOf("live: v2"), TEXT, { kind: "unchanged", etag: first.etag });
 
     expect(second.etag).toBe(first.etag);
-    expect(result.kind).toBe("written");
   });
-});
 
-describe("R2Store: what R2 would alter, drop, or refuse", () => {
-  // Drift: core refuses these because of what the bucket does with them; if the bucket ever keeps one whole, its refusal has lost its reason.
-  test.each([
-    ["a lone surrogate in a metadata value", { title: "Blog\ud83d" }, { title: "Blog\ufffd\ufffd\ufffd" }],
-    ["a lone surrogate in a metadata key", { "title\ud83d": "Blog" }, { "title\ufffd\ufffd\ufffd": "Blog" }],
-    ["a metadata key named __proto__", Object.fromEntries([["__proto__", "Blog"], ["state", "private"]]), { state: "private" }],
-  ] as ReadonlyArray<readonly [string, Record<string, string>, Record<string, string>]>)("%s: the bucket stores other metadata than it was given, and the store never hands it over", async (_name, metadata, stored) => {
+  // Drift: core refuses a lone surrogate because of what the bucket does with it; if the bucket ever keeps one whole, the refusal has lost its reason.
+  test("a lone surrogate in a content type: the bucket stores another type than it was given, and the store never hands it over", async () => {
     const store = await emptyStore();
-    const key = objectKey("sites/blog/record");
-    await BUCKET.put(key, "live: v1", { customMetadata: metadata });
+    const key = objectKey("blog/v1/data.txt");
+    await BUCKET.put(key, "live: v1", { httpMetadata: { contentType: "text/plain\ud83d" } });
     const kept = await BUCKET.head(key);
     const puts = vi.spyOn(BUCKET, "put");
 
-    await expect(store.write(key, bytesOf("live: v2"), { contentType: "text/plain", metadata })).rejects.toBeInstanceOf(TypeError);
-    expect<unknown>([kept?.customMetadata, puts.mock.calls.length]).toEqual([stored, 0]);
-  });
-
-  // Drift: core counts metadata as R2 does, not in UTF-8; a count that parted from R2's would refuse what R2 keeps or pass what R2 throws on.
-  test.each([
-    ["one byte past the limit", { a: "v".repeat(8192) }],
-    ["past the limit at two bytes a character", { a: "\u0101".repeat(4096) }],
-    ["under the limit in UTF-8, past it as R2 counts", { a: `${"v".repeat(5000)}\u0101` }],
-  ] as ReadonlyArray<readonly [string, Record<string, string>]>)("metadata %s: the bucket throws, and the store refuses it first", async (_name, metadata) => {
-    const store = await emptyStore();
-    const key = objectKey("sites/blog/record");
-    const puts = vi.spyOn(BUCKET, "put");
-
-    await expect(store.write(key, bytesOf("live: v1"), { contentType: "text/plain", metadata })).rejects.toBeInstanceOf(RangeError);
-    expect(puts.mock.calls.length).toBe(0);
-    await expect(BUCKET.put(key, "live: v1", { customMetadata: metadata })).rejects.toThrow("exceed the maximum allowed metadata size");
+    await expect(store.write(key, bytesOf("live: v2"), { contentType: "text/plain\ud83d" })).rejects.toBeInstanceOf(TypeError);
+    expect<unknown>([kept?.httpMetadata?.contentType, puts.mock.calls.length]).toEqual(["text/plain\ufffd\ufffd\ufffd", 0]);
   });
 });
 
@@ -112,7 +89,7 @@ describe("R2Store: input the store does not control", () => {
     ["an empty string", (): string => ""],
   ] as const)("if-none-match holding %s reads the whole object, as the in-memory store answers it", async (_name, sent) => {
     const store = await emptyStore();
-    const key = objectKey("sites/blog/v1/data.txt");
+    const key = objectKey("blog/v1/data.txt");
     const info = await store.write(key, bytesOf(DIGITS), TEXT);
 
     expect<unknown>(await readText(store, key, { ifNoneMatch: sent(info.etag) })).toEqual({ kind: "found", info, span: { offset: 0, length: 10 }, text: DIGITS });
@@ -121,7 +98,7 @@ describe("R2Store: input the store does not control", () => {
   // Drift: a ranged read is two R2 calls; a span worked out for the old object must never be cut from the new one.
   test("a write landing between the two calls of a ranged read: the read answers for the new object", async () => {
     await reset();
-    const key = objectKey("sites/blog/v1/data.txt");
+    const key = objectKey("blog/v1/data.txt");
     const head = BUCKET.head.bind(BUCKET);
     const heads = vi.spyOn(BUCKET, "head").mockImplementationOnce(async (name) => {
       const before = await head(name);
@@ -142,14 +119,14 @@ describe("R2Store: input the store does not control", () => {
   // Drift: the owner can put files in the bucket by other means; one the key rules refuse must stop a listing loudly, not ride along as a key.
   test("an object written past the store: no content type reads as bytes of unknown type, and a key no store wrote stops the listing", async () => {
     const store = await emptyStore();
-    const key = objectKey("sites/blog/v1/raw");
+    const key = objectKey("blog/v1/raw");
     const raw = await BUCKET.put(key, "raw");
     const head = await store.head(key);
 
-    await BUCKET.put("sites/blog/", "a folder marker");
+    await BUCKET.put("blog/v1/", "a folder marker");
 
-    expect<unknown>(head).toEqual({ kind: "found", info: { key, size: 3, etag: raw?.etag, contentType: "application/octet-stream", metadata: {} } });
-    await expect(store.list({ prefix: "" })).rejects.toThrow('empty-segment): "sites/blog/"');
+    expect<unknown>(head).toEqual({ kind: "found", info: { key, size: 3, etag: raw?.etag, contentType: "application/octet-stream" } });
+    await expect(store.list({ prefix: "" })).rejects.toThrow('empty-segment): "blog/v1/"');
   });
 
   // Drift: R2 refuses a stream of unknown length, so the declared size is all it checks, and workerd rounds a fraction down; neither may store a cut stream.
@@ -158,7 +135,7 @@ describe("R2Store: input the store does not control", () => {
     ["declares a fraction of a byte", "x", 1.5],
   ] as const)("a stream that %s rejects and stores nothing", async (_name, text, size) => {
     const store = await emptyStore();
-    const key = objectKey("sites/blog/v1/app.js");
+    const key = objectKey("blog/v1/app.js");
     const stream = new Response(text).body as ReadableStream<Uint8Array>;
 
     await expect(store.write(key, { stream, size }, TEXT)).rejects.toBeInstanceOf(Error);

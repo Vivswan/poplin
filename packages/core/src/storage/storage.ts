@@ -9,16 +9,10 @@ export const MAX_LIST_LIMIT = 1000;
 /** The longest key R2 and S3 both accept, in UTF-8 bytes. */
 const MAX_KEY_BYTES = 1024;
 
-/** The most metadata R2 keeps on one object, keys and values together, in bytes as R2 counts them. */
-const MAX_METADATA_BYTES = 8192;
+/** The list pages one `deletePrefix` call walks by default: 30 store calls, inside the 50 subrequests a Worker request gets on Cloudflare's Free plan. */
+const DEFAULT_DELETE_PAGES = 15;
 
-/** The metadata key the Workers runtime drops on its way to R2. */
-const DROPPED_METADATA_KEY = "__proto__";
-
-/** A character past Latin-1: R2 stores every character of a string that holds one in two bytes. */
-const WIDE_CHARACTER = /[\u0100-\uffff]/;
-
-/** What joins a key's segments, and what a `children` listing stops at. */
+/** What joins a key's segments, and what ends a folder's prefix. */
 const KEY_SEPARATOR = "/";
 
 /** Segments an S3 client or a URL parser would resolve away, as they read once percent-decoded. */
@@ -53,11 +47,11 @@ export type ObjectKey = string & { readonly [objectKeyBrand]: true };
 /**
  * A store's name for the bytes of one object, unquoted. Only a store makes one.
  *
- * It changes whenever a write changes the bytes. A write of the same bytes may keep it (R2 and S3 hash the content), so a record guarded by `writeIf` must differ in bytes on every write.
+ * It changes whenever a write changes the bytes. A write of the same bytes may keep it: R2 and S3 hash the content.
  */
 export type Etag = string & { readonly [etagBrand]: true };
 
-/** Where a listing stopped. It continues only a `list` call with the same prefix and scope, on the store that made it. */
+/** Where a listing stopped. It continues only a `list` call with the same prefix, on the store that made it. */
 export type ListCursor = string & { readonly [listCursorBrand]: true };
 
 /** Why a string is not an object key. `bad-character` is a control character or a lone surrogate. */
@@ -66,7 +60,7 @@ type KeyRefusal = "empty" | "too-long" | "bad-character" | "not-normalized" | "e
 /** A parsed key, or the first rule the string breaks. */
 export type CheckedKey = { readonly ok: true; readonly key: ObjectKey } | { readonly ok: false; readonly refusal: KeyRefusal };
 
-/** What a listing tells about an object: enough to count and to guard a later write. */
+/** What a listing tells about an object: enough to count its bytes and to delete it. */
 export interface ObjectSummary {
   /** The whole key, never the part after a listing prefix. */
   readonly key: ObjectKey;
@@ -74,7 +68,7 @@ export interface ObjectSummary {
   /** The whole object's length in bytes, also on a ranged read. */
   readonly size: number;
 
-  /** What a later `writeIf` passes to prove the bytes have not changed. */
+  /** What a visitor sends back as `ifNoneMatch` to ask whether the bytes have changed. */
   readonly etag: Etag;
 }
 
@@ -82,9 +76,6 @@ export interface ObjectSummary {
 export interface ObjectInfo extends ObjectSummary {
   /** The media type given at the write, served back as the `Content-Type` header. */
   readonly contentType: string;
-
-  /** The caller's own small string map, returned as written. A write refuses one over 8,192 bytes, the most R2 keeps. */
-  readonly metadata: Readonly<Record<string, string>>;
 }
 
 /**
@@ -126,31 +117,17 @@ export type ReadResult =
 /** The bytes to store. A stream carries its length up front because R2 and S3 refuse one of unknown length. */
 export type WriteBody = Uint8Array | ArrayBuffer | { readonly stream: ReadableStream<Uint8Array>; readonly size: number };
 
-/**
- * What is stored beside the bytes. An absent `metadata` stores an empty map.
- *
- * `checkWriteOptions` says which strings a store cannot keep; every other one is kept as written, without trimming, case folding, or normalising.
- */
+/** What is stored beside the bytes. `checkWriteOptions` says which content type a store cannot keep; every other one is kept as written, without trimming, case folding, or normalising. */
 export interface WriteOptions {
   readonly contentType: string;
-  readonly metadata?: Readonly<Record<string, string>>;
 }
-
-/** What must still be true of the key at the moment the write lands: no object there, or the object this etag names. */
-export type WriteCondition = { readonly kind: "absent" } | { readonly kind: "unchanged"; readonly etag: Etag };
-
-/** The answer to `writeIf`. `precondition-failed` stored nothing and left the key as it was. */
-export type WriteResult = { readonly kind: "written"; readonly info: ObjectInfo } | { readonly kind: "precondition-failed" };
 
 /** Which keys a listing returns, and how they are paged. */
 export interface ListOptions {
-  /** Any well-formed string in NFC, not a key: `""` lists the whole store, `"sites/"` one folder. */
+  /** Any well-formed string in NFC, not a key: `""` lists the whole store, `"blog/"` one folder. */
   readonly prefix: string;
 
-  /** `subtree`, the default, lists every key under the prefix. `children` stops at the next `/` and reports what lies past it as one folder. */
-  readonly scope?: "subtree" | "children";
-
-  /** The most objects and folders, counted together, in one page: 1 to `MAX_LIST_LIMIT`, which is the default. */
+  /** The most objects in one page: 1 to `MAX_LIST_LIMIT`, which is the default. */
   readonly limit?: number;
 
   /** The cursor of the previous page; absent for the first. */
@@ -160,13 +137,13 @@ export interface ListOptions {
 /**
  * One page of a listing.
  *
- * Order: `objects` ascend by the UTF-8 bytes of their keys, which is code point order, within a page and from one page to the next. `folders` ascend the same way. The two lists are not merged into one order.
+ * Order: `objects` ascend by the UTF-8 bytes of their keys, which is code point order, within a page and from one page to the next.
  *
- * A page may hold fewer entries than the limit, even none, while more remain: only `more` says whether to go on. `folders` is empty under the `subtree` scope, and each ends in `/`.
+ * A page may hold fewer objects than the limit, even none, while more remain: only `more` says whether to go on.
  *
- * A listing is not a snapshot. An object that no write touches during the listing appears exactly once. A folder may appear again on a later page when a write lands in it between the two, so a caller de-duplicates folders across pages.
+ * A listing is not a snapshot. An object that no write touches during the listing appears exactly once.
  */
-export type ListPage = { readonly objects: readonly ObjectSummary[]; readonly folders: readonly string[] } & (
+export type ListPage = { readonly objects: readonly ObjectSummary[] } & (
   | { readonly more: false }
   | { readonly more: true; readonly cursor: ListCursor }
 );
@@ -177,7 +154,7 @@ export type ListPage = { readonly objects: readonly ObjectSummary[]; readonly fo
  * Every answer the product acts on is a result variant. A method rejects only when the store itself fails, or where its `@throws` says so.
  */
 export interface ObjectStore {
-  /** Read an object's metadata without its bytes. */
+  /** Read what the store keeps about an object, without its bytes. */
   head(key: ObjectKey): Promise<HeadResult>;
 
   /** Read an object, or the part of it `options.range` selects, unless `options.ifNoneMatch` names its current etag. */
@@ -187,17 +164,9 @@ export interface ObjectStore {
    * Store an object, replacing whatever the key held.
    *
    * @throws {Error} a stream body ended at another length than its `size`; nothing was stored
-   * @throws {TypeError | RangeError} `checkWriteOptions` refused the options; nothing was stored
+   * @throws {TypeError} `checkWriteOptions` refused the options; nothing was stored
    */
   write(key: ObjectKey, body: WriteBody, options: WriteOptions): Promise<ObjectInfo>;
-
-  /**
-   * Store an object only while `condition` holds. Of several writers holding the same condition, exactly one is answered `written`.
-   *
-   * @throws {Error} a stream body ended at another length than its `size`; nothing was stored
-   * @throws {TypeError | RangeError} `checkWriteOptions` refused the options; nothing was stored
-   */
-  writeIf(key: ObjectKey, body: WriteBody, options: WriteOptions, condition: WriteCondition): Promise<WriteResult>;
 
   /** Remove an object. A key that holds none is not an error. */
   delete(key: ObjectKey): Promise<void>;
@@ -231,13 +200,6 @@ function isDotSegment(segment: string): boolean {
 
 function requireWellFormed(text: string, what: string): void {
   if (!text.isWellFormed()) throw new TypeError(`${what} holds a lone surrogate, which no store can keep: ${JSON.stringify(text)}`);
-}
-
-// R2's own count: a string of Latin-1 characters takes one byte each, any other string two bytes per UTF-16 unit.
-function storedBytes(text: string): number {
-  if (WIDE_CHARACTER.test(text)) return text.length * 2;
-
-  return text.length;
 }
 
 /**
@@ -291,27 +253,14 @@ export function resolveRange(range: ByteRange, size: number): ByteSpan | "unsati
 }
 
 /**
- * Refuse what a store could not keep as written beside the bytes. Every implementation's `write` and `writeIf` call it first, and nowhere else decides this.
+ * Refuse what a store could not keep as written beside the bytes. Every implementation's `write` calls it first, and nowhere else decides this.
  *
  * @returns a copy of the options to store from, so a change the caller makes while the write is under way stores nothing unchecked
- * @throws {TypeError} the content type, a metadata key, or a metadata value holds a lone surrogate, which R2 stores as U+FFFD; or a metadata key is `__proto__`, which the Workers runtime drops
- * @throws {RangeError} the metadata keys and values together pass 8,192 bytes, counting a Latin-1 string at one byte a character and any other at two per UTF-16 unit, as R2 does
+ * @throws {TypeError} the content type holds a lone surrogate, which R2 stores as U+FFFD
  */
 export function checkWriteOptions(options: WriteOptions): WriteOptions {
-  const checked = { contentType: options.contentType, metadata: { ...options.metadata } };
+  const checked = { contentType: options.contentType };
   requireWellFormed(checked.contentType, "the content type");
-
-  let bytes = 0;
-
-  for (const [key, value] of Object.entries(checked.metadata)) {
-    if (key === DROPPED_METADATA_KEY) throw new TypeError(`a metadata key cannot be ${DROPPED_METADATA_KEY}: the Workers runtime drops it`);
-
-    requireWellFormed(key, "a metadata key");
-    requireWellFormed(value, `the metadata value of ${JSON.stringify(key)}`);
-    bytes += storedBytes(key) + storedBytes(value);
-  }
-
-  if (bytes > MAX_METADATA_BYTES) throw new RangeError(`metadata is at most ${MAX_METADATA_BYTES} bytes, keys and values together, not ${bytes}`);
 
   return checked;
 }
@@ -334,4 +283,33 @@ export function checkListOptions(options: ListOptions): number {
   if (!valid) throw new RangeError(`a list limit is a whole number from 1 to ${MAX_LIST_LIMIT}, not ${limit}`);
 
   return limit;
+}
+
+/**
+ * Remove the objects under a folder, a page at a time, for at most `maxPages` pages. A page costs two store calls: one `list` and one `deleteMany`.
+ *
+ * @param prefix - the folder, ending in `/`, so that `blog/` never reaches into `blog2/`
+ * @param maxPages - the most pages to walk, a whole number from 1; the default keeps one call to 30 store calls
+ * @returns how many objects the pages held, and whether the page limit stopped the walk with objects left; a caller calls again, in a later request, while `more` is true
+ * @throws {TypeError} `prefix` does not end in `/`, or `list` refuses it
+ * @throws {RangeError} `maxPages` is not a whole number from 1
+ */
+export async function deletePrefix(store: ObjectStore, prefix: string, maxPages: number = DEFAULT_DELETE_PAGES): Promise<{ readonly removed: number; readonly more: boolean }> {
+  if (!prefix.endsWith(KEY_SEPARATOR)) throw new TypeError(`a folder prefix ends in ${KEY_SEPARATOR}, so it cannot match a longer folder name: ${JSON.stringify(prefix)}`);
+
+  if (!(Number.isInteger(maxPages) && maxPages >= 1)) throw new RangeError(`a page limit is a whole number from 1, not ${maxPages}`);
+
+  let removed = 0;
+  let page = await store.list({ prefix });
+
+  for (let walked = 1; ; walked += 1) {
+    await store.deleteMany(page.objects.map((object) => object.key));
+    removed += page.objects.length;
+
+    if (!page.more) return { removed, more: false };
+
+    if (walked === maxPages) return { removed, more: true };
+
+    page = await store.list({ prefix, cursor: page.cursor });
+  }
 }

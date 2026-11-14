@@ -4,6 +4,7 @@ import { describe, expect, test } from "bun:test";
 
 import {
   type ByteRange,
+  deletePrefix,
   type ListOptions,
   type ListPage,
   MAX_LIST_LIMIT,
@@ -12,11 +13,9 @@ import {
   type ObjectStore,
   parseObjectKey,
   type ReadOptions,
-  type WriteCondition,
-  type WriteOptions,
 } from "../src/storage/storage";
 
-/** The options of a write whose type and metadata the case does not look at. */
+/** The options of a write whose content type the case does not look at. */
 const TEXT = { contentType: "text/plain" } as const;
 
 /** Ten bytes, each naming its own offset, so a ranged read shows which bytes came back. */
@@ -25,24 +24,18 @@ const DIGITS = "0123456789";
 /** An etag in no store's form, standing for a visitor's stale copy. */
 const STALE_ETAG = "an-etag-no-store-issued";
 
-/** Keys at four depths. U+FF5E sorts before U+1F600 in UTF-8 bytes and after it in UTF-16 units. */
+/** Two neighbours around the seven files of `blog/`. U+FF5E sorts before U+1F600 in UTF-8 bytes and after it in UTF-16 units. */
 const LISTED_KEYS = [
-  ".settings",
-  "sites/blog/record",
-  "sites/blog/v1/index.html",
-  "sites/blog/v2/index.html",
-  "sites/docs/record",
-  "sites/readme",
-  "sites/\uff5e",
-  "sites/\u{1f600}",
-  "sitesmap",
+  "art/v1/index.html",
+  "blog/v1/index.html",
+  "blog/v1/notes/a.txt",
+  "blog/v1/\uff5e",
+  "blog/v1/\u{1f600}",
+  "blog/v2/index.html",
+  "blog/v2/style.css",
+  "blog/v3/index.html",
+  "blog2/v1/index.html",
 ] as const;
-
-/** R2's limit on one object's metadata, in bytes as R2 counts them: one per character of a Latin-1 string, two per UTF-16 unit of any other. */
-const METADATA_LIMIT = 8192;
-
-/** A character R2 stores in two bytes, and with it every other character of its string. */
-const WIDE = "\u0101";
 
 /** Half a surrogate pair: no UTF-8 holds it, so R2 would store U+FFFD in its place. */
 const LONE_SURROGATE = "\ud83d";
@@ -96,29 +89,25 @@ function keysOf(pages: readonly ListPage[]): string[] {
   return pages.flatMap((page) => page.objects.map((object) => object.key));
 }
 
-function foldersOf(pages: readonly ListPage[]): string[] {
-  return pages.flatMap((page) => [...page.folders]);
-}
-
 function readingAndWriting(label: string, makeStore: StoreFactory): void {
   describe(`${label}: reading and writing`, () => {
     test("a key nothing was written to answers missing from head and read, so a first publish never needs a catch", async () => {
       const store = await makeStore();
-      const key = objectKey("sites/blog/record");
+      const key = objectKey("blog/v1/index.html");
 
       expect<unknown>([await store.head(key), await store.read(key)]).toEqual([{ kind: "missing" }, { kind: "missing" }]);
     });
 
-    // Drift: the site record rides in the bytes and the metadata; a store that drops either serves a site under the wrong type or state.
+    // Drift: a page is its bytes and its content type; a store that drops the type serves a site as a download.
     test.each([
       ["a buffer", (): Uint8Array => bytesOf("<h1>hi</h1>")],
       ["an ArrayBuffer", (): ArrayBuffer => bytesOf("<h1>hi</h1>").buffer as ArrayBuffer],
       ["a sized stream", (): { stream: ReadableStream<Uint8Array>; size: number } => ({ stream: streamOf("<h1>hi</h1>"), size: 11 })],
-    ] as const)("a write from %s reads back whole, with its content type and metadata, from head and read", async (_form, body) => {
+    ] as const)("a write from %s reads back whole, with its content type, from head and read", async (_form, body) => {
       const store = await makeStore();
-      const key = objectKey("sites/blog/v1/index.html");
-      const written = await store.write(key, body(), { contentType: "text/html; charset=utf-8", metadata: { title: "Blog", state: "private" } });
-      const info = { key, size: 11, etag: written.etag, contentType: "text/html; charset=utf-8", metadata: { title: "Blog", state: "private" } };
+      const key = objectKey("blog/v1/index.html");
+      const written = await store.write(key, body(), { contentType: "text/html; charset=utf-8" });
+      const info = { key, size: 11, etag: written.etag, contentType: "text/html; charset=utf-8" };
 
       expect<unknown>([written, await store.head(key), await readText(store, key)]).toEqual([
         { ...info, etag: expect.any(String) },
@@ -127,14 +116,14 @@ function readingAndWriting(label: string, makeStore: StoreFactory): void {
       ]);
     });
 
-    test("an empty object and absent metadata read back as an empty body and an empty map, not as missing", async () => {
+    test("an empty object reads back as an empty body, not as missing", async () => {
       const store = await makeStore();
-      const key = objectKey("sites/blog/empty.css");
+      const key = objectKey("blog/v1/empty.css");
       const written = await store.write(key, new Uint8Array(0), { contentType: "text/css" });
 
       expect<unknown>(await readText(store, key)).toEqual({
         kind: "found",
-        info: { key, size: 0, etag: written.etag, contentType: "text/css", metadata: {} },
+        info: { key, size: 0, etag: written.etag, contentType: "text/css" },
         span: { offset: 0, length: 0 },
         text: "",
       });
@@ -142,7 +131,7 @@ function readingAndWriting(label: string, makeStore: StoreFactory): void {
 
     test("a stream that ends short of its declared size rejects and stores nothing, so a cut upload never becomes a site file", async () => {
       const store = await makeStore();
-      const key = objectKey("sites/blog/v1/app.js");
+      const key = objectKey("blog/v1/app.js");
 
       await expect(store.write(key, { stream: streamOf("short"), size: 9 }, TEXT)).rejects.toBeInstanceOf(Error);
       expect<unknown>(await store.head(key)).toEqual({ kind: "missing" });
@@ -151,7 +140,7 @@ function readingAndWriting(label: string, makeStore: StoreFactory): void {
     // Drift: R2 fixes a stream's length as the call begins; a store that read the size again later would keep a cut upload R2 refuses.
     test("a stream held to the size it declared when the write began: a size the caller lowers afterwards does not make a short stream whole", async () => {
       const store = await makeStore();
-      const key = objectKey("sites/blog/v1/app.js");
+      const key = objectKey("blog/v1/app.js");
       const body = { stream: streamOf("x"), size: 2 };
       const written = store.write(key, body, TEXT);
       body.size = 1;
@@ -160,132 +149,44 @@ function readingAndWriting(label: string, makeStore: StoreFactory): void {
       expect<unknown>(await store.head(key)).toEqual({ kind: "missing" });
     });
 
-    test("a rewrite with other bytes changes the etag and replaces bytes, type, and metadata together", async () => {
+    test("a rewrite with other bytes changes the etag and replaces bytes and type together", async () => {
       const store = await makeStore();
-      const key = objectKey("sites/blog/record");
-      const first = await store.write(key, bytesOf("live: v1"), { contentType: "text/plain", metadata: { owner: "ana" } });
+      const key = objectKey("blog/v1/data");
+      const first = await store.write(key, bytesOf("live: v1"), { contentType: "text/plain" });
       const second = await store.write(key, bytesOf("live: v2"), { contentType: "application/json" });
 
       expect(second.etag).not.toBe(first.etag);
       expect<unknown>(await readText(store, key)).toEqual({
         kind: "found",
-        info: { key, size: 8, etag: second.etag, contentType: "application/json", metadata: {} },
+        info: { key, size: 8, etag: second.etag, contentType: "application/json" },
         span: { offset: 0, length: 8 },
         text: "live: v2",
       });
     });
 
-    // Drift: R2 turns a lone surrogate into U+FFFD, the Workers runtime drops `__proto__`, and R2 refuses metadata past its limit; a store that took them would hand back another record than it was given.
-    test.each([
-      ["a lone surrogate in a metadata value", { contentType: "text/plain", metadata: { title: `Blog${LONE_SURROGATE}` } }, TypeError, "lone surrogate"],
-      ["a lone surrogate in a metadata key", { contentType: "text/plain", metadata: { [`title${LONE_SURROGATE}`]: "Blog" } }, TypeError, "lone surrogate"],
-      ["a lone surrogate in the content type", { contentType: `text/plain${LONE_SURROGATE}` }, TypeError, "lone surrogate"],
-      ["a metadata key named __proto__", { contentType: "text/plain", metadata: Object.fromEntries([["__proto__", "Blog"]]) }, TypeError, "__proto__"],
-      ["metadata one byte past the limit", { contentType: "text/plain", metadata: { a: "v".repeat(METADATA_LIMIT) } }, RangeError, "8193"],
-      ["metadata past the limit over several entries", { contentType: "text/plain", metadata: { a: "v".repeat(4095), b: "v".repeat(4096) } }, RangeError, "8193"],
-      ["metadata past the limit at two bytes a character", { contentType: "text/plain", metadata: { a: WIDE.repeat(4096) } }, RangeError, "8193"],
-      ["metadata one wide character makes two bytes a character", { contentType: "text/plain", metadata: { a: `${"v".repeat(5000)}${WIDE}` } }, RangeError, "10003"],
-    ] as const)("a write with %s is refused by write and by write-if, and stores nothing", async (_name, options, kind, reason) => {
+    // Drift: R2 turns a lone surrogate into U+FFFD; a store that took one would serve another content type than it was given.
+    test("a write whose content type holds a lone surrogate is refused, and stores nothing", async () => {
       const store = await makeStore();
-      const key = objectKey("sites/blog/record");
-      const writes = [(): Promise<unknown> => store.write(key, bytesOf("live: v1"), options), (): Promise<unknown> => store.writeIf(key, bytesOf("live: v1"), options, { kind: "absent" })];
+      const key = objectKey("blog/v1/index.html");
+      const write = (): Promise<unknown> => store.write(key, bytesOf("<h1>hi</h1>"), { contentType: `text/html${LONE_SURROGATE}` });
 
-      for (const write of writes) {
-        await expect(write()).rejects.toBeInstanceOf(kind);
-        await expect(write()).rejects.toThrow(reason);
-      }
-
+      await expect(write()).rejects.toBeInstanceOf(TypeError);
+      await expect(write()).rejects.toThrow("lone surrogate");
       expect<unknown>(await store.head(key)).toEqual({ kind: "missing" });
     });
 
     // Drift: a store that checks the options and then reads them again after the body arrives would store what it never checked.
-    test.each([
-      ["write", (store: ObjectStore, key: ObjectKey, options: WriteOptions): Promise<unknown> => store.write(key, { stream: streamOf("live: v1"), size: 8 }, options)],
-      ["write-if", (store: ObjectStore, key: ObjectKey, options: WriteOptions): Promise<unknown> => store.writeIf(key, { stream: streamOf("live: v1"), size: 8 }, options, { kind: "absent" })],
-    ] as const)("metadata the caller changes while a %s is under way is stored as it was when the call began", async (_name, write) => {
+    test("a content type the caller changes while a write is under way is stored as it was when the call began", async () => {
       const store = await makeStore();
-      const key = objectKey("sites/blog/record");
-      const metadata = { title: "Blog" };
-      const written = write(store, key, { contentType: "text/plain", metadata });
+      const key = objectKey("blog/v1/index.html");
+      const options = { contentType: "text/html" };
+      const written = store.write(key, { stream: streamOf("<h1>hi</h1>"), size: 11 }, options);
 
-      metadata.title = `Blog${LONE_SURROGATE}`;
+      options.contentType = `text/html${LONE_SURROGATE}`;
       await written;
       const head = await store.head(key);
 
-      expect(head.kind === "found" ? head.info.metadata : undefined).toEqual({ title: "Blog" });
-    });
-
-    // Drift: the refusals above must stop exactly where R2 does; a check one byte tight, or wary of every odd key, would refuse a record R2 keeps.
-    test.each([
-      ["metadata at the limit", { a: "v".repeat(METADATA_LIMIT - 1) }],
-      ["Latin-1 metadata at the limit, one byte a character", { a: "\u00e9".repeat(METADATA_LIMIT - 1) }],
-      ["wide metadata at the limit, two bytes a character", { ab: WIDE.repeat(4095) }],
-      ["keys an object already has members named, an empty key, and keys differing in case", { constructor: "a", toString: "b", "": "c", Title: "d", title: "e" }],
-      ["a surrogate pair, a control character, and text that is not NFC", { "e\u0301": "\u{1f600}\n" }],
-    ] as ReadonlyArray<readonly [string, Record<string, string>]>)("%s reads back as written", async (_name, metadata) => {
-      const store = await makeStore();
-      const key = objectKey("sites/blog/record");
-      await store.write(key, bytesOf("live: v1"), { contentType: "text/plain", metadata });
-      const head = await store.head(key);
-
-      expect(head.kind === "found" ? Object.entries(head.info.metadata).sort() : undefined).toEqual(Object.entries(metadata).sort());
-    });
-  });
-}
-
-function conditionalWrites(label: string, makeStore: StoreFactory): void {
-  describe(`${label}: conditional writes`, () => {
-    // Drift: these answers are the only lock the product has; a store that writes on a failed condition loses a publish silently.
-    test.each([
-      ["absent, on an empty key", false, (): WriteCondition => ({ kind: "absent" }), "written", "new"],
-      ["absent, on a held key", true, (): WriteCondition => ({ kind: "absent" }), "precondition-failed", "old"],
-      ["unchanged, with the current etag", true, (held: ObjectInfo): WriteCondition => ({ kind: "unchanged", etag: held.etag }), "written", "new"],
-      ["unchanged, on an empty key", false, (held: ObjectInfo): WriteCondition => ({ kind: "unchanged", etag: held.etag }), "precondition-failed", undefined],
-    ] as const)("%s", async (_name, held, condition, outcome, stored) => {
-      const store = await makeStore();
-      const key = objectKey("sites/blog/record");
-      const elsewhere = await store.write(objectKey("sites/docs/record"), bytesOf("other"), TEXT);
-      if (held) await store.write(key, bytesOf("old"), TEXT);
-
-      const current = await store.head(key);
-      const known = current.kind === "found" ? current.info : elsewhere;
-      const result = await store.writeIf(key, bytesOf("new"), TEXT, condition(known));
-      const after = await store.read(key);
-
-      expect(result.kind).toBe(outcome);
-      expect(after.kind === "found" ? await new Response(after.body).text() : undefined).toBe(stored);
-    });
-
-    test("an etag from before a rewrite no longer passes, and the rewrite survives the refused write", async () => {
-      const store = await makeStore();
-      const key = objectKey("sites/blog/record");
-      const first = await store.write(key, bytesOf("live: v1"), TEXT);
-      const second = await store.write(key, bytesOf("live: v2"), TEXT);
-      const result = await store.writeIf(key, bytesOf("live: v3"), TEXT, { kind: "unchanged", etag: first.etag });
-
-      expect<unknown>([result, await readText(store, key)]).toEqual([
-        { kind: "precondition-failed" },
-        { kind: "found", info: second, span: { offset: 0, length: 8 }, text: "live: v2" },
-      ]);
-    });
-
-    // Drift: two agents publishing the same site at once must not both believe they won.
-    test.each([
-      ["on the same etag", true],
-      ["on an absent key", false],
-    ] as const)("two writers racing %s: exactly one is written, and the key holds the winner's bytes", async (_name, held) => {
-      const store = await makeStore();
-      const key = objectKey("sites/blog/record");
-      let condition: WriteCondition = { kind: "absent" };
-      if (held) condition = { kind: "unchanged", etag: (await store.write(key, bytesOf("start"), TEXT)).etag };
-
-      const writers = ["first", "second"] as const;
-      const results = await Promise.all(writers.map((writer) => store.writeIf(key, bytesOf(writer), TEXT, condition)));
-      const winner = writers[results.findIndex((result) => result.kind === "written")];
-      const after = await store.read(key);
-
-      expect(results.map((result) => result.kind).sort()).toEqual(["precondition-failed", "written"]);
-      expect(after.kind === "found" ? await new Response(after.body).text() : undefined).toBe(winner);
+      expect(head.kind === "found" ? head.info.contentType : undefined).toBe("text/html");
     });
   });
 }
@@ -302,7 +203,7 @@ function rangedAndConditionalReads(label: string, makeStore: StoreFactory): void
       ["a suffix longer than the object", { suffix: 50 }, { offset: 0, length: 10 }, DIGITS],
     ] as ReadonlyArray<readonly [string, ByteRange, unknown, string]>)("%s returns exactly its bytes and says which", async (_name, range, span, text) => {
       const store = await makeStore();
-      const key = objectKey("sites/blog/v1/data.txt");
+      const key = objectKey("blog/v1/data.txt");
       const info = await store.write(key, bytesOf(DIGITS), TEXT);
 
       expect<unknown>(await readText(store, key, { range })).toEqual({ kind: "found", info, span, text });
@@ -314,7 +215,7 @@ function rangedAndConditionalReads(label: string, makeStore: StoreFactory): void
       ["an empty suffix", { suffix: 0 }],
     ] as ReadonlyArray<readonly [string, ByteRange]>)("%s is not satisfiable and reports the size a 416 needs", async (_name, range) => {
       const store = await makeStore();
-      const key = objectKey("sites/blog/v1/data.txt");
+      const key = objectKey("blog/v1/data.txt");
       const info = await store.write(key, bytesOf(DIGITS), TEXT);
 
       expect<unknown>(await store.read(key, { range })).toEqual({ kind: "range-not-satisfiable", info });
@@ -327,7 +228,7 @@ function rangedAndConditionalReads(label: string, makeStore: StoreFactory): void
       ["another etag", (): ReadOptions => ({ ifNoneMatch: STALE_ETAG }), "found"],
     ] as const)("a read with if-none-match on %s", async (_name, options, kind) => {
       const store = await makeStore();
-      const key = objectKey("sites/blog/v1/data.txt");
+      const key = objectKey("blog/v1/data.txt");
       const info = await store.write(key, bytesOf(DIGITS), TEXT);
       const outcomes = { "not-modified": { kind: "not-modified", info }, found: { kind: "found", info, span: { offset: 0, length: 10 }, text: DIGITS } };
 
@@ -338,73 +239,53 @@ function rangedAndConditionalReads(label: string, makeStore: StoreFactory): void
 
 function listing(label: string, makeStore: StoreFactory): void {
   describe(`${label}: listing`, () => {
-    // Drift: the storage cap and the trash sweep walk pages; a key skipped or repeated at a page edge miscounts or leaks files.
+    // Drift: the storage cap and the removal of a site walk pages; a key skipped or repeated at a page edge miscounts or leaks files.
     test.each([1, 2, 3, 4, MAX_LIST_LIMIT])("pages of %d visit every key under the prefix exactly once, in UTF-8 byte order", async (limit) => {
       const store = await makeStore();
       await seed(store, LISTED_KEYS);
 
-      const pages = await listEveryPage(store, { prefix: "sites/", limit });
+      const pages = await listEveryPage(store, { prefix: "blog/", limit });
 
       expect(keysOf(pages)).toEqual(LISTED_KEYS.slice(1, 8));
-      expect(foldersOf(pages)).toEqual([]);
       expect(pages.every((page) => page.objects.length <= limit)).toBe(true);
+    });
+
+    // Drift: a listing is not a snapshot; a publish landing while the storage cap counts a site must not make it skip or count twice a file nothing touched.
+    test("a write under the prefix between two pages: every key no write touched is still listed exactly once", async () => {
+      const store = await makeStore();
+      await seed(store, LISTED_KEYS);
+
+      const pages = await listEveryPage(store, { prefix: "blog/", limit: 1 }, () => store.write(objectKey("blog/v4/index.html"), bytesOf("later"), TEXT));
+
+      expect(keysOf(pages).filter((key) => key !== "blog/v4/index.html")).toEqual(LISTED_KEYS.slice(1, 8));
+    });
+
+    // Drift: a prefix is matched as text, not as a folder; a store that rounded it to a segment would list a site's neighbour or nothing.
+    test.each([
+      ["ends inside a segment", "blog/v1/n", ["blog/v1/notes/a.txt"]],
+      ["nothing starts with", "trash/", []],
+    ] as const)("a prefix that %s lists exactly the keys that start with it", async (_name, prefix, keys) => {
+      const store = await makeStore();
+      await seed(store, LISTED_KEYS);
+
+      expect(keysOf(await listEveryPage(store, { prefix }))).toEqual([...keys]);
     });
 
     test("a listing carries each object's size and etag, and an empty prefix lists the whole store", async () => {
       const store = await makeStore();
-      const settings = await store.write(objectKey(".settings"), bytesOf("{}"), TEXT);
-      const readme = await store.write(objectKey("sites/readme"), bytesOf("hello"), TEXT);
+      const style = await store.write(objectKey("art/v1/style.css"), bytesOf("{}"), TEXT);
+      const page = await store.write(objectKey("blog/v1/index.html"), bytesOf("hello"), TEXT);
 
-      expect<unknown>((await listEveryPage(store, { prefix: "" })).flatMap((page) => page.objects)).toEqual([
-        { key: ".settings", size: 2, etag: settings.etag },
-        { key: "sites/readme", size: 5, etag: readme.etag },
+      expect<unknown>((await listEveryPage(store, { prefix: "" })).flatMap((listed) => listed.objects)).toEqual([
+        { key: "art/v1/style.css", size: 2, etag: style.etag },
+        { key: "blog/v1/index.html", size: 5, etag: page.etag },
       ]);
-    });
-
-    // Drift: the index page lists sites this way; walking every file of every site instead would cost a request per thousand files.
-    test.each([
-      ["a folder of sites", "sites/", [["sites/readme", "sites/\uff5e", "sites/\u{1f600}"], ["sites/blog/", "sites/docs/"]]],
-      ["one site", "sites/blog/", [["sites/blog/record"], ["sites/blog/v1/", "sites/blog/v2/"]]],
-      ["the whole store", "", [[".settings", "sitesmap"], ["sites/"]]],
-      ["a prefix that ends inside a segment", "sites/b", [[], ["sites/blog/"]]],
-      ["a prefix nothing starts with", "trash/", [[], []]],
-    ] as ReadonlyArray<readonly [string, string, readonly [readonly string[], readonly string[]]]>)("the children of %s are its own objects and one folder per deeper level", async (_name, prefix, [objects, folders]) => {
-      const store = await makeStore();
-      await seed(store, LISTED_KEYS);
-
-      const pages = await listEveryPage(store, { prefix, scope: "children" });
-
-      expect(keysOf(pages)).toEqual([...objects]);
-      expect(foldersOf(pages)).toEqual([...folders]);
-    });
-
-    test("children paged one entry at a time report each object and each folder exactly once", async () => {
-      const store = await makeStore();
-      await seed(store, LISTED_KEYS);
-
-      const pages = await listEveryPage(store, { prefix: "sites/", scope: "children", limit: 1 });
-
-      expect(keysOf(pages)).toEqual(["sites/readme", "sites/\uff5e", "sites/\u{1f600}"]);
-      expect(foldersOf(pages)).toEqual(["sites/blog/", "sites/docs/"]);
-      expect(pages.every((page) => page.objects.length + page.folders.length <= 1)).toBe(true);
-    });
-
-    // Drift: a listing is not a snapshot, and R2 reports a folder again when a write lands in it between two pages; the index page must still show each site once.
-    test("a write into a folder already reported, between two pages: the folders, de-duplicated, and the objects are each still reported once", async () => {
-      const store = await makeStore();
-      await seed(store, LISTED_KEYS);
-
-      const pages = await listEveryPage(store, { prefix: "sites/", scope: "children", limit: 1 }, () => store.write(objectKey("sites/blog/v3/index.html"), bytesOf("later"), TEXT));
-
-      expect(pages[0]?.folders).toEqual(["sites/blog/"]);
-      expect([...new Set(foldersOf(pages))]).toEqual(["sites/blog/", "sites/docs/"]);
-      expect(keysOf(pages)).toEqual(["sites/readme", "sites/\uff5e", "sites/\u{1f600}"]);
     });
 
     // Drift: R2 turns a lone surrogate into U+FFFD and normalises to NFC, so such a prefix would list other keys on R2 than in memory.
     test.each([
-      ["a lone surrogate", `sites/${LONE_SURROGATE}`, "lone surrogate"],
-      ["text that is not NFC", "sites/cafe\u0301", "NFC"],
+      ["a lone surrogate", `blog/${LONE_SURROGATE}`, "lone surrogate"],
+      ["text that is not NFC", "blog/cafe\u0301", "NFC"],
     ] as const)("a prefix holding %s is refused before anything is listed", async (_name, prefix, reason) => {
       const store = await makeStore();
 
@@ -424,24 +305,49 @@ function deleting(label: string, makeStore: StoreFactory): void {
   describe(`${label}: deleting`, () => {
     test("deleting a key that holds nothing is not an error, and deleting one that does leaves its neighbours", async () => {
       const store = await makeStore();
-      await seed(store, ["sites/blog/record", "sites/blog/v1/index.html"]);
+      await seed(store, ["blog/v1/index.html", "blog/v1/style.css"]);
 
-      await store.delete(objectKey("sites/docs/record"));
-      await store.delete(objectKey("sites/blog/record"));
+      await store.delete(objectKey("art/v1/index.html"));
+      await store.delete(objectKey("blog/v1/index.html"));
 
-      expect(keysOf(await listEveryPage(store, { prefix: "" }))).toEqual(["sites/blog/v1/index.html"]);
+      expect(keysOf(await listEveryPage(store, { prefix: "" }))).toEqual(["blog/v1/style.css"]);
     });
 
     // Drift: R2 and S3 take 1000 keys per delete call; emptying a large site must not stop there or fail on a key already gone.
     test("delete-many removes more keys than one store call takes, skips a missing one, and touches nothing else", async () => {
       const store = await makeStore();
-      const doomed = Array.from({ length: MAX_LIST_LIMIT + 1 }, (_unused, at) => `sites/blog/v1/file-${at}`);
-      await seed(store, [...doomed, "sites/blog/record"]);
+      const doomed = Array.from({ length: MAX_LIST_LIMIT + 1 }, (_unused, at) => `blog/v1/file-${at}`);
+      await seed(store, [...doomed, "blog/v2/index.html"]);
 
-      await store.deleteMany([...doomed, "sites/blog/v1/never-written"].map(objectKey));
+      await store.deleteMany([...doomed, "blog/v1/never-written"].map(objectKey));
       await store.deleteMany([]);
 
-      expect(keysOf(await listEveryPage(store, { prefix: "" }))).toEqual(["sites/blog/record"]);
+      expect(keysOf(await listEveryPage(store, { prefix: "" }))).toEqual(["blog/v2/index.html"]);
+    });
+
+    // Drift: removing a site must take every version of it and no file of a site whose name only starts the same way.
+    test("delete-prefix removes a folder larger than one page, counts what it removed, and leaves the folders beside it", async () => {
+      const store = await makeStore();
+      const doomed = Array.from({ length: MAX_LIST_LIMIT + 1 }, (_unused, at) => `blog/v${at}/index.html`);
+      const kept = ["art/v1/index.html", "blog2/v1/index.html"];
+      await seed(store, [...doomed, ...kept]);
+
+      const outcomes = [await deletePrefix(store, "blog/"), await deletePrefix(store, "blog/")];
+
+      expect(outcomes).toEqual([
+        { removed: MAX_LIST_LIMIT + 1, more: false },
+        { removed: 0, more: false },
+      ]);
+      expect(keysOf(await listEveryPage(store, { prefix: "" }))).toEqual(kept);
+    });
+
+    // Drift: a prefix without its slash also starts the keys of every longer folder name, and an empty one starts every key in the bucket.
+    test.each(["blog", ""])("delete-prefix refuses the prefix %j, which is no folder, before anything is removed", async (prefix) => {
+      const store = await makeStore();
+      await seed(store, ["blog/v1/index.html", "blog2/v1/index.html"]);
+
+      await expect(deletePrefix(store, prefix)).rejects.toBeInstanceOf(TypeError);
+      expect(keysOf(await listEveryPage(store, { prefix: "" }))).toEqual(["blog/v1/index.html", "blog2/v1/index.html"]);
     });
   });
 }
@@ -453,7 +359,6 @@ function deleting(label: string, makeStore: StoreFactory): void {
  */
 export function describeObjectStore(label: string, makeStore: StoreFactory): void {
   readingAndWriting(label, makeStore);
-  conditionalWrites(label, makeStore);
   rangedAndConditionalReads(label, makeStore);
   listing(label, makeStore);
   deleting(label, makeStore);

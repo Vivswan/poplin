@@ -1,10 +1,39 @@
 import { describe, expect, test } from "bun:test";
 
 import { MemoryStore } from "../src/storage/memory";
-import { type ByteRange, parseObjectKey, resolveRange } from "../src/storage/storage";
+import { type ByteRange, deletePrefix, type ListOptions, type ListPage, type ObjectKey, parseObjectKey, resolveRange } from "../src/storage/storage";
 import { bytesOf, describeObjectStore, objectKey, readText } from "./storage-contract";
 
+/** A key of exactly the 1024 bytes R2 and S3 accept. */
 const LONGEST_KEY = "k".repeat(1024);
+
+/** A Worker request on Cloudflare's Free plan gets 50 subrequests; one removal leaves ten for the rest of the request. */
+const CALLS_ONE_REMOVAL_MAY_SPEND = 40;
+
+/** A store that counts the calls a removal spends, and lists one object a page so a small folder has many pages. */
+class CountingStore extends MemoryStore {
+  calls = 0;
+
+  override async list(options: ListOptions): Promise<ListPage> {
+    this.calls += 1;
+
+    return super.list({ ...options, limit: 1 });
+  }
+
+  override async deleteMany(keys: readonly ObjectKey[]): Promise<void> {
+    this.calls += 1;
+
+    return super.deleteMany(keys);
+  }
+}
+
+async function folderOfFifty(): Promise<CountingStore> {
+  const store = new CountingStore();
+  const keys = Array.from({ length: 50 }, (_unused, at) => `blog/v${at}/index.html`);
+  for (const key of [...keys, "blog2/v1/index.html"]) await store.write(objectKey(key), bytesOf(key), { contentType: "text/plain" });
+
+  return store;
+}
 
 describe("parseObjectKey", () => {
   // Drift: a key becomes a bucket path and part of a URL; one that R2 and S3 normalise differently would be written here and read nowhere.
@@ -70,37 +99,58 @@ describe("MemoryStore", () => {
     ["a Buffer, whose slice shares memory", (): Uint8Array => Buffer.from("kept")],
   ] as const)("what the caller wrote as %s and what it was handed are copies: changing either afterwards changes nothing stored", async (_form, body) => {
     const store = new MemoryStore();
-    const key = objectKey("sites/blog/record");
+    const key = objectKey("blog/v1/data.txt");
     const bytes = body();
-    const metadata = { state: "private" };
-    const written = await store.write(key, bytes, { contentType: "text/plain", metadata });
+    const written = await store.write(key, bytes, { contentType: "text/plain" });
     const handedOut = await store.read(key);
 
     bytes.fill(0);
-    metadata.state = "public";
-    (written.metadata as Record<string, string>).state = "public";
     if (handedOut.kind === "found") new Uint8Array(await new Response(handedOut.body).arrayBuffer()).fill(0);
 
     expect<unknown>(await readText(store, key)).toEqual({
       kind: "found",
-      info: { key, size: 4, etag: written.etag, contentType: "text/plain", metadata: { state: "private" } },
+      info: { key, size: 4, etag: written.etag, contentType: "text/plain" },
       span: { offset: 0, length: 4 },
       text: "kept",
     });
   });
+});
 
-  // Drift: R2 resumes a listing after the last key a page covered; a twin that never repeated a folder would pass a caller that fails on R2.
-  test("a folder written into between two pages is reported again, as R2 reports it, so a caller that does not de-duplicate fails here too", async () => {
-    const store = new MemoryStore();
-    for (const key of ["sites/blog/v1", "sites/docs/v1"]) await store.write(objectKey(key), bytesOf(key), { contentType: "text/plain" });
+describe("deletePrefix", () => {
+  // Drift: the Free plan ends a request at 50 subrequests; a removal that spent more would fail half way through a large site, every time.
+  test("a folder of more pages than one call walks: the default stops inside what one request may spend, and says more remain", async () => {
+    const store = await folderOfFifty();
+    const outcome = await deletePrefix(store, "blog/");
 
-    const first = await store.list({ prefix: "sites/", scope: "children", limit: 1 });
-    await store.write(objectKey("sites/blog/v2"), bytesOf("later"), { contentType: "text/plain" });
-    if (!first.more) throw new Error("two folders do not fit a page of one");
+    expect(outcome.more).toBe(true);
+    expect(store.calls).toBeLessThan(CALLS_ONE_REMOVAL_MAY_SPEND);
+    expect(store.calls).toBe(outcome.removed * 2);
+  });
 
-    const second = await store.list({ prefix: "sites/", scope: "children", limit: 1, cursor: first.cursor });
+  test("a page limit of three spends three lists and three deletes a call, and calls repeated while more remain empty the folder and nothing beside it", async () => {
+    const store = await folderOfFifty();
+    const first = await deletePrefix(store, "blog/", 3);
+    const spent = store.calls;
 
-    expect([first.folders, second.folders]).toEqual([["sites/blog/"], ["sites/blog/"]]);
+    let outcome = first;
+    let removed = first.removed;
+
+    while (outcome.more) {
+      outcome = await deletePrefix(store, "blog/", 3);
+      removed += outcome.removed;
+    }
+
+    const left = await store.list({ prefix: "" });
+
+    expect<unknown>([first, spent, removed, left.objects.map((object) => object.key)]).toEqual([{ removed: 3, more: true }, 6, 50, ["blog2/v1/index.html"]]);
+  });
+
+  // Drift: the walk stops when its page count meets the limit; a limit it can never meet would walk a whole bucket in one request.
+  test.each([0, -1, 1.5, Number.NaN, Number.POSITIVE_INFINITY])("a page limit of %d is refused before anything is listed", async (maxPages) => {
+    const store = await folderOfFifty();
+
+    await expect(deletePrefix(store, "blog/", maxPages)).rejects.toBeInstanceOf(RangeError);
+    expect(store.calls).toBe(0);
   });
 });
 
