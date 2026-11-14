@@ -7,7 +7,7 @@ import { type SettingValues, settingsFromText, settingsToText } from "@poplin/co
 import { withNotice } from "../page/notices";
 import type { Change, Form, Visit } from "../records";
 import { requireFields } from "../security/form";
-import { ZONE_SETTINGS } from "./constants";
+import { DOMAIN_SETTINGS } from "./constants";
 
 /** The path of the Settings tab. */
 const SETTINGS_PATH = "/settings";
@@ -20,11 +20,11 @@ async function saveSettings(visit: Visit, form: Form): Promise<string> {
   if (!config.ok) return withNotice(SETTINGS_PATH, { refused: config.code });
 
   const current = settingsToText(config.values);
-  const ordinary = (Object.keys(current) as (keyof SettingValues)[]).filter((key) => !ZONE_SETTINGS.includes(key));
+  const ordinary = (Object.keys(current) as (keyof SettingValues)[]).filter((key) => !DOMAIN_SETTINGS.includes(key));
   const typed = requireFields(form, ordinary);
   if (typed === undefined) return withNotice(SETTINGS_PATH, { refused: "missing_field" });
 
-  // A setting is read from its text beside every other one, so the Zone tab's settings go along as they are stored and are not sent on.
+  // A setting is read from its text beside every other one, so the Domain tab's settings go along as they are stored and are not sent on.
   const read = settingsFromText({ ...current, ...typed });
   if (!read.ok) return withNotice(SETTINGS_PATH, { refused: "bad_argument", about: read.key });
 

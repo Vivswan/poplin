@@ -6,7 +6,7 @@ import { html } from "hono/html";
 
 import { csrfField, refusedPage } from "../page/frame";
 import type { Html, Page, Visit } from "../records";
-import { ZONE_SETTINGS } from "./constants";
+import { DOMAIN_SETTINGS } from "./constants";
 import { freeLimitWarnings } from "./free-limits";
 
 /** What each setting means, in a line. A key missing here does not compile. */
@@ -23,7 +23,7 @@ const MEANINGS: { readonly [Key in keyof SettingValues]: string } = {
   private_sites: "On an install with no domain, what may be private: single-file or folders.",
   outside_pages: "Whether pages outside the install may frame a site or load its files.",
   search_engines_allowed: "Whether search engines are let through to public sites.",
-  zone_bots: "The zone's bot switches.",
+  block_bots: "The zone's bot switches.",
   max_total_size: "The most all sites hold together, such as 9GB.",
   max_site_size: "The most one site holds, such as 200MB.",
   max_sites: "The most sites, or none for no limit.",
@@ -93,7 +93,7 @@ ${csrfField(visit)}
 /**
  * Show the settings.
  *
- * @returns one input per ordinary setting in one form, the Zone tab's settings as text, a warning beside each stored value that is above a free limit of Cloudflare, and the sign-out form
+ * @returns one input per ordinary setting in one form, the Domain tab's settings as text, a warning beside each stored value that is above a free limit of Cloudflare, and the sign-out form
  */
 export async function showSettings(visit: Visit): Promise<Page> {
   const place = { tab: "settings", heading: "Settings" } as const;
@@ -104,16 +104,16 @@ export async function showSettings(visit: Visit): Promise<Page> {
   const defaults = defaultTexts(config.values, visit.url.hostname);
   const warnings = freeLimitWarnings(config.values);
   const rows = (Object.keys(texts) as Key[]).map((key): Row => ({ key, text: texts[key], fallback: defaults[key], warning: warnings.get(key) }));
-  const ordinary = rows.filter((row) => !ZONE_SETTINGS.includes(row.key));
-  const zone = rows.filter((row) => ZONE_SETTINGS.includes(row.key));
+  const ordinary = rows.filter((row) => !DOMAIN_SETTINGS.includes(row.key));
+  const zone = rows.filter((row) => DOMAIN_SETTINGS.includes(row.key));
 
   const body = html`<form method="post" action="/settings/save">
 ${csrfField(visit)}
 ${ordinary.map(settingRow)}
 <button type="submit">Save settings</button>
 </form>
-<h2>Changed on the Zone tab</h2>
-<p>These settings also change Cloudflare, so they are changed on the Zone tab.</p>
+<h2>Changed on the Domain tab</h2>
+<p>These settings also change rules on your domain, so they are changed on the Domain tab.</p>
 <dl>${zone.map(zoneRow)}</dl>
 ${signOutForm(visit)}`;
 

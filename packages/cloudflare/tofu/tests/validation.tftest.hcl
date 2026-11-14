@@ -456,14 +456,14 @@ run "outside_pages_unknown_word" {
   expect_failures = [var.outside_pages]
 }
 
-run "zone_bots_unknown_word" {
+run "block_bots_unknown_word" {
   command = plan
 
   variables {
-    zone_bots = "always"
+    block_bots = "always"
   }
 
-  expect_failures = [var.zone_bots]
+  expect_failures = [var.block_bots]
 }
 
 run "access_team_domain_with_a_scheme" {

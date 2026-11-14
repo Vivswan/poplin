@@ -913,7 +913,7 @@ function signingKey(label: string, makeDatabase: DatabaseFactory): void {
       expect<unknown>([FIRST_KEY, SECOND_KEY, THIRD_KEY]).toContainEqual(winner);
       expect<unknown>(later).toEqual({ kind: "kept", key: winner });
       expect<unknown>(await database.readSigningKey()).toEqual(new Uint8Array(48).fill(0xe5));
-      expect(await auditTrail(database)).toEqual([{ seq: 1, at: NOW + 2, by: BO, action: "signed-everyone-out", site: null, detail: {} }]);
+      expect(await auditTrail(database)).toEqual([{ seq: 1, at: NOW + 2, by: BO, action: "signed_everyone_out", site: null, detail: {} }]);
       await expect(database.ensureSigningKey(new Uint8Array(31), NOW)).rejects.toThrow(RangeError);
       await expect(database.rotateSigningKey(new Uint8Array(31), BY_ADA)).rejects.toThrow(RangeError);
       expect<unknown>(await database.readSigningKey()).toEqual(new Uint8Array(48).fill(0xe5));
@@ -943,7 +943,7 @@ function signingKey(label: string, makeDatabase: DatabaseFactory): void {
       const needles = ["a1".repeat(32), "b2".repeat(32), "161,161", "178,178", '"161"', '"178"'];
 
       expect(needles.filter((needle) => shown.includes(needle))).toEqual([]);
-      expect(shown).toContain("signed-everyone-out");
+      expect(shown).toContain("signed_everyone_out");
       expect<unknown>(await database.readSigningKey()).toEqual(SECOND_KEY);
     });
   });
@@ -994,7 +994,7 @@ function auditLog(label: string, makeDatabase: DatabaseFactory): void {
         async (database: Database, site: Site): Promise<unknown> => [await database.deleteSite(site.id, signed), await database.importSite(site, signed)],
         ["delete", "imported"],
       ],
-      ["the signing key replaced", async (database: Database): Promise<unknown> => database.rotateSigningKey(SECOND_KEY, signed), ["signed-everyone-out"]],
+      ["the signing key replaced", async (database: Database): Promise<unknown> => database.rotateSigningKey(SECOND_KEY, signed), ["signed_everyone_out"]],
       ["a signing key stored where none was", async (database: Database): Promise<unknown> => database.ensureSigningKey(FIRST_KEY, NOW), []],
       ["a site imported that is already there", async (database: Database, site: Site): Promise<unknown> => database.importSite(site, signed), []],
       ["a note appended", async (database: Database): Promise<unknown> => database.appendAudit({ action: "login", detail: {} }, signed), ["login"]],

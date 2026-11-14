@@ -209,7 +209,7 @@ describe("a zone the OpenTofu module set up", () => {
       run: (connection) => syncGuards(connection, ZONE, { layout: SUFFIXED, plan: "free", outsidePages: "blocked", searchEnginesAllowed: false }),
     },
     { name: "the database", rate: WHOLE_ZONE, run: (connection) => syncDatabase(connection, ACCOUNT) },
-    { name: "the bot settings", rate: WHOLE_ZONE, run: (connection) => syncZoneBots(connection, ZONE, { zoneBots: "auto", plan: "free", sharesZone: false }) },
+    { name: "the bot settings", rate: WHOLE_ZONE, run: (connection) => syncZoneBots(connection, ZONE, { blockBots: "auto", plan: "free", sharesZone: false }) },
   ];
 
   test.each(pieces)("$name: the setup client finds its own object, sends no change, and reports none", async ({ rate, run }) => {

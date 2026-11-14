@@ -22,7 +22,7 @@ const AUDIT_ACTIONS = [
   "token_revoked",
   "settings_set",
   "settings_changed",
-  "signed-everyone-out",
+  "signed_everyone_out",
   "login",
 ] as const;
 

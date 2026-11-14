@@ -11,58 +11,58 @@ const UNSET = { ai_bots_protection: "disabled", fight_mode: false, enable_js: fa
 
 describe("planZoneBots", () => {
   const cases: readonly {
-    readonly zoneBots: "auto" | "on" | "off";
+    readonly blockBots: "auto" | "on" | "off";
     readonly plan: ZonePlan;
     readonly sharesZone: boolean;
     readonly step: object;
   }[] = [
-    { zoneBots: "auto", plan: "free", sharesZone: false, step: { kind: "change", subject: "zone bot switches", switches: AI_BLOCK } },
-    { zoneBots: "auto", plan: "free", sharesZone: true, step: { kind: "skip", subject: "zone bot switches", reason: COVERS_OTHERS } },
-    { zoneBots: "auto", plan: "pro", sharesZone: false, step: { kind: "change", subject: "zone bot switches", switches: AI_BLOCK } },
-    { zoneBots: "auto", plan: "pro", sharesZone: true, step: { kind: "skip", subject: "zone bot switches", reason: COVERS_OTHERS } },
-    { zoneBots: "on", plan: "free", sharesZone: false, step: { kind: "change", subject: "zone bot switches", switches: AI_BLOCK_AND_FIGHT } },
-    { zoneBots: "on", plan: "free", sharesZone: true, step: { kind: "change", subject: "zone bot switches", switches: AI_BLOCK_AND_FIGHT } },
-    { zoneBots: "on", plan: "pro", sharesZone: true, step: { kind: "change", subject: "zone bot switches", switches: AI_BLOCK } },
-    { zoneBots: "off", plan: "free", sharesZone: false, step: { kind: "skip", subject: "zone bot switches", reason: SWITCHED_OFF } },
-    { zoneBots: "off", plan: "free", sharesZone: true, step: { kind: "skip", subject: "zone bot switches", reason: SWITCHED_OFF } },
+    { blockBots: "auto", plan: "free", sharesZone: false, step: { kind: "change", subject: "zone bot switches", switches: AI_BLOCK } },
+    { blockBots: "auto", plan: "free", sharesZone: true, step: { kind: "skip", subject: "zone bot switches", reason: COVERS_OTHERS } },
+    { blockBots: "auto", plan: "pro", sharesZone: false, step: { kind: "change", subject: "zone bot switches", switches: AI_BLOCK } },
+    { blockBots: "auto", plan: "pro", sharesZone: true, step: { kind: "skip", subject: "zone bot switches", reason: COVERS_OTHERS } },
+    { blockBots: "on", plan: "free", sharesZone: false, step: { kind: "change", subject: "zone bot switches", switches: AI_BLOCK_AND_FIGHT } },
+    { blockBots: "on", plan: "free", sharesZone: true, step: { kind: "change", subject: "zone bot switches", switches: AI_BLOCK_AND_FIGHT } },
+    { blockBots: "on", plan: "pro", sharesZone: true, step: { kind: "change", subject: "zone bot switches", switches: AI_BLOCK } },
+    { blockBots: "off", plan: "free", sharesZone: false, step: { kind: "skip", subject: "zone bot switches", reason: SWITCHED_OFF } },
+    { blockBots: "off", plan: "free", sharesZone: true, step: { kind: "skip", subject: "zone bot switches", reason: SWITCHED_OFF } },
   ];
 
   test.each(cases)(
-    "$zoneBots on $plan, zone shared $sharesZone: a switch that covers the whole zone is flipped on a zone with hostnames of its own only by `on`, and Bot Fight Mode only by `on` on the Free plan",
+    "$blockBots on $plan, zone shared $sharesZone: a switch that covers the whole zone is flipped on a zone with hostnames of its own only by `on`, and Bot Fight Mode only by `on` on the Free plan",
     ({ step, ...desired }) => {
       expect<unknown>(planZoneBots(desired, UNSET)).toEqual([step]);
     },
   );
 
-  const settled: readonly { readonly name: string; readonly zoneBots: "auto" | "on"; readonly current: object; readonly step: object }[] = [
+  const settled: readonly { readonly name: string; readonly blockBots: "auto" | "on"; readonly current: object; readonly step: object }[] = [
     {
       name: "the AI bot block already on",
-      zoneBots: "auto",
+      blockBots: "auto",
       current: { ...UNSET, ai_bots_protection: "block" },
       step: { kind: "leave", subject: "zone bot switches" },
     },
     {
       name: "both switches already on",
-      zoneBots: "on",
+      blockBots: "on",
       current: { ai_bots_protection: "block", fight_mode: true },
       step: { kind: "leave", subject: "zone bot switches" },
     },
     {
       name: "Bot Fight Mode on by the owner's hand while poplin wants the AI bot block alone",
-      zoneBots: "auto",
+      blockBots: "auto",
       current: { ai_bots_protection: "block", fight_mode: true },
       step: { kind: "leave", subject: "zone bot switches" },
     },
     {
       name: "one of the two switches still off",
-      zoneBots: "on",
+      blockBots: "on",
       current: { ai_bots_protection: "block", fight_mode: false },
       step: { kind: "change", subject: "zone bot switches", switches: AI_BLOCK_AND_FIGHT },
     },
   ];
 
-  test.each(settled)("$name: a second run sends nothing, and poplin never switches off what it finds on", ({ zoneBots, current, step }) => {
-    expect<unknown>(planZoneBots({ zoneBots, plan: "free", sharesZone: false }, current)).toEqual([step]);
+  test.each(settled)("$name: a second run sends nothing, and poplin never switches off what it finds on", ({ blockBots, current, step }) => {
+    expect<unknown>(planZoneBots({ blockBots, plan: "free", sharesZone: false }, current)).toEqual([step]);
   });
 });
 
@@ -77,7 +77,7 @@ describe("syncZoneBots", () => {
         return reply(switches);
       },
       async (connection, asked) => {
-        const desired = { zoneBots: "auto", plan: "free", sharesZone: false } as const;
+        const desired = { blockBots: "auto", plan: "free", sharesZone: false } as const;
         const first = await syncZoneBots(connection, "zone-1", desired);
         const second = await syncZoneBots(connection, "zone-1", desired);
 
@@ -93,18 +93,18 @@ describe("syncZoneBots", () => {
     );
   });
 
-  const untouched: readonly { readonly zoneBots: "auto" | "off"; readonly reason: string }[] = [
-    { zoneBots: "auto", reason: COVERS_OTHERS },
-    { zoneBots: "off", reason: SWITCHED_OFF },
+  const untouched: readonly { readonly blockBots: "auto" | "off"; readonly reason: string }[] = [
+    { blockBots: "auto", reason: COVERS_OTHERS },
+    { blockBots: "off", reason: SWITCHED_OFF },
   ];
 
   test.each(untouched)(
-    "$zoneBots on a zone with hostnames of its own: no request is sent at all, so a key without the bot permission still works, and the report says why",
-    async ({ zoneBots, reason }) => {
+    "$blockBots on a zone with hostnames of its own: no request is sent at all, so a key without the bot permission still works, and the report says why",
+    async ({ blockBots, reason }) => {
       await withFake(
         () => reply(UNSET),
         async (connection, asked) => {
-          expect(await syncZoneBots(connection, "zone-1", { zoneBots, plan: "free", sharesZone: true })).toMatchObject({
+          expect(await syncZoneBots(connection, "zone-1", { blockBots, plan: "free", sharesZone: true })).toMatchObject({
             ok: true,
             report: { skipped: [{ subject: "zone bot switches", reason }], changedNothing: true },
           });
@@ -118,7 +118,7 @@ describe("syncZoneBots", () => {
     await withFake(
       () => undefined,
       async (connection, asked) => {
-        expect(await syncZoneBots(connection, "zone-1", { zoneBots: "on", plan: "free", sharesZone: true })).toMatchObject({
+        expect(await syncZoneBots(connection, "zone-1", { blockBots: "on", plan: "free", sharesZone: true })).toMatchObject({
           ok: false,
           failure: "refused",
           report: { changedNothing: true },

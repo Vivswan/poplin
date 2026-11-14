@@ -31,7 +31,7 @@ const WORDS: Readonly<Record<AuditAction, string>> = {
   token_revoked: "revoked a token",
   settings_set: "set the first settings",
   settings_changed: "changed the settings of the install",
-  "signed-everyone-out": "signed everyone out",
+  "signed_everyone_out": "signed everyone out",
   login: "logged in",
 };
 

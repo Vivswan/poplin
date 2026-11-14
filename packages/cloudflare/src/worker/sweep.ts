@@ -8,8 +8,7 @@
 // Cloudflare's Free plan gives one invocation 1,000 calls to its own services and a cron run 10 ms of CPU; the run stays under a third of the first, since the second is the tighter one.
 
 import type { Install } from "@poplin/core/src/actions/records";
-import { sweepExpired } from "@poplin/core/src/actions/sweep";
-import type { Login } from "@poplin/core/src/auth/logins";
+import { SWEEPER, sweepExpired } from "@poplin/core/src/actions/sweep";
 
 /** How many sites or uploads one step looks at. */
 const STEP_ITEMS = 5;
@@ -19,9 +18,6 @@ const STEP_CALLS = 162;
 
 /** The most database and bucket calls one run makes, which leaves 10 of an invocation's 300 to an instance that starts first. */
 const RUN_CALLS = 290;
-
-/** Who signs the audit entry of every site the sweep moves or removes. No person logs in under a `.invalid` address. */
-const SWEEPER = { scope: "admin", holder: "sweep@poplin.invalid" as Login } as const;
 
 /** The three parts of the walk, in its own order: the sites, the trash, the uploads. */
 const PARTS: readonly Place[] = [{ trash: false }, { trash: true }, { uploads: true }];

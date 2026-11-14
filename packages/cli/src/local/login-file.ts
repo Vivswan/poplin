@@ -1,4 +1,4 @@
-// The login file: the one file on the user's machine that holds the Worker's address and a token.
+// The login file: the one file on the user's machine that holds the install's address and a token.
 //
 // It is replaced whole and never edited, so a reader sees the old login or the new one and never a part of either.
 

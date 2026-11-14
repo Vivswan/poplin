@@ -2,6 +2,7 @@
 
 import * as v from "valibot";
 
+import type { Login } from "../auth/logins";
 import type { Actor } from "../auth/scopes";
 import type { Signed } from "../database/database";
 import { MOMENT, POSITIVE, SITE_ID } from "../records/fields";
@@ -15,6 +16,9 @@ import { removeDropped, removeUploadFiles, sweepableBefore } from "./uploads";
 
 /** The most sites one call looks at. */
 const MAX_STEP = 100;
+
+/** Who signs the audit entry of every site a scheduled sweep moves or removes. No person logs in under a `.invalid` address. */
+export const SWEEPER = { scope: "admin", holder: "sweep@poplin.invalid" as Login } as const;
 
 /** Where a walk stands: in the sites or in the trash, after which site; or in the uploads, after which upload. */
 const PLACE = v.union([

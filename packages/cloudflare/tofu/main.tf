@@ -94,9 +94,9 @@ locals {
   )
 
   # Why the zone's bot switches are left alone, or null when the module sets them.
-  zone_bots_skipped = (
-    var.zone_bots == "off" ? "zone_bots is off" :
-    var.zone_bots == "auto" && length(local.other_names) > 0 ? "the AI bot block covers the whole zone, and the zone has hostnames of its own: ${join(", ", local.other_names)}" :
+  block_bots_skipped = (
+    var.block_bots == "off" ? "block_bots is off" :
+    var.block_bots == "auto" && length(local.other_names) > 0 ? "the AI bot block covers the whole zone, and the zone has hostnames of its own: ${join(", ", local.other_names)}" :
     null
   )
 
@@ -121,7 +121,7 @@ locals {
     private_sites               = "single-file"
     outside_pages               = var.outside_pages
     search_engines_allowed      = var.search_engines_allowed ? "on" : "off"
-    zone_bots                   = var.zone_bots
+    block_bots                  = var.block_bots
     max_total_size              = var.max_total_size
     max_site_size               = var.max_site_size
     max_sites                   = var.max_sites == null ? "none" : tostring(var.max_sites)

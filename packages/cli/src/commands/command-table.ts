@@ -174,10 +174,9 @@ export const COMMANDS = [
     flags: [{ name: "--reset", about: "put that setting back to its default" }, ...INSTALL_FLAGS],
     examples: ["poplin config", "poplin config versions_kept 10", "poplin config outside_pages allowed"],
     notes: [
-      "outside_pages, search_engines_allowed, and zone_bots are also held in",
-      "Cloudflare: two rules, and the zone's bot settings. The Worker follows a",
-      "changed outside_pages itself. Cloudflare's side changes only when the zone",
-      "is synced.",
+      "outside_pages, search_engines_allowed, and block_bots are also held in",
+      "rules on your domain. The install follows a changed outside_pages itself.",
+      "The domain's side changes only when it is synced.",
     ],
   },
   {

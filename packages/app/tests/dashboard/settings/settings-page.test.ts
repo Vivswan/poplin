@@ -5,10 +5,10 @@ import { settingsToText } from "@poplin/core/src/records/settings";
 
 import { openDashboard } from "../support/install";
 
-const ZONE = ["outside_pages", "search_engines_allowed", "zone_bots"];
+const ZONE = ["outside_pages", "search_engines_allowed", "block_bots"];
 const INPUT = /<input type="text" id="([a-z_]+)" name="([a-z_]+)" value="([^"]*)" autocomplete="off">\s*<p class="hint">Default: ([^<]*)<\/p>/g;
 
-test("every ordinary setting has a labelled input holding its stored text and shows its default; the Zone tab's settings are text only", async () => {
+test("every ordinary setting has a labelled input holding its stored text and shows its default; the Domain tab's settings are text only", async () => {
   const opened = await openDashboard();
   const admin = { scope: "admin", holder: opened.owner } as const;
   await changeConfig(opened.install, admin, { trash_days: 30, dashboard_title: `Ada's "sites" <b>`, cache_files: "off", max_sites: 12 });
@@ -38,8 +38,8 @@ test("every ordinary setting has a labelled input holding its stored text and sh
     max_sites: "none",
     logins: "the email of whoever set the install up",
   });
-  expect(page).toContain("so they are changed on the Zone tab.");
-  expect(page).toContain("<dt><code>outside_pages</code></dt><dd>blocked</dd><dt><code>search_engines_allowed</code></dt><dd>off</dd><dt><code>zone_bots</code></dt><dd>auto</dd>");
+  expect(page).toContain("so they are changed on the Domain tab.");
+  expect(page).toContain("<dt><code>outside_pages</code></dt><dd>blocked</dd><dt><code>search_engines_allowed</code></dt><dd>off</dd><dt><code>block_bots</code></dt><dd>auto</dd>");
   expect(page).toContain(`<title>Settings - Ada&#39;s &quot;sites&quot; &lt;b&gt;</title>`);
 });
 

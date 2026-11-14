@@ -294,7 +294,7 @@ function storedRows(label: string, makeDriver: DriverFactory): void {
 
       expect(audit.map((row) => [row.action, row.actor, row.site_id, row.site_name, row.detail])).toEqual([
         ["create", ADA, site.id, REPORT, '{"access":"public","public_name":"docs"}'],
-        ["signed-everyone-out", ADA, null, null, "{}"],
+        ["signed_everyone_out", ADA, null, null, "{}"],
         ["delete", ADA, site.id, REPORT, "{}"],
       ]);
       expect(["a1".repeat(32), "b2".repeat(32), "161,161", "178,178"].filter((needle) => logged.includes(needle))).toEqual([]);

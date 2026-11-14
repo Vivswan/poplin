@@ -125,7 +125,7 @@ run "worker_bindings" {
       private_sites               = "single-file"
       outside_pages               = "blocked"
       search_engines_allowed      = "on"
-      zone_bots                   = "auto"
+      block_bots                  = "auto"
       max_total_size              = "9GB"
       max_site_size               = "200MB"
       max_sites                   = "50"
@@ -274,7 +274,7 @@ run "own_records_are_no_records_of_the_zone" {
   }
 
   assert {
-    condition     = output.zone_bots == "set"
+    condition     = output.block_bots == "set"
     error_message = "The install's own records are no hostnames of the zone's, so the bot settings stay."
   }
 }
@@ -471,7 +471,7 @@ run "guards_by_default" {
   }
 
   assert {
-    condition     = output.zone_bots == "set" && sort(keys(output.guard_rule_expressions)) == tolist(["poplin_bots", "poplin_outside_pages"])
+    condition     = output.block_bots == "set" && sort(keys(output.guard_rule_expressions)) == tolist(["poplin_bots", "poplin_outside_pages"])
     error_message = "The outputs say the switches are set and carry both guard expressions."
   }
 }
@@ -503,7 +503,7 @@ run "search_engines_let_through" {
   }
 }
 
-run "zone_bots_on_a_zone_with_other_hostnames" {
+run "block_bots_on_a_zone_with_other_hostnames" {
   command = plan
 
   variables {
@@ -527,7 +527,7 @@ run "zone_bots_on_a_zone_with_other_hostnames" {
   }
 
   assert {
-    condition     = output.zone_bots == "the AI bot block covers the whole zone, and the zone has hostnames of its own: www.example.com"
+    condition     = output.block_bots == "the AI bot block covers the whole zone, and the zone has hostnames of its own: www.example.com"
     error_message = "A skipped switch says why and names the hostnames."
   }
 
@@ -537,12 +537,12 @@ run "zone_bots_on_a_zone_with_other_hostnames" {
   }
 }
 
-run "zone_bots_forced_on_a_zone_with_other_hostnames" {
+run "block_bots_forced_on_a_zone_with_other_hostnames" {
   command = plan
 
   variables {
-    rate_rule = "off"
-    zone_bots = "on"
+    rate_rule  = "off"
+    block_bots = "on"
   }
 
   override_data {
@@ -558,6 +558,6 @@ run "zone_bots_forced_on_a_zone_with_other_hostnames" {
 
   assert {
     condition     = cloudflare_bot_management.zone[0].ai_bots_protection == "block" && cloudflare_bot_management.zone[0].fight_mode == true
-    error_message = "zone_bots = on is the caller's word that the whole zone may be covered: both switches are set whatever the zone holds."
+    error_message = "block_bots = on is the caller's word that the whole zone may be covered: both switches are set whatever the zone holds."
   }
 }

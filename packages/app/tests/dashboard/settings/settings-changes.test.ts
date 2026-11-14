@@ -4,7 +4,7 @@ import { type SettingValues, settingsToText } from "@poplin/core/src/records/set
 
 import { LOGIN, landing, type Opened, openDashboard } from "../support/install";
 
-const ZONE = ["outside_pages", "search_engines_allowed", "zone_bots"];
+const ZONE = ["outside_pages", "search_engines_allowed", "block_bots"];
 const NOTICE = /<p class="notice (done|refused)" role="status">([^<]*)<\/p>/;
 
 async function settings(opened: Opened): Promise<SettingValues> {
@@ -51,7 +51,7 @@ test("a value above a free limit is saved, never blocked, and the page it lands 
   expect(page.match(/id="[a-z_]+-warning"/g)).toEqual(['id="max_total_size-warning"', 'id="requests_per_day-warning"']);
 });
 
-test("text a setting does not take, a missing field, and a form that names a Zone tab setting change nothing; the refusal names the setting", async () => {
+test("text a setting does not take, a missing field, and a form that names a Domain tab setting change nothing; the refusal names the setting", async () => {
   const opened = await openDashboard();
   const before = JSON.stringify([await settings(opened), await opened.audit()]);
   const withoutOne = await fields(opened);
@@ -76,7 +76,7 @@ test("text a setting does not take, a missing field, and a form that names a Zon
     expect(NOTICE.exec(await landing(opened, answer))?.slice(1)).toEqual(["refused", sentence]);
   }
 
-  const zone = await opened.post("/settings/save", await fields(opened, { outside_pages: "allowed", search_engines_allowed: "on", zone_bots: "off", no_such_setting: "1" }));
+  const zone = await opened.post("/settings/save", await fields(opened, { outside_pages: "allowed", search_engines_allowed: "on", block_bots: "off", no_such_setting: "1" }));
 
   expect(zone.headers.get("Location")).toBe("/settings?done=saved");
   expect(JSON.stringify([await settings(opened), await opened.audit()])).toBe(before);
@@ -103,6 +103,6 @@ test("sign everyone out needs its box ticked; ticked, the signing key is replace
 
   expect([signedOut.status, signedOut.headers.get("Location")]).toEqual([303, `${LOGIN}${encodeURIComponent("/")}`]);
   expect(String(await opened.install.database.readSigningKey())).not.toBe(key);
-  expect((await opened.audit()).slice(0, -entries).map((entry) => [entry.action, entry.by])).toEqual([["signed-everyone-out", opened.owner]]);
+  expect((await opened.audit()).slice(0, -entries).map((entry) => [entry.action, entry.by])).toEqual([["signed_everyone_out", opened.owner]]);
   expect([after.status, after.headers.get("Location"), await after.text()]).toEqual([302, `${LOGIN}${encodeURIComponent("/settings")}`, ""]);
 });

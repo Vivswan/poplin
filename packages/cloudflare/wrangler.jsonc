@@ -25,7 +25,7 @@
       "private_sites": "single-file",
       "outside_pages": "blocked",
       "search_engines_allowed": "off",
-      "zone_bots": "auto",
+      "block_bots": "auto",
       "max_total_size": "9GB",
       "max_site_size": "200MB",
       "max_sites": "none",

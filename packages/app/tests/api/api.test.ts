@@ -216,7 +216,7 @@ describe("createApi", () => {
     expect(part(await done("changeConfig", undefined, { body: { trash_days: 9 } }), "values").trash_days).toBe(9);
     const key = await install.database.ensureSigningKey(new Uint8Array(32).fill(7), NOW);
     expect([(await done("signEveryoneOut", undefined)).body, await install.database.readSigningKey()]).not.toEqual([{}, key.key]);
-    expect(((await done("listAudit", { limit: 3 })).body.entries as { action: string }[]).map((entry) => entry.action)).toEqual(["signed-everyone-out", "settings_changed", "restore"]);
+    expect(((await done("listAudit", { limit: 3 })).body.entries as { action: string }[]).map((entry) => entry.action)).toEqual(["signed_everyone_out", "settings_changed", "restore"]);
     expect(part(await done("deleteSite", { site: moved, forever: true }), "before").id).toBe(moved);
     expect(part(await done("importSettings", undefined, { body: { format: 1, settings } }), "values").trash_days).toBe(7);
     const files = manifest(PAGES).map((file) => ({ ...file, path: `v1/${file.path}` }));

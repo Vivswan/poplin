@@ -454,7 +454,7 @@ class MemoryDatabase implements Database {
   async rotateSigningKey(fresh: Uint8Array, signed: Signed): Promise<void> {
     requireKey(fresh);
     this.#signingKey = Uint8Array.from(fresh);
-    this.#log(signed, "signed-everyone-out", null, {});
+    this.#log(signed, "signed_everyone_out", null, {});
   }
 
   async appendAudit(note: AuditNote, signed: Signed): Promise<void> {

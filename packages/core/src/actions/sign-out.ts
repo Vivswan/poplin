@@ -7,7 +7,7 @@ import { type Install, type Refused, refuse } from "./records";
 const KEY_BYTES = 32;
 
 /**
- * Replace the install's signing key with 32 bytes drawn here from Web Crypto. The key is told to nobody, and the change writes one `signed-everyone-out` audit entry.
+ * Replace the install's signing key with 32 bytes drawn here from Web Crypto. The key is told to nobody, and the change writes one `signed_everyone_out` audit entry.
  *
  * @returns done, or `not_allowed` for anyone but an admin
  * @throws {Error} the database failed

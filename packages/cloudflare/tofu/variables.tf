@@ -84,14 +84,14 @@ variable "search_engines_allowed" {
   default     = false
 }
 
-variable "zone_bots" {
+variable "block_bots" {
   description = "The zone's bot switches, which cover every hostname of the zone: `auto` (block AI bots, on a zone with no hostnames of its own), `on` (block AI bots and switch Bot Fight Mode on, on any zone of the Free plan), or `off` (leave them alone)."
   type        = string
   default     = "auto"
 
   validation {
-    condition     = contains(["auto", "on", "off"], var.zone_bots)
-    error_message = "zone_bots must be one of: auto, on, off."
+    condition     = contains(["auto", "on", "off"], var.block_bots)
+    error_message = "block_bots must be one of: auto, on, off."
   }
 }
 

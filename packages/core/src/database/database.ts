@@ -428,7 +428,7 @@ export interface Database {
   ensureSigningKey(fresh: Uint8Array, at: number): Promise<SigningKey>;
 
   /**
-   * Replace the signing key, which ends every session. It writes one `signed-everyone-out` audit entry, which holds nothing of either key.
+   * Replace the signing key, which ends every session. It writes one `signed_everyone_out` audit entry, which holds nothing of either key.
    *
    * @param fresh - at least 32 newly drawn random bytes
    * @throws {RangeError} `fresh` is under 32 bytes

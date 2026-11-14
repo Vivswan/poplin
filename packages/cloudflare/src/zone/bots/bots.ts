@@ -25,7 +25,7 @@ interface WantedSwitches {
 /** What an install wants of the zone's bot switches. `sharesZone` says whether the zone has hostnames of its own. */
 interface DesiredZoneBots {
   /** `auto` blocks AI bots on a zone with no hostnames of its own; `on` does so on any zone and adds Bot Fight Mode; `off` leaves the switches alone. */
-  readonly zoneBots: "auto" | "on" | "off";
+  readonly blockBots: "auto" | "on" | "off";
 
   /** The zone's plan: Bot Fight Mode is a switch of the Free plan alone. */
   readonly plan: ZonePlan;
@@ -41,16 +41,16 @@ type BotStep =
   | { readonly kind: "skip"; readonly subject: string; readonly reason: string };
 
 function skipReason(desired: DesiredZoneBots): string | undefined {
-  if (desired.zoneBots === "off") return SWITCHED_OFF;
+  if (desired.blockBots === "off") return SWITCHED_OFF;
 
-  if (desired.zoneBots === "auto" && desired.sharesZone) return COVERS_OTHERS;
+  if (desired.blockBots === "auto" && desired.sharesZone) return COVERS_OTHERS;
 
   return undefined;
 }
 
 // No rule can exempt a request from Bot Fight Mode, and it may challenge poplin's own command line and agents, so only `on` asks for it.
 function wantedSwitches(desired: DesiredZoneBots): WantedSwitches {
-  if (desired.zoneBots === "on" && desired.plan === "free") return { ...AI_BOTS_BLOCKED, fight_mode: true };
+  if (desired.blockBots === "on" && desired.plan === "free") return { ...AI_BOTS_BLOCKED, fight_mode: true };
 
   return AI_BOTS_BLOCKED;
 }

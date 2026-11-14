@@ -56,7 +56,7 @@ DNS has no partial wildcard, so the wildcard record covers every name under the 
 | its own `*.example.com` that is not proxied | stops with an error: the site hostnames would resolve to that record's origin |
 | its own record under a name the routes take, such as `status-page.example.com` or `admin.example.com` | stops with an error that names it |
 | its own hostnames, while `rate_rule` is `zone` | stops with an error that names them |
-| its own hostnames, while `zone_bots` is `auto` | sets no bot setting, and the `zone_bots` output names them |
+| its own hostnames, while `block_bots` is `auto` | sets no bot setting, and the `block_bots` output names them |
 
 ## Names and marks
 
@@ -98,7 +98,7 @@ A request Cloudflare blocks never reaches the Worker. Both guard rules read only
 
 The zone's bot settings cover every hostname of the zone, the dashboard and the zone's own included:
 
-| `zone_bots` | The zone has no hostnames of its own | The zone has hostnames of its own |
+| `block_bots` | The zone has no hostnames of its own | The zone has hostnames of its own |
 | --- | --- | --- |
 | `auto` | AI bots blocked, Bot Fight Mode off | nothing set |
 | `on` | AI bots blocked, Bot Fight Mode on | AI bots blocked, Bot Fight Mode on |
@@ -121,17 +121,17 @@ No rule can exempt a request from Bot Fight Mode, and it may challenge `poplin` 
 | `guard_rules` | bool | `true` | whether the module creates the two guard rules |
 | `outside_pages` | string | `blocked` | whether a page of another domain may frame a site or load its files: `blocked` or `allowed` |
 | `search_engines_allowed` | bool | `false` | whether the crawlers of search engines pass the bots rule |
-| `zone_bots` | string | `auto` | the zone's bot settings: `auto`, `on`, or `off` |
+| `block_bots` | string | `auto` | the zone's bot settings: `auto`, `on`, or `off` |
 | `worker_name` | string | `poplin` | the name of the Worker script |
 | `bucket_name` | string | `poplin-sites` | the name of the R2 bucket |
 
-`outside_pages`, `search_engines_allowed`, and `zone_bots` are first settings too. Each lives in two places, and `poplin config` changes the stored setting alone. For the Cloudflare side, change the input and apply:
+`outside_pages`, `search_engines_allowed`, and `block_bots` are first settings too. Each lives in two places, and `poplin config` changes the stored setting alone. For the Cloudflare side, change the input and apply:
 
 | Setting | The Worker, from the stored setting | Cloudflare, from the module's input |
 | --- | --- | --- |
 | `outside_pages` | while `blocked`, refuses a request to a site that a page other than one of the install's sites made, and names the pages under the domain as the only ones that may frame a site | the outside pages rule: created while `blocked`, with `guard_rules` on |
 | `search_engines_allowed` | reads nothing from it | the bots rule: whether the crawlers of search engines pass it, with `guard_rules` on |
-| `zone_bots` | reads nothing from it | the zone's AI bot block and Bot Fight Mode |
+| `block_bots` | reads nothing from it | the zone's AI bot block and Bot Fight Mode |
 
 The first settings. The names and text forms are those of `poplin config`:
 
@@ -165,7 +165,7 @@ The Worker stores the first settings once, while it has none. After that the das
 | `admin_url` | the address of the dashboard, `https://admin.example.com` |
 | `site_url_pattern` | the address of a site, `https://<name>--<id>-page.example.com` |
 | `guard_rule_expressions` | the expression of each guard rule, by its ref |
-| `zone_bots` | `set`, or the reason the module left the zone's bot settings alone |
+| `block_bots` | `set`, or the reason the module left the zone's bot settings alone |
 
 ## Cloudflare token permissions
 
@@ -194,9 +194,9 @@ The Worker stores the first settings once, while it has none. After that the das
 | configure the provider or hold a token | the caller's provider block does |
 | add to rate rules the zone already has | the rate rule is the zone's whole rate limiting ruleset. Set `rate_rule` to `off` on a zone with rate rules of its own |
 | add to custom rules the zone already has | the guard rules are the zone's whole custom ruleset. Set `guard_rules` to `false` on a zone with custom rules of its own, and add the `guard_rule_expressions` to them |
-| keep bot settings the zone already has | the module sets the AI bot block and Bot Fight Mode both. Set `zone_bots` to `off` on a zone that sets its own |
+| keep bot settings the zone already has | the module sets the AI bot block and Bot Fight Mode both. Set `block_bots` to `off` on a zone that sets its own |
 | stop a bot Cloudflare has not verified | a bot that presents as a browser passes both rules; telling it apart takes a bot score, which the Free plan does not have |
-| read the zone's plan | a Free plan rate rule reads the path alone: `rate_rule` is `zone` there, and `hostnames` on a paid plan. The input is explicit here; poplin's own setup takes the same three values and only offers the plan's as its default. Bot Fight Mode is a setting of the Free plan: `zone_bots` is `auto` or `off` on a paid plan |
+| read the zone's plan | a Free plan rate rule reads the path alone: `rate_rule` is `zone` there, and `hostnames` on a paid plan. The input is explicit here; poplin's own setup takes the same three values and only offers the plan's as its default. Bot Fight Mode is a setting of the Free plan: `block_bots` is `auto` or `off` on a paid plan |
 | keep a name several levels deep from the Worker | `a.b-page.example.com` also matches the site route; the Worker answers that it is no site |
 | change a record the zone already has | a record whose comment does not start with `poplin: ` is read and never changed |
 | check that the Worker's name is free | an existing Worker named `worker_name` in the account is replaced |

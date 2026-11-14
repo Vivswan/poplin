@@ -879,7 +879,7 @@ export class SqlDatabase implements Database {
   }
 
   async rotateSigningKey(fresh: Uint8Array, signed: Signed): Promise<void> {
-    await this.#driver.batch([sql(REPLACE_SIGNING_KEY, signingKeyToText(fresh), signed.at), auditPlain(signed, "signed-everyone-out", {})]);
+    await this.#driver.batch([sql(REPLACE_SIGNING_KEY, signingKeyToText(fresh), signed.at), auditPlain(signed, "signed_everyone_out", {})]);
   }
 
   async appendAudit(note: AuditNote, signed: Signed): Promise<void> {

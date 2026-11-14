@@ -28,7 +28,7 @@ output "guard_rule_expressions" {
   value       = { for rule in local.guard_rules : rule.ref => rule.expression }
 }
 
-output "zone_bots" {
+output "block_bots" {
   description = "What the module did with the zone's bot switches: `set`, or the reason it left them alone."
-  value       = coalesce(local.zone_bots_skipped, "set")
+  value       = coalesce(local.block_bots_skipped, "set")
 }

@@ -1,4 +1,4 @@
-// A login: the Worker's address and the token presented to it, as the login file and the environment both state it.
+// A login: the install's address and the token presented to it, as the login file and the environment both state it.
 
 import * as v from "valibot";
 

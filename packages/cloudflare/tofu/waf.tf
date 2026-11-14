@@ -51,11 +51,11 @@ resource "cloudflare_ruleset" "guards" {
 
 # The zone's bot settings, which cover every hostname of the zone: `auto` takes them only on a zone with no hostnames of its own.
 resource "cloudflare_bot_management" "zone" {
-  count = local.zone_bots_skipped == null ? 1 : 0
+  count = local.block_bots_skipped == null ? 1 : 0
 
   zone_id            = var.zone_id
   ai_bots_protection = "block"
 
   # No rule can exempt a request from Bot Fight Mode, and it may challenge poplin's own command line and agents, so only `on` switches it on.
-  fight_mode = var.zone_bots == "on"
+  fight_mode = var.block_bots == "on"
 }
