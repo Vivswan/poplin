@@ -12,7 +12,7 @@ import { type SiteObject, siteObject } from "./site-object";
 const MAX_PAGE = 100;
 
 /** What a listing may ask for. */
-const QUERY = v.strictObject({
+export const LIST_QUERY = v.strictObject({
   trash: v.optional(v.boolean(), false),
   limit: v.optional(v.pipe(POSITIVE, v.maxValue(MAX_PAGE)), MAX_PAGE),
   after: v.optional(v.strictObject({ updated_at: MOMENT, id: SITE_ID })),
@@ -22,7 +22,7 @@ const QUERY = v.strictObject({
 interface Listed {
   readonly ok: true;
   readonly sites: readonly SiteObject[];
-  readonly next?: v.InferOutput<typeof QUERY>["after"];
+  readonly next?: v.InferOutput<typeof LIST_QUERY>["after"];
 }
 
 /**
@@ -31,11 +31,11 @@ interface Listed {
  * @param query - `trash` lists the trash instead; `limit` is 1 to 100; `after` is the `next` of the page before
  * @returns the page, or `bad_argument` naming the key that was refused
  */
-export async function listSites(install: Install, actor: Actor, query: v.InferInput<typeof QUERY> = {}): Promise<Listed | Refused<"not_set_up" | "bad_argument">> {
+export async function listSites(install: Install, actor: Actor, query: v.InferInput<typeof LIST_QUERY> = {}): Promise<Listed | Refused<"not_set_up" | "bad_argument">> {
   const entered = await enterInstall(install, actor);
   if (!entered.ok) return entered;
 
-  const asked = v.safeParse(QUERY, query);
+  const asked = v.safeParse(LIST_QUERY, query);
   if (!asked.success) return refuse("bad_argument", v.getDotPath(asked.issues[0])?.split(".")[0] ?? "query");
 
   const owner = actor.scope === "admin" ? undefined : actor.holder;

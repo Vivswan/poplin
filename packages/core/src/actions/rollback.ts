@@ -1,9 +1,15 @@
 // Rollback: make an earlier kept version of a site the live one. No file moves.
 
+import * as v from "valibot";
+
 import type { Actor } from "../auth/scopes";
+import { POSITIVE } from "../records/fields";
 import { reachSite } from "./reach";
 import { type Install, type Refused, refuse } from "./records";
 import { type SiteAnswer, siteAnswer } from "./site-object";
+
+/** What a rollback may ask for besides its site: the version to go to. */
+export const ROLLBACK_OPTIONS = v.strictObject({ version: v.optional(POSITIVE) });
 
 /** The codes a rollback may be refused with. */
 type RollbackCode = "not_set_up" | "bad_argument" | "not_found" | "not_allowed" | "in_trash" | "no_such_version";
@@ -17,13 +23,13 @@ type RollbackCode = "not_set_up" | "bad_argument" | "not_found" | "not_allowed" 
 export async function rollbackSite(
   install: Install,
   actor: Actor,
-  request: { readonly site: string; readonly version?: number },
+  request: v.InferInput<typeof ROLLBACK_OPTIONS> & { readonly site: string },
 ): Promise<SiteAnswer | Refused<RollbackCode>> {
   const reached = await reachSite(install, actor, request.site);
   if (!reached.ok) return reached;
 
   const target = request.version ?? "previous";
-  if (target !== "previous" && (!Number.isSafeInteger(target) || target < 1)) return refuse("bad_argument", "version");
+  if (!v.is(ROLLBACK_OPTIONS, { version: request.version })) return refuse("bad_argument", "version");
 
   const moved = await install.database.setLiveVersion(reached.site.id, target, reached.signed);
   if (moved.kind !== "done" && moved.kind !== "unchanged") return refuse(moved.kind);

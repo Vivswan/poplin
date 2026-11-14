@@ -8,6 +8,7 @@
 // totals       one row: how many sites there are and how much their kept versions hold
 // audit        what was done, by whom, and when; rows are only ever added
 // request_counts   one row per UTC day and site, and one more per day under the empty site for all sites together
+// uploads      the staged publishes: begun, taking files, then live or given up
 
 import type { Step } from "./migrate";
 
@@ -110,6 +111,23 @@ CREATE TABLE request_counts (
   PRIMARY KEY (day, site)
 ) STRICT, WITHOUT ROWID`;
 
+/** A staged publish from its first request on. `number` is 1 exactly for a new site, whose folder no site has yet; `manifest` lists every declared file while the upload is pending, and nothing after. */
+const UPLOADS = `
+CREATE TABLE uploads (
+  id TEXT NOT NULL PRIMARY KEY,
+  folder TEXT NOT NULL,
+  number INTEGER NOT NULL CHECK (number >= 1),
+  owner TEXT NOT NULL,
+  state TEXT NOT NULL DEFAULT 'pending' CHECK (state IN ('pending', 'finished', 'abandoned')),
+  plan TEXT NOT NULL CHECK (json_valid(plan)),
+  manifest TEXT NOT NULL CHECK (json_valid(manifest)),
+  bytes INTEGER NOT NULL CHECK (bytes >= 0),
+  files INTEGER NOT NULL CHECK (files >= 1),
+  dropped TEXT NOT NULL DEFAULT '[]' CHECK (json_valid(dropped)),
+  created_at INTEGER NOT NULL,
+  UNIQUE (folder, number)
+) STRICT`;
+
 /** A public name is an address of its own, so no new site may make a name and an id match. */
 const NAME_IS_NO_ID_ON_INSERT = `
 CREATE TRIGGER sites_insert_keeps_names_and_ids_apart BEFORE INSERT ON sites
@@ -192,7 +210,7 @@ BEGIN SELECT RAISE(ABORT, 'the audit log is append-only'); END`;
 /** Creates every table, index, and trigger of the first schema. */
 export const CREATE_SCHEMA: Step = {
   number: 1,
-  description: "create the sites, versions, tokens, settings, secrets, totals, audit, and request_counts tables",
+  description: "create the sites, versions, tokens, settings, secrets, totals, audit, request_counts, and uploads tables",
   statements: [
     SITES,
     VERSIONS,
@@ -203,9 +221,12 @@ export const CREATE_SCHEMA: Step = {
     TOTALS_START_AT_ZERO,
     AUDIT,
     REQUEST_COUNTS,
+    UPLOADS,
     "CREATE INDEX sites_by_change ON sites (trashed, updated_at DESC, id DESC)",
     "CREATE INDEX sites_by_owner ON sites (owner, trashed, updated_at DESC, id DESC)",
     "CREATE INDEX tokens_by_creation ON tokens (created_at DESC, id DESC)",
+    "CREATE INDEX uploads_by_age ON uploads (created_at, id)",
+    "CREATE INDEX uploads_by_state ON uploads (state, owner, number, bytes)",
     NAME_IS_NO_ID_ON_INSERT,
     NAME_IS_NO_ID_ON_UPDATE,
     FIRST_VERSION_COMES_WITH_THE_SITE,

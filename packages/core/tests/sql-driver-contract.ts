@@ -11,7 +11,25 @@ import { SqlDatabase } from "../src/database/sql-database";
 import { migrate, type Step, storedVersion } from "../src/migrations/migrate";
 import { SCHEMA_VERSION, STEPS } from "../src/migrations/registry";
 import type { SiteId } from "../src/sites/ids";
-import { ADA, BY_ADA, DOCS, draft, FIRST_KEY, made, NO_SITE, NOW, OTHER_SITE, publish, REPORT, SECOND_KEY, SETTINGS, TODAY, TOMORROW } from "./database-contract";
+import {
+  ADA,
+  BY_ADA,
+  begunSite,
+  begunVersion,
+  DOCS,
+  draft,
+  FIRST_KEY,
+  made,
+  NO_SITE,
+  NOW,
+  OTHER_SITE,
+  publish,
+  REPORT,
+  SECOND_KEY,
+  SETTINGS,
+  TODAY,
+  TOMORROW,
+} from "./database-contract";
 
 const STEP_THAT_FAILS_HALFWAY: Step = {
   number: SCHEMA_VERSION + 1,
@@ -191,6 +209,10 @@ function schemaRules(label: string, makeDriver: DriverFactory): void {
       params: [id, folder, access, publicName, ADA],
     });
     const stored = site("aaaaaaaaaaaa", "folder-a", "public", "docs");
+    const upload = (id: string, folder: string, state: string): Statement => ({
+      sql: "INSERT INTO uploads (id, folder, number, owner, state, plan, manifest, bytes, files, created_at) VALUES (?1, ?2, 2, ?3, ?4, '{}', '[]', 0, 1, 0)",
+      params: [id, folder, ADA, state],
+    });
 
     // Drift: these are the states no code path may leave behind; each row is one written straight in SQL, past every check the code makes.
     test.each([
@@ -225,11 +247,15 @@ function schemaRules(label: string, makeDriver: DriverFactory): void {
         [{ sql: "INSERT INTO tokens (id, hash, scope, note, created_at, expires_at) VALUES ('t', 'h', 'publisher', '', 0, 1)", params: [] }],
       ],
       ["a second row of settings", [{ sql: "INSERT INTO settings (id, value, updated_at) VALUES (2, '{}', 0)", params: [] }]],
+      ["an upload in a state that is none of the three", [upload("upload-b", "folder-b", "live")]],
+      ["a second upload under one folder and number", [upload("upload-b", "folder-a", "pending")]],
+      ["an upload of no file", [{ sql: "UPDATE uploads SET files = 0 WHERE id = 'upload-a'", params: [] }]],
+      ["an upload whose manifest is no JSON", [{ sql: "UPDATE uploads SET manifest = 'index.html' WHERE id = 'upload-a'", params: [] }]],
       ["an audit entry rewritten", [{ sql: "UPDATE audit SET actor = 'someone' WHERE seq = 1", params: [] }]],
       ["an audit entry removed", [{ sql: "DELETE FROM audit WHERE seq = 1", params: [] }]],
     ] as ReadonlyArray<readonly [string, readonly Statement[]]>)("refuses %s", async (_state, statements) => {
       const driver = await migrated(makeDriver);
-      await driver.batch([stored, { sql: "INSERT INTO audit (at, actor, action, detail) VALUES (0, ?1, 'login', '{}')", params: [ADA] }]);
+      await driver.batch([stored, upload("upload-a", "folder-a", "pending"), { sql: "INSERT INTO audit (at, actor, action, detail) VALUES (0, ?1, 'login', '{}')", params: [ADA] }]);
 
       await expect(driver.batch(statements)).rejects.toThrow();
     });
@@ -321,6 +347,17 @@ function queryPlans(label: string, makeDriver: DriverFactory): void {
       await database.changeSettings({ trash_days: 30 }, BY_ADA);
       await database.appendAudit({ action: "login", detail: {} }, BY_ADA);
       await database.listAudit({ limit: 10 });
+      const created = await begunSite(database, draft(REPORT));
+      const updated = await begunVersion(database, imported.kind === "done" ? imported.site : site);
+      await database.getUpload(created.id);
+      await database.getUploadFile(created.id, "index.html");
+      await database.getSiteByFolder(site.folder);
+      await database.publishUploadAsSite(created.id, created.site, BY_ADA);
+      await database.publishUploadAsVersion(updated, { keep: 1, access: { access: "public", public_name: DOCS }, details: { title: "Q3 sales" } }, BY_ADA);
+      await database.listUploads({ before: NOW + 1, limit: 10, after: { created_at: NOW, id: created.id } });
+      await database.abandonUpload((await begunSite(database, draft(REPORT))).id);
+      await database.setUploadDropped(updated, []);
+      await database.removeUpload(created.id);
       await storedVersion(driver);
 
       const scans: string[] = [];
@@ -334,9 +371,9 @@ function queryPlans(label: string, makeDriver: DriverFactory): void {
         );
       }
 
-      // The one walk of a table is the token list, which hands back every row it reads. An import walks the list of versions it was given, which is no table.
+      // The one walk of a table is the token list, which hands back every row it reads. An import walks the list of versions it was given, and a file lookup the manifest of its own row: neither is a table.
       expect([exported.sites, imported.kind]).toEqual([[], "done"]);
-      expect(driver.statements.length).toBeGreaterThan(60);
+      expect(driver.statements.length).toBeGreaterThan(90);
       expect(scans).toEqual([
         "SCAN tokens USING INDEX tokens_by_creation <- SELECT id, hash, scope, note, created_at, expires_at FROM tokens ORDER BY created_at DESC, id DESC",
       ]);

@@ -4,13 +4,14 @@ import { describe, expect, test } from "bun:test";
 
 import type { Login } from "../src/auth/logins";
 import { mintToken, type TokenId } from "../src/auth/tokens";
-import type { Database, NewSite, NewVersion, Signed } from "../src/database/database";
+import type { Database, NewSite, NewUpload, NewVersion, Signed } from "../src/database/database";
 import type { PublicName, SiteName } from "../src/names/names";
 import type { AuditAction, AuditEntry } from "../src/records/audit";
 import { defaultSettings } from "../src/records/settings";
 import { mintSiteFolder, type Site } from "../src/records/site";
 import type { Totals } from "../src/records/sizes";
 import type { SiteId } from "../src/sites/ids";
+import { mintUploadId, type UploadId } from "../src/records/upload";
 
 /** The moment the fixtures are made at. */
 export const NOW = 1_700_000_000_000;
@@ -57,6 +58,18 @@ export const TOMORROW = "2026-11-14";
 /** An id in the form of a site id, standing for a second site whose requests are counted. */
 export const OTHER_SITE = "aaaaaaaaaaaa" as SiteId;
 
+/** The files a fixture upload declares: 1000 bytes in two files, one under a path that needs quoting. */
+const MANIFEST = [
+  { path: "index.html", size: 700, content_type: "text/html" },
+  { path: "it's \"quoted\"/100%.css", size: 300, content_type: "text/css" },
+];
+
+/** Room no fixture upload fills. */
+const ROOMY = { own: 100, folderBytes: 1_000_000, staying: 0, totalBytes: 1_000_000, sites: null };
+
+/** A change made by the second person a moment later. */
+const BY_BO_LATER: Signed = { by: BO, at: NOW + 5 };
+
 /** The settings of a new install. */
 export const SETTINGS = defaultSettings({ installer: "ada@example.com" as Login, hostname: "admin.example.com" });
 
@@ -98,6 +111,30 @@ export async function made(database: Database, site: NewSite, signed: Signed = B
   if (created.kind !== "done") throw new Error(`the fixture site was refused: ${created.kind}`);
 
   return created.site;
+}
+
+/** Record a fixture upload that makes a new site; answers its id and the site it plans. */
+export async function begunSite(database: Database, site: NewSite, at: number = NOW): Promise<{ readonly id: UploadId; readonly site: NewSite }> {
+  const planned = { ...site, embeddable: true };
+  const upload: NewUpload = { id: mintUploadId(), folder: site.folder, number: 1, owner: ADA, plan: { kind: "create", site: planned }, manifest: MANIFEST, created_at: at };
+  await database.addUpload(upload, ROOMY);
+
+  return { id: upload.id, site: planned };
+}
+
+/**
+ * Record a fixture upload that adds the next version to a site; answers its id.
+ *
+ * @throws {Error} no version number could be set aside, which is a broken fixture
+ */
+export async function begunVersion(database: Database, site: Site): Promise<UploadId> {
+  const reserved = await database.reserveVersion(site.id);
+  if (reserved.kind !== "reserved") throw new Error(`the fixture version was refused: ${reserved.kind}`);
+
+  const id = mintUploadId();
+  await database.addUpload({ id, folder: site.folder, number: reserved.number, owner: ADA, plan: { kind: "update", details: {} }, manifest: MANIFEST, created_at: NOW }, ROOMY);
+
+  return id;
 }
 
 /** Every site, the trash included, read a page at a time. */
@@ -1106,6 +1143,10 @@ function requestCounts(label: string, makeDatabase: DatabaseFactory): void {
       expect(await database.addRequests({ day: TODAY, site: OTHER_SITE, requests: 1 })).toEqual({ site: 1, all: 51 });
       expect(await database.addRequests({ day: TODAY, site: NO_SITE, requests: 50 })).toEqual({ site: 100, all: 101 });
       expect(await database.readRequests(TODAY, NO_SITE)).toEqual({ site: 100, all: 101 });
+      expect([await database.readRequests(TODAY), await database.readRequests(TOMORROW)]).toEqual([
+        { site: 0, all: 101 },
+        { site: 0, all: 0 },
+      ]);
       expect([await database.readRequests(TOMORROW, NO_SITE), await database.readRequests(TODAY, NO_SITE)]).toEqual([
         { site: 0, all: 0 },
         { site: 100, all: 101 },
@@ -1142,6 +1183,186 @@ function requestCounts(label: string, makeDatabase: DatabaseFactory): void {
   });
 }
 
+function uploads(label: string, makeDatabase: DatabaseFactory): void {
+  describe(`${label}: uploads`, () => {
+    // Drift: every later step reads the upload back; a manifest that lost a path's quotes or a file's size would store a file under the wrong key or at the wrong length.
+    test("an upload reads back as recorded, one file of it is found by its exact path, and an upload given up keeps no manifest", async () => {
+      const database = await opened(makeDatabase);
+      const site = await made(database, draft(REPORT));
+      const created = await begunSite(database, draft(REPORT));
+      const updated = await begunVersion(database, site);
+      const read = await database.getUpload(created.id);
+      const quoted = await database.getUploadFile(created.id, MANIFEST[1]?.path ?? "");
+      const unnamed = await database.getUploadFile(created.id, "index.htm");
+      await database.abandonUpload(updated);
+
+      expect(read).toEqual({
+        upload: {
+          id: created.id,
+          folder: created.site.folder,
+          number: 1,
+          owner: ADA,
+          state: "pending",
+          plan: { kind: "create", site: created.site },
+          bytes: 1000,
+          files: 2,
+          dropped: [],
+          created_at: NOW,
+        },
+        manifest: MANIFEST,
+      } as never);
+      expect<unknown>([quoted, unnamed?.file, await database.getUploadFile(mintUploadId(), "index.html")]).toEqual([{ upload: read?.upload, file: MANIFEST[1] }, undefined, undefined]);
+      expect(await auditActions(database)).toEqual(["create"]);
+      expect([(await database.getUpload(updated))?.manifest, (await database.getUploadFile(updated, "index.html"))?.file]).toEqual([[], undefined]);
+    });
+
+    // Drift: finishing is the one step that makes files live; a site made twice, or made from an upload that was given up, would serve files nobody meant to publish.
+    test("an upload becomes a site once: of two finishes at the same moment one makes it, and an abandoned upload makes none", async () => {
+      const database = await opened(makeDatabase);
+      const live = await begunSite(database, draft(REPORT));
+      const given = await begunSite(database, draft(REPORT));
+      await database.abandonUpload(given.id);
+
+      const [first, second] = await Promise.all([database.publishUploadAsSite(live.id, live.site, BY_ADA), database.publishUploadAsSite(live.id, live.site, BY_ADA)]);
+      const lost = await database.publishUploadAsSite(given.id, given.site, BY_ADA);
+      const elsewhere = await database.publishUploadAsSite(given.id, draft(REPORT), BY_ADA);
+
+      expect([first.kind, second.kind].sort()).toEqual(["done", "not_pending"]);
+      expect([lost.kind, elsewhere.kind, (await database.getUpload(live.id))?.upload.state]).toEqual(["not_pending", "not_pending", "finished"]);
+      expect([await auditActions(database), await database.readTotals()]).toEqual([["create"], { sites: 1, trashed_sites: 0, bytes: 1000, files: 4 }]);
+    });
+
+    // Drift: a public name taken while the files were uploading must leave the upload pending, so the files it holds are still owned by a record that can be given up.
+    test("an upload whose public name another site took in the meantime makes no site and stays pending", async () => {
+      const database = await opened(makeDatabase);
+      const upload = await begunSite(database, draft(REPORT, "public", DOCS));
+      await made(database, draft(REPORT, "public", DOCS));
+
+      expect(await database.publishUploadAsSite(upload.id, upload.site, BY_ADA)).toEqual({ kind: "name_taken" });
+      expect([(await database.getUpload(upload.id))?.upload.state, await auditActions(database)]).toEqual(["pending", ["create"]]);
+    });
+
+    // Drift: the settings asked with an update go live with its version; a refused version that had already changed the access would publish old content under a new access.
+    test.each([
+      ["a higher version already kept", { access: { access: "public", public_name: DOCS }, details: { title: "Q3 sales" } }, "stale", "stale_number"],
+      ["a public name another site holds", { access: { access: "public", public_name: "taken" as PublicName }, details: { title: "Q3 sales" } }, "none", "name_taken"],
+      ["a site in the trash", { details: { title: "Q3 sales" } }, "trash", "in_trash"],
+      ["a site that is gone", { details: { title: "Q3 sales" } }, "delete", "not_found"],
+    ] as const)("an update refused for %s changes neither the site's settings nor its versions, and writes no audit entry", async (_why, asked, before, refusal) => {
+      const database = await opened(makeDatabase);
+      await made(database, draft(REPORT, "public", "taken" as PublicName));
+      const site = await made(database, draft(REPORT));
+      const upload = await begunVersion(database, site);
+      if (before === "stale") await database.publishUploadAsVersion(await begunVersion(database, site), { keep: 3, details: {} }, BY_ADA);
+      if (before === "trash") await database.trashSite(site.id, BY_ADA);
+      if (before === "delete") await database.deleteSite(site.id, BY_ADA);
+      const stored = await everything(database);
+
+      expect(await database.publishUploadAsVersion(upload, { keep: 3, ...asked }, BY_BO_LATER)).toEqual({ kind: refusal });
+      expect([await everything(database), (await database.getUpload(upload))?.upload.state]).toEqual([stored, "pending"]);
+    });
+
+    // Drift: the versions a publish drops are named in the upload's record, which is all that tells the sweep whose files to remove after a crash.
+    test("an update goes live with its settings in one step, each with its audit entry, and its record names the versions it dropped", async () => {
+      const database = await opened(makeDatabase);
+      const site = await made(database, draft(REPORT));
+      const second = await begunVersion(database, site);
+      const third = await begunVersion(database, site);
+      await database.publishUploadAsVersion(second, { keep: 2, details: {} }, BY_ADA);
+
+      const settings = { access: { access: "public", public_name: DOCS }, details: { title: "Q3 sales", embeddable: false } } as const;
+      const published = await database.publishUploadAsVersion(third, { keep: 1, ...settings }, BY_BO_LATER);
+      const again = await database.publishUploadAsVersion(third, { keep: 1, access: { access: "unlisted" }, details: { title: "changed" } }, BY_BO_LATER);
+      const live = { access: "public", public_name: DOCS, title: "Q3 sales", embeddable: false, live_version: 3, updated_at: NOW + 5 };
+
+      expect(published).toMatchObject({ kind: "done", dropped: [1, 2], site: { ...live, versions: [{ number: 3, bytes: 1000, files: 2, published_by: BO }] } });
+      expect([again, await database.getUpload(third)]).toMatchObject([{ kind: "not_pending" }, { manifest: [], upload: { state: "finished", dropped: [1, 2] } }]);
+      expect(await auditActions(database)).toEqual(["create", "publish", "access", "details", "publish"]);
+      expect([await database.getSiteByFolder(site.folder), await database.readTotals()]).toMatchObject([{ id: site.id, title: "Q3 sales" }, { sites: 1, bytes: 1000, files: 2 }]);
+    });
+
+    // Drift: the sweep removes a record only after its files; a pending record that could be removed would orphan the files still being uploaded under it.
+    test("a record is removed only once it is finished or abandoned, and old uploads list a page at a time, the oldest first", async () => {
+      const database = await opened(makeDatabase);
+      const ids: UploadId[] = [];
+      for (const age of [3, 1, 2]) ids.push((await begunSite(database, draft(REPORT), NOW - age)).id);
+
+      const [oldest, newest, middle] = ids as [UploadId, UploadId, UploadId];
+      const first = await database.listUploads({ before: NOW, limit: 2 });
+      const rest = await database.listUploads({ before: NOW, limit: 2, after: first.next });
+      const kept = await database.removeUpload(oldest);
+      const given = [await database.abandonUpload(oldest), await database.abandonUpload(oldest), await database.removeUpload(oldest), await database.removeUpload(oldest)];
+
+      expect([first.uploads.map((upload) => upload.id), rest.uploads.map((upload) => upload.id), rest.next]).toEqual([[oldest, middle], [newest], undefined]);
+      expect([(await database.listUploads({ before: NOW - 2, limit: 2 })).uploads.length, kept, given]).toEqual([0, false, [true, false, true, false]]);
+      await expect(database.listUploads({ before: NOW, limit: 101 })).rejects.toThrow(RangeError);
+    });
+
+    // Drift: these are uploads no later step could store a file for or finish; each row is one the database must refuse to record.
+    test.each([
+      ["a second upload under the same folder and number", (upload: NewUpload): NewUpload => ({ ...upload, id: mintUploadId() })],
+      ["a second upload with the same id", (upload: NewUpload): NewUpload => ({ ...upload, folder: mintSiteFolder() })],
+      ["an upload of no file", (upload: NewUpload): NewUpload => ({ ...upload, id: mintUploadId(), folder: mintSiteFolder(), manifest: [] })],
+      ["a file of a negative size", (upload: NewUpload): NewUpload => ({ ...upload, id: mintUploadId(), folder: mintSiteFolder(), manifest: [{ ...MANIFEST[0], size: -1 }] as never })],
+      ["an id that is none", (upload: NewUpload): NewUpload => ({ ...upload, id: "nope" as UploadId, folder: mintSiteFolder() })],
+    ])("%s is refused, and nothing of it is kept", async (_state, change) => {
+      const database = await opened(makeDatabase);
+      const { folder } = draft(REPORT);
+      const upload: NewUpload = { id: mintUploadId(), folder, number: 2, owner: ADA, plan: { kind: "update", details: {} }, manifest: MANIFEST, created_at: NOW };
+      await database.addUpload(upload, ROOMY);
+
+      await expect(database.addUpload(change(upload), ROOMY)).rejects.toThrow();
+      expect((await database.listUploads({ before: NOW + 1, limit: 10 })).uploads.length).toBe(1);
+    });
+
+    // Drift: the limits bound what the bucket and the database hold; an upload measured in one step and recorded in the next would let requests sent together pass every limit at once.
+    test.each([
+      ["its owner's pending uploads", { own: 2 }, "version", 1, "own_full"],
+      ["the bytes pending under its folder", { folderBytes: 2000 }, "version", 1, "folder_full"],
+      ["the bytes of its folder with the site's newest version", { folderBytes: 2000, staying: 1 }, "version", 0, "folder_full"],
+      ["the bytes of every site and every pending upload", { totalBytes: 4000 }, "version", 1, "total_full"],
+      ["the sites there are and are being made", { sites: 3 }, "site", 1, "sites_full"],
+    ] as const)("of three uploads recorded at the same moment only as many are kept as fit the room for %s", async (_bound, bound, kind, fit, refusal) => {
+      const database = await opened(makeDatabase);
+      const site = await made(database, draft(REPORT));
+      const room = { ...ROOMY, ...bound };
+      const version = (number: number): NewUpload => ({ id: mintUploadId(), folder: site.folder, number, owner: ADA, plan: { kind: "update", details: {} }, manifest: MANIFEST, created_at: NOW });
+      const candidate = (number: number): NewUpload => (kind === "version" ? version(number) : { ...version(1), folder: mintSiteFolder() });
+      await database.addUpload({ ...version(1), folder: mintSiteFolder() }, ROOMY);
+      await database.addUpload({ ...version(2), owner: BO }, ROOMY);
+
+      const together = await Promise.all([3, 4, 5].map((number) => database.addUpload(candidate(number), room)));
+      const kinds = together.map((added) => added.kind).sort();
+
+      expect(kinds).toEqual([...Array.from({ length: fit }, () => "done" as const), ...Array.from({ length: 3 - fit }, () => refusal)].sort());
+      expect((await database.listUploads({ before: NOW + 1, limit: 10 })).uploads.length).toBe(2 + fit);
+    });
+
+    // Drift: the record of a finished upload is all that says which dropped versions still have files; one that could not be shortened would have every removal start over.
+    test("the dropped versions of a finished upload are set to the ones still to go, and those of a pending upload are left alone", async () => {
+      const database = await opened(makeDatabase);
+      const site = await made(database, draft(REPORT));
+      const finished = await begunVersion(database, site);
+      const pending = await begunVersion(database, site);
+      await database.publishUploadAsVersion(finished, { keep: 1, details: {} }, BY_ADA);
+      await database.setUploadDropped(finished, []);
+      await database.setUploadDropped(pending, [1]);
+
+      expect([(await database.getUpload(finished))?.upload.dropped, (await database.getUpload(pending))?.upload.dropped]).toEqual([[], []]);
+    });
+
+    // Drift: a site made by an admin finishing a publisher's upload must stay the publisher's, or the publisher loses the site it uploaded.
+    test("a site made from an upload belongs to whoever began the upload, and its audit entry to whoever finished it", async () => {
+      const database = await opened(makeDatabase);
+      const upload = await begunSite(database, draft(REPORT));
+      const made = await database.publishUploadAsSite(upload.id, upload.site, BY_BO_LATER);
+
+      expect(made).toMatchObject({ kind: "done", site: { owner: ADA, created_at: NOW + 5, versions: [{ published_by: ADA }] } });
+      expect((await auditTrail(database)).map((entry) => [entry.action, entry.by])).toEqual([["create", BO]]);
+    });
+  });
+}
+
 /**
  * Register the contract every `Database` keeps, whatever it stores its records in.
  *
@@ -1157,4 +1378,5 @@ export function describeDatabase(label: string, makeDatabase: DatabaseFactory): 
   auditLog(label, makeDatabase);
   tokensAndSettings(label, makeDatabase);
   requestCounts(label, makeDatabase);
+  uploads(label, makeDatabase);
 }

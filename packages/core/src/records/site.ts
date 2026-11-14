@@ -16,7 +16,7 @@ const FOLDER_PATTERN = /^[0-9a-z]{16}$/;
 const ACCESSES = ["private", "unlisted", "public"] as const;
 
 /** The key of a site's file folder. */
-const SITE_FOLDER = v.custom<SiteFolder>(isSiteFolder, "a site folder is 16 lowercase base36 characters");
+export const SITE_FOLDER = v.custom<SiteFolder>(isSiteFolder, "a site folder is 16 lowercase base36 characters");
 
 /** A title as shown on the dashboard. */
 const TITLE = v.pipe(v.string(), v.minLength(1));
@@ -31,6 +31,13 @@ const VERSIONS = v.pipe(
   v.check((versions) => new Set(versions.map((version) => version.number)).size === versions.length, "each version number is kept once"),
 );
 
+/** Who may open a site. A public site names its public name; no other access has one. */
+export const SITE_ACCESS = v.variant("access", [
+  v.object({ access: v.literal("private") }),
+  v.object({ access: v.literal("unlisted") }),
+  v.object({ access: v.literal("public"), public_name: PUBLIC_NAME }),
+]);
+
 /** What a new site is made from. A public site names its public name; no other access has one. `bytes` and `files` are the size of its first version. */
 export const NEW_SITE = v.intersect([
   v.object({
@@ -43,11 +50,7 @@ export const NEW_SITE = v.intersect([
     bytes: COUNT,
     files: COUNT,
   }),
-  v.variant("access", [
-    v.object({ access: v.literal("private") }),
-    v.object({ access: v.literal("unlisted") }),
-    v.object({ access: v.literal("public"), public_name: PUBLIC_NAME }),
-  ]),
+  SITE_ACCESS,
 ]);
 
 /** The settings of a site that change without touching its access, its id, or its versions; each is optional. */

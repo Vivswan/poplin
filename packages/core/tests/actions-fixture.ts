@@ -23,7 +23,7 @@ interface Faults {
   /** The write, counted from 1 over the store's life, that throws; none when absent. */
   failWrite?: number;
 
-  /** Whether every listing throws, so no file can be removed. */
+  /** Whether every removal throws, so no file can be removed. A listing still answers: finishing a publish reads one. */
   failRemoval?: boolean;
 }
 
@@ -48,7 +48,7 @@ export function pages(text: string): ReturnType<typeof file>[] {
   return [file("index.html", text), file("css/site.css", "body{}")];
 }
 
-/** Make the store fail as `faults` says. Answers the store's own `list`, which no fault reaches. */
+/** Make the store fail as `faults` says. Answers the store's own `list`. */
 function breakStore(store: MemoryStore, faults: Faults): MemoryStore["list"] {
   const write = store.write.bind(store);
   const list = store.list.bind(store);
@@ -60,10 +60,11 @@ function breakStore(store: MemoryStore, faults: Faults): MemoryStore["list"] {
 
     return write(...parameters);
   });
-  spyOn(store, "list").mockImplementation((options) => {
+  const deleteMany = store.deleteMany.bind(store);
+  spyOn(store, "deleteMany").mockImplementation((keys) => {
     if (faults.failRemoval === true) return Promise.reject(new Error("the store is down"));
 
-    return list(options);
+    return deleteMany(keys);
   });
 
   return list;

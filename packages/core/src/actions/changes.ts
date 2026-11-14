@@ -22,7 +22,7 @@ const DAY_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 const DAY_LENGTH = 10;
 
 /** What a caller may ask of a site's settings; every key is optional, and no other key is taken. */
-const CHANGES = v.strictObject({
+export const SITE_CHANGES = v.strictObject({
   access: v.optional(v.picklist(["private", "unlisted", "public"])),
   public_name: v.optional(v.string()),
   title: v.optional(v.nullable(v.string())),
@@ -38,7 +38,7 @@ const CHANGES = v.strictObject({
  *
  * `expires` is `"never"`, a span from now such as `"7d"` (units `s`, `m`, `h`, `d`), or a day such as `"2026-12-01"`, which is that day's start in UTC.
  */
-export type SiteChanges = v.InferInput<typeof CHANGES>;
+export type SiteChanges = v.InferInput<typeof SITE_CHANGES>;
 
 /** What the changes are checked against. */
 interface Ground {
@@ -114,7 +114,7 @@ export function defaultExpiry(span: SettingValues["default_expires"], now: numbe
  * @returns the changes, or the first refusal: `bad_argument` names the key in `about`, `bad_name` and `reserved_name` are about the public name
  */
 export function readChanges(raw: unknown, ground: Ground): CheckedChanges | Refused<"bad_argument" | "bad_name" | "reserved_name"> {
-  const parsed = v.safeParse(CHANGES, raw);
+  const parsed = v.safeParse(SITE_CHANGES, raw);
   if (!parsed.success) return refuse("bad_argument", v.getDotPath(parsed.issues[0]) ?? "settings");
 
   const asked = parsed.output;

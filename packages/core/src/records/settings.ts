@@ -218,6 +218,15 @@ function printOne<Key extends SettingKey>(key: Key, values: SettingValues): stri
 }
 
 /**
+ * The bytes a size setting such as `max_total_size` stands for.
+ *
+ * @returns the count times its unit, which is decimal: `9GB` is 9,000,000,000
+ */
+export function sizeBytes(size: SettingValues["max_total_size"]): number {
+  return size.count * BYTES_PER_UNIT[size.unit];
+}
+
+/**
  * Build the settings a new install starts with.
  *
  * @returns the values of the published defaults table; the two that depend on the install come from `install`

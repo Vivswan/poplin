@@ -11,7 +11,7 @@ import { type Install, type Refused, refuse } from "./records";
 const MAX_PAGE = 100;
 
 /** What a reading of the log may ask for. */
-const QUERY = v.strictObject({
+export const AUDIT_QUERY = v.strictObject({
   limit: v.optional(v.pipe(POSITIVE, v.maxValue(MAX_PAGE)), MAX_PAGE),
   before: v.optional(POSITIVE),
 });
@@ -25,11 +25,11 @@ const QUERY = v.strictObject({
 export async function listAudit(
   install: Install,
   actor: Actor,
-  query: v.InferInput<typeof QUERY> = {},
+  query: v.InferInput<typeof AUDIT_QUERY> = {},
 ): Promise<{ readonly ok: true; readonly entries: readonly AuditEntry[] } | Refused<"not_allowed" | "bad_argument">> {
   if (actor.scope !== "admin") return refuse("not_allowed");
 
-  const asked = v.safeParse(QUERY, query);
+  const asked = v.safeParse(AUDIT_QUERY, query);
   if (!asked.success) return refuse("bad_argument", v.getDotPath(asked.issues[0]) ?? "query");
 
   return { ok: true, entries: await install.database.listAudit(asked.output) };

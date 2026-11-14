@@ -13,6 +13,7 @@ import type { SiteId } from "../sites/ids";
 import type { SettingValues } from "../records/settings";
 import type { Site, SiteAccess, SiteFolder } from "../records/site";
 import type { SiteSize, Totals } from "../records/sizes";
+import type { ManifestFile, Upload, UploadId, UploadPlan } from "../records/upload";
 
 /** Who makes a change and when, in milliseconds since the epoch. */
 export interface Signed {
@@ -129,6 +130,59 @@ export interface Reserved {
 /** A publish that went live. `dropped` lists the versions no longer kept, whose files the caller removes. */
 export interface Published extends Done {
   readonly dropped: readonly number[];
+}
+
+/** What a staged publish is recorded from when it begins. `number` is 1 for a new site, and otherwise the number `reserveVersion` set aside. */
+export interface NewUpload {
+  readonly id: UploadId;
+  readonly folder: SiteFolder;
+  readonly number: number;
+  readonly owner: Holder;
+  readonly plan: UploadPlan;
+  readonly manifest: readonly ManifestFile[];
+  readonly created_at: number;
+}
+
+/** What a pending upload is published with: the settings asked with it, which change with the version or not at all. */
+export interface UploadedVersion {
+  /** How many versions the site keeps at most, the live one included. */
+  readonly keep: number;
+
+  /** The access to set; absent to leave it as it is. */
+  readonly access?: SiteAccess;
+
+  /** The details to set; a key left out stays as it is. */
+  readonly details: SiteDetails;
+}
+
+/** The room a new upload must fit in. Each bound is checked with the upload itself counted, in the same step that records it. */
+export interface UploadRoom {
+  /** The most uploads its owner may have pending. */
+  readonly own: number;
+
+  /** The most bytes its folder may hold once it is live: the site's newest `staying` versions and every pending upload under the folder. */
+  readonly folderBytes: number;
+
+  /** How many of the folder's site's newest kept versions stay beside a new one. */
+  readonly staying: number;
+
+  /** The most bytes every kept version of every site and every pending upload may hold together. */
+  readonly totalBytes: number;
+
+  /** The most sites, the pending uploads of new sites counted as sites; `null` for no bound, as for an upload that makes no site. */
+  readonly sites: number | null;
+}
+
+/** Where a page of old uploads ended. */
+interface UploadsCursor {
+  readonly created_at: number;
+  readonly id: UploadId;
+}
+
+/** One page of uploads, the oldest first. `next` is absent on the last page. */
+export interface UploadsPage {
+  readonly uploads: readonly Upload[];
+  readonly next?: UploadsCursor;
 }
 
 /** An entry for the audit log that goes with no change, such as a login. */
@@ -253,6 +307,72 @@ export interface Database {
    */
   importSite(site: Site, signed: Signed): Promise<Done | Refused<"id_taken" | "folder_taken" | "name_taken">>;
 
+  /** The site whose files sit under this folder, in the trash or not. */
+  getSiteByFolder(folder: SiteFolder): Promise<Site | undefined>;
+
+  /**
+   * Record a staged publish as pending, only while it fits the room it is given. It writes no audit entry: nothing a reader of any site sees has changed.
+   *
+   * @returns the first bound the upload does not fit, in the order `own`, `folder`, `total`, `sites`; of uploads recorded at the same moment only those that fit together are kept
+   * @throws {Error} a value breaks its field rule, the manifest is empty, or the id or the folder and number are already an upload's
+   */
+  addUpload(upload: NewUpload, room: UploadRoom): Promise<{ readonly kind: "done" } | Refused<"own_full" | "folder_full" | "total_full" | "sites_full">>;
+
+  /** The upload with this id and its manifest, which is empty once the upload is finished or abandoned. */
+  getUpload(id: UploadId): Promise<{ readonly upload: Upload; readonly manifest: readonly ManifestFile[] } | undefined>;
+
+  /** The upload with this id and the one file of its manifest at `path`, `undefined` when the manifest names none there. The manifest itself is not read out. */
+  getUploadFile(id: UploadId, path: string): Promise<{ readonly upload: Upload; readonly file: ManifestFile | undefined } | undefined>;
+
+  /**
+   * Make a pending upload's site, at version 1 under a fresh id, and mark the upload finished, in one step. The site belongs to whoever began the upload, whoever finishes it.
+   *
+   * @param draft - the site, whose folder is the upload's
+   * @returns `not_pending` when the upload is finished, abandoned, gone, or of another folder; `name_taken` as in `createSite`
+   * @throws {Error} the draft breaks a field rule, or its folder is already a site's
+   */
+  publishUploadAsSite(id: UploadId, draft: NewSite, signed: Signed): Promise<Done | Refused<"name_taken" | "not_pending">>;
+
+  /**
+   * Record a pending upload as the next version of the site in its folder and make it live, with the settings asked with it, and mark the upload finished with the versions dropped.
+   *
+   * All of it is one step: when the version is refused no setting changes, and when the public name is taken no version is added. Each setting that changes writes its own audit entry.
+   *
+   * @returns `stale_number` when a higher version is already kept; `name_taken` as in `changeAccess`; `not_pending` as in `publishUploadAsSite`
+   * @throws {RangeError} `keep` is not a whole number from 1 up
+   * @throws {Error} a detail breaks its field rule
+   */
+  publishUploadAsVersion(
+    id: UploadId,
+    version: UploadedVersion,
+    signed: Signed,
+  ): Promise<Published | Refused<"not_found" | "in_trash" | "name_taken" | "stale_number" | "not_pending">>;
+
+  /** Record which of the versions a finished upload dropped still have files in the store, so a later removal goes on from there. */
+  setUploadDropped(id: UploadId, dropped: readonly number[]): Promise<void>;
+
+  /**
+   * Give a pending upload up, so it takes no file and is never made live. Its manifest is dropped with it.
+   *
+   * @returns `false` when the upload is not pending
+   */
+  abandonUpload(id: UploadId): Promise<boolean>;
+
+  /**
+   * Remove the record of an upload that is finished or abandoned.
+   *
+   * @returns `false` when there is no such upload, or it is still pending
+   */
+  removeUpload(id: UploadId): Promise<boolean>;
+
+  /**
+   * One page of the uploads begun before a moment, whatever their state, the oldest first.
+   *
+   * @param query - the moment, how many uploads from 1 to 100, and the `next` of the page before
+   * @throws {RangeError} `limit` is not a whole number from 1 to 100
+   */
+  listUploads(query: { readonly before: number; readonly limit: number; readonly after?: UploadsCursor }): Promise<UploadsPage>;
+
   /** Store the record of a new token. */
   addToken(token: TokenRecord, signed: Signed): Promise<{ readonly kind: "done" } | Refused<"id_taken">>;
 
@@ -329,7 +449,8 @@ export interface Database {
    * A day's counts so far, 0 where nothing was counted.
    *
    * @param day - a UTC date, such as `2026-11-13`
+   * @param site - the site whose own count is read; without it only `all` is read, and `site` is 0
    * @throws {RangeError} `day` is not such a date
    */
-  readRequests(day: string, site: SiteId): Promise<RequestCounts>;
+  readRequests(day: string, site?: SiteId): Promise<RequestCounts>;
 }

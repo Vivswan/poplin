@@ -14,6 +14,7 @@ import type {
   Done,
   ExportPage,
   NewSite,
+  NewUpload,
   NewVersion,
   Published,
   Refused,
@@ -25,12 +26,16 @@ import type {
   SitesPage,
   SitesQuery,
   Unchanged,
+  UploadedVersion,
+  UploadRoom,
+  UploadsPage,
 } from "../src/database/database";
 import type { PublicName, SiteName } from "../src/names/names";
 import type { AuditAction, AuditEntry } from "../src/records/audit";
 import { SETTING_CHANGES, SETTING_VALUES, type SettingValues } from "../src/records/settings";
 import { NEW_SITE, SITE_DETAILS, type Site, type SiteAccess, siteToRow } from "../src/records/site";
 import type { SiteSize, Totals } from "../src/records/sizes";
+import { type ManifestFile, manifestFromText, type Upload, type UploadId, uploadFromRow } from "../src/records/upload";
 import { mintSiteId, type SiteId } from "../src/sites/ids";
 import { describeDatabase } from "./database-contract";
 
@@ -133,6 +138,8 @@ class MemoryDatabase implements Database {
   readonly #audit: AuditEntry[] = [];
 
   readonly #requests = new Map<string, Map<string, number>>();
+
+  readonly #uploads = new Map<UploadId, { readonly upload: Upload; readonly manifest: readonly ManifestFile[] }>();
 
   readonly #mintId: () => SiteId;
 
@@ -487,11 +494,153 @@ class MemoryDatabase implements Database {
     return { site, all };
   }
 
-  async readRequests(day: string, site: SiteId): Promise<RequestCounts> {
+  async readRequests(day: string, site?: SiteId): Promise<RequestCounts> {
     requireDay(day);
     const counts = this.#requests.get(day);
+    const own = site === undefined ? 0 : (counts?.get(site) ?? 0);
 
-    return { site: counts?.get(site) ?? 0, all: counts?.get(ALL_SITES) ?? 0 };
+    return { site: own, all: counts?.get(ALL_SITES) ?? 0 };
+  }
+
+  async getSiteByFolder(folder: Site["folder"]): Promise<Site | undefined> {
+    const kept = this.#byFolder(folder);
+
+    return kept === undefined ? undefined : siteOf(kept);
+  }
+
+  async addUpload(upload: NewUpload, room: UploadRoom): Promise<{ readonly kind: "done" } | Refused<"own_full" | "folder_full" | "total_full" | "sites_full">> {
+    // The checks of a stored upload are the ones that read its row; they are used here for their verdict.
+    const manifest = manifestFromText(JSON.stringify(upload.manifest));
+    const bytes = manifest.reduce((sum, file) => sum + file.size, 0);
+    const checked = uploadFromRow({ ...upload, state: "pending", plan: JSON.stringify(upload.plan), bytes, files: manifest.length, dropped: "[]" });
+    const all = [...this.#uploads.values()].map((kept) => kept.upload);
+    const taken = all.some((kept) => kept.folder === checked.folder && kept.number === checked.number);
+    if (taken || this.#uploads.has(checked.id)) throw new Error("the id, or the folder and number, are already an upload's");
+
+    const pending = all.filter((kept) => kept.state === "pending");
+    const sum = (sized: readonly { readonly bytes: number }[]): number => sized.reduce((total, kept) => total + kept.bytes, 0);
+    const sites = [...this.#sites.values()];
+    const totals = { sites: sites.length, bytes: sum(sites.flatMap((kept) => kept.fields.versions)) };
+    if (pending.filter((kept) => kept.owner === checked.owner).length >= room.own) return { kind: "own_full" };
+
+    const versions = this.#byFolder(checked.folder)?.fields.versions ?? [];
+    const staying = sum(versions.slice(Math.max(versions.length - room.staying, 0)));
+    if (sum(pending.filter((kept) => kept.folder === checked.folder)) + staying + bytes > room.folderBytes) return { kind: "folder_full" };
+
+    if (sum(pending) + totals.bytes + bytes > room.totalBytes) return { kind: "total_full" };
+
+    if (room.sites !== null && pending.filter((kept) => kept.number === 1).length + totals.sites >= room.sites) return { kind: "sites_full" };
+
+    this.#uploads.set(checked.id, { upload: checked, manifest });
+
+    return { kind: "done" };
+  }
+
+  async getUpload(id: UploadId): Promise<{ readonly upload: Upload; readonly manifest: readonly ManifestFile[] } | undefined> {
+    return this.#uploads.get(id);
+  }
+
+  async getUploadFile(id: UploadId, path: string): Promise<{ readonly upload: Upload; readonly file: ManifestFile | undefined } | undefined> {
+    const kept = this.#uploads.get(id);
+    if (kept === undefined) return undefined;
+
+    return { upload: kept.upload, file: kept.manifest.find((file) => file.path === path) };
+  }
+
+  async publishUploadAsSite(id: UploadId, draft: NewSite, signed: Signed): Promise<Done | Refused<"name_taken" | "not_pending">> {
+    const site = v.parse(NEW_SITE, draft);
+    const upload = this.#uploads.get(id)?.upload;
+    if (upload?.state !== "pending" || upload.folder !== site.folder || upload.number !== 1) return { kind: "not_pending" };
+
+    const publicName = publicNameOf(accessOf(site));
+    if (publicName !== null && this.#holds(publicName)) return { kind: "name_taken" };
+
+    // The upload is finished before the first wait, so a finish started at the same moment finds it so.
+    this.#finish(upload, []);
+    const made = await this.createSite(draft, signed);
+    const kept = made.kind === "done" ? this.#sites.get(made.site.id) : undefined;
+    if (kept === undefined) return made;
+
+    // The site is its upload's owner's, whoever finished it; the audit entry stays the finisher's.
+    const fields = { ...kept.fields, owner: upload.owner, versions: kept.fields.versions.map((entry) => ({ ...entry, published_by: upload.owner })) };
+    this.#sites.set(fields.id, { ...kept, fields });
+
+    return { kind: "done", site: siteOf({ ...kept, fields }) };
+  }
+
+  async publishUploadAsVersion(
+    id: UploadId,
+    version: UploadedVersion,
+    signed: Signed,
+  ): Promise<Published | Refused<"not_found" | "in_trash" | "name_taken" | "stale_number" | "not_pending">> {
+    if (!Number.isSafeInteger(version.keep) || version.keep < 1) throw new RangeError(`a site keeps at least 1 version, not ${version.keep}`);
+
+    const details = v.parse(SITE_DETAILS, version.details);
+    const upload = this.#uploads.get(id)?.upload;
+    if (upload?.state !== "pending") return { kind: "not_pending" };
+
+    const kept = this.#byFolder(upload.folder);
+    const refusal = unreachable(kept);
+    if (kept === undefined || refusal !== undefined) return refusal ?? { kind: "not_found" };
+
+    const publicName = version.access === undefined ? null : publicNameOf(version.access);
+    const held = publicName !== null && publicNameOf(kept.access) !== publicName && this.#holds(publicName);
+    const highest = Math.max(...kept.fields.versions.map((entry) => entry.number));
+    if (held) return { kind: "name_taken" };
+
+    if (upload.number >= kept.nextVersion || upload.number <= highest) return { kind: "stale_number" };
+
+    // The upload is finished before the first wait, so a finish started at the same moment finds it so.
+    this.#finish(upload, []);
+
+    // The three changes are started without a wait between them: each runs to its end as it is called, so nothing else comes in between.
+    const { id: site } = kept.fields;
+    const set = version.access === undefined ? undefined : this.changeAccess(site, version.access, signed);
+    const detailed = this.changeDetails(site, details, signed);
+    const published = await this.addVersion(site, { number: upload.number, keep: version.keep, bytes: upload.bytes, files: upload.files }, signed);
+    await Promise.all([set, detailed]);
+    if (published.kind !== "done") throw new Error(`a version that was checked was refused: ${published.kind}`);
+
+    this.#finish(upload, published.dropped);
+
+    return published;
+  }
+
+  async setUploadDropped(id: UploadId, dropped: readonly number[]): Promise<void> {
+    const kept = this.#uploads.get(id);
+    if (kept?.upload.state === "finished") this.#uploads.set(id, { ...kept, upload: { ...kept.upload, dropped: [...dropped] } });
+  }
+
+  async abandonUpload(id: UploadId): Promise<boolean> {
+    const kept = this.#uploads.get(id);
+    if (kept?.upload.state !== "pending") return false;
+
+    this.#uploads.set(id, { manifest: [], upload: { ...kept.upload, state: "abandoned" } });
+
+    return true;
+  }
+
+  async removeUpload(id: UploadId): Promise<boolean> {
+    const state = this.#uploads.get(id)?.upload.state;
+    if (state === undefined || state === "pending") return false;
+
+    return this.#uploads.delete(id);
+  }
+
+  async listUploads(query: { readonly before: number; readonly limit: number; readonly after?: { readonly created_at: number; readonly id: UploadId } }): Promise<UploadsPage> {
+    requirePage(query.limit);
+
+    const { after } = query;
+    const follows = (upload: Upload): boolean => after === undefined || upload.created_at > after.created_at || (upload.created_at === after.created_at && upload.id > after.id);
+    const listed = [...this.#uploads.values()]
+      .map((kept) => kept.upload)
+      .filter((upload) => upload.created_at < query.before && follows(upload))
+      .sort((left, right) => left.created_at - right.created_at || (left.id < right.id ? -1 : 1));
+    const uploads = listed.slice(0, query.limit);
+    const last = uploads.at(-1);
+    if (last === undefined || listed.length <= query.limit) return { uploads };
+
+    return { uploads, next: { created_at: last.created_at, id: last.id } };
   }
 
   /** Whether a site has this text as its id or as its public name: the two are one set of addresses. */
@@ -501,6 +650,16 @@ class MemoryDatabase implements Database {
 
   #holdsFolder(folder: string): boolean {
     return [...this.#sites.values()].some((kept) => kept.fields.folder === folder);
+  }
+
+  #byFolder(folder: string): Kept | undefined {
+    return [...this.#sites.values()].find((kept) => kept.fields.folder === folder);
+  }
+
+  /** Keep an upload as finished, with the versions its publish dropped. */
+  #finish(upload: Upload, dropped: readonly number[]): void {
+    const kept = this.#uploads.get(upload.id);
+    if (kept !== undefined) this.#uploads.set(upload.id, { manifest: [], upload: { ...upload, state: "finished", dropped: [...dropped] } });
   }
 
   #byPublicName(name: string): Kept | undefined {

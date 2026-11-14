@@ -1,5 +1,7 @@
 // Delete: a site into the trash, or gone for good with its files.
 
+import * as v from "valibot";
+
 import type { Actor } from "../auth/scopes";
 import type { Signed } from "../database/database";
 import type { Site } from "../records/site";
@@ -8,6 +10,9 @@ import { removeFiles, sitePrefix } from "./files";
 import { reachSite } from "./reach";
 import { type Install, type Refused, refuse } from "./records";
 import { type SiteAnswer, type SiteObject, siteAnswer } from "./site-object";
+
+/** What a delete may ask for besides its site: whether the site goes now and for good. */
+export const DELETE_OPTIONS = v.strictObject({ forever: v.optional(v.boolean()) });
 
 /** A site removed for good, as it last was. `left` holds the site's prefix when its files could not all be removed, and is empty otherwise. */
 interface Removed {
@@ -38,7 +43,7 @@ export async function removeSite(install: Install, id: SiteId, signed: Signed): 
 export async function deleteSite(
   install: Install,
   actor: Actor,
-  request: { readonly site: string; readonly forever?: boolean },
+  request: v.InferInput<typeof DELETE_OPTIONS> & { readonly site: string },
 ): Promise<(Omit<SiteAnswer, "site"> & { readonly site: SiteObject | null; readonly left: readonly string[] }) | Refused<"not_set_up" | "bad_argument" | "not_found" | "not_allowed" | "in_trash">> {
   const reached = await reachSite(install, actor, request.site);
   if (!reached.ok) return reached;

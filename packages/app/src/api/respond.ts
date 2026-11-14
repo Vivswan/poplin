@@ -1,0 +1,96 @@
+// The one form every answer of the API takes: the JSON of a done action, or the error object with the HTTP status of its code.
+
+import type { Refused } from "@poplin/core/src/actions/records";
+import type { ApiError } from "@poplin/core/src/api/routes";
+
+/** The HTTP status of every code an action or the API itself refuses with. A code missing here does not compile. */
+const STATUS = {
+  not_logged_in: 401,
+  not_allowed: 403,
+  not_found: 404,
+  no_such_version: 404,
+  method_not_allowed: 405,
+  unsupported_media_type: 415,
+  bad_argument: 400,
+  bad_name: 400,
+  reserved_name: 400,
+  bad_path: 400,
+  no_index: 400,
+  size_mismatch: 400,
+  name_taken: 409,
+  in_trash: 409,
+  not_in_trash: 409,
+  stale_version: 409,
+  missing_files: 409,
+  upload_finished: 409,
+  too_many_sites: 409,
+  not_set_up: 409,
+  too_large: 413,
+  internal: 500,
+} as const;
+
+/** What each code means, for a person. No message quotes anything a request sent. */
+const MESSAGES: Readonly<Record<Code, string>> = {
+  not_logged_in: "no token was sent, or it is not a live token of this install",
+  not_allowed: "this token may not do that",
+  not_found: "there is no such thing here",
+  no_such_version: "the site keeps no such version",
+  method_not_allowed: "this address takes another method",
+  unsupported_media_type: "the body is not of the content type this address takes",
+  bad_argument: "an argument is missing, unknown, or of the wrong form",
+  bad_name: "the name breaks the rules of a name",
+  reserved_name: "the install keeps that public name for itself",
+  bad_path: "a file's path is one no site can serve, or is given twice",
+  no_index: "a site needs an index.html at its top",
+  size_mismatch: "a file's bytes are not as many as its declared size",
+  name_taken: "another site holds that public name",
+  in_trash: "the site sits in the trash",
+  not_in_trash: "the site is not in the trash",
+  stale_version: "a newer publish of the site went live first",
+  missing_files: "a declared file has not been uploaded",
+  upload_finished: "the upload is finished and live",
+  too_many_sites: "the install holds as many sites as it may",
+  not_set_up: "the install is not set up",
+  too_large: "a size limit is passed",
+  internal: "the install failed to do that",
+};
+
+/** The form of a token, wherever it sits in a text. */
+const TOKEN_SHAPE = /poplin_[0-9a-f]{16}_[0-9a-f]{64}/i;
+
+/** What goes on every response: no cache keeps it, and no browser guesses at its type. No header opens the API to another origin's scripts. */
+const HEADERS = { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff" } as const;
+
+/** Every code a response may carry. */
+export type Code = keyof typeof STATUS;
+
+/** What a handler answers: a done action, or a refusal with one of the codes. */
+export type Result<Done> = ({ readonly ok: true } & Done) | Refused<Code>;
+
+function json(status: number, body: unknown, extra: Readonly<Record<string, string>> = {}): Response {
+  return new Response(JSON.stringify(body), { status, headers: { ...HEADERS, ...extra } });
+}
+
+/**
+ * Build the response of a refusal.
+ *
+ * @param about - the argument, the limit, or the path the code is about, as the action named it; one that holds a token is left out, since a caller may have sent a token where a name goes
+ * @param headers - headers to send beside the fixed ones, such as `Allow`
+ */
+export function refusal(code: Code, about?: string, headers?: Readonly<Record<string, string>>): Response {
+  const named = about !== undefined && !TOKEN_SHAPE.test(about);
+  const error: ApiError["error"] = named ? { code, message: MESSAGES[code], about } : { code, message: MESSAGES[code] };
+
+  return json(STATUS[code], { error } satisfies ApiError, headers);
+}
+
+/**
+ * Build the response of a handler's answer.
+ *
+ * @returns 200 with the answer less its `ok`, or the refusal's response
+ */
+export function respond(result: Result<object>): Response {
+  if (!result.ok) return refusal(result.code, result.about);
+
+  return json(200, Object.fromEntries(Object.entries(result).filter(([key]) => key !== "ok")));
+}

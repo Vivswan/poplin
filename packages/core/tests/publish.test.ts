@@ -53,6 +53,9 @@ describe("publishSite", () => {
         expires: "never",
         versions: [{ number: 1, published: NOW, published_by: OWNER.holder }],
         live_version: 1,
+        bytes: 9,
+        files: 2,
+        updated: NOW,
         state: "live",
         created: true,
       },
@@ -107,6 +110,8 @@ describe("publishSite", () => {
       ...before.site,
       created: false,
       live_version: 2,
+      bytes: before.site.bytes + 9,
+      files: 3,
       versions: [...before.site.versions, { number: 2, published: NOW, published_by: OWNER.holder }],
     } as never);
     expect(updated.before).toEqual(before.site);

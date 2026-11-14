@@ -1,0 +1,135 @@
+// The handler of every route: it checks what was sent against the action's schema, calls that one action, and hands back its answer. No rule lives here.
+
+import { abandonPublish } from "@poplin/core/src/actions/abandon-publish";
+import { AUDIT_QUERY, listAudit } from "@poplin/core/src/actions/audit-log";
+import { beginPublish, PUBLISH_REQUEST, type UploadLimits } from "@poplin/core/src/actions/begin-publish";
+import { SITE_CHANGES } from "@poplin/core/src/actions/changes";
+import { changeConfig, readConfig } from "@poplin/core/src/actions/config";
+import { DELETE_OPTIONS, deleteSite } from "@poplin/core/src/actions/delete";
+import { finishPublish } from "@poplin/core/src/actions/finish-publish";
+import { LIST_QUERY, listSites } from "@poplin/core/src/actions/list";
+import { issueToken, listTokens, revokeToken, TOKEN_REQUEST, tokenObject } from "@poplin/core/src/actions/manage-tokens";
+import { newLink } from "@poplin/core/src/actions/new-link";
+import { type Install, type Refused, refuse } from "@poplin/core/src/actions/records";
+import { restoreSite } from "@poplin/core/src/actions/restore";
+import { ROLLBACK_OPTIONS, rollbackSite } from "@poplin/core/src/actions/rollback";
+import { updateSite } from "@poplin/core/src/actions/set";
+import { getSite } from "@poplin/core/src/actions/show";
+import { signEveryoneOut } from "@poplin/core/src/actions/sign-out";
+import { showUpload } from "@poplin/core/src/actions/show-upload";
+import { uploadFile } from "@poplin/core/src/actions/upload-file";
+import type { ROUTES } from "@poplin/core/src/api/routes";
+import type { Actor } from "@poplin/core/src/auth/scopes";
+import type { TokenRecord } from "@poplin/core/src/auth/tokens";
+import * as v from "valibot";
+
+import { capBody, type QueryShape } from "./body";
+import type { Result } from "./respond";
+
+/** The query each route takes; a route missing here takes none. */
+export const QUERIES: { readonly [Name in RouteName]?: QueryShape } = {
+  listSites: { trash: "switch", limit: "number", after_updated_at: "number", after_id: "text" },
+  deleteSite: { forever: "switch" },
+  uploadFile: { path: "text" },
+  listAudit: { limit: "number", before: "number" },
+};
+
+/** The name of a route in the table. */
+export type RouteName = keyof typeof ROUTES;
+
+/** One request as its handler takes it: who asks, and what the route's path, query, and body hold. */
+export interface Call {
+  /** The install the action runs on. */
+  readonly install: Install;
+
+  /** The record of the token the request presented. */
+  readonly token: TokenRecord;
+
+  /** Whoever that token stands for. */
+  readonly actor: Actor;
+
+  /** The path's `:site`, which has the form of a site reference; `""` on a route without one. */
+  readonly site: string;
+
+  /** The path's `:upload` or `:token`; `""` on a route without one. */
+  readonly named: string;
+
+  /** The query, read by the route's shape. */
+  readonly query: Readonly<Record<string, string | number | boolean>>;
+
+  /** The parsed JSON body of a route that sends one, `undefined` otherwise. */
+  readonly body: unknown;
+
+  /** The request itself, whose body a route that sends bytes reads. */
+  readonly request: Request;
+
+  /** What one request can carry. */
+  readonly limits: UploadLimits;
+}
+
+/** What the handler of a route answers: the route's `done` type, or a refusal. */
+type Handler<Name extends RouteName> = (call: Call) => Promise<Result<NonNullable<(typeof ROUTES)[Name]["types"]>["done"]>>;
+
+/** Check a sent value against an action's schema, and run the action on what passes. */
+async function checked<Schema extends v.GenericSchema, Answer>(
+  schema: Schema,
+  sent: unknown,
+  run: (asked: v.InferOutput<Schema>) => Promise<Answer>,
+): Promise<Answer | Refused<"bad_argument">> {
+  const asked = v.safeParse(schema, sent);
+  if (!asked.success) return refuse("bad_argument", v.getDotPath(asked.issues[0])?.split(".")[0] ?? "body");
+
+  return run(asked.output);
+}
+
+/** The listing a query asks for: the two halves of the cursor become one `after`. */
+function listingOf(query: Call["query"]): unknown {
+  const { after_updated_at: updated_at, after_id: id, ...rest } = query;
+  if (updated_at === undefined && id === undefined) return rest;
+
+  return { ...rest, after: { updated_at, id } };
+}
+
+/** Store the body of a request as one file, reading no more of it than one request may carry. */
+async function storeBody({ install, actor, named, query, request, limits }: Call): ReturnType<Handler<"uploadFile">> {
+  const body = capBody(request, limits.fileBytes);
+  if (typeof query.path !== "string") return refuse("bad_argument", "path");
+
+  try {
+    const stored = await uploadFile(install, actor, { upload: named, path: query.path, body: body.stream });
+
+    return body.exceeded() ? refuse("too_large", "max_file_size") : stored;
+  } catch (error) {
+    if (body.exceeded()) return refuse("too_large", "max_file_size");
+
+    throw error;
+  }
+}
+
+/** The handler of every route, by the route's name. A route without one does not compile. */
+export const HANDLERS: { readonly [Name in RouteName]: Handler<Name> } = {
+  whoami: async ({ token }) => ({ ok: true, token: tokenObject(token) }),
+  logout: ({ install, actor, token }) => revokeToken(install, actor, token.id),
+  listTokens: ({ install, actor }) => listTokens(install, actor),
+  issueToken: ({ install, actor, body }) => checked(TOKEN_REQUEST, body, (request) => issueToken(install, actor, request)),
+  revokeToken: ({ install, actor, named }) => revokeToken(install, actor, named),
+
+  listSites: ({ install, actor, query }) => checked(LIST_QUERY, listingOf(query), (asked) => listSites(install, actor, asked)),
+  getSite: ({ install, actor, site }) => getSite(install, actor, site),
+  updateSite: ({ install, actor, site, body }) => checked(SITE_CHANGES, body, (changes) => updateSite(install, actor, { ...changes, site })),
+  rollbackSite: ({ install, actor, site, body }) => checked(ROLLBACK_OPTIONS, body, (options) => rollbackSite(install, actor, { ...options, site })),
+  newLink: ({ install, actor, site }) => newLink(install, actor, site),
+  deleteSite: ({ install, actor, site, query }) => checked(DELETE_OPTIONS, query, (options) => deleteSite(install, actor, { ...options, site })),
+  restoreSite: ({ install, actor, site }) => restoreSite(install, actor, site),
+
+  beginPublish: ({ install, actor, body, limits }) => checked(PUBLISH_REQUEST, body, (request) => beginPublish(install, actor, request, limits)),
+  showUpload: ({ install, actor, named }) => showUpload(install, actor, named),
+  uploadFile: storeBody,
+  finishPublish: ({ install, actor, named }) => finishPublish(install, actor, named),
+  abandonPublish: ({ install, actor, named }) => abandonPublish(install, actor, named),
+
+  readConfig: ({ install, actor }) => readConfig(install, actor),
+  changeConfig: ({ install, actor, body }) => changeConfig(install, actor, body),
+  signEveryoneOut: ({ install, actor }) => signEveryoneOut(install, actor),
+  listAudit: ({ install, actor, query }) => checked(AUDIT_QUERY, query, (asked) => listAudit(install, actor, asked)),
+};

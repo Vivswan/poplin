@@ -14,7 +14,8 @@ export const DAY_MS = 86_400_000;
 /**
  * A site as a caller sees it. Times are milliseconds since the epoch.
  *
- * `url` is the one address to hand to a person: the public one for a public site, the label's otherwise. `gone_on` is when a site in the trash is deleted for good, and is absent outside the trash.
+ * `url` is the one address to hand to a person: the public one for a public site, the label's otherwise. `bytes` and `files` sum the kept versions, and `updated` is when the site last changed.
+ * `gone_on` is when a site in the trash is deleted for good, and is absent outside the trash.
  */
 export interface SiteObject {
   readonly id: SiteId;
@@ -30,6 +31,9 @@ export interface SiteObject {
   readonly expires: "never" | number;
   readonly versions: readonly { readonly number: number; readonly published: number; readonly published_by: Holder }[];
   readonly live_version: number;
+  readonly bytes: number;
+  readonly files: number;
+  readonly updated: number;
   readonly state: Site["state"];
   readonly gone_on?: number;
 }
@@ -69,6 +73,9 @@ export function siteObject(site: Site, install: Pick<Install, "addressOf">, tras
     expires: site.expires,
     versions: site.versions.map((version) => ({ number: version.number, published: version.published_at, published_by: version.published_by })),
     live_version: site.live_version,
+    bytes: site.versions.reduce((sum, version) => sum + version.bytes, 0),
+    files: site.versions.reduce((sum, version) => sum + version.files, 0),
+    updated: site.updated_at,
     state: site.state,
   };
   if (site.state !== "trash") return object;

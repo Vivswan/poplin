@@ -14,6 +14,7 @@ import { NEW_SITE, SITE_DETAILS, type Site, type SiteAccess, siteFromRow, siteTo
 import { type SiteSize, sizeFromRow, type Totals, totalsFromRow } from "../records/sizes";
 import { mintSiteId, type SiteId } from "../sites/ids";
 import { tokenFromRow } from "../records/token";
+import { type ManifestFile, MANIFEST_FILE, manifestFromText, type Upload, type UploadId, uploadFromRow } from "../records/upload";
 import type {
   Address,
   AuditNote,
@@ -22,6 +23,7 @@ import type {
   Done,
   ExportPage,
   NewSite,
+  NewUpload,
   NewVersion,
   Published,
   Refused,
@@ -33,6 +35,9 @@ import type {
   SitesPage,
   SitesQuery,
   Unchanged,
+  UploadedVersion,
+  UploadRoom,
+  UploadsPage,
 } from "./database";
 import type { SqlDriver, SqlValue, Statement, StatementResult } from "./driver";
 
@@ -57,6 +62,12 @@ const SITE_BY_ID = `${SELECT_SITE} WHERE s.id = ?1`;
 /** The site holding public name `?1`. */
 const SITE_BY_PUBLIC_NAME = `${SELECT_SITE} WHERE s.public_name = ?1`;
 
+/** The site whose files sit under folder `?1`. */
+const SITE_BY_FOLDER = `${SELECT_SITE} WHERE s.folder = ?1`;
+
+/** The site in the folder of upload `?1`. */
+const SITE_OF_UPLOAD = `${SELECT_SITE} WHERE s.folder = (SELECT folder FROM uploads WHERE id = ?1)`;
+
 /** Added to a lookup by address: the site is outside the trash and not past its expiry at `?2`. */
 const IS_SERVED = "AND s.trashed = 0 AND (s.expires_at IS NULL OR s.expires_at > ?2)";
 
@@ -70,10 +81,10 @@ const AUDIT_PLAIN = "INSERT INTO audit (at, actor, action, detail) SELECT ?1, ?2
 /** An audit entry that goes with no change. */
 const AUDIT_NOTE = "INSERT INTO audit (at, actor, action, site_id, site_name, detail) VALUES (?1, ?2, ?3, ?4, ?5, ?6)";
 
-/** A new site, only while its id and its public name are free: no site has either as its id or its public name. The schema adds version 1 with the row. */
+/** A new site, only while its id and its public name are free: no site has either as its id or its public name. The schema adds version 1 with the row. Its owner is whoever began upload `?12`, and `?9` when it is made from none. */
 const INSERT_SITE = `
 INSERT INTO sites (id, name, folder, access, public_name, title, search_engines, expires_at, live_version, next_version, owner, created_at, updated_at, embeddable)
-SELECT ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, 1, 2, ?9, ?10, ?10, ?11
+SELECT ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, 1, 2, COALESCE((SELECT owner FROM uploads WHERE id = ?12), ?9), ?10, ?10, ?11
 WHERE NOT EXISTS (SELECT 1 FROM sites WHERE id = ?1)
   AND NOT EXISTS (SELECT 1 FROM sites WHERE public_name = ?1)
   AND (?5 IS NULL OR (?5 <> ?1 AND NOT EXISTS (SELECT 1 FROM sites WHERE public_name = ?5) AND NOT EXISTS (SELECT 1 FROM sites WHERE id = ?5)))`;
@@ -175,6 +186,117 @@ const IMPORT_IS_HELD = `
 SELECT (EXISTS (SELECT 1 FROM sites WHERE id = ?1) OR EXISTS (SELECT 1 FROM sites WHERE public_name = ?1)) AS id_held,
   EXISTS (SELECT 1 FROM sites WHERE folder = ?2) AS folder_held`;
 
+/** Every column of an upload but its manifest. */
+const UPLOAD_COLUMNS = "id, folder, number, owner, state, plan, bytes, files, dropped, created_at";
+
+/** How many pending uploads holder `?4` began. */
+const PENDING_OF_OWNER = "(SELECT COUNT(*) FROM uploads WHERE state = 'pending' AND owner = ?4)";
+
+/** The bytes folder `?2` would hold: what its pending uploads declare, and the `?5` newest kept versions of its site. */
+const BYTES_IN_FOLDER = `((SELECT COALESCE(SUM(bytes), 0) FROM uploads WHERE state = 'pending' AND folder = ?2)
+  + (SELECT COALESCE(SUM(bytes), 0) FROM versions WHERE folder = ?2 AND number IN (SELECT number FROM versions WHERE folder = ?2 ORDER BY number DESC LIMIT ?5)))`;
+
+/** The bytes of every kept version and every pending upload together. */
+const BYTES_HELD = "((SELECT COALESCE(SUM(bytes), 0) FROM uploads WHERE state = 'pending') + (SELECT bytes FROM totals WHERE id = 1))";
+
+/** The sites there are and the ones the pending uploads would make. Only a new site's upload has number 1. */
+const SITES_HELD = "((SELECT COALESCE(SUM(number = 1), 0) FROM uploads WHERE state = 'pending') + (SELECT sites FROM totals WHERE id = 1))";
+
+/** What a new upload of holder `?4` under folder `?2` is measured against, read before it is recorded. */
+const UPLOAD_ROOM = `SELECT ?1 AS id, ?3 AS number, ${PENDING_OF_OWNER} AS own, ${BYTES_IN_FOLDER} AS folder_bytes, ${BYTES_HELD} AS total_bytes, ${SITES_HELD} AS sites`;
+
+/** A new upload, pending, only while it fits: its owner's count under `?11`, its folder's bytes within `?12`, all bytes within `?13`, and the sites under `?14` unless that is NULL. */
+const INSERT_UPLOAD = `
+INSERT INTO uploads (id, folder, number, owner, plan, manifest, bytes, files, created_at)
+SELECT ?1, ?2, ?3, ?4, ?6, ?7, ?8, ?9, ?10
+WHERE ${PENDING_OF_OWNER} < ?11 AND ${BYTES_IN_FOLDER} + ?8 <= ?12 AND ${BYTES_HELD} + ?8 <= ?13 AND (?14 IS NULL OR ${SITES_HELD} < ?14)`;
+
+/** The upload with id `?1`, without its manifest. */
+const UPLOAD_BY_ID = `SELECT ${UPLOAD_COLUMNS} FROM uploads WHERE id = ?1`;
+
+/** The upload with id `?1` and its whole manifest. */
+const UPLOAD_WITH_MANIFEST = `SELECT ${UPLOAD_COLUMNS}, manifest FROM uploads WHERE id = ?1`;
+
+/** The upload with id `?1` and the one file of its manifest at path `?2`, picked out by the engine so the manifest stays where it is. */
+const UPLOAD_WITH_FILE = `
+SELECT ${UPLOAD_COLUMNS}, (SELECT j.value FROM json_each(uploads.manifest) j WHERE j.value ->> 'path' = ?2) AS file
+FROM uploads WHERE id = ?1`;
+
+/** Added to `INSERT_SITE` for a site made from upload `?12`: only while that upload is pending and is the first version of the same folder. */
+const WHILE_UPLOAD_IS_PENDING = "AND EXISTS (SELECT 1 FROM uploads WHERE id = ?12 AND state = 'pending' AND folder = ?3 AND number = 1)";
+
+/** An upload marked finished and its manifest dropped, only when the statement before it changed a row. */
+const FINISH_UPLOAD = "UPDATE uploads SET state = 'finished', manifest = '[]' WHERE id = ?1 AND changes() = 1";
+
+/** Whether upload `?1` can be made its site's next version: it is pending, its site is live, and its number was reserved and is above every kept one. */
+const UPLOAD_CAN_PUBLISH = `
+EXISTS (SELECT 1 FROM uploads u JOIN sites s ON s.folder = u.folder
+  WHERE u.id = ?1 AND u.state = 'pending' AND s.trashed = 0 AND u.number < s.next_version
+    AND u.number > (SELECT MAX(v.number) FROM versions v WHERE v.folder = s.folder))`;
+
+/** The access asked with upload `?1`, set by the rule of `SET_ACCESS`, only while the upload can be published. */
+const SET_ACCESS_WITH_UPLOAD = `
+UPDATE sites SET access = ?2, public_name = ?3, updated_at = ?4
+WHERE folder = (SELECT folder FROM uploads WHERE id = ?1) AND (access <> ?2 OR public_name IS NOT ?3)
+  AND (?3 IS NULL OR (NOT EXISTS (SELECT 1 FROM sites o WHERE o.public_name = ?3 AND o.folder <> sites.folder) AND NOT EXISTS (SELECT 1 FROM sites o WHERE o.id = ?3)))
+  AND ${UPLOAD_CAN_PUBLISH}`;
+
+/** The audit entry of a change made with upload `?4` to its site, written only when the statement before it changed a row. */
+const AUDIT_WITH_UPLOAD = `
+INSERT INTO audit (at, actor, action, site_id, site_name, detail)
+SELECT ?1, ?2, ?3, id, name, ?5 FROM sites WHERE folder = (SELECT folder FROM uploads WHERE id = ?4) AND changes() = 1`;
+
+/** Whether the site of upload `?1` has access `?2` under public name `?3`; true when no access is asked, which is a `?2` of NULL. */
+const UPLOAD_HAS_ACCESS = `
+(?2 IS NULL OR EXISTS (SELECT 1 FROM sites WHERE folder = (SELECT folder FROM uploads WHERE id = ?1) AND access = ?2 AND public_name IS ?3))`;
+
+/** Whether a site other than the one of upload `?1` has `?2` as its public name, or any site has it as its id. */
+const NAME_IS_HELD_BY_ANOTHER = `
+SELECT (EXISTS (SELECT 1 FROM sites WHERE public_name = ?2 AND folder <> (SELECT folder FROM uploads WHERE id = ?1))
+  OR EXISTS (SELECT 1 FROM sites WHERE id = ?2)) AS held`;
+
+/** The version of upload `?1` with the size its manifest declared, only while the upload can be published and its site has the access asked with it. */
+const INSERT_UPLOADED_VERSION = `
+INSERT INTO versions (folder, number, published_at, published_by, bytes, files)
+SELECT u.folder, u.number, ?4, ?5, u.bytes, u.files FROM uploads u
+WHERE u.id = ?1 AND ${UPLOAD_HAS_ACCESS} AND ${UPLOAD_CAN_PUBLISH}`;
+
+/** The version just kept for upload `?1` made live. */
+const SET_LIVE_TO_UPLOADED = `
+UPDATE sites SET live_version = (SELECT number FROM uploads WHERE id = ?1), updated_at = ?2
+WHERE folder = (SELECT folder FROM uploads WHERE id = ?1) AND changes() = 1`;
+
+/** The audit entry of the publish of upload `?3`, naming the version the site is at now. */
+const AUDIT_UPLOADED_VERSION = `
+INSERT INTO audit (at, actor, action, site_id, site_name, detail)
+SELECT ?1, ?2, 'publish', s.id, s.name, json_object('version', s.live_version) FROM sites s
+WHERE s.folder = (SELECT folder FROM uploads WHERE id = ?3) AND changes() = 1`;
+
+/** Upload `?1` marked finished with the versions beyond the `?2` highest, which the next statement drops. */
+const FINISH_UPLOADED_VERSION = `
+UPDATE uploads SET state = 'finished', manifest = '[]', dropped = (
+  SELECT json_group_array(v.number) FROM versions v
+  WHERE v.folder = uploads.folder AND v.number NOT IN (SELECT k.number FROM versions k WHERE k.folder = uploads.folder ORDER BY k.number DESC LIMIT ?2))
+WHERE id = ?1 AND changes() = 1`;
+
+/** The versions beyond the `?2` highest dropped from the site of upload `?1`, only after its publish. */
+const DROP_BEHIND_UPLOAD = `
+DELETE FROM versions
+WHERE changes() = 1 AND folder = (SELECT folder FROM uploads WHERE id = ?1)
+  AND number NOT IN (SELECT number FROM versions WHERE folder = (SELECT folder FROM uploads WHERE id = ?1) ORDER BY number DESC LIMIT ?2)`;
+
+/** The dropped versions of finished upload `?1` that still have files, as a JSON list. */
+const SET_DROPPED = "UPDATE uploads SET dropped = ?2 WHERE id = ?1 AND state = 'finished'";
+
+/** A pending upload given up, and its manifest dropped. */
+const ABANDON_UPLOAD = "UPDATE uploads SET state = 'abandoned', manifest = '[]' WHERE id = ?1 AND state = 'pending'";
+
+/** The record of an upload that takes no more files, removed. */
+const DELETE_UPLOAD = "DELETE FROM uploads WHERE id = ?1 AND state <> 'pending'";
+
+/** A page of the uploads begun before `?1`, the oldest first, from after the upload begun at `?2` with id `?3`. */
+const LIST_UPLOADS = `SELECT ${UPLOAD_COLUMNS} FROM uploads WHERE created_at < ?1 AND (created_at, id) > (?2, ?3) ORDER BY created_at, id LIMIT ?4`;
+
 /** Every column of a token. */
 const SELECT_TOKEN = "SELECT id, hash, scope, note, created_at, expires_at FROM tokens";
 
@@ -240,6 +362,24 @@ const DETAIL_COLUMNS: { readonly [Key in keyof Required<SiteDetails>]: (value: R
   expires: (expires) => ["expires_at", expires === "never" ? null : expires],
 };
 
+/** The `SET` and the differs-from condition of each detail given, with each stored value added to `params` and named by its place there. */
+function detailColumns(given: SiteDetails, params: SqlValue[]): { readonly sets: string[]; readonly differs: string[] } {
+  const sets: string[] = [];
+  const differs: string[] = [];
+
+  for (const key of ["title", "search_engines", "embeddable", "expires"] as const) {
+    const value = given[key];
+    if (value === undefined) continue;
+
+    const [column, stored] = (DETAIL_COLUMNS[key] as (value: unknown) => readonly [string, SqlValue])(value);
+    params.push(stored);
+    sets.push(`${column} = ?${params.length}`);
+    differs.push(`${column} IS NOT ?${params.length}`);
+  }
+
+  return { sets, differs };
+}
+
 function sql(text: string, ...params: SqlValue[]): Statement {
   return { sql: text, params };
 }
@@ -290,6 +430,12 @@ function unreachable(site: Site | undefined): Refused<"not_found" | "in_trash"> 
   return undefined;
 }
 
+function uploadIn(result: StatementResult | undefined): Upload | undefined {
+  const row = result?.rows[0];
+
+  return row === undefined ? undefined : uploadFromRow(row);
+}
+
 function signingKeyIn(result: StatementResult | undefined): Uint8Array<ArrayBuffer> | undefined {
   const row = result?.rows[0];
 
@@ -327,39 +473,12 @@ export class SqlDatabase implements Database {
   }
 
   async createSite(draft: NewSite, signed: Signed): Promise<Done | Refused<"name_taken">> {
-    const site = v.parse(NEW_SITE, draft);
-    const publicName = publicNameOf(site);
-    const expires = site.expires === "never" ? null : site.expires;
-    const detail = { access: site.access, public_name: publicName };
+    const made = await this.#insertSite(draft, signed);
+    if (made.kind === "done") return made;
 
-    for (let attempt = 0; attempt < MINT_ATTEMPTS; attempt += 1) {
-      const id = this.#mintId();
-      const [inserted, , , held, made] = await this.#driver.batch([
-        sql(
-          INSERT_SITE,
-          id,
-          site.name,
-          site.folder,
-          site.access,
-          publicName,
-          site.title,
-          site.search_engines ? 1 : 0,
-          expires,
-          signed.by,
-          signed.at,
-          site.embeddable ? 1 : 0,
-        ),
-        sql(SIZE_FIRST_VERSION, site.folder, site.bytes, site.files),
-        auditSite(signed, "create", id, detail),
-        sql(NAME_IS_HELD, publicName),
-        sql(SITE_BY_ID, id),
-      ]);
-      if (changed(inserted)) return done(made);
+    if (made.kind === "not_pending") throw new Error("a site made from no upload waits for none");
 
-      if (publicName !== null && held?.rows[0]?.held === 1) return { kind: "name_taken" };
-    }
-
-    throw new Error(`no free site id in ${MINT_ATTEMPTS} tries`);
+    return { kind: "name_taken" };
   }
 
   async getSite(id: SiteId): Promise<Site | undefined> {
@@ -370,6 +489,12 @@ export class SqlDatabase implements Database {
 
   async getSiteByPublicName(name: PublicName): Promise<Site | undefined> {
     const [found] = await this.#driver.batch([sql(SITE_BY_PUBLIC_NAME, name)]);
+
+    return siteIn(found);
+  }
+
+  async getSiteByFolder(folder: Site["folder"]): Promise<Site | undefined> {
+    const [found] = await this.#driver.batch([sql(SITE_BY_FOLDER, folder)]);
 
     return siteIn(found);
   }
@@ -428,20 +553,8 @@ export class SqlDatabase implements Database {
 
   async changeDetails(id: SiteId, details: SiteDetails, signed: Signed): Promise<Done | Unchanged | Refused<"not_found" | "in_trash">> {
     const given = v.parse(SITE_DETAILS, details);
-    const sets: string[] = [];
-    const differs: string[] = [];
     const params: SqlValue[] = [id, signed.at];
-
-    for (const key of ["title", "search_engines", "embeddable", "expires"] as const) {
-      const value = given[key];
-      if (value === undefined) continue;
-
-      const [column, stored] = (DETAIL_COLUMNS[key] as (value: unknown) => readonly [string, SqlValue])(value);
-      params.push(stored);
-      sets.push(`${column} = ?${params.length}`);
-      differs.push(`${column} IS NOT ?${params.length}`);
-    }
-
+    const { sets, differs } = detailColumns(given, params);
     if (sets.length === 0) return this.#unchanged(id);
 
     const text = `UPDATE sites SET ${sets.join(", ")}, updated_at = ?2 WHERE id = ?1 AND trashed = 0 AND (${differs.join(" OR ")})`;
@@ -598,6 +711,111 @@ export class SqlDatabase implements Database {
     return { kind: "name_taken" };
   }
 
+  async addUpload(upload: NewUpload, room: UploadRoom): Promise<{ readonly kind: "done" } | Refused<"own_full" | "folder_full" | "total_full" | "sites_full">> {
+    const manifest = JSON.stringify(upload.manifest);
+    const bytes = manifestFromText(manifest).reduce((sum, file) => sum + file.size, 0);
+    const row = { ...upload, state: "pending", plan: JSON.stringify(upload.plan), bytes, files: upload.manifest.length, dropped: "[]" };
+    const checked = uploadFromRow(row);
+    const named: SqlValue[] = [checked.id, checked.folder, checked.number, checked.owner, room.staying];
+
+    const [before, inserted] = await this.#driver.batch([
+      sql(UPLOAD_ROOM, ...named),
+      sql(INSERT_UPLOAD, ...named, row.plan, manifest, checked.bytes, checked.files, checked.created_at, room.own, room.folderBytes, room.totalBytes, room.sites),
+    ]);
+    if (changed(inserted)) return { kind: "done" };
+
+    const held = before?.rows[0];
+    if (Number(held?.own) >= room.own) return { kind: "own_full" };
+
+    if (Number(held?.folder_bytes) + checked.bytes > room.folderBytes) return { kind: "folder_full" };
+
+    return { kind: Number(held?.total_bytes) + checked.bytes > room.totalBytes ? "total_full" : "sites_full" };
+  }
+
+  async getUpload(id: UploadId): Promise<{ readonly upload: Upload; readonly manifest: readonly ManifestFile[] } | undefined> {
+    const [found] = await this.#driver.batch([sql(UPLOAD_WITH_MANIFEST, id)]);
+    const upload = uploadIn(found);
+    if (upload === undefined) return undefined;
+
+    return { upload, manifest: manifestFromText(found?.rows[0]?.manifest) };
+  }
+
+  async getUploadFile(id: UploadId, path: string): Promise<{ readonly upload: Upload; readonly file: ManifestFile | undefined } | undefined> {
+    const [found] = await this.#driver.batch([sql(UPLOAD_WITH_FILE, id, path)]);
+    const upload = uploadIn(found);
+    if (upload === undefined) return undefined;
+
+    const file = found?.rows[0]?.file;
+    if (typeof file !== "string") return { upload, file: undefined };
+
+    return { upload, file: v.parse(MANIFEST_FILE, JSON.parse(file)) };
+  }
+
+  publishUploadAsSite(id: UploadId, draft: NewSite, signed: Signed): Promise<Done | Refused<"name_taken" | "not_pending">> {
+    return this.#insertSite(draft, signed, id);
+  }
+
+  async publishUploadAsVersion(
+    id: UploadId,
+    version: UploadedVersion,
+    signed: Signed,
+  ): Promise<Published | Refused<"not_found" | "in_trash" | "name_taken" | "stale_number" | "not_pending">> {
+    if (!Number.isSafeInteger(version.keep) || version.keep < 1) throw new RangeError(`a site keeps at least 1 version, not ${version.keep}`);
+
+    const access = version.access?.access ?? null;
+    const publicName = version.access === undefined ? null : publicNameOf(version.access);
+    const settings = [...this.#accessWith(id, version.access, signed), ...this.#detailsWith(id, { access, publicName, details: version.details }, signed)];
+    const results = await this.#driver.batch([
+      ...settings,
+      sql(INSERT_UPLOADED_VERSION, id, access, publicName, signed.at, signed.by),
+      sql(SET_LIVE_TO_UPLOADED, id, signed.at),
+      sql(AUDIT_UPLOADED_VERSION, signed.at, signed.by, id),
+      sql(FINISH_UPLOADED_VERSION, id, version.keep),
+      sql(DROP_BEHIND_UPLOAD, id, version.keep),
+      sql(SITE_OF_UPLOAD, id),
+      sql(UPLOAD_BY_ID, id),
+      sql(NAME_IS_HELD_BY_ANOTHER, id, publicName),
+    ]);
+    const [inserted, , , , , after, finished, held] = results.slice(settings.length);
+    const upload = uploadIn(finished);
+    if (changed(inserted) && upload !== undefined) return { ...done(after), dropped: upload.dropped };
+
+    if (upload?.state !== "pending") return { kind: "not_pending" };
+
+    const refusal = unreachable(siteIn(after));
+    if (refusal !== undefined) return refusal;
+
+    return { kind: held?.rows[0]?.held === 1 ? "name_taken" : "stale_number" };
+  }
+
+  async setUploadDropped(id: UploadId, dropped: readonly number[]): Promise<void> {
+    await this.#driver.batch([sql(SET_DROPPED, id, JSON.stringify(dropped))]);
+  }
+
+  async abandonUpload(id: UploadId): Promise<boolean> {
+    const [abandoned] = await this.#driver.batch([sql(ABANDON_UPLOAD, id)]);
+
+    return changed(abandoned);
+  }
+
+  async removeUpload(id: UploadId): Promise<boolean> {
+    const [removed] = await this.#driver.batch([sql(DELETE_UPLOAD, id)]);
+
+    return changed(removed);
+  }
+
+  async listUploads(query: { readonly before: number; readonly limit: number; readonly after?: { readonly created_at: number; readonly id: UploadId } }): Promise<UploadsPage> {
+    requirePage(query.limit);
+
+    // One row more than the page shows whether another page follows.
+    const [listed] = await this.#driver.batch([sql(LIST_UPLOADS, query.before, query.after?.created_at ?? -1, query.after?.id ?? "", query.limit + 1)]);
+    const uploads = (listed?.rows ?? []).slice(0, query.limit).map(uploadFromRow);
+    const last = uploads.at(-1);
+    if (last === undefined || (listed?.rows.length ?? 0) <= query.limit) return { uploads };
+
+    return { uploads, next: { created_at: last.created_at, id: last.id } };
+  }
+
   async addToken(token: TokenRecord, signed: Signed): Promise<{ readonly kind: "done" } | Refused<"id_taken">> {
     const expires = token.scope === "admin" ? token.expiresAt : null;
     const [inserted] = await this.#driver.batch([
@@ -710,11 +928,73 @@ export class SqlDatabase implements Database {
     return { site: requestsIn(site), all: requestsIn(all) };
   }
 
-  async readRequests(day: string, site: SiteId): Promise<RequestCounts> {
+  async readRequests(day: string, site?: SiteId): Promise<RequestCounts> {
     requireDay(day);
-    const [ofSite, ofAll] = await this.#driver.batch([sql(READ_REQUESTS, day, site), sql(READ_REQUESTS, day, ALL_SITES)]);
+    const ofSite = site === undefined ? [] : [sql(READ_REQUESTS, day, site)];
+    const read = await this.#driver.batch([sql(READ_REQUESTS, day, ALL_SITES), ...ofSite]);
 
-    return { site: requestsIn(ofSite), all: requestsIn(ofAll) };
+    return { site: requestsIn(read[1]), all: requestsIn(read[0]) };
+  }
+
+  /** The statements that set the access asked with an upload, and their audit entry; none when no access is asked. */
+  #accessWith(id: UploadId, access: SiteAccess | undefined, signed: Signed): Statement[] {
+    if (access === undefined) return [];
+
+    const detail = { access: access.access, public_name: publicNameOf(access) };
+
+    return [
+      sql(SET_ACCESS_WITH_UPLOAD, id, access.access, publicNameOf(access), signed.at),
+      sql(AUDIT_WITH_UPLOAD, signed.at, signed.by, "access", id, JSON.stringify(detail)),
+    ];
+  }
+
+  /** The statements that set the details asked with an upload, only once its site has the access asked with it, and their audit entry; none when no detail is asked. */
+  #detailsWith(
+    id: UploadId,
+    asked: { readonly access: string | null; readonly publicName: string | null; readonly details: SiteDetails },
+    signed: Signed,
+  ): Statement[] {
+    const given = v.parse(SITE_DETAILS, asked.details);
+    const params: SqlValue[] = [id, asked.access, asked.publicName, signed.at];
+    const { sets, differs } = detailColumns(given, params);
+    if (sets.length === 0) return [];
+
+    const text = `
+UPDATE sites SET ${sets.join(", ")}, updated_at = ?4
+WHERE folder = (SELECT folder FROM uploads WHERE id = ?1) AND (${differs.join(" OR ")}) AND ${UPLOAD_HAS_ACCESS} AND ${UPLOAD_CAN_PUBLISH}`;
+
+    return [sql(text, ...params), sql(AUDIT_WITH_UPLOAD, signed.at, signed.by, "details", id, JSON.stringify(given))];
+  }
+
+  /** Make a site under a fresh id; with `upload`, only while that upload is pending, and marking it finished in the same step. */
+  async #insertSite(draft: NewSite, signed: Signed, upload?: UploadId): Promise<Done | Refused<"name_taken" | "not_pending">> {
+    const site = v.parse(NEW_SITE, draft);
+    const publicName = publicNameOf(site);
+    const expires = site.expires === "never" ? null : site.expires;
+    const detail = { access: site.access, public_name: publicName };
+    const columns = [site.name, site.folder, site.access, publicName, site.title, site.search_engines ? 1 : 0, expires, signed.by, signed.at, site.embeddable ? 1 : 0];
+    const text = upload === undefined ? INSERT_SITE : `${INSERT_SITE}\n  ${WHILE_UPLOAD_IS_PENDING}`;
+    const insert = (id: SiteId): Statement => sql(text, id, ...columns, upload ?? null);
+
+    for (let attempt = 0; attempt < MINT_ATTEMPTS; attempt += 1) {
+      const id = this.#mintId();
+      const [inserted, , , , held, made, waiting] = await this.#driver.batch([
+        insert(id),
+        sql(SIZE_FIRST_VERSION, site.folder, site.bytes, site.files),
+        auditSite(signed, "create", id, detail),
+        sql(FINISH_UPLOAD, upload ?? null),
+        sql(NAME_IS_HELD, publicName),
+        sql(SITE_BY_ID, id),
+        sql(UPLOAD_BY_ID, upload ?? null),
+      ]);
+      if (changed(inserted)) return done(made);
+
+      if (upload !== undefined && uploadIn(waiting)?.state !== "pending") return { kind: "not_pending" };
+
+      if (publicName !== null && held?.rows[0]?.held === 1) return { kind: "name_taken" };
+    }
+
+    throw new Error(`no free site id in ${MINT_ATTEMPTS} tries`);
   }
 
   async #unchanged(id: SiteId): Promise<Unchanged | Refused<"not_found" | "in_trash">> {

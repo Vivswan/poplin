@@ -6,9 +6,26 @@ import { restoreSite } from "../src/actions/restore";
 import { updateSite } from "../src/actions/set";
 import { getSite } from "../src/actions/show";
 import { sweepExpired } from "../src/actions/sweep";
-import { ADMIN, DAY, made, makeWorld, NOW, OWNER, type World } from "./actions-fixture";
+import { abandonPublish } from "../src/actions/abandon-publish";
+import { beginPublish } from "../src/actions/begin-publish";
+import { publishSite } from "../src/actions/publish";
+import { uploadFile } from "../src/actions/upload-file";
+import { ADMIN, DAY, file, made, makeWorld, NOW, OWNER, type World } from "./actions-fixture";
 
-/** Run a whole walk, step after step, and answer what each step did. */
+const HOUR = 3_600_000;
+const PAGE = { path: "index.html", size: 4, content_type: "text/html" };
+
+/** Begin a publish of one four-byte page and send it; answers the upload's id. */
+async function staged(world: World, asked: object): Promise<string> {
+  const begun = await beginPublish(world.install, OWNER, { ...asked, files: [PAGE] });
+  if (!begun.ok) throw new Error(`the fixture upload was refused: ${begun.code}`);
+
+  await uploadFile(world.install, OWNER, { upload: begun.upload.id, path: PAGE.path, body: new Blob(["page"]).stream() });
+
+  return begun.upload.id;
+}
+
+/** Run a whole walk, step after step, and answer what each step did to the sites. The last step is the one over the uploads. */
 async function walk(world: World, limit: number): Promise<unknown[]> {
   const steps: unknown[] = [];
   let from: Parameters<typeof sweepExpired>[2]["from"];
@@ -46,8 +63,10 @@ describe("sweepExpired", () => {
       [
         [1, 0, []],
         [0, 1, []],
+        [0, 0, []],
       ],
       [
+        [0, 0, []],
         [0, 0, []],
         [0, 0, []],
       ],
@@ -89,6 +108,7 @@ describe("sweepExpired", () => {
       [1, 0, []],
       [0, 0, []],
       [0, 1, []],
+      [0, 0, []],
     ]);
     expect(trash).toMatchObject({ ok: true, sites: [{ state: "trash" }, { state: "trash" }, { state: "trash" }] });
     expect(await getSite(world.install, ADMIN, old)).toEqual({ ok: false, code: "not_found" });
@@ -113,12 +133,45 @@ describe("sweepExpired", () => {
     expect(await walk(world, 10)).toEqual([
       [0, 0, []],
       [0, 0, []],
+      [0, 0, []],
     ]);
     expect([await getSite(world.install, OWNER, renewed), await getSite(world.install, OWNER, restored)]).toMatchObject([
       { site: { state: "live", expires: "never" } },
       { site: { state: "live" } },
     ]);
     expect((await world.keys()).length).toBe(4);
+  });
+
+  // Drift: a client that broke off leaves files in the bucket under no site; nothing but the sweep ever removes them, and a sweep that came early would take files still being sent.
+  test("an upload nobody finished goes with its files once 25 hours have passed and not before, and a finished upload's record goes while its site's files stay", async () => {
+    const world = await makeWorld({ versions_kept: 1 });
+    const site = await made(world, OWNER, "report");
+    await staged(world, { name: "draft" });
+    await staged(world, { site });
+    await abandonPublish(world.install, OWNER, await staged(world, { site }));
+    await publishSite(world.install, OWNER, { files: [file("index.html", "live")], site });
+    const before = await world.keys();
+    const uploads = async (): Promise<number> => (await world.install.database.listUploads({ before: Number.MAX_SAFE_INTEGER, limit: 100 })).uploads.length;
+
+    world.clock.now = NOW + 25 * HOUR;
+    const early = [await sweepExpired(world.install, ADMIN, { limit: 10, from: { uploads: true } }), await uploads()];
+    world.clock.now = NOW + 25 * HOUR + 1;
+    world.faults.failRemoval = true;
+    const failed = await sweepExpired(world.install, ADMIN, { limit: 10, from: { uploads: true } });
+    world.faults.failRemoval = false;
+    const first = await sweepExpired(world.install, ADMIN, { limit: 2, from: { uploads: true } });
+    const rest = await sweepExpired(world.install, ADMIN, { limit: 10, from: first.ok ? first.next : undefined });
+
+    expect(early).toMatchObject([{ ok: true, uploads: 0, left: [] }, 5]);
+    const versionsOf = (keys: readonly string[]): string[] => keys.map((key) => key.split("/")[1] ?? "").sort();
+
+    expect(versionsOf(before)).toEqual(["v1", "v2", "v4"]);
+    expect([failed.ok && failed.uploads, versionsOf(failed.ok ? failed.left : [])]).toEqual([2, ["v1", "v2", "v3"]]);
+    expect([first, rest]).toMatchObject([
+      { ok: true, uploads: 2, left: [], next: { uploads: true } },
+      { ok: true, uploads: 1, left: [] },
+    ]);
+    expect([versionsOf(await world.keys()), await uploads(), await getSite(world.install, ADMIN, site)]).toMatchObject([["v4"], 0, { site: { live_version: 4 } }]);
   });
 
   // Drift: the sweep deletes sites for good; it must run for an admin alone and never on a limit that is no count.
