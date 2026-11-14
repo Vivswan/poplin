@@ -1,11 +1,11 @@
 // The session cookie: written once after a login, read on every request after it.
 //
 // It binds an email and its issue time under the install's signing key, and nothing else: no address, no browser, no Access token.
+// It names no domain, so a browser sends it to the hostname that set it and to no other: the dashboard's.
 // A new signing key ends every session at once.
 
 import { buildSession, verifySession } from "@poplin/core/src/auth/cookie";
 import { isLogin, type Login, type Logins } from "@poplin/core/src/auth/logins";
-import type { Hostname } from "@poplin/core/src/names/hostname";
 
 const COOKIE_NAME = "__Secure-poplin-session";
 const MAX_AGE_SECONDS = 30 * 24 * 60 * 60;
@@ -31,9 +31,6 @@ interface NewSession {
 
   /** The time, in whole milliseconds since the epoch. */
   readonly now: number;
-
-  /** The parent domain every site of the install sits under; absent, the cookie stays on the hostname that set it. */
-  readonly domain?: Hostname;
 }
 
 /** What a request's cookie is checked against. */
@@ -71,15 +68,12 @@ async function checkValue(value: string, check: SessionCheck): Promise<CheckedSe
 /**
  * Build the `Set-Cookie` value that starts a session of 30 days.
  *
- * @returns the cookie with `Secure; HttpOnly; SameSite=Lax; Path=/`, and `Domain` only when one is given
+ * @returns the cookie with `Secure; HttpOnly; SameSite=Lax; Path=/` and no `Domain`
  */
 export async function mintSessionCookie(session: NewSession): Promise<string> {
   const value = await buildSession({ email: session.email, issuedAt: session.now, key: session.key });
-  const cookie = `${COOKIE_NAME}=${value}; Secure; HttpOnly; SameSite=Lax; Path=/; Max-Age=${MAX_AGE_SECONDS}`;
 
-  if (session.domain === undefined) return cookie;
-
-  return `${cookie}; Domain=${session.domain}`;
+  return `${COOKIE_NAME}=${value}; Secure; HttpOnly; SameSite=Lax; Path=/; Max-Age=${MAX_AGE_SECONDS}`;
 }
 
 /**

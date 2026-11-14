@@ -88,7 +88,7 @@ export async function openDashboard(domain?: DomainPlug): Promise<Opened> {
   };
 
   const counters = new MemoryCounters();
-  const dashboard = createDashboard({ install, readSession: sessionOf, addresses: base.serving.addresses, csrfSecret: CSRF_SECRET, domain, ...codeCounts(counters) });
+  const dashboard = createDashboard({ install, readSession: sessionOf, loginPath: "/login", csrfSecret: CSRF_SECRET, domain, ...codeCounts(counters) });
   const get: Opened["get"] = (path, headers = {}) => dashboard.fetch(new Request(`${ORIGIN}${path}`, { headers: { Cookie: cookie, ...headers } }));
 
   const tokenOf = (page: string): string => /name="csrf" value="([^"]+)"/.exec(page)?.[1] ?? "";

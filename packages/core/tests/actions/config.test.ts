@@ -11,10 +11,10 @@ describe("changeConfig", () => {
     const before = await readConfig(world.install, ADMIN);
     if (!before.ok) throw new Error("the settings were refused");
 
-    const changed = await changeConfig(world.install, ADMIN, { outside_pages: "allowed", cache_files: "off", versions_kept: 10 });
+    const changed = await changeConfig(world.install, ADMIN, { outside_pages: "allowed", block_bots: "off", versions_kept: 10 });
     const same = await changeConfig(world.install, ADMIN, { versions_kept: 10 });
 
-    expect(changed).toEqual({ ok: true, values: { ...before.values, outside_pages: "allowed", cache_files: "off", versions_kept: 10 } });
+    expect(changed).toEqual({ ok: true, values: { ...before.values, outside_pages: "allowed", block_bots: "off", versions_kept: 10 } });
     expect([same, await readConfig(world.install, ADMIN)]).toEqual([changed, changed]);
     expect(await world.audit()).toEqual(["settings_changed"]);
   });

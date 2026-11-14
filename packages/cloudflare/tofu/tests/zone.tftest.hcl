@@ -37,7 +37,7 @@ run "defaults" {
   }
 
   assert {
-    condition     = sort([for route in cloudflare_workers_route.worker : route.pattern]) == tolist(["*-poplin.example.com/*", "poplin.example.com/*"])
+    condition     = sort([for route in cloudflare_workers_route.worker : route.pattern]) == tolist(["*-page.example.com/*", "*-poplin.example.com/*", "poplin.example.com/*"])
     error_message = "The routes take the hostnames that end in the marker, and the admin hostname, and no other hostname of the zone."
   }
 
@@ -52,7 +52,7 @@ run "defaults" {
   }
 
   assert {
-    condition     = output.bucket_name == "poplin-sites" && output.worker_name == "poplin" && output.admin_url == "https://poplin.example.com" && output.site_url_pattern == "https://<name>--<id>-<letter>-poplin.example.com"
+    condition     = output.bucket_name == "poplin-sites" && output.worker_name == "poplin" && output.admin_url == "https://poplin.example.com" && output.site_url_pattern == "https://<name>--<id>-<letter>-poplin.example.com" && output.public_url_pattern == "https://<public name>-page.example.com"
     error_message = "The outputs name the bucket, the Worker, the dashboard, and a site's address."
   }
 }
@@ -70,8 +70,125 @@ run "login_allows_exactly_the_logins" {
   }
 
   assert {
-    condition     = tolist([for destination in cloudflare_zero_trust_access_application.login.destinations : destination.uri]) == tolist(["poplin.example.com/login"]) && cloudflare_zero_trust_access_application.login.domain == "poplin.example.com/login"
-    error_message = "The login covers the login path on the admin hostname and no other path."
+    condition     = tolist([for destination in cloudflare_zero_trust_access_application.login.destinations : "${destination.type} ${destination.uri}"]) == tolist(["public poplin.example.com/login", "public *-p-poplin.example.com"])
+    error_message = "The one application covers the login path on the admin hostname and every private site's address, and nothing else: no other path of the dashboard, no open site."
+  }
+
+  assert {
+    condition     = cloudflare_zero_trust_access_application.login.domain == "poplin.example.com/login" && length(cloudflare_zero_trust_access_application.login.policies) == 1
+    error_message = "The application's first address is the login path, and one policy decides who passes."
+  }
+
+  assert {
+    condition     = cloudflare_zero_trust_access_application.login.session_duration == "720h" && cloudflare_zero_trust_access_application.login.http_only_cookie_attribute && cloudflare_zero_trust_access_application.login.same_site_cookie_attribute == "lax"
+    error_message = "A login lasts 30 days, and its cookie is kept from scripts and from requests other sites make."
+  }
+}
+
+# Access takes an application address of 63 characters at most. Under a domain of 51 the login path is 64.
+run "domain_too_long_for_the_login" {
+  command = plan
+
+  override_data {
+    target = data.cloudflare_zone.this
+    values = {
+      name    = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.com"
+      account = { id = "0123456789abcdef0123456789abcdef", name = "example account" }
+    }
+  }
+
+  expect_failures = [cloudflare_zero_trust_access_application.login]
+}
+
+# The public word is one of the install's two endings: it gets a route of its own, every rule reads it, and the Worker is told it.
+run "public_word_of_the_installs_own" {
+  command = plan
+
+  variables {
+    public_word = "wiki"
+    rate_rule   = "hostnames"
+  }
+
+  assert {
+    condition     = sort([for route in cloudflare_workers_route.worker : route.pattern]) == tolist(["*-poplin.example.com/*", "*-wiki.example.com/*", "poplin.example.com/*"])
+    error_message = "The public names' ending has a route of its own beside the label addresses' and the admin hostname's."
+  }
+
+  assert {
+    condition     = jsondecode(cloudflare_workers_script.poplin.bindings[3].json).public_word == "wiki"
+    error_message = "The zone binding tells the Worker the public word, so it reads the hostnames the routes send it."
+  }
+
+  assert {
+    condition     = cloudflare_ruleset.rate[0].rules[0].expression == "ends_with(http.host, \"-poplin.example.com\") or ends_with(http.host, \"-wiki.example.com\") or http.host eq \"poplin.example.com\""
+    error_message = "The hostnames the rules read are the ones the routes take."
+  }
+
+  # The address the module prints for a public site and for a label must each end as one route's pattern does: an address no route takes dies at Cloudflare.
+  assert {
+    condition = alltrue([
+      for address in [output.public_url_pattern, output.site_url_pattern] :
+      anytrue([for route in cloudflare_workers_route.worker : endswith("${address}/*", trimprefix(route.pattern, "*"))])
+    ])
+    error_message = "Every address the module prints is one a Worker route takes."
+  }
+
+  assert {
+    condition     = output.public_url_pattern == "https://<public name>-wiki.example.com" && cloudflare_zero_trust_access_application.login.destinations[1].uri == "*-p-poplin.example.com"
+    error_message = "A public site's address ends in the word, and the private sites' pattern never follows it."
+  }
+}
+
+# With the public word `poplin` every site hostname ends alike: one route, and one term with no brackets around it.
+run "public_word_poplin" {
+  command = plan
+
+  variables {
+    public_word = "poplin"
+  }
+
+  assert {
+    condition     = sort([for route in cloudflare_workers_route.worker : route.pattern]) == tolist(["*-poplin.example.com/*", "poplin.example.com/*"])
+    error_message = "One ending needs one site route."
+  }
+
+  assert {
+    condition     = startswith(cloudflare_ruleset.guards[0].rules[0].expression, "ends_with(http.host, \"-poplin.example.com\") and any(")
+    error_message = "One term stands without brackets in front of the rule's condition."
+  }
+}
+
+# A request over http to one of the install's hostnames is redirected before the Worker runs, and no other hostname of the zone is.
+run "https_redirect" {
+  command = plan
+
+  assert {
+    condition = cloudflare_ruleset.https[0].name == "poplin redirect rule" && cloudflare_ruleset.https[0].phase == "http_request_dynamic_redirect" && [for rule in cloudflare_ruleset.https[0].rules : [
+      rule.ref, rule.description, rule.action, rule.action_parameters.from_value.target_url.expression,
+      tostring(rule.action_parameters.from_value.status_code), tostring(rule.action_parameters.from_value.preserve_query_string),
+      ]] == [[
+      "poplin_https", "poplin: send http to https", "redirect", "concat(\"https://\", http.host, http.request.uri.path)",
+      "301", "true",
+    ]]
+    error_message = "The redirect rule is, value for value, the one the setup client writes: the same host and path over https, the query kept, answered 301."
+  }
+
+  assert {
+    condition     = cloudflare_ruleset.https[0].rules[0].expression == "not ssl and (ends_with(http.host, \"-poplin.example.com\") or ends_with(http.host, \"-page.example.com\") or http.host eq \"poplin.example.com\")"
+    error_message = "The rule reads plain http to the site hostnames and the admin hostname, and no other hostname of the zone."
+  }
+}
+
+run "https_redirect_switched_off" {
+  command = plan
+
+  variables {
+    https_redirect = false
+  }
+
+  assert {
+    condition     = length(cloudflare_ruleset.https) == 0
+    error_message = "https_redirect = false creates no redirect ruleset, for a zone that keeps redirect rules of its own."
   }
 }
 
@@ -102,9 +219,10 @@ run "worker_bindings" {
   # The setup client's tests read this literal and parse it with the Worker's own reader.
   assert {
     condition = jsondecode(cloudflare_workers_script.poplin.bindings[3].json) == {
-      domain = "example.com"
+      domain      = "example.com"
+      public_word = "page"
     }
-    error_message = "The zone binding carries the domain, and no other key."
+    error_message = "The zone binding carries the domain and the public word, and no other key."
   }
 
   # The setup client's tests read this literal too, and compare its keys with the settings the Worker stores.
@@ -117,8 +235,6 @@ run "worker_bindings" {
       logins                      = "owner@example.com"
       dashboard_title             = "poplin.example.com"
       gallery                     = "on"
-      cache_html                  = "60s"
-      cache_files                 = "1h"
       private_sites               = "single-file"
       outside_pages               = "blocked"
       search_engines_allowed      = "on"
@@ -201,7 +317,7 @@ run "values_shared_with_the_setup_client" {
   assert {
     condition = cloudflare_ruleset.guards[0].name == "poplin guard rules" && [for rule in cloudflare_ruleset.guards[0].rules : "${rule.ref}: ${rule.description}"] == [
       "poplin_outside_pages: poplin: stop pages of other domains",
-      "poplin_bots: poplin: stop verified bots",
+      "poplin_bots: poplin: stop verified bots, other methods, and scanner paths",
     ]
     error_message = "The guard rules carry the refs and the descriptions the setup client writes."
   }
@@ -282,7 +398,7 @@ run "zone_with_its_own_proxied_wildcard" {
   }
 
   assert {
-    condition     = sort([for route in cloudflare_workers_route.worker : route.pattern]) == tolist(["*-poplin.example.com/*", "poplin.example.com/*"])
+    condition     = sort([for route in cloudflare_workers_route.worker : route.pattern]) == tolist(["*-page.example.com/*", "*-poplin.example.com/*", "poplin.example.com/*"])
     error_message = "The routes do not depend on whose wildcard record it is."
   }
 }
@@ -320,6 +436,27 @@ run "zone_record_under_a_name_the_site_route_takes" {
     values = {
       result = [{
         name                = "status-poplin.example.com", type = "CNAME", proxied = true, comment = null, id = "0", content = "192.0.2.1", ttl = 1, proxiable = true,
+        comment_modified_on = null, created_on = null, data = null, meta = null, modified_on = null, priority = null,
+        private_routing     = null, settings = null, tags = null, tags_modified_on = null
+      }]
+    }
+  }
+
+  expect_failures = [cloudflare_workers_route.worker]
+}
+
+run "zone_record_under_a_name_the_public_route_takes" {
+  command = plan
+
+  variables {
+    rate_rule = "off"
+  }
+
+  override_data {
+    target = data.cloudflare_dns_records.zone
+    values = {
+      result = [{
+        name                = "home-page.example.com", type = "A", proxied = true, comment = null, id = "0", content = "192.0.2.1", ttl = 1, proxiable = true,
         comment_modified_on = null, created_on = null, data = null, meta = null, modified_on = null, priority = null,
         private_routing     = null, settings = null, tags = null, tags_modified_on = null
       }]
@@ -423,7 +560,7 @@ run "rate_rule_on_the_hostnames" {
   }
 
   assert {
-    condition     = cloudflare_ruleset.rate[0].rules[0].expression == "ends_with(http.host, \"-poplin.example.com\") or http.host eq \"poplin.example.com\""
+    condition     = cloudflare_ruleset.rate[0].rules[0].expression == "ends_with(http.host, \"-poplin.example.com\") or ends_with(http.host, \"-page.example.com\") or http.host eq \"poplin.example.com\""
     error_message = "The hostnames form counts the install's hostnames alone, so the zone's other hostnames do not stop it."
   }
 }
@@ -433,8 +570,18 @@ run "guards_by_default" {
 
   assert {
     condition = tolist([for rule in cloudflare_ruleset.guards[0].rules : rule.expression]) == tolist([
-      "ends_with(http.host, \"-poplin.example.com\") and any(http.request.headers[\"sec-fetch-site\"][*] eq \"cross-site\") and any(http.request.headers[\"sec-fetch-dest\"][*] ne \"document\")",
-      "ends_with(http.host, \"-poplin.example.com\") and cf.client.bot",
+      "(ends_with(http.host, \"-poplin.example.com\") or ends_with(http.host, \"-page.example.com\")) and any(http.request.headers[\"sec-fetch-site\"][*] eq \"cross-site\") and any(http.request.headers[\"sec-fetch-dest\"][*] ne \"document\")",
+      join(" or ", [
+        "(ends_with(http.host, \"-poplin.example.com\") or ends_with(http.host, \"-page.example.com\")) and not starts_with(http.request.uri.path, \"/cdn-cgi/\") and (cf.client.bot",
+        "not http.request.method in {\"GET\" \"HEAD\"}",
+        "ends_with(http.request.uri.path, \".php\")",
+        "ends_with(http.request.uri.path, \"/.env\")",
+        "http.request.uri.path contains \"/.env.\"",
+        "http.request.uri.path contains \"/.git/\"",
+        "starts_with(http.request.uri.path, \"/wp-admin/\")",
+        "starts_with(http.request.uri.path, \"/cgi-bin/\")",
+        "starts_with(lower(http.request.uri.path), \"/phpmyadmin\"))",
+      ]),
     ])
     error_message = "By default the outside pages rule and the bots rule exist, each reads the site hostnames alone, and a request for a document or one that lacks a Fetch Metadata header passes the first."
   }
@@ -476,7 +623,7 @@ run "search_engines_let_through" {
   }
 
   assert {
-    condition     = cloudflare_ruleset.guards[0].rules[1].expression == "ends_with(http.host, \"-poplin.example.com\") and cf.client.bot and cf.verified_bot_category ne \"Search Engine Crawler\""
+    condition     = strcontains(cloudflare_ruleset.guards[0].rules[1].expression, " and ((cf.client.bot and cf.verified_bot_category ne \"Search Engine Crawler\") or not http.request.method in ")
     error_message = "search_engines_allowed lets the search engine category pass and stops every other verified bot."
   }
 }

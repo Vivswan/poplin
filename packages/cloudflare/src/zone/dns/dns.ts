@@ -3,7 +3,7 @@
 import { BaseRecords } from "cloudflare/resources/dns/records";
 import { type Connection, callCloudflare } from "../client";
 import { INSTALL_OBJECTS } from "../install-objects";
-import { type DomainLayout, siteEnding } from "../layout";
+import { type DomainLayout, siteEndings } from "../layout";
 import { applySteps, type Mode, type Report, reportOf, type SyncFailure } from "../sync";
 
 // A Worker route answers only on a hostname with a proxied record; this address is the discard prefix, never reached.
@@ -109,7 +109,8 @@ function planName(layout: DomainLayout, name: string, records: readonly ZoneReco
  */
 export function refusedRecords(layout: DomainLayout, records: readonly ZoneRecord[]): RecordsRefusal | undefined {
   const theirs = zoneAddresses(records);
-  const shadowed = namesOf(theirs.filter((record) => record.name === layout.adminHostname || record.name.endsWith(siteEnding(layout))));
+  const endings = siteEndings(layout);
+  const shadowed = namesOf(theirs.filter((record) => record.name === layout.adminHostname || endings.some((ending) => record.name.endsWith(ending))));
 
   if (shadowed.length > 0) {
     const message = `The zone has records of its own under names poplin's routes would take: ${shadowed.join(", ")}. Rename them, then run this again.`;

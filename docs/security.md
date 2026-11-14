@@ -6,7 +6,7 @@ group: Reference
 
 # Security
 
-This page says what poplin protects against and what it does not. Everything below assumes a domain on Cloudflare, except the last section, [Without a domain](#without-a-domain).
+This page says what poplin protects against and what it does not.
 
 ## What unlisted covers
 
@@ -77,7 +77,8 @@ A search engine's crawler reads a public site without `noindex` only when both a
 
 | Who | Credential | Where it comes from |
 | --- | --- | --- |
-| a person at the dashboard or a private site | a login cookie | one login through Cloudflare Access, by email code or Google; the Worker checks the email against the list of allowed logins, then sets the cookie |
+| a person at the dashboard | the dashboard's cookie | one login through Cloudflare Access, by email code or Google; the Worker checks the email against the list of allowed logins, then sets a cookie for the dashboard's hostname alone |
+| a person at a private site | Cloudflare Access's own session, 30 days | the same login; Access puts a signed token on every request it lets through, and the Worker checks the token and the email against the list of allowed logins each time |
 | the CLI, or an agent through `poplin mcp` | a token the Worker issues | the person runs `poplin login` once and allows that computer in a browser; the token is listed on the dashboard and can be revoked there |
 | a machine with no browser | the same kind of token | `poplin login` prints an address and a short code to open on another device, where the person allows that computer |
 | the Worker, to the bucket and the database | its bindings inside Cloudflare | no bucket key and no database key exists outside Cloudflare |
@@ -87,7 +88,7 @@ A token the Worker issues is never a Cloudflare API key. It has one of two scope
 | Scope | Given to | May |
 | --- | --- | --- |
 | publisher | a machine a person logs in as a publisher, for an agent; or a token created on the dashboard | publish, and manage its own sites |
-| admin | a person on the list of allowed logins; the login cookie carries the same rights | everything: every site, the settings, the tokens |
+| admin | a person on the list of allowed logins; the dashboard's cookie carries the same rights | everything: every site, the settings, the tokens |
 
 A site belongs to the token that created it, or to the admin's email when it was uploaded on the dashboard. A publisher token updates and manages only the sites it created.
 
@@ -95,42 +96,58 @@ What guards each address:
 
 | Address | Guarded by |
 | --- | --- |
-| the login and the dashboard | Cloudflare Access authenticates the person; the Worker checks the email, then sets the cookie |
+| the login and the dashboard | Cloudflare Access authenticates the person at the login path; the Worker checks the email, then sets the dashboard's cookie |
 | the API, which the CLI and `poplin mcp` call | the token the Worker issued; no Access in front, so a machine needs no browser after its login |
-| a private site | the cookie |
+| a private site, `-p-poplin` | Cloudflare Access, before the Worker runs; then the Worker checks Access's token and the email |
 | an unlisted site; a public site | nothing |
 
-Every site hostname answers GET and HEAD only. The Worker refuses every other method.
+One Access application covers the login path and every address that ends in `-p-poplin.<domain>`. It is made once at install, never per site.
+
+Every site hostname answers GET and HEAD only. A rule at Cloudflare's edge blocks every other method there, and the Worker refuses one that still arrives.
 
 ## No enumeration
 
 ```text
-budget--x7k2p94mdq1c-p-poplin.example.com    private, no cookie   ->  302 to the dashboard's login
-budget--w8t1c5n0ze4u-p-poplin.example.com    no such site         ->  the same 302
-budget-page.example.com                  no such public name  ->  404
+budget--x7k2p94mdq1c-u-poplin.example.com    private              ->  302 to the same address under -p-
+budget--w8t1c5n0ze4u-u-poplin.example.com    no such site         ->  the same 302
+budget--x7k2p94mdq1c-p-poplin.example.com    no login             ->  Cloudflare's login page, for every address alike
+budget-page.example.com                      no such public name  ->  404
 ```
 
-Without the cookie, an address with a name and an id answers one redirect when its site is private, in the trash, expired, or was never made. A probe cannot tell a private site from an address that has none. The redirect names the requested address as the place to return to after the login.
+A `-u-` address answers one redirect when its site is private, in the trash, expired, or was never made. A probe cannot tell a private site from an address that has none. The redirect keeps the path and the query, is never cached, and counts against the visitor's requests, never the site's.
+
+A `-p-` address is answered by Cloudflare's login before the Worker sees it. A request that reaches the Worker without Access's token gets 404: no file, and no redirect.
+
+## After an update
+
+| A visitor | Sees |
+| --- | --- |
+| who opens a page of an unlisted or public site | the new version within 5 minutes; a private site's page at once |
+| whose browser held the older page | the new page, and on that visit its styles, scripts, and images again, in a browser that honours `Clear-Site-Data` |
+| of another page that shows a site's file | that file up to a day old |
 
 ## Hardening
 
 | Measure | What poplin does |
 | --- | --- |
-| the cookie | HttpOnly, Secure, SameSite Lax, set on the parent domain: no script can read it, and a cross-site post does not carry it |
-| a removed login | the cookie names the email, and the Worker checks it against the allowed logins on every request; a removed login stops working within the settings cache, one minute |
+| the dashboard's cookie | HttpOnly, Secure, SameSite Lax, for the dashboard's hostname alone: no script can read it, no site receives it, and a cross-site post does not carry it |
+| the login of a private site | Cloudflare Access's cookie, HttpOnly and SameSite Lax, one per site hostname, 30 days |
+| a removed login | the Worker checks the email against the allowed logins on every request: the dashboard stops at once, a private site within one minute, whatever session Access still holds |
 | writes to the dashboard | the Origin header must be the dashboard itself; agents use bearer tokens, never the cookie |
 | tokens at rest | stored hashed; an admin token expires after 30 days, a publisher token lives until revoked |
-| the signing key | kept in the database, where the Worker can rotate it; "sign everyone out" rotates it and ends every cookie session; agent tokens are revoked one by one |
+| the signing key | kept in the database, where the Worker can rotate it; "sign everyone out" rotates it and ends every dashboard session. A private site's login is Access's own: removing the login ends it. Agent tokens are revoked one by one |
 | the bucket and the database | R2 public access stays off, and poplin's install check reports it when it is on; the database is reached only through the Worker's binding |
 | site headers | `X-Content-Type-Options: nosniff`, `Referrer-Policy: no-referrer`, correct content types |
 | the dashboard | a strict Content-Security-Policy; it may never be framed |
 | content | the Worker never reads, parses, or rewrites a site's files |
 | the activity log | the dashboard shows the last 100 actions: publish, state change, delete, login, token issued |
+| plain http | a rule at Cloudflare's edge sends `http` to `https` on poplin's hostnames, before the Worker runs; the zone's other hostnames are left as they are |
+| junk requests | a rule at Cloudflare's edge blocks, on the site hostnames, every method but GET and HEAD and the paths scanners ask for: `*.php`, `/.env`, `/.env.*`, `/.git/`, `/wp-admin/`, `/cgi-bin/`, `/phpmyadmin` |
 | junk hostnames | Cloudflare routes to the Worker only the hostnames that end in `-poplin` or the public word, so no other hostname under the domain reaches it; a rate rule limits each address to 300 requests per 10 seconds. Setup skips it when other rules hold every rate rule the plan allows, or when a Free plan zone has hostnames of its own; the OpenTofu module, which owns the zone's rate rules, stops with a message in that second case |
 
 ## Between sites
 
-Each site is its own origin, so a page's scripts cannot read another site or its cookie.
+Each site is its own origin, so a page's scripts cannot read another site or its cookie. The dashboard's cookie is sent to the dashboard alone.
 
 | Switch | Set on | Values |
 | --- | --- | --- |
@@ -145,11 +162,11 @@ Each site is its own origin, so a page's scripts cannot read another site or its
 | a site in a frame, `embeddable` off | refused | refused | refused |
 | a site's files, read by its script | refused | refused | refused |
 
-- **A private site needs the viewer's login in every row.** A browser sends no login cookie with a request that a page of another domain makes, so a private site answers none of them.
+- **A private site needs the viewer's login in every row.** A browser sends Access's cookie only to the private site it was set for, and not with a request that a page of another domain makes.
 - **No script reads another site's files.** No response carries a header that lets another origin's script read it.
 - **A frame rule goes out with every file** unless the site is `embeddable` and `outside_pages` is `allowed`. For an `embeddable` site under `blocked` it names every hostname under the install's domain.
 
-All sites of a domain share the login cookie. The Worker decides from the request's `Sec-Fetch-Site`, `Sec-Fetch-Mode`, `Sec-Fetch-Dest`, `Origin`, and `Referer` headers and reads no content. Opening an address as the top-level page always passes, and so does a request with no `Sec-Fetch-Site` header.
+The Worker decides from the request's `Sec-Fetch-Site`, `Sec-Fetch-Mode`, `Sec-Fetch-Dest`, `Origin`, and `Referer` headers and reads no content. Opening an address as the top-level page always passes, and so does a request with no `Sec-Fetch-Site` header.
 
 | Under `blocked`, a page under the install's domain that is not a site | Result |
 | --- | --- |
@@ -157,41 +174,3 @@ All sites of a domain share the login cookie. The Worker decides from the reques
 | its request names no page | passes |
 
 **What a page's scripts can still do:** spend requests against the day's quota. The rate limit per visitor bounds that per address.
-
-## Without a domain
-
-**Narrower guarantees.** With no domain, poplin starts on the account's free `workers.dev` address, which is one hostname. Every site is a path on it, and the guarantees below replace the ones above.
-
-Adding a domain removes every limit in this section.
-
-| | On `workers.dev` | With a domain |
-| --- | --- | --- |
-| a site's address | the name and the id are a path: `/report--k3f9x2ab71qz/` | the name and the id are in the hostname |
-| separation between sites | the Worker serves every site page sandboxed, with `Content-Security-Policy: sandbox allow-scripts`, so the browser treats each page as its own origin | each site is its own origin |
-| what a page can use | no browser storage (localStorage, cookies), no popups, no form submission | anything |
-| links inside a site | relative only | anything |
-| a private site | one self-contained file by default | a whole folder |
-| junk traffic | nothing in front; the Worker's own limit per visitor is the guard, and every probe costs a request | only hostnames that end in the marker reach the Worker, and the rate rule runs before it when the zone's free slot allows it |
-| the cookie | on that one hostname | on the parent domain |
-
-What the sandbox keeps a site page from doing, in Chromium, Firefox, and WebKit:
-
-- **Reading another site.** Each page is an origin of its own, so the other paths are closed to it.
-- **Reading the login cookie.** The cookie is not available to the page.
-- **Acting as the owner.** A page cannot call the owner's dashboard or the API with the owner's login.
-
-This separation depends on the login cookie being Secure, HttpOnly, and SameSite=Lax. Poplin sets all three.
-
-### A private site without a domain
-
-A private site is one self-contained file by default. A sandboxed page's requests for its own extra files do not carry the login, so the Worker refuses them as it would refuse anyone.
-
-One setting for the whole install allows a private site to be a whole folder instead:
-
-```text
-1. the owner opens the private address with the cookie
-2. the Worker checks the cookie, then redirects to an address carrying a short-lived secret, 10 minutes by default
-3. every file of the site is served under that address, with no cookie
-```
-
-**What the owner accepts by switching it on:** anyone holding that address can open the site until it expires. The Worker sends `Referrer-Policy: no-referrer` on every site response, so the address is not sent to another site in a referrer header.

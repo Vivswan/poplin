@@ -52,6 +52,9 @@ export interface Account {
   /** The account's D1 databases. */
   databases: Row[];
 
+  /** Whether the zone's own Always Use HTTPS is on. */
+  zoneRedirects: boolean;
+
   /** Whether Access was never switched on: both Access lists are then refused. */
   accessOff: boolean;
 
@@ -71,6 +74,7 @@ export function emptyAccount(): Account {
     applications: [],
     rulesets: {},
     switches: { ai_bots_protection: "disabled", fight_mode: false },
+    zoneRedirects: false,
     databases: [],
     accessOff: false,
   };
@@ -117,6 +121,15 @@ function rules(account: Account, asked: Asked, parts: readonly string[]): Respon
   return stored(ruleset.rules, asked, parts[5]);
 }
 
+/** The zone's own switches: Always Use HTTPS, which is only read, and the bot switches. */
+function switches(account: Account, asked: Asked, parts: readonly string[]): Response {
+  if (parts[2] === "settings") return reply({ id: parts[3], value: account.zoneRedirects ? "on" : "off" });
+
+  if (asked.method === "PUT") account.switches = { ...account.switches, ...(asked.body as Row) };
+
+  return reply(account.switches);
+}
+
 /**
  * Answer one request as the account's API would.
  *
@@ -154,7 +167,5 @@ export function answer(account: Account, asked: Asked): Response {
 
   if (parts[2] === "rulesets") return rules(account, asked, parts);
 
-  if (asked.method === "PUT") account.switches = { ...account.switches, ...(asked.body as Row) };
-
-  return reply(account.switches);
+  return switches(account, asked, parts);
 }

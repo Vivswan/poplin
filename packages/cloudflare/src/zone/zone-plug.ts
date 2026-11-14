@@ -1,6 +1,6 @@
 // The dashboard's zone plug for Cloudflare: every object of an install read, or made to match, with a token that lives for the one call.
 //
-//   token -> the account's zones -> the zone of the install's domain -> records, routes, Access, guard rules, rate rule, bot switches, database
+//   token -> the account's zones -> the zone of the install's domain -> records, routes, Access, https redirect, guard rules, rate rule, bot switches, database
 //
 // A token proves itself by showing the install's own zone inside the install's own account; any other token is refused before anything is read.
 // A check is the repair's own code with the changes left unsent, so the two cannot disagree on what a repair would do.
@@ -13,7 +13,8 @@ import { type Connection, listZones } from "./client";
 import { syncDatabase } from "./database/database";
 import { syncDns } from "./dns/dns";
 import { INSTALL_OBJECTS } from "./install-objects";
-import type { DomainLayout } from "./layout";
+import { syncHttps } from "./https/https";
+import { type DomainLayout, privateSitesPattern } from "./layout";
 import { syncRoutes } from "./routes/routes";
 import { syncGuards } from "./rules/guards";
 import { defaultRateRule, syncWaf } from "./rules/waf";
@@ -34,6 +35,12 @@ const GUARD_NOTES: DomainPlug["guardNotes"] = {
   search_engines_allowed: "Search engines reach public sites.",
   block_bots: "auto blocks AI bots unless your domain has other hostnames. on adds Bot Fight Mode, which can block the command line from cloud hosts.",
 };
+
+/** What the WAF rule that stops verified bots also stops on a site hostname, as its row says. */
+const ALWAYS_STOPPED = "also stops every method but GET and HEAD, and the paths *.php, /.env, /.env.*, /.git/, /wp-admin/, /cgi-bin/, /phpmyadmin";
+
+/** The subject of the bots rule, whose row carries the list above. */
+const BOTS_RULE = "bots rule";
 
 /** The reading of a proven token on an install with no stored settings. */
 const NOT_SET_UP: DomainReading = { ok: false, refusal: "not_set_up" };
@@ -159,10 +166,15 @@ async function accessPiece(progress: Progress, mode: Mode, parts: PlugParts, con
     return;
   }
 
-  const synced = await syncAccess(connection, parts.accountId, { hostname: parts.layout.adminHostname, logins: logins.value }, mode);
+  const privateSites = privateSitesPattern(parts.layout);
+  const synced = await syncAccess(connection, parts.accountId, { hostname: parts.layout.adminHostname, logins: logins.value, privateSites }, mode);
   // A refusal after a step was done is a failure of the run: its rows keep what was made.
   if (synced.ok || synced.failed !== undefined || !isAccessOff(synced)) {
+    const before = progress.rows.length;
     await piece(progress, mode, accessObject, async () => synced);
+    const covered = `${parts.layout.adminHostname}${INSTALL_OBJECTS.loginPath}, ${privateSites}`;
+    // The application's row names what it stands in front of: the login path and every private site's address.
+    progress.rows.splice(before, Number.POSITIVE_INFINITY, ...progress.rows.slice(before).map((row) => (row.detail === INSTALL_OBJECTS.accessApplication ? { ...row, detail: `${row.detail}: ${covered}` } : row)));
 
     return;
   }
@@ -187,7 +199,9 @@ async function read(parts: PlugParts, mode: Mode, token: string, readSettings: R
 
   const { layout } = parts;
   const { plan } = zone;
-  const progress: Progress = { rows: [], steps: [], stopped: false };
+  // The public word is a fact of the install, set once: its row only shows it.
+  const word: DomainRow = { object: "Public word", state: "present", detail: `${layout.publicWord} (public sites answer at <name>-${layout.publicWord}.${layout.domain})` };
+  const progress: Progress = { rows: [word], steps: [], stopped: false };
 
   const dns = await piece(
     progress,
@@ -207,9 +221,17 @@ async function read(parts: PlugParts, mode: Mode, token: string, readSettings: R
   await piece(
     progress,
     mode,
+    () => "Redirect rule",
+    () => syncHttps(connection, zone.id, { layout, plan }, mode),
+  );
+  const guardsFrom = progress.rows.length;
+  await piece(
+    progress,
+    mode,
     () => "WAF rule",
     () => syncGuards(connection, zone.id, { layout, plan, outsidePages: settings.outside_pages, searchEnginesAllowed: settings.search_engines_allowed }, mode),
   );
+  progress.rows.splice(guardsFrom, Number.POSITIVE_INFINITY, ...progress.rows.slice(guardsFrom).map((row) => (row.detail === BOTS_RULE ? { ...row, detail: `${BOTS_RULE}: ${ALWAYS_STOPPED}` } : row)));
   await piece(
     progress,
     mode,

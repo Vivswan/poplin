@@ -66,7 +66,7 @@ async function openDesk(): Promise<Desk> {
   const dashboard = createDashboard({
     install: { database, store, now: () => clock.now, addressOf: ADDRESSES.addressOf, publicAddressOf: ADDRESSES.publicAddressOf, reservedNames: ADDRESSES.reservedNames },
     readSession: async (headers) => (headers.get("Cookie") === SESSION ? { ok: true, value: ADA } : { ok: false }),
-    addresses: { loginFor: () => `${ORIGIN}/login` },
+    loginPath: "/login",
     csrfSecret: new Uint8Array(32).fill(9),
     counters: new MemoryCounters(),
     visitorOf: async () => "the-admin",

@@ -1,9 +1,9 @@
-// An install the serving tests ask requests of: a real database on bun's SQLite, a store in memory that records every key it is asked for, and sessions minted by the login code.
+// An install the serving tests ask requests of: a real database on bun's SQLite, a store in memory that records every key it is asked for, and a login that takes a test header as its proof.
 
-import { importSessionKey } from "@poplin/core/src/auth/cookie";
 import { type Login, parseLogins } from "@poplin/core/src/auth/logins";
 import type { Database, NewSite } from "@poplin/core/src/database/database";
 import { openDatabase } from "@poplin/core/src/database/open";
+import type { AccessLetter } from "@poplin/core/src/names/marker";
 import { parsePublicName, parseSiteName } from "@poplin/core/src/names/names";
 import { defaultSettings } from "@poplin/core/src/records/settings";
 import { mintSiteFolder, type Site } from "@poplin/core/src/records/site";
@@ -11,15 +11,20 @@ import { siteLabel } from "@poplin/core/src/sites/labels";
 import { MemoryStore } from "@poplin/core/src/storage/memory";
 import { type HeadResult, type ObjectKey, parseObjectKey, type ReadOptions, type ReadResult } from "@poplin/core/src/storage/storage";
 import { BunSqliteDriver } from "@poplin/core/tests/database/support/bun-sqlite-driver";
-import { mintSessionCookie, readSession } from "../../../src/login/session";
 import type { serveSite } from "../../../src/sites/serve";
-import { ADDRESSES, LAYOUT } from "./layout";
+import { ADDRESSES, } from "./layout";
 
 /** The moment every test request arrives at. */
 export const NOW = 1_700_000_000_000;
 
 /** The one login of a test install. */
 const OWNER_EMAIL = "owner@example.com";
+
+/** The header the test install's login reads as its proof: it vouches for the email the header holds. */
+const PROOF_HEADER = "X-Test-Login";
+
+/** The letter `letterFormOf` writes, as it stands before the marker of a hostname: taken out, the address carries no letter. */
+const OPEN_LETTER = /-u(?=-[a-z]+\.example\.com$)/;
 
 type Serving = Parameters<typeof serveSite>[1];
 
@@ -46,8 +51,7 @@ export interface Install {
   readonly keys: string[];
   readonly bodies: ReadableStream<Uint8Array>[];
   readonly serving: Serving;
-  readonly ownerCookie: string;
-  readonly setCookie: string;
+  readonly ownerProof: Readonly<Record<string, string>>;
   readonly publish: (draft: Draft) => Promise<Site>;
 }
 
@@ -75,9 +79,21 @@ export function labelHost(site: Site): string {
 }
 
 /**
+ * Write the hostname of a label address as a visitor may type it.
+ *
+ * @param typed - the id, and the name before it when one is typed; neither is checked
+ * @param letter - the letter before the marker; `undefined` writes the address with none
+ */
+export function typedHost(typed: { readonly id: string; readonly name?: string }, letter: AccessLetter | undefined): string {
+  const host = new URL(ADDRESSES.letterFormOf(typed as Parameters<typeof ADDRESSES.letterFormOf>[0], letter ?? "u")).hostname;
+
+  return letter === undefined ? host.replace(OPEN_LETTER, "") : host;
+}
+
+/**
  * Open a fresh install with default settings and one login.
  *
- * @returns the install; `ownerCookie` is the `Cookie` header pair of a session the login code minted, and `setCookie` the whole `Set-Cookie` value it came from
+ * @returns the install; `ownerProof` is the header a request of the owner carries, and a request without it is from nobody
  */
 export async function openInstall(): Promise<Install> {
   const opened = await openDatabase(new BunSqliteDriver(), NOW);
@@ -93,8 +109,6 @@ export async function openInstall(): Promise<Install> {
   const memory = new MemoryStore();
   const keys: string[] = [];
   const bodies: ReadableStream<Uint8Array>[] = [];
-  const key = await importSessionKey(new Uint8Array(32).fill(7));
-  const setCookie = await mintSessionCookie({ email: owner, key, now: NOW, domain: LAYOUT.domain });
 
   const types = new Map<ObjectKey, string>();
 
@@ -139,9 +153,9 @@ export async function openInstall(): Promise<Install> {
     store,
     settings: defaultSettings({ installer: owner, hostname: "poplin.example.com" }),
     addresses: ADDRESSES,
-    readSession: (headers) => readSession(headers, { key, logins: logins.value, now: NOW }),
+    identify: async (headers) => ({ ok: headers.get(PROOF_HEADER) === owner }),
     now: () => NOW,
   };
 
-  return { database, owner, keys, bodies, serving, ownerCookie: setCookie.slice(0, setCookie.indexOf(";")), setCookie, publish };
+  return { database, owner, keys, bodies, serving, ownerProof: { [PROOF_HEADER]: owner }, publish };
 }

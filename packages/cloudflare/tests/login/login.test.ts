@@ -5,11 +5,7 @@ import { accessIdentity } from "../../src/login/access-token";
 import { accessKeys } from "../../src/login/keys";
 import { logIn } from "@poplin/app/src/login/login";
 import { readSession } from "@poplin/app/src/login/session";
-import { hostnameAddresses } from "@poplin/app/src/sites/hostname-addresses";
-import { LAYOUT } from "../zone/support/layouts";
 import { AUDIENCE, certs, headersOf, NOW, type Signer, sign, signer, TEAM } from "./support/access";
-
-const ADDRESSES = hostnameAddresses(LAYOUT);
 
 let team: Signer;
 let stranger: Signer;
@@ -29,7 +25,7 @@ function attempt(token: string | undefined, returnTo?: string): Promise<Outcome>
 
   const identify = accessIdentity({ keys, audience: AUDIENCE });
 
-  return logIn(headersOf(token), { identify, logins: loginsOf("owner@example.com", "second@example.com"), sessionKey, now: NOW, addresses: ADDRESSES, returnTo });
+  return logIn(headersOf(token), { identify, logins: loginsOf("owner@example.com", "second@example.com"), sessionKey, now: NOW, returnTo });
 }
 
 beforeAll(async () => {
@@ -69,11 +65,11 @@ describe("the login", () => {
     expect(await attempt(await sign(team), returnTo)).toMatchObject({ ok: true, location: "/" });
   });
 
-  // Drift: serving writes the return and the login reads it; if the two forms part, a visitor of a private site lands on the dashboard instead of the page they asked for.
-  test("the return serving writes for a private site's address brings the visitor back to that address", async () => {
-    const asked = "https://secret--k3f9x2ab71qz-p-poplin.example.com/notes/page.html?x=1";
-    const returnTo = new URL(ADDRESSES.loginFor(new URL(asked))).searchParams.get("return");
+  // Drift: the dashboard's cookie would reach every site of the domain, where a site's own script-free pages could still be sent it.
+  test("the session cookie names no domain, and a site's address is no place to return to", async () => {
+    const outcome = await attempt(await sign(team), "https://secret--k3f9x2ab71qz-p-poplin.example.com/notes");
+    if (!outcome.ok) throw new Error(`the login was refused: ${outcome.refusal}`);
 
-    expect(await attempt(await sign(team), returnTo ?? undefined)).toMatchObject({ ok: true, location: asked });
+    expect([outcome.location, /;\s*domain=/i.test(outcome.setCookie)]).toEqual(["/", false]);
   });
 });

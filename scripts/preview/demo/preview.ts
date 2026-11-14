@@ -26,7 +26,7 @@ import { rebased, unbased } from "./base";
 import { ADMIN_ORIGIN, askMount, forceTheme, type Mount, previewValue, SERVED_PREFIX, siteOrigin } from "./mount";
 import { galleryPage, loginPage, plainPage, previewBar, shell } from "./own-pages";
 import { type Samples, seedWorld } from "./seed";
-import { ADDRESSES, DOMAIN, openWorld, type World } from "./world";
+import { ADDRESSES, openWorld, type World } from "./world";
 
 /** What one request to the preview's API may carry. */
 const API_LIMITS = { fileBytes: 100_000_000, files: 10_000, manifestBytes: 2_000_000 } as const;
@@ -136,8 +136,6 @@ async function answerLogin(request: Request, world: World): Promise<Response> {
     logins: logins.value,
     sessionKey: await importSessionKey(key),
     now: now(),
-    addresses: ADDRESSES,
-    cookieDomain: DOMAIN as Parameters<typeof logIn>[1]["cookieDomain"],
     returnTo: url.searchParams.get("return"),
   });
 
@@ -150,7 +148,7 @@ async function answerLogin(request: Request, world: World): Promise<Response> {
 }
 
 function dashboardMount(world: World, prefix: string): Mount {
-  const dashboard = createDashboard({ install: world.install, readSession: sessionOf(world), addresses: ADDRESSES, csrfSecret: world.csrfSecret, domain: previewPlug("partial"), ...countsOf(world) });
+  const dashboard = createDashboard({ install: world.install, readSession: sessionOf(world), loginPath: "/login", csrfSecret: world.csrfSecret, domain: previewPlug("partial"), ...countsOf(world) });
   const answer: Mount["answer"] = (request) => (new URL(request.url).pathname === "/login" ? answerLogin(request, world) : dashboard.fetch(request));
 
   return { prefix, origin: ADMIN_ORIGIN, base: "", holds: "pages", answer };
@@ -182,7 +180,7 @@ function siteMount(world: World, label: string): Mount {
     const settings = await database.readSettings();
     if (settings === undefined) throw new Error("the preview's install lost its settings");
 
-    return serveSite(request, { database, store, settings, addresses: ADDRESSES, readSession: sessionOf(world), now });
+    return serveSite(request, { database, store, settings, addresses: ADDRESSES, identify: sessionOf(world), now });
   };
 
   return { prefix: `${SERVED_PREFIX}/${label}`, origin: siteOrigin(label), base: "", holds: "site", answer };

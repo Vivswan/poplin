@@ -1,13 +1,21 @@
 // A visitor's request for a site, answered from the database and the bucket.
 //
 //   URL -> what it addresses   not this install's, or no site address    404
-//   one database query         no served site                            404, or the login for a label without a session
-//   access                     private without a session                 the login
-//   path -> one to three keys  no file path                              404
+//   letter p                   no listed login behind the request        404, before anything is looked up
+//   one database query         the record and the letter decide          see below
+//   the page's version tag     the request holds the live version         304, with no read of the bucket
+//   path -> one to three keys  no file path                              404, which a browser may keep on an open site
 //   one bucket read per key    the body goes out as the store gave it; three reads at most, for a path without an extension, and one for every other
+//                              a page for a request that holds another version carries `Clear-Site-Data`, so the browser drops that version's files
 //
-// A label names its site by the id alone: the name before it and the letter after it are never compared.
-// A label without a session answers the same whether its site is private, in the trash, expired, or was never made, so an id cannot be probed.
+//   letter u, or none   the site is unlisted or public    the file
+//                       private, or no served site        302 to the same label under p
+//   letter p            the site is private               the file
+//                       unlisted or public                302 to the same label under u
+//                       no served site                    404
+//   public name         the site is public                the file
+//
+// A label's name is never compared: the id alone names the site. Under u a private site, a site in the trash, an expired one, and no site at all answer alike, so an id cannot be probed.
 
 import type { Database } from "@poplin/core/src/database/database";
 import type { SettingValues } from "@poplin/core/src/records/settings";
@@ -15,7 +23,7 @@ import type { Site } from "@poplin/core/src/records/site";
 import type { ByteRange, ObjectInfo, ObjectKey, ObjectStore, ReadResult } from "@poplin/core/src/storage/storage";
 import type { Addressed, SiteAddresses } from "./addresses";
 import { fileKeys } from "./file-keys";
-import { siteHeaders } from "./headers";
+import { clearHeldFiles, heldVersion, isPage, missingFileCache, siteHeaders, versionTag } from "./headers";
 import { parseRange } from "./range";
 
 /** The methods a site answers. */
@@ -44,6 +52,9 @@ const PLAIN_BODIES = {
   416: "Range not satisfiable\n",
 } as const;
 
+/** The verdict on an address that serves nothing. */
+const NOT_FOUND: Verdict = { kind: "none" };
+
 /** Everything a request is answered from. Nothing is read from a binding or a global. */
 interface Serving {
   /** Finds the site an address serves. */
@@ -52,14 +63,14 @@ interface Serving {
   /** Holds every site's files. */
   readonly store: Pick<ObjectStore, "head" | "read">;
 
-  /** The install's cache and framing settings. */
-  readonly settings: Pick<SettingValues, "cache_html" | "cache_files" | "outside_pages">;
+  /** The install's framing setting, and whether it lets search engines in at all. */
+  readonly settings: Pick<SettingValues, "outside_pages" | "search_engines_allowed">;
 
   /** The install's address layout. */
   readonly addresses: SiteAddresses;
 
-  /** Decides whether a request carries a valid session; `ok` is `true` for a logged-in owner. */
-  readonly readSession: (headers: Headers) => Promise<{ readonly ok: boolean }>;
+  /** Decides who a request is from; `ok` is `true` only when the install's login vouches for an email that is in the logins now. */
+  readonly identify: (headers: Headers) => Promise<{ readonly ok: boolean }>;
 
   /** The time, in milliseconds since the epoch. */
   readonly now: () => number;
@@ -68,10 +79,25 @@ interface Serving {
   readonly gallery?: (request: Request) => Promise<Response>;
 }
 
+/** An address that names a site. */
+type SiteAddress = Exclude<Addressed, { readonly kind: "gallery" | "none" }>;
+
+/** What a request for a site comes to, before any file is read. */
+type Verdict = { readonly kind: "serve"; readonly site: Site } | { readonly kind: "move"; readonly origin: string } | { readonly kind: "none" };
+
 /** A site with what its files are served under. */
 interface Served {
+  /** The site the address and the record gave. */
   readonly site: Site;
+
+  /** What the request is answered from. */
   readonly serving: Serving;
+
+  /** The tag of the site's live version, which every page of it carries. */
+  readonly tag: string;
+
+  /** Which version the request holds a page of: `other` is a version that is no longer live. */
+  readonly held: "other" | "none";
 }
 
 function plain(request: Request, status: keyof typeof PLAIN_BODIES, extra: Readonly<Record<string, string>> = {}): Response {
@@ -92,6 +118,7 @@ function requesterHost(headers: Headers): string | undefined {
 
 // A browser marks who made a request. Opening the address itself, as the top-level page, always passes.
 // It calls every hostname of the domain `same-site`, so there the requester's own hostname decides; a request that names none passes.
+// A hostname that ends as a site's does is the install's: its routes take every such name, and setup refuses a zone that holds one of its own.
 function isOutsideSubrequest(headers: Headers, addresses: SiteAddresses): boolean {
   const from = headers.get("Sec-Fetch-Site");
   if (from !== "cross-site" && from !== "same-site") return false;
@@ -105,10 +132,26 @@ function isOutsideSubrequest(headers: Headers, addresses: SiteAddresses): boolea
   return requester !== undefined && !addresses.isSiteHost(requester);
 }
 
-async function findSite(address: Exclude<Addressed, { readonly kind: "gallery" | "none" }>, serving: Serving): Promise<Site | undefined> {
+function redirect(location: string): Response {
+  return new Response(null, { status: 302, headers: { ...PLAIN_HEADERS, Location: location } });
+}
+
+function findSite(address: SiteAddress, serving: Serving): Promise<Site | undefined> {
   if (address.kind === "public-name") return serving.database.findServed({ public_name: address.name }, serving.now());
 
   return serving.database.findServed({ id: address.id }, serving.now());
+}
+
+/** What the address and the record give: the site to serve, the same label under the other letter, or nothing. */
+function verdictOf(address: SiteAddress, site: Site | undefined, addresses: SiteAddresses): Verdict {
+  if (address.kind === "public-name") return site?.access === "public" ? { kind: "serve", site } : NOT_FOUND;
+
+  const isPrivate = site?.access === "private";
+  if (address.letter !== "p") return site === undefined || isPrivate ? { kind: "move", origin: addresses.letterFormOf(address, "p") } : { kind: "serve", site };
+
+  if (site === undefined) return NOT_FOUND;
+
+  return isPrivate ? { kind: "serve", site } : { kind: "move", origin: addresses.letterFormOf(address, "u") };
 }
 
 function requestedRange(headers: Headers): ByteRange | undefined {
@@ -118,26 +161,42 @@ function requestedRange(headers: Headers): ByteRange | undefined {
   return parseRange(headers.get("Range"));
 }
 
-function etagMatches(header: string | null, info: ObjectInfo): boolean {
+function etagMatches(header: string | null, etag: string): boolean {
   if (header === null) return false;
 
   const sent = header.split(",").map((tag) => tag.trim().replace(/^W\//, ""));
 
-  return sent.includes("*") || sent.includes(`"${info.etag}"`);
+  return sent.includes("*") || sent.includes(etag);
 }
 
+/** The headers of a file. A page's tag is its site's live version; every other file's is the store's own. */
 function fileHeaders(info: ObjectInfo, served: Served): Headers {
   const headers = siteHeaders({ site: served.site, contentType: info.contentType, settings: served.serving.settings, addresses: served.serving.addresses });
-  headers.set("ETag", `"${info.etag}"`);
+  headers.set("ETag", isPage(info.contentType) ? served.tag : `"${info.etag}"`);
   headers.set("Accept-Ranges", "bytes");
 
   return headers;
 }
 
+/** The 304 for a request that holds a page of the live version. No file is looked at: only a page ever carried the tag, at this very address. */
+function unchangedPage(site: Site, serving: Serving, tag: string): Response {
+  const headers = siteHeaders({ site, contentType: "text/html", settings: serving.settings, addresses: serving.addresses });
+  // A browser lays these headers over the page it holds, whose own content type may name a charset.
+  headers.delete("Content-Type");
+  headers.set("ETag", tag);
+
+  return new Response(null, { status: 304, headers });
+}
+
+/** The 404 for a file a served site does not hold. Its headers come after the site was found and its letter matched, so they tell nothing a file of the site would not. */
+function missingFile(request: Request, served: Served): Response {
+  return plain(request, 404, { "Cache-Control": missingFileCache(served.site) });
+}
+
 async function answerRead(request: Request, result: Exclude<ReadResult, { kind: "missing" }>, served: Served, ranged: boolean): Promise<Response> {
   const headers = fileHeaders(result.info, served);
 
-  if (result.kind === "not-modified" || etagMatches(request.headers.get("If-None-Match"), result.info)) {
+  if (result.kind === "not-modified" || etagMatches(request.headers.get("If-None-Match"), headers.get("ETag") ?? "")) {
     if (result.kind === "found") await result.body.cancel();
 
     return new Response(null, { status: 304, headers });
@@ -147,11 +206,15 @@ async function answerRead(request: Request, result: Exclude<ReadResult, { kind: 
 
   const { offset, length } = result.span;
   headers.set("Content-Length", String(length));
-  if (!ranged) return new Response(result.body, { status: 200, headers });
+  if (ranged) {
+    headers.set("Content-Range", `bytes ${offset}-${offset + length - 1}/${result.info.size}`);
 
-  headers.set("Content-Range", `bytes ${offset}-${offset + length - 1}/${result.info.size}`);
+    return new Response(result.body, { status: 206, headers });
+  }
 
-  return new Response(result.body, { status: 206, headers });
+  if (served.held === "other" && isPage(result.info.contentType)) clearHeldFiles(headers);
+
+  return new Response(result.body, { status: 200, headers });
 }
 
 async function answerGet(request: Request, keys: readonly ObjectKey[], served: Served): Promise<Response> {
@@ -164,7 +227,7 @@ async function answerGet(request: Request, keys: readonly ObjectKey[], served: S
     return answerRead(request, result, served, range !== undefined);
   }
 
-  return plain(request, 404);
+  return missingFile(request, served);
 }
 
 async function answerHead(request: Request, keys: readonly ObjectKey[], served: Served): Promise<Response> {
@@ -173,21 +236,21 @@ async function answerHead(request: Request, keys: readonly ObjectKey[], served: 
     if (result.kind === "missing") continue;
 
     const headers = fileHeaders(result.info, served);
-    if (etagMatches(request.headers.get("If-None-Match"), result.info)) return new Response(null, { status: 304, headers });
+    if (etagMatches(request.headers.get("If-None-Match"), headers.get("ETag") ?? "")) return new Response(null, { status: 304, headers });
 
     headers.set("Content-Length", String(result.info.size));
 
     return new Response(null, { status: 200, headers });
   }
 
-  return plain(request, 404);
+  return missingFile(request, served);
 }
 
 /**
  * Answer a visitor's request for a site of an install.
  *
- * @returns the file with its headers, its body the store's own stream; else 304, 206 or 416 for a range, 403 for a subrequest of a page that is no site of the install, 302 to the login, 405, or the one 404
- * @throws whatever the database, the store, or the session reader rejects with; nothing else throws
+ * @returns the file with its headers, its body the store's own stream; else 304 for what the request holds, 206 or 416 for a range, 403 for a subrequest of a page that is no site of the install, 302 to the same label under the other letter, 405, or 404
+ * @throws whatever the database, the store, or the identity check rejects with; nothing else throws
  */
 export async function serveSite(request: Request, serving: Serving): Promise<Response> {
   if (!METHODS.has(request.method)) return plain(request, 405, { Allow: ALLOW });
@@ -196,23 +259,25 @@ export async function serveSite(request: Request, serving: Serving): Promise<Res
   const address = serving.addresses.resolve(url);
   if (address.kind === "none") return plain(request, 404);
 
+  // The login stands in front of every `p` address, so a request without its proof came around it: it learns nothing, not even a redirect.
+  if (address.kind === "site" && address.letter === "p" && !(await serving.identify(request.headers)).ok) return plain(request, 404);
+
   if (serving.settings.outside_pages === "blocked" && isOutsideSubrequest(request.headers, serving.addresses)) return plain(request, 403);
 
   if (address.kind === "gallery") return (await serving.gallery?.(request)) ?? plain(request, 404);
 
-  const site = await findSite(address, serving);
+  const verdict = verdictOf(address, await findSite(address, serving), serving.addresses);
+  if (verdict.kind === "none") return plain(request, 404);
 
-  if (site === undefined || site.access === "private") {
-    const session = await serving.readSession(request.headers);
-    if (!session.ok && address.kind === "site") return new Response(null, { status: 302, headers: { ...PLAIN_HEADERS, Location: serving.addresses.loginFor(url) } });
+  if (verdict.kind === "move") return redirect(`${verdict.origin}${url.pathname}${url.search}`);
 
-    if (!session.ok) return plain(request, 404);
-  }
+  const tag = versionTag(verdict.site);
+  const held = heldVersion(request.headers.get("If-None-Match"), tag);
+  if (held === "same") return unchangedPage(verdict.site, serving, tag);
 
-  if (site === undefined) return plain(request, 404);
+  const served = { site: verdict.site, serving, tag, held };
+  const keys = fileKeys(verdict.site, address.path);
+  if (request.method === "HEAD") return answerHead(request, keys, served);
 
-  const keys = fileKeys(site, address.path);
-  if (request.method === "HEAD") return answerHead(request, keys, { site, serving });
-
-  return answerGet(request, keys, { site, serving });
+  return answerGet(request, keys, served);
 }

@@ -10,6 +10,7 @@ import { syncZoneBots } from "../../src/zone/bots/bots";
 import type { Connection } from "../../src/zone/client";
 import { syncDatabase } from "../../src/zone/database/database";
 import { syncDns } from "../../src/zone/dns/dns";
+import { syncHttps } from "../../src/zone/https/https";
 import { syncGuards } from "../../src/zone/rules/guards";
 import { INSTALL_OBJECTS } from "../../src/zone/install-objects";
 import { syncRoutes } from "../../src/zone/routes/routes";
@@ -21,12 +22,18 @@ import { hostOf, LAYOUT } from "./support/layouts";
 const MODULE = join(import.meta.dir, "..", "..", "tofu");
 const ZONE = "zone-1";
 const ACCOUNT = "account-a";
-const SITES = 'ends_with(http.host, "-poplin.example.com")';
+const SITE_TERMS = 'ends_with(http.host, "-poplin.example.com") or ends_with(http.host, "-page.example.com")';
+const SITES = `(${SITE_TERMS})`;
+const NEVER_A_SITES =
+  'not http.request.method in {"GET" "HEAD"} or ends_with(http.request.uri.path, ".php") or ends_with(http.request.uri.path, "/.env") or http.request.uri.path contains "/.env." or http.request.uri.path contains "/.git/"' +
+  ' or starts_with(http.request.uri.path, "/wp-admin/") or starts_with(http.request.uri.path, "/cgi-bin/") or starts_with(lower(http.request.uri.path), "/phpmyadmin")';
+const HOSTNAMES = `${SITE_TERMS} or http.host eq "poplin.example.com"`;
+const BOTS = `${SITES} and not starts_with(http.request.uri.path, "/cdn-cgi/") and (cf.client.bot or ${NEVER_A_SITES})`;
 const LIMIT = { characteristics: ["cf.colo.id", "ip.src"], period: 10, requests_per_period: 300, mitigation_timeout: 10 };
 
 type SharedKey = keyof typeof INSTALL_OBJECTS;
 
-/** Where the module writes each shared value: the file, and the text around it. `%v` stands for the value as HCL writes it, `%i` for the value inside a longer HCL text. */
+/** Where the module writes each shared value: the file, and the text around it. `%v` stands for the value as HCL writes it, `%i` for the value inside a longer HCL text, and `%l` for a list written one entry a line. */
 const WRITTEN: Readonly<Record<SharedKey, readonly [file: string, around: string]>> = {
   recordMark: ["main.tf", 'startswith(coalesce(record.comment, "none"), %v)'],
   wildcardComment: ["main.tf", "(local.wildcard_host) = %v"],
@@ -35,7 +42,11 @@ const WRITTEN: Readonly<Record<SharedKey, readonly [file: string, around: string
   recordContent: ["dns.tf", "content = %v"],
   accessApplication: ["access.tf", "name = %v"],
   accessPolicy: ["access.tf", "name = %v"],
-  loginPath: ["access.tf", `destinations = [{ type = "public", uri = "\${local.admin_host}%i" }]`],
+  loginPath: ["access.tf", `{ type = "public", uri = "\${local.admin_host}%i" },`],
+  privateSitesStart: ["access.tf", `{ type = "public", uri = "%i\${local.domain}" },`],
+  accessSession: ["access.tf", "session_duration = %v"],
+  accessHttpOnly: ["access.tf", "http_only_cookie_attribute = %v"],
+  accessSameSite: ["access.tf", "same_site_cookie_attribute = %v"],
   database: ["database.tf", "name = %v"],
   rateRuleset: ["waf.tf", "name = %v"],
   rateRef: ["waf.tf", "ref = %v"],
@@ -48,11 +59,20 @@ const WRITTEN: Readonly<Record<SharedKey, readonly [file: string, around: string
   guardRuleset: ["waf.tf", "name = %v"],
   outsideRef: ["main.tf", "ref = %v"],
   outsideDescription: ["main.tf", "description = %v"],
-  outsideCondition: ["main.tf", 'format("ends_with(http.host, %q) and %i", local.site_host_ending)'],
+  outsideCondition: ["main.tf", `outside_pages_expression = "\${local.sites_expression} and %i"`],
   botsRef: ["main.tf", "ref = %v"],
   botsDescription: ["main.tf", "description = %v"],
-  botsCondition: ["main.tf", 'format("ends_with(http.host, %q) and %i%s"'],
-  searchEnginesPass: ["main.tf", '? " and %i" : ""'],
+  botsCondition: ["main.tf", 'verified_bots = var.search_engines_allowed ? "(%i and '],
+  searchEnginesPass: ["main.tf", ' and %i)" : "cf.client.bot"'],
+  edgePaths: ["main.tf", 'edge_paths = "%i"'],
+  otherMethods: ["main.tf", 'other_methods = "%i"'],
+  scannerPaths: ["main.tf", "%l"],
+  redirectRuleset: ["https.tf", "name = %v"],
+  httpsRef: ["https.tf", "ref = %v"],
+  httpsDescription: ["https.tf", "description = %v"],
+  plainHttp: ["main.tf", `plain_http_expression = "%i and (\${local.served_expression})"`],
+  httpsTarget: ["https.tf", 'target_url = { expression = "%i" }'],
+  httpsStatus: ["https.tf", "status_code = %v"],
   aiBots: ["waf.tf", "ai_bots_protection = %v"],
   minuteLimitsBinding: ["worker.tf", "name = %v\n type = \"ratelimit\""],
   minuteLimitsNamespace: ["worker.tf", "namespace_id = %v"],
@@ -67,9 +87,9 @@ function moduleText(file: string): string {
   return readFileSync(join(MODULE, file), "utf8").replaceAll(/ +/g, " ");
 }
 
-/** A value as HCL writes it: a text in double quotes with its own quotes escaped, a number bare, a list in brackets. */
-function hcl(value: string | number | readonly string[]): string {
-  if (typeof value === "number") return String(value);
+/** A value as HCL writes it: a text in double quotes with its own quotes escaped, a number or a switch bare, a list in brackets. */
+function hcl(value: string | number | boolean | readonly string[]): string {
+  if (typeof value === "number" || typeof value === "boolean") return String(value);
 
   if (typeof value === "string") return JSON.stringify(value);
 
@@ -91,6 +111,7 @@ function moduleZone(rate: string): Readonly<Record<string, unknown>> {
     [`/zones/${ZONE}/workers/routes`]: [
       { id: "w1", pattern: "*-poplin.example.com/*", script: "poplin" },
       { id: "w2", pattern: "poplin.example.com/*", script: "poplin" },
+      { id: "w3", pattern: "*-page.example.com/*", script: "poplin" },
     ],
     [`/accounts/${ACCOUNT}/access/policies`]: [
       { id: "pol-1", name: "poplin logins", decision: "allow", include: [{ email: { email: "owner@example.com" } }], exclude: [], require: [] },
@@ -101,8 +122,14 @@ function moduleZone(rate: string): Readonly<Record<string, unknown>> {
         name: "poplin",
         type: "self_hosted",
         domain: login,
-        destinations: [{ type: "public", uri: login }],
+        destinations: [
+          { type: "public", uri: login },
+          { type: "public", uri: "*-p-poplin.example.com" },
+        ],
         policies: [{ id: "pol-1", precedence: 1, name: "poplin logins", decision: "allow" }],
+        session_duration: "720h",
+        http_only_cookie_attribute: true,
+        same_site_cookie_attribute: "lax",
       },
     ],
     [`/zones/${ZONE}/rulesets/phases/http_ratelimit/entrypoint`]: {
@@ -119,7 +146,25 @@ function moduleZone(rate: string): Readonly<Record<string, unknown>> {
       phase: "http_request_firewall_custom",
       rules: [
         { id: "g1", ref: "poplin_outside_pages", description: "poplin: stop pages of other domains", expression: outside, action: "block", enabled: true },
-        { id: "g2", ref: "poplin_bots", description: "poplin: stop verified bots", expression: `${SITES} and cf.client.bot`, action: "block", enabled: true },
+        { id: "g2", ref: "poplin_bots", description: "poplin: stop verified bots, other methods, and scanner paths", expression: BOTS, action: "block", enabled: true },
+      ],
+    },
+    [`/zones/${ZONE}/settings/always_use_https`]: { id: "always_use_https", value: "off" },
+    [`/zones/${ZONE}/rulesets/phases/http_request_dynamic_redirect/entrypoint`]: {
+      id: "set-redirect",
+      name: "poplin redirect rule",
+      kind: "zone",
+      phase: "http_request_dynamic_redirect",
+      rules: [
+        {
+          id: "h1",
+          ref: "poplin_https",
+          description: "poplin: send http to https",
+          expression: `not ssl and (${HOSTNAMES})`,
+          action: "redirect",
+          action_parameters: { from_value: { target_url: { expression: 'concat("https://", http.host, http.request.uri.path)' }, status_code: 301, preserve_query_string: true } },
+          enabled: true,
+        },
       ],
     },
     [`/zones/${ZONE}/bot_management`]: { ai_bots_protection: "block", fight_mode: false },
@@ -145,13 +190,15 @@ type Run = (connection: Connection) => Promise<{ readonly ok: boolean; readonly 
 
 const FREE = { layout: LAYOUT, plan: "free", sharesZone: false, rateRule: "zone" } as const;
 const WHOLE_ZONE = 'starts_with(http.request.uri.path, "/")';
-const HOSTNAMES = `${SITES} or http.host eq "poplin.example.com"`;
 
 describe("the values the setup client shares with the OpenTofu module", () => {
   const rows = Object.entries(INSTALL_OBJECTS).map(([key, value]) => ({ key: key as SharedKey, value }));
 
   test.each(rows)("$key is written the same in the module: an object made by one tool must be the other's own too", ({ key, value }) => {
     const [file, around] = WRITTEN[key];
+    // A list is compared whole and in order: its entries are joined into one expression, so their order is part of what both tools write.
+    const list = Array.isArray(value) ? `[\n ${value.map((entry) => `${JSON.stringify(entry)},`).join("\n ")}\n ]` : "";
+    if (around === "%l") return expect(moduleText(file)).toContain(list);
 
     // Inside a longer HCL text the value's own quotes are escaped.
     const inner = typeof value === "string" ? value.replaceAll('"', '\\"') : hcl(value);
@@ -190,7 +237,7 @@ describe("a zone the OpenTofu module set up", () => {
     {
       name: "the login",
       rate: WHOLE_ZONE,
-      run: (connection) => syncAccess(connection, ACCOUNT, { hostname: hostOf("poplin.example.com"), logins: logins() }, "apply"),
+      run: (connection) => syncAccess(connection, ACCOUNT, { hostname: hostOf("poplin.example.com"), logins: logins(), privateSites: "*-p-poplin.example.com" }, "apply"),
     },
     { name: "the rate rule of `rate_rule = zone`, on the Free plan", rate: WHOLE_ZONE, run: (connection) => syncWaf(connection, ZONE, FREE, "apply") },
     {
@@ -208,6 +255,7 @@ describe("a zone the OpenTofu module set up", () => {
       rate: WHOLE_ZONE,
       run: (connection) => syncGuards(connection, ZONE, { layout: LAYOUT, plan: "free", outsidePages: "blocked", searchEnginesAllowed: false }, "apply"),
     },
+    { name: "the https redirect", rate: WHOLE_ZONE, run: (connection) => syncHttps(connection, ZONE, { layout: LAYOUT, plan: "free" }, "apply") },
     { name: "the database", rate: WHOLE_ZONE, run: (connection) => syncDatabase(connection, ACCOUNT, "apply") },
     { name: "the bot settings", rate: WHOLE_ZONE, run: (connection) => syncZoneBots(connection, ZONE, { blockBots: "auto", plan: "free", sharesZone: false }, "apply") },
   ];

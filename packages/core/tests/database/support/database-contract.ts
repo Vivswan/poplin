@@ -1080,7 +1080,7 @@ function auditLog(label: string, makeDatabase: DatabaseFactory): void {
       [
         "a setting set to what it is",
         async (database: Database): Promise<unknown> =>
-          database.changeSettings({ trash_days: 7, cache_html: { count: 60, unit: "s" }, logins: SETTINGS.logins }, signed),
+          database.changeSettings({ trash_days: 7, default_expires: "never", logins: SETTINGS.logins }, signed),
         [],
       ],
     ] as const)("%s writes exactly these entries: %#", async (_case, change, entries) => {
@@ -1167,22 +1167,22 @@ function tokensAndSettings(label: string, makeDatabase: DatabaseFactory): void {
       expect(await database.initSettings(SETTINGS, BY_ADA)).toEqual({ kind: "done", values: SETTINGS });
       expect(await database.initSettings({ ...SETTINGS, trash_days: 99 }, BY_ADA)).toEqual({ kind: "already_set", values: SETTINGS });
 
-      const cache = { count: 5, unit: "m" } as const;
+      const size = { count: 5, unit: "GB" } as const;
       await Promise.all([
         database.changeSettings({ trash_days: 30, default_expires: { count: 7, unit: "d" } }, BY_ADA),
-        database.changeSettings({ cache_html: cache, max_sites: 40 }, BY_ADA),
+        database.changeSettings({ max_total_size: size, max_sites: 40 }, BY_ADA),
       ]);
 
       expect(await database.readSettings()).toEqual({
         ...SETTINGS,
         trash_days: 30,
         default_expires: { count: 7, unit: "d" },
-        cache_html: cache,
+        max_total_size: size,
         max_sites: 40,
       });
       expect(await database.changeSettings({ default_expires: "never", max_sites: "none" }, BY_ADA)).toEqual({
         kind: "done",
-        values: { ...SETTINGS, trash_days: 30, cache_html: cache },
+        values: { ...SETTINGS, trash_days: 30, max_total_size: size },
       });
       expect((await auditDetails(database, "settings_changed")).at(-1)).toEqual({ default_expires: "never", max_sites: "none" });
       await expect(database.changeSettings({ trash_days: 0 }, BY_ADA)).rejects.toThrow();

@@ -9,9 +9,13 @@ import { applySteps, type Mode, reportOf, type Synced } from "../sync";
 
 const NOT_FOUND_STATUS = 404;
 const LITERAL = /^[a-z0-9.-]+$/;
-const NEW_RULESET_NAMES = { http_ratelimit: INSTALL_OBJECTS.rateRuleset, http_request_firewall_custom: INSTALL_OBJECTS.guardRuleset } as const;
+const NEW_RULESET_NAMES = {
+  http_ratelimit: INSTALL_OBJECTS.rateRuleset,
+  http_request_firewall_custom: INSTALL_OBJECTS.guardRuleset,
+  http_request_dynamic_redirect: INSTALL_OBJECTS.redirectRuleset,
+} as const;
 
-/** The phases poplin keeps a rule in: the rate limiting rules, and the custom rules that run before them. */
+/** The phases poplin keeps a rule in: the rate limiting rules, the custom rules that run before them, and the redirects. */
 type Phase = keyof typeof NEW_RULESET_NAMES;
 
 /** How a rate rule counts and for how long it blocks. */
@@ -22,15 +26,21 @@ interface RateLimit {
   readonly mitigation_timeout: number;
 }
 
-/** A rule as poplin writes it; `ratelimit` is present on a rate rule alone. */
-export interface RuleBody {
+/** Where a redirect rule sends a request: an address the rule language computes, the status it answers with, and whether the query goes along. */
+interface RedirectTo {
+  readonly from_value: { readonly target_url: { readonly expression: string }; readonly status_code: 301; readonly preserve_query_string: boolean };
+}
+
+/** What every rule of poplin's carries. */
+interface RuleText {
   readonly ref: string;
   readonly description: string;
   readonly expression: string;
-  readonly action: "block";
   readonly enabled: true;
-  readonly ratelimit?: RateLimit;
 }
+
+/** A rule as poplin writes it: one that blocks, with `ratelimit` on a rate rule alone, or one that redirects. */
+export type RuleBody = (RuleText & { readonly action: "block"; readonly ratelimit?: RateLimit }) | (RuleText & { readonly action: "redirect"; readonly action_parameters: RedirectTo });
 
 /** A rule as the zone has it now. */
 interface ZoneRule {
@@ -40,6 +50,7 @@ interface ZoneRule {
   readonly expression?: string;
   readonly action?: string;
   readonly enabled?: boolean;
+  readonly action_parameters?: unknown;
   readonly ratelimit?: {
     readonly characteristics: readonly string[];
     readonly period: number;
@@ -83,10 +94,22 @@ function sameLimit(limit: ZoneRule["ratelimit"], wanted: RateLimit | undefined):
   return sameNumbers && countsMatches && [...limit.characteristics].sort().join(" ") === wanted.characteristics.join(" ");
 }
 
+// A redirect goes where the rule says only while its target is the wanted expression and no fixed address stands beside it.
+function sameRedirect(parameters: unknown, wanted: RedirectTo): boolean {
+  const from = (parameters as Partial<RedirectTo> | undefined)?.from_value;
+  const target: { readonly expression?: string; readonly value?: string } | undefined = from?.target_url;
+  const sameTarget = target?.expression === wanted.from_value.target_url.expression && target.value === undefined;
+
+  return sameTarget && from?.status_code === wanted.from_value.status_code && from.preserve_query_string === wanted.from_value.preserve_query_string;
+}
+
 function sameRule(rule: ZoneRule, body: RuleBody): boolean {
   const sameText = rule.expression === body.expression && rule.description === body.description;
+  if (!sameText || rule.action !== body.action || rule.enabled === false) return false;
 
-  return sameText && rule.action === body.action && rule.enabled !== false && sameLimit(rule.ratelimit, body.ratelimit);
+  if (body.action === "redirect") return sameRedirect(rule.action_parameters, body.action_parameters);
+
+  return sameLimit(rule.ratelimit, body.ratelimit);
 }
 
 /**
@@ -99,6 +122,28 @@ export function quoted(text: string): string {
   if (!LITERAL.test(text)) throw new Error("only a checked hostname may enter a rule expression");
 
   return `"${text}"`;
+}
+
+/**
+ * Write the terms that are true for a request to a site hostname, one per ending.
+ *
+ * @param endings - what a site hostname ends with, from the layout's `siteEndings`
+ * @throws {Error} an ending that was cast instead of checked holds a character outside `a-z`, `0-9`, `.`, and `-`
+ */
+export function siteTerms(endings: readonly string[]): string[] {
+  return endings.map((ending) => `ends_with(http.host, ${quoted(ending)})`);
+}
+
+/**
+ * Write the expression that is true for a request to a site hostname and for no other, the admin hostname included.
+ *
+ * @returns one term, or several joined by `or` inside brackets, so the expression stands whole in front of an `and`
+ * @throws {Error} an ending that was cast instead of checked holds a character outside `a-z`, `0-9`, `.`, and `-`
+ */
+export function sitesExpression(endings: readonly string[]): string {
+  const terms = siteTerms(endings);
+
+  return terms.length === 1 ? (terms[0] ?? "") : `(${terms.join(" or ")})`;
 }
 
 /**

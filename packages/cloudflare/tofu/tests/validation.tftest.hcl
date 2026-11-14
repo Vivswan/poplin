@@ -154,35 +154,34 @@ run "requests_per_day_too_large_to_count" {
   expect_failures = [var.requests_per_day]
 }
 
-run "cache_html_without_a_unit" {
+run "public_word_with_a_dash" {
   command = plan
 
   variables {
-    cache_html = "60"
+    public_word = "my-page"
   }
 
-  expect_failures = [var.cache_html]
+  expect_failures = [var.public_word]
 }
 
-run "cache_files_of_zero" {
+run "public_word_of_one_letter" {
   command = plan
 
   variables {
-    cache_files = "0s"
+    public_word = "p"
   }
 
-  expect_failures = [var.cache_files]
+  expect_failures = [var.public_word]
 }
 
-# The Worker stores a span only as a whole number of seconds it can count exactly, so a longer one would leave FIRST_SETTINGS unread.
-run "cache_files_too_long_to_count" {
+run "public_word_with_a_capital" {
   command = plan
 
   variables {
-    cache_files = "9007199254740992s"
+    public_word = "Page"
   }
 
-  expect_failures = [var.cache_files]
+  expect_failures = [var.public_word]
 }
 
 run "max_total_size_unknown_unit" {

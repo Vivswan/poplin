@@ -1,6 +1,6 @@
 // The login path. Cloudflare Access stands in front of it at the edge; the token Access puts on the request is checked here all the same.
 //
-//   the Access token  ->  an email in the logins  ->  the session cookie on the install's domain, and the way back
+//   the Access token  ->  an email in the logins  ->  the dashboard's session cookie, and the way back to a dashboard path
 
 import { logIn } from "@poplin/app/src/login/login";
 import type { Held } from "./held";
@@ -16,7 +16,7 @@ const RETURN_KEY = "return";
 /**
  * Answer a request to the login path.
  *
- * @returns 302 with the session cookie, to the dashboard or back to the site the person came from; 403 for a request Access did not sign for a listed email; 503 while the team's keys cannot be had
+ * @returns 302 with the session cookie of the admin hostname alone, to the dashboard path the person came from; 403 for a request Access did not sign for a listed email; 503 while the team's keys cannot be had
  * @throws whatever the database rejects with while the login is written to the audit log
  */
 export async function answerLogin(request: Request, instance: Instance, held: Held): Promise<Response> {
@@ -28,9 +28,6 @@ export async function answerLogin(request: Request, instance: Instance, held: He
     logins: held.logins,
     sessionKey: held.sessionKey,
     now,
-    addresses: instance.addresses,
-    // The parent domain, so the site hostnames receive the cookie too.
-    cookieDomain: instance.layout.domain,
     returnTo: new URL(request.url).searchParams.get(RETURN_KEY),
   });
 

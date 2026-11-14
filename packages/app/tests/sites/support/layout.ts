@@ -12,12 +12,5 @@ function hostOf(raw: string): Hostname {
   return hostname.value;
 }
 
-function layout(): Parameters<typeof hostnameAddresses>[0] {
-  return { domain: hostOf("example.com"), publicWord: DEFAULT_PUBLIC_WORD };
-}
-
-/** The checked values of the layout: the domain and the public word. */
-export const LAYOUT = layout();
-
-/** The layout's answers, as serving, the login, and the site actions ask them. */
-export const ADDRESSES = hostnameAddresses(LAYOUT);
+/** The layout's answers, as serving and the site actions ask them. */
+export const ADDRESSES = hostnameAddresses({ domain: hostOf("example.com"), publicWord: DEFAULT_PUBLIC_WORD });

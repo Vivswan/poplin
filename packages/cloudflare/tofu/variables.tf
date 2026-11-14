@@ -20,6 +20,23 @@ variable "zone_id" {
   }
 }
 
+variable "public_word" {
+  description = "The word every public site's address ends in, as in `docs-page.example.com`. It is chosen once: another word later breaks every public address."
+  type        = string
+  default     = "page"
+
+  validation {
+    condition     = can(regex("^[a-z]{2,9}$", var.public_word))
+    error_message = "public_word must be 2 to 9 lowercase letters, such as page."
+  }
+}
+
+variable "https_redirect" {
+  description = "Whether the module creates the rule that sends a request over http to https before the Worker runs. It is the zone's whole redirect ruleset: false on a zone with redirect rules of its own."
+  type        = bool
+  default     = true
+}
+
 variable "rate_rule" {
   description = "What the rate rule counts: `zone` (every request of the zone, the one form the Free plan takes), `hostnames` (the install's hostnames alone, on a paid plan), or `off` (no rule)."
   type        = string
@@ -185,31 +202,9 @@ variable "dashboard_title" {
 }
 
 variable "gallery" {
-  description = "Whether the public page listing the public sites is on. It sits at the site hostname of the name `gallery`: gallery-poplin.example.com."
+  description = "Whether the public page listing the public sites is on. It sits at the site hostname of the name `gallery`: gallery-page.example.com."
   type        = bool
   default     = false
-}
-
-variable "cache_html" {
-  description = "How long HTML is cached, such as `60s`. `0s` switches the cache off."
-  type        = string
-  default     = "60s"
-
-  validation {
-    condition     = can(regex("^(0|[1-9][0-9]{0,8})[smhd]$", var.cache_html))
-    error_message = "cache_html must be a whole number of at most 9 digits followed by s, m, h, or d, such as 60s."
-  }
-}
-
-variable "cache_files" {
-  description = "How long a site's other files are cached, such as `1h`. `off` switches the cache off."
-  type        = string
-  default     = "1h"
-
-  validation {
-    condition     = var.cache_files == "off" || can(regex("^[1-9][0-9]{0,8}[smhd]$", var.cache_files))
-    error_message = "cache_files must be `off` or a whole number of at least 1 and at most 9 digits followed by s, m, h, or d, such as 1h."
-  }
 }
 
 variable "max_total_size" {

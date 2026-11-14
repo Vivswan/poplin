@@ -2,8 +2,8 @@
 
 import type { Connection, ZonePlan } from "../client";
 import { INSTALL_OBJECTS } from "../install-objects";
-import { type DomainLayout, siteEnding } from "../layout";
-import { type PhaseRules, planOwnRule, quoted, type RuleStep, removeOwnRule, syncPhase } from "./rules";
+import { type DomainLayout, siteEndings } from "../layout";
+import { type PhaseRules, planOwnRule, quoted, type RuleStep, removeOwnRule, siteTerms, syncPhase } from "./rules";
 import type { Mode, Synced } from "../sync";
 
 const RATE_REF = INSTALL_OBJECTS.rateRef;
@@ -69,7 +69,7 @@ export function defaultRateRule(plan: ZonePlan): "zone" | "hostnames" {
 export function rateRuleExpression(layout: DomainLayout, rateRule: "zone" | "hostnames"): string {
   if (rateRule === "zone") return INSTALL_OBJECTS.rateWholeZone;
 
-  return `ends_with(http.host, ${quoted(siteEnding(layout))}) or http.host eq ${quoted(layout.adminHostname)}`;
+  return [...siteTerms(siteEndings(layout)), `http.host eq ${quoted(layout.adminHostname)}`].join(" or ");
 }
 
 /**

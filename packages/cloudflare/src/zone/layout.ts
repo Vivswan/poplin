@@ -2,9 +2,10 @@
 
 import { ADMIN_LABEL, type Hostname, parseHostname } from "@poplin/core/src/names/hostname";
 import { DEFAULT_PUBLIC_WORD, MARKER, type PublicWord, parsePublicWord } from "@poplin/core/src/names/marker";
+import { INSTALL_OBJECTS } from "./install-objects";
 
-/** The most characters a domain may hold: a site's first label and its dot take up to 64, and DNS carries 253 in a hostname. */
-const MAX_DOMAIN_LENGTH = 189;
+/** The most characters Access takes in the address of an application. */
+const MAX_ACCESS_ADDRESS = 63;
 
 declare const layoutBrand: unique symbol;
 
@@ -22,8 +23,8 @@ export interface DomainLayout {
   readonly [layoutBrand]: true;
 }
 
-/** Why a layout was refused. `bad-domain` is also a domain too long to leave the longest site hostname room. */
-type LayoutRefusal = "bad-domain" | "bad-public-word";
+/** Why a layout was refused. `domain-too-long` is a domain under which the login path or the private sites' pattern passes what Access takes. */
+type LayoutRefusal = "bad-domain" | "domain-too-long" | "bad-public-word";
 
 /** A layout, or the first rule it breaks. */
 export type CheckedLayout = { readonly ok: true; readonly value: DomainLayout } | { readonly ok: false; readonly refusal: LayoutRefusal };
@@ -35,7 +36,10 @@ export type CheckedLayout = { readonly ok: true; readonly value: DomainLayout } 
  */
 export function parseDomainLayout(raw: RawLayout): CheckedLayout {
   const domain = parseHostname(raw.domain);
-  if (!domain.ok || domain.value.length > MAX_DOMAIN_LENGTH) return { ok: false, refusal: "bad-domain" };
+  if (!domain.ok) return { ok: false, refusal: "bad-domain" };
+
+  const guarded = [`${ADMIN_LABEL}.${domain.value}${INSTALL_OBJECTS.loginPath}`, `${INSTALL_OBJECTS.privateSitesStart}${domain.value}`];
+  if (guarded.some((address) => address.length > MAX_ACCESS_ADDRESS)) return { ok: false, refusal: "domain-too-long" };
 
   const publicWord = raw.public_word === undefined ? DEFAULT_PUBLIC_WORD : parsePublicWord(raw.public_word);
   if (publicWord === undefined) return { ok: false, refusal: "bad-public-word" };
@@ -44,10 +48,21 @@ export function parseDomainLayout(raw: RawLayout): CheckedLayout {
 }
 
 /**
- * Write what the hostname of every label address ends with: `-poplin`, a dot, and the domain.
+ * Write what the hostname of every site address ends with: `-poplin`, a dot, and the domain, and the same with the public word in place of `poplin`.
  *
- * @returns the ending a Worker route takes after its leading wildcard
+ * @returns the endings a Worker route takes after its leading wildcard: one when the public word is `poplin`, else the label addresses' and then the public names'
  */
-export function siteEnding(layout: DomainLayout): string {
-  return `${MARKER}.${layout.domain}`;
+export function siteEndings(layout: DomainLayout): readonly string[] {
+  const endings = [`${MARKER}.${layout.domain}`, `-${layout.publicWord}.${layout.domain}`];
+
+  return [...new Set(endings)];
+}
+
+/**
+ * Write the hostname pattern of every private site's address, as an Access application takes it.
+ *
+ * @returns `*-p-poplin.<domain>`, which fits what Access takes for every layout `parseDomainLayout` made
+ */
+export function privateSitesPattern(layout: DomainLayout): string {
+  return `${INSTALL_OBJECTS.privateSitesStart}${layout.domain}`;
 }

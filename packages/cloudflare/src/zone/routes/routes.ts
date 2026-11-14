@@ -2,7 +2,7 @@
 
 import { BaseRoutes } from "cloudflare/resources/workers/routes";
 import { type Connection, callCloudflare } from "../client";
-import { type DomainLayout, siteEnding } from "../layout";
+import { type DomainLayout, siteEndings } from "../layout";
 import { applySteps, type Mode, reportOf, type Synced } from "../sync";
 
 const ROUTED_ELSEWHERE = "a route poplin did not create holds this pattern";
@@ -32,7 +32,7 @@ type RouteStep =
 
 // A route may begin with a wildcard and hold no other, so the address marker alone picks the site hostnames out of the zone.
 function workerPatterns(layout: DomainLayout): string[] {
-  return [`*${siteEnding(layout)}/*`, `${layout.adminHostname}/*`];
+  return [...siteEndings(layout).map((ending) => `*${ending}/*`), `${layout.adminHostname}/*`];
 }
 
 function planWorkerRoute(pattern: string, script: string, routes: readonly ZoneRoute[]): RouteStep {

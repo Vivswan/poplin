@@ -66,7 +66,7 @@ export interface Instance {
   /** Answers every path under `/api`. */
   readonly api: ReturnType<typeof createApi>;
 
-  /** Decides who a request to the login path is from. */
+  /** Decides who a request to the login path or to a private site's address is from. */
   readonly identify: Identify<string>;
 }
 

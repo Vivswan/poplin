@@ -8,7 +8,7 @@ import { ADMIN, makeWorld, OWNER } from "./support/actions-fixture";
 
 /** The settings of another install as its export gives them: its own logins, and three values this install does not have. */
 async function backup(): Promise<{ format: number; settings: Record<string, string> }> {
-  const other = await makeWorld({ logins: ["bo@example.com" as Login], trash_days: 30, max_sites: 12, cache_files: "off" });
+  const other = await makeWorld({ logins: ["bo@example.com" as Login], trash_days: 30, max_sites: 12, block_bots: "off" });
   const exported = await exportSettings(other.install, ADMIN);
   if (!exported.ok) throw new Error(`the fixture export was refused: ${exported.code}`);
 
@@ -25,7 +25,7 @@ describe("importSettings", () => {
     const audit = await world.audit();
     const taken = await importSettings(world.install, ADMIN, { ...sent, logins: true });
 
-    expect(kept).toMatchObject({ ok: true, values: { logins: ["ada@example.com"], trash_days: 30, max_sites: 12, cache_files: "off" } });
+    expect(kept).toMatchObject({ ok: true, values: { logins: ["ada@example.com"], trash_days: 30, max_sites: 12, block_bots: "off" } });
     expect<unknown>([audit, taken.ok && taken.values.logins, await readConfig(world.install, ADMIN)]).toEqual([["settings_changed"], ["bo@example.com"], taken]);
   });
 

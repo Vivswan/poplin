@@ -18,8 +18,6 @@ const MEANINGS: { readonly [Key in keyof SettingValues]: string } = {
   logins: "The emails that may log in, with commas between them.",
   dashboard_title: "The title of this dashboard.",
   gallery: "The public page that lists the public sites: on or off.",
-  cache_html: "How long HTML is cached, such as 60s. 0s switches the cache off.",
-  cache_files: "How long a browser may keep a site's other files, such as 1h, or off.",
   private_sites: "On an install with no domain, what may be private: single-file or folders.",
   outside_pages: "Whether pages outside the install may frame a site or load its files.",
   search_engines_allowed: "Whether search engines are let through to public sites.",
@@ -82,7 +80,7 @@ function signOutForm(visit: Visit): Html {
   return html`<h2>Sign everyone out</h2>
 <form method="post" action="/settings/sign-everyone-out">
 ${csrfField(visit)}
-<p>Every browser that is logged in, this one included, has to log in again. Agent tokens and site addresses stay as they are.</p>
+<p>Every browser logged in to this dashboard, this one included, has to log in again. Private sites keep their own login, and agent tokens and site addresses stay as they are.</p>
 <div class="field">
 <label class="choice"><input type="checkbox" name="confirm" value="yes"> Yes, sign everyone out</label>
 </div>

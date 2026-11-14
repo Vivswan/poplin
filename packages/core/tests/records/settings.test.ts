@@ -15,8 +15,6 @@ const PUBLISHED_DEFAULTS = {
   logins: "ada@example.com",
   dashboard_title: "poplin.example.com",
   gallery: "off",
-  cache_html: "60s",
-  cache_files: "1h",
   private_sites: "single-file",
   outside_pages: "blocked",
   search_engines_allowed: "off",
@@ -37,8 +35,6 @@ const CHANGED = {
   logins: "ada@example.com,bo@example.com",
   dashboard_title: "Team pages",
   gallery: "on",
-  cache_html: "0s",
-  cache_files: "off",
   private_sites: "folders",
   outside_pages: "allowed",
   search_engines_allowed: "on",
@@ -59,8 +55,6 @@ const CHANGED_VALUES = {
   logins: ["ada@example.com", "bo@example.com"],
   dashboard_title: "Team pages",
   gallery: true,
-  cache_html: { count: 0, unit: "s" },
-  cache_files: "off",
   private_sites: "folders",
   outside_pages: "allowed",
   search_engines_allowed: true,
@@ -94,12 +88,12 @@ describe("settingsFromText and settingsToText", () => {
     expect(read.map((settings) => settings.ok && settingsToText(settings.values))).toEqual([PUBLISHED_DEFAULTS, CHANGED]);
   });
 
-  // Drift: a unit an admin may type must come back as typed; a printer that picked its own unit would show `1m` for the published `60s`.
+  // Drift: a unit an admin may type must come back as typed; a printer that picked its own unit would show `2h` for a typed `120m`.
   test.each([
-    ["cache_html", "120s"],
-    ["cache_html", "2m"],
-    ["cache_html", "24h"],
-    ["cache_files", "7d"],
+    ["default_expires", "120s"],
+    ["default_expires", "2m"],
+    ["default_expires", "24h"],
+    ["default_expires", "7d"],
     ["default_expires", "36h"],
     ["max_site_size", "1000KB"],
     ["max_site_size", "1500B"],
@@ -117,14 +111,14 @@ describe("settingsFromText and settingsToText", () => {
 
   // Drift: a setting is typed by a person; each row is text that must be refused by its key, never stored as some nearby value.
   test.each([
-    ["cache_html", "60", "bad-form"],
-    ["cache_html", "60 s", "bad-form"],
-    ["cache_html", "1.5m", "bad-form"],
-    ["cache_html", "-60s", "bad-form"],
-    ["cache_html", "60S", "bad-form"],
-    ["cache_html", "9GB", "bad-form"],
-    ["cache_files", "never", "bad-form"],
-    ["cache_files", "0s", "out-of-range"],
+    ["default_expires", "60", "bad-form"],
+    ["default_expires", "60 s", "bad-form"],
+    ["default_expires", "1.5m", "bad-form"],
+    ["default_expires", "-60s", "bad-form"],
+    ["default_expires", "60S", "bad-form"],
+    ["default_expires", "9GB", "bad-form"],
+    ["default_expires", "off", "bad-form"],
+    ["default_expires", "0s", "out-of-range"],
     ["max_total_size", "9gb", "bad-form"],
     ["max_total_size", "9GiB", "bad-form"],
     ["max_total_size", "0GB", "out-of-range"],
@@ -168,8 +162,8 @@ describe("SETTING_VALUES", () => {
   test.each([
     ["the last login cannot be removed", { logins: [] }, "logins"],
     ["a login is an email in its normal form", { logins: ["Ada@Example.com"] }, "logins.0"],
-    ["a duration is stored as a count and its unit, not as the text typed", { cache_html: "60s" }, "cache_html"],
-    ["a duration's unit is one of the four", { cache_html: { count: 1, unit: "w" } }, "cache_html.unit"],
+    ["a duration is stored as a count and its unit, not as the text typed", { default_expires: "60s" }, "default_expires"],
+    ["a duration's unit is one of the four", { default_expires: { count: 1, unit: "w" } }, "default_expires"],
     ["a size is a whole count", { max_site_size: { count: 1.5, unit: "MB" } }, "max_site_size.count"],
     ["no limit on sites is the word none, never null", { max_sites: null }, "max_sites"],
     ["no key beyond the published ones", { default_access: "public" }, "default_access"],

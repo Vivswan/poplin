@@ -6,7 +6,7 @@ import { type DomainLayout, parseDomainLayout, type RawLayout } from "../../../s
 const BASE: RawLayout = { domain: "example.com" };
 
 /** Check a layout that a test wrote by hand; a refusal is a mistake in the test. */
-function layoutOf(changes: Partial<RawLayout>): DomainLayout {
+export function layoutOf(changes: Partial<RawLayout>): DomainLayout {
   const layout = parseDomainLayout({ ...BASE, ...changes });
   if (!layout.ok) throw new Error(`the test's layout was refused: ${layout.refusal}`);
 
@@ -23,3 +23,6 @@ export function hostOf(raw: string): Hostname {
 
 /** The layout the tests run under: label addresses end in `-poplin.example.com`, public names in `-page.example.com`, and the dashboard is `poplin.example.com`. */
 export const LAYOUT = layoutOf({});
+
+/** A layout whose public word is `poplin`: every site hostname ends alike, in `-poplin.example.com`. */
+export const ONE_WORD = layoutOf({ public_word: "poplin" });

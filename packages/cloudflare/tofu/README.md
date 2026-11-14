@@ -33,9 +33,10 @@ bun run --cwd packages/cloudflare build   # writes packages/cloudflare/dist/work
 | Worker cron trigger | runs the Worker's sweep every 15 minutes: expired sites go to the trash, and sites past `trash_days` in the trash and uploads nobody finished are removed with their files |
 | Worker routes | send the install's hostnames, and no other hostname of the zone, to the Worker |
 | DNS records | proxied, each with a comment starting `poplin: ` |
-| Access policy and application | the login on `/login` of the dashboard's hostname, allowing exactly `logins` |
+| Access policy and application | one login, allowing exactly `logins`, in front of `/login` of the dashboard's hostname and of every private site's address, `*-p-poplin.example.com`; a login lasts 30 days |
+| Redirect rule | sends a request over `http` to one of the install's hostnames to `https`, with a 301, before the Worker runs |
 | Rate rule | blocks an address for 10 seconds after 300 requests in 10 seconds |
-| Guard rules | two custom rules that block a request to a site hostname before the Worker runs: one from a page of another domain, one from a verified bot |
+| Guard rules | two custom rules that block a request to a site hostname before the Worker runs: one from a page of another domain; one from a verified bot, with a method other than GET and HEAD, or for a scanner path |
 | Bot settings | the zone's AI bot block, on a zone with no hostnames of its own |
 
 Records and routes, for `example.com` with the default hostnames:
@@ -43,11 +44,13 @@ Records and routes, for `example.com` with the default hostnames:
 | Hostname | Example | DNS record | Worker route |
 | --- | --- | --- | --- |
 | a site | `report--k3f9x2ab71qz-p-poplin.example.com` | `*.example.com` | `*-poplin.example.com/*` |
-| a public site's public name | `docs-poplin.example.com` | `*.example.com` | `*-poplin.example.com/*` |
+| a public site's public name | `docs-page.example.com` | `*.example.com` | `*-page.example.com/*` |
 | the dashboard | `poplin.example.com` | `poplin.example.com` | `poplin.example.com/*` |
-| the gallery, while `gallery` is on | `gallery-poplin.example.com` | `*.example.com` | `*-poplin.example.com/*` |
+| the gallery, while `gallery` is on | `gallery-page.example.com` | `*.example.com` | `*-page.example.com/*` |
 
-DNS has no partial wildcard, so the wildcard record covers every name under the domain that has no record of its own, while the route sends only the names ending in `-poplin` to the Worker. The module reads the zone's records and follows what it finds:
+With `public_word = "poplin"` every site hostname ends in `-poplin`, and one site route takes them all.
+
+DNS has no partial wildcard, so the wildcard record covers every name under the domain that has no record of its own, while the routes send only the names ending in `-poplin` or in the public word to the Worker. The module reads the zone's records and follows what it finds:
 
 | The zone has | The module |
 | --- | --- |
@@ -71,12 +74,13 @@ Each object carries a fixed name or mark, the same one poplin's own setup code w
 | D1 database | the name `poplin` |
 | Rate rule | the ref `poplin_rate`, in a ruleset named `poplin rate rule` |
 | Guard rules | the refs `poplin_outside_pages` and `poplin_bots`, in a ruleset named `poplin guard rules` |
+| Redirect rule | the ref `poplin_https`, in a ruleset named `poplin redirect rule` |
 
 The Worker reads three of its bindings as JSON:
 
 | Binding | Holds |
 | --- | --- |
-| `ZONE` | `domain` |
+| `ZONE` | `domain`, and `public_word` |
 | `FIRST_SETTINGS` | every setting of `poplin config`, by its name, in its text form |
 | `ACCESS` | `team_domain`, the input `access_team_domain`, and `audience`, the audience tag of the Access application the module creates |
 
@@ -84,7 +88,7 @@ The Worker reads three of its bindings as JSON:
 
 ## What is stopped before the Worker
 
-A request Cloudflare blocks never reaches the Worker. Both guard rules read only hostnames ending in `-poplin`, such as `report--k3f9x2ab71qz-u-poplin.example.com`:
+A request Cloudflare blocks never reaches the Worker. Both guard rules read only the site hostnames, the ones ending in `-poplin` or in the public word, such as `report--k3f9x2ab71qz-u-poplin.example.com`. Neither reads the dashboard's hostname:
 
 | Request to a site hostname | Outside pages rule | Bots rule |
 | --- | --- | --- |
@@ -95,6 +99,12 @@ A request Cloudflare blocks never reaches the Worker. Both guard rules read only
 | a bot Cloudflare has verified, such as a search engine, a link preview, or a monitor | passes | blocked |
 | a search engine's crawler, while `search_engines_allowed` is true | passes | passes |
 | a bot Cloudflare has not verified that presents as a browser | passes | passes |
+| any method but GET and HEAD | passes | blocked |
+| a path that ends in `.php` or in `/.env`, or holds `/.env.` or `/.git/` | passes | blocked |
+| a path that starts with `/wp-admin/` or `/cgi-bin/`, or with `/phpmyadmin` in any case | passes | blocked |
+| a path under `/cdn-cgi/`, where Cloudflare's own login answers | passes | passes |
+
+The bots rule is 549 characters for the default hostnames, and 607 with search engines let through. The two guard rules are the only custom rules the module creates; the Free plan allows five.
 
 The zone's bot settings cover every hostname of the zone, the dashboard and the zone's own included:
 
@@ -115,6 +125,8 @@ No rule can exempt a request from Bot Fight Mode, and it may challenge `poplin` 
 | `logins` | list of strings | required | the emails that may log in: lowercase, at least one, each once |
 | `worker_bundle_path` | string | required | the path to the built Worker bundle, one JavaScript module file |
 | `access_team_domain` | string | required | the account's Zero Trust team domain, such as `team.cloudflareaccess.com`, shown in the Zero Trust settings. The module does not read it from the account: that takes a permission beyond the ones below |
+| `public_word` | string | `page` | the word every public site's address ends in, as in `docs-page.example.com`: 2 to 9 lowercase letters. It is chosen once: another word later breaks every public address |
+| `https_redirect` | bool | `true` | whether the module creates the redirect rule |
 | `rate_rule` | string | `zone` | what the rate rule counts: `zone`, every request of the zone, the one form the Free plan takes; `hostnames`, the install's hostnames alone, on a paid plan; `off`, no rule |
 | `guard_rules` | bool | `true` | whether the module creates the two guard rules |
 | `outside_pages` | string | `blocked` | whether a page of another domain may frame a site or load its files: `blocked` or `allowed` |
@@ -140,9 +152,7 @@ The first settings. The names and text forms are those of `poplin config`:
 | `versions_kept` | number | `3` | versions kept per site, the live one included |
 | `trash_days` | number | `7` | days a deleted site waits in the trash |
 | `dashboard_title` | string | `null` | the title of the dashboard; null means the dashboard's hostname |
-| `gallery` | bool | `false` | the public page listing the public sites, at `gallery-poplin.example.com` |
-| `cache_html` | string | `60s` | how long HTML is cached |
-| `cache_files` | string | `1h` | how long a site's other files are cached; `off` switches the cache off |
+| `gallery` | bool | `false` | the public page listing the public sites, at `gallery-page.example.com` |
 | `max_total_size` | string | `9GB` | limit: all sites together |
 | `max_site_size` | string | `200MB` | limit: one site |
 | `max_sites` | number | `null` | limit: how many sites; null means none |
@@ -162,6 +172,7 @@ The Worker stores the first settings once, while it has none. After that the das
 | `worker_name` | the Worker script |
 | `admin_url` | the address of the dashboard, `https://poplin.example.com` |
 | `site_url_pattern` | the address of a site, `https://<name>--<id>-<letter>-poplin.example.com`: the letter is `p` for a private site and `u` for every other |
+| `public_url_pattern` | the address of a public site under its public name, `https://<public name>-page.example.com` |
 | `guard_rule_expressions` | the expression of each guard rule, by its ref |
 | `block_bots` | `set`, or the reason the module left the zone's bot settings alone |
 
@@ -177,7 +188,10 @@ The Worker stores the first settings once, while it has none. After that the das
 | DNS: Edit | the zone | the records, and reading the zone's own |
 | Workers Routes: Edit | the zone | the routes |
 | Zone WAF: Edit | the zone | the rate rule and the guard rules |
+| Single Redirect: Edit | the zone | the redirect rule |
 | Bot Management: Edit | the zone | the bot settings |
+
+The Domain tab's check and repair take one permission more, Zone Settings: Read on the zone: they read whether the zone's own Always Use HTTPS is on, and write no redirect rule where it is.
 
 ## What it does not do
 
@@ -190,11 +204,14 @@ The Worker stores the first settings once, while it has none. After that the das
 | take over an object it did not create | an object that already exists under one of the names above is imported into the state first |
 | configure the provider or hold a token | the caller's provider block does |
 | add to rate rules the zone already has | the rate rule is the zone's whole rate limiting ruleset. Set `rate_rule` to `off` on a zone with rate rules of its own |
+| add to redirect rules the zone already has | the redirect rule is the zone's whole redirect ruleset. Set `https_redirect` to `false` on a zone with redirect rules of its own, or one whose Always Use HTTPS is on |
+| fit a domain of more than 50 characters | Access takes an application address of 63 characters, and `poplin.<domain>/login` must fit |
 | add to custom rules the zone already has | the guard rules are the zone's whole custom ruleset. Set `guard_rules` to `false` on a zone with custom rules of its own, and add the `guard_rule_expressions` to them |
 | keep bot settings the zone already has | the module sets the AI bot block and Bot Fight Mode both. Set `block_bots` to `off` on a zone that sets its own |
 | stop a bot Cloudflare has not verified | a bot that presents as a browser passes both rules; telling it apart takes a bot score, which the Free plan does not have |
 | read the zone's plan | a Free plan rate rule reads the path alone: `rate_rule` is `zone` there, and `hostnames` on a paid plan. The input is explicit here; poplin's own setup takes the same three values and only offers the plan's as its default. Bot Fight Mode is a setting of the Free plan: `block_bots` is `auto` or `off` on a paid plan |
 | keep a name several levels deep from the Worker | `a.b-poplin.example.com` also matches the site route; the Worker answers that it is no site |
+| put a login in front of an unlisted or a public site | only an address that ends in `-p-poplin` is behind Access; the Worker sends a private site asked for at any other address there |
 | change a record the zone already has | a record whose comment does not start with `poplin: ` is read and never changed |
 | check that the Worker's name is free | an existing Worker named `worker_name` in the account is replaced |
 | follow a login added on the dashboard | add the email to `logins` as well, so the login screen lets it in |

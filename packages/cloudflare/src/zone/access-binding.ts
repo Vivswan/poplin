@@ -1,4 +1,4 @@
-// The Worker's `ACCESS` binding: the Access application in front of the login path, as the OpenTofu module binds it.
+// The Worker's `ACCESS` binding: the Access application in front of the login path and of every private site, as the OpenTofu module binds it.
 
 import { parseHostname } from "@poplin/core/src/names/hostname";
 import * as v from "valibot";

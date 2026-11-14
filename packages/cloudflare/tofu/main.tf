@@ -19,11 +19,6 @@ data "cloudflare_zone" "this" {
       condition     = self.account.id == var.account_id
       error_message = "zone_id must name a zone of the account in account_id: a route finds its Worker in the zone's own account."
     }
-
-    postcondition {
-      condition     = length(self.name) <= 189
-      error_message = "The domain must be 189 characters or fewer: a site's hostname puts up to 64 more in front of it, and no hostname is longer than 253."
-    }
   }
 }
 
@@ -45,8 +40,14 @@ locals {
   # The fixed word every site hostname label ends in. The Worker reads the same word, so it is no input.
   marker = "-poplin"
 
-  # What every site hostname ends with, the gallery's included.
-  site_host_ending = "${local.marker}.${local.domain}"
+  # What a site hostname ends with: the label addresses' ending, then the public names' and the gallery's when their word is another.
+  site_host_endings = distinct(["${local.marker}.${local.domain}", "-${var.public_word}.${local.domain}"])
+
+  # One term of the rule language per ending. The inputs are validated, so no quote can appear in one.
+  site_terms = [for ending in local.site_host_endings : format("ends_with(http.host, %q)", ending)]
+
+  # True for a request to a site hostname and for no other, the admin hostname included. Several terms stand in brackets, so the whole binds in front of an `and`.
+  sites_expression = length(local.site_terms) == 1 ? local.site_terms[0] : "(${join(" or ", local.site_terms)})"
 
   # The wildcard record every site hostname resolves through. DNS has no partial wildcard, so it covers the whole level.
   wildcard_host = "*.${local.domain}"
@@ -64,7 +65,7 @@ locals {
   # The zone's own records under a name the routes take.
   shadowed_names = sort(distinct([
     for record in local.zone_records : record.name
-    if record.name == local.admin_host || endswith(record.name, local.site_host_ending)
+    if record.name == local.admin_host || anytrue([for ending in local.site_host_endings : endswith(record.name, ending)])
   ]))
 
   # The zone's own hostnames, a wildcard of its own included: a rate rule that reads the path alone, or a bot switch of the zone, would cover them too.
@@ -76,25 +77,48 @@ locals {
     { (local.admin_host) = "poplin: the dashboard, the login, and the API" },
   )
 
-  # A route may begin with a wildcard and hold no other, so Cloudflare itself sends only the hostnames that end in the marker to the Worker.
-  worker_route_hosts = toset(["*${local.site_host_ending}", local.admin_host])
+  # A route may begin with a wildcard and hold no other, so Cloudflare itself sends only the hostnames that end in one of the endings to the Worker: one route per ending.
+  worker_route_hosts = toset(concat([for ending in local.site_host_endings : "*${ending}"], [local.admin_host]))
 
-  # The hostnames the routes send to the Worker, as the rule language reads them. The inputs are validated, so no quote can appear in one.
-  served_expression = format("ends_with(http.host, %q) or http.host eq %q", local.site_host_ending, local.admin_host)
+  # The hostnames the routes send to the Worker, as the rule language reads them.
+  served_expression = join(" or ", concat(local.site_terms, [format("http.host eq %q", local.admin_host)]))
+
+  # A request over `http` to one of those hostnames: the redirect rule sends it to `https` before the Worker runs.
+  plain_http_expression = "not ssl and (${local.served_expression})"
 
   # A Free plan rate rule may read the path alone, so `zone` counts every request of the zone.
   rate_rule_expression = var.rate_rule == "zone" ? "starts_with(http.request.uri.path, \"/\")" : local.served_expression
 
   # A browser marks a request another site's page made, and says what it is for. One for a document is a visitor following a link, and one that lacks either mark passes.
-  outside_pages_expression = format("ends_with(http.host, %q) and any(http.request.headers[\"sec-fetch-site\"][*] eq \"cross-site\") and any(http.request.headers[\"sec-fetch-dest\"][*] ne \"document\")", local.site_host_ending)
+  outside_pages_expression = "${local.sites_expression} and any(http.request.headers[\"sec-fetch-site\"][*] eq \"cross-site\") and any(http.request.headers[\"sec-fetch-dest\"][*] ne \"document\")"
 
   # The bots Cloudflare has verified: all of them, or all but the crawlers of search engines.
-  bots_expression = format("ends_with(http.host, %q) and cf.client.bot%s", local.site_host_ending, var.search_engines_allowed ? " and cf.verified_bot_category ne \"Search Engine Crawler\"" : "")
+  verified_bots = var.search_engines_allowed ? "(cf.client.bot and cf.verified_bot_category ne \"Search Engine Crawler\")" : "cf.client.bot"
+
+  # A site answers GET and HEAD alone. The dashboard and the API take other methods on the admin hostname, which no site term matches.
+  other_methods = "not http.request.method in {\"GET\" \"HEAD\"}"
+
+  # The paths scanners ask every host for. No static site answers one: it holds no PHP, and a `.env` file or a `.git` folder published by mistake is better not served.
+  scanner_paths = [
+    "ends_with(http.request.uri.path, \".php\")",
+    "ends_with(http.request.uri.path, \"/.env\")",
+    "http.request.uri.path contains \"/.env.\"",
+    "http.request.uri.path contains \"/.git/\"",
+    "starts_with(http.request.uri.path, \"/wp-admin/\")",
+    "starts_with(http.request.uri.path, \"/cgi-bin/\")",
+    "starts_with(lower(http.request.uri.path), \"/phpmyadmin\")",
+  ]
+
+  # Cloudflare's own paths, where the login of a private site answers: the bots rule leaves them alone.
+  edge_paths = "not starts_with(http.request.uri.path, \"/cdn-cgi/\")"
+
+  # What the bots rule stops on a site hostname: a verified bot, a method no site answers, and a scanner path.
+  bots_expression = "${local.sites_expression} and ${local.edge_paths} and (${local.verified_bots} or ${local.other_methods} or ${join(" or ", local.scanner_paths)})"
 
   # The guard rules in the order they run.
   guard_rules = concat(
     var.outside_pages == "blocked" ? [{ ref = "poplin_outside_pages", description = "poplin: stop pages of other domains", expression = local.outside_pages_expression }] : [],
-    [{ ref = "poplin_bots", description = "poplin: stop verified bots", expression = local.bots_expression }],
+    [{ ref = "poplin_bots", description = "poplin: stop verified bots, other methods, and scanner paths", expression = local.bots_expression }],
   )
 
   # Why the zone's bot switches are left alone, or null when the module sets them.
@@ -106,7 +130,8 @@ locals {
 
   # The zone values the module owns: the records, routes, and rules above follow them in the same apply.
   zone_binding = {
-    domain = local.domain
+    domain      = local.domain
+    public_word = var.public_word
   }
 
   # Every setting in the text form `poplin config` takes.
@@ -118,8 +143,6 @@ locals {
     logins                      = join(",", var.logins)
     dashboard_title             = coalesce(var.dashboard_title, local.admin_host)
     gallery                     = var.gallery ? "on" : "off"
-    cache_html                  = var.cache_html
-    cache_files                 = var.cache_files
     private_sites               = "single-file"
     outside_pages               = var.outside_pages
     search_engines_allowed      = var.search_engines_allowed ? "on" : "off"

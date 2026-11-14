@@ -200,7 +200,7 @@ describe("parseCommand", () => {
     ["poplin config versions_kep", refusal('unknown setting "versions_kep"', "did you mean versions_kept?")],
     ["poplin config colour", refusal('unknown setting "colour"', "poplin config shows every setting")],
     ["poplin config versions_kept 0", refusal('"0" is not a value of versions_kept', "for example: poplin config versions_kept 3")],
-    ["poplin config cache_html soon", refusal('"soon" is not a value of cache_html', "for example: poplin config cache_html 60s")],
+    ["poplin config default_expires soon", refusal('"soon" is not a value of default_expires', "for example: poplin config default_expires never")],
     ["poplin config --reset", refusal("--reset needs the key to put back", "poplin config <key> --reset")],
     ["poplin config versions_kept 10 --reset", refusal("--reset takes no value", "poplin config versions_kept --reset")],
     ["poplin list --server=", refusal("--server needs the address of an install")],

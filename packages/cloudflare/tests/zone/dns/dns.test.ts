@@ -206,6 +206,12 @@ describe("refusedRecords", () => {
       names: ["*.eu.status-poplin.example.com", "status-poplin.example.com"],
     },
     {
+      name: "the zone's own hostname that ends in the public word, which the public route would take",
+      layout: LAYOUT,
+      records: [proxied("f1", "home-page.example.com", "A"), foreign("f2", "homepage.example.com", "A")],
+      names: ["home-page.example.com"],
+    },
+    {
       name: "the zone's own record under the admin hostname, which the admin route would take",
       layout: LAYOUT,
       records: [proxied("f1", "poplin.example.com", "A")],

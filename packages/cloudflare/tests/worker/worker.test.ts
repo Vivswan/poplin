@@ -7,7 +7,8 @@ import { settingsFromText } from "@poplin/core/src/records/settings";
 import { beforeEach, describe, expect, test } from "vitest";
 import bundle from "../../dist/worker.js?raw";
 import type { Bindings } from "../../src/worker/bindings";
-import { ADMIN, ask, api, BINDINGS, cookieOf, countedBindings, done, installOf, instance, logIn, OWNER, type Published, page, publish, tokenOf, type World, wait, world } from "./support/install";
+import { signer } from "../login/support/access";
+import { ADMIN, accessHeaders, ask, api, BINDINGS, cookieOf, countedBindings, done, installOf, instance, logIn, OWNER, type Published, page, publish, tokenOf, type World, under, wait, world } from "./support/install";
 
 /** The largest bundle that passes: three times today's, so a library pulled in whole fails here. */
 const MOST_BUNDLE_BYTES = 1_000_000;
@@ -106,7 +107,7 @@ beforeEach(async () => {
 });
 
 describe("an instance's first request", () => {
-  // Drift: two instances that start together would each store settings and a key of their own, and a session made by one would be no session at the other.
+  // Drift: two instances that start together would each store settings and a key of their own, and a dashboard session made by one would be no session at the other.
   test("two instances starting together on an empty database end with the schema, one settings record from FIRST_SETTINGS, and one signing key", async () => {
     const [one, other] = [instance(w), instance(w)];
     const started = await Promise.all([ask(one, `${ADMIN}/api/whoami`), ask(other, `${ADMIN}/api/whoami`)]);
@@ -116,14 +117,13 @@ describe("an instance's first request", () => {
 
     const stored = (await database.listAudit({ limit: 100 })).filter((entry) => entry.action === "settings_set");
 
-    const site = await publish(other, await tokenOf(w, "publisher"), { name: "notes" }, [page("<p>notes</p>")]);
     const session = cookieOf(await logIn(one, w));
-    const opened = await ask(other, `${site.addresses.site}/`, { headers: { Cookie: session } });
+    const opened = await ask(other, `${ADMIN}/`, { headers: { Cookie: session } });
 
     expect(started.map((answer) => answer.status)).toEqual([401, 401]);
     expect(await database.readSettings()).toEqual(first.values);
     expect(stored.map((entry) => entry.by)).toEqual([OWNER]);
-    expect({ status: opened.status, text: await opened.text() }).toEqual({ status: 200, text: "<p>notes</p>" });
+    expect(opened.status).toBe(200);
   });
 
   // Drift: a later apply of the module changes FIRST_SETTINGS; an instance that read the binding again would overwrite what the dashboard set.
@@ -193,35 +193,120 @@ describe("an instance's first request", () => {
 });
 
 describe("the product, from a token to an opened site", () => {
-  // Drift: any one join could break alone: the API's install, serving's session reader, the login's cookie domain, or the address the API prints against the one serving reads.
-  test("a site published through the API is private until the login, public under its public name, and gone from an address a new link replaced", async () => {
+  // Drift: any one join could break alone: the API's install, the token check in front of serving, the login's cookie, or the address the API prints against the one serving reads.
+  test("a site published through the API is private behind the letter p, public under its public name, and gone from an address a new link replaced", async () => {
     const worker = instance(w);
     const token = await tokenOf(w, "publisher");
     const site = await publish(worker, token, { name: "report" }, [page("<h1>report</h1>"), { path: "data/table.csv", body: new TextEncoder().encode("a,b\n1,2\n"), type: "text/csv" }]);
-    const home = `${site.addresses.site}/`;
+    const owner = await accessHeaders(w);
+    const printed = site.addresses.site;
 
-    const closed = await ask(worker, home);
-    const login = await logIn(worker, w, closed.headers.get("Location") ?? "");
-    const session = { Cookie: cookieOf(login) };
-    const opened = await ask(worker, home, { headers: session });
-    const file = await ask(worker, `${site.addresses.site}/data/table.csv`, { headers: session });
+    const open = await ask(worker, `${under(site, "u")}/data/table.csv?x=1`);
+    const around = await ask(worker, `${under(site, "p")}/`);
+    const opened = await ask(worker, `${under(site, "p")}/`, { headers: owner });
+    const file = await ask(worker, `${under(site, "p")}/data/table.csv`, { headers: owner });
+    const login = await logIn(worker, w, `${ADMIN}/login?return=${encodeURIComponent(`${under(site, "p")}/`)}`);
 
     const shown = await done<{ site: Published }>(await api(worker, token, "PATCH", ROUTES.updateSite.path({ site: site.label }), { access: "public", public_name: "yearly" }));
     const named = await ask(worker, "https://yearly-page.example.com/");
+    const stale = await ask(worker, `${under(site, "p")}/data/table.csv?x=1`, { headers: owner });
     const moved = await done<{ site: Published }>(await api(worker, token, "POST", ROUTES.newLink.path({ site: site.label })));
-    const old = await ask(worker, home, { headers: session });
-    const fresh = await ask(worker, `${moved.site.addresses.site}/`);
+    const old = [await ask(worker, `${under(site, "p")}/`, { headers: owner }), await ask(worker, `${under(site, "u")}/`)];
+    const fresh = await ask(worker, `${under(moved.site, "u")}/`);
 
-    expect({ status: closed.status, to: closed.headers.get("Location") }).toEqual({ status: 302, to: `${ADMIN}/login?return=${encodeURIComponent(home)}` });
-    expect({ status: login.status, to: login.headers.get("Location"), cache: login.headers.get("Cache-Control") }).toEqual({ status: 302, to: home, cache: "no-store" });
-    expect(login.headers.get("Set-Cookie")).toMatch(/^__Secure-poplin-session=[^;]+; Secure; HttpOnly; SameSite=Lax; Path=\/; Max-Age=\d+; Domain=example\.com$/);
-    expect({ status: opened.status, type: opened.headers.get("Content-Type"), text: await opened.text() }).toMatchObject({ status: 200, text: "<h1>report</h1>" });
+    expect({ status: open.status, to: open.headers.get("Location") }).toEqual({ status: 302, to: `${under(site, "p")}/data/table.csv?x=1` });
+    expect({ status: around.status, to: around.headers.get("Location"), text: await around.text() }).toEqual({ status: 404, to: null, text: "Not found\n" });
+    expect({ status: opened.status, cache: opened.headers.get("Cache-Control"), text: await opened.text() }).toEqual({ status: 200, cache: "private, no-cache", text: "<h1>report</h1>" });
     expect({ status: file.status, type: file.headers.get("Content-Type"), text: await file.text() }).toEqual({ status: 200, type: "text/csv", text: "a,b\n1,2\n" });
+    expect({ status: login.status, to: login.headers.get("Location"), cache: login.headers.get("Cache-Control") }).toEqual({ status: 302, to: "/", cache: "no-store" });
+    expect(login.headers.get("Set-Cookie")).toMatch(/^__Secure-poplin-session=[^;]+; Secure; HttpOnly; SameSite=Lax; Path=\/; Max-Age=\d+$/);
     expect(shown.site.addresses.public).toBe("https://yearly-page.example.com");
     expect({ status: named.status, text: await named.text() }).toEqual({ status: 200, text: "<h1>report</h1>" });
+    expect({ status: stale.status, to: stale.headers.get("Location") }).toEqual({ status: 302, to: `${under(site, "u")}/data/table.csv?x=1` });
     expect((await (await installOf(w)).database.listAudit({ limit: 100 })).filter((entry) => entry.action === "login").map((entry) => entry.by)).toEqual([OWNER]);
-    expect(moved.site.addresses.site).not.toBe(site.addresses.site);
-    expect([old.status, fresh.status]).toEqual([404, 200]);
+    expect([printed, shown.site.addresses.site, moved.site.id === site.id]).toEqual([under(site, "p"), under(site, "u"), false]);
+    expect([...old.map((answer) => answer.status), old[1]?.headers.get("Location"), fresh.status]).toEqual([404, 302, `${under(site, "p")}/`, 200]);
+  });
+
+  const cameAround: readonly (readonly [string, (from: World) => Promise<Record<string, string>>])[] = [
+    ["no token", async () => ({})],
+    ["a token that is no token", async () => ({ "Cf-Access-Jwt-Assertion": "garbage" })],
+    ["an empty token", async () => ({ "Cf-Access-Jwt-Assertion": "" })],
+    ["a token another key signed under the team's key id", async (from) => accessHeaders(from, {}, await signer("stranger-key"))],
+    ["a token of another application", (from) => accessHeaders(from, { aud: ["0000000000000000000000000000000000000000000000000000000000000000"] })],
+    ["a token of another team", (from) => accessHeaders(from, { iss: "https://other.cloudflareaccess.com" })],
+    ["a token past its expiry", (from) => accessHeaders(from, { exp: Math.floor(from.clock.now / 1000) - 3600 })],
+    ["a token not yet valid", (from) => accessHeaders(from, { nbf: Math.floor(from.clock.now / 1000) + 3600 })],
+    ["a token that names no email", (from) => accessHeaders(from, { email: undefined })],
+    ["a token for an email that is not in the logins", (from) => accessHeaders(from, { email: "guest@example.com" })],
+    ["the owner's dashboard session and no token", async (from) => ({ Cookie: cookieOf(await logIn(instance(from), from)) })],
+    ["a claim to be the owner in a header Access never sets", async () => ({ "Cf-Access-Authenticated-User-Email": OWNER })],
+  ];
+
+  // Drift: a request that reached the Worker around Access would get a private site's file, or a redirect that confirms the site exists, or would cost the database a query.
+  test.each(cameAround)("under p, %s gets the one 404 for a private site, an unlisted one, and no site alike, and no call to the database or the bucket", async (_what, headers) => {
+    const tally = { calls: 0 };
+    const worker = instance(w);
+    await ask(worker, `${ADMIN}/api/whoami`, {}, countedBindings(tally));
+    const token = await tokenOf(w, "publisher");
+    const hidden = await publish(worker, token, { name: "report" }, [page("<h1>report</h1>")]);
+    const linked = await publish(worker, token, { name: "notes", access: "unlisted" }, [page("<p>notes</p>")]);
+    const sent = await headers(w);
+    await ask(worker, `${under(hidden, "p")}/`, { headers: await accessHeaders(w) });
+
+    tally.calls = 0;
+    const answers = [await ask(worker, `${under(hidden, "p")}/`, { headers: sent }), await ask(worker, `${under(linked, "p")}/`, { headers: sent }), await ask(worker, `${under({ label: "nobody--000000000000" }, "p")}/`, { headers: sent })];
+    const whole = await Promise.all(answers.map(async (answer) => ({ status: answer.status, to: answer.headers.get("Location"), cache: answer.headers.get("Cache-Control"), text: await answer.text() })));
+
+    expect({ whole, calls: tally.calls }).toEqual({ whole: answers.map(() => ({ status: 404, to: null, cache: "no-store", text: "Not found\n" })), calls: 0 });
+  });
+
+  // Drift: a token check that fetched the team's keys, or read the logins, on every request would make a private page cost a network call or a second query.
+  test("a private page view on a warm instance costs one site query, one request count, one file read, and no fetch of the team's keys", async () => {
+    const tally = { calls: 0 };
+    const worker = instance(w);
+    await ask(worker, `${ADMIN}/api/whoami`, {}, countedBindings(tally));
+    const site = await publish(worker, await tokenOf(w, "publisher"), { name: "report" }, [page("<h1>report</h1>")]);
+    const owner = await accessHeaders(w);
+    await ask(worker, `${under(site, "p")}/`, { headers: owner });
+
+    tally.calls = 0;
+    const fetched = w.certs.calls.length;
+    const view = await ask(worker, `${under(site, "p")}/`, { headers: owner });
+
+    expect({ status: view.status, text: await view.text(), calls: tally.calls, fetches: [fetched, w.certs.calls.length] }).toEqual({ status: 200, text: "<h1>report</h1>", calls: 3, fetches: [1, 1] });
+  });
+
+  // Drift: a token that cannot be checked would be let through, or a private site would look deleted for as long as the team's keys cannot be had.
+  test("while the team's keys cannot be had, a request under p with a token is told to try again and gets no file", async () => {
+    const worker = instance(w);
+    const site = await publish(worker, await tokenOf(w, "publisher"), { name: "report" }, [page("<h1>report</h1>")]);
+    w.certs.down = true;
+    const answer = await ask(worker, `${under(site, "p")}/`, { headers: await accessHeaders(w) });
+
+    expect({ status: answer.status, retry: answer.headers.get("Retry-After"), cache: answer.headers.get("Cache-Control"), text: await answer.text() }).toEqual({
+      status: 503,
+      retry: "60",
+      cache: "no-store",
+      text: "The login cannot be checked right now. Try again.\n",
+    });
+  });
+
+  // Drift: Access keeps a person's session for 30 days, so a login removed on the dashboard would keep every private site until that session ends.
+  test("a person whose login is removed keeps a private site for the rest of the instance's minute and is then refused, token and all", async () => {
+    const two = withBindings({ FIRST_SETTINGS: { ...FIRST, logins: `${OWNER},second@example.com` } });
+    const worker = instance(w);
+    await ask(worker, `${ADMIN}/api/whoami`, {}, two);
+    const site = await publish(worker, await tokenOf(w, "publisher"), { name: "report" }, [page("<h1>report</h1>")]);
+    const second = await accessHeaders(w, { email: "second@example.com" });
+
+    const before = await ask(worker, `${under(site, "p")}/`, { headers: second });
+    await done(await api(worker, await tokenOf(w, "admin"), "PATCH", ROUTES.changeConfig.path(), { logins: [OWNER] }));
+    const withinTheMinute = await ask(worker, `${under(site, "p")}/`, { headers: second });
+    wait(w, 1 / 60);
+    const afterTheMinute = await ask(worker, `${under(site, "p")}/`, { headers: second });
+
+    expect([before.status, withinTheMinute.status, afterTheMinute.status, (await ask(worker, `${under(site, "p")}/`, { headers: await accessHeaders(w) })).status]).toEqual([200, 200, 404, 200]);
   });
 
   // Drift: an entry that read a file to pass it on would hold all of it in memory and could send it without its length.
@@ -255,6 +340,35 @@ describe("the product, from a token to an opened site", () => {
     expect({ status: view.status, text: await view.text(), calls: tally.calls }).toEqual({ status: 200, text: "<p>docs</p>", calls: 3 });
   });
 
+  // Drift: a page a browser asks about again would cost a bucket call each time, or a visitor who holds an older version would keep its styles and scripts beside the new page for a day.
+  test("a page asked for again costs the site query and the request count alone; after a publish and after a rollback it comes whole, with the word to drop the cached files", async () => {
+    const tally = { calls: 0 };
+    const worker = instance(w);
+    await ask(worker, `${ADMIN}/api/whoami`, {}, countedBindings(tally));
+    const token = await tokenOf(w, "admin");
+    const site = await publish(worker, token, { name: "docs", access: "unlisted" }, [page("<p>one</p>")]);
+    const home = `${under(site, "u")}/`;
+    const holding = (tag: string | null): Promise<Response> => ask(worker, home, { headers: { "If-None-Match": tag ?? "" } });
+    const first = await ask(worker, home);
+    const one = first.headers.get("ETag");
+
+    tally.calls = 0;
+    const same = await holding(one);
+    const calls = tally.calls;
+
+    wait(w, 1);
+    await publish(worker, token, { site: site.label }, [page("<p>two</p>")]);
+    const newer = await holding(one);
+    const two = newer.headers.get("ETag");
+    await done(await api(worker, token, "POST", ROUTES.rollbackSite.path({ site: site.label }), { version: 1 }));
+    const back = await holding(two);
+
+    expect({ status: first.status, cache: first.headers.get("Cache-Control"), clear: first.headers.get("Clear-Site-Data") }).toEqual({ status: 200, cache: "public, max-age=300, must-revalidate", clear: null });
+    expect({ status: same.status, text: await same.text(), calls }).toEqual({ status: 304, text: "", calls: 2 });
+    expect({ status: newer.status, clear: newer.headers.get("Clear-Site-Data"), text: await newer.text(), changed: two !== one }).toEqual({ status: 200, clear: '"cache"', text: "<p>two</p>", changed: true });
+    expect({ status: back.status, clear: back.headers.get("Clear-Site-Data"), text: await back.text(), tag: back.headers.get("ETag") }).toEqual({ status: 200, clear: '"cache"', text: "<p>one</p>", tag: one });
+  });
+
   // Drift: the limits would sit behind serving, or count nothing for an address that names no site, and a probe of made-up names would run free.
   test.each([
     { name: "a public site", address: "https://docs-page.example.com/", served: 200 },
@@ -285,6 +399,21 @@ describe("the product, from a token to an opened site", () => {
     expect([renamed.status, real.status]).toEqual([200, 429]);
   });
 
+  // Drift: counted for the site, a request that only gets a redirect would let anyone who guessed an id use up a private site's minute, and the 429 would tell that the id is real.
+  test("a private site's address under the open letter spends nothing of that site's minute", async () => {
+    const strict = withBindings({ FIRST_SETTINGS: { ...FIRST, site_requests_per_minute: "1" } });
+    const worker = instance(w);
+    await ask(worker, `${ADMIN}/api/whoami`, {}, strict);
+    const site = await publish(worker, await tokenOf(w, "publisher"), { name: "report" }, [page("<h1>report</h1>")]);
+    const owner = await accessHeaders(w);
+
+    const probes = [await ask(worker, `${under(site, "u")}/`, { headers: { "CF-Connecting-IP": "203.0.113.7" } }), await ask(worker, `${under(site, "u")}/`, { headers: { "CF-Connecting-IP": "203.0.113.8" } })];
+    const real = await ask(worker, `${under(site, "p")}/`, { headers: { ...owner, "CF-Connecting-IP": "198.51.100.9" } });
+    const again = await ask(worker, `${under(site, "p")}/`, { headers: { ...owner, "CF-Connecting-IP": "192.0.2.44" } });
+
+    expect([...probes.map((probe) => probe.status), real.status, again.status]).toEqual([302, 302, 200, 429]);
+  });
+
   // Drift: the routes should make a stray hostname impossible; if one arrives, it must not be read as the dashboard or as a site.
   test.each(["https://example.org/", "https://example.com/", "https://plain.example.com/", "https://poplin.example.com.example.org/api/whoami"])("%s is neither the admin hostname nor a site's and gets serving's 404", async (address) => {
     const answer = await ask(instance(w), address);
@@ -310,12 +439,13 @@ describe("the admin hostname", () => {
     expect([unsigned.headers.get("Set-Cookie"), posted.headers.get("Allow")]).toEqual([null, "GET"]);
   });
 
-  // Drift: the dashboard would be mounted without a session reader, or with one that trusts a key the install no longer has.
-  test("the dashboard shows the sites to a session and sends anyone else to the login; signing everyone out ends a session there at once, and at another instance's sites within its minute", async () => {
+  // Drift: the dashboard would be mounted without a session reader, or with one that trusts a key the install no longer has; or its session would open, or its sign-out would close, a private site.
+  test("the dashboard shows the sites to a session and sends anyone else to the login; signing everyone out ends the dashboard's sessions at once and leaves a private site to Access", async () => {
     const worker = instance(w);
     const token = await tokenOf(w, "admin");
     const site = await publish(worker, token, { name: "report" }, [page("<h1>report</h1>")]);
     const session = { Cookie: cookieOf(await logIn(worker, w)) };
+    const owner = await accessHeaders(w);
 
     const stranger = await ask(worker, `${ADMIN}/`);
     const sites = await ask(worker, `${ADMIN}/`, { headers: session });
@@ -323,19 +453,16 @@ describe("the admin hostname", () => {
     const after = await done<{ site: Published }>(await api(worker, token, "GET", ROUTES.getSite.path({ site: site.label })));
     const unknown = await ask(worker, `${ADMIN}/no-such-page`, { headers: session });
 
-    const elsewhere = instance(w);
-    const privately = await ask(elsewhere, `${site.addresses.site}/`, { headers: session });
     await done(await api(worker, token, "DELETE", ROUTES.signEveryoneOut.path()));
     const signedOut = await ask(worker, `${ADMIN}/`, { headers: session });
-    const withinTheMinute = await ask(elsewhere, `${site.addresses.site}/`, { headers: session });
     wait(w, 1 / 60);
-    const afterTheMinute = await ask(elsewhere, `${site.addresses.site}/`, { headers: session });
+    const privately = await ask(worker, `${under(site, "p")}/`, { headers: owner });
 
     expect({ status: stranger.status, to: stranger.headers.get("Location") }).toEqual({ status: 302, to: `${ADMIN}/login?return=${encodeURIComponent("/")}` });
     expect({ status: sites.status, page: (await sites.text()).includes(site.label), policy: sites.headers.get("Content-Security-Policy") }).toMatchObject({ status: 200, page: true });
     expect(sites.headers.get("Content-Security-Policy")).toContain("default-src 'none'");
     expect([unmarked.status, after.site.state, unknown.status]).toEqual([403, "live", 404]);
-    expect([privately.status, signedOut.status, withinTheMinute.status, afterTheMinute.status]).toEqual([200, 302, 200, 302]);
+    expect([signedOut.status, privately.status]).toEqual([302, 200]);
   });
 });
 

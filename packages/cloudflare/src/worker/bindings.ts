@@ -11,12 +11,12 @@ export interface Bindings {
   /** The one-minute request counts of every visitor and every site. */
   readonly MINUTE_LIMITS: RateLimit;
 
-  /** The zone values of an install with a domain, unchecked: the domain, and the public word when the install chose one. Absent on a Worker bound to no zone. */
+  /** The install's zone values, unchecked: the domain, and the public word when the install chose one. */
   readonly ZONE: unknown;
 
-  /** Every setting in its text form, unchecked: what the Worker stores while it has no settings. Absent on a Worker that setup gives its settings. */
+  /** Every setting in its text form, unchecked: what the Worker stores while it has no settings, and never reads once it has them. */
   readonly FIRST_SETTINGS: unknown;
 
-  /** The Access application in front of the login path, unchecked: the team's domain and the application's audience tag. */
+  /** The Access application in front of the login path and of every private site, unchecked: the team's domain and the application's audience tag. */
   readonly ACCESS: unknown;
 }

@@ -2,12 +2,10 @@ import { describe, expect, test } from "bun:test";
 
 import { sweepExpired } from "@poplin/core/src/actions/sweep";
 import { type ROUTES, STORED_TYPE_HEADER } from "@poplin/core/src/api/routes";
-import { importSessionKey } from "@poplin/core/src/auth/cookie";
-import { type Login, parseLogins } from "@poplin/core/src/auth/logins";
+import type { Login, } from "@poplin/core/src/auth/logins";
 
-import { mintSessionCookie, readSession } from "../../src/login/session";
 import { serveSite } from "../../src/sites/serve";
-import { ADDRESSES, LAYOUT } from "../sites/support/layout";
+import { ADDRESSES, } from "../sites/support/layout";
 import { type Answered, type ApiInstall, NOW, openApi, requestOf } from "./support/install";
 
 type RouteName = keyof typeof ROUTES;
@@ -186,22 +184,18 @@ async function stateOf(install: ApiInstall): Promise<unknown> {
   return [await sitesOf(install), await storeOf(install), await install.audit(), uploads.map((upload) => [upload.id, upload.state])];
 }
 
-/** Serve one request from an install's database and store, as the Worker does, with a session of the admin when `signedIn`. `site` is a label or a public name. */
+/** Serve one request from an install's database and store, as the Worker does. `site` is a label or a public name; `signedIn` asks a label under the letter of the login, with the login's proof. */
 async function served(install: ApiInstall, site: string, signedIn: boolean): Promise<[status: number, body: string]> {
-  const host = site.includes("--") ? `${site}-p-poplin.example.com` : `${site}-page.example.com`;
-  const logins = parseLogins([ADMIN_EMAIL]);
+  const host = site.includes("--") ? `${site}-${signedIn ? "p" : "u"}-poplin.example.com` : `${site}-page.example.com`;
   const settings = await install.database.readSettings();
-  if (!logins.ok || settings === undefined) throw new Error("the test's serving was refused");
+  if (settings === undefined) throw new Error("the test's serving was refused");
 
-  const key = await importSessionKey(new Uint8Array(32).fill(7));
-  const cookie = await mintSessionCookie({ email: ADMIN_EMAIL as Login, key, now: NOW, domain: LAYOUT.domain });
-  const headers: Record<string, string> = signedIn ? { Cookie: cookie.slice(0, cookie.indexOf(";")) } : {};
-  const response = await serveSite(new Request(`https://${host}/`, { headers }), {
+  const response = await serveSite(new Request(`https://${host}/`), {
     database: install.database,
     store: install.store,
     settings,
     addresses: ADDRESSES,
-    readSession: (sent) => readSession(sent, { key, logins: logins.value, now: NOW }),
+    identify: async () => ({ ok: signedIn }),
     now: () => NOW,
   });
 

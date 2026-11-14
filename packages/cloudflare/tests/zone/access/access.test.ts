@@ -6,7 +6,8 @@ import { page, reply, withFake } from "../support/fake-cloudflare";
 import { hostOf } from "../support/layouts";
 
 const ADMIN = hostOf("poplin.example.com");
-const WORKER = hostOf("poplin.an-account.workers.dev");
+const PRIVATE_SITES = "*-p-poplin.example.com";
+const SESSION = { session_duration: "720h", http_only_cookie_attribute: true, same_site_cookie_attribute: "lax" };
 const NOTHING = { policies: [], applications: [] };
 
 function loginsOf(...emails: string[]): Parameters<typeof planAccess>[0]["logins"] {
@@ -24,16 +25,19 @@ function policy(id: string, emails: readonly string[], more: Partial<Policy> = {
   return { id, name: "poplin logins", decision: "allow", include: emails.map((email) => ({ email: { email } })), exclude: [], require: [], ...more };
 }
 
+/** The application as the install wants it: over the login path and over the private sites. */
 function application(id: string, hostname: string, policyId: string, more: Partial<Application> = {}): Application {
   const uri = `${hostname}/login`;
+  const uris = [uri, PRIVATE_SITES];
 
   return {
     id,
     name: "poplin",
     type: "self_hosted",
     domain: uri,
-    destinations: [{ type: "public", uri }],
+    destinations: uris.map((each) => ({ type: "public", uri: each })),
     policies: [{ id: policyId }],
+    ...SESSION,
     ...more,
   };
 }
@@ -42,19 +46,15 @@ describe("planAccess", () => {
   const owner = loginsOf("owner@example.com", "second@example.com");
   const emails = ["owner@example.com", "second@example.com"];
 
-  const installs: readonly { readonly name: string; readonly hostname: typeof ADMIN }[] = [
-    { name: "an install with a domain, on the admin hostname", hostname: ADMIN },
-    { name: "an install with no domain, on the Worker's workers.dev hostname", hostname: WORKER },
-  ];
-
-  test.each(installs)("$name: an account with no Access gets the policy, then the application over the login path linked to it", ({ hostname }) => {
-    expect(planAccess({ hostname, logins: owner }, NOTHING)).toEqual([
+  // Drift: a private site's address left out of the application reaches the Worker with no token, and every private site answers 404 to its owner.
+  test("an account with no Access gets the policy, then the one application over the login path and the private sites, linked to it", () => {
+    expect(planAccess({ hostname: ADMIN, logins: owner, privateSites: PRIVATE_SITES }, NOTHING)).toEqual([
       { kind: "create", subject: "poplin logins", emails },
-      { kind: "create", subject: "poplin", uris: [`${hostname}/login`], policyId: undefined },
+      { kind: "create", subject: "poplin", uris: ["poplin.example.com/login", PRIVATE_SITES], policyId: undefined },
     ]);
   });
 
-  test.each(installs)("$name planned again over its own policy and application changes nothing and says so", ({ hostname }) => {
+  test("planned again over its own policy and application, beside the owner's own, it changes nothing and says so", () => {
     const current = {
       policies: [
         { id: "pol-0", name: "the owner's own policy", decision: "allow", include: [{ everyone: {} }] },
@@ -62,10 +62,10 @@ describe("planAccess", () => {
       ],
       applications: [
         { id: "app-0", name: "the owner's own application", type: "self_hosted", domain: "wiki.example.com" },
-        application("app-1", hostname, "pol-1"),
+        application("app-1", ADMIN, "pol-1"),
       ],
     };
-    const steps = planAccess({ hostname, logins: owner }, current);
+    const steps = planAccess({ hostname: ADMIN, logins: owner, privateSites: PRIVATE_SITES }, current);
 
     expect(steps).toEqual([
       { kind: "leave", subject: "poplin logins" },
@@ -90,7 +90,7 @@ describe("planAccess", () => {
   test.each(widened)("$name: the policy is changed back to exactly the login list, the application left", ({ policy: drifted }) => {
     const current = { policies: [drifted], applications: [application("app-1", ADMIN, "pol-1")] };
 
-    expect(planAccess({ hostname: ADMIN, logins: owner }, current)).toEqual([
+    expect(planAccess({ hostname: ADMIN, logins: owner, privateSites: PRIVATE_SITES }, current)).toEqual([
       { kind: "change", subject: "poplin logins", id: "pol-1", emails },
       { kind: "leave", subject: "poplin" },
     ]);
@@ -103,14 +103,24 @@ describe("planAccess", () => {
     {
       name: "an override made the login path public",
       application: application("app-1", ADMIN, "pol-1", {
-        destinations: [{ type: "public", uri: "poplin.example.com/login", overrides: [{ behavior: "public", path_pattern: "/login" }] }],
+        destinations: [
+          { type: "public", uri: "poplin.example.com/login", overrides: [{ behavior: "public", path_pattern: "/login" }] },
+          { type: "public", uri: PRIVATE_SITES },
+        ],
       }),
     },
+    { name: "the private sites were taken out", application: application("app-1", ADMIN, "pol-1", { destinations: [{ type: "public", uri: "poplin.example.com/login" }] }) },
+    { name: "the private sites were widened to every hostname", application: application("app-1", ADMIN, "pol-1", { destinations: [{ type: "public", uri: "poplin.example.com/login" }, { type: "public", uri: "*.example.com" }] }) },
+    { name: "the session was made a day", application: application("app-1", ADMIN, "pol-1", { session_duration: "24h" }) },
+    { name: "the cookie was opened to scripts", application: application("app-1", ADMIN, "pol-1", { http_only_cookie_attribute: false }) },
+    { name: "the cookie was opened to other sites' requests", application: application("app-1", ADMIN, "pol-1", { same_site_cookie_attribute: "none" }) },
+    { name: "the cookie attributes were never set, as on an application made before them", application: application("app-1", ADMIN, "pol-1", { http_only_cookie_attribute: undefined, same_site_cookie_attribute: undefined }) },
     {
       name: "a destination was added",
       application: application("app-1", ADMIN, "pol-1", {
         destinations: [
           { type: "public", uri: "poplin.example.com/login" },
+          { type: "public", uri: PRIVATE_SITES },
           { type: "public", uri: "wiki.example.com" },
         ],
       }),
@@ -120,15 +130,16 @@ describe("planAccess", () => {
   test.each(moved)("$name: the application is changed back by its id, the policy left", ({ application: drifted }) => {
     const current = { policies: [policy("pol-1", emails)], applications: [drifted] };
 
-    expect(planAccess({ hostname: ADMIN, logins: owner }, current)).toEqual([
+    expect(planAccess({ hostname: ADMIN, logins: owner, privateSites: PRIVATE_SITES }, current)).toEqual([
       { kind: "leave", subject: "poplin logins" },
-      { kind: "change", subject: "poplin", id: "app-1", uris: ["poplin.example.com/login"], policyId: "pol-1" },
+      { kind: "change", subject: "poplin", id: "app-1", uris: ["poplin.example.com/login", PRIVATE_SITES], policyId: "pol-1" },
     ]);
   });
 });
 
 describe("syncAccess", () => {
-  test("two runs against one account: the first creates the policy and links the application to its new id, the second sends no change", async () => {
+  // Drift: setup would make an application the OpenTofu module's next apply rewrites, or one per run.
+  test("two runs against one account: the first creates the policy and the one application with both destinations and the session, linked to the policy's new id; the second sends no change", async () => {
     const policies: Record<string, unknown>[] = [];
     const applications: Record<string, unknown>[] = [{ id: "app-0", name: "the owner's own application", type: "self_hosted", domain: "wiki.example.com" }];
 
@@ -144,7 +155,7 @@ describe("syncAccess", () => {
         return reply(made);
       },
       async (connection, asked) => {
-        const desired = { hostname: ADMIN, logins: loginsOf("owner@example.com") };
+        const desired = { hostname: ADMIN, logins: loginsOf("owner@example.com"), privateSites: PRIVATE_SITES };
         const first = await syncAccess(connection, "account-a", desired, "apply");
         const sent = asked.length;
         const second = await syncAccess(connection, "account-a", desired, "apply");
@@ -160,8 +171,12 @@ describe("syncAccess", () => {
               name: "poplin",
               type: "self_hosted",
               domain: "poplin.example.com/login",
-              destinations: [{ type: "public", uri: "poplin.example.com/login" }],
+              destinations: [
+                { type: "public", uri: "poplin.example.com/login" },
+                { type: "public", uri: PRIVATE_SITES },
+              ],
               policies: [{ id: "made-0", precedence: 1 }],
+              ...SESSION,
             },
           ],
         ]);

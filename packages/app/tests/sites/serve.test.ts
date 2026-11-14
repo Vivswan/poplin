@@ -1,7 +1,7 @@
 import { beforeAll, describe, expect, test } from "bun:test";
 import type { Site } from "@poplin/core/src/records/site";
 import { serveSite } from "../../src/sites/serve";
-import { type Install, labelHost, NOW, openInstall } from "./support/install";
+import { type Install, labelHost, NOW, openInstall, typedHost } from "./support/install";
 
 const HTML = "text/html; charset=utf-8";
 const SCRIPT = "text/javascript";
@@ -19,7 +19,11 @@ const PLAIN_HEADERS = {
   "x-robots-tag": "noindex",
 };
 
+const MISSING_ID = "000000000000";
+const HOMES = ["hidden home", "report home", "shop home", "", "", ""];
+
 const NOT_FOUND = { status: 404, body: "Not found\n", headers: { ...PLAIN_HEADERS, "content-type": "text/plain; charset=utf-8" } };
+const NO_FILE = { ...NOT_FOUND, headers: { ...NOT_FOUND.headers, "cache-control": "public, max-age=86400" } };
 
 const HARDENING = { "accept-ranges": "bytes", "referrer-policy": "no-referrer", "x-content-type-options": "nosniff" };
 const BLOCKING = { "content-security-policy": "frame-ancestors https://*.example.com", vary: "Sec-Fetch-Site, Sec-Fetch-Mode, Sec-Fetch-Dest, Origin, Referer" };
@@ -37,6 +41,8 @@ interface World {
 }
 
 type Serving = Install["serving"];
+type Typed = "p" | "u" | "no letter";
+type Outcome = "file" | "to p" | "to u" | "404";
 type Ask = (world: World) => Request;
 
 let world: World;
@@ -45,8 +51,8 @@ function ask(host: string, path: string, headers: Record<string, string> = {}, m
   return new Request(`https://${host}${path}`, { method, headers });
 }
 
-function withCookie(world: World, extra: Record<string, string> = {}): Record<string, string> {
-  return { Cookie: world.install.ownerCookie, ...extra };
+function withProof(world: World, extra: Record<string, string> = {}): Record<string, string> {
+  return { ...world.install.ownerProof, ...extra };
 }
 
 async function whole(response: Response): Promise<{ status: number; body: string; headers: Record<string, string> }> {
@@ -130,14 +136,14 @@ describe("methods", () => {
     expect({ ...(await whole(response)), opened: world.install.bodies.length - before }).toEqual({
       status: 200,
       body: "",
-      headers: { ...SITE_HEADERS, "cache-control": "public, max-age=60", "content-length": "10", "content-type": HTML, etag: expect.stringMatching(/^"[^"]+"$/) },
+      headers: { ...SITE_HEADERS, "cache-control": "public, max-age=300, must-revalidate", "content-length": "10", "content-type": HTML, etag: expect.stringMatching(/^"v1-[0-9a-z]+"$/) },
       opened: 0,
     });
   });
 
   // Drift: a refusal to a HEAD would carry a body, which HTTP forbids.
   test("HEAD of nothing is the 404 without its body", async () => {
-    expect(await whole(await serve(ask(labelHost(world.report), "/nothing.txt", {}, "HEAD")))).toEqual({ ...NOT_FOUND, body: "" });
+    expect(await whole(await serve(ask(labelHost(world.report), "/nothing.txt", {}, "HEAD")))).toEqual({ ...NO_FILE, body: "" });
   });
 });
 
@@ -151,13 +157,7 @@ describe("not found", () => {
     ["a public name no site holds", () => ask("nobody-page.example.com", "/")],
     ["the public name of a site that is not public", () => ask("report-page.example.com", "/")],
     ["the gallery with no handler", () => ask("gallery-page.example.com", "/")],
-    ["an id no site has, asked by the owner", (w) => ask("report--000000000000-p-poplin.example.com", "/", withCookie(w))],
-    ["a site in the trash, asked by the owner", (w) => ask(labelHost(w.trashed), "/", withCookie(w))],
-    ["a site past its expiry, asked by the owner", (w) => ask(labelHost(w.expired), "/", withCookie(w))],
-    ["a missing file of an unlisted site", (w) => ask(labelHost(w.report), "/nothing.txt")],
-    ["a missing page of an unlisted site", (w) => ask(labelHost(w.report), "/nothing")],
-    ["a missing file of a private site, asked by the owner", (w) => ask(labelHost(w.secret), "/nothing.txt", withCookie(w))],
-    ["a missing file of a public site at its public name", () => ask("shop-page.example.com", "/nothing.txt")],
+    ["a missing file of a private site, asked by the owner", (w) => ask(labelHost(w.secret), "/nothing.txt", withProof(w))],
   ];
 
   // Drift: one cause would get its own status, header, or wording, and a visitor could tell a private site from no site.
@@ -166,50 +166,73 @@ describe("not found", () => {
   });
 });
 
-describe("access", () => {
-  const strangers: readonly (readonly [string, (w: World) => string, string, Record<string, string>])[] = [
-    ["a private site", (w) => labelHost(w.secret), "/", {}],
-    ["a private site's file", (w) => labelHost(w.secret), "/app.js", {}],
-    ["a private site's missing file", (w) => labelHost(w.secret), "/nothing.txt?x=1", {}],
-    ["an id no site has", () => "secret--000000000000-p-poplin.example.com", "/", {}],
-    ["another name before a private id", (w) => `other--${w.secret.id}-p-poplin.example.com`, "/", {}],
-    ["a site in the trash", (w) => labelHost(w.trashed), "/", {}],
-    ["a site past its expiry", (w) => labelHost(w.expired), "/", {}],
-    ["a private site with a cookie nobody signed", (w) => labelHost(w.secret), "/", { Cookie: "__Secure-poplin-session=b3duZXJAZXhhbXBsZS5jb20.1700000000000.AAAA" }],
+describe("a missing file", () => {
+  const cases: readonly (readonly [string, Ask, string])[] = [
+    ["an unlisted site", (w) => ask(labelHost(w.report), "/favicon.ico"), "public, max-age=86400"],
+    ["an unlisted site, as a page", (w) => ask(labelHost(w.report), "/nothing"), "public, max-age=86400"],
+    ["a public site at its public name", () => ask("shop-page.example.com", "/favicon.ico"), "public, max-age=86400"],
+    ["a private site, under p with the owner's proof", (w) => ask(labelHost(w.secret), "/favicon.ico", withProof(w)), "no-store"],
   ];
 
-  // Drift: a stranger could tell a real private id from a made-up one, or the redirect would name a place the request chose.
-  test.each(strangers)("without a session, %s answers only the login redirect back to the address asked for", async (_why, host, path, headers) => {
-    const hostname = host(world);
-    const before = world.install.keys.length;
-    const response = await serve(ask(hostname, path, headers));
+  // Drift: a browser would ask the Worker for a missing icon on every page view, or would keep a 404 past the day a file was published in, or a 404 under p would be kept at all.
+  test.each(cases)("of %s is the 404 with the cache rule %3$s", async (_why, request, cache) => {
+    expect(await whole(await serve(request(world)))).toEqual({ ...NOT_FOUND, headers: { ...NOT_FOUND.headers, "cache-control": cache } });
+  });
+});
 
-    expect({ ...(await whole(response)), reads: world.install.keys.length - before }).toEqual({
-      status: 302,
-      body: "",
-      headers: { ...PLAIN_HEADERS, location: `https://poplin.example.com/login?return=${encodeURIComponent(`https://${hostname}${path}`)}` },
-      reads: 0,
-    });
+describe("access", () => {
+  // The six outcomes of a row stand for the record states: private, unlisted, public, missing, trashed, expired.
+  const table: readonly (readonly [Typed, boolean, readonly Outcome[]])[] = [
+    ["u", false, ["to p", "file", "file", "to p", "to p", "to p"]],
+    ["u", true, ["to p", "file", "file", "to p", "to p", "to p"]],
+    ["no letter", false, ["to p", "file", "file", "to p", "to p", "to p"]],
+    ["no letter", true, ["to p", "file", "file", "to p", "to p", "to p"]],
+    ["p", false, ["404", "404", "404", "404", "404", "404"]],
+    ["p", true, ["file", "to u", "to u", "404", "404", "404"]],
+  ];
+
+  // Drift: a private site's bytes would go out under the open letter or without the login's proof, a redirect would tell a real private id from a made-up one, or a name before the id would start to matter.
+  test.each(table)("under %s, with the owner's proof %p, the six record states answer %j, whatever name is typed", async (letter, proven, outcomes) => {
+    const sites = [world.secret, world.report, world.shop, { id: MISSING_ID, name: "nobody" }, world.trashed, world.expired];
+    const names = (site: (typeof sites)[number]): (string | undefined)[] => [site.name, "other", undefined];
+    const asked = sites.flatMap((site, at) => names(site).map((name) => ({ typed: { id: site.id, ...(name === undefined ? {} : { name }) }, outcome: outcomes[at] ?? "404", home: HOMES[at] ?? "" })));
+    const before = world.install.keys.length;
+
+    for (const { typed, outcome, home } of asked) {
+      const response = await serve(ask(typedHost(typed, letter === "no letter" ? undefined : letter), "/index.html?x=1", proven ? world.install.ownerProof : {}));
+      const moved = (to: "p" | "u"): unknown => ({ status: 302, body: "", headers: { ...PLAIN_HEADERS, location: `https://${typedHost(typed, to)}/index.html?x=1` } });
+      const answers = { file: { status: 200, body: home }, "to p": moved("p"), "to u": moved("u"), "404": NOT_FOUND };
+      const answered = await whole(response);
+
+      expect<unknown>([typed, outcome === "file" ? { status: answered.status, body: answered.body } : answered]).toEqual([typed, answers[outcome]]);
+    }
+
+    expect(world.install.keys.length - before).toBe(asked.filter(({ outcome }) => outcome === "file").length);
   });
 
-  // Drift: the login would set a cookie that never reaches a site hostname, and every private site would bounce forever.
-  test("the cookie the login mints for the parent domain opens a private site", async () => {
-    const response = await serve(ask(labelHost(world.secret), "/", { Cookie: `theme=dark; ${world.install.ownerCookie}` }));
+  // Drift: a request that came around the login would cost a database query, and a flood of them would be paid for by the install.
+  test("under p, a request without the proof is refused before anything is looked up", async () => {
+    const asked: unknown[] = [];
+    const database = { findServed: async (address: unknown) => void asked.push(address) };
 
-    expect(world.install.setCookie).toEndWith("; Domain=example.com");
-    expect({ ...(await whole(response)), headers: fixedHeaders(response) }).toEqual({
-      status: 200,
-      body: "hidden home",
-      headers: { ...SITE_HEADERS, "cache-control": "private, no-cache", "content-type": HTML },
-    });
+    expect([(await serve(ask(typedHost(world.secret, "p"), "/"), { database: database as never })).status, asked]).toEqual([404, []]);
+  });
+
+  // Drift: a redirect would drop the page or the query a link named, or carry a second slash into another host.
+  test.each([
+    ["/docs/page.html?x=1&y=%2F", "/docs/page.html?x=1&y=%2F"],
+    ["//evil.example/", "//evil.example/"],
+    ["/a\\b?q=a\\b", "/a/b?q=a\\b"],
+  ])("a redirect to the other letter keeps the path and the query: %s", async (path, kept) => {
+    const response = await serve(ask(typedHost(world.secret, "u"), path));
+
+    expect([response.status, response.headers.get("Location")]).toEqual([302, `https://${labelHost(world.secret)}${kept}`]);
   });
 
   const open: readonly (readonly [string, Ask, string])[] = [
     ["an unlisted site at its label", (w) => ask(labelHost(w.report), "/"), "report home"],
     ["a public site at its label", (w) => ask(labelHost(w.shop), "/"), "shop home"],
     ["a public site at its public name", () => ask("shop-page.example.com", "/"), "shop home"],
-    ["an unlisted site under another name before its id", (w) => ask(`other--${w.report.id}-u-poplin.example.com`, "/"), "report home"],
-    ["an unlisted site by its id alone", (w) => ask(`${w.report.id}-u-poplin.example.com`, "/"), "report home"],
   ];
 
   // Drift: a shared link would start asking for a login, or a public site would lose one of its two addresses.
@@ -226,7 +249,7 @@ describe("access", () => {
     const changed = await install.database.giveNewId(before.id, { by: install.owner, at: NOW });
     if (changed.kind !== "done") throw new Error(`the id did not change: ${changed.kind}`);
 
-    const old = await serveSite(ask(labelHost(before), "/", { Cookie: install.ownerCookie }), install.serving);
+    const old = await serveSite(ask(typedHost(before, "p"), "/", install.ownerProof), install.serving);
     const fresh = await serveSite(ask(labelHost(changed.site), "/"), install.serving);
 
     expect([await whole(old), fresh.status, await fresh.text()]).toEqual([NOT_FOUND, 200, "moved home"]);
@@ -297,7 +320,7 @@ describe("paths", () => {
     const before = world.install.keys.length;
     const response = await serve(ask(labelHost(world.report), path));
 
-    expect({ ...(await whole(response)), keys: world.install.keys.slice(before) }).toEqual({ ...NOT_FOUND, keys: keys.map((key) => `${prefixOf(world.report)}${key}`) });
+    expect({ ...(await whole(response)), keys: world.install.keys.slice(before) }).toEqual({ ...NO_FILE, keys: keys.map((key) => `${prefixOf(world.report)}${key}`) });
   });
 
   const hostile: readonly (readonly [string, (w: World) => string])[] = [
@@ -323,7 +346,7 @@ describe("paths", () => {
     const before = world.install.keys.length;
     const response = await serve(ask(labelHost(world.report), path(world)));
 
-    expect({ ...(await whole(response)), keys: world.install.keys.slice(before) }).toEqual({ ...NOT_FOUND, keys: [] });
+    expect({ ...(await whole(response)), keys: world.install.keys.slice(before) }).toEqual({ ...NO_FILE, keys: [] });
   });
 
   const climbing: readonly (readonly [string, (w: World) => string])[] = [
@@ -339,7 +362,7 @@ describe("paths", () => {
     const response = await serve(ask(labelHost(world.report), path(world)));
     const keys = world.install.keys.slice(before);
 
-    expect({ ...(await whole(response)), outside: keys.filter((key) => !key.startsWith(prefixOf(world.report))), reads: keys.length }).toEqual({ ...NOT_FOUND, outside: [], reads: 1 });
+    expect({ ...(await whole(response)), outside: keys.filter((key) => !key.startsWith(prefixOf(world.report))), reads: keys.length }).toEqual({ ...NO_FILE, outside: [], reads: 1 });
   });
 });
 
@@ -405,51 +428,150 @@ describe("ranges and validators", () => {
     expect(await whole(await serve(ask(host, "/app.js", { "If-None-Match": etag })))).toEqual({
       status: 304,
       body: "",
-      headers: { ...SITE_HEADERS, "cache-control": "public, max-age=3600", "content-type": SCRIPT, etag },
+      headers: { ...SITE_HEADERS, "cache-control": "public, max-age=86400", "content-type": SCRIPT, etag },
     });
+  });
+});
+
+describe("a page and the version it was published in", () => {
+  /** A request for the report's home page that holds the given tag, as a browser sends one back. */
+  const holding = (tag: string, method = "GET"): Request => ask(labelHost(world.report), "/", { "If-None-Match": tag }, method);
+
+  /** The tag of the report's live version, as its home page carries it. */
+  const liveTag = async (): Promise<string> => (await serve(ask(labelHost(world.report), "/"))).headers.get("ETag") ?? "";
+
+  // Drift: a page would carry the tag of its file, and an unchanged page would cost a read of the bucket on every revalidation.
+  test("every page of a site carries one tag, a file carries its own, and a first visit is told to drop nothing", async () => {
+    const answers = await Promise.all(["/", "/about", "/docs/", "/app.js"].map((path) => serve(ask(labelHost(world.report), path))));
+    const [home, about, docs, script] = answers.map((answer) => answer.headers.get("ETag"));
+
+    expect<unknown>([home, about === home, docs === home, script === home, answers.map((answer) => answer.headers.get("Clear-Site-Data"))]).toEqual([
+      expect.stringMatching(/^"v1-[0-9a-z]+"$/),
+      true,
+      true,
+      false,
+      [null, null, null, null],
+    ]);
+  });
+
+  // Drift: a revalidation would read the bucket, or its 304 would overwrite the kept page's content type, drop its cache rule, or tell the browser to drop its files.
+  test.each(["GET", "HEAD"])("a %s that holds the live version's tag gets the 304 with the page's headers, no content type, and no read of the bucket", async (method) => {
+    const tag = await liveTag();
+    const before = world.install.keys.length;
+    const answers = [await serve(holding(tag, method)), await serve(holding(`W/${tag}`, method)), await serve(holding(`"other", ${tag}`, method))];
+    const kept = { ...BLOCKING, "referrer-policy": "no-referrer", "x-content-type-options": "nosniff", "x-robots-tag": "noindex" };
+    const unchanged = { status: 304, body: "", headers: { ...kept, "cache-control": "public, max-age=300, must-revalidate", etag: tag } };
+
+    expect({ answers: await Promise.all(answers.map(whole)), reads: world.install.keys.length - before }).toEqual({ answers: [unchanged, unchanged, unchanged], reads: 0 });
+  });
+
+  const others: readonly (readonly [string, string])[] = [
+    ["an older version", '"v0-lx2a"'],
+    ["a newer version, as after a rollback", '"v2-zzzzzzzz"'],
+    ["the same number published at another moment, as after an import", '"v1-1"'],
+    ["another version in its weak form", 'W/"v7-abc"'],
+    ["another version beside a tag that is no version", '"memory-1", "v7-abc"'],
+  ];
+
+  // Drift: a visitor who holds an older page would keep that version's styles and scripts for a day beside the new page.
+  test.each(others)("a request that holds the tag of %s gets the page again and is told to drop its cached files", async (_what, tag) => {
+    const response = await serve(holding(tag));
+
+    expect([response.status, response.headers.get("Clear-Site-Data"), response.headers.get("ETag"), await response.text()]).toEqual([200, '"cache"', await liveTag(), "report home"]);
+  });
+
+  const quiet: readonly (readonly [string, Ask])[] = [
+    ["a tag that is no version", () => holding('"memory-1"')],
+    ["a version without its quotes", () => holding("v0-lx2a")],
+    ["a HEAD that holds another version", () => holding('"v0-lx2a"', "HEAD")],
+    ["a file asked for with another version's tag", (w) => ask(labelHost(w.report), "/app.js", { "If-None-Match": '"v0-lx2a"' })],
+    ["a part of a page asked for with another version's tag", (w) => ask(labelHost(w.report), "/", { "If-None-Match": '"v0-lx2a"', Range: "bytes=0-3" })],
+    ["a missing file asked for with another version's tag", (w) => ask(labelHost(w.report), "/nothing.txt", { "If-None-Match": '"v0-lx2a"' })],
+    ["a private site's address under the open letter", (w) => ask(typedHost(w.secret, "u"), "/", { "If-None-Match": '"v0-lx2a"' })],
+  ];
+
+  // Drift: the signal would go out on an answer that brings no page, and a browser would empty its cache on every image, or for a site it may not open.
+  test.each(quiet)("%s is told to drop nothing", async (_what, request) => {
+    const response = await serve(request(world));
+    await response.body?.cancel();
+
+    expect(response.headers.get("Clear-Site-Data")).toBeNull();
+  });
+
+  // Drift: a private site would lose the signal or the 304, and its owner would see old styles beside a new page or pay a bucket read on every open.
+  test("a private site's page answers the same two ways under p: the 304 for the live tag, and the page with the signal for another", async () => {
+    const page = (tag?: string): Request => ask(labelHost(world.secret), "/", withProof(world, tag === undefined ? {} : { "If-None-Match": tag }));
+    const tag = (await serve(page())).headers.get("ETag") ?? "";
+    const before = world.install.keys.length;
+    const same = await serve(page(tag));
+    const reads = world.install.keys.length - before;
+    const other = await serve(page('"v0-lx2a"'));
+
+    expect([same.status, same.headers.get("Cache-Control"), reads, other.status, other.headers.get("Clear-Site-Data"), other.headers.get("Cache-Control")]).toEqual([304, "private, no-cache", 0, 200, '"cache"', "private, no-cache"]);
+  });
+
+  // Drift: a tag made from the version's number alone would call a version gone back to, or a site imported again, unchanged.
+  test("the tag changes when another version goes live and when the same number was published at another moment", async () => {
+    const [first] = world.report.versions;
+    if (first === undefined) throw new Error("the test's site has no version");
+
+    const as = (changes: Partial<Site>): Partial<Serving> => ({ database: { findServed: async () => ({ ...world.report, ...changes }) as Site } });
+    const records = [{}, { live_version: 2, versions: [first, { ...first, number: 2 }] }, { versions: [{ ...first, published_at: first.published_at + 1 }] }];
+    const tags = await Promise.all(records.map(async (changes) => (await serve(holding('"none"', "HEAD"), as(changes))).headers.get("ETag")));
+
+    expect(new Set(tags).size).toBe(3);
   });
 });
 
 describe("headers", () => {
   const cases: readonly (readonly [string, Ask, Partial<Serving["settings"]>, Record<string, string>])[] = [
-    ["an unlisted page", (w) => ask(labelHost(w.report), "/"), {}, { ...SITE_HEADERS, "cache-control": "public, max-age=60", "content-type": HTML }],
-    ["an unlisted file", (w) => ask(labelHost(w.report), "/app.js"), {}, { ...SITE_HEADERS, "cache-control": "public, max-age=3600", "content-type": SCRIPT }],
-    ["a private page", (w) => ask(labelHost(w.secret), "/", withCookie(w)), {}, { ...SITE_HEADERS, "cache-control": "private, no-cache", "content-type": HTML }],
-    ["a private file", (w) => ask(labelHost(w.secret), "/app.js", withCookie(w)), {}, { ...SITE_HEADERS, "cache-control": "private, no-cache", "content-type": SCRIPT }],
+    ["an unlisted page", (w) => ask(labelHost(w.report), "/"), {}, { ...SITE_HEADERS, "cache-control": "public, max-age=300, must-revalidate", "content-type": HTML }],
+    ["an unlisted file", (w) => ask(labelHost(w.report), "/app.js"), {}, { ...SITE_HEADERS, "cache-control": "public, max-age=86400", "content-type": SCRIPT }],
+    ["a private page", (w) => ask(labelHost(w.secret), "/", withProof(w)), {}, { ...SITE_HEADERS, "cache-control": "private, no-cache", "content-type": HTML }],
+    ["a private file", (w) => ask(labelHost(w.secret), "/app.js", withProof(w)), {}, { ...SITE_HEADERS, "cache-control": "private, max-age=86400", "content-type": SCRIPT }],
     [
-      "a public page that search engines may list",
+      "a public page that search engines may list, on an install that lets them in",
+      () => ask("shop-page.example.com", "/"),
+      { search_engines_allowed: true },
+      { ...HARDENING, ...BLOCKING, "cache-control": "public, max-age=300, must-revalidate", "content-type": HTML },
+    ],
+    [
+      "a public page that asks for search engines, on an install that keeps them out",
       () => ask("shop-page.example.com", "/"),
       {},
-      { ...HARDENING, ...BLOCKING, "cache-control": "public, max-age=60", "content-type": HTML },
+      { ...SITE_HEADERS, "cache-control": "public, max-age=300, must-revalidate", "content-type": HTML },
+    ],
+    [
+      "an unlisted page, on an install that lets search engines in",
+      (w) => ask(labelHost(w.report), "/"),
+      { search_engines_allowed: true },
+      { ...SITE_HEADERS, "cache-control": "public, max-age=300, must-revalidate", "content-type": HTML },
     ],
     [
       "a page of a site that may not be framed",
       (w) => ask(labelHost(w.sealed), "/"),
       {},
-      { ...SITE_HEADERS, "cache-control": "public, max-age=60", "content-security-policy": "frame-ancestors 'none'", "content-type": HTML },
+      { ...SITE_HEADERS, "cache-control": "public, max-age=300, must-revalidate", "content-security-policy": "frame-ancestors 'none'", "content-type": HTML },
     ],
     [
       "a page while outside pages are allowed",
       (w) => ask(labelHost(w.report), "/"),
       { outside_pages: "allowed" },
-      { ...HARDENING, "cache-control": "public, max-age=60", "content-type": HTML, "x-robots-tag": "noindex" },
+      { ...HARDENING, "cache-control": "public, max-age=300, must-revalidate", "content-type": HTML, "x-robots-tag": "noindex" },
     ],
     [
       "a page that may not be framed while outside pages are allowed",
       (w) => ask(labelHost(w.sealed), "/"),
       { outside_pages: "allowed" },
-      { ...HARDENING, "cache-control": "public, max-age=60", "content-security-policy": "frame-ancestors 'none'", "content-type": HTML, "x-robots-tag": "noindex" },
+      { ...HARDENING, "cache-control": "public, max-age=300, must-revalidate", "content-security-policy": "frame-ancestors 'none'", "content-type": HTML, "x-robots-tag": "noindex" },
     ],
-    ["a page with the HTML cache off", (w) => ask(labelHost(w.report), "/"), { cache_html: { count: 0, unit: "s" } }, { ...SITE_HEADERS, "cache-control": "no-store", "content-type": HTML }],
-    ["a page whose stored type has spaces around it", (w) => ask(labelHost(w.report), "/padded.html"), { cache_html: { count: 0, unit: "s" } }, { ...SITE_HEADERS, "cache-control": "no-store", "content-type": "text/html" }],
-    ["a file whose stored type no header can carry", (w) => ask(labelHost(w.report), "/split.txt"), {}, { ...SITE_HEADERS, "cache-control": "public, max-age=3600", "content-type": "application/octet-stream" }],
-    ["a file without an extension, under its stored type", (w) => ask(labelHost(w.report), "/LICENSE"), {}, { ...SITE_HEADERS, "cache-control": "public, max-age=3600", "content-type": "text/plain" }],
-    ["a file with the file cache off", (w) => ask(labelHost(w.report), "/app.js"), { cache_files: "off" }, { ...SITE_HEADERS, "cache-control": "no-store", "content-type": SCRIPT }],
-    ["a file cached for days", (w) => ask(labelHost(w.report), "/app.js"), { cache_files: { count: 2, unit: "d" } }, { ...SITE_HEADERS, "cache-control": "public, max-age=172800", "content-type": SCRIPT }],
-    ["a private page with every cache off", (w) => ask(labelHost(w.secret), "/", withCookie(w)), { cache_html: { count: 0, unit: "s" }, cache_files: "off" }, { ...SITE_HEADERS, "cache-control": "private, no-cache", "content-type": HTML }],
+    ["a page without an extension in its address", (w) => ask(labelHost(w.report), "/about"), {}, { ...SITE_HEADERS, "cache-control": "public, max-age=300, must-revalidate", "content-type": HTML }],
+    ["a page whose stored type has spaces around it", (w) => ask(labelHost(w.report), "/padded.html"), {}, { ...SITE_HEADERS, "cache-control": "public, max-age=300, must-revalidate", "content-type": "text/html" }],
+    ["a file whose stored type no header can carry", (w) => ask(labelHost(w.report), "/split.txt"), {}, { ...SITE_HEADERS, "cache-control": "public, max-age=86400", "content-type": "application/octet-stream" }],
+    ["a file without an extension, under its stored type", (w) => ask(labelHost(w.report), "/LICENSE"), {}, { ...SITE_HEADERS, "cache-control": "public, max-age=86400", "content-type": "text/plain" }],
   ];
 
-  // Drift: a header would go missing or a new one appear: a page framed from outside, a private file kept by a shared cache, an unlisted site indexed, or a script of another origin let in.
+  // Drift: a header would go missing or a new one appear: a page framed from outside, a private file kept by a shared cache, an unlisted site indexed, a script of another origin let in, or a first visit told to drop its cache.
   test.each(cases)("%s goes out with exactly its headers", async (_why, request, settings, headers) => {
     const response = await serve(request(world), settingsWith(settings));
 
@@ -494,9 +616,9 @@ describe("other pages", () => {
   test("the refusal is the same for every site address, and reads nothing", async () => {
     const before = world.install.keys.length;
     const refusal = { status: 403, body: "Forbidden\n", headers: { ...PLAIN_HEADERS, "content-type": "text/plain; charset=utf-8" } };
-    const hosts = [labelHost(world.report), labelHost(world.secret), "secret--000000000000-p-poplin.example.com", "shop-page.example.com", "gallery-page.example.com"];
+    const hosts = [labelHost(world.report), typedHost(world.secret, "u"), typedHost({ id: MISSING_ID, name: "secret" }, "u"), "shop-page.example.com", "gallery-page.example.com"];
     const gallery = async (): Promise<Response> => new Response("the gallery");
-    const answers = await Promise.all(hosts.map(async (host) => whole(await serve(ask(host, "/", withCookie(world, CROSS_SITE_SUBREQUEST)), { gallery }))));
+    const answers = await Promise.all(hosts.map(async (host) => whole(await serve(ask(host, "/", CROSS_SITE_SUBREQUEST), { gallery }))));
 
     expect({ answers, reads: world.install.keys.length - before }).toEqual({ answers: hosts.map(() => refusal), reads: 0 });
   });

@@ -5,12 +5,25 @@ import type { DomainLayout } from "../../../src/zone/layout";
 import type { RuleBody } from "../../../src/zone/rules/rules";
 import { reportOf } from "../../../src/zone/sync";
 import { refusal, reply, withFake } from "../support/fake-cloudflare";
-import { LAYOUT } from "../support/layouts";
+import { LAYOUT, ONE_WORD } from "../support/layouts";
+import { siteEndings } from "../../../src/zone/layout";
 
-const OUTSIDE =
-  'ends_with(http.host, "-poplin.example.com") and any(http.request.headers["sec-fetch-site"][*] eq "cross-site") and any(http.request.headers["sec-fetch-dest"][*] ne "document")';
-const BOTS = 'ends_with(http.host, "-poplin.example.com") and cf.client.bot';
-const BOTS_BUT_SEARCH = 'ends_with(http.host, "-poplin.example.com") and cf.client.bot and cf.verified_bot_category ne "Search Engine Crawler"';
+const SITES = '(ends_with(http.host, "-poplin.example.com") or ends_with(http.host, "-page.example.com"))';
+const OUTSIDE = `${SITES} and any(http.request.headers["sec-fetch-site"][*] eq "cross-site") and any(http.request.headers["sec-fetch-dest"][*] ne "document")`;
+const SCANNER_PATHS = [
+  'ends_with(http.request.uri.path, ".php")',
+  'ends_with(http.request.uri.path, "/.env")',
+  'http.request.uri.path contains "/.env."',
+  'http.request.uri.path contains "/.git/"',
+  'starts_with(http.request.uri.path, "/wp-admin/")',
+  'starts_with(http.request.uri.path, "/cgi-bin/")',
+  'starts_with(lower(http.request.uri.path), "/phpmyadmin")',
+];
+const NEVER_A_SITES = `not http.request.method in {"GET" "HEAD"} or ${SCANNER_PATHS.join(" or ")}`;
+const OFF_THE_EDGE = 'not starts_with(http.request.uri.path, "/cdn-cgi/")';
+const BOTS = `${SITES} and ${OFF_THE_EDGE} and (cf.client.bot or ${NEVER_A_SITES})`;
+const BOTS_BUT_SEARCH = `${SITES} and ${OFF_THE_EDGE} and ((cf.client.bot and cf.verified_bot_category ne "Search Engine Crawler") or ${NEVER_A_SITES})`;
+const ONE_ENDING = 'ends_with(http.host, "-poplin.example.com")';
 const SLOTS_FULL = "the zone's plan allows no further custom rule and other rules hold every slot";
 const BLOCKING = { layout: LAYOUT, plan: "free", outsidePages: "blocked", searchEnginesAllowed: false } as const;
 
@@ -19,7 +32,7 @@ function outsideRule(expression: string = OUTSIDE): RuleBody {
 }
 
 function botsRule(expression: string = BOTS): RuleBody {
-  return { ref: "poplin_bots", description: "poplin: stop verified bots", expression, action: "block", enabled: true };
+  return { ref: "poplin_bots", description: "poplin: stop verified bots, other methods, and scanner paths", expression, action: "block", enabled: true };
 }
 
 function ownersRules(count: number): { id: string; expression: string; action: string }[] {
@@ -42,6 +55,25 @@ describe("the guard expressions", () => {
       expect(botsExpression(LAYOUT, searchEnginesAllowed)).toBe(expression);
     },
   );
+
+  // Drift: the dashboard and the API take POST, PUT, and DELETE on the admin hostname; a rule that reached it would lock the owner out of every change.
+  test.each([
+    ["the public word `page`", LAYOUT],
+    ["the public word `poplin`", ONE_WORD],
+  ])("with %s, no guard names the admin hostname, and the admin hostname ends in none of the endings the guards read", (_what, layout) => {
+    const expressions = [outsidePagesExpression(layout), botsExpression(layout, false), botsExpression(layout, true)];
+
+    expect([expressions.filter((expression) => expression.includes("http.host eq")), siteEndings(layout).filter((ending) => layout.adminHostname.endsWith(ending))]).toEqual([[], []]);
+  });
+
+  // Drift: the module writes one term bare and two in brackets; a client that wrote one otherwise would change the module's rule on every run, and two terms without brackets would bind the `and` to the last ending alone.
+  test("a layout whose public word is `poplin` has one ending, written without brackets; any other has two inside brackets", () => {
+    expect([outsidePagesExpression(ONE_WORD).startsWith(`${ONE_ENDING} and any(`), botsExpression(ONE_WORD, false).startsWith(`${ONE_ENDING} and ${OFF_THE_EDGE} and (`), botsExpression(LAYOUT, false).startsWith(`${SITES} and `)]).toEqual([
+      true,
+      true,
+      true,
+    ]);
+  });
 
   test("a domain forged into a layout makes both builders throw: the text is never written into a rule", () => {
     const forged = { ...LAYOUT, domain: 'example.com") or (http.host ne "' } as unknown as DomainLayout;

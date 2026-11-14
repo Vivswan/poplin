@@ -182,7 +182,7 @@ export const COMMANDS = [
     about: "show the install's settings, or change one",
     arguments: [
       { name: "key", about: "the setting to show; without it, every setting", required: false },
-      { name: "value", about: "the value to give it: 60s, 9GB, 25%, on", required: false },
+      { name: "value", about: "the value to give it: 7d, 9GB, 25%, on", required: false },
     ],
     flags: [{ name: "--reset", about: "put that setting back to its default" }, ...INSTALL_FLAGS],
     examples: ["poplin config", "poplin config versions_kept 10", "poplin config outside_pages allowed"],

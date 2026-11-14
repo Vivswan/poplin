@@ -7,7 +7,7 @@ import { refusal, reply, withFake } from "../support/fake-cloudflare";
 import { LAYOUT } from "../support/layouts";
 
 const FREE_RATE = 'starts_with(http.request.uri.path, "/")';
-const PAID_RATE = 'ends_with(http.host, "-poplin.example.com") or http.host eq "poplin.example.com"';
+const PAID_RATE = 'ends_with(http.host, "-poplin.example.com") or ends_with(http.host, "-page.example.com") or http.host eq "poplin.example.com"';
 const LIMIT = { characteristics: ["cf.colo.id", "ip.src"], period: 10, requests_per_period: 300, mitigation_timeout: 10 };
 const SLOT_TAKEN = "the zone's plan allows no further rate rule and other rules hold every slot";
 const LIMITS_OTHERS = "a rate rule that counts the whole zone would also limit this zone's other hostnames";

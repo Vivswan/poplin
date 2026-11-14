@@ -1,4 +1,5 @@
-// The Access application in front of the login path, and the one policy that lets the install's logins through. Access keeps no mark on either, so poplin's are the ones with its fixed names, which the OpenTofu module gives them too.
+// The one Access application in front of the login path and of every private site's address, and the one policy that lets the install's logins through.
+// Access keeps no mark on either, so poplin's are the ones with its fixed names, which the OpenTofu module gives them too.
 
 import type { Logins } from "@poplin/core/src/auth/logins";
 import type { Hostname } from "@poplin/core/src/names/hostname";
@@ -8,9 +9,21 @@ import { type CloudflareFailure, type CloudflareResult, type Connection, callClo
 import { INSTALL_OBJECTS } from "../install-objects";
 import { applySteps, type Mode, reportOf, type Synced } from "../sync";
 
+/** The name that marks the policy as poplin's. */
 const POLICY_NAME = INSTALL_OBJECTS.accessPolicy;
+
+/** The name that marks the application as poplin's. */
 const APPLICATION_NAME = INSTALL_OBJECTS.accessApplication;
+
+/** What Cloudflare's refusal says on an account whose Access was never switched on. */
 const NOT_ENABLED = "access.api.error.not_enabled";
+
+/** How Access keeps a person's login: its cookie's lifetime and the two cookie attributes a browser enforces. */
+const SESSION = {
+  session_duration: INSTALL_OBJECTS.accessSession,
+  http_only_cookie_attribute: INSTALL_OBJECTS.accessHttpOnly,
+  same_site_cookie_attribute: INSTALL_OBJECTS.accessSameSite,
+} as const;
 
 /** A reusable policy as the account has it now. */
 interface AccountPolicy {
@@ -30,6 +43,9 @@ interface AccountApplication {
   readonly domain?: string;
   readonly destinations?: readonly { readonly type?: string; readonly uri?: string; readonly overrides?: readonly unknown[] }[];
   readonly policies?: readonly { readonly id?: string }[];
+  readonly session_duration?: string;
+  readonly http_only_cookie_attribute?: boolean;
+  readonly same_site_cookie_attribute?: string;
 }
 
 /** What the account's Access holds now. */
@@ -38,10 +54,16 @@ interface AccountAccess {
   readonly applications: readonly AccountApplication[];
 }
 
-/** The login an install wants: `hostname` is the admin hostname, or the Worker's own on an install with no domain. */
+/** The login an install wants. */
 interface DesiredAccess {
+  /** The admin hostname, where the login path answers. */
   readonly hostname: Hostname;
+
+  /** The emails let through. */
   readonly logins: Logins;
+
+  /** The hostname pattern of every private site's address, from `privateSitesPattern`. */
+  readonly privateSites: string;
 }
 
 /** One step of an Access plan. An application step with no `policyId` links the policy the same plan creates. */
@@ -84,8 +106,9 @@ function protectsExactly(application: AccountApplication, uris: readonly string[
     destinations.every((place) => place.type === "public" && (place.overrides?.length ?? 0) === 0) &&
     destinations.map((place) => place.uri).join("\n") === uris.join("\n");
   const samePolicy = application.policies?.length === 1 && application.policies[0]?.id === policyId;
+  const sameSession = Object.entries(SESSION).every(([key, value]) => application[key as keyof typeof SESSION] === value);
 
-  return application.type === "self_hosted" && application.domain === uris[0] && samePlaces && samePolicy;
+  return application.type === "self_hosted" && application.domain === uris[0] && samePlaces && samePolicy && sameSession;
 }
 
 function planPolicy(policy: AccountPolicy | undefined, emails: readonly string[]): AccessStep {
@@ -108,11 +131,11 @@ function planApplication(application: AccountApplication | undefined, uris: read
  * Compute the Access changes an install needs.
  *
  * @param current - every reusable policy and application of the account as they are now
- * @returns the policy's step, then the application's, which covers the one login path of the shared table
+ * @returns the policy's step, then the application's, which covers the login path of the shared table and then the private sites' pattern
  */
 export function planAccess(desired: DesiredAccess, current: AccountAccess): AccessStep[] {
   const emails = [...desired.logins].sort();
-  const uris = [`${desired.hostname}${INSTALL_OBJECTS.loginPath}`];
+  const uris = [`${desired.hostname}${INSTALL_OBJECTS.loginPath}`, desired.privateSites];
   const policy = current.policies.find((candidate) => candidate.name === POLICY_NAME);
   const application = current.applications.find((candidate) => candidate.name === APPLICATION_NAME);
 
@@ -165,6 +188,7 @@ export async function syncAccess(connection: Connection, accountId: string, desi
       domain: step.uris[0] ?? "",
       destinations: step.uris.map((uri) => ({ type: "public" as const, uri })),
       policies: [{ id: step.policyId ?? createdPolicyId, precedence: 1 }],
+      ...SESSION,
     };
 
     return callCloudflare(connection, (api) =>

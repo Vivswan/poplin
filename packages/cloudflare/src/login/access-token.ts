@@ -32,7 +32,7 @@ type Refused = { readonly ok: false; readonly refusal: TokenRefusal };
 
 type Checked<Value> = { readonly ok: true; readonly value: Value } | Refused;
 
-/** The Access application in front of the login path. */
+/** The Access application in front of the login path and of every private site. */
 interface AccessApplication {
   /** The team's keys; its team domain is the only issuer accepted. */
   readonly keys: AccessKeys;

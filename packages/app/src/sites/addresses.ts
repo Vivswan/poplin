@@ -21,9 +21,6 @@ export interface SiteAddresses {
   /** Decides whether a hostname, in lowercase and without a port, is where a site of the install or its gallery answers. */
   readonly isSiteHost: (hostname: string) => boolean;
 
-  /** Writes the address that starts a login and names the request's own address as the place to return to. */
-  readonly loginFor: (url: URL) => string;
-
   /** The `frame-ancestors` source that covers every page of the install's sites. */
   readonly frameAncestors: string;
 

@@ -3,13 +3,14 @@
 //   <admin hostname>/api and below   the API, which checks the bearer token itself; its two login routes take none and are counted by visitor
 //   <admin hostname>/login           the login, which checks the Access token itself
 //   <admin hostname>/...             the dashboard, which checks the session cookie itself
-//   any other hostname               the limits, then serving; one that is no site's gets serving's own 404
+//   any other hostname               the Access token under `p`, the limits, then serving; one that is no site's gets serving's own 404
 //
 // An instance starts on its first request, and every request that arrives meanwhile waits on that one start.
 // Only a start that succeeded is kept. A failed one is answered to the requests that waited on it, and the next request starts again.
 //
-// A site request trusts settings and keys read up to a minute ago. The login and the dashboard read them anew,
-// so a removed login or "sign everyone out" ends a dashboard session at once and a site's within the minute.
+// A site request trusts settings and logins read up to a minute ago. The login and the dashboard read them anew,
+// so a removed login loses the dashboard at once and the private sites within the minute.
+// The session cookie is the dashboard's alone: "sign everyone out" ends the dashboard's sessions, and a private site's login is Access's own.
 
 import { createDashboard } from "@poplin/app/src/dashboard/dashboard";
 import { visitorKey } from "@poplin/app/src/limits/visitor-key";
@@ -25,7 +26,7 @@ import { type Failure, type Instance, type Outside, type Started, startInstance 
 import { type Place, runSweep } from "./sweep";
 import { plain } from "./util";
 
-/** How long a site request trusts the settings and the keys an instance read. */
+/** How long a site request trusts the settings and the logins an instance read. */
 const SETTINGS_LIFETIME_MS = 60_000;
 
 /** The login and the dashboard trust no earlier read. */
@@ -58,7 +59,7 @@ function answerDashboard(request: Request, instance: Instance, held: Held): Prom
   const dashboard = createDashboard({
     install: instance.install,
     readSession: (headers) => readSession(headers, { key: held.sessionKey, logins: held.logins, now }),
-    addresses: instance.addresses,
+    loginPath: INSTALL_OBJECTS.loginPath,
     csrfSecret: held.formsSecret,
     counters: instance.counters,
     visitorOf: (asked) => visitorKey(clientAddress(asked.headers), held.visitorSecret, now),

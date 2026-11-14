@@ -1,7 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { buildSession, importSessionKey } from "@poplin/core/src/auth/cookie";
 import { type Login, type Logins, parseLogin, parseLogins } from "@poplin/core/src/auth/logins";
-import { parseHostname } from "@poplin/core/src/names/hostname";
 import { mintSessionCookie, readSession } from "../../src/login/session";
 
 const NOW = 1_700_000_000_000;
@@ -36,18 +35,12 @@ async function minted(key: CryptoKey, email = "owner@example.com", now = NOW): P
 }
 
 describe("the session cookie", () => {
-  // Drift: an attribute dropped here lets a script read the cookie, or a cross-site post carry it.
-  test("it is written with exactly the attributes the browser must enforce", async () => {
+  // Drift: an attribute dropped here lets a script read the cookie or a cross-site post carry it, and a `Domain` added here sends the dashboard's session to every site of the install.
+  test("it is written with exactly the attributes the browser must enforce, and for the hostname that set it alone", async () => {
     const key = await keyOf(1);
     const value = await buildSession({ email: loginOf("owner@example.com"), issuedAt: NOW, key });
-    const domain = parseHostname("example.com");
-    if (!domain.ok) throw new Error("the test's domain was refused");
 
-    const plain = await mintSessionCookie({ email: loginOf("owner@example.com"), key, now: NOW });
-    const shared = await mintSessionCookie({ email: loginOf("owner@example.com"), key, now: NOW, domain: domain.value });
-
-    expect(plain).toBe(`${NAME}=${value}; Secure; HttpOnly; SameSite=Lax; Path=/; Max-Age=2592000`);
-    expect(shared).toBe(`${plain}; Domain=example.com`);
+    expect(await mintSessionCookie({ email: loginOf("owner@example.com"), key, now: NOW })).toBe(`${NAME}=${value}; Secure; HttpOnly; SameSite=Lax; Path=/; Max-Age=2592000`);
   });
 
   // Drift: the reader and the writer would disagree on the name or the form, and every login would bounce.

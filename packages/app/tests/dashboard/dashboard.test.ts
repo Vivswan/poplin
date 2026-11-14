@@ -194,7 +194,7 @@ test("a session that cannot be read, as when the database is down, is answered l
   const broken = createDashboard({
     install: opened.install,
     readSession: () => Promise.reject(new Error("the database is down")),
-    addresses: { loginFor: () => `${ORIGIN}/login` },
+    loginPath: "/login",
     csrfSecret: CSRF_SECRET,
     ...codeCounts(),
   });

@@ -1,10 +1,11 @@
-// The two custom rules that stop a request before the Worker runs, so it costs the install nothing. Both read the site hostnames alone.
+// The two custom rules that stop a request before the Worker runs, so it costs the install nothing. Both read the site hostnames alone, never the admin hostname.
+// The bots rule also stops what no static site answers: a method other than GET and HEAD, and the paths scanners ask every host for.
 // A browser calls every hostname under one domain the same site, so the outside pages rule stops pages of other domains and the Worker refuses the rest.
 
 import type { Connection, ZonePlan } from "../client";
 import { INSTALL_OBJECTS } from "../install-objects";
-import { type DomainLayout, siteEnding } from "../layout";
-import { type PhaseRules, planOwnRule, quoted, type RuleStep, removeOwnRule, syncPhase } from "./rules";
+import { type DomainLayout, siteEndings } from "../layout";
+import { type PhaseRules, planOwnRule, type RuleStep, removeOwnRule, sitesExpression, syncPhase } from "./rules";
 import type { Mode, Synced } from "../sync";
 
 const CUSTOM_PHASE = "http_request_firewall_custom";
@@ -41,20 +42,20 @@ function held(steps: readonly RuleStep[], kind: RuleStep["kind"]): number {
  * @throws {Error} a hostname that was cast instead of checked holds a character outside `a-z`, `0-9`, `.`, and `-`
  */
 export function outsidePagesExpression(layout: DomainLayout): string {
-  return `ends_with(http.host, ${quoted(siteEnding(layout))}) and ${INSTALL_OBJECTS.outsideCondition}`;
+  return `${sitesExpression(siteEndings(layout))} and ${INSTALL_OBJECTS.outsideCondition}`;
 }
 
 /**
- * Write the expression of the bots rule: true for a request to a site from a bot Cloudflare has verified.
+ * Write the expression of the bots rule: true for a request to a site from a bot Cloudflare has verified, with a method other than GET and HEAD, or for a path of the scanner list.
  *
- * @returns an expression false for every bot Cloudflare has not verified, whatever it is
+ * @returns an expression false for every request to the admin hostname and for every path under `/cdn-cgi/`, where Cloudflare's own login answers
  * @throws {Error} a hostname that was cast instead of checked holds a character outside `a-z`, `0-9`, `.`, and `-`
  */
 export function botsExpression(layout: DomainLayout, searchEnginesAllowed: boolean): string {
-  const verified = `ends_with(http.host, ${quoted(siteEnding(layout))}) and ${INSTALL_OBJECTS.botsCondition}`;
-  if (!searchEnginesAllowed) return verified;
+  const bots = searchEnginesAllowed ? `(${INSTALL_OBJECTS.botsCondition} and ${INSTALL_OBJECTS.searchEnginesPass})` : INSTALL_OBJECTS.botsCondition;
+  const stopped = `${bots} or ${INSTALL_OBJECTS.otherMethods} or ${INSTALL_OBJECTS.scannerPaths.join(" or ")}`;
 
-  return `${verified} and ${INSTALL_OBJECTS.searchEnginesPass}`;
+  return `${sitesExpression(siteEndings(layout))} and ${INSTALL_OBJECTS.edgePaths} and (${stopped})`;
 }
 
 /**

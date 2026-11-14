@@ -32,9 +32,6 @@ const OUTSIDE_PAGES = ["blocked", "allowed"] as const;
 /** The zone's bot switches: `auto` sets them on a zone with no hostnames of its own, `on` on any zone, `off` leaves them alone. */
 const BLOCK_BOTS = ["auto", "on", "off"] as const;
 
-/** How long HTML is cached; `0s` switches the cache off. */
-const CACHE_TIME = amountSchema(SECONDS_PER_UNIT, 0);
-
 /** A time span of at least one unit. */
 const TIME_SPAN = amountSchema(SECONDS_PER_UNIT, 1);
 
@@ -54,8 +51,6 @@ const VALUES = {
   ),
   dashboard_title: v.pipe(v.string(), v.minLength(1)),
   gallery: v.boolean(),
-  cache_html: CACHE_TIME,
-  cache_files: v.union([v.literal("off"), TIME_SPAN]),
   private_sites: v.picklist(PRIVATE_SITES),
   outside_pages: v.picklist(OUTSIDE_PAGES),
   search_engines_allowed: v.boolean(),
@@ -87,8 +82,6 @@ const FORMS: { readonly [Key in SettingKey]: TextForm<SettingValues[Key]> } = {
   logins: loginList(),
   dashboard_title: { read: (text) => text, print: (title) => title },
   gallery: onOff(),
-  cache_html: amount(SECONDS_PER_UNIT),
-  cache_files: orWord("off", amount(SECONDS_PER_UNIT)),
   private_sites: oneOf(PRIVATE_SITES),
   outside_pages: oneOf(OUTSIDE_PAGES),
   search_engines_allowed: onOff(),
@@ -255,11 +248,11 @@ export function showBytes(bytes: number): string {
 }
 
 /**
- * The seconds a time span such as `default_expires` or `cache_html` stands for.
+ * The seconds a time span such as `default_expires` stands for.
  *
  * @returns the count times its unit: `7d` is 604,800
  */
-export function spanSeconds(span: SettingValues["cache_html"]): number {
+export function spanSeconds(span: Exclude<SettingValues["default_expires"], "never">): number {
   return span.count * SECONDS_PER_UNIT[span.unit];
 }
 
@@ -277,8 +270,6 @@ export function defaultSettings(install: Install): SettingValues {
     logins: [install.installer],
     dashboard_title: install.hostname,
     gallery: false,
-    cache_html: { count: 60, unit: "s" },
-    cache_files: { count: 1, unit: "h" },
     private_sites: "single-file",
     outside_pages: "blocked",
     search_engines_allowed: false,

@@ -20,8 +20,6 @@
       "logins": "owner@example.com",
       "dashboard_title": "poplin.example.com",
       "gallery": "off",
-      "cache_html": "60s",
-      "cache_files": "1h",
       "private_sites": "single-file",
       "outside_pages": "blocked",
       "search_engines_allowed": "off",

@@ -1,7 +1,7 @@
 // The preview answers on one local origin, and the app expects each piece at the root of a hostname. A mount stands between the two.
 //
 //   the browser asks   http://127.0.0.1:4400/settings
-//   the app is asked   https://admin.example.com/settings
+//   the app is asked   https://poplin.example.com/settings
 //   the app answers    href="/activity"    Location: https://<a site's host label>.example.com/
 //   the browser gets   href="/activity"    Location: /served/<a site's host label>/
 //
@@ -10,10 +10,11 @@
 // Only addresses are rewritten: in an HTML page, in the `Location` header, and the install's own origins in a JSON answer.
 // Every HTML page also gets the preview's bar before its `</body>`, and a refusal in plain text is shown inside a page of the preview that says so.
 
+import { ADMIN_LABEL } from "../../../packages/core/src/names/hostname";
 import { ADDRESSES, DOMAIN } from "./world";
 
 /** The origin the dashboard, the login, and the API are asked at. */
-export const ADMIN_ORIGIN = new URL(ADDRESSES.loginFor(new URL(`https://${DOMAIN}/`))).origin;
+export const ADMIN_ORIGIN = `https://${ADMIN_LABEL}.${DOMAIN}`;
 
 /** The hostname of that origin, as a page writes it without a scheme. */
 const ADMIN_HOSTNAME = new URL(ADMIN_ORIGIN).hostname;

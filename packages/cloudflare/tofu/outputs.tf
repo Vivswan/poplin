@@ -23,6 +23,11 @@ output "site_url_pattern" {
   value       = "https://<name>--<id>-<letter>${local.marker}.${local.domain}"
 }
 
+output "public_url_pattern" {
+  description = "The address of a public site under its public name, with `<public name>` standing for that name."
+  value       = "https://<public name>-${var.public_word}.${local.domain}"
+}
+
 output "guard_rule_expressions" {
   description = "The expression of each guard rule by its ref, for a zone that keeps custom rules of its own and adds these to them."
   value       = { for rule in local.guard_rules : rule.ref => rule.expression }

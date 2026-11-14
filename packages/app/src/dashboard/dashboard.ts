@@ -24,7 +24,6 @@ import { bodyLimit } from "hono/body-limit";
 import { NONCE, secureHeaders } from "hono/secure-headers";
 
 import type { Counters } from "../limits/limits";
-import type { SiteAddresses } from "../sites/addresses";
 import { showActivity } from "./activity/activity-page";
 import { framePage, refusedPage } from "./page/frame";
 import { noticeIn } from "./page/notices";
@@ -82,8 +81,8 @@ interface DashboardParts {
   /** Reads who a request's session names: an email that is in the logins now, or a refusal. */
   readonly readSession: (headers: Headers) => Promise<{ readonly ok: true; readonly value: Login } | { readonly ok: false }>;
 
-  /** The install's address layout, which writes the address of the login. */
-  readonly addresses: Pick<SiteAddresses, "loginFor">;
+  /** The path of the dashboard's own hostname where a login starts. */
+  readonly loginPath: string;
 
   /** At least 32 random bytes that sign the forms' tokens, used for nothing else. */
   readonly csrfSecret: Uint8Array<ArrayBuffer>;
@@ -108,8 +107,8 @@ interface Dashboard {
   readonly fetch: (request: Request) => Promise<Response>;
 }
 
-function loginAddress(addresses: DashboardParts["addresses"], url: URL, back: string): string {
-  const login = new URL(addresses.loginFor(url));
+function loginAddress(loginPath: string, url: URL, back: string): string {
+  const login = new URL(loginPath, url.origin);
   login.searchParams.set(RETURN_KEY, back);
 
   return login.href;
@@ -164,12 +163,12 @@ export function createDashboard(parts: DashboardParts): Dashboard {
     const reading = context.req.method === "GET" || context.req.method === "HEAD";
     // A session that cannot be read is no session: the answer is the way to the login, never a page that says so.
     const who = await parts.readSession(context.req.raw.headers).catch(() => NO_SESSION);
-    if (!who.ok) return context.redirect(loginAddress(parts.addresses, url, reading ? `${url.pathname}${url.search}` : "/"), reading ? 302 : 303);
+    if (!who.ok) return context.redirect(loginAddress(parts.loginPath, url, reading ? `${url.pathname}${url.search}` : "/"), reading ? 302 : 303);
 
     // Every email in the logins is an admin: the dashboard has no other view.
     const actor = { scope: "admin", holder: who.value } as const;
     const csrf = await mintCsrfToken({ key: await csrfKey, email: who.value, now: parts.install.now() });
-    context.set("visit", { install: parts.install, actor, url, csrf, login: loginAddress(parts.addresses, url, "/") });
+    context.set("visit", { install: parts.install, actor, url, csrf, login: loginAddress(parts.loginPath, url, "/") });
     context.set("tabs", parts.domain === undefined ? undefined : "domain");
 
     return next();

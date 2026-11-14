@@ -135,12 +135,26 @@ export function page(text: string): TestFile {
   return { path: "index.html", body: new TextEncoder().encode(text), type: "text/html" };
 }
 
-/** Ask the login path as Access sends a person on: with the team's token for the owner, live at the clock's time. */
-export async function logIn(worker: Worker, from: World, address = `${ADMIN}/login`): Promise<Response> {
+/**
+ * Write the headers Access puts on a request it let through: the team's token, live at the clock's time.
+ *
+ * @param changes - claims that replace the owner's own, such as another `email`; `undefined` drops one
+ * @param by - who signs the token; the world's team when left out
+ */
+export async function accessHeaders(from: World, changes: Record<string, unknown> = {}, by: Signer = from.team): Promise<Record<string, string>> {
   const seconds = Math.floor(from.clock.now / 1000);
-  const token = await sign(from.team, { email: OWNER, iat: seconds - 10, nbf: seconds - 10, exp: seconds + 3600 });
 
-  return ask(worker, address, { headers: { "Cf-Access-Jwt-Assertion": token } });
+  return { "Cf-Access-Jwt-Assertion": await sign(by, { email: OWNER, iat: seconds - 10, nbf: seconds - 10, exp: seconds + 3600, ...changes }, from.team.kid) };
+}
+
+/** Ask the login path as Access sends a person on: with the team's token for the owner. */
+export async function logIn(worker: Worker, from: World, address = `${ADMIN}/login`): Promise<Response> {
+  return ask(worker, address, { headers: await accessHeaders(from) });
+}
+
+/** Write a site's label address under a letter: `p` is the address behind Access, `u` the open one. */
+export function under(site: Pick<Published, "label">, letter: "p" | "u"): string {
+  return `https://${site.label}-${letter}-poplin.example.com`;
 }
 
 /** The `Cookie` header a browser sends after a login's `Set-Cookie`. */

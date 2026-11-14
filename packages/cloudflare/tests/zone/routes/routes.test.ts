@@ -3,7 +3,11 @@ import type { DomainLayout } from "../../../src/zone/layout";
 import { planRoutes, syncRoutes } from "../../../src/zone/routes/routes";
 import { reportOf } from "../../../src/zone/sync";
 import { page, reply, withFake } from "../support/fake-cloudflare";
-import { LAYOUT } from "../support/layouts";
+import { hostnameAddresses } from "@poplin/app/src/sites/hostname-addresses";
+import type { PublicName, SiteName } from "@poplin/core/src/names/names";
+import type { SiteId } from "@poplin/core/src/sites/ids";
+import { siteLabel } from "@poplin/core/src/sites/labels";
+import { LAYOUT, layoutOf, ONE_WORD } from "../support/layouts";
 
 const SCRIPT = "poplin";
 
@@ -13,13 +17,38 @@ interface Row {
   readonly script: string | undefined;
 }
 
+/** Whether a route pattern takes a hostname: a pattern may start with one wildcard, and ends in `/*`. */
+function takes(pattern: string, hostname: string): boolean {
+  const host = pattern.slice(0, -"/*".length);
+
+  return host.startsWith("*") ? hostname.endsWith(host.slice(1)) : hostname === host;
+}
+
+describe("the routes and the addresses the product writes", () => {
+  // Drift: the site object's `url` is written by the app's layout and the routes by the zone's; an address no route takes never reaches the Worker, and a visitor gets Cloudflare's error page.
+  test.each([
+    ["page", LAYOUT],
+    ["poplin", ONE_WORD],
+    ["wiki", layoutOf({ public_word: "wiki" })],
+  ])("with the public word %s, every address the layout writes is taken by exactly one route, and the dashboard's by its own", (_word, layout) => {
+    const addresses = hostnameAddresses({ domain: layout.domain, publicWord: layout.publicWord });
+    const label = siteLabel("report" as SiteName, "k3f9x2ab71qz" as SiteId);
+    const written = [addresses.addressOf(label, "private"), addresses.addressOf(label, "unlisted"), addresses.publicAddressOf("docs" as PublicName), addresses.letterFormOf({ id: "k3f9x2ab71qz" as SiteId }, "p")];
+    const patterns = planRoutes({ layout, script: SCRIPT }, []).map((step) => step.subject);
+    const taking = [...written.map((address) => new URL(address).hostname), layout.adminHostname].map((hostname) => patterns.filter((pattern) => takes(pattern, hostname)).length);
+
+    expect(taking).toEqual([1, 1, 1, 1, 1]);
+  });
+});
+
 describe("planRoutes", () => {
   const fresh: readonly { readonly name: string; readonly layout: DomainLayout; readonly patterns: readonly string[] }[] = [
-    { name: "the layout", layout: LAYOUT, patterns: ["*-poplin.example.com/*", "poplin.example.com/*"] },
+    { name: "the layout", layout: LAYOUT, patterns: ["*-poplin.example.com/*", "*-page.example.com/*", "poplin.example.com/*"] },
+    { name: "a layout whose public word is `poplin`", layout: ONE_WORD, patterns: ["*-poplin.example.com/*", "poplin.example.com/*"] },
   ];
 
   test.each(fresh)(
-    "$name on a zone with no routes: one route for the hostnames that end in the marker and one for the admin hostname, both to the Worker, and no route for any other hostname",
+    "$name on a zone with no routes: one route for the label addresses, one for the public names when their word differs, and one for the admin hostname, all to the Worker, and no route for any other hostname",
     ({ layout, patterns }) => {
       expect<unknown>(planRoutes({ layout, script: SCRIPT }, [])).toEqual(patterns.map((subject) => ({ kind: "create", subject, script: SCRIPT })));
     },
@@ -41,11 +70,13 @@ describe("planRoutes", () => {
     const routes: Row[] = [
       { id: "x1", pattern: "*-poplin.example.com/*", script: "another-worker" },
       { id: "x2", pattern: "poplin.example.com/*", script: undefined },
+      { id: "x3", pattern: "*-page.example.com/*", script: "another-worker" },
     ];
     const reason = "a route poplin did not create holds this pattern";
 
     expect(planRoutes({ layout: LAYOUT, script: SCRIPT }, routes)).toEqual([
       { kind: "skip", subject: "*-poplin.example.com/*", reason },
+      { kind: "skip", subject: "*-page.example.com/*", reason },
       { kind: "skip", subject: "poplin.example.com/*", reason },
     ]);
   });
@@ -63,6 +94,7 @@ describe("planRoutes", () => {
       { kind: "remove", subject: "old.example.com/*", id: "r1" },
       { kind: "remove", subject: "*.example.com/*", id: "r2" },
       { kind: "leave", subject: "*-poplin.example.com/*" },
+      { kind: "create", subject: "*-page.example.com/*", script: SCRIPT },
       { kind: "create", subject: "poplin.example.com/*", script: SCRIPT },
     ]);
   });
@@ -71,7 +103,7 @@ describe("planRoutes", () => {
 describe("syncRoutes", () => {
   test("two runs against one zone: the first creates poplin's routes beside the others, the second sends no change and reports none", async () => {
     const routes: Record<string, unknown>[] = [{ id: "x1", pattern: "api.example.com/*", script: "another-worker" }];
-    const patterns = ["*-poplin.example.com/*", "poplin.example.com/*"];
+    const patterns = ["*-poplin.example.com/*", "*-page.example.com/*", "poplin.example.com/*"];
 
     await withFake(
       (asked) => {

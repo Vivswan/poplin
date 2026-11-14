@@ -16,13 +16,16 @@ function table(states: Readonly<Record<string, string>>): string[] {
   const usual = states.all ?? "present";
 
   return [
+    "Public word | present | page (public sites answer at <name>-page.example.com)",
     `DNS record | ${state("dns", usual)} | *.example.com`,
     `DNS record | ${state("dns", usual)} | poplin.example.com`,
+    `Worker route | ${state("routes", usual)} | *-page.example.com/*`,
     `Worker route | ${state("routes", usual)} | *-poplin.example.com/*`,
     `Worker route | ${state("routes", usual)} | poplin.example.com/*`,
-    `Access application | ${state("access", usual)} | poplin`,
+    `Access application | ${state("access", usual)} | poplin: poplin.example.com/login, *-p-poplin.example.com`,
     `Access policy | ${state("access", usual)} | poplin logins`,
-    `WAF rule | ${state("guards", usual)} | bots rule`,
+    `Redirect rule | ${state("https", usual)} | https redirect`,
+    `WAF rule | ${state("guards", usual)} | bots rule: also stops every method but GET and HEAD, and the paths *.php, /.env, /.env.*, /.git/, /wp-admin/, /cgi-bin/, /phpmyadmin`,
     `WAF rule | ${state("guards", usual)} | outside pages rule`,
     `Rate rule | ${state("rate", usual)} | rate rule`,
     `Bot settings | ${state("bots", usual)} | zone bot switches`,
@@ -67,7 +70,7 @@ test("a repair makes every object, a check then finds all present, and a second 
 
   await withAccount(account, async (plug, asked) => {
     expect(shown(await plug.repair(TOKEN, SETTINGS))).toEqual(table({ all: "created", bots: "changed" }));
-    expect(writes(asked)).toHaveLength(10);
+    expect(writes(asked)).toHaveLength(12);
 
     const sent = asked.length;
 
@@ -75,6 +78,18 @@ test("a repair makes every object, a check then finds all present, and a second 
     expect(shown(await plug.repair(TOKEN, SETTINGS))).toEqual(table({}));
     expect(writes(asked.slice(sent))).toEqual([]);
   });
+});
+
+test("a repair makes the one Access application over the login path and the private sites, and the https rule only where the zone does not redirect by itself", async () => {
+  const [plain, redirecting] = [emptyAccount(), { ...emptyAccount(), zoneRedirects: true }];
+
+  await withAccount(plain, async (plug) => void (await plug.repair(TOKEN, SETTINGS)));
+  await withAccount(redirecting, async (plug) => {
+    expect(shown(await plug.repair(TOKEN, SETTINGS))).toEqual(table({ all: "created", bots: "changed", https: "present" }));
+  });
+
+  expect(plain.applications.map((application) => (application.destinations as { uri: string }[]).map((place) => place.uri))).toEqual([["poplin.example.com/login", "*-p-poplin.example.com"]]);
+  expect([Object.keys(plain.rulesets).includes("http_request_dynamic_redirect"), Object.keys(redirecting.rulesets).includes("http_request_dynamic_redirect")]).toEqual([true, false]);
 });
 
 test("one object taken away and one changed by hand: the check names exactly those two, and the repair changes exactly those two", async () => {
@@ -151,11 +166,14 @@ test("a repair refused half way: the rows say what was made, which change failed
 
   await withAccount(account, async (plug) => {
     expect(shown(await plug.repair(TOKEN, SETTINGS))).toEqual([
+      "Public word | present | page (public sites answer at <name>-page.example.com)",
       "DNS record | created | *.example.com",
       "DNS record | created | poplin.example.com",
+      "Worker route | not-run | *-page.example.com/*",
       `Worker route | failed | *-poplin.example.com/*: refused with status 403: 10000 Authentication error for Bearer ${TOKEN}`,
       "Worker route | not-run | poplin.example.com/*",
       "Access application | not-run | ",
+      "Redirect rule | not-run | ",
       "WAF rule | not-run | ",
       "Rate rule | not-run | ",
       "Bot settings | not-run | ",
@@ -194,10 +212,10 @@ test("Access refused as not switched on after the policy was already made is a s
   await withAccount(account, async (plug) => {
     const rows = shown(await plug.repair(TOKEN, SETTINGS));
 
-    expect(rows.slice(4, 7)).toEqual([
+    expect(rows.slice(6, 9)).toEqual([
       "Access policy | created | poplin logins",
       "Access application | failed | poplin: refused with status 403: 10000 access.api.error.not_enabled",
-      "WAF rule | not-run | ",
+      "Redirect rule | not-run | ",
     ]);
     expect(account.policies).toHaveLength(1);
   });
