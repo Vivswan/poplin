@@ -25,7 +25,7 @@ import type { Bindings } from "./bindings";
 import { type Held, readHeld } from "./held";
 import { answerLogin } from "./login";
 import { answerSite } from "./site";
-import { answerSetup, isSetupPath } from "./setup";
+import { answerFirstSetup, answerSetup, isSetupPath } from "./setup";
 import { type Failure, type Instance, type Outside, type Started, startInstance } from "./start";
 import { runSweep } from "./sweep";
 import { plain } from "./util";
@@ -48,8 +48,8 @@ const OWN_ADDRESS = ".workers.dev";
 /** The setup page, for a redirect from the Worker's own address. */
 const SETUP = "/setup";
 
-/** Where a person sets the variables an install needs. */
-const SET_THEM = "Set them in the Cloudflare dashboard: Workers & Pages, this Worker, Settings, Variables and Secrets. The install page lists each one.";
+/** Where the variables of an install come from, for a person whose Worker lost or mistyped one. */
+const SET_THEM = "Setup writes them, and so does the OpenTofu module. In the Cloudflare dashboard they are under Workers & Pages, this Worker, Settings, Variables and Secrets.";
 
 /** What a request is answered through: the settings its instance holds, read no longer ago than `lifetime` milliseconds, and whether the setup page is open. */
 interface Ways {
@@ -57,12 +57,15 @@ interface Ways {
   readonly setupOpen: () => Promise<boolean>;
 }
 
+/** A start that failed, as apart from a Worker with nothing set, which is no failure. */
+type Stopped = Exclude<Failure, { readonly kind: "unset" }>;
+
 /** What stopped an instance, for whoever runs the install. It names each variable and never a value of one. */
-function failureText(failure: Failure): string {
+function failureText(failure: Stopped): string {
   if (failure.kind === "binding") {
     const lines = failure.refused.map(({ binding, refusal }) => `  ${binding}: ${refusal}`);
 
-    return ["This poplin install is not finished. These variables of its Worker are missing or wrong:", "", ...lines, "", SET_THEM].join("\n");
+    return ["This poplin install cannot start. These variables of its Worker are missing or wrong:", "", ...lines, "", SET_THEM].join("\n");
   }
 
   if (failure.kind === "newer") return "This install's database is newer than its code: update poplin.";
@@ -70,7 +73,7 @@ function failureText(failure: Failure): string {
   return "This install's database could not be brought up to date. Try again.";
 }
 
-function failureAnswer(request: Request, failure: Failure): Response {
+function failureAnswer(request: Request, failure: Stopped): Response {
   return plain(request, 503, failureText(failure));
 }
 
@@ -110,6 +113,14 @@ async function answerAdmin(request: Request, instance: Instance, ways: Ways): Pr
   if (isSetupPath(pathname)) return answerSetup(request, instance, await ways.held(FRESH), ways.setupOpen);
 
   return answerDashboard(request, instance, await ways.held(FRESH));
+}
+
+/** Run the scheduled sweep of a started instance. A Worker with nothing set has no site to sweep; any other start that failed is thrown. */
+async function sweep(started: Started): Promise<void> {
+  if (started.ok) return runSweep(started.instance.install);
+
+  const { failure } = started;
+  if (failure.kind !== "unset") throw new Error(`the sweep did not run. ${failureText(failure)}`);
 }
 
 /**
@@ -178,7 +189,11 @@ export function createWorker(given: Partial<Outside> = {}): Required<Pick<Export
 
   async function answer(request: Request, env: Bindings): Promise<Response> {
     const started = await start(env);
-    if (!started.ok) return failureAnswer(request, started.failure);
+    if (!started.ok) {
+      const { failure } = started;
+
+      return failure.kind === "unset" ? answerFirstSetup(request, failure.unset, outside.now) : failureAnswer(request, failure);
+    }
 
     const { instance } = started;
     const { hostname } = new URL(request.url);
@@ -203,10 +218,7 @@ export function createWorker(given: Partial<Outside> = {}): Required<Pick<Export
     },
 
     async scheduled(_controller, env) {
-      const started = await start(env);
-      if (!started.ok) throw new Error(`the sweep did not run. ${failureText(started.failure)}`);
-
-      await runSweep(started.instance.install);
+      await sweep(await start(env));
     },
   };
 }

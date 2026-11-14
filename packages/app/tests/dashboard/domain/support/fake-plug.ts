@@ -1,6 +1,6 @@
 // A domain plug written by hand for the tests: it answers what a test scripted and records what it was asked with.
 
-import type { DomainPlug, DomainReading, DomainRow, DomainSettings } from "../../../../src/dashboard/domain/records";
+import type { DomainPlug, DomainReading, DomainRow, DomainSettings, FirstRun } from "../../../../src/dashboard/domain/records";
 
 /** The token the tests paste. No answer, header, or audit entry may hold it. */
 export const TOKEN = "planted-token-0123456789-abcdefghij";
@@ -64,4 +64,23 @@ export function fakePlug(answer: (run: "check" | "repair", token: string) => Dom
 /** A plug over the one-missing install: a check finds it, a repair fixes it. */
 export function usualPlug(): FakePlug {
   return fakePlug((run) => ({ ok: true, rows: run === "check" ? ONE_MISSING : REPAIRED, steps: [] }));
+}
+
+/**
+ * Build the provider's side of an install with nothing set, over a plug a test wrote.
+ *
+ * @returns a first run that hands that plug out for any text with a dot in it, takes anything else as no domain, and records what it was asked for
+ */
+export function firstRunOf(plug: FakePlug): FirstRun & { readonly asked: { domain: string; login: string }[] } {
+  const asked: { domain: string; login: string }[] = [];
+
+  return {
+    asked,
+    ...TOKEN_FORM,
+    plugFor: (first) => {
+      asked.push({ ...first });
+
+      return first.domain.includes(".") ? plug : undefined;
+    },
+  };
 }

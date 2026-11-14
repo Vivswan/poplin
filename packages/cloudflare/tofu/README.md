@@ -16,6 +16,8 @@ module "poplin" {
 
 The caller configures the `cloudflare` provider, major 5, and runs OpenTofu 1.13 or newer. An install with no domain needs no zone and is not set up by this module.
 
+The module sets every value the Worker starts from itself: its domain, its first settings, its account, and its login. A Worker it deployed never shows the setup page's two boxes for a domain and a first login.
+
 `worker_bundle_path` is the path of the Worker bundle, which the caller builds from a checkout of this repository:
 
 ```sh

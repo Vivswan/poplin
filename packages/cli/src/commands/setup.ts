@@ -40,6 +40,9 @@ const REFUSALS: Readonly<Record<string, () => Problem>> = {
   unreachable: () => problem("setup_provider_silent"),
   not_set_up: () => problem("not_set_up"),
   too_many_tries: () => problem("too_many_requests"),
+  no_domain: () => problem("setup_no_domain"),
+  bad_domain: () => problem("setup_bad_domain"),
+  bad_login: () => problem("setup_bad_login"),
 };
 
 /** The rows and the steps of a run that read the install's side. */
@@ -77,7 +80,8 @@ function shown(run: "check" | "repair", reading: Reading, token: string): Outcom
 /**
  * Run the setup of the install at `--server`.
  *
- * It makes no Worker, no bucket, and no database: the install must already answer at the address. It works only until somebody has logged in to the install; after that the dashboard's Domain tab does the same.
+ * It makes no install: the install must already answer at the address. It works only until somebody has logged in to the install; after that the dashboard's Domain tab does the same.
+ * An install with nothing set takes its domain and its first login from `--domain` and `--login`; one that has them ignores both.
  *
  * @returns the install's rows, worded for a person and kept whole for `--json`; with anything left to repair the command exits as a failure. The token is in no line and no value
  */
@@ -91,7 +95,7 @@ export async function runSetup(request: RequestOf<"setup">, io: Io): Promise<Out
 
   const run = request.check ? "check" : "repair";
   const signal = AbortSignal.any([AbortSignal.timeout(io.timeoutMs ?? RUN_TIMEOUT_MS), io.stopped]);
-  const init = { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ token }), redirect: "manual" as const, signal };
+  const init = { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ token, domain: request.domain, login: request.login }), redirect: "manual" as const, signal };
   const answer = await io.fetch(`${request.server}/setup/api/${run}`, init).catch(() => undefined);
   const body: unknown = await answer?.json().catch(() => undefined);
   if (body === undefined && io.stopped.aborted) return refused(problem("stopped", undefined, "the install may have had the request all the same; poplin setup --check shows what is left"));

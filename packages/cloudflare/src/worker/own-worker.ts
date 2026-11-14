@@ -21,8 +21,10 @@ interface RefusedVariable {
   readonly refusal: "absent" | "bad-shape";
 }
 
-/** The Worker's account and name, or every one of the two variables that is refused. */
-type ReadOwnWorker = { readonly ok: true; readonly value: { readonly accountId: string; readonly script: string } } | { readonly ok: false; readonly refused: readonly RefusedVariable[] };
+/** The Worker's account and name, or every one of the two variables that is refused, with the name when it alone is good. */
+type ReadOwnWorker =
+  | { readonly ok: true; readonly value: { readonly accountId: string; readonly script: string } }
+  | { readonly ok: false; readonly refused: readonly RefusedVariable[]; readonly script: string | undefined };
 
 function refusalOf(value: unknown, form: RegExp): RefusedVariable["refusal"] | undefined {
   if (value === undefined) return "absent";
@@ -45,7 +47,7 @@ export function readOwnWorker(variables: OwnVariables): ReadOwnWorker {
 
   if (worker !== undefined) refused.push({ binding: INSTALL_OBJECTS.workerBinding, refusal: worker });
 
-  if (refused.length > 0) return { ok: false, refused };
+  if (refused.length > 0) return { ok: false, refused, script: worker === undefined ? String(variables.script) : undefined };
 
   return { ok: true, value: { accountId: String(variables.accountId), script: String(variables.script) } };
 }

@@ -26,8 +26,8 @@ const ACCOUNT_OF: Readonly<Record<string, string>> = { [`Bearer ${TOKEN}`]: ACCO
 
 /** Every zone the fake holds, whatever the account. */
 const ZONES = [
-  { id: ZONE, name: "example.com", account: { id: ACCOUNT }, plan: { name: "Free Website" } },
-  { id: "zone-b", name: "example.com", account: { id: "account-b" }, plan: { name: "Free Website" } },
+  { id: ZONE, name: "example.com", account: { id: ACCOUNT }, plan: { name: "Free Website" }, status: "active" },
+  { id: "zone-b", name: "example.com", account: { id: "account-b" }, plan: { name: "Free Website" }, status: "active" },
 ];
 
 /** A stored object: its id and whatever was sent for it. */

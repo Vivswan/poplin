@@ -5,11 +5,11 @@
 // A token proves itself by showing the install's own zone inside the install's own account; any other token is refused before anything is read.
 // A check is the repair's own code with the changes left unsent, so the two cannot disagree on what a repair would do.
 
-import type { DomainPlug, DomainReading, DomainRow, DomainSettings, DomainState, DomainStep, ReadSettings } from "@poplin/app/src/dashboard/domain/records";
-import { parseLogins } from "@poplin/core/src/auth/logins";
+import type { DomainPlug, DomainReading, DomainRow, DomainSettings, DomainState, DomainStep, ReadSettings, TokenFacts } from "@poplin/app/src/dashboard/domain/records";
+import { type Login, parseLogins } from "@poplin/core/src/auth/logins";
 import { ACCESS_NOT_ENABLED, isAccessOff, readLoginFacts, syncAccess } from "./access/access";
 import { syncZoneBots } from "./bots/bots";
-import { type Connection, listZones } from "./client";
+import { type Connection, findZones, listZones, type Zone } from "./client";
 import { syncDatabase } from "./database/database";
 import { syncDns } from "./dns/dns";
 import { INSTALL_OBJECTS } from "./install-objects";
@@ -26,6 +26,9 @@ const TOKEN = /^[A-Za-z0-9_-]{20,512}$/;
 
 /** The reading of a token that is not one, is refused, or does not show the install's zone in the install's account. */
 const REFUSED: DomainReading = { ok: false, refusal: "token" };
+
+/** The reading of a good token that shows no active zone of the domain typed for an install with nothing set. */
+const NO_DOMAIN: DomainReading = { ok: false, refusal: "no_domain" };
 
 /** The reading when Cloudflare did not answer, or asked to wait. */
 const UNREACHABLE: DomainReading = { ok: false, refusal: "unreachable" };
@@ -118,11 +121,16 @@ const STATES: Readonly<Record<Mode, Readonly<Record<"created" | "changed" | "rem
   apply: { created: "created", changed: "changed", removed: "removed" },
 };
 
-/** What the plug is built from. */
-interface PlugParts {
-  /** The account the Worker runs in, never one a token's holder names. */
-  readonly accountId: string;
+/**
+ * Which install the plug is of.
+ *
+ * One that is set has `accountId`, the account the Worker runs in, never one a token's holder names.
+ * One with nothing set has `first`, its first login: its account is the one the token shows the domain in, and a repair also writes the domain, this login, and that account onto the Worker.
+ */
+type Known = { readonly accountId: string; readonly first?: undefined } | { readonly accountId?: undefined; readonly first: { readonly login: Login } };
 
+/** What the plug is built from. */
+type PlugParts = Known & {
   /** The name of the install's Worker, which its routes name. */
   readonly script: string;
 
@@ -134,10 +142,13 @@ interface PlugParts {
 
   /** What sends a call; absent outside tests. */
   readonly fetch?: Connection["fetch"];
-}
+};
 
 /** One permission of a token: its name alone for one ticked on the form by hand, or with its key and level in a link to the form. */
 type Right = { readonly name: string } | { readonly name: string; readonly key: string; readonly type: "read" | "edit" };
+
+/** The parts once the account is known. */
+type Placed = Pick<PlugParts, "script" | "layout" | "first"> & { readonly accountId: string };
 
 /** An object the table names. */
 type Piece = keyof typeof RIGHTS;
@@ -263,7 +274,7 @@ function accessDetail(row: DomainRow, covered: string): DomainRow {
  *
  * @returns whether the application can be read from: `false` for Access that is off, and for a run that stopped
  */
-async function accessPiece(progress: Progress, mode: Mode, parts: PlugParts, connection: Connection, settings: DomainSettings): Promise<boolean> {
+async function accessPiece(progress: Progress, mode: Mode, parts: Placed, connection: Connection, settings: DomainSettings): Promise<boolean> {
   const logins = parseLogins(settings.logins);
   if (progress.stopped || !logins.ok) {
     progress.rows.push({ object: "Access application", state: progress.stopped ? "not-run" : "failed", detail: progress.stopped ? "" : BAD_LOGINS });
@@ -290,43 +301,64 @@ async function accessPiece(progress: Progress, mode: Mode, parts: PlugParts, con
   return false;
 }
 
-// The Worker checks a login against the application setup made, so its audience tag is written onto the Worker once the application exists.
-async function variablesPiece(progress: Progress, mode: Mode, parts: PlugParts, connection: Connection, accessReady: boolean): Promise<void> {
+/** The values of an install with nothing set, as a repair writes them onto the Worker: its domain, its first login, and the account the token shows the domain in. */
+function firstValues(placed: Placed): Parameters<typeof syncVariables>[2] {
+  if (placed.first === undefined) return [];
+
+  return [
+    { name: INSTALL_OBJECTS.zoneBinding, value: { domain: placed.layout.domain } },
+    { name: INSTALL_OBJECTS.firstSettingsBinding, value: { logins: placed.first.login } },
+    { name: INSTALL_OBJECTS.accountBinding, value: placed.accountId },
+  ];
+}
+
+// The Worker checks a login against the application setup made, so its audience tag is written onto the Worker once the application exists, in one change with the values of an install that has none.
+async function variablesPiece(progress: Progress, mode: Mode, placed: Placed, connection: Connection, accessReady: boolean): Promise<void> {
   const name = INSTALL_OBJECTS.accessBinding;
-  if (!accessReady) {
-    progress.rows.push({ object: "Worker variable", state: progress.stopped ? "not-run" : "missing", detail: progress.stopped ? "" : `${name}: ${NO_APPLICATION}` });
+  const object = (): Piece => "Worker variable";
+  if (progress.stopped) {
+    progress.rows.push({ object: object(), state: "not-run", detail: "" });
 
     return;
   }
 
-  const object = (): Piece => "Worker variable";
-  const facts = await readLoginFacts(connection, parts.accountId);
+  const facts = accessReady ? await readLoginFacts(connection, placed.accountId) : ({ ok: true, value: undefined } as const);
   if (!facts.ok) {
     await piece(progress, mode, object, async (): Promise<Outcome> => ({ ...facts, report: reportOf([]), failed: TEAM_DOMAIN }));
 
     return;
   }
 
-  if (facts.value === undefined) {
-    progress.rows.push({ object: object(), state: "missing", detail: `${name}: ${NO_APPLICATION}` });
+  if (facts.value === undefined) progress.rows.push({ object: object(), state: "missing", detail: `${name}: ${NO_APPLICATION}` });
 
-    return;
-  }
+  const login = facts.value === undefined ? [] : [{ name, value: { team_domain: facts.value.teamDomain, audience: facts.value.audience } }];
+  const wanted = [...firstValues(placed), ...login];
+  if (wanted.length === 0) return;
 
-  const json = { team_domain: facts.value.teamDomain, audience: facts.value.audience };
-  const synced = await piece(progress, mode, object, () => syncVariables(connection, { accountId: parts.accountId, script: parts.script }, [{ name, json }], mode));
-  if (mode === "apply" && synced?.ok === true && !synced.report.changedNothing) progress.steps.push({ text: LOGIN_READY, address: `https://${parts.layout.adminHostname}` });
+  const synced = await piece(progress, mode, object, () => syncVariables(connection, placed, wanted, mode));
+  const ready = mode === "apply" && synced?.ok === true && !synced.report.changedNothing && login.length > 0;
+  if (ready) progress.steps.push({ text: LOGIN_READY, address: `https://${placed.layout.adminHostname}` });
+}
+
+/** Find the zone of the install's domain: in the install's own account, or for an install with nothing set in whichever account the token shows it in. */
+async function findZone(parts: PlugParts, connection: Connection): Promise<Zone | DomainReading> {
+  const zones = parts.accountId === undefined ? await findZones(connection, parts.layout.domain) : await listZones(connection, parts.accountId);
+  if (!zones.ok) return zones.failure === "refused" ? REFUSED : UNREACHABLE;
+
+  const zone = zones.value.find((candidate) => candidate.name === parts.layout.domain);
+  if (zone !== undefined) return zone;
+
+  return parts.accountId === undefined ? NO_DOMAIN : REFUSED;
 }
 
 async function read(parts: PlugParts, mode: Mode, token: string, readSettings: ReadSettings): Promise<DomainReading> {
   if (!TOKEN.test(token)) return REFUSED;
 
   const connection: Connection = { key: token, baseUrl: parts.baseUrl, fetch: parts.fetch };
-  const zones = await listZones(connection, parts.accountId);
-  if (!zones.ok) return zones.failure === "refused" ? REFUSED : UNREACHABLE;
+  const zone = await findZone(parts, connection);
+  if ("ok" in zone) return zone;
 
-  const zone = zones.value.find((candidate) => candidate.name === parts.layout.domain);
-  if (zone === undefined) return REFUSED;
+  const placed: Placed = { script: parts.script, layout: parts.layout, first: parts.first, accountId: zone.accountId };
 
   // The token is proven: only now is anything of the install read.
   const settings = await readSettings();
@@ -352,7 +384,7 @@ async function read(parts: PlugParts, mode: Mode, token: string, readSettings: R
     () => "Worker route",
     () => syncRoutes(connection, zone.id, { layout, script: parts.script }, mode),
   );
-  await variablesPiece(progress, mode, parts, connection, await accessPiece(progress, mode, parts, connection, settings));
+  await variablesPiece(progress, mode, placed, connection, await accessPiece(progress, mode, placed, connection, settings));
   await piece(
     progress,
     mode,
@@ -383,7 +415,7 @@ async function read(parts: PlugParts, mode: Mode, token: string, readSettings: R
     progress,
     mode,
     () => "D1 database",
-    () => syncDatabase(connection, parts.accountId, mode),
+    () => syncDatabase(connection, placed.accountId, mode),
   );
 
   return { ok: true, rows: progress.rows, steps: progress.steps };
@@ -397,11 +429,11 @@ function tokenLink(rights: readonly Right[]): string {
 }
 
 /**
- * Build the zone plug of an install on Cloudflare.
+ * Say what Cloudflare's form for a new token is and asks for.
  *
- * @returns a plug whose `check` sends no change; both refuse, alike and before reading anything, a token that is malformed, that Cloudflare refuses, or that does not show the install's domain as a zone of `accountId`; the settings are read only after that
+ * @returns the token's name, every permission it needs, the link that opens the form with the ones a link can carry, and the ones to add by hand
  */
-export function createDomainPlug(parts: PlugParts): DomainPlug {
+export function tokenFacts(): TokenFacts {
   const needed: readonly Right[] = [...new Set(Object.values(RIGHTS).flat())];
 
   return {
@@ -410,6 +442,18 @@ export function createDomainPlug(parts: PlugParts): DomainPlug {
     tokenLink: tokenLink(needed),
     tokenByHand: needed.filter((right) => !("key" in right)).map((right) => right.name),
     tokenNote: TOKEN_SCOPE,
+  };
+}
+
+/**
+ * Build the zone plug of an install on Cloudflare.
+ *
+ * @returns a plug whose `check` sends no change. Both refuse, alike and before reading anything, a token that is malformed, that Cloudflare refuses, or that does not show the install's domain as a zone of `accountId`.
+ * With no `accountId` the account is the one the token shows the domain in as an active zone, and a token that shows none is told so. The settings are read only after that
+ */
+export function createDomainPlug(parts: PlugParts): DomainPlug {
+  return {
+    ...tokenFacts(),
     guardNotes: GUARD_NOTES,
     check: (token, settings) => read(parts, "plan", token, settings),
     repair: (token, settings) => read(parts, "apply", token, settings),

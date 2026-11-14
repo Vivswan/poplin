@@ -72,6 +72,7 @@ describe("parseCommand", () => {
     ["poplin whoami", { kind: "whoami", ...PLAIN }],
     ["poplin setup", { kind: "setup", check: false, ...PLAIN }],
     ["poplin setup --check", { kind: "setup", check: true, ...PLAIN }],
+    ["poplin setup --domain example.com --login owner@example.com", { kind: "setup", check: false, domain: "example.com", login: "owner@example.com", ...PLAIN }],
     ["poplin doctor", { kind: "doctor", ...PLAIN }],
     ["poplin export", { kind: "export", allVersions: false, overwrite: false, ...PLAIN }],
     [`poplin export ${LABEL}`, { kind: "export", site: REPORT, allVersions: false, overwrite: false, ...PLAIN }],

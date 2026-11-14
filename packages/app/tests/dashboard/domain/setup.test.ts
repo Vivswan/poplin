@@ -6,7 +6,7 @@ import { createSetup } from "../../../src/dashboard/domain/setup";
 import type { DomainReading } from "../../../src/dashboard/domain/records";
 import { formHeadersOf } from "../support/browser";
 import { CSRF_SECRET, ORIGIN, openDashboard } from "../support/install";
-import { type FakePlug, fakePlug, TOKEN, usualPlug } from "./support/fake-plug";
+import { type FakePlug, fakePlug, firstRunOf, TOKEN, usualPlug } from "./support/fake-plug";
 
 /** The line above the table: its kind and its text. */
 const NOTICE = /<p class="notice (done|refused)" role="status">([^<]*)<\/p>/;
@@ -282,4 +282,66 @@ test("a program's call is answered as JSON by the same run, the same count of tr
   const shut = await openSetup({ open: async () => false });
 
   expect([(await shut.call("repair", own)).status, shut.plug.calls]).toEqual([404, []]);
+});
+
+/** A database every use of which fails the test: the page of an install with nothing set may neither read nor write one. */
+const NO_DATABASE = new Proxy({}, { get: (_target, name) => () => Promise.reject(new Error(`the database was asked for ${String(name)}`)) }) as Parameters<typeof createSetup>[0]["install"]["database"];
+
+/** The setup page of an install with nothing set, over a plug the test wrote, with a browser's way of posting its form. */
+function openFirstSetup(plug: FakePlug = usualPlug()) {
+  const first = firstRunOf(plug);
+  const setup = createSetup({ install: { database: NO_DATABASE, now: () => 1_700_000_000_000 }, domain: first, open: async () => true, counters: new MemoryCounters(), visitorOf: async () => "203.0.113.7", csrfSecret: CSRF_SECRET });
+  const get = (): Promise<Response> => setup.fetch(new Request(`${ORIGIN}/setup`));
+  const post = async (run: string, fields: Readonly<Record<string, string>>): Promise<Response> => {
+    const page = await get();
+    const csrf = /name="csrf" value="([^"]+)"/.exec(await page.clone().text())?.[1] ?? "";
+
+    return setup.fetch(new Request(`${ORIGIN}/setup/${run}`, { method: "POST", headers: formHeadersOf(page, ORIGIN), body: new URLSearchParams({ csrf, ...fields }).toString() }));
+  };
+  const call = (run: string, body: object): Promise<Response> =>
+    setup.fetch(new Request(`${ORIGIN}/setup/api/${run}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }));
+
+  return { first, plug, get, post, call };
+}
+
+// Drift: an install with nothing set is open to anyone who finds it, and whoever posts has proven nothing of it: a run that stored a setting, a login, or an audit entry would let a stranger write into an install that is not theirs.
+test("on an install with nothing set a repair runs the plug of the typed domain and login with the defaults of such an install, shows its table, and never touches the install's database", async () => {
+  const { first, plug, get, post } = openFirstSetup();
+  const page = await (await get()).text();
+  const repaired = await post("repair", { domain: " Example.COM ", login: "Owner@Example.com", token: OWN });
+  const text = await repaired.text();
+
+  expect([page.includes('name="domain"'), page.includes('name="login"'), page.includes("This install is new.")]).toEqual([true, true, true]);
+  expect([repaired.status, NOTICE.exec(text)?.slice(1), text.includes(OWN)]).toEqual([200, ["done", "1 repaired"], false]);
+  expect(first.asked).toEqual([{ domain: "example.com", login: "owner@example.com" }]);
+  expect<unknown>(plug.calls.map(({ run, settings }) => [run, settings?.logins, settings?.outside_pages])).toEqual([["repair", ["owner@example.com"], "blocked"]]);
+});
+
+const mistyped: readonly { readonly name: string; readonly fields: Readonly<Record<string, string>>; readonly says: string; readonly asked: number }[] = [
+  { name: "an email that is none", fields: { domain: "example.com", login: "owner" }, says: "The email is no email address.", asked: 0 },
+  { name: "no email", fields: { domain: "example.com" }, says: "The email is no email address.", asked: 0 },
+  { name: "text that is no domain", fields: { domain: "localhost", login: "owner@example.com" }, says: "The domain is no domain. Type it alone, such as example.com.", asked: 1 },
+];
+
+// Drift: a mistyped box sent on would spend the person's token on a run under the wrong domain or for nobody's login.
+test.each(mistyped)("$name is refused before the plug is asked, in a sentence that names the box", async ({ fields, says, asked }) => {
+  const { first, plug, post } = openFirstSetup();
+  const refused = await post("repair", { ...fields, token: OWN });
+  const text = await refused.text();
+
+  expect([refused.status, NOTICE.exec(text)?.slice(1), plug.calls, first.asked.length]).toEqual([400, ["refused", says], [], asked]);
+  expect(text.includes(OWN)).toBe(false);
+});
+
+// Drift: the two entry points and the count of tries are one guard; an install with nothing set that counted only one of them, or none, would let its page be tried without end.
+test("a program's call carries the same two values, and the sixth try of one address is refused, form and call counted together", async () => {
+  const { first, plug, post, call } = openFirstSetup();
+  const called = await call("check", { token: OWN, domain: "example.com", login: "owner@example.com" });
+  const statuses = [called.status];
+  for (let again = 0; again < 4; again += 1) statuses.push((await post("check", { domain: "example.com", login: "owner@example.com", token: FOREIGN })).status);
+
+  const sixth = await call("repair", { token: OWN, domain: "example.com", login: "owner@example.com" });
+
+  expect([statuses, sixth.status, await sixth.json()]).toEqual([[200, 200, 200, 200, 200], 429, { ok: false, refusal: "too_many_tries" }]);
+  expect([first.asked.length, plug.calls.map(({ run }) => run)]).toEqual([5, ["check", "check", "check", "check", "check"]]);
 });

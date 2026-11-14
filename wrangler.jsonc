@@ -3,7 +3,7 @@
   "name": "poplin",
   "main": "packages/cloudflare/src/worker/worker.ts",
   "compatibility_date": "2026-11-01",
-  // The install's own values are set on the Worker itself: three by the person who installs, `ACCESS` by setup. A deploy leaves them as they are.
+  // The install's own values are written onto the Worker itself, by setup. A deploy leaves them as they are.
   "keep_vars": true,
   // The sweep: expired sites to the trash, old trash and abandoned uploads away.
   "triggers": { "crons": ["*/15 * * * *"] },

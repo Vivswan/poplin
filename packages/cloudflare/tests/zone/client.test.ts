@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { BaseZones } from "cloudflare/resources/zones/zones";
-import { callCloudflare, listZones } from "../../src/zone/client";
+import { callCloudflare, findZones, listZones } from "../../src/zone/client";
 import { withFake } from "./support/fake-cloudflare";
 import { type Asked, page, refusal, reply } from "./support/replies";
 
@@ -119,12 +119,31 @@ describe("listZones", () => {
         expect(await listZones(connection, ACCOUNT)).toEqual({
           ok: true,
           value: [
-            { id: "zone-1", name: "example.com", plan: "free" },
-            { id: "zone-3", name: "example.net", plan: "business" },
-            { id: "zone-4", name: "example.edu", plan: "free" },
+            { id: "zone-1", name: "example.com", plan: "free", accountId: ACCOUNT },
+            { id: "zone-3", name: "example.net", plan: "business", accountId: ACCOUNT },
+            { id: "zone-4", name: "example.edu", plan: "free", accountId: ACCOUNT },
           ],
         });
         expect(asked[0]?.path).toBe(`/zones?account.id=${ACCOUNT}`);
+      },
+    );
+  });
+});
+
+describe("findZones", () => {
+  // Drift: an install with nothing set takes its account from this answer. Anybody may add a domain to an account of their own, where it stays pending until they prove it theirs: such a zone must never name the account.
+  test("only an active zone of exactly the name comes back, with its account: a pending one, and one whose name only holds the name, do not", async () => {
+    const zones = [
+      { ...(zone("zone-1", "example.com", "account-b", "Free Website") as object), status: "pending" },
+      { ...(zone("zone-2", "example.com", ACCOUNT, "Pro Website") as object), status: "active" },
+      { ...(zone("zone-3", "shop.example.com", ACCOUNT, "Free Website") as object), status: "active" },
+    ];
+
+    await withFake(
+      (asked) => page(asked, zones),
+      async (connection, asked) => {
+        expect(await findZones(connection, "example.com")).toEqual({ ok: true, value: [{ id: "zone-2", name: "example.com", plan: "pro", accountId: ACCOUNT }] });
+        expect(asked[0]?.path).toBe("/zones?name=example.com&status=active");
       },
     );
   });

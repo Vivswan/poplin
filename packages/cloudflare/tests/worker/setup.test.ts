@@ -6,7 +6,7 @@ import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import type { Bindings } from "../../src/worker/bindings";
 import { type Account, emptyAccount, OTHER_TOKEN, TEAM, TOKEN } from "../zone/support/fake-install";
 import type { Asked } from "../zone/support/replies";
-import { ADMIN, accessHeaders, ask, BINDINGS, cloudflareOf, cookieOf, countedBindings, installOf, instance, logIn, OWNER, page, publish, type World, tokenOf, under, world } from "./support/install";
+import { ADMIN, accessHeaders, ask, BINDINGS, cloudflareOf, cookieOf, countedBindings, installOf, instance, logIn, OWNER, page, publish, sweep, type World, tokenOf, under, world } from "./support/install";
 
 /** The Worker's own address, which Cloudflare gives it whatever its routes. */
 const OWN = "https://poplin.example-account.workers.dev";
@@ -165,6 +165,75 @@ describe("an install whose setup has not written ACCESS", () => {
     expect([setup.status, login.status, await login.text(), login.headers.get("Set-Cookie")]).toEqual([200, 503, "The login is not set up yet. Finish the setup of this install first.\n", null]);
     expect([shut.status, (await shut.text()).includes("report"), opened.status, await opened.text()]).toEqual([404, false, 200, "<h1>report</h1>"]);
     expect(finished.status).toBe(302);
+  });
+});
+
+describe("a Worker with nothing set", () => {
+  /** The bindings of a Worker a deploy made: its bucket, its database, its limiter, and its own name. */
+  const DEPLOYED = { ...BINDINGS, ZONE: undefined, ACCOUNT_ID: undefined, FIRST_SETTINGS: undefined, ACCESS: undefined } as Bindings;
+
+  /** What a person types into the two boxes. */
+  const TYPED = { domain: "example.com", login: OWNER };
+
+  /** Open the setup page and post its form with the two boxes and a token, as a browser does. */
+  async function first(worker: ReturnType<typeof instance>, change: string, token: string, bindings: Bindings = DEPLOYED, from: Record<string, string> = {}): Promise<Response> {
+    const opened = await (await ask(worker, `${OWN}/setup`, { headers: from }, bindings)).text();
+    const [, csrf = ""] = /name="csrf" value="([^"]+)"/.exec(opened) ?? [];
+
+    return ask(worker, `${OWN}/setup/${change}`, { method: "POST", headers: { ...from, ...formOf(OWN) }, body: new URLSearchParams({ csrf, token, ...TYPED }).toString() }, bindings);
+  }
+
+  beforeEach(() => {
+    account.bindings = account.bindings.filter((binding) => binding.name !== "ZONE");
+  });
+
+  // Drift: a Worker that was deployed and nothing more used to answer a page of missing variables, which a person had to fill in by hand before any setup could run.
+  test("answers its setup page with the two boxes on any hostname, sends every other path there, and serves nothing else", async () => {
+    const worker = instance(w);
+    const page = await ask(worker, `${OWN}/setup`, {}, DEPLOYED);
+    const text = await page.text();
+    const elsewhere = await Promise.all([`${OWN}/`, `${OWN}/api/whoami`, `${ADMIN}/login`, "https://report--k3f9x2ab71qz-u-poplin.example.com/"].map((address) => ask(worker, address, {}, DEPLOYED)));
+
+    expect([page.status, text.includes('name="domain"'), text.includes('name="login"'), text.includes("poplin.example.com")]).toEqual([200, true, true, false]);
+    expect(elsewhere.map((answer) => [answer.status, answer.headers.get("Location")])).toEqual([[302, "/setup"], [302, "/setup"], [302, "/setup"], [302, "/setup"]]);
+    await sweep(worker, w, DEPLOYED);
+  });
+
+  // Drift: whoever posts here has proven nothing of this install. The run may change what its token's own account holds at Cloudflare, and nothing this install keeps.
+  test("a repair gives the Worker its values at Cloudflare in one press, within what one request may send and ask, and writes nothing to this install's database or bucket, whatever the token", async () => {
+    const tally = { calls: 0 };
+    const counted = { ...countedBindings(tally), ZONE: undefined, ACCOUNT_ID: undefined, FIRST_SETTINGS: undefined, ACCESS: undefined } as Bindings;
+    const worker = instance(w, cloudflareOf(account, asked));
+    await ask(worker, `${OWN}/setup`, {}, DEPLOYED);
+    const before = [await stored(), (await BINDINGS.SITES.list()).objects.length];
+
+    const stranger = await first(worker, "repair", OTHER_TOKEN);
+    const strangers = asked.length;
+    tally.calls = 0;
+    const repaired = await first(worker, "repair", TOKEN, counted);
+    const text = await repaired.text();
+
+    expect([stranger.status, repaired.status, text.includes("The login is ready. Open your dashboard and log in:"), text.includes(TOKEN)]).toEqual([200, 200, true, false]);
+    expect(account.bindings.map((binding) => binding.name)).toEqual(["SITES", "DB", "ZONE", "FIRST_SETTINGS", "ACCOUNT_ID", "ACCESS"]);
+    expect([await stored(), (await BINDINGS.SITES.list()).objects.length]).toEqual(before);
+    // The page and the post together: 30 calls to Cloudflare of the 50 a request of the Free plan may send, and 10 to the database of its 50.
+    expect([asked.length - strangers, tally.calls]).toEqual([30, 10]);
+  });
+
+  // Drift: the page takes a secret from anyone who finds the address, before the install has a domain or a login to tell them apart by.
+  test("the sixth post one address sends in a minute is refused before Cloudflare is asked, and a Worker whose values are gone while its database holds settings names them and offers no setup", async () => {
+    const worker = instance(w, cloudflareOf(account, asked));
+    const from = { "CF-Connecting-IP": "192.0.2.9" };
+    const statuses: number[] = [];
+    for (let post = 0; post < 5; post += 1) statuses.push((await first(worker, "check", "no-such-token-0123456789", DEPLOYED, from)).status);
+
+    const calls = asked.length;
+    statuses.push((await first(worker, "check", TOKEN, DEPLOYED, from)).status);
+    await ask(instance(w), `${ADMIN}/setup`);
+    const lost = await ask(instance(w), `${OWN}/setup`, {}, DEPLOYED);
+
+    expect([statuses, asked.length]).toEqual([[403, 403, 403, 403, 403, 429], calls]);
+    expect([lost.status, (await lost.text()).includes("  ZONE: absent\n  ACCOUNT_ID: absent")]).toEqual([503, true]);
   });
 });
 

@@ -54,6 +54,8 @@ export const INSTALL_OBJECTS = {
   minuteLimitsLimit: 1_000_000,
   minuteLimitsSeconds: 60,
   accessBinding: "ACCESS",
+  zoneBinding: "ZONE",
+  firstSettingsBinding: "FIRST_SETTINGS",
   accountBinding: "ACCOUNT_ID",
   workerBinding: "WORKER_NAME",
   sweepCron: "*/15 * * * *",

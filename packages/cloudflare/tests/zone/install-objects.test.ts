@@ -80,6 +80,8 @@ const WRITTEN: Readonly<Record<SharedKey, readonly [file: string, around: string
   minuteLimitsLimit: ["worker.tf", "simple = { limit = %v, "],
   minuteLimitsSeconds: ["worker.tf", ", period = %v }"],
   accessBinding: ["worker.tf", 'name = %v\n type = "json"\n json = jsonencode({'],
+  zoneBinding: ["worker.tf", 'name = %v\n type = "json"\n json = jsonencode(local.zone_binding)'],
+  firstSettingsBinding: ["worker.tf", 'name = %v\n type = "json"\n json = jsonencode(local.first_settings)'],
   accountBinding: ["worker.tf", 'name = %v\n type = "plain_text"\n text = var.account_id'],
   workerBinding: ["worker.tf", 'name = %v\n type = "plain_text"\n text = var.worker_name'],
   sweepCron: ["worker.tf", "schedules = [{ cron = %v }]"],

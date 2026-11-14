@@ -5,12 +5,13 @@
 //
 // A login is an entry of the audit log, which only ever grows, so the page never opens again.
 // The page answers on the admin hostname and on the Worker's own workers.dev address, which is the only one that resolves before setup made the records.
+// A Worker with nothing set answers the page on every hostname: it has no domain yet to tell one from another.
 
 import { createSetup } from "@poplin/app/src/dashboard/domain/setup";
 import { visitorKey } from "@poplin/app/src/limits/visitor-key";
 import { clientAddress } from "../limits/client-address";
 import type { Held } from "./held";
-import type { Instance } from "./start";
+import type { Instance, Unset } from "./start";
 
 /** Where the setup page answers; its two runs are one level below. */
 const SETUP_PATH = "/setup";
@@ -22,6 +23,27 @@ const SETUP_PATH = "/setup";
  */
 export function isSetupPath(pathname: string): boolean {
   return pathname === SETUP_PATH || pathname.startsWith(`${SETUP_PATH}/`);
+}
+
+/**
+ * Answer a request to a Worker with nothing set: its setup page, with the two boxes for the domain and the first login, and from every other path the way there.
+ *
+ * @param now - the clock, in milliseconds since the epoch
+ * @returns the page's own answer. A run stores nothing here: what it changes is at Cloudflare, under the account of the token it was given
+ */
+export function answerFirstSetup(request: Request, unset: Unset, now: () => number): Promise<Response> {
+  if (!isSetupPath(new URL(request.url).pathname)) return Promise.resolve(new Response(null, { status: 302, headers: { "Cache-Control": "no-store", Location: SETUP_PATH } }));
+
+  const setup = createSetup({
+    install: { database: unset.database, now },
+    domain: unset.first,
+    open: async () => !(await unset.database.hasLoggedIn()),
+    counters: unset.counters,
+    visitorOf: (asked) => visitorKey(clientAddress(asked.headers), unset.secrets.visitorSecret, now()),
+    csrfSecret: unset.secrets.formsSecret,
+  });
+
+  return setup.fetch(request);
 }
 
 /**

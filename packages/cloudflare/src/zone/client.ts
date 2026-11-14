@@ -33,11 +33,12 @@ export type CloudflareResult<Value> = { readonly ok: true; readonly value: Value
 /** The plan a zone is on; an unknown plan reads as `free`, the one with the tightest limits. */
 export type ZonePlan = "free" | "pro" | "business" | "enterprise";
 
-/** A zone the key can change, in the account it was asked about. */
+/** A zone the key can change, with the account it is in. */
 export interface Zone {
   readonly id: string;
   readonly name: string;
   readonly plan: ZonePlan;
+  readonly accountId: string;
 }
 
 function isRefusal(entry: unknown): entry is ApiRefusal {
@@ -101,5 +102,24 @@ export async function listZones(connection: Connection, accountId: string): Prom
 
   const owned = zones.value.filter((zone) => zone.account.id === accountId);
 
-  return { ok: true, value: owned.map((zone) => ({ id: zone.id, name: zone.name, plan: planOf(zone.plan?.name) })) };
+  return { ok: true, value: owned.map((zone) => ({ id: zone.id, name: zone.name, plan: planOf(zone.plan?.name), accountId })) };
+}
+
+/**
+ * Find the zones of a domain the key can see, in whatever account.
+ *
+ * @returns only zones of exactly that name that are active: a zone anybody added and never proved theirs is pending, and is left out
+ */
+export async function findZones(connection: Connection, domain: string): Promise<CloudflareResult<Zone[]>> {
+  const zones = await callCloudflare(connection, (api) => Array.fromAsync(new BaseZones(api).list({ name: domain, status: "active" })));
+  if (!zones.ok) return zones;
+
+  const found = zones.value.flatMap((zone) => {
+    const accountId = zone.account.id;
+    if (zone.name !== domain || zone.status !== "active" || accountId === undefined) return [];
+
+    return [{ id: zone.id, name: zone.name, plan: planOf(zone.plan?.name), accountId }];
+  });
+
+  return { ok: true, value: found };
 }

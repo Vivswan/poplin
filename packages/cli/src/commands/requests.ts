@@ -43,7 +43,7 @@ const BUILDERS: { readonly [Name in Exclude<CommandName, "help">]: (words: Words
   login,
   logout: (words) => withInstall(words, (install) => ({ kind: "logout", ...install })),
   whoami: (words) => withInstall(words, (install) => ({ kind: "whoami", ...install })),
-  setup: (words) => withInstall(words, (install) => ({ kind: "setup", check: words.flags.has("--check"), ...install })),
+  setup,
   config,
   doctor: (words) => withInstall(words, (install) => ({ kind: "doctor", ...install })),
   export: exportSites,
@@ -85,7 +85,7 @@ export type Request =
   | ({ readonly kind: "list"; readonly trash: boolean } & Install)
   | ({ readonly kind: "login"; readonly publisher: boolean; readonly computer?: string; readonly browser: boolean } & Install)
   | ({ readonly kind: "logout" | "whoami" | "doctor" } & Install)
-  | ({ readonly kind: "setup"; readonly check: boolean } & Install)
+  | ({ readonly kind: "setup"; readonly check: boolean; readonly domain?: string; readonly login?: string } & Install)
   | ({ readonly kind: "config"; readonly action: ConfigAction } & Install)
   | ({ readonly kind: "export"; readonly site?: SiteRef; readonly allVersions: boolean; readonly out?: string; readonly overwrite: boolean } & Install)
   | ({ readonly kind: "import"; readonly zip: string; readonly site?: SiteRef; readonly settings: boolean; readonly logins: boolean; readonly dryRun: boolean } & Install)
@@ -225,6 +225,14 @@ function login(words: Words): Request | UsageError {
   if (computer === undefined) return withInstall(words, (install) => ({ ...asked, ...install }));
 
   return withInstall(words, (install) => ({ ...asked, computer, ...install }));
+}
+
+function setup(words: Words): Request | UsageError {
+  const domain = flagValue(words.flags, "--domain");
+  const first = flagValue(words.flags, "--login");
+  const typed = { ...(domain === undefined ? {} : { domain }), ...(first === undefined ? {} : { login: first }) };
+
+  return withInstall(words, (install) => ({ kind: "setup", check: words.flags.has("--check"), ...typed, ...install }));
 }
 
 function readConfigAction(words: Words): ConfigAction | UsageError {

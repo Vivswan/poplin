@@ -5,7 +5,7 @@
 //   DNS record    missing   poplin.example.com
 //   Route         present   poplin.example.com/*
 //
-// The token field is always sent empty: a page never holds the token it was asked with.
+// Every field of the form is always sent empty: a page never holds what was typed into it.
 
 import { html } from "hono/html";
 
@@ -34,7 +34,14 @@ const TO_REPAIR: readonly DomainState[] = ["missing", "differs"];
 const REPAIRED: readonly DomainState[] = ["created", "changed", "removed"];
 
 /** What a reading that is no table says. */
-const REFUSALS = { token: "Token refused.", unreachable: "No answer from the provider. Try again.", not_set_up: "This install is not set up yet." } as const;
+const REFUSALS = {
+  token: "Token refused.",
+  unreachable: "No answer from the provider. Try again.",
+  not_set_up: "This install is not set up yet.",
+  no_domain: "The token shows no domain of that name.",
+  bad_domain: "The domain is no domain. Type it alone, such as example.com.",
+  bad_login: "The email is no email address.",
+} as const;
 
 /** What the two pages show. */
 interface Shown {
@@ -55,6 +62,9 @@ interface Shown {
 
   /** What else the provider's form asks of the person. */
   readonly tokenNote: string;
+
+  /** Whether the install has nothing set: the form then asks for its domain and its first login beside the token. Left out, it asks for the token alone. */
+  readonly nothingSet?: boolean;
 
   /** The path the forms post under: the run's name is added to it. */
   readonly path: "/domain" | "/setup";
@@ -104,6 +114,23 @@ ${stepList(ran.reading.steps)}
 </table></div>`;
 }
 
+/** The two boxes of an install with nothing set. Like the token's, they are always sent empty: a page never holds what was typed into it. */
+function firstFields(nothingSet: boolean): Html {
+  if (!nothingSet) return html``;
+
+  return html`<p>This install is new. Give it its domain and your email, paste a token, and press Repair.</p>
+<div class="field">
+<label for="domain">Domain</label>
+<input type="text" id="domain" name="domain" autocomplete="off" spellcheck="false" required>
+<p class="hint">The domain your sites will live under, alone: example.com</p>
+</div>
+<div class="field">
+<label for="login">Your email</label>
+<input type="email" id="login" name="login" autocomplete="email" required>
+<p class="hint">The first login. The code you log in with is sent to it.</p>
+</div>`;
+}
+
 function byHand(rights: readonly string[]): Html {
   if (rights.length === 0) return html``;
 
@@ -114,12 +141,13 @@ function byHand(rights: readonly string[]): Html {
 /**
  * Build the result of the last run and the form for the next one.
  *
- * @returns the summary, the steps only a person can do, and the table, when a run was just answered; then one form with an empty token field, the way to a token with its rights, and the two buttons
+ * @returns the summary, the steps only a person can do, and the table, when a run was just answered; then one form with an empty token field, the two boxes of an install with nothing set, the way to a token with its rights, and the two buttons
  */
 export function domainBody(shown: Shown): Html {
   return html`${result(shown.ran)}
 <form method="post" action="${shown.path}/check">
 ${csrfField(shown)}
+${firstFields(shown.nothingSet === true)}
 <div class="field">
 <label for="token">${shown.tokenLabel}</label>
 <input type="password" id="token" name="token" autocomplete="off" required>

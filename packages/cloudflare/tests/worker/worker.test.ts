@@ -149,8 +149,6 @@ describe("an instance's first request", () => {
   const stopped: readonly { readonly name: string; readonly broken: () => Bindings; readonly status: number; readonly says: string; readonly hides: string }[] = [
     { name: "a ZONE binding with no domain", broken: () => withBindings({ ZONE: { public_word: "wiki" } }), status: 503, says: "  ZONE: bad-shape", hides: "wiki" },
     { name: "a ZONE binding whose public word is no word", broken: () => withBindings({ ZONE: { domain: "example.com", public_word: "my-wiki" } }), status: 503, says: "  ZONE: bad-public-word", hides: "my-wiki" },
-    { name: "no ZONE binding", broken: () => withBindings({ ZONE: undefined }), status: 503, says: "  ZONE: absent", hides: "example.com" },
-    { name: "neither a ZONE nor an ACCOUNT_ID binding", broken: () => withBindings({ ZONE: undefined, ACCOUNT_ID: undefined }), status: 503, says: "  ZONE: absent\n  ACCOUNT_ID: absent", hides: "example.com" },
     { name: "an ACCOUNT_ID that is no account id", broken: () => withBindings({ ACCOUNT_ID: "my-account" }), status: 503, says: "  ACCOUNT_ID: bad-shape", hides: "my-account" },
     { name: "a WORKER_NAME that is no Worker's name", broken: () => withBindings({ WORKER_NAME: "../poplin" }), status: 503, says: "  WORKER_NAME: bad-shape", hides: "../poplin" },
     {

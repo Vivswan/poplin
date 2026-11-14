@@ -46,6 +46,20 @@ function derivation(label: string): HkdfParams {
 }
 
 /**
+ * Derive the two secrets an instance keeps beside the session key.
+ *
+ * @param key - the bytes of the install's signing key
+ * @returns the key that hashes a visitor's address for the limits, and the bytes that sign the forms of the dashboard and of the setup page
+ */
+export async function derivedSecrets(key: Uint8Array<ArrayBuffer>): Promise<Pick<Held, "visitorSecret" | "formsSecret">> {
+  const derivable = await crypto.subtle.importKey("raw", key, "HKDF", false, ["deriveKey", "deriveBits"]);
+  const visitorSecret = await crypto.subtle.deriveKey(derivation(VISITOR_LABEL), derivable, VISITOR_KEY, false, ["sign"]);
+  const formsSecret = new Uint8Array(await crypto.subtle.deriveBits(derivation(FORMS_LABEL), derivable, FORMS_BITS));
+
+  return { visitorSecret, formsSecret };
+}
+
+/**
  * Read the settings and the signing key.
  *
  * @throws {Error} the install holds no settings or no signing key, or the database failed
@@ -57,9 +71,5 @@ export async function readHeld(database: Pick<Database, "readSettings" | "readSi
   const logins = parseLogins(settings.logins);
   if (!logins.ok) throw new Error(`the stored logins are refused: ${logins.refusal}`);
 
-  const derivable = await crypto.subtle.importKey("raw", key, "HKDF", false, ["deriveKey", "deriveBits"]);
-  const visitorSecret = await crypto.subtle.deriveKey(derivation(VISITOR_LABEL), derivable, VISITOR_KEY, false, ["sign"]);
-  const formsSecret = new Uint8Array(await crypto.subtle.deriveBits(derivation(FORMS_LABEL), derivable, FORMS_BITS));
-
-  return { settings, logins: logins.value, sessionKey: await importSessionKey(key), visitorSecret, formsSecret };
+  return { settings, logins: logins.value, sessionKey: await importSessionKey(key), ...(await derivedSecrets(key)) };
 }

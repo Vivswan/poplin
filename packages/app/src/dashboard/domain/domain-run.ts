@@ -9,7 +9,7 @@ import type { DomainPlug, DomainReading, DomainSettings, ReadSettings } from "./
 const HIDDEN = "[token]";
 
 /** The status of a page that holds no table. */
-export const REFUSAL_STATUS = { token: 403, unreachable: 502, not_set_up: 404 } as const;
+export const REFUSAL_STATUS = { token: 403, unreachable: 502, not_set_up: 404, no_domain: 403, bad_domain: 400, bad_login: 400 } as const;
 
 /** What a form asks of the plug: `check` reads, `repair` changes. */
 export type DomainRun = "check" | "repair";
@@ -30,6 +30,9 @@ interface Asked {
 
   /** The page the form was on. */
   readonly from: "dashboard" | "setup";
+
+  /** Whether the run gets an audit entry; left out, it does. A run on an install with no stored settings gets none: nobody is there to name, and whoever sent it has proven nothing of this install. */
+  readonly unrecorded?: boolean;
 }
 
 function hidden(text: string, token: string): string {
@@ -64,7 +67,7 @@ function byState(reading: Extract<DomainReading, { ok: true }>): Record<string, 
 /**
  * Run the plug once and write the run's audit entry.
  *
- * @returns the plug's reading with the token taken out of every text. A reading that is no table, such as a refused token, writes no audit entry, and no entry ever holds the token
+ * @returns the plug's reading with the token taken out of every text. A reading that is no table, such as a refused token, writes no audit entry, an unrecorded run writes none either, and no entry ever holds the token
  * @throws {Error} the plug or the database failed
  */
 export async function runDomain(plug: DomainPlug, install: Pick<Install, "database" | "now">, asked: Asked): Promise<DomainReading> {
@@ -77,7 +80,7 @@ export async function runDomain(plug: DomainPlug, install: Pick<Install, "databa
 
   const answered = asked.run === "check" ? await plug.check(asked.token, settings) : await plug.repair(asked.token, settings);
   const reading = withoutToken(answered, asked.token);
-  if (!reading.ok) return reading;
+  if (!reading.ok || asked.unrecorded === true) return reading;
 
   const by = asked.by ?? read?.logins[0];
   if (by === undefined) throw new Error("a table was read with no settings behind it, so the audit entry has nobody to name");

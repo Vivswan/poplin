@@ -73,6 +73,9 @@ const LOCAL_ROWS = {
   no_setup_token: { sentence: "setup needs a token of the install's provider, and POPLIN_SETUP_TOKEN holds none", hint: "the install page lists the rights the token needs; put the token in POPLIN_SETUP_TOKEN for this one command", exit: "failed" },
   setup_token_refused: { sentence: "the token was refused, or it is not of the install's own account", hint: "make a token with the rights the install page lists, in the account the install runs in", exit: "failed" },
   setup_provider_silent: { sentence: "the install got no answer from its provider", hint: "try again", exit: "unreachable" },
+  setup_no_domain: { sentence: "the token shows no such domain", hint: "--domain takes a domain that is active at the provider, in the account the token is of", exit: "failed" },
+  setup_bad_domain: { sentence: "--domain takes a domain alone", hint: "for example: --domain example.com", exit: "failed" },
+  setup_bad_login: { sentence: "--login takes an email address", hint: "an install with nothing set yet needs both: --domain <domain> --login <email>", exit: "failed" },
   setup_closed: {
     sentence: "nothing at that address takes a setup",
     hint: "an install's setup closes for good once somebody has logged in: from then on its dashboard's Domain tab checks and repairs",

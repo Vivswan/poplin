@@ -4,7 +4,7 @@ import type { DomainReading } from "../../../app/src/dashboard/domain/records";
 import { createSetup } from "../../../app/src/dashboard/domain/setup";
 import { MemoryCounters } from "../../../app/src/limits/memory-counters";
 import { ORIGIN } from "../../../app/tests/api/support/install";
-import { fakePlug, TOKEN, usualPlug } from "../../../app/tests/dashboard/domain/support/fake-plug";
+import { fakePlug, firstRunOf, TOKEN, usualPlug } from "../../../app/tests/dashboard/domain/support/fake-plug";
 import { type Bench, cleanUp, jsonOf, openBench } from "./support/harness";
 
 /** The environment of a person who has a provider's token and no login. */
@@ -77,6 +77,23 @@ describe("poplin setup", () => {
     const ended = await bench.run(SETUP, { env: ENV });
 
     expect([ended.code, ended.err[0], ended.out]).toEqual([code, says, []]);
+  });
+
+  // Drift: an install with nothing set takes its domain and its first login from this one call; a flag dropped on the way would leave the terminal no way to start such an install.
+  test("--domain and --login reach an install with nothing set, which runs the plug made for them; a value it cannot take is said in its own sentence", async () => {
+    const bench = await openBench();
+    const plug = usualPlug();
+    const first = firstRunOf(plug);
+    const setup = createSetup({ install: { database: bench.install.database, now: () => bench.install.clock.now }, domain: first, open: async () => true, counters: new MemoryCounters(), visitorOf: async () => "203.0.113.7", csrfSecret: SECRET });
+    bench.hook = (request) => setup.fetch(request);
+
+    const repaired = await bench.run(`${SETUP} --domain example.com --login Owner@example.com`, { env: ENV });
+    const noLogin = await bench.run(`${SETUP} --domain example.com`, { env: ENV });
+    const noDomain = await bench.run(`${SETUP} --domain localhost --login owner@example.com`, { env: ENV });
+
+    expect([repaired.code, repaired.out.at(-1), first.asked[0]]).toEqual([0, "the install's side is as it should be", { domain: "example.com", login: "owner@example.com" }]);
+    expect([noLogin.code, noLogin.err[0], noDomain.code, noDomain.err[0]]).toEqual([1, "--login takes an email address", 1, "--domain takes a domain alone"]);
+    expect(plug.calls.map(({ run }) => run)).toEqual(["repair"]);
   });
 
   // Drift: the token opens the person's whole account at the provider; the command's own output is the one place it could reach a log or a screen.
