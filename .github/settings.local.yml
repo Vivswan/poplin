@@ -11,7 +11,17 @@ repository:
   description: "Agents publish static sites to your own Cloudflare account: private by default, shareable by secret link, or public."
   # Declared even when empty: the apply manages only declared keys, so
   # this keeps topics healing out-of-band edits.
-  topics: []
+  topics:
+    - cloudflare-workers
+    - cloudflare-r2
+    - cloudflare-access
+    - static-site
+    - static-hosting
+    - mcp
+    - mcp-server
+    - ai-agents
+    - cli
+    - typescript
   private: false
 
 # This repository's own labels (the fleet layers already carry the
@@ -27,3 +37,17 @@ repository:
 #   - name: my-ruleset
 #     target: branch
 #     enforcement: active
+
+# The real-zone tests' environment: only a job in a main run that names it can read its secret, and GitHub itself holds the rule.
+# The secret is set on GitHub, never declared here: an absent `secrets` key leaves live secrets untouched.
+environments:
+  - name: bench
+    deployment_branch_policy:
+      protected_branches: false
+      custom_branch_policies: true
+    deployment_branch_policies:
+      - name: main
+    # Declared off, not omitted: a reviewer rule or a wait timer added by hand would park every run, and only a declared value heals it.
+    reviewers: []
+    wait_timer: 0
+    prevent_self_review: false
