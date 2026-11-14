@@ -344,7 +344,8 @@ async function addVersion(
  *
  * Nothing is written before the arguments, the file list, and the limits pass. A site needs an `index.html` at its top.
  *
- * @returns the site with `created`, the site as it was before (`null` for a new site), or a refusal that left no file and no change behind. The one exception: on an update that also asks for settings, `stale_version`, `in_trash`, or `not_found` may come after those settings were applied
+ * @returns the site with `created`, the site as it was before (`null` for a new site), or a refusal that left no file and no change behind.
+ *   The one exception: on an update that also asks for settings, `stale_version`, `in_trash`, or `not_found` may come after those settings were applied
  * @throws {Error} the store or the database failed; the message says when files were left behind
  */
 export async function publishSite(

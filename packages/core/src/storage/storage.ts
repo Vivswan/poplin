@@ -39,7 +39,6 @@ declare const listCursorBrand: unique symbol;
  * A key is also in Unicode NFC: R2 normalises keys to it and would fold two spellings into one object.
  *
  * `%` is an ordinary character, kept as written. The one escape refused is a segment that percent-decodes to `.` or `..` (`%2e`, `.%2E`): a URL parser resolves it away.
- *
  * Whatever puts a key in a URL percent-encodes each segment, so no other escape can change the path.
  */
 export type ObjectKey = string & { readonly [objectKeyBrand]: true };
