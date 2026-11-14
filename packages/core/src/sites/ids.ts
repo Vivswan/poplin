@@ -20,9 +20,9 @@ declare const siteIdBrand: unique symbol;
 export type SiteId = string & { readonly [siteIdBrand]: true };
 
 /** Fills the given bytes with random values. */
-type RandomFill = (bytes: Uint8Array) => void;
+type RandomFill = (bytes: Uint8Array<ArrayBuffer>) => void;
 
-function fillFromCrypto(bytes: Uint8Array): void {
+function fillFromCrypto(bytes: Uint8Array<ArrayBuffer>): void {
   crypto.getRandomValues(bytes);
 }
 

@@ -1,77 +1,157 @@
-// The site record: the small object stored beside a site, saying who may open it, which version is live, and whether it sits in the trash.
+// A site as the rest of the code sees it, and the one place a row of the sites table becomes that value.
 
 import * as v from "valibot";
 
-import { parseSiteId } from "../sites/ids";
-import { HOLDER, MOMENT, POSITIVE, REVISION, SITE_NAME } from "./fields";
-import type { RecordKind } from "./kind";
+import type { PublicName, SiteName } from "../names/names";
+import { mintSiteId, type SiteId } from "../sites/ids";
+import { HOLDER, type Holder, MOMENT, POSITIVE, PUBLIC_NAME, SITE_ID, SITE_NAME } from "./fields";
 
-/** The number a site record of the shape below is stamped with. */
-const SITE_SHAPE = 1;
+/** How many characters a folder key holds. */
+const FOLDER_LENGTH = 16;
 
-/** One publish that can still be gone back to. */
-const VERSION = v.strictObject({ number: POSITIVE, published: MOMENT, published_by: HOLDER });
+/** The form of a folder key. */
+const FOLDER_PATTERN = /^[0-9a-z]{16}$/;
 
-/** What a site record holds whatever its access and its state. */
-const ALWAYS = {
-  shape: v.literal(SITE_SHAPE),
-  revision: REVISION,
-  name: SITE_NAME,
-  title: v.nullable(v.pipe(v.string(), v.minLength(1))),
-  search_engines: v.boolean(),
-  expires: v.union([v.literal("never"), MOMENT]),
-  embed_from: v.array(SITE_NAME),
-  live_version: POSITIVE,
-  versions: v.pipe(v.array(VERSION), v.minLength(1)),
-  owner: HOLDER,
-};
+/** Who may open a site: only its admins, anyone with its address, or everyone under its public name too. */
+const ACCESSES = ["private", "unlisted", "public"] as const;
 
-/** Only the admins may open the site. */
-const PRIVATE = { access: v.literal("private") };
+/** The key of a site's file folder. */
+const SITE_FOLDER = v.custom<SiteFolder>(isSiteFolder, "a site folder is 16 lowercase base36 characters");
 
-/** Anyone with the secret may open the site. No other access has a secret. */
-const UNLISTED = { access: v.literal("unlisted"), secret: v.custom<string>(isSecret, "a secret is 12 lowercase base36 characters") };
+/** A title as shown on the dashboard. */
+const TITLE = v.pipe(v.string(), v.minLength(1));
 
-/** Everyone may open the site. */
-const PUBLIC = { access: v.literal("public") };
+/** One kept publish, as the versions table holds it. */
+const VERSION = v.object({ number: POSITIVE, published_at: MOMENT, published_by: HOLDER });
 
-/** The site is served. */
-const LIVE = { state: v.literal("live") };
-
-/** The site sits in the trash until the moment `gone_on`. No other state has that field. */
-const TRASH = { state: v.literal("trash"), gone_on: MOMENT };
-
-/** Every site record: one strict object per access and state, so a field of another access or state is refused. */
-const SITE_SCHEMA = v.pipe(
-  v.variant("state", [
-    v.variant("access", [
-      v.strictObject({ ...ALWAYS, ...LIVE, ...PRIVATE }),
-      v.strictObject({ ...ALWAYS, ...LIVE, ...UNLISTED }),
-      v.strictObject({ ...ALWAYS, ...LIVE, ...PUBLIC }),
-    ]),
-    v.variant("access", [
-      v.strictObject({ ...ALWAYS, ...TRASH, ...PRIVATE }),
-      v.strictObject({ ...ALWAYS, ...TRASH, ...UNLISTED }),
-      v.strictObject({ ...ALWAYS, ...TRASH, ...PUBLIC }),
-    ]),
+/** What a new site is made from. A public site names its public name; no other access has one. */
+export const NEW_SITE = v.intersect([
+  v.object({
+    name: SITE_NAME,
+    folder: SITE_FOLDER,
+    title: v.nullable(TITLE),
+    search_engines: v.boolean(),
+    embeddable: v.optional(v.boolean(), true),
+    expires: v.union([v.literal("never"), MOMENT]),
+  }),
+  v.variant("access", [
+    v.object({ access: v.literal("private") }),
+    v.object({ access: v.literal("unlisted") }),
+    v.object({ access: v.literal("public"), public_name: PUBLIC_NAME }),
   ]),
-  v.check((site) => site.versions.every((version, at) => at === 0 || version.number > (site.versions[at - 1]?.number ?? 0)), "versions are kept in ascending order, each number once"),
-  v.check((site) => site.versions.some((version) => version.number === site.live_version), "live_version names a kept version"),
-);
+]);
 
-/** The site record kind. */
-export const SITE: RecordKind<SiteRecord> = { name: "site", shape: SITE_SHAPE, schema: SITE_SCHEMA };
+/** The settings of a site that change without touching its access, its id, or its versions; each is optional. */
+export const SITE_DETAILS = v.strictObject({
+  title: v.optional(v.nullable(TITLE)),
+  search_engines: v.optional(v.boolean()),
+  embeddable: v.optional(v.boolean()),
+  expires: v.optional(v.union([v.literal("never"), MOMENT])),
+});
+
+/** A row of the sites table with its versions gathered as JSON text. */
+const SITE_ROW = v.object({
+  id: SITE_ID,
+  name: SITE_NAME,
+  folder: SITE_FOLDER,
+  access: v.picklist(ACCESSES),
+  public_name: v.nullable(PUBLIC_NAME),
+  title: v.nullable(TITLE),
+  search_engines: v.picklist([0, 1]),
+  embeddable: v.picklist([0, 1]),
+  expires_at: v.nullable(MOMENT),
+  live_version: POSITIVE,
+  owner: HOLDER,
+  created_at: MOMENT,
+  updated_at: MOMENT,
+  trashed_at: v.nullable(MOMENT),
+  versions: v.pipe(v.string(), v.parseJson(), v.array(VERSION), v.minLength(1)),
+});
+
+declare const siteFolderBrand: unique symbol;
+
+/** The key of the folder a site's files sit under in the bucket. It is made once and never changes, whatever the site's id becomes. */
+export type SiteFolder = string & { readonly [siteFolderBrand]: true };
+
+/** One publish that can still be gone back to. Times are milliseconds since the epoch. */
+type SiteVersion = v.InferOutput<typeof VERSION>;
+
+/** Who may open a site. Only a public site holds a public name. */
+export type SiteAccess = { readonly access: "private" } | { readonly access: "unlisted" } | { readonly access: "public"; readonly public_name: PublicName };
+
+/** Whether a site is served or sits in the trash since `trashed_at`. */
+type SiteState = { readonly state: "live" } | { readonly state: "trash"; readonly trashed_at: number };
 
 /**
- * A site record in its current shape.
+ * A site.
  *
- * `title` is the title shown on the dashboard, `null` when none is. `expires` is `"never"` or the moment the site moves to the trash.
+ * `title` is `null` when none was given, and `expires` is `"never"` or the moment the site stops being served. `embeddable` says whether other pages may show the site in a frame.
  *
- * `owner` and `published_by` are a token's id, or an admin's email for an upload through the dashboard. Times are milliseconds since the epoch.
+ * `versions` is in ascending order and holds `live_version`. `owner` is whoever made the site. Times are milliseconds since the epoch.
  */
-export type SiteRecord = v.InferOutput<typeof SITE_SCHEMA>;
+export type Site = {
+  readonly id: SiteId;
+  readonly name: SiteName;
+  readonly folder: SiteFolder;
+  readonly title: string | null;
+  readonly search_engines: boolean;
+  readonly embeddable: boolean;
+  readonly expires: "never" | number;
+  readonly live_version: number;
+  readonly versions: readonly SiteVersion[];
+  readonly owner: Holder;
+  readonly created_at: number;
+  readonly updated_at: number;
+} & SiteAccess &
+  SiteState;
 
-// A secret has the form of a site id.
-function isSecret(value: unknown): boolean {
-  return typeof value === "string" && parseSiteId(value).ok;
+function isSiteFolder(value: unknown): boolean {
+  return typeof value === "string" && FOLDER_PATTERN.test(value);
+}
+
+function accessOf(row: v.InferOutput<typeof SITE_ROW>): SiteAccess {
+  if (row.access === "public" && row.public_name !== null) return { access: "public", public_name: row.public_name };
+
+  if (row.access !== "public" && row.public_name === null) return { access: row.access };
+
+  throw new Error(`site ${row.id} is stored as ${row.access} ${row.public_name === null ? "without" : "with"} a public name`);
+}
+
+/**
+ * Make the folder key of a new site.
+ *
+ * @returns 16 base36 characters, about 82 bits, each as likely as any other; a site's files are stored under it
+ */
+export function mintSiteFolder(): SiteFolder {
+  // Two minted ids give 24 evenly drawn characters; the first 16 are as evenly drawn.
+  return `${mintSiteId()}${mintSiteId()}`.slice(0, FOLDER_LENGTH) as SiteFolder;
+}
+
+/**
+ * Turn a row of the sites table into a site.
+ *
+ * @param row - the columns of the row, with `versions` as JSON text
+ * @returns the site, its versions in ascending order
+ * @throws {Error} the row is no site: a column breaks its rule, the access and the public name disagree, or the live version is not kept
+ */
+export function siteFromRow(row: unknown): Site {
+  const parsed = v.safeParse(SITE_ROW, row);
+  if (!parsed.success) throw new Error(`a stored site is not a site: ${v.summarize(parsed.issues)}`);
+
+  const { access, public_name, search_engines, embeddable, expires_at, trashed_at, versions, ...rest } = parsed.output;
+  const kept = [...versions].sort((left, right) => left.number - right.number);
+  if (!kept.some((version) => version.number === rest.live_version))
+    throw new Error(`site ${rest.id} is live at version ${rest.live_version}, which is not kept`);
+
+  const state: SiteState = trashed_at === null ? { state: "live" } : { state: "trash", trashed_at };
+
+  return {
+    ...rest,
+    search_engines: search_engines === 1,
+    embeddable: embeddable === 1,
+    expires: expires_at ?? "never",
+    versions: kept,
+    ...accessOf(parsed.output),
+    ...state,
+  };
 }

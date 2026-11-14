@@ -1,5 +1,6 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
   "compatibility_date": "2026-11-01",
-  "r2_buckets": [{ "binding": "SITES", "bucket_name": "example-sites-bucket" }]
+  "r2_buckets": [{ "binding": "SITES", "bucket_name": "example-sites-bucket" }],
+  "d1_databases": [{ "binding": "DB", "database_name": "example-poplin-database", "database_id": "00000000-0000-0000-0000-000000000000" }]
 }

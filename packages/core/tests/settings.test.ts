@@ -1,10 +1,10 @@
 // This pins the published defaults: the table of install settings in the CLI reference is a promise to every install, and the code is its only other copy.
 
 import { describe, expect, test } from "bun:test";
+import * as v from "valibot";
 
 import type { Login } from "../src/auth/logins";
-import { checkRecord } from "../src/records/kind";
-import { defaultSettings, SETTINGS, type SettingValues, settingsFromText, settingsToText } from "../src/records/settings";
+import { defaultSettings, SETTING_VALUES, type SettingValues, settingsFromText, settingsToText } from "../src/records/settings";
 
 const INSTALL = { installer: "ada@example.com" as Login, hostname: "admin.example.com" };
 const PUBLISHED_DEFAULTS = {
@@ -16,7 +16,9 @@ const PUBLISHED_DEFAULTS = {
   dashboard_title: "admin.example.com",
   gallery: "off",
   cache_html: "60s",
+  cache_files: "1h",
   private_sites: "single-file",
+  outside_pages: "blocked",
   max_total_size: "9GB",
   max_site_size: "200MB",
   max_sites: "none",
@@ -34,7 +36,9 @@ const CHANGED = {
   dashboard_title: "Team pages",
   gallery: "on",
   cache_html: "0s",
+  cache_files: "off",
   private_sites: "folders",
+  outside_pages: "allowed",
   max_total_size: "1500MB",
   max_site_size: "512KB",
   max_sites: "40",
@@ -52,7 +56,9 @@ const CHANGED_VALUES = {
   dashboard_title: "Team pages",
   gallery: true,
   cache_html: { count: 0, unit: "s" },
+  cache_files: "off",
   private_sites: "folders",
+  outside_pages: "allowed",
   max_total_size: { count: 1500, unit: "MB" },
   max_site_size: { count: 512, unit: "KB" },
   max_sites: 40,
@@ -67,7 +73,7 @@ describe("defaultSettings", () => {
     const texts = settingsToText(defaultSettings(INSTALL));
 
     expect(Object.entries(texts)).toEqual(Object.entries(PUBLISHED_DEFAULTS));
-    expect(checkRecord(SETTINGS, { shape: 1, revision: 1, ...defaultSettings(INSTALL) }).ok).toBe(true);
+    expect(v.is(SETTING_VALUES, defaultSettings(INSTALL))).toBe(true);
   });
 });
 
@@ -87,6 +93,7 @@ describe("settingsFromText and settingsToText", () => {
     ["cache_html", "120s"],
     ["cache_html", "2m"],
     ["cache_html", "24h"],
+    ["cache_files", "7d"],
     ["default_expires", "36h"],
     ["max_site_size", "1000KB"],
     ["max_site_size", "1500B"],
@@ -110,6 +117,8 @@ describe("settingsFromText and settingsToText", () => {
     ["cache_html", "-60s", "bad-form"],
     ["cache_html", "60S", "bad-form"],
     ["cache_html", "9GB", "bad-form"],
+    ["cache_files", "never", "bad-form"],
+    ["cache_files", "0s", "out-of-range"],
     ["max_total_size", "9gb", "bad-form"],
     ["max_total_size", "9GiB", "bad-form"],
     ["max_total_size", "0GB", "out-of-range"],
@@ -128,6 +137,7 @@ describe("settingsFromText and settingsToText", () => {
     ["default_search_engines", "true", "bad-form"],
     ["gallery", "ON", "bad-form"],
     ["private_sites", "folder", "bad-form"],
+    ["outside_pages", "on", "bad-form"],
     ["dashboard_title", "", "out-of-range"],
     ["logins", "", "bad-form"],
     ["logins", "ada@example.com,", "bad-form"],
@@ -144,8 +154,8 @@ describe("settingsFromText and settingsToText", () => {
   });
 });
 
-describe("SETTINGS", () => {
-  // Drift: the record is read on every request; each row is a stored value that would switch a limit off or lock every admin out.
+describe("SETTING_VALUES", () => {
+  // Drift: the settings are read on every request; each row is a stored value that would switch a limit off or lock every admin out.
   test.each([
     ["the last login cannot be removed", { logins: [] }, "logins"],
     ["a login is an email in its normal form", { logins: ["Ada@Example.com"] }, "logins.0"],
@@ -153,11 +163,10 @@ describe("SETTINGS", () => {
     ["a duration's unit is one of the four", { cache_html: { count: 1, unit: "w" } }, "cache_html.unit"],
     ["a size is a whole count", { max_site_size: { count: 1.5, unit: "MB" } }, "max_site_size.count"],
     ["no limit on sites is the word none, never null", { max_sites: null }, "max_sites"],
-    ["the stamp is this shape's number", { shape: 2 }, "shape"],
     ["no key beyond the published ones", { default_access: "public" }, "default_access"],
-  ])("refuses a record that breaks: %s", (_, change, field) => {
-    const checked = checkRecord(SETTINGS, { shape: 1, revision: 1, ...defaultSettings(INSTALL), ...change });
+  ])("refuses settings that break: %s", (_, change, field) => {
+    const checked = v.safeParse(SETTING_VALUES, { ...defaultSettings(INSTALL), ...change });
 
-    expect(checked.ok ? undefined : checked.issues[0]?.split(":")[0]).toBe(field);
+    expect(checked.success ? undefined : v.getDotPath(checked.issues[0])).toBe(field);
   });
 });

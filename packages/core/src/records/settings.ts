@@ -1,13 +1,9 @@
-// The install's settings: one record for the whole install, the typed value of every key, and the text form each key is typed and shown in.
+// The install's settings: the typed value of every key, and the text form each key is typed and shown in.
 
 import * as v from "valibot";
 
 import { type Login, parseLogin } from "../auth/logins";
-import { LOGIN, POSITIVE, REVISION } from "./fields";
-import type { RecordKind } from "./kind";
-
-/** The number a settings record of the shape below is stamped with. */
-const SETTINGS_SHAPE = 1;
+import { LOGIN, POSITIVE } from "./fields";
 
 /** A whole number as text: no sign, no leading zero, no fraction. */
 const WHOLE_PATTERN = /^(?:0|[1-9]\d*)$/;
@@ -23,6 +19,9 @@ const BYTES_PER_UNIT = { B: 1, KB: 1000, MB: 1_000_000, GB: 1_000_000_000 } as c
 
 /** What an install with no domain may serve privately. */
 const PRIVATE_SITES = ["single-file", "folders"] as const;
+
+/** Whether a page that is not one of the install's own sites may frame a site or load its files. */
+const OUTSIDE_PAGES = ["blocked", "allowed"] as const;
 
 /** How long HTML is cached; `0s` switches the cache off. */
 const CACHE_TIME = amountSchema(SECONDS_PER_UNIT, 0);
@@ -47,7 +46,9 @@ const VALUES = {
   dashboard_title: v.pipe(v.string(), v.minLength(1)),
   gallery: v.boolean(),
   cache_html: CACHE_TIME,
+  cache_files: v.union([v.literal("off"), TIME_SPAN]),
   private_sites: v.picklist(PRIVATE_SITES),
+  outside_pages: v.picklist(OUTSIDE_PAGES),
   max_total_size: SIZE,
   max_site_size: SIZE,
   max_sites: v.union([v.literal("none"), POSITIVE]),
@@ -57,14 +58,11 @@ const VALUES = {
   visitor_requests_per_minute: POSITIVE,
 };
 
-/** The values alone, as a change to the settings is checked before it is written. */
-const VALUES_SCHEMA = v.strictObject(VALUES);
+/** Every setting, as the settings are stored and read. */
+export const SETTING_VALUES = v.strictObject(VALUES);
 
-/** The whole stored record. */
-const SETTINGS_SCHEMA = v.strictObject({ shape: v.literal(SETTINGS_SHAPE), revision: REVISION, ...VALUES });
-
-/** The settings record kind. */
-export const SETTINGS: RecordKind<Settings> = { name: "settings", shape: SETTINGS_SHAPE, schema: SETTINGS_SCHEMA };
+/** Some of the settings, as a change to them is checked before it is written. */
+export const SETTING_CHANGES = v.partial(SETTING_VALUES);
 
 /** Every key, in the order of `VALUES`. */
 const SETTING_KEYS = Object.keys(VALUES) as readonly SettingKey[];
@@ -79,7 +77,9 @@ const FORMS: { readonly [Key in SettingKey]: TextForm<SettingValues[Key]> } = {
   dashboard_title: { read: (text) => text, print: (title) => title },
   gallery: onOff(),
   cache_html: amount(SECONDS_PER_UNIT),
+  cache_files: orWord("off", amount(SECONDS_PER_UNIT)),
   private_sites: oneOf(PRIVATE_SITES),
+  outside_pages: oneOf(OUTSIDE_PAGES),
   max_total_size: amount(BYTES_PER_UNIT),
   max_site_size: amount(BYTES_PER_UNIT),
   max_sites: orWord("none", whole()),
@@ -104,13 +104,10 @@ interface TextForm<Value> {
   readonly print: (value: Value) => string;
 }
 
-/** The values of every setting, without the stamp and the counter of the stored record. */
-export type SettingValues = v.InferOutput<typeof VALUES_SCHEMA>;
+/** The values of every setting. */
+export type SettingValues = v.InferOutput<typeof SETTING_VALUES>;
 
 type SettingKey = keyof SettingValues;
-
-/** The settings record in its current shape. */
-type Settings = v.InferOutput<typeof SETTINGS_SCHEMA>;
 
 /** What a new install knows that the defaults are built from. */
 interface Install {
@@ -125,7 +122,9 @@ interface Install {
 type SettingRefusal = "unknown-key" | "missing" | "bad-form" | "out-of-range";
 
 /** The typed settings, or the first key that was refused and why. */
-export type CheckedSettings = { readonly ok: true; readonly values: SettingValues } | { readonly ok: false; readonly key: string; readonly refusal: SettingRefusal };
+export type CheckedSettings =
+  | { readonly ok: true; readonly values: SettingValues }
+  | { readonly ok: false; readonly key: string; readonly refusal: SettingRefusal };
 
 function amountSchema<Table extends Units>(units: Table, least: number): v.GenericSchema<unknown, Amount<keyof Table>> {
   const unitNames = Object.keys(units) as (keyof Table & string)[];
@@ -226,7 +225,9 @@ export function defaultSettings(install: Install): SettingValues {
     dashboard_title: install.hostname,
     gallery: false,
     cache_html: { count: 60, unit: "s" },
+    cache_files: { count: 1, unit: "h" },
     private_sites: "single-file",
+    outside_pages: "blocked",
     max_total_size: { count: 9, unit: "GB" },
     max_site_size: { count: 200, unit: "MB" },
     max_sites: "none",
@@ -272,7 +273,7 @@ export function settingsFromText(texts: Readonly<Record<string, string>>): Check
     values[key] = value;
   }
 
-  const checked = v.safeParse(VALUES_SCHEMA, values);
+  const checked = v.safeParse(SETTING_VALUES, values);
   if (checked.success) return { ok: true, values: checked.output };
 
   const [issue] = checked.issues;

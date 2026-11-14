@@ -1,0 +1,545 @@
+// The database interface over SQLite. Every SQL text poplin runs outside a migration step is in this file, and every row leaves it as a checked value.
+//
+// A change is one batch: the statement that changes a row carries its own condition, and each statement after it runs only when the one before it changed a row.
+// So a change and its audit entry are kept together or not at all, and nothing is decided from an earlier read.
+
+import * as v from "valibot";
+
+import type { TokenId, TokenRecord } from "../auth/tokens";
+import type { PublicName } from "../names/names";
+import { type AuditAction, type AuditEntry, auditFromRow } from "../records/audit";
+import { SETTING_CHANGES, SETTING_VALUES, type SettingValues } from "../records/settings";
+import { NEW_SITE, SITE_DETAILS, type Site, type SiteAccess, siteFromRow } from "../records/site";
+import { mintSiteId, type SiteId } from "../sites/ids";
+import { tokenFromRow } from "../records/token";
+import type {
+  Address,
+  AuditNote,
+  Database,
+  Done,
+  NewSite,
+  Published,
+  Refused,
+  Reserved,
+  Signed,
+  SiteDetails,
+  SitesPage,
+  SitesQuery,
+  Unchanged,
+} from "./database";
+import type { SqlDriver, SqlValue, Statement, StatementResult } from "./driver";
+
+/** How many ids are tried for one site before giving up; an id is about 62 random bits, so a second try is already a rare event. */
+const MINT_ATTEMPTS = 5;
+
+/** The most rows one page of a listing holds. */
+const MAX_PAGE = 100;
+
+/** A `before` that every audit entry is below. */
+const NEWEST = Number.MAX_SAFE_INTEGER;
+
+/** A site with its kept versions gathered into one JSON column, so one query gives the whole site. */
+const SELECT_SITE = `
+SELECT s.id, s.name, s.folder, s.access, s.public_name, s.title, s.search_engines, s.embeddable, s.expires_at, s.live_version, s.owner, s.created_at, s.updated_at, s.trashed_at,
+  (SELECT json_group_array(json_object('number', v.number, 'published_at', v.published_at, 'published_by', v.published_by)) FROM versions v WHERE v.folder = s.folder) AS versions
+FROM sites s`;
+
+/** The site with id `?1`. */
+const SITE_BY_ID = `${SELECT_SITE} WHERE s.id = ?1`;
+
+/** The site holding public name `?1`. */
+const SITE_BY_PUBLIC_NAME = `${SELECT_SITE} WHERE s.public_name = ?1`;
+
+/** Added to a lookup by address: the site is outside the trash and not past its expiry at `?2`. */
+const IS_SERVED = "AND s.trashed = 0 AND (s.expires_at IS NULL OR s.expires_at > ?2)";
+
+/** The audit entry of a change to the site now at id `?4`, written only when the statement before it changed a row. */
+const AUDIT_SITE =
+  "INSERT INTO audit (at, actor, action, site_id, site_name, detail) SELECT ?1, ?2, ?3, id, name, ?5 FROM sites WHERE id = ?4 AND changes() = 1";
+
+/** The audit entry of a change to no site, written only when the statement before it changed a row. */
+const AUDIT_PLAIN = "INSERT INTO audit (at, actor, action, detail) SELECT ?1, ?2, ?3, ?4 WHERE changes() = 1";
+
+/** An audit entry that goes with no change. */
+const AUDIT_NOTE = "INSERT INTO audit (at, actor, action, site_id, site_name, detail) VALUES (?1, ?2, ?3, ?4, ?5, ?6)";
+
+/** A new site, only while its id and its public name are free: no site has either as its id or its public name. The schema adds version 1 with the row. */
+const INSERT_SITE = `
+INSERT INTO sites (id, name, folder, access, public_name, title, search_engines, expires_at, live_version, next_version, owner, created_at, updated_at, embeddable)
+SELECT ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, 1, 2, ?9, ?10, ?10, ?11
+WHERE NOT EXISTS (SELECT 1 FROM sites WHERE id = ?1)
+  AND NOT EXISTS (SELECT 1 FROM sites WHERE public_name = ?1)
+  AND (?5 IS NULL OR (?5 <> ?1 AND NOT EXISTS (SELECT 1 FROM sites WHERE public_name = ?5) AND NOT EXISTS (SELECT 1 FROM sites WHERE id = ?5)))`;
+
+/** Whether a site has `?1` as its public name or its id. */
+const NAME_IS_HELD = "SELECT (EXISTS (SELECT 1 FROM sites WHERE public_name = ?1) OR EXISTS (SELECT 1 FROM sites WHERE id = ?1)) AS held";
+
+/** A new access for a live site, only when it differs and the public name asked for is free. */
+const SET_ACCESS = `
+UPDATE sites SET access = ?2, public_name = ?3, updated_at = ?4
+WHERE id = ?1 AND trashed = 0 AND (access <> ?2 OR public_name IS NOT ?3)
+  AND (?3 IS NULL OR (NOT EXISTS (SELECT 1 FROM sites WHERE public_name = ?3 AND id <> ?1) AND NOT EXISTS (SELECT 1 FROM sites WHERE id = ?3)))`;
+
+/** A new id for a live site, only while that id is free. */
+const SET_ID = `
+UPDATE sites SET id = ?2, updated_at = ?3
+WHERE id = ?1 AND trashed = 0 AND NOT EXISTS (SELECT 1 FROM sites WHERE id = ?2) AND NOT EXISTS (SELECT 1 FROM sites WHERE public_name = ?2)`;
+
+/** A live site into the trash. */
+const TRASH = "UPDATE sites SET trashed_at = ?2, updated_at = ?2 WHERE id = ?1 AND trashed = 0";
+
+/** A trashed site out of the trash. */
+const RESTORE = "UPDATE sites SET trashed_at = NULL, updated_at = ?2 WHERE id = ?1 AND trashed = 1";
+
+/** The audit entry of a delete, written while the site is still there to name. */
+const AUDIT_DELETE = "INSERT INTO audit (at, actor, action, site_id, site_name, detail) SELECT ?1, ?2, 'delete', id, name, '{}' FROM sites WHERE id = ?3";
+
+/** The delete itself, only when its audit entry was written. */
+const DELETE_SITE = "DELETE FROM sites WHERE id = ?1 AND changes() = 1";
+
+/** The next version number of a live site, set aside. */
+const RESERVE = "UPDATE sites SET next_version = next_version + 1 WHERE id = ?1 AND trashed = 0";
+
+/** The number the statement before it set aside. */
+const RESERVED = "SELECT next_version - 1 AS number FROM sites WHERE id = ?1";
+
+/** A version, only when its number was reserved and is above every kept one, so a slower, older publish never replaces a newer one. */
+const INSERT_VERSION = `
+INSERT INTO versions (folder, number, published_at, published_by)
+SELECT s.folder, ?2, ?3, ?4 FROM sites s
+WHERE s.id = ?1 AND s.trashed = 0 AND ?2 < s.next_version AND ?2 > (SELECT MAX(v.number) FROM versions v WHERE v.folder = s.folder)`;
+
+/** The version just kept made live. */
+const SET_LIVE_TO_NEW = "UPDATE sites SET live_version = ?2, updated_at = ?3 WHERE id = ?1 AND changes() = 1";
+
+/** The versions beyond the `?2` highest dropped, only after a publish. */
+const DROP_OLD_VERSIONS = `
+DELETE FROM versions
+WHERE changes() = 1 AND folder = (SELECT folder FROM sites WHERE id = ?1)
+  AND number NOT IN (SELECT number FROM versions WHERE folder = (SELECT folder FROM sites WHERE id = ?1) ORDER BY number DESC LIMIT ?2)`;
+
+/** A kept version of a live site made live, only when it is not live already. */
+const SET_LIVE = `
+UPDATE sites SET live_version = ?2, updated_at = ?3
+WHERE id = ?1 AND trashed = 0 AND live_version <> ?2 AND EXISTS (SELECT 1 FROM versions v WHERE v.folder = sites.folder AND v.number = ?2)`;
+
+/** The highest kept version below the live one made live. */
+const SET_LIVE_TO_PREVIOUS = `
+UPDATE sites SET live_version = (SELECT MAX(v.number) FROM versions v WHERE v.folder = sites.folder AND v.number < sites.live_version), updated_at = ?2
+WHERE id = ?1 AND trashed = 0 AND EXISTS (SELECT 1 FROM versions v WHERE v.folder = sites.folder AND v.number < sites.live_version)`;
+
+/** The audit entry of a move of the live version, naming the version the site is at now. */
+const AUDIT_LIVE = `
+INSERT INTO audit (at, actor, action, site_id, site_name, detail)
+SELECT ?1, ?2, 'live_version', id, name, json_object('version', live_version) FROM sites WHERE id = ?3 AND changes() = 1`;
+
+/** Every column of a token. */
+const SELECT_TOKEN = "SELECT id, hash, scope, note, created_at, expires_at FROM tokens";
+
+/** A new token, only while its id is free. */
+const INSERT_TOKEN =
+  "INSERT INTO tokens (id, hash, scope, note, created_at, expires_at) SELECT ?1, ?2, ?3, ?4, ?5, ?6 WHERE NOT EXISTS (SELECT 1 FROM tokens WHERE id = ?1)";
+
+/** The audit entry of a revoked token, written while the token is still there to name. */
+const AUDIT_REVOKE = `
+INSERT INTO audit (at, actor, action, detail)
+SELECT ?1, ?2, 'token_revoked', json_object('token', id, 'scope', scope, 'note', note) FROM tokens WHERE id = ?3`;
+
+/** The removal itself, only when its audit entry was written. */
+const DELETE_TOKEN = "DELETE FROM tokens WHERE id = ?1 AND changes() = 1";
+
+/** The settings, as JSON text. */
+const READ_SETTINGS = "SELECT value FROM settings WHERE id = 1";
+
+/** The settings of a new install, only while none are stored. */
+const INSERT_SETTINGS = "INSERT INTO settings (id, value, updated_at) SELECT 1, ?1, ?2 WHERE NOT EXISTS (SELECT 1 FROM settings WHERE id = 1)";
+
+/** A merge patch: each key it names is replaced and every other key stays, in one statement, only when a value differs. */
+const PATCH_SETTINGS = "UPDATE settings SET value = json_patch(value, ?1), updated_at = ?2 WHERE id = 1 AND json(json_patch(value, ?1)) <> json(value)";
+
+/** The audit entries below `?1`, the newest first. */
+const LIST_AUDIT = "SELECT seq, at, actor, action, site_id, site_name, detail FROM audit WHERE seq < ?1 ORDER BY seq DESC LIMIT ?2";
+
+/** The column each site detail is stored in, and its stored value. */
+const DETAIL_COLUMNS: { readonly [Key in keyof Required<SiteDetails>]: (value: Required<SiteDetails>[Key]) => readonly [column: string, stored: SqlValue] } = {
+  title: (title) => ["title", title],
+  search_engines: (allowed) => ["search_engines", allowed ? 1 : 0],
+  embeddable: (allowed) => ["embeddable", allowed ? 1 : 0],
+  expires: (expires) => ["expires_at", expires === "never" ? null : expires],
+};
+
+function sql(text: string, ...params: SqlValue[]): Statement {
+  return { sql: text, params };
+}
+
+function auditSite(signed: Signed, action: AuditAction, id: SiteId, detail: Readonly<Record<string, unknown>>): Statement {
+  return sql(AUDIT_SITE, signed.at, signed.by, action, id, JSON.stringify(detail));
+}
+
+function auditPlain(signed: Signed, action: AuditAction, detail: Readonly<Record<string, unknown>>): Statement {
+  return sql(AUDIT_PLAIN, signed.at, signed.by, action, JSON.stringify(detail));
+}
+
+function requirePage(limit: number): void {
+  if (!Number.isSafeInteger(limit) || limit < 1 || limit > MAX_PAGE) throw new RangeError(`a page holds 1 to ${MAX_PAGE} rows, not ${limit}`);
+}
+
+function publicNameOf(access: SiteAccess): PublicName | null {
+  return access.access === "public" ? access.public_name : null;
+}
+
+function siteIn(result: StatementResult | undefined): Site | undefined {
+  const row = result?.rows[0];
+
+  return row === undefined ? undefined : siteFromRow(row);
+}
+
+function changed(result: StatementResult | undefined): boolean {
+  return (result?.changes ?? 0) > 0;
+}
+
+function done(result: StatementResult | undefined): Done {
+  const site = siteIn(result);
+  if (site === undefined) throw new Error("a change to a site was made and the site is not there to read");
+
+  return { kind: "done", site };
+}
+
+/** Why a site that is live could not be changed: there is none, or it sits in the trash. `undefined` for a live site. */
+function unreachable(site: Site | undefined): Refused<"not_found" | "in_trash"> | undefined {
+  if (site === undefined) return { kind: "not_found" };
+
+  if (site.state === "trash") return { kind: "in_trash" };
+
+  return undefined;
+}
+
+function settingsIn(result: StatementResult | undefined): SettingValues | undefined {
+  const value = result?.rows[0]?.value;
+  if (typeof value !== "string") return undefined;
+
+  return v.parse(SETTING_VALUES, JSON.parse(value));
+}
+
+/** Core's database over any SQLite a driver reaches: D1 in the Worker, `bun:sqlite` in the tests. */
+export class SqlDatabase implements Database {
+  readonly #driver: SqlDriver;
+
+  readonly #mintId: () => SiteId;
+
+  /**
+   * @param driver - a database already at the current schema version
+   * @param mintId - makes a candidate site id; the default draws 12 random base36 characters
+   */
+  constructor(driver: SqlDriver, mintId: () => SiteId = mintSiteId) {
+    this.#driver = driver;
+    this.#mintId = mintId;
+  }
+
+  async createSite(draft: NewSite, signed: Signed): Promise<Done | Refused<"name_taken">> {
+    const site = v.parse(NEW_SITE, draft);
+    const publicName = publicNameOf(site);
+    const expires = site.expires === "never" ? null : site.expires;
+    const detail = { access: site.access, public_name: publicName };
+
+    for (let attempt = 0; attempt < MINT_ATTEMPTS; attempt += 1) {
+      const id = this.#mintId();
+      const [inserted, , held, made] = await this.#driver.batch([
+        sql(
+          INSERT_SITE,
+          id,
+          site.name,
+          site.folder,
+          site.access,
+          publicName,
+          site.title,
+          site.search_engines ? 1 : 0,
+          expires,
+          signed.by,
+          signed.at,
+          site.embeddable ? 1 : 0,
+        ),
+        auditSite(signed, "create", id, detail),
+        sql(NAME_IS_HELD, publicName),
+        sql(SITE_BY_ID, id),
+      ]);
+      if (changed(inserted)) return done(made);
+
+      if (publicName !== null && held?.rows[0]?.held === 1) return { kind: "name_taken" };
+    }
+
+    throw new Error(`no free site id in ${MINT_ATTEMPTS} tries`);
+  }
+
+  async getSite(id: SiteId): Promise<Site | undefined> {
+    const [found] = await this.#driver.batch([sql(SITE_BY_ID, id)]);
+
+    return siteIn(found);
+  }
+
+  async getSiteByPublicName(name: PublicName): Promise<Site | undefined> {
+    const [found] = await this.#driver.batch([sql(SITE_BY_PUBLIC_NAME, name)]);
+
+    return siteIn(found);
+  }
+
+  async findServed(address: Address, now: number): Promise<Site | undefined> {
+    const lookup = "id" in address ? sql(`${SITE_BY_ID} ${IS_SERVED}`, address.id, now) : sql(`${SITE_BY_PUBLIC_NAME} ${IS_SERVED}`, address.public_name, now);
+    const [found] = await this.#driver.batch([lookup]);
+
+    return siteIn(found);
+  }
+
+  async listSites(query: SitesQuery): Promise<SitesPage> {
+    requirePage(query.limit);
+
+    const conditions = ["s.trashed = ?1"];
+    const params: SqlValue[] = [query.trash ? 1 : 0];
+
+    if (query.owner !== undefined) {
+      params.push(query.owner);
+      conditions.push(`s.owner = ?${params.length}`);
+    }
+
+    if (query.after !== undefined) {
+      params.push(query.after.updated_at, query.after.id);
+      conditions.push(`(s.updated_at, s.id) < (?${params.length - 1}, ?${params.length})`);
+    }
+
+    // One row more than the page shows whether another page follows.
+    params.push(query.limit + 1);
+    const text = `${SELECT_SITE} WHERE ${conditions.join(" AND ")} ORDER BY s.updated_at DESC, s.id DESC LIMIT ?${params.length}`;
+    const [listed] = await this.#driver.batch([sql(text, ...params)]);
+    const sites = (listed?.rows ?? []).slice(0, query.limit).map(siteFromRow);
+    const last = sites.at(-1);
+    if (last === undefined || (listed?.rows.length ?? 0) <= query.limit) return { sites };
+
+    return { sites, next: { updated_at: last.updated_at, id: last.id } };
+  }
+
+  async changeAccess(id: SiteId, access: SiteAccess, signed: Signed): Promise<Done | Unchanged | Refused<"not_found" | "in_trash" | "name_taken">> {
+    const publicName = publicNameOf(access);
+    const [updated, , after] = await this.#driver.batch([
+      sql(SET_ACCESS, id, access.access, publicName, signed.at),
+      auditSite(signed, "access", id, { access: access.access, public_name: publicName }),
+      sql(SITE_BY_ID, id),
+    ]);
+    if (changed(updated)) return done(after);
+
+    const site = siteIn(after);
+    const refusal = unreachable(site);
+    if (site === undefined || refusal !== undefined) return refusal ?? { kind: "not_found" };
+
+    if (site.access === access.access && publicNameOf(site) === publicName) return { kind: "unchanged", site };
+
+    return { kind: "name_taken" };
+  }
+
+  async changeDetails(id: SiteId, details: SiteDetails, signed: Signed): Promise<Done | Unchanged | Refused<"not_found" | "in_trash">> {
+    const given = v.parse(SITE_DETAILS, details);
+    const sets: string[] = [];
+    const differs: string[] = [];
+    const params: SqlValue[] = [id, signed.at];
+
+    for (const key of ["title", "search_engines", "embeddable", "expires"] as const) {
+      const value = given[key];
+      if (value === undefined) continue;
+
+      const [column, stored] = (DETAIL_COLUMNS[key] as (value: unknown) => readonly [string, SqlValue])(value);
+      params.push(stored);
+      sets.push(`${column} = ?${params.length}`);
+      differs.push(`${column} IS NOT ?${params.length}`);
+    }
+
+    if (sets.length === 0) return this.#unchanged(id);
+
+    const text = `UPDATE sites SET ${sets.join(", ")}, updated_at = ?2 WHERE id = ?1 AND trashed = 0 AND (${differs.join(" OR ")})`;
+    const [updated, , after] = await this.#driver.batch([sql(text, ...params), auditSite(signed, "details", id, given), sql(SITE_BY_ID, id)]);
+    if (changed(updated)) return done(after);
+
+    return this.#unchangedIn(after);
+  }
+
+  async giveNewId(id: SiteId, signed: Signed): Promise<Done | Refused<"not_found" | "in_trash">> {
+    for (let attempt = 0; attempt < MINT_ATTEMPTS; attempt += 1) {
+      const next = this.#mintId();
+      const [updated, , after, before] = await this.#driver.batch([
+        sql(SET_ID, id, next, signed.at),
+        auditSite(signed, "new_id", next, { from: id }),
+        sql(SITE_BY_ID, next),
+        sql(SITE_BY_ID, id),
+      ]);
+      if (changed(updated)) return done(after);
+
+      const refusal = unreachable(siteIn(before));
+      if (refusal !== undefined) return refusal;
+    }
+
+    throw new Error(`no free site id in ${MINT_ATTEMPTS} tries`);
+  }
+
+  async trashSite(id: SiteId, signed: Signed): Promise<Done | Refused<"not_found" | "in_trash">> {
+    const [updated, , after] = await this.#driver.batch([sql(TRASH, id, signed.at), auditSite(signed, "trash", id, {}), sql(SITE_BY_ID, id)]);
+    if (changed(updated)) return done(after);
+
+    return unreachable(siteIn(after)) ?? { kind: "not_found" };
+  }
+
+  async restoreSite(id: SiteId, signed: Signed): Promise<Done | Refused<"not_found" | "not_in_trash">> {
+    const [updated, , after] = await this.#driver.batch([sql(RESTORE, id, signed.at), auditSite(signed, "restore", id, {}), sql(SITE_BY_ID, id)]);
+    if (changed(updated)) return done(after);
+
+    return { kind: siteIn(after) === undefined ? "not_found" : "not_in_trash" };
+  }
+
+  async deleteSite(id: SiteId, signed: Signed): Promise<Done | Refused<"not_found">> {
+    const [before, , deleted] = await this.#driver.batch([sql(SITE_BY_ID, id), sql(AUDIT_DELETE, signed.at, signed.by, id), sql(DELETE_SITE, id)]);
+    if (!changed(deleted)) return { kind: "not_found" };
+
+    return done(before);
+  }
+
+  async reserveVersion(id: SiteId): Promise<Reserved | Refused<"not_found" | "in_trash">> {
+    const [updated, reserved, after] = await this.#driver.batch([sql(RESERVE, id), sql(RESERVED, id), sql(SITE_BY_ID, id)]);
+    if (changed(updated)) return { kind: "reserved", number: Number(reserved?.rows[0]?.number) };
+
+    return unreachable(siteIn(after)) ?? { kind: "not_found" };
+  }
+
+  async addVersion(
+    id: SiteId,
+    version: { readonly number: number; readonly keep: number },
+    signed: Signed,
+  ): Promise<Published | Refused<"not_found" | "in_trash" | "stale_number">> {
+    if (!Number.isSafeInteger(version.keep) || version.keep < 1) throw new RangeError(`a site keeps at least 1 version, not ${version.keep}`);
+
+    const [before, , updated, , , after] = await this.#driver.batch([
+      sql(SITE_BY_ID, id),
+      sql(INSERT_VERSION, id, version.number, signed.at, signed.by),
+      sql(SET_LIVE_TO_NEW, id, version.number, signed.at),
+      auditSite(signed, "publish", id, { version: version.number }),
+      sql(DROP_OLD_VERSIONS, id, version.keep),
+      sql(SITE_BY_ID, id),
+    ]);
+    if (!changed(updated)) return unreachable(siteIn(after)) ?? { kind: "stale_number" };
+
+    const published = done(after);
+    const kept = new Set(published.site.versions.map((entry) => entry.number));
+    const dropped = (siteIn(before)?.versions ?? []).map((entry) => entry.number).filter((number) => !kept.has(number));
+
+    return { ...published, dropped };
+  }
+
+  async setLiveVersion(
+    id: SiteId,
+    target: number | "previous",
+    signed: Signed,
+  ): Promise<Done | Unchanged | Refused<"not_found" | "in_trash" | "no_such_version">> {
+    const update = target === "previous" ? sql(SET_LIVE_TO_PREVIOUS, id, signed.at) : sql(SET_LIVE, id, target, signed.at);
+    const [updated, , after] = await this.#driver.batch([update, sql(AUDIT_LIVE, signed.at, signed.by, id), sql(SITE_BY_ID, id)]);
+    if (changed(updated)) return done(after);
+
+    const site = siteIn(after);
+    const refusal = unreachable(site);
+    if (site === undefined || refusal !== undefined) return refusal ?? { kind: "not_found" };
+
+    if (site.live_version === target) return { kind: "unchanged", site };
+
+    return { kind: "no_such_version" };
+  }
+
+  async addToken(token: TokenRecord, signed: Signed): Promise<{ readonly kind: "done" } | Refused<"id_taken">> {
+    const expires = token.scope === "admin" ? token.expiresAt : null;
+    const [inserted] = await this.#driver.batch([
+      sql(INSERT_TOKEN, token.id, token.hash, token.scope, token.note, token.createdAt, expires),
+      auditPlain(signed, "token_added", { token: token.id, scope: token.scope, note: token.note }),
+    ]);
+
+    return { kind: changed(inserted) ? "done" : "id_taken" };
+  }
+
+  async getToken(id: TokenId): Promise<TokenRecord | undefined> {
+    const [found] = await this.#driver.batch([sql(`${SELECT_TOKEN} WHERE id = ?1`, id)]);
+    const row = found?.rows[0];
+
+    return row === undefined ? undefined : tokenFromRow(row);
+  }
+
+  async listTokens(): Promise<readonly TokenRecord[]> {
+    const [listed] = await this.#driver.batch([sql(`${SELECT_TOKEN} ORDER BY created_at DESC, id DESC`)]);
+
+    return (listed?.rows ?? []).map(tokenFromRow);
+  }
+
+  async revokeToken(id: TokenId, signed: Signed): Promise<{ readonly kind: "done"; readonly token: TokenRecord } | Refused<"not_found">> {
+    const [before, , deleted] = await this.#driver.batch([
+      sql(`${SELECT_TOKEN} WHERE id = ?1`, id),
+      sql(AUDIT_REVOKE, signed.at, signed.by, id),
+      sql(DELETE_TOKEN, id),
+    ]);
+    const row = before?.rows[0];
+    if (!changed(deleted) || row === undefined) return { kind: "not_found" };
+
+    return { kind: "done", token: tokenFromRow(row) };
+  }
+
+  async readSettings(): Promise<SettingValues | undefined> {
+    const [read] = await this.#driver.batch([sql(READ_SETTINGS)]);
+
+    return settingsIn(read);
+  }
+
+  async initSettings(values: SettingValues, signed: Signed): Promise<{ readonly kind: "done" | "already_set"; readonly values: SettingValues }> {
+    const checked = v.parse(SETTING_VALUES, values);
+    const [inserted, , read] = await this.#driver.batch([
+      sql(INSERT_SETTINGS, JSON.stringify(checked), signed.at),
+      auditPlain(signed, "settings_set", {}),
+      sql(READ_SETTINGS),
+    ]);
+    const stored = settingsIn(read);
+    if (stored === undefined) throw new Error("the settings were stored and are not there to read");
+
+    return { kind: changed(inserted) ? "done" : "already_set", values: stored };
+  }
+
+  async changeSettings(
+    changes: Partial<SettingValues>,
+    signed: Signed,
+  ): Promise<{ readonly kind: "done" | "unchanged"; readonly values: SettingValues } | Refused<"not_set_up">> {
+    const checked = v.parse(SETTING_CHANGES, changes);
+    const [patched, , read] = await this.#driver.batch([
+      sql(PATCH_SETTINGS, JSON.stringify(checked), signed.at),
+      auditPlain(signed, "settings_changed", checked),
+      sql(READ_SETTINGS),
+    ]);
+    const values = settingsIn(read);
+    if (values === undefined) return { kind: "not_set_up" };
+
+    return { kind: changed(patched) ? "done" : "unchanged", values };
+  }
+
+  async appendAudit(note: AuditNote, signed: Signed): Promise<void> {
+    await this.#driver.batch([sql(AUDIT_NOTE, signed.at, signed.by, note.action, note.site?.id ?? null, note.site?.name ?? null, JSON.stringify(note.detail))]);
+  }
+
+  async listAudit(query: { readonly limit: number; readonly before?: number }): Promise<readonly AuditEntry[]> {
+    requirePage(query.limit);
+    const [listed] = await this.#driver.batch([sql(LIST_AUDIT, query.before ?? NEWEST, query.limit)]);
+
+    return (listed?.rows ?? []).map(auditFromRow);
+  }
+
+  async #unchanged(id: SiteId): Promise<Unchanged | Refused<"not_found" | "in_trash">> {
+    const [found] = await this.#driver.batch([sql(SITE_BY_ID, id)]);
+
+    return this.#unchangedIn(found);
+  }
+
+  #unchangedIn(result: StatementResult | undefined): Unchanged | Refused<"not_found" | "in_trash"> {
+    const site = siteIn(result);
+    const refusal = unreachable(site);
+    if (site === undefined || refusal !== undefined) return refusal ?? { kind: "not_found" };
+
+    return { kind: "unchanged", site };
+  }
+}

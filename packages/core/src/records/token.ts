@@ -1,35 +1,34 @@
-// The stored token record: what `mintToken` makes, with the stamp and the counter every stored record carries.
+// The one place a row of the tokens table becomes the token record `mintToken` makes.
 
 import * as v from "valibot";
 
 import type { TokenRecord } from "../auth/tokens";
-import { MOMENT, REVISION, TOKEN_ID } from "./fields";
-import type { RecordKind } from "./kind";
-
-/** The number a token record of the shape below is stamped with. */
-const TOKEN_SHAPE = 1;
+import { MOMENT, TOKEN_ID } from "./fields";
 
 /** The form of a token's hash: a SHA-256 in lowercase hex. */
 const HASH_PATTERN = /^[0-9a-f]{64}$/;
 
-/** What a token record holds whatever its scope. */
-const ALWAYS = {
-  shape: v.literal(TOKEN_SHAPE),
-  revision: REVISION,
-  id: TOKEN_ID,
-  hash: v.pipe(v.string(), v.regex(HASH_PATTERN)),
-  note: v.string(),
-  createdAt: MOMENT,
-};
+/** What a row holds whatever the token's scope. */
+const ALWAYS = { id: TOKEN_ID, hash: v.pipe(v.string(), v.regex(HASH_PATTERN)), note: v.string(), created_at: MOMENT };
 
-/** Every token record. Only an admin token has an expiry. The annotation fails to compile once the fields differ from `TokenRecord`. */
-const TOKEN_SCHEMA: v.GenericSchema<unknown, StoredToken> = v.variant("scope", [
-  v.strictObject({ ...ALWAYS, scope: v.literal("admin"), expiresAt: MOMENT }),
-  v.strictObject({ ...ALWAYS, scope: v.literal("publisher") }),
+/** A row of the tokens table. Only an admin token has an expiry. */
+const TOKEN_ROW = v.variant("scope", [
+  v.strictObject({ ...ALWAYS, scope: v.literal("admin"), expires_at: MOMENT }),
+  v.strictObject({ ...ALWAYS, scope: v.literal("publisher"), expires_at: v.null() }),
 ]);
 
-/** The token record kind. */
-export const TOKEN: RecordKind<StoredToken> = { name: "token", shape: TOKEN_SHAPE, schema: TOKEN_SCHEMA };
+/**
+ * Turn a row of the tokens table into a token record.
+ *
+ * @returns the record in the fields of `TokenRecord`, which stays their one definition
+ * @throws {Error} the row is no token record
+ */
+export function tokenFromRow(row: unknown): TokenRecord {
+  const parsed = v.safeParse(TOKEN_ROW, row);
+  if (!parsed.success) throw new Error(`a stored token is not a token: ${v.summarize(parsed.issues)}`);
 
-/** A token record as it is stored: the fields of `TokenRecord`, which stays their one definition. */
-export type StoredToken = TokenRecord & { readonly shape: number; readonly revision: number };
+  const { id, hash, note, created_at: createdAt } = parsed.output;
+  if (parsed.output.scope === "publisher") return { id, hash, note, createdAt, scope: "publisher" };
+
+  return { id, hash, note, createdAt, scope: "admin", expiresAt: parsed.output.expires_at };
+}

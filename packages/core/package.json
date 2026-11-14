@@ -6,8 +6,10 @@
     "./actions": "./src/actions.ts",
     "./src/auth/cookie": "./src/auth/cookie.ts",
     "./src/auth/logins": "./src/auth/logins.ts",
+    "./src/database/driver": "./src/database/driver.ts",
     "./src/names/suffix": "./src/names/suffix.ts",
     "./src/storage/storage": "./src/storage/storage.ts",
+    "./tests/database-contract": "./tests/database-contract.ts",
     "./tests/storage-contract": "./tests/storage-contract.ts"
   },
   "dependencies": {

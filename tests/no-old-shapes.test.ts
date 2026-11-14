@@ -8,8 +8,8 @@ import { dirname, join } from "node:path";
 /** The repository this file sits in. */
 const ROOT = join(import.meta.dir, "..");
 
-/** The only files outside a `migrations/` folder that may import from one and may branch on a record's `shape`. */
-const DOORWAYS: readonly string[] = ["packages/core/src/records/read.ts"];
+/** The only files outside a `migrations/` folder that may import from one and may branch on a stored version. */
+const DOORWAYS: readonly string[] = ["packages/core/src/database/open.ts"];
 
 /** The files that count as source. */
 const SOURCE_FILE = /\.(?:ts|tsx|mts|cts|js|jsx|mjs|cjs)$/;
@@ -157,12 +157,12 @@ describe("no old shapes outside migrations/", () => {
     const root = planted({
       "packages/demo/src/migrations/0001-rename-text.ts": oldShapeCode,
       "packages/demo/src/sites/migrations/helper.ts": oldShapeCode,
-      "packages/core/src/records/read.ts": oldShapeCode,
+      "packages/core/src/database/open.ts": oldShapeCode,
       "packages/demo/src/sites/current.ts": currentShapeCode,
       "packages/demo/tests/planted.test.ts": oldShapeCode,
       "packages/demo/README.md": oldShapeCode,
     });
 
-    expect(violations(root)).toEqual(["retired-shape word: packages/core/src/records/read.ts:2"]);
+    expect(violations(root)).toEqual(["retired-shape word: packages/core/src/database/open.ts:2"]);
   });
 });
