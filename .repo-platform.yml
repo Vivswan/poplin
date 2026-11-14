@@ -1,4 +1,4 @@
-modules: [bun, release-please, pr-title, site, nightly]
+modules: [bun, release-please, pr-title, site, nightly, fuzzer]
 project:
   name: Poplin
   slug: poplin
