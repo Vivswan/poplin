@@ -1,4 +1,6 @@
-import { describeDatabase } from "./database-contract";
 import { BunSqliteDriver } from "./bun-sqlite-driver";
+import { describeDatabase } from "./database-contract";
+import { describeSqlDriver, sqlDatabaseOver } from "./sql-driver-contract";
 
-describeDatabase("bun:sqlite", () => new BunSqliteDriver());
+describeDatabase("bun:sqlite", sqlDatabaseOver(() => new BunSqliteDriver()));
+describeSqlDriver("bun:sqlite", () => new BunSqliteDriver());

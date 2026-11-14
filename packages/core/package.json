@@ -33,6 +33,7 @@
     "./src/storage/storage": "./src/storage/storage.ts",
     "./tests/bun-sqlite-driver": "./tests/bun-sqlite-driver.ts",
     "./tests/database-contract": "./tests/database-contract.ts",
+    "./tests/sql-driver-contract": "./tests/sql-driver-contract.ts",
     "./tests/storage-contract": "./tests/storage-contract.ts"
   },
   "dependencies": {

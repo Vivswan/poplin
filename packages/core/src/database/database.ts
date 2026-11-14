@@ -1,6 +1,9 @@
 // Everything poplin keeps in its database, as the operations the rest of the code asks for. No SQL and no row leaves this interface.
 //
 // Every change names who made it and when, and writes its audit entry in the same atomic step: both are kept, or neither.
+//
+// An implementation keeps these rules itself, whatever it stores records in: a site always holds its live version, no two sites share a folder,
+// and no site's public name is any site's id. The cases every implementation runs are in `tests/database-contract.ts`.
 
 import type { TokenId, TokenRecord } from "../auth/tokens";
 import type { PublicName, SiteName } from "../names/names";
@@ -20,7 +23,7 @@ export interface Signed {
 /**
  * What a new site is made from.
  *
- * `folder` is minted by the caller, so the site's files can be stored before its row exists. `embeddable` is `true` when left out.
+ * `folder` is minted by the caller, so the site's files can be stored before the site is. `embeddable` is `true` when left out.
  *
  * `bytes` is the sum of the sizes of the files of version 1 and `files` their count, both whole numbers from 0 up.
  */
@@ -46,7 +49,7 @@ export interface SiteDetails {
 /** Where a visitor's hostname points: a site's id, or a public name. */
 export type Address = { readonly id: SiteId } | { readonly public_name: PublicName };
 
-/** Where a page of a listing ended. */
+/** Where a page of a listing ended: the change time and the id of its last site. */
 interface SitesCursor {
   readonly updated_at: number;
   readonly id: SiteId;
@@ -67,7 +70,7 @@ export interface SitesQuery {
   readonly after?: SitesCursor;
 }
 
-/** One page of a listing, the site changed last first. `next` is absent on the last page. */
+/** One page of a listing, the site changed last first, and of sites changed at one moment the one with the greater id. `next` is absent on the last page. */
 export interface SitesPage {
   readonly sites: readonly Site[];
   readonly next?: SitesCursor;
@@ -159,10 +162,10 @@ export interface CountedRequests {
 /** The one doorway to stored sites, tokens, settings, the signing key, the audit log, and the day's request counts. */
 export interface Database {
   /**
-   * Make a site at version 1 under a fresh id.
+   * Make a site under a fresh id, with version 1 as its only version and its live one: published at `signed.at` by `signed.by`, of the draft's `bytes` and `files`.
    *
-   * @returns the site, or `name_taken` when it is to be public and another site holds the public name or has it as its id
-   * @throws {Error} the draft breaks a field rule, or its folder is already a site's
+   * @returns the site, or `name_taken` when it is to be public and another site holds the public name or has it as its id, whatever its folder
+   * @throws {Error} the draft breaks a field rule, or its folder is a site's, in the trash or not; nothing is stored
    */
   createSite(draft: NewSite, signed: Signed): Promise<Done | Refused<"name_taken">>;
 
@@ -226,10 +229,10 @@ export interface Database {
    */
   setLiveVersion(id: SiteId, target: number | "previous", signed: Signed): Promise<Done | Unchanged | Refused<"not_found" | "in_trash" | "no_such_version">>;
 
-  /** What the kept versions of one site hold together, in the trash or not; `undefined` for no site. It reads the site's row and its kept versions. */
+  /** What the kept versions of one site hold together, in the trash or not; `undefined` for no site. */
   getSiteSize(id: SiteId): Promise<SiteSize | undefined>;
 
-  /** How many sites the install has and what all their kept versions hold. It reads one row, however many sites there are. */
+  /** How many sites the install has and what all their kept versions hold: at every moment the counts and sums over every site, the trash included. */
   readTotals(): Promise<Totals>;
 
   /**
@@ -245,7 +248,7 @@ export interface Database {
    *
    * The site and all its versions are stored together or not at all, with one `imported` audit entry. Version numbers go on from above its highest kept version.
    *
-   * @returns `id_taken` when a site has the id as its id or its public name, `folder_taken` when a site has the folder, `name_taken` as in `createSite`
+   * @returns the first of these that holds: `id_taken` when a site has the id as its id or its public name, `folder_taken` when a site has the folder, `name_taken` as in `createSite` or when the public name is the site's own id
    * @throws {Error} the value is no site
    */
   importSite(site: Site, signed: Signed): Promise<Done | Refused<"id_taken" | "folder_taken" | "name_taken">>;
@@ -256,7 +259,7 @@ export interface Database {
   /** The record of the token with this id. */
   getToken(id: TokenId): Promise<TokenRecord | undefined>;
 
-  /** Every token record, the newest first. */
+  /** Every token record, the newest first, and of tokens made at one moment the one with the greater id. */
   listTokens(): Promise<readonly TokenRecord[]>;
 
   /** Remove a token's record, so the token proves nothing from then on. */
