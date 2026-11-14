@@ -5,9 +5,9 @@ import { publishSite } from "@poplin/core/src/actions/publish";
 import { ROUTES } from "@poplin/core/src/api/routes";
 import { parseUserCode } from "@poplin/core/src/auth/computer-logins";
 import { beforeEach, describe, expect, test } from "vitest";
-import { ADMIN, api, ask, BINDINGS, countedBindings, done, installOf, instance, OWNER, page, publish, sweep, tokenOf, type World, wait, world } from "./support/install";
+import { ADMIN, api, ask, BINDINGS, done, freePlanBindings, installOf, instance, OWNER, page, publish, sweep, tokenOf, type World, wait, world } from "./support/install";
 
-/** The most database and bucket calls one scheduled invocation may make, the start of its instance included: the entry's own stated budget, under Cloudflare's 1,000 on the Free plan. */
+/** The most database and bucket calls one scheduled invocation may make, the start of its instance included: 50 to the database, which is all D1 answers on the Free plan, and 250 to the bucket. */
 const INVOCATION_CALLS = 300;
 
 /** The files one removal takes from a folder whose list pages hold one object each. */
@@ -111,13 +111,12 @@ describe("the scheduled run", () => {
 
     await database.deleteSite(row.id, { by: OWNER, at: w.clock.now });
     const before = [(await keysUnder("")).length, (await database.listLeftovers({ limit: 10 })).folders.length];
-    const worker = instance(w);
     const runs: number[] = [];
 
     for (let run = 0; run < 4; run += 1) {
       wait(w, 0.25);
       tally.calls = 0;
-      await sweep(worker, w, countedBindings(tally));
+      await sweep(instance(w), w, freePlanBindings(tally));
       runs.push(tally.calls);
     }
 
@@ -141,7 +140,7 @@ describe("the scheduled run", () => {
     }
 
     wait(w, 8 * 24);
-    const counted = countedBindings(tally);
+    const counted = freePlanBindings(tally);
     await sweep(instance(w), w, { ...counted, SITES: shortPages(counted.SITES) });
 
     expect([await states(), (await keysUnder("")).length]).toEqual([{ live: 0, trash: 0 }, 0]);
@@ -150,7 +149,8 @@ describe("the scheduled run", () => {
   });
 
   // Drift: Cloudflare may start a new instance for every cron run, and the listing is newest first. A place kept in the instance's memory starts every run at the newest site, so an expired site behind more live ones than a run looks at is never reached.
-  test("an expired site behind ninety-six newer live ones reaches the trash although every run starts a new instance, and each run stays inside its call budget", async () => {
+  // D1 answers a Free invocation 50 queries: a run that asks more is cut off before it keeps its place, and the next one starts at the newest site again.
+  test("an expired site behind ninety-six newer live ones reaches the trash in the second run, each run a new instance that D1 refuses a fifty-first query", async () => {
     const tally = { calls: 0 };
     await ask(instance(w), `${ADMIN}/api/whoami`);
     const install = await installOf(w);
@@ -169,12 +169,11 @@ describe("the scheduled run", () => {
     for (let run = 0; run < 3; run += 1) {
       wait(w, 0.25);
       tally.calls = 0;
-      await sweep(instance(w), w, countedBindings(tally));
+      await sweep(instance(w), w, freePlanBindings(tally));
       runs.push({ calls: tally.calls, trash: (await states()).trash });
     }
 
     expect(runs.map((run) => run.trash)).toEqual([0, 1, 1]);
-    expect(runs[0]?.calls).toBeGreaterThan(INVOCATION_CALLS / 3);
     expect(Math.max(...runs.map((run) => run.calls))).toBeLessThanOrEqual(INVOCATION_CALLS);
   });
 });

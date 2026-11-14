@@ -25,6 +25,9 @@ export const OWNER = "owner@example.com" as Login;
 /** The milliseconds of one hour. */
 const HOUR_MS = 3_600_000;
 
+/** The queries D1 answers one invocation on Cloudflare's Free plan. */
+const FREE_QUERIES = 50;
+
 /** One Worker instance. */
 export type Worker = ReturnType<typeof createWorker>;
 
@@ -181,6 +184,31 @@ export function countedBindings(tally: Tally): Bindings {
     });
 
   return { ...BINDINGS, DB: counting(BINDINGS.DB), SITES: counting(BINDINGS.SITES) };
+}
+
+/**
+ * The bindings of one invocation on Cloudflare's Free plan: every call counted as `countedBindings` counts it, and the database refusing its fifty-first query, as D1 does there. A batch is one query.
+ *
+ * @returns bindings for one invocation; the next one takes its own
+ */
+export function freePlanBindings(tally: Tally): Bindings {
+  const counted = countedBindings(tally);
+  let queries = 0;
+  const capped = new Proxy(counted.DB, {
+    get(inner, name) {
+      const member: unknown = Reflect.get(inner, name, inner);
+      if (typeof member !== "function" || name === "prepare") return member;
+
+      return (...given: unknown[]): unknown => {
+        queries += 1;
+        if (queries > FREE_QUERIES) throw new Error(`D1 refused query ${queries} of one invocation: the Free plan gives ${FREE_QUERIES}`);
+
+        return Reflect.apply(member, inner, given);
+      };
+    },
+  });
+
+  return { ...counted, DB: capped };
 }
 
 /** Move the clock forward. */

@@ -51,6 +51,8 @@ async function trashExpired(install: Install, sites: readonly Site[], signed: Si
   let trashed = 0;
 
   for (const listed of sites) {
+    if (listed.expires === "never" || listed.expires > signed.at) continue;
+
     // Read again: the site may have been given a later expiry since the listing.
     const site = await install.database.getSite(listed.id);
     if (site === undefined || site.expires === "never" || site.expires > signed.at) continue;
@@ -72,6 +74,8 @@ async function removeSatOut(
   let deleted = 0;
 
   for (const listed of sites) {
+    if (listed.state !== "trash" || listed.trashed_at + rule.trashDays * DAY_MS > rule.signed.at) continue;
+
     // Read again: the site may have been restored since the listing.
     const site = await install.database.getSite(listed.id);
     if (site?.state !== "trash" || site.trashed_at + rule.trashDays * DAY_MS > rule.signed.at) continue;
@@ -161,7 +165,7 @@ async function sweepLeftovers(install: Install, from: Extract<SweepPlace, { read
  * Take one step of the walk that moves every site past its expiry to the trash, removes for good every site that has sat in the trash for `trash_days`, and removes every upload begun over 25 hours ago.
  * The walk ends by removing the files removed sites left behind, then every login of a computer that ran out.
  *
- * One step lists once and looks at up to `limit` sites, uploads, or leftovers, so its cost is bounded: one read per site looked at, one change per site moved or removed, and one bounded file removal per item.
+ * One step lists once and looks at up to `limit` sites, uploads, or leftovers, so its cost is bounded: one read and one change per site that is due, none for a site that is not, and one bounded file removal per item.
  * @param actor - an admin, who signs the audit entry of every site moved or removed
  * @param step - `limit` is 1 to 100; `from` is the `next` of the step before, and absent to start a walk
  * @returns what the step did, `not_allowed` for anyone but an admin, or `bad_argument` naming the key that was refused
