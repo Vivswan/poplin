@@ -14,3 +14,8 @@ Agents publish static sites to your own Cloudflare account. A site is private by
 | public                | everyone                    |
 
 Poplin is in development and not released. Pages arrive here as the product is built.
+
+| Page | What it covers |
+| --- | --- |
+| [Decisions](decisions.md) | why poplin is built the way it is, and what each choice costs |
+| [Security](security.md) | what poplin protects against and what it does not |
