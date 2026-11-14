@@ -23,7 +23,17 @@ repository:
   allow_update_branch: true
   squash_merge_commit_title: PR_TITLE
   squash_merge_commit_message: BLANK
-  topics: []
+  topics:
+    - cloudflare-workers
+    - cloudflare-r2
+    - cloudflare-access
+    - static-site
+    - static-hosting
+    - mcp
+    - mcp-server
+    - ai-agents
+    - cli
+    - typescript
   enable_vulnerability_alerts: true
   enable_automated_security_fixes: true
 labels:
@@ -176,6 +186,17 @@ rulesets:
           actor_type: RepositoryRole
           bypass_mode: always
 environments:
+  - name: bench
+    wait_timer: 0
+    prevent_self_review: false
+    reviewers: []
+    deployment_branch_policy:
+      protected_branches: false
+      custom_branch_policies: true
+    deployment_branch_policies:
+      _undeclared: delete
+      entries:
+        - name: main
   - name: github-pages
     wait_timer: 0
     prevent_self_review: false
