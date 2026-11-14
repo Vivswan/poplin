@@ -1,4 +1,5 @@
 // Core's object store on an R2 bucket binding.
+// R2 lists at most 1000 keys a call and takes a key of up to 1024 bytes: core's list limit and its longest key stay inside both.
 
 import {
   type ByteRange,

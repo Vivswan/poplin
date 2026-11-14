@@ -346,7 +346,7 @@ function deleting(label: string, makeStore: StoreFactory): void {
       const kept = ["art/v1/index.html", "blog2/v1/index.html"];
       await seed(store, [...doomed, ...kept]);
 
-      const outcomes = [await deletePrefix(store, "blog/"), await deletePrefix(store, "blog/")];
+      const outcomes = [await deletePrefix(store, "blog/", 15), await deletePrefix(store, "blog/", 15)];
 
       expect(outcomes).toEqual([
         { removed: MAX_LIST_LIMIT + 1, more: false },
@@ -360,7 +360,7 @@ function deleting(label: string, makeStore: StoreFactory): void {
       const store = await makeStore();
       await seed(store, ["blog/v1/index.html", "blog2/v1/index.html"]);
 
-      await expect(deletePrefix(store, prefix)).rejects.toBeInstanceOf(TypeError);
+      await expect(deletePrefix(store, prefix, 1)).rejects.toBeInstanceOf(TypeError);
       expect(keysOf(await listEveryPage(store, { prefix: "" }))).toEqual(["blog/v1/index.html", "blog2/v1/index.html"]);
     });
   });

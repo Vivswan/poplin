@@ -3,14 +3,11 @@
 // `String.prototype.isWellFormed` is newer than the compile target, so this file names the library that types it.
 /// <reference lib="es2024.string" />
 
-/** The most entries one `list` call may ask for; R2 and S3 both stop a page there. */
+/** The most objects one `list` call may ask for: no store is asked for a longer page. */
 export const MAX_LIST_LIMIT = 1000;
 
-/** The longest key R2 and S3 both accept, in UTF-8 bytes. */
+/** The longest key, in UTF-8 bytes: a length every store accepts. */
 const MAX_KEY_BYTES = 1024;
-
-/** The list pages one `deletePrefix` call walks by default: 30 store calls. A host that bounds the store calls of one request must allow that many. */
-const DEFAULT_DELETE_PAGES = 15;
 
 /** What joins a key's segments, and what ends a folder's prefix. */
 const KEY_SEPARATOR = "/";
@@ -310,12 +307,12 @@ export function checkListOptions(options: ListOptions): number {
  * Remove the objects under a folder, a page at a time, for at most `maxPages` pages. A page costs two store calls: one `list` and one `deleteMany`.
  *
  * @param prefix - the folder, ending in `/`, so that `blog/` never reaches into `blog2/`
- * @param maxPages - the most pages to walk, a whole number from 1; the default keeps one call to 30 store calls
+ * @param maxPages - the most pages to walk, a whole number from 1
  * @returns how many objects the pages held, and whether the page limit stopped the walk with objects left; a caller calls again, in a later request, while `more` is true
  * @throws {TypeError} `prefix` does not end in `/`, or `list` refuses it
  * @throws {RangeError} `maxPages` is not a whole number from 1
  */
-export async function deletePrefix(store: ObjectStore, prefix: string, maxPages: number = DEFAULT_DELETE_PAGES): Promise<{ readonly removed: number; readonly more: boolean }> {
+export async function deletePrefix(store: ObjectStore, prefix: string, maxPages: number): Promise<{ readonly removed: number; readonly more: boolean }> {
   if (!prefix.endsWith(KEY_SEPARATOR)) throw new TypeError(`a folder prefix ends in ${KEY_SEPARATOR}, so it cannot match a longer folder name: ${JSON.stringify(prefix)}`);
 
   if (!(Number.isInteger(maxPages) && maxPages >= 1)) throw new RangeError(`a page limit is a whole number from 1, not ${maxPages}`);

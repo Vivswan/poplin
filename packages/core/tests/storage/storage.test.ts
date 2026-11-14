@@ -7,9 +7,6 @@ import { bytesOf, describeObjectStore, objectKey, readText } from "./support/sto
 /** A key of exactly the 1024 bytes R2 and S3 accept. */
 const LONGEST_KEY = "k".repeat(1024);
 
-/** A Worker request on Cloudflare's Free plan gets 50 subrequests; one removal leaves ten for the rest of the request. */
-const CALLS_ONE_REMOVAL_MAY_SPEND = 40;
-
 /** A store that counts the calls a removal spends, and lists one object a page so a small folder has many pages. */
 class CountingStore extends MemoryStore {
   calls = 0;
@@ -117,16 +114,6 @@ describe("MemoryStore", () => {
 });
 
 describe("deletePrefix", () => {
-  // Drift: the Free plan ends a request at 50 subrequests; a removal that spent more would fail half way through a large site, every time.
-  test("a folder of more pages than one call walks: the default stops inside what one request may spend, and says more remain", async () => {
-    const store = await folderOfFifty();
-    const outcome = await deletePrefix(store, "blog/");
-
-    expect(outcome.more).toBe(true);
-    expect(store.calls).toBeLessThan(CALLS_ONE_REMOVAL_MAY_SPEND);
-    expect(store.calls).toBe(outcome.removed * 2);
-  });
-
   test("a page limit of three spends three lists and three deletes a call, and calls repeated while more remain empty the folder and nothing beside it", async () => {
     const store = await folderOfFifty();
     const first = await deletePrefix(store, "blog/", 3);
