@@ -107,6 +107,16 @@ variable "worker_bundle_path" {
   }
 }
 
+variable "access_team_domain" {
+  description = "The account's Zero Trust team domain, such as `team.cloudflareaccess.com`: Access signs every login's token under it, and the Worker fetches the team's keys from it."
+  type        = string
+
+  validation {
+    condition     = can(regex("^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\\.cloudflareaccess\\.com$", var.access_team_domain))
+    error_message = "access_team_domain must be the team domain alone, such as team.cloudflareaccess.com: lowercase, with no scheme and no path."
+  }
+}
+
 variable "worker_name" {
   description = "The name of the Worker script."
   type        = string

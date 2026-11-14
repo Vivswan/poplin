@@ -10,10 +10,18 @@ module "poplin" {
   zone_id            = "fedcba9876543210fedcba9876543210"
   logins             = ["owner@example.com"]
   worker_bundle_path = "./worker.js"
+  access_team_domain = "team.cloudflareaccess.com"
 }
 ```
 
-The caller configures the `cloudflare` provider, major 5, and runs OpenTofu 1.13 or newer. `worker_bundle_path` is the path of a Worker bundle file the caller provides. An install with no domain needs no zone and is not set up by this module.
+The caller configures the `cloudflare` provider, major 5, and runs OpenTofu 1.13 or newer. An install with no domain needs no zone and is not set up by this module.
+
+`worker_bundle_path` is the path of the Worker bundle, which the caller builds from a checkout of this repository:
+
+```sh
+bun install
+bun run --cwd packages/cloudflare build   # writes packages/cloudflare/dist/worker.js
+```
 
 ## What it creates
 
@@ -21,7 +29,8 @@ The caller configures the `cloudflare` provider, major 5, and runs OpenTofu 1.13
 | --- | --- |
 | R2 bucket | holds every site's files; its public access is off |
 | D1 database | holds every record: the sites, the tokens, the settings, the audit log. The module applies no schema: the Worker does when it opens the database |
-| Worker script | serves the sites, the dashboard, the API, and the MCP server; uploaded from the bundle with the bucket, the database, the minute limiter, the zone values, and the first settings bound to it |
+| Worker script | serves the sites, the dashboard, the login, and the API; uploaded from the bundle with the bucket, the database, the minute limiter, the zone values, the first settings, and the Access application bound to it |
+| Worker cron trigger | runs the Worker's sweep every 15 minutes: expired sites go to the trash, and sites past `trash_days` in the trash and uploads nobody finished are removed with their files |
 | Worker routes | send the install's hostnames, and no other hostname of the zone, to the Worker |
 | DNS records | proxied, each with a comment starting `poplin: ` |
 | Access policy and application | the login on `/login` of the admin hostname, allowing exactly `logins` |
@@ -63,12 +72,13 @@ Each object carries a fixed name or mark, the same one poplin's own setup code w
 | Rate rule | the ref `poplin_rate`, in a ruleset named `poplin rate rule` |
 | Guard rules | the refs `poplin_outside_pages` and `poplin_bots`, in a ruleset named `poplin guard rules` |
 
-The Worker reads two of its bindings as JSON:
+The Worker reads three of its bindings as JSON:
 
 | Binding | Holds |
 | --- | --- |
 | `ZONE` | `domain`, `admin_hostname` (the whole hostname, such as `admin.example.com`), and `suffix` |
 | `FIRST_SETTINGS` | every setting of `poplin config`, by its name, in its text form |
+| `ACCESS` | `team_domain`, the input `access_team_domain`, and `audience`, the audience tag of the Access application the module creates |
 
 `MINUTE_LIMITS` is a rate limiting binding with the limit 1000000 per 60 seconds, the one the Worker's per-minute counters are written for.
 
@@ -104,6 +114,7 @@ No rule can exempt a request from Bot Fight Mode, and it may challenge `poplin` 
 | `zone_id` | string | required | the zone of the domain: 32 lowercase hexadecimal characters |
 | `logins` | list of strings | required | the emails that may log in: lowercase, at least one, each once |
 | `worker_bundle_path` | string | required | the path to the built Worker bundle, one JavaScript module file |
+| `access_team_domain` | string | required | the account's Zero Trust team domain, such as `team.cloudflareaccess.com`, shown in the Zero Trust settings. The module does not read it from the account: that takes a permission beyond the ones below |
 | `admin_hostname` | string | `admin` | the dashboard's hostname, written without the domain: `admin` gives `admin.example.com`, and `admin.tools` gives `admin.tools.example.com`. Any hostname under the domain that does not end in the suffix |
 | `suffix` | string | `-page` | the ending of every site hostname label: 2 to 9 characters, a dash, then lowercase letters, digits, or single dashes, with no dash last |
 | `rate_rule` | string | `zone` | what the rate rule counts: `zone`, every request of the zone, the one form the Free plan takes; `hostnames`, the install's hostnames alone, on a paid plan; `off`, no rule |
@@ -162,7 +173,7 @@ The Worker stores the first settings once, while it has none. After that the das
 | --- | --- | --- |
 | Workers R2 Storage: Edit | the account | the bucket |
 | D1: Edit | the account | the database |
-| Workers Scripts: Edit | the account | the Worker |
+| Workers Scripts: Edit | the account | the Worker and its cron trigger |
 | Access: Apps and Policies: Edit | the account | the login |
 | Zone: Read | the zone | the domain's name |
 | DNS: Edit | the zone | the records, and reading the zone's own |
@@ -174,7 +185,8 @@ The Worker stores the first settings once, while it has none. After that the das
 
 | It does not | Instead |
 | --- | --- |
-| build the Worker | pass the path of a Worker bundle file in `worker_bundle_path` |
+| build the Worker | build the bundle with `bun run --cwd packages/cloudflare build` and pass its path in `worker_bundle_path` |
+| read the Zero Trust team domain | pass it in `access_team_domain` |
 | apply the database's schema | the Worker brings the database up to its own schema when it opens it |
 | set up two installs in one account | the Access policy, the Access application, and the database have fixed names |
 | issue a certificate for a deeper `admin_hostname` | Cloudflare's Universal SSL covers `example.com` and `*.example.com`. A hostname such as `admin.tools.example.com` needs a certificate of its own |

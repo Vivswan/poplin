@@ -38,7 +38,20 @@ resource "cloudflare_workers_script" "poplin" {
       type = "json"
       json = jsonencode(local.first_settings)
     },
+    {
+      # The Access application in front of the login: the Worker checks a login's token against this team and this audience tag.
+      name = "ACCESS"
+      type = "json"
+      json = jsonencode({ team_domain = var.access_team_domain, audience = cloudflare_zero_trust_access_application.login.aud })
+    },
   ]
+}
+
+# The sweep: the Worker's scheduled run moves expired sites to the trash and removes old trash and abandoned uploads.
+resource "cloudflare_workers_cron_trigger" "sweep" {
+  account_id  = var.account_id
+  script_name = cloudflare_workers_script.poplin.script_name
+  schedules   = [{ cron = "*/15 * * * *" }]
 }
 
 resource "cloudflare_workers_route" "worker" {

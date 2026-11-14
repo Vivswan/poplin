@@ -31,7 +31,7 @@ jobs:
         run: bun run typecheck
       - name: Test
         run: bun run test
-      - name: Test the Worker (Workers runtime)
+      - name: Build the Worker bundle and test the Worker (Workers runtime)
         run: bun run test:worker
 
   # The product's tests and the three tree guards on every OS a user publishes from. The runtime is the bun that

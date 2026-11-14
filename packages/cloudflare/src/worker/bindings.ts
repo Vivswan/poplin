@@ -16,4 +16,7 @@ export interface Bindings {
 
   /** Every setting in its text form, unchecked: what the Worker stores while it has no settings. Absent on a Worker that setup gives its settings. */
   readonly FIRST_SETTINGS: unknown;
+
+  /** The Access application in front of the login path, unchecked: the team's domain and the application's audience tag. */
+  readonly ACCESS: unknown;
 }

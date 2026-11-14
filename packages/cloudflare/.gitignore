@@ -1,2 +1,8 @@
 # The runtime and binding types `wrangler types` writes before a typecheck.
 worker-configuration.d.ts
+
+# The Worker bundle the `build` script writes.
+dist/
+
+# The local bucket, database, and counters of the `dev` script.
+.wrangler/

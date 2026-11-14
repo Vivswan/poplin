@@ -10,7 +10,9 @@
   },
   "scripts": {
     "typecheck": "wrangler types && tsc -p .",
-    "test": "vitest run"
+    "build": "wrangler deploy --dry-run --outdir dist",
+    "dev": "wrangler dev",
+    "test": "bun run build && vitest run"
   },
   "dependencies": {
     "@poplin/app": "workspace:*",

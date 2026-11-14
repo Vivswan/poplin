@@ -1,6 +1,6 @@
 // What marks an object at Cloudflare as poplin's, and what poplin writes into each. The OpenTofu module in `packages/cloudflare/tofu/` writes the same values, so each tool leaves the other's objects as they are.
 
-/** Every value the setup client and the OpenTofu module write alike. A record with a comment starting `recordMark` and a rule with one of the refs are poplin's. The `minuteLimits` values are the Worker binding of wrangler.jsonc. */
+/** Every value the setup client and the OpenTofu module write alike. A record with a comment starting `recordMark` and a rule with one of the refs are poplin's. `minuteLimits`, `accessBinding`, and `sweepCron` are the Worker's, in wrangler.jsonc. */
 export const INSTALL_OBJECTS = {
   recordMark: "poplin: ",
   wildcardComment: "poplin: every site",
@@ -32,4 +32,6 @@ export const INSTALL_OBJECTS = {
   minuteLimitsNamespace: "1001",
   minuteLimitsLimit: 1_000_000,
   minuteLimitsSeconds: 60,
+  accessBinding: "ACCESS",
+  sweepCron: "*/15 * * * *",
 } as const;

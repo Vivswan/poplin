@@ -58,6 +58,8 @@ const WRITTEN: Readonly<Record<SharedKey, readonly [file: string, around: string
   minuteLimitsNamespace: ["worker.tf", "namespace_id = %v"],
   minuteLimitsLimit: ["worker.tf", "simple = { limit = %v, "],
   minuteLimitsSeconds: ["worker.tf", ", period = %v }"],
+  accessBinding: ["worker.tf", 'name = %v\n type = "json"\n json = jsonencode({'],
+  sweepCron: ["worker.tf", "schedules = [{ cron = %v }]"],
 };
 
 /** One file of the module with runs of spaces made one, so the alignment `tofu fmt` chooses does not matter. */
@@ -169,6 +171,15 @@ describe("the Worker's rate limiting binding", () => {
         simple: { limit: INSTALL_OBJECTS.minuteLimitsLimit, period: INSTALL_OBJECTS.minuteLimitsSeconds },
       },
     ]);
+  });
+});
+
+describe("the Worker's Access binding and sweep trigger", () => {
+  test("wrangler.jsonc declares the binding name and the schedule the table holds, so a local run and a deployed Worker read the same binding and sweep as often", () => {
+    const config = Bun.JSONC.parse(readFileSync(join(MODULE, "..", "wrangler.jsonc"), "utf8")) as { triggers: { crons: unknown }; vars: Record<string, unknown> };
+
+    expect(config.triggers.crons).toEqual([INSTALL_OBJECTS.sweepCron]);
+    expect(Object.keys(config.vars)).toContain(INSTALL_OBJECTS.accessBinding);
   });
 });
 

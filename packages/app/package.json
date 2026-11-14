@@ -3,13 +3,16 @@
   "private": true,
   "type": "module",
   "exports": {
+    "./src/api/api": "./src/api/api.ts",
     "./src/dashboard/dashboard": "./src/dashboard/dashboard.ts",
     "./src/dashboard/settings/free-limits": "./src/dashboard/settings/free-limits.ts",
     "./src/limits/limits": "./src/limits/limits.ts",
+    "./src/limits/refusal": "./src/limits/refusal.ts",
     "./src/limits/visitor-key": "./src/limits/visitor-key.ts",
     "./src/login/login": "./src/login/login.ts",
     "./src/login/session": "./src/login/session.ts",
-    "./src/sites/hostname-addresses": "./src/sites/hostname-addresses.ts"
+    "./src/sites/hostname-addresses": "./src/sites/hostname-addresses.ts",
+    "./src/sites/serve": "./src/sites/serve.ts"
   },
   "dependencies": {
     "@poplin/core": "workspace:*",

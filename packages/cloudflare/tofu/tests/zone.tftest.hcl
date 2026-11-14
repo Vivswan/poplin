@@ -20,6 +20,7 @@ variables {
   zone_id            = "fedcba9876543210fedcba9876543210"
   logins             = ["owner@example.com"]
   worker_bundle_path = "tests/fixtures/worker.bundle"
+  access_team_domain = "team.cloudflareaccess.com"
 }
 
 run "defaults" {
@@ -85,8 +86,8 @@ run "worker_bindings" {
   }
 
   assert {
-    condition     = tolist([for binding in cloudflare_workers_script.poplin.bindings : "${binding.name} ${binding.type}"]) == tolist(["SITES r2_bucket", "DB d1", "MINUTE_LIMITS ratelimit", "ZONE json", "FIRST_SETTINGS json"])
-    error_message = "The Worker gets the bucket, the database, the minute limiter, the zone values, and the first settings, under the names its code reads."
+    condition     = tolist([for binding in cloudflare_workers_script.poplin.bindings : "${binding.name} ${binding.type}"]) == tolist(["SITES r2_bucket", "DB d1", "MINUTE_LIMITS ratelimit", "ZONE json", "FIRST_SETTINGS json", "ACCESS json"])
+    error_message = "The Worker gets the bucket, the database, the minute limiter, the zone values, the first settings, and the Access application, under the names its code reads."
   }
 
   assert {
@@ -134,6 +135,36 @@ run "worker_bindings" {
       visitor_requests_per_minute = "30"
     }
     error_message = "The first settings carry every setting the Worker stores, and no other key, each in the text form `poplin config` takes."
+  }
+}
+
+# The Worker checks a login's token against the team and the audience tag bound here. The tag is known only once the application exists, so this run applies.
+run "access_binding_names_the_login_application" {
+  command = apply
+
+  override_resource {
+    target = cloudflare_zero_trust_access_application.login
+    values = {
+      aud = "4714c1358e65fe4b408ad6d432a5f878f08194bdb4752441fd56faefa9b2b6f2"
+    }
+  }
+
+  assert {
+    condition = jsondecode(cloudflare_workers_script.poplin.bindings[5].json) == {
+      team_domain = "team.cloudflareaccess.com"
+      audience    = "4714c1358e65fe4b408ad6d432a5f878f08194bdb4752441fd56faefa9b2b6f2"
+    }
+    error_message = "The ACCESS binding holds the team domain as given and the audience tag of the module's own Access application."
+  }
+}
+
+# The Worker's scheduled run is the only thing that empties the trash, so the trigger must exist and fire as often as the Worker's code expects.
+run "sweep_trigger" {
+  command = plan
+
+  assert {
+    condition     = cloudflare_workers_cron_trigger.sweep.script_name == "poplin" && [for schedule in cloudflare_workers_cron_trigger.sweep.schedules : schedule.cron] == ["*/15 * * * *"]
+    error_message = "The sweep runs on the Worker every 15 minutes."
   }
 }
 

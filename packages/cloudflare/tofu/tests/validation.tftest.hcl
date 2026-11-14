@@ -20,6 +20,7 @@ variables {
   zone_id            = "fedcba9876543210fedcba9876543210"
   logins             = ["owner@example.com"]
   worker_bundle_path = "tests/fixtures/worker.bundle"
+  access_team_domain = "team.cloudflareaccess.com"
 }
 
 run "account_id_not_hexadecimal" {
@@ -463,4 +464,24 @@ run "zone_bots_unknown_word" {
   }
 
   expect_failures = [var.zone_bots]
+}
+
+run "access_team_domain_with_a_scheme" {
+  command = plan
+
+  variables {
+    access_team_domain = "https://team.cloudflareaccess.com"
+  }
+
+  expect_failures = [var.access_team_domain]
+}
+
+run "access_team_domain_on_another_host" {
+  command = plan
+
+  variables {
+    access_team_domain = "team.example.com"
+  }
+
+  expect_failures = [var.access_team_domain]
 }
