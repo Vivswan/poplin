@@ -39,7 +39,7 @@ function counted(install: Install): { readonly install: Install; readonly calls:
 
 describe("sending one file of an upload", () => {
   // Drift: a publish sends a request per file; a request that asked the database more as the upload grew would run a large publish out of the queries and the CPU one request gets.
-  test("a file of an upload of 5,000 files asks the database exactly what a file of an upload of 3 asks: the file before the write, and the upload after it", async () => {
+  test("a file of an upload of 5,000 files asks the database exactly what a file of an upload of 3 asks: the file, once, before the write", async () => {
     const world = await makeWorld();
     const asked: Record<string, string[]> = {};
 
@@ -50,7 +50,7 @@ describe("sending one file of an upload", () => {
       asked[`${files} files`] = [...watched.calls, JSON.stringify(sent)];
     }
 
-    const each = ["getUploadFile", "getUploadFile", '{"ok":true,"path":"pages/1.html","size":4}'];
+    const each = ["getUploadFile", '{"ok":true,"path":"pages/1.html","size":4}'];
     expect(asked).toEqual({ "3 files": each, "5000 files": each });
   });
 

@@ -169,28 +169,32 @@ describe("finishPublish", () => {
 
   // Drift: a body that dribbles in for hours outlives its upload; a file stored after the record went would sit in the bucket under nothing for good, and one removed from a live version would break a site.
   test.each([
-    ["was given up", "abandon", []],
-    ["ran out", "expire", []],
-    ["was swept unfinished", "sweep", []],
-    ["was finished and then swept", "finish", ["v1"]],
-  ] as const)("a file whose bytes reach the store after its upload %s is kept only as part of a live version", async (_how, how, kept) => {
+    { how: "was given up", ending: "abandon", lands: "after the ending", stored: true, kept: ["v1"], left: [] },
+    { how: "ran out", ending: "expire", lands: "before the ending", stored: false, kept: [], left: [] },
+    { how: "was swept unfinished", ending: "sweep", lands: "before the ending", stored: false, kept: [], left: [] },
+    { how: "was finished and then swept", ending: "finish", lands: "before the ending", stored: true, kept: ["v1"], left: ["v1"] },
+  ] as const)("a file whose bytes reach the store while its upload $how is kept only as part of a live version once the sweep has been", async ({ ending, lands, stored, kept, left }) => {
     const world = await makeWorld();
     const begun = await beginPublish(world.install, OWNER, { name: "report", files: [PAGE] });
     if (!begun.ok) throw new Error("the fixture upload was refused");
 
     const upload = begun.upload.id;
-    // The upload ends between the write of the file and the look the action takes after it: the second read of the upload.
-    const read = world.install.database.getUploadFile.bind(world.install.database);
-    let reads = 0;
-    spyOn(world.install.database, "getUploadFile").mockImplementation(async (id, path) => {
-      reads += 1;
-      if (reads === 2) await ENDINGS[how](world, upload);
+    const spied = spyOn(world.install.store, "write");
+    const write = spied.getMockImplementation();
+    if (write === undefined) throw new Error("the fixture store has no write to wrap");
 
-      return read(id, path);
+    spied.mockImplementation(async (...given) => {
+      if (lands === "after the ending") await ENDINGS[ending](world, upload);
+      const written = await write(...given);
+      if (lands === "before the ending") await ENDINGS[ending](world, upload);
+
+      return written;
     });
     const late = await uploadFile(world.install, OWNER, { upload, path: PAGE.path, body: new Blob(["page"]).stream() });
+    const held = await versions(world);
+    await ENDINGS.sweep(world, upload);
 
-    expect([late.ok, await versions(world)]).toEqual([kept.length > 0, [...kept]]);
+    expect([late.ok, held, await versions(world)]).toEqual([stored, [...kept], [...left]]);
   });
 
   // Drift: a site that stops keeping many versions at once leaves more prefixes than one removal walks; a removal that started over each time would never reach the last of them.

@@ -3,7 +3,7 @@
 import type { Actor } from "../auth/scopes";
 import { parseUploadId } from "../records/upload";
 import { type Install, type Refused, refuse } from "./records";
-import { isKeptVersion, isWithinReach, uploadKey } from "./uploads";
+import { isKeptVersion, isWithinReach, uploadKey, uploadObject } from "./uploads";
 
 /** One file to store: the upload's id as sent, the file's path as the manifest names it, and its bytes, which are read once. */
 interface FileRequest {
@@ -40,10 +40,10 @@ async function unread<Code extends string>(body: ReadableStream<Uint8Array>, cod
 /**
  * Store one file of a pending upload under `<folder>/v<number>/<path>`, replacing what an earlier request stored there.
  * An import names each file `v<number>/<path>`, which is its place under the folder.
- *
  * The same file sent again is stored again. A site is live at these keys only once the upload is finished, so no visitor reads them before.
  *
  * @returns the path and the size stored. `not_found` about `upload` for an upload that is gone, given up, run out, another publisher's, or the copy of a site, and about `path` for a path the manifest does not name.
+ * A file whose upload is given up while its bytes come in is answered as stored, and goes with the upload's other files at the sweep.
  * `size_mismatch` when the body is not the declared length: nothing of it is stored, and what the key held stays
  * @throws {Error} the store or the database failed, or the body broke off
  */
@@ -85,7 +85,10 @@ export async function uploadFile(
     throw error;
   }
 
-  // The write may have outlived the upload: it ran out, was given up, or was swept while the bytes came in. Nothing would ever remove the file then, so it goes now.
+  // Inside the lifetime the record is still there. If the upload was given up meanwhile, the sweep removes this file with the rest.
+  if (install.now() < uploadObject(upload).expires) return { ok: true, path: file.path, size: file.size };
+
+  // The write outlived the lifetime, and the sweep may have removed the record: nothing would remove the file then, so it goes now.
   // A record that is gone may also be one that was finished and then swept: its files are a live version, and stay.
   const after = await install.database.getUploadFile(id, file.path);
   if (!isWithinReach(after?.upload, actor, install.now()) && !(await isKeptVersion(install, upload))) {

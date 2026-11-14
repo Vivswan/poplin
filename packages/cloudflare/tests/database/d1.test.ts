@@ -141,10 +141,8 @@ describe("D1: the rows a publish costs of a day's allowance", () => {
   });
 
   // Drift: a day allows 5,000,000 rows read and 100,000 written, and every query fails once either is spent; a publish whose cost grew faster than its files would spend a day in one go.
-  test.each([50, 200])("a whole publish of %d files reads at most two rows a file and 60 more, and writes at most 30", async (files) => {
-    const cost = await publishCost(files);
-
-    expect([cost.read <= 2 * files + 60, cost.written <= 30, cost]).toEqual([true, true, cost]);
+  test.each([50, 200])("a whole publish of %d files reads one row a file and 26 more, and writes 21", async (files) => {
+    expect(await publishCost(files)).toEqual({ read: files + 26, written: 21 });
   });
 });
 
