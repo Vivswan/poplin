@@ -1,0 +1,12 @@
+// The demo on Cloudflare: the built folder as static assets alone. There is no script, so a visit runs no Worker and counts against no request limit.
+//
+//   bun run demo:build
+//   bun run --cwd packages/cloudflare wrangler deploy --config demo/wrangler.jsonc
+//
+// The demo sits at the root of the hostname the deploy gets. A page inside it that the worker in the browser has not answered gets `404.html`, which sends it through the first page.
+{
+  "$schema": "../node_modules/wrangler/config-schema.json",
+  "name": "poplin-demo",
+  "compatibility_date": "2026-11-01",
+  "assets": { "directory": "../../demo/dist", "not_found_handling": "404-page" }
+}

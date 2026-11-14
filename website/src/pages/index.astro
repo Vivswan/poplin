@@ -9,7 +9,7 @@ const PUBLIC_ADDRESS = "report-page.example.com";
 
 // One example folder plays the published site: in the access panel, and behind the action beside the transcript.
 const example = samples[0];
-const exampleAddress = example === undefined ? undefined : sitePath(`demo/${encodeURIComponent(example.name)}/`);
+const exampleAddress = example === undefined ? undefined : sitePath(`sample/${encodeURIComponent(example.name)}/`);
 const exampleSize = example === undefined ? "" : `${example.files} files, ${Math.round(example.bytes / 1024)} KB`;
 const keeps = [
   { say: "Roll back a bad update.", result: "Poplin keeps the last 3 versions of a site by default. Going back needs no upload." },

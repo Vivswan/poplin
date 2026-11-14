@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>poplin demo</title>
+<style>
+:root { color-scheme: light dark; --ink: light-dark(#1c1b19, #ecebe7); --soft: light-dark(#5f5c55, #a9a59b); --paper: light-dark(#faf9f6, #161614); }
+body { margin: 0; min-height: 100vh; display: grid; place-items: center; background: var(--paper); color: var(--ink); font: 15px/1.5 system-ui, sans-serif; }
+main { max-width: 30rem; padding: 1.5rem; }
+h1 { margin: 0 0 0.75rem; font-size: 1.25rem; line-height: 1.3; }
+p { margin: 0.5rem 0; color: var(--soft); }
+[hidden] { display: none; }
+</style>
+</head>
+<body>
+<main>
+<h1>Your agent publishes a folder as a website, in your own account.</h1>
+<p id="starting" role="status">Starting the demo: a dashboard with sample data, all inside this browser.</p>
+<div id="blocked" hidden>
+<p><strong>This window cannot run the demo.</strong></p>
+<p>The demo runs inside your browser and needs a Service Worker. A private window in Firefox has none, and some browser settings turn them off. Open this page in a normal window.</p>
+</div>
+<noscript><p>The demo runs inside your browser and needs JavaScript.</p></noscript>
+</main>
+<script>
+// Register the worker, wait until it controls this page, then load the address the visitor asked for: the worker answers it with the dashboard.
+
+/** Where this window keeps when it last entered the demo, and how many times in a row. */
+const ENTERED = "poplin-demo-entered";
+
+/** Two entries closer together than this, in milliseconds, are a loop: the page came straight back, so the worker did not take it. */
+const LOOP_MS = 4000;
+
+/** How long a worker that is already running is given to take this page, in milliseconds: after a forced reload none ever does. */
+const TAKEOVER_MS = 1500;
+
+/** How long the worker is given to start before the page says it cannot, in milliseconds. */
+const START_MS = 10000;
+
+/** A deep link the host could not answer comes back here as `?to=<path>`, its fragment still on the address. A path that leads out of the demo's folder leads home. */
+const home = new URL(".", location.href).href;
+const wanted = new URL(`.${new URLSearchParams(location.search).get("to") ?? "/"}`, home).href;
+const target = (wanted.startsWith(home) ? wanted : home) + location.hash;
+
+let entered = false;
+
+function blocked() {
+  document.getElementById("starting").hidden = true;
+  document.getElementById("blocked").hidden = false;
+}
+
+function enter() {
+  // The takeover and the wait for it both lead here; the first one enters.
+  if (entered) return;
+
+  entered = true;
+  const [at = 0, times = 0] = (sessionStorage.getItem(ENTERED) ?? "").split(" ").map(Number);
+  const again = Date.now() - at < LOOP_MS ? times + 1 : 1;
+  if (again > 2) return blocked();
+
+  sessionStorage.setItem(ENTERED, `${Date.now()} ${again}`);
+  // WebKit answers a replace to the address already shown from its own memory, around the worker; a reload goes through it.
+  if (target === location.href) location.reload();
+  else location.replace(target);
+}
+
+async function begin() {
+  if (!("serviceWorker" in navigator)) return blocked();
+
+  // Some browsers leave a worker they will not run waiting for ever. One that only loads slowly still takes the page over later, and the demo opens then.
+  const slow = setTimeout(blocked, START_MS);
+  navigator.serviceWorker.addEventListener("controllerchange", enter, { once: true });
+  await navigator.serviceWorker.register("sw.js", { scope: "./" });
+  await navigator.serviceWorker.ready;
+  clearTimeout(slow);
+  if (navigator.serviceWorker.controller !== null) return enter();
+
+  setTimeout(enter, TAKEOVER_MS);
+}
+
+begin().catch(blocked);
+</script>
+</body>
+</html>

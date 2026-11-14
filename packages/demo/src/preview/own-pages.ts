@@ -33,9 +33,17 @@ body { padding-bottom: 2.25rem !important; }
 #preview-bar a, #preview-bar button { color: #f2f0ea; text-decoration: underline; text-underline-offset: 0.15em; cursor: pointer; }
 #preview-bar a:focus-visible, #preview-bar button:focus-visible { outline: 2px solid #f2f0ea; outline-offset: 2px; }
 #preview-bar [aria-current] { color: #b9b5ac; text-decoration: none; }
+#preview-bar strong { color: #f2f0ea; font-weight: 600; }
 #preview-bar form { display: inline; }
 #preview-bar .end { margin-left: auto; display: flex; gap: 0 0.9rem; }
+@media (max-width: 48rem) { body { padding-bottom: 4.5rem !important; } }
 `;
+
+/** What the product is, for a stranger: the first thing the bar says under the page a visit starts on. */
+const WHAT_IT_IS = "Your agent publishes a folder as a website, in your own account.";
+
+/** The page a visit starts on. */
+const FIRST_PAGE = "/";
 
 /** The schemes the bar switches between; the first follows the system. */
 const THEMES = ["system", "light", "dark"] as const;
@@ -87,15 +95,16 @@ function groupSection(group: string, entries: readonly Entry[]): string {
 /**
  * Build the bar that sits under every page of the demo.
  *
- * @returns markup for the end of a page's body: what the demo is, the way home, the page's hints, the scheme switch, and the reset. Its style element carries `NONCE_SLOT` for the page's nonce
+ * @returns markup for the end of a page's body: under the first page what the product is, then what the demo is, the way home, the page's hints, the scheme switch, and the reset. Its style element carries `NONCE_SLOT` for the page's nonce
  */
 export function previewBar(bar: Bar): string {
   const back = encodeURIComponent(bar.here);
+  const lead = bar.here === FIRST_PAGE ? `<strong>${WHAT_IT_IS}</strong>` : "";
   const hints = bar.hints.map(([words, path]) => `<a href="${escaped(path)}">${escaped(words)}</a>`);
   const themes = THEMES.map((theme) => `<a href="/theme/${theme}?to=${back}"${theme === (bar.theme ?? "system") ? ' aria-current="true"' : ""}>${theme}</a>`);
 
   return `<style nonce="${NONCE_SLOT}">${BAR_STYLE}</style>
-<nav id="preview-bar" aria-label="Demo"><span>Demo: sample data, resets</span><a href="/">Dashboard</a>${hints.join("")}
+<nav id="preview-bar" aria-label="Demo">${lead}<span>Demo: sample data, resets</span><a href="/">Dashboard</a>${hints.join("")}
 <span class="end"><span>${themes.join(" ")}</span><form method="post" action="/reset"><button type="submit">Reset</button></form></span></nav>`;
 }
 

@@ -38,13 +38,14 @@ interface Flags {
  * Read the flags of a command line: `--port <port>`, `--watch`, `--gallery`.
  *
  * @param args - the arguments after the script's own path
- * @returns the flags, with the default port when none is named
+ * @param defaultPort - the port of a command line that names none
+ * @returns the flags
  * @throws {TypeError} a flag is not one of the three
  * @throws {RangeError} the port is none
  */
-export function readFlags(args: readonly string[]): Flags {
+export function readFlags(args: readonly string[], defaultPort: number = DEFAULT_PORT): Flags {
   const { values } = parseArgs({ args: [...args], options: { port: { type: "string" }, watch: { type: "boolean" }, gallery: { type: "boolean" } }, strict: true });
-  const port = values.port === undefined ? DEFAULT_PORT : Number(values.port);
+  const port = values.port === undefined ? defaultPort : Number(values.port);
   if (!Number.isInteger(port) || port < 1 || port > 65_535) throw new RangeError(`--port takes a port from 1 to 65535, not ${JSON.stringify(values.port)}`);
 
   return { port, watch: values.watch === true, gallery: values.gallery === true };

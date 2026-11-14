@@ -9,6 +9,9 @@
       "includeEntryExports": true,
       "ignoreIssues": { "src/actions.ts": ["exports"] }
     },
+    "packages/demo": {
+      "entry": ["src/browser/worker.ts"]
+    },
     "packages/cloudflare": {
       "entry": ["tests/**/*.test.ts"]
     }

@@ -114,3 +114,20 @@ jobs:
           export PAGES_BASE_PATH="/${GITHUB_REPOSITORY#*/}/"
           export PAGES_ORIGIN="https://${GITHUB_REPOSITORY_OWNER}.github.io"
           bun run --cwd website build
+
+  # The dashboard demo as a visitor meets it: built as static files, served under the path the Pages deploy serves them
+  # at, and walked in a real browser. Chromium alone: the one engine in which the walk can stop the demo's worker and
+  # reload a page around it.
+  demo:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup
+      - name: Install Chromium
+        working-directory: packages/demo
+        run: bunx playwright install --with-deps chromium
+      - name: Walk the demo in Chromium
+        run: bun run --cwd packages/demo test:browser chromium

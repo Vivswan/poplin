@@ -9,8 +9,8 @@ import { createPreview } from "../packages/demo/src/preview/preview";
 import { HOST, PID_PATH, pidFile, stopRunning } from "../packages/demo/scripts/running";
 import { readSamples } from "../packages/demo/scripts/samples";
 
-/** The folder of the demo itself, which a later host runs with no server. */
-const DEMO = join(import.meta.dir, "..", "packages", "demo", "src", "preview");
+/** The source of the demo: the module every host runs, and the host that runs it in a browser with no server. */
+const DEMO = join(import.meta.dir, "..", "packages", "demo", "src");
 
 /** What only one runtime has: its own modules and globals. */
 const RUNTIME_NAME = /\bBun\.|["'](?:bun|node):|\bprocess\.|import\.meta\.(?:dir|path|main)|\bBuffer\b/g;
@@ -18,8 +18,8 @@ const RUNTIME_NAME = /\bBun\.|["'](?:bun|node):|\bprocess\.|import\.meta\.(?:dir
 /** An import: the first group is what it names. */
 const IMPORT = /from "([^"]+)"/g;
 
-/** Where the demo may import from, beside its own folder: the portable source of the app and of core. */
-const PORTABLE_SOURCE = /^\.\.\/\.\.\/\.\.\/(?:app|core)\/src\//;
+/** Where the demo may import from: its own two folders, the portable source of the app and of core, and SQLite built for a browser. */
+const PORTABLE_IMPORT = /^(?:\.\/|\.\.\/(?:preview|browser)\/|\.\.\/\.\.\/\.\.\/(?:app|core)\/src\/|sql\.js(?:\/dist\/sql-wasm-browser\.js)?$)/;
 
 /** The command that starts a preview. */
 const SERVE = join(import.meta.dir, "..", "packages", "demo", "scripts", "serve.ts");
@@ -178,14 +178,14 @@ describe("the local preview", () => {
     expect(seen.size).toBeLessThan(MAX_PAGES);
   });
 
-  test("the demo's own folder names no runtime and imports only portable source: without this it stops running in a browser or a Worker the day someone reaches for a file or a process", async () => {
-    const files = [...new Bun.Glob("*.ts").scanSync({ cwd: DEMO })].sort();
+  test("the demo names no runtime and imports only portable source, its own files, and SQLite: without this it stops running in a browser or a Worker the day someone reaches for a file or a process", async () => {
+    const files = [...new Bun.Glob("*/*.ts").scanSync({ cwd: DEMO })].sort();
     const texts = await Promise.all(files.map(async (file) => [file, await Bun.file(join(DEMO, file)).text()] as const));
     const imports = texts.flatMap(([file, text]) => Array.from(text.matchAll(IMPORT), ([, path = ""]) => [file, path] as const));
 
     expect(files.length).toBeGreaterThan(5);
     expect(texts.flatMap(([file, text]) => (text.match(RUNTIME_NAME) ?? []).map((found) => [file, found]))).toEqual([]);
-    expect(imports.filter(([, path]) => !path.startsWith("./") && !PORTABLE_SOURCE.test(path))).toEqual([]);
+    expect(imports.filter(([, path]) => !PORTABLE_IMPORT.test(path))).toEqual([]);
   });
 
   test("a form sent from a preview page changes the install, and a reset brings the sample data back: without this the forms are pictures", async () => {

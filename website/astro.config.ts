@@ -1,5 +1,6 @@
 import { fileURLToPath } from "node:url";
 import { defineConfig } from "astro/config";
+import { demoIntegration } from "./integrations/demo.ts";
 import { samplesIntegration } from "./integrations/samples.ts";
 
 const samplesDir = process.env.POPLIN_SAMPLES_DIR || fileURLToPath(new URL("../demo/samples/", import.meta.url));
@@ -11,6 +12,6 @@ export default defineConfig({
   trailingSlash: "always",
   // Rasters are made at build time from the repository's own SVG drawings, so processing them is safe.
   image: { dangerouslyProcessSVG: true },
-  // One sample folder stands in for a published page; the others stay out of the built site.
-  integrations: [samplesIntegration(samplesDir, "sales-report")],
+  // One sample folder stands in for a published page; the others stay out of the built site. The dashboard demo is built into `demo/`.
+  integrations: [samplesIntegration(samplesDir, "sales-report"), demoIntegration()],
 });

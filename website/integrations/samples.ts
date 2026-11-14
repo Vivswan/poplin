@@ -47,7 +47,7 @@ function listSamples(samplesDir: string, only: string): Sample[] {
 }
 
 /**
- * Offers the one sample site named `only` in `samplesDir` to the pages and copies it into the built site at `demo/<name>/`.
+ * Offers the one sample site named `only` in `samplesDir` to the pages and copies it into the built site at `sample/<name>/`.
  * A missing folder yields an empty list, so the site builds without it.
  */
 export function samplesIntegration(samplesDir: string, only: string): AstroIntegration {
@@ -70,7 +70,7 @@ export function samplesIntegration(samplesDir: string, only: string): AstroInteg
       },
       "astro:build:done": ({ dir }) => {
         for (const sample of samples) {
-          cpSync(join(samplesDir, sample.name), join(fileURLToPath(dir), "demo", sample.name), { recursive: true });
+          cpSync(join(samplesDir, sample.name), join(fileURLToPath(dir), "sample", sample.name), { recursive: true });
         }
       },
     },

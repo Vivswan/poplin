@@ -22,7 +22,7 @@ import type { SqlDriver } from "../../../core/src/database/driver";
 import type { ObjectStore } from "../../../core/src/storage/storage";
 import { PLUG_STATES, type PlugState, previewPlug } from "./domain-plug";
 import { type Entry, galleryOf, STAGES } from "./gallery";
-import { rebased, unbased } from "./base";
+import { insidePath, rebased, unbased } from "./base";
 import { ADMIN_ORIGIN, askMount, forceTheme, type Mount, previewValue, SERVED_PREFIX, siteOrigin } from "./mount";
 import { galleryPage, loginPage, plainPage, previewBar, shell } from "./own-pages";
 import { type Samples, seedWorld } from "./seed";
@@ -69,8 +69,8 @@ export interface Host {
   /** The files of every sample site the seed publishes. */
   readonly samples: Samples;
 
-  /** Whether `/gallery` answers. */
-  readonly gallery: boolean;
+  /** Whether `/gallery` answers; it does not when left out. */
+  readonly gallery?: boolean;
 
   /** Opens the object store of one install; a memory store when left out. A host that keeps the demo across its own restarts hands in a store it can save. */
   readonly openStore?: () => ObjectStore;
@@ -83,6 +83,9 @@ export interface Host {
 
   /** The path the demo sits under at its origin, such as `/poplin/demo`; the root when left out. */
   readonly base?: string;
+
+  /** Where a person finds why a request failed, as the answer to that request says it; the terminal when left out. */
+  readonly reasonAt?: string;
 }
 
 /** The whole preview: the handler of every request, the admin token of the seeded install, and the gallery's links. */
@@ -230,11 +233,6 @@ function mountOf(scene: Scene, path: string): Mount | undefined {
   return siteMount(scene.seeded, decodeURIComponent(label));
 }
 
-/** A path of this origin a redirect may lead to; anything else leads home. */
-function localPath(asked: string | null): string {
-  return asked?.startsWith("/") === true && !asked.startsWith("//") ? asked : "/";
-}
-
 /** The address a page can be opened at again, where a change of scheme comes back to. A form's answer has none of its own: it is the stage that sent the form, or the page the form was on, one step up. */
 function shownAt(request: Request, url: URL): string {
   if (request.method === "GET" || request.method === "HEAD") return `${url.pathname}${url.search}`;
@@ -258,7 +256,7 @@ function redirectOf(url: URL): Response | undefined {
 
   const [, , chosen = ""] = url.pathname.split("/");
 
-  const chosenAt = goTo(localPath(url.searchParams.get("to")), 303);
+  const chosenAt = goTo(insidePath(url.searchParams.get("to") ?? "/", "/") ?? "/", 303);
   chosenAt.headers.set("Set-Cookie", `${THEME_COOKIE}=${encodeURIComponent(chosen)}; Path=/; SameSite=Lax`);
 
   return chosenAt;
@@ -284,7 +282,7 @@ export async function createPreview(host: Host): Promise<Preview> {
     const framed = (text: string, status: number): string => themed(plainPage(text, status, bar), theme);
     if (mount !== undefined) return askMount(request, mount, { theme, origin: url.origin, bar, framed });
 
-    if (url.pathname === "/gallery" && host.gallery) return own(galleryPage({ entries: await entries(), token: scene.token, origin: url.origin, bar }));
+    if (url.pathname === "/gallery" && host.gallery === true) return own(galleryPage({ entries: await entries(), token: scene.token, origin: url.origin, bar }));
 
     const redirect = redirectOf(url);
     if (redirect !== undefined) return redirect;
@@ -318,7 +316,7 @@ export async function createPreview(host: Host): Promise<Preview> {
       } catch (error) {
         console.error("preview: a request failed", error);
 
-        return new Response("The preview failed on this request. The terminal says why.\n", { status: 500 });
+        return new Response(`The preview failed on this request. ${host.reasonAt ?? "The terminal says why."}\n`, { status: 500 });
       }
     },
   };

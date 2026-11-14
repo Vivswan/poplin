@@ -8,8 +8,32 @@
 /** An attribute of a page that holds a path from the root; the path's own first slash follows. */
 const ROOT_PATH_ATTRIBUTE = /\b(href|action|formaction|src)="\/(?!\/)/g;
 
+/** An origin that stands for the demo's own wherever only a path is at hand; no answer ever names it. */
+const ANY_ORIGIN = "https://demo.invalid";
+
 /** The headers a rewritten body no longer matches. */
 const BODY_HEADERS = ["Content-Length", "ETag"];
+
+/**
+ * Decide where an address a visitor's own address names may lead: only to a place under a folder of the demo's origin.
+ *
+ * The address is read as a browser reads it, so whatever a browser would follow elsewhere is refused, in every spelling of it.
+ *
+ * @param asked - what the visitor's address names, such as `/settings?done=saved`; any text at all
+ * @param under - the folder it is read against and must stay in: a path with its closing slash, such as `/poplin/demo/`
+ * @returns the path, query, and fragment to redirect to, which a browser reads back as the very address that was checked; `undefined` for an address that leads out of the folder or off the origin
+ */
+export function insidePath(asked: string, under: string): string | undefined {
+  const home = new URL(under, ANY_ORIGIN);
+  const target = URL.parse(asked, home);
+  if (target === null || target.origin !== home.origin || !target.pathname.startsWith(home.pathname)) return undefined;
+
+  // A path alone can still name another host to a browser, as one that begins with two slashes does.
+  const written = `${target.pathname}${target.search}${target.hash}`;
+  if (URL.parse(written, home)?.href !== target.href) return undefined;
+
+  return written;
+}
 
 /**
  * Take the base off a request's path.
