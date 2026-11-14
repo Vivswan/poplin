@@ -38,6 +38,8 @@
     "smoke": "bun scripts/smoke.ts"
   },
   "devDependencies": {
+    "htmlparser2": "12.0.0",
+    "mime": "4.1.2",
     "publint": "0.3.25",
     "tsdown": "0.23.7"
   }
