@@ -9,9 +9,6 @@ import type { RecordKind } from "./kind";
 /** The number a site record of the shape below is stamped with. */
 const SITE_SHAPE = 1;
 
-/** The form of a source folder's fingerprint: a SHA-256 in lowercase hex. */
-const FINGERPRINT_PATTERN = /^[0-9a-f]{64}$/;
-
 /** A secret is checked as the secret part of a label, with a stand-in name in front of it. */
 const NO_RESERVED_NAMES: ReadonlySet<string> = new Set();
 
@@ -30,7 +27,6 @@ const ALWAYS = {
   live_version: POSITIVE,
   versions: v.pipe(v.array(VERSION), v.minLength(1)),
   owner: HOLDER,
-  source_fingerprint: v.nullable(v.pipe(v.string(), v.regex(FINGERPRINT_PATTERN))),
 };
 
 /** Only the admins may open the site. */
@@ -72,7 +68,7 @@ export const SITE: RecordKind<SiteRecord> = { name: "site", shape: SITE_SHAPE, s
 /**
  * A site record in its current shape.
  *
- * `title` is the title shown on the dashboard, `null` when none is. `expires` is `"never"` or the moment the site moves to the trash. `source_fingerprint` is `null` when the publish sent none.
+ * `title` is the title shown on the dashboard, `null` when none is. `expires` is `"never"` or the moment the site moves to the trash.
  *
  * `owner` and `published_by` are a token's id, or an admin's email for an upload through the dashboard. Times are milliseconds since the epoch.
  */

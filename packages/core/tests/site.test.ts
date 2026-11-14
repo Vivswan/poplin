@@ -18,7 +18,6 @@ const LIVE_PRIVATE = {
   live_version: 1,
   versions: [{ number: 1, published: NOW, published_by: TOKEN_ID }],
   owner: TOKEN_ID,
-  source_fingerprint: null,
   state: "live",
 };
 const SECRET = "7f3k9x2mq4ab";
@@ -39,7 +38,7 @@ describe("SITE", () => {
     ["a public site open to search engines", { ...LIVE_PRIVATE, access: "public", search_engines: true }],
     ["a site in the trash", { ...LIVE_PRIVATE, state: "trash", gone_on: NOW }],
     ["an unlisted site in the trash, which keeps its secret for a restore", { ...LIVE_PRIVATE, access: "unlisted", secret: SECRET, state: "trash", gone_on: NOW }],
-    ["a title, an expiry, and a fingerprint", { ...LIVE_PRIVATE, title: "Q3 sales", expires: NOW, source_fingerprint: "ab".repeat(32) }],
+    ["a title and an expiry", { ...LIVE_PRIVATE, title: "Q3 sales", expires: NOW }],
     ["an upload through the dashboard, owned by an admin's email", { ...LIVE_PRIVATE, owner: "ada@example.com", versions: [{ number: 1, published: NOW, published_by: "ada@example.com" }] }],
     ["a site shown inside two others", { ...LIVE_PRIVATE, embed_from: ["dashboard", "home"] }],
     [
@@ -76,7 +75,6 @@ describe("SITE", () => {
     ],
     ["a version says who published it", { ...LIVE_PRIVATE, versions: [{ number: 1, published: NOW }] }, "versions.0.published_by"],
     ["the owner is a token id or an email", { ...LIVE_PRIVATE, owner: "somebody" }, "owner"],
-    ["the fingerprint is a SHA-256 in hex, never a path", { ...LIVE_PRIVATE, source_fingerprint: "/home/work/dist" }, "source_fingerprint"],
     ["no field beyond the shape", { ...LIVE_PRIVATE, alias: "q3" }, "alias"],
   ])("refuses a record that breaks: %s", (_, record, field) => {
     expect(refusedField(record)).toBe(field);
