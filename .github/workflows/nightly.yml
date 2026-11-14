@@ -1,0 +1,73 @@
+# Runs the nightly CI, as the starter written once by Vivswan/repo-platform and never overwritten by a
+# later sync.
+#
+# Replace the placeholder step. The release-gate job runs the repo-owned release acceptance tier on the schedule too
+# (docs/all-green.md, "The release-gate hook"). The report job files one label-deduplicated tracking issue on a red
+# night and closes it on a green one (docs/modules/nightly.md).
+name: Nightly
+
+on:
+  schedule:
+    # Pick your own minute so the fleet's nightlies do not all land at
+    # once.
+    - cron: "59 6 * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: nightly
+
+permissions:
+  contents: read
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      # Add sibling jobs freely: list each in the report job's `needs` and
+      # fold its result into the red/green conditions there.
+
+      - name: Nightly checks
+        run: |
+          # Replace with the repository's nightly checks. A green no-op
+          # until then: an uncustomized starter must not file issues.
+          echo "::warning::nightly starter not customized yet - replace the placeholder step (see repo-platform's docs/modules/nightly.md)"
+
+  # The same hook ci.yml calls on the release PR, so a tier the release blocks on is also judged every night.
+  release-gate:
+    uses: ./.github/workflows/release-gate.yml
+
+  # A CANCELLED job counts as red: hitting the timeout cancels rather
+  # than fails, and a hang is exactly what a nightly exists to catch.
+  report:
+    needs: [checks, release-gate]
+    if: always()
+    runs-on: ubuntu-latest
+    # A hung reporter is the residual silence window; keep this tight.
+    timeout-minutes: 5
+    # issues: write is for the fuzz-issue action; an issue it creates fires no issues:opened event, so it assigns the owner itself.
+    permissions:
+      issues: write
+    steps:
+      - name: File or update the nightly issue
+        if: >-
+          contains(fromJSON('["failure","cancelled"]'), needs.checks.result) ||
+          contains(fromJSON('["failure","cancelled"]'), needs.release-gate.result)
+        uses: Vivswan/repo-platform/actions/fuzz-issue@stable
+        with:
+          mode: report
+          label: "nightly-failure"
+          title: Nightly CI failures
+          label-color: "D93F0B"
+          label-description: "Automated nightly CI failure"
+          stream: generic
+
+      - name: Close the nightly issue on a green night
+        if: needs.checks.result == 'success' && needs.release-gate.result == 'success'
+        uses: Vivswan/repo-platform/actions/fuzz-issue@stable
+        with:
+          mode: resolve
+          label: "nightly-failure"
+          stream: generic

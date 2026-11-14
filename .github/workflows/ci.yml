@@ -1,0 +1,227 @@
+# This file is managed by Vivswan/repo-platform.
+# Local edits are replaced on the next sync.
+#
+# Runs the fleet's CI and the legs after its gate, the same file in every repository.
+#
+# The legs after the gate are static jobs gated on the plan's module output, so a change to fleet.yml@stable
+# changes this repository's CI with no PR here.
+
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+  schedule:
+    # Nightly, public repositories only: the scheduled run is the site leg's rebuild and link-rot check, and
+    # CodeQL keeps its weekly rescan through fleet.yml's plan output. A private repository's night skips every job.
+    - cron: "3 4 * * *"
+
+permissions:
+  contents: read
+
+# A ref-keyed group keeps one pending run and cancels the older one, so a burst of merges would leave intermediate commits unjudged.
+#   push          -> keyed by the commit: every merge to main gets its own complete run and verdict
+#   pull_request  -> keyed by the ref: a newer push cancels the stale run
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.ref || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  # Repo-owned: edit checks.yml, not this file. The call carries the repository's secrets; a job that reads one declares what
+  # it uses (an environment for an environment secret). Permissions still cap at contents: read. The nightly run is the platform's alone.
+  checks:
+    if: github.event_name != 'schedule'
+    uses: ./.github/workflows/checks.yml
+    # The called workflow is this repository's own, so it inherits the repository's secrets by design.
+    # nosemgrep: yaml.github-actions.security.secrets-inherit.secrets-inherit
+    secrets: inherit # zizmor: ignore[secrets-inherit]
+
+  # Every platform call carries the fleet ceiling, ONE fixed block: the union of what any job of the called workflows
+  # asks, each job narrowing itself to its own need. GitHub validates a called job's grant against it before the job's
+  # `if` runs, so the block is unconditional and the same text on every platform call.
+  # The nightly runs in public repositories only: a private repository pays for every job that runs and has no code
+  # scanning, and a skipped job bills nothing. The gate carries the same clause, so the two skip together.
+  platform:
+    if: github.event_name != 'schedule' || !github.event.repository.private
+    uses: Vivswan/repo-platform/.github/workflows/fleet.yml@stable
+    permissions:
+      actions: read
+      attestations: write
+      contents: write
+      id-token: write
+      issues: write
+      pages: write
+      pull-requests: write
+      security-events: write
+      vulnerability-alerts: read
+
+  # Repo-owned: edit release-gate.yml, not this file. The release acceptance tier (docs/all-green.md). The branch
+  # prefix is release-please's own, spelled as in fleet.yml's release-pr job; the no-op seed never gates a run red.
+  release-gate:
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'pull_request' && startsWith(github.head_ref, 'release-please--'))
+    uses: ./.github/workflows/release-gate.yml
+
+  # THE gate: this job's own check run (named all-green, created by the GitHub Actions app) is the ruleset's required
+  # check. It passes only when each needed result is success. `checks` (the schedule run) and `release-gate` (every
+  # event but the release PR and a dispatch) may skip; `platform` never may, so an all-skipped run cannot pass.
+  # A private repository's nightly is the one run with no gate: `platform` stands down there and this job with it.
+  all-green:
+    needs: [checks, platform, release-gate]
+    if: always() && (github.event_name != 'schedule' || !github.event.repository.private)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: re-actors/alls-green@b5b5b37504aa4183270bd3d855c52a67f212be35 # v1.3.0
+        with:
+          jobs: ${{ toJSON(needs) }}
+          allowed-skips: checks, release-gate
+
+  # Repo-owned: edit post-green.yml, not this file. No job lane here: a caller holding a lane a called job takes deadlocks the call.
+  # !cancelled(): the implicit success() reads the whole needs chain, so a gating job skipped by its condition would skip this job past a green gate.
+  post-green:
+    needs: [all-green]
+    if: >-
+      !cancelled() &&
+      needs.all-green.result == 'success' &&
+      github.event_name == 'push' &&
+      github.ref == 'refs/heads/main'
+    # The hook ceiling: contents write pushes a fast-forward branch (a packaged latest), id-token write mints the run's
+    # OIDC token for trusted publishing (npm, PyPI). A called job cannot exceed its caller, so both are granted here.
+    permissions:
+      contents: write
+      id-token: write
+    uses: ./.github/workflows/post-green.yml
+    with:
+      sha: ${{ github.sha }}
+    # The called workflow is this repository's own, so it inherits the repository's secrets by design.
+    # nosemgrep: yaml.github-actions.security.secrets-inherit.secrets-inherit
+    secrets: inherit # zizmor: ignore[secrets-inherit]
+
+  # The legs below gate on the plan's modules output, a substring test on the compact JSON array, hence the quoted module
+  # name; `platform` sits in a needs list because a job reads outputs only from its direct dependencies.
+  #   !cancelled() first -> each condition names the results it gates on (see post-green)
+  #   no lane here       -> the called job holds its own, keyed by the judged commit, so a burst of merges cancels no cut
+  #   needs post-green   -> the repository's own green-gated work lands before the tag is minted
+  release:
+    needs: [platform, post-green]
+    if: >-
+      !cancelled() &&
+      needs.post-green.result == 'success' &&
+      github.event_name == 'push' &&
+      github.ref == 'refs/heads/main' &&
+      contains(needs.platform.outputs.modules, '"release-please"')
+    permissions:
+      actions: read
+      attestations: write
+      contents: write
+      id-token: write
+      issues: write
+      pages: write
+      pull-requests: write
+      security-events: write
+      vulnerability-alerts: read
+    uses: Vivswan/repo-platform/.github/workflows/fleet-release.yml@stable
+    with:
+      sha: ${{ github.sha }}
+      tracking-labels: ${{ needs.platform.outputs.tracking-labels }}
+
+  # Repo-owned: edit update-release.yml, not this file.
+  # The ceiling here and on update-release-pr is the contract with the repo-owned hooks: a hook narrows itself per job,
+  # and a narrower caller ceiling rejects an existing hook that asks for more (one requesting packages: read failed against a ceiling without it).
+  update-release:
+    needs: [release]
+    if: >-
+      !cancelled() &&
+      needs.release.result == 'success' &&
+      needs.release.outputs.release_created == 'true'
+    permissions:
+      contents: write
+      pull-requests: write
+      packages: write
+      id-token: write
+      attestations: write
+      issues: read
+      vulnerability-alerts: read
+    uses: ./.github/workflows/update-release.yml
+    with:
+      tag: ${{ needs.release.outputs.tag_name }}
+    # The called workflow is this repository's own, so it inherits the repository's secrets by design.
+    # nosemgrep: yaml.github-actions.security.secrets-inherit.secrets-inherit
+    secrets: inherit # zizmor: ignore[secrets-inherit]
+
+  # By the draft's id, not its tag: the update-release hook may rename the draft.
+  publish-release:
+    needs: [release, update-release]
+    if: >-
+      !cancelled() &&
+      needs.release.result == 'success' &&
+      needs.update-release.result == 'success' &&
+      needs.release.outputs.release_created == 'true'
+    permissions:
+      actions: read
+      attestations: write
+      contents: write
+      id-token: write
+      issues: write
+      pages: write
+      pull-requests: write
+      security-events: write
+      vulnerability-alerts: read
+    uses: Vivswan/repo-platform/.github/workflows/fleet-release-publish.yml@stable
+    with:
+      release-id: ${{ needs.release.outputs.release_id }}
+
+  # Repo-owned: edit update-release-pr.yml, not this file. The ceiling is update-release's, under the same contract.
+  update-release-pr:
+    needs: [release]
+    if: >-
+      !cancelled() &&
+      needs.release.result == 'success' &&
+      needs.release.outputs.prs_created == 'true'
+    permissions:
+      contents: write
+      pull-requests: write
+      packages: write
+      id-token: write
+      attestations: write
+      issues: read
+      vulnerability-alerts: read
+    uses: ./.github/workflows/update-release-pr.yml
+    with:
+      pr_number: ${{ needs.release.outputs.pr_number }}
+      head_branch: ${{ needs.release.outputs.pr_head_branch }}
+    # The called workflow is this repository's own, so it inherits the repository's secrets by design.
+    # nosemgrep: yaml.github-actions.security.secrets-inherit.secrets-inherit
+    secrets: inherit # zizmor: ignore[secrets-inherit]
+
+  # Same run as the gate, so github.sha IS the judged commit and a red main never reaches the site.
+  #   needs release   -> a release commit's own deploy serves its new tag; an order, not a gate (!cancelled()), so a
+  #                      skipped or red release still deploys
+  #   no push clause  -> every main run deploys, so the nightly schedule IS the rebuild and a dispatch IS the manual deploy
+  site:
+    needs: [platform, all-green, release]
+    if: >-
+      !cancelled() &&
+      needs.all-green.result == 'success' &&
+      github.ref == 'refs/heads/main' &&
+      contains(needs.platform.outputs.modules, '"site"')
+    concurrency:
+      group: pages
+      cancel-in-progress: true
+    permissions:
+      actions: read
+      attestations: write
+      contents: write
+      id-token: write
+      issues: write
+      pages: write
+      pull-requests: write
+      security-events: write
+      vulnerability-alerts: read
+    uses: Vivswan/repo-platform/.github/workflows/reusable-site.yml@stable
+    with:
+      sha: ${{ github.sha }}

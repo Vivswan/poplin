@@ -1,0 +1,32 @@
+# Runs this repository's own checks under the all-green gate.
+#
+# This file is repo-owned, seeded once by the fleet sync and never overwritten by a later sync, so edit freely.
+#
+# The caller passes the repository's secrets through (a job reading an environment secret declares its environment) and
+# caps at contents: read. A check needing more permissions gets its own workflow, wired via .github/settings.yml.
+#
+# A job skipped by its own `if:` stands down from the all-green gate. A job with `continue-on-error: true` is an
+# advisory check, whose failures stay out of the gate too.
+
+name: Checks
+
+on:
+  workflow_call:
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      # Example bun checks; replace the placeholder below with real ones.
+      # - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+      #   with:
+      #     bun-version-file: .bun-version
+      # - run: bun install --frozen-lockfile
+      # - run: bun run lint
+      # - run: bun test
+
+      - name: Repository-specific checks go here
+        run: echo "add this repository's own test and lint jobs to checks.yml"

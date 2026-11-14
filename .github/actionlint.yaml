@@ -1,0 +1,9 @@
+# Repo-owned actionlint configuration. Written once by
+# Vivswan/repo-platform, never overwritten by a later sync,
+# so add this repository's own ignores freely.
+
+paths:
+  .github/workflows/**/*.{yml,yaml}:
+    ignore:
+      # actionlint's permission-scope list lacks `vulnerability-alerts` (rhysd/actionlint#666); drop when it knows the scope.
+      - 'unknown permission scope "vulnerability-alerts"'

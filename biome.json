@@ -1,0 +1,40 @@
+{
+  "$schema": "https://biomejs.dev/schemas/2.6.4/schema.json",
+  "extends": ["./biome.local.jsonc"],
+  "markdown": { "parser": { "frontmatter": true } },
+  "linter": {
+    "enabled": true,
+    "rules": {
+      "complexity": {
+        "noExcessiveCognitiveComplexity": {
+          "level": "warn",
+          "options": { "maxAllowedComplexity": 15 }
+        },
+        "noExcessiveLinesPerFunction": { "level": "warn", "options": { "maxLines": 80 } },
+        "useMaxParams": { "level": "warn", "options": { "max": 6 } }
+      },
+      "style": {
+        "noNestedTernary": "error",
+        "noUselessElse": "error",
+        "noNegationElse": "error",
+        "noParameterAssign": "error"
+      },
+      "suspicious": { "noAssignInExpressions": "error", "noUnusedExpressions": "error" },
+      "performance": { "noBarrelFile": "error", "noReExportAll": "error" },
+      "correctness": { "noInvalidUseBeforeDeclaration": "error" }
+    }
+  },
+  "overrides": [
+    {
+      "includes": [
+        "biome.json",
+        ".github/repo-platform-manifest.json",
+        ".github/settings.yml",
+        "**/LICENSE.md"
+      ],
+      "formatter": { "enabled": false },
+      "linter": { "enabled": false },
+      "assist": { "enabled": false }
+    }
+  ]
+}
