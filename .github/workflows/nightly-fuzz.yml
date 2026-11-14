@@ -1,8 +1,8 @@
 # Runs the nightly fuzzing, as the starter written once by Vivswan/repo-platform and never overwritten
 # by a later sync.
 #
-# Replace the placeholder fuzz step. Follow the failure-report contract in docs/modules/fuzzer.md, and the issue
-# filing, replay, and auto-close steps keep working.
+# The fuzz step runs the property tests under tests/fuzz for ten minutes. Each failing property writes its
+# report, with the seed and the replay command, where the failure-report contract in docs/modules/fuzzer.md wants it.
 name: Nightly Fuzz
 
 on:
@@ -30,7 +30,7 @@ permissions:
 jobs:
   fuzz:
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 20
     # Sharding multiplies coverage: uncomment the matrix and suffix the
     # artifact name below with the shard (docs/modules/fuzzer.md).
     # strategy:
@@ -40,19 +40,26 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      # Set up your fuzzer's toolchain here.
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version-file: .bun-version
 
+      - name: Install
+        run: bun install --frozen-lockfile
+
+      # FUZZ_SECONDS is the budget of the whole directory: tests/fuzz/config.ts shares it between the fuzz
+      # files and their properties. A blank FUZZ_RUNS (the nightly) leaves the time budget as the only limit.
+      # `timeout` turns a hang into a failure well before the job's own limit cancels it.
       - name: Fuzz
         env:
           SEED: ${{ inputs.seed }}
-          ITERATIONS: ${{ inputs.iterations || '1000' }}
+          FUZZ_RUNS: ${{ inputs.iterations }}
+          FUZZ_SECONDS: "600"
+          FUZZ_REPORTS: .fuzz-failures
         run: |
-          SEED="${SEED:-$RANDOM$RANDOM}"
-          echo "fuzzing with seed $SEED, $ITERATIONS iterations"
-          # Replace with your fuzzer: seeded with $SEED for $ITERATIONS iterations, writing one
-          # .fuzz-failures/<name>/report.md per crash (the contract: docs/modules/fuzzer.md).
-          # A green no-op until then: an uncustomized starter must not file issues.
-          echo "::warning::nightly-fuzz starter not customized yet - replace the placeholder fuzz step (see repo-platform's docs/modules/fuzzer.md)"
+          export FUZZ_SEED="${SEED:-$RANDOM$RANDOM}"
+          echo "fuzzing with seed $FUZZ_SEED for $FUZZ_SECONDS seconds"
+          timeout 15m bun test tests/fuzz
 
       # A job that hits timeout-minutes is cancelled, not failed, and its
       # later steps still run under this condition.
