@@ -3,6 +3,8 @@
   "private": true,
   "type": "module",
   "exports": {
+    "./src/dashboard/dashboard": "./src/dashboard/dashboard.ts",
+    "./src/dashboard/settings/free-limits": "./src/dashboard/settings/free-limits.ts",
     "./src/limits/limits": "./src/limits/limits.ts",
     "./src/limits/visitor-key": "./src/limits/visitor-key.ts",
     "./src/login/login": "./src/login/login.ts",

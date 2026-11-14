@@ -1,0 +1,183 @@
+// The owner's dashboard: the pages on the admin hostname where a logged-in admin sees and manages every site and the install's settings.
+//
+//   GET  /                         the sites, or the trash with ?view=trash
+//   GET  /sites/<label>            one site
+//   POST /sites/<label>/<change>   settings, rollback, new-link, delete, restore, delete-forever
+//   GET  /settings                 the settings
+//   POST /settings/<change>        save, sign-everyone-out
+//   GET  /activity                 the audit log
+//   GET  /usage                    the totals and the day's requests
+//
+// Every request is first asked for its session: without one the only answer is the way to the login. Every POST is then checked to come from a dashboard page.
+
+import { readConfig } from "@poplin/core/src/actions/config";
+import type { Install } from "@poplin/core/src/actions/records";
+import type { Login } from "@poplin/core/src/auth/logins";
+import { type Context, Hono, type MiddlewareHandler } from "hono";
+import { bodyLimit } from "hono/body-limit";
+import { NONCE, secureHeaders } from "hono/secure-headers";
+
+import type { SiteAddresses } from "../sites/addresses";
+import { showActivity } from "./activity/activity-page";
+import { framePage, refusedPage } from "./page/frame";
+import { noticeIn } from "./page/notices";
+import type { Change, Form, Page, Visit } from "./records";
+import { checkCsrfToken, importCsrfKey, mintCsrfToken } from "./security/csrf";
+import { isForm, readForm } from "./security/form";
+import { isSameOrigin } from "./security/same-origin";
+import { SETTINGS_CHANGES } from "./settings/settings-changes";
+import { showSettings } from "./settings/settings-page";
+import { SITE_CHANGES } from "./sites/site-changes";
+import { showSite } from "./sites/site-page";
+import { showSites } from "./sites/sites-page";
+import { showUsage } from "./usage/usage-page";
+
+/** The methods the dashboard answers. */
+const METHODS: ReadonlySet<string> = new Set(["GET", "HEAD", "POST"]);
+
+/** The `Allow` header of a refused method. */
+const ALLOW = "GET, HEAD, POST";
+
+/** The most bytes a posted form holds: room for the Settings form with a long list of logins. */
+const MAX_FORM_BYTES = 1024 * 1024;
+
+/** The query key of the login address that names where to go back to. */
+const RETURN_KEY = "return";
+
+/** The title of a dashboard whose settings cannot be read. */
+const PLAIN_TITLE = "poplin";
+
+/** What a request whose session cannot be read is taken to carry. */
+const NO_SESSION = { ok: false } as const;
+
+/** The whole answer to a failure nothing above handled: it tells nothing of the cause. */
+const FAILURE = "Something went wrong.";
+
+/** What a dashboard is built from. */
+interface DashboardParts {
+  /** The install the actions work on: its database, store, clock, and addresses. */
+  readonly install: Install;
+
+  /** Reads who a request's session names: an email that is in the logins now, or a refusal. */
+  readonly readSession: (headers: Headers) => Promise<{ readonly ok: true; readonly value: Login } | { readonly ok: false }>;
+
+  /** The install's address layout, which writes the address of the login. */
+  readonly addresses: Pick<SiteAddresses, "loginFor">;
+
+  /** At least 32 random bytes that sign the forms' tokens, used for nothing else. */
+  readonly csrfSecret: Uint8Array<ArrayBuffer>;
+}
+
+/** What the handlers of one request share. */
+interface Shared {
+  Variables: { visit: Visit; form: Form };
+}
+
+/** Something that answers a request, as a Worker's `fetch` does. */
+interface Dashboard {
+  readonly fetch: (request: Request) => Promise<Response>;
+}
+
+function loginAddress(addresses: DashboardParts["addresses"], url: URL, back: string): string {
+  const login = new URL(addresses.loginFor(url));
+  login.searchParams.set(RETURN_KEY, back);
+
+  return login.href;
+}
+
+async function respond(context: Context<Shared>, page: Page): Promise<Response> {
+  const visit = context.get("visit");
+  const config = await readConfig(visit.install, visit.actor);
+  const title = config.ok ? config.values.dashboard_title : PLAIN_TITLE;
+  const document = await framePage(page, { title, nonce: context.get("secureHeadersNonce") ?? "", notice: noticeIn(visit.url) });
+
+  return context.html(document, page.status ?? 200);
+}
+
+function refuse(context: Context<Shared>, code: string, status: NonNullable<Page["status"]>): Promise<Response> {
+  return respond(context, refusedPage({ tab: "sites", heading: "Not done", status }, { code }));
+}
+
+/** Answer a form: run the change its address names and send the browser to the page the change answers with. */
+async function change<Subject extends string[]>(context: Context<Shared>, changes: Readonly<Record<string, Change<Subject>>>, name: string, ...subject: Subject): Promise<Response> {
+  const wanted = Object.hasOwn(changes, name) ? changes[name] : undefined;
+  if (wanted === undefined) return context.notFound();
+
+  return context.redirect(await wanted(context.get("visit"), ...subject, context.get("form")), 303);
+}
+
+/**
+ * Build the dashboard.
+ *
+ * @returns a handler for every request to the admin hostname's dashboard paths. It answers nothing but a redirect to the login before the session is checked
+ * @throws {RangeError} the CSRF secret is under 32 bytes
+ */
+export function createDashboard(parts: DashboardParts): Dashboard {
+  const csrfKey = importCsrfKey(parts.csrfSecret);
+  const app = new Hono<Shared>();
+
+  const noStore: MiddlewareHandler<Shared> = async (context, next) => {
+    await next();
+    context.res.headers.set("Cache-Control", "no-store");
+  };
+
+  const session: MiddlewareHandler<Shared> = async (context, next) => {
+    const url = new URL(context.req.url);
+    const reading = context.req.method === "GET" || context.req.method === "HEAD";
+    // A session that cannot be read is no session: the answer is the way to the login, never a page that says so.
+    const who = await parts.readSession(context.req.raw.headers).catch(() => NO_SESSION);
+    if (!who.ok) return context.redirect(loginAddress(parts.addresses, url, reading ? `${url.pathname}${url.search}` : "/"), reading ? 302 : 303);
+
+    // Every email in the logins is an admin: the dashboard has no other view.
+    const actor = { scope: "admin", holder: who.value } as const;
+    const csrf = await mintCsrfToken({ key: await csrfKey, email: who.value, now: parts.install.now() });
+    context.set("visit", { install: parts.install, actor, url, csrf, login: loginAddress(parts.addresses, url, "/") });
+
+    return next();
+  };
+
+  const method: MiddlewareHandler<Shared> = async (context, next) => {
+    if (METHODS.has(context.req.method)) return next();
+
+    const refused = await refuse(context, "bad_method", 405);
+    refused.headers.set("Allow", ALLOW);
+
+    return refused;
+  };
+
+  const fromHere: MiddlewareHandler<Shared> = async (context, next) => {
+    if (!isForm(context.req.raw)) return refuse(context, "not_a_form", 415);
+
+    if (!isSameOrigin(context.req.raw)) return refuse(context, "not_from_here", 403);
+
+    const form = readForm(await context.req.text());
+    const genuine = await checkCsrfToken(form.get("csrf") ?? "", { key: await csrfKey, email: context.get("visit").actor.holder, now: parts.install.now() });
+    if (!genuine) return refuse(context, "not_from_here", 403);
+
+    context.set("form", form);
+
+    return next();
+  };
+
+  app.use(
+    secureHeaders({
+      contentSecurityPolicy: { defaultSrc: ["'none'"], styleSrc: [NONCE], formAction: ["'self'"], frameAncestors: ["'none'"], baseUri: ["'none'"] },
+      xFrameOptions: "DENY",
+    }),
+  );
+  app.use(noStore, session, method);
+  app.post("*", bodyLimit({ maxSize: MAX_FORM_BYTES, onError: (context) => refuse(context, "too_large", 413) }), fromHere);
+
+  app.get("/", async (context) => respond(context, await showSites(context.get("visit"))));
+  app.get("/sites/:site", async (context) => respond(context, await showSite(context.get("visit"), context.req.param("site"))));
+  app.post("/sites/:site/:change", (context) => change(context, SITE_CHANGES, context.req.param("change"), context.req.param("site")));
+  app.get("/settings", async (context) => respond(context, await showSettings(context.get("visit"))));
+  app.post("/settings/:change", (context) => change(context, SETTINGS_CHANGES, context.req.param("change")));
+  app.get("/activity", async (context) => respond(context, await showActivity(context.get("visit"))));
+  app.get("/usage", async (context) => respond(context, await showUsage(context.get("visit"))));
+
+  app.notFound((context) => refuse(context, "no_page", 404));
+  app.onError(() => new Response(FAILURE, { status: 500, headers: { "Content-Type": "text/plain; charset=utf-8" } }));
+
+  return { fetch: async (request) => app.fetch(request) };
+}

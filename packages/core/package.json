@@ -36,6 +36,7 @@
     "./src/names/hostname": "./src/names/hostname.ts",
     "./src/names/names": "./src/names/names.ts",
     "./src/names/suffix": "./src/names/suffix.ts",
+    "./src/records/audit": "./src/records/audit.ts",
     "./src/records/settings": "./src/records/settings.ts",
     "./src/records/site": "./src/records/site.ts",
     "./src/sites/ids": "./src/sites/ids.ts",
