@@ -9,7 +9,8 @@
 // A run on an install with nothing set writes nothing to the install's own database: what it changes is at the provider, under the token's own account.
 // The page is open until somebody has logged in. Until then the first login may have been mistyped, with nobody able to log in to mend it: an email typed here, with a proven token, replaces it.
 // No answer hands a typed value back: every box of the form comes back empty, and a refusal names the box and never what was in it.
-// Every post is counted against the sender's address first, and a counter that cannot answer refuses: the page stays shut when its guard is gone.
+// Every try is counted against the sender's address before the plug is asked, and a counter that cannot answer refuses: the page stays shut when its guard is gone.
+// A post is a try only once it is the page's own form or a call sent as JSON: one that a page of another origin made a browser send is refused uncounted, so it cannot use up the tries of the person at that address.
 
 import type { Install } from "@poplin/core/src/actions/records";
 import { storeFirstLogin } from "@poplin/core/src/actions/store-settings";
@@ -123,10 +124,13 @@ async function fits(parts: SetupParts, request: Request): Promise<boolean> {
   return (await take().catch(() => ({ ok: false }))).ok;
 }
 
-/** Read what a program's call sent: `undefined` for a body that is not sent as JSON, and an empty text for each field the JSON holds no text for. */
-async function sentBy(request: Request): Promise<Sent | undefined> {
-  if (request.headers.get("Content-Type")?.split(";")[0]?.trim().toLowerCase() !== JSON_TYPE) return undefined;
+/** Whether a program's call is sent as JSON, which no page of another origin can make a browser send unasked. */
+function isJson(request: Request): boolean {
+  return request.headers.get("Content-Type")?.split(";")[0]?.trim().toLowerCase() === JSON_TYPE;
+}
 
+/** Read what a program's call sent: an empty text for each field the JSON holds no text for. */
+async function sentBy(request: Request): Promise<Sent> {
   const body: unknown = await request.json().catch(() => undefined);
   const fields: Readonly<Record<string, unknown>> = typeof body === "object" && body !== null ? { ...body } : {};
   const text = (name: string): string => (typeof fields[name] === "string" ? fields[name] : "");
@@ -253,9 +257,9 @@ export function createSetup(parts: SetupParts): Setup {
 
   app.post(
     "/setup/:run",
-    counted,
     bodyLimit({ maxSize: MAX_FORM_BYTES, onError: (context) => refuse(context, "too_large", 413) }),
     fromHere,
+    counted,
     async (context) => {
       const run = context.req.param("run");
       if (run !== "check" && run !== "repair") return notFound();
@@ -277,12 +281,12 @@ export function createSetup(parts: SetupParts): Setup {
     const run = context.req.param("run");
     if (run !== "check" && run !== "repair") return notFound();
 
+    // Before the count, as a form's origin is: a call in any other type is one a page of another origin could have made a browser send.
+    if (!isJson(context.req.raw)) return context.json({ ok: false, refusal: "not_json" }, 415);
+
     if (!(await fits(parts, context.req.raw))) return context.json({ ok: false, refusal: "too_many_tries" }, 429);
 
-    const sent = await sentBy(context.req.raw);
-    if (sent === undefined) return context.json({ ok: false, refusal: "not_json" }, 415);
-
-    const reading = await runFor(parts, run, sent);
+    const reading = await runFor(parts, run, await sentBy(context.req.raw));
     if (!reading.ok && reading.refusal === "allowance_spent") return spentRun(parts.install.now());
 
     if (!reading.ok) return context.json(reading, REFUSAL_STATUS[reading.refusal]);

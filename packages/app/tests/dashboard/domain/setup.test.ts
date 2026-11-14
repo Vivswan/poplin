@@ -211,6 +211,22 @@ test("six tries from one address in a minute: the sixth is refused before the pl
   expect((await post("check", OWN)).status).toBe(200);
 });
 
+// Drift: the count came before the question of where a form was from, so a page of another origin could post five forms from the owner's browser and shut the owner out for that minute.
+test("posts a page of another origin can make a browser send are refused uncounted: after five forms from another origin, five with no token, and five calls in a plain type, the person's own five tries are all still there", async () => {
+  const { get, post, call, plug } = await openSetup({ plug: usualPlug() });
+  const csrf = /name="csrf" value="([^"]+)"/.exec(await (await get("/setup")).text())?.[1] ?? "";
+  const foreign = [];
+  for (let sent = 0; sent < 5; sent += 1) {
+    foreign.push(await post("check", OWN, { csrf }, { Origin: "https://evil.example.net" }), await post("check", OWN, {}), await call("check", JSON.stringify({ token: OWN }), "text/plain"));
+  }
+  const own = [];
+  for (let sent = 0; sent < 6; sent += 1) own.push(await post("check", OWN));
+
+  expect(foreign.map((answer) => answer.status)).toEqual(Array.from({ length: 5 }, () => [403, 403, 415]).flat());
+  expect(own.map((answer) => answer.status)).toEqual([200, 200, 200, 200, 200, 429]);
+  expect(plug.calls.length).toBe(5);
+});
+
 test("counters that cannot answer shut the page: a try is refused, never let through uncounted", async () => {
   const broken = {
     takeMinute: async (): Promise<never> => {
@@ -273,6 +289,7 @@ test("a program's call is answered as JSON by the same run, the same count of tr
   const noToken = await call("check", JSON.stringify({ secret: OWN }));
   const asForm = await call("repair", new URLSearchParams({ token: OWN }).toString(), "application/x-www-form-urlencoded");
   const unknown = await call("save", own);
+  await call("check", own);
   const fifth = await call("check", own);
   const sixth = await call("check", own);
 
@@ -280,7 +297,7 @@ test("a program's call is answered as JSON by the same run, the same count of tr
   expect([refused.status, await refused.json()]).toEqual([403, { ok: false, refusal: "token" }]);
   expect([noToken.status, asForm.status, unknown.status, fifth.status]).toEqual([403, 415, 404, 200]);
   expect([sixth.status, await sixth.json()]).toEqual([429, { ok: false, refusal: "too_many_tries" }]);
-  expect(plug.calls.map(({ run }) => run)).toEqual(["check", "repair", "check", "check"]);
+  expect(plug.calls.map(({ run }) => run)).toEqual(["check", "repair", "check", "check", "check"]);
   expect((await opened.audit())[0]).toMatchObject({ action: "domain_synced", detail: { run: "check", from: "setup" } });
 
   address.value = "198.51.100.9";
