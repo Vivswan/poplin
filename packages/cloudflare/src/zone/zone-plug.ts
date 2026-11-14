@@ -236,7 +236,8 @@ function rowsOf(outcome: Outcome, mode: Mode, objectOf: (subject: string) => Pie
   return rows.sort((left, right) => (left.detail < right.detail ? -1 : 1));
 }
 
-// One piece of the install: its rows are added, and a failure stops every piece after it.
+// One piece of the install: its rows are added, and a failure stops every piece after it, so nothing is built on a state half made.
+// A piece refused for a permission the token lacks, before it changed anything, leaves nothing half made, and the pieces after it need other permissions: the run goes on.
 async function piece<Answer extends Outcome>(
   progress: Progress,
   mode: Mode,
@@ -251,7 +252,9 @@ async function piece<Answer extends Outcome>(
 
   const outcome = await run();
   progress.rows.push(...rowsOf(outcome, mode, objectOf));
-  if (!outcome.ok) progress.stopped = true;
+  const { created, changed, removed } = outcome.report;
+  const untouched = created.length + changed.length + removed.length === 0;
+  if (!outcome.ok && !(untouched && lacksRight(outcome))) progress.stopped = true;
 
   return outcome;
 }
@@ -272,15 +275,15 @@ function accessDetail(row: DomainRow, covered: string): DomainRow {
 /**
  * Access that is switched off is a state of the account, not a failure of the run: the other pieces go on, and the page shows the one click.
  *
- * @returns whether the application can be read from: `false` for Access that is off, and for a run that stopped
+ * @returns whether the application can be read from: `false` for Access that is off, and `undefined` for an application that was not made, by a run that stopped or a token with no permission for it
  */
-async function accessPiece(progress: Progress, mode: Mode, parts: Placed, connection: Connection, settings: DomainSettings): Promise<boolean> {
+async function accessPiece(progress: Progress, mode: Mode, parts: Placed, connection: Connection, settings: DomainSettings): Promise<boolean | undefined> {
   const logins = parseLogins(settings.logins);
   if (progress.stopped || !logins.ok) {
     progress.rows.push({ object: "Access application", state: progress.stopped ? "not-run" : "failed", detail: progress.stopped ? "" : BAD_LOGINS });
     progress.stopped = true;
 
-    return false;
+    return undefined;
   }
 
   const privateSites = privateSitesPattern(parts.layout);
@@ -292,7 +295,7 @@ async function accessPiece(progress: Progress, mode: Mode, parts: Placed, connec
     const covered = `${parts.layout.adminHostname}${INSTALL_OBJECTS.loginPath}, ${privateSites}`;
     progress.rows.splice(before, Number.POSITIVE_INFINITY, ...progress.rows.slice(before).map((row) => accessDetail(row, covered)));
 
-    return synced.ok;
+    return synced.ok ? true : undefined;
   }
 
   progress.rows.push({ object: "Access application", state: "missing", detail: ACCESS_OFF }, { object: "Access policy", state: "missing", detail: ACCESS_OFF });
@@ -313,10 +316,11 @@ function firstValues(placed: Placed): Parameters<typeof syncVariables>[2] {
 }
 
 // The Worker checks a login against the application setup made, so its audience tag is written onto the Worker once the application exists, in one change with the values of an install that has none.
-async function variablesPiece(progress: Progress, mode: Mode, placed: Placed, connection: Connection, accessReady: boolean): Promise<void> {
+async function variablesPiece(progress: Progress, mode: Mode, placed: Placed, connection: Connection, accessReady: boolean | undefined): Promise<void> {
   const name = INSTALL_OBJECTS.accessBinding;
   const object = (): Piece => "Worker variable";
-  if (progress.stopped) {
+  // An install whose login was refused gets no values: a Worker with a domain and no login behind it is half an install.
+  if (progress.stopped || accessReady === undefined) {
     progress.rows.push({ object: object(), state: "not-run", detail: "" });
 
     return;
@@ -376,6 +380,8 @@ async function read(parts: PlugParts, mode: Mode, token: string, readSettings: R
     () => "DNS record",
     () => syncDns(connection, zone.id, layout, mode),
   );
+  // The records say whether a hostname of the install is somebody else's, and whether the zone has hostnames of its own: unread, for whatever reason, nothing is built on the zone.
+  if (dns?.ok !== true) progress.stopped = true;
   const sharesZone = dns?.ok === true && dns.sharesZone;
 
   await piece(

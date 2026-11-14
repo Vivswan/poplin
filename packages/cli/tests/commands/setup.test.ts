@@ -64,6 +64,17 @@ describe("poplin setup", () => {
     expect([json.code, jsonOf(json)]).toEqual([1, { run: "repair", rows: reading.rows, steps: reading.steps }]);
   });
 
+  // Drift: a repair that goes on past a refused piece makes rows beside it, and a script that read the exit code alone would take the install for complete.
+  test("a repair with a refused row beside the ones it made exits as a failure and says how many are not done", async () => {
+    const bench = await openBench();
+    const reading: DomainReading = { ok: true, rows: [{ object: "Record", state: "created", detail: "poplin.example.com" }, { object: "Rule", state: "failed", detail: "refused. Add this right to the token: Rule: Edit" }], steps: [] };
+    withSetup(bench, fakePlug(() => reading));
+
+    const ended = await bench.run(SETUP, { env: ENV });
+
+    expect([ended.code, ended.out.at(-1)]).toEqual([1, "1 not done"]);
+  });
+
   const refused: readonly { readonly name: string; readonly reading?: DomainReading; readonly open?: boolean; readonly code: number; readonly says: string }[] = [
     { name: "a token the provider refuses", reading: { ok: false, refusal: "token" }, code: 1, says: "the token was refused, or it is not of the install's own account" },
     { name: "a provider that does not answer", reading: { ok: false, refusal: "unreachable" }, code: 5, says: "the install got no answer from its provider" },

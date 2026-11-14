@@ -275,8 +275,8 @@ test("a token that is malformed, unknown to Cloudflare, or valid for another acc
   });
 });
 
-test("a repair refused half way: the rows say what was made, which change failed and why, and what was never reached, and the account holds exactly the part that was made", async () => {
-  const account = { ...emptyAccount(), refuse: "POST /zones/zone-1/workers/routes" };
+test("a repair that fails half way, for another reason than a permission, stops: the rows say what was made, which change failed and why, and what was never reached, and the account holds exactly the part that was made", async () => {
+  const account = { ...emptyAccount(), refuse: "POST /zones/zone-1/workers/routes", refuseAs: { status: 500, code: 10000 } };
 
   await withAccount(account, async (plug) => {
     expect(shown(await plug.repair(TOKEN, SETTINGS))).toEqual([
@@ -284,7 +284,7 @@ test("a repair refused half way: the rows say what was made, which change failed
       "DNS record | created | *.example.com",
       "DNS record | created | poplin.example.com",
       "Worker route | not-run | *-page.example.com/*",
-      `Worker route | failed | *-poplin.example.com/*: refused with status 403: 10000 Authentication error for Bearer ${TOKEN}. Add this right to the token: Workers Routes: Edit`,
+      `Worker route | failed | *-poplin.example.com/*: refused with status 500: 10000 Authentication error for Bearer ${TOKEN}`,
       "Worker route | not-run | poplin.example.com/*",
       "Access application | not-run | ",
       "Worker variable | not-run | ",
@@ -296,6 +296,61 @@ test("a repair refused half way: the rows say what was made, which change failed
     ]);
     expect(account.records.map((record) => record.name)).toEqual(["*.example.com", "poplin.example.com"]);
     expect([account.routes, account.policies, account.applications, account.databases, account.rulesets]).toEqual([[], [], [], [], {}]);
+  });
+});
+
+/** The calls Cloudflare refuses a token without each of the three permissions the link to the token form cannot carry, and the rows those calls belong to. */
+const BY_HAND = {
+  "Single Redirect: Edit": { calls: ["GET /zones/zone-1/rulesets/phases/http_request_dynamic_redirect/entrypoint"], rows: ["Redirect rule"] },
+  "Zone WAF: Edit": { calls: ["GET /zones/zone-1/rulesets/phases/http_request_firewall_custom/entrypoint", "GET /zones/zone-1/rulesets/phases/http_ratelimit/entrypoint"], rows: ["WAF rule", "Rate rule"] },
+  "Bot Management: Edit": { calls: ["GET /zones/zone-1/bot_management"], rows: ["Bot settings"] },
+} as const;
+
+/** Each of those three permissions alone, and all three, which is the token the link alone makes. */
+const lacking: readonly { readonly name: string; readonly rights: readonly (keyof typeof BY_HAND)[] }[] = [
+  ...Object.keys(BY_HAND).map((right) => ({ name: right, rights: [right as keyof typeof BY_HAND] })),
+  { name: "all three", rights: ["Single Redirect: Edit", "Zone WAF: Edit", "Bot Management: Edit"] },
+];
+
+// Drift: one refused piece used to stop the run, so a token with the eight linked rights left four rows never tried, the database among them, and the page looked broken.
+test.each(lacking)("a repair with a token without $name goes on past each refused piece: every other object is made, the database among them, and each refused row names its right", async ({ rights }) => {
+  const account = { ...emptyAccount(), refuse: rights.flatMap((right) => BY_HAND[right].calls) };
+  const refused = rights.flatMap((right) => BY_HAND[right].rows.map((object) => `${object} | failed | refused with status 403: 10000 Authentication error for Bearer ${TOKEN}. Add this right to the token: ${right}`));
+  const made = table({ all: "created", bots: "changed" }).filter((row) => !refused.some((other) => row.split(" | ")[0] === other.split(" | ")[0]));
+
+  await withAccount(account, async (plug) => {
+    const reading = await plug.repair(TOKEN, SETTINGS);
+    const rows = shown(reading);
+
+    expect(rows.filter((row) => row.includes(" | failed | ")).sort()).toEqual([...refused].sort());
+    expect(rows.filter((row) => !row.includes(" | failed | "))).toEqual(made);
+    expect(reading).toMatchObject({ steps: [{ address: "https://poplin.example.com" }] });
+    expect(account.databases.length).toBe(1);
+    // The install is not complete while a row is refused: a check after it still lists each one.
+    expect(shown(await plug.check(TOKEN, SETTINGS)).filter((row) => row.includes(" | failed | ")).sort()).toEqual([...refused].sort());
+  });
+});
+
+/** The pieces others build on, by the call a token without their permission is refused, and what a repair still makes after each. */
+const built: readonly { readonly name: string; readonly call: string; readonly failed: string; readonly made: readonly string[] }[] = [
+  { name: "the records", call: "GET /zones/zone-1/dns_records", failed: "DNS record", made: [] },
+  { name: "the login", call: `GET /accounts/${ACCOUNT}/access/policies`, failed: "Access application", made: ["Redirect rule", "WAF rule", "Rate rule", "Bot settings", "D1 database"] },
+];
+
+// Drift: the records say whether a hostname is somebody else's, so nothing may follow a zone that was not read, and a Worker given its domain with no login behind it is half an install.
+test.each(built)("a repair with a token that may not read $name makes nothing that builds on them: the row names the right, and every piece that needs them is not run", async ({ call, failed, made }) => {
+  const account = { ...emptyAccount(), refuse: call };
+  const pieces = ["DNS record", "Worker route", "Access application", "Worker variable", "Redirect rule", "WAF rule", "Rate rule", "Bot settings", "D1 database"];
+
+  await withAccount(account, async (plug, asked) => {
+    const rows = shown(await plug.repair(TOKEN, SETTINGS));
+    const stateOf = (object: string): string => [...new Set(rows.filter((row) => row.startsWith(`${object} | `)).map((row) => row.split(" | ")[1] ?? ""))].join();
+    const after = pieces.slice(pieces.indexOf(failed) + 1);
+
+    expect([stateOf(failed), rows.filter((row) => row.includes("Add this right")).length]).toEqual(["failed", 1]);
+    expect(after.filter((object) => stateOf(object) !== "not-run")).toEqual([...made]);
+    expect(made.map(stateOf).filter((state) => state !== "created" && state !== "changed")).toEqual([]);
+    expect(writes(asked).filter((write) => write.includes("/workers/scripts/"))).toEqual([]);
   });
 });
 

@@ -65,8 +65,8 @@ export interface Account {
   /** Whether Access was never switched on: both Access lists are then refused. */
   accessOff: boolean;
 
-  /** A change to refuse, as `METHOD /path`; the refusal's message repeats the token it was sent with. */
-  refuse?: string;
+  /** A call to refuse, as `METHOD /path`, or several; the refusal's message repeats the token it was sent with. */
+  refuse?: string | readonly string[];
 
   /** The message of that refusal, for a test that needs Cloudflare's own words. */
   refuseMessage?: string;
@@ -208,7 +208,7 @@ export function answer(account: Account, asked: Asked): Response {
   // A token of another account reaches nothing of this one.
   if (owner !== ACCOUNT) return refusal(403, 10000, "Authentication error");
 
-  if (account.refuse === `${asked.method} ${path}`) return refusal(account.refuseAs?.status ?? 403, account.refuseAs?.code ?? 10000, account.refuseMessage ?? `Authentication error for ${asked.key}`);
+  if ([account.refuse ?? []].flat().includes(`${asked.method} ${path}`)) return refusal(account.refuseAs?.status ?? 403, account.refuseAs?.code ?? 10000, account.refuseMessage ?? `Authentication error for ${asked.key}`);
 
   return inAccount(account, asked, path.split("/").slice(1));
 }
