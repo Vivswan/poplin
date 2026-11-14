@@ -146,10 +146,9 @@ CREATE TABLE logins (
   decided_by TEXT,
   created_at INTEGER NOT NULL,
   expires_at INTEGER NOT NULL,
-  polled_at INTEGER,
   CHECK ((state = 'pending') = (decided_by IS NULL)),
   CHECK (expires_at > created_at)
-) STRICT`;
+) STRICT, WITHOUT ROWID`;
 
 /** The folder of every site removed for good, kept until the bucket holds nothing under it. */
 const LEFTOVERS = `
@@ -276,7 +275,7 @@ export const CREATE_SCHEMA: Step = {
     "CREATE INDEX tokens_by_creation ON tokens (created_at DESC, id DESC)",
     "CREATE INDEX uploads_by_age ON uploads (created_at, id)",
     "CREATE INDEX uploads_by_state ON uploads (state, owner, number, bytes)",
-    "CREATE INDEX logins_by_expiry ON logins (expires_at)",
+    "CREATE INDEX logins_by_visitor ON logins (state, visitor, created_at, expires_at)",
     NAME_IS_NO_ID_ON_INSERT,
     NAME_IS_NO_ID_ON_UPDATE,
     FIRST_VERSION_COMES_WITH_THE_SITE,

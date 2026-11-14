@@ -466,13 +466,6 @@ export interface Database {
   decideComputerLogin(code: UserCode, decision: LoginDecision): Promise<{ readonly kind: "done"; readonly login: ComputerLogin } | Refused<"not_pending">>;
 
   /**
-   * Note that a pending login's terminal asked whether it was decided, only when it last asked at or before `notAfter`.
-   *
-   * @returns `false` for a terminal that asked again too soon, and for a login that is not pending
-   */
-  pollComputerLogin(id: LoginId, poll: { readonly at: number; readonly notAfter: number }): Promise<boolean>;
-
-  /**
    * Turn an allowed login into its token, in one step: the token's record is stored with a `token_added` audit entry signed by the admin who allowed the login, and the login is removed.
    *
    * Of calls made at the same moment one is done, so a login gives one token.

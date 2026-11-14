@@ -69,7 +69,7 @@ const ANSWERS = {
   logout: v.looseObject({ token: TOKEN }),
   beginLogin: v.looseObject({ code: v.string(), secret: v.string(), verify_url: v.string(), expires_in: v.number(), interval: v.number() }),
   redeemLogin: v.variant("state", [
-    v.looseObject({ state: v.picklist(["pending", "slow_down", "denied", "expired"]) }),
+    v.looseObject({ state: v.picklist(["pending", "denied", "expired"]) }),
     v.looseObject({ state: v.literal("allowed"), token: v.string(), record: TOKEN }),
   ]),
   listSites: v.looseObject({ sites: v.array(SITE), next: v.optional(v.looseObject({ updated_at: v.number(), id: v.string() })) }),

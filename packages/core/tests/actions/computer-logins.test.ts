@@ -225,21 +225,6 @@ describe("redeemLogin", () => {
     expect([refused, await redeemLogin(world.install, { secret: late.secret }), await tokenCount(world)]).toEqual([{ ok: true, state: "denied" }, { ok: true, state: "expired" }, 0]);
   });
 
-  // Drift: a terminal that asks without pause costs a write a request; the answer that tells it to wait longer is the only brake it is given.
-  test("a question under five seconds after the one before it is told to slow down, and one after five seconds is not", async () => {
-    const world = await makeWorld();
-    const { secret } = await begun(world);
-    const states: string[] = [];
-
-    for (const at of [0, 1, 4999, 5000, 5001, 10_000]) {
-      world.clock.now = NOW + at;
-      const answer = await redeemLogin(world.install, { secret });
-      states.push(answer.ok ? answer.state : answer.code);
-    }
-
-    expect(states).toEqual(["pending", "slow_down", "slow_down", "pending", "slow_down", "pending"]);
-  });
-
   // Drift: the body comes from anyone; a value of another form must be refused as an argument, never read as a secret or thrown on.
   test.each([
     ["no secret", {}, "secret"],

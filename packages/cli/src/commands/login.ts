@@ -1,7 +1,7 @@
 // `poplin login`: ask the install for a login, show the person where to allow it, wait for the answer, and save the token.
 //
 //   POST /api/logins         the code to show, the address to open, the secret to keep
-//   POST /api/logins/token   asked every few seconds: pending, slow_down, denied, expired, or the token
+//   POST /api/logins/token   asked every few seconds: pending, denied, expired, or the token
 //
 // Nothing is saved before the token arrives, so a login that is stopped, denied, or runs out leaves the machine as it was.
 
@@ -21,9 +21,6 @@ const SECONDS_PER_MINUTE = 60;
 
 /** The fewest and the most seconds between two questions, whatever the install says. */
 const INTERVAL_BOUNDS = { min: 1, max: 60 } as const;
-
-/** How many seconds are added to the wait when the install says to slow down. */
-const SLOW_DOWN_SECONDS = 5;
 
 /** The longest name a computer gives itself, in characters. */
 const MAX_COMPUTER_LENGTH = 100;
@@ -62,11 +59,18 @@ function pageOf(address: string, server: string): string | undefined {
   return page.href;
 }
 
-/** A failure a waiting login outlasts: the install was out of reach for a moment, or said to ask less often. */
+/** A failure a waiting login outlasts: the install was out of reach for a moment, or asked for a rest. */
 function passes(failure: Failure): boolean {
   if (failure.kind === "unreachable" || failure.kind === "timeout") return true;
 
   return failure.kind === "refused" && failure.code === "too_many_requests";
+}
+
+/** The seconds to the next question after a failure that passes: the rest its answer asked for when that is longer than the pace. */
+function restOf(failure: Failure, interval: number): number {
+  const asked = "retryAfter" in failure ? failure.retryAfter : undefined;
+
+  return Math.max(interval, asked ?? interval);
 }
 
 function clamped(seconds: number): number {
@@ -87,10 +91,10 @@ function announce(page: string, begun: Begun, json: boolean, io: Io): void {
   for (const line of ["open this address, and allow this computer there:", `  ${page}`, "allow it only if the page shows this code:", `  ${begun.code}`, `the code works for ${minutes} minutes`]) io.out(line);
 }
 
-/** Ask for the token once: the token, the reason to stop, or whether to go on at the same pace or a slower one. */
-async function ask(client: Client, secret: string): Promise<Collected | Problem | "wait" | "slow_down"> {
+/** Ask for the token once: the token, the reason to stop, or the seconds to wait before the next question. */
+async function ask(client: Client, secret: string, interval: number): Promise<Collected | Problem | number> {
   const asked = await client.call("redeemLogin", undefined, { secret });
-  if (!asked.ok) return passes(asked.failure) ? "slow_down" : problemOf(asked.failure);
+  if (!asked.ok) return passes(asked.failure) ? restOf(asked.failure, interval) : problemOf(asked.failure);
 
   const answer = asked.value;
   if (answer.state === "allowed") return answer;
@@ -99,24 +103,26 @@ async function ask(client: Client, secret: string): Promise<Collected | Problem 
 
   if (answer.state === "expired") return problem("login_expired");
 
-  return answer.state === "slow_down" ? "slow_down" : "wait";
+  return interval;
 }
 
 /** Ask for the token until the login is decided, runs out, or the person stops the command. */
 async function collect(client: Client, begun: Begun, io: Io): Promise<Collected | Problem> {
-  let interval = clamped(begun.interval);
+  const interval = clamped(begun.interval);
+  let wait = interval;
   let left = begun.expires_in;
 
   while (left > 0) {
     if (io.terminal.progress) io.status(`waiting to be allowed, ${Math.ceil(left / SECONDS_PER_MINUTE)} min left (Ctrl-C stops)`);
 
-    if ((await io.pause(interval * MS_PER_SECOND)) === "interrupted") return problem("interrupted");
+    if ((await io.pause(wait * MS_PER_SECOND)) === "interrupted") return problem("interrupted");
 
-    left -= interval;
-    const answer = await ask(client, begun.secret);
-    if (typeof answer !== "string") return answer;
+    left -= wait;
+    const answer = await ask(client, begun.secret, interval);
+    if (typeof answer !== "number") return answer;
 
-    if (answer === "slow_down") interval = clamped(interval + SLOW_DOWN_SECONDS);
+    // A rest longer than the login has left ends with the login.
+    wait = Math.min(answer, left);
   }
 
   return problem("login_expired");

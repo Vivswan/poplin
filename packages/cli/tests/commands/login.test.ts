@@ -262,26 +262,23 @@ describe("logIn", () => {
     expect(ran.out.join("\n").match(CREDENTIAL)).toBeNull();
   });
 
-  // Drift: a terminal told to slow down that kept its pace would be refused for the rest of its ten minutes; one that gave up would fail a login the admin was about to allow.
-  test("a terminal told to slow down waits five seconds longer, and still collects its token", async () => {
+  // Drift: the install paces a terminal by its visitor's count alone. A terminal that kept its pace through a 429 would be refused again, and one that gave up would fail a login the admin was about to allow.
+  test("a terminal asked for a rest waits as long as the answer says, then goes on at its pace and still collects its token", async () => {
     const desk = await openDesk();
-    const { api } = desk.bench.install;
-    let secret = "";
     const inner = desk.bench.hook;
+    let questions = 0;
     desk.bench.hook = async (request) => {
-      const sent = request.method === "POST" && new URL(request.url).pathname === "/api/logins/token" ? ((await request.clone().json()) as { secret: string }) : undefined;
-      // Another question under the same secret arrives just ahead of the terminal's first, as a second copy of the command would send.
-      if (sent !== undefined && secret === "") {
-        secret = sent.secret;
-        await api.fetch(request.clone());
-      }
+      if (request.method !== "POST" || new URL(request.url).pathname !== "/api/logins/token") return inner?.(request);
 
-      return inner?.(request);
+      questions += 1;
+      if (questions > 1) return inner?.(request);
+
+      return Response.json({ error: { code: "too_many_requests", message: "the install is asked too often" } }, { status: 429, headers: { "Retry-After": "90" } });
     };
 
     const ran = await desk.login(`login --server ${ORIGIN}`, async (address, soFar) => {
       desk.bench.paused = async () => {
-        if (soFar.waits.length === 2) await allow(desk, address);
+        if (soFar.waits.length === 3) await allow(desk, address);
 
         return undefined;
       };
@@ -289,7 +286,7 @@ describe("logIn", () => {
       return undefined;
     });
 
-    expect([ran.code, ran.waits, desk.bench.sent.length]).toEqual([0, [5000, 10_000], 3]);
+    expect([ran.code, ran.waits, questions]).toEqual([0, [5000, 90_000, 5000], 3]);
   });
 
   // Drift: the browser goes where the install says; an install, or whatever answers in its place, that named another site would send the admin there with the dashboard's trust.

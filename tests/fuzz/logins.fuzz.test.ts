@@ -35,7 +35,6 @@ interface Known {
   readonly scope: string;
   readonly expiresAt: number;
   state: "pending" | "allowed" | "denied" | "collected";
-  polledAt: number | undefined;
 }
 
 /** An install with its dashboard, and every text either one let out. */
@@ -128,10 +127,6 @@ function expected(login: Known, now: number): string {
     return "allowed";
   }
 
-  if (login.polledAt !== undefined && login.polledAt > now - INTERVAL_MS) return "slow_down";
-
-  login.polledAt = now;
-
   return "pending";
 }
 
@@ -195,7 +190,7 @@ async function take(desk: Desk, step: Step): Promise<void> {
     expect(begun.status).toBe(200);
     desk.texts.pop();
     desk.credentials.add(String(begun.body.secret));
-    desk.known.push({ code: String(begun.body.code), secret: String(begun.body.secret), scope: step.scope, expiresAt: desk.install.clock.now + Number(begun.body.expires_in) * 1000, state: "pending", polledAt: undefined });
+    desk.known.push({ code: String(begun.body.code), secret: String(begun.body.secret), scope: step.scope, expiresAt: desk.install.clock.now + Number(begun.body.expires_in) * 1000, state: "pending" });
 
     return;
   }

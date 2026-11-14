@@ -29,7 +29,7 @@ export type LoginId = string & { readonly [loginIdBrand]: true };
 /** Eight consonants with no dash, from an alphabet without vowels and without two letters that look alike. */
 export type UserCode = string & { readonly [userCodeBrand]: true };
 
-/** What a login holds whatever its state. `hash` is the SHA-256 of the whole secret in hex; times are milliseconds since the epoch. `polledAt` is the last time the terminal was told to wait, and `visitor` the key of whoever asked. */
+/** What a login holds whatever its state. `hash` is the SHA-256 of the whole secret in hex; times are milliseconds since the epoch. `visitor` is the key of whoever asked. */
 interface LoginFacts {
   readonly id: LoginId;
   readonly code: UserCode;
@@ -39,7 +39,6 @@ interface LoginFacts {
   readonly visitor: string;
   readonly createdAt: number;
   readonly expiresAt: number;
-  readonly polledAt: number | null;
 }
 
 /** A login nobody decided yet: the only kind that is made, and the only kind that is stored as new. */
@@ -102,7 +101,7 @@ export async function mintComputerLogin(request: LoginRequest): Promise<{ readon
   const secret = `${SECRET_PREFIX}${id}_${randomHex(SECRET_BYTES)}`;
   const { scope, computer, visitor, now } = request;
 
-  return { secret, login: { id, code: mintCode(), hash: await sha256Hex(secret), scope, computer, visitor, createdAt: now, expiresAt: now + LIFETIME_MS, polledAt: null, state: "pending" } };
+  return { secret, login: { id, code: mintCode(), hash: await sha256Hex(secret), scope, computer, visitor, createdAt: now, expiresAt: now + LIFETIME_MS, state: "pending" } };
 }
 
 /**

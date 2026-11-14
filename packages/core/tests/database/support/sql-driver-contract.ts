@@ -324,7 +324,7 @@ function storedRows(label: string, makeDriver: DriverFactory): void {
 function queryPlans(label: string, makeDriver: DriverFactory): void {
   describe(`${label}: how the engine runs each statement`, () => {
     // Drift: D1 bills and limits by rows read; one statement that walks a whole table costs a row per site on every request.
-    test("no statement of any operation walks the sites table, or any table but the token list: every lookup and every page goes through a key or an index", async () => {
+    test("no statement of any operation walks the sites table, or any table but the token list and the logins: every lookup and every page goes through a key or an index", async () => {
       const inner = await migrated(makeDriver);
       const driver = new RecordingDriver(inner);
       const database = new SqlDatabase(driver);
@@ -384,7 +384,6 @@ function queryPlans(label: string, makeDriver: DriverFactory): void {
       await database.addComputerLogin(denied, { perVisitor: 10, all: 10 });
       await database.getComputerLogin(login.id);
       await database.findComputerLogin(login.code);
-      await database.pollComputerLogin(login.id, { at: NOW + 1, notAfter: NOW });
       await database.decideComputerLogin(login.code, { state: "allowed", by: ADMIN, at: NOW + 1 });
       await database.decideComputerLogin(denied.code, { state: "denied", by: ADMIN, at: NOW + 1 });
       const redeemed = await database.redeemComputerLogin(login.id, (await mintToken({ scope: "publisher", note: "laptop", now: NOW + 2 })).record);
@@ -399,16 +398,17 @@ function queryPlans(label: string, makeDriver: DriverFactory): void {
         const steps = plan.map((step) => String(step.detail));
         scans.push(
           ...steps
-            .filter((step) => /\bSCAN\b/.test(step) && !/\bSCAN (CONSTANT ROW|sqlite_master|j VIRTUAL TABLE)\b/.test(step))
+            .filter((step) => /\bSCAN\b/.test(step) && !/\bSCAN (CONSTANT ROW|sqlite_master|j VIRTUAL TABLE|\(subquery-1\))/.test(step))
             .map((step) => `${step} <- ${statement.sql.trim().split("\n")[0]}`),
         );
       }
 
-      // The one walk of a table is the token list, which hands back every row it reads. An import walks the list of versions it was given, which is no table.
+      // The token list hands back every row it walks, and the sweep walks the logins, which the room keeps few. An import walks the list of versions it was given, and a new login the visitors its own count gave: neither is a table.
       expect([exported.sites, imported.kind, again.kind, redeemed.kind, swept]).toEqual([[], "done", "done", "done", 1]);
       expect(driver.statements.length).toBeGreaterThan(105);
       expect(scans).toEqual([
         "SCAN tokens USING INDEX tokens_by_creation <- SELECT id, hash, scope, note, created_at, expires_at FROM tokens ORDER BY created_at DESC, id DESC",
+        "SCAN logins USING INDEX logins_by_visitor <- DELETE FROM logins WHERE expires_at <= ?1",
       ]);
     });
   });

@@ -15,7 +15,7 @@ describe("mintComputerLogin", () => {
 
     const hash = new Bun.CryptoHasher("sha256").update(secret).digest("hex");
 
-    expect(login).toEqual({ id, code: login.code, hash, scope: "publisher", computer: "laptop", visitor: "one-visitor", createdAt: NOW, expiresAt: NOW + TEN_MINUTES_MS, polledAt: null, state: "pending" } as typeof login);
+    expect(login).toEqual({ id, code: login.code, hash, scope: "publisher", computer: "laptop", visitor: "one-visitor", createdAt: NOW, expiresAt: NOW + TEN_MINUTES_MS, state: "pending" } as typeof login);
     expect([JSON.stringify(login).includes(random), parseToken(secret).ok, parseLoginSecret(secret)]).toEqual([false, false, login.id]);
   });
 

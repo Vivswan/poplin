@@ -440,7 +440,7 @@ class MemoryDatabase implements Database {
   async addComputerLogin(login: PendingLogin, room: LoginRoom): Promise<{ readonly kind: "done" } | Refused<"taken">> {
     if ([...this.#logins.values()].some((other) => other.id === login.id || other.code === login.code)) return { kind: "taken" };
 
-    const oldestFirst = (one: ComputerLogin, other: ComputerLogin): number => one.createdAt - other.createdAt || one.id.localeCompare(other.id);
+    const oldestFirst = (one: ComputerLogin, other: ComputerLogin): number => one.createdAt - other.createdAt || (one.id < other.id ? -1 : 1);
     const waiting = (): ComputerLogin[] => [...this.#logins.values()].filter((other) => other.state === "pending" && other.expiresAt > login.createdAt).sort(oldestFirst);
     const of = (visitor: string): ComputerLogin[] => waiting().filter((other) => other.visitor === visitor);
 
@@ -472,15 +472,6 @@ class MemoryDatabase implements Database {
     this.#log(decision, decision.state === "allowed" ? "login_allowed" : "login_denied", null, { scope: login.scope, computer: login.computer });
 
     return { kind: "done", login };
-  }
-
-  async pollComputerLogin(id: LoginId, poll: { readonly at: number; readonly notAfter: number }): Promise<boolean> {
-    const login = this.#logins.get(id);
-    if (login?.state !== "pending" || (login.polledAt !== null && login.polledAt > poll.notAfter)) return false;
-
-    this.#logins.set(id, { ...login, polledAt: poll.at });
-
-    return true;
   }
 
   async redeemComputerLogin(id: LoginId, token: TokenRecord): Promise<{ readonly kind: "done" } | Refused<"not_allowed">> {

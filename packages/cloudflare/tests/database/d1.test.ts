@@ -3,6 +3,7 @@ import { env } from "cloudflare:workers";
 import { describe, expect, test } from "vitest";
 
 import { beginPublish } from "@poplin/core/src/actions/begin-publish";
+import { beginLogin, redeemLogin } from "@poplin/core/src/actions/computer-logins";
 import { finishPublish } from "@poplin/core/src/actions/finish-publish";
 import type { Install } from "@poplin/core/src/actions/records";
 import { uploadFile } from "@poplin/core/src/actions/upload-file";
@@ -18,9 +19,20 @@ import { describeSqlDriver, sqlDatabaseOver } from "@poplin/core/tests/database/
 import type { Bindings } from "../../src/worker/bindings";
 import { D1Driver } from "../../src/database/d1";
 
+/** The bindings of wrangler.jsonc, simulated. */
 const BINDINGS: Bindings = env;
+
+/** The moment every fixture is made at. */
 const NOW = 1_700_000_000_000;
+
+/** A publisher's token, which begins the fixture publishes. */
 const PUBLISHER: Actor = { scope: "publisher", holder: "00000000000000aa" as TokenId };
+
+/** The waiting logins `beginLogin` keeps of all visitors together. */
+const PLACES = 50;
+
+/** The visitors that hold the places between them, three logins each. */
+const VISITORS = 17;
 
 /** The rows the batches of a database read and wrote, as the provider counts them toward a day's allowance. */
 interface RowCounts {
@@ -56,13 +68,12 @@ async function meteredDatabase(): Promise<{ readonly driver: D1Driver; readonly 
   return { driver: new D1Driver(metered as D1Database), rows };
 }
 
-/** Publish a new site of `files` pages of four bytes each through the three steps; answers the rows the whole of it read and wrote. */
-async function publishCost(files: number): Promise<RowCounts> {
+/** An install over an empty database whose every batch adds the rows it read and wrote to `rows`. */
+async function meteredInstall(): Promise<{ readonly install: Install; readonly rows: RowCounts }> {
   const { driver, rows } = await meteredDatabase();
   const opened = await openDatabase(driver, NOW);
   if (opened.kind !== "open") throw new Error(`the database did not open: ${opened.kind}`);
 
-  await opened.database.initSettings(defaultSettings({ installer: "ada@example.com" as Login, hostname: "poplin.example.com" }), { by: PUBLISHER.holder, at: NOW });
   const install: Install = {
     database: opened.database,
     store: new MemoryStore(),
@@ -71,6 +82,14 @@ async function publishCost(files: number): Promise<RowCounts> {
     publicAddressOf: (name) => `https://${name}.example.com`,
     reservedNames: new Set(),
   };
+
+  return { install, rows };
+}
+
+/** Publish a new site of `files` pages of four bytes each through the three steps; answers the rows the whole of it read and wrote. */
+async function publishCost(files: number): Promise<RowCounts> {
+  const { install, rows } = await meteredInstall();
+  await install.database.initSettings(defaultSettings({ installer: "ada@example.com" as Login, hostname: "poplin.example.com" }), { by: PUBLISHER.holder, at: NOW });
   const paths = ["index.html", ...Array.from(Array(files - 1).keys(), (index) => `pages/${index}.html`)];
   rows.read = 0;
   rows.written = 0;
@@ -112,5 +131,27 @@ describe("D1: the rows a publish costs of a day's allowance", () => {
     const cost = await publishCost(files);
 
     expect([cost.read <= 2 * files + 60, cost.written <= 30, cost]).toEqual([true, true, cost]);
+  });
+});
+
+describe("D1: the rows a computer's login costs of a day's allowance", () => {
+  // Drift: anyone may begin a login, and a day allows 5,000,000 rows read and 100,000 written. The room once cost 2,705 rows read a login, and a terminal's question one row written.
+  test("with the fifty places held, a new login reads 58 rows and writes 4, and a terminal's question reads 1 and writes none", async () => {
+    const { install, rows } = await meteredInstall();
+    const begin = async (visitor: number): Promise<string> => {
+      const begun = await beginLogin(install, { scope: "publisher", computer: "laptop" }, `visitor-${visitor}`);
+      if (!begun.ok) throw new Error(`the login was refused: ${begun.code}`);
+
+      return begun.secret;
+    };
+    for (let place = 0; place < PLACES; place += 1) await begin(place % VISITORS);
+
+    rows.read = 0;
+    rows.written = 0;
+    const secret = await begin(VISITORS);
+    const begun = { ...rows };
+    const asked = await redeemLogin(install, { secret });
+
+    expect([asked, begun, rows]).toEqual([{ ok: true, state: "pending" }, { read: 58, written: 4 }, { read: 59, written: 4 }]);
   });
 });

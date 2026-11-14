@@ -336,7 +336,7 @@ SELECT ?1, ?2, 'token_revoked', json_object('token', id, 'scope', scope, 'note',
 const DELETE_TOKEN = "DELETE FROM tokens WHERE id = ?1 AND changes() = 1";
 
 /** Every column of a login. */
-const SELECT_LOGIN = "SELECT id, code, hash, scope, computer, visitor, state, decided_by, created_at, expires_at, polled_at FROM logins";
+const SELECT_LOGIN = "SELECT id, code, hash, scope, computer, visitor, state, decided_by, created_at, expires_at FROM logins";
 
 /** Whether id `?1` and code `?2` are both free, so the login that brings them will be stored. */
 const LOGIN_IS_NEW = "NOT EXISTS (SELECT 1 FROM logins WHERE id = ?1 OR code = ?2)";
@@ -346,13 +346,13 @@ const MAKE_ROOM_OF_VISITOR = `
 DELETE FROM logins
 WHERE id IN (SELECT id FROM logins WHERE visitor = ?4 AND state = 'pending' AND expires_at > ?3 ORDER BY created_at DESC, id DESC LIMIT -1 OFFSET ?5) AND ${LOGIN_IS_NEW}`;
 
-/** Room for a new login among all: once `?4` logins wait at `?3`, the oldest one of the visitor with the most is removed. */
+/** The logins that wait at `?3`, one row a visitor: how many, and the oldest as its `created_at` in sixteen digits then its id, a text that sorts as the pair does. */
+const WAITING_BY_VISITOR = "SELECT COUNT(*) AS held, MIN(printf('%016d', created_at) || id) AS oldest FROM logins WHERE state = 'pending' AND expires_at > ?3 GROUP BY visitor";
+
+/** Room for a new login among all: once `?4` logins wait at `?3`, the oldest one of the visitor with the most is removed. One pass finds it: `9999 - held` in four digits puts the visitor with the most first. */
 const MAKE_ROOM_OF_ALL = `
 DELETE FROM logins
-WHERE id = (
-  SELECT l.id FROM logins l WHERE l.state = 'pending' AND l.expires_at > ?3
-  ORDER BY (SELECT COUNT(*) FROM logins o WHERE o.visitor = l.visitor AND o.state = 'pending' AND o.expires_at > ?3) DESC, l.created_at, l.id LIMIT 1
-) AND (SELECT COUNT(*) FROM logins WHERE state = 'pending' AND expires_at > ?3) >= ?4 AND ${LOGIN_IS_NEW}`;
+WHERE id = (SELECT CASE WHEN SUM(held) >= ?4 THEN substr(MIN(printf('%04d', 9999 - held) || oldest), 21) END FROM (${WAITING_BY_VISITOR})) AND ${LOGIN_IS_NEW}`;
 
 /** A new login, pending, only while its id and its code are free. */
 const INSERT_LOGIN = `
@@ -366,9 +366,6 @@ const DECIDE_LOGIN = "UPDATE logins SET state = ?2, decided_by = ?3 WHERE code =
 const AUDIT_LOGIN = `
 INSERT INTO audit (at, actor, action, detail)
 SELECT ?1, ?2, ?3, json_object('scope', scope, 'computer', computer) FROM logins WHERE code = ?4 AND changes() = 1`;
-
-/** The time `?2` a pending login's terminal last asked, only when it last asked at or before `?3`. */
-const POLL_LOGIN = "UPDATE logins SET polled_at = ?2 WHERE id = ?1 AND state = 'pending' AND (polled_at IS NULL OR polled_at <= ?3)";
 
 /** A token for login `?1`, only while the login is allowed, has not run out at `?5`, and is of the token's scope `?7`. */
 const INSERT_TOKEN_OF_LOGIN = `
@@ -1051,12 +1048,6 @@ export class SqlDatabase implements Database {
     if (!changed(updated) || login === undefined) return { kind: "not_pending" };
 
     return { kind: "done", login };
-  }
-
-  async pollComputerLogin(id: LoginId, poll: { readonly at: number; readonly notAfter: number }): Promise<boolean> {
-    const [polled] = await this.#driver.batch([sql(POLL_LOGIN, id, poll.at, poll.notAfter)]);
-
-    return changed(polled);
   }
 
   async redeemComputerLogin(id: LoginId, token: TokenRecord): Promise<{ readonly kind: "done" } | Refused<"not_allowed">> {

@@ -2,7 +2,7 @@
 
 import { describe, expect, test } from "bun:test";
 
-import { mintComputerLogin, type PendingLogin } from "../../../src/auth/computer-logins";
+import { type LoginId, mintComputerLogin, type PendingLogin } from "../../../src/auth/computer-logins";
 import type { Login } from "../../../src/auth/logins";
 import { mintToken, type TokenId, type TokenRecord } from "../../../src/auth/tokens";
 import type { Database, NewSite, NewUpload, NewVersion, Signed } from "../../../src/database/database";
@@ -1405,24 +1405,6 @@ function computerLogins(label: string, makeDatabase: DatabaseFactory): void {
       expect(entries.map((entry) => [entry.at, entry.by, entry.detail])).toEqual([[NOW + 2, ADMIN, { token: stored[0]?.id, scope: "publisher", note: "laptop" }]]);
     });
 
-    // Drift: a terminal that asks without pause would cost a write a request; one never told to slow down has no reason to.
-    test("a pending login notes a poll only when the one before it is old enough, and a decided login notes none", async () => {
-      const database = await opened(makeDatabase);
-      const login = await pendingLogin();
-      await database.addComputerLogin(login, ROOM);
-
-      expect([
-        await database.pollComputerLogin(login.id, { at: NOW + 5000, notAfter: NOW }),
-        await database.pollComputerLogin(login.id, { at: NOW + 6000, notAfter: NOW + 1000 }),
-        await database.pollComputerLogin(login.id, { at: NOW + 10_000, notAfter: NOW + 5000 }),
-      ]).toEqual([true, false, true]);
-      expect(await database.getComputerLogin(login.id)).toEqual({ ...login, polledAt: NOW + 10_000 });
-
-      await database.decideComputerLogin(login.code, { state: "denied", by: ADMIN, at: NOW + 11_000 });
-
-      expect(await database.pollComputerLogin(login.id, { at: NOW + 20_000, notAfter: NOW + 15_000 })).toBe(false);
-    });
-
     // Drift: a login nobody decided or collected would stay for ever; a sweep that took a live one would end a login a person is in the middle of.
     test("the sweep removes every login that ran out, whatever its state, and leaves the others", async () => {
       const database = await opened(makeDatabase);
@@ -1432,6 +1414,40 @@ function computerLogins(label: string, makeDatabase: DatabaseFactory): void {
 
       expect([await database.sweepComputerLogins(old.expiresAt - 1), await database.sweepComputerLogins(old.expiresAt), await database.sweepComputerLogins(old.expiresAt)]).toEqual([0, 2, 0]);
       expect([await database.getComputerLogin(old.id), await database.getComputerLogin(decided.id), await database.getComputerLogin(live.id)]).toEqual([undefined, undefined, live]);
+    });
+  });
+}
+
+function loginRoom(label: string, makeDatabase: DatabaseFactory): void {
+  describe(`${label}: which waiting login gives way`, () => {
+    // Drift: the order is (most held, oldest, smallest id). A store that compared times as text would keep 999 over 1000, and one that broke a tie by visitor would evict another login than the next store does.
+    test("the oldest login of the visitor with the most gives way, by the number of its time and not its digits, and of two asked at one moment the one with the smaller id", async () => {
+      const database = await opened(makeDatabase);
+      const room = { perVisitor: 3, all: 4 };
+      const asked = async (visitor: string, at: number, id: string): Promise<PendingLogin> => ({ ...(await pendingLogin(at, visitor)), id: id as LoginId });
+      const [early, first, second, later] = [await asked("two", 998, "00000000000000d4"), await asked("one", 999, "00000000000000c3"), await asked("one", 1000, "00000000000000b2"), await asked("two", 1000, "00000000000000a1")];
+      const waiting = async (): Promise<string[]> => {
+        const stored = await Promise.all([early, first, second, later].map((login) => database.getComputerLogin(login.id)));
+
+        return stored.flatMap((login) => (login === undefined ? [] : [`${login.visitor} at ${login.createdAt}`]));
+      };
+      const after: string[][] = [];
+
+      for (const login of [early, first, second, later]) await database.addComputerLogin(login, room);
+      for (const [at, visitor] of [
+        [1001, "three"],
+        [1002, "four"],
+        [1003, "five"],
+      ] as const) {
+        await database.addComputerLogin(await pendingLogin(at, visitor), room);
+        after.push(await waiting());
+      }
+
+      expect(after).toEqual([
+        ["one at 999", "one at 1000", "two at 1000"],
+        ["one at 1000", "two at 1000"],
+        ["one at 1000"],
+      ]);
     });
   });
 }
@@ -1877,6 +1893,7 @@ export function describeDatabase(label: string, makeDatabase: DatabaseFactory): 
   everLoggedIn(label, makeDatabase);
   tokensAndSettings(label, makeDatabase);
   computerLogins(label, makeDatabase);
+  loginRoom(label, makeDatabase);
   sweepPlace(label, makeDatabase);
   requestCounts(label, makeDatabase);
   uploads(label, makeDatabase);

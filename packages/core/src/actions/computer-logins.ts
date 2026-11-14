@@ -3,7 +3,7 @@
 //   beginLogin    anyone      a pending login: a code to show and a secret to keep. It grants nothing, and no visitor's logins keep another's out
 //   showLogin     an admin    what the login under a code asks for
 //   decideLogin   an admin    allowed or denied, once
-//   redeemLogin   the secret  pending, slow_down, denied, expired, or the token, which is made at this moment and handed out once
+//   redeemLogin   the secret  pending, denied, expired, or the token, which is made at this moment and handed out once
 
 import * as v from "valibot";
 
@@ -64,9 +64,9 @@ export interface LoginObject {
   readonly expires: number;
 }
 
-/** What a terminal is answered: wait, wait longer, give up, or the token, which is shown this once. */
+/** What a terminal is answered: wait, give up, or the token, which is shown this once. */
 export type Redeemed =
-  | { readonly state: "pending" | "slow_down" | "denied" | "expired" }
+  | { readonly state: "pending" | "denied" | "expired" }
   | { readonly state: "allowed"; readonly token: string; readonly record: TokenObject };
 
 function loginObject(login: ComputerLogin): LoginObject {
@@ -168,7 +168,7 @@ export async function decideLogin(
  * The token of an allowed login is made here, stored as its hash alone, and answered once: the login is removed in the same step, so a second question finds none.
  *
  * @param request - the secret; anything is taken and checked
- * @returns `expired` for a secret of no login as for one that ran out, so the answer tells nothing of which. `slow_down` for a question under five seconds after the one before it
+ * @returns `expired` for a secret of no login as for one that ran out, so the answer tells nothing of which
  * @throws {Error} the database failed
  */
 export async function redeemLogin(install: Install, request: v.InferInput<typeof LOGIN_SECRET>): Promise<({ readonly ok: true } & Redeemed) | Refused<"bad_argument">> {
@@ -181,13 +181,7 @@ export async function redeemLogin(install: Install, request: v.InferInput<typeof
   const now = install.now();
   if (login === undefined || !(await holdsSecret(secret, login)) || login.expiresAt <= now) return { ok: true, state: "expired" };
 
-  if (login.state === "denied") return { ok: true, state: "denied" };
-
-  if (login.state === "pending") {
-    const noted = await install.database.pollComputerLogin(login.id, { at: now, notAfter: now - INTERVAL_MS });
-
-    return { ok: true, state: noted ? "pending" : "slow_down" };
-  }
+  if (login.state !== "allowed") return { ok: true, state: login.state };
 
   const minted = await mintToken({ scope: login.scope, note: login.computer === "" ? UNNAMED : login.computer, now });
   const redeemed = await install.database.redeemComputerLogin(login.id, minted.record);
