@@ -8,6 +8,11 @@
 //   requestsPerDay    Workers: 100,000 requests a day             nothing more is served without the paid plan
 //   logins            Access: 50 users                            seats are billed
 
+// A free limit no setting moves, and the fixed budget of core's that stays inside it:
+//
+//   budget in core                                           free limit
+//   one removal of a folder's files: 30 calls to the store   Workers: 1,000 subrequests to Cloudflare's own services an invocation, R2 among them
+
 import type { FreeLimits } from "@poplin/app/src/dashboard/settings/free-limits";
 
 /** The bytes R2 stores for free. */

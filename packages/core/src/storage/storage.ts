@@ -9,7 +9,7 @@ export const MAX_LIST_LIMIT = 1000;
 /** The longest key R2 and S3 both accept, in UTF-8 bytes. */
 const MAX_KEY_BYTES = 1024;
 
-/** The list pages one `deletePrefix` call walks by default: 30 store calls, inside the 50 subrequests a Worker request gets on Cloudflare's Free plan. */
+/** The list pages one `deletePrefix` call walks by default: 30 store calls. A host that bounds the store calls of one request must allow that many. */
 const DEFAULT_DELETE_PAGES = 15;
 
 /** What joins a key's segments, and what ends a folder's prefix. */
