@@ -4,6 +4,7 @@
 import { expect, test } from "bun:test";
 import fc from "fast-check";
 
+import { REFUSAL_STATUS } from "../../packages/app/src/dashboard/domain/domain-run";
 import type { DomainReading } from "../../packages/app/src/dashboard/domain/records";
 import { createSetup } from "../../packages/app/src/dashboard/domain/setup";
 import { MemoryCounters } from "../../packages/app/src/limits/memory-counters";
@@ -16,11 +17,24 @@ import { hostile } from "./hostile";
 /** A token in the form a provider takes one. */
 const TOKEN = "planted-token-0123456789-abcdefghij";
 
-/** The refusals a plug answers a run with. */
-const PLUG_REFUSALS = ["token", "unreachable", "no_domain", "not_set_up"] as const;
+/** Every refusal the page has a status for, from the page's own table: a refusal added there is held to the property with no change here. */
+const REFUSALS = Object.keys(REFUSAL_STATUS) as readonly (keyof typeof REFUSAL_STATUS)[];
 
 /** The values no run of the property types: the answers to them are what every refused answer is held to. */
 const PLAIN = { domain: "example.com", login: "owner@example.com", token: TOKEN };
+
+/** Text past the most the page reads of one request, which is 16 KiB. */
+const TOO_LONG = "a".repeat(20_000);
+
+/** A domain of characters outside the basic plane: under that cap as a program sends it, and over it as a form does, which writes each as twelve bytes. */
+const LONG_AS_A_FORM = `!${"\u{10000}".repeat(1400)}`;
+
+/** The plain values that reach each answer the page gives of its own accord, whatever the plug would say; a new answer of the page gets a row here. The first two are refused on an install with nothing set alone. */
+const OWN_ANSWERS: Readonly<Record<string, Run["typed"]>> = {
+  "an email that is none": { ...PLAIN, login: "nobody" },
+  "a domain that is none": { ...PLAIN, domain: "nowhere" },
+  "a request past the cap": { ...PLAIN, domain: TOO_LONG },
+};
 
 /** A database every use of which fails the run: a refused run reads and writes none. */
 const NO_DATABASE = new Proxy({}, { get: (_target, name) => () => Promise.reject(new Error(`the database was asked for ${String(name)}`)) }) as Parameters<typeof createSetup>[0]["install"]["database"];
@@ -31,16 +45,16 @@ interface Run {
   readonly by: "form" | "call";
   readonly run: "check" | "repair";
   readonly nothingSet: boolean;
-  readonly refusal: (typeof PLUG_REFUSALS)[number];
+  readonly refusal: (typeof REFUSALS)[number];
 }
 
 /** The property of this file, under the budget every fuzz file shares. */
 const property = fuzzTarget(import.meta.file);
 
-/** Text for one box: noise, markup, a token, a domain or an email with edits, each also padded or in other capitals. */
+/** Text for one box: noise, markup, a token, a domain or an email with edits, each also padded or in other capitals, and text past the cap. */
 const box = fc.oneof(
   fc.string(),
-  fc.constantFrom(TOKEN, ` ${TOKEN} `, TOKEN.toUpperCase(), `${TOKEN}.example.com`, `${TOKEN}@example.com`, '"><script>alert(1)</script>', "' onfocus='alert(1)", "<b>bold</b>.example", "Example.COM", "Owner@Example.com"),
+  fc.constantFrom(TOKEN, ` ${TOKEN} `, TOKEN.toUpperCase(), `${TOKEN}.example.com`, `${TOKEN}@example.com`, TOO_LONG, LONG_AS_A_FORM, '"><script>alert(1)</script>', "' onfocus='alert(1)", "<b>bold</b>.example", "Example.COM", "Owner@Example.com"),
   hostile(fc.constantFrom(TOKEN, "example.com", "owner@example.com")),
 );
 
@@ -50,7 +64,7 @@ const runs: fc.Arbitrary<Run> = fc.record({
   by: fc.constantFrom("form", "call"),
   run: fc.constantFrom("check", "repair"),
   nothingSet: fc.boolean(),
-  refusal: fc.constantFrom(...PLUG_REFUSALS),
+  refusal: fc.constantFrom(...REFUSALS),
 });
 
 /** Send one run to a setup page of its own, and answer everything the page sent back, the page's own random parts taken out. */
@@ -77,18 +91,17 @@ async function answerOf(run: Run, answer: DomainReading = { ok: false, refusal: 
   return JSON.stringify([answered.status, headers, body]);
 }
 
-/** Every answer a refused run may get: the answers to the plain values, for each way to send, each kind of run, each kind of install, and each refusal, a mistyped box included. */
+/** Every answer a refused run may get: the answers to the plain values, for each way to send, each kind of run, each kind of install, and each refusal, and the same for each answer of the page's own. */
 async function plainAnswers(): Promise<ReadonlySet<string>> {
   const answers = new Set<string>();
 
-  for (const by of ["form", "call"] as const) {
-    for (const run of ["check", "repair"] as const) {
-      for (const nothingSet of [true, false]) {
-        for (const refusal of PLUG_REFUSALS) answers.add(await answerOf({ typed: PLAIN, by, run, nothingSet, refusal }));
+  for (const typed of [PLAIN, ...Object.values(OWN_ANSWERS)]) {
+    for (const by of ["form", "call"] as const) {
+      for (const run of ["check", "repair"] as const) {
+        for (const nothingSet of [true, false]) {
+          for (const refusal of REFUSALS) answers.add(await answerOf({ typed, by, run, nothingSet, refusal }));
+        }
       }
-
-      answers.add(await answerOf({ typed: { ...PLAIN, login: "nobody" }, by, run, nothingSet: true, refusal: "token" }));
-      answers.add(await answerOf({ typed: { ...PLAIN, domain: "nowhere" }, by, run, nothingSet: true, refusal: "token" }));
     }
   }
 
@@ -105,12 +118,19 @@ property(
   }),
 );
 
+// Drift: the property once failed at random, on a domain long enough to pass the cap as a form and not as a program's call, an answer the plain values had never reached.
+test("a domain under the cap as a program sends it and over it as a form is answered as too large by the form, and as any other domain by the call", async () => {
+  const typed = { ...PLAIN, domain: LONG_AS_A_FORM };
+  const [form, call] = [await answerOf({ typed, by: "form", run: "check", nothingSet: false, refusal: "token" }), await answerOf({ typed, by: "call", run: "check", nothingSet: false, refusal: "token" })];
+
+  expect([form.startsWith("[413,"), call.startsWith("[403,"), PLAIN_ANSWERS.has(form), PLAIN_ANSWERS.has(call)]).toEqual([true, true, true, true]);
+});
+
 // Control: the property would hold of a page that refused everything.
 test("a run the plug takes still shows its table, by the form and by a program's call", async () => {
   const taken: DomainReading = { ok: true, rows: [{ object: "DNS record", state: "present", detail: "poplin.example.com" }], steps: [] };
   const [form, call] = [await answerOf({ typed: PLAIN, by: "form", run: "check", nothingSet: true, refusal: "token" }, taken), await answerOf({ typed: PLAIN, by: "call", run: "check", nothingSet: true, refusal: "token" }, taken)];
 
   expect([form.startsWith("[200,"), form.includes("<td>DNS record</td>"), call.startsWith("[200,"), call.includes('\\"object\\":\\"DNS record\\"')]).toEqual([true, true, true, true]);
-  // A refusal reads the same for a check and a repair, and a call the same on both kinds of install: the forty plain runs make sixteen answers.
-  expect([PLAIN_ANSWERS.has(form), PLAIN_ANSWERS.has(call), PLAIN_ANSWERS.size]).toEqual([false, false, 16]);
+  expect([PLAIN_ANSWERS.has(form), PLAIN_ANSWERS.has(call)]).toEqual([false, false]);
 });
