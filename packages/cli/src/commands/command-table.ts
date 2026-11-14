@@ -1,0 +1,237 @@
+// The command table: every command, its arguments, and its flags. The parser accepts what it lists and the help prints what it lists, so the two cannot disagree.
+
+/** The flag that asks for a command's help. */
+export const HELP_FLAG = "--help";
+
+/** The flag that asks for the version. */
+export const VERSION_FLAG = "--version";
+
+/** The two flags every command takes. */
+const EVERYWHERE: readonly FlagSpec[] = [
+  { name: HELP_FLAG, about: "show this help" },
+  { name: VERSION_FLAG, about: "print the version" },
+];
+
+/** The flags of every command that talks to an install. */
+const INSTALL_FLAGS: readonly FlagSpec[] = [
+  { name: "--json", about: "print the site object, or the error object" },
+  { name: "--server", value: "<address>", about: "which install to talk to, when you have several" },
+  ...EVERYWHERE,
+];
+
+/** The argument that names one site. */
+const SITE = { name: "site", about: "its label, its bare id, or its public name" };
+
+/** The settings of a site, the same when it is published and when it is changed. */
+const SITE_SETTINGS: readonly FlagSpec[] = [
+  { name: "--private", about: "only you can open it" },
+  { name: "--unlisted", about: "anyone who has the address can open it" },
+  { name: "--public", about: "everyone can open it, at its public name" },
+  { name: "--title", value: "<title>", about: 'its title on your dashboard; "" is the page\'s own' },
+  { name: "--search-engines", value: "on|off", about: "may search engines list it" },
+  { name: "--embeddable", value: "on|off", about: "may other pages show it in a frame" },
+  { name: "--expires", value: "<when>", about: "when it moves to the trash: 7d, 2026-12-01, never" },
+];
+
+/** The command the bare form `poplin <path>` runs. */
+export const BARE_COMMAND = "publish";
+
+/** A short session from the first publish to the trash, for the help of `poplin` itself. */
+export const SESSION = [
+  "poplin ./report",
+  "poplin set report--k3f9x2ab71qz --unlisted",
+  "poplin ./report --site report--k3f9x2ab71qz",
+  "poplin rollback report--k3f9x2ab71qz",
+  "poplin set report--k3f9x2ab71qz --public",
+  "poplin ./report --site report",
+  "poplin delete report",
+];
+
+/** Every command, in the order the help lists them. */
+export const COMMANDS = [
+  {
+    name: "publish",
+    group: "publish",
+    about: "put a new site up, or update one with --site",
+    arguments: [{ name: "path", about: "a folder with an index.html, or one HTML file", required: true }],
+    flags: [
+      { name: "--site", value: "<site>", about: "update that site instead of making a new one" },
+      { name: "--name", value: "<name>", about: "the new site's name; with --public, the public name" },
+      { name: "--dry-run", about: "list the files and the name, and upload nothing" },
+      ...SITE_SETTINGS,
+      ...INSTALL_FLAGS,
+    ],
+    examples: [
+      "poplin ./report",
+      "poplin ./report.html",
+      "poplin publish ./report",
+      "poplin ./demo --unlisted --expires 7d",
+      "poplin ./report --site report--k3f9x2ab71qz",
+      "poplin ./report --site docs",
+    ],
+  },
+  {
+    name: "set",
+    group: "one site",
+    about: "change a site's settings",
+    arguments: [{ ...SITE, required: true }],
+    flags: [{ name: "--name", value: "<name>", about: "with --public: the public name, when not the site's" }, ...SITE_SETTINGS, ...INSTALL_FLAGS],
+    examples: [
+      "poplin set report--k3f9x2ab71qz --unlisted",
+      "poplin set report--k3f9x2ab71qz --public",
+      "poplin set report--w8t1c5n0ze4u --public --name docs",
+      'poplin set report--k3f9x2ab71qz --title "Q3 sales"',
+    ],
+  },
+  {
+    name: "show",
+    group: "one site",
+    about: "look at a site",
+    arguments: [{ ...SITE, required: true }],
+    flags: INSTALL_FLAGS,
+    examples: [],
+  },
+  {
+    name: "rollback",
+    group: "one site",
+    about: "go back a version",
+    arguments: [{ ...SITE, required: true }],
+    flags: [{ name: "--to", value: "<version>", about: "go to that version, not one back" }, ...INSTALL_FLAGS],
+    examples: ["poplin rollback report--k3f9x2ab71qz"],
+  },
+  {
+    name: "new-link",
+    group: "one site",
+    about: "give a site a new id, so a new address",
+    arguments: [{ ...SITE, required: true }],
+    flags: INSTALL_FLAGS,
+    examples: ["poplin new-link report--k3f9x2ab71qz"],
+  },
+  {
+    name: "delete",
+    group: "one site",
+    about: "move a site into the trash",
+    arguments: [{ ...SITE, required: true }],
+    flags: [{ name: "--forever", about: "remove it now, after you type its label" }, ...INSTALL_FLAGS],
+    examples: ["poplin delete report--k3f9x2ab71qz", "poplin delete report"],
+  },
+  {
+    name: "restore",
+    group: "one site",
+    about: "take a site back out of the trash",
+    arguments: [{ ...SITE, required: true }],
+    flags: INSTALL_FLAGS,
+    examples: [],
+  },
+  {
+    name: "list",
+    group: "all sites",
+    about: "list every site",
+    arguments: [],
+    flags: [{ name: "--trash", about: "list the deleted sites instead" }, ...INSTALL_FLAGS],
+    examples: ["poplin list", "poplin list --trash"],
+  },
+  {
+    name: "login",
+    group: "you, on this machine",
+    about: "authorize this machine",
+    arguments: [],
+    flags: [{ name: "--publisher", about: "save a publisher's token, for an agent" }, ...INSTALL_FLAGS],
+    examples: ["poplin login", "poplin login --publisher"],
+  },
+  {
+    name: "logout",
+    group: "you, on this machine",
+    about: "forget this machine's token",
+    arguments: [],
+    flags: INSTALL_FLAGS,
+    examples: ["poplin logout"],
+  },
+  {
+    name: "whoami",
+    group: "you, on this machine",
+    about: "print the install, your email, and your role",
+    arguments: [],
+    flags: INSTALL_FLAGS,
+    examples: ["poplin whoami"],
+  },
+  {
+    name: "setup",
+    group: "the install",
+    about: "set up a new install",
+    arguments: [],
+    flags: INSTALL_FLAGS,
+    examples: ["poplin setup"],
+  },
+  {
+    name: "config",
+    group: "the install",
+    about: "show the install's settings, or change one",
+    arguments: [
+      { name: "key", about: "the setting to show; without it, every setting", required: false },
+      { name: "value", about: "the value to give it: 60s, 9GB, 25%, on", required: false },
+    ],
+    flags: [{ name: "--reset", about: "put that setting back to its default" }, ...INSTALL_FLAGS],
+    examples: ["poplin config", "poplin config versions_kept 10", "poplin config outside_pages allowed"],
+  },
+  {
+    name: "doctor",
+    group: "the install",
+    about: "check that the install works, and report",
+    arguments: [],
+    flags: INSTALL_FLAGS,
+    examples: ["poplin doctor"],
+  },
+  {
+    name: "export",
+    group: "the install",
+    about: "download everything, or one site, as a zip",
+    arguments: [{ ...SITE, about: "the one site to export; without it, every site", required: false }],
+    flags: [{ name: "--all-versions", about: "add the kept versions" }, ...INSTALL_FLAGS],
+    examples: ["poplin export"],
+  },
+  {
+    name: "import",
+    group: "the install",
+    about: "put a backup back",
+    arguments: [{ name: "zip", about: "the zip that export made", required: true }],
+    flags: INSTALL_FLAGS,
+    examples: [],
+  },
+  {
+    name: "mcp",
+    group: "the install",
+    about: "run the MCP server on this machine, over stdio",
+    arguments: [],
+    flags: EVERYWHERE,
+    examples: ["poplin mcp"],
+  },
+  {
+    name: "help",
+    group: "help",
+    about: "show the help of a command",
+    arguments: [{ name: "command", about: "the command to explain; without it, every command", required: false }],
+    flags: EVERYWHERE,
+    examples: [],
+  },
+] as const satisfies readonly CommandSpec[];
+
+/** One flag of a command. A flag with a `value` takes one; a flag without is a switch. */
+interface FlagSpec {
+  readonly name: `--${string}`;
+  readonly value?: string;
+  readonly about: string;
+}
+
+/** One command: the word that runs it, the arguments it takes in order, and the flags it accepts. */
+export interface CommandSpec {
+  readonly name: string;
+  readonly group: string;
+  readonly about: string;
+  readonly arguments: readonly { readonly name: string; readonly about: string; readonly required: boolean }[];
+  readonly flags: readonly FlagSpec[];
+  readonly examples: readonly string[];
+}
+
+/** The word of a command in the table. */
+export type CommandName = (typeof COMMANDS)[number]["name"];
