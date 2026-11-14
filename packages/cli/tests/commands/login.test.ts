@@ -247,7 +247,7 @@ describe("logIn", () => {
   // Drift: an agent relays the address to its user from the first line while the command still waits; a line that came late, or that was not JSON, would leave the user with nothing to open.
   test("--json prints the address and the code as one line before it waits, and who was logged in as a second, with no token in either", async () => {
     const desk = await openDesk();
-    let first: unknown;
+    let first: Record<string, unknown> = {};
 
     const ran = await desk.login(`login --server ${ORIGIN} --json`, async (address, soFar) => {
       first = jsonOf(soFar);
@@ -257,7 +257,7 @@ describe("logIn", () => {
     const [announced = "", result = ""] = ran.out;
 
     expect([ran.code, ran.out.length, JSON.parse(announced)]).toEqual([0, 2, first]);
-    expect(first).toEqual({ verify_url: expect.stringMatching(new RegExp(`^${ORIGIN}/tokens/allow\\?code=${CODE.source}$`)), code: expect.stringMatching(CODE), expires_in: 600 });
+    expect(first).toEqual({ verify_url: `${ORIGIN}/tokens/allow?code=${first.code}`, code: expect.stringMatching(new RegExp(`^${CODE.source}$`)), expires_in: 600 });
     expect(JSON.parse(result)).toMatchObject({ server: ORIGIN, token: { scope: "admin", note: "test-computer" } });
     expect(ran.out.join("\n").match(CREDENTIAL)).toBeNull();
   });

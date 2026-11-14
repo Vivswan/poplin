@@ -212,9 +212,10 @@ describe("a Worker with nothing set", () => {
     const worker = instance(w);
     const page = await ask(worker, `${OWN}/setup`, {}, DEPLOYED);
     const text = await page.text();
+    const hosts = (text.match(/[a-z0-9-]+(?:\.[a-z0-9-]+)+/g) ?? []).filter((host) => host.endsWith(".example.com"));
     const elsewhere = await Promise.all([`${OWN}/`, `${OWN}/api/whoami`, `${ADMIN}/login`, "https://report--k3f9x2ab71qz-u-poplin.example.com/"].map((address) => ask(worker, address, {}, DEPLOYED)));
 
-    expect([page.status, text.includes('name="domain"'), text.includes('name="login"'), text.includes("poplin.example.com")]).toEqual([200, true, true, false]);
+    expect([page.status, text.includes('name="domain"'), text.includes('name="login"'), hosts]).toEqual([200, true, true, []]);
     expect(elsewhere.map((answer) => [answer.status, answer.headers.get("Location")])).toEqual([[302, "/setup"], [302, "/setup"], [302, "/setup"], [302, "/setup"]]);
     await sweep(worker, w, DEPLOYED);
   });
