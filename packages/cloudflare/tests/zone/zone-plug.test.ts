@@ -1,4 +1,6 @@
 import { expect, test } from "bun:test";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import type { DomainReading, DomainSettings } from "@poplin/app/src/dashboard/domain/records";
 import type { Login } from "@poplin/core/src/auth/logins";
 import { createDomainPlug } from "../../src/zone/zone-plug";
@@ -151,6 +153,14 @@ test("the rights the page asks a token for are the rights a repair's calls need,
 
     expect([...new Set(needed)].sort()).toEqual([...plug.tokenRights].sort());
   });
+});
+
+test("the install page lists every right the plug asks a token for, each in a row of its own: a person makes the token from that table", () => {
+  const page = readFileSync(join(import.meta.dir, "..", "..", "..", "..", "docs", "install.md"), "utf8");
+  const listed = [...page.matchAll(/^ *\| (?:Account|Zone) +\| (.+?) +\|/gm)].map(([, right = ""]) => right);
+  const plug = createDomainPlug({ accountId: ACCOUNT, script: "poplin", layout: LAYOUT });
+
+  expect(listed.sort()).toEqual([...plug.tokenRights].sort());
 });
 
 test("one object taken away and one changed by hand: the check names exactly those two, and the repair changes exactly those two", async () => {

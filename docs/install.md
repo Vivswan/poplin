@@ -14,104 +14,103 @@ after:   https://poplin.example.com                       your dashboard
          report--k3f9x2ab71qz-p-poplin.example.com        every site you publish
 ```
 
-**This takes a terminal.** The steps below use git, bun, OpenTofu, and a Cloudflare API token. Someone who has set up a server before does them in about half an hour.
+Steps 1 to 6 happen in your browser, and after them your dashboard works. Step 7 logs in the computer you publish from. Allow half an hour.
 
-If that is not you, ask such a person to do steps 3 to 6 for you. Steps 1 and 2 are yours either way: they happen in your browser.
+Three words the steps use: a **Worker** is the program Cloudflare runs for you, a **token** is a long password that lets a program change your Cloudflare account, and a **terminal** is the window where you type commands (Terminal on a Mac, PowerShell on Windows).
 
 ## What you need
 
-| Thing                                | Where it comes from                                                |
-| ------------------------------------ | ------------------------------------------------------------------ |
-| a Cloudflare account                 | the Free plan is enough                                            |
-| a domain on that account             | poplin gives every site an address under it                        |
-| git, bun, and OpenTofu 1.13 or newer | on the computer that runs steps 3 to 6                             |
+| Thing                              | Why                                                                              |
+| ---------------------------------- | -------------------------------------------------------------------------------- |
+| a Cloudflare account               | the Free plan is enough                                                          |
+| a domain on that account           | poplin gives every site an address under it                                      |
+| a payment method on the account    | Cloudflare asks for one in step 1, also for what is free. Poplin's use fits the free allowances |
+| a GitHub account                   | free. Step 2 puts a copy of poplin's code there, which Cloudflare builds from    |
+| Node.js, on your own computer      | for step 7 alone                                                                 |
 
 ## The steps
 
-1. **Switch on Access, in your browser.** Open Zero Trust in the Cloudflare dashboard and pick a plan. Free works. Access is the login in front of your dashboard, and no command can switch it on.
+1. **Switch on two things in Cloudflare.** No program can do this for you. Each asks for a payment method.
+
+   | Open                          | Do                                         | It is                                  |
+   | ----------------------------- | ------------------------------------------ | -------------------------------------- |
+   | Zero Trust, in the left menu  | pick a team name and the Free plan         | the login in front of your dashboard   |
+   | R2, under Storage             | add R2 to the account                      | the storage for your sites' files      |
+
+   The team name can be any word: it only names your login page. Each is done when Cloudflare shows its overview instead of the sign-up.
+
+2. **Make the Worker.** Click the button and sign in to GitHub when asked. Leave every box of the form as it is, and press the button at its end. The names it suggests must stay: the project `poplin`, the bucket `poplin-sites`, the database `poplin`.
+
+   [![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/Vivswan/poplin)
+
+   Cloudflare copies poplin to your GitHub account, makes the storage and the database, and builds the Worker. After a few minutes it shows the Worker's own address. Note it. Where this page says `your-name`, yours has a word of your account:
 
    ```text
-   https://one.dash.cloudflare.com
+   https://poplin.your-name.workers.dev
    ```
 
-   Cloudflare asks for a team name. Note the team domain it makes: `team.cloudflareaccess.com`, with your team name in front.
+   Opened now, that address shows a short page that names missing values. That is expected: step 3 gives them.
 
-2. **Switch on R2, in your browser.** Open R2 in the Cloudflare dashboard and add it to the account. R2 is the storage that holds your sites' files. Cloudflare asks for a payment card here; the free allowance costs nothing.
+3. **Tell the Worker three things.** In Cloudflare, open Workers & Pages, then `poplin`, then Settings, then Variables and Secrets. Add three variables, then press Deploy. For each, choose the Type, type the Name, and type the Value exactly as shown, brackets and quotes included, with your own domain, email, and id in place of the examples.
 
-3. **Make a Cloudflare API token.** In the Cloudflare dashboard, under your profile, make a custom token with the permissions in [the module's list](../packages/cloudflare/tofu/README.md#cloudflare-token-permissions). Then hand it to the terminal:
+   | Type | Name             | Value                              | Yours in place of                                                   |
+   | ---- | ---------------- | ---------------------------------- | ------------------------------------------------------------------- |
+   | JSON | `ZONE`           | `{"domain": "example.com"}`        | `example.com`: your domain                                          |
+   | JSON | `FIRST_SETTINGS` | `{"logins": "you@example.com"}`    | `you@example.com`: your email, in lowercase. It is the first login  |
+   | Text | `ACCOUNT_ID`     | `0123456789abcdef0123456789abcdef` | the whole value: your Account ID, 32 letters and digits, shown on the right of the Workers & Pages overview |
 
-   ```sh
-   export CLOUDFLARE_API_TOKEN="paste the token here"
-   ```
+   Until all three are right, the Worker's address answers the short page, which names what is still missing or wrong.
 
-4. **Get poplin and build the Worker.**
-
-   ```sh
-   git clone https://github.com/Vivswan/poplin
-   bun install --cwd poplin
-   bun run --cwd poplin/packages/cloudflare build
-   ```
-
-   The build writes one file, `poplin/packages/cloudflare/dist/worker.js`. Nothing is deployed yet.
-
-5. **Describe your install.** Beside the `poplin` folder, write a file named `main.tf`:
-
-   ```hcl
-   terraform {
-     required_providers {
-       cloudflare = {
-         source  = "cloudflare/cloudflare"
-         version = "~> 5.28"
-       }
-     }
-   }
-
-   provider "cloudflare" {}
-
-   module "poplin" {
-     source = "./poplin/packages/cloudflare/tofu"
-
-     account_id         = "0123456789abcdef0123456789abcdef"
-     zone_id            = "fedcba9876543210fedcba9876543210"
-     logins             = ["owner@example.com"]
-     worker_bundle_path = "./poplin/packages/cloudflare/dist/worker.js"
-     access_team_domain = "team.cloudflareaccess.com"
-   }
-
-   output "admin_url" {
-     value = module.poplin.admin_url
-   }
-   ```
-
-   | Value                | Put in                                                              |
-   | -------------------- | ------------------------------------------------------------------- |
-   | `account_id`         | the Account ID on your domain's Overview page in Cloudflare         |
-   | `zone_id`            | the Zone ID on the same page                                        |
-   | `logins`             | the emails that may log in: yours first, in lowercase               |
-   | `access_team_domain` | the team domain from step 1                                         |
-
-   **A domain that already has addresses of its own**, such as `www.example.com`, needs one more line in the `module` block: `rate_rule = "off"`.
-
-6. **Make the install.**
-
-   ```sh
-   tofu init
-   tofu apply
-   ```
-
-   OpenTofu lists what it will make and asks for a `yes`. It ends with the address of your dashboard:
+4. **Make a Cloudflare API token.** Open the page below, press Create Token, and choose Create Custom Token. Add the eleven rows of the table; Cloudflare calls them permissions. Each row is three choices: Account or Zone, the name, and Read or Edit.
 
    ```text
-   admin_url = "https://poplin.example.com"
+   https://dash.cloudflare.com/profile/api-tokens
    ```
 
-7. **Open your dashboard and log in.** Cloudflare's login asks for one of the emails in `logins` and sends it a code.
+   | Under   | Right                                                        | For                                    |
+   | ------- | ------------------------------------------------------------ | -------------------------------------- |
+   | Account | Workers Scripts: Edit                                        | giving the Worker its login            |
+   | Account | D1: Edit                                                     | the database                           |
+   | Account | Access: Apps and Policies: Edit                              | the login                              |
+   | Account | Access: Organizations, Identity Providers, and Groups: Read  | your team's name                       |
+   | Zone    | Zone: Read                                                   | finding your domain                    |
+   | Zone    | DNS: Edit                                                    | the addresses                          |
+   | Zone    | Workers Routes: Edit                                         | sending the addresses to the Worker    |
+   | Zone    | Zone WAF: Edit                                               | the rules against unwanted traffic     |
+   | Zone    | Single Redirect: Edit                                        | sending http to https                  |
+   | Zone    | Zone Settings: Read                                          | seeing whether the domain redirects already |
+   | Zone    | Bot Management: Edit                                         | blocking AI crawlers                   |
+
+   Below the rows, under Account Resources choose your account, and under Zone Resources choose your domain. Leave the rest as it is and create the token. Cloudflare shows it once: copy it now.
+
+5. **Finish on the setup page.** Open the Worker's address from step 2 with `/setup` after it. Paste the token and press Repair. Repair makes whatever is missing, which the first time is everything.
+
+   ```text
+   https://poplin.your-name.workers.dev/setup
+   ```
+
+   The page lists what it made, and ends with the address of your dashboard:
+
+   ```text
+   13 repaired
+   The login is ready. Open your dashboard and log in: https://poplin.example.com
+
+   DNS record           created   poplin.example.com
+   Worker route         created   poplin.example.com/*
+   Access application   created   poplin: poplin.example.com/login, *-p-poplin.example.com
+   ```
+
+   The token is used for that one request and kept nowhere. **A row that says failed** names what Cloudflare refused: most often a row missing from the token. On the page of step 4, open the token's menu, choose Edit, add the row, and press Repair again. Repair is safe to repeat.
+
+6. **Open your dashboard and log in.** Cloudflare's login asks for your email and sends it a code. A new address can take a few minutes to answer. No code means the email differs from the one in step 3.
 
    ```text
    https://poplin.example.com
    ```
 
-8. **Log a computer in, and check.**
+   This first login closes the setup page for good.
+
+7. **Log a computer in, and check.** Open a terminal on the computer you publish from. It needs Node.js installed. The first command opens your dashboard, where you allow the computer.
 
    ```sh
    npx poplin login --server https://poplin.example.com
@@ -122,18 +121,20 @@ If that is not you, ask such a person to do steps 3 to 6 for you. Steps 1 and 2 
 
 Your install is ready. Paste the line from [the README](../README.md#use-it-from-an-ai-agent) into your agent, or see [Using](using.md).
 
-## What the install is made of
+## Add a login
 
-| In your Cloudflare account | Does                                                       |
-| -------------------------- | ---------------------------------------------------------- |
-| one Worker                 | serves every site, the dashboard, the login, and the API   |
-| one R2 bucket              | holds every site's files                                   |
-| one D1 database            | holds the list of sites, the logins, and the settings      |
-| an Access application      | the login screen in front of the dashboard                 |
-| DNS records and routes     | send your sites' addresses, and the dashboard's, to the Worker |
-| rules on the domain        | slow down and stop unwanted traffic before the Worker      |
+A second person needs two steps, because Cloudflare's login page keeps its own list.
 
-[The module's page](../packages/cloudflare/tofu/README.md) lists every object, every input, and what the module leaves alone.
+| Step | Where                         | Do                                              |
+| ---- | ----------------------------- | ----------------------------------------------- |
+| 1    | the dashboard, Settings       | add the email to `logins`, and save             |
+| 2    | the dashboard, Domain         | paste a token as in step 4, and press Repair    |
+
+Removing a login needs step 1 alone: the person is out of the dashboard at once, and out of private sites within a minute.
+
+## The Domain tab
+
+After the first login, the Domain tab does what the setup page did. Check lists every object and changes nothing. Repair makes them match again.
 
 ## Change a setting
 
@@ -142,15 +143,62 @@ npx poplin config
 npx poplin config trash_days 30
 ```
 
-The dashboard's Settings tab changes the same settings. The values in `main.tf` are only the first ones: once the install runs, applying again changes no stored setting.
+The dashboard's Settings tab changes the same settings.
 
-**A new login goes in two places:** the `logins` setting, and `logins` in `main.tf` followed by `tofu apply`, so that Cloudflare's login screen lets that email in.
+## What the install is made of
+
+| In your Cloudflare account | Does                                                           | Made by      |
+| -------------------------- | -------------------------------------------------------------- | ------------ |
+| one Worker                 | serves every site, the dashboard, the login, and the API       | step 2       |
+| one R2 bucket              | holds every site's files                                       | step 2       |
+| one D1 database            | holds the list of sites, the logins, and the settings          | step 2       |
+| an Access application      | the login screen in front of the dashboard and private sites   | step 5       |
+| DNS records and routes     | send your sites' addresses, and the dashboard's, to the Worker | step 5       |
+| rules on the domain        | slow down and stop unwanted traffic before the Worker          | step 5       |
+
+## From a terminal instead
+
+Two steps have a terminal form. Both need the same Cloudflare account, and the rest of the page stays as it is.
+
+**Step 2, without a GitHub account.** It needs git and bun. The last command opens Cloudflare in your browser to ask for access, then deploys.
+
+```sh
+git clone https://github.com/Vivswan/poplin
+bun install --cwd poplin
+bun run --cwd poplin deploy
+```
+
+**Step 5, without the page.** `poplin setup` sends the token to the same setup, and prints the same rows. It makes no Worker, and it works only until the first login.
+
+```sh
+export POPLIN_SETUP_TOKEN="paste the token here"
+npx poplin setup --server https://poplin.your-name.workers.dev
+```
 
 ## Update the install
 
+Cloudflare builds and deploys again whenever the copy of poplin in your GitHub account changes. Taking a newer poplin means bringing that copy up to date, which takes a terminal with git:
+
 ```sh
-git -C poplin pull
-bun install --cwd poplin
-bun run --cwd poplin/packages/cloudflare build
-tofu apply
+git clone https://github.com/your-name/poplin
+git -C poplin pull https://github.com/Vivswan/poplin main
+git -C poplin push
+```
+
+An install made from a terminal updates with `git -C poplin pull` and `bun run --cwd poplin deploy`. The variables of step 3 and the login of step 5 stay.
+
+## With OpenTofu
+
+People who run OpenTofu can make the whole install with poplin's module instead of steps 2 to 5. [The module's page](../packages/cloudflare/tofu/README.md) lists every input and every object.
+
+```hcl
+module "poplin" {
+  source = "github.com/Vivswan/poplin//packages/cloudflare/tofu?ref=<release tag>"
+
+  account_id         = "0123456789abcdef0123456789abcdef"
+  zone_id            = "fedcba9876543210fedcba9876543210"
+  logins             = ["owner@example.com"]
+  worker_bundle_path = "./worker.js"
+  access_team_domain = "team.cloudflareaccess.com"
+}
 ```
