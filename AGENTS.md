@@ -39,5 +39,7 @@ Poplin publishes a static site to the user's own Cloudflare account with one cal
 
 - Run every local check: `bun run check`
 - Turn the hooks on, once per clone: `git config core.hooksPath .githooks`
+- Click through the product on this machine, over sample data in memory: `bun run preview`, then open `http://127.0.0.1:4400/`
+- Stop it: `bun run preview:stop`; `--port` runs a second one beside it, `--watch` restarts it when its source changes, and `--gallery` lists every state at `/gallery`
 - Backwards-compatible code lives only in `migrations/`. Everywhere else an old shape is deleted outright.
 - Provider-specific code lives only in `packages/cloudflare/`; `tests/portable.test.ts` holds the line.

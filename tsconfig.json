@@ -10,7 +10,7 @@
     "moduleResolution": "bundler",
     "types": ["bun"]
   },
-  "include": ["packages", "tests", ".github/scripts"],
+  "include": ["packages", "tests", "scripts", ".github/scripts"],
   "exclude": [
     "packages/cloudflare/worker-configuration.d.ts",
     "packages/cloudflare/vitest.config.ts",

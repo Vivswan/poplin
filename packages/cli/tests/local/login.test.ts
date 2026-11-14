@@ -67,6 +67,13 @@ const NOT_LOGINS: readonly { readonly name: string; readonly value: unknown }[] 
   { name: "a server that is not a string", value: { server: 1, token: TOKEN } },
   { name: "a token that is not a string", value: { server: SERVER, token: null } },
   { name: "a server over http", value: { server: "http://poplin.example.com", token: TOKEN } },
+  { name: "a server over http whose name only starts as this machine's", value: { server: "http://localhost.example.com", token: TOKEN } },
+  { name: "a server over http whose name only starts as this machine's address", value: { server: "http://127.0.0.1.example.com", token: TOKEN } },
+  { name: "a server over http at every address of the machine", value: { server: "http://0.0.0.0:4400", token: TOKEN } },
+  { name: "a server over http at another address of the local network", value: { server: "http://192.168.1.20:4400", token: TOKEN } },
+  { name: "this machine over http in a short form", value: { server: "http://127.1:4400", token: TOKEN } },
+  { name: "this machine over http with a path", value: { server: "http://127.0.0.1:4400/api", token: TOKEN } },
+  { name: "this machine over http with credentials", value: { server: "http://sam:secret@localhost:4400", token: TOKEN } },
   { name: "a server with a path", value: { server: `${SERVER}/sites`, token: TOKEN } },
   { name: "a server with a closing slash", value: { server: `${SERVER}/`, token: TOKEN } },
   { name: "a server with a query", value: { server: `${SERVER}?next=1`, token: TOKEN } },
@@ -121,6 +128,10 @@ describe("loginFilePath", () => {
 describe("parseLogin", () => {
   test("drift: a login is the two facts as given, and the token may be any printable ASCII since the server owns its form", () => {
     expect<unknown>(parseLogin({ server: OTHER_SERVER, token: "!~" })).toEqual({ ok: true, login: { server: OTHER_SERVER, token: "!~" } });
+  });
+
+  test.each(["http://127.0.0.1:4400", "http://localhost:4400", "http://[::1]:4400", "http://localhost"])("drift: a server on this machine itself is taken over plain http, where a token crosses no network: %s", (server) => {
+    expect<unknown>(parseLogin({ server, token: TOKEN })).toEqual({ ok: true, login: { server, token: TOKEN } });
   });
 
   test.each(NOT_LOGINS)("drift: a value that is nearly a login must be refused whole, never trimmed or defaulted into one: $name", ({ value }) => {

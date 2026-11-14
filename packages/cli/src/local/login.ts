@@ -3,6 +3,8 @@
 import * as v from "valibot";
 
 const SECURE = "https:";
+const PLAIN = "http:";
+const LOOPBACK_HOSTS: ReadonlySet<string> = new Set(["127.0.0.1", "localhost", "[::1]"]);
 const TOKEN_PATTERN = /^[\x21-\x7e]+$/;
 const NOT_AN_OBJECT = "it must hold a server and a token and nothing else";
 const NOT_A_SERVER = "the server must be an https:// address with nothing after the host, such as https://poplin.example.com";
@@ -19,7 +21,7 @@ const LOGIN_SCHEMA = v.pipe(
   v.brand("Login"),
 );
 
-/** A checked login. `server` is an `https://` origin with nothing after the host; `token` is printable ASCII with no whitespace. */
+/** A checked login. `server` is an origin `isServer` takes; `token` is printable ASCII with no whitespace. */
 export type Login = v.InferOutput<typeof LOGIN_SCHEMA>;
 
 /** A login, or what is wrong with the value in words that never quote it, since it may hold a token. */
@@ -28,7 +30,9 @@ type ParsedLogin = { readonly ok: true; readonly login: Login } | { readonly ok:
 /**
  * Decide whether a text is the address of an install.
  *
- * @returns `true` for an `https://` origin with nothing after the host
+ * A token is sent to the server, so plain `http://` is taken only for this machine itself: `127.0.0.1`, `localhost`, or `[::1]`, where nothing crosses a network.
+ *
+ * @returns `true` for an `https://` origin, or an `http://` origin of this machine, with nothing after the host
  */
 export function isServer(server: string): boolean {
   if (!URL.canParse(server)) return false;
@@ -36,7 +40,9 @@ export function isServer(server: string): boolean {
   const url = new URL(server);
 
   // An origin has no credentials, path, query, or fragment, so any of them makes the text differ from it.
-  return url.protocol === SECURE && url.origin === server;
+  if (url.origin !== server) return false;
+
+  return url.protocol === SECURE || (url.protocol === PLAIN && LOOPBACK_HOSTS.has(url.hostname));
 }
 
 /**
