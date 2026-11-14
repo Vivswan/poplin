@@ -1,6 +1,12 @@
 import { describe, expect, test } from "bun:test";
-import { isUnder, parseHostname } from "../src/cloudflare/hostname";
-import { hostOf } from "./layouts";
+import { type Hostname, isUnder, parseHostname } from "../src/names/hostname";
+
+function hostOf(raw: string): Hostname {
+  const hostname = parseHostname(raw);
+  if (!hostname.ok) throw new Error(`the test's hostname was refused: ${hostname.refusal}`);
+
+  return hostname.value;
+}
 
 describe("parseHostname", () => {
   const accepted: readonly string[] = [

@@ -1,7 +1,7 @@
 // The zone values of an install with a domain, after their checks: each is already safe to write into a record, a route, or a rule.
 
+import { type Hostname, isUnder, parseHostname } from "@poplin/core/src/names/hostname";
 import { parseSuffix, type Suffix } from "@poplin/core/src/names/suffix";
-import { type Hostname, isUnder, parseHostname } from "./hostname";
 
 declare const layoutBrand: unique symbol;
 

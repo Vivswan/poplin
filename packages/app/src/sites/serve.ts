@@ -1,6 +1,6 @@
 // A visitor's request for a site, answered from the database and the bucket.
 //
-//   hostname -> label          not this install's, or no valid label     404
+//   URL -> what it addresses   not this install's, or no site address    404
 //   one database query         no served site, or another name           404, or the login for a label without a session
 //   access                     private without a session                 the login
 //   path -> one to three keys  no file path                              404
@@ -11,13 +11,11 @@
 import type { Database } from "@poplin/core/src/database/database";
 import type { SettingValues } from "@poplin/core/src/records/settings";
 import type { Site } from "@poplin/core/src/records/site";
-import type { LabelParts } from "@poplin/core/src/sites/labels";
 import type { ByteRange, ObjectInfo, ObjectKey, ObjectStore, ReadResult } from "@poplin/core/src/storage/storage";
-import { type DomainLayout, siteEnding } from "../cloudflare/layout";
+import type { Addressed, SiteAddresses } from "./addresses";
 import { fileKeys } from "./file-keys";
 import { siteHeaders } from "./headers";
 import { parseRange } from "./range";
-import { resolveHostname } from "./resolve";
 
 /** The methods a site answers. */
 const METHODS: ReadonlySet<string> = new Set(["GET", "HEAD"]);
@@ -27,9 +25,6 @@ const ALLOW = "GET, HEAD";
 
 /** The request headers that name the page a request came from; the first that holds an address decides. */
 const REQUESTER_HEADERS = ["Origin", "Referer"] as const;
-
-/** The dashboard path that starts a login. */
-const LOGIN_PATH = "/login";
 
 /** The headers of every answer that is not a file: never cached, never indexed, never framed. */
 const PLAIN_HEADERS = {
@@ -59,8 +54,8 @@ interface Serving {
   /** The install's cache and framing settings. */
   readonly settings: Pick<SettingValues, "cache_html" | "cache_files" | "outside_pages">;
 
-  /** The install's domain, admin hostname, and suffix. */
-  readonly zone: DomainLayout;
+  /** The install's address layout. */
+  readonly addresses: SiteAddresses;
 
   /** Decides whether a request carries a valid session; `ok` is `true` for a logged-in owner. */
   readonly readSession: (headers: Headers) => Promise<{ readonly ok: boolean }>;
@@ -68,7 +63,7 @@ interface Serving {
   /** The time, in milliseconds since the epoch. */
   readonly now: () => number;
 
-  /** Answers the gallery's hostname; absent, that hostname is not found. */
+  /** Answers the gallery's address; absent, that address is not found. */
   readonly gallery?: (request: Request) => Promise<Response>;
 }
 
@@ -85,14 +80,6 @@ function plain(request: Request, status: keyof typeof PLAIN_BODIES, extra: Reado
   return new Response(PLAIN_BODIES[status], { status, headers });
 }
 
-// The return target is the site's own address and nothing the request chose besides its path: the login decides whether to go back there.
-function loginRedirect(url: URL, zone: DomainLayout): Response {
-  const login = new URL(`https://${zone.adminHostname}${LOGIN_PATH}`);
-  login.searchParams.set("return", `https://${url.hostname}${url.pathname}${url.search}`);
-
-  return new Response(null, { status: 302, headers: { ...PLAIN_HEADERS, Location: login.href } });
-}
-
 function requesterHost(headers: Headers): string | undefined {
   for (const name of REQUESTER_HEADERS) {
     const url = URL.parse(headers.get(name) ?? "");
@@ -104,7 +91,7 @@ function requesterHost(headers: Headers): string | undefined {
 
 // A browser marks who made a request. Opening the address itself, as the top-level page, always passes.
 // It calls every hostname of the domain `same-site`, so there the requester's own hostname decides; a request that names none passes.
-function isOutsideSubrequest(headers: Headers, zone: DomainLayout): boolean {
+function isOutsideSubrequest(headers: Headers, addresses: SiteAddresses): boolean {
   const from = headers.get("Sec-Fetch-Site");
   if (from !== "cross-site" && from !== "same-site") return false;
 
@@ -114,10 +101,10 @@ function isOutsideSubrequest(headers: Headers, zone: DomainLayout): boolean {
 
   const requester = requesterHost(headers);
 
-  return requester !== undefined && !requester.endsWith(siteEnding(zone));
+  return requester !== undefined && !addresses.isSiteHost(requester);
 }
 
-async function findSite(address: LabelParts, serving: Serving): Promise<Site | undefined> {
+async function findSite(address: Exclude<Addressed, { readonly kind: "gallery" | "none" }>, serving: Serving): Promise<Site | undefined> {
   if (address.kind === "public-name") return serving.database.findServed({ public_name: address.name }, serving.now());
 
   const site = await serving.database.findServed({ id: address.id }, serving.now());
@@ -142,7 +129,7 @@ function etagMatches(header: string | null, info: ObjectInfo): boolean {
 }
 
 function fileHeaders(info: ObjectInfo, served: Served): Headers {
-  const headers = siteHeaders({ site: served.site, contentType: info.contentType, settings: served.serving.settings, zone: served.serving.zone });
+  const headers = siteHeaders({ site: served.site, contentType: info.contentType, settings: served.serving.settings, addresses: served.serving.addresses });
   headers.set("ETag", `"${info.etag}"`);
   headers.set("Accept-Ranges", "bytes");
 
@@ -199,7 +186,7 @@ async function answerHead(request: Request, keys: readonly ObjectKey[], served: 
 }
 
 /**
- * Answer a visitor's request for a site of an install on its own domain.
+ * Answer a visitor's request for a site of an install.
  *
  * @returns the file with its headers, its body the store's own stream; else 304, 206 or 416 for a range, 403 for a subrequest of a page that is no site of the install, 302 to the login, 405, or the one 404
  * @throws whatever the database, the store, or the session reader rejects with; nothing else throws
@@ -208,10 +195,10 @@ export async function serveSite(request: Request, serving: Serving): Promise<Res
   if (!METHODS.has(request.method)) return plain(request, 405, { Allow: ALLOW });
 
   const url = new URL(request.url);
-  const address = resolveHostname(url.hostname, serving.zone);
+  const address = serving.addresses.resolve(url);
   if (address.kind === "none") return plain(request, 404);
 
-  if (serving.settings.outside_pages === "blocked" && isOutsideSubrequest(request.headers, serving.zone)) return plain(request, 403);
+  if (serving.settings.outside_pages === "blocked" && isOutsideSubrequest(request.headers, serving.addresses)) return plain(request, 403);
 
   if (address.kind === "gallery") return (await serving.gallery?.(request)) ?? plain(request, 404);
 
@@ -219,14 +206,14 @@ export async function serveSite(request: Request, serving: Serving): Promise<Res
 
   if (site === undefined || site.access === "private") {
     const session = await serving.readSession(request.headers);
-    if (!session.ok && address.kind === "site") return loginRedirect(url, serving.zone);
+    if (!session.ok && address.kind === "site") return new Response(null, { status: 302, headers: { ...PLAIN_HEADERS, Location: serving.addresses.loginFor(url) } });
 
     if (!session.ok) return plain(request, 404);
   }
 
   if (site === undefined) return plain(request, 404);
 
-  const keys = fileKeys(site, url.pathname);
+  const keys = fileKeys(site, address.path);
   if (request.method === "HEAD") return answerHead(request, keys, { site, serving });
 
   return answerGet(request, keys, { site, serving });

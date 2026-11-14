@@ -25,7 +25,7 @@ export async function updateSite(install: Install, actor: Actor, request: SiteCh
   const { site, settings, signed } = reached;
   if (site.state === "trash") return refuse("in_trash");
 
-  const changes = readChanges(asked, { name: site.name, now: signed.at });
+  const changes = readChanges(asked, { name: site.name, now: signed.at, reserved: install.reservedNames });
   if (!changes.ok) return changes;
 
   if (asksNothing(changes)) return refuse("bad_argument", "settings");

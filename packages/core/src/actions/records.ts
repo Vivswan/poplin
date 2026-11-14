@@ -18,6 +18,9 @@ export interface Install {
 
   /** The address a site answers at under its label, or a public site under its public name. */
   readonly addressOf: (label: SiteLabel | PublicName) => string;
+
+  /** The public names the address layout keeps for itself: no site may hold one. */
+  readonly reservedNames: ReadonlySet<string>;
 }
 
 /** An action that was not done: nothing was changed and no audit entry was written. `about` names the argument, limit, or path the code is about. */

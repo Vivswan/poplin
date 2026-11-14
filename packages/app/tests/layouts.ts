@@ -1,6 +1,6 @@
 // The layouts and hostnames the planner tests share, each checked the way setup checks one.
 
-import { type Hostname, parseHostname } from "../src/cloudflare/hostname";
+import { type Hostname, parseHostname } from "@poplin/core/src/names/hostname";
 import { type DomainLayout, parseDomainLayout, type RawLayout } from "../src/cloudflare/layout";
 
 const BASE: RawLayout = { domain: "example.com", admin_hostname: "admin.example.com", suffix: "-page" };

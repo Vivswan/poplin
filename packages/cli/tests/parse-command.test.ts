@@ -147,7 +147,6 @@ describe("parseCommand", () => {
       `poplin set ${LABEL} --name docs`,
       refusal("--name gives a public site its public name, so it needs --public", "poplin set <site> --public --name <public name>"),
     ],
-    [`poplin set ${LABEL} --public --name gallery`, refusal('--name "gallery" is not a name: the install keeps that name for itself')],
     [`poplin set ${LABEL} --search-engines yes`, refusal('--search-engines takes on or off, not "yes"')],
     [`poplin set ${LABEL} --embeddable ON`, refusal('--embeddable takes on or off, not "ON"')],
     [

@@ -9,6 +9,9 @@ const SEPARATOR = "--";
 /** The longest site label: the longest name, the separator, and an id. */
 export const MAX_SITE_LABEL_LENGTH = MAX_NAME_LENGTH + SEPARATOR.length + SITE_ID_LENGTH;
 
+/** What a reference reserves: no site holds a name its install keeps, so the lookup answers for one. */
+const NOTHING_RESERVED: ReadonlySet<string> = new Set();
+
 declare const siteLabelBrand: unique symbol;
 
 /** A name, `--`, and an id; made by `siteLabel` alone. */
@@ -33,13 +36,14 @@ export function siteLabel(name: SiteName, id: SiteId): SiteLabel {
  * Split a label into what it names.
  *
  * @param label - a hostname label with its suffix already stripped, in lowercase
+ * @param reserved - the names the install's address layout keeps for itself; none is a public name
  * @returns a name and an id for a label that holds `--`, a public name for one that does not, or why it is neither; only the form is checked, not that a site exists
  */
-export function splitLabel(label: string): Checked<LabelParts> {
+export function splitLabel(label: string, reserved: ReadonlySet<string>): Checked<LabelParts> {
   const separatorAt = label.indexOf(SEPARATOR);
 
   if (separatorAt === -1) {
-    const publicName = parsePublicName(label);
+    const publicName = parsePublicName(label, reserved);
     if (!publicName.ok) return publicName;
 
     return { ok: true, value: { kind: "public-name", name: publicName.value } };
@@ -60,11 +64,11 @@ export function splitLabel(label: string): Checked<LabelParts> {
  * Twelve base36 characters are read as an id, though a name may look the same: whoever resolves the reference tries them as an id first and as a public name second.
  *
  * @param raw - the string as typed, in lowercase
- * @returns the reference, or why the string is none; no lookup is made
+ * @returns the reference, or why the string is none; no lookup is made, and no name is reserved
  */
 export function siteReference(raw: string): Checked<SiteReference> {
   const id = parseSiteId(raw);
   if (id.ok) return { ok: true, value: { kind: "id", id: id.value } };
 
-  return splitLabel(raw);
+  return splitLabel(raw, NOTHING_RESERVED);
 }

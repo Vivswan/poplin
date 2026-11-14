@@ -11,6 +11,7 @@ import { fuzzTarget } from "./config";
 import { hostile } from "./hostile";
 
 const GALLERY_NAME = "gallery";
+const RESERVED: ReadonlySet<string> = new Set([GALLERY_NAME]);
 const MIN_PUBLISHED_LENGTH = 3;
 const MAX_PUBLISHED_LENGTH = 40;
 const MAX_DNS_LABEL_LENGTH = 63;
@@ -34,7 +35,7 @@ const siteNames = wellFormed
   .map((parsed) => parsed.value);
 
 const publicNames = wellFormed
-  .map((name) => parsePublicName(name))
+  .map((name) => parsePublicName(name, RESERVED))
   .filter((parsed) => parsed.ok)
   .map((parsed) => parsed.value);
 
@@ -95,11 +96,11 @@ property(
   fc.property(labels, suffixes, (label, suffix) => {
     parseSiteName(label);
     nameFromEntry(label);
-    parsePublicName(label);
+    parsePublicName(label, RESERVED);
     parseSiteId(label);
-    splitLabel(label);
+    splitLabel(label, RESERVED);
     siteReference(label);
-    readHostLabel(suffix, label);
+    readHostLabel(suffix, label, RESERVED);
 
     const stripped = stripSuffix(suffix, label);
     if (stripped.ok) expect(`${stripped.label}${suffix}`).toBe(label);
@@ -109,13 +110,14 @@ property(
 property(
   "every accepted name follows the published rule, no accepted public name is the one the gallery keeps, and every accepted id is 12 base36 characters, so no site gets an address DNS cannot carry or the install answers on itself",
   fc.property(labels, suffixes, (raw, suffix) => {
-    const checked = [parseSiteName(raw), nameFromEntry(raw), parsePublicName(raw), splitLabel(raw), siteReference(raw)];
-    const accepted: readonly unknown[] = [...checked.map((outcome) => (outcome.ok ? outcome.value : undefined)), readHostLabel(suffix, raw)];
+    const checked = [parseSiteName(raw), nameFromEntry(raw), parsePublicName(raw, RESERVED), splitLabel(raw, RESERVED), siteReference(raw)];
+    const accepted: readonly unknown[] = [...checked.map((outcome) => (outcome.ok ? outcome.value : undefined)), readHostLabel(suffix, raw, RESERVED)];
     const parts = accepted
       .filter((value) => value !== undefined)
       .map((value): { readonly kind?: string; readonly name?: string; readonly id?: string } => (typeof value === "string" ? { name: value } : (value as object)));
     const names = parts.map((part) => part.name).filter((name) => name !== undefined);
-    const publicOnes = [parsePublicName(raw).ok ? raw : undefined, ...parts.map((part) => (part.kind === "public-name" ? part.name : undefined))].filter((name) => name !== undefined);
+    const addressed = [splitLabel(raw, RESERVED), { ok: true as const, value: readHostLabel(suffix, raw, RESERVED) }].map((outcome) => (outcome.ok && outcome.value.kind === "public-name" ? outcome.value.name : undefined));
+    const publicOnes = [parsePublicName(raw, RESERVED).ok ? raw : undefined, ...addressed].filter((name) => name !== undefined);
     const ids = parts.map((part) => part.id).filter((id) => id !== undefined);
 
     expect(names.filter((name) => !followsPublishedRule(name))).toEqual([]);
@@ -127,7 +129,7 @@ property(
 property(
   "every well formed name is accepted as a name, and as a public name unless the gallery keeps it, so a tightened rule cannot orphan published sites",
   fc.property(fc.oneof(wellFormed, fc.constant(GALLERY_NAME)), (name) => {
-    expect([parseSiteName(name).ok, parsePublicName(name).ok]).toEqual([true, name !== GALLERY_NAME]);
+    expect([parseSiteName(name).ok, parsePublicName(name, RESERVED).ok]).toEqual([true, name !== GALLERY_NAME]);
   }),
 );
 
@@ -137,15 +139,15 @@ property(
     const address = applySuffix(suffix, siteLabel(name, id));
     context.log(`address: ${address}`);
 
-    expect<unknown>(readHostLabel(suffix, address)).toEqual({ kind: "site", name, id });
-    expect<unknown>(readHostLabel(suffix, applySuffix(suffix, publicName))).toEqual({ kind: "public-name", name: publicName });
+    expect<unknown>(readHostLabel(suffix, address, RESERVED)).toEqual({ kind: "site", name, id });
+    expect<unknown>(readHostLabel(suffix, applySuffix(suffix, publicName), RESERVED)).toEqual({ kind: "public-name", name: publicName });
   }),
 );
 
 property(
   "an accepted label is exactly its name, or its name, two dashes, and its id, so no extra text rides along to another site",
   fc.property(labels, (label) => {
-    const split = splitLabel(label);
+    const split = splitLabel(label, RESERVED);
     if (!split.ok) return;
 
     const rebuilt = split.value.kind === "site" ? `${split.value.name}--${split.value.id}` : split.value.name;

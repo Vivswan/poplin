@@ -89,6 +89,7 @@ export async function makeWorld(overrides: Partial<SettingValues> = {}): Promise
       store,
       now: () => clock.now,
       addressOf: (label) => `https://${label}-page.example.com`,
+      reservedNames: new Set(["gallery"]),
     },
     faults,
     clock,

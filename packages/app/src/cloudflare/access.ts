@@ -1,10 +1,10 @@
 // The Access application in front of the login paths, and the one policy that lets the install's logins through. Access keeps no mark on either, so poplin's are the ones with its fixed names, which the OpenTofu module gives them too.
 
 import type { Logins } from "@poplin/core/src/auth/logins";
+import type { Hostname } from "@poplin/core/src/names/hostname";
 import { BaseApplications } from "cloudflare/resources/zero-trust/access/applications/applications";
 import { BasePolicies } from "cloudflare/resources/zero-trust/access/policies";
 import { type CloudflareResult, type Connection, callCloudflare } from "./client";
-import type { Hostname } from "./hostname";
 import { INSTALL_OBJECTS } from "./install-objects";
 import { applySteps, reportOf, type Synced } from "./sync";
 

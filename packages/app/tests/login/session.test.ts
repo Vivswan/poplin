@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { buildSession, importSessionKey } from "@poplin/core/src/auth/cookie";
 import { type Login, type Logins, parseLogin, parseLogins } from "@poplin/core/src/auth/logins";
-import { parseHostname } from "../../src/cloudflare/hostname";
+import { parseHostname } from "@poplin/core/src/names/hostname";
 import { mintSessionCookie, readSession } from "../../src/login/session";
 
 const NOW = 1_700_000_000_000;

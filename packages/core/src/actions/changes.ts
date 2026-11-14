@@ -47,6 +47,9 @@ interface Ground {
 
   /** The moment a span of time is counted from, and that an expiry must lie after. */
   readonly now: number;
+
+  /** The public names the install's address layout keeps for itself. */
+  readonly reserved: ReadonlySet<string>;
 }
 
 /** The changes in the database's terms. `access` is absent when none was asked for. */
@@ -80,7 +83,7 @@ function readExpires(text: string, now: number): "never" | number | undefined {
 
 function readAccess(asked: SiteChanges, ground: Ground): SiteAccess | undefined | Refused<"bad_argument" | "bad_name" | "reserved_name"> {
   if (asked.access === "public") {
-    const publicName = parsePublicName(asked.public_name ?? ground.name);
+    const publicName = parsePublicName(asked.public_name ?? ground.name, ground.reserved);
     if (!publicName.ok) return refuse(publicName.refusal === "reserved" ? "reserved_name" : "bad_name", "public_name");
 
     return { access: "public", public_name: publicName.value };

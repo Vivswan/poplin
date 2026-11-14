@@ -22,7 +22,7 @@ interface Reached extends Entered {
 
 async function findSite(install: Install, reference: string): Promise<Site | undefined | "malformed"> {
   const parsed = siteReference(reference);
-  if (!parsed.ok) return parsed.refusal === "reserved" ? undefined : "malformed";
+  if (!parsed.ok) return "malformed";
 
   const named = parsed.value;
   if (named.kind === "public-name") return install.database.getSiteByPublicName(named.name);
@@ -33,7 +33,7 @@ async function findSite(install: Install, reference: string): Promise<Site | und
   if (byId !== undefined) return byId;
 
   // Twelve base36 characters are also the form of a name, so a miss as an id is tried as a public name.
-  const publicName = parsePublicName(reference);
+  const publicName = parsePublicName(reference, install.reservedNames);
   if (!publicName.ok) return undefined;
 
   return install.database.getSiteByPublicName(publicName.value);

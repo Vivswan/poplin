@@ -67,7 +67,7 @@
     },
     // The other portable places import no provider module either; tests/portable.test.ts is the authority, and also reads type names and headers.
     {
-      "includes": ["packages/core/tests/**", "packages/cli/**", "packages/app/src/limits/**"],
+      "includes": ["packages/core/tests/**", "packages/cli/**", "packages/app/src/limits/**", "packages/app/src/sites/**", "packages/app/src/login/login.ts", "packages/app/src/login/session.ts", "packages/app/src/login/return-path.ts"],
       "linter": {
         "rules": {
           "style": {

@@ -6,6 +6,7 @@ import { siteLabel, siteReference, splitLabel } from "../src/sites/labels";
 
 const ID = "k3f9x2ab71qz";
 const LONGEST_NAME = "a".repeat(40);
+const RESERVED: ReadonlySet<string> = new Set(["gallery"]);
 
 describe("splitLabel", () => {
   // Drift: serving trusts this split to tell a site's own address from a public name; a loose split would look a site up under a string that is no id.
@@ -28,11 +29,11 @@ describe("splitLabel", () => {
     ["ab", { ok: false, refusal: "too-short" }],
     ["", { ok: false, refusal: "empty" }],
   ] as ReadonlyArray<readonly [string, unknown]>)("splits %j", (label, outcome) => {
-    expect<unknown>(splitLabel(label)).toEqual(outcome);
+    expect<unknown>(splitLabel(label, RESERVED)).toEqual(outcome);
   });
 
   test("drift: the gallery's name is no public name, yet a site may be called by it, since its address always carries the id", () => {
-    expect<unknown>([splitLabel("gallery"), splitLabel(`gallery--${ID}`)]).toEqual([
+    expect<unknown>([splitLabel("gallery", RESERVED), splitLabel(`gallery--${ID}`, RESERVED)]).toEqual([
       { ok: false, refusal: "reserved" },
       { ok: true, value: { kind: "site", name: "gallery", id: ID } },
     ]);
@@ -48,7 +49,7 @@ describe("siteLabel", () => {
     const id = mintSiteId();
     const label = siteLabel(name.value, id);
 
-    expect<unknown>([label, splitLabel(label)]).toEqual([`${raw}--${id}`, { ok: true, value: { kind: "site", name: raw, id } }]);
+    expect<unknown>([label, splitLabel(label, RESERVED)]).toEqual([`${raw}--${id}`, { ok: true, value: { kind: "site", name: raw, id } }]);
   });
 });
 
@@ -61,7 +62,7 @@ describe("siteReference", () => {
     ["docs", { ok: true, value: { kind: "public-name", name: "docs" } }],
     ["summer-report", { ok: true, value: { kind: "public-name", name: "summer-report" } }],
     [`${ID}z`, { ok: true, value: { kind: "public-name", name: `${ID}z` } }],
-    ["gallery", { ok: false, refusal: "reserved" }],
+    ["gallery", { ok: true, value: { kind: "public-name", name: "gallery" } }],
     [`gallery--${ID}`, { ok: true, value: { kind: "site", name: "gallery", id: ID } }],
     [`report--${ID}z`, { ok: false, refusal: "bad-id" }],
     ["Report", { ok: false, refusal: "bad-character" }],

@@ -22,6 +22,7 @@
     "./src/database/database": "./src/database/database.ts",
     "./src/database/driver": "./src/database/driver.ts",
     "./src/database/open": "./src/database/open.ts",
+    "./src/names/hostname": "./src/names/hostname.ts",
     "./src/names/names": "./src/names/names.ts",
     "./src/names/suffix": "./src/names/suffix.ts",
     "./src/records/settings": "./src/records/settings.ts",

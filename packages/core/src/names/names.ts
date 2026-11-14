@@ -15,19 +15,16 @@ const DOUBLE_DASH = "--";
 /** The ending a file name loses when a name is derived from it. */
 const HTML_SUFFIX = ".html";
 
-/** The public names every install keeps for itself: `gallery` before the suffix is the hostname of the gallery page. */
-const OWN_PUBLIC_NAMES: ReadonlySet<string> = new Set(["gallery"]);
-
 declare const siteNameBrand: unique symbol;
 declare const publicNameBrand: unique symbol;
 
 /** A string that passed `parseSiteName`; no other code can make one. A name is a label in a site's address: any number of sites may share it. */
 export type SiteName = string & { readonly [siteNameBrand]: true };
 
-/** A name that may stand alone before the suffix as a public site's hostname label; made by `parsePublicName` alone. */
+/** A name that may stand alone as a public site's address; made by `parsePublicName` alone. */
 export type PublicName = SiteName & { readonly [publicNameBrand]: true };
 
-/** Why a string was refused. `reserved` means the name is one of the install's own hostnames; `bad-id` that the part after `--` is no site id. */
+/** Why a string was refused. `reserved` means the install's address layout keeps the name for itself; `bad-id` that the part after `--` is no site id. */
 type NameRefusal = "empty" | "too-short" | "too-long" | "bad-character" | "leading-dash" | "trailing-dash" | "double-dash" | "reserved" | "bad-id";
 
 /** A parsed value, or the reason it was refused. */
@@ -78,13 +75,14 @@ export function nameFromEntry(entry: string): Checked<SiteName> {
 /**
  * Decide whether a string may be a public site's public name.
  *
+ * @param reserved - the names the install's address layout keeps for itself, such as the one its gallery answers at
  * @returns the name, or the first rule it breaks
  */
-export function parsePublicName(raw: string): Checked<PublicName> {
+export function parsePublicName(raw: string, reserved: ReadonlySet<string>): Checked<PublicName> {
   const name = parseSiteName(raw);
   if (!name.ok) return name;
 
-  if (OWN_PUBLIC_NAMES.has(raw)) return refuse("reserved");
+  if (reserved.has(raw)) return refuse("reserved");
 
   return { ok: true, value: raw as PublicName };
 }

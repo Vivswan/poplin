@@ -3,6 +3,7 @@ import { describe, expect, test } from "bun:test";
 import { nameFromEntry, parsePublicName, parseSiteName } from "../src/names/names";
 
 const LONGEST_NAME = "a".repeat(40);
+const RESERVED: ReadonlySet<string> = new Set(["gallery"]);
 
 describe("parseSiteName", () => {
   // Drift: a name is part of a DNS label; a loosened rule would publish a site no hostname can reach, and a name under 3 characters would put `--` third and fourth.
@@ -58,7 +59,7 @@ describe("nameFromEntry", () => {
 });
 
 describe("parsePublicName", () => {
-  // Drift: a public name before the suffix is a whole hostname label, so it must not be one the install answers on itself; a name with an id behind it never is, and stays free.
+  // Drift: a public name is a whole address, so it must not be one the install's layout answers on itself; a name with an id behind it never is, and stays free.
   test.each([
     ["docs", { ok: true, value: "docs" }],
     ["admins", { ok: true, value: "admins" }],
@@ -70,6 +71,6 @@ describe("parsePublicName", () => {
     ["my--docs", { ok: false, refusal: "double-dash" }],
     ["Gallery", { ok: false, refusal: "bad-character" }],
   ] as ReadonlyArray<readonly [string, unknown]>)("decides %j", (raw, outcome) => {
-    expect<unknown>(parsePublicName(raw)).toEqual(outcome);
+    expect<unknown>(parsePublicName(raw, RESERVED)).toEqual(outcome);
   });
 });

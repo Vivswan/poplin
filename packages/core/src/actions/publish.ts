@@ -268,7 +268,7 @@ async function makeSite(
   const name = parseSiteName(asked.name);
   if (!name.ok) return refuse("bad_name", "name");
 
-  const changes = readChanges(asked.changes, { name: name.value, now: signed.at });
+  const changes = readChanges(asked.changes, { name: name.value, now: signed.at, reserved: install.reservedNames });
   if (!changes.ok) return changes;
 
   const listed = await listFiles(asked.files);
@@ -320,7 +320,7 @@ async function addVersion(
   const { site, settings, signed } = reached;
   if (site.state === "trash") return refuse("in_trash");
 
-  const changes = readChanges(asked.changes, { name: site.name, now: signed.at });
+  const changes = readChanges(asked.changes, { name: site.name, now: signed.at, reserved: install.reservedNames });
   if (!changes.ok) return changes;
 
   const listed = await listFiles(asked.files);

@@ -13,6 +13,9 @@ const VERSION_PATTERN = /^[1-9]\d*$/;
 /** What a site argument may be, for the hint of a refused one. */
 const SITE_FORMS = "a site is its label report--k3f9x2ab71qz, its id k3f9x2ab71qz, or a public site's public name";
 
+/** The names the parser keeps back: which ones an install keeps depends on its address layout, so the install answers for them. */
+const NOTHING_RESERVED: ReadonlySet<string> = new Set();
+
 /** Why core refused a name or a site, in words. A refusal missing here does not compile. */
 const REFUSALS: Readonly<Record<Refusal, string>> = {
   empty: "it is empty",
@@ -115,7 +118,7 @@ function readName<Name>(raw: string, parsed: Checked<Name>): Name | UsageError {
 }
 
 function readPublicName(raw: string): PublicName | UsageError {
-  return readName(raw, parsePublicName(raw));
+  return readName(raw, parsePublicName(raw, NOTHING_RESERVED));
 }
 
 function withInstall(words: Words, build: (install: Install) => Request): Request | UsageError {

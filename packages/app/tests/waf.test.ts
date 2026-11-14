@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { type Hostname, parseHostname } from "../src/cloudflare/hostname";
+import { type Hostname, parseHostname } from "@poplin/core/src/names/hostname";
 import { type DomainLayout, parseDomainLayout } from "../src/cloudflare/layout";
 import { reportOf } from "../src/cloudflare/sync";
 import { defaultRateRule, planWaf, rateRuleExpression, syncWaf } from "../src/cloudflare/waf";

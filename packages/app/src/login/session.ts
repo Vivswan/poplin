@@ -5,8 +5,7 @@
 
 import { buildSession, verifySession } from "@poplin/core/src/auth/cookie";
 import { isLogin, type Login, type Logins } from "@poplin/core/src/auth/logins";
-import type { RequestHeaders } from "./access-token";
-import type { Hostname } from "../cloudflare/hostname";
+import type { Hostname } from "@poplin/core/src/names/hostname";
 
 const COOKIE_NAME = "__Secure-poplin-session";
 const MAX_AGE_SECONDS = 30 * 24 * 60 * 60;
@@ -14,6 +13,11 @@ const MAX_CANDIDATES = 8;
 
 /** Why a request carries no session. `not-a-login` is a genuine cookie whose email has left the logins. */
 type SessionRefusal = "missing" | "malformed" | "bad-signature" | "expired" | "not-a-login";
+
+/** The request's headers; `get` answers `null` for an absent one, as `Headers` does. */
+export interface RequestHeaders {
+  readonly get: (name: string) => string | null;
+}
 
 type CheckedSession = { readonly ok: true; readonly value: Login } | { readonly ok: false; readonly refusal: SessionRefusal };
 

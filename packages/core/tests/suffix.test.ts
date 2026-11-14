@@ -8,6 +8,7 @@ import { type SiteLabel, siteLabel } from "../src/sites/labels";
 const DNS_LABEL_LIMIT = 63;
 const LONGEST_NAME = "a".repeat(40);
 const ID = "k3f9x2ab71qz";
+const RESERVED: ReadonlySet<string> = new Set(["gallery"]);
 
 function suffixOf(raw: string): Suffix {
   const parsed = parseSuffix(raw);
@@ -17,7 +18,7 @@ function suffixOf(raw: string): Suffix {
 }
 
 function publicNameOf(raw: string): PublicName {
-  const parsed = parsePublicName(raw);
+  const parsed = parsePublicName(raw, RESERVED);
   if (!parsed.ok) throw new Error(`fixture ${JSON.stringify(raw)} is not a public name`);
 
   return parsed.value;
@@ -102,7 +103,7 @@ describe("readHostLabel", () => {
     const id = mintSiteId();
     const labels = [applySuffix(suffix, siteLabel(name, id)), applySuffix(suffix, name)];
 
-    expect<unknown>({ labels, readBack: labels.map((label) => readHostLabel(suffix, label)) }).toEqual({
+    expect<unknown>({ labels, readBack: labels.map((label) => readHostLabel(suffix, label, RESERVED)) }).toEqual({
       labels: [`q3-report--${id}${suffix}`, `q3-report${suffix}`],
       readBack: [
         { kind: "site", name, id },
@@ -132,6 +133,6 @@ describe("readHostLabel", () => {
     ["Docs-page", { kind: "not-found" }],
     ["docs--page", { kind: "not-found" }],
   ] as ReadonlyArray<readonly [string, unknown]>)("reads %j", (label, outcome) => {
-    expect<unknown>(readHostLabel(DEFAULT_SUFFIX, label)).toEqual(outcome);
+    expect<unknown>(readHostLabel(DEFAULT_SUFFIX, label, RESERVED)).toEqual(outcome);
   });
 });

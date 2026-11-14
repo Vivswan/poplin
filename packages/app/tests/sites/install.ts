@@ -14,6 +14,7 @@ import { type ObjectKey, parseObjectKey, type ReadOptions, type ReadResult } fro
 import { BunSqliteDriver } from "@poplin/core/tests/bun-sqlite-driver";
 import { parseDomainLayout } from "../../src/cloudflare/layout";
 import { mintSessionCookie, readSession } from "../../src/login/session";
+import { HOSTNAME_RESERVED_NAMES, hostnameAddresses } from "../../src/sites/hostname-addresses";
 import type { serveSite } from "../../src/sites/serve";
 
 /** The moment every test request arrives at. */
@@ -61,7 +62,7 @@ function keyOf(raw: string): ObjectKey {
 
 function draftOf(draft: Draft): NewSite {
   const name = parseSiteName(draft.name);
-  const publicName = parsePublicName(draft.name);
+  const publicName = parsePublicName(draft.name, HOSTNAME_RESERVED_NAMES);
   if (!name.ok || !publicName.ok) throw new Error(`the test's site name was refused: ${draft.name}`);
 
   const shared = { name: name.value, folder: mintSiteFolder(), title: null, search_engines: draft.search_engines ?? false, embeddable: draft.embeddable ?? true, expires: draft.expires ?? "never", bytes: 0, files: 0 };
@@ -70,7 +71,7 @@ function draftOf(draft: Draft): NewSite {
   return { ...shared, access: draft.access };
 }
 
-function zone(): Serving["zone"] {
+function zone(): Parameters<typeof hostnameAddresses>[0] {
   const layout = parseDomainLayout({ domain: "example.com", admin_hostname: "admin.example.com", suffix: "-page" });
   if (!layout.ok) throw new Error(`the test's layout was refused: ${layout.refusal}`);
 
@@ -135,7 +136,7 @@ export async function openInstall(): Promise<Install> {
     database,
     store,
     settings: defaultSettings({ installer: owner, hostname: ZONE.adminHostname }),
-    zone: ZONE,
+    addresses: hostnameAddresses(ZONE),
     readSession: (headers) => readSession(headers, { key, logins: logins.value, now: NOW }),
     now: () => NOW,
   };

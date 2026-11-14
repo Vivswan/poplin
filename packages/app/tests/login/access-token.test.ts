@@ -1,6 +1,6 @@
 import { beforeAll, describe, expect, test } from "bun:test";
 import { SignJWT, UnsecuredJWT } from "jose";
-import { verifyAccessToken } from "../../src/login/access-token";
+import { accessIdentity } from "../../src/login/access-token";
 import { accessKeys } from "../../src/login/keys";
 import { AUDIENCE, type Certs, certs, claims, headersOf, NOW, NOW_SECONDS, type Signer, sign, signer, TEAM } from "./access";
 
@@ -12,11 +12,11 @@ const CERTS_URL = "https://team.cloudflareaccess.com/cdn-cgi/access/certs";
 let team: Signer;
 let stranger: Signer;
 
-type Verdict = Awaited<ReturnType<typeof verifyAccessToken>>;
+type Verdict = Awaited<ReturnType<ReturnType<typeof accessIdentity>>>;
 type Forgery = readonly [name: string, refusal: string, token: () => Promise<string | undefined> | string | undefined];
 
 function check(served: Certs, token: string | undefined, now: number = NOW, keys = accessKeys({ teamDomain: TEAM, fetch: served.fetch })): Promise<Verdict> {
-  return verifyAccessToken(headersOf(token), { keys, audience: AUDIENCE, now });
+  return accessIdentity({ keys, audience: AUDIENCE })(headersOf(token), now);
 }
 
 function refused(refusal: string): Verdict {
@@ -169,6 +169,6 @@ describe("the team's keys", () => {
   ])("%s from the certs address refuses the login", async (_name, answer) => {
     const keys = accessKeys({ teamDomain: TEAM, fetch: async () => answer() });
 
-    expect(await verifyAccessToken(headersOf(await sign(team)), { keys, audience: AUDIENCE, now: NOW })).toEqual(refused("keys-unavailable"));
+    expect(await accessIdentity({ keys, audience: AUDIENCE })(headersOf(await sign(team)), NOW)).toEqual(refused("keys-unavailable"));
   });
 });

@@ -1,10 +1,15 @@
 import { beforeAll, describe, expect, test } from "bun:test";
 import { importSessionKey } from "@poplin/core/src/auth/cookie";
 import { type Logins, parseLogins } from "@poplin/core/src/auth/logins";
+import { accessIdentity } from "../../src/login/access-token";
 import { accessKeys } from "../../src/login/keys";
 import { logIn } from "../../src/login/login";
 import { readSession } from "../../src/login/session";
+import { hostnameAddresses } from "../../src/sites/hostname-addresses";
+import { SUFFIXED } from "../layouts";
 import { AUDIENCE, certs, headersOf, NOW, type Signer, sign, signer, TEAM } from "./access";
+
+const ADDRESSES = hostnameAddresses(SUFFIXED);
 
 let team: Signer;
 let stranger: Signer;
@@ -22,7 +27,9 @@ function loginsOf(...emails: string[]): Logins {
 function attempt(token: string | undefined, returnTo?: string): Promise<Outcome> {
   const keys = accessKeys({ teamDomain: TEAM, fetch: certs(team).fetch });
 
-  return logIn(headersOf(token), { access: { keys, audience: AUDIENCE, now: NOW }, logins: loginsOf("owner@example.com", "second@example.com"), sessionKey, returnTo });
+  const identify = accessIdentity({ keys, audience: AUDIENCE });
+
+  return logIn(headersOf(token), { identify, logins: loginsOf("owner@example.com", "second@example.com"), sessionKey, now: NOW, addresses: ADDRESSES, returnTo });
 }
 
 beforeAll(async () => {
@@ -60,5 +67,13 @@ describe("the login", () => {
   // Drift: the login would send the owner to another origin right after signing in.
   test.each([undefined, "https://evil.example/", "//evil.example", "/\\evil.example", "/.//evil.example"])("a return to %p lands on the dashboard root", async (returnTo) => {
     expect(await attempt(await sign(team), returnTo)).toMatchObject({ ok: true, location: "/" });
+  });
+
+  // Drift: serving writes the return and the login reads it; if the two forms part, a visitor of a private site lands on the dashboard instead of the page they asked for.
+  test("the return serving writes for a private site's address brings the visitor back to that address", async () => {
+    const asked = "https://secret--k3f9x2ab71qz-page.example.com/notes/page.html?x=1";
+    const returnTo = new URL(ADDRESSES.loginFor(new URL(asked))).searchParams.get("return");
+
+    expect(await attempt(await sign(team), returnTo ?? undefined)).toMatchObject({ ok: true, location: asked });
   });
 });

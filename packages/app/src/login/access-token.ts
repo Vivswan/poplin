@@ -5,6 +5,8 @@
 import { type Login, parseLogin } from "@poplin/core/src/auth/logins";
 import { errors, type JWTPayload, jwtVerify } from "jose";
 import type { AccessKeys, KeySet } from "./keys";
+import type { Identify } from "./login";
+import type { RequestHeaders } from "./session";
 
 const TOKEN_HEADER = "Cf-Access-Jwt-Assertion";
 const MAX_TOKEN_LENGTH = 8192;
@@ -14,7 +16,7 @@ const LEEWAY_SECONDS = 30;
 const CLAIM_REFUSALS: Readonly<Record<string, TokenRefusal>> = { aud: "wrong-audience", iss: "wrong-issuer", nbf: "not-yet-valid" };
 
 /** Why a request carries no usable Access token. `keys-unavailable` is the certs address failing; `no-email` is a genuine token that names no person. */
-export type TokenRefusal =
+type TokenRefusal =
   | "missing"
   | "malformed"
   | "bad-signature"
@@ -30,20 +32,17 @@ type Refused = { readonly ok: false; readonly refusal: TokenRefusal };
 
 type Checked<Value> = { readonly ok: true; readonly value: Value } | Refused;
 
-/** The request's headers; `get` answers `null` for an absent one, as `Headers` does. */
-export interface RequestHeaders {
-  readonly get: (name: string) => string | null;
-}
-
-/** What a token is checked against. */
-export interface AccessCheck {
+/** The Access application in front of the login path. */
+interface AccessApplication {
   /** The team's keys; its team domain is the only issuer accepted. */
   readonly keys: AccessKeys;
 
-  /** The audience tag of the Access application in front of the login path. */
+  /** The application's audience tag. */
   readonly audience: string;
+}
 
-  /** The time, in milliseconds since the epoch. */
+/** What a token is checked against: the application, and the time in milliseconds since the epoch. */
+interface AccessCheck extends AccessApplication {
   readonly now: number;
 }
 
@@ -96,12 +95,7 @@ async function claimsOf(token: string, check: AccessCheck): Promise<Checked<JWTP
   return verifiedClaims(token, check, newer);
 }
 
-/**
- * Decide whose Access login a request carries.
- *
- * @returns the email of a token this team's Access signed for this application and that is live now, in normal form; never throws
- */
-export async function verifyAccessToken(headers: RequestHeaders, check: AccessCheck): Promise<Checked<Login>> {
+async function verifyAccessToken(headers: RequestHeaders, check: AccessCheck): Promise<Checked<Login>> {
   const token = headers.get(TOKEN_HEADER);
   if (token === null || token === "") return refuse("missing");
 
@@ -121,4 +115,13 @@ export async function verifyAccessToken(headers: RequestHeaders, check: AccessCh
   if (!login.ok) return refuse("no-email");
 
   return login;
+}
+
+/**
+ * Make the login of an install behind Cloudflare Access.
+ *
+ * @returns a check that answers the email of a token this team's Access signed for this application and that is live at the given time, in normal form; it never throws
+ */
+export function accessIdentity(application: AccessApplication): Identify<TokenRefusal> {
+  return (headers, now) => verifyAccessToken(headers, { ...application, now });
 }

@@ -6,7 +6,7 @@
 
 import type { SettingValues } from "@poplin/core/src/records/settings";
 import type { Site } from "@poplin/core/src/records/site";
-import type { DomainLayout } from "../cloudflare/layout";
+import type { SiteAddresses } from "./addresses";
 
 /** How many seconds each unit of a cache time holds. */
 const SECONDS_PER_UNIT: Readonly<Record<CacheTime["unit"], number>> = { s: 1, m: 60, h: 3600, d: 86_400 };
@@ -45,8 +45,8 @@ interface FileFacts {
   /** The install's cache and framing settings. */
   readonly settings: Pick<SettingValues, "cache_html" | "cache_files" | "outside_pages">;
 
-  /** The install's domain, which the frame rule names. */
-  readonly zone: DomainLayout;
+  /** The install's addresses, which the frame rule names. */
+  readonly addresses: Pick<SiteAddresses, "frameAncestors">;
 }
 
 function publicCache(time: CacheTime | "off"): string {
@@ -63,11 +63,10 @@ function cacheControl(facts: FileFacts): string {
   return publicCache(facts.settings.cache_files);
 }
 
-// A CSP host source takes a wildcard only as its whole first label, so `*<suffix>.<domain>` cannot be written: every hostname under the domain is named.
 function frameRule(facts: FileFacts): string | undefined {
   if (!facts.site.embeddable) return FRAME_NONE;
 
-  if (facts.settings.outside_pages === "blocked") return `frame-ancestors https://*.${facts.zone.domain}`;
+  if (facts.settings.outside_pages === "blocked") return `frame-ancestors ${facts.addresses.frameAncestors}`;
 
   return undefined;
 }

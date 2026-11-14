@@ -14,6 +14,7 @@ const PORTABLE: readonly string[] = [
   "packages/cli",
   "packages/app/src/sites",
   "packages/app/src/limits",
+  "packages/app/src/login/login.ts",
   "packages/app/src/login/session.ts",
   "packages/app/src/login/return-path.ts",
 ];
@@ -24,7 +25,6 @@ const PROVIDER: readonly string[] = [
   "packages/app/src/cloudflare",
   "packages/app/src/login/access-token.ts",
   "packages/app/src/login/keys.ts",
-  "packages/app/src/login/login.ts",
   "tofu",
 ];
 
@@ -41,13 +41,7 @@ const FORBIDDEN: readonly (readonly [rule: string, pattern: RegExp])[] = [
 ];
 
 /** The findings on the tree today that another change removes: `<path>: <what was found>`, then the owner and the reason. A row that finds nothing fails, so the list only shrinks. */
-const ALLOWED: readonly (readonly [finding: string, owner: string, reason: string])[] = [
-  ["packages/app/src/login/session.ts: ./access-token", "the login folder's owner", "the headers type sits in the Access token module; it moves beside the session"],
-  ["packages/app/src/login/session.ts: ../cloudflare/hostname", "the zone client's owner", "a hostname is no provider's; the module moves out of the provider folder"],
-  ["packages/app/src/sites/headers.ts: ../cloudflare/layout", "the address interface", "serving reads the zone layout type; an address interface replaces the import"],
-  ["packages/app/src/sites/resolve.ts: ../cloudflare/layout", "the address interface", "serving reads the zone layout type; an address interface replaces the import"],
-  ["packages/app/src/sites/serve.ts: ../cloudflare/layout", "the address interface", "serving reads the zone layout type; an address interface replaces the import"],
-];
+const ALLOWED: readonly (readonly [finding: string, owner: string, reason: string])[] = [];
 
 /** The files that count as source. */
 const SOURCE_FILE = /\.(?:ts|tsx|mts|cts|js|jsx|mjs|cjs)$/;
@@ -278,11 +272,13 @@ describe("provider code stays out of the portable packages", () => {
       "packages/cli/scripts/planted.mts": leak,
       "packages/app/src/sites/planted.ts": leak,
       "packages/app/src/limits/planted.ts": leak,
+      "packages/app/src/login/login.ts": leak,
       "packages/app/src/login/session.ts": leak,
       "packages/app/src/login/return-path.ts": leak,
     });
     const everyPlace = [
       "provider import: packages/app/src/limits/planted.ts:1: cloudflare",
+      "provider import: packages/app/src/login/login.ts:1: cloudflare",
       "provider import: packages/app/src/login/return-path.ts:1: cloudflare",
       "provider import: packages/app/src/login/session.ts:1: cloudflare",
       "provider import: packages/app/src/sites/planted.ts:1: cloudflare",
@@ -321,7 +317,6 @@ describe("provider code stays out of the portable packages", () => {
       "packages/app/src/cloudflare/client.ts": providerCode,
       "packages/app/src/login/access-token.ts": providerCode,
       "packages/app/src/login/keys.ts": providerCode,
-      "packages/app/src/login/login.ts": providerCode,
       "packages/cli/node_modules/wrangler/index.js": providerCode,
       "packages/cli/dist/bin.mjs": providerCode,
       "packages/cli/README.md": providerCode,

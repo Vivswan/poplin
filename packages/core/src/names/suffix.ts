@@ -83,13 +83,14 @@ export function stripSuffix(suffix: Suffix, label: string): Unsuffixed {
  * Read what a hostname label names.
  *
  * @param label - the first label of a hostname, in lowercase
+ * @param reserved - the names the install's address layout keeps for itself; a label around one is `not-found`
  * @returns `site` with the name and id of a label holding `--`, `public-name` for a name alone, `not-ours`, or `not-found`; no lookup is made, so a site may still not exist
  */
-export function readHostLabel(suffix: Suffix, label: string): HostLabel {
+export function readHostLabel(suffix: Suffix, label: string, reserved: ReadonlySet<string>): HostLabel {
   const stripped = stripSuffix(suffix, label);
   if (!stripped.ok) return { kind: "not-ours" };
 
-  const parts = splitLabel(stripped.label);
+  const parts = splitLabel(stripped.label, reserved);
   if (!parts.ok) return { kind: "not-found" };
 
   return parts.value;
