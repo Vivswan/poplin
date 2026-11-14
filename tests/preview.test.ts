@@ -8,9 +8,13 @@ import { BunSqliteDriver } from "../packages/core/tests/database/support/bun-sql
 import { createPreview } from "../packages/demo/src/preview/preview";
 import { HOST, PID_PATH, pidFile, stopRunning } from "../packages/demo/scripts/running";
 import { readSamples } from "../packages/demo/scripts/samples";
+import { plantedRepository, repositoryFiles } from "./support/repository-files";
+
+/** The repository this file sits in. */
+const ROOT = join(import.meta.dir, "..");
 
 /** The source of the demo: the module every host runs, and the host that runs it in a browser with no server. */
-const DEMO = join(import.meta.dir, "..", "packages", "demo", "src");
+const DEMO_SOURCE = new Bun.Glob("packages/demo/src/*/*.ts");
 
 /** What only one runtime has: its own modules and globals. */
 const RUNTIME_NAME = /\bBun\.|["'](?:bun|node):|\bprocess\.|import\.meta\.(?:dir|path|main)|\bBuffer\b/g;
@@ -41,6 +45,19 @@ const LOCAL_LINK = /href="(\/[^"]*)"/g;
 
 /** Any address of the install's own domain, which no local page may send a browser to. */
 const INSTALL_ADDRESS = /(?:href|action|formaction)="[^"]*example\.com[^"]*"/g;
+
+/** What the demo's source in a repository names of one runtime, and what it imports from outside the places it may, each as `[file, what]`; `files` counts the files read. */
+async function demoReach(root: string): Promise<{ files: number; runtime: string[][]; imports: string[][] }> {
+  const files = repositoryFiles(root).filter((path) => DEMO_SOURCE.match(path));
+  const texts = await Promise.all(files.map(async (file) => [file, await Bun.file(join(root, file)).text()] as const));
+  const imports = texts.flatMap(([file, text]) => Array.from(text.matchAll(IMPORT), ([, path = ""]) => [file, path]));
+
+  return {
+    files: files.length,
+    runtime: texts.flatMap(([file, text]) => (text.match(RUNTIME_NAME) ?? []).map((found) => [file, found])),
+    imports: imports.filter(([, path = ""]) => !PORTABLE_IMPORT.test(path)),
+  };
+}
 
 /** Follow a path through its redirects, as a browser would. */
 async function open(preview: Awaited<ReturnType<typeof createPreview>>, path: string): Promise<Response> {
@@ -179,13 +196,30 @@ describe("the local preview", () => {
   });
 
   test("the demo names no runtime and imports only portable source, its own files, and SQLite: without this it stops running in a browser or a Worker the day someone reaches for a file or a process", async () => {
-    const files = [...new Bun.Glob("*/*.ts").scanSync({ cwd: DEMO })].sort();
-    const texts = await Promise.all(files.map(async (file) => [file, await Bun.file(join(DEMO, file)).text()] as const));
-    const imports = texts.flatMap(([file, text]) => Array.from(text.matchAll(IMPORT), ([, path = ""]) => [file, path] as const));
+    const { files, runtime, imports } = await demoReach(ROOT);
 
-    expect(files.length).toBeGreaterThan(5);
-    expect(texts.flatMap(([file, text]) => (text.match(RUNTIME_NAME) ?? []).map((found) => [file, found]))).toEqual([]);
-    expect(imports.filter(([, path]) => !PORTABLE_IMPORT.test(path))).toEqual([]);
+    expect(files).toBeGreaterThan(5);
+    expect(runtime).toEqual([]);
+    expect(imports).toEqual([]);
+  });
+
+  // Drift: a guard that lists the disk reads what is no part of the repository, and fails in the one checkout that holds it.
+  test("a runtime's name and an import from outside are named in a new file not yet added, and not in a file the repository is told to leave out or in a build folder", async () => {
+    const reach = 'import { readFileSync } from "node:fs";\n';
+    using tree = plantedRepository(
+      {
+        "packages/demo/src/preview/added.ts": reach,
+        "packages/demo/src/preview/scratch.ts": reach,
+        "packages/demo/src/built/bundle.ts": reach,
+      },
+      { excluded: ["scratch.ts"], ignored: ["built/"] },
+    );
+
+    expect(await demoReach(tree.path)).toEqual({
+      files: 1,
+      runtime: [["packages/demo/src/preview/added.ts", '"node:']],
+      imports: [["packages/demo/src/preview/added.ts", "node:fs"]],
+    });
   });
 
   test("a form sent from a preview page changes the install, and a reset brings the sample data back: without this the forms are pictures", async () => {

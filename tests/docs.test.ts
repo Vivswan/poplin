@@ -10,6 +10,7 @@ import { parseCommand } from "../packages/cli/src/commands/parse-command";
 import { problem } from "../packages/cli/src/commands/problems";
 import { TOOLS } from "../packages/cli/src/mcp/tools";
 import { words } from "../packages/cli/tests/commands/support/command-line";
+import { plantedRepository, repositoryFiles } from "./support/repository-files";
 
 /** The repository this file sits in. */
 const ROOT = join(import.meta.dir, "..");
@@ -23,8 +24,8 @@ const MARKDOWN = new Bun.Glob("**/*.md");
 /** The sources of the website, whose pages link into the rendered `docs/`. */
 const WEBSITE = new Bun.Glob("website/src/**/*.astro");
 
-/** The folder of installed packages, whose pages are not the repository's. */
-const INSTALLED = "node_modules/";
+/** A file in a folder whose name starts with a dot: a tool's own pages, which link from where the tool reads them. */
+const HIDDEN = /(?:^|\/)\.[^/]+\//;
 
 /** A link of the website into the rendered docs, with the path under the site as the first group. */
 const SITE_LINK = /sitePath\("(docs\/[^"]*)"\)/g;
@@ -119,15 +120,15 @@ interface Page {
   readonly anchors: string[];
 }
 
-async function read(path: string): Promise<string> {
-  return Bun.file(join(ROOT, path)).text();
+async function read(root: string, path: string): Promise<string> {
+  return Bun.file(join(root, path)).text();
 }
 
-async function parse(path: string): Promise<Page> {
+async function parse(root: string, path: string): Promise<Page> {
   const page: Page = { spans: [], blocks: [], links: [], anchors: [] };
 
   Bun.markdown.render(
-    await read(path),
+    await read(root, path),
     {
       codespan: (text) => {
         page.spans.push(text);
@@ -199,22 +200,42 @@ function sitePage(link: string): string {
   return link.replace(RENDERED_PAGE, ".md").replace(FOLDER_END, `/${FOLDER_PAGE}`);
 }
 
-/** The repository's own files a pattern finds, as paths from the root. */
-async function paths(glob: Bun.Glob): Promise<string[]> {
-  const found = await Array.fromAsync(glob.scan({ cwd: ROOT }));
-
-  return found.map((path) => path.replaceAll("\\", "/")).filter((path) => !path.includes(INSTALLED));
+/** The repository's own files a pattern takes, as paths from the root. */
+function paths(root: string, glob: Bun.Glob): string[] {
+  return repositoryFiles(root).filter((path) => glob.match(path) && !HIDDEN.test(path));
 }
 
 /** What is wrong with one link of a file, or nothing when it leads to a file, and to a heading of it when it names one. The link is read from the file's folder unless another is given. */
-async function brokenLink(from: string, href: string, folder: string = dirname(from)): Promise<string | undefined> {
+async function brokenLink(root: string, from: string, href: string, folder: string = dirname(from)): Promise<string | undefined> {
   const [path = "", anchor] = href.split("#");
   const target = path === "" ? from : join(folder, path).replaceAll("\\", "/");
-  if (!existsSync(join(ROOT, target))) return `${from}: ${path} does not exist`;
+  if (!existsSync(join(root, target))) return `${from}: ${path} does not exist`;
 
-  if (anchor === undefined || (await parse(target)).anchors.includes(anchor)) return undefined;
+  if (anchor === undefined || (await parse(root, target)).anchors.includes(anchor)) return undefined;
 
   return `${from}: ${target} has no heading #${anchor}`;
+}
+
+/** Every link between the Markdown pages of a repository: what is wrong with it, or nothing. */
+async function pageLinks(root: string): Promise<(string | undefined)[]> {
+  const checked: (string | undefined)[] = [];
+
+  for (const path of paths(root, MARKDOWN)) {
+    for (const href of (await parse(root, path)).links.filter((link) => !OUTSIDE_LINK.test(link))) checked.push(await brokenLink(root, path, href));
+  }
+
+  return checked;
+}
+
+/** Every link of a repository's website into its docs: what is wrong with it, or nothing. */
+async function siteLinks(root: string): Promise<(string | undefined)[]> {
+  const checked: (string | undefined)[] = [];
+
+  for (const path of paths(root, WEBSITE)) {
+    for (const link of groups(await read(root, path), SITE_LINK)) checked.push(await brokenLink(root, path, sitePage(link), ""));
+  }
+
+  return checked;
 }
 
 describe("the pages a person reads", () => {
@@ -222,7 +243,7 @@ describe("the pages a person reads", () => {
     const refusals: string[] = [];
 
     for (const path of PAGES) {
-      const lines = commandLines(await parse(path));
+      const lines = commandLines(await parse(ROOT, path));
       expect(lines.length).toBeGreaterThan(0);
 
       for (const line of lines.filter((written) => !namesCommand(written))) {
@@ -240,28 +261,28 @@ describe("the pages a person reads", () => {
   });
 
   test("the using page runs every command of the CLI in an example: without this a new command is never shown to the person who would run it", async () => {
-    const run = new Set<string>(commandLines(await parse(USING_PAGE)).map((line) => parseCommand(words(line), NOW).kind));
+    const run = new Set<string>(commandLines(await parse(ROOT, USING_PAGE)).map((line) => parseCommand(words(line), NOW).kind));
 
     expect(COMMANDS.map((spec: CommandSpec) => spec.name).filter((name) => !run.has(name))).toEqual([]);
   });
 
   test("every flag a page names on its own is one a command takes: without this a removed flag stays in a sentence", async () => {
     const flags = new Set<string>(COMMANDS.flatMap((spec: CommandSpec) => spec.flags.map((flag) => flag.name)));
-    const named = (await Promise.all(PAGES.map(parse))).flatMap((page) => page.spans).flatMap((span) => FLAG.exec(span)?.[1] ?? []);
+    const named = (await Promise.all(PAGES.map((path) => parse(ROOT, path)))).flatMap((page) => page.spans).flatMap((span) => FLAG.exec(span)?.[1] ?? []);
 
     expect(named.length).toBeGreaterThan(0);
     expect(unique(named).filter((flag) => !flags.has(flag))).toEqual([]);
   });
 
   test("every word written like a tool, a code, a setting, or a module input is one: without this a renamed one stays in a page", async () => {
-    const module = (await Promise.all(MODULE_FILES.map(read))).flatMap((text) => groups(text, MODULE_NAME));
+    const module = (await Promise.all(MODULE_FILES.map((path) => read(ROOT, path)))).flatMap((text) => groups(text, MODULE_NAME));
     const inputs = Object.values(TOOLS).flatMap((tool) => Object.keys(tool.parameters));
     const known = [...Object.keys(TOOLS), ...inputs, ...Object.keys(SETTING_SAMPLES), ...OTHER_WORDS];
     const unknown: string[] = [];
 
     for (const path of PAGES) {
       const here = new Set<string>(MODULE_PAGES.includes(path) ? [...known, ...module] : known);
-      const named = (await parse(path)).spans.filter((span) => SNAKE_WORD.test(span));
+      const named = (await parse(ROOT, path)).spans.filter((span) => SNAKE_WORD.test(span));
       unknown.push(...unique(named).flatMap((word) => (here.has(word) || isCode(word) ? [] : `${path}: ${word}`)));
     }
 
@@ -270,8 +291,8 @@ describe("the pages a person reads", () => {
   });
 
   test("every value an example gives the module is an input the module declares: without this a removed input stays in the file a person copies", async () => {
-    const inputs = (await Promise.all(MODULE_FILES.map(read))).flatMap((text) => groups(text, MODULE_INPUT));
-    const blocks = (await Promise.all(PAGES.map(parse))).flatMap((page) => page.blocks);
+    const inputs = (await Promise.all(MODULE_FILES.map((path) => read(ROOT, path)))).flatMap((text) => groups(text, MODULE_INPUT));
+    const blocks = (await Promise.all(PAGES.map((path) => parse(ROOT, path)))).flatMap((page) => page.blocks);
     const set = blocks.flatMap((block) => groups(MODULE_BLOCK.exec(block)?.[1] ?? "", MODULE_VALUE)).filter((name) => name !== MODULE_SOURCE);
 
     expect(set.length).toBeGreaterThan(0);
@@ -279,7 +300,7 @@ describe("the pages a person reads", () => {
   });
 
   test("the using page names every tool, and each example passes only inputs its tool takes: without this a new tool is never shown, and a renamed input stays in an example", async () => {
-    const { spans } = await parse(USING_PAGE);
+    const { spans } = await parse(ROOT, USING_PAGE);
     const examples = spans.flatMap((span, at) => (JSON_SPAN.test(span) ? [{ tool: spans[at - 1] ?? "", input: span }] : []));
 
     expect(Object.keys(TOOLS).filter((tool) => !spans.includes(tool))).toEqual([]);
@@ -289,7 +310,7 @@ describe("the pages a person reads", () => {
   });
 
   test("every code in the tables of refusals is one the CLI answers with: without this a renamed code stays in the table a person looks a refusal up in", async () => {
-    const [, tables = ""] = (await read(USING_PAGE)).split(REFUSALS_HEADING);
+    const [, tables = ""] = (await read(ROOT, USING_PAGE)).split(REFUSALS_HEADING);
     const codes = groups(tables, CODE_CELL).flatMap((cell) => groups(cell, SPAN));
 
     expect(codes.length).toBeGreaterThan(0);
@@ -298,30 +319,43 @@ describe("the pages a person reads", () => {
   });
 
   test("every link of every Markdown page leads to a file, and to a heading when it names one: without this a moved page or a reworded heading leaves a dead link", async () => {
-    const pages = await paths(MARKDOWN);
-    const broken: (string | undefined)[] = [];
-
-    for (const path of pages) {
-      for (const href of (await parse(path)).links.filter((link) => !OUTSIDE_LINK.test(link))) broken.push(await brokenLink(path, href));
-    }
+    const pages = paths(ROOT, MARKDOWN);
+    const broken = await pageLinks(ROOT);
 
     expect(PAGES.filter((path) => !pages.includes(path))).toEqual([]);
     expect(broken.length).toBeGreaterThan(0);
     expect(broken.filter((found) => found !== undefined)).toEqual([]);
-    expect(await brokenLink("README.md", "docs/using.md#no-such-heading")).toBe("README.md: docs/using.md has no heading #no-such-heading");
+    expect(await brokenLink(ROOT, "README.md", "docs/using.md#no-such-heading")).toBe("README.md: docs/using.md has no heading #no-such-heading");
   });
 
   test("every link of the website into the docs leads to a page, and to a heading when it names one: without this a section removed from the docs breaks the published site", async () => {
-    const broken: (string | undefined)[] = [];
-
-    for (const path of await paths(WEBSITE)) {
-      for (const link of groups(await read(path), SITE_LINK)) broken.push(await brokenLink(path, sitePage(link), ""));
-    }
+    const broken = await siteLinks(ROOT);
 
     expect(broken.length).toBeGreaterThan(0);
     expect(broken.filter((found) => found !== undefined)).toEqual([]);
     expect(["docs/", "docs/security.html#hardening", "docs/#install"].map(sitePage)).toEqual(["docs/README.md", "docs/security.md#hardening", "docs/README.md#install"]);
-    expect(await brokenLink("website/src/pages/index.astro", sitePage("docs/security.html#no-such-heading"), "")).toBe("website/src/pages/index.astro: docs/security.md has no heading #no-such-heading");
-    expect(await brokenLink("website/src/pages/index.astro", sitePage("docs/README.html"), "")).toBe("website/src/pages/index.astro: docs/README.html does not exist");
+    expect(await brokenLink(ROOT, "website/src/pages/index.astro", sitePage("docs/security.html#no-such-heading"), "")).toBe("website/src/pages/index.astro: docs/security.md has no heading #no-such-heading");
+    expect(await brokenLink(ROOT, "website/src/pages/index.astro", sitePage("docs/README.html"), "")).toBe("website/src/pages/index.astro: docs/README.html does not exist");
+  });
+
+  // Drift: a guard that lists the disk reads what is no part of the repository, and fails in the one checkout that holds it.
+  test("a dead link is named in a new page not yet added, and not in a page the repository is told to leave out or in a build folder", async () => {
+    const dead = "[the page that is gone](docs/gone.md)\n";
+    const deadOnSite = 'const href = sitePath("docs/gone.html");\n';
+    using tree = plantedRepository(
+      {
+        "README.md": `[using it](docs/using.md)\n${dead}`,
+        "docs/using.md": "# Using it\n",
+        "NOTES.md": dead,
+        "built/page.md": dead,
+        "website/src/pages/index.astro": deadOnSite,
+        "website/src/pages/scratch.astro": deadOnSite,
+        "website/src/built/page.astro": deadOnSite,
+      },
+      { excluded: ["/NOTES.md", "scratch.astro"], ignored: ["built/"] },
+    );
+
+    expect(await pageLinks(tree.path)).toEqual([undefined, "README.md: docs/gone.md does not exist"]);
+    expect(await siteLinks(tree.path)).toEqual(["website/src/pages/index.astro: docs/gone.md does not exist"]);
   });
 });

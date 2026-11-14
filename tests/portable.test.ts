@@ -10,12 +10,13 @@
 // A JSX file is refused whole, wherever it is read: its text cannot be told from its code without a parser.
 
 import { describe, expect, test } from "bun:test";
-import { type DisposableTempDir, existsSync, mkdirSync, mkdtempDisposableSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { readFileSync } from "node:fs";
 import { dirname, join, posix } from "node:path";
 
 import { SyntaxKind } from "typescript/unstable/ast";
 import { createScanner } from "typescript/unstable/ast/scanner";
+
+import { plantedRepository, repositoryFiles } from "./support/repository-files";
 
 /** The repository this file sits in. */
 const ROOT = join(import.meta.dir, "..");
@@ -82,8 +83,8 @@ const SOURCE_FILE = /\.(?:ts|mts|cts|js|mjs|cjs)$/;
 /** The source files that hold JSX, which are refused unread. */
 const JSX_FILE = /\.[jt]sx$/;
 
-/** Every file under a folder, at any depth. */
-const EVERY_FILE = new Bun.Glob("**/*");
+/** A folder of `packages`, at the start of the path of a file in it. */
+const PACKAGE_FOLDER = /^packages\/[^/]+(?=\/)/;
 
 /** The folders whose files are never read: installed and built code. */
 const SKIPPED_FOLDERS: readonly string[] = ["node_modules", "dist"];
@@ -123,29 +124,21 @@ function lineOf(text: string, index: number): number {
   return text.slice(0, index).split("\n").length;
 }
 
-/** Every file of one kind under the places that exist, as a path from the root with forward slashes. */
+/** Every file of one kind the repository holds under the places, as a path from the root with forward slashes. */
 function filesUnder(root: string, places: readonly string[], kind: RegExp = SOURCE_FILE): string[] {
-  const files = places
-    .filter((place) => existsSync(join(root, place)))
-    .flatMap((place) => Array.from(EVERY_FILE.scanSync({ cwd: join(root, place), dot: true }), (file) => `${place}/${file.replaceAll("\\", "/")}`));
+  const files = repositoryFiles(root).filter((path) => places.some((place) => isUnder(path, place)));
 
-  return files.filter((path) => kind.test(posix.basename(path)) && !path.split("/").some((part) => SKIPPED_FOLDERS.includes(part))).sort();
+  return files.filter((path) => kind.test(posix.basename(path)) && !path.split("/").some((part) => SKIPPED_FOLDERS.includes(part)));
 }
 
 /** Read a repository's `packages` folder: which folders are a provider's, and what each manifest names its package. */
 function readTree(root: string): Tree {
   const packages = new Map<string, string>();
-  if (!existsSync(join(root, "packages"))) return { root, packages, providers: [] };
+  const files = repositoryFiles(root);
+  const folders = [...new Set(files.flatMap((path) => PACKAGE_FOLDER.exec(path)?.[0] ?? []))];
 
-  const folders = readdirSync(join(root, "packages"), { withFileTypes: true })
-    .filter((entry) => entry.isDirectory())
-    .map((entry) => `packages/${entry.name}`);
-
-  for (const folder of folders) {
-    const manifest = join(root, folder, "package.json");
-    if (!existsSync(manifest)) continue;
-
-    packages.set(JSON.parse(readFileSync(manifest, "utf8")).name, folder);
+  for (const folder of folders.filter((place) => files.includes(`${place}/package.json`))) {
+    packages.set(JSON.parse(readFileSync(join(root, folder, "package.json"), "utf8")).name, folder);
   }
 
   return { root, packages, providers: folders.filter((folder) => !PORTABLE.includes(folder)).sort() };
@@ -246,7 +239,7 @@ function manifestFindings({ root, packages, providers }: Tree): [string, string,
   const found: [string, string, number, string][] = [];
   const providerPackages = [...packages].filter(([, folder]) => providers.includes(folder)).map(([name]) => name);
 
-  for (const place of PORTABLE.filter((path) => existsSync(join(root, path, "package.json")))) {
+  for (const place of PORTABLE.filter((path) => repositoryFiles(root).includes(`${path}/package.json`))) {
     const text = readFileSync(join(root, place, "package.json"), "utf8");
     const manifest: Record<string, Record<string, string> | undefined> = JSON.parse(text);
     const names = DEPENDENCY_FIELDS.flatMap((field) => Object.keys(manifest[field] ?? {}));
@@ -312,18 +305,6 @@ function violations(root: string, allowed: readonly string[] = []): string[] {
   return [...new Set([...kept, ...stale])].sort();
 }
 
-/** A throwaway tree holding the given files, outside the repository; it is removed when the caller's scope ends. */
-function planted(files: Readonly<Record<string, string>>): DisposableTempDir {
-  const tree = mkdtempDisposableSync(join(tmpdir(), "portable-"));
-
-  for (const [path, text] of Object.entries(files)) {
-    mkdirSync(dirname(join(tree.path, path)), { recursive: true });
-    writeFileSync(join(tree.path, path), text);
-  }
-
-  return tree;
-}
-
 describe("provider code stays out of the portable packages", () => {
   test("drift: a provider's module, type, header, or word in portable code would make a second provider a rewrite of the product, not a new adapter", () => {
     expect(
@@ -381,7 +362,7 @@ describe("provider code stays out of the portable packages", () => {
     ["the provider's API", 'const zones = await fetch("https://api.cloudflare.com/client/v4/zones");', "provider host", "api.cloudflare.com"],
     ["the Access team's host", 'const keys = await fetch("https://team.cloudflareaccess.com/cdn-cgi/access/certs");', "provider host", "cloudflareaccess.com"],
   ])("names %s", (_, line, rule, what) => {
-    using tree = planted({
+    using tree = plantedRepository({
       "packages/app/package.json": '{ "name": "@poplin/app" }',
       "packages/cloudflare/package.json": '{ "name": "@poplin/cloudflare" }',
       "packages/cli/tests/sites/planted.ts": `// A planted file.\n${line}\n`,
@@ -406,13 +387,13 @@ describe("provider code stays out of the portable packages", () => {
     ["its word for a domain in a name", "const zoneId = read();", "zone"],
     ["its word for a domain in a text", 'const meaning = "The zone\'s bot switches.";', "zone"],
   ])("names %s", (_, line, word) => {
-    using tree = planted({ "packages/app/src/dashboard/planted.ts": `// A planted file.\n${line}\n` });
+    using tree = plantedRepository({ "packages/app/src/dashboard/planted.ts": `// A planted file.\n${line}\n` });
 
     expect(violations(tree.path)).toEqual([`provider word: packages/app/src/dashboard/planted.ts:2: ${word}`]);
   });
 
   test("drift: a URL in the text of a JSX file reads as a comment, so a provider's word or an import after it would pass unseen", () => {
-    using tree = planted({
+    using tree = plantedRepository({
       "packages/app/src/dashboard/planted.tsx": 'export const hint = <p>https://example.com</p>; export const cloudflareToken = "";\n',
       "packages/app/tests/dashboard/planted.tsx": 'export const hint = <p>https://example.com</p>; import "cloudflare";\n',
       "packages/other/src/planted.jsx": 'export const hint = <p>https://example.com</p>; export { listed } from "../../cloudflare/src/storage/r2";\n',
@@ -426,7 +407,7 @@ describe("provider code stays out of the portable packages", () => {
   });
 
   test("drift: a second provider that leans on the first could not be shipped, or removed, by itself", () => {
-    using tree = planted({
+    using tree = plantedRepository({
       "packages/core/package.json": '{ "name": "@poplin/core" }',
       "packages/cloudflare/package.json": '{ "name": "@poplin/cloudflare" }',
       "packages/other/package.json": '{ "name": "@poplin/other" }',
@@ -448,7 +429,7 @@ describe("provider code stays out of the portable packages", () => {
   });
 
   test("drift: a portable package whose manifest or TypeScript settings name the provider takes it in with no import to give it away", () => {
-    using tree = planted({
+    using tree = plantedRepository({
       "packages/cloudflare/package.json": '{ "name": "@poplin/cloudflare" }',
       "packages/core/package.json":
         '{\n  "name": "@poplin/core",\n  "dependencies": { "valibot": "1.5.0" },\n  "devDependencies": {\n    "wrangler": "4.0.0",\n    "@poplin/cloudflare": "workspace:*"\n  }\n}\n',
@@ -464,7 +445,7 @@ describe("provider code stays out of the portable packages", () => {
 
   test("drift: every portable place is walked, tests included, and an allowed finding is passed over only while it is there", () => {
     const leak = "const page = new HTMLRewriter();\n";
-    using tree = planted({
+    using tree = plantedRepository({
       "packages/core/src/storage/planted.ts": leak,
       "packages/core/tests/planted.test.ts": leak,
       "packages/cli/scripts/planted.mts": leak,
@@ -528,7 +509,7 @@ describe("provider code stays out of the portable packages", () => {
       `const address = \`\${origin}//\${path}\`; /* wrangler */`,
     ].join("\n");
     const namedOutsideSource = 'const label = "A Cloudflare Worker reads R2 and D1 in the zone.";\n';
-    using tree = planted({
+    using tree = plantedRepository({
       "packages/app/package.json": '{ "name": "@poplin/app" }',
       "packages/cloudflare/package.json": '{ "name": "@poplin/cloudflare", "dependencies": { "cloudflare": "7.3.0" }, "devDependencies": { "wrangler": "4.0.0" } }',
       "packages/cloudflare/src/storage/r2.ts": providerCode,
@@ -545,5 +526,28 @@ describe("provider code stays out of the portable packages", () => {
     });
 
     expect(violations(tree.path)).toEqual([]);
+  });
+
+  // Drift: a guard that lists the disk reads what is no part of the repository, and fails in the one checkout that holds it.
+  test("a file the repository is told to leave out is not read: a local scratch file, a local package, and a build folder are no part of it, a new file not yet added is", () => {
+    const leak = 'import Cloudflare from "cloudflare";\n';
+    using tree = plantedRepository(
+      {
+        "packages/core/src/storage/added.ts": leak,
+        "packages/core/src/storage/scratch.ts": leak,
+        "packages/core/built/bundle.js": leak,
+        "packages/core/built/page.tsx": leak,
+        "packages/other/package.json": '{ "name": "@poplin/other" }',
+        "packages/local/package.json": '{ "name": "@poplin/local" }',
+        "packages/app/src/api/reach.ts": 'import { store } from "@poplin/other/src/store";\nimport { note } from "@poplin/local/src/note";\n',
+      },
+      { excluded: ["scratch.ts", "/packages/local/"], ignored: ["built/"] },
+    );
+
+    expect(violations(tree.path)).toEqual([
+      "provider import: packages/app/src/api/reach.ts:1: @poplin/other/src/store",
+      "provider import: packages/core/src/storage/added.ts:1: cloudflare",
+      "provider word: packages/core/src/storage/added.ts:1: cloudflare",
+    ]);
   });
 });

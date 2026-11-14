@@ -1,9 +1,11 @@
 // Scope: this catches accidental handling of an old stored shape, and import leaks, in source under `packages/*/src` outside any `migrations/` folder, and a retired name written anywhere in the repository; deliberate hiding is out of scope.
 
-import { afterAll, describe, expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { describe, expect, test } from "bun:test";
+import { mkdtempDisposableSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
+import { join } from "node:path";
+
+import { plantedRepository, repositoryFiles } from "./support/repository-files";
 
 /** The repository this file sits in. */
 const ROOT = join(import.meta.dir, "..");
@@ -69,23 +71,18 @@ const NAMED_ON_PURPOSE: readonly { readonly path: string; readonly name?: RegExp
   { path: "tests/preview.test.ts", name: /gallery: false/ },
 ];
 
-/** The throwaway trees made by this run, removed when it ends. */
-const PLANTED_ROOTS: string[] = [];
-
 function inMigrations(path: string): boolean {
   return path.split("/").includes("migrations");
 }
 
-/** Every source file under `packages/<package>/src`, as a path from the root with forward slashes. */
+/** Every source file of the repository under `packages/<package>/src`, as a path from the root with forward slashes. */
 function sourceFiles(root: string): string[] {
-  return [...SOURCE_FILES.scanSync({ cwd: root })].map((path) => path.replaceAll("\\", "/")).sort();
+  return repositoryFiles(root).filter((path) => SOURCE_FILES.match(path));
 }
 
 /** Every text file of the repository that is read, as a path from the root with forward slashes. */
 function textFiles(root: string): string[] {
-  const paths = [...TEXT_FILES.scanSync({ cwd: root, dot: true })].map((path) => path.replaceAll("\\", "/"));
-
-  return paths.filter((path) => !UNREAD.test(path)).sort();
+  return repositoryFiles(root).filter((path) => TEXT_FILES.match(path) && !UNREAD.test(path));
 }
 
 /** Whether a retired name found in a file is one the file is listed to hold. A listed name must cover the whole find, so a longer old word beside it is still named. */
@@ -134,27 +131,11 @@ function violations(root: string): string[] {
   return [...found, ...retiredNames(root)].sort();
 }
 
-/** A throwaway tree holding the given files, outside the repository. */
-function planted(files: Readonly<Record<string, string>>): string {
-  const root = mkdtempSync(join(tmpdir(), "no-old-shapes-"));
-  PLANTED_ROOTS.push(root);
-
-  for (const [path, text] of Object.entries(files)) {
-    mkdirSync(dirname(join(root, path)), { recursive: true });
-    writeFileSync(join(root, path), text);
-  }
-
-  return root;
-}
-
-afterAll(() => {
-  for (const root of PLANTED_ROOTS) rmSync(root, { recursive: true, force: true });
-});
-
 describe("no old shapes outside migrations/", () => {
   test("drift: code that handles an old stored shape outside a migrations/ folder would outlive its step and never be deleted", () => {
     expect(violations(ROOT)).toEqual([]);
     expect(sourceFiles(ROOT)).toEqual(expect.arrayContaining([...DOORWAYS, "packages/core/src/migrations/registry.ts"]));
+    expect(textFiles(ROOT)).toEqual(expect.arrayContaining(["README.md", "tests/no-old-shapes.test.ts"]));
   });
 
   // Drift: a guard that matches nothing passes forever; each row is a violation planted in a throwaway tree that the guard must name.
@@ -201,9 +182,9 @@ describe("no old shapes outside migrations/", () => {
     ["a comparison broken over lines", "const title = record.shape\n  === 1 ? record.text : record.title;", "branches on a stamp"],
     ["a condition broken over lines", "if (\n  isOld(record.shape)\n) record = step(record);", "branches on a stamp"],
   ])("names %s", (_, line, rule) => {
-    const root = planted({ "packages/demo/src/sites/planted.ts": `// A planted file.\n${line}\n` });
+    using tree = plantedRepository({ "packages/demo/src/sites/planted.ts": `// A planted file.\n${line}\n` });
 
-    expect(violations(root)).toEqual([`${rule}: packages/demo/src/sites/planted.ts:2`]);
+    expect(violations(tree.path)).toEqual([`${rule}: packages/demo/src/sites/planted.ts:2`]);
   });
 
   // Drift: a retired name lives on longest where no compiler reads it: a test that still passes, a page of the skill, a variable of the module.
@@ -215,19 +196,19 @@ describe("no old shapes outside migrations/", () => {
     ["a value of the module", "packages/demo/tofu/main.tf", '    gallery = var.gallery ? "on" : "off"'],
     ["the Worker's first settings", "packages/demo/wrangler.jsonc", '      "private_sites": "single-file",'],
   ])("names a retired name in %s", (_, path, line) => {
-    const root = planted({ [path]: `A planted file.\n${line}\n` });
+    using tree = plantedRepository({ [path]: `A planted file.\n${line}\n` });
 
-    expect(violations(root)).toEqual([`retired name: ${path}:2`]);
+    expect(violations(tree.path)).toEqual([`retired name: ${path}:2`]);
   });
 
   // Drift: an allow-list by file alone would let any old name back into a file that rightly holds one.
   test("a file listed for one retired name is still named for another, and the word gallery alone is no setting", () => {
-    const root = planted({
+    using tree = plantedRepository({
       "packages/cloudflare/tests/zone/zone-binding.test.ts": 'const refused = { admin_hostname: "dashboard.example.com" };\nconst old = { zone_bots: "on" };\n',
       "packages/demo/src/sites/names.ts": 'const OWN_PATHS = ["/gallery"];\nconst host = { samples, gallery: flags.gallery };\n',
     });
 
-    expect(violations(root)).toEqual(["retired name: packages/cloudflare/tests/zone/zone-binding.test.ts:2"]);
+    expect(violations(tree.path)).toEqual(["retired name: packages/cloudflare/tests/zone/zone-binding.test.ts:2"]);
   });
 
   test("drift: the rules bind everything but the places named; a guard that fired on those, or on current-shape code, would be switched off", () => {
@@ -242,7 +223,7 @@ describe("no old shapes outside migrations/", () => {
       "if (site.live_version === version.number) return version;",
       "const reshaped = version > 1;",
     ].join("\n");
-    const root = planted({
+    using tree = plantedRepository({
       "packages/demo/src/migrations/0001-rename-text.ts": oldShapeCode,
       "packages/demo/src/sites/migrations/helper.ts": oldShapeCode,
       "packages/core/src/database/open.ts": oldShapeCode,
@@ -251,6 +232,42 @@ describe("no old shapes outside migrations/", () => {
       "packages/demo/README.md": oldShapeCode,
     });
 
-    expect(violations(root)).toEqual(["retired-shape word: packages/core/src/database/open.ts:2"]);
+    expect(violations(tree.path)).toEqual(["retired-shape word: packages/core/src/database/open.ts:2"]);
+  });
+
+  // Drift: a checkout that held two local notes failed here on their old names, every run, while a fresh clone passed.
+  test("a file git is told to leave out is not read: a local note and a build folder are no part of the repository, a new file not yet added is", () => {
+    const old = "const legacyTitle = record.text;\nconst bots = settings.zone_bots;\n";
+    using tree = plantedRepository(
+      {
+        "packages/demo/src/sites/added.ts": old,
+        "packages/demo/src/sites/note.ts": old,
+        "packages/demo/src/built/bundle.ts": old,
+        "NOTES.md": old,
+        "built/page.md": old,
+      },
+      { excluded: ["/NOTES.md", "note.ts"], ignored: ["built/"] },
+    );
+
+    expect(violations(tree.path)).toEqual([
+      "retired name: packages/demo/src/sites/added.ts:2",
+      "retired-shape word: packages/demo/src/sites/added.ts:1",
+    ]);
+  });
+});
+
+describe("the files a guard of the tree reads", () => {
+  test("a file the index still holds and the disk does not is left out, one under a folder that is a file now too: without this a guard run between a delete and its commit stops on a file that is gone", () => {
+    using tree = plantedRepository({ "kept.ts": "", "docs/new page.md": "" }, { deleted: ["gone.ts", "kept.ts/under.ts"] });
+
+    expect(repositoryFiles(tree.path)).toEqual(["docs/new page.md", "kept.ts"]);
+  });
+
+  test("a folder that is no repository and a repository with no file are each refused in plain words: a listing that came back empty would read as a tree with nothing wrong in it", () => {
+    using folder = mkdtempDisposableSync(join(tmpdir(), "no-repository-"));
+    using empty = plantedRepository({});
+
+    expect(() => repositoryFiles(folder.path)).toThrow(/`git ls-files .*` failed in /);
+    expect(() => repositoryFiles(empty.path)).toThrow("git lists no file in");
   });
 });

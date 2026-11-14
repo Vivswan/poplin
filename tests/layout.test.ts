@@ -1,6 +1,8 @@
 import { describe, expect, test } from "bun:test";
 import { join } from "node:path";
 
+import { plantedRepository, repositoryFiles } from "./support/repository-files";
+
 const ROOT = join(import.meta.dir, "..");
 
 const ENTRY_FIELDS = ["main", "module", "types", "bin", "exports"];
@@ -13,8 +15,11 @@ const UNMIRRORED: readonly (readonly [path: string, reason: string])[] = [
 
 const SUPPORT_FILE = /^(packages\/[^/]+)\/tests\/(.+)\/support\/[^/]+\.ts$/;
 
-function scan(pattern: string): string[] {
-  return [...new Bun.Glob(pattern).scanSync({ cwd: ROOT })].map((path) => path.replaceAll("\\", "/")).sort();
+/** The repository's files a pattern takes, as sorted paths from the root. */
+function scan(root: string, pattern: string): string[] {
+  const glob = new Bun.Glob(pattern);
+
+  return repositoryFiles(root).filter((path) => glob.match(path));
 }
 
 function packageOf(path: string): string {
@@ -39,8 +44,8 @@ function sourceOf(entry: string): string {
 }
 
 /** The entry files a package's manifest names, as paths from the repository root; an `exports` target may hold one `*`. */
-async function declaredEntries(packagePath: string): Promise<string[]> {
-  const manifest: Record<string, unknown> = await Bun.file(join(ROOT, packagePath, "package.json")).json();
+async function declaredEntries(root: string, packagePath: string): Promise<string[]> {
+  const manifest: Record<string, unknown> = await Bun.file(join(root, packagePath, "package.json")).json();
   const declared = ENTRY_FIELDS.flatMap((field) => stringLeaves(manifest[field]));
 
   return declared.map((entry) => join(packagePath, sourceOf(entry)).replaceAll("\\", "/"));
@@ -56,26 +61,67 @@ function isEntry(path: string, entry: string): boolean {
   return path.length >= head.length + tail.length && path.startsWith(head) && path.endsWith(tail);
 }
 
+/** The source files that sit in no concept folder and that no manifest declares as an entry. */
+async function looseSources(root: string): Promise<string[]> {
+  const loose = scan(root, "packages/*/src/*.ts");
+  const entries = (await Promise.all([...new Set(loose.map(packageOf))].map((packagePath) => declaredEntries(root, packagePath)))).flat();
+
+  return loose.filter((path) => !entries.some((entry) => isEntry(path, entry)));
+}
+
+/** The tests that mirror no source file of their package. */
+function unmirroredTests(root: string): string[] {
+  const sources = new Set(scan(root, "packages/*/src/**/*.ts"));
+
+  return scan(root, "packages/*/tests/**/*.test.ts").filter((path) => !sources.has(path.replace("/tests/", "/src/").replace(/\.test\.ts$/, ".ts")));
+}
+
+/** The files under tests/ that are no test and sit in no `support/` folder of a concept their package has. */
+function strayShared(root: string): string[] {
+  const shared = scan(root, "packages/*/tests/**/*.ts").filter((path) => !path.endsWith(".test.ts"));
+  const concepts = new Set(scan(root, "packages/*/src/**/*.ts").map((path) => path.slice(0, path.lastIndexOf("/"))));
+
+  return shared.filter((path) => !concepts.has(path.replace(SUPPORT_FILE, "$1/src/$2")));
+}
+
 describe("package layout", () => {
   test("every source file sits in a concept folder or is a declared entry: without this src/ fills with files no concept owns", async () => {
-    const loose = scan("packages/*/src/*.ts");
-    const entries = (await Promise.all([...new Set(loose.map(packageOf))].map(declaredEntries))).flat();
-
-    expect(loose.filter((path) => !entries.some((entry) => isEntry(path, entry)))).toEqual([]);
+    expect(scan(ROOT, "packages/*/src/*.ts").length).toBeGreaterThan(0);
+    expect(await looseSources(ROOT)).toEqual([]);
   });
 
   test("every test mirrors a source file of its package, tests/<path>/<name>.test.ts for src/<path>/<name>.ts: without this a moved or deleted module leaves its test behind", () => {
-    const tests = scan("packages/*/tests/**/*.test.ts");
-    const sources = new Set(scan("packages/*/src/**/*.ts"));
-
-    expect(tests.length).toBeGreaterThan(0);
-    expect(tests.filter((path) => !sources.has(path.replace("/tests/", "/src/").replace(/\.test\.ts$/, ".ts")))).toEqual(UNMIRRORED.map(([path]) => path));
+    expect(scan(ROOT, "packages/*/tests/**/*.test.ts").length).toBeGreaterThan(0);
+    expect(unmirroredTests(ROOT)).toEqual(UNMIRRORED.map(([path]) => path));
   });
 
   test("every other file under tests/ sits in the support/ folder of a concept its package has: without this a shared fixture reads as a test with no source", () => {
-    const shared = scan("packages/*/tests/**/*.ts").filter((path) => !path.endsWith(".test.ts"));
-    const concepts = new Set(scan("packages/*/src/**/*.ts").map((path) => path.slice(0, path.lastIndexOf("/"))));
+    expect(scan(ROOT, "packages/*/tests/**/support/*.ts").length).toBeGreaterThan(0);
+    expect(strayShared(ROOT)).toEqual([]);
+  });
 
-    expect(shared.filter((path) => !concepts.has(path.replace(SUPPORT_FILE, "$1/src/$2")))).toEqual([]);
+  // Drift: a guard that lists the disk reads what is no part of the repository, and fails in the one checkout that holds it.
+  test("each rule names a new file not yet added, and none reads a file the repository is told to leave out or a build folder", async () => {
+    using tree = plantedRepository(
+      {
+        "packages/demo/package.json": '{ "bin": "dist/bin.mjs" }',
+        "packages/demo/src/bin.ts": "",
+        "packages/demo/src/loose.ts": "",
+        "packages/demo/src/scratch.ts": "",
+        "packages/demo/src/sites/site.ts": "",
+        "packages/demo/tests/sites/site.test.ts": "",
+        "packages/demo/tests/sites/gone.test.ts": "",
+        "packages/demo/tests/sites/scratch.test.ts": "",
+        "packages/demo/tests/built/old.test.ts": "",
+        "packages/demo/tests/gone/support/fixture.ts": "",
+        "packages/demo/tests/gone/support/scratch.ts": "",
+        "packages/demo/tests/built/support/fixture.ts": "",
+      },
+      { excluded: ["scratch.ts", "scratch.test.ts"], ignored: ["built/"] },
+    );
+
+    expect(await looseSources(tree.path)).toEqual(["packages/demo/src/loose.ts"]);
+    expect(unmirroredTests(tree.path)).toEqual(["packages/demo/tests/sites/gone.test.ts"]);
+    expect(strayShared(tree.path)).toEqual(["packages/demo/tests/gone/support/fixture.ts"]);
   });
 });

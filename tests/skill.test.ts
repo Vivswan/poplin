@@ -8,12 +8,16 @@ import { parseCommand } from "../packages/cli/src/commands/parse-command";
 import { problem } from "../packages/cli/src/commands/problems";
 import { words } from "../packages/cli/tests/commands/support/command-line";
 import { TOOL_INPUTS } from "../packages/core/src/actions/tool-inputs";
+import { plantedRepository, repositoryFiles } from "./support/repository-files";
 
-/** The folder the skill sits in. */
-const SKILL_FOLDER = join(import.meta.dir, "..", "skills", "poplin");
+/** The repository this file sits in. */
+const ROOT = join(import.meta.dir, "..");
 
-/** Every page of the skill, as a path from its folder. */
-const PAGES: readonly string[] = [...new Bun.Glob("**/*.md").scanSync({ cwd: SKILL_FOLDER })].map((path) => path.replaceAll("\\", "/")).sort();
+/** The folder the skill sits in, as the start of the path of a file in it. */
+const SKILL_PLACE = "skills/poplin/";
+
+/** A page, by the ending of its name. */
+const PAGE_ENDING = ".md";
 
 /** The MCP tools, as the server lists them. */
 const TOOLS: readonly string[] = Object.keys(TOOL_INPUTS);
@@ -70,12 +74,20 @@ interface Shown {
   readonly interface?: Readonly<Record<string, unknown>>;
 }
 
-async function read(name: string): Promise<string> {
-  return Bun.file(join(SKILL_FOLDER, name)).text();
+async function read(root: string, name: string): Promise<string> {
+  return Bun.file(join(root, SKILL_PLACE, name)).text();
 }
 
-async function readAll(): Promise<string> {
-  return (await Promise.all(PAGES.map(read))).join("\n");
+/** Every page of a repository's skill, as a path from the skill's folder. */
+function pagesOf(root: string): string[] {
+  const pages = repositoryFiles(root).filter((path) => path.startsWith(SKILL_PLACE) && path.endsWith(PAGE_ENDING));
+
+  return pages.map((path) => path.slice(SKILL_PLACE.length));
+}
+
+/** The text of every page of a repository's skill. */
+async function readAll(root: string): Promise<string[]> {
+  return Promise.all(pagesOf(root).map((page) => read(root, page)));
 }
 
 /** The text of every code span of a page, as Bun's Markdown parser reads it: table cells included, fenced blocks left out. */
@@ -101,6 +113,11 @@ function matches(text: string, pattern: RegExp, group = 0): string[] {
   return [...new Set([...text.matchAll(pattern)].map((match) => match[group] ?? ""))].sort();
 }
 
+/** The pages a repository's skill holds under `references/`, and the ones its main page links. */
+async function references(root: string): Promise<{ held: string[]; linked: string[] }> {
+  return { held: pagesOf(root).filter((page) => page.startsWith("references/")), linked: matches(await read(root, "SKILL.md"), REFERENCE_LINK, 1) };
+}
+
 /** Whether the CLI's table holds the code: the table is not exported, and a code it lacks has no sentence, or throws. */
 function isCode(word: string): boolean {
   try {
@@ -119,20 +136,20 @@ function refusalOf(line: string): string | undefined {
 
 describe("the agent skill", () => {
   test("the frontmatter names the skill and says when to use it: an agent's loader reads those two keys, and without them it skips the file or never picks it", async () => {
-    const frontmatter: unknown = Bun.YAML.parse(FRONTMATTER.exec(await read("SKILL.md"))?.[1] ?? "");
+    const frontmatter: unknown = Bun.YAML.parse(FRONTMATTER.exec(await read(ROOT, "SKILL.md"))?.[1] ?? "");
 
     expect(frontmatter).toEqual({ name: "poplin", description: expect.stringMatching(/^Use when /) });
   });
 
   test("the pages cover every tool, and every other word in code font is an input of a tool or a code: without this a renamed tool or input, of one word or several, stays in a page an agent follows", async () => {
-    const words = (await Promise.all(PAGES.map(read))).flatMap(codeSpans).filter((span) => WORD.test(span));
+    const words = (await readAll(ROOT)).flatMap(codeSpans).filter((span) => WORD.test(span));
     const named = [...new Set(words)].filter((word) => !OTHER_WORDS.includes(word) && !INPUTS.includes(word) && !isCode(word));
 
     expect(named.sort()).toEqual([...TOOLS].sort());
   });
 
   test("every code in the table of refusals is one the CLI answers with: without this a renamed code, of one word or several, stays in the table an agent looks a refusal up in", async () => {
-    const codes = matches(await read(REFUSALS_PAGE), CODE_CELL, 1).flatMap((cell) => matches(cell, CODE_SPAN, 1));
+    const codes = matches(await read(ROOT, REFUSALS_PAGE), CODE_CELL, 1).flatMap((cell) => matches(cell, CODE_SPAN, 1));
 
     expect(codes.length).toBeGreaterThan(0);
     expect(codes.filter((code) => !isCode(code))).toEqual([]);
@@ -140,7 +157,7 @@ describe("the agent skill", () => {
   });
 
   test("every command and flag in the pages is one the CLI takes: without this a renamed command or flag stays in a page an agent runs", async () => {
-    const text = await readAll();
+    const text = (await readAll(ROOT)).join("\n");
     const lines = matches(text, COMMAND_LINE, 1);
     const flags = new Set<string>(COMMANDS.flatMap((spec: CommandSpec) => spec.flags.map((flag) => flag.name)));
 
@@ -150,7 +167,7 @@ describe("the agent skill", () => {
   });
 
   test("the JSON entry for a file-configured agent starts the CLI's MCP server: without this the entry runs a command the CLI refuses, and the server exits at once", async () => {
-    const entry: ServerEntry = JSON.parse(JSON_BLOCK.exec(await read("references/mcp-server.md"))?.[1] ?? "{}");
+    const entry: ServerEntry = JSON.parse(JSON_BLOCK.exec(await read(ROOT, "references/mcp-server.md"))?.[1] ?? "{}");
     const { command, args = [] } = entry.mcpServers?.poplin ?? {};
 
     expect([command, args[0]]).toEqual(["npx", "poplin"]);
@@ -158,16 +175,34 @@ describe("the agent skill", () => {
   });
 
   test("the main page links every page under references/, and every such link leads to a page: without this a sub-page is never opened, or a link sends an agent nowhere", async () => {
-    const references = PAGES.filter((page) => page.startsWith("references/"));
+    const { held, linked } = await references(ROOT);
 
-    expect(matches(await read("SKILL.md"), REFERENCE_LINK, 1)).toEqual(references);
-    expect(matches(await read("README.md"), REFERENCE_LINK, 1).filter((link) => !references.includes(link))).toEqual([]);
+    expect(held.length).toBeGreaterThan(0);
+    expect(linked).toEqual(held);
+    expect(matches(await read(ROOT, "README.md"), REFERENCE_LINK, 1).filter((link) => !held.includes(link))).toEqual([]);
+  });
+
+  // Drift: a guard that lists the disk reads what is no part of the repository, and fails in the one checkout that holds it.
+  test("a new page not yet added counts as a page of the skill, and a page the repository is told to leave out or one in a build folder does not", async () => {
+    using tree = plantedRepository(
+      {
+        "skills/poplin/SKILL.md": "# Poplin\n\nRead [the setup](references/setup.md).\n",
+        "skills/poplin/references/setup.md": "# Setup\n",
+        "skills/poplin/references/added.md": "# Added\n",
+        "skills/poplin/references/scratch.md": "# Scratch\n",
+        "skills/poplin/references/built/page.md": "# Built\n",
+      },
+      { excluded: ["scratch.md"], ignored: ["built/"] },
+    );
+
+    expect(await references(tree.path)).toEqual({ held: ["references/added.md", "references/setup.md"], linked: ["references/setup.md"] });
+    expect(await readAll(tree.path)).toEqual(["# Poplin\n\nRead [the setup](references/setup.md).\n", "# Added\n", "# Setup\n"]);
   });
 
   test("the two Codex files show the skill under one name, one line, and one colour, the main page's title: without this Codex lists the skill under two faces", async () => {
-    const sidecar: Shown = Bun.YAML.parse(await read("agents/openai.yaml")) as Shown;
-    const manifest: Shown = await Bun.file(join(SKILL_FOLDER, ".codex-plugin", "plugin.json")).json();
-    const title = TITLE.exec(await read("SKILL.md"))?.[1];
+    const sidecar: Shown = Bun.YAML.parse(await read(ROOT, "agents/openai.yaml")) as Shown;
+    const manifest: Shown = await Bun.file(join(ROOT, SKILL_PLACE, ".codex-plugin", "plugin.json")).json();
+    const title = TITLE.exec(await read(ROOT, "SKILL.md"))?.[1];
 
     expect([sidecar.interface?.display_name, sidecar.interface?.short_description, sidecar.interface?.brand_color]).toEqual([
       title,
