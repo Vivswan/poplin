@@ -31,10 +31,13 @@ jobs:
         run: bun run typecheck
       - name: Test
         run: bun run test
+      - name: Test the Worker (Workers runtime)
+        run: bun run test:worker
 
   # The product's tests on every OS a user publishes from. The runtime is the bun that .bun-version pins: the tests
   # import bun:test, which no other runtime provides. The release pipeline's tests run in `check` alone: that pipeline
-  # runs on ubuntu and nowhere else.
+  # runs on ubuntu and nowhere else. The Worker's tests run in `check` alone too: they need the Workers runtime, and the
+  # root `test` script this job calls leaves `packages/worker` out.
   matrix:
     name: test / ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
@@ -49,4 +52,4 @@ jobs:
           persist-credentials: false
       - uses: ./.github/actions/setup
       - name: Test the packages
-        run: bun test ./packages/ ./tests/layout.test.ts
+        run: bun run test ./packages/ ./tests/layout.test.ts

@@ -2,6 +2,10 @@
   "name": "@poplin/worker",
   "private": true,
   "type": "module",
+  "exports": {
+    "./bindings": "./src/bindings.ts",
+    "./r2": "./src/r2.ts"
+  },
   "scripts": {
     "typecheck": "wrangler types && tsc -p .",
     "test": "vitest run"

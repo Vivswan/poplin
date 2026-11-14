@@ -4,6 +4,7 @@
 #
 #   staged path                -> tests run
 #   packages/<pkg>/...         -> that package's tests and the layout guard
+#   packages/worker/...        -> the Worker's tests, in the Workers runtime, and the layout guard
 #   anything else              -> every test
 set -e
 
@@ -13,6 +14,12 @@ bun run typecheck
 staged=$(git diff --cached --name-only)
 outside=$(printf '%s\n' "$staged" | sed -n '\|^packages/[^/]*/|!p')
 packages=$(printf '%s\n' "$staged" | sed -n 's|^\(packages/[^/]*\)/.*|./\1/|p' | sort -u)
+worker=$(printf '%s\n' "$staged" | sed -n '\|^packages/worker/|p')
+
+# The Worker's tests run under Vitest; the root test script leaves that package out.
+if [ -n "$outside$worker" ]; then
+    bun run test:worker
+fi
 
 if [ -n "$outside" ]; then
     exec bun run test
@@ -23,4 +30,4 @@ IFS='
 '
 set -f
 # shellcheck disable=SC2086
-bun test $packages ./tests/layout.test.ts
+bun run test $packages ./tests/layout.test.ts
