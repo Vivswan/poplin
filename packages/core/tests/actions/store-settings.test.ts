@@ -3,6 +3,7 @@ import { describe, expect, test } from "bun:test";
 import { changeConfig, readConfig } from "../../src/actions/config";
 import { exportSettings } from "../../src/actions/export";
 import { importSettings } from "../../src/actions/import-settings";
+import { storeFirstLogin } from "../../src/actions/store-settings";
 import type { Login } from "../../src/auth/logins";
 import type { Actor } from "../../src/auth/scopes";
 import type { TokenId } from "../../src/auth/tokens";
@@ -48,5 +49,19 @@ describe("a change of the logins", () => {
 
     expect([refused, untouched.ok && [untouched.values.logins, untouched.values.trash_days]]).toEqual([{ ok: false, code: "no_working_login", about: "logins" }, [[ADA], 7]]);
     expect(taken).toMatchObject({ ok: true, values: { logins: [ADA], trash_days: 30 } });
+  });
+});
+
+describe("the first login, while nobody has logged in", () => {
+  // Drift: this is the one change of the logins made by nobody who is a login. Kept open after a login, it would let whoever reaches it take the install from the people in it.
+  test("is replaced whole, and other settings stay; after anybody logged in it is refused and nothing changes", async () => {
+    const world = await makeWorld({ logins: [ADA, BO] });
+    const first = await storeFirstLogin(world.install, CY);
+    await world.install.database.appendAudit({ action: "login", detail: {} }, { by: CY, at: world.install.now() });
+    const late = await storeFirstLogin(world.install, ADA);
+    const after = await readConfig(world.install, ADMIN);
+
+    expect(first).toMatchObject({ ok: true, values: { logins: [CY], trash_days: 7 } });
+    expect([late, after.ok && after.values.logins]).toEqual([{ ok: false, code: "no_working_login", about: "logins" }, [CY]]);
   });
 });

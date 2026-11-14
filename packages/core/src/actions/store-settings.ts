@@ -2,6 +2,9 @@
 //
 // The login page in front of an install keeps a list of its own, which follows the stored logins only when an admin repairs it from the dashboard.
 // So an email that was just stored gets nobody in yet, and a list made of such emails alone shuts the dashboard on everyone, the way back included.
+//
+// One change is made by nobody who is a login: while nobody has ever logged in, no login is known to work, and the first one may have been mistyped.
+// `storeFirstLogin` replaces it, for a caller that has proven it may change the install's side at the provider, and for no longer than that.
 
 import type { Login } from "../auth/logins";
 import type { Actor } from "../auth/scopes";
@@ -24,6 +27,22 @@ function keepsWorkingLogin(actor: Actor, stored: readonly Login[], next: readonl
   if (own !== undefined) return next.includes(own);
 
   return next.some((login) => stored.includes(login));
+}
+
+/**
+ * Replace the stored logins with one, while nobody has ever logged in.
+ *
+ * The caller has no login and no token of the install: it must have proven, by other means, that it may change what stands in front of the install.
+ *
+ * @returns every setting after the change, `not_set_up` before setup stored any, or `no_working_login` about `logins` once anybody has logged in, which changes nothing
+ */
+export async function storeFirstLogin(install: Pick<Install, "database" | "now">, login: Login): Promise<Stored | Refused<"not_set_up" | "no_working_login">> {
+  if (await install.database.hasLoggedIn()) return refuse("no_working_login", "logins");
+
+  const changed = await install.database.changeSettings({ logins: [login] }, { by: login, at: install.now() });
+  if (changed.kind === "not_set_up") return refuse("not_set_up");
+
+  return { ok: true, values: changed.values };
 }
 
 /**

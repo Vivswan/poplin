@@ -123,7 +123,7 @@ Two words the steps use: a **Worker** is the program Cloudflare runs for you, an
    | still have the token's text | choose Edit, add the permission, save. Paste the same text and press Repair          |
    | no longer have it           | choose Roll. Roll makes a new token text. Add the permission, and paste the new text |
 
-5. **Open your dashboard and log in.** Cloudflare's login asks for your email and sends a code to its inbox. A new address can take a few minutes to answer: until then the browser says it cannot find the site; wait a few minutes and reload. No code means the email differs from the one in step 4.
+5. **Open your dashboard and log in.** Cloudflare's login asks for your email and sends a code to its inbox. A new address can take a few minutes to answer: until then the browser says it cannot find the site; wait a few minutes and reload. No code arrives when the email differs from the one in step 4: go back to the setup page, type the right email with the token, and press Repair.
 
    ```text
    https://poplin.example.com

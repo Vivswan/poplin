@@ -51,6 +51,8 @@ async function openSetup(options: Options = {}) {
   // The page's own view of the database: every read of the settings is counted, and an install with none has none.
   const watched = {
     appendAudit: (...written: Parameters<typeof database.appendAudit>) => database.appendAudit(...written),
+    hasLoggedIn: () => database.hasLoggedIn(),
+    changeSettings: (...changed: Parameters<typeof database.changeSettings>) => database.changeSettings(...changed),
     readSettings: async () => {
       reads.count += 1;
 
@@ -85,7 +87,10 @@ async function openSetup(options: Options = {}) {
   const call = (run: string, body: string, type = "application/json"): Promise<Response> =>
     setup.fetch(new Request(`${ORIGIN}/setup/api/${run}`, { method: "POST", headers: { "Content-Type": type }, body }));
 
-  return { opened, plug, address, reads, get, post, call };
+  // The form as a person sends it who types an email beside the token.
+  const typed = async (run: string, token: string, login: string): Promise<Response> => post(run, token, { csrf: await csrf(), login });
+
+  return { opened, plug, address, reads, get, post, typed, call };
 }
 
 /** Every byte an answer carries: its status, its headers but the one random nonce, and its body with the form's own token and the nonce taken out. */
@@ -271,7 +276,7 @@ test("a program's call is answered as JSON by the same run, the same count of tr
   const fifth = await call("check", own);
   const sixth = await call("check", own);
 
-  expect([checked.status, await checked.json()]).toEqual([200, { ok: true, rows: [{ object: "DNS record", state: "missing", detail: "poplin.example.com" }], steps: [] }]);
+  expect([checked.status, await checked.json()]).toEqual([200, { ok: true, rows: [{ object: "DNS record", state: "missing", detail: "poplin.example.com" }], steps: [], expects: "owner@example.com" }]);
   expect([refused.status, await refused.json()]).toEqual([403, { ok: false, refusal: "token" }]);
   expect([noToken.status, asForm.status, unknown.status, fifth.status]).toEqual([403, 415, 404, 200]);
   expect([sixth.status, await sixth.json()]).toEqual([429, { ok: false, refusal: "too_many_tries" }]);
@@ -282,6 +287,57 @@ test("a program's call is answered as JSON by the same run, the same count of tr
   const shut = await openSetup({ open: async () => false });
 
   expect([(await shut.call("repair", own)).status, shut.plug.calls]).toEqual([404, []]);
+});
+
+/** The email the first login was meant to be, where the stored one was mistyped. */
+const MEANT = "meant@example.com";
+
+/** The line that says which logins the install expects. */
+const EXPECTS = /The login is set to expect: ([^<]*)</;
+
+// Drift: a first login mistyped at setup was the only login and the only email the login page let in, and nothing could change it: nobody could log in, and the setup page read no email.
+test("while nobody has logged in, a repair with the install's own token and an email sets the first login to it, for the plug and for the store, and says so; an empty box keeps the stored one", async () => {
+  const { opened, plug, typed, post, get } = await openSetup();
+  const stored = async (): Promise<readonly string[] | undefined> => (await opened.install.database.readSettings())?.logins;
+  const kept = await post("repair", OWN);
+  const before = await stored();
+  const corrected = await typed("repair", OWN, ` ${MEANT} `);
+  const page = await corrected.text();
+
+  expect([before, EXPECTS.exec(await kept.text())?.[1]]).toEqual([[opened.owner], opened.owner]);
+  expect([corrected.status, await stored(), EXPECTS.exec(page)?.[1], NOTICE.exec(page)?.[2]]).toEqual([200, [MEANT], MEANT, "1 repaired"]);
+  expect<unknown>(plug.calls.map((call) => call.settings?.logins)).toEqual([[opened.owner], [MEANT]]);
+  expect((await opened.audit())[0]).toMatchObject({ action: "domain_synced", by: MEANT });
+  expect([/id="login"[^>]*>/.exec(await (await get("/setup")).text())?.[0], page.includes('id="domain"'), page.includes(`value="${MEANT}`)]).toEqual(['id="login" name="login" autocomplete="email">', false, false]);
+});
+
+/** The ways an email typed beside the token changes nothing that is stored. */
+const unchanged: readonly { readonly name: string; readonly run: string; readonly token: string; readonly login: string; readonly status: number; readonly asked: readonly (readonly string[])[] }[] = [
+  { name: "a check, which shows what a repair would change", run: "check", token: OWN, login: MEANT, status: 200, asked: [[MEANT]] },
+  { name: "a token of another account", run: "repair", token: FOREIGN, login: MEANT, status: 403, asked: [] },
+  { name: "an email that is none", run: "repair", token: OWN, login: "nobody", status: 400, asked: [] },
+];
+
+// Drift: the page is open to anyone until the first login, so a stranger who could change the login, or read it, would own the install or learn who does.
+test.each(unchanged)("$name leaves the stored login as it was, and an answer that is no table says nothing of it", async ({ run, token, login, status, asked }) => {
+  const { opened, plug, typed, call } = await openSetup();
+  const form = await typed(run, token, login);
+  const called = await call(run, JSON.stringify({ token, login }));
+  const texts = [await form.text(), await called.text()];
+
+  expect([form.status, called.status]).toEqual([status, status]);
+  expect((await opened.install.database.readSettings())?.logins).toEqual([opened.owner]);
+  expect<unknown>(plug.calls.flatMap((made) => (made.settings === undefined ? [] : [made.settings.logins]))).toEqual([...asked, ...asked]);
+  expect(texts.map((text) => text.includes(opened.owner) || text.includes(login))).toEqual(status === 200 ? [true, true] : [false, false]);
+});
+
+// Drift: the correction is the one change of the logins made by nobody who is a login; left open after a login it would hand the install to whoever holds a token of the account.
+test("once somebody has logged in, an email typed beside the token changes no login, even where the page were still asked", async () => {
+  const { opened, plug, call } = await openSetup();
+  await opened.install.database.appendAudit({ action: "login", detail: {} }, { by: opened.owner, at: opened.install.now() });
+  const answer = await call("repair", JSON.stringify({ token: OWN, login: MEANT }));
+
+  expect([answer.status, (await opened.install.database.readSettings())?.logins, plug.calls.at(-1)?.settings?.logins]).toEqual([200, [opened.owner], [opened.owner]]);
 });
 
 /** A database every use of which fails the test: the page of an install with nothing set may neither read nor write one. */

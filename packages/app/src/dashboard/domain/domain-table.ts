@@ -67,8 +67,11 @@ interface Shown {
   /** What else the provider's form asks of the person. */
   readonly tokenNote: string;
 
-  /** Whether the install has nothing set: the form then asks for its domain and its first login beside the token. Left out, it asks for the token alone. */
-  readonly nothingSet?: boolean;
+  /** What the form asks for beside the token: `first` the domain and the first login of an install with nothing set, `login` an email that corrects the first login. Left out, the token alone. */
+  readonly boxes?: "first" | "login";
+
+  /** The logins the install is set to expect, said under the result of a run. Given only for a run whose token was proven. */
+  readonly expects?: string;
 
   /** The path the forms post under: the run's name is added to it. */
   readonly path: "/domain" | "/setup";
@@ -107,12 +110,13 @@ function tableRow(row: DomainRow): Html {
   return html`<tr><td>${row.object}</td><td><strong class="state ${state.tone}">${state.label}</strong></td><td class="wrap">${row.detail}</td></tr>`;
 }
 
-function result(ran: Shown["ran"]): Html {
+function result(ran: Shown["ran"], expects: Shown["expects"]): Html {
   if (ran === undefined) return html``;
 
   if (!ran.reading.ok) return html`<p class="notice refused" role="status">${REFUSALS[ran.reading.refusal]}</p>`;
 
   return html`${summary(ran.run, ran.reading.rows)}
+${expects === undefined ? html`` : html`<p class="hint">The login is set to expect: ${expects}</p>`}
 ${stepList(ran.reading.steps)}
 <div class="scroll" role="region" aria-label="Domain" tabindex="0"><table>
 <thead><tr><th scope="col">Object</th><th scope="col">State</th><th scope="col">Detail</th></tr></thead>
@@ -120,9 +124,17 @@ ${stepList(ran.reading.steps)}
 </table></div>`;
 }
 
-/** The two boxes of an install with nothing set. Like the token's, they are always sent empty: a page never holds what was typed into it. */
-function firstFields(nothingSet: boolean): Html {
-  if (!nothingSet) return html``;
+/** The boxes beside the token's. Like the token's, they are always sent empty: a page never holds what was typed into it. */
+function firstFields(boxes: Shown["boxes"]): Html {
+  if (boxes === undefined) return html``;
+
+  if (boxes === "login") {
+    return html`<div class="field">
+<label for="login">Your email</label>
+<input type="email" id="login" name="login" autocomplete="email">
+<p class="hint">Leave it empty to keep the first login. If that email was wrong, type the right one: Repair sets the login to it.</p>
+</div>`;
+  }
 
   return html`<p>This install is new. Give it its domain and your email, paste a token, and press Repair.</p>
 <div class="field">
@@ -150,10 +162,10 @@ function byHand(rights: readonly string[]): Html {
  * @returns the summary, the steps only a person can do, and the table, when a run was just answered; then one form with an empty token field, the two boxes of an install with nothing set, the way to a token with its rights, and the two buttons
  */
 export function domainBody(shown: Shown): Html {
-  return html`${result(shown.ran)}
+  return html`${result(shown.ran, shown.expects)}
 <form method="post" action="${shown.path}/check">
 ${csrfField(shown)}
-${firstFields(shown.nothingSet === true)}
+${firstFields(shown.boxes)}
 <div class="field">
 <label for="token">${shown.tokenLabel}</label>
 <input type="password" id="token" name="token" autocomplete="off" required>

@@ -43,7 +43,14 @@ describe("poplin setup", () => {
 
     expect([checked.code, checked.out, checked.err]).toEqual([
       1,
-      ["present   DNS record    *.example.com", "missing   DNS record    poplin.example.com", "present   Worker route  poplin.example.com/*", "left-out  Rate rule     rate rule: the domain has other hostnames", "1 to repair"],
+      [
+        "present   DNS record    *.example.com",
+        "missing   DNS record    poplin.example.com",
+        "present   Worker route  poplin.example.com/*",
+        "left-out  Rate rule     rate rule: the domain has other hostnames",
+        "the login is set to expect ada@example.com",
+        "1 to repair",
+      ],
       [],
     ]);
     expect([repaired.code, repaired.out.slice(1, 2), repaired.out.at(-1)]).toEqual([0, ["created   DNS record    poplin.example.com"], "the install's side is as it should be"]);
@@ -60,8 +67,8 @@ describe("poplin setup", () => {
     const plain = await bench.run(SETUP, { env: ENV });
     const json = await bench.run(`${SETUP} --json`, { env: ENV });
 
-    expect([plain.code, plain.out]).toEqual([1, ["missing  Login  the login is off for the account", "Switch the login on.", "https://provider.example.com/login", "1 not done"]]);
-    expect([json.code, jsonOf(json)]).toEqual([1, { run: "repair", rows: reading.rows, steps: reading.steps }]);
+    expect([plain.code, plain.out]).toEqual([1, ["missing  Login  the login is off for the account", "the login is set to expect ada@example.com", "Switch the login on.", "https://provider.example.com/login", "1 not done"]]);
+    expect([json.code, jsonOf(json)]).toEqual([1, { run: "repair", rows: reading.rows, steps: reading.steps, expects: "ada@example.com" }]);
   });
 
   // Drift: a repair that goes on past a refused piece makes rows beside it, and a script that read the exit code alone would take the install for complete.
@@ -73,6 +80,19 @@ describe("poplin setup", () => {
     const ended = await bench.run(SETUP, { env: ENV });
 
     expect([ended.code, ended.out.at(-1)]).toEqual([1, "1 not done"]);
+  });
+
+  // Drift: a first login mistyped at setup shuts everybody out, and the terminal is one of the two places it is mended from: the line is how the person sees which email the login now expects.
+  test("--login reaches a set install too, and the email the install then expects is printed and is in --json", async () => {
+    const bench = await openBench();
+    withSetup(bench, fakePlug(() => ({ ok: true, rows: [], steps: [] })));
+
+    const plain = await bench.run(`${SETUP} --login meant@example.com`, { env: ENV });
+    const json = await bench.run(`${SETUP} --login meant@example.com --json`, { env: ENV });
+
+    expect([plain.code, plain.out]).toEqual([0, ["the login is set to expect meant@example.com", "the install's side is as it should be"]]);
+    expect(jsonOf(json)).toEqual({ run: "repair", rows: [], steps: [], expects: "meant@example.com" });
+    expect<unknown>((await bench.install.database.readSettings())?.logins).toEqual(["meant@example.com"]);
   });
 
   const refused: readonly { readonly name: string; readonly reading?: DomainReading; readonly open?: boolean; readonly code: number; readonly says: string }[] = [

@@ -24,11 +24,12 @@ const HIDDEN = "[token]";
 /** The states a repair has still to change, or could not. */
 const UNFINISHED: ReadonlySet<string> = new Set(["missing", "differs", "failed", "not-run"]);
 
-/** The install's answer to a run that read its side: a row per object, and the steps only a person can do. */
+/** The install's answer to a run that read its side: a row per object, the steps only a person can do, and the logins it is set to expect once it has any. */
 const READING = v.object({
   ok: v.literal(true),
   rows: v.array(v.object({ object: v.string(), state: v.string(), detail: v.string() })),
   steps: v.array(v.object({ text: v.string(), address: v.string() })),
+  expects: v.optional(v.string()),
 });
 
 /** The install's answer to a run it refused. */
@@ -72,8 +73,10 @@ function shown(run: "check" | "repair", reading: Reading, token: string): Outcom
   const rows = reading.rows.map((row) => ({ object: safe(row.object), state: safe(row.state), detail: safe(row.detail) }));
   const steps = reading.steps.map((step) => ({ text: safe(step.text), address: safe(step.address) }));
   const waiting = rows.filter((row) => UNFINISHED.has(row.state)).length;
-  const lines = [...columns(rows.map((row) => [row.state, row.object, row.detail])), ...steps.flatMap((step) => [step.text, step.address]), summary(run, waiting)];
-  const outcome: Outcome = { ok: true, value: { run, rows, steps }, lines };
+  const expects = reading.expects === undefined ? {} : { expects: safe(reading.expects) };
+  const login = reading.expects === undefined ? [] : [`the login is set to expect ${safe(reading.expects)}`];
+  const lines = [...columns(rows.map((row) => [row.state, row.object, row.detail])), ...login, ...steps.flatMap((step) => [step.text, step.address]), summary(run, waiting)];
+  const outcome: Outcome = { ok: true, value: { run, rows, steps, ...expects }, lines };
 
   return waiting > 0 ? { ...outcome, found: "failed" } : outcome;
 }
@@ -82,7 +85,7 @@ function shown(run: "check" | "repair", reading: Reading, token: string): Outcom
  * Run the setup of the install at `--server`.
  *
  * It makes no install: the install must already answer at the address. It works only until somebody has logged in to the install; after that the dashboard's Domain tab does the same.
- * An install with nothing set takes its domain and its first login from `--domain` and `--login`; one that has them ignores both.
+ * An install with nothing set takes its domain and its first login from `--domain` and `--login`. One that has them ignores `--domain`, and takes `--login` as the correction of the first login.
  *
  * @returns the install's rows, worded for a person and kept whole for `--json`; with anything left to repair the command exits as a failure. The token is in no line and no value
  */

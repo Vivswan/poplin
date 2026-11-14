@@ -188,7 +188,7 @@ export const COMMANDS = [
     flags: [
       { name: "--check", about: "say what a setup would change, and change nothing" },
       { name: "--domain", value: "<domain>", about: "a new install's domain: example.com" },
-      { name: "--login", value: "<email>", about: "a new install's first login" },
+      { name: "--login", value: "<email>", about: "the first login, or its correction" },
       ...INSTALL_FLAGS,
     ],
     examples: [
@@ -204,6 +204,8 @@ export const COMMANDS = [
       "An install with nothing set yet takes two flags more, and gets its",
       "domain, its first login, and its account from this one run:",
       "  --domain example.com --login owner@example.com",
+      "A first login that was mistyped is corrected the same way, until",
+      "somebody has logged in: --login with the right email.",
       "To make the token, open /setup at that address in a browser: the page",
       "links the provider's form for a new token with its rights chosen.",
     ],

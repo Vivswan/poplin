@@ -134,6 +134,26 @@ describe("the setup page", () => {
     expect((await (await installOf(w)).database.listAudit({ limit: 10 })).map((entry) => [entry.action, entry.detail.from])).toEqual([["domain_synced", "setup"], ["settings_set", undefined]]);
   });
 
+  // Drift: a first login mistyped at setup was the only email Cloudflare's login let in and the only one the Worker took, with no way left to change either.
+  test("an email sent with the account's token replaces the first login, in the store and in Cloudflare's policy, so the old one gets in nowhere; a token of another account changes and learns nothing", async () => {
+    const worker = instance(w, cloudflareOf(account, asked));
+    const send = (body: Record<string, string>): Promise<Response> => ask(worker, `${OWN}/setup/api/repair`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+    const logins = async (): Promise<readonly string[] | undefined> => (await (await installOf(w)).database.readSettings())?.logins;
+    const meant = "meant@example.com";
+
+    const first = await send({ token: TOKEN });
+    const stranger = await send({ token: OTHER_TOKEN, login: meant });
+    const strangerSaid = await stranger.text();
+    const between = [await logins(), JSON.stringify(account.policies).includes(OWNER), JSON.stringify(account.policies).includes(meant)];
+    const corrected = await send({ token: TOKEN, login: meant });
+    const old = await logIn(worker, w);
+
+    expect([first.status, stranger.status, strangerSaid.includes(OWNER), strangerSaid.includes(meant)]).toEqual([200, 403, false, false]);
+    expect(between).toEqual([[OWNER], true, false]);
+    expect([corrected.status, (await corrected.json<{ expects?: string }>()).expects, await logins()]).toEqual([200, meant, [meant]]);
+    expect([JSON.stringify(account.policies).includes(OWNER), JSON.stringify(account.policies).includes(meant), old.status === 302]).toEqual([false, true, false]);
+  });
+
   // Drift: the page takes a secret from anyone who finds it, so its only guard against guessing is the count of tries.
   test("the sixth post one address sends in a minute is refused before Cloudflare is asked", async () => {
     const worker = instance(w, cloudflareOf(account, asked));
