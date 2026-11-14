@@ -25,9 +25,8 @@ const NOTHING_RESERVED: ReadonlySet<string> = new Set();
 /** The words the settings flags take for a switch. */
 const SWITCH = { on: "on", off: "off" } as const;
 
-/** What to do about a missing login, after the table's own hint: the server reads the login anew on every call. */
-const WHERE_TO_LOG_IN =
-  "put both in the env of this server's entry in the agent app's MCP settings, then start the server again; a token comes from the install's dashboard";
+/** What to do about a missing login. The server reads the login anew on every call, so the next call finds it. */
+const HOW_TO_LOG_IN = "run `poplin login --server <address>` on this computer";
 
 /** What every tool says of its `site`. */
 const SITE = "Its label, e.g. report--k3f9x2ab71qz. Also taken: its bare id, or a public site's public name.";
@@ -125,9 +124,7 @@ async function online(host: Host, run: (session: Session) => Promise<Outcome>): 
   const session = await host.session();
 
   if (session === "logged-out") {
-    const said = problem("no_login");
-
-    return refused({ ...said, hint: `${said.hint}; ${WHERE_TO_LOG_IN}` });
+    return refused({ ...problem("no_login"), hint: HOW_TO_LOG_IN });
   }
 
   if ("code" in session) return refused(session);

@@ -14,8 +14,6 @@ const PUBLISHED_DEFAULTS = {
   trash_days: "7",
   logins: "ada@example.com",
   dashboard_title: "poplin.example.com",
-  gallery: "off",
-  private_sites: "single-file",
   outside_pages: "blocked",
   search_engines_allowed: "off",
   block_bots: "auto",
@@ -34,8 +32,6 @@ const CHANGED = {
   trash_days: "30",
   logins: "ada@example.com,bo@example.com",
   dashboard_title: "Team pages",
-  gallery: "on",
-  private_sites: "folders",
   outside_pages: "allowed",
   search_engines_allowed: "on",
   block_bots: "off",
@@ -54,8 +50,6 @@ const CHANGED_VALUES = {
   trash_days: 30,
   logins: ["ada@example.com", "bo@example.com"],
   dashboard_title: "Team pages",
-  gallery: true,
-  private_sites: "folders",
   outside_pages: "allowed",
   search_engines_allowed: true,
   block_bots: "off",
@@ -135,8 +129,7 @@ describe("settingsFromText and settingsToText", () => {
     ["default_expires", "0d", "out-of-range"],
     ["default_expires", "2026-12-01", "bad-form"],
     ["default_search_engines", "true", "bad-form"],
-    ["gallery", "ON", "bad-form"],
-    ["private_sites", "folder", "bad-form"],
+    ["search_engines_allowed", "ON", "bad-form"],
     ["outside_pages", "on", "bad-form"],
     ["search_engines_allowed", "allowed", "bad-form"],
     ["block_bots", "blocked", "bad-form"],
@@ -151,9 +144,9 @@ describe("settingsFromText and settingsToText", () => {
   });
 
   test("drift: a change is checked against every key, so a setting left out is named instead of silently keeping an unknown value", () => {
-    const { gallery: _, ...rest } = PUBLISHED_DEFAULTS;
+    const { trash_days: _, ...rest } = PUBLISHED_DEFAULTS;
 
-    expect<unknown>(settingsFromText(rest)).toEqual({ ok: false, key: "gallery", refusal: "missing" });
+    expect<unknown>(settingsFromText(rest)).toEqual({ ok: false, key: "trash_days", refusal: "missing" });
   });
 });
 

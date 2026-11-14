@@ -41,7 +41,6 @@ const COMPANIONS: Readonly<Record<string, readonly string[]>> = {
   "publish --public-name": ["--public"],
   "set --json": ["--private"],
   "set --server": ["--private"],
-  "config --reset": ["versions_kept"],
   "import --logins": ["--settings"],
 };
 

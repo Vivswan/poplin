@@ -270,7 +270,7 @@ describe("the MCP server", () => {
   );
 
   test.each([
-    ["no login", {}, "no_login", "not logged in", "poplin login --server"],
+    ["no login", {}, "no_login", "not logged in", "run `poplin login --server <address>` on this computer"],
     ["half a login", { POPLIN_SERVER: ORIGIN }, "bad_login", "the login cannot be used", "POPLIN_TOKEN"],
   ])(
     "with %s the server starts, lists its tools, and answers every call with how to log in: a server that exits at start breaks the agent's app with no word why",

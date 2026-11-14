@@ -17,7 +17,7 @@ Open this when a poplin tool or command answers with a refusal. From a tool, or 
 | `too_large`, `too_many_sites`                     | a limit of the install                           | tell the user the limit; do not delete sites to make room unasked    |
 | `stale_version`, `missing_files`, `size_mismatch` | the publish did not complete; nothing went live  | publish again, the same way                                          |
 | `unreachable`, `timeout`, `internal`              | no answer, or the install failed part way        | the change may have been made: `list_sites` before you try again     |
-| `not_set_up`                                      | the install's own setup is unfinished            | the user finishes it in the browser, at the install's address        |
+| `not_set_up`                                      | the install has stored no settings               | try again; if it stays, the user deploys the install again           |
 
 After `unreachable`, `timeout`, or `internal` on a publish, check the list before you repeat it. A second publish with no `site` would make a second site.
 

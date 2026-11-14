@@ -11,7 +11,7 @@ const INPUT = /<input type="text" id="([a-z_]+)" name="([a-z_]+)" value="([^"]*)
 test("every ordinary setting has a labelled input holding its stored text and shows its default; the Domain tab's settings are text only", async () => {
   const opened = await openDashboard();
   const admin = { scope: "admin", holder: opened.owner } as const;
-  await changeConfig(opened.install, admin, { trash_days: 30, dashboard_title: `Ada's "sites" <b>`, gallery: true, max_sites: 12 });
+  await changeConfig(opened.install, admin, { trash_days: 30, dashboard_title: `Ada's "sites" <b>`, default_search_engines: true, max_sites: 12 });
 
   const stored = await opened.install.database.readSettings();
   if (stored === undefined) throw new Error("the settings are not stored");
@@ -26,7 +26,7 @@ test("every ordinary setting has a labelled input holding its stored text and sh
   expect(Object.fromEntries(inputs.map((input) => [input.name, input.value]))).toMatchObject({
     trash_days: "30",
     dashboard_title: "Ada&#39;s &quot;sites&quot; &lt;b&gt;",
-    gallery: "on",
+    default_search_engines: "on",
     max_sites: "12",
     max_total_size: "9GB",
     logins: "owner@example.com",
@@ -34,7 +34,7 @@ test("every ordinary setting has a labelled input holding its stored text and sh
   expect(Object.fromEntries(inputs.map((input) => [input.name, input.fallback]))).toMatchObject({
     trash_days: "7",
     dashboard_title: "poplin.example.com",
-    gallery: "off",
+    default_search_engines: "off",
     max_sites: "none",
     logins: "the email of whoever set the install up",
   });

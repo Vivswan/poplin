@@ -201,12 +201,6 @@ variable "dashboard_title" {
   }
 }
 
-variable "gallery" {
-  description = "Whether the public page listing the public sites is on. It sits at the site hostname of the name `gallery`: gallery-page.example.com."
-  type        = bool
-  default     = false
-}
-
 variable "max_total_size" {
   description = "The size limit of all sites together, such as `9GB`."
   type        = string

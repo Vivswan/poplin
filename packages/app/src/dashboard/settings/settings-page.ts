@@ -17,8 +17,6 @@ const MEANINGS: { readonly [Key in keyof SettingValues]: string } = {
   trash_days: "How many days a deleted site waits in the trash.",
   logins: "The emails that may log in, with commas between them.",
   dashboard_title: "The title of this dashboard.",
-  gallery: "The public page that lists the public sites: on or off.",
-  private_sites: "On an install with no domain, what may be private: single-file or folders.",
   outside_pages: "Whether pages outside the install may frame a site or load its files.",
   search_engines_allowed: "Whether search engines are let through to public sites.",
   block_bots: "The zone's bot switches.",

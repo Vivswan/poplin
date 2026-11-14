@@ -26,11 +26,11 @@ test("saving sends the typed values through the config action: the changed keys 
   const opened = await openDashboard();
   const before = await settings(opened);
 
-  const saved = await opened.post("/settings/save", await fields(opened, { trash_days: "30", gallery: "on", logins: "owner@example.com,Ada@Example.com", dashboard_title: "My sites" }));
+  const saved = await opened.post("/settings/save", await fields(opened, { trash_days: "30", default_search_engines: "on", logins: "owner@example.com,Ada@Example.com", dashboard_title: "My sites" }));
 
   expect([saved.status, saved.headers.get("Location")]).toEqual([303, "/settings?done=saved"]);
   expect(NOTICE.exec(await landing(opened, saved))?.slice(1)).toEqual(["done", "Saved."]);
-  expect(await settings(opened)).toEqual({ ...before, trash_days: 30, gallery: true, logins: ["owner@example.com", "ada@example.com"] as SettingValues["logins"], dashboard_title: "My sites" });
+  expect(await settings(opened)).toEqual({ ...before, trash_days: 30, default_search_engines: true, logins: ["owner@example.com", "ada@example.com"] as SettingValues["logins"], dashboard_title: "My sites" });
   expect((await opened.audit())[0]).toMatchObject({ action: "settings_changed", by: opened.owner });
 
   const entries = (await opened.audit()).length;

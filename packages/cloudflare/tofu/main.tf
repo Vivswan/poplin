@@ -142,8 +142,6 @@ locals {
     trash_days                  = tostring(var.trash_days)
     logins                      = join(",", var.logins)
     dashboard_title             = coalesce(var.dashboard_title, local.admin_host)
-    gallery                     = var.gallery ? "on" : "off"
-    private_sites               = "single-file"
     outside_pages               = var.outside_pages
     search_engines_allowed      = var.search_engines_allowed ? "on" : "off"
     block_bots                  = var.block_bots

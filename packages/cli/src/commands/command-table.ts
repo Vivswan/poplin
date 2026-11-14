@@ -163,18 +163,10 @@ export const COMMANDS = [
   {
     name: "whoami",
     group: "you, on this machine",
-    about: "print the install, your email, and your role",
+    about: "print the install, your role, and the token's id",
     arguments: [],
     flags: INSTALL_FLAGS,
     examples: ["poplin whoami"],
-  },
-  {
-    name: "setup",
-    group: "the install",
-    about: "set up a new install",
-    arguments: [],
-    flags: INSTALL_FLAGS,
-    examples: ["poplin setup"],
   },
   {
     name: "config",
@@ -184,7 +176,7 @@ export const COMMANDS = [
       { name: "key", about: "the setting to show; without it, every setting", required: false },
       { name: "value", about: "the value to give it: 7d, 9GB, 25%, on", required: false },
     ],
-    flags: [{ name: "--reset", about: "put that setting back to its default" }, ...INSTALL_FLAGS],
+    flags: INSTALL_FLAGS,
     examples: ["poplin config", "poplin config versions_kept 10", "poplin config outside_pages allowed"],
     notes: [
       "outside_pages, search_engines_allowed, and block_bots are also held in",

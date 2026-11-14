@@ -23,9 +23,6 @@ const UNIT_STEP = 1000;
 /** How many tenths a whole holds: a size is shown to one decimal place. */
 const TENTHS = 10;
 
-/** What an install with no domain may serve privately. */
-const PRIVATE_SITES = ["single-file", "folders"] as const;
-
 /** Whether a page that is not one of the install's own sites may frame a site or load its files. */
 const OUTSIDE_PAGES = ["blocked", "allowed"] as const;
 
@@ -50,8 +47,6 @@ const VALUES = {
     v.check((logins) => new Set(logins).size === logins.length, "each login is listed once"),
   ),
   dashboard_title: v.pipe(v.string(), v.minLength(1)),
-  gallery: v.boolean(),
-  private_sites: v.picklist(PRIVATE_SITES),
   outside_pages: v.picklist(OUTSIDE_PAGES),
   search_engines_allowed: v.boolean(),
   block_bots: v.picklist(BLOCK_BOTS),
@@ -81,8 +76,6 @@ const FORMS: { readonly [Key in SettingKey]: TextForm<SettingValues[Key]> } = {
   trash_days: whole(),
   logins: loginList(),
   dashboard_title: { read: (text) => text, print: (title) => title },
-  gallery: onOff(),
-  private_sites: oneOf(PRIVATE_SITES),
   outside_pages: oneOf(OUTSIDE_PAGES),
   search_engines_allowed: onOff(),
   block_bots: oneOf(BLOCK_BOTS),
@@ -269,8 +262,6 @@ export function defaultSettings(install: Install): SettingValues {
     trash_days: 7,
     logins: [install.installer],
     dashboard_title: install.hostname,
-    gallery: false,
-    private_sites: "single-file",
     outside_pages: "blocked",
     search_engines_allowed: false,
     block_bots: "auto",

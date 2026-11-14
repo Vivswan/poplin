@@ -42,7 +42,6 @@ const BUILDERS: { readonly [Name in Exclude<CommandName, "help">]: (words: Words
   login,
   logout: (words) => withInstall(words, (install) => ({ kind: "logout", ...install })),
   whoami: (words) => withInstall(words, (install) => ({ kind: "whoami", ...install })),
-  setup: (words) => withInstall(words, (install) => ({ kind: "setup", ...install })),
   config,
   doctor: (words) => withInstall(words, (install) => ({ kind: "doctor", ...install })),
   export: exportSites,
@@ -67,12 +66,8 @@ interface Words {
   readonly flags: Flags;
 }
 
-/** What `config` does: show every setting, show one, give one a value in core's text form, or put one back. */
-type ConfigAction =
-  | { readonly kind: "show-all" }
-  | { readonly kind: "show"; readonly key: SettingKey }
-  | { readonly kind: "change"; readonly key: SettingKey; readonly value: string }
-  | { readonly kind: "reset"; readonly key: SettingKey };
+/** What `config` does: show every setting, show one, or give one a value in core's text form. */
+type ConfigAction = { readonly kind: "show-all" } | { readonly kind: "show"; readonly key: SettingKey } | { readonly kind: "change"; readonly key: SettingKey; readonly value: string };
 
 /** A publish makes a new site, named after the path unless `name` is given, or updates the site it names. */
 type PublishTarget = { readonly kind: "create"; readonly name?: SiteName } | { readonly kind: "update"; readonly site: SiteRef };
@@ -86,7 +81,7 @@ export type Request =
   | ({ readonly kind: "delete"; readonly site: SiteRef; readonly forever: boolean } & Install)
   | ({ readonly kind: "list"; readonly trash: boolean } & Install)
   | ({ readonly kind: "login"; readonly publisher: boolean; readonly computer?: string; readonly browser: boolean } & Install)
-  | ({ readonly kind: "logout" | "whoami" | "setup" | "doctor" } & Install)
+  | ({ readonly kind: "logout" | "whoami" | "doctor" } & Install)
   | ({ readonly kind: "config"; readonly action: ConfigAction } & Install)
   | ({ readonly kind: "export"; readonly site?: SiteRef; readonly allVersions: boolean; readonly out?: string; readonly overwrite: boolean } & Install)
   | ({ readonly kind: "import"; readonly zip: string; readonly site?: SiteRef; readonly settings: boolean; readonly logins: boolean; readonly dryRun: boolean } & Install)
@@ -220,10 +215,6 @@ function login(words: Words): Request | UsageError {
 
 function readConfigAction(words: Words): ConfigAction | UsageError {
   const [key, value] = words.positionals;
-  const reset = words.flags.has("--reset");
-
-  if (key === undefined && reset) return usageError("--reset needs the key to put back", "poplin config <key> --reset");
-
   if (key === undefined) return { kind: "show-all" };
 
   if (!isSettingKey(key)) {
@@ -231,10 +222,6 @@ function readConfigAction(words: Words): ConfigAction | UsageError {
 
     return usageError(`unknown setting ${JSON.stringify(key)}`, meant === undefined ? "poplin config shows every setting" : `did you mean ${meant}?`);
   }
-
-  if (value !== undefined && reset) return usageError("--reset takes no value", `poplin config ${key} --reset`);
-
-  if (reset) return { kind: "reset", key };
 
   if (value === undefined) return { kind: "show", key };
 

@@ -15,7 +15,7 @@ const STILL_LIVE = "the token may still be live: revoke it on the install's dash
 type InstallRequest = RequestOf<"whoami" | "logout" | "config" | "doctor">;
 
 /** `config` showing every setting, showing one, or changing one. */
-type ConfigAction = Exclude<RequestOf<"config">["action"], { readonly kind: "reset" }>;
+type ConfigAction = RequestOf<"config">["action"];
 
 /** One line of a doctor's report. */
 interface Check {
@@ -147,9 +147,6 @@ export async function runInstallCommand(request: InstallRequest, session: Sessio
     case "doctor":
       return doctor(session);
     case "config":
-      // No route puts a setting back to its default.
-      if (request.action.kind === "reset") return { ok: false, problem: problem("not_available", "config --reset", "to give the setting a value: poplin config <key> <value>") };
-
       return config(request.action, session);
   }
 }

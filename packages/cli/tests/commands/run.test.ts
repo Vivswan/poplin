@@ -234,8 +234,6 @@ describe("run", () => {
     ["an address that is not https", undefined, "list --server http://poplin.example.com:8787", 2, "--server takes an https:// address with nothing after the host"],
     ["login with no install to ask", {}, "login", 3, "login needs the address of the install"],
     ["login at an address that is not https", {}, "login --server http://poplin.example.com:8787", 2, "--server takes an https:// address with nothing after the host"],
-    ["setup", {}, "setup", 4, "this build of poplin cannot do that: poplin setup"],
-    ["config --reset", undefined, "config trash_days --reset", 4, "this build of poplin cannot do that: config --reset"],
   ])("%s sends nothing and exits with its own code", async (_name, env, line, code, sentence) => {
     const bench = await openBench();
 

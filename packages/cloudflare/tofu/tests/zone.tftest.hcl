@@ -196,7 +196,6 @@ run "worker_bindings" {
   command = plan
 
   variables {
-    gallery                = true
     max_sites              = 50
     search_engines_allowed = true
   }
@@ -234,8 +233,6 @@ run "worker_bindings" {
       trash_days                  = "7"
       logins                      = "owner@example.com"
       dashboard_title             = "poplin.example.com"
-      gallery                     = "on"
-      private_sites               = "single-file"
       outside_pages               = "blocked"
       search_engines_allowed      = "on"
       block_bots                  = "auto"
@@ -544,7 +541,6 @@ run "rate_rule_on_the_hostnames" {
   command = plan
 
   variables {
-    gallery   = true
     rate_rule = "hostnames"
   }
 

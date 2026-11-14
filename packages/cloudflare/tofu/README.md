@@ -46,7 +46,6 @@ Records and routes, for `example.com` with the default hostnames:
 | a site | `report--k3f9x2ab71qz-p-poplin.example.com` | `*.example.com` | `*-poplin.example.com/*` |
 | a public site's public name | `docs-page.example.com` | `*.example.com` | `*-page.example.com/*` |
 | the dashboard | `poplin.example.com` | `poplin.example.com` | `poplin.example.com/*` |
-| the gallery, while `gallery` is on | `gallery-page.example.com` | `*.example.com` | `*-page.example.com/*` |
 
 With `public_word = "poplin"` every site hostname ends in `-poplin`, and one site route takes them all.
 
@@ -152,7 +151,6 @@ The first settings. The names and text forms are those of `poplin config`:
 | `versions_kept` | number | `3` | versions kept per site, the live one included |
 | `trash_days` | number | `7` | days a deleted site waits in the trash |
 | `dashboard_title` | string | `null` | the title of the dashboard; null means the dashboard's hostname |
-| `gallery` | bool | `false` | the public page listing the public sites, at `gallery-page.example.com` |
 | `max_total_size` | string | `9GB` | limit: all sites together |
 | `max_site_size` | string | `200MB` | limit: one site |
 | `max_sites` | number | `null` | limit: how many sites; null means none |
