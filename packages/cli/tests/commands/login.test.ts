@@ -289,6 +289,34 @@ describe("logIn", () => {
     expect([ran.code, ran.waits, questions]).toEqual([0, [5000, 90_000, 5000], 3]);
   });
 
+  // Drift: an install begins five logins a minute for everybody together, so a login can be asked to wait through no fault of its own. One that gave up at the first 429 would fail in a busy minute, and one that asked on for ever would tell nobody.
+  test.each([
+    ["twice", 2, 0, [39_000, 60_000, 5000]],
+    ["six times", 6, 1, [39_000, 60_000, 60_000, 60_000, 60_000]],
+  ])("a login the install asks to wait %s is begun again after each rest, five rests at most", async (_name, refusals, code, waits) => {
+    const desk = await openDesk();
+    const inner = desk.bench.hook;
+    let begun = 0;
+    desk.bench.hook = async (request) => {
+      if (request.method !== "POST" || new URL(request.url).pathname !== "/api/logins") return inner?.(request);
+
+      begun += 1;
+      if (begun > refusals) return inner?.(request);
+
+      return Response.json({ error: { code: "too_many_requests", message: "the install is asked too often" } }, { status: 429, headers: begun === 1 ? { "Retry-After": "39" } : {} });
+    };
+
+    desk.bench.paused = async (soFar) => {
+      const address = soFar.out.map((line) => line.trim()).find((line) => line.startsWith(ORIGIN));
+
+      return address === undefined ? undefined : allow(desk, address);
+    };
+
+    const ran = await desk.bench.run(`login --server ${ORIGIN}`, { env: {} });
+
+    expect([ran.code, ran.waits, begun, ran.err[0]]).toEqual([code, waits, Math.min(refusals, 5) + 1, code === 0 ? undefined : "the install is asked too often from this address"]);
+  });
+
   // Drift: the browser goes where the install says; an install, or whatever answers in its place, that named another site would send the admin there with the dashboard's trust.
   test("an answer whose address is not on the install that was asked opens nothing and waits for nothing", async () => {
     const desk = await openDesk();

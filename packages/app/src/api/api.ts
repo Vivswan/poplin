@@ -25,6 +25,9 @@ const DECLARES_FILES: ReadonlySet<RouteName> = new Set(["beginPublish", "beginIm
 /** The most requests one visitor may send a minute to each route that takes no token. A terminal asks for its token twelve times a minute. The pace alone bounds no visitor's waiting logins: core keeps three of each. */
 const OPEN_PER_MINUTE: Readonly<Record<OpenName, number>> = { beginLogin: 5, redeemLogin: 25 };
 
+/** The most logins all visitors together may begin a minute. A day then begins 7,200 at most: 28,800 rows written and 417,600 read, under a third of what a free day of the database takes. */
+const STARTS_PER_MINUTE = 5;
+
 /** What a counter that cannot answer is taken to say: the minute is full. A login is the guess the count exists to stop, so it is refused where a request for a site is let through. */
 const UNCOUNTED = { ok: false, retryAfterSeconds: 60 } as const;
 
@@ -66,15 +69,18 @@ function bodyCap(name: RouteName, limits: ApiLimits): number {
   return name === "importSettings" ? SETTINGS_BYTES : JSON_BYTES;
 }
 
-/** Answer one request to a route that takes no token: the visitor's count first, then what was sent, then the route's handler. */
-async function answerOpen(name: OpenName, request: Request, deps: ApiDeps): Promise<Response> {
-  const take = async (): Promise<Taken & { readonly visitor: string }> => {
-    const visitor = await deps.visitorOf(request);
-    const counted = await deps.counters.takeMinute({ scope: "visitor", key: `${name}:${visitor}`, limit: OPEN_PER_MINUTE[name] }, deps.now());
+/** Count one request to a route that takes no token: against its visitor's minute, and a login that fits there against the minute of all logins begun. */
+async function takeOpen(name: OpenName, request: Request, deps: ApiDeps): Promise<Taken & { readonly visitor: string }> {
+  const visitor = await deps.visitorOf(request);
+  const own = await deps.counters.takeMinute({ scope: "visitor", key: `${name}:${visitor}`, limit: OPEN_PER_MINUTE[name] }, deps.now());
+  if (!own.ok || name !== "beginLogin") return { ...own, visitor };
 
-    return { ...counted, visitor };
-  };
-  const taken = await take().catch((error: unknown) => {
+  return { ...(await deps.counters.takeMinute({ scope: "install", key: name, limit: STARTS_PER_MINUTE }, deps.now())), visitor };
+}
+
+/** Answer one request to a route that takes no token: the counts first, then what was sent, then the route's handler. */
+async function answerOpen(name: OpenName, request: Request, deps: ApiDeps): Promise<Response> {
+  const taken = await takeOpen(name, request, deps).catch((error: unknown) => {
     // A database that is spent for the day is told as that, never as a full minute.
     if (error instanceof AllowanceSpent) throw error;
 
@@ -135,7 +141,7 @@ async function answer(name: RouteName, request: Request, params: Readonly<Record
  *
  * Every request is authenticated by `Authorization: Bearer <token>` alone, and whether the token may do what it asks is decided by the action. `HEAD` is answered as `GET` without its body.
  *
- * The two routes a computer logs in through take no token: they are counted by visitor, and what they hand out is decided by an admin on the dashboard.
+ * The two routes a computer logs in through take no token: they are counted by visitor, the logins begun by all visitors together too, and what they hand out is decided by an admin on the dashboard.
  *
  * @returns the handler of every request under `/api`, which never throws. It answers a path that is no route 404, a route under another method 405 with `Allow`, a database spent for the day 503 with `Retry-After`, and any other failure 500
  */

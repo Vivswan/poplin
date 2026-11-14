@@ -22,6 +22,9 @@ const FIRST = BINDINGS.FIRST_SETTINGS as Readonly<Record<string, string>>;
 /** The milliseconds of one minute, which is how long the rate limiting binding counts for. */
 const MINUTE_MS = 60_000;
 
+/** The end of a minute, in milliseconds: too little of it for a test that counts requests within one. */
+const MINUTE_END_MS = 2000;
+
 /** Values in the form of a site, an upload, a token's id, a path, and a version, for a request to every route. */
 const NAMED = { site: "zzzzzzzzzzzz", upload: "zzzzzzzzzzzzzzzz", token: "00000000000000aa", path: "index.html", version: 1 };
 
@@ -661,21 +664,30 @@ describe("a computer's login", () => {
     expect(statuses.filter(([, status]) => status !== 401)).toEqual([]);
   });
 
-  // Drift: the counts are keyed by the address Cloudflare saw; an entry that passed no key, or one key for everyone, would let one computer lock every other out, or count nobody.
-  test("the sixth login one address begins in a minute is refused, and another address begins one", async () => {
+  // Drift: questions are counted by the address Cloudflare saw, and logins begun by all addresses together. One key for everyone would let one computer silence every terminal, and no count of the install would let a few addresses spend a day's writes.
+  test("the sixth login begun in a minute is refused whichever address begins it, and the twenty-sixth question of one address is refused while another address is answered", async () => {
     const worker = instance(w);
-    let statuses: number[] = [];
-    let started = 0;
+    const question = (address: string): Promise<Response> => {
+      const headers = { "Content-Type": "application/json", "CF-Connecting-IP": address };
 
-    // The binding's minute is the wall clock's, not the test's: a run that crosses one is made again.
-    do {
-      started = Math.floor(Date.now() / MINUTE_MS);
-      statuses = [];
-      for (let sent = 0; sent < 6; sent += 1) statuses.push((await begin(worker, "192.0.2.1")).status);
-      statuses.push((await begin(worker, "192.0.2.2")).status);
-    } while (Math.floor(Date.now() / MINUTE_MS) !== started);
+      return ask(worker, `${ADMIN}${ROUTES.redeemLogin.path()}`, { method: "POST", headers, body: JSON.stringify({ secret: `poplin_login_${"0".repeat(16)}_${"0".repeat(64)}` }) });
+    };
+    const begun: number[] = [];
+    const asked: number[] = [];
 
-    expect(statuses).toEqual([200, 200, 200, 200, 200, 429, 200]);
+    // The binding's minute is the wall clock's, not the test's: a run that would cross one waits for the next.
+    const left = MINUTE_MS - (Date.now() % MINUTE_MS);
+    if (left < MINUTE_END_MS) await new Promise((resolve) => setTimeout(resolve, left));
+
+    for (let sent = 0; sent < 5; sent += 1) begun.push((await begin(worker, "192.0.2.1")).status);
+    begun.push((await begin(worker, "192.0.2.2")).status);
+    for (let sent = 0; sent < 26; sent += 1) asked.push((await question("192.0.2.1")).status);
+    asked.push((await question("192.0.2.2")).status);
+
+    expect([begun, asked]).toEqual([
+      [200, 200, 200, 200, 200, 429],
+      [...Array.from({ length: 25 }, () => 200), 429, 200],
+    ]);
   });
 });
 

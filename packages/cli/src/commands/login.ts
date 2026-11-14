@@ -22,6 +22,9 @@ const SECONDS_PER_MINUTE = 60;
 /** The fewest and the most seconds between two questions, whatever the install says. */
 const INTERVAL_BOUNDS = { min: 1, max: 60 } as const;
 
+/** How often a login the install asks to wait is begun again before the refusal stands. */
+const BEGIN_RESTS = 5;
+
 /** The longest name a computer gives itself, in characters. */
 const MAX_COMPUTER_LENGTH = 100;
 
@@ -77,6 +80,26 @@ function clamped(seconds: number): number {
   if (!Number.isFinite(seconds)) return INTERVAL_BOUNDS.max;
 
   return Math.min(INTERVAL_BOUNDS.max, Math.max(INTERVAL_BOUNDS.min, seconds));
+}
+
+/**
+ * Begin the login, and begin it again after each rest an install that is asked too often asks for, up to five rests.
+ *
+ * @returns the begun login, the refusal that stands, or `interrupted` once the person stops a rest
+ */
+async function begin(client: Client, asked: { readonly scope: "publisher" | "admin"; readonly computer: string }, io: Io): Promise<Begun | Problem> {
+  for (let rests = 0; ; rests += 1) {
+    const begun = await client.call("beginLogin", undefined, asked);
+    if (begun.ok) return begun.value;
+
+    const { failure } = begun;
+    if (failure.kind !== "refused" || failure.code !== "too_many_requests" || rests === BEGIN_RESTS) return problemOf(failure);
+
+    const seconds = clamped(failure.retryAfter ?? INTERVAL_BOUNDS.max);
+    if (io.terminal.progress) io.status(`the install asks for a pause: beginning the login in ${seconds} s (Ctrl-C stops)`);
+
+    if ((await io.pause(seconds * MS_PER_SECOND)) === "interrupted") return problem("interrupted");
+  }
 }
 
 /** Tell the person where to go: with `--json` one line an agent can pass on, otherwise the address and the code, each alone on a line. */
@@ -158,16 +181,18 @@ export async function logIn(request: RequestOf<"login">, io: Io): Promise<Outcom
 
   const client = createClient({ server, fetch: io.fetch, timeoutMs: io.timeoutMs, stopped: io.stopped });
   const computer = request.computer ?? io.computer.replace(CONTROL, "").slice(0, MAX_COMPUTER_LENGTH);
-  const begun = await client.call("beginLogin", undefined, { scope: request.publisher ? "publisher" : "admin", computer });
-  if (!begun.ok) return refused(problemOf(begun.failure));
+  const begun = await begin(client, { scope: request.publisher ? "publisher" : "admin", computer }, io);
+  if (io.terminal.progress) io.status("");
 
-  const page = pageOf(begun.value.verify_url, server);
+  if ("exit" in begun) return refused(begun);
+
+  const page = pageOf(begun.verify_url, server);
   if (page === undefined) return refused(problem("unexpected_answer", "the address to open is not the install's"));
 
-  announce(page, begun.value, request.json, io);
+  announce(page, begun, request.json, io);
   if (request.browser) io.open(page);
 
-  const collected = await collect(client, begun.value, io);
+  const collected = await collect(client, begun, io);
   if (io.terminal.progress) io.status("");
 
   if ("code" in collected) return refused(collected);

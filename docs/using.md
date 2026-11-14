@@ -137,6 +137,8 @@ $ poplin login --server https://poplin.example.com
   ->  the login is saved on this computer
 ```
 
+An install begins five logins a minute for all computers together. In a minute that is full, `poplin login` waits and asks again.
+
 `POPLIN_SERVER` and `POPLIN_TOKEN` in the environment stand in for a saved login.
 
 ## The install

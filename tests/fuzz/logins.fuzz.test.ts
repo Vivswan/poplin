@@ -17,6 +17,8 @@ const ADA = "ada@example.com" as Login;
 const SESSION = "session=ada";
 const FORM = "application/x-www-form-urlencoded";
 const INTERVAL_MS = 5000;
+const MINUTE_MS = 60_000;
+const STARTS_PER_MINUTE = 5;
 const CREDENTIAL = /poplin_(?:login_)?[0-9a-f]{16}_[0-9a-f]{64}/g;
 const YEAR_2100_MS = 4_102_444_800_000;
 
@@ -46,6 +48,36 @@ interface Desk {
   readonly credentials: Set<string>;
   csrf: string;
   visitors: number;
+  starts: Starts;
+}
+
+/** What the test itself counts of the logins begun: how many each visitor and all of them together began in the minute. */
+class Starts {
+  #minute = -1;
+
+  #all = 0;
+
+  readonly #own = new Map<string, number>();
+
+  /** The status a login this visitor begins now is answered with, counted as the install counts it. */
+  status(visitor: string, now: number): number {
+    const minute = Math.floor(now / MINUTE_MS);
+    if (minute !== this.#minute) {
+      this.#minute = minute;
+      this.#all = 0;
+      this.#own.clear();
+    }
+
+    const own = this.#own.get(visitor) ?? 0;
+    if (own >= STARTS_PER_MINUTE) return 429;
+
+    this.#own.set(visitor, own + 1);
+    if (this.#all >= STARTS_PER_MINUTE) return 429;
+
+    this.#all += 1;
+
+    return 200;
+  }
 }
 
 const property = fuzzTarget(import.meta.file);
@@ -98,6 +130,7 @@ async function openDesk(): Promise<Desk> {
     credentials: new Set(),
     csrf: "",
     visitors: 0,
+    starts: new Starts(),
   };
   const tokens = await (await desk.dashboard.fetch(new Request(`${ORIGIN}/tokens`, { headers: { Cookie: SESSION } }))).text();
   desk.csrf = /name="csrf" value="([^"]+)"/.exec(tokens)?.[1] ?? "";
@@ -187,7 +220,9 @@ async function take(desk: Desk, step: Step): Promise<void> {
 
   if (step.kind === "begin") {
     const begun = await call(desk, "/api/logins", { scope: step.scope, computer: step.computer });
-    expect(begun.status).toBe(200);
+    expect(begun.status).toBe(desk.starts.status(`visitor-${desk.visitors}`, desk.install.clock.now));
+    if (begun.status !== 200) return;
+
     desk.texts.pop();
     desk.credentials.add(String(begun.body.secret));
     desk.known.push({ code: String(begun.body.code), secret: String(begun.body.secret), scope: step.scope, expiresAt: desk.install.clock.now + Number(begun.body.expires_in) * 1000, state: "pending" });
@@ -231,7 +266,7 @@ property(
 );
 
 property(
-  "whatever sixteen other addresses begin and however long they wait, an address that has no login waiting begins one, and it waits until it runs out",
+  "whatever sixteen other addresses begin and however long they wait, an address that has no login waiting begins one unless five were begun that minute, and it waits until it runs out",
   fc.asyncProperty(fc.array(fc.oneof(fc.nat({ max: 15 }), fc.constantFrom("wait" as const, "minute" as const)), { maxLength: 120 }), fc.nat({ max: 120 }), async (crowd, entry) => {
     const install = await openApi();
     const begin = async (visitor: string): Promise<{ readonly status: number; readonly secret: string }> => {
@@ -241,18 +276,19 @@ property(
       return { status: answer.status, secret: String((await answer.json()).secret) };
     };
     const begunAt = Math.min(entry, crowd.length);
-    let own: { readonly status: number; readonly secret: string; readonly at: number } | undefined;
+    const starts = new Starts();
+    let own: { readonly status: number; readonly secret: string; readonly at: number; readonly fits: number } | undefined;
 
     for (const [at, step] of [...crowd, "wait" as const].entries()) {
-      if (at === begunAt) own = { ...(await begin("own")), at: install.clock.now };
+      if (at === begunAt) own = { fits: starts.status("own", install.clock.now), ...(await begin("own")), at: install.clock.now };
       if (step === "wait") install.clock.now += INTERVAL_MS;
-      if (step === "minute") install.clock.now += 60_000;
-      if (typeof step === "number") expect([200, 429]).toContain((await begin(`crowd-${step}`)).status);
+      if (step === "minute") install.clock.now += MINUTE_MS;
+      if (typeof step === "number") expect((await begin(`crowd-${step}`)).status).toBe(starts.status(`crowd-${step}`, install.clock.now));
     }
     const asked = await install.api.fetch(new Request(`${ORIGIN}/api/logins/token`, { method: "POST", headers: { "Content-Type": "application/json", [VISITOR_HEADER]: "own" }, body: JSON.stringify({ secret: own?.secret }) }));
-    const waits = own !== undefined && install.clock.now < own.at + 600_000;
+    const waits = own?.status === 200 && install.clock.now < own.at + 600_000;
 
-    expect([own?.status, asked.status, (await asked.json()).state]).toEqual([200, 200, waits ? "pending" : "expired"]);
+    expect([own?.status, asked.status, (await asked.json()).state]).toEqual([own?.fits, 200, waits ? "pending" : "expired"]);
   }),
 );
 

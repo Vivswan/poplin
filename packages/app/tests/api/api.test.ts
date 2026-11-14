@@ -598,8 +598,8 @@ describe("what the API refuses before any action runs", () => {
     expect(await stateOf(install)).toEqual(before);
   });
 
-  // Drift: nobody is asked before these two routes run, so the count by address is the only brake on a flood of logins and on guesses at a secret.
-  test("one address begins five logins and asks twenty-five times a minute; the next request is answered 429 with when to come back, and another address and the next minute are not", async () => {
+  // Drift: nobody is asked before these two routes run, so the count by address is the brake on one address's flood of logins and on its guesses at a secret.
+  test("one address begins five logins and asks twenty-five times a minute; the next request is answered 429 with when to come back, and another address's question and the next minute are not", async () => {
     const install = await openApi();
     const begin = (visitor: string): Promise<Answered> => install.call("beginLogin", undefined, { token: null, headers: { [VISITOR_HEADER]: visitor }, body: { scope: "publisher", computer: "laptop" } });
     const ask = (visitor: string): Promise<Answered> => install.call("redeemLogin", undefined, { token: null, headers: { [VISITOR_HEADER]: visitor }, body: { secret: `poplin_login_${"0".repeat(16)}_${"0".repeat(64)}` } });
@@ -618,11 +618,28 @@ describe("what the API refuses before any action runs", () => {
       { error: { code: "too_many_requests", message: "too many requests came from this address: wait, then ask again" } },
       "39",
     ]);
-    expect([...others, await begin("one"), await ask("one")].map((answer) => answer.status)).toEqual([200, 200, 200, 200]);
+    expect([...others, await begin("one"), await ask("one")].map((answer) => answer.status)).toEqual([429, 200, 200, 200]);
   });
 
-  // Drift: the pace alone lets one address hold fifty logins waiting for good, and the entry is what tells core who asks. An entry that passed every request as one visitor would let that address keep every other computer out.
-  test("one address beginning logins as fast as it may for thirty minutes never keeps another address from beginning one, nor takes the place of one that waits", async () => {
+  // Drift: every login begun writes four rows whoever begins it, and addresses are cheap. Without a count of all of them together, a few addresses spend the database's free day of writing in hours.
+  test("five logins are begun in a minute by all addresses together; the sixth address is answered 429 with when to come back, its question is not, and the next minute begins five more", async () => {
+    const install = await openApi();
+    const begin = (visitor: string): Promise<Answered> => install.call("beginLogin", undefined, { token: null, headers: { [VISITOR_HEADER]: visitor }, body: { scope: "publisher", computer: "laptop" } });
+    install.clock.now = NOW + 1000;
+
+    const first = [];
+    for (const visitor of ["one", "two", "three", "four", "five", "six", "six"]) first.push(await begin(visitor));
+    const asked = await install.call("redeemLogin", undefined, { token: null, headers: { [VISITOR_HEADER]: "six" }, body: { secret: first[0]?.body.secret } });
+    install.clock.now = NOW + 60_000;
+    const next = [];
+    for (const visitor of ["six", "six", "six", "six", "six", "one"]) next.push(await begin(visitor));
+
+    expect([first.map((answer) => answer.status), asked.status, next.map((answer) => answer.status)]).toEqual([[200, 200, 200, 200, 200, 429, 429], 200, [200, 200, 200, 200, 200, 429]]);
+    expect([first.at(-1)?.response.headers.get("Retry-After"), part(first.at(-1) as Answered, "error").code]).toEqual(["39", "too_many_requests"]);
+  });
+
+  // Drift: the pace alone lets one address hold fifty logins waiting for good, and the entry is what tells core who asks. An entry that passed every request as one visitor would let that address take the place of every other computer's login.
+  test("one address beginning logins as fast as it may for thirty minutes takes the four starts a minute another address left, and never the place of a login that waits", async () => {
     const install = await openApi();
     const begin = (visitor: string): Promise<Answered> => install.call("beginLogin", undefined, { token: null, headers: { [VISITOR_HEADER]: visitor }, body: { scope: "publisher", computer: "laptop" } });
     const flood: number[] = [];
@@ -637,7 +654,7 @@ describe("what the API refuses before any action runs", () => {
       others.push([other.status, asked.body]);
     }
 
-    expect([flood.filter((status) => status === 200).length, flood.filter((status) => status === 429).length]).toEqual([150, 30]);
+    expect([flood.filter((status) => status === 200).length, flood.filter((status) => status === 429).length]).toEqual([120, 60]);
     expect(others).toEqual(Array.from({ length: 30 }, () => [200, { state: "pending" }]));
   });
 

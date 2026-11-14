@@ -25,12 +25,12 @@ const PERCENT = 100;
 const TAKEN: Taken = { ok: true };
 const PAGE_STATUSES: ReadonlySet<number> = new Set([200, 304]);
 
-/** One count of requests over a minute: a visitor's, or a site's. */
+/** One count of requests over a minute: a visitor's, a site's, or one of the whole install. */
 export interface MinuteWindow {
-  /** Which of the two per-minute limits it counts for. */
-  readonly scope: "visitor" | "site";
+  /** Which of the per-minute limits it counts for. */
+  readonly scope: "visitor" | "site" | "install";
 
-  /** Whose count it is: a visitor key or a site id. */
+  /** Whose count it is: a visitor key, a site id, or the name of what the install counts. */
   readonly key: string;
 
   /** The most requests the minute takes. */
