@@ -5,7 +5,15 @@ order: 10
 
 # Poplin
 
-Agents publish static sites to your own Cloudflare account. A site is private by default; it can be made unlisted (anyone with the secret link) or public.
+Poplin lets an AI agent or a person publish a static site (a folder, or one HTML file) to their own Cloudflare account with one call.
+
+**Status:** in development, not released. You cannot install or use it yet.
+
+```text
+poplin ./report   ->   https://page-report.example.com
+```
+
+**Who can open what you publish:**
 
 | State                 | Who can open it             |
 | --------------------- | --------------------------- |
@@ -13,9 +21,9 @@ Agents publish static sites to your own Cloudflare account. A site is private by
 | unlisted              | anyone with the secret link |
 | public                | everyone                    |
 
-Poplin is in development and not released. Pages arrive here as the product is built.
+**The pages:**
 
-| Page | What it covers |
-| --- | --- |
-| [Decisions](decisions.md) | why poplin is built the way it is, and what each choice costs |
-| [Security](security.md) | what poplin protects against and what it does not |
+| Page                        | What it covers                                    |
+| --------------------------- | ------------------------------------------------- |
+| [Comparison](comparison.md) | what poplin and four other tools do               |
+| [Security](security.md)     | what poplin protects against and what it does not |

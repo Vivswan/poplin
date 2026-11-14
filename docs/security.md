@@ -6,13 +6,11 @@ group: Reference
 
 # Security
 
-This page describes the design. It is updated as the product is built.
-
-It says what poplin protects against and what it does not. Why the design is this way is on the [decisions page](decisions.md). Everything below assumes a domain on Cloudflare, except the last section, [Without a domain](#without-a-domain).
+This page says what poplin protects against and what it does not. Everything below assumes a domain on Cloudflare, except the last section, [Without a domain](#without-a-domain).
 
 ## What a secret link covers
 
-An unlisted site promises what a shared document promises: anyone with the secret link can open it.
+An unlisted site opens for anyone with the secret link.
 
 ```text
 https://page-report--7f3k9x2mq4ab.example.com      12 random characters, about 62 bits
@@ -86,7 +84,7 @@ A private site without the cookie answers exactly like a name that does not exis
 
 ## Hardening
 
-| Measure | What the design does |
+| Measure | What poplin does |
 | --- | --- |
 | the cookie | HttpOnly, Secure, SameSite Lax, set on the parent domain: no script can read it, and a cross-site post does not carry it |
 | a removed login | the cookie names the email, and the Worker checks it against the allowed logins on every request; a removed login stops working within the settings cache, one minute |
@@ -110,7 +108,7 @@ Each site is its own origin, so a page's scripts cannot read another site or its
 | a public or an unlisted site's files | works from any page; for an unlisted site the page must know the secret link |
 | a private site's files | refused, unless the private site's own list of allowed sites names the asking site; the list is empty by default |
 
-All sites of a domain share the login cookie, which is why the Worker refuses the third row. It decides from the request's `Origin` and `Sec-Fetch-Site` headers and reads no content. The owner opening a private address is a top-level navigation and is unaffected.
+All sites of a domain share the login cookie. The Worker decides the third row from the request's `Origin` and `Sec-Fetch-Site` headers and reads no content. The owner opening a private address is a top-level navigation and is unaffected.
 
 **What a page's scripts can still do:** spend requests against the day's quota. The rate limit per visitor bounds that per address.
 
@@ -136,7 +134,7 @@ What the sandbox keeps a site page from doing, in Chromium, Firefox, and WebKit:
 - **Reading the login cookie.** The cookie is not available to the page.
 - **Acting as the owner.** A page cannot call the owner's index or the API with the owner's login.
 
-This separation depends on the login cookie being Secure, HttpOnly, and SameSite=Lax. The design sets all three explicitly.
+This separation depends on the login cookie being Secure, HttpOnly, and SameSite=Lax. Poplin sets all three.
 
 ### A private site without a domain
 
@@ -150,4 +148,4 @@ One setting for the whole install allows a private site to be a whole folder ins
 3. every file of the site is served under that address, with no cookie
 ```
 
-**What the owner accepts by switching it on:** anyone holding that address can open the site until it expires. The Worker sends `Referrer-Policy: no-referrer` on every site response, so the address never leaks to another site.
+**What the owner accepts by switching it on:** anyone holding that address can open the site until it expires. The Worker sends `Referrer-Policy: no-referrer` on every site response, so the address is not sent to another site in a referrer header.
