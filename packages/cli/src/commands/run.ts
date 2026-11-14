@@ -7,7 +7,9 @@ import type { Host } from "../mcp/records";
 import { type Pipes, serveOnPipes } from "../mcp/stdio";
 import { VERSION } from "../poplin";
 import { exitCode } from "./exit-codes";
+import { runExport } from "./export";
 import { helpText } from "./help";
+import { runImport } from "./import";
 import { runInstallCommand } from "./install-commands";
 import { parseCommand } from "./parse-command";
 import { type Problem, problem, problemLines } from "./problems";
@@ -34,7 +36,7 @@ const INSTALL_COMMANDS = ["whoami", "logout", "config", "doctor"] as const;
 const SITE_COMMANDS = ["set", "show", "list", "rollback", "new-link", "delete", "restore"] as const;
 
 /** A command that talks to an install. */
-type OnlineRequest = RequestOf<"publish" | (typeof INSTALL_COMMANDS)[number] | (typeof SITE_COMMANDS)[number]>;
+type OnlineRequest = RequestOf<"publish" | "export" | "import" | (typeof INSTALL_COMMANDS)[number] | (typeof SITE_COMMANDS)[number]>;
 
 function refused(said: Problem): Outcome {
   return { ok: false, problem: said };
@@ -136,6 +138,10 @@ async function execute(request: Request, io: Io): Promise<Outcome> {
   if (asks(request, INSTALL_COMMANDS)) return online(request, io, (session) => runInstallCommand(request, session));
 
   if (asks(request, SITE_COMMANDS)) return online(request, io, (session) => runSiteCommand(request, session));
+
+  if (asks(request, ["export"])) return online(request, io, (session) => runExport(request, session));
+
+  if (asks(request, ["import"])) return runImport(request, (send) => online(request, io, send));
 
   return refused(problem("not_available", `poplin ${request.kind}`, IN_ITS_PLACE[request.kind]));
 }

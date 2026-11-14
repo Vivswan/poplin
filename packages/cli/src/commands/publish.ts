@@ -2,28 +2,17 @@
 
 import type { ROUTES } from "../../../core/src/api/routes";
 import { showBytes } from "../../../core/src/records/settings";
-import type { Called, Client, Failure } from "../client/client";
+import type { Failure } from "../client/client";
 import { type PublishFile, readFiles } from "../files/read";
 import { readTitle } from "../files/title";
 import { type Problem, problem, problemOf } from "./problems";
 import type { Io, Outcome, RequestOf, Session } from "./records";
 import { columns, countText, searchNotes, siteLines } from "./text";
+import { giveUpUpload, type Published, sendUpload } from "./upload";
 import { siteChanges, siteWord } from "./wire";
 
 /** The page whose title a site takes. */
 const ENTRY_PAGE = "index.html";
-
-/** How many files are on their way at once. */
-const UPLOADS_AT_ONCE = 4;
-
-/** How often one file is sent before the publish is given up: once, and twice more. The route stores the same bytes again, so sending twice is safe. */
-const UPLOAD_ATTEMPTS = 3;
-
-/** How often a publish is finished before it is given up: once, and twice more after sending the files the install said it lacks. */
-const FINISH_ATTEMPTS = 3;
-
-/** The first status that is the install's own failure rather than a refusal of what was sent. */
-const SERVER_FAILURE = 500;
 
 /** What became of an upload that was not finished, in words. */
 const AFTERMATH = {
@@ -38,9 +27,6 @@ type PublishRequest = RequestOf<"publish">;
 
 /** What a publish is begun with. */
 type Manifest = NonNullable<(typeof ROUTES)["beginPublish"]["types"]>["body"];
-
-/** The answer to a finished publish. */
-type Published = NonNullable<(typeof ROUTES)["finishPublish"]["types"]>["done"];
 
 /** A publish with its folder read: the files, and what the install is asked to make of them. */
 export interface PublishPlan {
@@ -96,78 +82,6 @@ async function titleOf(request: PublishRequest, files: readonly PublishFile[]): 
   return own ?? request.settings.title;
 }
 
-/** Whether sending a file again may go better: the install failed or gave no answer, rather than refusing what was sent. */
-function isWorthAnotherTry(failure: Failure): boolean {
-  return failure.kind !== "refused" || failure.status >= SERVER_FAILURE;
-}
-
-async function sendFile(client: Client, upload: string, file: PublishFile): Promise<Failure | undefined> {
-  let failure: Failure | undefined;
-
-  for (let attempt = 1; attempt <= UPLOAD_ATTEMPTS; attempt += 1) {
-    const body = file.open();
-    const sent = await client.call("uploadFile", { upload, path: file.path }, body, file.size);
-    if (sent.ok) return undefined;
-
-    // A request that broke off leaves the file open; a stream the request still holds refuses the cancel, and closes with the request.
-    await body.cancel().catch(() => undefined);
-    failure = sent.failure;
-
-    if (!isWorthAnotherTry(failure)) return failure;
-  }
-
-  return failure;
-}
-
-/** Send files, four at a time. The first file that cannot be sent stops the rest from starting. */
-async function sendFiles(client: Client, upload: string, files: readonly PublishFile[], progress: Progress): Promise<Failure | undefined> {
-  const waiting = [...files];
-  let failure: Failure | undefined;
-
-  const lane = async (): Promise<void> => {
-    for (let file = waiting.shift(); file !== undefined && failure === undefined; file = waiting.shift()) {
-      const failed = await sendFile(client, upload, file);
-
-      if (failed === undefined) {
-        progress.arrived(file);
-      } else {
-        failure ??= failed;
-      }
-    }
-  };
-
-  await Promise.all(Array.from({ length: Math.min(UPLOADS_AT_ONCE, files.length) }, lane));
-
-  return failure;
-}
-
-function lacksFiles(finished: Called<Published>): boolean {
-  return !finished.ok && finished.failure.kind === "refused" && finished.failure.code === "missing_files";
-}
-
-/** Finish the upload. While the install lacks files, ask which, send those, and finish again. */
-async function finish(client: Client, upload: string, plan: PublishPlan, progress: Progress): Promise<Called<Published>> {
-  let finished = await client.call("finishPublish", { upload });
-
-  for (let attempt = 1; attempt < FINISH_ATTEMPTS && lacksFiles(finished); attempt += 1) {
-    const shown = await client.call("showUpload", { upload });
-    if (!shown.ok) return shown;
-
-    const lacking = new Set(shown.value.missing);
-    const failure = await sendFiles(
-      client,
-      upload,
-      plan.files.filter((file) => lacking.has(file.path)),
-      progress,
-    );
-    if (failure !== undefined) return { ok: false, failure };
-
-    finished = await client.call("finishPublish", { upload });
-  }
-
-  return finished;
-}
-
 function published(plan: PublishPlan, answer: Published): Outcome {
   const { site } = answer;
   const facts = site.created ? [site.access] : [`version ${site.live_version}`, site.access];
@@ -180,26 +94,6 @@ function givenUp(failure: Failure, aftermath: string): Outcome {
   const hint = said.hint === undefined ? aftermath : `${aftermath}; ${said.hint}`;
 
   return { ok: false, problem: { ...said, hint } };
-}
-
-/**
- * Give an upload up after a failure, and say what became of it.
- *
- * An install that answers that the upload is live finished it, though its answer was lost: the publish is then asked for once more, and reported as done.
- */
-async function giveUp(client: Client, upload: string, plan: PublishPlan, failure: Failure): Promise<Outcome> {
-  const abandoned = await client.call("abandonPublish", { upload });
-  if (abandoned.ok) return givenUp(failure, AFTERMATH.abandoned);
-
-  const refusal = abandoned.failure.kind === "refused" ? abandoned.failure.code : undefined;
-  if (refusal === "not_found") return givenUp(failure, AFTERMATH.abandoned);
-
-  if (refusal !== "upload_finished") return givenUp(failure, AFTERMATH.unknown);
-
-  const live = await client.call("finishPublish", { upload });
-  if (!live.ok) return givenUp(failure, AFTERMATH.live);
-
-  return published(plan, live.value);
 }
 
 /**
@@ -256,13 +150,14 @@ export async function sendPublish(plan: PublishPlan, { client, io }: Session): P
   const progress = progressOn(io, plan);
 
   try {
-    const failure = await sendFiles(client, upload, plan.files, progress);
-    if (failure !== undefined) return await giveUp(client, upload, plan, failure);
+    const finished = await sendUpload(client, upload, plan.files, progress.arrived);
+    if (finished.ok) return published(plan, finished.value);
 
-    const finished = await finish(client, upload, plan, progress);
-    if (!finished.ok) return await giveUp(client, upload, plan, finished.failure);
+    // An upload the install finished though its answer was lost is reported as done.
+    const became = await giveUpUpload(client, upload);
+    if (became.kind === "published") return published(plan, became.answer);
 
-    return published(plan, finished.value);
+    return givenUp(finished.failure, AFTERMATH[became.kind]);
   } catch (error) {
     await client.call("abandonPublish", { upload });
 

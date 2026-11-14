@@ -75,4 +75,34 @@ describe("client", () => {
     expect(called).toEqual({ ok: false, failure } as never);
     expect(JSON.stringify(called)).not.toContain(TOKEN);
   });
+
+  test("a download hands back the real API's file as a stream with its length and its stored type, and a refusal as its code: without this a file route would be read as JSON and capped at 16 MB", async () => {
+    const install = await openApi();
+    const type = "text/x-notes; charset=utf-8";
+    const begun = await install.call("beginPublish", undefined, { body: { name: "notes", files: [{ path: "index.html", size: 5, content_type: type }] } });
+    const upload = (begun.body.upload as { id: string }).id;
+    await install.call("uploadFile", { upload, path: "index.html" }, { body: "hello" });
+    const site = ((await install.call("finishPublish", { upload })).body.site as { id: string }).id;
+    const client = createClient({ server: ORIGIN, token: install.tokens.admin, fetch: (input, init) => install.api.fetch(new Request(input, init)) });
+
+    const file = await client.download({ site, version: 1, path: "index.html" });
+    const absent = await client.download({ site, version: 1, path: "none.html" });
+
+    expect(file).toMatchObject({ ok: true, value: { size: 5, contentType: type } });
+    expect(file.ok && (await new Response(file.value.body).text())).toBe("hello");
+    expect(absent).toMatchObject({ ok: false, failure: { kind: "refused", status: 404, code: "not_found", about: "path" } });
+  });
+
+  test.each<[string, Response, unknown]>([
+    ["no length", new Response("hello", { headers: { "Poplin-Content-Type": "text%2Fplain" } }), { kind: "unexpected", status: 200 }],
+    ["a length that is no count", new Response("hello", { headers: { "Content-Length": "-5", "Poplin-Content-Type": "text%2Fplain" } }), { kind: "unexpected", status: 200 }],
+    ["no stored type", new Response("hello", { headers: { "Content-Length": "5" } }), { kind: "unexpected", status: 200 }],
+    ["a stored type that is not percent-encoded text", new Response("hello", { headers: { "Content-Length": "5", "Poplin-Content-Type": "%E0%A4%A" } }), { kind: "unexpected", status: 200 }],
+    ["JSON under a status that is no refusal", answer(201, { ok: true }), { kind: "unexpected", status: 201 }],
+    ["a page that is no JSON", answer(502, "<html>bad gateway</html>"), { kind: "not-json", status: 502 }],
+  ])("a download answered with %s is a failure and no file: without this a proxy's page could be written into a backup as a site's file", async (_name, response, failure) => {
+    const client = createClient({ server: ORIGIN, token: TOKEN, fetch: async () => response });
+
+    expect(await client.download({ site: "k3f9x2ab71qz", version: 1, path: "index.html" })).toEqual({ ok: false, failure } as never);
+  });
 });

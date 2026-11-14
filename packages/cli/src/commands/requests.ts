@@ -88,8 +88,8 @@ export type Request =
   | ({ readonly kind: "login"; readonly publisher: boolean } & Install)
   | ({ readonly kind: "logout" | "whoami" | "setup" | "doctor" } & Install)
   | ({ readonly kind: "config"; readonly action: ConfigAction } & Install)
-  | ({ readonly kind: "export"; readonly site?: SiteRef; readonly allVersions: boolean } & Install)
-  | ({ readonly kind: "import"; readonly zip: string } & Install)
+  | ({ readonly kind: "export"; readonly site?: SiteRef; readonly allVersions: boolean; readonly out?: string; readonly overwrite: boolean } & Install)
+  | ({ readonly kind: "import"; readonly zip: string; readonly site?: SiteRef; readonly settings: boolean; readonly logins: boolean; readonly dryRun: boolean } & Install)
   | { readonly kind: "mcp" };
 
 function readInstall(flags: Flags): Install | UsageError {
@@ -260,18 +260,32 @@ function config(words: Words): Request | UsageError {
 }
 
 function exportSites(words: Words): Request | UsageError {
-  const allVersions = words.flags.has("--all-versions");
-  const [siteText] = words.positionals;
-  if (siteText === undefined) return withInstall(words, (install) => ({ kind: "export", allVersions, ...install }));
+  const out = flagValue(words.flags, "--out");
+  if (out === "") return usageError("--out needs the path of the zip to write", "poplin export --out backup.zip");
 
-  return withSite(words, (site, install) => ({ kind: "export", site, allVersions, ...install }));
+  const asked = { allVersions: words.flags.has("--all-versions"), overwrite: words.flags.has("--overwrite"), ...(out === undefined ? {} : { out }) };
+  const [siteText] = words.positionals;
+  if (siteText === undefined) return withInstall(words, (install) => ({ kind: "export", ...asked, ...install }));
+
+  return withSite(words, (site, install) => ({ kind: "export", site, ...asked, ...install }));
 }
 
 function importBackup(words: Words): Request | UsageError {
   const [zip = ""] = words.positionals;
   if (zip === "") return usageError("the path of the zip is empty", "poplin import <zip>");
 
-  return withInstall(words, (install) => ({ kind: "import", zip, ...install }));
+  const settings = words.flags.has("--settings");
+  const logins = words.flags.has("--logins");
+  if (logins && !settings) return usageError("--logins replaces the logins among the settings, so it needs --settings", "poplin import <zip> --settings --logins");
+
+  const asked = { zip, settings, logins, dryRun: words.flags.has("--dry-run") };
+  const siteText = flagValue(words.flags, "--site");
+  if (siteText === undefined) return withInstall(words, (install) => ({ kind: "import", ...asked, ...install }));
+
+  const site = readSite(siteText, "--site");
+  if (isUsageError(site)) return site;
+
+  return withInstall(words, (install) => ({ kind: "import", site, ...asked, ...install }));
 }
 
 /**

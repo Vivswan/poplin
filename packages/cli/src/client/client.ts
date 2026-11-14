@@ -2,13 +2,13 @@
 
 import * as v from "valibot";
 
-import { ROUTES, type Route } from "../../../core/src/api/routes";
+import { ROUTES, type Route, STORED_TYPE_HEADER } from "../../../core/src/api/routes";
 import { SETTING_VALUES } from "../../../core/src/records/settings";
 
 /** How long a call that carries JSON, or nothing, may take: 30 seconds. */
 const CALL_TIMEOUT_MS = 30_000;
 
-/** How long the upload of one file may take: 10 minutes. */
+/** How long the upload or the download of one file may take: 10 minutes. */
 const FILE_TIMEOUT_MS = 600_000;
 
 /** The most bytes of an answer that are read: 16 MB, far above a page of a hundred sites. */
@@ -51,6 +51,14 @@ const UPLOAD = v.looseObject({ id: v.string(), state: v.string(), version: v.num
 /** The answer of an action on one site. */
 const SITE_ANSWER = v.looseObject({ before: v.nullable(SITE), site: SITE });
 
+/** A site as a backup holds it: what names it, and what each version it keeps holds. Every other key is kept as sent, and checked by the install that imports it. */
+const STORED_SITE = v.looseObject({
+  id: v.string(),
+  name: v.string(),
+  live_version: v.number(),
+  versions: v.array(v.looseObject({ number: v.number(), files: v.number(), bytes: v.number() })),
+});
+
 /** The install's settings as an answer holds them. */
 const CONFIG_ANSWER = v.looseObject({ values: SETTING_VALUES });
 
@@ -70,9 +78,21 @@ const ANSWERS = {
   uploadFile: v.looseObject({ path: v.string(), size: v.number() }),
   finishPublish: v.looseObject({ before: v.nullable(SITE), site: v.looseObject({ ...SITE.entries, created: v.boolean() }), left: v.array(v.string()) }),
   abandonPublish: v.looseObject({ left: v.array(v.string()) }),
+  exportSettings: v.looseObject({ format: v.number(), settings: v.record(v.string(), v.string()) }),
+  exportSites: v.looseObject({ format: v.number(), sites: v.array(STORED_SITE), next: v.optional(v.string()) }),
+  exportSite: v.looseObject({ format: v.number(), site: STORED_SITE }),
+  exportFiles: v.looseObject({ files: v.array(v.looseObject({ path: v.string(), size: v.number() })), next: v.optional(v.string()) }),
+  importSettings: CONFIG_ANSWER,
+  beginImport: v.looseObject({ upload: UPLOAD }),
   readConfig: CONFIG_ANSWER,
   changeConfig: CONFIG_ANSWER,
 } as const;
+
+/** The route that answers one stored file's bytes, which no JSON form describes. */
+const FILE_ROUTE = ROUTES.exportFile;
+
+/** A count of bytes as a header writes it. */
+const BYTE_COUNT = /^\d{1,15}$/;
 
 /** The body of every refusal of the API. */
 const REFUSAL = v.looseObject({ error: v.looseObject({ code: v.string(), message: v.string(), about: v.optional(v.string()) }) });
@@ -106,6 +126,13 @@ export type Failure =
 /** What a call answers: the route's answer, or why there is none. */
 export type Called<Done> = { readonly ok: true; readonly value: Done } | { readonly ok: false; readonly failure: Failure };
 
+/** One stored file as the install sends it: its bytes, which are read once, their count, and the media type it is served with. */
+interface Download {
+  readonly body: ReadableStream<Uint8Array>;
+  readonly size: number;
+  readonly contentType: string;
+}
+
 /** What a client is made of. */
 interface ClientOptions {
   /** The origin of the install, such as `https://poplin.example.com`. */
@@ -126,9 +153,18 @@ interface ClientOptions {
  *
  * `call` takes the route's arguments, then the JSON value or the bytes of one file of a route that sends one, then the exact count of bytes a stream holds, which is sent as `Content-Length`.
  * It answers the route's answer, checked against the form the route answers in, or the failure, and never throws.
+ *
+ * `download` asks for one stored file of one version of a site. Its bytes are not read here: the caller reads the stream to its end or cancels it, and a read that breaks off throws there.
  */
 export interface Client {
   readonly call: <Name extends CallName>(name: Name, args: ArgsOf<Name>, body?: TypesOf<Name>["body"], length?: number) => Promise<Called<TypesOf<Name>["done"]>>;
+  readonly download: (args: Parameters<typeof FILE_ROUTE.path>[0]) => Promise<Called<Download>>;
+}
+
+/** What goes with one request: the JSON value or the bytes of a route that sends one, and the count of bytes a stream holds. */
+interface Sent {
+  readonly body?: unknown;
+  readonly length?: number | undefined;
 }
 
 function failed(failure: Failure): { readonly ok: false; readonly failure: Failure } {
@@ -179,18 +215,14 @@ function parseJson(text: string): { readonly value: unknown } | undefined {
   }
 }
 
-/** Read an answer into the route's value or a failure. */
-async function readAnswer<Name extends CallName>(name: Name, response: Response): Promise<Called<TypesOf<Name>["done"]>> {
+/** Read an answer that is JSON into the value a done answer holds, or into the failure any other answer is. */
+async function readJson(response: Response): Promise<Called<unknown>> {
   const { status } = response;
   const text = await readText(response);
   const parsed = text === undefined ? undefined : parseJson(text);
   if (parsed === undefined) return failed({ kind: "not-json", status });
 
-  if (status === 200) {
-    if (!v.is(ANSWERS[name], parsed.value)) return failed({ kind: "unexpected", status });
-
-    return { ok: true, value: parsed.value as TypesOf<Name>["done"] };
-  }
+  if (status === 200) return { ok: true, value: parsed.value };
 
   const refusal = v.safeParse(REFUSAL, parsed.value);
   if (!refusal.success || status < 400) return failed({ kind: "unexpected", status });
@@ -201,19 +233,62 @@ async function readAnswer<Name extends CallName>(name: Name, response: Response)
   return failed({ kind: "refused", status, code, message, about });
 }
 
+/** Read an answer into the route's value or a failure. */
+async function readAnswer<Name extends CallName>(name: Name, response: Response): Promise<Called<TypesOf<Name>["done"]>> {
+  const read = await readJson(response);
+  if (!read.ok) return read;
+
+  if (!v.is(ANSWERS[name], read.value)) return failed({ kind: "unexpected", status: response.status });
+
+  return { ok: true, value: read.value as TypesOf<Name>["done"] };
+}
+
+/** The media type a header holds percent-encoded; `undefined` for a header that is absent or is no such text. */
+function storedType(header: string | null): string | undefined {
+  if (header === null) return undefined;
+
+  try {
+    return decodeURIComponent(header);
+  } catch {
+    return undefined;
+  }
+}
+
+/** Read the answer to a download: the stream with what the headers say of it, or the refusal a JSON body holds. A done answer without its length or its type is none. */
+async function readDownload(response: Response): Promise<Called<Download>> {
+  const { status } = response;
+
+  if (status !== 200) {
+    const read = await readJson(response);
+
+    return read.ok ? failed({ kind: "unexpected", status }) : read;
+  }
+
+  const length = response.headers.get("Content-Length") ?? "";
+  const contentType = storedType(response.headers.get(STORED_TYPE_HEADER));
+
+  if (!BYTE_COUNT.test(length) || contentType === undefined) {
+    await response.body?.cancel().catch(() => undefined);
+
+    return failed({ kind: "unexpected", status });
+  }
+
+  return { ok: true, value: { body: response.body ?? new Blob([]).stream(), size: Number(length), contentType } };
+}
+
 /**
  * Build the client of one install.
  *
- * A call waits 30 seconds for its answer, and the upload of one file 10 minutes. No call is sent twice, and no redirect is followed, so the token goes to the install's origin alone.
+ * A call waits 30 seconds for its answer, and the upload of one file 10 minutes. A download has 10 minutes from its request to its last byte. No call is sent twice, and no redirect is followed, so the token goes to the install's origin alone.
  */
 export function createClient(options: ClientOptions): Client {
-  const call: Client["call"] = async (name, args, body, length) => {
-    const route = ROUTES[name] as Route<unknown, unknown, unknown>;
-    const timeoutMs = options.timeoutMs ?? (route.sends === "bytes" ? FILE_TIMEOUT_MS : CALL_TIMEOUT_MS);
-    const request = { ...requestOf(route, options.token, body, length), redirect: "manual" as const, signal: AbortSignal.timeout(timeoutMs) };
+  const ask = async <Done>(route: Route<never, unknown, unknown>, path: string, sent: Sent, read: (response: Response) => Promise<Called<Done>>): Promise<Called<Done>> => {
+    const carriesFile = route.sends === "bytes" || route.answers === "bytes";
+    const timeoutMs = options.timeoutMs ?? (carriesFile ? FILE_TIMEOUT_MS : CALL_TIMEOUT_MS);
+    const request = { ...requestOf(route, options.token, sent.body, sent.length), redirect: "manual" as const, signal: AbortSignal.timeout(timeoutMs) };
 
     try {
-      return await readAnswer(name, await options.fetch(`${options.server}${route.path(args)}`, request));
+      return await read(await options.fetch(`${options.server}${path}`, request));
     } catch {
       if (request.signal.aborted) return failed({ kind: "timeout", seconds: Math.round(timeoutMs / 1000) });
 
@@ -222,5 +297,13 @@ export function createClient(options: ClientOptions): Client {
     }
   };
 
-  return { call };
+  const call: Client["call"] = (name, args, body, length) => {
+    const route = ROUTES[name] as Route<unknown, unknown, unknown>;
+
+    return ask(route as Route<never, unknown, unknown>, route.path(args), { body, length }, (response) => readAnswer(name, response));
+  };
+
+  const download: Client["download"] = (args) => ask(FILE_ROUTE as Route<never, unknown, unknown>, FILE_ROUTE.path(args), {}, readDownload);
+
+  return { call, download };
 }

@@ -28,6 +28,7 @@ const FLAG_VALUES: Readonly<Record<string, string>> = {
   "--expires": "7d",
   "--to": "4",
   "--server": "poplin.example.com",
+  "--out": "backup.zip",
 };
 
 /** A word for each argument a command needs. */
@@ -39,6 +40,7 @@ const COMPANIONS: Readonly<Record<string, readonly string[]>> = {
   "set --json": ["--private"],
   "set --server": ["--private"],
   "config --reset": ["versions_kept"],
+  "import --logins": ["--settings"],
 };
 
 function lineWith(spec: CommandSpec, flag: CommandSpec["flags"][number]): string[] {

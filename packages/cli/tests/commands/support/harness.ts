@@ -45,7 +45,8 @@ export interface Bench {
   readonly run: (line: string, options?: Options) => Promise<Ran>;
 }
 
-function scratch(): string {
+/** Make an empty folder that `cleanUp` removes; answers its path. */
+export function scratch(): string {
   const folder = mkdtempSync(join(tmpdir(), "poplin-cli-"));
   SCRATCH.push(folder);
 
