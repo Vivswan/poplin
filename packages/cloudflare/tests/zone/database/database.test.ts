@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { planDatabase, syncDatabase } from "../../../src/zone/database/database";
-import { page, refusal, reply, withFake } from "../support/fake-cloudflare";
+import { withFake } from "../support/fake-cloudflare";
+import { page, refusal, reply } from "../support/replies";
 
 const ID = "3f6c0d5e-1a2b-4c3d-8e9f-0a1b2c3d4e5f";
 

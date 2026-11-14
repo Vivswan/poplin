@@ -1,13 +1,13 @@
 // The dashboard's zone plug for Cloudflare: every object of an install read, or made to match, with a token that lives for the one call.
 //
-//   token -> the account's zones -> the zone of the install's domain -> records, routes, Access, https redirect, guard rules, rate rule, bot switches, database
+//   token -> the account's zones -> the zone of the install's domain -> records, routes, Access, the Worker's own variables, https redirect, guard rules, rate rule, bot switches, database
 //
 // A token proves itself by showing the install's own zone inside the install's own account; any other token is refused before anything is read.
 // A check is the repair's own code with the changes left unsent, so the two cannot disagree on what a repair would do.
 
 import type { DomainPlug, DomainReading, DomainRow, DomainSettings, DomainState, DomainStep, ReadSettings } from "@poplin/app/src/dashboard/domain/records";
 import { parseLogins } from "@poplin/core/src/auth/logins";
-import { isAccessOff, syncAccess } from "./access/access";
+import { isAccessOff, readLoginFacts, syncAccess } from "./access/access";
 import { syncZoneBots } from "./bots/bots";
 import { type Connection, listZones } from "./client";
 import { syncDatabase } from "./database/database";
@@ -18,7 +18,8 @@ import { type DomainLayout, privateSitesPattern } from "./layout";
 import { syncRoutes } from "./routes/routes";
 import { syncGuards } from "./rules/guards";
 import { defaultRateRule, syncWaf } from "./rules/waf";
-import type { Mode, Report } from "./sync";
+import { type Mode, type Report, reportOf } from "./sync";
+import { syncVariables } from "./variables/variables";
 
 /** What a token is made of. Anything else is refused unsent, so no pasted text reaches a request header. */
 const TOKEN = /^[A-Za-z0-9_-]{20,512}$/;
@@ -54,6 +55,30 @@ const ACCESS_STEP = "Open Zero Trust and pick a plan (Free works): that switches
 /** What the Access row says when the stored logins cannot be read back. */
 const BAD_LOGINS = "the stored logins are not a list of emails";
 
+/** What the Access policy's row says when Cloudflare lets other emails through than the settings list. */
+const OTHER_LOGINS = "not the logins of the settings";
+
+/** What the variable's row says before the application it is read from exists. */
+const NO_APPLICATION = "written once the Access application exists";
+
+/** What a repair that wrote the variable tells the person to do next. */
+const LOGIN_READY = "The login is ready. Open your dashboard and log in:";
+
+/** The permissions a token needs, in Cloudflare's own names, by the object whose calls need them. A piece with no row here does not compile. */
+const RIGHTS = {
+  Zone: ["Zone: Read"],
+  "DNS record": ["DNS: Edit"],
+  "Worker route": ["Workers Routes: Edit"],
+  "Access application": ["Access: Apps and Policies: Edit"],
+  "Access policy": ["Access: Apps and Policies: Edit"],
+  "Worker variable": ["Access: Organizations, Identity Providers, and Groups: Read", "Workers Scripts: Edit"],
+  "Redirect rule": ["Single Redirect: Edit", "Zone Settings: Read"],
+  "WAF rule": ["Zone WAF: Edit"],
+  "Rate rule": ["Zone WAF: Edit"],
+  "Bot settings": ["Bot Management: Edit"],
+  "D1 database": ["D1: Edit"],
+} as const;
+
 /** What each state of a step is called in a check and in a repair. */
 const STATES: Readonly<Record<Mode, Readonly<Record<"created" | "changed" | "removed", DomainState>>>> = {
   plan: { created: "missing", changed: "differs", removed: "differs" },
@@ -72,8 +97,14 @@ interface PlugParts {
   readonly layout: DomainLayout;
 
   /** Where the API is; absent outside tests. */
-  readonly baseUrl?: string;
+  readonly baseUrl?: string | undefined;
+
+  /** What sends a call; absent outside tests. */
+  readonly fetch?: Connection["fetch"];
 }
+
+/** An object the table names. */
+type Piece = keyof typeof RIGHTS;
 
 /** A piece that stopped: what was done before, the step that failed and the ones never reached, and whichever of Cloudflare's answer or the piece's own message says why. */
 interface Stopped {
@@ -111,7 +142,7 @@ function failureText(stopped: Stopped): string {
   return errors === "" ? `refused with status ${stopped.status}` : `refused with status ${stopped.status}: ${errors}`;
 }
 
-function rowsOf(outcome: Outcome, mode: Mode, objectOf: (subject: string) => string): DomainRow[] {
+function rowsOf(outcome: Outcome, mode: Mode, objectOf: (subject: string) => Piece): DomainRow[] {
   const { report } = outcome;
   const states = STATES[mode];
   const row = (subject: string, state: DomainState, detail = subject): DomainRow => ({ object: objectOf(subject), state, detail });
@@ -136,7 +167,7 @@ function rowsOf(outcome: Outcome, mode: Mode, objectOf: (subject: string) => str
 async function piece<Answer extends Outcome>(
   progress: Progress,
   mode: Mode,
-  objectOf: (subject: string) => string,
+  objectOf: (subject: string) => Piece,
   run: () => Promise<Answer>,
 ): Promise<Answer | undefined> {
   if (progress.stopped) {
@@ -152,18 +183,31 @@ async function piece<Answer extends Outcome>(
   return outcome;
 }
 
-function accessObject(subject: string): string {
+function accessObject(subject: string): Piece {
   return subject === INSTALL_OBJECTS.accessPolicy ? "Access policy" : "Access application";
 }
 
-// Access that is switched off is a state of the account, not a failure of the run: the other pieces go on, and the page shows the one click.
-async function accessPiece(progress: Progress, mode: Mode, parts: PlugParts, connection: Connection, settings: DomainSettings): Promise<void> {
+// The application's row names what it stands in front of, and a policy that differs says how: it lets other emails through than the settings list.
+function accessDetail(row: DomainRow, covered: string): DomainRow {
+  if (row.detail === INSTALL_OBJECTS.accessApplication) return { ...row, detail: `${row.detail}: ${covered}` };
+
+  if (row.object === "Access policy" && row.state === "differs") return { ...row, detail: `${row.detail}: ${OTHER_LOGINS}` };
+
+  return row;
+}
+
+/**
+ * Access that is switched off is a state of the account, not a failure of the run: the other pieces go on, and the page shows the one click.
+ *
+ * @returns whether the application can be read from: `false` for Access that is off, and for a run that stopped
+ */
+async function accessPiece(progress: Progress, mode: Mode, parts: PlugParts, connection: Connection, settings: DomainSettings): Promise<boolean> {
   const logins = parseLogins(settings.logins);
   if (progress.stopped || !logins.ok) {
     progress.rows.push({ object: "Access application", state: progress.stopped ? "not-run" : "failed", detail: progress.stopped ? "" : BAD_LOGINS });
     progress.stopped = true;
 
-    return;
+    return false;
   }
 
   const privateSites = privateSitesPattern(parts.layout);
@@ -173,20 +217,49 @@ async function accessPiece(progress: Progress, mode: Mode, parts: PlugParts, con
     const before = progress.rows.length;
     await piece(progress, mode, accessObject, async () => synced);
     const covered = `${parts.layout.adminHostname}${INSTALL_OBJECTS.loginPath}, ${privateSites}`;
-    // The application's row names what it stands in front of: the login path and every private site's address.
-    progress.rows.splice(before, Number.POSITIVE_INFINITY, ...progress.rows.slice(before).map((row) => (row.detail === INSTALL_OBJECTS.accessApplication ? { ...row, detail: `${row.detail}: ${covered}` } : row)));
+    progress.rows.splice(before, Number.POSITIVE_INFINITY, ...progress.rows.slice(before).map((row) => accessDetail(row, covered)));
 
-    return;
+    return synced.ok;
   }
 
   progress.rows.push({ object: "Access application", state: "missing", detail: ACCESS_OFF }, { object: "Access policy", state: "missing", detail: ACCESS_OFF });
   progress.steps.push({ text: ACCESS_STEP, address: `https://one.dash.cloudflare.com/${parts.accountId}` });
+
+  return false;
+}
+
+// The Worker checks a login against the application setup made, so its audience tag is written onto the Worker once the application exists.
+async function variablesPiece(progress: Progress, mode: Mode, parts: PlugParts, connection: Connection, accessReady: boolean): Promise<void> {
+  const name = INSTALL_OBJECTS.accessBinding;
+  if (!accessReady) {
+    progress.rows.push({ object: "Worker variable", state: progress.stopped ? "not-run" : "missing", detail: progress.stopped ? "" : `${name}: ${NO_APPLICATION}` });
+
+    return;
+  }
+
+  const object = (): Piece => "Worker variable";
+  const facts = await readLoginFacts(connection, parts.accountId);
+  if (!facts.ok) {
+    await piece(progress, mode, object, async (): Promise<Outcome> => ({ ...facts, report: reportOf([]) }));
+
+    return;
+  }
+
+  if (facts.value === undefined) {
+    progress.rows.push({ object: object(), state: "missing", detail: `${name}: ${NO_APPLICATION}` });
+
+    return;
+  }
+
+  const json = { team_domain: facts.value.teamDomain, audience: facts.value.audience };
+  const synced = await piece(progress, mode, object, () => syncVariables(connection, { accountId: parts.accountId, script: parts.script }, [{ name, json }], mode));
+  if (mode === "apply" && synced?.ok === true && !synced.report.changedNothing) progress.steps.push({ text: LOGIN_READY, address: `https://${parts.layout.adminHostname}` });
 }
 
 async function read(parts: PlugParts, mode: Mode, token: string, readSettings: ReadSettings): Promise<DomainReading> {
   if (!TOKEN.test(token)) return REFUSED;
 
-  const connection: Connection = { key: token, baseUrl: parts.baseUrl };
+  const connection: Connection = { key: token, baseUrl: parts.baseUrl, fetch: parts.fetch };
   const zones = await listZones(connection, parts.accountId);
   if (!zones.ok) return zones.failure === "refused" ? REFUSED : UNREACHABLE;
 
@@ -217,7 +290,7 @@ async function read(parts: PlugParts, mode: Mode, token: string, readSettings: R
     () => "Worker route",
     () => syncRoutes(connection, zone.id, { layout, script: parts.script }, mode),
   );
-  await accessPiece(progress, mode, parts, connection, settings);
+  await variablesPiece(progress, mode, parts, connection, await accessPiece(progress, mode, parts, connection, settings));
   await piece(
     progress,
     mode,
@@ -262,6 +335,7 @@ async function read(parts: PlugParts, mode: Mode, token: string, readSettings: R
 export function createDomainPlug(parts: PlugParts): DomainPlug {
   return {
     tokenLabel: "Cloudflare API token",
+    tokenRights: [...new Set(Object.values(RIGHTS).flat())],
     guardNotes: GUARD_NOTES,
     check: (token, settings) => read(parts, "plan", token, settings),
     repair: (token, settings) => read(parts, "apply", token, settings),

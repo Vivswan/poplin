@@ -8,7 +8,8 @@ import { join } from "node:path";
 
 import { convergeInstall } from "../../packages/cloudflare/scripts/live/converge";
 import { openRun } from "../../packages/cloudflare/scripts/live/util";
-import { type Asked, page, refusal, reply, withFake } from "../../packages/cloudflare/tests/zone/support/fake-cloudflare";
+import { withFake } from "../../packages/cloudflare/tests/zone/support/fake-cloudflare";
+import { type Asked, page, refusal, reply } from "../../packages/cloudflare/tests/zone/support/replies";
 
 /** The workflow that runs the live scripts. */
 const WORKFLOW = join(import.meta.dir, "..", "..", ".github", "workflows", "live-checks.yml");

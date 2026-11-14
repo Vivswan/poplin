@@ -18,6 +18,7 @@
     "test:worker": "bun run --cwd packages/cloudflare test",
     "live": "POPLIN_LIVE=1 bun test ./tests/live/live.test.ts",
     "knip": "knip --treat-config-hints-as-errors",
+    "deploy": "bun run --cwd packages/cloudflare deploy",
     "preview": "bun run --cwd packages/demo preview",
     "preview:stop": "bun run --cwd packages/demo preview:stop",
     "demo": "bun run --cwd packages/demo demo",

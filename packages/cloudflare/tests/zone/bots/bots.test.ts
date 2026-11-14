@@ -1,7 +1,8 @@
 import { describe, expect, test } from "bun:test";
 import { planZoneBots, syncZoneBots } from "../../../src/zone/bots/bots";
 import type { ZonePlan } from "../../../src/zone/client";
-import { reply, withFake } from "../support/fake-cloudflare";
+import { withFake } from "../support/fake-cloudflare";
+import { reply } from "../support/replies";
 
 const COVERS_OTHERS = "the AI bot block covers the whole zone, and this zone has hostnames of its own";
 const SWITCHED_OFF = "the zone-wide bot switches are set to off";

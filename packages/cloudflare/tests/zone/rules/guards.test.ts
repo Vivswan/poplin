@@ -4,7 +4,8 @@ import { botsExpression, outsidePagesExpression, planGuards, syncGuards } from "
 import type { DomainLayout } from "../../../src/zone/layout";
 import type { RuleBody } from "../../../src/zone/rules/rules";
 import { reportOf } from "../../../src/zone/sync";
-import { refusal, reply, withFake } from "../support/fake-cloudflare";
+import { withFake } from "../support/fake-cloudflare";
+import { refusal, reply } from "../support/replies";
 import { LAYOUT, ONE_WORD } from "../support/layouts";
 import { siteEndings } from "../../../src/zone/layout";
 

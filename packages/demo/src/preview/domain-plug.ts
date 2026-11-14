@@ -84,5 +84,5 @@ export function previewPlug(state: PlugState): DomainPlug {
       return read(state);
     };
 
-  return { tokenLabel: "Provider token", guardNotes: NOTES, check: answer(checked), repair: answer(repaired) };
+  return { tokenLabel: "Provider token", tokenRights: ["Records: Edit", "Routes: Edit", "Login: Edit", "Rules: Edit"], guardNotes: NOTES, check: answer(checked), repair: answer(repaired) };
 }

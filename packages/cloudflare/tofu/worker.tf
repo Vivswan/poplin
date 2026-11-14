@@ -44,6 +44,18 @@ resource "cloudflare_workers_script" "poplin" {
       type = "json"
       json = jsonencode({ team_domain = var.access_team_domain, audience = cloudflare_zero_trust_access_application.login.aud })
     },
+    {
+      # The account the Worker runs in: the dashboard's Domain tab checks and repairs the install's objects in this account alone.
+      name = "ACCOUNT_ID"
+      type = "plain_text"
+      text = var.account_id
+    },
+    {
+      # The Worker's own name, which the Domain tab finds its routes and its variables by.
+      name = "WORKER_NAME"
+      type = "plain_text"
+      text = var.worker_name
+    },
   ]
 }
 

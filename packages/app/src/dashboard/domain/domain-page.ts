@@ -57,13 +57,13 @@ ${keys.map((key) => guardRow(key, texts[key], notes[key]))}
  * @throws {Error} the plug or the database failed
  */
 export async function showDomain(visit: Visit, plug: DomainPlug, asked?: Asked): Promise<Page> {
-  const { tokenLabel } = plug;
+  const asks = { csrf: visit.csrf, tokenLabel: plug.tokenLabel, tokenRights: plug.tokenRights, path: "/domain" } as const;
   const place = { tab: "domain", heading: "Domain" } as const;
   const config = await readConfig(visit.install, visit.actor);
   if (!config.ok) return refusedPage(place, config);
 
   if (asked === undefined)
-    return { ...place, body: html`${domainBody({ csrf: visit.csrf, tokenLabel, path: "/domain" })}${guardsForm(visit, config.values, plug.guardNotes)}` };
+    return { ...place, body: html`${domainBody(asks)}${guardsForm(visit, config.values, plug.guardNotes)}` };
 
   const token = asked.form.get("token") ?? "";
   const reading = await runDomain(plug, visit.install, {
@@ -73,7 +73,7 @@ export async function showDomain(visit: Visit, plug: DomainPlug, asked?: Asked):
     by: visit.actor.holder,
     from: "dashboard",
   });
-  const body = html`${domainBody({ csrf: visit.csrf, tokenLabel, path: "/domain", ran: { run: asked.run, reading } })}${guardsForm(visit, config.values, plug.guardNotes)}`;
+  const body = html`${domainBody({ ...asks, ran: { run: asked.run, reading } })}${guardsForm(visit, config.values, plug.guardNotes)}`;
   if (reading.ok) return { ...place, body };
 
   return { ...place, body, status: REFUSAL_STATUS[reading.refusal] };

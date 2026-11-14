@@ -49,7 +49,7 @@ export function fakePlug(answer: (run: "check" | "repair", token: string) => Dom
       return reading.ok && read === undefined ? { ok: false, refusal: "not_set_up" } : reading;
     };
 
-  return { calls, tokenLabel: "Provider token", guardNotes: NOTES, check: asked("check"), repair: asked("repair") };
+  return { calls, tokenLabel: "Provider token", tokenRights: ["Records: Edit", "Rules: Edit"], guardNotes: NOTES, check: asked("check"), repair: asked("repair") };
 }
 
 /** A plug over the one-missing install: a check finds it, a repair fixes it. */

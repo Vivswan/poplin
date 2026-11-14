@@ -29,7 +29,7 @@ bun run --cwd packages/cloudflare build   # writes packages/cloudflare/dist/work
 | --- | --- |
 | R2 bucket | holds every site's files; its public access is off |
 | D1 database | holds every record: the sites, the tokens, the settings, the audit log. The module applies no schema: the Worker does when it opens the database |
-| Worker script | serves the sites, the dashboard, the login, and the API; uploaded from the bundle with the bucket, the database, the minute limiter, the zone values, the first settings, and the Access application bound to it |
+| Worker script | serves the sites, the dashboard, the login, and the API; uploaded from the bundle with the bucket, the database, the minute limiter, the zone values, the first settings, the Access application, the account's id, and the Worker's own name bound to it |
 | Worker cron trigger | runs the Worker's sweep every 15 minutes: expired sites go to the trash, and sites past `trash_days` in the trash and uploads nobody finished are removed with their files |
 | Worker routes | send the install's hostnames, and no other hostname of the zone, to the Worker |
 | DNS records | proxied, each with a comment starting `poplin: ` |
@@ -189,7 +189,7 @@ The Worker stores the first settings once, while it has none. After that the das
 | Single Redirect: Edit | the zone | the redirect rule |
 | Bot Management: Edit | the zone | the bot settings |
 
-The Domain tab's check and repair take one permission more, Zone Settings: Read on the zone: they read whether the zone's own Always Use HTTPS is on, and write no redirect rule where it is.
+The Domain tab's check and repair take two permissions more. Zone Settings: Read on the zone: they read whether the zone's own Always Use HTTPS is on, and write no redirect rule where it is. Access: Organizations, Identity Providers, and Groups: Read on the account: they read the team domain, and compare it and the application's audience tag with the Worker's `ACCESS` binding.
 
 ## What it does not do
 

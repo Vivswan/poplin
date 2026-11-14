@@ -9,9 +9,9 @@
     "./src/zone/zone-binding": "./src/zone/zone-binding.ts"
   },
   "scripts": {
-    "typecheck": "wrangler types && tsc -p .",
-    "build": "wrangler deploy --dry-run --outdir dist",
-    "dev": "wrangler dev",
+    "typecheck": "wrangler types ./worker-configuration.d.ts --config ../../wrangler.jsonc && tsc -p .",
+    "build": "wrangler deploy --dry-run --outdir packages/cloudflare/dist --config ../../wrangler.jsonc",
+    "deploy": "wrangler deploy --config ../../wrangler.jsonc",
     "test": "bun run build && vitest run",
     "live:converge": "bun scripts/live/converge.ts",
     "live:suite": "bun scripts/live/suite.ts",

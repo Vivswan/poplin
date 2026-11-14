@@ -27,18 +27,12 @@ describe("readAccessBinding", () => {
   });
 });
 
-describe("the ACCESS binding the module and wrangler.jsonc give the Worker", () => {
+describe("the ACCESS binding the module gives the Worker", () => {
   // Drift: the module writes the binding and the Worker reads it; a key renamed on one side would stop every instance at its start.
   test("the module binds exactly the two keys the reader takes: the team domain from its input, the audience from its own Access application", () => {
     const [team, audience] = Object.keys(BOUND);
     const bound = `jsonencode({ ${team} = var.access_team_domain, ${audience} = cloudflare_zero_trust_access_application.login.aud })`;
 
     expect(readFileSync(join(PACKAGE, "tofu", "worker.tf"), "utf8")).toContain(bound);
-  });
-
-  test("the example value for local runs is read the same way", () => {
-    const config = Bun.JSONC.parse(readFileSync(join(PACKAGE, "wrangler.jsonc"), "utf8")) as { vars: { ACCESS: unknown } };
-
-    expect(readAccessBinding(config.vars.ACCESS).ok).toBe(true);
   });
 });

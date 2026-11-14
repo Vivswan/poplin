@@ -3,6 +3,7 @@
 //   GET  /setup          the token form, and nothing about the install
 //   POST /setup/check    the table, read with the pasted token
 //   POST /setup/repair   the table, after making every object match
+//   POST /setup/api/check, /setup/api/repair   the same two runs for a program: the token in a JSON body, the reading as JSON
 //
 // The pasted token is the only proof of ownership: the plug refuses one that does not act on the install's own account. Until one passes nothing of the install is read, so no answer can say anything of it.
 // Every post is counted against the sender's address first, and a counter that cannot answer refuses: the page stays shut when its guard is gone.
@@ -35,6 +36,9 @@ const MAX_FORM_BYTES = 16 * 1024;
 
 /** Who the forms' tokens are made for: the page has no session to bind them to. */
 const CSRF_NAME = "setup";
+
+/** The content type a program sends its token in. A page of another origin cannot post it without the browser asking first, so the two paths need no form token. */
+const JSON_TYPE = "application/json";
 
 /** The whole answer of a page that is shut and of every other path. */
 const NOT_FOUND = "Not found.";
@@ -87,14 +91,33 @@ function refuse(context: Context<Shared>, code: string, status: NonNullable<Page
   return respond(context, refusedPage({ ...PLACE, status }, { code }));
 }
 
+/** Count one try against the sender's address, for a page's form and a program's call alike, and say whether it fits the minute. A counter that cannot answer refuses it. */
+async function fits(parts: SetupParts, request: Request): Promise<boolean> {
+  const take = async (): Promise<{ readonly ok: boolean }> =>
+    parts.counters.takeMinute({ scope: "visitor", key: `setup:${await parts.visitorOf(request)}`, limit: TRIES_PER_MINUTE }, parts.install.now());
+
+  return (await take().catch(() => ({ ok: false }))).ok;
+}
+
+/** Read the token of a program's call: `undefined` for a body that is not sent as JSON, and no token for JSON that holds none. */
+async function sentToken(request: Request): Promise<string | undefined> {
+  if (request.headers.get("Content-Type")?.split(";")[0]?.trim().toLowerCase() !== JSON_TYPE) return undefined;
+
+  const sent: unknown = await request.json().catch(() => undefined);
+  if (typeof sent !== "object" || sent === null || !("token" in sent) || typeof sent.token !== "string") return "";
+
+  return sent.token;
+}
+
 /**
  * Build the setup page.
  *
- * @returns a handler for `/setup` and the two paths under it; every other path, and every path while `open` answers `false`, is a 404 that says nothing
+ * @returns a handler for `/setup`, the two paths under it, and the two a program calls; every other path, and every path while `open` answers `false`, is a 404 that says nothing
  * @throws {RangeError} the CSRF secret is under 32 bytes
  */
 export function createSetup(parts: SetupParts): Setup {
   const csrfKey = importCsrfKey(parts.csrfSecret);
+  const asks = { tokenLabel: parts.domain.tokenLabel, tokenRights: parts.domain.tokenRights };
   const app = new Hono<Shared>();
 
   const gate: MiddlewareHandler<Shared> = async (context, next) => {
@@ -110,14 +133,13 @@ export function createSetup(parts: SetupParts): Setup {
   };
 
   const counted: MiddlewareHandler<Shared> = async (context, next) => {
-    const request = context.req.raw;
-    const take = async () =>
-      parts.counters.takeMinute({ scope: "visitor", key: `setup:${await parts.visitorOf(request)}`, limit: TRIES_PER_MINUTE }, parts.install.now());
-    const taken = await take().catch(() => ({ ok: false }));
-    if (!taken.ok) return refuse(context, "too_many_tries", 429);
+    if (!(await fits(parts, context.req.raw))) return refuse(context, "too_many_tries", 429);
 
     return next();
   };
+
+  // The settings are handed over as a question the plug asks once the token is proven. The audit entry names the first login: no session says who sent the token.
+  const settings = (): ReturnType<ReadSettings> => parts.install.database.readSettings();
 
   const fromHere: MiddlewareHandler<Shared> = async (context, next) => {
     const sent = await readOwnForm(context.req.raw, { key: await csrfKey, email: CSRF_NAME, now: parts.install.now() });
@@ -139,7 +161,7 @@ export function createSetup(parts: SetupParts): Setup {
   app.use(gate);
 
   app.get("/setup", (context) =>
-    respond(context, { ...PLACE, body: domainBody({ csrf: context.get("csrf"), tokenLabel: parts.domain.tokenLabel, path: "/setup" }) }),
+    respond(context, { ...PLACE, body: domainBody({ csrf: context.get("csrf"), ...asks, path: "/setup" }) }),
   );
 
   app.post(
@@ -151,15 +173,27 @@ export function createSetup(parts: SetupParts): Setup {
       const run = context.req.param("run");
       if (run !== "check" && run !== "repair") return notFound();
 
-      // The settings are handed over as a question the plug asks once the token is proven. The audit entry names the first login: no session says who pasted the token.
-      const settings = (): ReturnType<ReadSettings> => parts.install.database.readSettings();
       const reading = await runDomain(parts.domain, parts.install, { run, token: context.get("form").get("token") ?? "", settings, from: "setup" });
-      const body = domainBody({ csrf: context.get("csrf"), tokenLabel: parts.domain.tokenLabel, path: "/setup", ran: { run, reading } });
+      const body = domainBody({ csrf: context.get("csrf"), ...asks, path: "/setup", ran: { run, reading } });
       if (reading.ok) return respond(context, { ...PLACE, body });
 
       return respond(context, { ...PLACE, body, status: REFUSAL_STATUS[reading.refusal] });
     },
   );
+
+  app.post("/setup/api/:run", bodyLimit({ maxSize: MAX_FORM_BYTES, onError: (context) => context.json({ ok: false, refusal: "too_large" }, 413) }), async (context) => {
+    const run = context.req.param("run");
+    if (run !== "check" && run !== "repair") return notFound();
+
+    if (!(await fits(parts, context.req.raw))) return context.json({ ok: false, refusal: "too_many_tries" }, 429);
+
+    const token = await sentToken(context.req.raw);
+    if (token === undefined) return context.json({ ok: false, refusal: "not_json" }, 415);
+
+    const reading = await runDomain(parts.domain, parts.install, { run, token, settings, from: "setup" });
+
+    return context.json(reading, reading.ok ? 200 : REFUSAL_STATUS[reading.refusal]);
+  });
 
   app.notFound(() => notFound());
   app.onError(() => new Response(FAILURE, { status: 500, headers: { "Content-Type": "text/plain; charset=utf-8" } }));

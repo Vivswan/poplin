@@ -13,7 +13,7 @@
       "entry": ["src/browser/worker.ts"]
     },
     "packages/cloudflare": {
-      "entry": ["tests/**/*.test.ts"]
+      "entry": ["src/worker/worker.ts", "tests/**/*.test.ts"]
     }
   }
 }

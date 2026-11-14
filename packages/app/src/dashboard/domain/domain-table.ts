@@ -44,6 +44,9 @@ interface Shown {
   /** What the token field is called. */
   readonly tokenLabel: string;
 
+  /** The rights the token needs, in the provider's own names. */
+  readonly tokenRights: readonly string[];
+
   /** The path the forms post under: the run's name is added to it. */
   readonly path: "/domain" | "/setup";
 
@@ -95,7 +98,7 @@ ${stepList(ran.reading.steps)}
 /**
  * Build the result of the last run and the form for the next one.
  *
- * @returns the summary, the steps only a person can do, and the table, when a run was just answered; then one form with an empty token field and the two buttons
+ * @returns the summary, the steps only a person can do, and the table, when a run was just answered; then one form with an empty token field, the rights its token needs, and the two buttons
  */
 export function domainBody(shown: Shown): Html {
   return html`${result(shown.ran)}
@@ -105,6 +108,8 @@ ${csrfField(shown)}
 <label for="token">${shown.tokenLabel}</label>
 <input type="password" id="token" name="token" autocomplete="off" required>
 <p class="hint">Used for this one request. Never kept.</p>
+<p class="hint">Create a token with these rights:</p>
+<ul class="hint">${shown.tokenRights.map((right) => html`<li>${right}</li>`)}</ul>
 </div>
 <button type="submit">${shown.ran === undefined ? "Check" : "Check again"}</button>
 <button type="submit" formaction="${shown.path}/repair">Repair</button>

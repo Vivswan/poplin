@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { plainHttpExpression, planHttps, syncHttps } from "../../../src/zone/https/https";
-import { refusal, reply, withFake } from "../support/fake-cloudflare";
+import { withFake } from "../support/fake-cloudflare";
+import { refusal, reply } from "../support/replies";
 import { LAYOUT, ONE_WORD } from "../support/layouts";
 
 const EXPRESSION = 'not ssl and (ends_with(http.host, "-poplin.example.com") or ends_with(http.host, "-page.example.com") or http.host eq "poplin.example.com")';

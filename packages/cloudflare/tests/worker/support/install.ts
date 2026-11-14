@@ -10,8 +10,11 @@ import { openDatabase } from "@poplin/core/src/database/open";
 import { D1Driver } from "../../../src/database/d1";
 import { R2Store } from "../../../src/storage/r2";
 import type { Bindings } from "../../../src/worker/bindings";
+import type { Outside } from "../../../src/worker/start";
 import { createWorker } from "../../../src/worker/worker";
 import { type Certs, certs, NOW, type Signer, sign, signer } from "../../login/support/access";
+import { type Account, answer } from "../../zone/support/fake-install";
+import { type Asked, bodyOf } from "../../zone/support/replies";
 
 /** The bindings of wrangler.jsonc, simulated. */
 export const BINDINGS: Bindings = env;
@@ -64,8 +67,34 @@ export async function world(): Promise<World> {
   return { clock: { now: NOW }, team, certs: certs(team) };
 }
 
-export function instance(from: World): Worker {
-  return createWorker({ now: () => from.clock.now, fetch: from.certs.fetch });
+/** Where the Cloudflare API is, as the setup client's calls name it. */
+const CLOUDFLARE_API = "/client/v4";
+
+/**
+ * Stand in for the Cloudflare API with an account kept in memory.
+ *
+ * @param asked - takes every call, in order
+ */
+export function cloudflareOf(account: Account, asked: Asked[]): NonNullable<Outside["cloudflare"]> {
+  return async (input, init) => {
+    const request = new Request(input, init);
+    const url = new URL(request.url);
+    const entry = { method: request.method, path: `${url.pathname.slice(CLOUDFLARE_API.length)}${url.search}`, key: request.headers.get("authorization"), body: await bodyOf(request) };
+    asked.push(entry);
+
+    return answer(account, entry);
+  };
+}
+
+/**
+ * Make one Worker instance of a world.
+ *
+ * @param cloudflare - what answers the setup client's calls; left out, a call to Cloudflare fails the test
+ */
+export function instance(from: World, cloudflare?: Outside["cloudflare"]): Worker {
+  const unasked: NonNullable<Outside["cloudflare"]> = async () => Promise.reject(new Error("the test asked Cloudflare and gave it no stand-in"));
+
+  return createWorker({ now: () => from.clock.now, fetch: from.certs.fetch, cloudflare: cloudflare ?? unasked });
 }
 
 export async function ask(worker: Worker, url: string, init: RequestInit = {}, bindings: Bindings = BINDINGS): Promise<Response> {

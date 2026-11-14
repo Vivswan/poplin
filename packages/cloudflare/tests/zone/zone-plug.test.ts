@@ -2,8 +2,9 @@ import { expect, test } from "bun:test";
 import type { DomainReading, DomainSettings } from "@poplin/app/src/dashboard/domain/records";
 import type { Login } from "@poplin/core/src/auth/logins";
 import { createDomainPlug } from "../../src/zone/zone-plug";
-import { type Asked, withFake } from "./support/fake-cloudflare";
-import { ACCOUNT, type Account, answer, emptyAccount, OTHER_TOKEN, TOKEN } from "./support/fake-install";
+import { withFake } from "./support/fake-cloudflare";
+import type { Asked } from "./support/replies";
+import { ACCOUNT, type Account, answer, emptyAccount, OTHER_TOKEN, TEAM, TOKEN } from "./support/fake-install";
 import { LAYOUT } from "./support/layouts";
 
 const STORED: DomainSettings = { logins: ["owner@example.com" as Login], outside_pages: "blocked", search_engines_allowed: false, block_bots: "auto" };
@@ -14,6 +15,7 @@ const REFUSED = { ok: false, refusal: "token" } as const;
 function table(states: Readonly<Record<string, string>>): string[] {
   const state = (object: string, usual: string): string => states[object] ?? usual;
   const usual = states.all ?? "present";
+  const variable = state("variable", state("access", usual));
 
   return [
     "Public word | present | page (public sites answer at <name>-page.example.com)",
@@ -24,6 +26,7 @@ function table(states: Readonly<Record<string, string>>): string[] {
     `Worker route | ${state("routes", usual)} | poplin.example.com/*`,
     `Access application | ${state("access", usual)} | poplin: poplin.example.com/login, *-p-poplin.example.com`,
     `Access policy | ${state("access", usual)} | poplin logins`,
+    `Worker variable | ${variable} | ${variable === "missing" ? "ACCESS: written once the Access application exists" : "ACCESS"}`,
     `Redirect rule | ${state("https", usual)} | https redirect`,
     `WAF rule | ${state("guards", usual)} | bots rule: also stops every method but GET and HEAD, and the paths *.php, /.env, /.env.*, /.git/, /wp-admin/, /cgi-bin/, /phpmyadmin`,
     `WAF rule | ${state("guards", usual)} | outside pages rule`,
@@ -70,7 +73,7 @@ test("a repair makes every object, a check then finds all present, and a second 
 
   await withAccount(account, async (plug, asked) => {
     expect(shown(await plug.repair(TOKEN, SETTINGS))).toEqual(table({ all: "created", bots: "changed" }));
-    expect(writes(asked)).toHaveLength(12);
+    expect(writes(asked)).toHaveLength(13);
 
     const sent = asked.length;
 
@@ -90,6 +93,64 @@ test("a repair makes the one Access application over the login path and the priv
 
   expect(plain.applications.map((application) => (application.destinations as { uri: string }[]).map((place) => place.uri))).toEqual([["poplin.example.com/login", "*-p-poplin.example.com"]]);
   expect([Object.keys(plain.rulesets).includes("http_request_dynamic_redirect"), Object.keys(redirecting.rulesets).includes("http_request_dynamic_redirect")]).toEqual([true, false]);
+});
+
+test("a repair writes the application's audience tag and the team's domain onto the Worker and keeps every other binding: a Worker with no ACCESS lets nobody log in, and one that lost its bucket serves nothing", async () => {
+  const account = emptyAccount();
+  const ready = [{ text: "The login is ready. Open your dashboard and log in:", address: "https://poplin.example.com" }];
+
+  await withAccount(account, async (plug) => {
+    expect(await plug.repair(TOKEN, SETTINGS)).toMatchObject({ steps: ready });
+    expect(account.bindings.map((binding) => binding.name)).toEqual(["SITES", "DB", "ZONE", "ACCESS"]);
+    expect(account.bindings.at(-1)).toEqual({ name: "ACCESS", type: "json", json: { team_domain: TEAM, audience: account.applications[0]?.aud } });
+    expect(await plug.repair(TOKEN, SETTINGS)).toMatchObject({ steps: [] });
+
+    account.bindings = account.bindings.map((binding) => (binding.name === "ACCESS" ? { ...binding, json: JSON.stringify({ team_domain: TEAM, audience: "f".repeat(64) }) } : binding));
+
+    expect(shown(await plug.check(TOKEN, SETTINGS))).toEqual(table({ variable: "differs" }));
+  });
+});
+
+test("a login added to the settings: the check says the Access policy lets other emails through, and the repair lets the new one in, so a person added in Settings is not stopped at Cloudflare's login", async () => {
+  const account = emptyAccount();
+  const added: DomainSettings = { ...STORED, logins: [...STORED.logins, "second@example.com" as Login] };
+
+  await withAccount(account, async (plug, asked) => {
+    await plug.repair(TOKEN, SETTINGS);
+    const sent = asked.length;
+    const differs = table({}).map((row) => row.replace("Access policy | present | poplin logins", "Access policy | differs | poplin logins: not the logins of the settings"));
+
+    expect(shown(await plug.check(TOKEN, async () => added))).toEqual(differs);
+    expect(writes(asked.slice(sent))).toEqual([]);
+
+    await plug.repair(TOKEN, async () => added);
+
+    expect(account.policies.map((policy) => policy.include)).toEqual([[{ email: { email: "owner@example.com" } }, { email: { email: "second@example.com" } }]]);
+  });
+});
+
+/** The right each call of a repair needs, by the start of its path after the account or the zone. */
+const RIGHT_OF: readonly (readonly [path: RegExp, right: string])[] = [
+  [/^\/zones\?/, "Zone: Read"],
+  [/^\/zones\/[^/]+\/dns_records/, "DNS: Edit"],
+  [/^\/zones\/[^/]+\/workers\/routes/, "Workers Routes: Edit"],
+  [/^\/accounts\/[^/]+\/access\/(apps|policies)/, "Access: Apps and Policies: Edit"],
+  [/^\/accounts\/[^/]+\/access\/organizations/, "Access: Organizations, Identity Providers, and Groups: Read"],
+  [/^\/accounts\/[^/]+\/workers\/scripts/, "Workers Scripts: Edit"],
+  [/^\/zones\/[^/]+\/settings\//, "Zone Settings: Read"],
+  [/^\/zones\/[^/]+\/rulesets\/phases\/http_request_dynamic_redirect/, "Single Redirect: Edit"],
+  [/^\/zones\/[^/]+\/rulesets/, "Zone WAF: Edit"],
+  [/^\/zones\/[^/]+\/bot_management/, "Bot Management: Edit"],
+  [/^\/accounts\/[^/]+\/d1\/database/, "D1: Edit"],
+];
+
+test("the rights the page asks a token for are the rights a repair's calls need, no more and no fewer: a call added without its right is refused on every real install", async () => {
+  await withAccount(emptyAccount(), async (plug, asked) => {
+    await plug.repair(TOKEN, SETTINGS);
+    const needed = asked.map((entry) => RIGHT_OF.find(([path]) => path.test(entry.path))?.[1] ?? `no right is known for ${entry.method} ${entry.path}`);
+
+    expect([...new Set(needed)].sort()).toEqual([...plug.tokenRights].sort());
+  });
 });
 
 test("one object taken away and one changed by hand: the check names exactly those two, and the repair changes exactly those two", async () => {
@@ -119,7 +180,7 @@ test("Access that was never switched on is no failure: both runs go on past it, 
   const account = { ...emptyAccount(), accessOff: true };
   const off = (states: Readonly<Record<string, string>>): string[] =>
     table(states).map((row) => row.replace(/^(Access \w+ \| missing \|) .*$/, "$1 Access is off for the account"));
-  const steps = [{ text: "Open Zero Trust and pick a plan (Free works): that switches Access on.", address: "https://one.dash.cloudflare.com/account-a" }];
+  const steps = [{ text: "Open Zero Trust and pick a plan (Free works): that switches Access on.", address: `https://one.dash.cloudflare.com/${ACCOUNT}` }];
 
   await withAccount(account, async (plug) => {
     const checked = await plug.check(TOKEN, SETTINGS);
@@ -173,6 +234,7 @@ test("a repair refused half way: the rows say what was made, which change failed
       `Worker route | failed | *-poplin.example.com/*: refused with status 403: 10000 Authentication error for Bearer ${TOKEN}`,
       "Worker route | not-run | poplin.example.com/*",
       "Access application | not-run | ",
+      "Worker variable | not-run | ",
       "Redirect rule | not-run | ",
       "WAF rule | not-run | ",
       "Rate rule | not-run | ",
@@ -207,14 +269,15 @@ test("a proven token on an install with no settings is told so and reads nothing
 });
 
 test("Access refused as not switched on after the policy was already made is a stopped repair: the made row stays in the table", async () => {
-  const account = { ...emptyAccount(), refuse: "POST /accounts/account-a/access/apps", refuseMessage: "access.api.error.not_enabled" };
+  const account = { ...emptyAccount(), refuse: `POST /accounts/${ACCOUNT}/access/apps`, refuseMessage: "access.api.error.not_enabled" };
 
   await withAccount(account, async (plug) => {
     const rows = shown(await plug.repair(TOKEN, SETTINGS));
 
-    expect(rows.slice(6, 9)).toEqual([
+    expect(rows.slice(6, 10)).toEqual([
       "Access policy | created | poplin logins",
       "Access application | failed | poplin: refused with status 403: 10000 access.api.error.not_enabled",
+      "Worker variable | not-run | ",
       "Redirect rule | not-run | ",
     ]);
     expect(account.policies).toHaveLength(1);

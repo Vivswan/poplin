@@ -42,6 +42,9 @@ export interface DomainPlug {
   /** What the token field is called, such as the provider's own name for the key. */
   readonly tokenLabel: string;
 
+  /** Every right a token needs for a check and a repair, each in the provider's own name for it. */
+  readonly tokenRights: readonly string[];
+
   /** What each of the three settings does at this provider, in the provider's own words. */
   readonly guardNotes: Readonly<Record<GuardKey, string>>;
 

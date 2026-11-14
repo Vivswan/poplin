@@ -3,7 +3,8 @@ import { type Hostname, parseHostname } from "@poplin/core/src/names/hostname";
 import { type DomainLayout, parseDomainLayout } from "../../../src/zone/layout";
 import { reportOf } from "../../../src/zone/sync";
 import { defaultRateRule, planWaf, rateRuleExpression, syncWaf } from "../../../src/zone/rules/waf";
-import { refusal, reply, withFake } from "../support/fake-cloudflare";
+import { withFake } from "../support/fake-cloudflare";
+import { refusal, reply } from "../support/replies";
 import { LAYOUT } from "../support/layouts";
 
 const FREE_RATE = 'starts_with(http.request.uri.path, "/")';

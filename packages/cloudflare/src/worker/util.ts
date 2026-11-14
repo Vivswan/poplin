@@ -13,7 +13,7 @@ const PLAIN_HEADERS = {
 /**
  * Build a small plain-text answer.
  *
- * @param text - the whole body, one line; a `HEAD` request gets the headers alone
+ * @param text - the whole body; a `HEAD` request gets the headers alone
  * @param extra - headers beside the plain ones, such as `Allow`
  */
 export function plain(request: Request, status: number, text: string, extra: Readonly<Record<string, string>> = {}): Response {

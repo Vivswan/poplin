@@ -2,7 +2,8 @@ import { describe, expect, test } from "bun:test";
 import { planDns, refusedRecords, sharesZone, syncDns } from "../../../src/zone/dns/dns";
 import type { DomainLayout } from "../../../src/zone/layout";
 import { reportOf } from "../../../src/zone/sync";
-import { page, reply, withFake } from "../support/fake-cloudflare";
+import { withFake } from "../support/fake-cloudflare";
+import { page, reply } from "../support/replies";
 import { LAYOUT } from "../support/layouts";
 
 const WILDCARD_COMMENT = "poplin: every site";

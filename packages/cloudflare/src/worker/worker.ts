@@ -2,7 +2,9 @@
 //
 //   <admin hostname>/api and below   the API, which checks the bearer token itself; its two login routes take none and are counted by visitor
 //   <admin hostname>/login           the login, which checks the Access token itself
+//   <admin hostname>/setup and below the setup page, which answers only until somebody has logged in
 //   <admin hostname>/...             the dashboard, which checks the session cookie itself
+//   the Worker's workers.dev address the setup page and nothing else of the install: it is the one address that resolves before setup made the records
 //   any other hostname               the Access token under `p`, the limits, then serving; one that is no site's gets serving's own 404
 //
 // An instance starts on its first request, and every request that arrives meanwhile waits on that one start.
@@ -22,6 +24,7 @@ import type { Bindings } from "./bindings";
 import { type Held, readHeld } from "./held";
 import { answerLogin } from "./login";
 import { answerSite } from "./site";
+import { answerSetup, isSetupPath, neverLoggedIn } from "./setup";
 import { type Failure, type Instance, type Outside, type Started, startInstance } from "./start";
 import { runSweep } from "./sweep";
 import { plain } from "./util";
@@ -38,9 +41,28 @@ const API_PATH = "/api";
 /** The answer to a request that met a failure of the database or the bucket. */
 const TRY_AGAIN = "Something went wrong. Try again.";
 
-/** What stopped an instance, in a sentence for whoever runs the install. It names a binding and never a value of one. */
+/** What the hostname of a Worker's own address ends in. Cloudflare gives every Worker one, whatever its routes. */
+const OWN_ADDRESS = ".workers.dev";
+
+/** The setup page, for a redirect from the Worker's own address. */
+const SETUP = "/setup";
+
+/** Where a person sets the variables an install needs. */
+const SET_THEM = "Set them in the Cloudflare dashboard: Workers & Pages, this Worker, Settings, Variables and Secrets. The install page lists each one.";
+
+/** What a request is answered through: the settings its instance holds, read no longer ago than `lifetime` milliseconds, and whether the setup page is open. */
+interface Ways {
+  readonly held: (lifetime: number) => Promise<Held>;
+  readonly setupOpen: () => Promise<boolean>;
+}
+
+/** What stopped an instance, for whoever runs the install. It names each variable and never a value of one. */
 function failureText(failure: Failure): string {
-  if (failure.kind === "binding") return `This install is set up wrong: its ${failure.binding} binding is refused (${failure.refusal}).`;
+  if (failure.kind === "binding") {
+    const lines = failure.refused.map(({ binding, refusal }) => `  ${binding}: ${refusal}`);
+
+    return ["This poplin install is not finished. These variables of its Worker are missing or wrong:", "", ...lines, "", SET_THEM].join("\n");
+  }
 
   if (failure.kind === "newer") return "This install's database is newer than its code: update poplin.";
 
@@ -48,8 +70,6 @@ function failureText(failure: Failure): string {
 }
 
 function failureAnswer(request: Request, failure: Failure): Response {
-  if (failure.kind === "binding") return plain(request, 500, failureText(failure));
-
   return plain(request, 503, failureText(failure));
 }
 
@@ -61,6 +81,7 @@ function answerDashboard(request: Request, instance: Instance, held: Held): Prom
     readSession: (headers) => readSession(headers, { key: held.sessionKey, logins: held.logins, now }),
     loginPath: INSTALL_OBJECTS.loginPath,
     csrfSecret: held.formsSecret,
+    domain: instance.domain,
     counters: instance.counters,
     visitorOf: (asked) => visitorKey(clientAddress(asked.headers), held.visitorSecret, now),
   });
@@ -68,16 +89,38 @@ function answerDashboard(request: Request, instance: Instance, held: Held): Prom
   return dashboard.fetch(request);
 }
 
+/** The Worker's own address answers setup alone: the page itself, the way to it from any other path while it is open, and nothing after. */
+async function answerOwnAddress(request: Request, instance: Instance, ways: Ways): Promise<Response> {
+  if (isSetupPath(new URL(request.url).pathname)) return answerSetup(request, instance, await ways.held(FRESH), ways.setupOpen);
+
+  if (await ways.setupOpen()) return new Response(null, { status: 302, headers: { "Cache-Control": "no-store", Location: SETUP } });
+
+  return plain(request, 404, "Not found.");
+}
+
+/** The admin hostname: the API, the login, the setup page, and the dashboard, each of which checks who asks by itself. */
+async function answerAdmin(request: Request, instance: Instance, ways: Ways): Promise<Response> {
+  const { pathname } = new URL(request.url);
+  if (pathname === API_PATH || pathname.startsWith(`${API_PATH}/`)) return instance.api.fetch(request);
+
+  if (pathname === INSTALL_OBJECTS.loginPath) return answerLogin(request, instance, await ways.held(FRESH));
+
+  if (isSetupPath(pathname)) return answerSetup(request, instance, await ways.held(FRESH), ways.setupOpen);
+
+  return answerDashboard(request, instance, await ways.held(FRESH));
+}
+
 /**
  * Make the handlers of one Worker instance.
  *
- * @param given - the clock and the fetch of the Access keys; the runtime's own when absent
+ * @param given - the clock, the fetch of the Access keys, and the fetch of setup's calls to Cloudflare; the runtime's own when absent
  * @returns `fetch`, which never throws, and `scheduled`, which throws when the sweep could not run
  */
 export function createWorker(given: Partial<Outside> = {}): Required<Pick<ExportedHandler<Bindings>, "fetch" | "scheduled">> {
-  const outside: Outside = { now: given.now ?? Date.now, fetch: given.fetch ?? ((url, init) => fetch(url, init)) };
+  const outside: Outside = { now: given.now ?? Date.now, fetch: given.fetch ?? ((url, init) => fetch(url, init)), cloudflare: given.cloudflare };
   let starting: Promise<Started> | undefined;
   let holding: { readonly at: number; readonly value: Promise<Held> } | undefined;
+  let loggedInOnce = false;
 
   async function attempt(env: Bindings): Promise<Started> {
     try {
@@ -124,19 +167,26 @@ export function createWorker(given: Partial<Outside> = {}): Required<Pick<Export
     return visitorKey(clientAddress(request.headers), visitorSecret, outside.now());
   }
 
+  // A login is never undone, so an instance that saw one asks the database no more.
+  async function setupOpen(database: Database): Promise<boolean> {
+    if (!loggedInOnce) loggedInOnce = !(await neverLoggedIn(database));
+
+    return !loggedInOnce;
+  }
+
   async function answer(request: Request, env: Bindings): Promise<Response> {
     const started = await start(env);
     if (!started.ok) return failureAnswer(request, started.failure);
 
     const { instance } = started;
-    const url = new URL(request.url);
-    if (url.hostname !== instance.layout.adminHostname) return answerSite(request, instance, await held(instance.install.database, SETTINGS_LIFETIME_MS));
+    const { hostname } = new URL(request.url);
+    const { database } = instance.install;
+    const ways: Ways = { held: (lifetime) => held(database, lifetime), setupOpen: () => setupOpen(database) };
+    if (hostname.endsWith(OWN_ADDRESS)) return answerOwnAddress(request, instance, ways);
 
-    if (url.pathname === API_PATH || url.pathname.startsWith(`${API_PATH}/`)) return instance.api.fetch(request);
+    if (hostname !== instance.layout.adminHostname) return answerSite(request, instance, await ways.held(SETTINGS_LIFETIME_MS));
 
-    if (url.pathname === INSTALL_OBJECTS.loginPath) return answerLogin(request, instance, await held(instance.install.database, FRESH));
-
-    return answerDashboard(request, instance, await held(instance.install.database, FRESH));
+    return answerAdmin(request, instance, ways);
   }
 
   return {

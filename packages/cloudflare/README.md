@@ -4,12 +4,7 @@ The Worker that runs a poplin install on Cloudflare, the setup client for a zone
 
 | To | Run | Result |
 | --- | --- | --- |
-| run the Worker on this machine | `bun run --cwd packages/cloudflare dev` | the Worker on `http://localhost:8787`, with a local bucket, database, and counters, and the example values of `wrangler.jsonc` |
 | build the bundle | `bun run --cwd packages/cloudflare build` | `packages/cloudflare/dist/worker.js`, the one file the OpenTofu module uploads |
+| deploy the Worker | `bun run deploy`, at the repository's root | the Worker in the Cloudflare account wrangler is logged in to, with its bucket and its database made the first time |
 
-A local run reads the hostname from the `Host` header:
-
-```sh
-curl -H "Host: poplin.example.com" http://localhost:8787/api/whoami
-curl -H "Host: docs-page.example.com" http://localhost:8787/
-```
+The Worker's configuration is `wrangler.jsonc` at the repository's root. It holds no value of any install: `ZONE`, `FIRST_SETTINGS`, and `ACCOUNT_ID` are set on the deployed Worker, and setup writes `ACCESS`. [Install](../../docs/install.md) has the steps.

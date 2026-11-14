@@ -201,8 +201,8 @@ run "worker_bindings" {
   }
 
   assert {
-    condition     = tolist([for binding in cloudflare_workers_script.poplin.bindings : "${binding.name} ${binding.type}"]) == tolist(["SITES r2_bucket", "DB d1", "MINUTE_LIMITS ratelimit", "ZONE json", "FIRST_SETTINGS json", "ACCESS json"])
-    error_message = "The Worker gets the bucket, the database, the minute limiter, the zone values, the first settings, and the Access application, under the names its code reads."
+    condition     = tolist([for binding in cloudflare_workers_script.poplin.bindings : "${binding.name} ${binding.type}"]) == tolist(["SITES r2_bucket", "DB d1", "MINUTE_LIMITS ratelimit", "ZONE json", "FIRST_SETTINGS json", "ACCESS json", "ACCOUNT_ID plain_text", "WORKER_NAME plain_text"])
+    error_message = "The Worker gets the bucket, the database, the minute limiter, the zone values, the first settings, the Access application, its account, and its own name, under the names its code reads."
   }
 
   assert {

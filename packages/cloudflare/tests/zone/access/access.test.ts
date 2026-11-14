@@ -2,7 +2,8 @@ import { describe, expect, test } from "bun:test";
 import { parseLogins } from "@poplin/core/src/auth/logins";
 import { planAccess, syncAccess } from "../../../src/zone/access/access";
 import { reportOf } from "../../../src/zone/sync";
-import { page, reply, withFake } from "../support/fake-cloudflare";
+import { withFake } from "../support/fake-cloudflare";
+import { page, reply } from "../support/replies";
 import { hostOf } from "../support/layouts";
 
 const ADMIN = hostOf("poplin.example.com");

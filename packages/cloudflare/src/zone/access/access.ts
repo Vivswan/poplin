@@ -5,6 +5,7 @@ import type { Logins } from "@poplin/core/src/auth/logins";
 import type { Hostname } from "@poplin/core/src/names/hostname";
 import { BaseApplications } from "cloudflare/resources/zero-trust/access/applications/applications";
 import { BasePolicies } from "cloudflare/resources/zero-trust/access/policies";
+import { BaseOrganizations } from "cloudflare/resources/zero-trust/organizations/organizations";
 import { type CloudflareFailure, type CloudflareResult, type Connection, callCloudflare } from "../client";
 import { INSTALL_OBJECTS } from "../install-objects";
 import { applySteps, type Mode, reportOf, type Synced } from "../sync";
@@ -64,6 +65,12 @@ interface DesiredAccess {
 
   /** The hostname pattern of every private site's address, from `privateSitesPattern`. */
   readonly privateSites: string;
+}
+
+/** What the Worker checks a login's token against. `teamDomain` is the hostname alone, such as `team.cloudflareaccess.com`. */
+interface LoginFacts {
+  readonly teamDomain: string;
+  readonly audience: string;
 }
 
 /** One step of an Access plan. An application step with no `policyId` links the policy the same plan creates. */
@@ -149,6 +156,26 @@ export function planAccess(desired: DesiredAccess, current: AccountAccess): Acce
  */
 export function isAccessOff(failure: CloudflareFailure): boolean {
   return failure.failure === "refused" && failure.errors.some((error) => error.message.includes(NOT_ENABLED));
+}
+
+/**
+ * Read what the Worker checks a login's token against: the team's domain and the audience tag of poplin's application.
+ *
+ * @returns the two texts, or `undefined` while the account has no such application or Cloudflare names no team or no tag for it
+ */
+export async function readLoginFacts(connection: Connection, accountId: string): Promise<CloudflareResult<LoginFacts | undefined>> {
+  const applications = await callCloudflare(connection, (api) => Array.fromAsync(new BaseApplications(api).list({ account_id: accountId })));
+  if (!applications.ok) return applications;
+
+  const audience = applications.value.find((candidate) => candidate.name === APPLICATION_NAME)?.aud;
+  if (audience === undefined) return { ok: true, value: undefined };
+
+  const team = await callCloudflare(connection, (api) => new BaseOrganizations(api).list({ account_id: accountId }));
+  if (!team.ok) return team;
+
+  const teamDomain = team.value.auth_domain;
+
+  return { ok: true, value: teamDomain === undefined ? undefined : { teamDomain, audience } };
 }
 
 /**

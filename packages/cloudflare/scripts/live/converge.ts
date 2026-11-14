@@ -38,7 +38,7 @@ const NOBODY = "owner@example.com";
 /** The binding of an install with no login application: a team that does not exist, and an audience no token names. */
 const NO_ACCESS = { team_domain: "access-off.invalid", audience: "0".repeat(64) };
 
-/** The settings a live install starts with, where they differ from the example's: a short trash, and room for the suite's own requests. */
+/** The settings a live install starts with, where they differ from the defaults: a short trash, and room for the suite's own requests. */
 const LIVE_SETTINGS = { dashboard_title: "poplin live checks", trash_days: "1", visitor_requests_per_minute: "120" };
 
 /** How long the install has to answer after a deploy, and how often it is asked, in milliseconds. */
@@ -155,10 +155,10 @@ async function ensureAccess(run: Run, found: Found, login: string, progress: Pro
   return { team_domain: team.value.auth_domain, audience };
 }
 
-/** The Worker's configuration for the test install: the package's own, with the test account's bucket, database, zone, and login. */
-async function workerConfig(found: Found, databaseId: string, access: AccessBinding, login: string): Promise<Record<string, unknown>> {
-  const base: unknown = Bun.JSONC.parse(await Bun.file(join(PACKAGE, "wrangler.jsonc")).text());
-  if (!isRecord(base) || !isRecord(base.vars) || !isRecord(base.vars.FIRST_SETTINGS)) throw new Error("wrangler.jsonc holds no FIRST_SETTINGS");
+/** The Worker's configuration for the test install: the repository's own, with the test account's id, bucket, database, zone, and login. */
+async function workerConfig(run: Run, found: Found, bound: { readonly databaseId: string; readonly access: AccessBinding; readonly login: string }): Promise<Record<string, unknown>> {
+  const base: unknown = Bun.JSONC.parse(await Bun.file(join(PACKAGE, "..", "..", "wrangler.jsonc")).text());
+  if (!isRecord(base)) throw new Error("wrangler.jsonc holds no configuration");
 
   return {
     ...base,
@@ -169,8 +169,8 @@ async function workerConfig(found: Found, databaseId: string, access: AccessBind
     workers_dev: false,
     preview_urls: false,
     r2_buckets: [{ binding: "SITES", bucket_name: BUCKET }],
-    d1_databases: [{ binding: "DB", database_name: INSTALL_OBJECTS.database, database_id: databaseId }],
-    vars: { ZONE: { domain: found.layout.domain }, ACCESS: access, FIRST_SETTINGS: { ...base.vars.FIRST_SETTINGS, ...LIVE_SETTINGS, logins: login } },
+    d1_databases: [{ binding: "DB", database_name: INSTALL_OBJECTS.database, database_id: bound.databaseId }],
+    vars: { ZONE: { domain: found.layout.domain }, ACCESS: bound.access, FIRST_SETTINGS: { ...LIVE_SETTINGS, logins: bound.login }, ACCOUNT_ID: run.accountId, WORKER_NAME: SCRIPT },
   };
 }
 
@@ -214,7 +214,8 @@ function needOf(row: DomainRow): string | undefined {
 
   if (row.state === "left-out") return `the zone to allow it: ${row.detail.slice(row.detail.indexOf(": ") + 2)}`;
 
-  if (row.state === "missing" && row.object.startsWith("Access")) return ACCESS_OFF;
+  // The Worker's login variable is read from the Access application, so it is missing wherever the application is.
+  if (row.state === "missing" && (row.object.startsWith("Access") || row.object === "Worker variable")) return ACCESS_OFF;
 
   // Cloudflare refuses the bot settings of a plan that has none through the API, whatever the token may do.
   if (row.object === "Bot settings" && REFUSAL_STATUS.test(row.detail)) return "a plan whose bot settings the API can change";
@@ -307,7 +308,7 @@ async function converge(run: Run, progress: Progress, env: Environment): Promise
   const access = await ensureAccess(run, found, login, progress);
   if (isStop(access)) return access;
 
-  const deployed = await deployWorker(run, await workerConfig(found, database.id, access, login));
+  const deployed = await deployWorker(run, await workerConfig(run, found, { databaseId: database.id, access, login }));
   if (deployed !== undefined) return deployed;
 
   note(run, progress, { piece: "Worker", result: "deployed" });

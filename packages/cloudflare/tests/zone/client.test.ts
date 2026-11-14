@@ -1,7 +1,8 @@
 import { describe, expect, test } from "bun:test";
 import { BaseZones } from "cloudflare/resources/zones/zones";
 import { callCloudflare, listZones, verifyKey } from "../../src/zone/client";
-import { type Asked, page, refusal, reply, withFake } from "./support/fake-cloudflare";
+import { withFake } from "./support/fake-cloudflare";
+import { type Asked, page, refusal, reply } from "./support/replies";
 
 const ACCOUNT = "account-a";
 const ACCOUNT_VERIFY = `/accounts/${ACCOUNT}/tokens/verify`;

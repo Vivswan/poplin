@@ -16,7 +16,7 @@ const MOST_BUNDLE_BYTES = 1_000_000;
 /** A file large enough that it cannot pass through in one piece: 5 MiB. */
 const LARGE_BYTES = 5 * 1024 * 1024;
 
-/** The example first settings of wrangler.jsonc. */
+/** The first settings the tests' Worker starts from. */
 const FIRST = BINDINGS.FIRST_SETTINGS as Readonly<Record<string, string>>;
 
 /** The milliseconds of one minute, which is how long the rate limiting binding counts for. */
@@ -136,31 +136,46 @@ describe("an instance's first request", () => {
     expect((await (await installOf(w)).database.readSettings())?.trash_days).toBe(7);
   });
 
+  // Drift: the person who installs sets this variable by hand; one that had to carry every setting would be eighteen chances to mistype the install into not starting.
+  test("FIRST_SETTINGS that names the logins alone starts the install with every other setting at its default, titled with its own address", async () => {
+    const answer = await ask(instance(w), `${ADMIN}/api/whoami`, {}, withBindings({ FIRST_SETTINGS: { logins: " owner@example.com , second@example.com " } }));
+    const stored = await (await installOf(w)).database.readSettings();
+    const usual = settingsFromText(FIRST);
+
+    expect(answer.status).toBe(401);
+    expect(stored).toEqual(usual.ok ? { ...usual.values, logins: ["owner@example.com", "second@example.com"] as typeof usual.values.logins } : undefined);
+  });
+
   const stopped: readonly { readonly name: string; readonly broken: () => Bindings; readonly status: number; readonly says: string; readonly hides: string }[] = [
-    { name: "a ZONE binding with no domain", broken: () => withBindings({ ZONE: { public_word: "wiki" } }), status: 500, says: "its ZONE binding is refused (bad-shape)", hides: "wiki" },
-    { name: "a ZONE binding whose public word is no word", broken: () => withBindings({ ZONE: { domain: "example.com", public_word: "my-wiki" } }), status: 500, says: "its ZONE binding is refused (bad-public-word)", hides: "my-wiki" },
-    { name: "no ZONE binding", broken: () => withBindings({ ZONE: undefined }), status: 500, says: "its ZONE binding is refused (absent)", hides: "example.com" },
+    { name: "a ZONE binding with no domain", broken: () => withBindings({ ZONE: { public_word: "wiki" } }), status: 503, says: "  ZONE: bad-shape", hides: "wiki" },
+    { name: "a ZONE binding whose public word is no word", broken: () => withBindings({ ZONE: { domain: "example.com", public_word: "my-wiki" } }), status: 503, says: "  ZONE: bad-public-word", hides: "my-wiki" },
+    { name: "no ZONE binding", broken: () => withBindings({ ZONE: undefined }), status: 503, says: "  ZONE: absent", hides: "example.com" },
+    { name: "neither a ZONE nor an ACCOUNT_ID binding", broken: () => withBindings({ ZONE: undefined, ACCOUNT_ID: undefined }), status: 503, says: "  ZONE: absent\n  ACCOUNT_ID: absent", hides: "example.com" },
+    { name: "an ACCOUNT_ID that is no account id", broken: () => withBindings({ ACCOUNT_ID: "my-account" }), status: 503, says: "  ACCOUNT_ID: bad-shape", hides: "my-account" },
+    { name: "a WORKER_NAME that is no Worker's name", broken: () => withBindings({ WORKER_NAME: "../poplin" }), status: 503, says: "  WORKER_NAME: bad-shape", hides: "../poplin" },
     {
       name: "an ACCESS binding whose audience is no tag",
       broken: () => withBindings({ ACCESS: { team_domain: "team.cloudflareaccess.com", audience: "not-a-tag" } }),
-      status: 500,
-      says: "its ACCESS binding is refused (bad-audience)",
+      status: 503,
+      says: "  ACCESS: bad-audience",
       hides: "not-a-tag",
     },
     {
       name: "a first setting in no form its key takes",
       broken: () => withBindings({ FIRST_SETTINGS: { ...FIRST, trash_days: "soon" } }),
-      status: 500,
-      says: "its FIRST_SETTINGS binding is refused (bad-form at trash_days)",
+      status: 503,
+      says: "  FIRST_SETTINGS: bad-form at trash_days",
       hides: "soon",
     },
     {
       name: "a first setting under a key that is no setting",
       broken: () => withBindings({ FIRST_SETTINGS: { ...FIRST, poplin_0123456789abcdef: "on" } }),
-      status: 500,
-      says: "its FIRST_SETTINGS binding is refused (unknown-key)",
+      status: 503,
+      says: "  FIRST_SETTINGS: unknown-key",
       hides: "poplin_0123456789abcdef",
     },
+    { name: "first settings with no logins", broken: () => withBindings({ FIRST_SETTINGS: { trash_days: "9" } }), status: 503, says: "  FIRST_SETTINGS: missing at logins", hides: "9" },
+    { name: "first settings whose login is no email", broken: () => withBindings({ FIRST_SETTINGS: { logins: "the-owner" } }), status: 503, says: "  FIRST_SETTINGS: bad-form at logins", hides: "the-owner" },
     { name: "a schema step that fails", broken: () => withBindings({ DB: failingDatabase((batch) => batch === 2) }), status: 503, says: "could not be brought up to date. Try again.", hides: "away" },
     { name: "a database that is away", broken: () => withBindings({ DB: failingDatabase(() => true) }), status: 503, says: "Something went wrong. Try again.", hides: "away" },
   ];
@@ -577,7 +592,7 @@ describe("the built bundle", () => {
 
   // Drift: the file the OpenTofu module uploads is built from the entry's imports, so one import of a test helper or a whole library would ship to every install.
   test("is one module of the entry and what it imports, under the size cap, with no test or fixture file in it", () => {
-    expect(modules).toContain("src/worker/worker.ts");
+    expect(modules).toContain("packages/cloudflare/src/worker/worker.ts");
     expect(modules.filter((path) => /(^|\/)tests\/|\.test\.|\/support\/|vitest|fixtures/.test(path))).toEqual([]);
     expect([...bundle.matchAll(/^import .*$/gm)].map(([line]) => line)).toEqual([]);
     expect(new TextEncoder().encode(bundle).byteLength).toBeLessThan(MOST_BUNDLE_BYTES);

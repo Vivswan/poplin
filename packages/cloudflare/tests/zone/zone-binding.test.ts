@@ -105,11 +105,4 @@ describe("the bindings the module gives the Worker", () => {
 
     expect<unknown>(read).toEqual({ ok: true, value: READ });
   });
-
-  test("the Worker's own example values for local runs are read the same way", () => {
-    const config = Bun.JSONC.parse(readFileSync(join(ROOT, "packages", "cloudflare", "wrangler.jsonc"), "utf8")) as { vars: { ZONE: unknown; FIRST_SETTINGS: Record<string, string> } };
-
-    expect(readZoneBinding(config.vars.ZONE).ok).toBe(true);
-    expect(settingsFromText(config.vars.FIRST_SETTINGS).ok).toBe(true);
-  });
 });

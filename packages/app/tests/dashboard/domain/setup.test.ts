@@ -81,7 +81,11 @@ async function openSetup(options: Options = {}) {
       }),
     );
 
-  return { opened, plug, address, reads, get, post };
+  // A program's call: the token in a JSON body, with no page opened first and no form token.
+  const call = (run: string, body: string, type = "application/json"): Promise<Response> =>
+    setup.fetch(new Request(`${ORIGIN}/setup/api/${run}`, { method: "POST", headers: { "Content-Type": type }, body }));
+
+  return { opened, plug, address, reads, get, post, call };
 }
 
 /** Every byte an answer carries: its status, its headers but the one random nonce, and its body with the form's own token and the nonce taken out. */
@@ -254,4 +258,28 @@ test("a post without the form's token, with a forged one, from another origin, o
   expect([(await get("/")).status, (await get("/setup/check")).status, (await post("save", OWN, { csrf })).status]).toEqual([404, 404, 404]);
   expect(plug.calls).toEqual([]);
   expect(await opened.audit()).toEqual(before);
+});
+
+test("a program's call is answered as JSON by the same run, the same count of tries, and the same open question as the page's form: a second way in with any one of them missing would be the weaker door", async () => {
+  const { opened, call, plug, address } = await openSetup();
+  const own = JSON.stringify({ token: OWN });
+  const checked = await call("check", own);
+  const refused = await call("repair", JSON.stringify({ token: FOREIGN }));
+  const noToken = await call("check", JSON.stringify({ secret: OWN }));
+  const asForm = await call("repair", new URLSearchParams({ token: OWN }).toString(), "application/x-www-form-urlencoded");
+  const unknown = await call("save", own);
+  const fifth = await call("check", own);
+  const sixth = await call("check", own);
+
+  expect([checked.status, await checked.json()]).toEqual([200, { ok: true, rows: [{ object: "DNS record", state: "missing", detail: "poplin.example.com" }], steps: [] }]);
+  expect([refused.status, await refused.json()]).toEqual([403, { ok: false, refusal: "token" }]);
+  expect([noToken.status, asForm.status, unknown.status, fifth.status]).toEqual([403, 415, 404, 200]);
+  expect([sixth.status, await sixth.json()]).toEqual([429, { ok: false, refusal: "too_many_tries" }]);
+  expect(plug.calls.map(({ run }) => run)).toEqual(["check", "repair", "check", "check"]);
+  expect((await opened.audit())[0]).toMatchObject({ action: "domain_synced", detail: { run: "check", from: "setup" } });
+
+  address.value = "198.51.100.9";
+  const shut = await openSetup({ open: async () => false });
+
+  expect([(await shut.call("repair", own)).status, shut.plug.calls]).toEqual([404, []]);
 });

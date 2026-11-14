@@ -11,10 +11,11 @@ const RATE_LIMITED_STATUS = 429;
 const WHOLE_SECONDS = /^\d+$/;
 const ZONE_PLANS: ReadonlySet<string> = new Set(["free", "pro", "business", "enterprise"]);
 
-/** Where to send a call and the key that authorises it. `baseUrl` is absent outside tests. */
+/** Where to send a call and the key that authorises it. `baseUrl` and `fetch` are absent outside tests. */
 export interface Connection {
   readonly key: string;
-  readonly baseUrl?: string;
+  readonly baseUrl?: string | undefined;
+  readonly fetch?: ((input: string | URL | Request, init?: RequestInit) => Promise<Response>) | undefined;
 }
 
 /** One entry of the `errors` list in Cloudflare's reply. */
@@ -84,7 +85,7 @@ function planOf(name: string | undefined): ZonePlan {
  * @returns the reply's `result`, or the failure; a refusal by Cloudflare is a value, never an exception, and nothing is retried
  */
 export async function callCloudflare<Value>(connection: Connection, call: (api: BaseCloudflare) => Promise<Value>): Promise<CloudflareResult<Value>> {
-  const api = new BaseCloudflare({ apiToken: connection.key, baseURL: connection.baseUrl, maxRetries: 0, logLevel: "off" });
+  const api = new BaseCloudflare({ apiToken: connection.key, baseURL: connection.baseUrl, fetch: connection.fetch, maxRetries: 0, logLevel: "off" });
 
   try {
     return { ok: true, value: await call(api) };

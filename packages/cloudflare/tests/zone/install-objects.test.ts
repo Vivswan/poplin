@@ -16,7 +16,8 @@ import { INSTALL_OBJECTS } from "../../src/zone/install-objects";
 import { syncRoutes } from "../../src/zone/routes/routes";
 import type { Report } from "../../src/zone/sync";
 import { syncWaf } from "../../src/zone/rules/waf";
-import { type Asked, page, refusal, reply, withFake } from "./support/fake-cloudflare";
+import { withFake } from "./support/fake-cloudflare";
+import { type Asked, page, refusal, reply } from "./support/replies";
 import { hostOf, LAYOUT } from "./support/layouts";
 
 const MODULE = join(import.meta.dir, "..", "..", "tofu");
@@ -79,6 +80,8 @@ const WRITTEN: Readonly<Record<SharedKey, readonly [file: string, around: string
   minuteLimitsLimit: ["worker.tf", "simple = { limit = %v, "],
   minuteLimitsSeconds: ["worker.tf", ", period = %v }"],
   accessBinding: ["worker.tf", 'name = %v\n type = "json"\n json = jsonencode({'],
+  accountBinding: ["worker.tf", 'name = %v\n type = "plain_text"\n text = var.account_id'],
+  workerBinding: ["worker.tf", 'name = %v\n type = "plain_text"\n text = var.worker_name'],
   sweepCron: ["worker.tf", "schedules = [{ cron = %v }]"],
 };
 
@@ -209,7 +212,7 @@ describe("the values the setup client shares with the OpenTofu module", () => {
 
 describe("the Worker's rate limiting binding", () => {
   test("wrangler.jsonc declares the binding the table holds, so the module, which is pinned to the table above, binds the limiter the Worker's counters are written for", () => {
-    const config = Bun.JSONC.parse(readFileSync(join(MODULE, "..", "wrangler.jsonc"), "utf8")) as { ratelimits: unknown };
+    const config = Bun.JSONC.parse(readFileSync(join(MODULE, "..", "..", "..", "wrangler.jsonc"), "utf8")) as { ratelimits: unknown };
 
     expect(config.ratelimits).toEqual([
       {
@@ -221,12 +224,11 @@ describe("the Worker's rate limiting binding", () => {
   });
 });
 
-describe("the Worker's Access binding and sweep trigger", () => {
-  test("wrangler.jsonc declares the binding name and the schedule the table holds, so a local run and a deployed Worker read the same binding and sweep as often", () => {
-    const config = Bun.JSONC.parse(readFileSync(join(MODULE, "..", "wrangler.jsonc"), "utf8")) as { triggers: { crons: unknown }; vars: Record<string, unknown> };
+describe("the Worker's sweep trigger", () => {
+  test("wrangler.jsonc declares the schedule the table holds, so a Worker a deploy made and one the module made sweep as often", () => {
+    const config = Bun.JSONC.parse(readFileSync(join(MODULE, "..", "..", "..", "wrangler.jsonc"), "utf8")) as { triggers: { crons: unknown } };
 
     expect(config.triggers.crons).toEqual([INSTALL_OBJECTS.sweepCron]);
-    expect(Object.keys(config.vars)).toContain(INSTALL_OBJECTS.accessBinding);
   });
 });
 

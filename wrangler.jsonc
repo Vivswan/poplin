@@ -1,0 +1,17 @@
+{
+  "$schema": "packages/cloudflare/node_modules/wrangler/config-schema.json",
+  "name": "poplin",
+  "main": "packages/cloudflare/src/worker/worker.ts",
+  "compatibility_date": "2026-11-01",
+  // The install's own values are set on the Worker itself: three by the person who installs, `ACCESS` by setup. A deploy leaves them as they are.
+  "keep_vars": true,
+  // The sweep: expired sites to the trash, old trash and abandoned uploads away.
+  "triggers": { "crons": ["*/15 * * * *"] },
+  // Neither has an id: a deploy creates the bucket and the database the first time.
+  "r2_buckets": [{ "binding": "SITES", "bucket_name": "poplin-sites" }],
+  "d1_databases": [{ "binding": "DB", "database_name": "poplin" }],
+  // The limit is a fixed ceiling: each request weighs the ceiling divided by the per-minute setting in force, so a setting changes with no deploy.
+  "ratelimits": [{ "name": "MINUTE_LIMITS", "namespace_id": "1001", "simple": { "limit": 1000000, "period": 60 } }],
+  // The Worker's own name, which its routes name. It is the `name` above.
+  "vars": { "WORKER_NAME": "poplin" }
+}

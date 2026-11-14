@@ -4,7 +4,7 @@
 
 import { logIn } from "@poplin/app/src/login/login";
 import type { Held } from "./held";
-import type { Instance } from "./start";
+import { type Instance, NO_ACCESS } from "./start";
 import { plain } from "./util";
 
 /** The one method a login is made with: Access sends the person on with a `GET`. */
@@ -16,7 +16,7 @@ const RETURN_KEY = "return";
 /**
  * Answer a request to the login path.
  *
- * @returns 302 with the session cookie of the admin hostname alone, to the dashboard path the person came from; 403 for a request Access did not sign for a listed email; 503 while the team's keys cannot be had
+ * @returns 302 with the session cookie of the admin hostname alone, to the dashboard path the person came from; 403 for a request Access did not sign for a listed email; 503 while the team's keys cannot be had, or before setup wrote `ACCESS`
  * @throws whatever the database rejects with while the login is written to the audit log
  */
 export async function answerLogin(request: Request, instance: Instance, held: Held): Promise<Response> {
@@ -30,6 +30,8 @@ export async function answerLogin(request: Request, instance: Instance, held: He
     now,
     returnTo: new URL(request.url).searchParams.get(RETURN_KEY),
   });
+
+  if (!outcome.ok && outcome.refusal === NO_ACCESS) return plain(request, 503, "The login is not set up yet. Finish the setup of this install first.");
 
   if (!outcome.ok && outcome.refusal === "keys-unavailable") return plain(request, 503, "The login cannot be checked right now. Try again.", { "Retry-After": "60" });
 
