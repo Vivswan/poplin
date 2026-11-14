@@ -1,6 +1,6 @@
 // The site actions every face implements: the CLI's word for each, and the MCP tool of the same action.
 
-/** The eight site actions, one to one across the CLI, the library, and the MCP server. */
+/** The eight site actions, one to one across the CLI and the MCP server. */
 export const SITE_ACTIONS = [
   { action: "publish", tool: "publish_site" },
   { action: "set", tool: "update_site" },

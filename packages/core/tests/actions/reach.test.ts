@@ -52,6 +52,15 @@ describe("reachSite", () => {
       expect(await world.audit()).toEqual([...audit, ...entry]);
     });
 
+    // Drift: a label is copied from a publish made before a rename, or typed with the wrong name; an action that compared the name would answer its own site not_found.
+    test("the publisher that made it may under a label that carries another name before the site's id", async () => {
+      const { world, id } = await prepared(prepare, "private");
+      const audit = await world.audit();
+
+      expect(await run(world, OWNER, `draft--${id}`)).toMatchObject({ ok: true });
+      expect(await world.audit()).toEqual([...audit, ...entry]);
+    });
+
     test.each([
       ["private", "not_found"],
       ["public", prepare === "the trash" ? "not_found" : "not_allowed"],

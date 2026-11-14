@@ -7,6 +7,7 @@ import { COMMANDS, type CommandSpec } from "../packages/cli/src/commands/command
 import { parseCommand } from "../packages/cli/src/commands/parse-command";
 import { problem } from "../packages/cli/src/commands/problems";
 import { words } from "../packages/cli/tests/commands/support/command-line";
+import { TOOL_INPUTS } from "../packages/core/src/actions/tool-inputs";
 
 /** The folder the skill sits in. */
 const SKILL_FOLDER = join(import.meta.dir, "..", "skills", "poplin");
@@ -14,8 +15,11 @@ const SKILL_FOLDER = join(import.meta.dir, "..", "skills", "poplin");
 /** Every page of the skill, as a path from its folder. */
 const PAGES: readonly string[] = [...new Bun.Glob("**/*.md").scanSync({ cwd: SKILL_FOLDER })].map((path) => path.replaceAll("\\", "/")).sort();
 
-/** The MCP tools: the one place this test names them. */
-const TOOLS: readonly string[] = ["publish_site", "update_site", "get_site", "list_sites", "rollback_site", "new_link", "delete_site", "restore_site"];
+/** The MCP tools, as the server lists them. */
+const TOOLS: readonly string[] = Object.keys(TOOL_INPUTS);
+
+/** The day the pages' command lines are read on: before every date they give `--expires`, whatever day the test runs. */
+const READ_ON = Date.UTC(2026, 0, 1);
 
 /** The words written with an underscore that are neither a tool nor a code: an input of a tool, and a folder that is never uploaded. */
 const OTHER_WORDS: readonly string[] = ["public_name", "node_modules"];
@@ -86,7 +90,7 @@ function isCode(word: string): boolean {
 
 /** What the CLI's parser refuses of a command line that starts with `poplin`, or nothing when it reads it. */
 function refusalOf(line: string): string | undefined {
-  const parsed = parseCommand(words(line));
+  const parsed = parseCommand(words(line), READ_ON);
 
   return parsed.kind === "usage-error" ? `${line.trim()}: ${parsed.message}` : undefined;
 }
@@ -127,7 +131,7 @@ describe("the agent skill", () => {
     const { command, args = [] } = entry.mcpServers?.poplin ?? {};
 
     expect([command, args[0]]).toEqual(["npx", "poplin"]);
-    expect(parseCommand(args.slice(1)).kind).toBe("mcp");
+    expect(parseCommand(args.slice(1), READ_ON).kind).toBe("mcp");
   });
 
   test("the main page links every page under references/, and every such link leads to a page: without this a sub-page is never opened, or a link sends an agent nowhere", async () => {
