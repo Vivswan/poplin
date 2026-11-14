@@ -108,11 +108,8 @@ export async function missingFiles(store: ObjectStore, upload: Upload, manifest:
     page = await store.list({ prefix, cursor: page.cursor });
   }
 
-  const missing = manifest.filter((file) => {
-    const key = uploadKey(upload, file.path);
-
-    return !key.ok || stored.get(key.key) !== file.size;
-  });
+  // Every path of the manifest passed the key rules when the upload began, so its key is the prefix and the path as written.
+  const missing = manifest.filter((file) => stored.get(`${prefix}${file.path}`) !== file.size);
   if (stored.size > manifest.length) throw new Error(`${prefix} holds a file its manifest does not name`);
 
   return missing.map((file) => file.path);
