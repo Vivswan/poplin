@@ -44,6 +44,7 @@ const REFUSALS = {
   no_domain: "The token shows no domain of that name.",
   bad_domain: "The domain is no domain. Type it alone, such as example.com.",
   bad_login: "The email is no email address.",
+  allowance_spent: "The database takes no more today: its free allowance for the day is used up. Try again after midnight UTC.",
 } as const;
 
 /** What the two pages show. */

@@ -8,6 +8,7 @@ import { REFUSAL_STATUS } from "../../packages/app/src/dashboard/domain/domain-r
 import type { DomainReading } from "../../packages/app/src/dashboard/domain/records";
 import { createSetup } from "../../packages/app/src/dashboard/domain/setup";
 import { MemoryCounters } from "../../packages/app/src/limits/memory-counters";
+import { AllowanceSpent } from "../../packages/core/src/database/driver";
 import { fakePlug, firstRunOf } from "../../packages/app/tests/dashboard/domain/support/fake-plug";
 import { formHeadersOf } from "../../packages/app/tests/dashboard/support/browser";
 import { CSRF_SECRET, ORIGIN } from "../../packages/app/tests/dashboard/support/install";
@@ -39,6 +40,9 @@ const OWN_ANSWERS: Readonly<Record<string, Run["typed"]>> = {
 /** A database every use of which fails the run: a refused run reads and writes none. */
 const NO_DATABASE = new Proxy({}, { get: (_target, name) => () => Promise.reject(new Error(`the database was asked for ${String(name)}`)) }) as Parameters<typeof createSetup>[0]["install"]["database"];
 
+/** A database that takes no more for the day: every use of it is refused as a driver refuses once the allowance is used up. */
+const SPENT_DATABASE = new Proxy({}, { get: () => () => Promise.reject(new AllowanceSpent("reading")) }) as typeof NO_DATABASE;
+
 /** One run: what is typed into the three boxes, how it is sent, whether it reads or changes, on which kind of install, and what the plug answers a run that reaches it. */
 interface Run {
   readonly typed: { readonly domain: string; readonly login: string; readonly token: string };
@@ -68,10 +72,10 @@ const runs: fc.Arbitrary<Run> = fc.record({
 });
 
 /** Send one run to a setup page of its own, and answer everything the page sent back, the page's own random parts taken out. */
-async function answerOf(run: Run, answer: DomainReading = { ok: false, refusal: run.refusal }): Promise<string> {
+async function answerOf(run: Run, answer: DomainReading = { ok: false, refusal: run.refusal }, database = NO_DATABASE): Promise<string> {
   const plug = fakePlug(() => answer);
   const setup = createSetup({
-    install: { database: NO_DATABASE, now: () => 1_700_000_000_000 },
+    install: { database, now: () => 1_700_000_000_000 },
     domain: run.nothingSet ? firstRunOf(plug) : plug,
     open: async () => true,
     counters: new MemoryCounters(),
@@ -124,6 +128,19 @@ test("a domain under the cap as a program sends it and over it as a form is answ
   const [form, call] = [await answerOf({ typed, by: "form", run: "check", nothingSet: false, refusal: "token" }), await answerOf({ typed, by: "call", run: "check", nothingSet: false, refusal: "token" })];
 
   expect([form.startsWith("[413,"), call.startsWith("[403,"), PLAIN_ANSWERS.has(form), PLAIN_ANSWERS.has(call)]).toEqual([true, true, true, true]);
+});
+
+// Drift: a database that is spent for the day once answered "Something went wrong.", which named nothing. Its refusal is one more answer of the page, and it must be the one a plug's own refusal of the kind gets, with nothing typed in it.
+test("a run whose token is taken while the database takes no more for the day is answered the spent allowance and when to come back, as any other typed values would be", async () => {
+  const taken: DomainReading = { ok: true, rows: [{ object: "DNS record", state: "present", detail: "poplin.example.com" }], steps: [] };
+  const typed = { ...PLAIN, token: `${TOKEN}-of-another-shape` };
+  const answers = await Promise.all((["form", "call"] as const).map((by) => answerOf({ typed, by, run: "repair", nothingSet: false, refusal: "token" }, taken, SPENT_DATABASE)));
+
+  // The page's clock stands at 22:13:20 UTC: 6,400 seconds before midnight.
+  expect(answers.map((answer) => [answer.startsWith("[503,"), answer.includes('["retry-after","6400"]'), PLAIN_ANSWERS.has(answer)])).toEqual([
+    [true, true, true],
+    [true, true, true],
+  ]);
 });
 
 // Control: the property would hold of a page that refused everything.

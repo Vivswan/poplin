@@ -12,6 +12,7 @@
 
 import type { Install } from "@poplin/core/src/actions/records";
 import { parseLogin } from "@poplin/core/src/auth/logins";
+import { AllowanceSpent, secondsToNextDay } from "@poplin/core/src/database/driver";
 import { defaultSettings } from "@poplin/core/src/records/settings";
 import { type Context, Hono, type MiddlewareHandler } from "hono";
 import { bodyLimit } from "hono/body-limit";
@@ -88,6 +89,16 @@ interface Setup {
   readonly fetch: (request: Request) => Promise<Response>;
 }
 
+/**
+ * Build the answer to a program's run while the database takes no more for the day.
+ *
+ * @param now - the clock, in milliseconds since the epoch
+ * @returns status 503 with the refusal `allowance_spent` as JSON and `Retry-After` up to the next midnight UTC
+ */
+export function spentRun(now: number): Response {
+  return Response.json({ ok: false, refusal: "allowance_spent" }, { status: 503, headers: { "Retry-After": String(secondsToNextDay(now)), "Cache-Control": "no-store" } });
+}
+
 function notFound(): Response {
   return new Response(NOT_FOUND, { status: 404, headers: { "Content-Type": "text/plain; charset=utf-8" } });
 }
@@ -131,7 +142,7 @@ function typedDomain(sent: Sent): string {
  *
  * On an install with nothing set the plug is made for the typed domain and login, its settings are the defaults of such an install, and the run is not recorded: no value of it is stored here.
  */
-async function runFor(parts: SetupParts, run: DomainRun, sent: Sent): Promise<DomainReading> {
+async function runOnce(parts: SetupParts, run: DomainRun, sent: Sent): Promise<DomainReading> {
   const { domain, install } = parts;
   if (!("plugFor" in domain)) return runDomain(domain, install, { run, token: sent.token, settings: () => install.database.readSettings(), from: "setup" });
 
@@ -144,6 +155,17 @@ async function runFor(parts: SetupParts, run: DomainRun, sent: Sent): Promise<Do
   const settings = async (): Promise<ReturnType<typeof defaultSettings>> => defaultSettings({ installer: login.value, hostname: typedDomain(sent) });
 
   return runDomain(plug, install, { run, token: sent.token, settings, from: "setup", unrecorded: true });
+}
+
+/** Run the plug once for what was sent. A database whose allowance for the day is used up is the refusal `allowance_spent`, whatever the plug did before the database was asked. */
+async function runFor(parts: SetupParts, run: DomainRun, sent: Sent): Promise<DomainReading> {
+  try {
+    return await runOnce(parts, run, sent);
+  } catch (error) {
+    if (error instanceof AllowanceSpent) return { ok: false, refusal: "allowance_spent" };
+
+    throw error;
+  }
 }
 
 /**
@@ -215,7 +237,10 @@ export function createSetup(parts: SetupParts): Setup {
       const body = domainBody({ csrf: context.get("csrf"), ...asks, nothingSet, path: "/setup", ran: { run, reading } });
       if (reading.ok) return respond(context, { ...PLACE, body });
 
-      return respond(context, { ...PLACE, body, status: REFUSAL_STATUS[reading.refusal] });
+      const refused = await respond(context, { ...PLACE, body, status: REFUSAL_STATUS[reading.refusal] });
+      if (reading.refusal === "allowance_spent") refused.headers.set("Retry-After", String(secondsToNextDay(parts.install.now())));
+
+      return refused;
     },
   );
 
@@ -229,6 +254,7 @@ export function createSetup(parts: SetupParts): Setup {
     if (sent === undefined) return context.json({ ok: false, refusal: "not_json" }, 415);
 
     const reading = await runFor(parts, run, sent);
+    if (!reading.ok && reading.refusal === "allowance_spent") return spentRun(parts.install.now());
 
     return context.json(reading, reading.ok ? 200 : REFUSAL_STATUS[reading.refusal]);
   });

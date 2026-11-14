@@ -43,6 +43,7 @@ const REFUSALS: Readonly<Record<string, () => Problem>> = {
   no_domain: () => problem("setup_no_domain"),
   bad_domain: () => problem("setup_bad_domain"),
   bad_login: () => problem("setup_bad_login"),
+  allowance_spent: () => problem("allowance_spent"),
 };
 
 /** The rows and the steps of a run that read the install's side. */

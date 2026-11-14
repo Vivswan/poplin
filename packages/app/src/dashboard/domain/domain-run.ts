@@ -9,7 +9,7 @@ import type { DomainPlug, DomainReading, DomainSettings, ReadSettings } from "./
 const HIDDEN = "[token]";
 
 /** The status of a page that holds no table. */
-export const REFUSAL_STATUS = { token: 403, unreachable: 502, not_set_up: 404, no_domain: 403, bad_domain: 400, bad_login: 400 } as const;
+export const REFUSAL_STATUS = { token: 403, unreachable: 502, not_set_up: 404, no_domain: 403, bad_domain: 400, bad_login: 400, allowance_spent: 503 } as const;
 
 /** What a form asks of the plug: `check` reads, `repair` changes. */
 export type DomainRun = "check" | "repair";

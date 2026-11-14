@@ -36,11 +36,12 @@ export interface DomainStep {
 /**
  * Every object of the install, or why none was read: `token` for a key that is malformed, refused, or of another account, all alike; `unreachable` when the provider did not answer; `not_set_up` for a proven token on an install with no settings.
  *
- * The last three are of an install with nothing set: `no_domain` for a token that shows no such domain, and `bad_domain` and `bad_login` for a typed value that is no domain or no email, refused before the provider is asked.
+ * Three are of an install with nothing set: `no_domain` for a token that shows no such domain, and `bad_domain` and `bad_login` for a typed value that is no domain or no email, refused before the provider is asked.
+ * `allowance_spent` is a run of the setup page that the install's database refused a read or its audit entry, because its free allowance for the day is used up.
  */
 export type DomainReading =
   | { readonly ok: true; readonly rows: readonly DomainRow[]; readonly steps: readonly DomainStep[] }
-  | { readonly ok: false; readonly refusal: "token" | "unreachable" | "not_set_up" | "no_domain" | "bad_domain" | "bad_login" };
+  | { readonly ok: false; readonly refusal: "token" | "unreachable" | "not_set_up" | "no_domain" | "bad_domain" | "bad_login" | "allowance_spent" };
 
 /** The provider's side of an install. Neither method keeps the token past its own call, and neither throws for anything the provider answers. */
 export interface DomainPlug {
