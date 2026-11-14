@@ -1,0 +1,7 @@
+# Codex sidecar for this skill. The interface block mirrors
+# .codex-plugin/plugin.json (displayName, shortDescription, brandColor) and
+# the SKILL.md H1.
+interface:
+  display_name: "Poplin"
+  short_description: "Publish static sites to your own poplin install."
+  brand_color: "#3B66D6"

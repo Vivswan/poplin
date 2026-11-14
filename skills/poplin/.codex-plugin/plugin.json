@@ -1,0 +1,24 @@
+{
+  "name": "poplin",
+  "description": "Publish a folder or one HTML file as a static site on the user's own poplin install: private by default, unlisted or public on request.",
+  "author": {
+    "name": "Vivswan",
+    "url": "https://github.com/Vivswan"
+  },
+  "homepage": "https://github.com/Vivswan/poplin/tree/main/skills/poplin",
+  "repository": "https://github.com/Vivswan/poplin",
+  "license": "SEE LICENSE IN LICENSE.md",
+  "keywords": ["agent-skills", "static-sites", "publishing", "cloudflare", "mcp"],
+  "skills": "./",
+  "interface": {
+    "displayName": "Poplin",
+    "shortDescription": "Publish static sites to your own poplin install.",
+    "longDescription": "Fires when the user asks to publish, share, host, or put online a page, a report, a chart, a dashboard, or a folder of static files, or to set poplin up. Publishes with the poplin MCP tools or the poplin command, keeps a new site private, and asks before a site becomes unlisted or public, before its address changes, and before the setup logs in or edits the agent's configuration.",
+    "developerName": "Vivswan",
+    "category": "Developer Tools",
+    "capabilities": ["Read", "Bash"],
+    "websiteURL": "https://github.com/Vivswan/poplin/tree/main/skills/poplin",
+    "defaultPrompt": ["Put this report online.", "Update the report I shared yesterday.", "Set up poplin on this computer."],
+    "brandColor": "#3B66D6"
+  }
+}
