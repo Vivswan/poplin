@@ -3,10 +3,19 @@
 /** The most entries one `list` call may ask for; R2 and S3 both stop a page there. */
 export const MAX_LIST_LIMIT = 1000;
 
+/** The longest key R2 and S3 both accept, in UTF-8 bytes. */
 const MAX_KEY_BYTES = 1024;
+
+/** What joins a key's segments, and what a `children` listing stops at. */
 const KEY_SEPARATOR = "/";
+
+/** Segments an S3 client or a URL parser would resolve away. */
 const DOT_SEGMENTS: ReadonlySet<string> = new Set([".", ".."]);
+
+/** A control character, which the key rules refuse, or a surrogate left without its pair, which UTF-8 cannot carry. */
 const UNSTORABLE_CHARACTER = /[\p{Cc}\p{Cs}]/u;
+
+/** Measures a key as the stores do. */
 const UTF8 = new TextEncoder();
 
 declare const objectKeyBrand: unique symbol;
@@ -40,16 +49,19 @@ export type CheckedKey = { readonly ok: true; readonly key: ObjectKey } | { read
 
 /** What a listing tells about an object: enough to count and to guard a later write. */
 export interface ObjectSummary {
+  /** The whole key, never the part after a listing prefix. */
   readonly key: ObjectKey;
 
   /** The whole object's length in bytes, also on a ranged read. */
   readonly size: number;
 
+  /** What a later `writeIf` passes to prove the bytes have not changed. */
   readonly etag: Etag;
 }
 
 /** Everything a store keeps about an object besides its bytes. */
 export interface ObjectInfo extends ObjectSummary {
+  /** The media type given at the write, served back as the `Content-Type` header. */
   readonly contentType: string;
 
   /** The caller's own small string map, returned as written. Stores cap it near 2 KB in total. */
@@ -71,6 +83,7 @@ export interface ByteSpan {
 
 /** How to narrow a read. With both set, `ifNoneMatch` is decided first, as HTTP does. */
 export interface ReadOptions {
+  /** The part of the object to return; the whole object when absent. */
   readonly range?: ByteRange;
 
   /** An etag in the store's unquoted form, as a visitor sent it; an equal one answers `not-modified`. */

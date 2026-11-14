@@ -120,6 +120,7 @@ function pageOf(entries: readonly ListEntry[], limit: number): ListPage {
  */
 export class MemoryStore implements ObjectStore {
   readonly #objects = new Map<ObjectKey, StoredObject>();
+
   #writes = 0;
 
   #store(key: ObjectKey, bytes: Uint8Array, options: WriteOptions): ObjectInfo {
