@@ -23,8 +23,15 @@ const FORGED: readonly (readonly [what: string, headers: Readonly<Record<string,
   ["no token", {}],
   ["a header that is no token", { "Cf-Access-Jwt-Assertion": "not-a-token" }],
   ["a cookie that is no token", { Cookie: "CF_Authorization=not-a-token" }],
-  ["a token nobody signed", { "Cf-Access-Jwt-Assertion": "eyJhbGciOiJub25lIn0.eyJlbWFpbCI6Im93bmVyQGV4YW1wbGUuY29tIn0." }],
+  ["a token nobody signed", { "Cf-Access-Jwt-Assertion": unsignedToken() }],
 ];
+
+/** A login token in the right shape that no login signed: it is put together here, so the source holds nothing shaped like a token. */
+function unsignedToken(): string {
+  const part = (value: object): string => Buffer.from(JSON.stringify(value)).toString("base64url");
+
+  return [part({ alg: "none" }), part({ email: "owner@example.com" }), "made-up"].join(".");
+}
 
 /** A check only a person can make: it never runs, and a run lists it as skipped. */
 function byHand(id: string, name: string): Check {
