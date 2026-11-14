@@ -2,12 +2,13 @@
 
 import {
   type ByteSpan,
+  checkListOptions,
+  checkWriteOptions,
   type Etag,
   type HeadResult,
   type ListCursor,
   type ListOptions,
   type ListPage,
-  MAX_LIST_LIMIT,
   type ObjectInfo,
   type ObjectKey,
   type ObjectStore,
@@ -28,7 +29,8 @@ interface StoredObject {
   readonly bytes: Uint8Array;
 }
 
-type ListEntry = { readonly kind: "object"; readonly name: string; readonly summary: ObjectSummary } | { readonly kind: "folder"; readonly name: string };
+// `through` is the greatest key the entry covers: the object's own, or the last one in the folder.
+type ListEntry = { readonly through: ObjectKey } & ({ readonly kind: "object"; readonly summary: ObjectSummary } | { readonly kind: "folder"; readonly name: string });
 
 // UTF-8 byte order is code point order; the default string order compares UTF-16 units and puts astral characters first.
 function compareNames(left: string, right: string): number {
@@ -50,8 +52,10 @@ async function bufferBody(body: WriteBody): Promise<Uint8Array> {
 
   if (body instanceof ArrayBuffer) return new Uint8Array(body.slice(0));
 
-  const bytes = new Uint8Array(await new Response(body.stream).arrayBuffer());
-  if (bytes.length !== body.size) throw new Error(`the stream held ${bytes.length} bytes, not the ${body.size} it declared`);
+  // The size is read before the wait, as R2 fixes a stream's length when the call begins.
+  const { stream, size } = body;
+  const bytes = new Uint8Array(await new Response(stream).arrayBuffer());
+  if (bytes.length !== size) throw new Error(`the stream held ${bytes.length} bytes, not the ${size} it declared`);
 
   return bytes;
 }
@@ -76,25 +80,22 @@ function conditionHolds(condition: WriteCondition, current: StoredObject | undef
   return current !== undefined && current.info.etag === condition.etag;
 }
 
-function pageLimit(options: ListOptions): number {
-  const limit = options.limit ?? MAX_LIST_LIMIT;
-  const valid = Number.isInteger(limit) && limit >= 1 && limit <= MAX_LIST_LIMIT;
-
-  if (!valid) throw new RangeError(`a list limit is a whole number from 1 to ${MAX_LIST_LIMIT}, not ${limit}`);
-
-  return limit;
-}
-
 function entryFor(stored: StoredObject, options: ListOptions): ListEntry {
   const { key, size, etag } = stored.info;
-  const object: ListEntry = { kind: "object", name: key, summary: { key, size, etag } };
+  const object: ListEntry = { kind: "object", through: key, summary: { key, size, etag } };
 
   if (options.scope !== "children") return object;
 
   const separatorAt = key.indexOf(KEY_SEPARATOR, options.prefix.length);
   if (separatorAt === -1) return object;
 
-  return { kind: "folder", name: key.slice(0, separatorAt + KEY_SEPARATOR.length) };
+  return { kind: "folder", through: key, name: key.slice(0, separatorAt + KEY_SEPARATOR.length) };
+}
+
+function entryName(entry: ListEntry): string {
+  if (entry.kind === "folder") return entry.name;
+
+  return entry.summary.key;
 }
 
 function pageOf(entries: readonly ListEntry[], limit: number): ListPage {
@@ -110,13 +111,15 @@ function pageOf(entries: readonly ListEntry[], limit: number): ListPage {
   const last = shown.at(-1);
   if (last === undefined || entries.length <= limit) return { objects, folders, more: false };
 
-  return { objects, folders, more: true, cursor: last.name as ListCursor };
+  return { objects, folders, more: true, cursor: last.through as string as ListCursor };
 }
 
 /**
  * An `ObjectStore` that keeps its objects in this instance and loses them with it.
  *
- * It differs from R2 in one stated way: every write gets a fresh etag, equal bytes included. A list cursor is the last name of its page.
+ * It differs from R2 in one stated way: every write gets a fresh etag, equal bytes included.
+ *
+ * A list cursor is the last key its page covered, as in R2's local simulation: a folder that gains a later key between two pages is listed again.
  */
 export class MemoryStore implements ObjectStore {
   readonly #objects = new Map<ObjectKey, StoredObject>();
@@ -168,24 +171,28 @@ export class MemoryStore implements ObjectStore {
    * Store an object, replacing whatever the key held.
    *
    * @throws {Error} a stream body ended at another length than its `size`; nothing was stored
+   * @throws {TypeError | RangeError} `checkWriteOptions` refused the options; nothing was stored
    */
   async write(key: ObjectKey, body: WriteBody, options: WriteOptions): Promise<ObjectInfo> {
+    const checked = checkWriteOptions(options);
     const bytes = await bufferBody(body);
 
-    return this.#store(key, bytes, options);
+    return this.#store(key, bytes, checked);
   }
 
   /**
    * Store an object only while `condition` holds; the check and the store share one turn, so racing writers cannot both pass.
    *
    * @throws {Error} a stream body ended at another length than its `size`; nothing was stored
+   * @throws {TypeError | RangeError} `checkWriteOptions` refused the options; nothing was stored
    */
   async writeIf(key: ObjectKey, body: WriteBody, options: WriteOptions, condition: WriteCondition): Promise<WriteResult> {
+    const checked = checkWriteOptions(options);
     const bytes = await bufferBody(body);
 
     if (!conditionHolds(condition, this.#objects.get(key))) return { kind: "precondition-failed" };
 
-    return { kind: "written", info: this.#store(key, bytes, options) };
+    return { kind: "written", info: this.#store(key, bytes, checked) };
   }
 
   /** Remove an object. A key that holds none is not an error. */
@@ -202,25 +209,24 @@ export class MemoryStore implements ObjectStore {
    * List one page of the keys that start with a prefix, always as many as the limit allows.
    *
    * @throws {RangeError} `limit` is not a whole number from 1 to `MAX_LIST_LIMIT`
+   * @throws {TypeError} `prefix` holds a lone surrogate or is not in NFC
    */
   async list(options: ListOptions): Promise<ListPage> {
-    const limit = pageLimit(options);
+    const limit = checkListOptions(options);
+    const { prefix, cursor } = options;
+    const listed = [...this.#objects.values()]
+      .filter((stored) => stored.info.key.startsWith(prefix))
+      .filter((stored) => cursor === undefined || compareNames(stored.info.key, cursor) > 0)
+      .sort((left, right) => compareNames(left.info.key, right.info.key));
+
+    // Keys under one folder are neighbours in this order, so each folder keeps its first place and ends on its last key.
     const entries = new Map<string, ListEntry>();
 
-    for (const stored of this.#objects.values()) {
-      if (!stored.info.key.startsWith(options.prefix)) continue;
-
+    for (const stored of listed) {
       const entry = entryFor(stored, options);
-      entries.set(entry.name, entry);
+      entries.set(entryName(entry), entry);
     }
 
-    const { cursor } = options;
-    const ordered = [...entries.values()].sort((left, right) => compareNames(left.name, right.name));
-    if (cursor === undefined) return pageOf(ordered, limit);
-
-    return pageOf(
-      ordered.filter((entry) => compareNames(entry.name, cursor) > 0),
-      limit,
-    );
+    return pageOf([...entries.values()], limit);
   }
 }

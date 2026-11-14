@@ -69,6 +69,39 @@ describe("R2Store: the limits of R2 itself", () => {
   });
 });
 
+describe("R2Store: what R2 would alter, drop, or refuse", () => {
+  // Drift: core refuses these because of what the bucket does with them; if the bucket ever keeps one whole, its refusal has lost its reason.
+  test.each([
+    ["a lone surrogate in a metadata value", { title: "Blog\ud83d" }, { title: "Blog\ufffd\ufffd\ufffd" }],
+    ["a lone surrogate in a metadata key", { "title\ud83d": "Blog" }, { "title\ufffd\ufffd\ufffd": "Blog" }],
+    ["a metadata key named __proto__", Object.fromEntries([["__proto__", "Blog"], ["state", "private"]]), { state: "private" }],
+  ] as ReadonlyArray<readonly [string, Record<string, string>, Record<string, string>]>)("%s: the bucket stores other metadata than it was given, and the store never hands it over", async (_name, metadata, stored) => {
+    const store = await emptyStore();
+    const key = objectKey("sites/blog/record");
+    await BUCKET.put(key, "live: v1", { customMetadata: metadata });
+    const kept = await BUCKET.head(key);
+    const puts = vi.spyOn(BUCKET, "put");
+
+    await expect(store.write(key, bytesOf("live: v2"), { contentType: "text/plain", metadata })).rejects.toBeInstanceOf(TypeError);
+    expect<unknown>([kept?.customMetadata, puts.mock.calls.length]).toEqual([stored, 0]);
+  });
+
+  // Drift: core counts metadata as R2 does, not in UTF-8; a count that parted from R2's would refuse what R2 keeps or pass what R2 throws on.
+  test.each([
+    ["one byte past the limit", { a: "v".repeat(8192) }],
+    ["past the limit at two bytes a character", { a: "\u0101".repeat(4096) }],
+    ["under the limit in UTF-8, past it as R2 counts", { a: `${"v".repeat(5000)}\u0101` }],
+  ] as ReadonlyArray<readonly [string, Record<string, string>]>)("metadata %s: the bucket throws, and the store refuses it first", async (_name, metadata) => {
+    const store = await emptyStore();
+    const key = objectKey("sites/blog/record");
+    const puts = vi.spyOn(BUCKET, "put");
+
+    await expect(store.write(key, bytesOf("live: v1"), { contentType: "text/plain", metadata })).rejects.toBeInstanceOf(RangeError);
+    expect(puts.mock.calls.length).toBe(0);
+    await expect(BUCKET.put(key, "live: v1", { customMetadata: metadata })).rejects.toThrow("exceed the maximum allowed metadata size");
+  });
+});
+
 describe("R2Store: input the store does not control", () => {
   // Drift: the header is a visitor's input; R2 reads `*` as any etag and throws on a quote, where an etag that is not the current one must read as found.
   test.each([

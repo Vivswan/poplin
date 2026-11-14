@@ -2,12 +2,13 @@
 
 import {
   type ByteRange,
+  checkListOptions,
+  checkWriteOptions,
   type Etag,
   type HeadResult,
   type ListCursor,
   type ListOptions,
   type ListPage,
-  MAX_LIST_LIMIT,
   type ObjectInfo,
   type ObjectKey,
   type ObjectStore,
@@ -78,17 +79,8 @@ function onlyIf(condition: WriteCondition): R2Conditional | Headers {
   return { etagMatches: condition.etag };
 }
 
-function pageLimit(options: ListOptions): number {
-  const limit = options.limit ?? MAX_LIST_LIMIT;
-  const valid = Number.isInteger(limit) && limit >= 1 && limit <= MAX_LIST_LIMIT;
-
-  if (!valid) throw new RangeError(`a list limit is a whole number from 1 to ${MAX_LIST_LIMIT}, not ${limit}`);
-
-  return limit;
-}
-
 function listOptions(options: ListOptions): R2ListOptions {
-  const listed: R2ListOptions = { prefix: options.prefix, limit: pageLimit(options) };
+  const listed: R2ListOptions = { prefix: options.prefix, limit: checkListOptions(options) };
 
   if (options.cursor !== undefined) listed.cursor = options.cursor;
   if (options.scope === "children") listed.delimiter = KEY_SEPARATOR;
@@ -159,9 +151,11 @@ export class R2Store implements ObjectStore {
    * Store an object, replacing whatever the key held.
    *
    * @throws {Error} a stream body ended at another length than its `size`; nothing was stored
+   * @throws {TypeError | RangeError} `checkWriteOptions` refused the options; nothing was stored
    */
   async write(key: ObjectKey, body: WriteBody, options: WriteOptions): Promise<ObjectInfo> {
-    const object = await this.#bucket.put(key, putBody(body), putOptions(options));
+    const checked = checkWriteOptions(options);
+    const object = await this.#bucket.put(key, putBody(body), putOptions(checked));
 
     return infoOf(key, object);
   }
@@ -170,9 +164,11 @@ export class R2Store implements ObjectStore {
    * Store an object only while `condition` holds; R2 checks it as the write lands, so racing writers cannot both pass.
    *
    * @throws {Error} a stream body ended at another length than its `size`; nothing was stored
+   * @throws {TypeError | RangeError} `checkWriteOptions` refused the options; nothing was stored
    */
   async writeIf(key: ObjectKey, body: WriteBody, options: WriteOptions, condition: WriteCondition): Promise<WriteResult> {
-    const object = await this.#bucket.put(key, putBody(body), { ...putOptions(options), onlyIf: onlyIf(condition) });
+    const checked = checkWriteOptions(options);
+    const object = await this.#bucket.put(key, putBody(body), { ...putOptions(checked), onlyIf: onlyIf(condition) });
     if (object === null) return { kind: "precondition-failed" };
 
     return { kind: "written", info: infoOf(key, object) };
@@ -191,7 +187,10 @@ export class R2Store implements ObjectStore {
   /**
    * List one page of the keys that start with a prefix. A page may hold fewer entries than the limit while more remain.
    *
+   * R2's reference calls its order lexicographic. The contract suite holds it to UTF-8 byte order with keys the two UTF orders sort apart.
+   *
    * @throws {RangeError} `limit` is not a whole number from 1 to `MAX_LIST_LIMIT`
+   * @throws {TypeError} `prefix` holds a lone surrogate or is not in NFC
    * @throws {Error} the bucket holds a key the key rules refuse
    */
   async list(options: ListOptions): Promise<ListPage> {

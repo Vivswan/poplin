@@ -1,16 +1,31 @@
 // The object store every product rule reads and writes through, with the key and byte-range rules its implementations share.
 
+// `String.prototype.isWellFormed` is newer than the compile target, so this file names the library that types it.
+/// <reference lib="es2024.string" />
+
 /** The most entries one `list` call may ask for; R2 and S3 both stop a page there. */
 export const MAX_LIST_LIMIT = 1000;
 
 /** The longest key R2 and S3 both accept, in UTF-8 bytes. */
 const MAX_KEY_BYTES = 1024;
 
+/** The most metadata R2 keeps on one object, keys and values together, in bytes as R2 counts them. */
+const MAX_METADATA_BYTES = 8192;
+
+/** The metadata key the Workers runtime drops on its way to R2. */
+const DROPPED_METADATA_KEY = "__proto__";
+
+/** A character past Latin-1: R2 stores every character of a string that holds one in two bytes. */
+const WIDE_CHARACTER = /[\u0100-\uffff]/;
+
 /** What joins a key's segments, and what a `children` listing stops at. */
 const KEY_SEPARATOR = "/";
 
-/** Segments an S3 client or a URL parser would resolve away. */
+/** Segments an S3 client or a URL parser would resolve away, as they read once percent-decoded. */
 const DOT_SEGMENTS: ReadonlySet<string> = new Set([".", ".."]);
+
+/** What starts a percent escape; a segment without one decodes to itself. */
+const ESCAPE = "%";
 
 /** A control character, which the key rules refuse, or a surrogate left without its pair, which UTF-8 cannot carry. */
 const UNSTORABLE_CHARACTER = /[\p{Cc}\p{Cs}]/u;
@@ -28,6 +43,10 @@ declare const listCursorBrand: unique symbol;
  * The rules: 1 to 1024 UTF-8 bytes; segments joined by `/`, none empty (so no leading, trailing, or doubled slash) and none `.` or `..`; no control character and no lone surrogate.
  *
  * A key is also in Unicode NFC: R2 normalises keys to it and would fold two spellings into one object.
+ *
+ * `%` is an ordinary character, kept as written. The one escape refused is a segment that percent-decodes to `.` or `..` (`%2e`, `.%2E`): a URL parser resolves it away.
+ *
+ * Whatever puts a key in a URL percent-encodes each segment, so no other escape can change the path.
  */
 export type ObjectKey = string & { readonly [objectKeyBrand]: true };
 
@@ -64,7 +83,7 @@ export interface ObjectInfo extends ObjectSummary {
   /** The media type given at the write, served back as the `Content-Type` header. */
   readonly contentType: string;
 
-  /** The caller's own small string map, returned as written. Stores cap it near 2 KB in total. */
+  /** The caller's own small string map, returned as written. A write refuses one over 8,192 bytes, the most R2 keeps. */
   readonly metadata: Readonly<Record<string, string>>;
 }
 
@@ -107,7 +126,11 @@ export type ReadResult =
 /** The bytes to store. A stream carries its length up front because R2 and S3 refuse one of unknown length. */
 export type WriteBody = Uint8Array | ArrayBuffer | { readonly stream: ReadableStream<Uint8Array>; readonly size: number };
 
-/** What is stored beside the bytes. An absent `metadata` stores an empty map. */
+/**
+ * What is stored beside the bytes. An absent `metadata` stores an empty map.
+ *
+ * `checkWriteOptions` says which strings a store cannot keep; every other one is kept as written, without trimming, case folding, or normalising.
+ */
 export interface WriteOptions {
   readonly contentType: string;
   readonly metadata?: Readonly<Record<string, string>>;
@@ -121,7 +144,7 @@ export type WriteResult = { readonly kind: "written"; readonly info: ObjectInfo 
 
 /** Which keys a listing returns, and how they are paged. */
 export interface ListOptions {
-  /** Any string, not a key: `""` lists the whole store, `"sites/"` one folder. */
+  /** Any well-formed string in NFC, not a key: `""` lists the whole store, `"sites/"` one folder. */
   readonly prefix: string;
 
   /** `subtree`, the default, lists every key under the prefix. `children` stops at the next `/` and reports what lies past it as one folder. */
@@ -135,9 +158,13 @@ export interface ListOptions {
 }
 
 /**
- * One page of a listing, in ascending UTF-8 byte order across pages.
+ * One page of a listing.
  *
- * A page may hold fewer entries than the limit, even none, while more remain: only `more` says whether to go on. `folders` is empty under the `subtree` scope; each ends in `/` and appears once in the whole listing.
+ * Order: `objects` ascend by the UTF-8 bytes of their keys, which is code point order, within a page and from one page to the next. `folders` ascend the same way. The two lists are not merged into one order.
+ *
+ * A page may hold fewer entries than the limit, even none, while more remain: only `more` says whether to go on. `folders` is empty under the `subtree` scope, and each ends in `/`.
+ *
+ * A listing is not a snapshot. An object that no write touches during the listing appears exactly once. A folder may appear again on a later page when a write lands in it between the two, so a caller de-duplicates folders across pages.
  */
 export type ListPage = { readonly objects: readonly ObjectSummary[]; readonly folders: readonly string[] } & (
   | { readonly more: false }
@@ -160,6 +187,7 @@ export interface ObjectStore {
    * Store an object, replacing whatever the key held.
    *
    * @throws {Error} a stream body ended at another length than its `size`; nothing was stored
+   * @throws {TypeError | RangeError} `checkWriteOptions` refused the options; nothing was stored
    */
   write(key: ObjectKey, body: WriteBody, options: WriteOptions): Promise<ObjectInfo>;
 
@@ -167,6 +195,7 @@ export interface ObjectStore {
    * Store an object only while `condition` holds. Of several writers holding the same condition, exactly one is answered `written`.
    *
    * @throws {Error} a stream body ended at another length than its `size`; nothing was stored
+   * @throws {TypeError | RangeError} `checkWriteOptions` refused the options; nothing was stored
    */
   writeIf(key: ObjectKey, body: WriteBody, options: WriteOptions, condition: WriteCondition): Promise<WriteResult>;
 
@@ -180,12 +209,35 @@ export interface ObjectStore {
    * List one page of the keys that start with a prefix.
    *
    * @throws {RangeError} `limit` is not a whole number from 1 to `MAX_LIST_LIMIT`
+   * @throws {TypeError} `prefix` holds a lone surrogate or is not in NFC
    */
   list(options: ListOptions): Promise<ListPage>;
 }
 
 function isByteCount(value: number): boolean {
   return Number.isSafeInteger(value) && value >= 0;
+}
+
+function isDotSegment(segment: string): boolean {
+  if (!segment.includes(ESCAPE)) return DOT_SEGMENTS.has(segment);
+
+  try {
+    return DOT_SEGMENTS.has(decodeURIComponent(segment));
+  } catch {
+    // A malformed escape decodes to nothing, so a URL parser leaves the segment as it is.
+    return false;
+  }
+}
+
+function requireWellFormed(text: string, what: string): void {
+  if (!text.isWellFormed()) throw new TypeError(`${what} holds a lone surrogate, which no store can keep: ${JSON.stringify(text)}`);
+}
+
+// R2's own count: a string of Latin-1 characters takes one byte each, any other string two bytes per UTF-16 unit.
+function storedBytes(text: string): number {
+  if (WIDE_CHARACTER.test(text)) return text.length * 2;
+
+  return text.length;
 }
 
 /**
@@ -206,7 +258,7 @@ export function parseObjectKey(raw: string): CheckedKey {
 
   if (segments.includes("")) return { ok: false, refusal: "empty-segment" };
 
-  if (segments.some((segment) => DOT_SEGMENTS.has(segment))) return { ok: false, refusal: "dot-segment" };
+  if (segments.some(isDotSegment)) return { ok: false, refusal: "dot-segment" };
 
   return { ok: true, key: raw as ObjectKey };
 }
@@ -215,9 +267,11 @@ export function parseObjectKey(raw: string): CheckedKey {
  * Work out which bytes of an object a range selects. Every implementation's `read` answers by this rule.
  *
  * @param size - the whole object's length in bytes
- * @returns the span, or `unsatisfiable` when the range selects no byte or holds a number that is not a whole byte count
+ * @returns the span, or `unsatisfiable` when the range selects no byte, or when the range or `size` holds a number that is not a whole, safe byte count
  */
 export function resolveRange(range: ByteRange, size: number): ByteSpan | "unsatisfiable" {
+  if (!isByteCount(size)) return "unsatisfiable";
+
   if ("suffix" in range) {
     if (!isByteCount(range.suffix) || range.suffix === 0 || size === 0) return "unsatisfiable";
 
@@ -234,4 +288,50 @@ export function resolveRange(range: ByteRange, size: number): ByteSpan | "unsati
   if (!isByteCount(range.length) || range.length === 0) return "unsatisfiable";
 
   return { offset: range.offset, length: Math.min(range.length, rest) };
+}
+
+/**
+ * Refuse what a store could not keep as written beside the bytes. Every implementation's `write` and `writeIf` call it first, and nowhere else decides this.
+ *
+ * @returns a copy of the options to store from, so a change the caller makes while the write is under way stores nothing unchecked
+ * @throws {TypeError} the content type, a metadata key, or a metadata value holds a lone surrogate, which R2 stores as U+FFFD; or a metadata key is `__proto__`, which the Workers runtime drops
+ * @throws {RangeError} the metadata keys and values together pass 8,192 bytes, counting a Latin-1 string at one byte a character and any other at two per UTF-16 unit, as R2 does
+ */
+export function checkWriteOptions(options: WriteOptions): WriteOptions {
+  const checked = { contentType: options.contentType, metadata: { ...options.metadata } };
+  requireWellFormed(checked.contentType, "the content type");
+
+  let bytes = 0;
+
+  for (const [key, value] of Object.entries(checked.metadata)) {
+    if (key === DROPPED_METADATA_KEY) throw new TypeError(`a metadata key cannot be ${DROPPED_METADATA_KEY}: the Workers runtime drops it`);
+
+    requireWellFormed(key, "a metadata key");
+    requireWellFormed(value, `the metadata value of ${JSON.stringify(key)}`);
+    bytes += storedBytes(key) + storedBytes(value);
+  }
+
+  if (bytes > MAX_METADATA_BYTES) throw new RangeError(`metadata is at most ${MAX_METADATA_BYTES} bytes, keys and values together, not ${bytes}`);
+
+  return checked;
+}
+
+/**
+ * Refuse a listing no store answers as asked. Every implementation's `list` calls it first, and nowhere else decides this.
+ *
+ * @returns the page limit, `MAX_LIST_LIMIT` when the options name none
+ * @throws {TypeError} `prefix` holds a lone surrogate, which R2 reads as U+FFFD, or is not in NFC, the form every key has
+ * @throws {RangeError} `limit` is not a whole number from 1 to `MAX_LIST_LIMIT`
+ */
+export function checkListOptions(options: ListOptions): number {
+  requireWellFormed(options.prefix, "the list prefix");
+
+  if (options.prefix.normalize("NFC") !== options.prefix) throw new TypeError(`the list prefix is not in NFC, so no key starts with it: ${JSON.stringify(options.prefix)}`);
+
+  const limit = options.limit ?? MAX_LIST_LIMIT;
+  const valid = Number.isInteger(limit) && limit >= 1 && limit <= MAX_LIST_LIMIT;
+
+  if (!valid) throw new RangeError(`a list limit is a whole number from 1 to ${MAX_LIST_LIMIT}, not ${limit}`);
+
+  return limit;
 }
