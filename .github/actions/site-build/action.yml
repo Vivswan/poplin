@@ -25,15 +25,12 @@ outputs:
 runs:
   using: composite
   steps:
-    # A repository with a website replaces the no-op step below with its toolchain setup and, for example:
-    #   - id: build
-    #     shell: bash
-    #     env: {PAGES_BASE_PATH: "${{ inputs.base-path }}", PAGES_ORIGIN: "${{ inputs.origin }}"}
-    #     run: |
-    #       <your build command>
-    #       echo "dist=<the built site directory>" >> "$GITHUB_OUTPUT"
+    - uses: ./.github/actions/setup
     - id: build
       shell: bash
+      env:
+        PAGES_BASE_PATH: ${{ inputs.base-path }}
+        PAGES_ORIGIN: ${{ inputs.origin }}
       run: |
-        echo "site-build hook: no repository site configured; docs/ publishes alone when present"
-        echo "dist=" >> "$GITHUB_OUTPUT"
+        bun run --cwd website build
+        echo "dist=website/dist" >> "$GITHUB_OUTPUT"

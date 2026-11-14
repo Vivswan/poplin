@@ -6,6 +6,8 @@
     "build": "ASTRO_TELEMETRY_DISABLED=1 astro build"
   },
   "dependencies": {
+    "@fontsource/libre-franklin": "5.3.0",
+    "@fontsource/source-serif-4": "5.3.1",
     "astro": "7.4.12"
   }
 }

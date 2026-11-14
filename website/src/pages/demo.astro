@@ -1,76 +1,63 @@
 ---
 import { samples } from "virtual:poplin-samples";
+import SampleTile from "../components/SampleTile.astro";
 import Page from "../layouts/Page.astro";
 import { sitePath } from "../lib/paths.ts";
 ---
 
 <Page
-  title="Demo: sample sites an agent would publish with poplin"
-  description="A gallery of sample static sites of the kind an agent publishes with poplin: each one a plain folder with an index page."
+  title="Samples: sites an agent would publish with poplin"
+  description="Sample static sites of the kind an agent publishes with poplin: each one a plain folder with an index.html."
   path="demo/"
 >
-  <section class="page-head wrap">
-    <h1>What an agent would publish.</h1>
-    <p class="lede">Each sample is a plain folder with an index page. One call would publish it.</p>
+  <section class="page-head frame">
+    <h1>What an agent publishes.</h1>
+    <p class="lead">Each sample is a plain folder with an <code>index.html</code>. One call would publish it.</p>
   </section>
 
-  <section class="section wrap" aria-label="Sample sites">
-    {
-      samples.length === 0 ? (
-        <div class="empty">
-          <div class="swatch" aria-hidden="true">
-            {Array.from({ length: 32 }, () => (
-              <span class="closed" />
-            ))}
-          </div>
-          <p>
-            <strong>No sample sites in this build.</strong> The gallery fills from the samples folder in the
-            repository. Meanwhile, the <a href={sitePath()}>home page</a> shows what publishing looks like.
-          </p>
-        </div>
-      ) : (
-        <ul class="gallery">
-          {samples.map((sample) => (
-            <li class="sample">
-              <div class="preview" aria-hidden="true">
-                <iframe src={sitePath(`demo/${encodeURIComponent(sample.name)}/`)} title="" loading="lazy" tabindex="-1" />
-              </div>
-              <h2>
-                <a href={sitePath(`demo/${encodeURIComponent(sample.name)}/`)}>
-                  {sample.titleHtml === "" ? sample.name : <Fragment set:html={sample.titleHtml} />}
-                </a>
-              </h2>
-              {sample.descriptionHtml !== "" && <p set:html={sample.descriptionHtml} />}
-              <p class="address">poplin ./{sample.name}</p>
-            </li>
+  {
+    samples.length === 0 ? (
+      <section class="page-text frame" aria-labelledby="none">
+        <h2 id="none">No sample sites in this build.</h2>
+        <p>
+          The gallery fills from the samples folder in the repository. The <a href={sitePath()}>home page</a> shows what
+          publishing looks like.
+        </p>
+      </section>
+    ) : (
+      <section class="tiles frame" aria-labelledby="samples">
+        <h2 id="samples">Four folders, as published.</h2>
+        <ul>
+          {samples.map((sample, index) => (
+            <SampleTile sample={sample} tone={index % 4} />
           ))}
         </ul>
-      )
-    }
-  </section>
+      </section>
+    )
+  }
 
-  <section class="section wrap" aria-labelledby="differs">
-    <h2 id="differs">Here and when published.</h2>
-      <table class="grid">
-        <thead>
-          <tr>
-            <th scope="col"><span class="visually-hidden">Question</span></th>
-            <th scope="col">In this gallery</th>
-            <th scope="col">Published with poplin, on a domain</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr>
-            <th scope="row">Address</th>
-            <td data-label="In this gallery">a path on this site</td>
-            <td data-label="Published with poplin, on a domain">its own address, such as <span class="nowrap">page-report.example.com</span></td>
-          </tr>
-          <tr>
-            <th scope="row">Who can open it</th>
-            <td data-label="In this gallery">everyone</td>
-            <td data-label="Published with poplin, on a domain">only the owner, until the owner shares it</td>
-          </tr>
-        </tbody>
-      </table>
+  <section class="page-table frame" aria-labelledby="differs">
+    <h2 id="differs">Here, and when published.</h2>
+    <table class="facts-table">
+      <thead>
+        <tr>
+          <th scope="col"><span class="visually-hidden">Question</span></th>
+          <th scope="col">In this gallery</th>
+          <th scope="col">Published with poplin, on a domain</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <th scope="row">Address</th>
+          <td>a path on this site</td>
+          <td>its own address, such as <code>page-report.example.com</code></td>
+        </tr>
+        <tr>
+          <th scope="row">Who can open it</th>
+          <td>everyone</td>
+          <td>only the owner, until the owner shares it</td>
+        </tr>
+      </tbody>
+    </table>
   </section>
 </Page>

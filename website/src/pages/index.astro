@@ -1,298 +1,347 @@
 ---
+import { samples } from "virtual:poplin-samples";
+import SampleTile from "../components/SampleTile.astro";
 import Page from "../layouts/Page.astro";
 import { REPOSITORY_URL, sitePath } from "../lib/paths.ts";
 
-const CELL_COUNT = 32;
-const OWNER_CELL = 11;
-const LINK_HOLDER_CELLS = [2, 6, 13, 20, 25, 30];
-const everyCell = Array.from({ length: CELL_COUNT }, (_, cell) => cell);
-const states = [
+const SHORT_ADDRESS = "page-report.example.com";
+const SECRET_ADDRESS = "page-report--7f3k9x2mq4ab.example.com";
+
+// The report sample plays the published site; any sample stands in when that folder is absent.
+const shown = samples.find((sample) => sample.name === "sales-report") ?? samples[0];
+const shownSize = shown === undefined ? "" : `${shown.files} files, ${Math.round(shown.bytes / 1024)} KB`;
+const others = samples.filter((sample) => sample !== shown);
+const keeps = [
   {
-    name: "Private",
-    note: "the default",
-    address: "page-report.example.com",
-    who: "Only you, after one login.",
-    others: [] as number[],
+    say: "Roll back a bad update.",
+    result: "Poplin keeps the last 3 versions of a site by default. Going back needs no upload.",
   },
   {
-    name: "Unlisted",
-    note: "you choose",
-    address: "page-report--7f3k9x2mq4ab.example.com",
-    who: "Anyone with the secret link.",
-    others: LINK_HOLDER_CELLS,
+    say: "Bring back a deleted site.",
+    result: "A deleted site waits in the trash, 7 days by default, before it is gone.",
   },
   {
-    name: "Public",
-    note: "you choose",
-    address: "page-report.example.com",
-    who: "Everyone.",
-    others: everyCell,
+    say: "Let a demo end by itself.",
+    result: "Give a site an end date. It moves to the trash that day.",
+  },
+  {
+    say: "Take everything out.",
+    result: "One zip holds every site and the settings, as plain files.",
   },
 ];
-
-function cellKind(cell: number, others: number[]): string {
-  if (cell === OWNER_CELL) {
-    return "you";
-  }
-  return others.includes(cell) ? "other" : "closed";
-}
+const freeTier = [
+  { name: "Worker", value: "100,000 requests a day, account-wide" },
+  { name: "Bucket", value: "10 GB stored" },
+  { name: "Login", value: "50 users" },
+  { name: "Address", value: "workers.dev, or your domain" },
+];
+const guards = [
+  { name: "All sites together", value: "9 GB" },
+  { name: "One site", value: "200 MB" },
+  { name: "One site, each minute", value: "60 requests" },
+  { name: "One visitor, each minute", value: "30 requests" },
+];
 ---
 
 <Page
-  title="Poplin: agents publish static sites to your own Cloudflare account"
-  description="One call publishes a folder or one HTML file to your own Cloudflare account. Private by default, shareable by secret link, or public."
+  title="Poplin: a private site, in one call"
+  description="Poplin lets an AI agent or a person publish a static site to their own Cloudflare account with one call. A site is private by default, unlisted by secret link, or public."
   path=""
 >
-  <section class="hero wrap">
-    <div class="hero-words">
-      <h1>Your agent publishes the site. Only you can open it.</h1>
-      <p class="lede">
-        One call puts a folder, or one HTML file, on your own Cloudflare account. It stays private until you share it.
+  <section class="hero frame" aria-labelledby="title">
+    <div class="hero-say">
+      <h1 id="title">A private site, in one call.</h1>
+      <p class="lead">
+        Poplin lets an AI agent, or you, publish a folder or one HTML file to your own Cloudflare account. It stays
+        private until you share it.
       </p>
-      <p class="status-line">
-        <span class="tag">In development</span>
-        Not released.
-      </p>
+      <p class="status">In development, not released.</p>
+      <a class="button" href={sitePath("demo/")}>See the sample sites</a>
     </div>
-    <div class="cloth">
-      <figure class="term">
-        <pre><code><span class="prompt" aria-hidden="true">$ </span><span class="typed">poplin ./report</span>
-<span class="out addr">https://page-report.example.com</span>
-<span class="out dim">private: only you, after one login</span></code></pre>
-        <figcaption>An agent, or you, publishes with one call. The address comes back.</figcaption>
-      </figure>
+
+    <dl class="hero-foot">
+      <dt>Private</dt>
+      <dd>Only you, after one login. The default.</dd>
+      <dt>Unlisted</dt>
+      <dd>Anyone with the secret link.</dd>
+      <dt>Public</dt>
+      <dd>Everyone.</dd>
+    </dl>
+
+    <div class="stage">
+      <form class="panel access" data-ui aria-label="A published site and who can open it">
+        <header class="panel-head">
+          <p class="panel-name"><code>report</code></p>
+          <p class="panel-title">{shown === undefined ? "Quarterly report" : <Fragment set:html={shown.titleHtml} />}</p>
+        </header>
+
+        <fieldset class="segments">
+          <legend>Who can open it</legend>
+          <label><input type="radio" name="access" value="private" checked /><span>Private</span></label>
+          <label><input type="radio" name="access" value="unlisted" /><span>Unlisted</span></label>
+          <label><input type="radio" name="access" value="public" /><span>Public</span></label>
+        </fieldset>
+
+        <dl class="facts">
+          <div>
+            <dt>Address</dt>
+            <dd><code>https://{SHORT_ADDRESS}</code></dd>
+          </div>
+          <div data-show="unlisted">
+            <dt>Secret link</dt>
+            <dd><code>https://{SECRET_ADDRESS}</code></dd>
+          </div>
+          <div>
+            <dt>You, logged in</dt>
+            <dd class="yes">opens it</dd>
+          </div>
+          <div>
+            <dt>Someone with the secret link</dt>
+            <dd data-show="private">there is no secret link</dd>
+            <dd data-show="unlisted" class="yes">opens it</dd>
+            <dd data-show="public">there is no secret link</dd>
+          </div>
+          <div>
+            <dt>Everyone else</dt>
+            <dd data-show="private unlisted">sees a plain Not found page</dd>
+            <dd data-show="public" class="yes">opens it</dd>
+          </div>
+        </dl>
+
+        <div class="view">
+          <p class="view-label" data-show="private">What everyone else sees</p>
+          <p class="view-label" data-show="unlisted">What someone with the secret link sees</p>
+          <p class="view-label" data-show="public">What everyone sees</p>
+          <div class="view-missing" data-show="private">
+            <p><strong>404</strong> Not found</p>
+            <p><span class="fake-link">Log in</span></p>
+          </div>
+          {
+            shown === undefined ? (
+              <div class="view-site view-plain" data-show="unlisted public">
+                <p>The published site opens here.</p>
+              </div>
+            ) : (
+              <div class="view-site" data-show="unlisted public">
+                <iframe
+                  src={sitePath(`demo/${encodeURIComponent(shown.name)}/`)}
+                  title="The published report, as a visitor sees it"
+                  sandbox="allow-scripts"
+                  loading="lazy"
+                />
+              </div>
+            )
+          }
+        </div>
+      </form>
     </div>
   </section>
 
-  <section class="section wrap" aria-labelledby="states">
-    <h2 id="states">Three states. You pick who gets in.</h2>
-    <ul class="states">
-      {
-        states.map((state) => (
-          <li class="state">
-            <div class="swatch" aria-hidden="true">
-              {everyCell.map((cell) => (
-                <span class={cellKind(cell, state.others)} />
-              ))}
-            </div>
-            <h3>
-              {state.name} <span class="aside">{state.note}</span>
-            </h3>
-            <p>{state.who}</p>
-            <p class="address">{state.address}</p>
-          </li>
-        ))
-      }
-    </ul>
-    <p class="key">
-      <span class="chip you" aria-hidden="true"></span> you <span class="chip other" aria-hidden="true"></span> someone else who can open it
-    </p>
-    <p class="plain">
-      A state changes in place. The site, its files, and its short address stay. An unlisted site also gets a secret
-      link, and you can rotate that link if it leaks.
-    </p>
+  <section class="split" aria-labelledby="one-call">
+    <div class="split-in">
+      <pre data-rise><code>$ poplin ./report
+{shownSize === "" ? "" : `uploading ${shownSize}\n`}created  report  private
+https://{SHORT_ADDRESS}</code></pre>
+      <p class="split-word" aria-hidden="true">One call.</p>
+    </div>
+    <div class="split-out">
+      <table class="panel dashboard" data-ui data-rise>
+        <caption>Your dashboard</caption>
+        <thead>
+          <tr>
+            <th scope="col">Site</th>
+            <th scope="col">Access</th>
+            <th scope="col">Versions</th>
+            <th scope="col">Published by</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr class="row-new">
+            <td><code>report</code></td>
+            <td><span class="chip chip-private">Private</span></td>
+            <td>1</td>
+            <td>an agent, just now</td>
+          </tr>
+          <tr>
+            <td><code>launch-deck</code></td>
+            <td><span class="chip chip-unlisted">Unlisted</span></td>
+            <td>3</td>
+            <td>an agent</td>
+          </tr>
+          <tr>
+            <td><code>trip-summary</code></td>
+            <td><span class="chip chip-public">Public</span></td>
+            <td>2</td>
+            <td>you</td>
+          </tr>
+          <tr>
+            <td><code>checkout-prototype</code></td>
+            <td><span class="chip chip-private">Private</span></td>
+            <td>1</td>
+            <td>an agent</td>
+          </tr>
+        </tbody>
+      </table>
+      <p class="split-word" aria-hidden="true">One more row.</p>
+    </div>
+    <h2 id="one-call" class="visually-hidden">One call adds one row to your dashboard</h2>
   </section>
 
-  <section class="section wrap" aria-labelledby="how">
-    <h2 id="how">One Worker, one bucket, your account.</h2>
-    <figure class="flow">
-      <ul class="flow-col">
-        <li class="node">
-          <strong>An agent</strong>
-          <span>connects over MCP</span>
-        </li>
-        <li class="node">
-          <strong>A person</strong>
-          <span>uses the CLI or the index page</span>
-        </li>
-      </ul>
-      <p class="thread"><span>publish</span></p>
-      <div class="account">
-        <p class="account-name">Your Cloudflare account</p>
-        <div class="node solid">
-          <strong>One Worker</strong>
-          <span>serves every site, your index page, and the MCP server</span>
-        </div>
-        <p class="thread short" aria-hidden="true"></p>
-        <div class="node solid">
-          <strong>One bucket</strong>
-          <span>a folder per site, with its versions</span>
-        </div>
+  <section class="strip" aria-labelledby="travels">
+    <div class="field field-1">
+      <h2 id="travels">From agent to reader.</h2>
+      <div class="card" data-ui data-rise>
+        <p class="card-name"><code>report</code></p>
+        <p>Sent by an agent, over MCP</p>
+        <p>{shownSize === "" ? "A folder of files" : shownSize}</p>
+        <p class="chip chip-plain">Publishing</p>
       </div>
-      <p class="thread"><span>open</span></p>
-      <ul class="flow-col">
-        <li class="node">
-          <strong>You</strong>
-          <span>private sites, after one login</span>
-        </li>
-        <li class="node">
-          <strong>Anyone with the link</strong>
-          <span>unlisted sites</span>
-        </li>
-        <li class="node">
-          <strong>Everyone</strong>
-          <span>public sites</span>
-        </li>
-      </ul>
-      <figcaption>
-        Nothing runs outside Cloudflare, so there is no server to keep up. The Worker never reads or rewrites a site's
-        files.
-      </figcaption>
-    </figure>
-  </section>
-
-  <section class="section wrap" aria-labelledby="manage">
-    <h2 id="manage">One page lists every site.</h2>
-    <div class="manage">
-      <figure class="mock">
-        <table>
-          <caption>Your sites</caption>
-          <thead>
-            <tr>
-              <th scope="col">Site</th>
-              <th scope="col">State</th>
-              <th scope="col">Note</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr>
-              <th scope="row">report</th>
-              <td><span class="pill private">private</span></td>
-              <td>3 versions</td>
-            </tr>
-            <tr>
-              <th scope="row">launch-deck</th>
-              <td><span class="pill unlisted">unlisted</span></td>
-              <td>secret link</td>
-            </tr>
-            <tr>
-              <th scope="row">trip-summary</th>
-              <td><span class="pill public">public</span></td>
-              <td>2 versions</td>
-            </tr>
-            <tr>
-              <th scope="row">checkout-prototype</th>
-              <td><span class="pill private">private</span></td>
-              <td>expires in 6 days</td>
-            </tr>
-            <tr>
-              <th scope="row" class="struck">old-demo</th>
-              <td><span class="pill trash">in the trash</span></td>
-              <td>can be undeleted</td>
-            </tr>
-          </tbody>
-        </table>
-        <figcaption>A sketch of the owner's index page, not a screenshot.</figcaption>
-      </figure>
-      <dl class="can">
-        <div>
-          <dt>Versions and rollback</dt>
-          <dd>A site keeps its last few versions. Rolling back switches the live one, with no upload.</dd>
-        </div>
-        <div>
-          <dt>A trash with undo</dt>
-          <dd>A deleted site waits in the trash first. Undelete brings it back.</dd>
-        </div>
-        <div>
-          <dt>Expiry</dt>
-          <dd>Give a throwaway demo an end date. It moves to the trash that day.</dd>
-        </div>
-        <div>
-          <dt>Export</dt>
-          <dd>Take everything out as one zip.</dd>
-        </div>
-        <div>
-          <dt>Three ways in</dt>
-          <dd>MCP for agents, a CLI for people, and an npm package.</dd>
-        </div>
-      </dl>
+      <p class="clause">First an agent publishes a folder.</p>
+    </div>
+    <div class="field field-2">
+      <div class="card" data-ui data-rise>
+        <p class="card-name"><code>report</code></p>
+        <p>In your own bucket</p>
+        <p>Version 1, stored as sent</p>
+        <p class="chip chip-private">Private</p>
+      </div>
+      <p class="clause">Then your Worker stores it, unread.</p>
+    </div>
+    <div class="field field-3">
+      <div class="card" data-ui data-rise>
+        <p class="card-name"><code>report</code></p>
+        <p>Opened by you</p>
+        <p>After one login</p>
+        <p class="chip chip-private">Private</p>
+      </div>
+      <p class="clause">Then you open it, and no one else.</p>
+    </div>
+    <div class="field field-4">
+      <div class="card" data-ui data-rise>
+        <p class="card-name"><code>report</code></p>
+        <p>Opened with the secret link</p>
+        <p>Same site, same files</p>
+        <p class="chip chip-unlisted">Unlisted</p>
+      </div>
+      <p class="clause">Then you share it, when you choose.</p>
     </div>
   </section>
 
-  <section class="section wrap" aria-labelledby="why">
-    <h2 id="why">Private is the default, not a paid tier.</h2>
-      <table class="grid">
-        <thead>
-          <tr>
-            <th scope="col"><span class="visually-hidden">Question</span></th>
-            <th scope="col">Many hosts</th>
-            <th scope="col">Poplin</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr>
-            <th scope="row">A private page</th>
-            <td data-label="Many hosts">a paid tier</td>
-            <td data-label="Poplin">the default</td>
-          </tr>
-          <tr>
-            <th scope="row">Sharing with a few people</th>
-            <td data-label="Many hosts">a login</td>
-            <td data-label="Poplin">a secret link, as shared documents work</td>
-          </tr>
-        </tbody>
-      </table>
-    <p class="plain">
-      Your pages sit in your own Cloudflare account. The four closest tools are on the <a href={sitePath("compare/")}>compare page</a>.
-    </p>
+  <section class="bands" aria-labelledby="keeps">
+    <div class="band band-head frame">
+      <h2 id="keeps">After you publish.</h2>
+    </div>
+    {
+      keeps.map((keep, index) => (
+        <div class={`band band-${index + 1}`}>
+          <p class="band-row frame" data-rise>
+            <span class="band-say">{keep.say}</span>
+            <span class="band-then">{keep.result}</span>
+          </p>
+        </div>
+      ))
+    }
   </section>
 
-  <section class="section wrap" aria-labelledby="cost">
-    <h2 id="cost">It fits Cloudflare's free tier.</h2>
-      <table class="grid">
-        <thead>
-          <tr>
-            <th scope="col">Piece</th>
-            <th scope="col">What it does</th>
-            <th scope="col">Free tier</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr>
-            <th scope="row">Worker</th>
-            <td data-label="What it does">serves the sites</td>
-            <td data-label="Free tier">100,000 requests a day. It stops at the limit and never bills.</td>
-          </tr>
-          <tr>
-            <th scope="row">Bucket</th>
-            <td data-label="What it does">stores the sites</td>
-            <td data-label="Free tier">10 GB, with no egress fee</td>
-          </tr>
-          <tr>
-            <th scope="row">Login</th>
-            <td data-label="What it does">lets you in</td>
-            <td data-label="Free tier">free for 50 users</td>
-          </tr>
-          <tr>
-            <th scope="row">Address</th>
-            <td data-label="What it does">where sites open</td>
-            <td data-label="Free tier">the account's free workers.dev address, or a domain you already have</td>
-          </tr>
-        </tbody>
-      </table>
-    <ul class="notes">
-      <li>
-        <strong>Guards.</strong> A storage cap, a size cap per site, and request limits per site and per visitor. Poplin
-        refuses an upload past the storage cap, because the bucket bills past its free tier.
-      </li>
-      <li>
-        <strong>The one limit it cannot fully guard.</strong> A flood of requests can stop the sites until midnight
+  <section class="tier frame" aria-labelledby="tier">
+    <div class="rows">
+      <h2 id="tier">It fits the free tier.</h2>
+      <p class="group">Cloudflare gives</p>
+      <ul>
+        {
+          freeTier.map((row) => (
+            <li data-rise>
+              <span class="dot dot-blue" aria-hidden="true" />
+              <span class="row-name">{row.name}</span>
+              <span class="row-value">{row.value}</span>
+            </li>
+          ))
+        }
+      </ul>
+      <p class="group">Poplin holds itself to, by default</p>
+      <ul>
+        {
+          guards.map((row) => (
+            <li data-rise>
+              <span class="dot dot-red" aria-hidden="true" />
+              <span class="row-name">{row.name}</span>
+              <span class="row-value">{row.value}</span>
+            </li>
+          ))
+        }
+      </ul>
+    </div>
+    <div class="tier-note" data-rise>
+      <p>There is no server to keep up. One Worker serves every site from one bucket, inside your own account.</p>
+      <p>
+        The Worker stops at its daily limit and never bills. A flood of requests can stop the sites until midnight
         UTC. It costs no money.
+      </p>
+      <p>Poplin refuses an upload past its storage limit, because the bucket bills past its free tier.</p>
+    </div>
+  </section>
+
+  <section class="starts frame" aria-labelledby="starts">
+    <form class="plans" aria-labelledby="starts">
+      <h2 id="starts">Where sites open.</h2>
+      <label class="plan">
+        <input type="radio" name="start" value="none" checked />
+        <span class="plan-name">No domain</span>
+      </label>
+      <label class="plan">
+        <input type="radio" name="start" value="own" />
+        <span class="plan-name">Your domain</span>
+      </label>
+    </form>
+    <div class="plan-stage">
+      <div data-show="none">
+        <p class="plan-figure"><code>poplin.you.workers.dev/report/</code></p>
+        <p>
+          Sites are paths on the free address every Cloudflare account has. Public and unlisted sites can be whole
+          folders. A private site is one self-contained file, unless the install allows folders.
+        </p>
+        <p>Pages there cannot use browser storage, popups, or form submission, and links inside a site are relative.</p>
+      </div>
+      <div data-show="own">
+        <p class="plan-figure"><code>{SHORT_ADDRESS}</code></p>
+        <p>
+          Each site gets an address of its own, so the browser keeps your sites apart. Private sites can be whole
+          folders, and pages may use browser storage and forms.
+        </p>
+        <p>A Cloudflare firewall rule stands in front. An address under your domain that is not shaped like a site's never reaches the Worker.</p>
+      </div>
+      <a class="button" href={sitePath("docs/security.html#without-a-domain")}>Read what each one protects</a>
+    </div>
+  </section>
+
+  {
+    samples.length > 0 && (
+      <section class="tiles frame" aria-labelledby="samples">
+        <h2 id="samples">What an agent publishes.</h2>
+        <ul>
+          {[...(shown === undefined ? [] : [shown]), ...others].map((sample, index) => (
+            <SampleTile sample={sample} tone={index % 4} />
+          ))}
+        </ul>
+      </section>
+    )
+  }
+
+  <section class="close" aria-labelledby="close">
+    <div class="close-say">
+      <h2 id="close">Not released.</h2>
+      <p>Poplin is in development. There is no install command. The source and the documentation are public.</p>
+    </div>
+    <ul class="close-rows">
+      <li>
+        <a class="close-link" href={sitePath("docs/")}>Read the documentation</a>
       </li>
       <li>
-        <strong>No domain needed to start.</strong> Without one the guarantees are <a href={sitePath("docs/security.html#without-a-domain")}>narrower</a>. Adding a domain switches on the full
-        set.
+        <a class="close-link" href={REPOSITORY_URL}>Read the source on GitHub</a>
+      </li>
+      <li>
+        <a class="close-link" href={sitePath("compare/")}>Compare it with other tools</a>
       </li>
     </ul>
-  </section>
-
-  <section class="section wrap status" aria-labelledby="status">
-    <h2 id="status">In development. Not released.</h2>
-    <p class="plain">This site shows no install command. The source and the docs are public.</p>
-    <p class="actions">
-      <a class="button" href={REPOSITORY_URL}>Open the repository</a>
-      <a class="button quiet" href={sitePath("docs/")}>Read the docs</a>
-      <a class="button quiet" href={sitePath("demo/")}>See the demo</a>
-    </p>
   </section>
 </Page>

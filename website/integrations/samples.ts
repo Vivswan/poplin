@@ -1,4 +1,4 @@
-import { cpSync, existsSync, readdirSync, readFileSync } from "node:fs";
+import { cpSync, existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { AstroIntegration } from "astro";
@@ -6,25 +6,27 @@ import type { AstroIntegration } from "astro";
 const MODULE_ID = "virtual:poplin-samples";
 const RESOLVED_ID = `\0${MODULE_ID}`;
 const TITLE = /<title[^>]*>([^<]*)<\/title>/i;
-const META_TAG = /<meta\s[^>]*>/gi;
-const DESCRIPTION_NAME = /\sname\s*=\s*["']description["']/i;
-const CONTENT = /\scontent\s*=\s*(?:"([^"]*)"|'([^']*)')/i;
 const GALLERY_PAGE = "index.html";
 
 /** One sample site found under the samples folder, as the gallery lists it. */
 interface Sample {
   /** The folder name, which is also the last segment of the sample's address. */
   readonly name: string;
+
   /** The text of the sample's own `<title>`, still HTML-escaped as the sample wrote it; empty when it has none. */
   readonly titleHtml: string;
-  /** The sample's own meta description, still HTML-escaped as the sample wrote it; empty when it has none. */
-  readonly descriptionHtml: string;
+
+  /** How many files the sample folder holds, at any depth. */
+  readonly files: number;
+
+  /** The size of those files together, in bytes. */
+  readonly bytes: number;
 }
 
-function readDescription(html: string): string {
-  const tag = (html.match(META_TAG) ?? []).find((meta) => DESCRIPTION_NAME.test(meta));
-  const content = tag === undefined ? null : CONTENT.exec(tag);
-  return (content?.[1] ?? content?.[2] ?? "").trim();
+function measureFolder(folder: string): { files: number; bytes: number } {
+  const entries = readdirSync(folder, { withFileTypes: true, recursive: true }).filter((entry) => entry.isFile());
+  const sizes = entries.map((entry) => statSync(join(entry.parentPath, entry.name)).size);
+  return { files: sizes.length, bytes: sizes.reduce((total, size) => total + size, 0) };
 }
 
 function readSample(samplesDir: string, name: string): Sample | undefined {
@@ -34,7 +36,8 @@ function readSample(samplesDir: string, name: string): Sample | undefined {
     return undefined;
   }
   const html = readFileSync(indexFile, "utf8");
-  return { name, titleHtml: (TITLE.exec(html)?.[1] ?? "").trim(), descriptionHtml: readDescription(html) };
+  const title = (TITLE.exec(html)?.[1] ?? "").trim();
+  return { name, titleHtml: title, ...measureFolder(join(samplesDir, name)) };
 }
 
 function listSamples(samplesDir: string): Sample[] {

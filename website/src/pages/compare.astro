@@ -1,107 +1,15 @@
 ---
+// The docs page is the one owner of these facts; this page renders it, so the two cannot disagree.
+import { Content as Comparison } from "../../../docs/comparison.md";
 import Page from "../layouts/Page.astro";
-
-const closest = [
-  {
-    name: "handbill",
-    url: "https://viktoravelino.com/blog/hand-someone-a-page/",
-    has: "Cloudflare Workers and R2, a secret subdomain, a public alias",
-    gap: "no multi-file sites (left out by choice), no index, no MCP",
-  },
-  {
-    name: "anvilnine/artifacts",
-    url: "https://github.com/anvilnine/artifacts",
-    has: "secret links, switching a site between states, a CLI and MCP, an S3 backend",
-    gap: "no index; it needs a running server",
-  },
-  {
-    name: "Pagecast",
-    url: "https://github.com/Amal-David/pagecast",
-    has: "unlisted links on Cloudflare Pages, a CLI and MCP",
-    gap: "no index; its state is kept on one machine",
-  },
-  {
-    name: "Birta",
-    url: "https://birta.dev",
-    has: "a hosted service: agents publish static pages, a review link per version beside a stable public address, version history, custom domains, a free tier",
-    gap: "closed source; self-hosting only on an enterprise plan; no MCP server or CLI named; the review link is its only private state, and no login protects it",
-  },
-];
-const furtherOff = [
-  { kind: "Self-hosted or Workers tools", names: "agenthost, Open Artifacts, open-artifacts, Toss, MCP Static Hosting, Smallweb" },
-  {
-    kind: "Hosted services",
-    names: "ShipStatic, Spacefast, Tiiny Host, pgs.sh, Surge, Netlify Drop, Vercel, Cloudflare Pages with Access, statichost, Neocities, static.app, GitHub Pages, Render, Firebase",
-  },
-  { kind: "Tunnels, where a machine must stay up", names: "Tailscale Funnel, trycloudflare, ngrok" },
-  { kind: "Shutting or shut", names: "Glitch, Fleek, val.town, Deno Deploy" },
-];
 ---
 
 <Page
-  title="Compare: poplin and the closest tools"
-  description="What handbill, anvilnine/artifacts, Pagecast, and Birta each have, what each leaves out, and where poplin differs."
+  title="Compare: poplin and four other tools"
+  description="What poplin, handbill, anvilnine/artifacts, Pagecast, and Birta each do, taken from each tool's own pages."
   path="compare/"
 >
-  <section class="page-head wrap">
-    <h1>Poplin and the closest tools.</h1>
-    <p class="lede">Four projects come closest. Each does part of it well.</p>
-  </section>
-
-  <section class="section wrap" aria-labelledby="closest">
-    <h2 id="closest">The closest four.</h2>
-      <table class="grid">
-        <thead>
-          <tr>
-            <th scope="col">Project</th>
-            <th scope="col">Has</th>
-            <th scope="col">Does not have</th>
-          </tr>
-        </thead>
-        <tbody>
-          {
-            closest.map((tool) => (
-              <tr>
-                <th scope="row">
-                  <a href={tool.url}>{tool.name}</a>
-                </th>
-                <td data-label="Has">{tool.has}</td>
-                <td data-label="Does not have">{tool.gap}</td>
-              </tr>
-            ))
-          }
-          <tr class="ours">
-            <th scope="row">poplin</th>
-            <td data-label="Has">
-              whole sites, three states changed in place, the owner's index, an MCP server and a CLI, all inside your
-              own Cloudflare account
-            </td>
-            <td data-label="Does not have">a release: it is in development; a host other than Cloudflare</td>
-          </tr>
-        </tbody>
-      </table>
-  </section>
-
-  <section class="section wrap" aria-labelledby="further">
-    <h2 id="further">Further off.</h2>
-    <p class="plain">Each has no secret-link state, or no switch between states, or holds one file.</p>
-      <table class="grid">
-        <thead>
-          <tr>
-            <th scope="col">Kind</th>
-            <th scope="col">Names</th>
-          </tr>
-        </thead>
-        <tbody>
-          {
-            furtherOff.map((row) => (
-              <tr>
-                <th scope="row">{row.kind}</th>
-                <td data-label="Names">{row.names}</td>
-              </tr>
-            ))
-          }
-        </tbody>
-      </table>
+  <section class="page-prose frame">
+    <Comparison />
   </section>
 </Page>

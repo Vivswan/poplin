@@ -1,4 +1,9 @@
 ---
+import "@fontsource/libre-franklin/latin-400.css";
+import "@fontsource/libre-franklin/latin-600.css";
+import "@fontsource/libre-franklin/latin-700.css";
+import "@fontsource/source-serif-4/latin-400.css";
+import "@fontsource/source-serif-4/latin-600.css";
 import "../styles/site.css";
 import { getImage } from "astro:assets";
 import { REPOSITORY_URL, sitePath } from "../lib/paths.ts";
@@ -11,11 +16,9 @@ interface Props {
 
 const { title, description, path } = Astro.props;
 const pages = [
-  { path: "demo/", label: "Demo" },
+  { path: "demo/", label: "Samples" },
   { path: "compare/", label: "Compare" },
 ];
-const fontUrl = sitePath("fonts/barlow-condensed-600.woff2");
-const fontFace = `@font-face{font-family:"Barlow Condensed";font-weight:600;font-style:normal;font-display:optional;src:url("${fontUrl}") format("woff2")}`;
 const pageUrl = new URL(sitePath(path), Astro.site).href;
 
 // The brand folder at the repository root wins when it exists; the temporary drawings here stand in until then.
@@ -40,13 +43,11 @@ const imageUrl = new URL(card.src, Astro.site).href;
     <title>{title}</title>
     <meta name="description" content={description} />
     <meta name="color-scheme" content="light dark" />
-    <meta name="theme-color" content="#f2f5fa" media="(prefers-color-scheme: light)" />
-    <meta name="theme-color" content="#0f1a2e" media="(prefers-color-scheme: dark)" />
+    <meta name="theme-color" content="#f5f7fa" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#141a2b" media="(prefers-color-scheme: dark)" />
     <link rel="canonical" href={pageUrl} />
     <link rel="icon" type="image/svg+xml" href={favicon.src} />
     <link rel="apple-touch-icon" href={touchIcon.src} />
-    <link rel="preload" as="font" type="font/woff2" href={fontUrl} crossorigin />
-    <style is:inline set:html={fontFace} />
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="Poplin" />
     <meta property="og:title" content={title} />
@@ -57,10 +58,19 @@ const imageUrl = new URL(card.src, Astro.site).href;
     <meta property="og:image:height" content="630" />
     <meta property="og:image:alt" content="A terminal running poplin ./report and printing a private address." />
     <meta name="twitter:card" content="summary_large_image" />
+    <script is:inline>
+      document.documentElement.classList.add("js");
+      // If the layout script never runs, nothing stays hidden.
+      setTimeout(() => {
+        if (document.documentElement.classList.contains("watching")) return;
+
+        for (const part of document.querySelectorAll("[data-rise]")) part.classList.add("in");
+      }, 4000);
+    </script>
   </head>
   <body>
     <a class="skip" href="#main">Skip to the content</a>
-    <header class="top wrap">
+    <header class="top frame">
       <a class="wordmark" href={sitePath()} aria-label="Poplin, home">poplin</a>
       <nav aria-label="Site">
         <ul>
@@ -81,16 +91,71 @@ const imageUrl = new URL(card.src, Astro.site).href;
     <main id="main">
       <slot />
     </main>
-    <footer class="foot wrap">
-      <p>
-        <span class="wordmark">poplin</span>
-        In development, not released.
-      </p>
-      <ul>
-        <li><a href={sitePath("docs/")}>Docs</a></li>
-        <li><a href={REPOSITORY_URL}>Source on GitHub</a></li>
-        <li><a href={`${REPOSITORY_URL}/blob/main/LICENSE.md`}>Individual and Small Organization License 1.1.0</a></li>
-      </ul>
+    <footer class="foot">
+      <div class="tile tile-say">
+        <p>Poplin publishes a static site to your own Cloudflare account, private until you share it.</p>
+        <p class="small">
+          <a href={`${REPOSITORY_URL}/blob/main/LICENSE.md`}>Individual and Small Organization License 1.1.0</a>
+        </p>
+      </div>
+      <nav class="tile tile-nav" aria-label="Footer">
+        <ul>
+          <li><a class="foot-link" href={sitePath()}>Home</a></li>
+          <li><a class="foot-link" href={sitePath("demo/")}>Samples</a></li>
+          <li><a class="foot-link" href={sitePath("compare/")}>Compare</a></li>
+          <li><a class="foot-link" href={sitePath("docs/")}>Docs</a></li>
+        </ul>
+      </nav>
+      <a class="tile tile-source" href={REPOSITORY_URL}>
+        <span>Source</span>
+        <span>on GitHub</span>
+      </a>
+      <div class="tile tile-name" aria-hidden="true"><span>poplin</span></div>
+      <a class="tile tile-go" href={sitePath("demo/")}>
+        <span>See what an agent publishes</span>
+        <svg viewBox="0 0 48 48" width="48" height="48" aria-hidden="true" focusable="false">
+          <path d="M8 24h30M26 10l14 14-14 14" fill="none" stroke="currentColor" stroke-width="4" stroke-linecap="square"></path>
+        </svg>
+      </a>
     </footer>
+    <script>
+      // Parts of a section rise in once as the section enters; without script, or with reduced motion, they are simply there.
+      const parts = document.querySelectorAll<HTMLElement>("[data-rise]");
+      const still = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+      if (still || !("IntersectionObserver" in window)) {
+        for (const part of parts) part.classList.add("in");
+      } else {
+        const watcher = new IntersectionObserver(
+          (entries) => {
+            for (const entry of entries) {
+              if (!entry.isIntersecting) continue;
+
+              entry.target.classList.add("in");
+              watcher.unobserve(entry.target);
+            }
+          },
+          { rootMargin: "0px 0px -8% 0px", threshold: 0.08 },
+        );
+        for (const part of parts) watcher.observe(part);
+        document.documentElement.classList.add("watching");
+      }
+
+      // A sample preview narrower than the samples' smallest layout is drawn at that width and scaled down to fit.
+      const SMALLEST = 360;
+      const fit = new ResizeObserver((entries) => {
+        for (const entry of entries) {
+          const frame = entry.target.querySelector("iframe");
+          if (frame === null) continue;
+
+          const width = entry.contentRect.width;
+          const scale = Math.min(1, width / SMALLEST);
+          frame.style.width = `${width / scale}px`;
+          frame.style.height = `${entry.contentRect.height / scale}px`;
+          frame.style.transform = scale === 1 ? "" : `scale(${scale})`;
+        }
+      });
+      for (const view of document.querySelectorAll(".tile-view")) fit.observe(view);
+    </script>
   </body>
 </html>

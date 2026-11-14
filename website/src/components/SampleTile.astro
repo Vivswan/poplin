@@ -1,0 +1,32 @@
+---
+import type { samples } from "virtual:poplin-samples";
+import { sitePath } from "../lib/paths.ts";
+
+interface Props {
+  /** One sample site, as the samples integration lists it. */
+  sample: (typeof samples)[number];
+
+  /** Which of the four colour pairs the label strip takes, 0 to 3. */
+  tone: number;
+}
+
+const { sample, tone } = Astro.props;
+const address = sitePath(`demo/${encodeURIComponent(sample.name)}/`);
+---
+
+<li class={`tile-sample tone-${tone}`} data-rise>
+  <a class="tile-link" href={address}>
+    <span class="tile-view" data-ui>
+      <iframe src={address} title={`Preview of the ${sample.name} sample`} sandbox="allow-scripts" loading="lazy" tabindex="-1"></iframe>
+    </span>
+    <span class="tile-strip">
+      <span class="tile-values">
+        <span>{sample.files} files</span>
+        <span>{Math.round(sample.bytes / 1024)} KB</span>
+        <span>no build step</span>
+      </span>
+      <span class="tile-title">{sample.titleHtml === "" ? sample.name : <Fragment set:html={sample.titleHtml} />}</span>
+      <span class="tile-folder">{sample.name}</span>
+    </span>
+  </a>
+</li>
