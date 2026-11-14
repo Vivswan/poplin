@@ -133,6 +133,20 @@ export function stopOf(failure: CloudflareFailure, permission: string): Stop {
 }
 
 /**
+ * Say why a script stopped, as an error on the log and a bold line in the step summary.
+ *
+ * @param what - what the script could not do, as the start of a sentence
+ * @returns the exit code of a stopped script: a skip stops the run as a failure does, so a run that checked nothing is never green
+ */
+export function reportStop(run: Run, stop: Stop, what: string): number {
+  const reason = stop.kind === "skipped" ? `it needs ${stop.needs}` : stop.what;
+  run.summarize(`**${what}: ${reason}.**\n`);
+  run.say(`::error::${what}: ${reason}.`);
+
+  return 1;
+}
+
+/**
  * Find the zone of the install: the one `CLOUDFLARE_ZONE_NAME` names, or the account's only zone.
  *
  * @returns the zone with its name and id hidden, or why there is none

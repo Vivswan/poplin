@@ -4,7 +4,7 @@ The checks of a deployed install: a stranger's requests over HTTPS, and a token 
 
 | To                                                | Run                                                            | Needs                                                                     |
 | ------------------------------------------------- | -------------------------------------------------------------- | ------------------------------------------------------------------------- |
-| check the checks themselves, against a local fake | `bun test ./tests/live/self.test.ts`                           | nothing                                                                   |
+| check the checks themselves, against a local fake | `bun test ./tests/live`                                        | nothing                                                                   |
 | check an install of your own                      | `bun run live`                                                 | `POPLIN_LIVE_DOMAIN`, and `POPLIN_LIVE_TOKEN` for the checks that publish |
 | check the test install                            | the `Live Checks` workflow: after every green main, or by hand | the `cloudflare-live-tests` environment                                   |
 
@@ -20,11 +20,13 @@ The test install stays up between runs. A run removes what it made: every site w
 
 ## What a run skips
 
-A check that cannot run is written to the step summary as skipped, with what it needs. It never fails the run.
+A check that cannot run is written to the step summary as skipped, with what it needs, and to the log as a warning. It never fails the run.
+
+A run that cannot make the install answer, or cannot start the checks, fails: the log's error line and the step summary say what it needs. That covers a token with no permission for the zone, the bucket, the database, the Worker, the DNS record, or the route.
 
 | Skipped: needs                                                      | Checks                                                                   |
 | ------------------------------------------------------------------- | ------------------------------------------------------------------------ |
-| a token permission                                                  | the piece of the install that permission makes, and the checks behind it |
+| a token permission for a rule, the bot settings, or the login       | the piece of the install that permission makes, and the checks behind it |
 | Access switched on for the account                                  | `L1`                                                                     |
 | an install that sends a private site's address to its letter p form | `L1`, `L4`, `L5`                                                         |
 | a Worker route for the public word's hostnames                      | `public-name`                                                            |

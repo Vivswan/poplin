@@ -3,8 +3,9 @@
 #   build the Worker bundle -> make the standing test install match main -> run tests/live against it -> remove the run's token
 #
 # The test install stays up between runs: only what a run made (its sites, its token row) is removed.
-# The environment's secrets reach the three steps that call Cloudflare and no other step. A step that lacks a token
-# permission, or an account switch only a person can flip, is written to the step summary as skipped, with what it needs.
+# The environment's secrets reach the three steps that call Cloudflare and no other step. Each step prints what it did.
+# A piece the install answers without, lacking a token permission or an account switch only a person can flip, is a
+# warning and a skipped row of the step summary, with what it needs. Anything else that stops a step fails the run.
 #
 # It is its own workflow, not a job of post-green.yml: one lane holds every run so two never touch the install together,
 # and a lane shared across commits would cancel the hook the release leg waits on.
@@ -13,7 +14,8 @@ name: Live Checks
 
 on:
   # A run of CI on this repository's main that ended green. The job's condition holds the line: a pull request's run,
-  # or a run from a fork, never gets past it, and the code checked out is this repository's main.
+  # or a run from a fork, never gets past it, and the code checked out is this repository's main. Neither does the run
+  # of a commit that main has moved past: the newest commit's own run checks the same install.
   workflow_run: # zizmor: ignore[dangerous-triggers]
     workflows: [CI]
     types: [completed]
@@ -36,6 +38,7 @@ jobs:
       (github.event.workflow_run.conclusion == 'success' &&
       github.event.workflow_run.event == 'push' &&
       github.event.workflow_run.head_branch == 'main' &&
+      github.event.workflow_run.head_sha == github.sha &&
       github.event.workflow_run.head_repository.full_name == github.repository))
     runs-on: ubuntu-latest
     timeout-minutes: 45
@@ -61,7 +64,6 @@ jobs:
           POPLIN_LIVE_LOGIN: ${{ secrets.POPLIN_LIVE_LOGIN }}
         run: bun run --silent --cwd packages/cloudflare live:converge
       - name: Run the live checks
-        if: steps.converge.outputs.ready == 'true'
         timeout-minutes: 25
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
@@ -72,7 +74,7 @@ jobs:
         run: bun run --silent --cwd packages/cloudflare live:suite "$MISSING"
       # The suite removes its own token row; this covers a suite step that was killed before it could.
       - name: Remove the run's token
-        if: always() && steps.converge.outputs.ready == 'true'
+        if: always() && steps.converge.outcome == 'success'
         timeout-minutes: 3
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}

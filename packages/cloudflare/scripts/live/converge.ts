@@ -2,8 +2,9 @@
 //
 //   the zone -> bucket, database -> the login application -> wrangler deploy of the built bundle -> the zone plug's repair -> wait for the install to answer
 //
-// It holds no state: every step reads what is there and changes what differs. A token that lacks a permission, or an account with a switch off, stops the piece it belongs to and is reported as skipped.
-// Step outputs: `ready` (true once the install answers) and `missing` (a JSON object of what the install lacks, each with its reason, for the live suite).
+// It holds no state: every step reads what is there and changes what differs. A token that lacks a permission, or an account with a switch off, stops the piece it belongs to.
+// Every piece is printed as it is settled. A piece nothing answers without stops the run as an error, whether it failed or the token lacks its permission.
+// Step output: `missing` (a JSON object of what the install lacks and still answers without, each with its reason, for the live suite).
 
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -20,7 +21,7 @@ import { syncDatabase } from "../../src/zone/database/database";
 import { INSTALL_OBJECTS } from "../../src/zone/install-objects";
 import { privateSitesPattern } from "../../src/zone/layout";
 import { createDomainPlug } from "../../src/zone/zone-plug";
-import { type Found, findInstall, isStop, liveLogin, openRun, type Run, type Stop, stopOf } from "./util";
+import { type Found, findInstall, isStop, liveLogin, openRun, type Run, reportStop, type Stop, stopOf } from "./util";
 
 /** This package's folder. */
 const PACKAGE = join(import.meta.dir, "..", "..");
@@ -77,6 +78,9 @@ const NOT_AUTHENTICATED = "10000";
 /** What the Worker's `ACCESS` binding holds. */
 type AccessBinding = typeof NO_ACCESS;
 
+/** The variables a run reads. */
+type Environment = Readonly<Record<string, string | undefined>>;
+
 /** One row of the summary: a piece of the install, what the run did to it, and what it needs when it was skipped. */
 interface Piece {
   readonly piece: string;
@@ -88,6 +92,12 @@ interface Piece {
 interface Progress {
   readonly pieces: Piece[];
   readonly missing: Record<string, string>;
+}
+
+/** Add a piece to the summary's rows and print it, so the log shows how far a run came. */
+function note(run: Run, progress: Progress, piece: Piece): void {
+  progress.pieces.push(piece);
+  run.say(piece.needs === undefined ? `${piece.piece}: ${piece.result}` : `${piece.piece}: ${piece.result}: needs ${piece.needs}`);
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -108,7 +118,7 @@ async function ensureBucket(run: Run): Promise<Stop | "created" | "present"> {
 /** Make the login application and read what the Worker checks a login against. A login the account or the token cannot give is a skip, and the Worker is bound to no team. */
 async function ensureAccess(run: Run, found: Found, login: string, progress: Progress): Promise<AccessBinding | Stop> {
   const skip = (needs: string): AccessBinding => {
-    progress.pieces.push({ piece: "Login binding", result: "skipped", needs });
+    note(run, progress, { piece: "Login binding", result: "skipped", needs });
     progress.missing.access = needs;
 
     return NO_ACCESS;
@@ -140,7 +150,7 @@ async function ensureAccess(run: Run, found: Found, login: string, progress: Pro
 
   run.hide(audience);
   run.hide(team.value.auth_domain);
-  progress.pieces.push({ piece: "Login binding", result: "bound" });
+  note(run, progress, { piece: "Login binding", result: "bound" });
 
   return { team_domain: team.value.auth_domain, audience };
 }
@@ -212,11 +222,11 @@ function needOf(row: DomainRow): string | undefined {
   return NOT_PERMITTED.test(row.detail) ? `the token permission for the ${row.object}` : undefined;
 }
 
-/** What is printed of a row the repair did not settle. Its detail may quote Cloudflare, which may name a person or the zone, so only the status of a refusal is kept. */
-function unsettledLine(row: DomainRow): string {
+/** What is told of a row the repair did not settle. Its detail may quote Cloudflare, which may name a person or the zone, so only the status of a refusal is kept. */
+function unsettledResult(row: DomainRow): string {
   const refusal = REFUSAL_STATUS.exec(row.detail)?.[0];
 
-  return refusal === undefined ? `${row.object}: ${row.state}` : `${row.object}: ${row.state}: ${refusal}`;
+  return refusal === undefined ? row.state : `${row.state} (${refusal})`;
 }
 
 /** Run the zone plug's repair, the same code the Domain tab runs, and sort its rows into the summary and the lacking things. */
@@ -234,14 +244,13 @@ async function repairZone(run: Run, found: Found, login: string, progress: Progr
 
   for (const row of reading.rows) {
     if (SETTLED.has(row.state)) {
-      progress.pieces.push({ piece: row.object, result: row.state });
+      note(run, progress, { piece: row.object, result: row.state });
       continue;
     }
 
     const needs = needOf(row);
     const capability = CAPABILITIES[row.object];
-    progress.pieces.push({ piece: row.object, result: row.state, needs });
-    run.say(unsettledLine(row));
+    note(run, progress, { piece: row.object, result: unsettledResult(row), needs });
 
     if (needs === undefined) failed ??= { kind: "failed", what: `the ${row.object} is ${row.state}` };
 
@@ -275,15 +284,17 @@ async function waitUntilReady(found: Found): Promise<Stop | undefined> {
 }
 
 /** Every step in order; answers what stopped the run, or `undefined` once the install answers. */
-async function converge(run: Run, progress: Progress): Promise<Stop | undefined> {
-  const found = await findInstall(run);
+async function converge(run: Run, progress: Progress, env: Environment): Promise<Stop | undefined> {
+  const found = await findInstall(run, env);
   if (isStop(found)) return found;
 
-  const login = liveLogin(run) ?? NOBODY;
+  note(run, progress, { piece: "Zone", result: "found" });
+
+  const login = liveLogin(run, env) ?? NOBODY;
   const bucket = await ensureBucket(run);
   if (typeof bucket !== "string") return bucket;
 
-  progress.pieces.push({ piece: "R2 bucket", result: bucket });
+  note(run, progress, { piece: "R2 bucket", result: bucket });
 
   const database = await syncDatabase(run.connection, run.accountId, "apply");
   if (!database.ok) return database.failure === "no-id" ? { kind: "failed", what: "Cloudflare named no database" } : stopOf(database, "D1: Edit");
@@ -291,6 +302,7 @@ async function converge(run: Run, progress: Progress): Promise<Stop | undefined>
   if (database.id === undefined) return { kind: "failed", what: "the database has no id" };
 
   run.hide(database.id);
+  note(run, progress, { piece: "Database", result: "present" });
 
   const access = await ensureAccess(run, found, login, progress);
   if (isStop(access)) return access;
@@ -298,24 +310,32 @@ async function converge(run: Run, progress: Progress): Promise<Stop | undefined>
   const deployed = await deployWorker(run, await workerConfig(found, database.id, access, login));
   if (deployed !== undefined) return deployed;
 
-  progress.pieces.push({ piece: "Worker", result: "deployed" });
+  note(run, progress, { piece: "Worker", result: "deployed" });
 
   return (await repairZone(run, found, login, progress)) ?? (await waitUntilReady(found));
 }
 
-const run = openRun();
-const progress: Progress = { pieces: [], missing: {} };
-const stopped = await converge(run, progress);
-const rows = progress.pieces.map((piece) => `| ${piece.piece} | ${piece.result} | ${piece.needs ?? ""} |`);
+/**
+ * Make the install match main, and tell the log, the step summary, and the step's output what came of it.
+ *
+ * @param env - where the zone's name and the login are read from: the same variables the run was opened from
+ * @returns the exit code: 0 only once the install answers
+ */
+export async function convergeInstall(run: Run, env: Environment): Promise<number> {
+  const progress: Progress = { pieces: [], missing: {} };
+  const stopped = await converge(run, progress, env);
+  const rows = progress.pieces.map((piece) => `| ${piece.piece} | ${piece.result} | ${piece.needs ?? ""} |`);
 
-run.summarize(["### The test install", "", "| Piece | Result | Skipped: needs |", "| --- | --- | --- |", ...rows, ""].join("\n"));
-run.output("ready", String(stopped === undefined));
-run.output("missing", JSON.stringify(progress.missing));
+  run.summarize(["### The test install", "", "| Piece | Result | Skipped: needs |", "| --- | --- | --- |", ...rows, ""].join("\n"));
+  run.output("missing", JSON.stringify(progress.missing));
 
-if (stopped?.kind === "skipped") run.summarize(`**The live checks were skipped: needs ${stopped.needs}.**\n`);
+  for (const [lacking, needs] of Object.entries(progress.missing)) run.say(`::warning::The checks of ${lacking} are skipped: the install needs ${needs}.`);
 
-if (stopped?.kind === "failed") {
-  run.summarize(`**The test install could not be made ready: ${stopped.what}.**\n`);
-  run.say(`The test install could not be made ready: ${stopped.what}.`);
-  process.exitCode = 1;
+  if (stopped !== undefined) return reportStop(run, stopped, "The test install could not be made ready");
+
+  run.say("The test install answers.");
+
+  return 0;
 }
+
+if (import.meta.main) process.exitCode = await convergeInstall(openRun(), process.env);

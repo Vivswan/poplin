@@ -10,7 +10,7 @@ import { createInterface } from "node:readline";
 import { Readable } from "node:stream";
 
 import { findDatabase, removeTokens, seedToken } from "./tokens";
-import { type Found, findInstall, isStop, liveLogin, openRun, type Run, type Stop } from "./util";
+import { type Found, findInstall, isStop, liveLogin, openRun, type Run, reportStop, type Stop } from "./util";
 
 /** The repository's folder. */
 const ROOT = join(import.meta.dir, "..", "..", "..", "..");
@@ -79,12 +79,4 @@ async function runSuite(run: Run, missing: string): Promise<number | Stop> {
 const run = openRun();
 const ended = await runSuite(run, process.argv[2] ?? "{}");
 
-if (typeof ended === "number") process.exitCode = ended;
-
-if (typeof ended !== "number" && ended.kind === "skipped") run.summarize(`**The live checks were skipped: needs ${ended.needs}.**\n`);
-
-if (typeof ended !== "number" && ended.kind === "failed") {
-  run.summarize(`**The live checks could not start: ${ended.what}.**\n`);
-  run.say(`The live checks could not start: ${ended.what}.`);
-  process.exitCode = 1;
-}
+process.exitCode = typeof ended === "number" ? ended : reportStop(run, ended, "The live checks could not start");
