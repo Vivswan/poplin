@@ -192,6 +192,12 @@ export interface UploadsPage {
   readonly next?: UploadsCursor;
 }
 
+/** One page of the folders removed sites left behind, in ascending order. `next` is the folder to pass as `after`, absent on the last page. */
+export interface LeftoversPage {
+  readonly folders: readonly SiteFolder[];
+  readonly next?: SiteFolder;
+}
+
 /** What an admin decides about a pending login, and when. */
 export interface LoginDecision {
   /** Whether the computer is let in. */
@@ -281,8 +287,23 @@ export interface Database {
   /** Take a site out of the trash. An expiry that is not after `signed.at` becomes `"never"` in the same step, so the site is served again and no sweep trashes it for that expiry. */
   restoreSite(id: SiteId, signed: Signed): Promise<Done | Refused<"not_found" | "not_in_trash">>;
 
-  /** Remove a site for good, from the trash or not. Its public name is free again; `site` is the site as it was, whose folder the caller empties. */
+  /**
+   * Remove a site for good, from the trash or not. Its public name is free again, and its folder is a leftover from the same step on.
+   *
+   * @returns `site` is the site as it was, whose folder the caller empties and then forgets
+   */
   deleteSite(id: SiteId, signed: Signed): Promise<Done | Refused<"not_found">>;
+
+  /**
+   * One page of the leftovers: the folders of removed sites that are not known to be empty. A folder a site is stored into again is no leftover.
+   *
+   * @param query - how many folders, from 1 to 100, and the `next` of the page before
+   * @throws {RangeError} `limit` is not a whole number from 1 to 100
+   */
+  listLeftovers(query: { readonly limit: number; readonly after?: SiteFolder }): Promise<LeftoversPage>;
+
+  /** Forget a leftover, once the bucket holds nothing under the folder. A folder that is none changes nothing. */
+  forgetLeftover(folder: SiteFolder): Promise<void>;
 
   /** Set aside the next version number of a site. No two calls get the same number; a number never used is simply skipped. It writes no audit entry: nothing a reader of the site sees has changed. */
   reserveVersion(id: SiteId): Promise<Reserved | Refused<"not_found" | "in_trash">>;

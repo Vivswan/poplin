@@ -10,19 +10,39 @@ import { ADMIN, api, ask, BINDINGS, countedBindings, done, installOf, instance, 
 /** The most database and bucket calls one scheduled invocation may make, the start of its instance included: the entry's own stated budget, under Cloudflare's 1,000 on the Free plan. */
 const INVOCATION_CALLS = 300;
 
-/** A quarter of an hour: one run begins with the sites, the next with the trash, the third with the uploads. */
+/** A quarter of an hour: one run begins with the sites, the next with the trash, the third with the uploads, the fourth with the leftovers. */
 const TURN_MS = 15 * 60 * 1000;
+
+/** The place of the trash among the parts of the walk. */
+const TRASH_TURN = 1;
+
+/** The files one removal takes from a folder whose list pages hold one object each. */
+const WHOLE_REMOVAL = 15;
+
+/** What a step over five sat-out sites costs when each takes a whole removal: the settings, the listing, and per site a read, a change, 30 bucket calls, and the leftover forgotten. */
+const MOST_STEP_CALLS = 167;
 
 /** The one file of a site made only to be swept. */
 const HTML = new TextEncoder().encode("<p>short-lived</p>");
 
 let w: World;
 
-/** Move the clock to the next quarter hour whose run begins with the sites. */
-function toTheSitesTurn(): void {
+/** Move the clock to the next quarter hour whose run begins with the part at this place of the walk: 0 for the sites. */
+function toTheTurnOf(part: number): void {
   const turn = Math.ceil(w.clock.now / TURN_MS);
 
-  w.clock.now = (turn + ((3 - (turn % 3)) % 3)) * TURN_MS;
+  w.clock.now = (turn + ((4 + part - (turn % 4)) % 4)) * TURN_MS;
+}
+
+/** The bucket with every list page cut to one object, so one removal, which walks 15 pages, takes 15 files. */
+function shortPages(bucket: R2Bucket): R2Bucket {
+  return new Proxy(bucket, {
+    get(inner, name) {
+      if (name !== "list") return Reflect.get(inner, name, inner);
+
+      return (options: R2ListOptions): Promise<R2Objects> => inner.list({ ...options, limit: 1 });
+    },
+  });
 }
 
 async function keysUnder(prefix: string): Promise<string[]> {
@@ -54,12 +74,12 @@ describe("the scheduled run", () => {
     const stored = await keysUnder("");
 
     wait(w, 2);
-    toTheSitesTurn();
+    toTheTurnOf(0);
     await sweep(worker, w);
     const afterExpiry = await states();
 
     wait(w, 8 * 24);
-    toTheSitesTurn();
+    toTheTurnOf(0);
     await sweep(worker, w);
     const { database } = await installOf(w);
     const left = await keysUnder("");
@@ -88,11 +108,62 @@ describe("the scheduled run", () => {
     const old = await begin();
 
     wait(w, 1);
-    toTheSitesTurn();
+    toTheTurnOf(0);
     const waiting = await begin();
     await sweep(worker, w);
 
     expect([await stored(old), await stored(waiting)]).toEqual([false, true]);
+  });
+
+  // Drift: a site's row can go while its files stay, when the removal is cut off; nothing but the scheduled run ever comes back for them, and it must do so inside its budget.
+  test("files a removed site left in the bucket are gone after the next scheduled runs, each inside its call budget, and the files of other sites stay", async () => {
+    const tally = { calls: 0 };
+    const token = await tokenOf(w, "publisher");
+    await publish(instance(w), token, { name: "kept" }, [page("<p>kept</p>")]);
+    const cut = await publish(instance(w), token, { name: "cut-off" }, [page("<p>cut off</p>")]);
+    const { database } = await installOf(w);
+    const row = (await database.listSites({ trash: false, limit: 10 })).sites.find((site) => site.id === cut.id);
+    if (row === undefined) throw new Error("the test's site is not there");
+
+    await database.deleteSite(row.id, { by: OWNER, at: w.clock.now });
+    const before = [(await keysUnder("")).length, (await database.listLeftovers({ limit: 10 })).folders.length];
+    const worker = instance(w);
+    const runs: number[] = [];
+
+    for (let run = 0; run < 4; run += 1) {
+      wait(w, 0.25);
+      tally.calls = 0;
+      await sweep(worker, w, countedBindings(tally));
+      runs.push(tally.calls);
+    }
+
+    expect(before).toEqual([2, 1]);
+    expect([(await keysUnder("")).length, await database.listLeftovers({ limit: 10 }), await states()]).toEqual([1, { folders: [] }, { live: 1, trash: 0 }]);
+    expect([Math.min(...runs) > 0, Math.max(...runs) <= INVOCATION_CALLS]).toEqual([true, true]);
+  });
+
+  // Drift: a run starts a step only while the most a step can cost still fits; a step that cost more than the run allows for would pass the invocation's budget unseen.
+  test("a run whose first step is as costly as a step gets, five sat-out sites that each take a whole removal, stays inside one invocation's calls", async () => {
+    const tally = { calls: 0 };
+    await ask(instance(w), `${ADMIN}/api/whoami`);
+    const install = await installOf(w);
+    const files = Array.from({ length: WHOLE_REMOVAL }, (_, at) => ({ path: at === 0 ? "index.html" : `page-${at}.html`, size: HTML.byteLength, contentType: "text/html", open: () => new Blob([HTML]).stream() }));
+
+    for (let made = 0; made < 5; made += 1) {
+      const site = await publishSite(install, { scope: "admin", holder: OWNER }, { name: `large-${made}`, files });
+      if (!site.ok) throw new Error(`the test's site was refused: ${site.code}`);
+
+      await install.database.trashSite(site.site.id, { by: OWNER, at: w.clock.now });
+    }
+
+    wait(w, 8 * 24);
+    toTheTurnOf(TRASH_TURN);
+    const counted = countedBindings(tally);
+    await sweep(instance(w), w, { ...counted, SITES: shortPages(counted.SITES) });
+
+    expect([await states(), (await keysUnder("")).length]).toEqual([{ live: 0, trash: 0 }, 0]);
+    expect(tally.calls).toBeGreaterThanOrEqual(MOST_STEP_CALLS);
+    expect(tally.calls).toBeLessThanOrEqual(INVOCATION_CALLS);
   });
 
   // Drift: a run that walked until the walk ended would pass Cloudflare's per-invocation limit on a large install and be cut off mid-change; one that forgot its place would look at the same sites every time.
@@ -113,7 +184,7 @@ describe("the scheduled run", () => {
       wait(w, 2);
     }
 
-    toTheSitesTurn();
+    toTheTurnOf(0);
     await sweep(worker, w, countedBindings(tally));
     const first = { calls: tally.calls, trash: (await states()).trash };
 

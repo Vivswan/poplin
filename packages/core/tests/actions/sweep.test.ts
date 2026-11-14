@@ -14,6 +14,7 @@ import { ADMIN, DAY, file, made, makeWorld, NOW, OWNER, type World } from "./sup
 
 const HOUR = 3_600_000;
 const PAGE = { path: "index.html", size: 4, content_type: "text/html" };
+const ONE_REMOVAL = 15;
 
 /** Begin a publish of one four-byte page and send it; answers the upload's id. */
 async function staged(world: World, asked: object): Promise<string> {
@@ -25,7 +26,7 @@ async function staged(world: World, asked: object): Promise<string> {
   return begun.upload.id;
 }
 
-/** Run a whole walk, step after step, and answer what each step did to the sites. The last step is the one over the uploads. */
+/** Run a whole walk, step after step, and answer what each step did to the sites. The last two steps are the ones over the uploads and over the leftovers. */
 async function walk(world: World, limit: number): Promise<unknown[]> {
   const steps: unknown[] = [];
   let from: Parameters<typeof sweepExpired>[2]["from"];
@@ -41,7 +42,89 @@ async function walk(world: World, limit: number): Promise<unknown[]> {
   return steps;
 }
 
+/** Make every list page of the store hold one object, so one removal, which walks 15 pages, takes `ONE_REMOVAL` files from a folder. */
+function shortPages(world: World): void {
+  const list = world.install.store.list.bind(world.install.store);
+  spyOn(world.install.store, "list").mockImplementation((options) => list({ ...options, limit: 1 }));
+}
+
+/** Publish a site of `files` pages; answers its id. */
+async function sized(world: World, name: string, files: number): Promise<string> {
+  const pages = Array.from({ length: files }, (_, index) => file(index === 0 ? "index.html" : `page-${index}.html`, "page"));
+  const published = await publishSite(world.install, OWNER, { files: pages, name });
+  if (!published.ok) throw new Error(`the fixture site was refused: ${published.code}`);
+
+  return published.site.id;
+}
+
 describe("sweepExpired", () => {
+  // Drift: one removal reaches a bounded number of files; a site with more, whose row is gone, would keep the rest in the bucket for good unless a later walk came back for them.
+  test("a site removed with more files than one removal reaches is finished by the walks after it, and the answer names its prefix until then", async () => {
+    const world = await makeWorld({ trash_days: 1 });
+    const big = await sized(world, "big", 2 * ONE_REMOVAL + 5);
+    const old = await sized(world, "old", ONE_REMOVAL + 5);
+    const kept = await sized(world, "kept", 3);
+    await deleteSite(world.install, OWNER, { site: old });
+    shortPages(world);
+    const folderOf = async (count: number): Promise<string> => {
+      const folders = (await world.keys()).map((key) => key.split("/")[0] ?? "");
+
+      return `${folders.find((folder) => folders.filter((other) => other === folder).length === count)}/`;
+    };
+    const [bigPrefix, oldPrefix] = [await folderOf(2 * ONE_REMOVAL + 5), await folderOf(ONE_REMOVAL + 5)];
+
+    const removed = await deleteSite(world.install, OWNER, { site: big, forever: true });
+    const afterDelete = (await world.keys()).length;
+    world.clock.now = NOW + DAY;
+    const walks = [await walk(world, 10), await walk(world, 10), await walk(world, 10)];
+    const leftovers = await world.install.database.listLeftovers({ limit: 10 });
+
+    expect([removed.ok && removed.left, afterDelete]).toEqual([[bigPrefix], ONE_REMOVAL + 5 + ONE_REMOVAL + 5 + 3]);
+    expect(walks).toEqual([
+      [
+        [0, 0, []],
+        [0, 1, [oldPrefix]],
+        [0, 0, []],
+        [0, 0, [bigPrefix]],
+      ],
+      [
+        [0, 0, []],
+        [0, 0, []],
+        [0, 0, []],
+        [0, 0, []],
+      ],
+      [
+        [0, 0, []],
+        [0, 0, []],
+        [0, 0, []],
+        [0, 0, []],
+      ],
+    ]);
+    expect([leftovers, (await world.keys()).length, await getSite(world.install, ADMIN, kept)]).toMatchObject([{ folders: [] }, 3, { ok: true }]);
+  });
+
+  // Drift: a store that is down when a site is removed leaves every file behind; the folder is remembered with the row's removal, so the next walk needs no answer of the failed one.
+  test("files a failed removal left are removed by the next walk, a step of leftovers takes them a page at a time, and each is counted once it is empty", async () => {
+    const world = await makeWorld();
+    const sites = [await sized(world, "one", 2), await sized(world, "two", 2), await sized(world, "three", 2)];
+    world.faults.failRemoval = true;
+    for (const site of sites) await deleteSite(world.install, OWNER, { site, forever: true });
+
+    const down = await sweepExpired(world.install, ADMIN, { limit: 10, from: { leftovers: true } });
+    world.faults.failRemoval = false;
+    const first = await sweepExpired(world.install, ADMIN, { limit: 2, from: { leftovers: true } });
+    const rest = await sweepExpired(world.install, ADMIN, { limit: 2, from: first.ok ? first.next : undefined });
+    const again = await sweepExpired(world.install, ADMIN, { limit: 2, from: { leftovers: true } });
+
+    expect(down).toMatchObject({ ok: true, emptied: 0, left: [expect.any(String), expect.any(String), expect.any(String)] });
+    expect([first, rest, again]).toMatchObject([
+      { ok: true, emptied: 2, left: [], next: { leftovers: true } },
+      { ok: true, emptied: 1, left: [] },
+      { ok: true, emptied: 0, left: [] },
+    ]);
+    expect([rest.ok && rest.next, again.ok && again.next, await world.keys()]).toEqual([undefined, undefined, []]);
+  });
+
   // Drift: the sweep runs on a schedule with nobody watching; one that was not idempotent would trash or delete a little more on every run.
   test("a sweep trashes what has expired and deletes for good what has sat out its days in the trash, and a second sweep at once does nothing", async () => {
     const world = await makeWorld({ trash_days: 2 });
@@ -64,8 +147,10 @@ describe("sweepExpired", () => {
         [1, 0, []],
         [0, 1, []],
         [0, 0, []],
+        [0, 0, []],
       ],
       [
+        [0, 0, []],
         [0, 0, []],
         [0, 0, []],
         [0, 0, []],
@@ -109,6 +194,7 @@ describe("sweepExpired", () => {
       [0, 0, []],
       [0, 1, []],
       [0, 0, []],
+      [0, 0, []],
     ]);
     expect(trash).toMatchObject({ ok: true, sites: [{ state: "trash" }, { state: "trash" }, { state: "trash" }] });
     expect(await getSite(world.install, ADMIN, old)).toEqual({ ok: false, code: "not_found" });
@@ -131,6 +217,7 @@ describe("sweepExpired", () => {
     });
 
     expect(await walk(world, 10)).toEqual([
+      [0, 0, []],
       [0, 0, []],
       [0, 0, []],
       [0, 0, []],

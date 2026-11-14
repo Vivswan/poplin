@@ -51,7 +51,7 @@ const DONE = {
   trashed: "Moved to the trash.",
   restored: "Restored from the trash.",
   deleted: "Deleted forever.",
-  deleted_files_left: "Deleted forever, but some of its files could not be removed from the bucket.",
+  deleted_files_left: "Deleted forever. Its remaining files are being removed from the bucket.",
   allowed: "Allowed. The computer collects its token within a few seconds.",
   denied: "Denied. The computer was not logged in.",
   revoked: "Revoked. The token works nowhere now.",

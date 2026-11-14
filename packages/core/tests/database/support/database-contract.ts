@@ -573,6 +573,28 @@ function sites(label: string, makeDatabase: DatabaseFactory): void {
       expect((await database.createSite(draft(DOCS, "public"), BY_ADA)).kind).toBe("done");
     });
 
+    // Drift: the folder of a removed site is all that says files may still sit in the bucket; one that was not remembered would leave them there for good.
+    test("every site removed for good leaves its folder as a leftover until it is forgotten, and a site stored back into its folder takes it out", async () => {
+      const database = await opened(makeDatabase);
+      const sites = [await made(database, draft(REPORT)), await made(database, draft(REPORT)), await made(database, draft(DOCS))];
+      const folders = sites.map((site) => site.folder).sort();
+      const [first, second, third] = folders;
+      const before = await database.listLeftovers({ limit: 10 });
+      for (const site of sites) await database.deleteSite(site.id, BY_ADA);
+
+      const pages = [await database.listLeftovers({ limit: 2 }), await database.listLeftovers({ limit: 2, after: second })];
+      const back = sites.find((site) => site.folder === first);
+      if (back === undefined || second === undefined) throw new Error("the fixture sites are not there");
+
+      await database.importSite(back, BY_ADA);
+      await database.forgetLeftover(second);
+      await database.forgetLeftover(second);
+
+      expect([before, pages]).toEqual([{ folders: [] }, [{ folders: [first, second], next: second }, { folders: [third] }]] as never);
+      expect(await database.listLeftovers({ limit: 10 })).toEqual({ folders: [third] } as never);
+      await expect(database.listLeftovers({ limit: 0 })).rejects.toThrow(RangeError);
+    });
+
     test.each([
       ["never", NOW, true],
       [NOW + 1, NOW, true],

@@ -57,14 +57,17 @@ describe("deleteSite", () => {
     expect(await world.audit()).toEqual(["create", "create", "publish", "create", "trash", "delete", "delete", "create"]);
   });
 
-  // Drift: the row goes first, so files that cannot be removed are garbage nothing serves; the answer must name them or they are never found again.
-  test("a delete forever whose files cannot be removed still removes the row, and names the prefix that is left", async () => {
+  // Drift: the row goes first, so files that cannot be removed are garbage nothing serves; the answer must name them, and the folder must stay a leftover, or they are never found again.
+  test("a delete forever whose files cannot be removed still removes the row, names the prefix that is left, and keeps the folder as a leftover until its files are gone", async () => {
     const world = await makeWorld();
     const id = await made(world, OWNER, "report");
     const folder = (await world.keys())[0]?.split("/")[0];
+    const emptied = await made(world, OWNER, "notes");
+    await deleteSite(world.install, OWNER, { site: emptied, forever: true });
     world.faults.failRemoval = true;
 
     expect(await deleteSite(world.install, OWNER, { site: id, forever: true })).toMatchObject({ ok: true, left: [`${folder}/`] });
     expect(await getSite(world.install, ADMIN, id)).toEqual({ ok: false, code: "not_found" });
+    expect(await world.install.database.listLeftovers({ limit: 10 })).toEqual({ folders: [folder] } as never);
   });
 });

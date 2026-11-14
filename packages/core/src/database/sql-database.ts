@@ -12,7 +12,7 @@ import { type AuditAction, type AuditEntry, auditFromRow } from "../records/audi
 import { computerLoginFromRow } from "../records/computer-login";
 import { SETTING_CHANGES, SETTING_VALUES, type SettingValues } from "../records/settings";
 import { signingKeyFromRow, signingKeyToText } from "../records/secret";
-import { NEW_SITE, SITE_DETAILS, type Site, type SiteAccess, siteFromRow, siteToRow } from "../records/site";
+import { NEW_SITE, SITE_DETAILS, SITE_FOLDER, type Site, type SiteAccess, type SiteFolder, siteFromRow, siteToRow } from "../records/site";
 import { type SiteSize, sizeFromRow, type Totals, totalsFromRow } from "../records/sizes";
 import { mintSiteId, type SiteId } from "../sites/ids";
 import { tokenFromRow } from "../records/token";
@@ -24,6 +24,7 @@ import type {
   Database,
   Done,
   ExportPage,
+  LeftoversPage,
   LoginDecision,
   NewSite,
   NewUpload,
@@ -120,6 +121,12 @@ const AUDIT_DELETE = "INSERT INTO audit (at, actor, action, site_id, site_name, 
 
 /** The delete itself, only when its audit entry was written. */
 const DELETE_SITE = "DELETE FROM sites WHERE id = ?1 AND changes() = 1";
+
+/** A page of the leftovers in ascending order, from above folder `?1`. */
+const LIST_LEFTOVERS = "SELECT folder FROM leftovers WHERE folder > ?1 ORDER BY folder LIMIT ?2";
+
+/** The leftover of folder `?1`, forgotten. */
+const FORGET_LEFTOVER = "DELETE FROM leftovers WHERE folder = ?1";
 
 /** The next version number of a live site, set aside. */
 const RESERVE = "UPDATE sites SET next_version = next_version + 1 WHERE id = ?1 AND trashed = 0";
@@ -649,6 +656,22 @@ export class SqlDatabase implements Database {
     if (!changed(deleted)) return { kind: "not_found" };
 
     return done(before);
+  }
+
+  async listLeftovers(query: { readonly limit: number; readonly after?: SiteFolder }): Promise<LeftoversPage> {
+    requirePage(query.limit);
+
+    // One row more than the page shows whether another page follows.
+    const [listed] = await this.#driver.batch([sql(LIST_LEFTOVERS, query.after ?? "", query.limit + 1)]);
+    const folders = (listed?.rows ?? []).slice(0, query.limit).map((row) => v.parse(SITE_FOLDER, row.folder));
+    const last = folders.at(-1);
+    if (last === undefined || (listed?.rows.length ?? 0) <= query.limit) return { folders };
+
+    return { folders, next: last };
+  }
+
+  async forgetLeftover(folder: SiteFolder): Promise<void> {
+    await this.#driver.batch([sql(FORGET_LEFTOVER, folder)]);
   }
 
   async reserveVersion(id: SiteId): Promise<Reserved | Refused<"not_found" | "in_trash">> {

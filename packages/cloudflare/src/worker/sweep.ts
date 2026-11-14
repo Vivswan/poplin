@@ -1,9 +1,10 @@
 // One scheduled run of the sweep: as many steps of core's walk as fit one invocation's calls.
 //
-//   one step, at most      1 settings read + 1 listing + 5 x (1 read + 1 change + 30 bucket calls) + 1 removal of old logins = 163 calls
-//   one run, at most       290 calls: a step starts only while 163 more still fit
+//   one step, at most      1 settings read + 1 listing + 5 x (1 read + 1 change + 30 bucket calls + 1 leftover forgotten) = 167 calls
+//   a step of leftovers    1 settings read + 1 listing + 5 x (30 bucket calls + 1 leftover forgotten) + 1 removal of old logins = 158 calls
+//   one run, at most       290 calls: a step starts only while 167 more still fit
 //   one invocation         300 calls: an instance that starts in it makes up to 10 before the run
-//   a run with nothing to remove costs 7 calls a step, so it looks at about 95 sites or uploads
+//   a run with nothing to remove costs 7 calls a step, so it looks at about 90 sites or uploads
 //
 // Cloudflare's Free plan gives one invocation 1,000 calls to its own services and a cron run 10 ms of CPU; the run stays under a third of the first, since the second is the tighter one.
 
@@ -14,13 +15,13 @@ import { SWEEPER, sweepExpired } from "@poplin/core/src/actions/sweep";
 const STEP_ITEMS = 5;
 
 /** The most database and bucket calls one step can make, as the table above adds them up. */
-const STEP_CALLS = 163;
+const STEP_CALLS = 167;
 
 /** The most database and bucket calls one run makes, which leaves 10 of an invocation's 300 to an instance that starts first. */
 const RUN_CALLS = 290;
 
-/** The three parts of the walk, in its own order: the sites, the trash, the uploads. */
-const PARTS: readonly Place[] = [{ trash: false }, { trash: true }, { uploads: true }];
+/** The four parts of the walk, in its own order: the sites, the trash, the uploads, the leftovers. */
+const PARTS: readonly Place[] = [{ trash: false }, { trash: true }, { uploads: true }, { leftovers: true }];
 
 /** How long one part keeps the first turn; the cron trigger fires this often, so each run without a place to resume begins with the next part. */
 const TURN_MS = 15 * 60 * 1000;

@@ -210,9 +210,10 @@ describe("the sweep", () => {
     const waiting = await begun(world);
     world.clock.now = NOW + 10 * MINUTE;
 
-    const steps = [await sweepExpired(world.install, ADMIN, { limit: 10 }), await sweepExpired(world.install, ADMIN, { limit: 10, from: { trash: true } }), await sweepExpired(world.install, ADMIN, { limit: 10, from: { uploads: true } })];
+    const steps = [];
+    for (const from of [{ trash: false }, { trash: true }, { uploads: true }, { leftovers: true }] as const) steps.push(await sweepExpired(world.install, ADMIN, { limit: 10, from }));
 
-    expect(steps.map((step) => (step.ok ? step.logins : step.code))).toEqual([0, 0, 1]);
+    expect(steps.map((step) => (step.ok ? step.logins : step.code))).toEqual([0, 0, 0, 1]);
     expect([await redeemLogin(world.install, { secret: old.secret }), await redeemLogin(world.install, { secret: waiting.secret })]).toEqual([
       { ok: true, state: "expired" },
       { ok: true, state: "pending" },

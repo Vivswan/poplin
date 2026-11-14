@@ -14,6 +14,7 @@ import type {
   Database,
   Done,
   ExportPage,
+  LeftoversPage,
   LoginDecision,
   NewSite,
   NewUpload,
@@ -35,7 +36,7 @@ import type {
 import type { PublicName, SiteName } from "../../src/names/names";
 import type { AuditAction, AuditEntry } from "../../src/records/audit";
 import { SETTING_CHANGES, SETTING_VALUES, type SettingValues } from "../../src/records/settings";
-import { NEW_SITE, SITE_DETAILS, type Site, type SiteAccess, siteToRow } from "../../src/records/site";
+import { NEW_SITE, SITE_DETAILS, type Site, type SiteAccess, type SiteFolder, siteToRow } from "../../src/records/site";
 import type { SiteSize, Totals } from "../../src/records/sizes";
 import { type ManifestFile, manifestFromText, type Upload, type UploadId, uploadFromRow } from "../../src/records/upload";
 import { mintSiteId, type SiteId } from "../../src/sites/ids";
@@ -144,6 +145,8 @@ class MemoryDatabase implements Database {
   readonly #requests = new Map<string, Map<string, number>>();
 
   readonly #uploads = new Map<UploadId, { readonly upload: Upload; readonly manifest: readonly ManifestFile[] }>();
+
+  readonly #leftovers = new Set<SiteFolder>();
 
   readonly #mintId: () => SiteId;
 
@@ -282,9 +285,25 @@ class MemoryDatabase implements Database {
     if (kept === undefined) return { kind: "not_found" };
 
     this.#sites.delete(id);
+    this.#leftovers.add(kept.fields.folder);
     this.#log(signed, "delete", kept.fields, {});
 
     return { kind: "done", site: siteOf(kept) };
+  }
+
+  async listLeftovers(query: { readonly limit: number; readonly after?: SiteFolder }): Promise<LeftoversPage> {
+    requirePage(query.limit);
+
+    const listed = [...this.#leftovers].filter((folder) => query.after === undefined || folder > query.after).sort();
+    const folders = listed.slice(0, query.limit);
+    const last = folders.at(-1);
+    if (last === undefined || listed.length <= query.limit) return { folders };
+
+    return { folders, next: last };
+  }
+
+  async forgetLeftover(folder: SiteFolder): Promise<void> {
+    this.#leftovers.delete(folder);
   }
 
   async reserveVersion(id: SiteId): Promise<Reserved | Refused<"not_found" | "in_trash">> {
@@ -764,6 +783,8 @@ class MemoryDatabase implements Database {
 
   /** Keep a site as it is after a change, with the audit entry of that change. */
   #changed(kept: Kept, signed: Signed, action: AuditAction, detail: Readonly<Record<string, unknown>>): Done {
+    // A folder a site holds is no leftover.
+    this.#leftovers.delete(kept.fields.folder);
     this.#sites.set(kept.fields.id, kept);
     this.#log(signed, action, kept.fields, detail);
 

@@ -384,6 +384,8 @@ function queryPlans(label: string, makeDriver: DriverFactory): void {
       await database.decideComputerLogin(denied.code, { state: "denied", by: ADMIN, at: NOW + 1 });
       const redeemed = await database.redeemComputerLogin(login.id, (await mintToken({ scope: "publisher", note: "laptop", now: NOW + 2 })).record);
       const swept = await database.sweepComputerLogins(denied.expiresAt);
+      await database.listLeftovers({ limit: 10, after: gone.folder });
+      await database.forgetLeftover(gone.folder);
       await storedVersion(driver);
 
       const scans: string[] = [];

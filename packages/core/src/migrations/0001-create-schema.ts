@@ -10,6 +10,7 @@
 // request_counts   one row per UTC day and site, and one more per day under the empty site for all sites together
 // uploads      the staged publishes: begun, taking files, then live or given up
 // logins       the computers asking to be logged in: pending, then allowed or denied, and gone once used or ten minutes old
+// leftovers    the folders of removed sites, each until its files are gone from the bucket
 
 import type { Step } from "./migrate";
 
@@ -147,6 +148,22 @@ CREATE TABLE logins (
   CHECK (expires_at > created_at)
 ) STRICT`;
 
+/** The folder of every site removed for good, kept until the bucket holds nothing under it. */
+const LEFTOVERS = `
+CREATE TABLE leftovers (
+  folder TEXT NOT NULL PRIMARY KEY
+) STRICT, WITHOUT ROWID`;
+
+/** A site that is removed leaves its folder to be emptied, whatever removed it. */
+const REMOVED_SITE_LEAVES_ITS_FOLDER = `
+CREATE TRIGGER sites_delete_leaves_the_folder AFTER DELETE ON sites
+BEGIN INSERT OR IGNORE INTO leftovers (folder) VALUES (OLD.folder); END`;
+
+/** A folder a site holds is no leftover, so the files of a site stored back into its folder stay. */
+const SITE_KEEPS_ITS_FOLDER = `
+CREATE TRIGGER sites_insert_keeps_the_folder AFTER INSERT ON sites
+BEGIN DELETE FROM leftovers WHERE folder = NEW.folder; END`;
+
 /** A public name is an address of its own, so no new site may make a name and an id match. */
 const NAME_IS_NO_ID_ON_INSERT = `
 CREATE TRIGGER sites_insert_keeps_names_and_ids_apart BEFORE INSERT ON sites
@@ -229,7 +246,7 @@ BEGIN SELECT RAISE(ABORT, 'the audit log is append-only'); END`;
 /** Creates every table, index, and trigger of the first schema. */
 export const CREATE_SCHEMA: Step = {
   number: 1,
-  description: "create the sites, versions, tokens, settings, secrets, totals, audit, request_counts, uploads, and logins tables",
+  description: "create the sites, versions, tokens, settings, secrets, totals, audit, request_counts, uploads, logins, and leftovers tables",
   statements: [
     SITES,
     VERSIONS,
@@ -242,6 +259,7 @@ export const CREATE_SCHEMA: Step = {
     REQUEST_COUNTS,
     UPLOADS,
     LOGINS,
+    LEFTOVERS,
     "CREATE INDEX sites_by_change ON sites (trashed, updated_at DESC, id DESC)",
     "CREATE INDEX sites_by_owner ON sites (owner, trashed, updated_at DESC, id DESC)",
     "CREATE INDEX tokens_by_creation ON tokens (created_at DESC, id DESC)",
@@ -254,6 +272,8 @@ export const CREATE_SCHEMA: Step = {
     LIVE_VERSION_IS_KEPT,
     LIVE_VERSION_STAYS,
     FOLDER_NEVER_CHANGES,
+    REMOVED_SITE_LEAVES_ITS_FOLDER,
+    SITE_KEEPS_ITS_FOLDER,
     TOTALS_COUNT_A_NEW_SITE,
     TOTALS_FORGET_A_DELETED_SITE,
     TOTALS_FOLLOW_THE_TRASH,
