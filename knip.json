@@ -5,6 +5,10 @@
     ".": {
       "entry": [".github/scripts/release-pipeline.ts"]
     },
+    "packages/core": {
+      "includeEntryExports": true,
+      "ignoreIssues": { "src/actions.ts": ["exports"] }
+    },
     "packages/worker": {
       "ignoreDependencies": ["cloudflare"]
     }

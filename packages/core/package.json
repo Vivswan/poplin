@@ -1,5 +1,13 @@
 {
   "name": "@poplin/core",
   "private": true,
-  "type": "module"
+  "type": "module",
+  "exports": {
+    "./actions": "./src/actions.ts",
+    "./src/storage/storage": "./src/storage/storage.ts",
+    "./tests/storage-contract": "./tests/storage-contract.ts"
+  },
+  "dependencies": {
+    "valibot": "1.5.0"
+  }
 }
