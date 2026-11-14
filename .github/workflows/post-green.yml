@@ -1,0 +1,35 @@
+# Runs this repository's own work after every green push to main (the contract is the fleet's docs/all-green.md,
+# "After the gate").
+#
+# This file is repo-owned, seeded once by the fleet sync and never overwritten by a later sync.
+#
+# Every green push to main gets its own run of this hook, and the runs of neighbouring commits overlap, so a job
+# here may finish after a newer commit's did.
+#
+# Replace the no-op job with this repository's work, since it costs a runner allocation on every green push until
+# you do.
+#
+# A job acts on the repository's current state, idempotently, never on "what this commit changed" or "the newest
+# commit".
+#
+# A concurrency group on a job is keyed per commit (inputs.sha), since a shared lane replaces the pending run and
+# the release leg needs this hook.
+
+name: Post Green
+
+on:
+  workflow_call:
+    inputs:
+      sha:
+        description: The green main commit the calling run judged.
+        required: true
+        type: string
+
+jobs:
+  noop:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - env:
+          SHA: ${{ inputs.sha }}
+        run: echo "post-green hook for $SHA - nothing configured"

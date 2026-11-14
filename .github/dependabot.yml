@@ -1,0 +1,34 @@
+# This file is managed by Vivswan/repo-platform.
+# Local edits are replaced on the next sync.
+
+version: 2
+updates:
+  - package-ecosystem: "github-actions"
+    # `/` alone reads .github/workflows, so the composite actions are listed too. Dependabot expands the glob with
+    # Ruby's Dir.glob over the checkout: a match with no YAML file is skipped, a glob matching nothing adds no directory.
+    directories:
+      - "/"
+      - "/.github/actions/*"
+    # One PR per cycle for all action bumps, not one PR per action.
+    groups:
+      actions:
+        patterns: ["*"]
+    schedule:
+      interval: "monthly"
+    cooldown:
+      default-days: 7
+    # Conventional PR titles so the commit-names/pr-title gates pass; action
+    # bumps are workflow changes, hence ci (package-manifest entries use build).
+    commit-message:
+      prefix: "ci"
+      include: "scope"
+
+  - package-ecosystem: "bun"
+    directory: "/"
+    schedule:
+      interval: "monthly"
+    cooldown:
+      default-days: 7
+    commit-message:
+      prefix: "build"
+      include: "scope"
