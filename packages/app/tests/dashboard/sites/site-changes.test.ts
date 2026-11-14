@@ -2,6 +2,7 @@ import { expect, test } from "bun:test";
 
 import { publishSite } from "@poplin/core/src/actions/publish";
 import { getSite } from "@poplin/core/src/actions/show";
+import { settingsToText } from "@poplin/core/src/records/settings";
 import type { Site } from "@poplin/core/src/records/site";
 
 import { landing, ORIGIN, type Opened, openDashboard } from "../support/install";
@@ -22,8 +23,8 @@ async function shown(opened: Opened, reference: string): Promise<Extract<Awaited
 }
 
 /** The files of a site that one request does not copy whole. */
-function sixteenPages(): { path: string; size: number; contentType: string; open: () => ReadableStream<Uint8Array> }[] {
-  return Array.from({ length: 16 }, (_page, at) => {
+function twentyPages(): { path: string; size: number; contentType: string; open: () => ReadableStream<Uint8Array> }[] {
+  return Array.from({ length: 20 }, (_page, at) => {
     const bytes = new TextEncoder().encode(`<p>${at}</p>`);
 
     return { path: at === 0 ? "index.html" : `pages/${at}.html`, size: bytes.length, contentType: "text/html", open: () => new Blob([bytes]).stream() };
@@ -44,32 +45,29 @@ test("the settings form renames a site when its name field changes, lands on the
   expect((await opened.install.database.listAudit({ limit: 10 })).map((entry) => entry.action).filter((action) => action === "details")).toHaveLength(1);
 });
 
-// Drift: one request copies 15 files; a form that showed a half copy as a site, or lost the upload between requests, would leave a broken site or a copy nobody can finish.
+// Drift: one request copies 16 files of a small site; a form that showed a half copy as a site, or lost the upload between requests, would leave a broken site or a copy nobody can finish.
 test("the duplicate form makes a private copy and lands on it; a site of more files than one request copies comes back to its own page until the copy is whole", async () => {
   const opened = await openDashboard();
-  const published = await publishSite(opened.install, { scope: "admin", holder: opened.owner }, { name: "report", access: "public", files: sixteenPages() });
+  const published = await publishSite(opened.install, { scope: "admin", holder: opened.owner }, { name: "report", access: "public", files: twentyPages() });
   if (!published.ok) throw new Error(`the fixture site was refused: ${published.code}`);
 
   const { site } = published;
   const path = `/sites/report--${site.id}`;
 
   const begun = await opened.post(`${path}/duplicate`, { name: "report-draft" });
-  const [, upload = ""] = new RegExp(`^${path}\\?done=copying&copy=([0-9a-z]{16})&copied=15&files=16$`).exec(begun.headers.get("Location") ?? "") ?? [];
+  const [, upload = ""] = new RegExp(`^${path}\\?done=copying&copy=([0-9a-z]{16})&copied=16&files=20$`).exec(begun.headers.get("Location") ?? "") ?? [];
   const waiting = await landing(opened, begun);
   const sitesMeanwhile = (await opened.install.database.readTotals()).sites;
   const finished = await opened.post(`${path}/duplicate`, { upload });
   const [, label = ""] = /^\/sites\/(report-draft--[0-9a-z]{12})\?done=duplicated$/.exec(finished.headers.get("Location") ?? "") ?? [];
 
   expect(upload).not.toBe("");
-  expect([NOTICE.exec(waiting)?.[2], waiting.includes(`name="upload" value="${upload}"`), waiting.includes("Copying: 15 of 16 files."), sitesMeanwhile]).toEqual([
-    "The copy is not finished: one request copies 15 files. Press Keep copying until it is.",
-    true,
-    true,
-    1,
-  ]);
+  expect([NOTICE.exec(waiting)?.[2], waiting.includes(`name="upload" value="${upload}"`), sitesMeanwhile]).toEqual(["The copy is not finished. Press Keep copying until it is.", true, 1]);
+  expect(waiting).toContain("<p>Copied 16 of 20 files: 4 are left. One press of Keep copying copies up to 16 more. The copy is no site until every file is there.</p>");
+  expect(waiting).toContain(`cancel this copy and run <code>poplin duplicate report--${site.id}</code> in a terminal`);
   expect(NOTICE.exec(await landing(opened, finished))?.[2]).toBe("This is the copy: a new private site with its own address. The site it was copied from is unchanged.");
   expect([await shown(opened, label), await shown(opened, site.id)]).toMatchObject([
-    { name: "report-draft", access: "private", public_name: null, files: 16, live_version: 1 },
+    { name: "report-draft", access: "private", public_name: null, files: 20, live_version: 1 },
     { id: site.id, access: "public", public_name: "report" },
   ]);
   expect((await opened.audit()).slice(0, 2).map((entry) => entry.action)).toEqual(["duplicate", "create"]);
@@ -78,7 +76,7 @@ test("the duplicate form makes a private copy and lands on it; a site of more fi
 // Drift: a copy that is not finished holds a place under the limits for a day; a page that offers no way to give it up leaves a copy begun by mistake to count until then.
 test("the page of a copy in progress offers to cancel it: the copy's files go, no site is made, and the copy cannot be gone on with", async () => {
   const opened = await openDashboard();
-  const published = await publishSite(opened.install, { scope: "admin", holder: opened.owner }, { name: "report", files: sixteenPages() });
+  const published = await publishSite(opened.install, { scope: "admin", holder: opened.owner }, { name: "report", files: twentyPages() });
   if (!published.ok) throw new Error(`the fixture site was refused: ${published.code}`);
 
   const path = `/sites/report--${published.site.id}`;
@@ -95,6 +93,34 @@ test("the page of a copy in progress offers to cancel it: the copy's files go, n
   expect([cancelled.headers.get("Location"), NOTICE.exec(await landing(opened, cancelled))?.[2]]).toEqual([`${path}?done=copy_cancelled`, "The copy was cancelled and its files removed. No site was made."]);
   expect([again.headers.get("Location"), twice.headers.get("Location")]).toEqual([`${path}?refused=not_found&about=upload`, `${path}?done=copy_cancelled`]);
   expect([(await opened.install.store.list({ prefix: "" })).objects.length, (await opened.install.database.readTotals()).sites]).toEqual([keys.objects.length, 1]);
+});
+
+// Drift: both refusals reach the page as a code another refusal shares; worded by the code alone, a copy over a limit read as a form that was too large, and a copy that ran out as a site that is not there.
+test("a copy the install has no room for names the limit it does not fit, and a copy gone on with after its day says that it cannot be", async () => {
+  const opened = await openDashboard();
+  const published = await publishSite(opened.install, { scope: "admin", holder: opened.owner }, { name: "report", files: twentyPages() });
+  if (!published.ok) throw new Error(`the fixture site was refused: ${published.code}`);
+
+  const path = `/sites/report--${published.site.id}`;
+  const begun = await opened.post(`${path}/duplicate`, {});
+  const upload = new URL(begun.headers.get("Location") ?? "", ORIGIN).searchParams.get("copy") ?? "";
+  opened.clock.now += 25 * 3_600_000;
+  const late = await opened.post(`${path}/duplicate`, { upload });
+
+  const stored = await opened.install.database.readSettings();
+  if (stored === undefined) throw new Error("the settings are not stored");
+
+  await opened.post("/settings/save", { ...settingsToText(stored), max_total_size: `${published.site.bytes + 1}B` });
+  const full = await opened.post(`${path}/duplicate`, {});
+
+  expect([late.headers.get("Location"), NOTICE.exec(await landing(opened, late))?.[2]]).toEqual([
+    `${path}?refused=not_found&about=upload`,
+    "That copy can no longer be gone on with: it was cancelled, or its day to finish ran out. Unless the list of sites shows it, duplicate the site again.",
+  ]);
+  expect([full.headers.get("Location"), NOTICE.exec(await landing(opened, full))?.[2]]).toEqual([
+    `${path}?refused=too_large&about=max_total_size`,
+    "The copy does not fit under max_total_size, which bounds all sites together, the trash and unfinished copies included. No copy was made.",
+  ]);
 });
 
 test("each form of a live site does its change through the action, writes the action's audit entry, and lands on a page that says so", async () => {

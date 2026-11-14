@@ -21,7 +21,6 @@ const sources = fc.record({
   calls: fc.integer({ min: 1, max: 12 }),
 });
 
-/** A file of a publish with the path and the media type a caller may declare: any text a store keeps, short or long. */
 const declared = fc.record({
   name: fc.string({ unit: "grapheme", minLength: 1, maxLength: 12 }).filter((name) => checkFilePath(`files/${name}`).ok),
   type: fc.string({ unit: "grapheme", minLength: 1, maxLength: 40 }).filter(isContentType),

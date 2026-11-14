@@ -1,5 +1,6 @@
 // One site's own page: what it is, every setting, and every change the owner can make to it.
 
+import { copiesPerCall } from "@poplin/core/src/actions/duplicate";
 import { getSite } from "@poplin/core/src/actions/show";
 import { showBytes } from "@poplin/core/src/records/settings";
 import { parseUploadId } from "@poplin/core/src/records/upload";
@@ -125,26 +126,37 @@ ${others.map((version) => html`<option value="${version.number}">v${version.numb
 </form>`;
 }
 
-/** The form that begins a copy; or, on the page a copy in progress came back to, the form that goes on with it and the one that cancels it. */
-function duplicateForm(visit: Visit, site: Shown): Html {
-  const upload = parseUploadId(visit.url.searchParams.get("copy") ?? "");
-  const [copied, files] = [visit.url.searchParams.get("copied") ?? "", visit.url.searchParams.get("files") ?? ""];
+/** How far a copy in progress is, and what one more press does. */
+function copyProgress(copied: number, files: number): Html {
+  const left = Math.max(0, files - copied);
+  if (left === 0) return html`<p>Every file is copied. Press Keep copying once more to make the site.</p>`;
 
-  if (upload !== undefined && COUNT_PATTERN.test(copied) && COUNT_PATTERN.test(files)) {
-    return html`<h2>Duplicate</h2>
+  return html`<p>Copied ${copied} of ${files} files: ${left} are left. One press of Keep copying copies up to ${copiesPerCall(files)} more. The copy is no site until every file is there.</p>`;
+}
+
+/** The form that goes on with a copy in progress, and the one that cancels it. */
+function copyingForms(visit: Visit, site: Shown, copy: { readonly upload: string; readonly copied: number; readonly files: number }): Html {
+  return html`<h2>Duplicate</h2>
 <form method="post" action="${action(site, "duplicate")}">
 ${csrfField(visit)}
-<input type="hidden" name="upload" value="${upload}">
-<p>Copying: ${copied} of ${files} files. The copy is no site until every file is there.</p>
+<input type="hidden" name="upload" value="${copy.upload}">
+${copyProgress(copy.copied, copy.files)}
 <button type="submit">Keep copying</button>
 </form>
 <form method="post" action="${action(site, "cancel-copy")}">
 ${csrfField(visit)}
-<input type="hidden" name="upload" value="${upload}">
-<p>A copy that is not finished is removed after a day. Cancel removes it now.</p>
+<input type="hidden" name="upload" value="${copy.upload}">
+<p>A copy that is not finished is removed after a day. Cancel removes it now. To copy a large site without pressing, cancel this copy and run <code>poplin duplicate ${site.label}</code> in a terminal.</p>
 <button type="submit">Cancel the copy</button>
 </form>`;
-  }
+}
+
+/** The form that begins a copy; or, on the page a copy in progress came back to, the forms of that copy. */
+function duplicateForm(visit: Visit, site: Shown): Html {
+  const upload = parseUploadId(visit.url.searchParams.get("copy") ?? "");
+  const [copied, files] = [visit.url.searchParams.get("copied") ?? "", visit.url.searchParams.get("files") ?? ""];
+
+  if (upload !== undefined && COUNT_PATTERN.test(copied) && COUNT_PATTERN.test(files)) return copyingForms(visit, site, { upload, copied: Number(copied), files: Number(files) });
 
   return html`<h2>Duplicate</h2>
 <form method="post" action="${action(site, "duplicate")}">

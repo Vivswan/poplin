@@ -10,7 +10,7 @@ import type { listAudit } from "@poplin/core/src/actions/audit-log";
 import type { decideLogin, showLogin } from "@poplin/core/src/actions/computer-logins";
 import type { changeConfig, readConfig } from "@poplin/core/src/actions/config";
 import type { deleteSite } from "@poplin/core/src/actions/delete";
-import { COPIES_PER_CALL, type duplicateSite } from "@poplin/core/src/actions/duplicate";
+import type { duplicateSite } from "@poplin/core/src/actions/duplicate";
 import type { listSites } from "@poplin/core/src/actions/list";
 import type { listTokens } from "@poplin/core/src/actions/manage-tokens";
 import type { newLink } from "@poplin/core/src/actions/new-link";
@@ -53,6 +53,19 @@ const REFUSALS: Readonly<Record<ActionCode | OwnCode, string>> = {
   no_such_token: "No token has that id. It may be revoked already.",
 };
 
+/** What a code says when what it is about gives it another meaning: `too_large` is a form's own refusal, and about a limit a copy that does not fit it; `not_found` is a site, and about an upload a copy. `other` stands for any limit not named. */
+const ABOUT_REFUSALS: Readonly<Record<string, Readonly<Record<string, string>>>> = {
+  too_large: {
+    max_total_size: "The copy does not fit under max_total_size, which bounds all sites together, the trash and unfinished copies included. No copy was made.",
+    max_site_size: "The copy does not fit under max_site_size: the site is larger than one site may be now. No copy was made.",
+    max_pending_uploads: "Too many copies and uploads are unfinished at once. Finish or cancel one; an unfinished one is removed about a day after it began. No copy was made.",
+    other: "The copy does not fit a limit of the install: {about}. No copy was made.",
+  },
+  not_found: {
+    upload: "That copy can no longer be gone on with: it was cancelled, or its day to finish ran out. Unless the list of sites shows it, duplicate the site again.",
+  },
+};
+
 /** What each finished change says. */
 const DONE = {
   saved: "Saved.",
@@ -62,7 +75,7 @@ const DONE = {
   trashed: "Moved to the trash.",
   restored: "Restored from the trash.",
   duplicated: "This is the copy: a new private site with its own address. The site it was copied from is unchanged.",
-  copying: `The copy is not finished: one request copies ${COPIES_PER_CALL} files. Press Keep copying until it is.`,
+  copying: "The copy is not finished. Press Keep copying until it is.",
   copy_cancelled: "The copy was cancelled and its files removed. No site was made.",
   copy_cancelled_files_left: "The copy was cancelled, and no site was made. Its remaining files are being removed from the bucket.",
   deleted: "Deleted forever.",
@@ -115,20 +128,28 @@ export interface Notice {
   readonly text: string;
 }
 
+/** The sentence of a code whose meaning hangs on what it is about; none for a code that has one meaning, or is about nothing. */
+function sentenceAbout(code: string, about: string | undefined): string | undefined {
+  if (about === undefined || !Object.hasOwn(ABOUT_REFUSALS, code)) return undefined;
+
+  const sentences = ABOUT_REFUSALS[code] ?? {};
+
+  return Object.hasOwn(sentences, about) ? sentences[about] : sentences["other"];
+}
+
 /**
  * The sentence of a refusal code.
  *
- * @param about - the field or setting the code is about; anything that is no plain name is left out
- * @returns the table's sentence, or one general sentence for a code the table does not hold
+ * @param about - the field, setting, or limit the code is about; anything that is no plain name is left out
+ * @returns the table's sentence, the one for what the code is about where that changes its meaning, or one general sentence for a code the table does not hold
  */
 export function refusalSentence(code: string, about?: string): string {
   if (!Object.hasOwn(REFUSALS, code)) return UNKNOWN_REFUSAL;
 
-  const sentence = REFUSALS[code as keyof typeof REFUSALS];
+  const named = about !== undefined && ABOUT_PATTERN.test(about) ? about : undefined;
+  const sentence = sentenceAbout(code, named) ?? REFUSALS[code as keyof typeof REFUSALS];
 
-  const named = about !== undefined && ABOUT_PATTERN.test(about) ? about : NO_ABOUT;
-
-  return sentence.replace("{about}", named);
+  return sentence.replace("{about}", named ?? NO_ABOUT);
 }
 
 /**

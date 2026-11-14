@@ -7,6 +7,7 @@ import { publishSite } from "../../src/actions/publish";
 import { getSite } from "../../src/actions/show";
 import { uploadFile } from "../../src/actions/upload-file";
 import type { ObjectKey } from "../../src/storage/storage";
+import { BunSqliteDriver } from "../database/support/bun-sqlite-driver";
 import { ADMIN, file, made, makeWorld, OWNER, STRANGER, type World } from "./support/actions-fixture";
 
 /** A site of five files, each of another media type than the manifest of a copy names. */
@@ -85,6 +86,59 @@ describe("duplicateSite", () => {
     if (!source.ok) throw new Error(`the source was refused: ${source.code}`);
 
     expect(await duplicateSite(world.install, OWNER, { site: source.site.id }, 1)).toMatchObject({ ok: true, site: null, copy: { copied: 1, files: 1_601 } });
+  });
+
+  // Drift: a host ends a request that makes more than 50 calls to the database and the store; a call that copies more files than fit leaves a copy nobody can finish.
+  test.each([
+    [1, 1],
+    [300, 19],
+    [1_001, 49],
+  ])("a copy of %i files is whole after %i calls, none of which makes more than 50 calls to the database and the store", async (count, calls) => {
+    const world = await makeWorld();
+    const pages = Array.from({ length: count - 1 }, (_page, at) => file(`pages/${at}.html`, "x"));
+    const source = await publishSite(world.install, OWNER, { name: "report", files: [file("index.html", "<p>home</p>"), ...pages] });
+    if (!source.ok) throw new Error(`the source was refused: ${source.code}`);
+
+    const budget = { left: 0 };
+    const spend = (): void => {
+      budget.left -= 1;
+      if (budget.left < 0) throw new Error("the call made more than 50 calls");
+    };
+    const store = new Proxy(world.install.store, {
+      get(target, name) {
+        const method: unknown = Reflect.get(target, name);
+        if (typeof method !== "function") return method;
+
+        return (...asked: unknown[]): unknown => {
+          spend();
+
+          return method.apply(target, asked);
+        };
+      },
+    });
+    const batch = BunSqliteDriver.prototype.batch;
+    const batches = spyOn(BunSqliteDriver.prototype, "batch").mockImplementation(function counted(this: BunSqliteDriver, statements) {
+      spend();
+
+      return batch.call(this, statements);
+    });
+    let upload: string | undefined;
+    let made = 0;
+
+    try {
+      for (let site: unknown = null; site === null; made += 1) {
+        budget.left = 50;
+        const step = await duplicateSite({ ...world.install, store }, OWNER, upload === undefined ? { site: source.site.id } : { site: source.site.id, upload });
+        if (!step.ok) throw new Error(`a step was refused: ${step.code}`);
+
+        upload = step.copy.upload;
+        site = step.site;
+      }
+    } finally {
+      batches.mockRestore();
+    }
+
+    expect(made).toBe(calls);
   });
 
   // Drift: a duplicate is a new site made from another's files, so it must pass every door a publish and a read pass: ownership, the trash, and the install's limits.
