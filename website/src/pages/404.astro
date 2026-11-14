@@ -1,0 +1,11 @@
+---
+import Page from "../layouts/Page.astro";
+import { sitePath } from "../lib/paths.ts";
+---
+
+<Page title="Page not found: poplin" description="This address has no page on the poplin website." path="404.html">
+  <section class="page-head wrap">
+    <h1>No page at this address.</h1>
+    <p class="lede">The <a href={sitePath()}>home page</a> has the whole picture.</p>
+  </section>
+</Page>
