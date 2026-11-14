@@ -1,9 +1,9 @@
 import { describe, expect, test } from "bun:test";
-import { foreignWildcards, otherHostnames, planDns, syncDns } from "../src/cloudflare/dns";
+import { planDns, refusedRecords, sharesZone, syncDns } from "../src/cloudflare/dns";
 import type { DomainLayout } from "../src/cloudflare/layout";
 import { reportOf } from "../src/cloudflare/sync";
 import { page, reply, withFake } from "./fake-cloudflare";
-import { BARE_GALLERY, NO_GALLERY, NO_PREFIX, PER_SITE, PREFIXED, WILDCARD } from "./layouts";
+import { OTHER_SUFFIX, SUFFIXED } from "./layouts";
 
 const MARK = "managed by poplin";
 
@@ -24,6 +24,10 @@ function foreign(id: string, name: string, type: string, comment?: string): Row 
   return { id, name, type, content: "192.0.2.1", proxied: false, comment };
 }
 
+function proxied(id: string, name: string, type: string): Row {
+  return { ...foreign(id, name, type), proxied: true };
+}
+
 const OTHERS: readonly Row[] = [
   foreign("f1", "www.example.com", "A"),
   foreign("f2", "mail.example.com", "CNAME", "the mail host"),
@@ -36,17 +40,16 @@ const OTHERS: readonly Row[] = [
 
 describe("planDns", () => {
   const fresh: readonly { readonly name: string; readonly layout: DomainLayout; readonly created: readonly string[] }[] = [
-    { name: "domain", layout: PREFIXED, created: ["*.example.com", "admin.example.com", "pages.example.com"] },
-    { name: "domain, gallery off", layout: NO_GALLERY, created: ["*.example.com", "admin.example.com"] },
-    { name: "domain, gallery on the bare domain", layout: BARE_GALLERY, created: ["*.example.com", "admin.example.com", "example.com"] },
-    { name: "domain, no prefix", layout: NO_PREFIX, created: ["*.example.com", "admin.example.com", "pages.example.com"] },
-    { name: "subdomain-per-site", layout: PER_SITE, created: ["*.pages.example.com", "admin.example.com", "pages.example.com"] },
-    { name: "subdomain-wildcard", layout: WILDCARD, created: ["*.pages.example.com", "admin.example.com", "pages.example.com"] },
+    { name: "the default suffix", layout: SUFFIXED, created: ["*.example.com", "admin.example.com"] },
+    { name: "another suffix and admin hostname", layout: OTHER_SUFFIX, created: ["*.example.com", "admin.tools.example.com"] },
   ];
 
-  test.each(fresh)("$name on an empty zone creates the wildcard and the exact records its routes attach to", ({ layout, created }) => {
-    expect(planDns(layout, [])).toEqual(created.map((subject) => ({ kind: "create", subject })));
-  });
+  test.each(fresh)(
+    "$name on an empty zone creates the wildcard the site hostnames resolve through and the exact records its routes attach to",
+    ({ layout, created }) => {
+      expect(planDns(layout, [])).toEqual(created.map((subject) => ({ kind: "create", subject })));
+    },
+  );
 
   test.each(fresh)(
     "$name on a zone with other hostnames plans the same and names none of them: poplin never touches a record it did not create",
@@ -64,56 +67,48 @@ describe("planDns", () => {
   });
 
   test("a name another record already answers for is skipped with the reason, and that record stays: taking it over would cut off the owner's host", () => {
-    const records = [foreign("f1", "admin.example.com", "CNAME"), foreign("f2", "*.example.com", "A"), foreign("f3", "pages.example.com", "NS")];
+    const records = [foreign("f1", "admin.example.com", "NS"), foreign("f2", "*.example.com", "NS")];
     const reason = "a record poplin did not create holds this name";
 
-    expect(planDns(PREFIXED, records)).toEqual([
+    expect(planDns(SUFFIXED, records)).toEqual([
       { kind: "skip", subject: "*.example.com", reason },
       { kind: "skip", subject: "admin.example.com", reason },
-      { kind: "skip", subject: "pages.example.com", reason },
     ]);
-    expect(planDns(NO_GALLERY, [foreign("f4", "admin.example.com", "TXT"), foreign("f5", "admin.example.com", "MX")])).toEqual([
+    expect(planDns(SUFFIXED, [foreign("f4", "admin.example.com", "TXT"), foreign("f5", "admin.example.com", "MX")])).toEqual([
       { kind: "create", subject: "*.example.com" },
       { kind: "create", subject: "admin.example.com" },
     ]);
   });
 
   test("a record of poplin's that drifted is changed back, by its id", () => {
-    const records = [
-      own("p0", "*.example.com"),
-      { ...own("p1", "admin.example.com"), proxied: false },
-      { ...own("p2", "pages.example.com"), content: "2001:db8::1" },
-    ];
+    const unproxied = [own("p0", "*.example.com"), { ...own("p1", "admin.example.com"), proxied: false }];
+    const repointed = [{ ...own("p0", "*.example.com"), content: "2001:db8::1" }, own("p1", "admin.example.com")];
 
-    expect(planDns(PREFIXED, records)).toEqual([
+    expect(planDns(SUFFIXED, unproxied)).toEqual([
       { kind: "leave", subject: "*.example.com" },
       { kind: "change", subject: "admin.example.com", id: "p1" },
-      { kind: "change", subject: "pages.example.com", id: "p2" },
+    ]);
+    expect(planDns(SUFFIXED, repointed)).toEqual([
+      { kind: "change", subject: "*.example.com", id: "p0" },
+      { kind: "leave", subject: "admin.example.com" },
     ]);
   });
 
-  test("a layout change removes the records only the old layout used, and only poplin's: a same-named record without the mark stays", () => {
-    const records = [
-      own("p0", "*.example.com"),
-      own("p1", "admin.example.com"),
-      own("p2", "pages.example.com"),
-      own("p3", "old.example.com"),
-      foreign("f1", "old.example.com", "A"),
-    ];
+  test("an admin hostname change removes the record only the old one used, and only poplin's: a same-named record without the mark stays", () => {
+    const records = [own("p0", "*.example.com"), own("p1", "admin.example.com"), own("p2", "old.example.com"), foreign("f1", "old.example.com", "A")];
 
-    expect(planDns(PER_SITE, records)).toEqual([
-      { kind: "remove", subject: "*.example.com", id: "p0" },
-      { kind: "remove", subject: "old.example.com", id: "p3" },
-      { kind: "create", subject: "*.pages.example.com" },
-      { kind: "leave", subject: "admin.example.com" },
-      { kind: "leave", subject: "pages.example.com" },
+    expect(planDns(OTHER_SUFFIX, records)).toEqual([
+      { kind: "remove", subject: "admin.example.com", id: "p1" },
+      { kind: "remove", subject: "old.example.com", id: "p2" },
+      { kind: "leave", subject: "*.example.com" },
+      { kind: "create", subject: "admin.tools.example.com" },
     ]);
   });
 
   test("of two marked records under one name the correct one is kept and the other removed: changing the wrong one first would collide with the right one and be refused on every run", () => {
     const records = [own("p0", "*.example.com"), { ...own("p1", "admin.example.com"), content: "2001:db8::1" }, own("p2", "admin.example.com")];
 
-    expect(planDns(NO_GALLERY, records)).toEqual([
+    expect(planDns(SUFFIXED, records)).toEqual([
       { kind: "remove", subject: "admin.example.com", id: "p1" },
       { kind: "leave", subject: "*.example.com" },
       { kind: "leave", subject: "admin.example.com" },
@@ -121,57 +116,139 @@ describe("planDns", () => {
   });
 });
 
-describe("otherHostnames", () => {
-  test("the zone's other exact hostnames come back once each, sorted: they feed the host rule's list and the route exclusions", () => {
-    const records = [...OTHERS, own("p0", "*.example.com"), own("p1", "admin.example.com"), own("p2", "stale.example.com")];
+describe("the zone's own wildcard record", () => {
+  const ZONE_WILDCARD = "the zone's own proxied wildcard record already carries the site hostnames to Cloudflare";
 
-    expect<unknown>(otherHostnames(PREFIXED, records)).toEqual(["mail.example.com", "www.example.com"]);
-  });
+  const cases: readonly { readonly name: string; readonly records: readonly Row[]; readonly refusal: string | undefined; readonly steps: readonly object[] }[] =
+    [
+      {
+        name: "none: poplin creates the wildcard",
+        records: [foreign("f1", "www.example.com", "A")],
+        refusal: undefined,
+        steps: [
+          { kind: "create", subject: "*.example.com" },
+          { kind: "create", subject: "admin.example.com" },
+        ],
+      },
+      {
+        name: "a proxied one: poplin makes none of its own and theirs stays, since the route alone picks poplin's names out",
+        records: [proxied("f1", "*.example.com", "A"), proxied("f2", "*.example.com", "AAAA")],
+        refusal: undefined,
+        steps: [
+          { kind: "skip", subject: "*.example.com", reason: ZONE_WILDCARD },
+          { kind: "create", subject: "admin.example.com" },
+        ],
+      },
+      {
+        name: "a proxied one added beside poplin's: poplin's is removed, or it would answer for the zone's other names in turn with theirs",
+        records: [own("p0", "*.example.com"), proxied("f1", "*.example.com", "A")],
+        refusal: undefined,
+        steps: [
+          { kind: "remove", subject: "*.example.com", id: "p0" },
+          { kind: "skip", subject: "*.example.com", reason: ZONE_WILDCARD },
+          { kind: "create", subject: "admin.example.com" },
+        ],
+      },
+      {
+        name: "one that is not proxied: refused, since every site hostname would resolve to its origin",
+        records: [foreign("f1", "*.example.com", "CNAME", "the old host")],
+        refusal: "unproxied-wildcard",
+        steps: [],
+      },
+    ];
 
-  test("a name the layout uses is never listed, even while another record holds it: listing it would exclude poplin's own hostname from its Worker", () => {
-    const records = [foreign("f1", "admin.example.com", "A"), foreign("f2", "example.com", "A")];
+  test.each(cases)("$name", ({ records, refusal, steps }) => {
+    const refused = refusedRecords(SUFFIXED, records);
 
-    expect(otherHostnames(BARE_GALLERY, records)).toEqual([]);
-    expect<unknown>(otherHostnames(PREFIXED, records)).toEqual(["example.com"]);
+    expect<unknown>(refused?.failure).toBe(refusal);
+    if (refused === undefined) expect<unknown>(planDns(SUFFIXED, records)).toEqual(steps);
+    if (refused !== undefined) expect(refused).toMatchObject({ names: ["*.example.com"], message: expect.stringContaining("*.example.com") });
   });
 });
 
-describe("foreignWildcards", () => {
-  test("every wildcard record of the owner's is named, the one under the layout's own wildcard name too, and poplin's are not: every name one answers for is on no list", () => {
-    const records = [
-      ...OTHERS,
-      foreign("f8", "*.dev.example.com", "CNAME"),
-      foreign("f9", "*.example.com", "A"),
-      foreign("f10", "*.mail.example.com", "MX"),
-      own("p0", "*.old.example.com"),
-    ];
+describe("refusedRecords", () => {
+  const cases: readonly {
+    readonly name: string;
+    readonly layout: DomainLayout;
+    readonly records: readonly Row[];
+    readonly names: readonly string[] | undefined;
+  }[] = [
+    { name: "a zone with other hostnames and deeper wildcards the site route does not take", layout: SUFFIXED, records: OTHERS, names: undefined },
+    { name: "poplin's own records", layout: SUFFIXED, records: [own("p0", "*.example.com"), own("p1", "old-page.example.com")], names: undefined },
+    {
+      name: "a record that only answers mail or text under a site name",
+      layout: SUFFIXED,
+      records: [foreign("f1", "status-page.example.com", "MX")],
+      names: undefined,
+    },
+    {
+      name: "the zone's own hostnames that end in the suffix, at any depth",
+      layout: SUFFIXED,
+      records: [proxied("f1", "status-page.example.com", "CNAME"), foreign("f2", "*.eu.status-page.example.com", "A"), foreign("f3", "www.example.com", "A")],
+      names: ["*.eu.status-page.example.com", "status-page.example.com"],
+    },
+    {
+      name: "the zone's own record under the admin hostname, which the admin route would take",
+      layout: SUFFIXED,
+      records: [proxied("f1", "admin.example.com", "A")],
+      names: ["admin.example.com"],
+    },
+    {
+      name: "a hostname that ends in another layout's suffix",
+      layout: OTHER_SUFFIX,
+      records: [proxied("f1", "status-page.example.com", "CNAME"), proxied("f2", "shop-s1-x.example.com", "A")],
+      names: ["shop-s1-x.example.com"],
+    },
+  ];
 
-    expect(foreignWildcards(records)).toEqual(["*.dev.example.com", "*.example.com"]);
-    expect(foreignWildcards([own("p0", "*.example.com"), foreign("f1", "www.example.com", "A")])).toEqual([]);
+  test.each(cases)("$name: only a record the site route would take from its owner is refused", ({ layout, records, names }) => {
+    const refused = refusedRecords(layout, records);
+
+    expect(refused?.names).toEqual(names as string[]);
+    if (refused === undefined) return;
+
+    expect(refused.failure).toBe("shadowed-records");
+    expect(refused.names.every((name) => refused.message.includes(name))).toBe(true);
+  });
+});
+
+describe("sharesZone", () => {
+  const cases: readonly { readonly name: string; readonly records: readonly Row[]; readonly shared: boolean }[] = [
+    { name: "an empty zone", records: [], shared: false },
+    {
+      name: "poplin's own records, and records that answer no request",
+      records: [own("p0", "*.example.com"), foreign("f1", "example.com", "MX")],
+      shared: false,
+    },
+    { name: "another hostname", records: [foreign("f1", "www.example.com", "A")], shared: true },
+    { name: "the zone's own wildcard, which answers for every other name", records: [proxied("f1", "*.example.com", "A")], shared: true },
+  ];
+
+  test.each(cases)("$name: the Free plan rate rule counts the whole zone, so it must know whether anything else answers there", ({ records, shared }) => {
+    expect(sharesZone(records)).toBe(shared);
   });
 });
 
 describe("syncDns", () => {
-  test("a zone with a wildcard record of its own is refused before any change, with no list of other hostnames: no route or rule can then be made over the names it answers for", async () => {
+  test("a zone with a record the site route would take is refused before any change: no route can then be made over a name of the owner's", async () => {
     await withFake(
-      (asked) => page(asked, [foreign("f1", "*.dev.example.com", "A"), foreign("f2", "www.example.com", "A")]),
+      (asked) => page(asked, [foreign("f1", "status-page.example.com", "A"), foreign("f2", "www.example.com", "A")]),
       async (connection, asked) => {
-        const synced = await syncDns(connection, "zone-1", PREFIXED);
+        const synced = await syncDns(connection, "zone-1", SUFFIXED);
 
         expect(synced).toMatchObject({
           ok: false,
-          failure: "foreign-wildcards",
-          wildcards: ["*.dev.example.com"],
+          failure: "shadowed-records",
+          names: ["status-page.example.com"],
           report: { created: [], changedNothing: true },
         });
-        expect("otherHostnames" in synced).toBe(false);
         expect(asked.map((entry) => entry.method)).toEqual(["GET", "GET"]);
       },
     );
   });
 
   test("two runs against one zone: the first creates poplin's records beside the others, the second sends no change and reports none", async () => {
-    let records: Record<string, unknown>[] = OTHERS.filter((row) => !row.name.includes("*")).map((row) => ({ ...row }));
+    let records: Record<string, unknown>[] = OTHERS.map((row) => ({ ...row }));
     const before = structuredClone(records);
 
     await withFake(
@@ -187,15 +264,15 @@ describe("syncDns", () => {
         return reply({ id });
       },
       async (connection, asked) => {
-        const first = await syncDns(connection, "zone-1", PREFIXED);
+        const first = await syncDns(connection, "zone-1", SUFFIXED);
         const sent = asked.length;
-        const second = await syncDns(connection, "zone-1", PREFIXED);
+        const second = await syncDns(connection, "zone-1", SUFFIXED);
 
-        expect(first).toMatchObject({ ok: true, report: { created: ["*.example.com", "admin.example.com", "pages.example.com"], changedNothing: false } });
-        expect<unknown>(first.ok && first.otherHostnames).toEqual(["mail.example.com", "www.example.com"]);
+        expect(first).toMatchObject({ ok: true, report: { created: ["*.example.com", "admin.example.com"], changedNothing: false } });
+        expect(first.ok && first.sharesZone).toBe(true);
         expect(second).toMatchObject({
           ok: true,
-          report: { created: [], left: ["*.example.com", "admin.example.com", "pages.example.com"], changedNothing: true },
+          report: { created: [], left: ["*.example.com", "admin.example.com"], changedNothing: true },
         });
         expect(asked.slice(sent).map((entry) => entry.method)).toEqual(["GET", "GET"]);
         expect(records.slice(0, before.length)).toEqual(before);
@@ -225,7 +302,7 @@ describe("syncDns", () => {
         return reply({ id: "p0" });
       },
       async (connection) => {
-        expect(await syncDns(connection, "zone-1", PREFIXED)).toMatchObject({
+        expect(await syncDns(connection, "zone-1", SUFFIXED)).toMatchObject({
           ok: false,
           failure: "refused",
           status: 400,

@@ -1,10 +1,16 @@
-# Each invalid input is refused by its own rule. Without these a loosened pattern would let a bad name reach Cloudflare, or into a rule expression.
+# Each invalid input is refused by its own rule. Without these a loosened pattern would let a bad name reach Cloudflare, or into a route pattern or a rule expression.
 
 mock_provider "cloudflare" {
   mock_data "cloudflare_zone" {
     defaults = {
       name    = "example.com"
       account = { id = "0123456789abcdef0123456789abcdef", name = "example account" }
+    }
+  }
+
+  mock_data "cloudflare_dns_records" {
+    defaults = {
+      result = []
     }
   }
 }
@@ -36,16 +42,6 @@ run "zone_id_too_short" {
   expect_failures = [var.zone_id]
 }
 
-run "layout_unknown" {
-  command = plan
-
-  variables {
-    layout = "workers.dev"
-  }
-
-  expect_failures = [var.layout]
-}
-
 run "admin_hostname_with_a_dot" {
   command = plan
 
@@ -56,55 +52,104 @@ run "admin_hostname_with_a_dot" {
   expect_failures = [var.admin_hostname]
 }
 
-run "admin_hostname_equal_to_pages_hostname" {
+run "suffix_with_a_quote" {
   command = plan
 
   variables {
-    admin_hostname = "pages"
+    suffix = "-p\""
+  }
+
+  expect_failures = [var.suffix]
+}
+
+run "suffix_with_a_wildcard" {
+  command = plan
+
+  variables {
+    suffix = "-*"
+  }
+
+  expect_failures = [var.suffix]
+}
+
+run "suffix_without_the_leading_dash" {
+  command = plan
+
+  variables {
+    suffix = "page"
+  }
+
+  expect_failures = [var.suffix]
+}
+
+run "suffix_ending_in_a_dash" {
+  command = plan
+
+  variables {
+    suffix = "-page-"
+  }
+
+  expect_failures = [var.suffix]
+}
+
+run "suffix_of_one_dash" {
+  command = plan
+
+  variables {
+    suffix = "-"
+  }
+
+  expect_failures = [var.suffix]
+}
+
+run "suffix_with_two_dashes_together" {
+  command = plan
+
+  variables {
+    suffix = "-a--b"
+  }
+
+  expect_failures = [var.suffix]
+}
+
+run "suffix_with_a_dot" {
+  command = plan
+
+  variables {
+    suffix = "-page.x"
+  }
+
+  expect_failures = [var.suffix]
+}
+
+run "suffix_too_long" {
+  command = plan
+
+  variables {
+    suffix = "-published"
+  }
+
+  expect_failures = [var.suffix]
+}
+
+run "suffix_empty" {
+  command = plan
+
+  variables {
+    suffix = ""
+  }
+
+  expect_failures = [var.suffix]
+}
+
+run "admin_hostname_ending_in_the_suffix" {
+  command = plan
+
+  variables {
+    admin_hostname = "admin-page"
   }
 
   expect_failures = [var.admin_hostname]
-}
-
-run "pages_hostname_with_a_capital" {
-  command = plan
-
-  variables {
-    pages_hostname = "Pages"
-  }
-
-  expect_failures = [var.pages_hostname]
-}
-
-run "pages_hostname_empty_under_a_subdomain_layout" {
-  command = plan
-
-  variables {
-    layout         = "subdomain-wildcard"
-    pages_hostname = ""
-  }
-
-  expect_failures = [var.pages_hostname]
-}
-
-run "prefix_with_a_quote" {
-  command = plan
-
-  variables {
-    prefix = "p\"-"
-  }
-
-  expect_failures = [var.prefix]
-}
-
-run "prefix_too_long" {
-  command = plan
-
-  variables {
-    prefix = "published-"
-  }
-
-  expect_failures = [var.prefix]
 }
 
 run "logins_empty" {
@@ -177,36 +222,6 @@ run "bucket_name_too_short" {
   expect_failures = [var.bucket_name]
 }
 
-run "excluded_hostname_wildcard" {
-  command = plan
-
-  variables {
-    excluded_hostnames = ["*.example.com"]
-  }
-
-  expect_failures = [var.excluded_hostnames]
-}
-
-run "excluded_hostname_with_a_quote" {
-  command = plan
-
-  variables {
-    excluded_hostnames = ["www.example.com\"} or true"]
-  }
-
-  expect_failures = [var.excluded_hostnames]
-}
-
-run "excluded_hostname_listed_twice" {
-  command = plan
-
-  variables {
-    excluded_hostnames = ["www.example.com", "www.example.com"]
-  }
-
-  expect_failures = [var.excluded_hostnames]
-}
-
 run "zone_of_another_account" {
   command = plan
 
@@ -215,47 +230,6 @@ run "zone_of_another_account" {
   }
 
   expect_failures = [data.cloudflare_zone.this]
-}
-
-run "excluded_hostname_outside_the_zone" {
-  command = plan
-
-  variables {
-    excluded_hostnames = ["www.example.org"]
-  }
-
-  expect_failures = [cloudflare_workers_route.excluded]
-}
-
-run "excluded_hostname_is_the_admin_hostname" {
-  command = plan
-
-  variables {
-    excluded_hostnames = ["admin.example.com"]
-  }
-
-  expect_failures = [cloudflare_workers_route.excluded]
-}
-
-run "excluded_hostname_under_the_pages_hostname" {
-  command = plan
-
-  variables {
-    layout             = "subdomain-per-site"
-    excluded_hostnames = ["report.pages.example.com"]
-  }
-
-  expect_failures = [cloudflare_workers_route.excluded]
-}
-
-run "host_rule_expression_over_the_size_cap" {
-  command = plan
-
-  variables {
-    excluded_hostnames = [for number in range(200) : "a-rather-long-hostname-label-number-${number}.example.com"]
-  }
-
-  expect_failures = [cloudflare_ruleset.host]
 }
 
 run "default_expires_without_a_unit" {

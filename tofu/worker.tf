@@ -9,7 +9,7 @@ resource "cloudflare_workers_script" "poplin" {
   compatibility_date = "2026-11-01"
 
   # FIRST_SETTINGS seeds the stored settings once: the Worker writes them only while no settings record exists, so a later apply never overwrites a change made on the dashboard.
-  # ZONE is read as it is: the module owns the zone values and moves the records, routes, and rules with them.
+  # ZONE is read as it is: the module owns the zone values and moves the records, routes, and rule with them.
   bindings = [
     {
       name        = "SITES"
@@ -35,29 +35,21 @@ resource "cloudflare_workers_route" "worker" {
   zone_id = var.zone_id
   pattern = "${each.value}/*"
   script  = cloudflare_workers_script.poplin.script_name
-}
-
-# A route with no Worker: the wildcard route never catches an excluded hostname, so it keeps its own origin.
-resource "cloudflare_workers_route" "excluded" {
-  for_each = local.excluded_hosts
-
-  zone_id = var.zone_id
-  pattern = "${each.value}/*"
 
   lifecycle {
     precondition {
-      condition     = each.value == local.domain || endswith(each.value, ".${local.domain}")
-      error_message = "excluded_hostnames must hold hostnames of the zone: ${each.value} is not ${local.domain} or under it."
+      condition     = length(local.zone_wildcards_unproxied) == 0
+      error_message = "The zone's own record ${local.wildcard_host} is not proxied, so every site hostname would resolve to its origin and never reach the Worker. Switch its proxy on, or remove it."
     }
 
     precondition {
-      condition     = each.value != local.admin_host && each.value != local.pages_host
-      error_message = "excluded_hostnames must not hold the admin hostname or the pages hostname: ${each.value} is the install's own."
+      condition     = length(local.shadowed_names) == 0
+      error_message = "The zone has records of its own under names the routes would take: ${join(", ", local.shadowed_names)}. Choose another suffix or admin_hostname, or rename them."
     }
 
     precondition {
-      condition     = !local.sites_under_pages || !endswith(each.value, ".${local.pages_host}")
-      error_message = "excluded_hostnames must not hold a hostname under the pages hostname in a subdomain layout: ${each.value} sits where the sites sit."
+      condition     = length(data.cloudflare_dns_records.zone.result) < local.record_limit
+      error_message = "The zone has ${local.record_limit} records or more, so the module cannot see every name the routes would take."
     }
   }
 }

@@ -3,7 +3,7 @@
 import { type Hostname, parseHostname } from "../src/cloudflare/hostname";
 import { type DomainLayout, parseDomainLayout, type RawLayout } from "../src/cloudflare/layout";
 
-const BASE: RawLayout = { names: "domain", domain: "example.com", adminHostname: "admin.example.com", pagesHostname: "pages.example.com", prefix: "page-" };
+const BASE: RawLayout = { domain: "example.com", adminHostname: "admin.example.com", suffix: "-page" };
 
 /** Check a layout that a test wrote by hand; a refusal is a mistake in the test. */
 function layoutOf(changes: Partial<RawLayout>): DomainLayout {
@@ -21,20 +21,8 @@ export function hostOf(raw: string): Hostname {
   return hostname.value;
 }
 
-/** The default layout: sites are `page-<name>.example.com`, with a gallery. */
-export const PREFIXED = layoutOf({});
+/** The default layout: sites are `<name>-page.example.com`. */
+export const SUFFIXED = layoutOf({});
 
-/** The default layout with the gallery off. */
-export const NO_GALLERY = layoutOf({ pagesHostname: undefined });
-
-/** The default layout with the gallery on the bare domain. */
-export const BARE_GALLERY = layoutOf({ pagesHostname: "example.com" });
-
-/** A domain given over to sites: no prefix. */
-export const NO_PREFIX = layoutOf({ prefix: "" });
-
-/** Sites under the pages hostname, a certificate each. */
-export const PER_SITE = layoutOf({ names: "subdomain-per-site" });
-
-/** Sites under the pages hostname, one bought wildcard certificate. */
-export const WILDCARD = layoutOf({ names: "subdomain-wildcard" });
+/** Another suffix and a deeper admin hostname. */
+export const OTHER_SUFFIX = layoutOf({ suffix: "-s1-x", adminHostname: "admin.tools.example.com" });

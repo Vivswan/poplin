@@ -1,18 +1,21 @@
 import { describe, expect, test } from "bun:test";
 import { parseDomainLayout, type RawLayout } from "../src/cloudflare/layout";
 
-const BASE: RawLayout = { names: "domain", domain: "example.com", adminHostname: "admin.example.com", pagesHostname: "pages.example.com", prefix: "page-" };
+const BASE: RawLayout = { domain: "example.com", adminHostname: "admin.example.com", suffix: "-page" };
 
 describe("parseDomainLayout", () => {
   const accepted: readonly { readonly name: string; readonly changes: Partial<RawLayout>; readonly layout: object }[] = [
     { name: "the default", changes: {}, layout: { ...BASE } },
-    { name: "the gallery off", changes: { pagesHostname: undefined }, layout: { ...BASE, pagesHostname: undefined } },
-    { name: "the gallery on the bare domain", changes: { pagesHostname: "example.com" }, layout: { ...BASE, pagesHostname: "example.com" } },
-    { name: "an empty prefix", changes: { prefix: "" }, layout: { ...BASE, prefix: "" } },
+    { name: "another suffix", changes: { suffix: "-s1-x" }, layout: { ...BASE, suffix: "-s1-x" } },
     {
-      name: "a subdomain layout, which drops the prefix it never reads",
-      changes: { names: "subdomain-per-site", prefix: 'never read"' },
-      layout: { names: "subdomain-per-site", domain: "example.com", adminHostname: "admin.example.com", pagesHostname: "pages.example.com" },
+      name: "an admin hostname deeper under the domain",
+      changes: { adminHostname: "admin.tools.example.com" },
+      layout: { ...BASE, adminHostname: "admin.tools.example.com" },
+    },
+    {
+      name: "an admin hostname that only holds the suffix's letters",
+      changes: { adminHostname: "my-pages.example.com" },
+      layout: { ...BASE, adminHostname: "my-pages.example.com" },
     },
   ];
 
@@ -26,26 +29,23 @@ describe("parseDomainLayout", () => {
     { name: "an admin hostname on another domain", changes: { adminHostname: "admin.example.org" }, refusal: "admin-outside-domain" },
     { name: "an admin hostname that only ends in the domain's letters", changes: { adminHostname: "admin.badexample.com" }, refusal: "admin-outside-domain" },
     { name: "the bare domain as the admin hostname", changes: { adminHostname: "example.com" }, refusal: "admin-outside-domain" },
-    { name: "a pages hostname that is no hostname", changes: { pagesHostname: "pages" }, refusal: "bad-pages-hostname" },
-    { name: "a pages hostname on another domain", changes: { pagesHostname: "pages.example.org" }, refusal: "pages-outside-domain" },
-    { name: "one hostname for the index and the gallery", changes: { pagesHostname: "admin.example.com" }, refusal: "admin-is-pages" },
-    { name: "a prefix that starts with a dash", changes: { prefix: "-page" }, refusal: "bad-prefix" },
-    { name: "a prefix with a dot", changes: { prefix: "page." }, refusal: "bad-prefix" },
-    { name: "a prefix too long to leave a secret address room in one label", changes: { prefix: "a".repeat(10) }, refusal: "bad-prefix" },
-    { name: "a subdomain layout with no pages hostname", changes: { names: "subdomain-wildcard", pagesHostname: undefined }, refusal: "pages-required" },
+    { name: "no suffix: the site route would take every hostname of the zone", changes: { suffix: "" }, refusal: "bad-suffix" },
+    { name: "a suffix with no dash in front, which a site's name would run into", changes: { suffix: "page" }, refusal: "bad-suffix" },
+    { name: "a suffix that ends in a dash, which no hostname label may", changes: { suffix: "-page-" }, refusal: "bad-suffix" },
+    { name: "a suffix with two dashes together, the mark between a name and its id", changes: { suffix: "-a--b" }, refusal: "bad-suffix" },
+    { name: "a suffix with a dot", changes: { suffix: "-page.x" }, refusal: "bad-suffix" },
+    { name: "a suffix with a wildcard, which a route may hold only in front", changes: { suffix: "-*" }, refusal: "bad-suffix" },
+    { name: "a suffix with a quote", changes: { suffix: '-p"' }, refusal: "bad-suffix" },
+    { name: "a suffix too long to leave a site address room in one label", changes: { suffix: "-published" }, refusal: "bad-suffix" },
+    { name: "an admin hostname that ends in the suffix", changes: { adminHostname: "admin-page.example.com" }, refusal: "admin-is-site-address" },
     {
-      name: "a subdomain layout whose admin hostname would be a site address",
-      changes: { names: "subdomain-per-site", adminHostname: "admin.pages.example.com" },
-      refusal: "admin-under-pages",
-    },
-    {
-      name: "a subdomain layout with sites under the bare domain, where the admin hostname is one",
-      changes: { names: "subdomain-wildcard", pagesHostname: "example.com" },
-      refusal: "admin-under-pages",
+      name: "an admin hostname under a name that ends in the suffix",
+      changes: { adminHostname: "admin.tools-page.example.com" },
+      refusal: "admin-is-site-address",
     },
   ];
 
-  test.each(refused)("$name is refused as $refusal: a layout that got through would be written into records, routes, and rules", ({ changes, refusal }) => {
+  test.each(refused)("$name is refused as $refusal: a layout that got through would be written into records, routes, and the rule", ({ changes, refusal }) => {
     expect(parseDomainLayout({ ...BASE, ...changes })).toEqual({ ok: false, refusal: refusal as never });
   });
 });

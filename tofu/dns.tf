@@ -1,4 +1,4 @@
-# The proxied records of the install. Each points at the discard address: the Worker answers, no origin exists.
+# The proxied records of the install. Each points at the discard address: the routes send the install's hostnames to the Worker, and no origin exists.
 
 resource "cloudflare_dns_record" "poplin" {
   for_each = local.records

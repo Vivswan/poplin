@@ -1,30 +1,7 @@
-# The two rules that run before the Worker. Their expressions are built in main.tf.
-
-resource "cloudflare_ruleset" "host" {
-  count = local.host_rule_enabled ? 1 : 0
-
-  zone_id = var.zone_id
-  name    = "poplin host rule"
-  kind    = "zone"
-  phase   = "http_request_firewall_custom"
-
-  rules = [{
-    ref         = "poplin_host"
-    description = "poplin: block hostnames that are no site"
-    expression  = local.host_rule_expression
-    action      = "block"
-  }]
-
-  lifecycle {
-    precondition {
-      condition     = length(local.host_rule_expression) <= 4096
-      error_message = "excluded_hostnames is too long: the host rule's expression must stay within 4096 characters."
-    }
-  }
-}
+# The rule that runs before the Worker. Its expression is built in main.tf.
 
 resource "cloudflare_ruleset" "rate" {
-  count = var.rate_rule ? 1 : 0
+  count = var.rate_rule == "off" ? 0 : 1
 
   zone_id = var.zone_id
   name    = "poplin rate rule"
@@ -44,4 +21,11 @@ resource "cloudflare_ruleset" "rate" {
       mitigation_timeout  = 10
     }
   }]
+
+  lifecycle {
+    precondition {
+      condition     = var.rate_rule != "zone" || length(local.other_names) == 0
+      error_message = "rate_rule = \"zone\" counts every request of the zone, and the zone has hostnames of its own: ${join(", ", local.other_names)}. Set rate_rule to \"hostnames\" on a paid plan, or to \"off\"."
+    }
+  }
 }

@@ -14,6 +14,6 @@ output "admin_url" {
 }
 
 output "site_url_pattern" {
-  description = "The address of a site, with `<name>` standing for the site's name."
-  value       = local.sites_under_pages ? "https://<name>.${local.pages_host}" : "https://${var.prefix}<name>.${local.domain}"
+  description = "The address of a site, with `<name>` and `<id>` standing for the site's name and id."
+  value       = "https://<name>--<id>${var.suffix}.${local.domain}"
 }

@@ -20,18 +20,7 @@ variable "zone_id" {
   }
 }
 
-# Where the sites and the dashboard sit in the zone.
-
-variable "layout" {
-  description = "Where sites sit: `domain` (page-report.example.com), `subdomain-per-site` or `subdomain-wildcard` (report.pages.example.com)."
-  type        = string
-  default     = "domain"
-
-  validation {
-    condition     = contains(["domain", "subdomain-per-site", "subdomain-wildcard"], var.layout)
-    error_message = "layout must be one of: domain, subdomain-per-site, subdomain-wildcard."
-  }
-}
+# Where the dashboard and the sites sit in the zone.
 
 variable "admin_hostname" {
   description = "The label of the dashboard's hostname under the domain: `admin` gives admin.example.com."
@@ -44,69 +33,31 @@ variable "admin_hostname" {
   }
 
   validation {
-    condition     = var.admin_hostname != var.pages_hostname
-    error_message = "admin_hostname must differ from pages_hostname."
+    condition     = !endswith(var.admin_hostname, var.suffix)
+    error_message = "admin_hostname must not end with the suffix: it would be a site's address."
   }
 }
 
-variable "pages_hostname" {
-  description = "The label of the gallery's hostname under the domain: `pages` gives pages.example.com. Empty means the bare domain."
+variable "suffix" {
+  description = "The ending of every site hostname label: `-page` gives report-page.example.com."
   type        = string
-  default     = "pages"
+  default     = "-page"
 
   validation {
-    condition     = var.pages_hostname == "" || can(regex("^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$", var.pages_hostname))
-    error_message = "pages_hostname must be empty or one hostname label: 1 to 63 lowercase letters, digits, or dashes, with no dash first or last."
+    condition     = can(regex("^(-[a-z0-9]+)+$", var.suffix)) && length(var.suffix) <= 9
+    error_message = "suffix must be 2 to 9 characters: a dash, then lowercase letters, digits, or single dashes, with no dash last."
   }
-
-  validation {
-    condition     = var.layout == "domain" || var.pages_hostname != ""
-    error_message = "pages_hostname must not be empty under a subdomain layout: the sites sit under it."
-  }
-}
-
-variable "prefix" {
-  description = "The label in front of every site name under the `domain` layout. Empty on a domain that holds nothing but sites; then no host rule is created."
-  type        = string
-  default     = "page-"
-
-  validation {
-    condition     = var.prefix == "" || can(regex("^[a-z0-9][a-z0-9-]{0,8}$", var.prefix))
-    error_message = "prefix must be empty or 1 to 9 lowercase letters, digits, or dashes, starting with a letter or a digit."
-  }
-}
-
-variable "excluded_hostnames" {
-  description = "The zone's other exact hostnames, such as www.example.com. Each stays out of the Worker and out of the host rule."
-  type        = list(string)
-  default     = []
-
-  validation {
-    condition     = alltrue([for host in var.excluded_hostnames : length(host) <= 253 && can(regex("^([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\\.)+[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$", host))])
-    error_message = "excluded_hostnames must hold exact hostnames in lowercase, such as www.example.com: no wildcard, no scheme, no path."
-  }
-
-  validation {
-    condition     = length(distinct(var.excluded_hostnames)) == length(var.excluded_hostnames)
-    error_message = "excluded_hostnames must list each hostname once."
-  }
-
-  validation {
-    condition     = length(var.excluded_hostnames) <= 200
-    error_message = "excluded_hostnames must hold at most 200 hostnames: the list is written into one rule expression."
-  }
-}
-
-variable "host_rule" {
-  description = "Whether to create the host rule. Set false when the zone has custom rules of its own: the module's ruleset owns that phase for the zone."
-  type        = bool
-  default     = true
 }
 
 variable "rate_rule" {
-  description = "Whether to create the rate rule. Set false when the zone's one Free-plan rate rule is already used."
-  type        = bool
-  default     = true
+  description = "What the rate rule counts: `zone` (every request of the zone, the one form the Free plan takes), `hostnames` (the install's hostnames alone, on a paid plan), or `off` (no rule)."
+  type        = string
+  default     = "zone"
+
+  validation {
+    condition     = contains(["zone", "hostnames", "off"], var.rate_rule)
+    error_message = "rate_rule must be one of: zone, hostnames, off."
+  }
 }
 
 # The Worker and the bucket.
@@ -219,7 +170,7 @@ variable "dashboard_title" {
 }
 
 variable "gallery" {
-  description = "Whether the public page listing the public sites is on. On also creates the pages hostname's record under the `domain` layout."
+  description = "Whether the public page listing the public sites is on. It sits at the site hostname of the name `gallery`: gallery-page.example.com."
   type        = bool
   default     = false
 }

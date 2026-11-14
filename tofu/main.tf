@@ -22,66 +22,65 @@ data "cloudflare_zone" "this" {
   }
 }
 
-locals {
-  domain = data.cloudflare_zone.this.name
+# Every record of the zone: the module reads which names are already taken and never changes a record it did not create.
+data "cloudflare_dns_records" "zone" {
+  zone_id   = var.zone_id
+  max_items = local.record_limit
+}
 
-  # Sites sit one level under the domain, or one level under the pages hostname.
-  sites_under_pages = var.layout != "domain"
+locals {
+  # The most records the module reads; a zone with as many is refused, since the rest would go unseen.
+  record_limit = 50000
+
+  domain = data.cloudflare_zone.this.name
 
   admin_host = "${var.admin_hostname}.${local.domain}"
 
-  # An empty pages hostname is the bare domain.
-  pages_host = var.pages_hostname == "" ? local.domain : "${var.pages_hostname}.${local.domain}"
+  # What every site hostname ends with, the gallery's included.
+  site_host_ending = "${var.suffix}.${local.domain}"
 
-  # The pages hostname answers only while the gallery or a subdomain layout uses it.
-  pages_in_use = local.sites_under_pages || var.gallery
+  # The wildcard record every site hostname resolves through. DNS has no partial wildcard, so it covers the whole level.
+  wildcard_host = "*.${local.domain}"
 
-  # The wildcard every site hostname falls under.
-  wildcard_host = local.sites_under_pages ? "*.${local.pages_host}" : "*.${local.domain}"
+  # The records that answer for a hostname and that the module did not create.
+  zone_records = [
+    for record in data.cloudflare_dns_records.zone.result : record
+    if contains(["A", "AAAA", "CNAME"], record.type) && !startswith(coalesce(record.comment, "none"), "poplin: ")
+  ]
+
+  # The zone's own records under the wildcard name: proxied ones already carry the site hostnames to Cloudflare, any other sends them to its own origin.
+  zone_wildcards           = [for record in local.zone_records : record if record.name == local.wildcard_host]
+  zone_wildcards_unproxied = [for record in local.zone_wildcards : record if !coalesce(record.proxied, false)]
+
+  # The zone's own records under a name the routes take.
+  shadowed_names = sort(distinct([
+    for record in local.zone_records : record.name
+    if record.name == local.admin_host || endswith(record.name, local.site_host_ending)
+  ]))
+
+  # The zone's own hostnames, a wildcard of its own included: a rate rule that reads the path alone would count their requests too.
+  other_names = sort(distinct(local.zone_records[*].name))
 
   # Every DNS record of the install, each with the comment that marks it as poplin's.
   records = merge(
-    {
-      (local.wildcard_host) = "poplin: every site"
-      (local.admin_host)    = "poplin: the dashboard, the login, the API, and the MCP server"
-    },
-    local.pages_in_use ? { (local.pages_host) = "poplin: the gallery" } : {},
+    length(local.zone_wildcards) == 0 ? { (local.wildcard_host) = "poplin: every site" } : {},
+    { (local.admin_host) = "poplin: the dashboard, the login, the API, and the MCP server" },
   )
 
-  # Under `domain` the wildcard route already covers the admin and pages hostnames; the bare domain is never under it.
-  worker_route_hosts = toset(concat(
-    [local.wildcard_host],
-    local.sites_under_pages ? [local.admin_host, local.pages_host] : [],
-    !local.sites_under_pages && local.pages_in_use && var.pages_hostname == "" ? [local.domain] : [],
-  ))
+  # A route may begin with a wildcard and hold no other, so Cloudflare itself sends only the hostnames that end in the suffix to the Worker.
+  worker_route_hosts = toset(["*${local.site_host_ending}", local.admin_host])
 
-  excluded_hosts = toset(var.excluded_hostnames)
+  # The hostnames the routes send to the Worker, as the rule language reads them. The inputs are validated, so no quote can appear in one.
+  served_expression = format("ends_with(http.host, %q) or http.host eq %q", local.site_host_ending, local.admin_host)
 
-  # The set literals of the rule language: quoted hostnames separated by spaces. The inputs are validated, so no quote can appear in one.
-  listed_hosts_set = join(" ", formatlist("%q", sort(distinct(concat([local.admin_host, local.pages_host], var.excluded_hostnames)))))
+  # A Free plan rate rule may read the path alone, so `zone` counts every request of the zone.
+  rate_rule_expression = var.rate_rule == "zone" ? "starts_with(http.request.uri.path, \"/\")" : local.served_expression
 
-  under_domain = format("ends_with(http.host, %q)", ".${local.domain}")
-
-  # What makes a hostname a site's: the prefix under `domain`, anything under the pages hostname otherwise.
-  site_match = local.sites_under_pages ? format("ends_with(http.host, %q)", ".${local.pages_host}") : format("(starts_with(http.host, %q) and %s)", var.prefix, local.under_domain)
-
-  # With an empty prefix a site cannot be told from a made-up name, so no host rule exists.
-  host_rule_enabled = var.host_rule && (local.sites_under_pages || var.prefix != "")
-
-  # Blocks every hostname under the domain that is not a site, the admin hostname, the pages hostname, or an excluded hostname.
-  host_rule_expression = "${local.under_domain} and not (http.host in {${local.listed_hosts_set}}) and not ${local.site_match}"
-
-  # A Free plan rate rule may match on the path alone, so it counts every request to the zone.
-  rate_rule_expression = "starts_with(http.request.uri.path, \"/\")"
-
-  # The zone values the module owns: the records, routes, and rules above follow them in the same apply.
+  # The zone values the module owns: the records, routes, and rule above follow them in the same apply.
   zone_binding = {
-    domain             = local.domain
-    names              = var.layout
-    admin_hostname     = var.admin_hostname
-    pages_hostname     = var.pages_hostname
-    prefix             = var.prefix
-    excluded_hostnames = sort(var.excluded_hostnames)
+    domain         = local.domain
+    admin_hostname = var.admin_hostname
+    suffix         = var.suffix
   }
 
   # Every setting in the text form `poplin config` takes.
