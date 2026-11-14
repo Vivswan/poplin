@@ -19,7 +19,7 @@ const MEANINGS: { readonly [Key in keyof SettingValues]: string } = {
   dashboard_title: "The title of this dashboard.",
   outside_pages: "Whether pages outside the install may frame a site or load its files.",
   search_engines_allowed: "Whether search engines are let through to public sites.",
-  block_bots: "The zone's bot switches.",
+  block_bots: "The domain's bot switches.",
   max_total_size: "The most all sites hold together, such as 9GB.",
   max_site_size: "The most one site holds, such as 200MB.",
   max_sites: "The most sites, or none for no limit.",
@@ -70,7 +70,7 @@ ${warningLine(row)}
 </div>`;
 }
 
-function zoneRow(row: Row): Html {
+function domainRow(row: Row): Html {
   return html`<dt><code>${row.key}</code></dt><dd>${row.text}</dd>`;
 }
 
@@ -101,7 +101,7 @@ export async function showSettings(visit: Visit, freeLimits: FreeLimits): Promis
   const warnings = freeLimitWarnings(config.values, freeLimits);
   const rows = (Object.keys(texts) as Key[]).map((key): Row => ({ key, text: texts[key], fallback: defaults[key], warning: warnings.get(key) }));
   const ordinary = rows.filter((row) => !DOMAIN_SETTINGS.includes(row.key));
-  const zone = rows.filter((row) => DOMAIN_SETTINGS.includes(row.key));
+  const domain = rows.filter((row) => DOMAIN_SETTINGS.includes(row.key));
 
   const body = html`<form method="post" action="/settings/save">
 ${csrfField(visit)}
@@ -110,7 +110,7 @@ ${ordinary.map(settingRow)}
 </form>
 <h2>Changed on the Domain tab</h2>
 <p>These settings also change rules on your domain, so they are changed on the Domain tab.</p>
-<dl>${zone.map(zoneRow)}</dl>
+<dl>${domain.map(domainRow)}</dl>
 ${signOutForm(visit)}`;
 
   return { ...place, body };
