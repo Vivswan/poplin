@@ -227,8 +227,8 @@ A refused command prints one sentence and often a hint. With `--json` it prints 
 | Code                    | Means                                                       | What to do                                                    |
 | ----------------------- | ----------------------------------------------------------- | ------------------------------------------------------------- |
 | `no_setup_server`       | `poplin setup` was given no address                         | `poplin setup --server https://poplin.your-name.workers.dev`  |
-| `no_setup_token`        | `POPLIN_SETUP_TOKEN` holds no token                         | put the token of [Install](install.md), step 4, in it         |
-| `setup_token_refused`   | the token was refused, or it is of another account          | make one with the rights step 4 lists, in the install's account |
+| `no_setup_token`        | `POPLIN_SETUP_TOKEN` holds no token                         | put the token of [Install](install.md), step 3, in it         |
+| `setup_token_refused`   | the token was refused, or it is of another account          | make one with the rights step 3 lists, in the install's account |
 | `setup_provider_silent` | Cloudflare gave the install no answer                       | try again                                                     |
 | `setup_closed`          | nothing at that address takes a setup                       | after the first login, use the dashboard's Domain tab         |
 
