@@ -1,0 +1,385 @@
+:root {
+  --accent: #0f6b5c;
+  --on-accent: #ffffff;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --accent: #5cc9b3;
+    --on-accent: #0f1624;
+  }
+}
+
+.page-title {
+  margin-top: clamp(1.5rem, 5vw, 3rem);
+  font-size: clamp(2.2rem, 1.4rem + 3.4vw, 3.6rem);
+}
+
+.stepper {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 1.5rem;
+  padding: 0;
+  list-style: none;
+  counter-reset: step;
+}
+
+.stepper li {
+  flex: 1;
+  counter-increment: step;
+  border-top: 4px solid var(--line);
+}
+
+.stepper .is-done,
+.stepper .is-current {
+  border-top-color: var(--accent);
+}
+
+.stepper button {
+  width: 100%;
+  min-height: 2.75rem;
+  padding: 0.5rem 0;
+  border: 0;
+  background: none;
+  color: var(--ink-3);
+  text-align: left;
+  cursor: pointer;
+}
+
+.stepper button::before {
+  content: counter(step) ". ";
+}
+
+.stepper button[disabled] {
+  cursor: default;
+}
+
+.stepper .is-done button {
+  color: var(--ink);
+  text-decoration: underline;
+  text-decoration-color: var(--accent);
+  text-underline-offset: 0.2em;
+}
+
+.stepper .is-done button[disabled] {
+  text-decoration: none;
+}
+
+.stepper .is-current button {
+  color: var(--ink);
+  font-weight: 700;
+}
+
+.layout {
+  display: grid;
+  gap: 1.5rem;
+  margin-top: 1.5rem;
+  align-items: start;
+}
+
+@media (min-width: 54rem) {
+  .layout {
+    grid-template-columns: minmax(0, 1fr) 20rem;
+    gap: 2.5rem;
+  }
+
+  .summary {
+    position: sticky;
+    top: 1.5rem;
+  }
+}
+
+.panel {
+  padding: clamp(1.1rem, 3vw, 2rem);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+}
+
+.panel h2 {
+  font-size: clamp(1.4rem, 1.2rem + 1vw, 1.9rem);
+}
+
+.panel h2:focus {
+  outline: none;
+}
+
+.cart {
+  margin-top: 0.75rem;
+  padding: 0;
+  list-style: none;
+}
+
+.cart-row {
+  display: grid;
+  grid-template-columns: 72px minmax(0, 1fr) auto;
+  grid-template-areas:
+    "picture text price"
+    "picture quantity remove";
+  gap: 0.5rem 1rem;
+  align-items: center;
+  padding-block: 1rem;
+  border-bottom: 1px solid var(--line);
+}
+
+.cart-picture {
+  grid-area: picture;
+  border-radius: 6px;
+  background: var(--wash);
+}
+
+.cart-text {
+  grid-area: text;
+  display: flex;
+  flex-direction: column;
+}
+
+.cart-detail {
+  color: var(--ink-2);
+  font-size: 0.9375rem;
+}
+
+.cart-price {
+  grid-area: price;
+  font-weight: 600;
+}
+
+.quantity {
+  grid-area: quantity;
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.quantity-button {
+  width: 2.5rem;
+  height: 2.5rem;
+  border: 1px solid var(--ink-3);
+  border-radius: 6px;
+  background: var(--surface);
+  font-size: 1.25rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.quantity-button[disabled] {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.quantity-count {
+  min-width: 2rem;
+  text-align: center;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.link-button {
+  grid-area: remove;
+  justify-self: end;
+  min-height: 2.5rem;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--ink-2);
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.empty {
+  display: grid;
+  gap: 0.75rem;
+  justify-items: start;
+  padding-block: 1.5rem;
+}
+
+.promo {
+  margin-top: 1.25rem;
+}
+
+.promo-row {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.promo-row input {
+  flex: 1;
+  min-width: 0;
+  max-width: 14rem;
+}
+
+.fields {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 13rem), 1fr));
+  gap: 1rem;
+  margin-top: 1.25rem;
+}
+
+.field-wide {
+  grid-column: 1 / -1;
+}
+
+.field label {
+  display: block;
+  margin-bottom: 0.3rem;
+  font-size: 0.9375rem;
+  font-weight: 600;
+}
+
+.field input {
+  width: 100%;
+  min-height: 2.75rem;
+  padding: 0.5rem 0.7rem;
+  border: 1px solid var(--ink-3);
+  border-radius: 6px;
+  background: var(--surface);
+}
+
+.field input[aria-invalid="true"] {
+  border-color: var(--bad);
+  box-shadow: inset 0 0 0 1px var(--bad);
+}
+
+.error {
+  margin-top: 0.3rem;
+  color: var(--bad);
+  font-size: 0.875rem;
+}
+
+.hint {
+  margin-top: 0.4rem;
+  color: var(--ink-2);
+  font-size: 0.875rem;
+}
+
+.notice {
+  margin-top: 0.9rem;
+  padding: 0.7rem 0.9rem;
+  border-left: 4px solid var(--accent);
+  background: var(--wash);
+  font-size: 0.9375rem;
+}
+
+.button-quiet {
+  min-height: 2.5rem;
+  margin-top: 1rem;
+  padding-block: 0.3rem;
+  font-size: 0.9375rem;
+}
+
+.choices {
+  display: grid;
+  gap: 0.5rem;
+  margin: 1.5rem 0 0;
+  padding: 0;
+  border: 0;
+}
+
+.choices legend {
+  margin-bottom: 0.5rem;
+  padding: 0;
+  font-size: 0.9375rem;
+  font-weight: 600;
+}
+
+.choice {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 0.25rem 0.75rem;
+  align-items: center;
+  padding: 0.7rem 0.9rem;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.choice:has(input:checked) {
+  border-color: var(--accent);
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
+
+.choice input {
+  width: 1.1rem;
+  height: 1.1rem;
+  margin: 0;
+  accent-color: var(--accent);
+}
+
+.choice-cost {
+  color: var(--ink-2);
+  font-size: 0.9375rem;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-top: 1.75rem;
+}
+
+.actions .button-primary:only-child {
+  margin-left: auto;
+}
+
+.done-line {
+  max-width: 36em;
+  margin-top: 0.9rem;
+  font-size: 1.1875rem;
+}
+
+.summary {
+  padding: 1.25rem;
+  border-radius: 8px;
+  background: var(--wash);
+}
+
+.summary h2 {
+  font-family: var(--sans);
+  font-size: 1.0625rem;
+  font-weight: 600;
+  letter-spacing: 0;
+}
+
+.summary-lines {
+  margin-top: 0.75rem;
+  padding: 0 0 0.75rem;
+  border-bottom: 1px solid var(--line);
+  list-style: none;
+  font-size: 0.9375rem;
+}
+
+.summary-lines li,
+.totals div {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  padding-block: 0.25rem;
+}
+
+.totals {
+  margin-top: 0.75rem;
+  font-size: 0.9375rem;
+}
+
+.totals dd {
+  font-variant-numeric: tabular-nums;
+}
+
+.totals .grand {
+  margin-top: 0.5rem;
+  padding-top: 0.75rem;
+  border-top: 2px solid var(--ink);
+  font-size: 1.25rem;
+  font-weight: 700;
+}
+
+@media (max-width: 26rem) {
+  .choice {
+    grid-template-columns: auto 1fr;
+  }
+
+  .choice-cost {
+    grid-column: 2;
+  }
+}

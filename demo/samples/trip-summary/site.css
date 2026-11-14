@@ -1,0 +1,267 @@
+:root {
+  --accent: #9a6a00;
+  --on-accent: #ffffff;
+  --series-1: #2a78d6;
+  --series-2: #eb6834;
+  --series-3: #1baf7a;
+  --series-4: #eda100;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --accent: #e7b84a;
+    --on-accent: #0f1624;
+    --series-1: #3987e5;
+    --series-2: #d95926;
+    --series-3: #199e70;
+    --series-4: #c98500;
+  }
+}
+
+.headline {
+  max-width: 12em;
+  margin-top: clamp(2rem, 6vw, 4rem);
+  font-size: clamp(2.4rem, 1.2rem + 5.4vw, 5rem);
+  line-height: 1.02;
+  letter-spacing: -0.02em;
+}
+
+.standfirst {
+  max-width: 36em;
+  margin-top: 1.25rem;
+  color: var(--ink-2);
+  font-size: 1.1875rem;
+}
+
+/* The route reads as a line of stops: a rule with a dot per stop, turned on its side on narrow screens. */
+.route {
+  display: grid;
+  margin-top: clamp(2rem, 5vw, 3.5rem);
+  padding: 0;
+  list-style: none;
+}
+
+.route li {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  padding: 0 0 1.25rem 1.75rem;
+  border-left: 2px solid var(--ink);
+}
+
+.route li:last-child {
+  padding-bottom: 0;
+  border-left-color: transparent;
+}
+
+.route li::before {
+  content: "";
+  position: absolute;
+  left: -8px;
+  top: 0.3rem;
+  width: 14px;
+  height: 14px;
+  border: 3px solid var(--ink);
+  border-radius: 50%;
+  background: var(--accent);
+}
+
+.route span {
+  color: var(--ink-2);
+  font-size: 0.9375rem;
+}
+
+@media (min-width: 44rem) {
+  .route {
+    grid-template-columns: repeat(4, 1fr);
+  }
+
+  .route li,
+  .route li:last-child {
+    padding: 1.4rem 1.5rem 0 0;
+    border-left: 0;
+    border-top: 2px solid var(--ink);
+  }
+
+  .route li:last-child {
+    border-top-color: transparent;
+  }
+
+  .route li::before {
+    left: 0;
+    top: -8px;
+  }
+}
+
+.section-title {
+  margin-block: clamp(2.75rem, 7vw, 4.5rem) 0.5rem;
+  font-size: clamp(1.5rem, 1.1rem + 1.6vw, 2.2rem);
+}
+
+.day {
+  display: grid;
+  gap: 0.75rem;
+  padding-block: 1.75rem;
+  border-bottom: 1px solid var(--line);
+}
+
+.day-head {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  column-gap: 1rem;
+  align-items: center;
+}
+
+.day-number {
+  grid-row: span 2;
+  min-width: 0.7em;
+  color: var(--accent);
+  font-family: var(--serif);
+  font-size: 4rem;
+  font-weight: 700;
+  line-height: 0.9;
+}
+
+.day-head h3 {
+  font-size: 1.5rem;
+}
+
+.day-head p {
+  color: var(--ink-2);
+  font-size: 0.9375rem;
+}
+
+.plan {
+  padding: 0;
+  list-style: none;
+}
+
+.plan li {
+  display: grid;
+  grid-template-columns: 3.4rem 1fr;
+  gap: 0.75rem;
+  padding-block: 0.4rem;
+}
+
+.plan time {
+  color: var(--ink-2);
+  font-variant-numeric: tabular-nums;
+}
+
+.plan em {
+  display: inline-block;
+  margin-left: 0.25rem;
+  padding: 0 0.45rem;
+  border-radius: 4px;
+  background: var(--wash);
+  color: var(--ink-2);
+  font-size: 0.8125rem;
+  font-style: normal;
+  white-space: nowrap;
+}
+
+@media (min-width: 48rem) {
+  .day {
+    grid-template-columns: 19rem 1fr;
+    gap: 2.5rem;
+  }
+
+  .day-head {
+    align-self: start;
+  }
+}
+
+.cost-line {
+  font-size: 1.1875rem;
+}
+
+.cost-line strong {
+  font-size: 2.25rem;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+
+.split {
+  display: block;
+  width: 100%;
+  max-width: 44rem;
+  height: 10px;
+  margin-top: 1rem;
+  border-radius: 5px;
+}
+
+.fill-1 {
+  fill: var(--series-1);
+  background: var(--series-1);
+}
+
+.fill-2 {
+  fill: var(--series-2);
+  background: var(--series-2);
+}
+
+.fill-3 {
+  fill: var(--series-3);
+  background: var(--series-3);
+}
+
+.fill-4 {
+  fill: var(--series-4);
+  background: var(--series-4);
+}
+
+.split-key {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem 1.75rem;
+  margin-top: 0.75rem;
+  padding: 0;
+  list-style: none;
+  font-size: 0.9375rem;
+}
+
+.split-key li {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.swatch {
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+}
+
+.share {
+  color: var(--ink-2);
+}
+
+.costs {
+  max-width: 44rem;
+  margin-top: 1.75rem;
+}
+
+.notes {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 15rem), 1fr));
+  gap: 1.5rem 2.5rem;
+  margin-top: 1.25rem;
+}
+
+.notes div {
+  padding-top: 0.9rem;
+  border-top: 3px solid var(--accent);
+}
+
+.notes dt {
+  font-weight: 700;
+}
+
+.notes dd {
+  margin-top: 0.3rem;
+  color: var(--ink-2);
+}
+
+.costs td:nth-child(3) {
+  white-space: nowrap;
+}
