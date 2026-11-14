@@ -7,13 +7,13 @@
 
 import type { DomainPlug, DomainReading, DomainRow, DomainSettings, DomainState, DomainStep, ReadSettings } from "@poplin/app/src/dashboard/domain/records";
 import { parseLogins } from "@poplin/core/src/auth/logins";
-import { isAccessOff, readLoginFacts, syncAccess } from "./access/access";
+import { ACCESS_NOT_ENABLED, isAccessOff, readLoginFacts, syncAccess } from "./access/access";
 import { syncZoneBots } from "./bots/bots";
 import { type Connection, listZones } from "./client";
 import { syncDatabase } from "./database/database";
 import { syncDns } from "./dns/dns";
 import { INSTALL_OBJECTS } from "./install-objects";
-import { syncHttps } from "./https/https";
+import { HTTPS_SWITCH, syncHttps } from "./https/https";
 import { type DomainLayout, privateSitesPattern } from "./layout";
 import { syncRoutes } from "./routes/routes";
 import { syncGuards } from "./rules/guards";
@@ -61,6 +61,15 @@ const OTHER_LOGINS = "not the logins of the settings";
 /** What the variable's row says before the application it is read from exists. */
 const NO_APPLICATION = "written once the Access application exists";
 
+/** What a run that could not read the team's domain names as the step that failed. */
+const TEAM_DOMAIN = "the team's domain";
+
+/** What Cloudflare answers a call the token has no permission for: this status, with an error of this code. */
+const NOT_PERMITTED = { status: 403, code: 10000 } as const;
+
+/** What a row says after a refusal for a missing permission, before the permission's name. */
+const ADD_RIGHT = "Add this right to the token";
+
 /** What a repair that wrote the variable tells the person to do next. */
 const LOGIN_READY = "The login is ready. Open your dashboard and log in:";
 
@@ -79,14 +88,14 @@ const RIGHT = {
   database: { name: "D1: Edit", key: "d1", type: "edit" },
 } as const satisfies Readonly<Record<string, Right>>;
 
-/** The permissions the calls of each object need. A piece with no row here does not compile. */
+/** The permissions the calls of each object need, the one its changes need first. A piece with no row here does not compile. */
 const RIGHTS = {
   Zone: [RIGHT.zone],
   "DNS record": [RIGHT.dns],
   "Worker route": [RIGHT.routes],
   "Access application": [RIGHT.access],
   "Access policy": [RIGHT.access],
-  "Worker variable": [RIGHT.team, RIGHT.scripts],
+  "Worker variable": [RIGHT.scripts, RIGHT.team],
   "Redirect rule": [RIGHT.redirect, RIGHT.zoneSettings],
   "WAF rule": [RIGHT.waf],
   "Rate rule": [RIGHT.waf],
@@ -169,6 +178,32 @@ function failureText(stopped: Stopped): string {
   return errors === "" ? `refused with status ${stopped.status}` : `refused with status ${stopped.status}: ${errors}`;
 }
 
+/** The permission a refused step lacked: of an object that needs two, the second where the step that failed is the one that reads with it. */
+function lackedRight(object: Piece, failed: string): Right {
+  if (failed === HTTPS_SWITCH) return RIGHT.zoneSettings;
+
+  if (failed === TEAM_DOMAIN) return RIGHT.team;
+
+  return RIGHTS[object][0];
+}
+
+/** Whether Cloudflare refused a step for a permission the token lacks, and for nothing else: an account whose Access is off answers with the same status. */
+function lacksRight(stopped: Stopped): boolean {
+  if (stopped.failure !== "refused" || stopped.status !== NOT_PERMITTED.status) return false;
+
+  const errors = stopped.errors ?? [];
+
+  return errors.some((error) => error.code === NOT_PERMITTED.code) && !errors.some((error) => error.message.includes(ACCESS_NOT_ENABLED));
+}
+
+/** Why a step failed, and for a missing permission the one to add, in the words of the token form. */
+function failedDetail(stopped: Stopped, object: Piece): string {
+  const failed = stopped.failed ?? "";
+  const why = failed === "" ? failureText(stopped) : `${failed}: ${failureText(stopped)}`;
+
+  return lacksRight(stopped) ? `${why}. ${ADD_RIGHT}: ${lackedRight(object, failed).name}` : why;
+}
+
 function rowsOf(outcome: Outcome, mode: Mode, objectOf: (subject: string) => Piece): DomainRow[] {
   const { report } = outcome;
   const states = STATES[mode];
@@ -183,7 +218,7 @@ function rowsOf(outcome: Outcome, mode: Mode, objectOf: (subject: string) => Pie
 
   if (!outcome.ok) {
     const failed = outcome.failed ?? "";
-    rows.push(row(failed, "failed", failed === "" ? failureText(outcome) : `${failed}: ${failureText(outcome)}`));
+    rows.push(row(failed, "failed", failedDetail(outcome, objectOf(failed))));
     rows.push(...(outcome.unrun ?? []).map((subject) => row(subject, "not-run")));
   }
 
@@ -267,7 +302,7 @@ async function variablesPiece(progress: Progress, mode: Mode, parts: PlugParts, 
   const object = (): Piece => "Worker variable";
   const facts = await readLoginFacts(connection, parts.accountId);
   if (!facts.ok) {
-    await piece(progress, mode, object, async (): Promise<Outcome> => ({ ...facts, report: reportOf([]) }));
+    await piece(progress, mode, object, async (): Promise<Outcome> => ({ ...facts, report: reportOf([]), failed: TEAM_DOMAIN }));
 
     return;
   }

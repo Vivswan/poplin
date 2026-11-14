@@ -267,7 +267,7 @@ test("a repair refused half way: the rows say what was made, which change failed
       "DNS record | created | *.example.com",
       "DNS record | created | poplin.example.com",
       "Worker route | not-run | *-page.example.com/*",
-      `Worker route | failed | *-poplin.example.com/*: refused with status 403: 10000 Authentication error for Bearer ${TOKEN}`,
+      `Worker route | failed | *-poplin.example.com/*: refused with status 403: 10000 Authentication error for Bearer ${TOKEN}. Add this right to the token: Workers Routes: Edit`,
       "Worker route | not-run | poplin.example.com/*",
       "Access application | not-run | ",
       "Worker variable | not-run | ",
@@ -279,6 +279,57 @@ test("a repair refused half way: the rows say what was made, which change failed
     ]);
     expect(account.records.map((record) => record.name)).toEqual(["*.example.com", "poplin.example.com"]);
     expect([account.routes, account.policies, account.applications, account.databases, account.rulesets]).toEqual([[], [], [], [], {}]);
+  });
+});
+
+/** One call a check makes with each permission but Zone: Read, which the list of zones needs: without that one no row is read at all. */
+const NEEDS: readonly (readonly [right: string, call: string])[] = [
+  ["DNS: Edit", "GET /zones/zone-1/dns_records"],
+  ["Workers Routes: Edit", "GET /zones/zone-1/workers/routes"],
+  ["Access: Apps and Policies: Edit", `GET /accounts/${ACCOUNT}/access/policies`],
+  ["Access: Organizations, Identity Providers, and Groups: Read", `GET /accounts/${ACCOUNT}/access/organizations`],
+  ["Workers Scripts: Edit", `GET /accounts/${ACCOUNT}/workers/scripts/poplin/settings`],
+  ["Zone Settings: Read", "GET /zones/zone-1/settings/always_use_https"],
+  ["Single Redirect: Edit", "GET /zones/zone-1/rulesets/phases/http_request_dynamic_redirect/entrypoint"],
+  ["Zone WAF: Edit", "GET /zones/zone-1/rulesets/phases/http_request_firewall_custom/entrypoint"],
+  ["Bot Management: Edit", "GET /zones/zone-1/bot_management"],
+  ["D1: Edit", `GET /accounts/${ACCOUNT}/d1/database`],
+];
+
+// Drift: a refused row used to quote Cloudflare's status alone, and the person had to guess which of eleven rows their token lacked.
+test.each(NEEDS)("a token without %s gets one failed row, which names that right in the words of the token form", async (right, call) => {
+  const account = emptyAccount();
+
+  await withAccount(account, async (plug) => {
+    await plug.repair(TOKEN, SETTINGS);
+    account.refuse = call;
+    const failed = shown(await plug.check(TOKEN, SETTINGS)).filter((row) => row.includes(" | failed | "));
+
+    expect(failed.map((row) => row.slice(row.indexOf("Add this right")))).toEqual([`Add this right to the token: ${right}`]);
+    expect(plug.tokenRights).toContain(right);
+  });
+});
+
+test("the rows of that table and the list of zones are every right the plug asks for: a right with no row here is one no refusal names", () => {
+  const plug = createDomainPlug({ accountId: ACCOUNT, script: "poplin", layout: LAYOUT });
+
+  expect(["Zone: Read", ...NEEDS.map(([right]) => right)].sort()).toEqual([...plug.tokenRights].sort());
+});
+
+const otherwise: readonly { readonly name: string; readonly refused: Partial<Account> }[] = [
+  { name: "a failure of Cloudflare's own", refused: { refuseAs: { status: 500, code: 10000 } } },
+  { name: "a refusal for another reason than a permission", refused: { refuseAs: { status: 403, code: 9109 } } },
+  { name: "an account whose Access is off, met after a step was made", refused: { refuseMessage: "access.api.error.not_enabled" } },
+];
+
+// Drift: a row that names a right for a failure no right mends sends the person to edit a token that was never the cause.
+test.each(otherwise)("$name fails its row and names no right", async ({ refused }) => {
+  const account = { ...emptyAccount(), refuse: `POST /accounts/${ACCOUNT}/access/apps`, ...refused };
+
+  await withAccount(account, async (plug) => {
+    const failed = shown(await plug.repair(TOKEN, SETTINGS)).filter((row) => row.includes(" | failed | "));
+
+    expect([failed.length, failed.join().includes("Add this right")]).toEqual([1, false]);
   });
 });
 

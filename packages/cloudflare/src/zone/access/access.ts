@@ -17,7 +17,7 @@ const POLICY_NAME = INSTALL_OBJECTS.accessPolicy;
 const APPLICATION_NAME = INSTALL_OBJECTS.accessApplication;
 
 /** What Cloudflare's refusal says on an account whose Access was never switched on. */
-const NOT_ENABLED = "access.api.error.not_enabled";
+export const ACCESS_NOT_ENABLED = "access.api.error.not_enabled";
 
 /** How Access keeps a person's login: its cookie's lifetime and the two cookie attributes a browser enforces. */
 const SESSION = {
@@ -155,7 +155,7 @@ export function planAccess(desired: DesiredAccess, current: AccountAccess): Acce
  * @returns `true` for a refusal that carries Cloudflare's not-enabled message, and for no other failure
  */
 export function isAccessOff(failure: CloudflareFailure): boolean {
-  return failure.failure === "refused" && failure.errors.some((error) => error.message.includes(NOT_ENABLED));
+  return failure.failure === "refused" && failure.errors.some((error) => error.message.includes(ACCESS_NOT_ENABLED));
 }
 
 /**

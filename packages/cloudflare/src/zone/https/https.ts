@@ -37,6 +37,9 @@ interface CurrentHttps {
   readonly rules: PhaseRules | undefined;
 }
 
+/** What a run that could not read the zone's own switch names as the step that failed. */
+export const HTTPS_SWITCH = "the zone's own https switch";
+
 /**
  * Write the expression of the redirect rule: true for a request over `http` to a site hostname or the admin hostname.
  *
@@ -79,7 +82,7 @@ export function planHttps(desired: DesiredHttps, current: CurrentHttps): RuleSte
  */
 export async function syncHttps(connection: Connection, zoneId: string, desired: DesiredHttps, mode: Mode): Promise<Synced> {
   const zoneSwitch = await callCloudflare(connection, (api) => new BaseSettings(api).get(ZONE_SWITCH, { zone_id: zoneId }));
-  if (!zoneSwitch.ok) return { ...zoneSwitch, report: reportOf([]) };
+  if (!zoneSwitch.ok) return { ...zoneSwitch, report: reportOf([]), failed: HTTPS_SWITCH };
 
   const zoneRedirects = (zoneSwitch.value as { readonly value?: unknown }).value === "on";
 

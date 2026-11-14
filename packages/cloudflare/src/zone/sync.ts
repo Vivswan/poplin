@@ -28,7 +28,7 @@ export interface Report {
   readonly changedNothing: boolean;
 }
 
-/** The failure that stopped a run, with the report of the steps done before it. `failed` is the subject of the step that failed and `unrun` the subjects after it; both are absent when the run stopped before it had a plan. */
+/** The failure that stopped a run, with the report of the steps done before it: `failed` is the step that failed and `unrun` the steps after it. Before a plan there is no `unrun`, and `failed` names the read the run stopped at where its plan needs two. */
 export type SyncFailure = CloudflareFailure & { readonly report: Report; readonly failed?: string; readonly unrun?: readonly string[] };
 
 /** A finished run, or the failure that stopped it with the report of the steps done before it. */

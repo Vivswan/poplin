@@ -70,6 +70,9 @@ export interface Account {
 
   /** The message of that refusal, for a test that needs Cloudflare's own words. */
   refuseMessage?: string;
+
+  /** The status and the error code of that refusal; left out, the ones of a token that lacks a permission. */
+  refuseAs?: { readonly status: number; readonly code: number };
 }
 
 /** An account with nothing of poplin's in it and no hostnames of its own. */
@@ -205,7 +208,7 @@ export function answer(account: Account, asked: Asked): Response {
   // A token of another account reaches nothing of this one.
   if (owner !== ACCOUNT) return refusal(403, 10000, "Authentication error");
 
-  if (account.refuse === `${asked.method} ${path}`) return refusal(403, 10000, account.refuseMessage ?? `Authentication error for ${asked.key}`);
+  if (account.refuse === `${asked.method} ${path}`) return refusal(account.refuseAs?.status ?? 403, account.refuseAs?.code ?? 10000, account.refuseMessage ?? `Authentication error for ${asked.key}`);
 
   return inAccount(account, asked, path.split("/").slice(1));
 }
