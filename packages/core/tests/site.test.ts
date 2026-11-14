@@ -1,8 +1,8 @@
 import { describe, expect, test } from "bun:test";
 
-import { secretName, type SiteName } from "../src/names/names";
 import { checkRecord } from "../src/records/kind";
 import { SITE } from "../src/records/site";
+import { mintSiteId } from "../src/sites/ids";
 
 const TOKEN_ID = "00000000000000aa";
 const NOW = 1_700_000_000_000;
@@ -80,8 +80,8 @@ describe("SITE", () => {
     expect(refusedField(record)).toBe(field);
   });
 
-  test("drift: the secret rule lives in the names module; a secret it mints must be one the record accepts", () => {
-    const [, secret] = secretName("report" as SiteName).split("--");
+  test("drift: the secret rule lives in the ids module; what it mints must be a secret the record accepts", () => {
+    const secret = mintSiteId();
 
     expect(checkRecord(SITE, { ...LIVE_PRIVATE, access: "unlisted", secret }).ok).toBe(true);
   });

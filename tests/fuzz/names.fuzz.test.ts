@@ -3,139 +3,185 @@
 import { expect } from "bun:test";
 import fc from "fast-check";
 
-import { nameFromEntry, parseSiteName, type SiteName, secretName, splitLabel } from "../../packages/core/src/names/names";
-import { applyPrefix, parsePrefix, stripPrefix } from "../../packages/core/src/names/prefix";
+import { nameFromEntry, parsePublicName, parseSiteName } from "../../packages/core/src/names/names";
+import { applySuffix, parseSuffix, readHostLabel, stripSuffix } from "../../packages/core/src/names/suffix";
+import { parseSiteId } from "../../packages/core/src/sites/ids";
+import { siteLabel, siteReference, splitLabel } from "../../packages/core/src/sites/labels";
 import { fuzzTarget } from "./config";
 import { hostile } from "./hostile";
 
-const NO_RESERVED: ReadonlySet<string> = new Set();
+const NO_OWN_NAMES: ReadonlySet<string> = new Set();
+const EVERY_INSTALLS_OWN = "gallery";
+const MIN_PUBLISHED_LENGTH = 3;
 const MAX_PUBLISHED_LENGTH = 40;
 const MAX_DNS_LABEL_LENGTH = 63;
-const MAX_PUBLISHED_PREFIX_LENGTH = 9;
+const MAX_PUBLISHED_SUFFIX_LENGTH = 9;
 const DNS_LABEL_SHAPE = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/;
-const PUBLISHED_PREFIX_SHAPE = /^([a-z0-9][a-z0-9-]*)?$/;
+const PUBLISHED_SUFFIX_SHAPE = /^(-[a-z0-9]+)+$/;
 const PUBLISHED_SHAPE = /^[a-z0-9]+(-[a-z0-9]+)*$/;
-const PUBLISHED_SECRET = /^[0-9a-z]{12}$/;
+const PUBLISHED_ID = /^[0-9a-z]{12}$/;
+const ENCODED_FORM_AT = 2;
 
 const property = fuzzTarget(import.meta.file);
 
 const wellFormed = fc
   .oneof(fc.array(fc.stringMatching(/^[a-z0-9]{1,10}$/), { minLength: 1, maxLength: 6 }), fc.array(fc.stringMatching(/^[a-z0-9]{40}$/), { minLength: 1, maxLength: 1 }))
   .map((words) => words.join("-"))
-  .filter((name) => name.length <= MAX_PUBLISHED_LENGTH);
+  .filter((name) => name.length >= MIN_PUBLISHED_LENGTH && name.length <= MAX_PUBLISHED_LENGTH);
 
 const siteNames = wellFormed
-  .map((name) => parseSiteName(name, NO_RESERVED))
+  .map((name) => parseSiteName(name))
   .filter((parsed) => parsed.ok)
   .map((parsed) => parsed.value);
 
-const reservedSets = fc.uniqueArray(fc.oneof(fc.constantFrom("www", "admin", "index"), wellFormed), { maxLength: 4 }).map((names): ReadonlySet<string> => new Set(names));
-const secretLabels = fc.tuple(wellFormed, fc.stringMatching(PUBLISHED_SECRET)).map(([name, secret]) => `${name}--${secret}`);
-const labels = hostile(fc.oneof(wellFormed, secretLabels, fc.tuple(fc.constantFrom("page-", "p", "site--"), wellFormed).map(([prefix, name]) => `${prefix}${name}`)));
-const entries = hostile(fc.oneof(wellFormed, wellFormed.map((name) => `${name}.html`)));
-const rawPrefixes = hostile(fc.oneof(fc.constantFrom("page-", "", "p", "site--"), fc.stringMatching(/^[a-z0-9-]{0,12}$/)));
+const publicNames = wellFormed
+  .map((name) => parsePublicName(name, NO_OWN_NAMES))
+  .filter((parsed) => parsed.ok)
+  .map((parsed) => parsed.value);
 
-const prefixes = rawPrefixes
-  .map((raw) => parsePrefix(raw))
+const siteIds = fc
+  .stringMatching(PUBLISHED_ID)
+  .map((raw) => parseSiteId(raw))
+  .filter((parsed) => parsed.ok)
+  .map((parsed) => parsed.value);
+const ownNameSets = fc.uniqueArray(fc.oneof(fc.constantFrom("www", "admin", "index"), wellFormed), { maxLength: 4 }).map((names): ReadonlySet<string> => new Set(names));
+const siteLabels = fc.tuple(wellFormed, fc.stringMatching(PUBLISHED_ID)).map(([name, id]) => `${name}--${id}`);
+const rawSuffixes = hostile(fc.oneof(fc.constantFrom("-page", "", "-p", "-my-pages", "page-", "--page"), fc.stringMatching(/^[a-z0-9-]{0,12}$/)));
+const labels = hostile(fc.oneof(wellFormed, siteLabels, fc.stringMatching(PUBLISHED_ID), fc.tuple(fc.oneof(wellFormed, siteLabels), fc.constantFrom("-page", "-p", "--site")).map(([site, suffix]) => `${site}${suffix}`)));
+const entries = hostile(fc.oneof(wellFormed, wellFormed.map((name) => `${name}.html`)));
+
+const suffixes = rawSuffixes
+  .map((raw) => parseSuffix(raw))
   .filter((parsed) => parsed.ok)
   .map((parsed) => parsed.value);
 
 function followsPublishedRule(name: string): boolean {
-  return name.length >= 1 && name.length <= MAX_PUBLISHED_LENGTH && PUBLISHED_SHAPE.test(name);
+  return name.length >= MIN_PUBLISHED_LENGTH && name.length <= MAX_PUBLISHED_LENGTH && PUBLISHED_SHAPE.test(name);
 }
 
-function followsPrefixRule(raw: string): boolean {
-  return raw.length <= MAX_PUBLISHED_PREFIX_LENGTH && PUBLISHED_PREFIX_SHAPE.test(raw);
+function followsSuffixRule(raw: string): boolean {
+  return raw.length <= MAX_PUBLISHED_SUFFIX_LENGTH && PUBLISHED_SUFFIX_SHAPE.test(raw);
 }
 
-function without(reserved: ReadonlySet<string>, name: string): ReadonlySet<string> {
-  return new Set([...reserved].filter((kept) => kept !== name));
+function without(ownNames: ReadonlySet<string>, name: string): ReadonlySet<string> {
+  return new Set([...ownNames].filter((kept) => kept !== name));
+}
+
+function isOwn(ownNames: ReadonlySet<string>, name: string): boolean {
+  return name === EVERY_INSTALLS_OWN || ownNames.has(name);
 }
 
 property(
-  "a hostile prefix is refused, not thrown on, unless it is at most 9 hostname characters with no leading dash, and an accepted one is the string that came in and reads back the name it was put before",
-  fc.property(rawPrefixes, siteNames, (raw, name) => {
-    const parsed = parsePrefix(raw);
+  "a hostile suffix is refused, not thrown on, unless it is a dash and then letters, digits, and single dashes, 9 characters at most, and an accepted one is the string that came in and reads back what it was put after",
+  fc.property(rawSuffixes, siteNames, siteIds, publicNames, (raw, name, id, publicName) => {
+    const parsed = parseSuffix(raw);
 
-    expect(parsed.ok).toBe(followsPrefixRule(raw));
+    expect(parsed.ok).toBe(followsSuffixRule(raw));
     if (!parsed.ok) return;
 
+    const label = siteLabel(name, id);
+
     expect<string>(parsed.value).toBe(raw);
-    expect<unknown>(stripPrefix(parsed.value, applyPrefix(parsed.value, name))).toEqual({ ok: true, label: name });
+    expect<unknown>([stripSuffix(parsed.value, applySuffix(parsed.value, label)), stripSuffix(parsed.value, applySuffix(parsed.value, publicName))]).toEqual([
+      { ok: true, label },
+      { ok: true, label: publicName },
+    ]);
   }),
 );
 
 property(
-  "the secret address of any site under any accepted prefix is a hostname label of at most 63 characters, so no configured prefix makes an address DNS cannot carry",
-  fc.property(prefixes, siteNames, (prefix, name) => {
-    const label = applyPrefix(prefix, secretName(name));
-
-    expect(label.length).toBeLessThanOrEqual(MAX_DNS_LABEL_LENGTH);
-    expect(label).toMatch(DNS_LABEL_SHAPE);
+  "the address of any site under any accepted suffix is a hostname label of at most 63 characters without two dashes third and fourth, so no configured suffix makes an address DNS or a URL parser cannot carry",
+  fc.property(suffixes, siteNames, siteIds, publicNames, (suffix, name, id, publicName) => {
+    for (const label of [applySuffix(suffix, siteLabel(name, id)), applySuffix(suffix, publicName)]) {
+      expect(label.length).toBeLessThanOrEqual(MAX_DNS_LABEL_LENGTH);
+      expect(label).toMatch(DNS_LABEL_SHAPE);
+      expect(label.startsWith("--", ENCODED_FORM_AT)).toBe(false);
+    }
   }),
 );
 
 property(
-  "a hostile label or entry is refused, not thrown on, and a stripped label put back behind its prefix is the label that came in",
-  fc.property(labels, prefixes, reservedSets, (label, prefix, reserved) => {
-    parseSiteName(label, reserved);
-    nameFromEntry(label, reserved);
-    splitLabel(label, reserved);
+  "a hostile label or entry is refused, not thrown on, and a stripped label put back before its suffix is the label that came in",
+  fc.property(labels, suffixes, ownNameSets, (label, suffix, ownNames) => {
+    parseSiteName(label);
+    nameFromEntry(label);
+    parsePublicName(label, ownNames);
+    parseSiteId(label);
+    splitLabel(label, ownNames);
+    siteReference(label, ownNames);
+    readHostLabel(suffix, label, ownNames);
 
-    const stripped = stripPrefix(prefix, label);
-    if (stripped.ok) expect(`${prefix}${stripped.label}`).toBe(label);
+    const stripped = stripSuffix(suffix, label);
+    if (stripped.ok) expect(`${stripped.label}${suffix}`).toBe(label);
   }),
 );
 
 property(
-  "every accepted name follows the published rule and is not reserved, so no site gets a name DNS or the bucket cannot carry",
-  fc.property(labels, reservedSets, (raw, reserved) => {
-    const outcomes = [parseSiteName(raw, reserved), nameFromEntry(raw, reserved), splitLabel(raw, reserved)];
-    const accepted = outcomes.map((outcome) => (outcome.ok ? outcome.value : undefined)).filter((value) => value !== undefined);
-    const names = accepted.map((value) => (typeof value === "string" ? value : value.name));
+  "every accepted name follows the published rule, every accepted public name is one the install does not keep for itself, and every accepted id is 12 base36 characters, so no site gets an address DNS cannot carry or the install answers on itself",
+  fc.property(labels, suffixes, ownNameSets, (raw, suffix, ownNames) => {
+    const checked = [parseSiteName(raw), nameFromEntry(raw), parsePublicName(raw, ownNames), splitLabel(raw, ownNames), siteReference(raw, ownNames)];
+    const accepted: readonly unknown[] = [...checked.map((outcome) => (outcome.ok ? outcome.value : undefined)), readHostLabel(suffix, raw, ownNames)];
+    const parts = accepted
+      .filter((value) => value !== undefined)
+      .map((value): { readonly kind?: string; readonly name?: string; readonly id?: string } => (typeof value === "string" ? { name: value } : (value as object)));
+    const names = parts.map((part) => part.name).filter((name) => name !== undefined);
+    const publicOnes = [parsePublicName(raw, ownNames).ok ? raw : undefined, ...parts.map((part) => (part.kind === "public-name" ? part.name : undefined))].filter((name) => name !== undefined);
+    const ids = parts.map((part) => part.id).filter((id) => id !== undefined);
 
-    expect(names.filter((name) => !followsPublishedRule(name) || reserved.has(name))).toEqual([]);
+    expect(names.filter((name) => !followsPublishedRule(name))).toEqual([]);
+    expect(publicOnes.filter((name) => isOwn(ownNames, name))).toEqual([]);
+    expect(ids.filter((id) => !PUBLISHED_ID.test(id))).toEqual([]);
   }),
 );
 
 property(
-  "every well formed name is accepted unless reserved, so a tightened rule cannot orphan published sites",
-  fc.property(wellFormed, reservedSets, (name, reserved) => {
-    expect(parseSiteName(name, reserved).ok).toBe(!reserved.has(name));
+  "every well formed name is accepted as a name, and as a public name unless the install keeps it for itself, so a tightened rule cannot orphan published sites",
+  fc.property(fc.oneof(wellFormed, fc.constant(EVERY_INSTALLS_OWN)), ownNameSets, (name, ownNames) => {
+    expect([parseSiteName(name).ok, parsePublicName(name, ownNames).ok]).toEqual([true, !isOwn(ownNames, name)]);
   }),
 );
 
 property(
-  "a secret address built under any prefix reads back as its site and a 12 character base36 secret",
-  fc.property(siteNames, prefixes, reservedSets, fc.context(), (name, prefix, reserved, context) => {
-    const address = applyPrefix(prefix, secretName(name));
-    const stripped = stripPrefix(prefix, address);
-    const label = stripped.ok ? stripped.label : undefined;
+  "a site address built under any suffix reads back as its name and its id whatever the install keeps for itself, and a public address as its public name",
+  fc.property(siteNames, siteIds, publicNames, suffixes, ownNameSets, fc.context(), (name, id, publicName, suffix, ownNames, context) => {
+    const address = applySuffix(suffix, siteLabel(name, id));
     context.log(`address: ${address}`);
 
-    expect(label).toBeString();
-    expect<unknown>(splitLabel(label as string, without(reserved, name))).toEqual({ ok: true, value: { name, secret: expect.stringMatching(PUBLISHED_SECRET) } });
+    expect<unknown>(readHostLabel(suffix, address, ownNames)).toEqual({ kind: "site", name, id });
+    expect<unknown>(readHostLabel(suffix, applySuffix(suffix, publicName), without(ownNames, publicName))).toEqual({ kind: "public-name", name: publicName });
   }),
 );
 
 property(
-  "an accepted label is exactly its name, or its name, two dashes, and its secret, so no extra text rides along to another site",
-  fc.property(labels, reservedSets, (label, reserved) => {
-    const split = splitLabel(label, reserved);
+  "an accepted label is exactly its name, or its name, two dashes, and its id, so no extra text rides along to another site",
+  fc.property(labels, ownNameSets, (label, ownNames) => {
+    const split = splitLabel(label, ownNames);
     if (!split.ok) return;
 
-    const parts: { readonly name: SiteName; readonly secret?: string } = split.value;
-    const rebuilt = parts.secret === undefined ? parts.name : `${parts.name}--${parts.secret}`;
+    const rebuilt = split.value.kind === "site" ? `${split.value.name}--${split.value.id}` : split.value.name;
 
     expect(rebuilt).toBe(label);
-    if (parts.secret !== undefined) expect(parts.secret).toMatch(PUBLISHED_SECRET);
+    expect(label.includes("--")).toBe(split.value.kind === "site");
   }),
 );
 
 property(
-  "a label names the same site whatever else is reserved, so reserving a name cannot repoint an address",
-  fc.property(labels, reservedSets, reservedSets, (label, reserved, others) => {
-    const split = splitLabel(label, reserved);
+  "a reference a command accepts is exactly what was typed, be it an id alone, a label, or a name, and twelve base36 characters are always the id",
+  fc.property(labels, ownNameSets, (raw, ownNames) => {
+    const reference = siteReference(raw, ownNames);
+    if (!reference.ok) return;
+
+    const parts: { readonly name?: string; readonly id?: string } = reference.value;
+
+    expect([parts.name, parts.id].filter((part) => part !== undefined).join("--")).toBe(raw);
+    expect(reference.value.kind === "id").toBe(PUBLISHED_ID.test(raw));
+  }),
+);
+
+property(
+  "a label names the same site whatever else the install keeps for itself, so keeping a name cannot repoint an address",
+  fc.property(labels, ownNameSets, ownNameSets, (label, ownNames, others) => {
+    const split = splitLabel(label, ownNames);
     if (!split.ok) return;
 
     expect(splitLabel(label, without(others, split.value.name))).toEqual(split);
@@ -147,17 +193,17 @@ property(
   fc.property(fc.mixedCase(fc.tuple(wellFormed, fc.constantFrom("", ".html")).map(([name, suffix]) => `${name}${suffix}`)), (entry) => {
     const name = entry.toLowerCase().replace(/\.html$/, "");
 
-    expect<unknown>(nameFromEntry(entry, NO_RESERVED)).toEqual({ ok: true, value: name });
+    expect<unknown>(nameFromEntry(entry)).toEqual({ ok: true, value: name });
   }),
 );
 
 property(
   "a name derived from an entry is one the parser accepts and differs from the entry only by ASCII case and a trailing .html",
-  fc.property(entries, reservedSets, (entry, reserved) => {
-    const derived = nameFromEntry(entry, reserved);
+  fc.property(entries, (entry) => {
+    const derived = nameFromEntry(entry);
     if (!derived.ok) return;
 
-    expect(parseSiteName(derived.value, reserved)).toEqual(derived);
+    expect(parseSiteName(derived.value)).toEqual(derived);
     expect(entry).toMatch(/^[\x21-\x7e]+$/);
     expect([derived.value, `${derived.value}.html`]).toContain(entry.toLowerCase());
   }),

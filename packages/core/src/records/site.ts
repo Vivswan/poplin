@@ -2,15 +2,12 @@
 
 import * as v from "valibot";
 
-import { splitLabel } from "../names/names";
+import { parseSiteId } from "../sites/ids";
 import { HOLDER, MOMENT, POSITIVE, REVISION, SITE_NAME } from "./fields";
 import type { RecordKind } from "./kind";
 
 /** The number a site record of the shape below is stamped with. */
 const SITE_SHAPE = 1;
-
-/** A secret is checked as the secret part of a label, with a stand-in name in front of it. */
-const NO_RESERVED_NAMES: ReadonlySet<string> = new Set();
 
 /** One publish that can still be gone back to. */
 const VERSION = v.strictObject({ number: POSITIVE, published: MOMENT, published_by: HOLDER });
@@ -74,10 +71,7 @@ export const SITE: RecordKind<SiteRecord> = { name: "site", shape: SITE_SHAPE, s
  */
 export type SiteRecord = v.InferOutput<typeof SITE_SCHEMA>;
 
+// A secret has the form of a site id.
 function isSecret(value: unknown): boolean {
-  if (typeof value !== "string") return false;
-
-  const label = splitLabel(`a--${value}`, NO_RESERVED_NAMES);
-
-  return label.ok && "secret" in label.value;
+  return typeof value === "string" && parseSiteId(value).ok;
 }

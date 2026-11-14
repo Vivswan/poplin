@@ -1,71 +1,51 @@
-// The site-name rules: what a name may be, its secret form, and how a hostname label splits back into them.
+// The name rules: what a site's name may be, how one is derived from a file or folder, and which names a public site may hold as its address.
 
-const MAX_NAME_LENGTH = 40;
+/** The most characters a name holds; with `--`, an id, and a suffix it still fits one DNS label. */
+export const MAX_NAME_LENGTH = 40;
+
+/** The fewest characters a name holds: a shorter one would put `--` third and fourth in a hostname label, the form URL parsers keep for encoded names. */
+const MIN_NAME_LENGTH = 3;
+
+/** The characters a name may hold. */
 const NAME_CHARACTERS = /^[a-z0-9-]+$/;
-const SECRET_SEPARATOR = "--";
-const SECRET_LENGTH = 12;
-const SECRET_ALPHABET = "0123456789abcdefghijklmnopqrstuvwxyz";
-const SECRET_PATTERN = /^[0-9a-z]{12}$/;
-const UNBIASED_BYTE_LIMIT = 256 - (256 % SECRET_ALPHABET.length);
+
+/** What joins a name to an id in a site label, so no name may hold it. */
+const DOUBLE_DASH = "--";
+
+/** The ending a file name loses when a name is derived from it. */
 const HTML_SUFFIX = ".html";
-export const MAX_SECRET_NAME_LENGTH = MAX_NAME_LENGTH + SECRET_SEPARATOR.length + SECRET_LENGTH;
+
+/** The public names every install keeps for itself: `gallery` before the suffix is the hostname of the gallery page. */
+const OWN_PUBLIC_NAMES: ReadonlySet<string> = new Set(["gallery"]);
 
 declare const siteNameBrand: unique symbol;
-declare const secretNameBrand: unique symbol;
+declare const publicNameBrand: unique symbol;
 
-/** A string that passed `parseSiteName`; no other code can make one. */
+/** A string that passed `parseSiteName`; no other code can make one. A name is a label in a site's address: any number of sites may share it. */
 export type SiteName = string & { readonly [siteNameBrand]: true };
 
-/** A site name followed by `--` and its secret; made by `secretName` alone. */
-export type SecretName = string & { readonly [secretNameBrand]: true };
+/** A name that may stand alone before the suffix as a public site's hostname label; made by `parsePublicName` alone. */
+export type PublicName = SiteName & { readonly [publicNameBrand]: true };
 
-/** Why a string was refused. `reserved` means the caller's reserved set holds the name. */
-type NameRefusal =
-  | "empty"
-  | "too-long"
-  | "bad-character"
-  | "leading-dash"
-  | "trailing-dash"
-  | "double-dash"
-  | "reserved"
-  | "bad-secret";
+/** Why a string was refused. `reserved` means the name is one of the install's own hostnames; `bad-id` that the part after `--` is no site id. */
+type NameRefusal = "empty" | "too-short" | "too-long" | "bad-character" | "leading-dash" | "trailing-dash" | "double-dash" | "reserved" | "bad-id";
 
 /** A parsed value, or the reason it was refused. */
 export type Checked<Value> = { readonly ok: true; readonly value: Value } | { readonly ok: false; readonly refusal: NameRefusal };
-
-/** The parts of a hostname label: a secret is present only on a site's secret address. */
-export type LabelParts = { readonly name: SiteName } | { readonly name: SiteName; readonly secret: string };
 
 function refuse(refusal: NameRefusal): { readonly ok: false; readonly refusal: NameRefusal } {
   return { ok: false, refusal };
 }
 
-function randomSecret(): string {
-  let secret = "";
-
-  while (secret.length < SECRET_LENGTH) {
-    const bytes = crypto.getRandomValues(new Uint8Array(SECRET_LENGTH));
-
-    for (const byte of bytes) {
-      // A byte past the last whole run of the alphabet would favour its first symbols.
-      if (byte >= UNBIASED_BYTE_LIMIT) continue;
-      if (secret.length === SECRET_LENGTH) break;
-
-      secret += SECRET_ALPHABET[byte % SECRET_ALPHABET.length];
-    }
-  }
-
-  return secret;
-}
-
 /**
  * Decide whether a string is a site name.
  *
- * @param reserved - names refused although well formed; compared as given, so the caller lists them in lowercase
- * @returns the name, or the first rule it breaks
+ * @returns the name, or the first rule it breaks; no word is reserved, since a name is never an address on its own
  */
-export function parseSiteName(raw: string, reserved: ReadonlySet<string>): Checked<SiteName> {
+export function parseSiteName(raw: string): Checked<SiteName> {
   if (raw.length === 0) return refuse("empty");
+
+  if (raw.length < MIN_NAME_LENGTH) return refuse("too-short");
 
   if (raw.length > MAX_NAME_LENGTH) return refuse("too-long");
 
@@ -75,9 +55,7 @@ export function parseSiteName(raw: string, reserved: ReadonlySet<string>): Check
 
   if (raw.endsWith("-")) return refuse("trailing-dash");
 
-  if (raw.includes(SECRET_SEPARATOR)) return refuse("double-dash");
-
-  if (reserved.has(raw)) return refuse("reserved");
+  if (raw.includes(DOUBLE_DASH)) return refuse("double-dash");
 
   return { ok: true, value: raw as SiteName };
 }
@@ -88,46 +66,26 @@ export function parseSiteName(raw: string, reserved: ReadonlySet<string>): Check
  * @param entry - the last path segment, not a path
  * @returns the name, or why the entry needs an explicit name; nothing else is rewritten
  */
-export function nameFromEntry(entry: string, reserved: ReadonlySet<string>): Checked<SiteName> {
+export function nameFromEntry(entry: string): Checked<SiteName> {
   // ASCII only: `toLowerCase` on the whole string would turn the Kelvin sign into a valid `k`.
   const lowered = entry.replace(/[A-Z]/g, (capital) => capital.toLowerCase());
 
-  if (!lowered.endsWith(HTML_SUFFIX)) return parseSiteName(lowered, reserved);
+  if (!lowered.endsWith(HTML_SUFFIX)) return parseSiteName(lowered);
 
-  return parseSiteName(lowered.slice(0, -HTML_SUFFIX.length), reserved);
+  return parseSiteName(lowered.slice(0, -HTML_SUFFIX.length));
 }
 
 /**
- * Build a fresh secret name for a site.
+ * Decide whether a string may be a public site's public name.
  *
- * @returns `<name>--<12 base36 characters>`, about 62 bits drawn from Web Crypto on every call
+ * @param ownNames - the names this install keeps besides `gallery`: each is a hostname of its own once the suffix follows it, such as an admin hostname that ends in the suffix. Compared as given, so the caller lists them in lowercase
+ * @returns the name, or the first rule it breaks
  */
-export function secretName(name: SiteName): SecretName {
-  return `${name}${SECRET_SEPARATOR}${randomSecret()}` as SecretName;
-}
-
-/**
- * Split a hostname label into its site name and, on a secret address, its secret.
- *
- * @param label - the label with any hostname prefix already stripped, in lowercase
- * @returns the parts, or why the label names no site; a secret is only checked for its form, not that it is the site's
- */
-export function splitLabel(label: string, reserved: ReadonlySet<string>): Checked<LabelParts> {
-  // A name never holds `--` or ends in a dash, so the first `--` is the separator.
-  const separatorAt = label.indexOf(SECRET_SEPARATOR);
-
-  if (separatorAt === -1) {
-    const short = parseSiteName(label, reserved);
-    if (!short.ok) return short;
-
-    return { ok: true, value: { name: short.value } };
-  }
-
-  const name = parseSiteName(label.slice(0, separatorAt), reserved);
+export function parsePublicName(raw: string, ownNames: ReadonlySet<string>): Checked<PublicName> {
+  const name = parseSiteName(raw);
   if (!name.ok) return name;
 
-  const secret = label.slice(separatorAt + SECRET_SEPARATOR.length);
-  if (!SECRET_PATTERN.test(secret)) return refuse("bad-secret");
+  if (OWN_PUBLIC_NAMES.has(raw) || ownNames.has(raw)) return refuse("reserved");
 
-  return { ok: true, value: { name: name.value, secret } };
+  return { ok: true, value: raw as PublicName };
 }
