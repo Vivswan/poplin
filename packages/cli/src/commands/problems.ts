@@ -45,6 +45,7 @@ const API_ROWS = {
   too_large: { sentence: "a size limit is passed", hint: "poplin config shows the limits", exit: "failed" },
   too_many_requests: { sentence: "the install is asked too often from this address", hint: "wait a minute, then try again", exit: "failed" },
   internal: { sentence: "the install failed to do that", hint: "try again; poplin doctor reports on the install", exit: "failed" },
+  allowance_spent: { sentence: "the day's free allowance of the install's database is used up until 00:00 UTC", hint: "wait until then: asking again sooner is refused the same way", exit: "failed" },
 } as const satisfies Readonly<Record<string, Row>>;
 
 /** The codes of what goes wrong on this machine, or between it and the install. */

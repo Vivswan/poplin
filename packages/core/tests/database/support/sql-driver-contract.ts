@@ -5,7 +5,7 @@ import { describe, expect, test } from "bun:test";
 
 import { mintToken } from "../../../src/auth/tokens";
 import type { Database } from "../../../src/database/database";
-import type { SqlDriver, SqlValue, Statement, StatementResult } from "../../../src/database/driver";
+import { AllowanceSpent, type SqlDriver, type SqlValue, type Statement, type StatementResult } from "../../../src/database/driver";
 import { openDatabase } from "../../../src/database/open";
 import { SqlDatabase } from "../../../src/database/sql-database";
 import { migrate, type Step, storedVersion } from "../../../src/migrations/migrate";
@@ -198,6 +198,15 @@ function migrations(label: string, makeDriver: DriverFactory): void {
         version: STEP_THAT_FAILS_HALFWAY.number,
         applied: [MENDED_STEP.description],
       });
+    });
+
+    // Drift: a step the day's allowance stopped did not fail. Told as a failed step, it sends a person to try again at once, where the wait is to midnight UTC.
+    test("a step the database refuses because its day's allowance is used up is thrown as that, and the version stays", async () => {
+      const inner = await makeDriver();
+      const spent: SqlDriver = { batch: (statements) => (statements.some((statement) => statement.sql.startsWith("INSERT")) ? Promise.reject(new AllowanceSpent("writing")) : inner.batch(statements)) };
+
+      await expect(migrate(spent, STEPS, NOW)).rejects.toThrow(AllowanceSpent);
+      expect(await storedVersion(inner)).toBe(0);
     });
 
     test("opening an empty database applies every step and hands back a database that works", async () => {

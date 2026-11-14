@@ -1,6 +1,7 @@
 // The one form every answer of the API takes: the JSON of a done action, or the error object with the HTTP status of its code.
 
 import type { Refused } from "@poplin/core/src/actions/records";
+import { type AllowanceSpent, secondsToNextDay } from "@poplin/core/src/database/driver";
 import { type ApiError, STORED_TYPE_HEADER } from "@poplin/core/src/api/routes";
 
 /** The HTTP status of every code an action or the API itself refuses with. A code missing here does not compile. */
@@ -31,6 +32,7 @@ const STATUS = {
   too_large: 413,
   too_many_requests: 429,
   internal: 500,
+  allowance_spent: 503,
 } as const;
 
 /** What each code means, for a person. No message quotes anything a request sent. */
@@ -61,6 +63,7 @@ const MESSAGES: Readonly<Record<Code, string>> = {
   too_large: "a size limit is passed",
   too_many_requests: "too many requests came from this address: wait, then ask again",
   internal: "the install failed to do that",
+  allowance_spent: "the day's free allowance of the database is used up: ask again after midnight UTC",
 };
 
 /** The form of a token, and of the secret of a computer's login, wherever one sits in a text. */
@@ -93,6 +96,16 @@ export function refusal(code: Code, about?: string, headers?: Readonly<Record<st
   const error: ApiError["error"] = named ? { code, message: MESSAGES[code], about } : { code, message: MESSAGES[code] };
 
   return json(STATUS[code], { error } satisfies ApiError, headers);
+}
+
+/**
+ * Build the response to a request the database refused because its day's free allowance is used up.
+ *
+ * @param now - the clock, in milliseconds since the epoch
+ * @returns status 503 with the code `allowance_spent`, about `reading` or `writing`, and `Retry-After` up to the next midnight UTC
+ */
+export function spentRefusal(spent: AllowanceSpent, now: number): Response {
+  return refusal("allowance_spent", spent.spent, { "Retry-After": String(secondsToNextDay(now)) });
 }
 
 /**

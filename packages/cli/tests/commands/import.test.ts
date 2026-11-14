@@ -171,6 +171,20 @@ describe("import", () => {
     expect(await held(into.install)).toEqual(await held(from.install));
   });
 
+  // Drift: every site of a backup meets a spent database the same way; a run that went on would ask once per site for nothing, and a line without the hour would not say when to run it again.
+  test("an import that meets a database spent for the day stops at the first site, and its line says when the allowance is back", async () => {
+    const from = await openBench();
+    const into = await openBench();
+    await filled(from);
+    const zip = await exportedZip(from);
+    into.hook = (request) => (request.method === "POST" && request.url.endsWith("/api/import/sites") ? answer(503, { error: { code: "allowance_spent", message: "no", about: "writing" } }) : undefined);
+
+    const said = jsonOf(await into.run(`import ${zip} --json`));
+
+    expect([said.imported, said.failed, said.stopped, into.sent.filter((line) => line === "POST /api/import/sites").length]).toEqual([0, 1, true, 1]);
+    expect(said.sites).toMatchObject([{ code: "allowance_spent", message: "the day's free allowance of the install's database is used up until 00:00 UTC (writing)" }]);
+  });
+
   // Drift: a refusal stops the run only when every other site would meet it too; the install's own 429 is a refusal, and a run that went on after Ctrl-C would import the rest of a backup the person had stopped.
   test("an import the person stops during a rest stops the run, and no later site is tried", async () => {
     const from = await openBench();

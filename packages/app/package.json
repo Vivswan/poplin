@@ -4,6 +4,7 @@
   "type": "module",
   "exports": {
     "./src/api/api": "./src/api/api.ts",
+    "./src/api/respond": "./src/api/respond.ts",
     "./src/dashboard/dashboard": "./src/dashboard/dashboard.ts",
     "./src/dashboard/settings/free-limits": "./src/dashboard/settings/free-limits.ts",
     "./src/dashboard/domain/records": "./src/dashboard/domain/records.ts",
@@ -14,6 +15,7 @@
     "./src/login/login": "./src/login/login.ts",
     "./src/login/session": "./src/login/session.ts",
     "./src/sites/hostname-addresses": "./src/sites/hostname-addresses.ts",
+    "./src/sites/paused": "./src/sites/paused.ts",
     "./src/sites/serve": "./src/sites/serve.ts"
   },
   "dependencies": {

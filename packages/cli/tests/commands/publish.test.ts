@@ -160,6 +160,20 @@ describe("publish", () => {
     expect((await bench.install.keys()).length).toBe(2);
   });
 
+  // Drift: a 5xx on a file is sent again up to three times, which is right for a fault and a flood for an install whose database is spent until midnight UTC.
+  test("a file refused because the day's allowance is used up is sent once, and the person is told when the allowance is back", async () => {
+    const bench = await openBench();
+    const folder = folderOf("notes", { "index.html": "<title>Field notes</title>" });
+    const refused = { error: { code: "allowance_spent", message: "no", about: "writing" } };
+    bench.hook = (request) => (request.method === "PUT" ? answer(503, refused, { "Retry-After": "3600" }) : undefined);
+
+    const failed = await bench.run(folder);
+
+    expect(bench.sent.filter((line) => line.startsWith("PUT ")).length).toBe(1);
+    expect([failed.code, failed.err[0]]).toEqual([1, "the day's free allowance of the install's database is used up until 00:00 UTC: writing"]);
+    expect(failed.err[1]).toEndWith("wait until then: asking again sooner is refused the same way");
+  });
+
   test.each([
     ["a file that is never stored", (request: Request) => (request.method === "PUT" ? answer(500, { error: { code: "internal", message: "no" } }) : undefined), "the install failed to do that", 1],
     ["a file the install refuses", (request: Request) => (request.method === "PUT" ? answer(400, { error: { code: "size_mismatch", message: "no", about: "index.html" } }) : undefined), "a file changed while it was sent: index.html", 1],

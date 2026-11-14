@@ -36,6 +36,7 @@ const CODES: Readonly<Record<Code, true>> = {
   too_large: true,
   too_many_requests: true,
   internal: true,
+  allowance_spent: true,
 };
 
 /** An id in the form of a site id that no site has. */

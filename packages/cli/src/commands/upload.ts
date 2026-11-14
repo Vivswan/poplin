@@ -20,6 +20,9 @@ const SERVER_FAILURE = 500;
 /** The status of an answer that says the install, or the zone in front of it, is asked too often. */
 const TOO_MANY_REQUESTS = 429;
 
+/** The code of an install whose database takes no more for the day. */
+const ALLOWANCE_SPENT = "allowance_spent";
+
 /** How often one call rests and is made again before its failure stands. */
 const RESTS_PER_CALL = 6;
 
@@ -66,11 +69,13 @@ function isAskedTooOften(failure: Failure): boolean {
   return "status" in failure && failure.status === TOO_MANY_REQUESTS;
 }
 
-/** Whether sending a file again at once may go better: the install failed or gave no answer, rather than refusing what was sent or asking for a rest, and the command goes on. */
+/** Whether sending a file again at once may go better: the install failed or gave no answer, and the command goes on. A refusal of what was sent, a rest asked for, and a database spent for the day answer the same again. */
 function isWorthAnotherTry(failure: Failure): boolean {
   if (isAskedTooOften(failure) || failure.kind === "stopped") return false;
 
-  return failure.kind !== "refused" || failure.status >= SERVER_FAILURE;
+  if (failure.kind !== "refused") return true;
+
+  return failure.status >= SERVER_FAILURE && failure.code !== ALLOWANCE_SPENT;
 }
 
 /** How long a call rests: as long as the answer asks, else two seconds doubled with each rest before it, and never over a minute. */

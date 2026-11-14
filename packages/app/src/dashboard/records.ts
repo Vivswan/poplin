@@ -36,7 +36,7 @@ export interface Page {
   readonly tab: Tab;
   readonly heading: string;
   readonly body: Html;
-  readonly status?: 400 | 403 | 404 | 405 | 413 | 415 | 429 | 502;
+  readonly status?: 400 | 403 | 404 | 405 | 413 | 415 | 429 | 502 | 503;
 }
 
 /** A change a form asks for, about the subjects its address names. It answers where the browser goes next: a dashboard path that carries the result. */

@@ -536,6 +536,40 @@ describe("a database that takes no more writes for the day", () => {
   });
 });
 
+describe("a database whose allowance for the day is used up", () => {
+  // Drift: D1 says so only in the words of an error, and every address answered a bare 503 or 500 that named nothing. A visitor, a caller of the API, and the owner each need it in their own form, with the wait to midnight UTC, or they ask again all day.
+  test("a site's address answers the paused page, the API the code with what ran out, and the dashboard its notice: each a 503 with the seconds to midnight UTC", async () => {
+    using failed = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const token = await tokenOf(w, "admin");
+    const site = await publish(instance(w), token, { name: "report", access: "public" }, [page("<h1>report</h1>")]);
+    const session = { Cookie: cookieOf(await logIn(instance(w), w)) };
+    const bearer = { Authorization: `Bearer ${token}` };
+    const noReading = withBindings({ DB: spentDatabase("read") });
+    const noWriting = withBindings({ DB: spentDatabase("write") });
+    const paused = instance(w);
+    const reading = instance(w);
+
+    const answers = [
+      await ask(paused, `${site.addresses.public}/`, {}, noReading),
+      await ask(paused, `${site.addresses.public}/`, { method: "HEAD" }, noReading),
+      await ask(paused, `${ADMIN}${ROUTES.whoami.path()}`, { headers: bearer }, noReading),
+      await ask(paused, `${ADMIN}/`, { headers: session }, noReading),
+      await ask(reading, `${ADMIN}${ROUTES.issueToken.path()}`, { method: "POST", headers: { ...bearer, "Content-Type": "application/json" }, body: JSON.stringify({ scope: "publisher", note: "a test" }) }, noWriting),
+    ];
+    const told = await Promise.all(answers.map(async (answer) => [answer.status, answer.headers.get("Retry-After"), answer.headers.get("Cache-Control"), await answer.text()]));
+
+    // The world's clock stands at 22:13:20 UTC: 6,400 seconds before midnight.
+    expect(told).toEqual([
+      [503, "6400", "public, max-age=60", "This site is paused until midnight UTC.\n"],
+      [503, "6400", "public, max-age=60", ""],
+      [503, "6400", "no-store", JSON.stringify({ error: { code: "allowance_spent", message: "the day's free allowance of the database is used up: ask again after midnight UTC", about: "reading" } })],
+      [503, "6400", "no-store", "The dashboard is paused: the free allowance of the database for reading is used up for today. It is back after midnight UTC.\n"],
+      [503, "6400", "no-store", JSON.stringify({ error: { code: "allowance_spent", message: "the day's free allowance of the database is used up: ask again after midnight UTC", about: "writing" } })],
+    ]);
+    expect(failed).toHaveBeenCalledTimes(5);
+  });
+});
+
 describe("a computer's login", () => {
   /** Begin a login with no token, from a computer at this address. */
   async function begin(worker: ReturnType<typeof instance>, address: string): Promise<Response> {

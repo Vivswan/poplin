@@ -19,6 +19,7 @@ import { readConfig } from "@poplin/core/src/actions/config";
 import type { Install } from "@poplin/core/src/actions/records";
 import { ALLOW_PAGE } from "@poplin/core/src/api/routes";
 import type { Login } from "@poplin/core/src/auth/logins";
+import { AllowanceSpent, secondsToNextDay } from "@poplin/core/src/database/driver";
 import { type Context, Hono, type MiddlewareHandler } from "hono";
 import { bodyLimit } from "hono/body-limit";
 import { NONCE, secureHeaders } from "hono/secure-headers";
@@ -26,7 +27,7 @@ import { NONCE, secureHeaders } from "hono/secure-headers";
 import type { Counters } from "../limits/limits";
 import { showActivity } from "./activity/activity-page";
 import { framePage, refusedPage } from "./page/frame";
-import { noticeIn } from "./page/notices";
+import { noticeIn, refusalSentence } from "./page/notices";
 import type { Change, Form, Page, Visit } from "./records";
 import { importCsrfKey, mintCsrfToken } from "./security/csrf";
 import { readOwnForm } from "./security/own-form";
@@ -67,6 +68,9 @@ const FAILURE = "Something went wrong.";
 
 /** The most times a minute one visitor may look a login's code up or decide one: a person needs two, and a guesser gets no more. */
 const CODES_PER_MINUTE = 20;
+
+/** The notice of each allowance of the database that is used up for the day. */
+const SPENT_NOTICES = { writing: "no_more_writing", reading: "no_more_reading" } as const;
 
 /** What a counter that cannot answer is taken to say: the minute is full, so a try at a code is refused. */
 const UNCOUNTED = { ok: false } as const;
@@ -111,6 +115,18 @@ interface Dashboard {
   readonly fetch: (request: Request) => Promise<Response>;
 }
 
+/**
+ * Build the dashboard's answer while its database takes no more reading or writing for the day, for where no page can be framed.
+ *
+ * @param now - the clock, in milliseconds since the epoch
+ * @returns status 503 in plain text that names what ran out, with `Retry-After` up to the next midnight UTC
+ */
+export function spentNotice(spent: AllowanceSpent, now: number): Response {
+  const headers = { "Retry-After": String(secondsToNextDay(now)), "Content-Type": "text/plain; charset=utf-8", "Cache-Control": "no-store" };
+
+  return new Response(`${refusalSentence(SPENT_NOTICES[spent.spent])}\n`, { status: 503, headers });
+}
+
 function loginAddress(loginPath: string, url: URL, back: string): string {
   const login = new URL(loginPath, url.origin);
   login.searchParams.set(RETURN_KEY, back);
@@ -129,6 +145,19 @@ async function respond(context: Context<Shared>, page: Page): Promise<Response> 
 
 function refuse(context: Context<Shared>, code: string, status: NonNullable<Page["status"]>): Promise<Response> {
   return respond(context, refusedPage({ tab: "sites", heading: "Not done", status }, { code }));
+}
+
+/** Answer a failure nothing above handled. A database whose allowance for the day is used up is told as a notice, and any other failure tells nothing of its cause. */
+async function answerFailure(error: unknown, context: Context<Shared>, now: number): Promise<Response> {
+  if (!(error instanceof AllowanceSpent)) return new Response(FAILURE, { status: 500, headers: { "Content-Type": "text/plain; charset=utf-8" } });
+
+  // The frame reads the settings, which a database that gives no more reading cannot: the notice then goes out in plain text.
+  const framed = await refuse(context, SPENT_NOTICES[error.spent], 503).catch(() => undefined);
+  if (framed === undefined) return spentNotice(error, now);
+
+  framed.headers.set("Retry-After", String(secondsToNextDay(now)));
+
+  return framed;
 }
 
 /** Answer a form: run the change its address names and send the browser to the page the change answers with. */
@@ -238,7 +267,7 @@ export function createDashboard(parts: DashboardParts): Dashboard {
   }
 
   app.notFound((context) => refuse(context, "no_page", 404));
-  app.onError(() => new Response(FAILURE, { status: 500, headers: { "Content-Type": "text/plain; charset=utf-8" } }));
+  app.onError((error, context) => answerFailure(error, context, parts.install.now()));
 
   return { fetch: async (request) => app.fetch(request) };
 }

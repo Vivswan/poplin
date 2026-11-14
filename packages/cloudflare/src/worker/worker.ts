@@ -18,6 +18,7 @@ import { createDashboard } from "@poplin/app/src/dashboard/dashboard";
 import { visitorKey } from "@poplin/app/src/limits/visitor-key";
 import { readSession } from "@poplin/app/src/login/session";
 import type { Database } from "@poplin/core/src/database/database";
+import { AllowanceSpent } from "@poplin/core/src/database/driver";
 import { clientAddress } from "../limits/client-address";
 import { FREE_LIMITS } from "../limits/free-limits";
 import { INSTALL_OBJECTS } from "../zone/install-objects";
@@ -26,6 +27,7 @@ import { type Held, readHeld } from "./held";
 import { answerLogin } from "./login";
 import { answerSite } from "./site";
 import { answerFirstSetup, answerSetup, isSetupPath } from "./setup";
+import { answerSpent } from "./spent";
 import { type Failure, type Instance, type Outside, type Started, startInstance } from "./start";
 import { runSweep } from "./sweep";
 import { plain } from "./util";
@@ -212,6 +214,7 @@ export function createWorker(given: Partial<Outside> = {}): Required<Pick<Export
         return await answer(request, env);
       } catch (error) {
         console.error("poplin: a request failed", error);
+        if (error instanceof AllowanceSpent) return answerSpent(request, env, error, outside.now());
 
         return plain(request, 503, TRY_AGAIN);
       }

@@ -13,6 +13,7 @@
 // A counter that cannot answer lets the request through: a site keeps working when its counters do not.
 
 import type { RequestCounts } from "@poplin/core/src/database/database";
+import { secondsToNextDay } from "@poplin/core/src/database/driver";
 import type { SettingValues } from "@poplin/core/src/records/settings";
 import { dayOf } from "@poplin/core/src/records/views";
 import type { SiteId } from "@poplin/core/src/sites/ids";
@@ -20,8 +21,6 @@ import type { SiteId } from "@poplin/core/src/sites/ids";
 import { isPageTag } from "../sites/headers";
 import type { VisitorKey } from "./visitor-key";
 
-const MS_PER_SECOND = 1000;
-const MS_PER_DAY = 86_400_000;
 const PERCENT = 100;
 const TAKEN: Taken = { ok: true };
 const PAGE_STATUSES: ReadonlySet<number> = new Set([200, 304]);
@@ -116,10 +115,6 @@ interface Asked {
   readonly now: number;
 }
 
-function secondsToMidnight(now: number): number {
-  return Math.ceil((MS_PER_DAY - (now % MS_PER_DAY)) / MS_PER_SECOND);
-}
-
 /** The most requests one site takes of a day: its share of the day, and never less than one request. */
 function siteShare(settings: Asked["settings"]): number {
   return Math.max(1, Math.floor((settings.requests_per_day * settings.site_share_of_day) / PERCENT));
@@ -165,7 +160,7 @@ export async function checkLimits(asked: Asked, counters: Counters): Promise<Ver
   await refreshDay(counters, day, now);
 
   const taken = takeDay(counters, day, { all: settings.requests_per_day, site: siteShare(settings) }, now);
-  if (typeof taken === "string") return { ok: false, which: taken, retryAfterSeconds: secondsToMidnight(now) };
+  if (typeof taken === "string") return { ok: false, which: taken, retryAfterSeconds: secondsToNextDay(now) };
 
   return { ok: true, requests: taken };
 }

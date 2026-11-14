@@ -5,6 +5,7 @@ import { publishSite } from "@poplin/core/src/actions/publish";
 import type { Install } from "@poplin/core/src/actions/records";
 import { OPEN_ROUTES, ROUTES } from "@poplin/core/src/api/routes";
 import type { Login } from "@poplin/core/src/auth/logins";
+import { AllowanceSpent } from "@poplin/core/src/database/driver";
 
 import { ADDRESSES } from "../sites/support/layout";
 import { type Answered, type ApiInstall, LIMITS, NOW, ORIGIN, openApi, requestOf, VISITOR_HEADER } from "./support/install";
@@ -695,5 +696,31 @@ describe("what the API refuses before any action runs", () => {
 
     expect([answered.status, answered.body]).toEqual([500, { error: { code: "internal", message: "the install failed to do that" } }]);
     expect(install.reported.map(String)).toEqual(["Error: the database is down"]);
+  });
+
+  // Drift: a caller that reads only "the install failed" tries again at once, all day; the code and the wait are what tell it the database is spent until midnight UTC.
+  test("a database whose day's allowance is used up is answered 503 with the code, what ran out, and the seconds to midnight UTC", async () => {
+    const install = await openApi();
+    install.database.readSettings = () => Promise.reject(new AllowanceSpent("writing"));
+
+    const answered = await install.call("listSites", {});
+
+    // The fixtures' moment is 22:13:20 UTC: 6,400 seconds before midnight.
+    expect([answered.status, answered.response.headers.get("Retry-After"), answered.body]).toEqual([
+      503,
+      "6400",
+      { error: { code: "allowance_spent", message: "the day's free allowance of the database is used up: ask again after midnight UTC", about: "writing" } },
+    ]);
+    expect(install.reported.length).toBe(1);
+  });
+
+  // Drift: a route that takes no token counts its visitor first, and a count that cannot be had is read as a full minute; a spent database told as "wait a minute" sends a terminal back sixty seconds later, all day.
+  test("a computer that begins a login while the visitor cannot be read for a spent database is answered the spent allowance, not a full minute", async () => {
+    const install = await openApi();
+    install.counters.takeMinute = () => Promise.reject(new AllowanceSpent("reading"));
+
+    const answered = await install.call("beginLogin", undefined, { token: null, body: { scope: "publisher", computer: "laptop" } });
+
+    expect([answered.status, part(answered, "error").code, part(answered, "error").about, answered.response.headers.get("Retry-After")]).toEqual([503, "allowance_spent", "reading", "6400"]);
   });
 });

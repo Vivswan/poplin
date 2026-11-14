@@ -1,6 +1,6 @@
 // The runner: it reads the schema version the database is stamped with and applies the steps the code has beyond it, each as one atomic unit.
 
-import type { SqlDriver, Statement } from "../database/driver";
+import { AllowanceSpent, type SqlDriver, type Statement } from "../database/driver";
 
 /** The ledger: one row per applied step. The highest step in it is the schema version, and the table is the only one the runner makes itself. */
 const CREATE_LEDGER = `
@@ -94,6 +94,9 @@ export async function migrate(driver: SqlDriver, steps: readonly Step[], now: nu
       applied.push(step.description);
       stored = step.number;
     } catch (error) {
+      // No step failed: the database takes no more for the day, and says so itself.
+      if (error instanceof AllowanceSpent) throw error;
+
       stored = await storedVersion(driver);
       if (stored >= step.number) continue;
 

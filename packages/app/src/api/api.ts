@@ -3,6 +3,7 @@
 import type { UploadLimits } from "@poplin/core/src/actions/begin-publish";
 import type { Install } from "@poplin/core/src/actions/records";
 import { OPEN_ROUTES, ROUTES } from "@poplin/core/src/api/routes";
+import { AllowanceSpent } from "@poplin/core/src/database/driver";
 import { siteReference } from "@poplin/core/src/sites/labels";
 import { Hono } from "hono";
 
@@ -10,7 +11,7 @@ import type { Counters, Taken } from "../limits/limits";
 import { authenticate, type ReadToken } from "./authenticate";
 import { hasContentType, readJson, readQuery } from "./body";
 import { type Call, HANDLERS, OPEN_HANDLERS, type OpenName, QUERIES, type RouteName } from "./handlers";
-import { refusal, respond, respondFile } from "./respond";
+import { refusal, respond, respondFile, spentRefusal } from "./respond";
 
 /** The most bytes the JSON body of a route may hold, unless it declares files or imports the settings. */
 const JSON_BYTES = 65_536;
@@ -73,7 +74,12 @@ async function answerOpen(name: OpenName, request: Request, deps: ApiDeps): Prom
 
     return { ...counted, visitor };
   };
-  const taken = await take().catch(() => UNCOUNTED);
+  const taken = await take().catch((error: unknown) => {
+    // A database that is spent for the day is told as that, never as a full minute.
+    if (error instanceof AllowanceSpent) throw error;
+
+    return UNCOUNTED;
+  });
   if (!taken.ok) return refusal("too_many_requests", undefined, { "Retry-After": String(Math.max(1, Math.ceil(taken.retryAfterSeconds))) });
 
   if (!hasContentType(request, ROUTES[name].sends)) return refusal("unsupported_media_type");
@@ -131,7 +137,7 @@ async function answer(name: RouteName, request: Request, params: Readonly<Record
  *
  * The two routes a computer logs in through take no token: they are counted by visitor, and what they hand out is decided by an admin on the dashboard.
  *
- * @returns the handler of every request under `/api`. It answers a path that is no route 404, a route under another method 405 with `Allow`, and a failure of the store or the database 500, and it never throws
+ * @returns the handler of every request under `/api`, which never throws. It answers a path that is no route 404, a route under another method 405 with `Allow`, a database spent for the day 503 with `Retry-After`, and any other failure 500
  */
 export function createApi(deps: ApiDeps): { readonly fetch: (request: Request) => Promise<Response> } {
   const app = new Hono();
@@ -147,6 +153,7 @@ export function createApi(deps: ApiDeps): { readonly fetch: (request: Request) =
   app.notFound(() => refusal("not_found", "route"));
   app.onError((error) => {
     deps.report?.(error);
+    if (error instanceof AllowanceSpent) return spentRefusal(error, deps.now());
 
     return refusal("internal");
   });

@@ -1,8 +1,9 @@
 // Core's SQL driver on a D1 database binding.
 
 import type { SqlDriver, Statement, StatementResult } from "@poplin/core/src/database/driver";
+import { allowanceSpent } from "./allowance";
 
-/** A D1 database behind core's driver interface. D1 enforces foreign keys and runs a batch as one transaction. */
+/** A D1 database behind core's driver interface. D1 enforces foreign keys and runs a batch as one transaction. A day's allowance used up is thrown as core's `AllowanceSpent`. */
 export class D1Driver implements SqlDriver {
   readonly #database: D1Database;
 
@@ -12,7 +13,9 @@ export class D1Driver implements SqlDriver {
 
   async batch(statements: readonly Statement[]): Promise<readonly StatementResult[]> {
     const prepared = statements.map((statement) => this.#database.prepare(statement.sql).bind(...statement.params));
-    const results = await this.#database.batch<Record<string, unknown>>(prepared);
+    const results = await this.#database.batch<Record<string, unknown>>(prepared).catch((error: unknown) => {
+      throw allowanceSpent(error) ?? error;
+    });
 
     return results.map((result) => ({ rows: result.results, changes: result.meta.changes }));
   }

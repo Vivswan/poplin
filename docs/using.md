@@ -198,6 +198,7 @@ Every command that talks to the install also takes `--json`, for the answer as J
 | the `-poplin` address of a deleted or expired site, or one from before a new link | the login; `Not found` once logged in |
 | a public name no site holds                      | `Not found`                                  |
 | any site, too often in a minute                  | `Too many requests. Try again in 60 seconds.` |
+| any site, once the day's free allowance of the database for reading is used up | `This site is paused until midnight UTC.` |
 
 ## When poplin refuses
 
@@ -220,6 +221,7 @@ A refused command prints one sentence and often a hint. With `--json` it prints 
 | `not_json`, `unexpected_answer`                | the answer is not a poplin install's               | `poplin whoami` shows the address in use                      |
 | `method_not_allowed`, `unsupported_media_type` | the install and this poplin are of two versions    | update the older one                                          |
 | `too_many_requests`                            | asked too often                                    | wait a minute                                                 |
+| `allowance_spent`                              | the day's free allowance of the database is used up | wait until 00:00 UTC; asking sooner is refused the same way  |
 | `internal`, `crashed`                          | something failed                                   | try again; `poplin doctor` reports on the install             |
 
 **Setting up an install**

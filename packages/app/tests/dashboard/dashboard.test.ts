@@ -1,5 +1,7 @@
 import { expect, test } from "bun:test";
 
+import { AllowanceSpent } from "@poplin/core/src/database/driver";
+
 import { createDashboard } from "../../src/dashboard/dashboard";
 import { importCsrfKey, mintCsrfToken } from "../../src/dashboard/security/csrf";
 import { CSRF_SECRET, codeCounts, FREE_LIMITS, LOGIN, ORIGIN, type Opened, openDashboard } from "./support/install";
@@ -217,4 +219,35 @@ test("a dashboard built with no domain plug has no Domain tab and answers none o
 
   expect(answers.map((answer) => answer.status)).toEqual([404, 404, 404]);
   expect(await (await opened.get("/")).text()).not.toContain('href="/domain"');
+});
+
+
+// Drift: the owner saw "Something went wrong." and could not tell a spent day from a fault. With writing spent the pages still read, so the notice comes framed; with reading spent no page can be framed, and it must still come.
+test("a database whose day's allowance is used up is told on the page with what ran out and when it is back, framed while pages can still be read", async () => {
+  const opened = await openDashboard();
+  const { database } = opened.install;
+  const reads = database.readSettings.bind(database);
+
+  database.rotateSigningKey = () => Promise.reject(new AllowanceSpent("writing"));
+  const saved = await opened.post("/settings/sign-everyone-out", { confirm: "yes" });
+  const page = await saved.text();
+  // The session's own read comes first and is answered, as the entry holds the settings from before; every read after it is refused.
+  let asked = 0;
+  database.readSettings = () => {
+    asked += 1;
+
+    return asked === 1 ? reads() : Promise.reject(new AllowanceSpent("reading"));
+  };
+  const shown = await opened.get("/settings");
+
+  // The fixtures' moment is 22:13:20 UTC: 6,400 seconds before midnight.
+  expect([saved.status, saved.headers.get("Retry-After"), saved.headers.get("Content-Type")]).toEqual([503, "6400", "text/html; charset=UTF-8"]);
+  expect(page).toContain("The database takes no more changes today: its free allowance for writing is used up. Changes work again after midnight UTC.");
+  expect(page).toContain("<title>Not done - poplin.example.com</title>");
+  expect({ status: shown.status, wait: shown.headers.get("Retry-After"), type: shown.headers.get("Content-Type"), text: await shown.text() }).toEqual({
+    status: 503,
+    wait: "6400",
+    type: "text/plain; charset=utf-8",
+    text: "The dashboard is paused: the free allowance of the database for reading is used up for today. It is back after midnight UTC.\n",
+  });
 });

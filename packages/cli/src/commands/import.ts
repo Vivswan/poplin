@@ -19,8 +19,8 @@ const ALREADY_THERE = "id_taken";
 /** The refusal of a site whose versions are together more than one import may carry. */
 const TOO_LARGE = "too_large";
 
-/** The statuses of a refusal that every other site would meet too: no login, not an admin's, or an install that is asked too often. */
-const REFUSED_FOR_ALL: readonly number[] = [401, 403, 429];
+/** The statuses of a refusal that every other site would meet too: no login, not an admin's, an install that is asked too often, or one whose database is spent for the day. */
+const REFUSED_FOR_ALL: readonly number[] = [401, 403, 429, 503];
 
 /** What became of an upload that was not finished, in words. */
 const AFTERMATH = {
