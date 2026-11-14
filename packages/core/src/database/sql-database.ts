@@ -411,6 +411,9 @@ const REPLACE_SIGNING_KEY = `
 INSERT INTO secrets (name, value, created_at) VALUES ('session_key', ?1, ?2)
 ON CONFLICT (name) DO UPDATE SET value = excluded.value, created_at = excluded.created_at`;
 
+/** Whether any audit entry is a login. The scan runs from the oldest entry and stops at the first, which sits near the start of every log that has one. */
+const HAS_LOGIN = "SELECT EXISTS (SELECT 1 FROM audit WHERE action = 'login') AS found";
+
 /** The audit entries below `?1`, the newest first. */
 const LIST_AUDIT = "SELECT seq, at, actor, action, site_id, site_name, detail FROM audit WHERE seq < ?1 ORDER BY seq DESC LIMIT ?2";
 
@@ -1090,6 +1093,12 @@ export class SqlDatabase implements Database {
 
   async appendAudit(note: AuditNote, signed: Signed): Promise<void> {
     await this.#driver.batch([sql(AUDIT_NOTE, signed.at, signed.by, note.action, note.site?.id ?? null, note.site?.name ?? null, JSON.stringify(note.detail))]);
+  }
+
+  async hasLoggedIn(): Promise<boolean> {
+    const [read] = await this.#driver.batch([sql(HAS_LOGIN)]);
+
+    return read?.rows[0]?.found === 1;
   }
 
   async listAudit(query: { readonly limit: number; readonly before?: number }): Promise<readonly AuditEntry[]> {

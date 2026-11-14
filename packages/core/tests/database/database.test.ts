@@ -565,6 +565,10 @@ class MemoryDatabase implements Database {
     this.#log(signed, note.action, note.site ?? null, note.detail);
   }
 
+  async hasLoggedIn(): Promise<boolean> {
+    return this.#audit.some((entry) => entry.action === "login");
+  }
+
   async listAudit(query: { readonly limit: number; readonly before?: number }): Promise<readonly AuditEntry[]> {
     requirePage(query.limit);
 

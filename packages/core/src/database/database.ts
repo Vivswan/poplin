@@ -539,6 +539,9 @@ export interface Database {
   /** Add an entry that goes with no change of a site, a token, or the settings. */
   appendAudit(note: AuditNote, signed: Signed): Promise<void>;
 
+  /** Whether the audit log holds a `login` entry, which is whether anybody has ever logged in. It is one query, whatever the log's length. */
+  hasLoggedIn(): Promise<boolean>;
+
   /**
    * The newest audit entries, the newest first.
    *

@@ -1162,6 +1162,26 @@ function auditLog(label: string, makeDatabase: DatabaseFactory): void {
   });
 }
 
+function everLoggedIn(label: string, makeDatabase: DatabaseFactory): void {
+  describe(`${label}: whether anybody has logged in`, () => {
+    // Drift: the setup page is open to anyone until the first login and shut for good after it; an answer that counted another entry as a login would shut it on the person setting up, and one that missed a login under later entries would open it again.
+    test("it is no before any login, whatever else the log holds, and yes from the first login on, however much is written after it", async () => {
+      const database = await opened(makeDatabase);
+      const by = { by: ADA, at: NOW };
+      const before = await database.hasLoggedIn();
+      await database.initSettings(SETTINGS, by);
+      for (const action of ["domain_synced", "login_allowed", "login_denied", "signed_everyone_out"] as const) await database.appendAudit({ action, detail: { from: "login" } }, by);
+
+      const without = await database.hasLoggedIn();
+      await database.appendAudit({ action: "login", detail: {} }, by);
+      const first = await database.hasLoggedIn();
+      for (let entry = 0; entry < 150; entry += 1) await database.appendAudit({ action: "domain_synced", detail: { from: "setup" } }, by);
+
+      expect([before, without, first, await database.hasLoggedIn()]).toEqual([false, false, true, true]);
+    });
+  });
+}
+
 function tokensAndSettings(label: string, makeDatabase: DatabaseFactory): void {
   describe(`${label}: tokens and settings`, () => {
     // Drift: the record `mintToken` makes is what a presented token is checked against; a field lost on the way through a row would refuse every token.
@@ -1788,6 +1808,7 @@ export function describeDatabase(label: string, makeDatabase: DatabaseFactory): 
   backups(label, makeDatabase);
   signingKey(label, makeDatabase);
   auditLog(label, makeDatabase);
+  everLoggedIn(label, makeDatabase);
   tokensAndSettings(label, makeDatabase);
   computerLogins(label, makeDatabase);
   sweepPlace(label, makeDatabase);

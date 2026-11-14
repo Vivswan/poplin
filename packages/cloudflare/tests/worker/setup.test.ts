@@ -4,10 +4,9 @@
 import { reset } from "cloudflare:test";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import type { Bindings } from "../../src/worker/bindings";
-import { neverLoggedIn } from "../../src/worker/setup";
 import { type Account, emptyAccount, OTHER_TOKEN, TEAM, TOKEN } from "../zone/support/fake-install";
 import type { Asked } from "../zone/support/replies";
-import { ADMIN, accessHeaders, ask, BINDINGS, cloudflareOf, cookieOf, installOf, instance, logIn, OWNER, page, publish, type World, tokenOf, under, world } from "./support/install";
+import { ADMIN, accessHeaders, ask, BINDINGS, cloudflareOf, cookieOf, countedBindings, installOf, instance, logIn, OWNER, page, publish, type World, tokenOf, under, world } from "./support/install";
 
 /** The Worker's own address, which Cloudflare gives it whatever its routes. */
 const OWN = "https://poplin.example-account.workers.dev";
@@ -86,17 +85,26 @@ describe("the setup page", () => {
     expect(await Promise.all(answers.map(async (answer) => [answer.status, await answer.text(), answer.headers.get("Set-Cookie")]))).toEqual(paths.map(() => [404, "Not found.\n", null]));
   });
 
-  // Drift: `open` is read from the audit log, and the log is where setup itself writes: a run counted as a login would shut the page on the person in the middle of setting up.
-  test("stays open through its own runs, however many, and shuts at the first entry that is not its own", async () => {
+  // Drift: the page is asked for by anyone, before any login: a check that read the audit log a page at a time would cost more with every run of setup, and past the database's cap of queries for one request the page would shut on the person setting up.
+  test("stays open through its own runs and costs the same database calls after 250 of them as after none, then shuts at a login", async () => {
+    const tally = { calls: 0 };
+    const counted = countedBindings(tally);
     const worker = instance(w, cloudflareOf(account, asked));
-    await ask(worker, `${ADMIN}/setup`);
+    await ask(worker, `${ADMIN}/setup`, {}, counted);
+    tally.calls = 0;
+    await ask(worker, `${ADMIN}/setup`, {}, counted);
+    const fresh = tally.calls;
+
     const { database } = await installOf(w);
     for (let entry = 0; entry < 250; entry += 1) await database.appendAudit({ action: "domain_synced", detail: { run: "check", from: "setup" } }, { by: OWNER, at: w.clock.now });
 
-    const open = await neverLoggedIn(database);
-    await database.appendAudit({ action: "domain_synced", detail: { run: "check", from: "dashboard" } }, { by: OWNER, at: w.clock.now });
+    tally.calls = 0;
+    const open = await ask(worker, `${ADMIN}/setup`, {}, counted);
+    const after = tally.calls;
+    await database.appendAudit({ action: "login", detail: {} }, { by: OWNER, at: w.clock.now });
 
-    expect([open, await neverLoggedIn(database), (await ask(worker, `${ADMIN}/setup`)).status]).toEqual([true, false, 404]);
+    expect([open.status, after, (await ask(worker, `${ADMIN}/setup`, {}, counted)).status]).toEqual([200, fresh, 404]);
+    expect(fresh).toBeGreaterThan(0);
   });
 
   // Drift: a check that wrote would repair behind the owner's back, and a token of another account that passed would set up somebody else's zone from this page.

@@ -24,7 +24,7 @@ import type { Bindings } from "./bindings";
 import { type Held, readHeld } from "./held";
 import { answerLogin } from "./login";
 import { answerSite } from "./site";
-import { answerSetup, isSetupPath, neverLoggedIn } from "./setup";
+import { answerSetup, isSetupPath } from "./setup";
 import { type Failure, type Instance, type Outside, type Started, startInstance } from "./start";
 import { runSweep } from "./sweep";
 import { plain } from "./util";
@@ -169,7 +169,7 @@ export function createWorker(given: Partial<Outside> = {}): Required<Pick<Export
 
   // A login is never undone, so an instance that saw one asks the database no more.
   async function setupOpen(database: Database): Promise<boolean> {
-    if (!loggedInOnce) loggedInOnce = !(await neverLoggedIn(database));
+    if (!loggedInOnce) loggedInOnce = await database.hasLoggedIn();
 
     return !loggedInOnce;
   }
