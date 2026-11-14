@@ -4,7 +4,10 @@ import { expect } from "bun:test";
 import fc from "fast-check";
 
 import { duplicateSite } from "../../packages/core/src/actions/duplicate";
+import { checkFilePath } from "../../packages/core/src/actions/files";
 import { publishSite } from "../../packages/core/src/actions/publish";
+import { parseUploadId } from "../../packages/core/src/records/upload";
+import { isContentType } from "../../packages/core/src/storage/storage";
 import { ADMIN, file, makeWorld, OWNER, type World } from "../../packages/core/tests/actions/support/actions-fixture";
 import { fuzzTarget } from "./config";
 
@@ -17,6 +20,18 @@ const sources = fc.record({
   copies: fc.integer({ min: 1, max: 4 }),
   calls: fc.integer({ min: 1, max: 12 }),
 });
+
+/** A file of a publish with the path and the media type a caller may declare: any text a store keeps, short or long. */
+const declared = fc.record({
+  name: fc.string({ unit: "grapheme", minLength: 1, maxLength: 12 }).filter((name) => checkFilePath(`files/${name}`).ok),
+  type: fc.string({ unit: "grapheme", minLength: 1, maxLength: 40 }).filter(isContentType),
+  text: fc.string({ maxLength: 20 }),
+});
+
+/** How long a manifest is as the cap measures it: its JSON text in UTF-8 bytes. */
+function manifestBytes(manifest: readonly unknown[]): number {
+  return new TextEncoder().encode(JSON.stringify(manifest)).length;
+}
 
 /** The files the store holds under each folder. */
 async function filesByFolder(world: World): Promise<Map<string, number>> {
@@ -58,5 +73,26 @@ property(
     }
 
     expect(await world.install.database.getSite(made.site.id)).toEqual(source);
+  }),
+);
+
+property(
+  "the manifest of a copy is never longer than the one its source was published with, so a site that fitted the cap can be copied",
+  fc.asyncProperty(fc.uniqueArray(declared, { selector: (one) => one.name.normalize("NFC"), maxLength: 6 }), async (extra) => {
+    const world = await makeWorld();
+    const files = [file("index.html", "<p>home</p>"), ...extra.map((one) => ({ ...file(`files/${one.name}`, one.text), contentType: one.type }))];
+    const made = await publishSite(world.install, OWNER, { name: "report", files });
+    if (!made.ok) throw new Error(`the source was refused: ${made.code}`);
+
+    const begun = await duplicateSite(world.install, OWNER, { site: made.site.id }, 0);
+    const upload = begun.ok ? parseUploadId(begun.copy.upload) : undefined;
+    if (upload === undefined) throw new Error("the copy was refused");
+
+    const copy = await world.install.database.getUpload(upload);
+    if (copy?.manifest.length !== files.length) throw new Error("the copy's manifest does not name every file");
+
+    const published = files.map((one) => ({ path: one.path, size: one.size, content_type: one.contentType }));
+
+    expect(manifestBytes(copy.manifest)).toBeLessThanOrEqual(manifestBytes(published));
   }),
 );

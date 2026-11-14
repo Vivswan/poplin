@@ -28,8 +28,8 @@ export const COPIES_PER_CALL = 15;
 /** The list pages spared beyond the count a version's files need, for a store that hands out short pages. */
 const SPARE_PAGES = 2;
 
-/** The type a copy's manifest names for every file. It is never stored: each file is written with the type its source holds. */
-const UNREAD_TYPE = "application/octet-stream";
+/** What a copy's manifest names as every file's type, as short as a type can be: no publish declares a shorter manifest for the same files. No file is stored with it. */
+const UNREAD_TYPE = "-";
 
 /** A copy bounded by nothing but what a publish may declare. */
 const UNBOUNDED: UploadLimits = { fileBytes: Number.MAX_SAFE_INTEGER, files: Number.MAX_SAFE_INTEGER };

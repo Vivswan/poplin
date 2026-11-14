@@ -76,6 +76,17 @@ describe("duplicateSite", () => {
     expect(await world.audit()).toEqual(["create", "publish", "create", "duplicate"]);
   });
 
+  // Drift: a copy declares its files from a listing, which names no media type; a stand-in longer than the types a publish declared makes the copy's manifest pass the cap its source's fitted under.
+  test("a site whose manifest fitted the cap by under the length of a few letters a file is copied, not refused as too large", async () => {
+    const world = await makeWorld();
+    const folder = Array.from({ length: 4 }, () => "x".repeat(218)).join("/");
+    const images = Array.from({ length: 1_600 }, (_image, at) => ({ ...file(`${folder}/${String(at).padStart(4, "0")}.png`, "x"), contentType: "image/png" }));
+    const source = await publishSite(world.install, OWNER, { name: "gallery", files: [file("index.html", "<p>home</p>"), ...images] });
+    if (!source.ok) throw new Error(`the source was refused: ${source.code}`);
+
+    expect(await duplicateSite(world.install, OWNER, { site: source.site.id }, 1)).toMatchObject({ ok: true, site: null, copy: { copied: 1, files: 1_601 } });
+  });
+
   // Drift: a duplicate is a new site made from another's files, so it must pass every door a publish and a read pass: ownership, the trash, and the install's limits.
   test.each([
     ["a publisher who does not own the site", {}, STRANGER, {}, { ok: false, code: "not_found" }],
