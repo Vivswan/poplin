@@ -8,9 +8,7 @@
     "target": "ES2022",
     "module": "ESNext",
     "moduleResolution": "bundler",
-    "resolveJsonModule": true
+    "types": ["bun"]
   },
-  // package.json is the one input that always exists: tsc fails with TS18003 when include matches no file.
-  "files": ["package.json"],
-  "include": ["packages", "tests"]
+  "include": ["packages", "tests", ".github/scripts"]
 }
