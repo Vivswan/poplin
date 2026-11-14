@@ -507,4 +507,7 @@ dist
 # TernJS port file
 .tern-port
 
+## Fuzzer workspace paths (repo-platform fuzzer)
+/.fuzz-failures/
+
 # END REPO-PLATFORM MANAGED
