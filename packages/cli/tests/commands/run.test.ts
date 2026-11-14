@@ -112,6 +112,23 @@ describe("run", () => {
     expect((await bench.run(`show ${label}`)).code).toBe(1);
   });
 
+  test("duplicate calls until the copy is whole and prints the copy's own label and private address: a copy of 8 files takes three calls of 3 files each, and a loop that stopped early would print no site", async () => {
+    const bench = await openBench();
+    const pages = Object.fromEntries(Array.from({ length: 7 }, (_page, at) => [`pages/${at}.html`, `<p>${at}</p>`]));
+    const made = jsonOf(await bench.run(`${folderOf("report", { "index.html": "<title>Report</title>", ...pages })} --unlisted --json`));
+    const { label } = made.site as { label: string };
+    bench.sent.length = 0;
+
+    const copied = await bench.run(`duplicate ${label} --name report-draft`);
+    const fresh = copied.out[0]?.split("  ")[1] ?? "";
+
+    expect(fresh).toMatch(/^report-draft--[0-9a-z]{12}$/);
+    expect(summary(copied)).toEqual({ code: 0, out: [`copied  ${fresh}  private  8 files`, `https://${fresh}-p-poplin.example.com`], err: [] });
+    expect(bench.sent).toEqual(Array.from({ length: 3 }, () => `POST /api/sites/${label}/duplicate`));
+    expect((await bench.run("list")).out).toHaveLength(2);
+    expect(summary(await bench.run("duplicate zzzzzzzzzzzz"))).toMatchObject({ code: 1, out: [] });
+  });
+
   test("list follows every page of the install: without this a listing stops at the first hundred sites", async () => {
     const { bench } = await withSite();
     const folder = folderOf("more", { "index.html": "x" });

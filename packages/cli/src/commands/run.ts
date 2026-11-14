@@ -26,7 +26,7 @@ const HIDDEN = "[token]";
 const INSTALL_COMMANDS = ["whoami", "logout", "config", "doctor"] as const;
 
 /** The commands about sites, but for `publish`. */
-const SITE_COMMANDS = ["set", "show", "list", "rollback", "new-link", "delete", "restore"] as const;
+const SITE_COMMANDS = ["set", "show", "list", "rollback", "new-link", "duplicate", "delete", "restore"] as const;
 
 /** A command that talks to an install. */
 type OnlineRequest = RequestOf<"publish" | "export" | "import" | (typeof INSTALL_COMMANDS)[number] | (typeof SITE_COMMANDS)[number]>;

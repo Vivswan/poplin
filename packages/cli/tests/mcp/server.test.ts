@@ -165,6 +165,20 @@ describe("the MCP server", () => {
     expect({ state: siteOf(restored).state, access: siteOf(restored).access }).toEqual({ state: "live", access: "unlisted" });
   });
 
+  test("duplicate_site answers a new private site under its own label and leaves the original as it was: an agent that reads the copy as the original would change the wrong one", async () => {
+    const { bench, site } = await withSite();
+    await bench.call("update_site", { site: site.label, access: "unlisted" });
+
+    const copied = await bench.call("duplicate_site", { site: site.label, name: "report-draft" });
+    const copy = siteOf(copied);
+    const original = siteOf(await bench.call("get_site", { site: site.label }));
+
+    expect(copied.text.split("\n")).toEqual([`copied  ${copy.label}  private  1 file`, copy.url]);
+    expect({ sameId: copy.id === site.id, label: copy.label.slice(0, -12), access: copy.access, created: copy.created }).toEqual({ sameId: false, label: "report-draft--", access: "private", created: true });
+    expect({ id: original.id, access: original.access, live: original.live_version }).toEqual({ id: site.id, access: "unlisted", live: 1 });
+    expect(codeOf(await bench.call("duplicate_site", { site: site.label, name: "Not A Name" }))).toBe("bad_name");
+  });
+
   test("new_link and delete_site with forever say what was lost, and nothing less than their own argument asks for either: an agent must be able to tell the user what is gone", async () => {
     const { bench, site } = await withSite();
 
@@ -283,7 +297,7 @@ describe("the MCP server", () => {
         await bench.call("publish_site", { path: folderOf("report", { "index.html": "<title>Report</title>" }) }),
       ];
 
-      expect(tools).toHaveLength(8);
+      expect(tools).toHaveLength(9);
       expect(
         answers.map((answer) => ({
           error: answer.error,

@@ -267,6 +267,19 @@ export const TOOLS: { readonly [Name in ToolName]: Tool<Name> } = {
       return onSite(host, input.site, (site) => ({ kind: "delete", site, forever: false, json: false }));
     },
   },
+  duplicate_site: {
+    description: "Make a private copy of a site, with a new label and address. The original is untouched.",
+    parameters: { site: SITE, name: "The copy's name, e.g. q3-draft. Left out: the site's own name." },
+    hints: { destructiveHint: false },
+    run: (input, host) => {
+      if (input.name === undefined) return onSite(host, input.site, (site) => ({ kind: "duplicate", site, json: false }));
+
+      const name = parseSiteName(input.name);
+      if (!name.ok) return refused(problem("bad_name", "name"));
+
+      return onSite(host, input.site, (site) => ({ kind: "duplicate", site, name: name.value, json: false }));
+    },
+  },
   restore_site: {
     description: "Take a site back out of the trash, with the settings it had.",
     parameters: { site: SITE },

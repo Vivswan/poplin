@@ -110,6 +110,18 @@ export const COMMANDS = [
     examples: ["poplin new-link report--k3f9x2ab71qz"],
   },
   {
+    name: "duplicate",
+    group: "one site",
+    about: "make a private copy of a site, with a new address",
+    arguments: [{ ...SITE, required: true }],
+    flags: [{ name: "--name", value: "<name>", about: "the copy's name; the site's own without it" }, ...INSTALL_FLAGS],
+    examples: ["poplin duplicate report--k3f9x2ab71qz", "poplin duplicate report --name report-draft"],
+    notes: [
+      "The copy holds the live version's files and the site's title and settings.",
+      "It is always private, whatever the site is, and the site is not changed.",
+    ],
+  },
+  {
     name: "delete",
     group: "one site",
     about: "move a site into the trash",

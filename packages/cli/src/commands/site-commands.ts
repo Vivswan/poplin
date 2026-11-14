@@ -1,4 +1,4 @@
-// The commands about sites: set, show, list, rollback, new-link, delete, and restore. Each is one call to the install, and prints what the install answered.
+// The commands about sites: set, show, list, rollback, new-link, duplicate, delete, and restore. Each is one call to the install, but for duplicate, which calls until the copy is whole, and prints what the install answered.
 
 import type { ROUTES } from "../../../core/src/api/routes";
 import { showBytes } from "../../../core/src/records/settings";
@@ -15,7 +15,7 @@ const PAGE = 100;
 const MAX_PAGES = 10;
 
 /** The commands this module runs, as the parser read them. */
-type SiteRequest = RequestOf<"set" | "show" | "list" | "rollback" | "new-link" | "delete" | "restore">;
+type SiteRequest = RequestOf<"set" | "show" | "list" | "rollback" | "new-link" | "duplicate" | "delete" | "restore">;
 
 /** One of those commands by its word. */
 type Asked<Kind extends SiteRequest["kind"]> = RequestOf<Kind>;
@@ -134,6 +134,27 @@ async function newLink(request: OneSite, { client }: Session): Promise<Outcome> 
   return { ok: true, value: linked.value, lines: [...siteLines("new link", site, []), ...dead] };
 }
 
+/** Copy a site: the install copies a few files a call, so the call is sent again with the upload it answered until it answers the new site. */
+async function duplicate(request: Asked<"duplicate">, { client, io }: Session): Promise<Outcome> {
+  const site = siteWord(request.site);
+  let asked: { readonly name?: string; readonly upload?: string } = request.name === undefined ? {} : { name: request.name };
+
+  for (let copied = -1; ; ) {
+    const called = await client.call("duplicateSite", { site }, asked);
+    if (!called.ok) return failed(called);
+
+    const { copy } = called.value;
+    if (called.value.site !== null) return { ok: true, value: called.value, lines: siteLines("copied", called.value.site, [called.value.site.access, countText(copy.files, "file")]) };
+
+    // A call that copied nothing more would be sent for ever.
+    if (copy.copied <= copied) return { ok: false, problem: problem("unexpected_answer") };
+
+    copied = copy.copied;
+    asked = { upload: copy.upload };
+    if (io.terminal.progress) io.status(`copying ${copy.copied} of ${countText(copy.files, "file")}`);
+  }
+}
+
 /** Remove a site for good, once its label is typed on a terminal. Without a terminal to ask on, nothing is removed. */
 async function deleteForever(request: Asked<"delete">, { client, io }: Session): Promise<Outcome> {
   if (!io.terminal.asks) return { ok: false, problem: problem("no_terminal") };
@@ -190,6 +211,8 @@ export async function runSiteCommand(request: SiteRequest, session: Session): Pr
       return rollback(request, session);
     case "new-link":
       return newLink(request, session);
+    case "duplicate":
+      return duplicate(request, session);
     case "delete":
       return deleteSite(request, session);
     case "restore":

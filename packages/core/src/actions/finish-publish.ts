@@ -37,11 +37,14 @@ interface Commit {
   readonly signed: Signed;
 }
 
-async function makeSite(install: Install, plan: Extract<UploadPlan, { kind: "create" }>, commit: Commit): Promise<Committed | Refused<LostCode> | "not_pending"> {
+/** Make the upload's new site. A copy gets one more audit entry, which names the site it was copied from. */
+async function makeSite(install: Install, plan: Extract<UploadPlan, { kind: "create" | "duplicate" }>, commit: Commit): Promise<Committed | Refused<LostCode> | "not_pending"> {
   const made = await install.database.publishUploadAsSite(commit.upload.id, plan.site, commit.signed);
   if (made.kind === "not_pending") return "not_pending";
 
   if (made.kind !== "done") return refuse(made.kind, "public_name");
+
+  if (plan.kind === "duplicate") await install.database.appendAudit({ action: "duplicate", site: made.site, detail: { from: plan.from.id } }, commit.signed);
 
   return { ok: true, before: null, site: made.site, dropped: [] };
 }
@@ -83,7 +86,7 @@ async function addVersion(install: Install, plan: Extract<UploadPlan, { kind: "u
 /** Make what the upload was begun for. */
 function commitUpload(install: Install, commit: Commit): Promise<Committed | Refused<LostCode> | "not_pending"> {
   const { plan } = commit.upload;
-  if (plan.kind === "create") return makeSite(install, plan, commit);
+  if (plan.kind === "create" || plan.kind === "duplicate") return makeSite(install, plan, commit);
 
   if (plan.kind === "import") return importSite(install, plan, commit);
 

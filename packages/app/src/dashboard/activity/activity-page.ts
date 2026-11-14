@@ -27,6 +27,7 @@ const WORDS: Readonly<Record<Exclude<AuditAction, "domain_synced">, string>> = {
   restore: "restored from the trash",
   delete: "deleted forever",
   imported: "imported the site",
+  duplicate: "made the site as a copy",
   token_added: "added a token",
   token_revoked: "revoked a token",
   settings_set: "set the first settings",

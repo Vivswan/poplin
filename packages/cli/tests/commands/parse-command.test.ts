@@ -57,6 +57,8 @@ describe("parseCommand", () => {
     [`poplin rollback ${LABEL}`, { kind: "rollback", site: REPORT, ...PLAIN }],
     [`poplin rollback ${LABEL} --to 4`, { kind: "rollback", site: REPORT, to: 4, ...PLAIN }],
     [`poplin new-link ${LABEL}`, { kind: "new-link", site: REPORT, ...PLAIN }],
+    [`poplin duplicate ${LABEL}`, { kind: "duplicate", site: REPORT, ...PLAIN }],
+    [`poplin duplicate ${LABEL} --name report-draft`, { kind: "duplicate", site: REPORT, name: "report-draft", ...PLAIN }],
     [`poplin delete ${LABEL}`, { kind: "delete", site: REPORT, forever: false, ...PLAIN }],
     ["poplin delete report", { kind: "delete", site: { kind: "public-name", name: "report" }, forever: false, ...PLAIN }],
     [`poplin delete ${LABEL} --forever`, { kind: "delete", site: REPORT, forever: true, ...PLAIN }],

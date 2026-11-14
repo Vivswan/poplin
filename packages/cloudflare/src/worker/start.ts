@@ -25,8 +25,8 @@ import type { DomainLayout } from "../zone/layout";
 import { readZoneBinding } from "../zone/zone-binding";
 import type { Bindings } from "./bindings";
 
-/** What one request to the API may carry. Cloudflare's Free plan ends a request body at 100 MB, and core ends a manifest at 1.5 MB itself. */
-const API_LIMITS = { fileBytes: 100_000_000, files: 10_000, manifestBytes: 2_000_000 } as const;
+/** What one request to the API may carry. Cloudflare's Free plan ends a request body at 100 MB, and core ends a manifest at 1.5 MB itself. A copy of 15 files keeps a request under 50 calls to the database and the bucket. */
+const API_LIMITS = { fileBytes: 100_000_000, files: 10_000, manifestBytes: 2_000_000, copies: 15 } as const;
 
 /** The bytes of a new signing key. */
 const KEY_BYTES = 32;

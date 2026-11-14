@@ -1,6 +1,7 @@
 // The changes the forms of a site's page ask for. Each calls one action and answers the page to show next, with the result in its address.
 
 import { deleteSite } from "@poplin/core/src/actions/delete";
+import { duplicateSite } from "@poplin/core/src/actions/duplicate";
 import { newLink } from "@poplin/core/src/actions/new-link";
 import { restoreSite } from "@poplin/core/src/actions/restore";
 import { rollbackSite } from "@poplin/core/src/actions/rollback";
@@ -83,6 +84,21 @@ async function makeNewLink(visit: Visit, reference: string): Promise<string> {
   return withNotice(sitePath(renamed.site.label), { done: "new_link" });
 }
 
+/** Begin a copy of the site, or go on with the one the form names. A copy that needs more requests comes back to the source's page, which shows how far it is. */
+async function duplicate(visit: Visit, reference: string, form: Form): Promise<string> {
+  const upload = form.get("upload") ?? "";
+  const name = form.get("name") ?? "";
+  const first = name === "" ? { site: reference } : { site: reference, name };
+  const copied = await duplicateSite(visit.install, visit.actor, upload === "" ? first : { site: reference, upload });
+  if (!copied.ok) return refused(reference, copied);
+
+  if (copied.site !== null) return withNotice(sitePath(copied.site.label), { done: "duplicated" });
+
+  const progress = new URLSearchParams({ copy: copied.copy.upload, copied: String(copied.copy.copied), files: String(copied.copy.files) });
+
+  return `${withNotice(sitePath(reference), { done: "copying" })}&${progress}`;
+}
+
 async function moveToTrash(visit: Visit, reference: string): Promise<string> {
   const trashed = await deleteSite(visit.install, visit.actor, { site: reference });
   if (!trashed.ok) return refused(reference, trashed);
@@ -117,6 +133,7 @@ export const SITE_CHANGES: Readonly<Record<string, Change<[string]>>> = {
   settings: saveSettings,
   rollback: rollBack,
   "new-link": makeNewLink,
+  duplicate,
   delete: moveToTrash,
   restore,
   "delete-forever": deleteForever,

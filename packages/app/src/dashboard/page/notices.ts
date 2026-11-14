@@ -9,6 +9,7 @@ import type { listAudit } from "@poplin/core/src/actions/audit-log";
 import type { decideLogin, showLogin } from "@poplin/core/src/actions/computer-logins";
 import type { changeConfig, readConfig } from "@poplin/core/src/actions/config";
 import type { deleteSite } from "@poplin/core/src/actions/delete";
+import { COPIES_PER_CALL, type duplicateSite } from "@poplin/core/src/actions/duplicate";
 import type { listSites } from "@poplin/core/src/actions/list";
 import type { listTokens } from "@poplin/core/src/actions/manage-tokens";
 import type { newLink } from "@poplin/core/src/actions/new-link";
@@ -30,6 +31,12 @@ const REFUSALS: Readonly<Record<ActionCode | OwnCode, string>> = {
   reserved_name: "That public name is reserved.",
   no_such_version: "That version is not kept.",
   bad_argument: "The value of {about} is not one it takes.",
+  bad_path: "A file of the site has a path no copy can hold.",
+  no_index: "The site has no index.html to copy.",
+  too_many_sites: "The install holds as many sites as it may, so no copy was made.",
+  missing_files: "A file of the copy did not arrive. Duplicate the site again.",
+  stale_version: "A newer publish went live first.",
+  id_taken: "A site here already has that id.",
   wrong_confirmation: "The typed label did not match, so nothing was deleted.",
   not_confirmed: "The box was not ticked, so nothing was changed.",
   missing_field: "The form was incomplete, so nothing was changed.",
@@ -50,6 +57,8 @@ const DONE = {
   new_link: "The site has a new link. The address with the old id stopped working.",
   trashed: "Moved to the trash.",
   restored: "Restored from the trash.",
+  duplicated: "This is the copy: a new private site with its own address. The site it was copied from is unchanged.",
+  copying: `The copy is not finished: one request copies ${COPIES_PER_CALL} files. Press Keep copying until it is.`,
   deleted: "Deleted forever.",
   deleted_files_left: "Deleted forever. Its remaining files are being removed from the bucket.",
   allowed: "Allowed. The computer collects its token within a few seconds.",
@@ -78,6 +87,7 @@ type ActionCode =
   | CodeOf<typeof newLink>
   | CodeOf<typeof deleteSite>
   | CodeOf<typeof restoreSite>
+  | CodeOf<typeof duplicateSite>
   | CodeOf<typeof readConfig>
   | CodeOf<typeof changeConfig>
   | CodeOf<typeof listAudit>

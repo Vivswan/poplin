@@ -18,6 +18,7 @@ const AUDIT_ACTIONS = [
   "restore",
   "delete",
   "imported",
+  "duplicate",
   "token_added",
   "token_revoked",
   "settings_set",

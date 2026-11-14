@@ -92,6 +92,7 @@ A publish takes these flags too.
 | `poplin rollback report--k3f9x2ab71qz`        | makes the version before live again                           |
 | `poplin rollback report--k3f9x2ab71qz --to 3` | makes version 3 live again                                    |
 | `poplin new-link report--k3f9x2ab71qz`        | gives the site a new id; the old address stops at once        |
+| `poplin duplicate report--k3f9x2ab71qz`       | makes a private copy, with a new address                      |
 | `poplin delete report--k3f9x2ab71qz`          | moves the site into the trash                                 |
 | `poplin restore report--k3f9x2ab71qz`         | takes it back out of the trash                                |
 | `poplin delete report--k3f9x2ab71qz --forever` | removes it now, after you type its label; nothing restores it |
@@ -175,6 +176,7 @@ Every command that talks to the install also takes `--json`, for the answer as J
 | `new_link`      | `{ "site": "report--k3f9x2ab71qz" }`                       | `poplin new-link report--k3f9x2ab71qz`        |
 | `delete_site`   | `{ "site": "report--k3f9x2ab71qz" }`                       | `poplin delete report--k3f9x2ab71qz`          |
 | `restore_site`  | `{ "site": "report--k3f9x2ab71qz" }`                       | `poplin restore report--k3f9x2ab71qz`         |
+| `duplicate_site` | `{ "site": "report--k3f9x2ab71qz" }`                      | `poplin duplicate report--k3f9x2ab71qz`       |
 
 - **`publish_site` and `update_site` take the site settings:** `name`, `access`, `public_name`, `title`, `search_engines`, `embeddable`, `expires`.
 - **`delete_site` with `"forever": true`** removes the site at once, with no trash.

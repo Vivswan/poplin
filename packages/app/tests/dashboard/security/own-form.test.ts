@@ -110,6 +110,8 @@ const FORMS: Readonly<Record<string, Arrange>> = {
     return { fields: { version: "previous" }, answer: [303, `${path}?done=rolled_back`] };
   }),
   "/sites/:site/new-link": ofSite("new-link", async () => ({ fields: {}, answer: [303, "a new label"] })),
+  // The fixture's site is a row without files, so the action behind the form answers that there is no page to copy: the form itself was taken.
+  "/sites/:site/duplicate": ofSite("duplicate", async (_opened, path) => ({ fields: { name: "" }, answer: [303, `${path}?refused=no_index`] })),
   "/sites/:site/delete": ofSite("delete", async (_opened, path) => ({ fields: {}, answer: [303, `${path}?done=trashed`] })),
   "/sites/:site/restore": ofSite("restore", async (opened, path, site) => {
     await trash(opened, site);

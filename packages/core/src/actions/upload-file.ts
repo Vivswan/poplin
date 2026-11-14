@@ -43,7 +43,7 @@ async function unread<Code extends string>(body: ReadableStream<Uint8Array>, cod
  *
  * The same file sent again is stored again. A site is live at these keys only once the upload is finished, so no visitor reads them before.
  *
- * @returns the path and the size stored. `not_found` about `upload` for an upload that is gone, given up, run out, or another publisher's, and about `path` for a path the manifest does not name.
+ * @returns the path and the size stored. `not_found` about `upload` for an upload that is gone, given up, run out, another publisher's, or the copy of a site, and about `path` for a path the manifest does not name.
  * `size_mismatch` when the body is not the declared length: nothing of it is stored, and what the key held stays
  * @throws {Error} the store or the database failed, or the body broke off
  */
@@ -58,6 +58,9 @@ export async function uploadFile(
   const found = await install.database.getUploadFile(id, request.path);
   const upload = found?.upload;
   if (!isWithinReach(upload, actor, install.now())) return unread(request.body, "not_found", "upload");
+
+  // A copy takes its files from its source alone, each with the type the source holds.
+  if (upload.plan.kind === "duplicate") return unread(request.body, "not_found", "upload");
 
   const file = found?.file;
   if (upload.state === "finished") return unread(request.body, "upload_finished", "upload");

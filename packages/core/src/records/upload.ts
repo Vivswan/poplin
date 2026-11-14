@@ -4,7 +4,7 @@ import * as v from "valibot";
 
 import { mintSiteId } from "../sites/ids";
 import { isContentType } from "../storage/storage";
-import { COUNT, HOLDER, MOMENT, POSITIVE } from "./fields";
+import { COUNT, HOLDER, MOMENT, POSITIVE, SITE_ID } from "./fields";
 import { NEW_SITE, SITE_ACCESS, SITE_DETAILS, SITE_FOLDER, TITLE } from "./site";
 
 /** How many characters an upload id holds. */
@@ -25,9 +25,10 @@ const CONTENT_TYPE = v.pipe(v.string(), v.maxLength(MAX_CONTENT_TYPE_LENGTH), v.
 /** One file of a publish as it is declared before its bytes are sent. */
 export const MANIFEST_FILE = v.strictObject({ path: v.string(), size: COUNT, content_type: CONTENT_TYPE });
 
-/** What finishing an upload makes: a new site, the next version of one under the settings asked for with it and the title of its entry page, or a site from a backup, kept as the row `siteFromRow` reads. */
+/** What finishing an upload makes: a new site, a copy of the version `from` names, the next version of a site with the settings and the page title asked with it, or a site from a backup, kept as the row `siteFromRow` reads. */
 const PLAN = v.variant("kind", [
   v.object({ kind: v.literal("create"), site: NEW_SITE }),
+  v.object({ kind: v.literal("duplicate"), site: NEW_SITE, from: v.object({ id: SITE_ID, folder: SITE_FOLDER, number: POSITIVE }) }),
   v.object({ kind: v.literal("update"), access: v.optional(SITE_ACCESS), details: SITE_DETAILS, page_title: v.optional(TITLE) }),
   v.object({ kind: v.literal("import"), site: v.record(v.string(), v.unknown()) }),
 ]);

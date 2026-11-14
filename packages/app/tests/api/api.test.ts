@@ -69,6 +69,7 @@ const BUDGET: Readonly<Record<RouteName, number>> = {
   newLink: 9,
   deleteSite: 35,
   restoreSite: 5,
+  duplicateSite: 47,
   beginPublish: 7,
   showUpload: 14,
   uploadFile: 6,
@@ -102,6 +103,7 @@ function samples(site: string, upload: string): Readonly<Record<TokenRoute, Samp
     newLink: { args: { site } },
     deleteSite: { args: { site, forever: true } },
     restoreSite: { args: { site } },
+    duplicateSite: { args: { site }, body: {} },
     beginPublish: { args: undefined, body: { site, files: manifest(PAGES) } },
     showUpload: { args: { upload } },
     uploadFile: { args: { upload, path: "index.html" }, body: PAGES["index.html"] },
@@ -228,6 +230,7 @@ describe("createApi", () => {
     expect(part(await done("rollbackSite", { site: label }, { body: { version: 1 } }), "site").live_version).toBe(1);
     const moved = part(await done("newLink", { site: label }), "site").id as string;
     expect(moved).not.toBe(first.id);
+    expect(part(await done("duplicateSite", { site: moved }, { body: { name: "report-copy" } }), "site")).toMatchObject({ name: "report-copy", access: "private", created: true });
     expect(part(await done("deleteSite", { site: moved }), "site").state).toBe("trash");
     expect(part(await done("restoreSite", { site: moved }), "site").state).toBe("live");
 
@@ -326,6 +329,7 @@ describe("createApi", () => {
       ["newLink", 404, "not_found"],
       ["deleteSite", 404, "not_found"],
       ["restoreSite", 404, "not_found"],
+      ["duplicateSite", 404, "not_found"],
       ["beginPublish", 404, "not_found"],
       ["showUpload", 404, "not_found"],
       ["uploadFile", 404, "not_found"],

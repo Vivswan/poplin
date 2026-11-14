@@ -2,6 +2,7 @@
 
 import { getSite } from "@poplin/core/src/actions/show";
 import { showBytes } from "@poplin/core/src/records/settings";
+import { parseUploadId } from "@poplin/core/src/records/upload";
 import { html } from "hono/html";
 
 import { showMoment } from "../page/amounts";
@@ -14,6 +15,9 @@ const ACCESSES = [
   { access: "unlisted", means: "unlisted: anyone who has the address" },
   { access: "public", means: "public: everyone, also under a public name" },
 ] as const;
+
+/** A count as a copy's progress carries it in the address. */
+const COUNT_PATTERN = /^[0-9]{1,9}$/;
 
 /** A site as the show action answers with it. */
 type Shown = Extract<Awaited<ReturnType<typeof getSite>>, { ok: true }>["site"];
@@ -112,9 +116,38 @@ ${others.map((version) => html`<option value="${version.number}">v${version.numb
 </form>`;
 }
 
+/** The form that begins a copy; or, on the page a copy in progress came back to, the form that goes on with it. */
+function duplicateForm(visit: Visit, site: Shown): Html {
+  const upload = parseUploadId(visit.url.searchParams.get("copy") ?? "");
+  const [copied, files] = [visit.url.searchParams.get("copied") ?? "", visit.url.searchParams.get("files") ?? ""];
+
+  if (upload !== undefined && COUNT_PATTERN.test(copied) && COUNT_PATTERN.test(files)) {
+    return html`<h2>Duplicate</h2>
+<form method="post" action="${action(site, "duplicate")}">
+${csrfField(visit)}
+<input type="hidden" name="upload" value="${upload}">
+<p>Copying: ${copied} of ${files} files. The copy is no site until every file is there.</p>
+<button type="submit">Keep copying</button>
+</form>`;
+  }
+
+  return html`<h2>Duplicate</h2>
+<form method="post" action="${action(site, "duplicate")}">
+${csrfField(visit)}
+<p>Makes a private copy of the live version, with a new address. This site is not changed.</p>
+<div class="field">
+<label for="copy_name">Name of the copy</label>
+<input type="text" id="copy_name" name="name" value="" autocomplete="off">
+<p class="hint">Left empty, it is this site's name.</p>
+</div>
+<button type="submit">Duplicate</button>
+</form>`;
+}
+
 function liveForms(visit: Visit, site: Shown): Html {
   return html`${settingsForm(visit, site)}
 ${rollbackForm(visit, site)}
+${duplicateForm(visit, site)}
 <h2>New link</h2>
 <form method="post" action="${action(site, "new-link")}">
 ${csrfField(visit)}

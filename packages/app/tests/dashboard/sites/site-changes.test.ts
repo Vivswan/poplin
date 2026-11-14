@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test";
 
+import { publishSite } from "@poplin/core/src/actions/publish";
 import { getSite } from "@poplin/core/src/actions/show";
 import type { Site } from "@poplin/core/src/records/site";
 
@@ -32,6 +33,42 @@ test("the settings form renames a site when its name field changes, lands on the
   expect([same.headers.get("Location"), renamed.headers.get("Location")]).toEqual([`${path}?done=saved`, `/sites/q3-report--${site.id}?done=saved`]);
   expect(await shown(opened, site.id)).toMatchObject({ id: site.id, name: "q3-report", label: `q3-report--${site.id}`, public_name: "report" });
   expect((await opened.install.database.listAudit({ limit: 10 })).map((entry) => entry.action).filter((action) => action === "details")).toHaveLength(1);
+});
+
+// Drift: one request copies 15 files; a form that showed a half copy as a site, or lost the upload between requests, would leave a broken site or a copy nobody can finish.
+test("the duplicate form makes a private copy and lands on it; a site of more files than one request copies comes back to its own page until the copy is whole", async () => {
+  const opened = await openDashboard();
+  const files = Array.from({ length: 16 }, (_page, at) => {
+    const bytes = new TextEncoder().encode(`<p>${at}</p>`);
+
+    return { path: at === 0 ? "index.html" : `pages/${at}.html`, size: bytes.length, contentType: "text/html", open: () => new Blob([bytes]).stream() };
+  });
+  const published = await publishSite(opened.install, { scope: "admin", holder: opened.owner }, { name: "report", access: "public", files });
+  if (!published.ok) throw new Error(`the fixture site was refused: ${published.code}`);
+
+  const { site } = published;
+  const path = `/sites/report--${site.id}`;
+
+  const begun = await opened.post(`${path}/duplicate`, { name: "report-draft" });
+  const [, upload = ""] = new RegExp(`^${path}\\?done=copying&copy=([0-9a-z]{16})&copied=15&files=16$`).exec(begun.headers.get("Location") ?? "") ?? [];
+  const waiting = await landing(opened, begun);
+  const sitesMeanwhile = (await opened.install.database.readTotals()).sites;
+  const finished = await opened.post(`${path}/duplicate`, { upload });
+  const [, label = ""] = /^\/sites\/(report-draft--[0-9a-z]{12})\?done=duplicated$/.exec(finished.headers.get("Location") ?? "") ?? [];
+
+  expect(upload).not.toBe("");
+  expect([NOTICE.exec(waiting)?.[2], waiting.includes(`name="upload" value="${upload}"`), waiting.includes("Copying: 15 of 16 files."), sitesMeanwhile]).toEqual([
+    "The copy is not finished: one request copies 15 files. Press Keep copying until it is.",
+    true,
+    true,
+    1,
+  ]);
+  expect(NOTICE.exec(await landing(opened, finished))?.[2]).toBe("This is the copy: a new private site with its own address. The site it was copied from is unchanged.");
+  expect([await shown(opened, label), await shown(opened, site.id)]).toMatchObject([
+    { name: "report-draft", access: "private", public_name: null, files: 16, live_version: 1 },
+    { id: site.id, access: "public", public_name: "report" },
+  ]);
+  expect((await opened.audit()).slice(0, 2).map((entry) => entry.action)).toEqual(["duplicate", "create"]);
 });
 
 test("each form of a live site does its change through the action, writes the action's audit entry, and lands on a page that says so", async () => {

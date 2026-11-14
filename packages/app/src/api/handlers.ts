@@ -8,6 +8,7 @@ import { SITE_CHANGES } from "@poplin/core/src/actions/changes";
 import { beginLogin, LOGIN_REQUEST, LOGIN_SECRET, redeemLogin } from "@poplin/core/src/actions/computer-logins";
 import { changeConfig, readConfig } from "@poplin/core/src/actions/config";
 import { DELETE_OPTIONS, deleteSite } from "@poplin/core/src/actions/delete";
+import { DUPLICATE_REQUEST, duplicateSite } from "@poplin/core/src/actions/duplicate";
 import { EXPORT_FILE_QUERY, EXPORT_FILES_QUERY, EXPORT_QUERY, EXPORT_SITE_QUERY, exportFile, exportFiles, exportSettings, exportSite, exportSites } from "@poplin/core/src/actions/export";
 import { finishPublish } from "@poplin/core/src/actions/finish-publish";
 import { importSettings, SETTINGS_IMPORT } from "@poplin/core/src/actions/import-settings";
@@ -74,8 +75,8 @@ export interface Call {
   /** The request itself, whose body a route that sends bytes reads. */
   readonly request: Request;
 
-  /** What one request can carry. */
-  readonly limits: UploadLimits;
+  /** What one request can carry, and how many files of a copy it makes. */
+  readonly limits: UploadLimits & { readonly copies: number };
 }
 
 /** One request to a route that takes no token: nobody asks, so there is no actor. */
@@ -161,6 +162,7 @@ export const HANDLERS: { readonly [Name in Exclude<RouteName, OpenName>]: Handle
   newLink: ({ install, actor, site }) => newLink(install, actor, site),
   deleteSite: ({ install, actor, site, query }) => checked(DELETE_OPTIONS, query, (options) => deleteSite(install, actor, { ...options, site })),
   restoreSite: ({ install, actor, site }) => restoreSite(install, actor, site),
+  duplicateSite: ({ install, actor, site, body, limits }) => checked(DUPLICATE_REQUEST, body, (asked) => duplicateSite(install, actor, { ...asked, site }, limits.copies)),
 
   beginPublish: ({ install, actor, body, limits }) => checked(PUBLISH_REQUEST, body, (request) => beginPublish(install, actor, request, limits)),
   showUpload: ({ install, actor, named }) => showUpload(install, actor, named),

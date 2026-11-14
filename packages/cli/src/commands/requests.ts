@@ -36,6 +36,7 @@ const BUILDERS: { readonly [Name in Exclude<CommandName, "help">]: (words: Words
   show: (words) => oneSite("show", words),
   rollback,
   "new-link": (words) => oneSite("new-link", words),
+  duplicate,
   delete: (words) => withSite(words, (site, install) => ({ kind: "delete", site, forever: words.flags.has("--forever"), ...install })),
   restore: (words) => oneSite("restore", words),
   list: (words) => withInstall(words, (install) => ({ kind: "list", trash: words.flags.has("--trash"), ...install })),
@@ -78,6 +79,7 @@ export type Request =
   | ({ readonly kind: "set"; readonly site: SiteRef; readonly settings: SiteSettings } & Install)
   | ({ readonly kind: "show" | "new-link" | "restore"; readonly site: SiteRef } & Install)
   | ({ readonly kind: "rollback"; readonly site: SiteRef; readonly to?: number } & Install)
+  | ({ readonly kind: "duplicate"; readonly site: SiteRef; readonly name?: SiteName } & Install)
   | ({ readonly kind: "delete"; readonly site: SiteRef; readonly forever: boolean } & Install)
   | ({ readonly kind: "list"; readonly trash: boolean } & Install)
   | ({ readonly kind: "login"; readonly publisher: boolean; readonly computer?: string; readonly browser: boolean } & Install)
@@ -203,6 +205,16 @@ function rollback(words: Words): Request | UsageError {
     return usageError(`--to takes a version number such as 4, not ${JSON.stringify(to)}`, "poplin show <site> lists the versions");
 
   return withSite(words, (site, install) => ({ kind: "rollback", site, to: version, ...install }));
+}
+
+function duplicate(words: Words): Request | UsageError {
+  const nameText = flagValue(words.flags, "--name");
+  if (nameText === undefined) return withSite(words, (site, install) => ({ kind: "duplicate", site, ...install }));
+
+  const name = readName("--name", nameText, parseSiteName(nameText));
+  if (isUsageError(name)) return name;
+
+  return withSite(words, (site, install) => ({ kind: "duplicate", site, name, ...install }));
 }
 
 function login(words: Words): Request | UsageError {

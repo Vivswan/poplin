@@ -22,7 +22,7 @@ export const NOW = 1_700_000_000_000;
 export const ORIGIN = "https://poplin.example.com";
 
 /** What one request to the test install can carry: small, so a test passes each cap with a few bytes. */
-export const LIMITS: ApiLimits = { fileBytes: 64, files: 8, manifestBytes: 4096 };
+export const LIMITS: ApiLimits = { fileBytes: 64, files: 8, manifestBytes: 4096, copies: 3 };
 
 /** The request header a test names its visitor in; every request without it comes from one visitor. */
 export const VISITOR_HEADER = "Test-Visitor";

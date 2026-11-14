@@ -27,10 +27,13 @@ const OPEN_PER_MINUTE: Readonly<Record<OpenName, number>> = { beginLogin: 5, red
 /** What a counter that cannot answer is taken to say: the minute is full. A login is the guess the count exists to stop, so it is refused where a request for a site is let through. */
 const UNCOUNTED = { ok: false, retryAfterSeconds: 60 } as const;
 
-/** What one request can carry: a file's bytes, a publish's file count, and the JSON that declares a publish's files. */
+/** What one request can carry: a file's bytes, a publish's file count, the JSON that declares a publish's files, and the files of a copy. */
 export interface ApiLimits extends UploadLimits {
   /** The most bytes the JSON body that begins a publish or an import may hold. */
   readonly manifestBytes: number;
+
+  /** The most files one request copies for a duplicate: two bucket calls each. */
+  readonly copies: number;
 }
 
 /** What the API is given: the install its actions run on, how a token's record is found, and what one request can carry. */

@@ -9,7 +9,7 @@ import { openDashboard } from "../support/install";
 const CHANGES = /action="\/sites\/[^/"]+\/([a-z-]+)"/g;
 const PAGE = { path: "index.html", size: 4, contentType: "text/html", open: (): ReadableStream<Uint8Array> => new Blob(["page"]).stream() };
 
-test("a live site's page offers every setting of the set action, rollback, a new link, and delete; one in the trash only restore and delete forever", async () => {
+test("a live site's page offers every setting of the set action, rollback, a copy, a new link, and delete; one in the trash only restore and delete forever", async () => {
   const opened = await openDashboard();
   const live = await opened.publish("report");
   const trashed = await opened.publish("old");
@@ -18,8 +18,8 @@ test("a live site's page offers every setting of the set action, rollback, a new
   const livePage = await (await opened.get(`/sites/report--${live.id}`)).text();
   const trashPage = await (await opened.get(`/sites/old--${trashed.id}`)).text();
 
-  expect(Array.from(livePage.matchAll(CHANGES), ([, change]) => change)).toEqual(["settings", "new-link", "delete"]);
-  expect(Array.from(livePage.matchAll(/<input[^>]* name="([a-z_]+)"/g), ([, name]) => name).filter((name) => name !== "csrf")).toEqual(["name", "access", "access", "access", "public_name", "title", "search_engines", "embeddable", "expires"]);
+  expect(Array.from(livePage.matchAll(CHANGES), ([, change]) => change)).toEqual(["settings", "duplicate", "new-link", "delete"]);
+  expect(Array.from(livePage.matchAll(/<input[^>]* name="([a-z_]+)"/g), ([, name]) => name).filter((name) => name !== "csrf")).toEqual(["name", "access", "access", "access", "public_name", "title", "search_engines", "embeddable", "expires", "name"]);
   expect(livePage).toContain("The current address stops working at once.");
   expect(livePage).toContain("Only one version is kept");
   expect(Array.from(trashPage.matchAll(CHANGES), ([, change]) => change)).toEqual(["restore", "delete-forever"]);

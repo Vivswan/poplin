@@ -78,6 +78,11 @@ const ANSWERS = {
   newLink: SITE_ANSWER,
   deleteSite: v.looseObject({ before: v.nullable(SITE), site: v.nullable(SITE), left: v.array(v.string()) }),
   restoreSite: SITE_ANSWER,
+  duplicateSite: v.looseObject({
+    before: v.null(),
+    site: v.nullable(v.looseObject({ ...SITE.entries, created: v.boolean() })),
+    copy: v.looseObject({ upload: v.string(), copied: v.number(), files: v.number() }),
+  }),
   beginPublish: v.looseObject({ upload: UPLOAD }),
   showUpload: v.looseObject({ upload: UPLOAD, missing: v.array(v.string()), more: v.boolean() }),
   uploadFile: v.looseObject({ path: v.string(), size: v.number() }),

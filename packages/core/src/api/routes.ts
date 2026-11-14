@@ -2,6 +2,7 @@
 //
 // The server registers its handlers from this table and a client builds its requests from it, so the two cannot differ.
 // A request carries `Authorization: Bearer <token>`, but for the routes of `OPEN_ROUTES`, which a computer with no token calls to get one. A JSON body goes with `Content-Type: application/json`, a file's bytes with `application/octet-stream`.
+// A duplicate is a run of requests too: `duplicateSite` copies a few files a request, as many as the install's limits say, and is sent again with the `upload` it answered until it answers the new site.
 // An export and an import are a run of small requests the client drives: `exportSites` a page at a time, then `exportFiles` and `exportFile` for each version; `beginImport`, then the upload routes under the id it answers.
 
 import type * as v from "valibot";
@@ -14,6 +15,7 @@ import type { SiteChanges } from "../actions/changes";
 import type { beginLogin, LOGIN_REQUEST, LOGIN_SECRET, Redeemed } from "../actions/computer-logins";
 import type { changeConfig, readConfig } from "../actions/config";
 import type { DELETE_OPTIONS, deleteSite } from "../actions/delete";
+import type { DUPLICATE_REQUEST, duplicateSite } from "../actions/duplicate";
 import type { EXPORT_FILE_QUERY, EXPORT_FILES_QUERY, EXPORT_QUERY, EXPORT_SITE_QUERY, exportFile, exportFiles, exportSettings, exportSite, exportSites } from "../actions/export";
 import type { finishPublish } from "../actions/finish-publish";
 import type { importSettings, SETTINGS_IMPORT } from "../actions/import-settings";
@@ -139,6 +141,7 @@ export const ROUTES = {
     return `${sitePath(site)}${queryOf({ forever })}`;
   }),
   restoreSite: ask<OneSite, SiteBody>("POST", "/sites/:site/restore", ({ site }) => sitePath(site, "/restore")),
+  duplicateSite: send<OneSite, v.InferInput<typeof DUPLICATE_REQUEST>, Answer<typeof duplicateSite>>("POST", "/sites/:site/duplicate", ({ site }) => sitePath(site, "/duplicate")),
 
   beginPublish: send<void, v.InferInput<typeof PUBLISH_REQUEST>, Answer<typeof beginPublish>>("POST", "/uploads", () => `${BASE}/uploads`),
   showUpload: ask<OneUpload, Answer<typeof showUpload>>("GET", "/uploads/:upload", ({ upload }) => uploadPath(upload)),

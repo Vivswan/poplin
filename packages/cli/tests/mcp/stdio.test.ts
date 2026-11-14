@@ -70,7 +70,7 @@ describe("poplin mcp over stdio", () => {
 
     expect({ code, stderr }).toEqual({ code: 0, stderr: "" });
     expect(protocolMessages(stdout).map((message) => ("id" in message ? message.id : "none"))).toEqual([1, 2, 3, 4]);
-    expect(listed.result?.tools?.map((tool) => tool.name)).toHaveLength(8);
+    expect(listed.result?.tools?.map((tool) => tool.name)).toHaveLength(9);
     expect({ made: made.result?.isError, shown: shown.result?.isError }).toEqual({ made: undefined, shown: undefined });
     expect(shown.result?.structuredContent?.site?.url).toBe(made.result?.structuredContent?.site?.url ?? "no address");
   }, 30_000);
