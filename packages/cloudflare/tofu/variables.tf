@@ -177,8 +177,8 @@ variable "versions_kept" {
   default     = 3
 
   validation {
-    condition     = var.versions_kept >= 1 && floor(var.versions_kept) == var.versions_kept
-    error_message = "versions_kept must be a whole number of at least 1."
+    condition     = var.versions_kept >= 1 && var.versions_kept <= 9007199254740991 && floor(var.versions_kept) == var.versions_kept
+    error_message = "versions_kept must be a whole number from 1 to 9007199254740991."
   }
 }
 
@@ -188,8 +188,8 @@ variable "trash_days" {
   default     = 7
 
   validation {
-    condition     = var.trash_days >= 1 && floor(var.trash_days) == var.trash_days
-    error_message = "trash_days must be a whole number of at least 1."
+    condition     = var.trash_days >= 1 && var.trash_days <= 9007199254740991 && floor(var.trash_days) == var.trash_days
+    error_message = "trash_days must be a whole number from 1 to 9007199254740991."
   }
 }
 
@@ -260,8 +260,8 @@ variable "max_sites" {
   default     = null
 
   validation {
-    condition     = var.max_sites == null || try(var.max_sites >= 1 && floor(var.max_sites) == var.max_sites, false)
-    error_message = "max_sites must be null or a whole number of at least 1."
+    condition     = var.max_sites == null || try(var.max_sites >= 1 && var.max_sites <= 9007199254740991 && floor(var.max_sites) == var.max_sites, false)
+    error_message = "max_sites must be null or a whole number from 1 to 9007199254740991."
   }
 }
 
@@ -271,8 +271,8 @@ variable "requests_per_day" {
   default     = 100000
 
   validation {
-    condition     = var.requests_per_day >= 1 && floor(var.requests_per_day) == var.requests_per_day
-    error_message = "requests_per_day must be a whole number of at least 1."
+    condition     = var.requests_per_day >= 1 && var.requests_per_day <= 9007199254740991 && floor(var.requests_per_day) == var.requests_per_day
+    error_message = "requests_per_day must be a whole number from 1 to 9007199254740991."
   }
 }
 
@@ -293,8 +293,8 @@ variable "site_requests_per_minute" {
   default     = 60
 
   validation {
-    condition     = var.site_requests_per_minute >= 1 && floor(var.site_requests_per_minute) == var.site_requests_per_minute
-    error_message = "site_requests_per_minute must be a whole number of at least 1."
+    condition     = var.site_requests_per_minute >= 1 && var.site_requests_per_minute <= 9007199254740991 && floor(var.site_requests_per_minute) == var.site_requests_per_minute
+    error_message = "site_requests_per_minute must be a whole number from 1 to 9007199254740991."
   }
 }
 
@@ -304,7 +304,7 @@ variable "visitor_requests_per_minute" {
   default     = 30
 
   validation {
-    condition     = var.visitor_requests_per_minute >= 1 && floor(var.visitor_requests_per_minute) == var.visitor_requests_per_minute
-    error_message = "visitor_requests_per_minute must be a whole number of at least 1."
+    condition     = var.visitor_requests_per_minute >= 1 && var.visitor_requests_per_minute <= 9007199254740991 && floor(var.visitor_requests_per_minute) == var.visitor_requests_per_minute
+    error_message = "visitor_requests_per_minute must be a whole number from 1 to 9007199254740991."
   }
 }

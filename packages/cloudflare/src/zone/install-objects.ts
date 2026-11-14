@@ -4,11 +4,12 @@
 export const INSTALL_OBJECTS = {
   recordMark: "poplin: ",
   wildcardComment: "poplin: every site",
-  adminComment: "poplin: the dashboard, the login, the API, and the MCP server",
+  adminComment: "poplin: the dashboard, the login, and the API",
   recordType: "AAAA",
   recordContent: "100::",
   accessApplication: "poplin",
   accessPolicy: "poplin logins",
+  loginPath: "/login",
   database: "poplin",
   rateRuleset: "poplin rate rule",
   rateRef: "poplin_rate",

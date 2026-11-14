@@ -69,8 +69,8 @@ run "login_allows_exactly_the_logins" {
   }
 
   assert {
-    condition     = tolist([for destination in cloudflare_zero_trust_access_application.login.destinations : destination.uri]) == tolist(["admin.example.com/login", "admin.example.com/oauth/authorize"])
-    error_message = "The login covers the two login paths on the admin hostname and no other path."
+    condition     = tolist([for destination in cloudflare_zero_trust_access_application.login.destinations : destination.uri]) == tolist(["admin.example.com/login"]) && cloudflare_zero_trust_access_application.login.domain == "admin.example.com/login"
+    error_message = "The login covers the login path on the admin hostname and no other path."
   }
 }
 
@@ -144,7 +144,7 @@ run "values_shared_with_the_setup_client" {
   assert {
     condition = { for name, record in cloudflare_dns_record.poplin : name => "${record.type} ${record.content} ${record.comment}" } == {
       "*.example.com"     = "AAAA 100:: poplin: every site"
-      "admin.example.com" = "AAAA 100:: poplin: the dashboard, the login, the API, and the MCP server"
+      "admin.example.com" = "AAAA 100:: poplin: the dashboard, the login, and the API"
     }
     error_message = "Each record points at the discard address and carries the comment the setup client writes for its name."
   }
@@ -224,7 +224,7 @@ run "own_records_are_no_records_of_the_zone" {
           private_routing     = null, settings = null, tags = null, tags_modified_on = null
         },
         {
-          name                = "admin.example.com", type = "AAAA", proxied = true, comment = "poplin: the dashboard, the login, the API, and the MCP server", id = "0", content = "100::", ttl = 1, proxiable = true,
+          name                = "admin.example.com", type = "AAAA", proxied = true, comment = "poplin: the dashboard, the login, and the API", id = "0", content = "100::", ttl = 1, proxiable = true,
           comment_modified_on = null, created_on = null, data = null, meta = null, modified_on = null, priority = null,
           private_routing     = null, settings = null, tags = null, tags_modified_on = null
         },

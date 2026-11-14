@@ -7,7 +7,6 @@ import { hostOf } from "../support/layouts";
 
 const ADMIN = hostOf("admin.example.com");
 const WORKER = hostOf("poplin.an-account.workers.dev");
-const PATHS = ["/login", "/oauth/authorize"];
 const NOTHING = { policies: [], applications: [] };
 
 function loginsOf(...emails: string[]): Parameters<typeof planAccess>[0]["logins"] {
@@ -26,14 +25,14 @@ function policy(id: string, emails: readonly string[], more: Partial<Policy> = {
 }
 
 function application(id: string, hostname: string, policyId: string, more: Partial<Application> = {}): Application {
-  const uris = PATHS.map((path) => `${hostname}${path}`);
+  const uri = `${hostname}/login`;
 
   return {
     id,
     name: "poplin",
     type: "self_hosted",
-    domain: uris[0],
-    destinations: uris.map((uri) => ({ type: "public", uri })),
+    domain: uri,
+    destinations: [{ type: "public", uri }],
     policies: [{ id: policyId }],
     ...more,
   };
@@ -48,10 +47,10 @@ describe("planAccess", () => {
     { name: "an install with no domain, on the Worker's workers.dev hostname", hostname: WORKER },
   ];
 
-  test.each(installs)("$name: an account with no Access gets the policy, then the application over the login paths linked to it", ({ hostname }) => {
-    expect(planAccess({ hostname, paths: PATHS, logins: owner }, NOTHING)).toEqual([
+  test.each(installs)("$name: an account with no Access gets the policy, then the application over the login path linked to it", ({ hostname }) => {
+    expect(planAccess({ hostname, logins: owner }, NOTHING)).toEqual([
       { kind: "create", subject: "poplin logins", emails },
-      { kind: "create", subject: "poplin", uris: [`${hostname}/login`, `${hostname}/oauth/authorize`], policyId: undefined },
+      { kind: "create", subject: "poplin", uris: [`${hostname}/login`], policyId: undefined },
     ]);
   });
 
@@ -66,7 +65,7 @@ describe("planAccess", () => {
         application("app-1", hostname, "pol-1"),
       ],
     };
-    const steps = planAccess({ hostname, paths: PATHS, logins: owner }, current);
+    const steps = planAccess({ hostname, logins: owner }, current);
 
     expect(steps).toEqual([
       { kind: "leave", subject: "poplin logins" },
@@ -91,7 +90,7 @@ describe("planAccess", () => {
   test.each(widened)("$name: the policy is changed back to exactly the login list, the application left", ({ policy: drifted }) => {
     const current = { policies: [drifted], applications: [application("app-1", ADMIN, "pol-1")] };
 
-    expect(planAccess({ hostname: ADMIN, paths: PATHS, logins: owner }, current)).toEqual([
+    expect(planAccess({ hostname: ADMIN, logins: owner }, current)).toEqual([
       { kind: "change", subject: "poplin logins", id: "pol-1", emails },
       { kind: "leave", subject: "poplin" },
     ]);
@@ -102,12 +101,9 @@ describe("planAccess", () => {
     { name: "a second policy was attached", application: application("app-1", ADMIN, "pol-1", { policies: [{ id: "pol-1" }, { id: "pol-0" }] }) },
     { name: "another policy replaced it", application: application("app-1", ADMIN, "pol-0") },
     {
-      name: "an override made a login path public",
+      name: "an override made the login path public",
       application: application("app-1", ADMIN, "pol-1", {
-        destinations: [
-          { type: "public", uri: "admin.example.com/login", overrides: [{ behavior: "public", path_pattern: "/login" }] },
-          { type: "public", uri: "admin.example.com/oauth/authorize" },
-        ],
+        destinations: [{ type: "public", uri: "admin.example.com/login", overrides: [{ behavior: "public", path_pattern: "/login" }] }],
       }),
     },
     {
@@ -115,7 +111,6 @@ describe("planAccess", () => {
       application: application("app-1", ADMIN, "pol-1", {
         destinations: [
           { type: "public", uri: "admin.example.com/login" },
-          { type: "public", uri: "admin.example.com/oauth/authorize" },
           { type: "public", uri: "wiki.example.com" },
         ],
       }),
@@ -125,24 +120,10 @@ describe("planAccess", () => {
   test.each(moved)("$name: the application is changed back by its id, the policy left", ({ application: drifted }) => {
     const current = { policies: [policy("pol-1", emails)], applications: [drifted] };
 
-    expect(planAccess({ hostname: ADMIN, paths: PATHS, logins: owner }, current)).toEqual([
+    expect(planAccess({ hostname: ADMIN, logins: owner }, current)).toEqual([
       { kind: "leave", subject: "poplin logins" },
-      { kind: "change", subject: "poplin", id: "app-1", uris: ["admin.example.com/login", "admin.example.com/oauth/authorize"], policyId: "pol-1" },
+      { kind: "change", subject: "poplin", id: "app-1", uris: ["admin.example.com/login"], policyId: "pol-1" },
     ]);
-  });
-
-  const refused: readonly { readonly name: string; readonly paths: readonly string[]; readonly subjects: readonly string[] }[] = [
-    { name: "no path", paths: [], subjects: ["poplin"] },
-    { name: "a path with no leading slash", paths: ["/login", "login"], subjects: ["login"] },
-    { name: "a path with a wildcard", paths: ["/*"], subjects: ["/*"] },
-    { name: "a path with a query", paths: ["/login?next=/"], subjects: ["/login?next=/"] },
-    { name: "a path that names another host", paths: ["/login", ".example.org/login"], subjects: [".example.org/login"] },
-  ];
-
-  test.each(refused)("$name stops the plan with a skip and no change: a path is appended to the hostname as it is", ({ paths, subjects }) => {
-    const steps = planAccess({ hostname: ADMIN, paths, logins: owner }, NOTHING);
-
-    expect(steps.map((step) => [step.kind, step.subject])).toEqual(subjects.map((subject) => ["skip", subject]));
   });
 });
 
@@ -163,7 +144,7 @@ describe("syncAccess", () => {
         return reply(made);
       },
       async (connection, asked) => {
-        const desired = { hostname: ADMIN, paths: PATHS, logins: loginsOf("owner@example.com") };
+        const desired = { hostname: ADMIN, logins: loginsOf("owner@example.com") };
         const first = await syncAccess(connection, "account-a", desired);
         const sent = asked.length;
         const second = await syncAccess(connection, "account-a", desired);
@@ -179,10 +160,7 @@ describe("syncAccess", () => {
               name: "poplin",
               type: "self_hosted",
               domain: "admin.example.com/login",
-              destinations: [
-                { type: "public", uri: "admin.example.com/login" },
-                { type: "public", uri: "admin.example.com/oauth/authorize" },
-              ],
+              destinations: [{ type: "public", uri: "admin.example.com/login" }],
               policies: [{ id: "made-0", precedence: 1 }],
             },
           ],

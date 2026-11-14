@@ -24,7 +24,7 @@ The caller configures the `cloudflare` provider, major 5, and runs OpenTofu 1.13
 | Worker script | serves the sites, the dashboard, the API, and the MCP server; uploaded from the bundle with the bucket, the database, the minute limiter, the zone values, and the first settings bound to it |
 | Worker routes | send the install's hostnames, and no other hostname of the zone, to the Worker |
 | DNS records | proxied, each with a comment starting `poplin: ` |
-| Access policy and application | the login on `/login` and `/oauth/authorize` of the admin hostname, allowing exactly `logins` |
+| Access policy and application | the login on `/login` of the admin hostname, allowing exactly `logins` |
 | Rate rule | blocks an address for 10 seconds after 300 requests in 10 seconds |
 | Guard rules | two custom rules that block a request to a site hostname before the Worker runs: one from a page of another domain, one from a verified bot |
 | Bot settings | the zone's AI bot block, on a zone with no hostnames of its own |
@@ -55,7 +55,7 @@ Each object carries a fixed name or mark, the same one poplin's own setup code w
 
 | Object | Name or mark |
 | --- | --- |
-| DNS records | the comments `poplin: every site` and `poplin: the dashboard, the login, the API, and the MCP server` |
+| DNS records | the comments `poplin: every site` and `poplin: the dashboard, the login, and the API` |
 | Worker routes | the Worker's name, `worker_name` |
 | Access policy | the name `poplin logins` |
 | Access application | the name `poplin` |
@@ -114,7 +114,13 @@ No rule can exempt a request from Bot Fight Mode, and it may challenge `poplin` 
 | `worker_name` | string | `poplin` | the name of the Worker script |
 | `bucket_name` | string | `poplin-sites` | the name of the R2 bucket |
 
-`outside_pages`, `search_engines_allowed`, and `zone_bots` are first settings too.
+`outside_pages`, `search_engines_allowed`, and `zone_bots` are first settings too. Each lives in two places, and `poplin config` changes the stored setting alone. For the Cloudflare side, change the input and apply:
+
+| Setting | The Worker, from the stored setting | Cloudflare, from the module's input |
+| --- | --- | --- |
+| `outside_pages` | while `blocked`, refuses a request to a site that a page other than one of the install's sites made, and names the pages under the domain as the only ones that may frame a site | the outside pages rule: created while `blocked`, with `guard_rules` on |
+| `search_engines_allowed` | reads nothing from it | the bots rule: whether the crawlers of search engines pass it, with `guard_rules` on |
+| `zone_bots` | reads nothing from it | the zone's AI bot block and Bot Fight Mode |
 
 The first settings. The names and text forms are those of `poplin config`:
 

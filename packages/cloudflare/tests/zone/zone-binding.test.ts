@@ -21,6 +21,35 @@ function literalAfter(file: string, opening: string): Record<string, string> {
   return Object.fromEntries(pairs.map(([, key = "", value = ""]) => [key, value]));
 }
 
+/** Every setting the Worker's reader takes as a whole number, bare or as a percent, with the largest one it takes. */
+function wholeNumberSettings(): { readonly key: string; readonly most: bigint }[] {
+  const pinned = literalAfter("tests/zone.tftest.hcl", "bindings[4].json) == {");
+  const found: { readonly key: string; readonly most: bigint }[] = [];
+
+  for (const key of SETTING_KEYS) {
+    const unit = pinned[key]?.endsWith("%") ? "%" : "";
+    const taken = (count: bigint): boolean => {
+      const read = settingsFromText({ ...pinned, [key]: `${count}${unit}` });
+
+      return read.ok && typeof (read.values as Record<string, unknown>)[key] === "number";
+    };
+    if (!taken(1n)) continue;
+
+    // Halving between a number that is taken and one that is not ends on the largest taken.
+    let most = 1n;
+    let refused = 2n ** 64n;
+    while (refused - most > 1n) {
+      const middle = (most + refused) / 2n;
+      if (taken(middle)) most = middle;
+      else refused = middle;
+    }
+
+    found.push({ key, most });
+  }
+
+  return found;
+}
+
 describe("readZoneBinding", () => {
   test("the three texts, with the whole admin hostname, are the layout the routes and rules are written from", () => {
     expect<unknown>(readZoneBinding(BOUND)).toEqual({ ok: true, value: { domain: "example.com", adminHostname: "admin.example.com", suffix: "-page" } });
@@ -59,6 +88,13 @@ describe("the bindings the module gives the Worker", () => {
     const read = settingsFromText(literalAfter("tests/zone.tftest.hcl", "bindings[4].json) == {"));
 
     expect(read).toMatchObject({ ok: true, values: { search_engines_allowed: true, zone_bots: "auto", dashboard_title: "admin.tools.example.com" } });
+  });
+
+  test.each(wholeNumberSettings())("$key: the module refuses a number above $most, the most the Worker's reader takes; one more would leave every first setting unread", ({ key, most }) => {
+    const variables = readFileSync(join(MODULE, "variables.tf"), "utf8").replaceAll(/ +/g, " ");
+    const [, rules = ""] = new RegExp(`^variable "${key}" \\{\\n(.*?)^\\}`, "ms").exec(variables) ?? [];
+
+    expect(rules).toContain(`var.${key} <= ${most}`);
   });
 
   test("the ZONE binding the module's test pins is read as a layout, with the whole admin hostname", () => {

@@ -69,7 +69,7 @@ locals {
   # Every DNS record of the install, each with the comment that marks it as poplin's.
   records = merge(
     length(local.zone_wildcards) == 0 ? { (local.wildcard_host) = "poplin: every site" } : {},
-    { (local.admin_host) = "poplin: the dashboard, the login, the API, and the MCP server" },
+    { (local.admin_host) = "poplin: the dashboard, the login, and the API" },
   )
 
   # A route may begin with a wildcard and hold no other, so Cloudflare itself sends only the hostnames that end in the suffix to the Worker.

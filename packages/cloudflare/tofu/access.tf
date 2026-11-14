@@ -1,4 +1,4 @@
-# The login in front of the two paths a person opens to prove who they are. Every other path is the Worker's to guard.
+# The login in front of the one path a person opens to prove who they are. Every other path is the Worker's to guard.
 # Access keeps no mark on either object, so poplin's setup client finds them by these names.
 
 resource "cloudflare_zero_trust_access_policy" "logins" {
@@ -14,10 +14,7 @@ resource "cloudflare_zero_trust_access_application" "login" {
   type       = "self_hosted"
   domain     = "${local.admin_host}/login"
 
-  destinations = [
-    { type = "public", uri = "${local.admin_host}/login" },
-    { type = "public", uri = "${local.admin_host}/oauth/authorize" },
-  ]
+  destinations = [{ type = "public", uri = "${local.admin_host}/login" }]
 
   policies = [{ id = cloudflare_zero_trust_access_policy.logins.id, precedence = 1 }]
 }

@@ -363,6 +363,17 @@ run "versions_kept_zero" {
   expect_failures = [var.versions_kept]
 }
 
+# The Worker reads a whole number only up to 9007199254740991, so one more would leave FIRST_SETTINGS unread.
+run "requests_per_day_too_large_to_count" {
+  command = plan
+
+  variables {
+    requests_per_day = 9007199254740992
+  }
+
+  expect_failures = [var.requests_per_day]
+}
+
 run "cache_html_without_a_unit" {
   command = plan
 
@@ -409,6 +420,16 @@ run "max_sites_zero" {
 
   variables {
     max_sites = 0
+  }
+
+  expect_failures = [var.max_sites]
+}
+
+run "max_sites_too_large_to_count" {
+  command = plan
+
+  variables {
+    max_sites = 9007199254740992
   }
 
   expect_failures = [var.max_sites]

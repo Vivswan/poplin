@@ -6,7 +6,7 @@ import { page, reply, withFake } from "../support/fake-cloudflare";
 import { OTHER_SUFFIX, SUFFIXED } from "../support/layouts";
 
 const WILDCARD_COMMENT = "poplin: every site";
-const ADMIN_COMMENT = "poplin: the dashboard, the login, the API, and the MCP server";
+const ADMIN_COMMENT = "poplin: the dashboard, the login, and the API";
 
 interface Row {
   readonly id: string;

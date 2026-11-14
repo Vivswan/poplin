@@ -1,4 +1,4 @@
-// The Access application in front of the login paths, and the one policy that lets the install's logins through. Access keeps no mark on either, so poplin's are the ones with its fixed names, which the OpenTofu module gives them too.
+// The Access application in front of the login path, and the one policy that lets the install's logins through. Access keeps no mark on either, so poplin's are the ones with its fixed names, which the OpenTofu module gives them too.
 
 import type { Logins } from "@poplin/core/src/auth/logins";
 import type { Hostname } from "@poplin/core/src/names/hostname";
@@ -10,9 +10,6 @@ import { applySteps, reportOf, type Synced } from "../sync";
 
 const POLICY_NAME = INSTALL_OBJECTS.accessPolicy;
 const APPLICATION_NAME = INSTALL_OBJECTS.accessApplication;
-const LOGIN_PATH = /^\/[A-Za-z0-9/._-]*$/;
-const NO_PATHS = "an application needs at least one login path";
-const BAD_PATH = "a login path starts with a slash and holds letters, digits, and / . _ - only";
 
 /** A reusable policy as the account has it now. */
 interface AccountPolicy {
@@ -43,7 +40,6 @@ interface AccountAccess {
 /** The login an install wants: `hostname` is the admin hostname, or the Worker's own on an install with no domain. */
 interface DesiredAccess {
   readonly hostname: Hostname;
-  readonly paths: readonly string[];
   readonly logins: Logins;
 }
 
@@ -111,16 +107,11 @@ function planApplication(application: AccountApplication | undefined, uris: read
  * Compute the Access changes an install needs.
  *
  * @param current - every reusable policy and application of the account as they are now
- * @returns the policy's step, then the application's; a path that is no plain path stops the plan with a skip and nothing else
+ * @returns the policy's step, then the application's, which covers the one login path of the shared table
  */
 export function planAccess(desired: DesiredAccess, current: AccountAccess): AccessStep[] {
-  if (desired.paths.length === 0) return [{ kind: "skip", subject: APPLICATION_NAME, reason: NO_PATHS }];
-
-  const bad = desired.paths.filter((path) => !LOGIN_PATH.test(path));
-  if (bad.length > 0) return bad.map((path) => ({ kind: "skip", subject: path, reason: BAD_PATH }));
-
   const emails = [...desired.logins].sort();
-  const uris = [...new Set(desired.paths)].map((path) => `${desired.hostname}${path}`);
+  const uris = [`${desired.hostname}${INSTALL_OBJECTS.loginPath}`];
   const policy = current.policies.find((candidate) => candidate.name === POLICY_NAME);
   const application = current.applications.find((candidate) => candidate.name === APPLICATION_NAME);
 

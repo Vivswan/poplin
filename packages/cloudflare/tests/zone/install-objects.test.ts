@@ -35,6 +35,7 @@ const WRITTEN: Readonly<Record<SharedKey, readonly [file: string, around: string
   recordContent: ["dns.tf", "content = %v"],
   accessApplication: ["access.tf", "name = %v"],
   accessPolicy: ["access.tf", "name = %v"],
+  loginPath: ["access.tf", `destinations = [{ type = "public", uri = "\${local.admin_host}%i" }]`],
   database: ["database.tf", "name = %v"],
   rateRuleset: ["waf.tf", "name = %v"],
   rateRef: ["waf.tf", "ref = %v"],
@@ -76,14 +77,14 @@ function hcl(value: string | number | readonly string[]): string {
 /** What the module's resources read back as from the API, for its default inputs on `example.com`. `rate` is the expression of its rate rule. */
 function moduleZone(rate: string): Readonly<Record<string, unknown>> {
   const placeholder = { type: "AAAA", content: "100::", proxied: true, ttl: 1 };
-  const uris = ["admin.example.com/login", "admin.example.com/oauth/authorize"];
+  const login = "admin.example.com/login";
   const rateRule = { id: "r1", ref: "poplin_rate", description: "poplin: 300 requests per 10 seconds per address", expression: rate, action: "block" };
   const outside = `${SITES} and any(http.request.headers["sec-fetch-site"][*] eq "cross-site") and any(http.request.headers["sec-fetch-dest"][*] ne "document")`;
 
   return {
     [`/zones/${ZONE}/dns_records`]: [
       { id: "d1", name: "*.example.com", ...placeholder, comment: "poplin: every site" },
-      { id: "d2", name: "admin.example.com", ...placeholder, comment: "poplin: the dashboard, the login, the API, and the MCP server" },
+      { id: "d2", name: "admin.example.com", ...placeholder, comment: "poplin: the dashboard, the login, and the API" },
     ],
     [`/zones/${ZONE}/workers/routes`]: [
       { id: "w1", pattern: "*-page.example.com/*", script: "poplin" },
@@ -97,8 +98,8 @@ function moduleZone(rate: string): Readonly<Record<string, unknown>> {
         id: "app-1",
         name: "poplin",
         type: "self_hosted",
-        domain: uris[0],
-        destinations: uris.map((uri) => ({ type: "public", uri })),
+        domain: login,
+        destinations: [{ type: "public", uri: login }],
         policies: [{ id: "pol-1", precedence: 1, name: "poplin logins", decision: "allow" }],
       },
     ],
@@ -178,7 +179,7 @@ describe("a zone the OpenTofu module set up", () => {
     {
       name: "the login",
       rate: WHOLE_ZONE,
-      run: (connection) => syncAccess(connection, ACCOUNT, { hostname: hostOf("admin.example.com"), paths: ["/login", "/oauth/authorize"], logins: logins() }),
+      run: (connection) => syncAccess(connection, ACCOUNT, { hostname: hostOf("admin.example.com"), logins: logins() }),
     },
     { name: "the rate rule of `rate_rule = zone`, on the Free plan", rate: WHOLE_ZONE, run: (connection) => syncWaf(connection, ZONE, FREE) },
     {
