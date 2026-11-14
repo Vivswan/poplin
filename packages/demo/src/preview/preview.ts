@@ -35,6 +35,8 @@ const API_LIMITS = { fileBytes: 100_000_000, files: 10_000, manifestBytes: 2_000
 const FREE_LIMITS = {
   totalBytes: { most: 10_000_000_000, warning: "above the sample host's free 10 GB; a real host bills storage past its own" },
   siteBytes: { most: 10_000_000_000, warning: "one site of this size is above the sample host's free 10 GB; a real host bills storage past its own" },
+  filesPerPublish: { most: 5000, warning: "a publish this large may not start within the sample host's free processing time" },
+  filesPerDay: { most: 32_258, warning: "a month of such days is above the sample host's free 1,000,000 stored files; a real host bills the ones past its own" },
   requestsPerDay: { most: 100_000, warning: "above the sample host's free 100,000 requests a day; a real host serves nothing more without its paid plan" },
   logins: { most: 50, warning: "above the 50 users the sample host takes for free; a real host bills users past its own" },
 } as const;

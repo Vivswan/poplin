@@ -494,7 +494,7 @@ function requestCountRows(label: string, makeDriver: DriverFactory): void {
 function manifestRows(label: string, makeDriver: DriverFactory): void {
   describe(`${label}: the row of an upload's manifest`, () => {
     // Drift: a request for a file runs once per file of a publish, and a database counts every entry of a manifest it walks as a row read; a lookup that walked the manifest would read as many rows as the publish has files, squared.
-    test.each([3, 5000])("an upload of %d files is recorded in two statements, its whole manifest is read in one, and one file of it in one that walks nothing but the upload's key", async (files) => {
+    test.each([3, 5000])("an upload of %d files is recorded in four statements, its whole manifest is read in one, and one file of it in one that walks nothing but the upload's key", async (files) => {
       const inner = await migrated(makeDriver);
       const driver = new RecordingDriver(inner);
       const database = new SqlDatabase(driver);
@@ -505,7 +505,7 @@ function manifestRows(label: string, makeDriver: DriverFactory): void {
       const lookup = driver.statements.at(-1);
       const plan = await rows(inner, `EXPLAIN QUERY PLAN ${lookup?.sql}`, ...(lookup?.params ?? []));
 
-      expect([recorded, driver.statements.length - recorded, read?.file, whole?.manifest.length]).toEqual([2, 2, { path: "page-2.html", size: 2, content_type: "text/html" }, files]);
+      expect([recorded, driver.statements.length - recorded, read?.file, whole?.manifest.length]).toEqual([4, 2, { path: "page-2.html", size: 2, content_type: "text/html" }, files]);
       expect(plan.map((step) => String(step.detail).split(" ")[0])).toEqual(["SEARCH"]);
     });
 

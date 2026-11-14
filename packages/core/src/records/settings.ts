@@ -29,6 +29,9 @@ const OUTSIDE_PAGES = ["blocked", "allowed"] as const;
 /** The zone's bot switches: `auto` sets them on a zone with no hostnames of its own, `on` on any zone, `off` leaves them alone. */
 const BLOCK_BOTS = ["auto", "on", "off"] as const;
 
+/** The most files one publish may declare under any setting: finishing lists them a thousand a store call. */
+export const MOST_FILES_PER_PUBLISH = 10_000;
+
 /** A time span of at least one unit. */
 const TIME_SPAN = amountSchema(SECONDS_PER_UNIT, 1);
 
@@ -53,6 +56,8 @@ const VALUES = {
   max_total_size: SIZE,
   max_site_size: SIZE,
   max_sites: v.union([v.literal("none"), POSITIVE]),
+  max_files_per_publish: v.pipe(v.number(), v.safeInteger(), v.minValue(1), v.maxValue(MOST_FILES_PER_PUBLISH)),
+  max_files_per_day: POSITIVE,
   requests_per_day: POSITIVE,
   site_share_of_day: v.pipe(v.number(), v.safeInteger(), v.minValue(1), v.maxValue(100)),
   site_requests_per_minute: POSITIVE,
@@ -82,6 +87,8 @@ const FORMS: { readonly [Key in SettingKey]: TextForm<SettingValues[Key]> } = {
   max_total_size: amount(BYTES_PER_UNIT),
   max_site_size: amount(BYTES_PER_UNIT),
   max_sites: orWord("none", whole()),
+  max_files_per_publish: whole(),
+  max_files_per_day: whole(),
   requests_per_day: whole(),
   site_share_of_day: percent(),
   site_requests_per_minute: whole(),
@@ -268,6 +275,8 @@ export function defaultSettings(install: Install): SettingValues {
     max_total_size: { count: 9, unit: "GB" },
     max_site_size: { count: 200, unit: "MB" },
     max_sites: "none",
+    max_files_per_publish: 5000,
+    max_files_per_day: 25_000,
     requests_per_day: 100_000,
     site_share_of_day: 25,
     site_requests_per_minute: 6000,

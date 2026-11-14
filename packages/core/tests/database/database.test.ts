@@ -57,6 +57,9 @@ const KEY_BYTES = 32;
 /** The form of a day: a date such as `2026-11-13`, which sorts as text in the order of time. */
 const DAY_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 
+/** The milliseconds of one day. */
+const DAY_MS = 86_400_000;
+
 /** The key a day's count of all sites together is kept under; no site id is empty. */
 const ALL_SITES = "";
 
@@ -150,6 +153,8 @@ class MemoryDatabase implements Database {
   readonly #views = new Map<string, Map<string, number>>();
 
   readonly #uploads = new Map<UploadId, { readonly upload: Upload; readonly manifest: readonly ManifestFile[] }>();
+
+  readonly #declared = new Map<string, number>();
 
   readonly #leftovers = new Set<SiteFolder>();
 
@@ -625,7 +630,7 @@ class MemoryDatabase implements Database {
     return kept === undefined ? undefined : siteOf(kept);
   }
 
-  async addUpload(upload: NewUpload, room: UploadRoom): Promise<{ readonly kind: "done" } | Refused<"own_full" | "folder_full" | "total_full" | "sites_full">> {
+  async addUpload(upload: NewUpload, room: UploadRoom): Promise<{ readonly kind: "done" } | Refused<"own_full" | "folder_full" | "total_full" | "sites_full" | "day_full">> {
     // The checks of a stored upload are the ones that read its row; they are used here for their verdict.
     const manifest = v.parse(v.array(MANIFEST_FILE), upload.manifest);
     const bytes = manifest.reduce((sum, file) => sum + file.size, 0);
@@ -650,6 +655,13 @@ class MemoryDatabase implements Database {
 
     if (room.sites !== null && pending.filter((kept) => kept.number === 1).length + totals.sites >= room.sites) return { kind: "sites_full" };
 
+    const yesterday = dayOf(Date.parse(room.day) - DAY_MS);
+    for (const day of this.#declared.keys()) if (day < yesterday) this.#declared.delete(day);
+
+    const declared = this.#declared.get(room.day) ?? 0;
+    if (declared + manifest.length > room.dayFiles) return { kind: "day_full" };
+
+    this.#declared.set(room.day, declared + manifest.length);
     this.#uploads.set(checked.id, { upload: checked, manifest });
 
     return { kind: "done" };

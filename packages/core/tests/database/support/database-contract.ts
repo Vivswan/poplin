@@ -66,7 +66,7 @@ const MANIFEST = [
 ];
 
 /** Room no fixture upload fills. */
-const ROOMY = { own: 100, folderBytes: 1_000_000, staying: 0, totalBytes: 1_000_000, sites: null };
+const ROOMY = { own: 100, folderBytes: 1_000_000, staying: 0, totalBytes: 1_000_000, sites: null, day: "2026-11-13", dayFiles: 1_000_000 };
 
 /** A change made by the second person a moment later. */
 const BY_BO_LATER: Signed = { by: BO, at: NOW + 5 };
@@ -1836,6 +1836,7 @@ function uploads(label: string, makeDatabase: DatabaseFactory): void {
       ["the bytes of its folder with the site's newest version", { folderBytes: 2000, staying: 1 }, "version", 0, "folder_full"],
       ["the bytes of every site and every pending upload", { totalBytes: 4000 }, "version", 1, "total_full"],
       ["the sites there are and are being made", { sites: 3 }, "site", 1, "sites_full"],
+      ["the files declared on its day", { dayFiles: 6 }, "version", 1, "day_full"],
     ] as const)("of three uploads recorded at the same moment only as many are kept as fit the room for %s", async (_bound, bound, kind, fit, refusal) => {
       const database = await opened(makeDatabase);
       const site = await made(database, draft(REPORT));
@@ -1877,6 +1878,30 @@ function uploads(label: string, makeDatabase: DatabaseFactory): void {
   });
 }
 
+function declaredFiles(label: string, makeDatabase: DatabaseFactory): void {
+  describe(`${label}: the files declared in a day`, () => {
+    // Drift: every stored file is a bucket operation the host bills past a monthly amount. A count that an upload given up gave back would let a loop of begin and abandon store without end, and one that outlived its day would refuse tomorrow's publish.
+    test("the files of every upload begun on a day count against that day, an upload given up gives none back, the next day begins at none, and one begun late for the day before still counts against it", async () => {
+      const database = await opened(makeDatabase);
+      const site = await made(database, draft(REPORT));
+      const room = { ...ROOMY, dayFiles: 4 };
+      const begin = async (number: number, day: string): Promise<{ readonly id: UploadId; readonly kind: string }> => {
+        const id = mintUploadId();
+        const added = await database.addUpload({ id, folder: site.folder, number, owner: ADA, plan: { kind: "update", details: {} }, manifest: MANIFEST, created_at: NOW }, { ...room, day });
+
+        return { id, kind: added.kind };
+      };
+
+      const first = await begin(2, TODAY);
+      await database.abandonUpload(first.id);
+      const kinds = [first.kind];
+      for (const [number, day] of [[3, TODAY], [4, TODAY], [5, TOMORROW], [6, TODAY], [7, TOMORROW], [8, TOMORROW]] as const) kinds.push((await begin(number, day)).kind);
+
+      expect(kinds).toEqual(["done", "done", "day_full", "done", "day_full", "done", "day_full"]);
+    });
+  });
+}
+
 /**
  * Register the contract every `Database` keeps, whatever it stores its records in.
  *
@@ -1898,4 +1923,5 @@ export function describeDatabase(label: string, makeDatabase: DatabaseFactory): 
   requestCounts(label, makeDatabase);
   uploads(label, makeDatabase);
   uploadFiles(label, makeDatabase);
+  declaredFiles(label, makeDatabase);
 }

@@ -181,6 +181,12 @@ export interface UploadRoom {
 
   /** The most sites, the pending uploads of new sites counted as sites; `null` for no bound, as for an upload that makes no site. */
   readonly sites: number | null;
+
+  /** The UTC day the upload's files are counted on, such as `2026-11-13`. */
+  readonly day: string;
+
+  /** The most files every upload begun on that day may declare together. An upload that is given up gives none back. */
+  readonly dayFiles: number;
 }
 
 /** Where a page of old uploads ended. */
@@ -370,10 +376,12 @@ export interface Database {
   /**
    * Record a staged publish as pending, only while it fits the room it is given. It writes no audit entry: nothing a reader of any site sees has changed.
    *
-   * @returns the first bound the upload does not fit, in the order `own`, `folder`, `total`, `sites`; of uploads recorded at the same moment only those that fit together are kept
+   * The files it declares are added to the count of its day in the same step, and the counts of the days before the day before it are dropped.
+   *
+   * @returns the first bound the upload does not fit, in the order `own`, `folder`, `total`, `sites`, `day`; of uploads recorded at the same moment only those that fit together are kept
    * @throws {Error} a value breaks its field rule, the manifest is empty or names a path twice, or the id or the folder and number are already an upload's
    */
-  addUpload(upload: NewUpload, room: UploadRoom): Promise<{ readonly kind: "done" } | Refused<"own_full" | "folder_full" | "total_full" | "sites_full">>;
+  addUpload(upload: NewUpload, room: UploadRoom): Promise<{ readonly kind: "done" } | Refused<"own_full" | "folder_full" | "total_full" | "sites_full" | "day_full">>;
 
   /** The upload with this id and its manifest, which is empty once the upload is finished or abandoned. */
   getUpload(id: UploadId): Promise<{ readonly upload: Upload; readonly manifest: readonly ManifestFile[] } | undefined>;

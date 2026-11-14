@@ -156,6 +156,8 @@ The first settings. The names and text forms are those of `poplin config`:
 | `max_total_size` | string | `9GB` | limit: all sites together |
 | `max_site_size` | string | `200MB` | limit: one site |
 | `max_sites` | number | `null` | limit: how many sites; null means none |
+| `max_files_per_publish` | number | `5000` | limit: the files of one publish, import, or copy; 10000 at most |
+| `max_files_per_day` | number | `25000` | limit: the files of all publishes begun in one UTC day |
 | `requests_per_day` | number | `100000` | limit: the day's requests, all sites |
 | `site_share_of_day` | number | `25` | limit: one site's share of the day, in percent |
 | `site_requests_per_minute` | number | `6000` | limit: one site |

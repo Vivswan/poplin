@@ -2,6 +2,7 @@ import { describe, expect, spyOn, test } from "bun:test";
 
 import { abandonPublish } from "../../src/actions/abandon-publish";
 import { beginPublish } from "../../src/actions/begin-publish";
+import { duplicateSite } from "../../src/actions/duplicate";
 import { finishPublish } from "../../src/actions/finish-publish";
 import { listSites } from "../../src/actions/list";
 import { publishSite } from "../../src/actions/publish";
@@ -111,6 +112,29 @@ describe("finishPublish", () => {
       { ok: false, code: "too_many_sites", about: "max_sites" },
     ]);
     expect([(await finishPublish(world.install, OWNER, second)).ok, (await finishPublish(world.install, OWNER, third)).ok]).toEqual([true, true]);
+  });
+
+  // Drift: every stored file is a bucket operation the host bills past a monthly amount, and an upload's whole list of files is read as it begins. Unbounded, a loop of publishes runs up a bill and one large publish may not start at all.
+  test("one publish declares at most max_files_per_publish files, and the uploads begun in one UTC day at most max_files_per_day together, a copy's among them", async () => {
+    const world = await makeWorld({ max_files_per_publish: 3, max_files_per_day: 5 });
+    const pages = (paths: readonly string[]): object[] => paths.map((path) => ({ ...PAGE, path }));
+    const large = await beginPublish(world.install, OWNER, { name: "large", files: pages(["index.html", "a.html", "b.html", "c.html"]) });
+    const report = await finishPublish(world.install, OWNER, await staged(world, { name: "report" }, ["index.html", "about.html"]));
+    if (!report.ok) throw new Error(`the fixture publish was refused: ${report.code}`);
+
+    const copied = await duplicateSite(world.install, OWNER, { site: report.site.id });
+    const over = await beginPublish(world.install, OWNER, { name: "two", files: pages(["index.html", "about.html"]) });
+    const last = await beginPublish(world.install, OWNER, { name: "two", files: [PAGE] });
+    const copy = await duplicateSite(world.install, OWNER, { site: report.site.id });
+    world.clock.now += DAY;
+    const tomorrow = await beginPublish(world.install, OWNER, { name: "three", files: pages(["index.html", "about.html"]) });
+
+    expect([large, over, copy]).toEqual([
+      { ok: false, code: "too_large", about: "max_files_per_publish" },
+      { ok: false, code: "too_large", about: "max_files_per_day" },
+      { ok: false, code: "too_large", about: "max_files_per_day" },
+    ]);
+    expect([copied.ok, last.ok, tomorrow.ok]).toEqual([true, true, true]);
   });
 
   // Drift: a pending upload keeps its manifest in the database; a token that could begin uploads without end would fill it, a megabyte a request.

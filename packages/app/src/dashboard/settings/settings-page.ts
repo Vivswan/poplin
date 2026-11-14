@@ -23,6 +23,8 @@ const MEANINGS: { readonly [Key in keyof SettingValues]: string } = {
   max_total_size: "The most all sites hold together, such as 9GB.",
   max_site_size: "The most one site holds, such as 200MB.",
   max_sites: "The most sites, or none for no limit.",
+  max_files_per_publish: "The most files one publish, import, or copy holds, up to 10000.",
+  max_files_per_day: "The most files all publishes, imports, and copies begun in one UTC day hold together.",
   requests_per_day: "The day's requests, all sites together.",
   site_share_of_day: "The share of the day's requests one site may take, such as 25%.",
   site_requests_per_minute: "The requests one site answers in a minute.",

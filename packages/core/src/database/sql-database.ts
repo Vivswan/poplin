@@ -221,14 +221,24 @@ const BYTES_HELD = "((SELECT COALESCE(SUM(bytes), 0) FROM uploads WHERE state = 
 /** The sites there are and the ones the pending uploads would make. Only a new site's upload has number 1. */
 const SITES_HELD = "((SELECT COALESCE(SUM(number = 1), 0) FROM uploads WHERE state = 'pending') + (SELECT sites FROM totals WHERE id = 1))";
 
+/** The files the uploads begun on day `?15` declared so far. */
+const FILES_OF_DAY = "(SELECT COALESCE(SUM(files), 0) FROM declared_files WHERE day = ?15)";
+
 /** What a new upload of holder `?4` under folder `?2` is measured against, read before it is recorded. */
 const UPLOAD_ROOM = `SELECT ?1 AS id, ?3 AS number, ${PENDING_OF_OWNER} AS own, ${BYTES_IN_FOLDER} AS folder_bytes, ${BYTES_HELD} AS total_bytes, ${SITES_HELD} AS sites`;
 
-/** A new upload, pending, only while it fits: its owner's count under `?11`, its folder's bytes within `?12`, all bytes within `?13`, and the sites under `?14` unless that is NULL. */
+/** A new upload, pending, only while it fits: its owner's count under `?11`, its folder's bytes within `?12`, all bytes within `?13`, the sites under `?14` unless that is NULL, and the files of day `?15` within `?16`. */
 const INSERT_UPLOAD = `
 INSERT INTO uploads (id, folder, number, owner, plan, manifest, bytes, files, created_at)
 SELECT ?1, ?2, ?3, ?4, ?6, ?7, ?8, ?9, ?10
-WHERE ${PENDING_OF_OWNER} < ?11 AND ${BYTES_IN_FOLDER} + ?8 <= ?12 AND ${BYTES_HELD} + ?8 <= ?13 AND (?14 IS NULL OR ${SITES_HELD} < ?14)`;
+WHERE ${PENDING_OF_OWNER} < ?11 AND ${BYTES_IN_FOLDER} + ?8 <= ?12 AND ${BYTES_HELD} + ?8 <= ?13 AND (?14 IS NULL OR ${SITES_HELD} < ?14)
+  AND ${FILES_OF_DAY} + ?9 <= ?16`;
+
+/** The count of every day before the one before `?1`, dropped. Yesterday's stays: an upload that began just before midnight is still counted against it. */
+const DROP_EARLIER_FILE_DAYS = "DELETE FROM declared_files WHERE day < date(?1, '-1 day')";
+
+/** `?2` more files declared on day `?1`, only when the statement before it recorded the upload. */
+const ADD_DECLARED_FILES = "INSERT INTO declared_files (day, files) SELECT ?1, ?2 WHERE changes() = 1 ON CONFLICT (day) DO UPDATE SET files = files + excluded.files";
 
 /** The upload with id `?1`, without its manifest. */
 const UPLOAD_BY_ID = `SELECT ${UPLOAD_COLUMNS} FROM uploads WHERE id = ?1`;
@@ -955,16 +965,19 @@ export class SqlDatabase implements Database {
     return { kind: "name_taken" };
   }
 
-  async addUpload(upload: NewUpload, room: UploadRoom): Promise<{ readonly kind: "done" } | Refused<"own_full" | "folder_full" | "total_full" | "sites_full">> {
+  async addUpload(upload: NewUpload, room: UploadRoom): Promise<{ readonly kind: "done" } | Refused<"own_full" | "folder_full" | "total_full" | "sites_full" | "day_full">> {
+    requireDay(room.day);
     const manifest = manifestToText(upload.manifest);
     const bytes = upload.manifest.reduce((sum, file) => sum + file.size, 0);
     const row = { ...upload, state: "pending", plan: JSON.stringify(upload.plan), bytes, files: upload.manifest.length, dropped: "[]" };
     const checked = uploadFromRow(row);
     const named: SqlValue[] = [checked.id, checked.folder, checked.number, checked.owner, room.staying];
 
-    const [before, inserted] = await this.#driver.batch([
+    const [before, , inserted] = await this.#driver.batch([
       sql(UPLOAD_ROOM, ...named),
-      sql(INSERT_UPLOAD, ...named, row.plan, manifest, checked.bytes, checked.files, checked.created_at, room.own, room.folderBytes, room.totalBytes, room.sites),
+      sql(DROP_EARLIER_FILE_DAYS, room.day),
+      sql(INSERT_UPLOAD, ...named, row.plan, manifest, checked.bytes, checked.files, checked.created_at, room.own, room.folderBytes, room.totalBytes, room.sites, room.day, room.dayFiles),
+      sql(ADD_DECLARED_FILES, room.day, checked.files),
     ]);
     if (changed(inserted)) return { kind: "done" };
 
@@ -973,7 +986,9 @@ export class SqlDatabase implements Database {
 
     if (Number(held?.folder_bytes) + checked.bytes > room.folderBytes) return { kind: "folder_full" };
 
-    return { kind: Number(held?.total_bytes) + checked.bytes > room.totalBytes ? "total_full" : "sites_full" };
+    if (Number(held?.total_bytes) + checked.bytes > room.totalBytes) return { kind: "total_full" };
+
+    return { kind: room.sites !== null && Number(held?.sites) >= room.sites ? "sites_full" : "day_full" };
   }
 
   async getUpload(id: UploadId): Promise<{ readonly upload: Upload; readonly manifest: readonly ManifestFile[] } | undefined> {

@@ -60,6 +60,8 @@ const ABOUT_REFUSALS: Readonly<Record<string, Readonly<Record<string, string>>>>
   too_large: {
     max_total_size: "The copy does not fit under max_total_size, which bounds all sites together, the trash and unfinished copies included. No copy was made.",
     max_site_size: "The copy does not fit under max_site_size: the site is larger than one site may be now. No copy was made.",
+    max_files_per_publish: "The site holds more files than max_files_per_publish lets one copy hold. No copy was made.",
+    max_files_per_day: "The copy does not fit under max_files_per_day: the publishes and copies begun today left too few files of the day. No copy was made.",
     max_pending_uploads: "Too many copies and uploads are unfinished at once. Finish or cancel one; an unfinished one is removed about a day after it began. No copy was made.",
     other: "The copy does not fit a limit of the install: {about}. No copy was made.",
   },

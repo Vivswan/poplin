@@ -129,7 +129,7 @@ async function beginCopy(
   // A publish that went live since the site was read may be removing this version: a listing that is not the whole version is no source.
   if (manifest.length !== live?.files) return refuse("no_such_version");
 
-  const listed = checkManifest(manifest, UNBOUNDED);
+  const listed = checkManifest(manifest, { ...UNBOUNDED, perPublish: settings.max_files_per_publish });
   if (!listed.ok) return listed;
 
   if (listed.bytes !== live.bytes) return refuse("no_such_version");
@@ -152,7 +152,7 @@ async function beginCopy(
     from: { id: site.id, folder: site.folder, number: site.live_version },
   };
   const upload = { id: mintUploadId(), folder, number: 1, owner: actor.holder, plan, manifest, created_at: asked.now };
-  const added = await install.database.addUpload(upload, roomUnder(settings, true));
+  const added = await install.database.addUpload(upload, roomUnder(settings, true, asked.now));
   if (added.kind !== "done") return FULL[added.kind];
 
   return { ok: true, upload: { ...upload, state: "pending", bytes: listed.bytes, files: manifest.length, dropped: [] }, missing: manifest.map((file) => file.path) };

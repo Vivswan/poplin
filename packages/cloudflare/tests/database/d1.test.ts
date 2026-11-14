@@ -126,6 +126,20 @@ describe("D1: the rows a publish costs of a day's allowance", () => {
     expect([lookup, rows]).toEqual([{ read: 1, written: 0 }, { read: 2, written: 0 }]);
   });
 
+  // Drift: the files of a day are counted so that the bucket's free month is not passed. A count kept a row per file, or one that read the days before, would spend the database's day to guard the bucket's month.
+  test.each([3, 5000])("recording an upload of %d files reads 14 rows and writes 6, whatever it holds: two read and one written are the day's count", async (files) => {
+    const { driver, rows } = await meteredDatabase();
+    const opened = await openDatabase(driver, NOW);
+    if (opened.kind !== "open") throw new Error(`the database did not open: ${opened.kind}`);
+
+    await begunFiles(opened.database, numberedFiles(3));
+    rows.read = 0;
+    rows.written = 0;
+    await begunFiles(opened.database, numberedFiles(files));
+
+    expect(rows).toEqual({ read: 14, written: 6 });
+  });
+
   // Drift: a day allows 5,000,000 rows read and 100,000 written, and every query fails once either is spent; a publish whose cost grew faster than its files would spend a day in one go.
   test.each([50, 200])("a whole publish of %d files reads at most two rows a file and 60 more, and writes at most 30", async (files) => {
     const cost = await publishCost(files);

@@ -239,6 +239,8 @@ run "worker_bindings" {
       max_total_size              = "9GB"
       max_site_size               = "200MB"
       max_sites                   = "50"
+      max_files_per_publish       = "5000"
+      max_files_per_day           = "25000"
       requests_per_day            = "100000"
       site_share_of_day           = "25%"
       site_requests_per_minute    = "6000"

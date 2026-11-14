@@ -1,10 +1,12 @@
 // The free plan's limits that a setting can be put above. A value above one is allowed: it earns a warning, never a refusal.
 //
-//   setting            part             compared with
-//   max_total_size     totalBytes       the bytes all sites hold together
-//   max_site_size      siteBytes        the bytes one site holds
-//   requests_per_day   requestsPerDay   the day's requests
-//   logins             logins           how many emails may log in
+//   setting                 part              compared with
+//   max_total_size          totalBytes        the bytes all sites hold together
+//   max_site_size           siteBytes         the bytes one site holds
+//   max_files_per_publish   filesPerPublish   the files one publish holds
+//   max_files_per_day       filesPerDay       the files the publishes of one day hold
+//   requests_per_day        requestsPerDay    the day's requests
+//   logins                  logins            how many emails may log in
 //
 // The numbers and the sentences are the host's: this file names no plan and no price.
 
@@ -23,6 +25,8 @@ interface FreeLimit {
 export interface FreeLimits {
   readonly totalBytes: FreeLimit;
   readonly siteBytes: FreeLimit;
+  readonly filesPerPublish: FreeLimit;
+  readonly filesPerDay: FreeLimit;
   readonly requestsPerDay: FreeLimit;
   readonly logins: FreeLimit;
 }
@@ -36,6 +40,8 @@ export function freeLimitWarnings(values: SettingValues, limits: FreeLimits): Re
   const rows: readonly (readonly [keyof SettingValues, number, FreeLimit])[] = [
     ["max_total_size", sizeBytes(values.max_total_size), limits.totalBytes],
     ["max_site_size", sizeBytes(values.max_site_size), limits.siteBytes],
+    ["max_files_per_publish", values.max_files_per_publish, limits.filesPerPublish],
+    ["max_files_per_day", values.max_files_per_day, limits.filesPerDay],
     ["requests_per_day", values.requests_per_day, limits.requestsPerDay],
     ["logins", values.logins.length, limits.logins],
   ];

@@ -5,9 +5,10 @@ import * as v from "valibot";
 import type { Actor } from "../auth/scopes";
 import type { Database, UploadRoom } from "../database/database";
 import { parseSiteName, type SiteName } from "../names/names";
-import { type SettingValues, sizeBytes } from "../records/settings";
+import { MOST_FILES_PER_PUBLISH, type SettingValues, sizeBytes } from "../records/settings";
 import { mintSiteFolder, type SiteAccess, type SiteFolder } from "../records/site";
 import { MANIFEST_FILE, type ManifestFile, mintUploadId, type UploadPlan } from "../records/upload";
+import { dayOf } from "../records/views";
 import type { SiteId } from "../sites/ids";
 import { type CheckedChanges, defaultExpiry, readChanges, SITE_CHANGES, type SiteChanges, TITLE_TEXT } from "./changes";
 import { checkFilePath } from "./files";
@@ -17,9 +18,6 @@ import { type UploadObject, uploadObject } from "./uploads";
 
 /** The page every site has at its top. */
 export const ENTRY_PAGE = "index.html";
-
-/** The most files one publish may declare, whatever the caller allows: finishing lists them a thousand a store call. */
-const MAX_FILES = 10_000;
 
 /** The longest manifest one publish may declare, as JSON text in UTF-8 bytes: it is kept in one row, and a row holds under 2 MB. */
 const MAX_MANIFEST_BYTES = 1_500_000;
@@ -33,13 +31,14 @@ export const FULL = {
   folder_full: refuse("too_large", "max_site_size"),
   total_full: refuse("too_large", "max_total_size"),
   sites_full: refuse("too_many_sites", "max_sites"),
+  day_full: refuse("too_large", "max_files_per_day"),
 } as const;
 
 /** Measures a manifest as the database stores it. */
 const UTF8 = new TextEncoder();
 
 /** A publish bounded by nothing but the install's own limits. */
-const UNBOUNDED: UploadLimits = { fileBytes: Number.MAX_SAFE_INTEGER, files: MAX_FILES };
+const UNBOUNDED: UploadLimits = { fileBytes: Number.MAX_SAFE_INTEGER, files: MOST_FILES_PER_PUBLISH };
 
 /** What a publish asks for before any file is sent: its settings, `site` to add a version to that site, the `name` of a new site or the new name of that one, every file with its size and content type, and `page_title`, the entry page's own title. */
 export const PUBLISH_REQUEST = v.strictObject({
@@ -57,6 +56,9 @@ export interface UploadLimits {
   /** The most files. */
   readonly files: number;
 }
+
+/** What bounds the files a publish declares: what one request can carry, and the most files `max_files_per_publish` allows. */
+type ManifestBounds = UploadLimits & { readonly perPublish: number };
 
 /** The codes a publish may be refused with as it begins. */
 type BeginCode =
@@ -98,17 +100,19 @@ interface Planned {
 }
 
 /**
- * Check the declared files against the path rules and against what one request can carry.
+ * Check the declared files against the path rules, the install's own count, and what one request can carry.
  *
  * @param rules - a publish's by default: a path whose key fits under any version, and the entry page
- * @returns the sum of the sizes, or the first rule a file or the whole manifest breaks
+ * @returns the sum of the sizes, or the first rule a file or the whole manifest breaks; more files than the setting allows are `too_large` about `max_files_per_publish`
  */
 export function checkManifest(
   files: readonly ManifestFile[],
-  limits: UploadLimits,
+  bounds: ManifestBounds,
   rules: ManifestRules = { isStorable: (path) => checkFilePath(path).ok, entries: [ENTRY_PAGE] },
 ): Listed | Refused<"bad_path" | "no_index" | "too_large"> {
-  if (files.length > Math.min(limits.files, MAX_FILES)) return refuse("too_large", "max_files");
+  if (files.length > bounds.perPublish) return refuse("too_large", "max_files_per_publish");
+
+  if (files.length > Math.min(bounds.files, MOST_FILES_PER_PUBLISH)) return refuse("too_large", "max_files");
 
   const paths = new Set<string>();
   let bytes = 0;
@@ -116,7 +120,7 @@ export function checkManifest(
   for (const { path, size } of files) {
     if (paths.has(path) || !rules.isStorable(path)) return refuse("bad_path", path);
 
-    if (size > limits.fileBytes) return refuse("too_large", "max_file_size");
+    if (size > bounds.fileBytes) return refuse("too_large", "max_file_size");
 
     paths.add(path);
     bytes += size;
@@ -135,11 +139,14 @@ export function checkManifest(
  * `max_site_size` bounds what the site keeps once this publish is live: the versions that stay under `versions_kept`, this publish, and every other pending upload to the site.
  * `max_total_size` bounds every kept version of every site, the trash included, and every pending upload, whose files are in the bucket already.
  * `max_sites` counts every site, the trash included, and every pending upload of a new site. One holder has at most 20 uploads pending.
- *
+ * `max_files_per_day` bounds the files every upload begun on the same UTC day declares; an upload that is given up or runs out gives none back.
  * @param makesSite - whether finishing the upload makes a site, which `max_sites` then bounds
+ * @param now - the clock, in milliseconds since the epoch: the day the upload's files are counted on
  */
-export function roomUnder(settings: SettingValues, makesSite: boolean): UploadRoom {
+export function roomUnder(settings: SettingValues, makesSite: boolean, now: number): UploadRoom {
   return {
+    day: dayOf(now),
+    dayFiles: settings.max_files_per_day,
     own: MAX_PENDING_UPLOADS,
     folderBytes: sizeBytes(settings.max_site_size),
     staying: settings.versions_kept - 1,
@@ -201,14 +208,14 @@ async function planSite(
   const changes = readChanges(asked.changes, { name: name.value, now: signed.at, reserved: install.reservedNames });
   if (!changes.ok) return changes;
 
-  const listed = checkManifest(asked.files, asked.limits);
+  const listed = checkManifest(asked.files, { ...asked.limits, perPublish: settings.max_files_per_publish });
   if (!listed.ok) return listed;
 
   if (await isHeldByAnother(install.database, changes.access)) return refuse("name_taken", "public_name");
 
   const site = draftOf(name.value, changes, { settings, now: signed.at, listed, files: asked.files.length, pageTitle: asked.pageTitle });
 
-  return { ok: true, folder: site.folder, number: 1, plan: { kind: "create", site }, room: roomUnder(settings, true) };
+  return { ok: true, folder: site.folder, number: 1, plan: { kind: "create", site }, room: roomUnder(settings, true, signed.at) };
 }
 
 async function planVersion(
@@ -225,7 +232,7 @@ async function planVersion(
   const changes = readChanges(asked.changes, { name: site.name, current: site, now: signed.at, reserved: install.reservedNames });
   if (!changes.ok) return changes;
 
-  const listed = checkManifest(asked.files, asked.limits);
+  const listed = checkManifest(asked.files, { ...asked.limits, perPublish: settings.max_files_per_publish });
   if (!listed.ok) return listed;
 
   if (await isHeldByAnother(install.database, changes.access, site.id)) return refuse("name_taken", "public_name");
@@ -236,7 +243,7 @@ async function planVersion(
   const asks = changes.access === undefined ? { details: changes.details } : { access: changes.access, details: changes.details };
   const plan: UploadPlan = { kind: "update", ...asks, ...pageTitleOf(asked.pageTitle) };
 
-  return { ok: true, folder: site.folder, number: reserved.number, plan, room: roomUnder(settings, false) };
+  return { ok: true, folder: site.folder, number: reserved.number, plan, room: roomUnder(settings, false, signed.at) };
 }
 
 /**
@@ -245,7 +252,7 @@ async function planVersion(
  * It checks the arguments, the actor's right to the site, the paths, and the limits against the declared sizes. A site needs an `index.html` at its top.
  * Then it mints the folder of a new site or sets aside the site's next version number, and records the upload. No file is stored, no site is made, and no site changes.
  * @param request - what the caller sent; anything is taken and checked
- * @param limits - what one request can carry; a file or a count beyond it is `too_large`, naming `max_file_size` or `max_files`
+ * @param limits - what one request can carry; a file or a count beyond it is `too_large`, naming `max_file_size` or `max_files`. A count beyond the install's settings names `max_files_per_publish` or `max_files_per_day`
  * @returns the upload, whose id every later step names, or a refusal that left nothing behind but a version number that is skipped
  * @throws {Error} the database failed
  */

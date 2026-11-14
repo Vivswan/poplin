@@ -234,6 +234,28 @@ variable "max_sites" {
   }
 }
 
+variable "max_files_per_publish" {
+  description = "The limit on the files one publish, import, or copy holds."
+  type        = number
+  default     = 5000
+
+  validation {
+    condition     = var.max_files_per_publish >= 1 && var.max_files_per_publish <= 10000 && floor(var.max_files_per_publish) == var.max_files_per_publish
+    error_message = "max_files_per_publish must be a whole number from 1 to 10000."
+  }
+}
+
+variable "max_files_per_day" {
+  description = "The limit on the files all publishes, imports, and copies begun in one UTC day hold together."
+  type        = number
+  default     = 25000
+
+  validation {
+    condition     = var.max_files_per_day >= 1 && var.max_files_per_day <= 9007199254740991 && floor(var.max_files_per_day) == var.max_files_per_day
+    error_message = "max_files_per_day must be a whole number from 1 to 9007199254740991."
+  }
+}
+
 variable "requests_per_day" {
   description = "The limit on the day's requests, all sites together."
   type        = number

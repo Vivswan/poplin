@@ -8,6 +8,7 @@
 // totals       one row: how many sites there are and how much their kept versions hold
 // audit        what was done, by whom, and when; rows are only ever added
 // request_counts   one row per UTC day and site, and one more per day under the empty site for all sites together; seven days are kept
+// declared_files   one row per UTC day: the files the uploads begun on it declared; the newest day and the one before it are kept
 // uploads      the staged publishes: begun, taking files, then live or given up
 // logins       the computers asking to be logged in: pending, then allowed or denied, and gone once used or ten minutes old
 // leftovers    the folders of removed sites, each until its files are gone from the bucket
@@ -114,6 +115,13 @@ CREATE TABLE request_counts (
   requests INTEGER NOT NULL CHECK (requests >= 1),
   views INTEGER NOT NULL DEFAULT 0 CHECK (views >= 0 AND views <= requests),
   PRIMARY KEY (day, site)
+) STRICT, WITHOUT ROWID`;
+
+/** The files the uploads begun on one UTC day declared, all holders together. The newest day and the one before it are kept. */
+const DECLARED_FILES = `
+CREATE TABLE declared_files (
+  day TEXT NOT NULL PRIMARY KEY CHECK (day GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]'),
+  files INTEGER NOT NULL CHECK (files >= 1)
 ) STRICT, WITHOUT ROWID`;
 
 /** A staged publish from its first request on. `number` is 1 exactly for a new site, whose folder no site has yet; `manifest` is one JSON object, the declared files under keys made from their paths, while the upload is pending and empty after. */
@@ -255,7 +263,7 @@ BEGIN SELECT RAISE(ABORT, 'the audit log is append-only'); END`;
 /** Creates every table, index, and trigger of the first schema. */
 export const CREATE_SCHEMA: Step = {
   number: 1,
-  description: "create the sites, versions, tokens, settings, secrets, totals, audit, request_counts, uploads, logins, leftovers, and sweep_place tables",
+  description: "create the sites, versions, tokens, settings, secrets, totals, audit, request_counts, declared_files, uploads, logins, leftovers, and sweep_place tables",
   statements: [
     SITES,
     VERSIONS,
@@ -266,6 +274,7 @@ export const CREATE_SCHEMA: Step = {
     TOTALS_START_AT_ZERO,
     AUDIT,
     REQUEST_COUNTS,
+    DECLARED_FILES,
     UPLOADS,
     LOGINS,
     LEFTOVERS,

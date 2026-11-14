@@ -88,12 +88,12 @@ function readSite(sent: v.InferOutput<typeof SENT_SITE>, folder: Site["folder"])
 /**
  * Check the declared files: each sits under a version the site keeps, every version has its entry page, and each version's files are as many and as long as its record says.
  *
- * One version may declare as many files as one publish; all of them together are bounded as one upload's manifest is.
+ * One version may declare as many files as one publish; all of them together are bounded as one upload's manifest is, and by `max_files_per_publish`.
  */
-function checkFiles(placed: Placed & { readonly site: Site }, files: readonly ManifestFile[], limits: UploadLimits): { readonly ok: true } | Refused<"bad_argument" | "bad_path" | "no_index" | "too_large"> {
+function checkFiles(placed: Placed & { readonly site: Site }, files: readonly ManifestFile[], bounds: Parameters<typeof checkManifest>[1]): { readonly ok: true } | Refused<"bad_argument" | "bad_path" | "no_index" | "too_large"> {
   const { versions } = placed.site;
   const prefixes = versions.map((version) => `v${version.number}/`);
-  const listed = checkManifest(files, { ...limits, files: UNBOUNDED.files }, {
+  const listed = checkManifest(files, { ...bounds, files: UNBOUNDED.files }, {
     isStorable: (path) => prefixes.some((prefix) => path.startsWith(prefix)) && uploadKey(placed, path).ok,
     entries: prefixes.map((prefix) => `${prefix}${ENTRY_PAGE}`),
   });
@@ -102,7 +102,7 @@ function checkFiles(placed: Placed & { readonly site: Site }, files: readonly Ma
   for (const [at, version] of versions.entries()) {
     const held = files.filter((file) => file.path.startsWith(prefixes[at] ?? ""));
     const bytes = held.reduce((sum, file) => sum + file.size, 0);
-    if (held.length > limits.files) return refuse("too_large", "max_files");
+    if (held.length > bounds.files) return refuse("too_large", "max_files");
 
     if (held.length !== version.files || bytes !== version.bytes) return refuse("bad_argument", "files");
   }
@@ -159,14 +159,14 @@ export async function beginImport(
 
   const { files } = asked.output;
   const placed: Placed = { folder, number: 1, plan: { kind: "import", site: read.row } };
-  const checked = checkFiles({ ...placed, site: read.site }, files, limits);
+  const checked = checkFiles({ ...placed, site: read.site }, files, { ...limits, perPublish: entered.settings.max_files_per_publish });
   if (!checked.ok) return checked;
 
   const conflict = await findConflict(install, read.site);
   if (conflict !== undefined) return conflict;
 
   const upload = { ...placed, id: mintUploadId(), owner: actor.holder, manifest: files, created_at: entered.signed.at };
-  const added = await install.database.addUpload(upload, roomUnder(entered.settings, true));
+  const added = await install.database.addUpload(upload, roomUnder(entered.settings, true, entered.signed.at));
   if (added.kind !== "done") return FULL[added.kind];
 
   const bytes = files.reduce((sum, file) => sum + file.size, 0);

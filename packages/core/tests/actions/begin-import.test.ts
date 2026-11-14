@@ -143,6 +143,16 @@ describe("beginImport", () => {
     expect([await world.keys(), await world.audit(), (await world.install.database.listUploads({ before: NOW + 1, limit: 10 })).uploads]).toEqual([[], [], []]);
   });
 
+  // Drift: an import's list of files is read whole as it begins, every version's among them, so the install's own count bounds them together; the refusal is the one a command line answers by sending the live version alone.
+  test.each([
+    ["as many files as max_files_per_publish", 6, { ok: true }],
+    ["one file more than max_files_per_publish", 5, { ok: false, code: "too_large", about: "max_files_per_publish" }],
+  ] as const)("a site of three versions of two files each, with %s", async (_what, most, answer) => {
+    const world = await makeWorld({ max_files_per_publish: most });
+
+    expect(await beginImport(world.install, ADMIN, (await manual()).request)).toMatchObject(answer);
+  });
+
   // Drift: a request's limits were written for one publish; held against every version of a site at once, they would refuse a backup of a site each of whose publishes they let through.
   test.each([
     ["as many files a version as one publish may declare", { fileBytes: 9, files: 2 }, { ok: true }],

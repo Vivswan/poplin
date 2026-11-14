@@ -29,6 +29,8 @@ export function codeCounts(counters = new MemoryCounters()): Pick<Parameters<typ
 export const FREE_LIMITS = {
   totalBytes: { most: 10_000_000_000, warning: "all sites are above the free 10 GB" },
   siteBytes: { most: 10_000_000_000, warning: "one site is above the free 10 GB" },
+  filesPerPublish: { most: 5000, warning: "one publish is above the free 5,000 files" },
+  filesPerDay: { most: 32_000, warning: "above the free 32,000 files a day" },
   requestsPerDay: { most: 100_000, warning: "above the free 100,000 requests a day" },
   logins: { most: 50, warning: "above the free 50 users" },
 } as const;
