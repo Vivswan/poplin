@@ -122,6 +122,15 @@ export async function begunSite(database: Database, site: NewSite, at: number = 
   return { id: upload.id, site: planned };
 }
 
+/** Record a fixture upload that stores a site from a backup under a folder made for it; answers its id and the site as finishing stores it. */
+export async function begunImport(database: Database, site: Site): Promise<{ readonly id: UploadId; readonly site: Site }> {
+  const placed = { ...site, folder: mintSiteFolder() };
+  const upload: NewUpload = { id: mintUploadId(), folder: placed.folder, number: 1, owner: ADA, plan: { kind: "import", site: { id: site.id } }, manifest: MANIFEST, created_at: NOW };
+  await database.addUpload(upload, ROOMY);
+
+  return { id: upload.id, site: placed };
+}
+
 /**
  * Record a fixture upload that adds the next version to a site; answers its id.
  *
@@ -1240,6 +1249,61 @@ function uploads(label: string, makeDatabase: DatabaseFactory): void {
 
       expect(await database.publishUploadAsSite(upload.id, upload.site, BY_ADA)).toEqual({ kind: "name_taken" });
       expect([(await database.getUpload(upload.id))?.upload.state, await auditActions(database)]).toEqual(["pending", ["create"]]);
+    });
+
+    // Drift: an import's files are in the store before its site is; a site stored twice, or stored from an import that was given up while its files were removed, would be served with files missing.
+    test("an import becomes its site once, as the backup held it: of two finishes at the same moment one stores it, and an import that was given up stores none", async () => {
+      const database = await opened(makeDatabase);
+      const first = await made(database, draft(REPORT, "public", DOCS), BY_BO_LATER);
+      const second = await made(database, draft(REPORT));
+      for (const site of [first, second]) await database.deleteSite(site.id, BY_ADA);
+      const live = await begunImport(database, first);
+      const given = await begunImport(database, second);
+      await database.abandonUpload(given.id);
+
+      const signed = { by: ADA, at: NOW + 99 };
+      const finishes = await Promise.all([database.importUploadAsSite(live.id, live.site, signed), database.importUploadAsSite(live.id, live.site, signed)]);
+      const lost = await database.importUploadAsSite(given.id, given.site, signed);
+      const elsewhere = await database.importUploadAsSite(given.id, { ...given.site, folder: mintSiteFolder() }, signed);
+
+      expect(finishes.map((finish) => finish.kind).sort()).toEqual(["done", "not_pending"]);
+      expect(finishes.find((finish) => finish.kind === "done")).toEqual({ kind: "done", site: live.site });
+      expect([lost.kind, elsewhere.kind, (await database.getUpload(live.id))?.upload.state, (await database.getUpload(given.id))?.upload.state]).toEqual(["not_pending", "not_pending", "finished", "abandoned"]);
+      expect([await database.getSite(first.id), await database.getSite(second.id), await database.readTotals()]).toEqual([live.site, undefined, { sites: 1, trashed_sites: 0, bytes: 1000, files: 4 }]);
+      expect((await auditTrail(database)).slice(4).map((entry) => [entry.action, entry.by, entry.at, entry.site?.id, entry.detail])).toEqual([["imported", ADA, NOW + 99, first.id, { versions: 1 }]]);
+    });
+
+    // Drift: what a refused import leaves pending still owns its files; one marked finished without its site, or one that changed the site in its way, would lose track of one of the two.
+    test.each([
+      ["its id is a site's", "id_taken", (site: Site, held: Site): Site => ({ ...site, id: held.id })],
+      ["its id is a site's public name", "id_taken", (site: Site): Site => ({ ...site, id: "cccccccccccc" as SiteId })],
+      ["its public name is a site's", "name_taken", (site: Site): Site => ({ ...site, access: "public", public_name: "cccccccccccc" as PublicName })],
+      ["its public name is a site's id", "name_taken", (site: Site, held: Site): Site => ({ ...site, access: "public", public_name: held.id as string as PublicName })],
+    ] as const)("an import is refused with %s as %s: nothing is stored, and the upload stays pending", async (_case, kind, change) => {
+      const database = await opened(makeDatabase);
+      const held = await made(database, draft(REPORT, "public", "cccccccccccc" as PublicName));
+      const gone = await made(database, draft(REPORT));
+      await database.deleteSite(gone.id, BY_ADA);
+      const upload = await begunImport(database, change(gone, held));
+      const before = await everything(database);
+
+      expect(await database.importUploadAsSite(upload.id, upload.site, BY_ADA)).toEqual({ kind });
+      expect([await everything(database), (await database.getUpload(upload.id))?.upload.state]).toEqual([before, "pending"]);
+    });
+
+    // Drift: the folder of an import is made for it; a site already in it means its files are another site's, which the row must refuse whatever the caller checked before.
+    test("an import whose folder is a site's is refused with folder_taken, and one that is no site throws: both leave the upload pending", async () => {
+      const database = await opened(makeDatabase);
+      const held = await made(database, draft(REPORT));
+      const gone = await made(database, draft(REPORT));
+      await database.deleteSite(gone.id, BY_ADA);
+      const upload: NewUpload = { id: mintUploadId(), folder: held.folder, number: 1, owner: ADA, plan: { kind: "import", site: {} }, manifest: MANIFEST, created_at: NOW };
+      await database.addUpload(upload, ROOMY);
+      const before = await everything(database);
+
+      expect(await database.importUploadAsSite(upload.id, { ...gone, folder: held.folder }, BY_ADA)).toEqual({ kind: "folder_taken" });
+      await expect(database.importUploadAsSite(upload.id, { ...gone, folder: held.folder, live_version: 9 }, BY_ADA)).rejects.toThrow();
+      expect([await everything(database), (await database.getUpload(upload.id))?.upload.state]).toEqual([before, "pending"]);
     });
 
     // Drift: the settings asked with an update go live with its version; a refused version that had already changed the access would publish old content under a new access.

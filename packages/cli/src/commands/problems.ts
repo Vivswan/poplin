@@ -29,6 +29,8 @@ const API_ROWS = {
   size_mismatch: { sentence: "a file changed while it was sent", hint: "publish again once the folder is still", exit: "failed" },
   name_taken: { sentence: "another site holds that public name", hint: "to pick another: poplin set <site> --public --name <public name>", exit: "failed" },
   in_trash: { sentence: "the site sits in the trash", hint: "to take it back: poplin restore <site>", exit: "failed" },
+  id_taken: { sentence: "a site of the install already has that id", hint: "the site is already there: poplin show <site> shows it", exit: "failed" },
+  backup_too_new: { sentence: "the backup was made by a newer poplin than the install runs", hint: "update the install, then import again", exit: "failed" },
   not_in_trash: { sentence: "the site is not in the trash", exit: "failed" },
   stale_version: { sentence: "a newer publish of the site went live first", hint: "publish again", exit: "failed" },
   missing_files: { sentence: "a file of the publish did not arrive", hint: "publish again", exit: "failed" },

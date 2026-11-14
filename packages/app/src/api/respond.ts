@@ -1,7 +1,7 @@
 // The one form every answer of the API takes: the JSON of a done action, or the error object with the HTTP status of its code.
 
 import type { Refused } from "@poplin/core/src/actions/records";
-import type { ApiError } from "@poplin/core/src/api/routes";
+import { type ApiError, STORED_TYPE_HEADER } from "@poplin/core/src/api/routes";
 
 /** The HTTP status of every code an action or the API itself refuses with. A code missing here does not compile. */
 const STATUS = {
@@ -17,7 +17,9 @@ const STATUS = {
   bad_path: 400,
   no_index: 400,
   size_mismatch: 400,
+  backup_too_new: 400,
   name_taken: 409,
+  id_taken: 409,
   in_trash: 409,
   not_in_trash: 409,
   stale_version: 409,
@@ -43,7 +45,9 @@ const MESSAGES: Readonly<Record<Code, string>> = {
   bad_path: "a file's path is one no site can serve, or is given twice",
   no_index: "a site needs an index.html at its top",
   size_mismatch: "a file's bytes are not as many as its declared size",
+  backup_too_new: "the backup was made by a newer poplin than this install runs: update the install, then import",
   name_taken: "another site holds that public name",
+  id_taken: "a site here already has that id",
   in_trash: "the site sits in the trash",
   not_in_trash: "the site is not in the trash",
   stale_version: "a newer publish of the site went live first",
@@ -60,6 +64,9 @@ const TOKEN_SHAPE = /poplin_[0-9a-f]{16}_[0-9a-f]{64}/i;
 
 /** What goes on every response: no cache keeps it, and no browser guesses at its type. No header opens the API to another origin's scripts. */
 const HEADERS = { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff" } as const;
+
+/** What goes on the answer that is one stored file: it is bytes whatever the file is, so no browser renders a site's page under the API's address. */
+const FILE_HEADERS = { ...HEADERS, "Content-Type": "application/octet-stream", "Content-Disposition": "attachment" } as const;
 
 /** Every code a response may carry. */
 export type Code = keyof typeof STATUS;
@@ -82,6 +89,19 @@ export function refusal(code: Code, about?: string, headers?: Readonly<Record<st
   const error: ApiError["error"] = named ? { code, message: MESSAGES[code], about } : { code, message: MESSAGES[code] };
 
   return json(STATUS[code], { error } satisfies ApiError, headers);
+}
+
+/**
+ * Build the response of a handler that answers one stored file.
+ *
+ * @returns 200 with the file's bytes, its length, and its stored media type in `STORED_TYPE_HEADER`, or the refusal's response
+ */
+export function respondFile(result: Result<{ readonly size: number; readonly content_type: string; readonly body: ReadableStream<Uint8Array> }>): Response {
+  if (!result.ok) return refusal(result.code, result.about);
+
+  const headers = { ...FILE_HEADERS, "Content-Length": String(result.size), [STORED_TYPE_HEADER]: encodeURIComponent(result.content_type) };
+
+  return new Response(result.body, { status: 200, headers });
 }
 
 /**

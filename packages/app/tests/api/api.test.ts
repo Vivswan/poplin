@@ -24,6 +24,13 @@ const NO_SITE = "zzzzzzzzzzzz";
 /** An id in the form of an upload id that no upload has. */
 const NO_UPLOAD = "zzzzzzzzzzzzzzzz";
 
+/** A site as a backup holds it, of one version with one file of four bytes. */
+const BACKED_UP = {
+  ...{ id: "k3f9x2ab71qz", name: "backed-up", title: null, access: "unlisted", search_engines: false, embeddable: true, expires: "never" },
+  ...{ live_version: 1, versions: [{ number: 1, published_at: 1, published_by: "ada@example.com", bytes: 4, files: 1 }] },
+  ...{ owner: "ada@example.com", created_at: 1, updated_at: 1, state: "live" },
+};
+
 /** What a browser sends ahead of a script's request from another origin. */
 const PREFLIGHT = { Origin: "https://www.example.com", "Access-Control-Request-Method": "GET" };
 
@@ -55,6 +62,13 @@ const BUDGET: Readonly<Record<RouteName, number>> = {
   uploadFile: 6,
   finishPublish: 44,
   abandonPublish: 24,
+  exportSettings: 2,
+  exportSites: 2,
+  exportSite: 4,
+  exportFiles: 5,
+  exportFile: 5,
+  importSettings: 2,
+  beginImport: 7,
   readConfig: 2,
   changeConfig: 2,
   signEveryoneOut: 2,
@@ -81,6 +95,13 @@ function samples(site: string, upload: string): Readonly<Record<RouteName, Sampl
     uploadFile: { args: { upload, path: "index.html" }, body: PAGES["index.html"] },
     finishPublish: { args: { upload } },
     abandonPublish: { args: { upload } },
+    exportSettings: { args: undefined },
+    exportSites: { args: {} },
+    exportSite: { args: { site } },
+    exportFiles: { args: { site, version: 1 } },
+    exportFile: { args: { site, version: 1, path: "index.html" } },
+    importSettings: { args: undefined, body: { format: 1, settings: {} } },
+    beginImport: { args: undefined, body: { format: 1, site: BACKED_UP, files: [{ path: "v1/index.html", size: 4, content_type: "text/html" }] } },
     readConfig: { args: undefined },
     changeConfig: { args: undefined, body: { trash_days: 9 } },
     signEveryoneOut: { args: undefined },
@@ -155,7 +176,8 @@ describe("createApi", () => {
       if (calls > BUDGET[name]) over.push(`${name}: ${calls} calls`);
 
       expect([name, answered.status, answered.body.error]).toEqual([name, 200, undefined]);
-      expect([headers.get("Cache-Control"), headers.get("X-Content-Type-Options"), headers.get("Content-Type")]).toEqual(["no-store", "nosniff", "application/json; charset=utf-8"]);
+      const type = ROUTES[name].answers === "bytes" ? "application/octet-stream" : "application/json; charset=utf-8";
+      expect([headers.get("Cache-Control"), headers.get("X-Content-Type-Options"), headers.get("Content-Type")]).toEqual(["no-store", "nosniff", type]);
 
       return answered;
     };
@@ -175,6 +197,11 @@ describe("createApi", () => {
 
     expect(first).toMatchObject({ name: "report", created: true, access: "private", live_version: 1, bytes: 21, files: 2, updated: NOW, url: `https://${label}-page.example.com` });
     expect((await done("listSites", { limit: 1 })).body.sites).toHaveLength(1);
+    const settings = (await done("exportSettings", undefined)).body.settings as Record<string, string>;
+    const backup = part(await done("exportSite", { site: label }), "site");
+    expect([(await done("exportSites", { limit: 1 })).body.sites, settings.trash_days]).toEqual([[backup], "7"]);
+    expect((await done("exportFiles", { site: label, version: 1 })).body.files).toEqual([{ path: "css/site.css", size: 6 }, { path: "index.html", size: 15 }]);
+    expect(await (await done("exportFile", { site: label, version: 1, path: "index.html" })).response.text()).toBe(PAGES["index.html"]);
     expect(part(await done("getSite", { site: label }), "site").id).toBe(first.id);
     expect(part(await done("updateSite", { site: label }, { body: { title: "Q3 sales", access: "unlisted" } }), "site")).toMatchObject({ title: "Q3 sales", access: "unlisted" });
     expect(part(await done("rollbackSite", { site: label }, { body: { version: 1 } }), "site").live_version).toBe(1);
@@ -191,6 +218,11 @@ describe("createApi", () => {
     expect([(await done("signEveryoneOut", undefined)).body, await install.database.readSigningKey()]).not.toEqual([{}, key.key]);
     expect(((await done("listAudit", { limit: 3 })).body.entries as { action: string }[]).map((entry) => entry.action)).toEqual(["signed-everyone-out", "settings_changed", "restore"]);
     expect(part(await done("deleteSite", { site: moved, forever: true }), "before").id).toBe(moved);
+    expect(part(await done("importSettings", undefined, { body: { format: 1, settings } }), "values").trash_days).toBe(7);
+    const files = manifest(PAGES).map((file) => ({ ...file, path: `v1/${file.path}` }));
+    const restored = part(await done("beginImport", undefined, { body: { format: 1, site: backup as never, files } }), "upload").id as string;
+    for (const [path, text] of Object.entries(PAGES)) await done("uploadFile", { upload: restored, path: `v1/${path}` }, { body: text });
+    expect(part(await done("finishPublish", { upload: restored }), "site")).toMatchObject({ id: first.id, label, created: true, live_version: 1 });
     await done("logout", undefined, { token: install.tokens.stranger });
 
     expect((await install.call("whoami", undefined, { token: install.tokens.stranger })).status).toBe(401);
@@ -278,6 +310,13 @@ describe("createApi", () => {
       ["uploadFile", 404, "not_found"],
       ["finishPublish", 404, "not_found"],
       ["abandonPublish", 404, "not_found"],
+      ["exportSettings", 403, "not_allowed"],
+      ["exportSites", 403, "not_allowed"],
+      ["exportSite", 403, "not_allowed"],
+      ["exportFiles", 403, "not_allowed"],
+      ["exportFile", 403, "not_allowed"],
+      ["importSettings", 403, "not_allowed"],
+      ["beginImport", 403, "not_allowed"],
       ["readConfig", 403, "not_allowed"],
       ["changeConfig", 403, "not_allowed"],
       ["signEveryoneOut", 403, "not_allowed"],

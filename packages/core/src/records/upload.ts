@@ -35,10 +35,11 @@ const CONTENT_TYPE = v.pipe(
 /** One file of a publish as it is declared before its bytes are sent. */
 export const MANIFEST_FILE = v.strictObject({ path: v.string(), size: COUNT, content_type: CONTENT_TYPE });
 
-/** What finishing an upload makes: a new site, or the next version of one under the settings asked for with it. */
+/** What finishing an upload makes: a new site, the next version of one under the settings asked for with it, or a site from a backup, kept as the row `siteFromRow` reads. */
 const PLAN = v.variant("kind", [
   v.object({ kind: v.literal("create"), site: NEW_SITE }),
   v.object({ kind: v.literal("update"), access: v.optional(SITE_ACCESS), details: SITE_DETAILS }),
+  v.object({ kind: v.literal("import"), site: v.record(v.string(), v.unknown()) }),
 ]);
 
 /** What a row of the uploads table holds besides its manifest. */
@@ -76,6 +77,8 @@ export type UploadPlan = Readonly<v.InferOutput<typeof PLAN>>;
  * A staged publish.
  *
  * Its files go under `folder` as version `number`. `pending` takes files; `finished` is live, and `dropped` names the versions the site stopped keeping with it; `abandoned` will never be live.
+ *
+ * An import's files go under `folder` as every version of its site, each declared as `v<number>/<path>`, and its `number` is 1.
  *
  * `bytes` is the sum of the declared sizes and `files` their count. `owner` is whoever began it.
  */

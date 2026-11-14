@@ -1,9 +1,9 @@
-// What the steps of a staged publish share: the upload as a caller sees it, whether an actor may still touch one, what the store holds of it, and giving it up.
+// What the steps of a staged publish or import share: the upload as a caller sees it, whether an actor may still touch one, where its files go, what the store holds of it, and giving it up.
 
 import { type Actor, mayReachSite } from "../auth/scopes";
 import type { ManifestFile, Upload } from "../records/upload";
 import { MAX_LIST_LIMIT, type ObjectStore } from "../storage/storage";
-import { fileKey, removeFiles, versionPrefix } from "./files";
+import { fileKey, removeFiles, sitePrefix, versionPrefix } from "./files";
 import type { Install } from "./records";
 import { DAY_MS } from "./site-object";
 
@@ -14,15 +14,22 @@ const UPLOAD_LIFETIME_MS = DAY_MS;
 const SWEEP_GRACE_MS = 3_600_000;
 
 /** The list pages one step spends on removing an upload's files or a finished upload's dropped versions: 20 store calls. */
-export const CLEANUP_PAGES = 10;
+const CLEANUP_PAGES = 10;
 
 /** The list pages spared beyond the count a manifest needs, for a store that hands out short pages. */
 const SPARE_PAGES = 2;
+
+/** How an import declares one file: `v`, the number of the version it belongs to, and its path in that version. */
+const IMPORTED_PATH = /^v([1-9]\d{0,15})\/(.+)$/s;
+
+/** What says where an upload's files go. */
+type Placed = Pick<Upload, "folder" | "number" | "plan">;
 
 /**
  * A staged publish as a caller sees it. Times are milliseconds since the epoch.
  *
  * `version` is the number the files become once finished, `files` and `bytes` what the manifest declared. `expires` is when a pending upload stops taking files.
+ * An import's `version` is 1 whatever versions its site keeps.
  */
 export interface UploadObject {
   readonly id: Upload["id"];
@@ -57,13 +64,37 @@ export function isWithinReach(upload: Upload | undefined, actor: Actor, now: num
 }
 
 /**
+ * The prefix every file of an upload sits under: one version of its folder, or the whole folder for an import, which fills every version of its site.
+ *
+ * @returns a prefix that ends in `/`
+ */
+function uploadPrefix(upload: Placed): string {
+  return upload.plan.kind === "import" ? sitePrefix(upload.folder) : versionPrefix(upload.folder, upload.number);
+}
+
+/**
+ * The key of one file an upload declares, built by `fileKey` alone.
+ *
+ * @param path - the path as the manifest names it: a path in the upload's version, or for an import `v<number>/<path>`
+ * @returns the key, or why the path is none; an import's path that names no version is `empty`
+ */
+export function uploadKey(upload: Placed, path: string): ReturnType<typeof fileKey> {
+  if (upload.plan.kind !== "import") return fileKey(upload.folder, upload.number, path);
+
+  const [, number, rest] = IMPORTED_PATH.exec(path) ?? [];
+  if (number === undefined || rest === undefined) return { ok: false, refusal: "empty" };
+
+  return fileKey(upload.folder, Number(number), rest);
+}
+
+/**
  * Compare what the store holds of an upload with its manifest, in one bounded listing: a page for every thousand files, and two to spare.
  *
  * @returns the paths of the manifest the store does not hold at their declared size, in the manifest's order; empty when every file is there
- * @throws {Error} the listing did not end inside its pages, or the version holds a file the manifest does not name
+ * @throws {Error} the listing did not end inside its pages, or the upload's prefix holds a file the manifest does not name
  */
 export async function missingFiles(store: ObjectStore, upload: Upload, manifest: readonly ManifestFile[]): Promise<readonly string[]> {
-  const prefix = versionPrefix(upload.folder, upload.number);
+  const prefix = uploadPrefix(upload);
   const stored = new Map<string, number>();
   let page = await store.list({ prefix });
 
@@ -78,7 +109,7 @@ export async function missingFiles(store: ObjectStore, upload: Upload, manifest:
   }
 
   const missing = manifest.filter((file) => {
-    const key = fileKey(upload.folder, upload.number, file.path);
+    const key = uploadKey(upload, file.path);
 
     return !key.ok || stored.get(key.key) !== file.size;
   });
@@ -105,14 +136,25 @@ export async function removeDropped(install: Install, upload: Pick<Upload, "id" 
 }
 
 /**
- * Decide whether the files of an upload are a version its site keeps, whatever became of the upload's record.
+ * Decide whether the files of an upload are kept by a site, whatever became of the upload's record: a version its site keeps, or for an import the site in its folder.
  *
  * @param upload - the upload as it was read while it was pending
  */
-export async function isKeptVersion(install: Install, upload: Pick<Upload, "folder" | "number">): Promise<boolean> {
+export async function isKeptVersion(install: Install, upload: Placed): Promise<boolean> {
   const site = await install.database.getSiteByFolder(upload.folder);
+  if (upload.plan.kind === "import") return site !== undefined;
 
   return site?.versions.some((version) => version.number === upload.number) ?? false;
+}
+
+/**
+ * Remove the files of an upload that will never be live, as far as one bounded removal goes.
+ *
+ * @param upload - an upload that is given up
+ * @returns the upload's prefix when files may still sit under it, and nothing otherwise
+ */
+export function removeUploadFiles(install: Install, upload: Placed): Promise<readonly string[]> {
+  return removeFiles(install.store, [uploadPrefix(upload)], CLEANUP_PAGES);
 }
 
 /**
@@ -131,5 +173,5 @@ export async function discardUpload(install: Install, upload: Upload): Promise<r
     if (now?.upload.state !== "abandoned") return [];
   }
 
-  return removeFiles(install.store, [versionPrefix(upload.folder, upload.number)], CLEANUP_PAGES);
+  return removeUploadFiles(install, upload);
 }

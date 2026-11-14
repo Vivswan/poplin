@@ -14,6 +14,7 @@ import type { SiteId } from "../../../src/sites/ids";
 import {
   ADA,
   BY_ADA,
+  begunImport,
   begunSite,
   begunVersion,
   DOCS,
@@ -358,6 +359,10 @@ function queryPlans(label: string, makeDriver: DriverFactory): void {
       await database.abandonUpload((await begunSite(database, draft(REPORT))).id);
       await database.setUploadDropped(updated, []);
       await database.removeUpload(created.id);
+      const gone = await made(database, draft(REPORT));
+      await database.deleteSite(gone.id, BY_ADA);
+      const restored = await begunImport(database, gone);
+      const again = await database.importUploadAsSite(restored.id, restored.site, BY_ADA);
       await storedVersion(driver);
 
       const scans: string[] = [];
@@ -372,7 +377,7 @@ function queryPlans(label: string, makeDriver: DriverFactory): void {
       }
 
       // The one walk of a table is the token list, which hands back every row it reads. An import walks the list of versions it was given, and a file lookup the manifest of its own row: neither is a table.
-      expect([exported.sites, imported.kind]).toEqual([[], "done"]);
+      expect([exported.sites, imported.kind, again.kind]).toEqual([[], "done", "done"]);
       expect(driver.statements.length).toBeGreaterThan(90);
       expect(scans).toEqual([
         "SCAN tokens USING INDEX tokens_by_creation <- SELECT id, hash, scope, note, created_at, expires_at FROM tokens ORDER BY created_at DESC, id DESC",

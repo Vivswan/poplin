@@ -368,18 +368,7 @@ class MemoryDatabase implements Database {
   }
 
   async importSite(site: Site, signed: Signed): Promise<Done | Refused<"id_taken" | "folder_taken" | "name_taken">> {
-    // The one check of a whole site that core has is the one that turns it into a row; it is used here for its verdict and for the versions in ascending order.
-    const { versions } = siteToRow(site);
-    if (this.#holds(site.id)) return { kind: "id_taken" };
-
-    if (this.#holdsFolder(site.folder)) return { kind: "folder_taken" };
-
-    const publicName = publicNameOf(site);
-    if (publicName !== null && (publicName === (site.id as string) || this.#holds(publicName))) return { kind: "name_taken" };
-
-    const highest = Math.max(...versions.map((entry) => entry.number));
-
-    return this.#changed(keptOf({ ...site, versions }, highest + 1), signed, "imported", { versions: versions.length });
+    return this.#imported(site, signed);
   }
 
   async addToken(token: TokenRecord, signed: Signed): Promise<{ readonly kind: "done" } | Refused<"id_taken">> {
@@ -568,6 +557,18 @@ class MemoryDatabase implements Database {
     return { kind: "done", site: siteOf({ ...kept, fields }) };
   }
 
+  async importUploadAsSite(id: UploadId, site: Site, signed: Signed): Promise<Done | Refused<"id_taken" | "folder_taken" | "name_taken" | "not_pending">> {
+    siteToRow(site);
+    const upload = this.#uploads.get(id)?.upload;
+    if (upload?.state !== "pending" || upload.folder !== site.folder || upload.number !== 1) return { kind: "not_pending" };
+
+    // The site is stored and the upload finished before the first wait, so a finish started at the same moment finds it so.
+    const imported = this.#imported(site, signed);
+    if (imported.kind === "done") this.#finish(upload, []);
+
+    return imported;
+  }
+
   async publishUploadAsVersion(
     id: UploadId,
     version: UploadedVersion,
@@ -654,6 +655,22 @@ class MemoryDatabase implements Database {
 
   #byFolder(folder: string): Kept | undefined {
     return [...this.#sites.values()].find((kept) => kept.fields.folder === folder);
+  }
+
+  /** Keep a site from a backup under its own id, unless a site holds its id, its folder, or its public name. */
+  #imported(site: Site, signed: Signed): Done | Refused<"id_taken" | "folder_taken" | "name_taken"> {
+    // The one check of a whole site that core has is the one that turns it into a row; it is used here for its verdict and for the versions in ascending order.
+    const { versions } = siteToRow(site);
+    if (this.#holds(site.id)) return { kind: "id_taken" };
+
+    if (this.#holdsFolder(site.folder)) return { kind: "folder_taken" };
+
+    const publicName = publicNameOf(site);
+    if (publicName !== null && (publicName === (site.id as string) || this.#holds(publicName))) return { kind: "name_taken" };
+
+    const highest = Math.max(...versions.map((entry) => entry.number));
+
+    return this.#changed(keptOf({ ...site, versions }, highest + 1), signed, "imported", { versions: versions.length });
   }
 
   /** Keep an upload as finished, with the versions its publish dropped. */

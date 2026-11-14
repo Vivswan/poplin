@@ -16,7 +16,7 @@ import { type Install, type Refused, refuse } from "./records";
 import { type UploadObject, uploadObject } from "./uploads";
 
 /** The page every site has at its top. */
-const ENTRY_PAGE = "index.html";
+export const ENTRY_PAGE = "index.html";
 
 /** A folder key of the usual length, to measure a path against before the site's own folder is known. */
 const ANY_FOLDER = "0".repeat(16) as SiteFolder;
@@ -34,7 +34,7 @@ const MAX_MANIFEST_BYTES = 1_500_000;
 const MAX_PENDING_UPLOADS = 20;
 
 /** The refusal of each bound of the room an upload did not fit. */
-const FULL = {
+export const FULL = {
   own_full: refuse("too_large", "max_pending_uploads"),
   folder_full: refuse("too_large", "max_site_size"),
   total_full: refuse("too_large", "max_total_size"),
@@ -82,6 +82,12 @@ type BeginCode =
 /** A new site as its upload records it, every field stated. */
 type NewSiteDraft = Extract<UploadPlan, { readonly kind: "create" }>["site"];
 
+/** What a manifest is held to besides its sizes: which paths can be stored, and the pages it must name. */
+interface ManifestRules {
+  readonly isStorable: (path: string) => boolean;
+  readonly entries: readonly string[];
+}
+
 /** A manifest that passed, with the sum of its sizes. */
 interface Listed {
   readonly ok: true;
@@ -97,15 +103,24 @@ interface Planned {
   readonly room: UploadRoom;
 }
 
-/** Check the declared files against the path rules and against what one request can carry. */
-function checkManifest(files: readonly ManifestFile[], limits: UploadLimits): Listed | Refused<"bad_path" | "no_index" | "too_large"> {
+/**
+ * Check the declared files against the path rules and against what one request can carry.
+ *
+ * @param rules - a publish's by default: a path whose key fits under any version, and the entry page
+ * @returns the sum of the sizes, or the first rule a file or the whole manifest breaks
+ */
+export function checkManifest(
+  files: readonly ManifestFile[],
+  limits: UploadLimits,
+  rules: ManifestRules = { isStorable: (path) => fileKey(ANY_FOLDER, WIDEST_VERSION, path).ok, entries: [ENTRY_PAGE] },
+): Listed | Refused<"bad_path" | "no_index" | "too_large"> {
   if (files.length > Math.min(limits.files, MAX_FILES)) return refuse("too_large", "max_files");
 
   const paths = new Set<string>();
   let bytes = 0;
 
   for (const { path, size } of files) {
-    if (paths.has(path) || !fileKey(ANY_FOLDER, WIDEST_VERSION, path).ok) return refuse("bad_path", path);
+    if (paths.has(path) || !rules.isStorable(path)) return refuse("bad_path", path);
 
     if (size > limits.fileBytes) return refuse("too_large", "max_file_size");
 
@@ -113,7 +128,7 @@ function checkManifest(files: readonly ManifestFile[], limits: UploadLimits): Li
     bytes += size;
   }
 
-  if (!paths.has(ENTRY_PAGE)) return refuse("no_index");
+  if (rules.entries.some((entry) => !paths.has(entry))) return refuse("no_index");
 
   if (UTF8.encode(JSON.stringify(files)).length > MAX_MANIFEST_BYTES) return refuse("too_large", "max_manifest_size");
 
@@ -126,8 +141,10 @@ function checkManifest(files: readonly ManifestFile[], limits: UploadLimits): Li
  * `max_site_size` bounds what the site keeps once this publish is live: the versions that stay under `versions_kept`, this publish, and every other pending upload to the site.
  * `max_total_size` bounds every kept version of every site, the trash included, and every pending upload, whose files are in the bucket already.
  * `max_sites` counts every site, the trash included, and every pending upload of a new site. One holder has at most 20 uploads pending.
+ *
+ * @param makesSite - whether finishing the upload makes a site, which `max_sites` then bounds
  */
-function roomUnder(settings: SettingValues, makesSite: boolean): UploadRoom {
+export function roomUnder(settings: SettingValues, makesSite: boolean): UploadRoom {
   return {
     own: MAX_PENDING_UPLOADS,
     folderBytes: sizeBytes(settings.max_site_size),

@@ -23,6 +23,8 @@ const CODES: Readonly<Record<Code, true>> = {
   no_index: true,
   size_mismatch: true,
   name_taken: true,
+  id_taken: true,
+  backup_too_new: true,
   in_trash: true,
   not_in_trash: true,
   stale_version: true,

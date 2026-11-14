@@ -307,6 +307,15 @@ export interface Database {
    */
   importSite(site: Site, signed: Signed): Promise<Done | Refused<"id_taken" | "folder_taken" | "name_taken">>;
 
+  /**
+   * Store a pending upload's site from a backup as `importSite` does, and mark the upload finished, in one step.
+   *
+   * @param site - the site, whose folder is the upload's
+   * @returns `not_pending` when the upload is finished, abandoned, gone, or of another folder; every other refusal as in `importSite`, which leaves the upload pending
+   * @throws {Error} the value is no site
+   */
+  importUploadAsSite(id: UploadId, site: Site, signed: Signed): Promise<Done | Refused<"id_taken" | "folder_taken" | "name_taken" | "not_pending">>;
+
   /** The site whose files sit under this folder, in the trash or not. */
   getSiteByFolder(folder: SiteFolder): Promise<Site | undefined>;
 

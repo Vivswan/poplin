@@ -37,7 +37,7 @@ async function openTarget(): Promise<Target> {
   const finished = await install.call("finishPublish", { upload }, { token });
   const site = (finished.body.site as { id: string }).id;
   const pending = await install.call("beginPublish", undefined, { token, body: { site, files: [PAGE] } });
-  const named = { site, upload: (pending.body.upload as { id: string }).id, token: "00000000000000aa", path: PAGE.path };
+  const named = { site, upload: (pending.body.upload as { id: string }).id, token: "00000000000000aa", path: PAGE.path, version: 1 };
   const paths = Object.values(ROUTES).flatMap((route) => [
     (route.path as (args: object) => string)(named),
     (route.path as (args: object) => string)({ ...named, site: NO_SITE, upload: NO_UPLOAD, trash: true, limit: 1, forever: true }),
@@ -82,7 +82,57 @@ const jsonBodies = fc.oneof(
     { requiredKeys: [] },
   ).map((value) => JSON.stringify(value)),
 );
-const bodies = fc.oneof(jsonBodies, fc.string({ unit: "binary", maxLength: 200 }), fc.constant("page"), fc.constant("x".repeat(5000)));
+const declaredFiles = fc.array(fc.record({ path: hostile(fc.constantFrom("v1/index.html", "v2/index.html", "index.html")), size: fc.oneof(fc.nat({ max: 80 }), fc.integer()), content_type: hostile(fc.constant("text/html")) }), { maxLength: 4 });
+const backupVersions = fc.record({
+  number: fc.integer({ min: -1, max: 3 }),
+  published_at: fc.nat(),
+  published_by: hostile(fc.constant("ada@example.com")),
+  bytes: fc.integer({ min: -1, max: 80 }),
+  files: fc.integer({ min: -1, max: 3 }),
+});
+const backupSites = fc.record(
+  {
+    id: hostile(fc.constantFrom(NO_SITE, "k3f9x2ab71qz")),
+    name: hostile(fc.constant("report")),
+    folder: hostile(fc.constant("0000000000000000")),
+    title: fc.oneof(fc.string(), fc.constant(null)),
+    access: fc.constantFrom("private", "unlisted", "public", "secret"),
+    public_name: hostile(fc.constantFrom("docs", "gallery")),
+    search_engines: fc.boolean(),
+    embeddable: fc.boolean(),
+    expires: fc.oneof(fc.constant("never"), fc.integer()),
+    live_version: fc.integer({ min: -1, max: 3 }),
+    versions: fc.array(backupVersions, { maxLength: 3 }),
+    owner: hostile(fc.constant("ada@example.com")),
+    created_at: fc.nat(),
+    updated_at: fc.nat(),
+    state: fc.constantFrom("live", "trash"),
+    trashed_at: fc.oneof(fc.nat(), fc.constant(null)),
+  },
+  { requiredKeys: ["id", "name", "access", "live_version", "versions", "owner"] },
+);
+const backupBodies = fc
+  .record(
+    {
+      format: fc.oneof(fc.constantFrom(1, 2, 0), fc.string()),
+      site: fc.oneof(backupSites, fc.json()),
+      files: declaredFiles,
+      settings: fc.dictionary(hostile(fc.constantFrom("trash_days", "logins", "max_sites")), hostile(fc.constantFrom("7", "none", "ada@example.com")), { maxKeys: 4 }),
+      logins: fc.boolean(),
+    },
+    { requiredKeys: ["format"] },
+  )
+  .map((value) => JSON.stringify(value));
+const wholeBackup = JSON.stringify({
+  format: 1,
+  site: {
+    ...{ id: "k3f9x2ab71qz", name: "report", title: null, access: "unlisted", search_engines: false, embeddable: true, expires: "never" },
+    ...{ live_version: 1, versions: [{ number: 1, published_at: 1, published_by: "ada@example.com", bytes: 4, files: 1 }] },
+    ...{ owner: "ada@example.com", created_at: 1, updated_at: 1, state: "live" },
+  },
+  files: [{ path: "v1/index.html", size: 4, content_type: "text/html" }],
+});
+const bodies = fc.oneof(jsonBodies, backupBodies, fc.constant(wholeBackup), fc.string({ unit: "binary", maxLength: 200 }), fc.constant("page"), fc.constant("x".repeat(5000)));
 const extraHeaders = fc.record(
   {
     "Content-Type": fc.constantFrom(...CONTENT_TYPES),
@@ -131,7 +181,8 @@ property(
       const response = await install.api.fetch(request as Request);
       const text = await response.text();
       const after = proven ? undefined : [await install.audit(), await install.keys(), await pendingOf(install)];
-      const parsed: unknown = text === "" ? {} : JSON.parse(text);
+      const isFile = response.headers.get("Content-Type") === "application/octet-stream";
+      const parsed: unknown = text === "" || isFile ? {} : JSON.parse(text);
 
       const facts = {
         published: ANSWERS.includes(response.status),
@@ -142,9 +193,10 @@ property(
         tokenQuoted: Object.values(install.tokens).some((token) => text.includes(token)),
         reported: install.reported.length,
         isObject: typeof parsed === "object" && parsed !== null,
+        fileUnasked: isFile && !(response.status === 200 && credential.who === "admin" && new URL(address).pathname.endsWith("/file")),
       };
 
-      expect(facts).toEqual({ published: true, unprovenRefused: true, unprovenChanged: false, crossOriginOpened: false, stored: false, tokenQuoted: false, reported: 0, isObject: true });
+      expect(facts).toEqual({ published: true, unprovenRefused: true, unprovenChanged: false, crossOriginOpened: false, stored: false, tokenQuoted: false, reported: 0, isObject: true, fileUnasked: false });
     },
   ),
 );

@@ -1,12 +1,15 @@
 // The handler of every route: it checks what was sent against the action's schema, calls that one action, and hands back its answer. No rule lives here.
 
 import { abandonPublish } from "@poplin/core/src/actions/abandon-publish";
+import { beginImport, IMPORT_REQUEST } from "@poplin/core/src/actions/begin-import";
 import { AUDIT_QUERY, listAudit } from "@poplin/core/src/actions/audit-log";
 import { beginPublish, PUBLISH_REQUEST, type UploadLimits } from "@poplin/core/src/actions/begin-publish";
 import { SITE_CHANGES } from "@poplin/core/src/actions/changes";
 import { changeConfig, readConfig } from "@poplin/core/src/actions/config";
 import { DELETE_OPTIONS, deleteSite } from "@poplin/core/src/actions/delete";
+import { EXPORT_FILE_QUERY, EXPORT_FILES_QUERY, EXPORT_QUERY, EXPORT_SITE_QUERY, exportFile, exportFiles, exportSettings, exportSite, exportSites } from "@poplin/core/src/actions/export";
 import { finishPublish } from "@poplin/core/src/actions/finish-publish";
+import { importSettings, SETTINGS_IMPORT } from "@poplin/core/src/actions/import-settings";
 import { LIST_QUERY, listSites } from "@poplin/core/src/actions/list";
 import { issueToken, listTokens, revokeToken, TOKEN_REQUEST, tokenObject } from "@poplin/core/src/actions/manage-tokens";
 import { newLink } from "@poplin/core/src/actions/new-link";
@@ -31,6 +34,10 @@ export const QUERIES: { readonly [Name in RouteName]?: QueryShape } = {
   listSites: { trash: "switch", limit: "number", after_updated_at: "number", after_id: "text" },
   deleteSite: { forever: "switch" },
   uploadFile: { path: "text" },
+  exportSites: { limit: "number", after: "text", all_versions: "switch" },
+  exportSite: { all_versions: "switch" },
+  exportFiles: { version: "number", limit: "number", cursor: "text" },
+  exportFile: { version: "number", path: "text" },
   listAudit: { limit: "number", before: "number" },
 };
 
@@ -127,6 +134,14 @@ export const HANDLERS: { readonly [Name in RouteName]: Handler<Name> } = {
   uploadFile: storeBody,
   finishPublish: ({ install, actor, named }) => finishPublish(install, actor, named),
   abandonPublish: ({ install, actor, named }) => abandonPublish(install, actor, named),
+
+  exportSettings: ({ install, actor }) => exportSettings(install, actor),
+  exportSites: ({ install, actor, query }) => checked(EXPORT_QUERY, query, (asked) => exportSites(install, actor, asked)),
+  exportSite: ({ install, actor, site, query }) => checked(EXPORT_SITE_QUERY, query, (asked) => exportSite(install, actor, { ...asked, site })),
+  exportFiles: ({ install, actor, site, query }) => checked(EXPORT_FILES_QUERY, query, (asked) => exportFiles(install, actor, { ...asked, site })),
+  exportFile: ({ install, actor, site, query }) => checked(EXPORT_FILE_QUERY, query, (asked) => exportFile(install, actor, { ...asked, site })),
+  importSettings: ({ install, actor, body }) => checked(SETTINGS_IMPORT, body, (request) => importSettings(install, actor, request)),
+  beginImport: ({ install, actor, body, limits }) => checked(IMPORT_REQUEST, body, (request) => beginImport(install, actor, request, limits)),
 
   readConfig: ({ install, actor }) => readConfig(install, actor),
   changeConfig: ({ install, actor, body }) => changeConfig(install, actor, body),

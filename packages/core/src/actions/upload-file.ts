@@ -2,11 +2,10 @@
 
 import type { Actor } from "../auth/scopes";
 import { parseUploadId } from "../records/upload";
-import { fileKey } from "./files";
 import { type Install, type Refused, refuse } from "./records";
-import { isKeptVersion, isWithinReach } from "./uploads";
+import { isKeptVersion, isWithinReach, uploadKey } from "./uploads";
 
-/** One file to store: the upload's id as sent, the file's path in the manifest, and its bytes, which are read once. */
+/** One file to store: the upload's id as sent, the file's path as the manifest names it, and its bytes, which are read once. */
 interface FileRequest {
   readonly upload: string;
   readonly path: string;
@@ -40,6 +39,7 @@ async function unread<Code extends string>(body: ReadableStream<Uint8Array>, cod
 
 /**
  * Store one file of a pending upload under `<folder>/v<number>/<path>`, replacing what an earlier request stored there.
+ * An import names each file `v<number>/<path>`, which is its place under the folder.
  *
  * The same file sent again is stored again. A site is live at these keys only once the upload is finished, so no visitor reads them before.
  *
@@ -64,8 +64,8 @@ export async function uploadFile(
 
   if (file === undefined) return unread(request.body, "not_found", "path");
 
-  const key = fileKey(upload.folder, upload.number, file.path);
-  if (!key.ok) throw new Error(`${JSON.stringify(file.path)} is no key of version ${upload.number}: ${key.refusal}`);
+  const key = uploadKey(upload, file.path);
+  if (!key.ok) throw new Error(`${JSON.stringify(file.path)} is no key of upload ${upload.id}: ${key.refusal}`);
 
   const meter = metered(request.body);
 

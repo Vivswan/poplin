@@ -9,14 +9,20 @@ import { Hono } from "hono";
 import { authenticate, type ReadToken } from "./authenticate";
 import { hasContentType, readJson, readQuery } from "./body";
 import { type Call, HANDLERS, QUERIES, type RouteName } from "./handlers";
-import { refusal, respond } from "./respond";
+import { refusal, respond, respondFile } from "./respond";
 
-/** The most bytes the JSON body of any route but the start of a publish may hold. */
+/** The most bytes the JSON body of a route may hold, unless it declares files or imports the settings. */
 const JSON_BYTES = 65_536;
+
+/** The most bytes the JSON body that imports the settings may hold: every setting at the longest one change of it can make it. */
+const SETTINGS_BYTES = 4 * JSON_BYTES;
+
+/** The routes whose JSON body declares files, and so may be as long as a manifest. */
+const DECLARES_FILES: ReadonlySet<RouteName> = new Set(["beginPublish", "beginImport"]);
 
 /** What one request can carry: a file's bytes, a publish's file count, and the JSON that declares a publish's files. */
 export interface ApiLimits extends UploadLimits {
-  /** The most bytes the JSON body that begins a publish may hold. */
+  /** The most bytes the JSON body that begins a publish or an import may hold. */
   readonly manifestBytes: number;
 }
 
@@ -30,6 +36,13 @@ export interface ApiDeps extends Install {
 
   /** Told of every failure a request ends in, before the request is answered 500. */
   readonly report?: (error: unknown) => void;
+}
+
+/** The most bytes the JSON body of a route may hold. */
+function bodyCap(name: RouteName, limits: ApiLimits): number {
+  if (DECLARES_FILES.has(name)) return limits.manifestBytes;
+
+  return name === "importSettings" ? SETTINGS_BYTES : JSON_BYTES;
 }
 
 /** Answer one request to one route: who asks first, then what was sent, then the route's handler. */
@@ -46,7 +59,7 @@ async function answer(name: RouteName, request: Request, params: Readonly<Record
   const site = params.site ?? "";
   if (params.site !== undefined && !siteReference(site).ok) return refusal("bad_argument", "site");
 
-  const sent = route.sends === "json" ? await readJson(request, name === "beginPublish" ? deps.limits.manifestBytes : JSON_BYTES) : undefined;
+  const sent = route.sends === "json" ? await readJson(request, bodyCap(name, deps.limits)) : undefined;
   if (sent?.ok === false) return respond(sent);
 
   const call: Call = {
@@ -60,6 +73,8 @@ async function answer(name: RouteName, request: Request, params: Readonly<Record
     request,
     limits: deps.limits,
   };
+
+  if (name === "exportFile") return respondFile(await HANDLERS.exportFile(call));
 
   return respond(await HANDLERS[name](call));
 }

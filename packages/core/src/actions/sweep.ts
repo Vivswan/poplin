@@ -8,11 +8,10 @@ import { MOMENT, POSITIVE, SITE_ID } from "../records/fields";
 import type { Site } from "../records/site";
 import { UPLOAD_ID, type Upload } from "../records/upload";
 import { removeSite } from "./delete";
-import { removeFiles, versionPrefix } from "./files";
 import { enterInstall } from "./reach";
 import { type Install, type Refused, refuse } from "./records";
 import { DAY_MS } from "./site-object";
-import { CLEANUP_PAGES, removeDropped, sweepableBefore } from "./uploads";
+import { removeDropped, removeUploadFiles, sweepableBefore } from "./uploads";
 
 /** The most sites one call looks at. */
 const MAX_STEP = 100;
@@ -80,11 +79,11 @@ async function removeSatOut(
   return { deleted, left };
 }
 
-/** Remove what an old upload left in the store: the versions its publish dropped when it was made live, and its own version otherwise. */
+/** Remove what an old upload left in the store: the versions its publish dropped when it was made live, and its own files otherwise. */
 function removeLeftovers(install: Install, upload: Upload): Promise<readonly string[]> {
   if (upload.state === "finished") return removeDropped(install, upload, upload.dropped);
 
-  return removeFiles(install.store, [versionPrefix(upload.folder, upload.number)], CLEANUP_PAGES);
+  return removeUploadFiles(install, upload);
 }
 
 /** Remove the old uploads with what they left in the store. A record goes only once its files are gone, so a removal that ran out of pages is taken up by the next walk. */

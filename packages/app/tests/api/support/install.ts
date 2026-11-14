@@ -39,7 +39,7 @@ interface Sent {
   readonly headers?: Readonly<Record<string, string>>;
 }
 
-/** What a call answered: the status, the parsed JSON body, and the response itself. */
+/** What a call answered: the status, the parsed JSON body, which is empty for an answer that is no JSON, and the response itself. */
 export interface Answered {
   readonly status: number;
   readonly body: Record<string, unknown>;
@@ -160,7 +160,10 @@ export async function openApi(overrides: Partial<ReturnType<typeof defaultSettin
     const response = await api.fetch(request);
     const text = await response.clone().text();
 
-    return { status: response.status, body: text === "" ? {} : JSON.parse(text), response };
+    // A route that answers a file's bytes has no JSON to parse: its body is read from `response`.
+    const isJson = response.headers.get("Content-Type")?.startsWith("application/json") === true;
+
+    return { status: response.status, body: text === "" || !isJson ? {} : JSON.parse(text), response };
   };
 
   return {
