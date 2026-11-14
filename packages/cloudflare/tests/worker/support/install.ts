@@ -31,6 +31,15 @@ const HOUR_MS = 3_600_000;
 /** The queries D1 answers one invocation on Cloudflare's Free plan. */
 const FREE_QUERIES = 50;
 
+/** A statement that changes a row. */
+const CHANGES = /^\s*(?:INSERT|UPDATE|DELETE|REPLACE)\b/i;
+
+/** What D1 rejects a query with once a day's free allowance is used up, as its error reference prints the first sentence of each. */
+const SPENT = {
+  read: "D1_ERROR: Your account has exceeded D1's free tier daily row read limit.",
+  write: "D1_ERROR: Your account has exceeded D1's free tier daily row write limit.",
+} as const;
+
 /** One Worker instance. */
 export type Worker = ReturnType<typeof createWorker>;
 
@@ -238,6 +247,36 @@ export function freePlanBindings(tally: Tally): Bindings {
   });
 
   return { ...counted, DB: capped };
+}
+
+/**
+ * The database binding as D1 is once a day's free allowance is used up.
+ *
+ * @param spent - `read` refuses every batch; `write` refuses the batches that hold a statement that changes a row, and answers the rest
+ */
+export function spentDatabase(spent: keyof typeof SPENT): D1Database {
+  const changing = new WeakSet<D1PreparedStatement>();
+  const binding: Pick<D1Database, "prepare" | "batch"> = {
+    prepare: (query) => {
+      const prepared: Pick<D1PreparedStatement, "bind"> = {
+        bind: (...values) => {
+          const bound = BINDINGS.DB.prepare(query).bind(...values);
+          if (CHANGES.test(query)) changing.add(bound);
+
+          return bound;
+        },
+      };
+
+      return prepared as D1PreparedStatement;
+    },
+    batch: async <Row>(statements: D1PreparedStatement[]) => {
+      if (spent === "read" || statements.some((statement) => changing.has(statement))) throw new Error(SPENT[spent]);
+
+      return BINDINGS.DB.batch<Row>(statements);
+    },
+  };
+
+  return binding as D1Database;
 }
 
 /** Move the clock forward. */

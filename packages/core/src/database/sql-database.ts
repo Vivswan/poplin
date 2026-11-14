@@ -1122,7 +1122,11 @@ export class SqlDatabase implements Database {
   }
 
   async ensureSigningKey(fresh: Uint8Array, at: number): Promise<SigningKey> {
-    const [inserted, read] = await this.#driver.batch([sql(INSERT_SIGNING_KEY, signingKeyToText(fresh), at), sql(READ_SIGNING_KEY)]);
+    const text = signingKeyToText(fresh);
+    const stored = await this.readSigningKey();
+    if (stored !== undefined) return { kind: "kept", key: stored };
+
+    const [inserted, read] = await this.#driver.batch([sql(INSERT_SIGNING_KEY, text, at), sql(READ_SIGNING_KEY)]);
     const key = signingKeyIn(read);
     if (key === undefined) throw new Error("the signing key was stored and is not there to read");
 

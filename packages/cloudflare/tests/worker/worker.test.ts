@@ -4,11 +4,11 @@
 import { reset } from "cloudflare:test";
 import { OPEN_ROUTES, ROUTES } from "@poplin/core/src/api/routes";
 import { settingsFromText } from "@poplin/core/src/records/settings";
-import { beforeEach, describe, expect, test } from "vitest";
+import { beforeEach, describe, expect, test, vi } from "vitest";
 import bundle from "../../dist/worker.js?raw";
 import type { Bindings } from "../../src/worker/bindings";
 import { signer } from "../login/support/access";
-import { ADMIN, accessHeaders, ask, api, BINDINGS, cookieOf, countedBindings, done, installOf, instance, logIn, OWNER, type Published, page, publish, tokenOf, type World, under, wait, world } from "./support/install";
+import { ADMIN, accessHeaders, ask, api, BINDINGS, cookieOf, countedBindings, done, installOf, instance, logIn, OWNER, type Published, page, publish, spentDatabase, tokenOf, type World, under, wait, world } from "./support/install";
 
 /** The largest bundle that passes: three times today's, so a library pulled in whole fails here. */
 const MOST_BUNDLE_BYTES = 1_000_000;
@@ -505,6 +505,34 @@ describe("the admin hostname", () => {
     expect(sites.headers.get("Content-Security-Policy")).toContain("default-src 'none'");
     expect([unmarked.status, after.site.state, unknown.status]).toEqual([403, "live", 404]);
     expect([signedOut.status, privately.status]).toEqual([302, 200]);
+  });
+});
+
+describe("a database that takes no more writes for the day", () => {
+  // Drift: an instance wrote on every start and the login wrote before its redirect, so a set-up install answered nobody once its writes were spent. Letting a first login through the same way would leave the setup page open behind a person who is in.
+  test("a new instance of a set-up install starts, serves a page and a file, logs a person in without the audit entry, which the log notes, and shows the dashboard; the first login of an install is refused and its setup stays open", async () => {
+    using warned = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    using failed = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const spent = withBindings({ DB: spentDatabase("write") });
+    const site = await publish(instance(w), await tokenOf(w, "admin"), { name: "report", access: "public" }, [page("<h1>report</h1>"), { path: "notes.txt", body: new TextEncoder().encode("notes"), type: "text/plain" }]);
+    const worker = instance(w);
+    const signed = { headers: await accessHeaders(w) };
+    const { database } = await installOf(w);
+
+    const first = await ask(worker, `${ADMIN}/login`, signed, spent);
+    const open = !(await database.hasLoggedIn());
+    await logIn(instance(w), w);
+    const later = await ask(worker, `${ADMIN}/login`, signed, spent);
+    const session = { headers: { Cookie: cookieOf(later) } };
+    const answers = [await ask(worker, `${site.addresses.public}/`, {}, spent), await ask(worker, `${site.addresses.public}/notes.txt`, {}, spent)];
+    for (const path of ["/", `/sites/${site.label}`, "/activity", "/usage", "/tokens", "/settings"]) answers.push(await ask(worker, `${ADMIN}${path}`, session, spent));
+    const logins = (await database.listAudit({ limit: 100 })).filter((entry) => entry.action === "login");
+
+    expect([first.status, first.headers.get("Set-Cookie"), open]).toEqual([503, null, true]);
+    expect([later.status, later.headers.get("Location"), logins.length]).toEqual([302, "/", 1]);
+    expect(answers.map((answer) => answer.status)).toEqual([200, 200, 200, 200, 200, 200, 200, 200]);
+    expect(warned.mock.calls.map(([line]) => line)).toEqual(["poplin: a login was not written to the audit log"]);
+    expect(failed.mock.calls.map(([line]) => line)).toEqual(["poplin: a request failed"]);
   });
 });
 
