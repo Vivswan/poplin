@@ -8,7 +8,7 @@ import { ADMIN, makeWorld, OWNER } from "./support/actions-fixture";
 
 /** The settings of another install as its export gives them: its own logins, and three values this install does not have. */
 async function backup(): Promise<{ format: number; settings: Record<string, string> }> {
-  const other = await makeWorld({ logins: ["bo@example.com" as Login], trash_days: 30, max_sites: 12, block_bots: "off" });
+  const other = await makeWorld({ logins: ["bo@example.com" as Login, "ada@example.com" as Login], trash_days: 30, max_sites: 12, block_bots: "off" });
   const exported = await exportSettings(other.install, ADMIN);
   if (!exported.ok) throw new Error(`the fixture export was refused: ${exported.code}`);
 
@@ -26,7 +26,7 @@ describe("importSettings", () => {
     const taken = await importSettings(world.install, ADMIN, { ...sent, logins: true });
 
     expect(kept).toMatchObject({ ok: true, values: { logins: ["ada@example.com"], trash_days: 30, max_sites: 12, block_bots: "off" } });
-    expect<unknown>([audit, taken.ok && taken.values.logins, await readConfig(world.install, ADMIN)]).toEqual([["settings_changed"], ["bo@example.com"], taken]);
+    expect<unknown>([audit, taken.ok && taken.values.logins, await readConfig(world.install, ADMIN)]).toEqual([["settings_changed"], ["bo@example.com", "ada@example.com"], taken]);
   });
 
   // Drift: each row is a backup this install cannot read whole; one that was applied in part would leave settings no admin chose.

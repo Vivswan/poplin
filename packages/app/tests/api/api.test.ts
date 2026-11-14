@@ -238,6 +238,9 @@ describe("createApi", () => {
     expect((await done("abandonPublish", { upload: second })).body.left).toEqual([]);
     expect(part(await done("readConfig", undefined), "values").trash_days).toBe(7);
     expect(part(await done("changeConfig", undefined, { body: { trash_days: 9 } }), "values").trash_days).toBe(9);
+    // Drift: a token names no email, so the API is the way a list of new emails alone would reach the store and shut the dashboard on everyone.
+    const shut = await install.call("changeConfig", undefined, { body: { logins: ["new@example.com"] } });
+    expect([shut.status, shut.body.error]).toEqual([409, { code: "no_working_login", message: "the change would leave no login that works", about: "logins" }]);
     const key = await install.database.ensureSigningKey(new Uint8Array(32).fill(7), NOW);
     expect([(await done("signEveryoneOut", undefined)).body, await install.database.readSigningKey()]).not.toEqual([{}, key.key]);
     expect(((await done("listAudit", { limit: 3 })).body.entries as { action: string }[]).map((entry) => entry.action)).toEqual(["signed_everyone_out", "settings_changed", "restore"]);

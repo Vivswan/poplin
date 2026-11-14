@@ -37,6 +37,11 @@ const API_ROWS = {
   upload_finished: { sentence: "the publish is already live", exit: "failed" },
   too_many_sites: { sentence: "the install holds as many sites as it may", hint: "poplin config max_sites shows the limit; poplin list --trash shows what still counts", exit: "failed" },
   not_set_up: { sentence: "the install has stored no settings", hint: "its Worker stores them when it starts: try again, and if this stays, deploy the install again", exit: "failed" },
+  no_working_login: {
+    sentence: "the change would leave no login that works",
+    hint: "keep an email that is a login now: a new one gets in only after a Repair on the dashboard's Domain tab",
+    exit: "failed",
+  },
   too_large: { sentence: "a size limit is passed", hint: "poplin config shows the limits", exit: "failed" },
   too_many_requests: { sentence: "the install is asked too often from this address", hint: "wait a minute, then try again", exit: "failed" },
   internal: { sentence: "the install failed to do that", hint: "try again; poplin doctor reports on the install", exit: "failed" },

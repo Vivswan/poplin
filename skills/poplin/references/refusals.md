@@ -18,6 +18,7 @@ Open this when a poplin tool or command answers with a refusal. From a tool, or 
 | `stale_version`, `missing_files`, `size_mismatch` | the publish did not complete; nothing went live  | publish again, the same way                                          |
 | `unreachable`, `timeout`, `internal`              | no answer, or the install failed part way        | the change may have been made: `list_sites` before you try again     |
 | `not_set_up`                                      | the install has stored no settings               | try again; if it stays, the user deploys the install again           |
+| `no_working_login`                                | the new logins would let nobody log in           | the user keeps one email that is a login now in the list             |
 
 After `unreachable`, `timeout`, or `internal` on a publish, check the list before you repeat it. A second publish with no `site` would make a second site.
 

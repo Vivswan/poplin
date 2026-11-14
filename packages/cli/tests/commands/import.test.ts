@@ -280,7 +280,7 @@ describe("import", () => {
     const from = await openBench();
     const label = await published(from, "notes", { "index.html": "<title>Notes</title>" });
     await from.run("config trash_days 9");
-    await from.run("config logins grace@example.com");
+    await from.run("config logins ada@example.com,grace@example.com");
     const zip = await exportedZip(from);
     const one = await exportedZip(from, label);
     const into = await openBench();
@@ -298,7 +298,7 @@ describe("import", () => {
     const refused = await into.run(`import ${one} --settings`);
 
     expect([bare, kept[0], kept[1]]).toEqual([before, 9, before[1]]);
-    expect([(await settings())[1], restored.out[0]]).toEqual([["grace@example.com"], "restored the settings, but for the logins"]);
+    expect([(await settings())[1], restored.out[0]]).toEqual([["ada@example.com", "grace@example.com"], "restored the settings, but for the logins"]);
     expect([refused.code, refused.err[0]]).toEqual([1, "the backup holds no settings: it is the backup of one site"]);
   });
 

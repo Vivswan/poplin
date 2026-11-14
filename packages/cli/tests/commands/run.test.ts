@@ -32,6 +32,7 @@ const CODES: Readonly<Record<Code, true>> = {
   upload_finished: true,
   too_many_sites: true,
   not_set_up: true,
+  no_working_login: true,
   too_large: true,
   too_many_requests: true,
   internal: true,
@@ -174,11 +175,16 @@ describe("run", () => {
     expect(jsonOf(await bench.run("config trash_days --json"))).toMatchObject({ values: { trash_days: 9 } });
 
     // Drift: the stored logins and the login page's own list are two lists; a change that printed the first alone would leave a new person stopped at the login with nothing saying why.
-    const added = await bench.run("config logins owner@example.com,second@example.com");
+    const added = await bench.run("config logins ada@example.com,second@example.com");
 
     const step = "one more step: on the dashboard's Domain tab, paste a token and press Repair, so the login page lets a new email in; until then only an email that was already a login gets in";
 
-    expect([added.out, added.err]).toEqual([["logins  owner@example.com,second@example.com"], [step]]);
+    expect([added.out, added.err]).toEqual([["logins  ada@example.com,second@example.com"], [step]]);
+
+    // Drift: a token names no email, so the one login known to pass the login page is one that was a login already; a list of new emails alone would shut the dashboard on everyone.
+    const replaced = await bench.run("config logins third@example.com");
+
+    expect([replaced.code, replaced.err[0], (await bench.run("config logins")).out]).toEqual([1, "the change would leave no login that works: logins", ["ada@example.com,second@example.com"]]);
   });
 
   test.each(Object.keys(CODES))("the code %s has a sentence of its own in the one table, exits 1, and is the error object under --json", async (code) => {

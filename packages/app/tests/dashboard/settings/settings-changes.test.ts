@@ -47,7 +47,7 @@ test("an admin who takes their own email out of the logins is refused and nothin
 
   const saved = await opened.post("/settings/save", await fields(opened, { logins: "second@example.com" }));
 
-  expect(saved.headers.get("Location")).toBe("/settings?refused=own_login");
+  expect(saved.headers.get("Location")).toBe("/settings?refused=no_working_login&about=logins");
   expect(NOTICE.exec(await landing(opened, saved))?.slice(1)).toEqual(["refused", "Your own email has to stay in the logins, so nothing was changed. Another admin can take it out."]);
   expect(await settings(opened)).toEqual(before);
 });

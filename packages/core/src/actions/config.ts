@@ -5,6 +5,7 @@ import * as v from "valibot";
 import type { Actor } from "../auth/scopes";
 import { SETTING_CHANGES, type SettingValues } from "../records/settings";
 import { type Install, type Refused, refuse } from "./records";
+import { storeSettings } from "./store-settings";
 
 /** The settings as they are after the action. */
 interface Configured {
@@ -30,9 +31,9 @@ export async function readConfig(install: Install, actor: Actor): Promise<Config
  * Change some settings. Each key given is replaced whole; every other key stays as it is.
  *
  * @param changes - the new typed values, at least one key; anything is taken and checked
- * @returns every setting after the change, or `bad_argument` naming the first key that is no setting or whose value breaks its rule; `about` is `settings` when no key is given
+ * @returns every setting after the change, `bad_argument` naming the first key that is no setting or whose value breaks its rule, with `about` as `settings` when no key is given, or `no_working_login` for new logins that would let nobody log in
  */
-export async function changeConfig(install: Install, actor: Actor, changes: unknown): Promise<Configured | Refused<"not_allowed" | "not_set_up" | "bad_argument">> {
+export async function changeConfig(install: Install, actor: Actor, changes: unknown): Promise<Configured | Refused<"not_allowed" | "not_set_up" | "bad_argument" | "no_working_login">> {
   if (actor.scope !== "admin") return refuse("not_allowed");
 
   const checked = v.safeParse(SETTING_CHANGES, changes);
@@ -40,8 +41,5 @@ export async function changeConfig(install: Install, actor: Actor, changes: unkn
 
   if (Object.keys(checked.output).length === 0) return refuse("bad_argument", "settings");
 
-  const changed = await install.database.changeSettings(checked.output, { by: actor.holder, at: install.now() });
-  if (changed.kind === "not_set_up") return refuse("not_set_up");
-
-  return { ok: true, values: changed.values };
+  return storeSettings(install, actor, checked.output);
 }

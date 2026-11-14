@@ -214,6 +214,7 @@ A refused command prints one sentence and often a hint. With `--json` it prints 
 | `wrong_server`                                 | the login is for another install                   | log in to this one with `--server`                            |
 | `not_allowed`                                  | this login may not do that                         | `poplin whoami` shows the login; use an admin's               |
 | `not_set_up`                                   | the install has stored no settings                 | try again; if it stays, deploy the install again              |
+| `no_working_login`                             | the new logins would let nobody log in             | keep one email that is a login now in the list                |
 | `unreachable`, `timeout`                       | no answer came                                     | check the address and the network; `poplin list` before a retry |
 | `not_json`, `unexpected_answer`                | the answer is not a poplin install's               | `poplin whoami` shows the address in use                      |
 | `method_not_allowed`, `unsupported_media_type` | the install and this poplin are of two versions    | update the older one                                          |
