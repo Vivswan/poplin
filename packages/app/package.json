@@ -4,6 +4,7 @@
   "type": "module",
   "dependencies": {
     "@poplin/core": "workspace:*",
-    "cloudflare": "7.3.0"
+    "cloudflare": "7.3.0",
+    "jose": "6.2.17"
   }
 }

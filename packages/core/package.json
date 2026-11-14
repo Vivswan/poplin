@@ -4,6 +4,7 @@
   "type": "module",
   "exports": {
     "./actions": "./src/actions.ts",
+    "./src/auth/cookie": "./src/auth/cookie.ts",
     "./src/auth/logins": "./src/auth/logins.ts",
     "./src/names/suffix": "./src/names/suffix.ts",
     "./src/storage/storage": "./src/storage/storage.ts",
