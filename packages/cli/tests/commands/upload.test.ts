@@ -5,8 +5,8 @@ import { type Bench, cleanUp, folderOf, jsonOf, openBench, stateOf } from "./sup
 /** A site of six files: more than the four that are on their way at once. */
 const SIX = { "index.html": "<h1>notes</h1>", "a.css": "a{}", "b.css": "b{}", "c.css": "c{}", "d.css": "d{}", "e.css": "e{}" };
 
-/** A site of eight files, which the test install copies over three calls. */
-const EIGHT = { "index.html": "<title>Report</title>", ...Object.fromEntries(Array.from({ length: 7 }, (_page, at) => [`pages/${at}.html`, `<p>${at}</p>`])) };
+/** A site of twenty files, which the install copies over two calls: sixteen, then the last four. */
+const TWENTY = { "index.html": "<title>Report</title>", ...Object.fromEntries(Array.from({ length: 19 }, (_page, at) => [`pages/${at}.html`, `<p>${at}</p>`])) };
 
 /** The id of an upload, as a path names it. */
 const UPLOAD_ID = /\/api\/uploads\/([0-9a-z]{16})/;
@@ -134,7 +134,7 @@ describe("upload", () => {
     ],
   ])("a stop of %s", async (_name, stop) => {
     const bench = await openBench();
-    const label = stop.command === "duplicate" ? (jsonOf(await bench.run(`${folderOf("report", EIGHT)} --json`)).site as { label: string }).label : "";
+    const label = stop.command === "duplicate" ? (jsonOf(await bench.run(`${folderOf("report", TWENTY)} --json`)).site as { label: string }).label : "";
     const before = await stateOf(bench);
     bench.sent.length = 0;
     stopAt(bench, stop.moment);

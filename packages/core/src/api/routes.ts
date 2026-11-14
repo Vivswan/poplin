@@ -2,7 +2,7 @@
 //
 // The server registers its handlers from this table and a client builds its requests from it, so the two cannot differ.
 // A request carries `Authorization: Bearer <token>`, but for the routes of `OPEN_ROUTES`, which a computer with no token calls to get one. A JSON body goes with `Content-Type: application/json`, a file's bytes with `application/octet-stream`.
-// A duplicate is a run of requests too: `duplicateSite` copies a few files a request, as many as the install's limits say, and is sent again with the `upload` it answered until it answers the new site.
+// A duplicate is a run of requests too: `duplicateSite` copies a few files a request, as many as one request's calls allow, and is sent again with the `upload` it answered until it answers the new site.
 // An export and an import are a run of small requests the client drives: `exportSites` a page at a time, then `exportFiles` and `exportFile` for each version; `beginImport`, then the upload routes under the id it answers.
 
 import type * as v from "valibot";

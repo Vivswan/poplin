@@ -182,7 +182,7 @@ describe("the MCP server", () => {
   // Drift: the tool runs the command's flow; a tool with a loop of its own would leave a half copy pending when a call of it fails.
   test("duplicate_site gives a copy up when a later call of it fails: an agent that tries again must not find the install full of half copies", async () => {
     const bench = await open();
-    const pages = { "index.html": "<title>Report</title>", "about.html": "a", "more.html": "b", "last.html": "c" };
+    const pages = { "index.html": "<title>Report</title>", ...Object.fromEntries(Array.from({ length: 19 }, (_page, at) => [`pages/${at}.html`, "a"])) };
     const site = siteOf(await bench.call("publish_site", { path: folderOf("report", pages) }));
     bench.sent.length = 0;
     bench.hook = (request) => (bench.sent.length > 1 && request.url.endsWith("/duplicate") ? new Response("{}", { status: 500, headers: { "Content-Type": "application/json" } }) : undefined);

@@ -230,9 +230,9 @@ async function stageCopy(
  *
  * A copy whose source no longer holds a file is given up and its files removed. So is one this call began that finishing refused.
  */
-async function advanceCopy(install: Install, actor: Actor, staged: StagedNow, copies: number): Promise<Copying | Duplicated | Refused<DuplicateCode>> {
+async function advanceCopy(install: Install, actor: Actor, staged: StagedNow): Promise<Copying | Duplicated | Refused<DuplicateCode>> {
   const { upload, missing } = staged;
-  const batch = missing.slice(0, Math.min(copies, copiesPerCall(upload.files)));
+  const batch = missing.slice(0, copiesPerCall(upload.files));
 
   if (!(await copyFiles(install.store, upload, batch))) {
     await discardUpload(install, upload);
@@ -260,7 +260,6 @@ async function advanceCopy(install: Install, actor: Actor, staged: StagedNow, co
  * It takes the source's typed title, its page's own title, and its search-engine and frame settings. Its expiry is a new site's, from `default_expires`: the source's is not copied.
  * The install's limits bound it as they bound a publish.
  * @param request - `site` is a reference to the source; `name` goes with the first call alone, and `upload` with every later one
- * @param copies - the most files this call copies, where that is fewer than `copiesPerCall` fits into the 50 calls to the database and the store a call may make
  * @returns the copy's progress, and the new site once every file is copied; `no_such_version` when the source stopped keeping the version meanwhile. Every refusal left no site behind
  * @throws {Error} the store or the database failed; a copy just begun is given up, and one named by `upload` stays to be gone on with
  */
@@ -268,13 +267,12 @@ export async function duplicateSite(
   install: Install,
   actor: Actor,
   request: v.InferInput<typeof DUPLICATE_REQUEST> & { readonly site: string },
-  copies: number = Number.MAX_SAFE_INTEGER,
 ): Promise<Copying | Duplicated | Refused<DuplicateCode>> {
   const staged = await stageCopy(install, actor, request);
   if (!staged.ok) return staged;
 
   try {
-    return await advanceCopy(install, actor, staged, copies);
+    return await advanceCopy(install, actor, staged);
   } catch (error) {
     // An upload that became a site meanwhile is left as it is.
     if (staged.fresh) await discardUpload(install, staged.upload);

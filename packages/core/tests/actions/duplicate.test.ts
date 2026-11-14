@@ -16,6 +16,9 @@ import { ADMIN, file, made, makeWorld, OWNER, STRANGER, type World } from "./sup
 /** A site of five files, each of another media type than the manifest of a copy names. */
 const FIVE = [file("index.html", "<p>home</p>"), ...["a", "b", "c", "d"].map((name) => ({ ...file(`docs/${name}.css`, `.${name}{}`), contentType: "text/css" }))];
 
+/** A site of forty files: the five, and pages. One call copies sixteen of them, so its copy takes three calls. */
+const FORTY = [...FIVE, ...Array.from({ length: 35 }, (_page, at) => file(`pages/${at}.html`, `<p>${at}</p>`))];
+
 /** Every stored file under a site's folder, as `path -> media type and text`, read from the store. */
 async function filesOf(world: World, folder: string): Promise<Record<string, string>> {
   const held: Record<string, string> = {};
@@ -59,15 +62,15 @@ describe("duplicateSite", () => {
   });
 
   // Drift: a site too large for one request is copied over several; a copy listed or served before its last file would be a broken site with a working address.
-  test("a copy made a file a call is no site until the call that copies the last file, and each call goes on from the upload the one before answered", async () => {
+  test("a copy of more files than one call copies is no site until the call that copies the last file, and each call goes on from the upload the one before answered", async () => {
     const world = await makeWorld();
     const source = await made(world, OWNER, "report");
-    await publishSite(world.install, OWNER, { site: source, files: FIVE });
+    await publishSite(world.install, OWNER, { site: source, files: FORTY });
     const seen: unknown[] = [];
     let upload: string | undefined;
 
-    for (let calls = 0; calls < 5; calls += 1) {
-      const step = await duplicateSite(world.install, OWNER, upload === undefined ? { site: source } : { site: source, upload }, 1);
+    for (let calls = 0; calls < 3; calls += 1) {
+      const step = await duplicateSite(world.install, OWNER, upload === undefined ? { site: source } : { site: source, upload });
       if (!step.ok) throw new Error(`a step was refused: ${step.code}`);
 
       const listed = await listSites(world.install, ADMIN);
@@ -75,8 +78,8 @@ describe("duplicateSite", () => {
       upload = step.copy.upload;
     }
 
-    expect(seen).toEqual([[null, 1, 1], [null, 2, 1], [null, 3, 1], [null, 4, 1], [1, 5, 2]]);
-    expect(await duplicateSite(world.install, OWNER, { site: source, upload }, 1)).toMatchObject({ ok: true, site: { live_version: 1 }, copy: { copied: 5, files: 5 } });
+    expect(seen).toEqual([[null, 16, 1], [null, 32, 1], [1, 40, 2]]);
+    expect(await duplicateSite(world.install, OWNER, { site: source, upload })).toMatchObject({ ok: true, site: { live_version: 1 }, copy: { copied: 40, files: 40 } });
     expect(await world.audit()).toEqual(["create", "publish", "create", "duplicate"]);
   });
 
@@ -101,7 +104,7 @@ describe("duplicateSite", () => {
     const source = await finishPublish(world.install, OWNER, begun.upload.id);
     if (!source.ok) throw new Error(`the source was refused: ${source.code}`);
 
-    expect(await duplicateSite(world.install, OWNER, { site: source.site.id }, 1)).toMatchObject({ ok: true, site: null, copy: { copied: 1, files: 1_601 } });
+    expect(await duplicateSite(world.install, OWNER, { site: source.site.id })).toMatchObject({ ok: true, site: null, copy: { copied: 21, files: 1_601 } });
   });
 
   // Drift: a host ends a request that makes more than 50 calls to the database and the store; a call that copies more files than fit leaves a copy nobody can finish.
@@ -211,14 +214,14 @@ describe("duplicateSite", () => {
   test("a copy takes no file from a caller, a site in the trash is not copied, and a copy whose source stopped keeping the version is given up with its files", async () => {
     const world = await makeWorld({ versions_kept: 1 });
     const source = await made(world, OWNER, "report");
-    await publishSite(world.install, OWNER, { site: source, files: FIVE });
+    await publishSite(world.install, OWNER, { site: source, files: FORTY });
     const keys = await world.keys();
-    const begun = await duplicateSite(world.install, OWNER, { site: source }, 1);
+    const begun = await duplicateSite(world.install, OWNER, { site: source });
     if (!begun.ok) throw new Error("the copy was refused");
 
     const sent = await uploadFile(world.install, OWNER, { upload: begun.copy.upload, path: "docs/a.css", body: new Blob([".a{}"]).stream() });
     await publishSite(world.install, OWNER, { site: source, files: [file("index.html", "<p>new</p>")] });
-    const lost = await duplicateSite(world.install, OWNER, { site: source, upload: begun.copy.upload }, 1);
+    const lost = await duplicateSite(world.install, OWNER, { site: source, upload: begun.copy.upload });
     await deleteSite(world.install, OWNER, { site: source });
 
     expect([sent, lost, await duplicateSite(world.install, OWNER, { site: source })]).toEqual([
@@ -226,6 +229,6 @@ describe("duplicateSite", () => {
       { ok: false, code: "no_such_version" },
       { ok: false, code: "in_trash" },
     ]);
-    expect([(await world.keys()).length, keys.length, (await world.install.database.readTotals()).sites]).toEqual([1, 5, 1]);
+    expect([(await world.keys()).length, keys.length, (await world.install.database.readTotals()).sites]).toEqual([1, 40, 1]);
   });
 });

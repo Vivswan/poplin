@@ -76,8 +76,8 @@ export interface Call {
   /** The request itself, whose body a route that sends bytes reads. */
   readonly request: Request;
 
-  /** What one request can carry, and how many files of a copy it makes. */
-  readonly limits: UploadLimits & { readonly copies?: number };
+  /** What one request can carry. */
+  readonly limits: UploadLimits;
 }
 
 /** One request to a route that takes no token: nobody asks, so there is no actor. */
@@ -163,7 +163,7 @@ export const HANDLERS: { readonly [Name in Exclude<RouteName, OpenName>]: Handle
   newLink: ({ install, actor, site }) => newLink(install, actor, site),
   deleteSite: ({ install, actor, site, query }) => checked(DELETE_OPTIONS, query, (options) => deleteSite(install, actor, { ...options, site })),
   restoreSite: ({ install, actor, site }) => restoreSite(install, actor, site),
-  duplicateSite: ({ install, actor, site, body, limits }) => checked(DUPLICATE_REQUEST, body, (asked) => duplicateSite(install, actor, { ...asked, site }, limits.copies)),
+  duplicateSite: ({ install, actor, site, body }) => checked(DUPLICATE_REQUEST, body, (asked) => duplicateSite(install, actor, { ...asked, site })),
 
   beginPublish: ({ install, actor, body, limits }) => beginPublish(install, actor, body, limits),
   showUpload: ({ install, actor, named }) => showUpload(install, actor, named),

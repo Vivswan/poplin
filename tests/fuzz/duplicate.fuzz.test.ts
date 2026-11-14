@@ -16,9 +16,8 @@ const property = fuzzTarget(import.meta.file);
 const sources = fc.record({
   access: fc.constantFrom("private", "unlisted", "public"),
   expires: fc.constantFrom("never", "1s", "7d"),
-  pages: fc.integer({ min: 0, max: 7 }),
-  copies: fc.integer({ min: 1, max: 4 }),
-  calls: fc.integer({ min: 1, max: 12 }),
+  pages: fc.integer({ min: 0, max: 40 }),
+  calls: fc.integer({ min: 1, max: 5 }),
 });
 
 const declared = fc.record({
@@ -46,7 +45,7 @@ async function filesByFolder(world: World): Promise<Map<string, number>> {
 
 property(
   "a copy is private under its own id and folder, and is a site only once it holds every file of its source",
-  fc.asyncProperty(sources, async ({ access, expires, pages, copies, calls }) => {
+  fc.asyncProperty(sources, async ({ access, expires, pages, calls }) => {
     const world = await makeWorld();
     const files = [file("index.html", "<p>home</p>"), ...Array.from({ length: pages }, (_page, at) => file(`pages/${at}.html`, `<p>${at}</p>`))];
     const made = await publishSite(world.install, OWNER, { name: "report", access, expires, files });
@@ -56,7 +55,7 @@ property(
     let upload: string | undefined;
 
     for (let call = 0; call < calls; call += 1) {
-      const step = await duplicateSite(world.install, ADMIN, upload === undefined ? { site: made.site.id } : { site: made.site.id, upload }, copies);
+      const step = await duplicateSite(world.install, ADMIN, upload === undefined ? { site: made.site.id } : { site: made.site.id, upload });
       if (!step.ok) throw new Error(`a step was refused: ${step.code}`);
 
       upload = step.copy.upload;
@@ -79,11 +78,13 @@ property(
   "the manifest of a copy is never longer than the one its source was published with, so a site that fitted the cap can be copied",
   fc.asyncProperty(fc.uniqueArray(declared, { selector: (one) => one.name.normalize("NFC"), maxLength: 6 }), async (extra) => {
     const world = await makeWorld();
-    const files = [file("index.html", "<p>home</p>"), ...extra.map((one) => ({ ...file(`files/${one.name}`, one.text), contentType: one.type }))];
+    // Sixteen pages besides: the first call then copies sixteen files and finishes nothing, so the copy's manifest is still there to measure. Their type is as short as one can be, so they hide no growth.
+    const pages = Array.from({ length: 16 }, (_page, at) => ({ ...file(`pages/${at}.html`, `<p>${at}</p>`), contentType: "-" }));
+    const files = [file("index.html", "<p>home</p>"), ...pages, ...extra.map((one) => ({ ...file(`files/${one.name}`, one.text), contentType: one.type }))];
     const made = await publishSite(world.install, OWNER, { name: "report", files });
     if (!made.ok) throw new Error(`the source was refused: ${made.code}`);
 
-    const begun = await duplicateSite(world.install, OWNER, { site: made.site.id }, 0);
+    const begun = await duplicateSite(world.install, OWNER, { site: made.site.id });
     const upload = begun.ok ? parseUploadId(begun.copy.upload) : undefined;
     if (upload === undefined) throw new Error("the copy was refused");
 
