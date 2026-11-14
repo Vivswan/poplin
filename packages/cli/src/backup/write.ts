@@ -109,7 +109,7 @@ export async function createBackup(target: string, overwrite: boolean): Promise<
       zip.end();
       await Promise.race([written, broken]);
 
-      if (!overwrite && (await isThere(target))) throw new Error(`a file appeared at ${JSON.stringify(target)} while the backup was written`);
+      if (!overwrite && (await isThere(target))) throw new Error(`a file appeared at "${target}" while the backup was written`);
 
       await fs.rename(part, target);
 

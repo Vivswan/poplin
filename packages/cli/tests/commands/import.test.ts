@@ -271,18 +271,18 @@ describe("import", () => {
       await writeZip(join(folder, "format.zip"), backupEntries({ manifest: { format: 2 } })),
       await writeZip(join(folder, "stray.zip"), [["notes.txt", "hello"], ...backupEntries()]),
       await writeZip(join(folder, "count.zip"), backupEntries({ manifest: { files: 3 } })),
-      join(folder, "absent.zip"),
+      join(folder, "no\\such.zip"),
     ];
 
     const runs = [];
     for (const zip of zips) runs.push(await bench.run(`import ${zip}`));
 
     expect(runs.map((ran) => [ran.code, ran.out, ran.err[1]])).toEqual(Array(4).fill([1, [], "nothing was sent to the install"]));
-    expect(runs.map((ran) => ran.err[0]?.replace(folder, ""))).toEqual([
+    expect(runs.map((ran) => ran.err[0])).toEqual([
       "the file is not a backup: it is of format 2, which a newer poplin made; this one reads up to format 1",
       'the file is not a backup: "notes.txt" is no entry of a backup',
       "the file is not a backup: its manifest counts other sites, files, or bytes than it holds",
-      'the file is not a backup: "/absent.zip" cannot be opened',
+      `the file is not a backup: "${zips[3]}" cannot be opened`,
     ]);
     expect([bench.sent, readdirSync(dirname(zips[0] ?? "")).length]).toEqual([[], 3]);
   });

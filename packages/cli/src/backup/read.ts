@@ -325,7 +325,7 @@ async function checkContents(file: BoundedFile, manifest: Manifest): Promise<voi
  */
 export async function openBackup(path: string): Promise<{ readonly ok: true; readonly backup: Backup } | { readonly ok: false; readonly reason: string }> {
   const handle = await fs.open(path, "r").catch(() => undefined);
-  if (handle === undefined) return { ok: false, reason: `${quote(path)} cannot be opened` };
+  if (handle === undefined) return { ok: false, reason: `"${path}" cannot be opened` };
 
   try {
     const file = new BoundedFile(handle, (await handle.stat()).size);

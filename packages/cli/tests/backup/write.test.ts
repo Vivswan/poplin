@@ -87,7 +87,7 @@ describe("createBackup", () => {
     const failing = await begun(target, true);
     await failing.addFile("a", streamOf("a"), 1);
     await failing.abandon();
-    const kept = [readdirSync(folder), readFileSync(target, "utf8")];
+    const kept = [readdirSync(folder).sort(), readFileSync(target, "utf8")];
     rmSync(join(folder, "link.zip"));
     const writer = await begun(target, true);
     writer.addJson("a.json", 1);
