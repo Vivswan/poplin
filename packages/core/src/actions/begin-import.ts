@@ -43,7 +43,7 @@ const SENT_SITE = v.pipe(
 );
 
 /** What an import of one site sends: the backup's format number, the site as `exportSites` gave it, and every file of every version it carries, each named `v<number>/<path>`. */
-export const IMPORT_REQUEST = v.strictObject({
+const IMPORT_REQUEST = v.strictObject({
   format: POSITIVE,
   site: SENT_SITE,
   files: v.array(MANIFEST_FILE),
@@ -140,7 +140,7 @@ async function findConflict(install: Install, site: Site): Promise<Refused<"id_t
 export async function beginImport(
   install: Install,
   actor: Actor,
-  request: v.InferInput<typeof IMPORT_REQUEST> | ImportRequest,
+  request: unknown,
   limits: UploadLimits = UNBOUNDED,
 ): Promise<{ readonly ok: true; readonly upload: UploadObject } | Refused<ImportCode>> {
   if (actor.scope !== "admin") return refuse("not_allowed");

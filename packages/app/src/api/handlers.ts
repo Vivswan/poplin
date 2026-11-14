@@ -1,9 +1,10 @@
 // The handler of every route: it checks what was sent against the action's schema, calls that one action, and hands back its answer. No rule lives here.
+// An action that takes anything checks what was sent itself, so a long file list is read once.
 
 import { abandonPublish } from "@poplin/core/src/actions/abandon-publish";
-import { beginImport, IMPORT_REQUEST } from "@poplin/core/src/actions/begin-import";
+import { beginImport } from "@poplin/core/src/actions/begin-import";
 import { AUDIT_QUERY, listAudit } from "@poplin/core/src/actions/audit-log";
-import { beginPublish, PUBLISH_REQUEST, type UploadLimits } from "@poplin/core/src/actions/begin-publish";
+import { beginPublish, type UploadLimits } from "@poplin/core/src/actions/begin-publish";
 import { SITE_CHANGES } from "@poplin/core/src/actions/changes";
 import { beginLogin, LOGIN_REQUEST, LOGIN_SECRET, redeemLogin } from "@poplin/core/src/actions/computer-logins";
 import { changeConfig, readConfig } from "@poplin/core/src/actions/config";
@@ -164,7 +165,7 @@ export const HANDLERS: { readonly [Name in Exclude<RouteName, OpenName>]: Handle
   restoreSite: ({ install, actor, site }) => restoreSite(install, actor, site),
   duplicateSite: ({ install, actor, site, body, limits }) => checked(DUPLICATE_REQUEST, body, (asked) => duplicateSite(install, actor, { ...asked, site }, limits.copies)),
 
-  beginPublish: ({ install, actor, body, limits }) => checked(PUBLISH_REQUEST, body, (request) => beginPublish(install, actor, request, limits)),
+  beginPublish: ({ install, actor, body, limits }) => beginPublish(install, actor, body, limits),
   showUpload: ({ install, actor, named }) => showUpload(install, actor, named),
   uploadFile: storeBody,
   finishPublish: ({ install, actor, named }) => finishPublish(install, actor, named),
@@ -176,7 +177,7 @@ export const HANDLERS: { readonly [Name in Exclude<RouteName, OpenName>]: Handle
   exportFiles: ({ install, actor, site, query }) => checked(EXPORT_FILES_QUERY, query, (asked) => exportFiles(install, actor, { ...asked, site })),
   exportFile: ({ install, actor, site, query }) => checked(EXPORT_FILE_QUERY, query, (asked) => exportFile(install, actor, { ...asked, site })),
   importSettings: ({ install, actor, body }) => checked(SETTINGS_IMPORT, body, (request) => importSettings(install, actor, request)),
-  beginImport: ({ install, actor, body, limits }) => checked(IMPORT_REQUEST, body, (request) => beginImport(install, actor, request, limits)),
+  beginImport: ({ install, actor, body, limits }) => beginImport(install, actor, body, limits),
 
   readConfig: ({ install, actor }) => readConfig(install, actor),
   changeConfig: ({ install, actor, body }) => changeConfig(install, actor, body),

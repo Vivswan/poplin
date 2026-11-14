@@ -252,7 +252,7 @@ async function planVersion(
 export async function beginPublish(
   install: Install,
   actor: Actor,
-  request: v.InferInput<typeof PUBLISH_REQUEST>,
+  request: unknown,
   limits: UploadLimits = UNBOUNDED,
 ): Promise<{ readonly ok: true; readonly upload: UploadObject } | Refused<BeginCode>> {
   const asked = v.safeParse(PUBLISH_REQUEST, request);

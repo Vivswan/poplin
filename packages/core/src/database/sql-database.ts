@@ -809,7 +809,7 @@ export class SqlDatabase implements Database {
 
   async addUpload(upload: NewUpload, room: UploadRoom): Promise<{ readonly kind: "done" } | Refused<"own_full" | "folder_full" | "total_full" | "sites_full">> {
     const manifest = JSON.stringify(upload.manifest);
-    const bytes = manifestFromText(manifest).reduce((sum, file) => sum + file.size, 0);
+    const bytes = upload.manifest.reduce((sum, file) => sum + file.size, 0);
     const row = { ...upload, state: "pending", plan: JSON.stringify(upload.plan), bytes, files: upload.manifest.length, dropped: "[]" };
     const checked = uploadFromRow(row);
     const named: SqlValue[] = [checked.id, checked.folder, checked.number, checked.owner, room.staying];

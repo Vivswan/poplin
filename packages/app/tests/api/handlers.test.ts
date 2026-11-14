@@ -1,12 +1,15 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, spyOn, test } from "bun:test";
 
+import { PUBLISH_REQUEST } from "@poplin/core/src/actions/begin-publish";
 import { sweepExpired } from "@poplin/core/src/actions/sweep";
 import { type ROUTES, STORED_TYPE_HEADER } from "@poplin/core/src/api/routes";
 import type { Login, } from "@poplin/core/src/auth/logins";
+import { mintToken } from "@poplin/core/src/auth/tokens";
 
+import { type Call, HANDLERS } from "../../src/api/handlers";
 import { serveSite } from "../../src/sites/serve";
 import { ADDRESSES, } from "../sites/support/layout";
-import { type Answered, type ApiInstall, NOW, openApi, requestOf } from "./support/install";
+import { type Answered, type ApiInstall, LIMITS, NOW, openApi, requestOf } from "./support/install";
 
 type RouteName = keyof typeof ROUTES;
 
@@ -407,6 +410,28 @@ describe("an import into an install that holds sites", () => {
 
     expect(answers.map((answered) => [answered.status, part(answered, "error").code])).toEqual([...Array.from({ length: 7 }, () => [403, "not_allowed"]), ...Array.from({ length: 4 }, () => [404, "not_found"])]);
     expect([await stateOf(first), await stateOf(second)]).toEqual(before);
+  });
+});
+
+describe("a route that declares files", () => {
+  // Drift: the handler and the action each have the schema at hand; a check in both reads a 10,000-file list twice inside the 10 ms of CPU one request gets.
+  test.each([
+    ["beginPublish", async () => ({ name: "report", files: [{ path: "index.html", size: 4, content_type: "text/html" }, { path: "css/site.css", size: 9, content_type: "text/css" }] })],
+    ["beginImport", async () => {
+      const [entry] = (await exportAll(await source(), false)).sites;
+
+      return { format: 1, site: entry?.site, files: entry?.files.map(({ path, size, content_type }) => ({ path, size, content_type })) ?? [] };
+    }],
+  ] as const)("%s checks each sent file once", async (name, sent) => {
+    const install = await openApi();
+    const body = await sent();
+    const holder = (await mintToken({ scope: "admin", note: "a test", now: NOW })).record.id;
+    const core = { database: install.database, store: install.store, now: () => NOW, ...ADDRESSES };
+    using checks = spyOn(PUBLISH_REQUEST.entries.files.item, "~run");
+
+    const answered = await HANDLERS[name]({ install: core, actor: { scope: "admin", holder }, body, limits: LIMITS } as unknown as Call);
+
+    expect([answered.ok, checks.mock.calls.length]).toEqual([true, body.files.length]);
   });
 });
 
