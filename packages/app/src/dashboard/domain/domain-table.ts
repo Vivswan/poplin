@@ -30,6 +30,9 @@ const STATES: Readonly<Record<DomainState, { readonly label: string; readonly to
 /** The states a repair would change. */
 const TO_REPAIR: readonly DomainState[] = ["missing", "differs"];
 
+/** The states of a row that a run with a failure in it left as it was found. */
+const UNDONE: readonly DomainState[] = [...TO_REPAIR, "not-run"];
+
 /** The states a repair leaves on what it changed. */
 const REPAIRED: readonly DomainState[] = ["created", "changed", "removed"];
 
@@ -77,8 +80,10 @@ function count(rows: readonly DomainRow[], states: readonly DomainState[]): numb
   return rows.filter((row) => states.includes(row.state)).length;
 }
 
+// A run goes on past a row that failed for a permission and stops at any other failure, and the rows alone do not say which: the notice counts what is left and claims neither.
 function summary(run: DomainRun, rows: readonly DomainRow[]): Html {
-  if (count(rows, ["failed"]) > 0) return html`<p class="notice refused" role="status">Stopped at a failure.</p>`;
+  const failed = count(rows, ["failed"]);
+  if (failed > 0) return html`<p class="notice refused" role="status">${failed + count(rows, UNDONE)} not done. Each failed row says why, or what to add.</p>`;
 
   const waiting = count(rows, TO_REPAIR);
   if (waiting > 0) return html`<p class="notice refused" role="status">${waiting} to repair</p>`;

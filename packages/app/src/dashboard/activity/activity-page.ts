@@ -68,14 +68,14 @@ function siteCell(entry: Entry, labels: Labels): Html {
   return html`<a href="/sites/${encodeURIComponent(label)}">${entry.site.name}</a>`;
 }
 
-// A run on the domain says which it was, and a repair that stopped names the row it stopped at.
+// A run on the domain says which it was, and a repair with a failure names the first row that failed: the run may have gone on past it.
 function domainWords(detail: Entry["detail"]): string {
   if (detail.run !== "repair") return "checked the domain";
 
   const [failed] = Array.isArray(detail.failed) ? detail.failed : [];
   if (typeof failed !== "string") return "repaired the domain";
 
-  return `repair stopped at ${failed.split(": ")[0]}`;
+  return `repair failed at ${failed.split(": ")[0]}`;
 }
 
 function wordsOf(entry: Entry): string {

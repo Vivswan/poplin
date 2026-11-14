@@ -91,7 +91,23 @@ test("a repair shows what it did and writes one audit entry that names what chan
   expect((await settled.audit())[0]?.detail).toEqual({ run: "repair", from: "dashboard" });
 });
 
-test("a repair that stopped half way says so above the table, and the rows tell done from failed from never reached", async () => {
+// Drift: a repair goes on past a row refused for a permission, so a notice that said the run had stopped was false beside rows made after the failed one.
+test("a repair that went on past a failed row counts that row alone as not done, and claims no stop", async () => {
+  const went: DomainReading = {
+    ok: true,
+    steps: [],
+    rows: [
+      { object: "Redirect rule", state: "failed", detail: "refused with status 403. Add this right to the token: Redirect: Edit" },
+      { object: "Database", state: "created", detail: "poplin" },
+    ],
+  };
+  const opened = await openDashboard(fakePlug(() => went));
+  const notice = NOTICE.exec(await (await opened.post("/domain/repair", { token: TOKEN })).text())?.slice(1);
+
+  expect(notice).toEqual(["refused", "1 not done. Each failed row says why, or what to add."]);
+});
+
+test("a repair that stopped half way counts the failed row and the ones never reached above the table, and the rows tell done from failed from never reached", async () => {
   const stopped: DomainReading = {
     ok: true,
     steps: [],
@@ -104,7 +120,7 @@ test("a repair that stopped half way says so above the table, and the rows tell 
   const opened = await openDashboard(fakePlug(() => stopped));
   const page = await (await opened.post("/domain/repair", { token: TOKEN })).text();
 
-  expect(NOTICE.exec(page)?.slice(1)).toEqual(["refused", "Stopped at a failure."]);
+  expect(NOTICE.exec(page)?.slice(1)).toEqual(["refused", "2 not done. Each failed row says why, or what to add."]);
   expect(rows(page).map((row) => row.slice(0, 3))).toEqual([
     ["DNS record", "good", "created"],
     ["Worker route", "bad", "failed"],

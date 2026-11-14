@@ -65,7 +65,7 @@ export interface DomainPlug {
   /** Read every object and say what a repair would do. It changes nothing at the provider, and reads the settings only once the token is proven. */
   check(token: string, settings: ReadSettings): Promise<DomainReading>;
 
-  /** Make every object match, in order, stopping at the first failure: the rows say what was done, what failed, and what was never reached. */
+  /** Make every object match, in order. It goes on past an object the token has no permission for, and stops at any other failure: the rows say what was done, what failed, and what was never reached. */
   repair(token: string, settings: ReadSettings): Promise<DomainReading>;
 }
 
