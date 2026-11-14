@@ -12,10 +12,8 @@ import { join } from "node:path";
 import type { DomainRow, DomainSettings } from "@poplin/app/src/dashboard/domain/records";
 import { parseLogins } from "@poplin/core/src/auth/logins";
 import { BaseBuckets } from "cloudflare/resources/r2/buckets/buckets";
-import { BaseApplications } from "cloudflare/resources/zero-trust/access/applications/applications";
-import { BaseOrganizations } from "cloudflare/resources/zero-trust/organizations/organizations";
 
-import { isAccessOff, syncAccess } from "../../src/zone/access/access";
+import { isAccessOff, readLoginFacts, syncAccess } from "../../src/zone/access/access";
 import { callCloudflare } from "../../src/zone/client";
 import { syncDatabase } from "../../src/zone/database/database";
 import { INSTALL_OBJECTS } from "../../src/zone/install-objects";
@@ -138,21 +136,18 @@ async function ensureAccess(run: Run, found: Found, login: string, progress: Pro
 
   if (!synced.ok) return stopped(stopOf(synced, "Access: Apps and Policies: Edit"));
 
-  const applications = await callCloudflare(run.connection, (api) => Array.fromAsync(new BaseApplications(api).list({ account_id: run.accountId })));
-  const team = await callCloudflare(run.connection, (api) => new BaseOrganizations(api).list({ account_id: run.accountId }));
-  if (!team.ok) return stopped(stopOf(team, "Access: Organizations, Identity Providers, and Groups: Read"));
+  // The applications were listed a moment ago to make the login, so a refusal here is of the team's domain.
+  const facts = await readLoginFacts(run.connection, run.accountId);
+  if (!facts.ok) return stopped(stopOf(facts, "Access: Organizations, Identity Providers, and Groups: Read"));
 
-  if (!applications.ok) return stopped(stopOf(applications, "Access: Apps and Policies: Edit"));
+  if (facts.value === undefined) return skip("the login application's audience and the team's domain");
 
-  const application = applications.value.find((candidate) => candidate.name === INSTALL_OBJECTS.accessApplication);
-  const audience = application !== undefined && "aud" in application ? application.aud : undefined;
-  if (audience === undefined || team.value.auth_domain === undefined) return skip("the login application's audience and the team's domain");
-
+  const { teamDomain, audience } = facts.value;
   run.hide(audience);
-  run.hide(team.value.auth_domain);
+  run.hide(teamDomain);
   note(run, progress, { piece: "Login binding", result: "bound" });
 
-  return { team_domain: team.value.auth_domain, audience };
+  return { team_domain: teamDomain, audience };
 }
 
 /** The Worker's configuration for the test install: the repository's own, with the test account's id, bucket, database, zone, and login. */
