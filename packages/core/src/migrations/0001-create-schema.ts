@@ -7,6 +7,7 @@
 // secrets      what the install must keep and never show, such as the key that signs sessions
 // totals       one row: how many sites there are and how much their kept versions hold
 // audit        what was done, by whom, and when; rows are only ever added
+// request_counts   one row per UTC day and site, and one more per day under the empty site for all sites together
 
 import type { Step } from "./migrate";
 
@@ -100,6 +101,15 @@ CREATE TABLE audit (
   CHECK ((site_id IS NULL) = (site_name IS NULL))
 ) STRICT`;
 
+/** A day's requests. A row lives one day, so it does not refer to the sites table. */
+const REQUEST_COUNTS = `
+CREATE TABLE request_counts (
+  day TEXT NOT NULL CHECK (day GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]'),
+  site TEXT NOT NULL,
+  requests INTEGER NOT NULL CHECK (requests >= 1),
+  PRIMARY KEY (day, site)
+) STRICT, WITHOUT ROWID`;
+
 /** A public name is an address of its own, so no new site may make a name and an id match. */
 const NAME_IS_NO_ID_ON_INSERT = `
 CREATE TRIGGER sites_insert_keeps_names_and_ids_apart BEFORE INSERT ON sites
@@ -182,7 +192,7 @@ BEGIN SELECT RAISE(ABORT, 'the audit log is append-only'); END`;
 /** Creates every table, index, and trigger of the first schema. */
 export const CREATE_SCHEMA: Step = {
   number: 1,
-  description: "create the sites, versions, tokens, settings, secrets, totals, and audit tables",
+  description: "create the sites, versions, tokens, settings, secrets, totals, audit, and request_counts tables",
   statements: [
     SITES,
     VERSIONS,
@@ -192,6 +202,7 @@ export const CREATE_SCHEMA: Step = {
     TOTALS,
     TOTALS_START_AT_ZERO,
     AUDIT,
+    REQUEST_COUNTS,
     "CREATE INDEX sites_by_change ON sites (trashed, updated_at DESC, id DESC)",
     "CREATE INDEX sites_by_owner ON sites (owner, trashed, updated_at DESC, id DESC)",
     "CREATE INDEX tokens_by_creation ON tokens (created_at DESC, id DESC)",

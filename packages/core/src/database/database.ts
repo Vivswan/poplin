@@ -135,7 +135,28 @@ export interface AuditNote {
   readonly detail: Readonly<Record<string, unknown>>;
 }
 
-/** The one doorway to stored sites, tokens, settings, the signing key, and the audit log. */
+/** The requests one UTC day has counted. */
+export interface RequestCounts {
+  /** The requests of the one site asked about. */
+  readonly site: number;
+
+  /** The requests of all sites together. */
+  readonly all: number;
+}
+
+/** Requests to add to a day's counts. */
+export interface CountedRequests {
+  /** The UTC date, such as `2026-11-13`. */
+  readonly day: string;
+
+  /** The site that answered them. */
+  readonly site: SiteId;
+
+  /** How many: a whole number of at least 1. */
+  readonly requests: number;
+}
+
+/** The one doorway to stored sites, tokens, settings, the signing key, the audit log, and the day's request counts. */
 export interface Database {
   /**
    * Make a site at version 1 under a fresh id.
@@ -292,4 +313,20 @@ export interface Database {
    * @throws {RangeError} `limit` is not a whole number from 1 to 100
    */
   listAudit(query: { readonly limit: number; readonly before?: number }): Promise<readonly AuditEntry[]>;
+
+  /**
+   * Add requests to a day's count of one site and of all sites together, and drop the counts of every earlier day. No audit entry is written.
+   *
+   * @returns both counts after the addition
+   * @throws {RangeError} `day` is not a date such as `2026-11-13`, or `requests` is not a whole number of at least 1
+   */
+  addRequests(counted: CountedRequests): Promise<RequestCounts>;
+
+  /**
+   * A day's counts so far, 0 where nothing was counted.
+   *
+   * @param day - a UTC date, such as `2026-11-13`
+   * @throws {RangeError} `day` is not such a date
+   */
+  readRequests(day: string, site: SiteId): Promise<RequestCounts>;
 }

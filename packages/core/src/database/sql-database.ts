@@ -17,6 +17,7 @@ import { tokenFromRow } from "../records/token";
 import type {
   Address,
   AuditNote,
+  CountedRequests,
   Database,
   Done,
   ExportPage,
@@ -24,6 +25,7 @@ import type {
   NewVersion,
   Published,
   Refused,
+  RequestCounts,
   Reserved,
   Signed,
   SigningKey,
@@ -212,6 +214,24 @@ ON CONFLICT (name) DO UPDATE SET value = excluded.value, created_at = excluded.c
 /** The audit entries below `?1`, the newest first. */
 const LIST_AUDIT = "SELECT seq, at, actor, action, site_id, site_name, detail FROM audit WHERE seq < ?1 ORDER BY seq DESC LIMIT ?2";
 
+/** The form of a day: a date such as `2026-11-13`, which sorts as text in the order of time. */
+const DAY_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
+
+/** The site column of the row that counts all sites together; no site id is empty. */
+const ALL_SITES = "";
+
+/** The counts of every day before `?1`, dropped so the table holds one day. */
+const DROP_EARLIER_DAYS = "DELETE FROM request_counts WHERE day < ?1";
+
+/** `?3` more requests on day `?1` for site `?2`, and the count after them. */
+const ADD_REQUESTS = `
+INSERT INTO request_counts (day, site, requests) VALUES (?1, ?2, ?3)
+ON CONFLICT (day, site) DO UPDATE SET requests = requests + excluded.requests
+RETURNING requests`;
+
+/** The count of day `?1` for site `?2`; no row when nothing was counted. */
+const READ_REQUESTS = "SELECT requests FROM request_counts WHERE day = ?1 AND site = ?2";
+
 /** The column each site detail is stored in, and its stored value. */
 const DETAIL_COLUMNS: { readonly [Key in keyof Required<SiteDetails>]: (value: Required<SiteDetails>[Key]) => readonly [column: string, stored: SqlValue] } = {
   title: (title) => ["title", title],
@@ -281,6 +301,14 @@ function settingsIn(result: StatementResult | undefined): SettingValues | undefi
   if (typeof value !== "string") return undefined;
 
   return v.parse(SETTING_VALUES, JSON.parse(value));
+}
+
+function requireDay(day: string): void {
+  if (!DAY_PATTERN.test(day)) throw new RangeError(`a day is a date such as 2026-11-13, not ${JSON.stringify(day)}`);
+}
+
+function requestsIn(result: StatementResult | undefined): number {
+  return Number(result?.rows[0]?.requests ?? 0);
 }
 
 /** Core's database over any SQLite a driver reaches: D1 in the Worker, `bun:sqlite` in the tests. */
@@ -667,6 +695,26 @@ export class SqlDatabase implements Database {
     const [listed] = await this.#driver.batch([sql(LIST_AUDIT, query.before ?? NEWEST, query.limit)]);
 
     return (listed?.rows ?? []).map(auditFromRow);
+  }
+
+  async addRequests(counted: CountedRequests): Promise<RequestCounts> {
+    requireDay(counted.day);
+    if (!Number.isSafeInteger(counted.requests) || counted.requests < 1) throw new RangeError(`requests are counted in whole numbers from 1, not ${counted.requests}`);
+
+    const [, site, all] = await this.#driver.batch([
+      sql(DROP_EARLIER_DAYS, counted.day),
+      sql(ADD_REQUESTS, counted.day, counted.site, counted.requests),
+      sql(ADD_REQUESTS, counted.day, ALL_SITES, counted.requests),
+    ]);
+
+    return { site: requestsIn(site), all: requestsIn(all) };
+  }
+
+  async readRequests(day: string, site: SiteId): Promise<RequestCounts> {
+    requireDay(day);
+    const [ofSite, ofAll] = await this.#driver.batch([sql(READ_REQUESTS, day, site), sql(READ_REQUESTS, day, ALL_SITES)]);
+
+    return { site: requestsIn(ofSite), all: requestsIn(ofAll) };
   }
 
   async #unchanged(id: SiteId): Promise<Unchanged | Refused<"not_found" | "in_trash">> {

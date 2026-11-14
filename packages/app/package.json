@@ -5,6 +5,7 @@
   "dependencies": {
     "@poplin/core": "workspace:*",
     "cloudflare": "7.3.0",
+    "ipaddr.js": "2.5.0",
     "jose": "6.2.17"
   }
 }

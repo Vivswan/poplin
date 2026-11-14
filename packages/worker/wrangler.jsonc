@@ -2,5 +2,7 @@
   "$schema": "node_modules/wrangler/config-schema.json",
   "compatibility_date": "2026-11-01",
   "r2_buckets": [{ "binding": "SITES", "bucket_name": "example-sites-bucket" }],
-  "d1_databases": [{ "binding": "DB", "database_name": "example-poplin-database", "database_id": "00000000-0000-0000-0000-000000000000" }]
+  "d1_databases": [{ "binding": "DB", "database_name": "example-poplin-database", "database_id": "00000000-0000-0000-0000-000000000000" }],
+  // The limit is a fixed ceiling: each request weighs the ceiling divided by the per-minute setting in force, so a setting changes with no deploy.
+  "ratelimits": [{ "name": "MINUTE_LIMITS", "namespace_id": "1001", "simple": { "limit": 1000000, "period": 60 } }]
 }

@@ -1109,6 +1109,72 @@ function queryPlans(label: string, makeDriver: DriverFactory): void {
   });
 }
 
+function requestCounts(label: string, makeDriver: DriverFactory): void {
+  describe(`${label}: the day's request counts`, () => {
+    const TODAY = "2026-11-13";
+    const TOMORROW = "2026-11-14";
+    const OTHER_SITE = "aaaaaaaaaaaa" as SiteId;
+
+    // Drift: the limits on a day's requests read these two numbers; a site's requests left out of the total, or yesterday's carried over, would refuse the wrong site.
+    test("two sites add to their own counts and to one total, a read changes nothing, and a new day starts from nothing and drops the day before", async () => {
+      const driver = await migrated(makeDriver);
+      const database = new SqlDatabase(driver);
+
+      expect(await database.readRequests(TODAY, NO_SITE)).toEqual({ site: 0, all: 0 });
+      expect(await database.addRequests({ day: TODAY, site: NO_SITE, requests: 50 })).toEqual({ site: 50, all: 50 });
+      expect(await database.addRequests({ day: TODAY, site: OTHER_SITE, requests: 1 })).toEqual({ site: 1, all: 51 });
+      expect(await database.addRequests({ day: TODAY, site: NO_SITE, requests: 50 })).toEqual({ site: 100, all: 101 });
+      expect(await database.readRequests(TODAY, NO_SITE)).toEqual({ site: 100, all: 101 });
+      expect(await database.readRequests(TOMORROW, NO_SITE)).toEqual({ site: 0, all: 0 });
+      expect(await database.addRequests({ day: TOMORROW, site: OTHER_SITE, requests: 2 })).toEqual({ site: 2, all: 2 });
+      expect(await rows(driver, "SELECT day, site, requests FROM request_counts ORDER BY site")).toEqual([
+        { day: TOMORROW, site: "", requests: 2 },
+        { day: TOMORROW, site: OTHER_SITE, requests: 2 },
+      ]);
+    });
+
+    // Drift: additions from several Worker instances land at once; one read back and written again would lose the others.
+    test("additions made at the same moment are all kept", async () => {
+      const database = new SqlDatabase(await migrated(makeDriver));
+      await Promise.all(Array.from({ length: 20 }, () => database.addRequests({ day: TODAY, site: NO_SITE, requests: 5 })));
+
+      expect(await database.readRequests(TODAY, NO_SITE)).toEqual({ site: 100, all: 100 });
+    });
+
+    const refused: readonly { readonly day: string; readonly requests: number }[] = [
+      { day: "2026-11-13T00:00", requests: 1 },
+      { day: "today", requests: 1 },
+      { day: TODAY, requests: 0 },
+      { day: TODAY, requests: 1.5 },
+    ];
+
+    // Drift: days are compared as text, so a day in another form would sort wrongly and be dropped or kept forever.
+    test.each(refused)("day $day with $requests requests is refused and nothing is counted", async ({ day, requests }) => {
+      const database = new SqlDatabase(await migrated(makeDriver));
+
+      await expect(database.addRequests({ day, site: NO_SITE, requests })).rejects.toThrow(RangeError);
+      expect(await database.readRequests(TODAY, NO_SITE)).toEqual({ site: 0, all: 0 });
+    });
+
+    // Drift: D1 limits rows read and written a day; a count that walked the table would cost a row per site on every counted request.
+    test("counting and reading go through the key: no statement walks the table", async () => {
+      const inner = await migrated(makeDriver);
+      const driver = new RecordingDriver(inner);
+      const database = new SqlDatabase(driver);
+      await database.addRequests({ day: TODAY, site: NO_SITE, requests: 1 });
+      await database.readRequests(TODAY, NO_SITE);
+      const scans: string[] = [];
+
+      for (const statement of driver.statements) {
+        const plan = await rows(inner, `EXPLAIN QUERY PLAN ${statement.sql}`, ...statement.params);
+        scans.push(...plan.map((step) => String(step.detail)).filter((step) => /\bSCAN\b/.test(step)));
+      }
+
+      expect([driver.statements.length, scans]).toEqual([5, []]);
+    });
+  });
+}
+
 /**
  * Register the contract of the database over one SQL driver.
  *
@@ -1126,4 +1192,5 @@ export function describeDatabase(label: string, makeDriver: DriverFactory): void
   auditLog(label, makeDriver);
   tokensAndSettings(label, makeDriver);
   queryPlans(label, makeDriver);
+  requestCounts(label, makeDriver);
 }
