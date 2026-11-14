@@ -140,13 +140,17 @@ $ poplin login --server https://poplin.example.com
 
 ## The install
 
-| Example                               | Does                                              |
-| ------------------------------------- | ------------------------------------------------- |
-| `poplin config`                       | shows every setting                               |
-| `poplin config versions_kept`         | shows one setting                                 |
-| `poplin config versions_kept 10`      | changes one setting                               |
-| `poplin doctor`                       | checks that the install answers; changes nothing  |
-| `poplin help rollback`                | shows the help of one command                     |
+| Example                                                              | Does                                              |
+| -------------------------------------------------------------------- | ------------------------------------------------- |
+| `poplin config`                                                      | shows every setting                               |
+| `poplin config versions_kept`                                        | shows one setting                                 |
+| `poplin config versions_kept 10`                                     | changes one setting                               |
+| `poplin doctor`                                                      | checks that the install answers; changes nothing  |
+| `poplin setup --server https://poplin.your-name.workers.dev`         | finishes a new install, as its setup page does    |
+| `poplin setup --check --server https://poplin.your-name.workers.dev` | lists what a setup would change; changes nothing  |
+| `poplin help rollback`                                               | shows the help of one command                     |
+
+`poplin setup` reads the Cloudflare API token from `POPLIN_SETUP_TOKEN` in the environment. It needs no login, and it works only until the first login to the install. [Install](install.md#from-a-terminal-instead) shows where it fits.
 
 The settings `poplin config` takes:
 
@@ -209,13 +213,23 @@ A refused command prints one sentence and often a hint. With `--json` it prints 
 | `bad_server`                                   | `--server` takes an `https://` address, host only  | `--server https://poplin.example.com`                         |
 | `wrong_server`                                 | the login is for another install                   | log in to this one with `--server`                            |
 | `not_allowed`                                  | this login may not do that                         | `poplin whoami` shows the login; use an admin's               |
-| `not_set_up`                                   | the install is not set up                          | open the install's address in a browser                       |
+| `not_set_up`                                   | the install has stored no settings                 | try again; if it stays, deploy the install again              |
 | `unreachable`, `timeout`                       | no answer came                                     | check the address and the network; `poplin list` before a retry |
 | `not_json`, `unexpected_answer`                | the answer is not a poplin install's               | `poplin whoami` shows the address in use                      |
 | `method_not_allowed`, `unsupported_media_type` | the install and this poplin are of two versions    | update the older one                                          |
 | `too_many_requests`                            | asked too often                                    | wait a minute                                                 |
 | `internal`, `crashed`                          | something failed                                   | try again; `poplin doctor` reports on the install             |
 | `not_available`                                | this poplin cannot do that                         | nothing                                                       |
+
+**Setting up an install**
+
+| Code                    | Means                                                       | What to do                                                    |
+| ----------------------- | ----------------------------------------------------------- | ------------------------------------------------------------- |
+| `no_setup_server`       | `poplin setup` was given no address                         | `poplin setup --server https://poplin.your-name.workers.dev`  |
+| `no_setup_token`        | `POPLIN_SETUP_TOKEN` holds no token                         | put the token of [Install](install.md), step 4, in it         |
+| `setup_token_refused`   | the token was refused, or it is of another account          | make one with the rights step 4 lists, in the install's account |
+| `setup_provider_silent` | Cloudflare gave the install no answer                       | try again                                                     |
+| `setup_closed`          | nothing at that address takes a setup                       | after the first login, use the dashboard's Domain tab         |
 
 **Naming a site**
 

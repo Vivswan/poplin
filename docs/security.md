@@ -87,10 +87,10 @@ A token the Worker issues is never a Cloudflare API key. It has one of two scope
 
 | Scope | Given to | May |
 | --- | --- | --- |
-| publisher | a machine a person logs in as a publisher, for an agent; or a token created on the dashboard | publish, and manage its own sites |
+| publisher | a computer a person logs in with `poplin login --publisher` and allows on the dashboard's Tokens tab, for an agent | publish, and manage its own sites |
 | admin | a person on the list of allowed logins; the dashboard's cookie carries the same rights | everything: every site, the settings, the tokens |
 
-A site belongs to the token that created it, or to the admin's email when it was uploaded on the dashboard. A publisher token updates and manages only the sites it created.
+A site belongs to the token that created it, or to the admin's email when it was duplicated on the dashboard. A publisher token updates and manages only the sites it created.
 
 What guards each address:
 
@@ -136,12 +136,12 @@ A `-p-` address is answered by Cloudflare's login before the Worker sees it. A r
 | writes to the dashboard | the Origin header must be the dashboard itself; agents use bearer tokens, never the cookie |
 | tokens at rest | stored hashed; an admin token expires after 30 days, a publisher token lives until revoked |
 | the signing key | kept in the database, where the Worker can rotate it; "sign everyone out" rotates it and ends every dashboard session. A private site's login is Access's own: removing the login ends it. Agent tokens are revoked one by one |
-| the bucket and the database | R2 public access stays off, and poplin's install check reports it when it is on; the database is reached only through the Worker's binding |
+| the bucket and the database | R2 public access stays off; the database is reached only through the Worker's binding |
 | site headers | `X-Content-Type-Options: nosniff`, `Referrer-Policy: no-referrer`, correct content types |
 | page views | a site shows about how often its pages were opened, from a sampled count per site and UTC day kept seven days; it counts opens, not people: no address, cookie, or browser name of a visitor is stored |
 | the dashboard | a strict Content-Security-Policy; it may never be framed |
 | content | the Worker never reads, parses, or rewrites a site's files |
-| the activity log | the dashboard shows the last 100 actions: publish, state change, delete, login, token issued |
+| the activity log | the dashboard's Activity tab shows every action, 50 a page, with an Older link: publish, state change, delete, login, token issued |
 | plain http | a rule at Cloudflare's edge sends `http` to `https` on poplin's hostnames, before the Worker runs; the zone's other hostnames are left as they are |
 | junk requests | a rule at Cloudflare's edge blocks, on the site hostnames, every method but GET and HEAD and the paths scanners ask for: `*.php`, `/.env`, `/.env.*`, `/.git/`, `/wp-admin/`, `/cgi-bin/`, `/phpmyadmin` |
 | junk hostnames | Cloudflare routes to the Worker only the hostnames that end in `-poplin` or the public word, so no other hostname under the domain reaches it; a rate rule limits each address to 300 requests per 10 seconds. Setup skips it when other rules hold every rate rule the plan allows, or when a Free plan zone has hostnames of its own; the OpenTofu module, which owns the zone's rate rules, stops with a message in that second case |
