@@ -2,13 +2,7 @@
 import Page from "../layouts/Page.astro";
 
 // Each cell is taken from the tool's own pages. Poplin's column comes first; the others keep the order below.
-const tools = [
-  { name: "Poplin", href: undefined },
-  { name: "handbill", href: "https://handbill.dev" },
-  { name: "anvilnine/artifacts", href: "https://github.com/anvilnine/artifacts" },
-  { name: "Pagecast", href: "https://github.com/Amal-David/pagecast" },
-  { name: "Birta", href: "https://birta.dev" },
-];
+const tools = ["Poplin", "handbill", "anvilnine/artifacts", "Pagecast", "Birta"];
 const rows = [
   {
     ask: "Where it runs",
@@ -41,7 +35,7 @@ const groups = [
 
 <Page
   title="Compare: poplin and four other tools"
-  description="What poplin, handbill, anvilnine/artifacts, Pagecast, and Birta each do, taken from each tool's own pages."
+  description="Poplin beside four other tools, question by question."
   path="compare/"
 >
   <section class="hero part frame" aria-labelledby="title">
@@ -59,7 +53,7 @@ const groups = [
             {
               tools.map((tool, index) => (
                 <th scope="col" class={index === 0 ? "ours" : undefined}>
-                  {tool.href === undefined ? tool.name : <a href={tool.href}>{tool.name}</a>}
+                  {tool}
                   {index === 0 && <span class="ours-mark">this tool</span>}
                 </th>
               ))
@@ -81,9 +75,6 @@ const groups = [
       </table>
     </div>
     <p class="note">"Not stated" means the tool's own pages do not say. Poplin's source is under the Individual and Small Organization License.</p>
-    <p class="note">
-      Poplin's one-Worker shape follows <a href="https://github.com/viktoravelino/handbill">handbill</a> by Viktor Avelino (MIT).
-    </p>
   </section>
 
   <section class="part rows frame" aria-labelledby="groups">
