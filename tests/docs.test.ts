@@ -17,6 +17,27 @@ const ROOT = join(import.meta.dir, "..");
 /** The pages a person reads, as paths from the root. */
 const PAGES: readonly string[] = ["README.md", "docs/README.md", "docs/using.md", "docs/install.md", "packages/cli/README.md"];
 
+/** Every Markdown page of the repository, the ones a person reads among them. */
+const MARKDOWN = new Bun.Glob("**/*.md");
+
+/** The sources of the website, whose pages link into the rendered `docs/`. */
+const WEBSITE = new Bun.Glob("website/src/**/*.astro");
+
+/** The folder of installed packages, whose pages are not the repository's. */
+const INSTALLED = "node_modules/";
+
+/** A link of the website into the rendered docs, with the path under the site as the first group. */
+const SITE_LINK = /sitePath\("(docs\/[^"]*)"\)/g;
+
+/** The ending the site gives a rendered page, where a link ends or its anchor starts. A folder's README is served as the folder alone, so its name never matches. */
+const RENDERED_PAGE = /(?<!\/README)\.html(?=#|$)/;
+
+/** The end of a link to a folder, where the link ends or its anchor starts. */
+const FOLDER_END = /\/(?=#|$)/;
+
+/** The page the site serves for a folder of the docs. */
+const FOLDER_PAGE = "README.md";
+
 /** The page that lists every command, tool, and refusal. */
 const USING_PAGE = "docs/using.md";
 
@@ -160,10 +181,22 @@ function unknownInputs(tool: string, example: string): string[] {
   return Object.keys(JSON.parse(example)).filter((input) => !taken.includes(input));
 }
 
-/** What is wrong with one link of a page, or nothing when it leads to a file, and to a heading of it when it names one. */
-async function brokenLink(from: string, href: string): Promise<string | undefined> {
+/** The Markdown page a link of the website leads to: the site serves `docs/using.md` as `docs/using.html`, and a folder as its README. */
+function sitePage(link: string): string {
+  return link.replace(RENDERED_PAGE, ".md").replace(FOLDER_END, `/${FOLDER_PAGE}`);
+}
+
+/** The repository's own files a pattern finds, as paths from the root. */
+async function paths(glob: Bun.Glob): Promise<string[]> {
+  const found = await Array.fromAsync(glob.scan({ cwd: ROOT }));
+
+  return found.map((path) => path.replaceAll("\\", "/")).filter((path) => !path.includes(INSTALLED));
+}
+
+/** What is wrong with one link of a file, or nothing when it leads to a file, and to a heading of it when it names one. The link is read from the file's folder unless another is given. */
+async function brokenLink(from: string, href: string, folder: string = dirname(from)): Promise<string | undefined> {
   const [path = "", anchor] = href.split("#");
-  const target = path === "" ? from : join(dirname(from), path).replaceAll("\\", "/");
+  const target = path === "" ? from : join(folder, path).replaceAll("\\", "/");
   if (!existsSync(join(ROOT, target))) return `${from}: ${path} does not exist`;
 
   if (anchor === undefined || (await parse(target)).anchors.includes(anchor)) return undefined;
@@ -238,15 +271,31 @@ describe("the pages a person reads", () => {
     expect(["constructor", "no_such_code"].filter(isCode)).toEqual([]);
   });
 
-  test("every link between the pages leads to a file, and to a heading when it names one: without this a moved page or a reworded heading leaves a dead link", async () => {
+  test("every link of every Markdown page leads to a file, and to a heading when it names one: without this a moved page or a reworded heading leaves a dead link", async () => {
+    const pages = await paths(MARKDOWN);
     const broken: (string | undefined)[] = [];
 
-    for (const path of PAGES) {
+    for (const path of pages) {
       for (const href of (await parse(path)).links.filter((link) => !OUTSIDE_LINK.test(link))) broken.push(await brokenLink(path, href));
+    }
+
+    expect(PAGES.filter((path) => !pages.includes(path))).toEqual([]);
+    expect(broken.length).toBeGreaterThan(0);
+    expect(broken.filter((found) => found !== undefined)).toEqual([]);
+    expect(await brokenLink("README.md", "docs/using.md#no-such-heading")).toBe("README.md: docs/using.md has no heading #no-such-heading");
+  });
+
+  test("every link of the website into the docs leads to a page, and to a heading when it names one: without this a section removed from the docs breaks the published site", async () => {
+    const broken: (string | undefined)[] = [];
+
+    for (const path of await paths(WEBSITE)) {
+      for (const link of groups(await read(path), SITE_LINK)) broken.push(await brokenLink(path, sitePage(link), ""));
     }
 
     expect(broken.length).toBeGreaterThan(0);
     expect(broken.filter((found) => found !== undefined)).toEqual([]);
-    expect(await brokenLink("README.md", "docs/using.md#no-such-heading")).toBe("README.md: docs/using.md has no heading #no-such-heading");
+    expect(["docs/", "docs/security.html#hardening", "docs/#install"].map(sitePage)).toEqual(["docs/README.md", "docs/security.md#hardening", "docs/README.md#install"]);
+    expect(await brokenLink("website/src/pages/index.astro", sitePage("docs/security.html#no-such-heading"), "")).toBe("website/src/pages/index.astro: docs/security.md has no heading #no-such-heading");
+    expect(await brokenLink("website/src/pages/index.astro", sitePage("docs/README.html"), "")).toBe("website/src/pages/index.astro: docs/README.html does not exist");
   });
 });
