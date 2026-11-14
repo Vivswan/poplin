@@ -128,6 +128,7 @@ export type Fetch = (input: string, init: RequestInit) => Promise<Response>;
  * Why a call got no answer to use.
  *
  * `refused` is the API's own refusal, with its code. `unreachable` is a request that never got an answer, `timeout` one that took too long.
+ * `stopped` is a call the person stopped the command before or during: the install may have had the request all the same.
  * `not-json` is an answer that is no JSON, such as a proxy's error page, and `unexpected` one that is JSON of a form the API never sends, or a redirect.
  *
  * `retryAfter` is how many seconds an answer asked its caller to wait, when its `Retry-After` header names whole seconds.
@@ -135,6 +136,7 @@ export type Fetch = (input: string, init: RequestInit) => Promise<Response>;
 export type Failure =
   | { readonly kind: "refused"; readonly status: number; readonly code: string; readonly message: string; readonly about?: string; readonly retryAfter?: number }
   | { readonly kind: "unreachable" }
+  | { readonly kind: "stopped" }
   | { readonly kind: "timeout"; readonly seconds: number }
   | { readonly kind: "not-json"; readonly status: number; readonly retryAfter?: number }
   | { readonly kind: "unexpected"; readonly status: number; readonly retryAfter?: number };
@@ -162,6 +164,9 @@ interface ClientOptions {
 
   /** How long one call may take, in milliseconds, in place of the two defaults. */
   readonly timeoutMs?: number;
+
+  /** What aborts when the person stops the command: every call then fails as `stopped`, the ones on their way included. A client without it takes no stop. */
+  readonly stopped?: AbortSignal;
 }
 
 /**
@@ -311,12 +316,16 @@ export function createClient(options: ClientOptions): Client {
   const ask = async <Done>(route: Route<never, unknown, unknown>, path: string, sent: Sent, read: (response: Response) => Promise<Called<Done>>): Promise<Called<Done>> => {
     const carriesFile = route.sends === "bytes" || route.answers === "bytes";
     const timeoutMs = options.timeoutMs ?? (carriesFile ? FILE_TIMEOUT_MS : CALL_TIMEOUT_MS);
-    const request = { ...requestOf(route, options.token, sent.body, sent.length), redirect: "manual" as const, signal: AbortSignal.timeout(timeoutMs) };
+    const tooLong = AbortSignal.timeout(timeoutMs);
+    const signal = options.stopped === undefined ? tooLong : AbortSignal.any([tooLong, options.stopped]);
+    const request = { ...requestOf(route, options.token, sent.body, sent.length), redirect: "manual" as const, signal };
 
     try {
       return await read(await options.fetch(`${options.server}${path}`, request));
     } catch {
-      if (request.signal.aborted) return failed({ kind: "timeout", seconds: Math.round(timeoutMs / 1000) });
+      if (options.stopped?.aborted === true) return failed({ kind: "stopped" });
+
+      if (tooLong.aborted) return failed({ kind: "timeout", seconds: Math.round(timeoutMs / 1000) });
 
       // What a `fetch` throws is dropped unread: it may quote the request, and the request holds the token.
       return failed({ kind: "unreachable" });

@@ -2,7 +2,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 
-import { type Bench, cleanUp, folderOf, jsonOf, openBench } from "./support/harness";
+import { type Bench, cleanUp, folderOf, jsonOf, openBench, stateOf } from "./support/harness";
 
 /** The pages of the fixture site. The test install takes files of at most 64 bytes. */
 const PAGES = { "index.html": "<title>Field notes</title><h1>notes</h1>", "css/site.css": "body{}", ".env": "KEY=1" };
@@ -15,13 +15,6 @@ function answer(status: number, body: unknown, headers: Readonly<Record<string, 
 /** The page a zone's rate rule answers with in the install's place: no JSON, and whatever headers the rule sends. */
 function tooMany(headers: Readonly<Record<string, string>>): Response {
   return new Response("<html><title>Too many requests</title></html>", { status: 429, headers: { "Content-Type": "text/html", ...headers } });
-}
-
-/** What the install holds that only a finished publish may change: the sites, and the keys of the store. */
-async function stateOf(bench: Bench): Promise<unknown> {
-  const sites = await bench.install.call("listSites", {});
-
-  return [sites.body, await bench.install.keys()];
 }
 
 /** Publish the fixture folder as a new site; answers its label. */
@@ -321,7 +314,7 @@ describe("publish", () => {
 
     const failed = await bench.run(folder);
 
-    expect([failed.code, failed.waits, bench.sent.filter((line) => line.startsWith("PUT")).length]).toEqual([5, [2000], 4]);
+    expect([failed.code, failed.waits, bench.sent.filter((line) => line.startsWith("PUT")).length]).toEqual([1, [2000], 4]);
     expect(await stateOf(bench)).toEqual(before);
   });
 
@@ -358,10 +351,10 @@ describe("publish", () => {
   });
 
   // Drift: a zone that never lets up, or a person who stops the command, must end the upload; a rest with no bound would hang a script for good.
-  test.each<[string, "over" | "interrupted", number[], number]>([
-    ["never lets up", "over", [2000, 4000, 8000, 16_000, 32_000, 60_000], 7],
-    ["is stopped by the person during the first rest", "interrupted", [2000], 1],
-  ])("an upload whose zone %s is given up after its rests and says the status", async (_name, paused, waits, puts) => {
+  test.each<[string, "over" | "interrupted", number[], number, number, string]>([
+    ["never lets up", "over", [2000, 4000, 8000, 16_000, 32_000, 60_000], 7, 5, "the answer is not the install's: status 429"],
+    ["is stopped by the person during the first rest", "interrupted", [2000], 1, 1, "the command was stopped: the upload was given up and no site changed"],
+  ])("an upload whose zone %s is given up after its rests and says why", async (_name, paused, waits, puts, code, line) => {
     const bench = await openBench();
     const folder = folderOf("notes", { "index.html": "<h1>notes</h1>" });
     const before = await stateOf(bench);
@@ -370,7 +363,7 @@ describe("publish", () => {
 
     const failed = await bench.run(folder);
 
-    expect([failed.code, failed.err[0], failed.waits]).toEqual([5, "the answer is not the install's: status 429", waits]);
+    expect([failed.code, failed.err[0], failed.waits]).toEqual([code, line, waits]);
     expect(bench.sent.filter((line) => line.startsWith("PUT")).length).toBe(puts);
     expect(bench.sent.at(-1)).toStartWith("DELETE /api/uploads/");
     expect(await stateOf(bench)).toEqual(before);

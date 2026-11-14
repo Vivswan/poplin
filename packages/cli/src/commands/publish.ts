@@ -131,9 +131,10 @@ export function previewPublish(plan: PublishPlan): Outcome {
  *
  * Four files are sent at once, each up to three times. A publish the install says lacks files is sent those and finished again, up to three finishes in all.
  *
- * @returns the site as the install answered it. After any failure past the first step the upload is given up, and the problem says what became of it
+ * @returns the site as the install answered it. After any failure past the first step, a stop by the person included, the upload is given up, and the problem says what became of it
  */
-export async function sendPublish(plan: PublishPlan, { client, io }: Session): Promise<Outcome> {
+export async function sendPublish(plan: PublishPlan, session: Session): Promise<Outcome> {
+  const { client, io } = session;
   const begun = await client.call("beginPublish", undefined, plan.manifest);
   if (!begun.ok) return begun.failure.kind === "refused" ? { ok: false, problem: problemOf(begun.failure) } : givenUp(begun.failure, AFTERMATH.unbegun);
 
@@ -145,7 +146,7 @@ export async function sendPublish(plan: PublishPlan, { client, io }: Session): P
     if (finished.ok) return published(plan, finished.value);
 
     // An upload the install finished though its answer was lost is reported as done.
-    const became = await giveUpUpload(client, upload);
+    const became = await giveUpUpload(session, upload);
     if (became.kind === "published") return published(plan, became.answer);
 
     return givenUp(finished.failure, AFTERMATH[became.kind]);

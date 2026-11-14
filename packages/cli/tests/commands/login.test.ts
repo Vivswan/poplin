@@ -332,4 +332,18 @@ describe("logIn", () => {
     expect([denied.code, kept, again.code, desk.saved()?.server]).toEqual([1, before, 0, ORIGIN]);
     expect([before?.token === undefined, desk.saved()?.token === before?.token]).toEqual([false, false]);
   });
+
+  // Drift: the first Ctrl-C no longer ends the process by itself; a login that heard a stop during a wait alone would sit out a call that never answers before it ended.
+  test("a login the person stops while a call is on its way ends as stopped, with nothing saved", async () => {
+    const desk = await openDesk();
+    desk.bench.hook = () => {
+      setTimeout(desk.bench.stop, 5);
+
+      return new Promise<Response>(() => undefined);
+    };
+
+    const stopped = await desk.bench.run(`login --server ${ORIGIN}`, { env: {} });
+
+    expect([stopped.code, stopped.out, stopped.err, desk.saved()]).toEqual([1, [], ["the command was stopped"], undefined]);
+  });
 });

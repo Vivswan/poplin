@@ -20,6 +20,9 @@ import type { Io, Outcome, RequestOf, Session } from "./records";
 import type { Request } from "./requests";
 import { runSiteCommand } from "./site-commands";
 
+/** How long each call may take that a stopped command gives its upload up with, in milliseconds: 4 seconds. */
+export const AFTER_STOP_TIMEOUT_MS = 4000;
+
 /** What stands where a token would have been printed. */
 const HIDDEN = "[token]";
 
@@ -99,7 +102,11 @@ async function connect(request: OnlineRequest, io: Io): Promise<Session | Proble
 
   if (request.server !== undefined && request.server !== server) return problem("wrong_server", request.server);
 
-  return { client: createClient({ server, token, fetch: io.fetch, timeoutMs: io.timeoutMs }), io, server, source: current.source };
+  const install = { server, token, fetch: io.fetch };
+  const client = createClient({ ...install, timeoutMs: io.timeoutMs, stopped: io.stopped });
+  const afterStop = createClient({ ...install, timeoutMs: Math.min(io.timeoutMs ?? AFTER_STOP_TIMEOUT_MS, AFTER_STOP_TIMEOUT_MS) });
+
+  return { client, afterStop, io, server, source: current.source };
 }
 
 async function online(request: OnlineRequest, io: Io, run: (session: Session) => Promise<Outcome>): Promise<Outcome> {
@@ -177,6 +184,7 @@ function mcpHost(io: Io): Host {
 
   return {
     session: () => connect({ kind: "whoami", json: false }, quiet),
+    stopped: io.stopped,
     withoutTokens: async (value) => textsHidden(value, await knownTokens(io)),
     log: io.err,
   };

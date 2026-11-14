@@ -87,27 +87,39 @@ function resultOf(outcome: Outcome): CallToolResult {
   return { content: [{ type: "text", text: lines.length === 0 ? DONE : lines.join("\n") }], structuredContent: record(outcome.value) };
 }
 
-function register<Name extends ToolName>(server: McpServer, name: Name, host: Host): void {
+async function answerOf<Name extends ToolName>(name: Name, input: unknown, host: Host): Promise<CallToolResult> {
+  const checked = v.safeParse(TOOL_INPUTS[name], input);
+  if (!checked.success) return resultOf(refusalOf(checked.issues));
+
+  try {
+    return resultOf(await TOOLS[name].run(checked.output, host));
+  } catch (error) {
+    const what = error instanceof Error ? `${error.name}: ${error.message}` : "an unknown failure";
+
+    return resultOf({ ok: false, problem: problem("crashed", what) });
+  }
+}
+
+/** Register one tool. Each call of it is in `running` until it has its answer. */
+function register<Name extends ToolName>(server: McpServer, name: Name, host: Host, running: Set<Promise<CallToolResult>>): void {
   const tool = TOOLS[name];
 
   server.registerTool(name, { description: tool.description, inputSchema: inputOf(name), annotations: tool.hints }, async (input) => {
-    const checked = v.safeParse(TOOL_INPUTS[name], input);
-    if (!checked.success) return resultOf(refusalOf(checked.issues));
+    const answer = answerOf(name, input, host);
+    running.add(answer);
 
     try {
-      return resultOf(await tool.run(checked.output, host));
-    } catch (error) {
-      const what = error instanceof Error ? `${error.name}: ${error.message}` : "an unknown failure";
-
-      return resultOf({ ok: false, problem: problem("crashed", what) });
+      return await answer;
+    } finally {
+      running.delete(answer);
     }
   });
 }
 
-function createServer(host: Host): McpServer {
+function createServer(host: Host, running: Set<Promise<CallToolResult>>): McpServer {
   const server = new McpServer({ name: NAME, version: VERSION }, { instructions: INSTRUCTIONS });
 
-  for (const name of TOOL_NAMES) register(server, name, host);
+  for (const name of TOOL_NAMES) register(server, name, host, running);
 
   return server;
 }
@@ -118,15 +130,24 @@ function createServer(host: Host): McpServer {
  * Every message the server sends passes the host's token guard on its way out: a result, an error, and what the SDK echoes of a call alike.
  *
  * @param transport - the connection to one agent, which the server starts and from then on owns
+ * @returns what closes the connection, once every tool call on its way has its answer: a call that is giving an upload up is not cut off
  */
-export function serveMcp(host: Host, transport: Transport): StdioServerHandle {
+export function serveMcp(host: Host, transport: Transport): Pick<StdioServerHandle, "close"> {
+  const running = new Set<Promise<CallToolResult>>();
   const send = transport.send.bind(transport);
   transport.send = async (message, options) => send(await host.withoutTokens(message), options);
 
-  return serveStdio(() => createServer(host), {
+  const served = serveStdio(() => createServer(host, running), {
     transport,
     onerror: (error) => {
       void host.withoutTokens(`poplin mcp: ${error.message}`).then(host.log);
     },
   });
+
+  return {
+    close: async () => {
+      await Promise.allSettled(running);
+      await served.close();
+    },
+  };
 }

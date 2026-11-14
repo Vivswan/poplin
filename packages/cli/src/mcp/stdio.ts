@@ -1,9 +1,11 @@
 // `poplin mcp`: the MCP server on the stdin and stdout of this process. stdout carries protocol messages and nothing else.
 
+import { once } from "node:events";
 import type { Readable, Writable } from "node:stream";
 import { finished } from "node:stream/promises";
 import { StdioServerTransport } from "@modelcontextprotocol/server/stdio";
 
+import { exitCode } from "../commands/exit-codes";
 import { problemLines } from "../commands/problems";
 import type { Host } from "./records";
 import { serveMcp } from "./server";
@@ -29,20 +31,28 @@ async function warnOfNoLogin(host: Host): Promise<void> {
 }
 
 /**
- * Serve the MCP tools over stdio until the agent's app closes stdin.
+ * Serve the MCP tools over stdio until the agent's app closes stdin, or the person stops the server.
  *
  * A machine with no login is served all the same: the server starts, and each tool call answers how to log in.
  *
- * @returns the exit code, once the connection is closed
+ * @returns the exit code, once the connection is closed: a failure's when the person stopped the server
  */
 export async function serveOnPipes(host: Host, pipes: Pipes): Promise<number> {
   // The agent's app closing its end, or the pipe breaking, ends the session alike.
-  const closed = finished(pipes.input, { writable: false }).catch(() => undefined);
+  const closed = finished(pipes.input, { writable: false }).then(
+    () => "closed" as const,
+    () => "closed" as const,
+  );
+  const stopped = once(host.stopped, "abort").then(() => "stopped" as const);
   const server = serveMcp(host, new StdioServerTransport(pipes.input, pipes.output));
 
   await warnOfNoLogin(host).catch(() => undefined);
-  await closed;
+  const ended = await Promise.race([closed, stopped]);
   await server.close();
 
-  return CLOSED;
+  if (ended === "closed") return CLOSED;
+
+  host.log("poplin mcp: the server was stopped");
+
+  return exitCode({ kind: "failed" });
 }

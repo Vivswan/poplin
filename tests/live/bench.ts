@@ -117,6 +117,7 @@ export function openBench(parts: BenchParts): OpenBench {
     computer: "live-checks",
     open: () => undefined,
     pause: async () => "over",
+    stopped: new AbortController().signal,
   });
 
   const cli = async (...words: readonly string[]): Promise<Ran> => {

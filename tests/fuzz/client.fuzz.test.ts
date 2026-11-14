@@ -153,6 +153,7 @@ property(
       computer: "laptop",
       open: () => undefined,
       pause: async () => "over",
+      stopped: new AbortController().signal,
     });
     const text = printed.join("\n");
 

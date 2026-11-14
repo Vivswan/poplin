@@ -5,7 +5,7 @@ import { showBytes } from "../../../core/src/records/settings";
 import { type Backup, type BackupSite, openBackup } from "../backup/read";
 import type { Called, Client, Failure } from "../client/client";
 import { problem, problemOf } from "./problems";
-import type { Io, Outcome, RequestOf, Session } from "./records";
+import type { Outcome, RequestOf, Session } from "./records";
 import { countText } from "./text";
 import { giveUpUpload, sendUpload, type UploadFile } from "./upload";
 import { siteWord } from "./wire";
@@ -141,8 +141,9 @@ function finished(site: BackupSite, sending: Sending): Result {
   return { ...sizeOf(site), result: "imported", versions: 1, files: sending.files.length, bytes, live_only: true };
 }
 
-/** Import one site: begin, send every file, finish. An import that cannot be finished is given up, and the site is then not made. */
-async function importSite(client: Client, io: Io, format: number, site: BackupSite): Promise<Result> {
+/** Import one site: begin, send every file, finish. An import that cannot be finished, or that the person stops, is given up, and the site is then not made. */
+async function importSite(session: Session, format: number, site: BackupSite): Promise<Result> {
+  const { client, io } = session;
   const { begun, sending } = await begin(client, format, site);
   if (!begun.ok) return unfinished(site, begun.failure);
 
@@ -159,7 +160,7 @@ async function importSite(client: Client, io: Io, format: number, site: BackupSi
     });
     if (sent.ok) return finished(site, sending);
 
-    const became = await giveUpUpload(client, upload);
+    const became = await giveUpUpload(session, upload);
     if (became.kind === "published") return finished(site, sending);
 
     return unfinished(site, sent.failure, AFTERMATH[became.kind]);
@@ -210,7 +211,8 @@ function reported(request: ImportRequest, results: readonly Result[]): Outcome {
 }
 
 /** Put the backup into the install: the settings first when they were asked for, then each chosen site. */
-async function send(backup: Backup, request: ImportRequest, chosen: Chosen, { client, io }: Session): Promise<Outcome> {
+async function send(backup: Backup, request: ImportRequest, chosen: Chosen, session: Session): Promise<Outcome> {
+  const { client } = session;
   const { format } = backup.manifest;
 
   if (request.settings) {
@@ -223,7 +225,7 @@ async function send(backup: Backup, request: ImportRequest, chosen: Chosen, { cl
   for await (const site of backup.sites()) {
     if (chosen !== undefined && !chosen.has(site.label)) continue;
 
-    const done = await importSite(client, io, format, site);
+    const done = await importSite(session, format, site);
     results.push(done);
 
     if (stopsRun(done)) break;

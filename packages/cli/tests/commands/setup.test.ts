@@ -121,4 +121,18 @@ describe("poplin setup", () => {
 
     expect([ended.code, ended.err[0]]).toEqual([5, "the install answered in a form this poplin does not know: status 200"]);
   });
+
+  // Drift: the first Ctrl-C no longer ends the process by itself; a setup that did not hear the stop would go on and print its rows as if nobody had stopped it.
+  test("a setup the person stops while its request is on its way ends as stopped, and says the install may have had the request", async () => {
+    const bench = await openBench();
+    bench.hook = () => {
+      setTimeout(bench.stop, 5);
+
+      return new Promise<Response>(() => undefined);
+    };
+
+    const stopped = await bench.run(SETUP, { env: ENV });
+
+    expect([stopped.code, stopped.out, stopped.err]).toEqual([1, [], ["the command was stopped", "the install may have had the request all the same; poplin setup --check shows what is left"]]);
+  });
 });

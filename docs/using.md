@@ -48,6 +48,7 @@ https://report--k3f9x2ab71qz-p-poplin.example.com
 - **A folder needs an `index.html` at its top.**
 - **Not uploaded:** hidden files (a name that starts with a dot) and anything named `node_modules`.
 - **A name** is 3 to 40 lowercase letters, digits, and single dashes.
+- **Ctrl-C** stops a publish, an import, or a copy: the upload on its way is given up, so its site is not made or changed, and the command exits 1. A second Ctrl-C ends it at once.
 
 ## Who can open a site
 
@@ -258,6 +259,7 @@ A refused command prints one sentence and often a hint. With `--json` it prints 
 | `too_many_sites`                                  | the install holds as many sites as it may        | `poplin config max_sites`; `poplin list --trash` still counts |
 | `size_mismatch`, `stale_version`, `missing_files` | the publish did not complete; nothing went live  | publish again                                                |
 | `upload_finished`                                 | the publish is already live                      | nothing                                                      |
+| `stopped`                                         | you stopped the command with Ctrl-C              | run it again; an upload not given up runs out in about a day |
 
 **Backups**
 

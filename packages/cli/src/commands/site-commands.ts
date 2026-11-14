@@ -164,17 +164,18 @@ function copied(site: SiteObject): string[] {
  * @param upload - the upload the copy's last answer named; none when the first call failed, which may have made the copy or begun it all the same
  * @returns the failure with what became of the copy, or the copy as done when the install finished it though its answer was lost
  */
-async function stopCopy(client: Session["client"], upload: string | undefined, failure: Failure): Promise<Outcome> {
+async function stopCopy(session: Session, upload: string | undefined, failure: Failure): Promise<Outcome> {
   if (upload === undefined) return failed({ ok: false, failure });
 
-  const became = await giveUpUpload(client, upload);
+  const became = await giveUpUpload(session, upload);
   if (became.kind === "published") return { ok: true, value: became.answer, lines: copied(became.answer.site) };
 
   return givenUp(failure, AFTERMATH[became.kind]);
 }
 
-/** Copy a site: the install copies a few files a call, so the call is sent again with the upload it answered until it answers the new site. A copy that cannot be finished is given up, as a publish is. */
-async function duplicate(request: Asked<"duplicate">, { client, io }: Session): Promise<Outcome> {
+/** Copy a site: the install copies a few files a call, so the call is sent again with the upload it answered until it answers the new site. A copy that cannot be finished, or that the person stops, is given up, as a publish is. */
+async function duplicate(request: Asked<"duplicate">, session: Session): Promise<Outcome> {
+  const { client, io } = session;
   const site = siteWord(request.site);
   const first = request.name === undefined ? {} : { name: request.name };
   let upload: string | undefined;
@@ -182,7 +183,7 @@ async function duplicate(request: Asked<"duplicate">, { client, io }: Session): 
   try {
     for (let done = -1; ; ) {
       const called = await client.call("duplicateSite", { site }, upload === undefined ? first : { upload });
-      if (!called.ok) return await stopCopy(client, upload, called.failure);
+      if (!called.ok) return await stopCopy(session, upload, called.failure);
 
       const { copy } = called.value;
       if (called.value.site !== null) return { ok: true, value: called.value, lines: copied(called.value.site) };
@@ -190,7 +191,7 @@ async function duplicate(request: Asked<"duplicate">, { client, io }: Session): 
       upload = copy.upload;
 
       // A call that copied nothing more would be sent for ever.
-      if (copy.copied <= done) return await stopCopy(client, upload, { kind: "unexpected", status: OK });
+      if (copy.copied <= done) return await stopCopy(session, upload, { kind: "unexpected", status: OK });
 
       done = copy.copied;
       if (io.terminal.progress) io.status(`copying ${copy.copied} of ${countText(copy.files, "file")}`);

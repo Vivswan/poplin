@@ -43,14 +43,20 @@ export interface Io {
   /** Hands an address to the person's browser, when this machine has one to open. It never throws, and a browser that did not open is not heard of. */
   readonly open: (address: string) => void;
 
-  /** Waits so many milliseconds. It answers `interrupted`, at once, when the person stops the command during the wait. */
+  /** Waits so many milliseconds. It answers `interrupted`, at once, when the command is stopped during the wait or was before it. */
   readonly pause: (ms: number) => Promise<"over" | "interrupted">;
+
+  /** Aborts when the person stops the command: the one way a command hears of it. No call is sent to the install from then on, but for the short ones that give an upload up. */
+  readonly stopped: AbortSignal;
 }
 
 /** What a command that talks to an install runs with. */
 export interface Session {
-  /** The client of the install. */
+  /** The client of the install. Once the command is stopped, each of its calls fails as `stopped`, the ones on their way included. */
   readonly client: Client;
+
+  /** The client a stopped command gives its upload up with: no stop ends its calls, and each waits a few seconds at most. */
+  readonly afterStop: Client;
 
   /** The machine's ends. */
   readonly io: Io;

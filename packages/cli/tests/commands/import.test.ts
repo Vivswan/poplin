@@ -209,7 +209,31 @@ describe("import", () => {
 
     const said = jsonOf(await into.run(`import ${zip} --json`));
 
-    expect([said.imported, said.stopped, (said.sites as Line[]).map((site) => site.code), into.sent.filter((line) => line === "POST /api/import/sites").length]).toEqual([0, true, ["too_many_requests"], 1]);
+    expect([said.imported, said.stopped, (said.sites as Line[]).map((site) => site.code), into.sent.filter((line) => line === "POST /api/import/sites").length]).toEqual([0, true, ["stopped"], 1]);
+  });
+
+  // Drift: a stop was heard during a rest alone; at any other moment the process ended at once, and the site's upload held its place under the limits for a day.
+  test("an import the person stops while a site's files are on their way gives that site's upload up, and no later site is tried", async () => {
+    const from = await openBench();
+    const into = await openBench();
+    await published(from, "alpha", { "index.html": "<title>Alpha</title>", "a.css": "a{}" });
+    await published(from, "beta", { "index.html": "<title>Beta</title>", "b.css": "b{}" });
+    const zip = await exportedZip(from);
+    into.hook = (request) => {
+      if (request.method !== "PUT") return undefined;
+
+      setTimeout(into.stop, 5);
+
+      return new Promise<Response>(() => undefined);
+    };
+
+    const stopped = await into.run(`import ${zip} --json`);
+    const said = jsonOf(stopped);
+    const sent = (start: string): number => into.sent.filter((line) => line.startsWith(start)).length;
+
+    expect([stopped.code, said.stopped, said.sites]).toMatchObject([1, true, [{ code: "stopped", message: "the command was stopped; the upload was given up and the site was not made" }]]);
+    expect([sent("POST /api/import/sites"), sent("PUT"), sent("DELETE /api/uploads/")]).toEqual([1, 2, 1]);
+    expect((await into.install.call("exportSites", {})).body.sites).toEqual([]);
   });
 
   test("a site the install refuses is reported with the install's code and the next is tried, and any failure exits 1: without this one taken name would stop a restore", async () => {

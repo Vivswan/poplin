@@ -113,4 +113,24 @@ describe("poplin mcp over stdio", () => {
 
     expect({ code, stdout }).toEqual({ code: 0, stdout: "" });
   }, 30_000);
+
+  // Drift: a tool call runs the command a person runs; a server stopped while a publish is on its way would leave the upload to hold its place for a day.
+  test("a server the person stops gives up the upload of a publish on its way before it exits 1", async () => {
+    const bench = await openMcp(folderOf("home", {}));
+    const exited = Promise.withResolvers<number>();
+    bench.hook = (request) => {
+      if (request.method !== "PUT") return undefined;
+
+      setTimeout(() => exited.resolve(bench.stop()), 5);
+
+      return new Promise<Response>(() => undefined);
+    };
+
+    void bench.call("publish_site", { path: folderOf("report", { "index.html": "<title>Report</title>" }) }).catch(() => undefined);
+    const code = await exited.promise;
+    const { uploads } = await bench.install.database.listUploads({ before: Number.MAX_SAFE_INTEGER, limit: 10 });
+
+    expect(code).toBe(1);
+    expect([bench.sent.at(-1)?.slice(0, 20), uploads.map((upload) => upload.state), bench.logged]).toEqual(["DELETE /api/uploads/", ["abandoned"], ["poplin mcp: the server was stopped"]]);
+  });
 });

@@ -93,6 +93,7 @@ const LOCAL_ROWS = {
     hint: "a login page in front of the install answers this way, and so does an install of another version",
     exit: "unreachable",
   },
+  stopped: { sentence: "the command was stopped", exit: "failed" },
   crashed: { sentence: "poplin failed in a way it has no word for", exit: "failed" },
 } as const satisfies Readonly<Record<string, Row>>;
 
@@ -153,6 +154,8 @@ export function problemOf(failure: Failure, call: "reads" | "changes" = "reads")
   if (failure.kind === "timeout") return problem("timeout", `${failure.seconds} seconds`, hint);
 
   if (failure.kind === "unreachable") return problem("unreachable", undefined, hint);
+
+  if (failure.kind === "stopped") return problem("stopped", undefined, hint);
 
   if (failure.kind !== "refused") return problem(FAILURE_CODES[failure.kind], `status ${failure.status}`, hint);
 

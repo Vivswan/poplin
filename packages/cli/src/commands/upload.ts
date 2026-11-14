@@ -2,8 +2,8 @@
 
 import type { ROUTES } from "../../../core/src/api/routes";
 import type { Called, Client, Failure } from "../client/client";
-import { problemOf } from "./problems";
-import type { Io, Outcome } from "./records";
+import { problem, problemOf } from "./problems";
+import type { Io, Outcome, Session } from "./records";
 
 /** How many files are on their way at once. */
 const UPLOADS_AT_ONCE = 4;
@@ -66,9 +66,9 @@ function isAskedTooOften(failure: Failure): boolean {
   return "status" in failure && failure.status === TOO_MANY_REQUESTS;
 }
 
-/** Whether sending a file again at once may go better: the install failed or gave no answer, rather than refusing what was sent or asking for a rest. */
+/** Whether sending a file again at once may go better: the install failed or gave no answer, rather than refusing what was sent or asking for a rest, and the command goes on. */
 function isWorthAnotherTry(failure: Failure): boolean {
-  if (isAskedTooOften(failure)) return false;
+  if (isAskedTooOften(failure) || failure.kind === "stopped") return false;
 
   return failure.kind !== "refused" || failure.status >= SERVER_FAILURE;
 }
@@ -97,7 +97,7 @@ class Pace {
     if (this.#io.terminal.progress) this.#io.status(`the install asks for a pause: going on in ${seconds} s (Ctrl-C stops)`);
 
     try {
-      if ((await this.#io.pause(seconds * MS_PER_SECOND)) === "interrupted") this.#stopped = failure;
+      if ((await this.#io.pause(seconds * MS_PER_SECOND)) === "interrupted") this.#stopped = { kind: "stopped" };
     } finally {
       this.#rest = undefined;
     }
@@ -106,7 +106,7 @@ class Pace {
   /**
    * Wait out the rest that is on, if one is.
    *
-   * @returns the answer the person stopped the command over, after which no call of the upload is made; nothing while the upload goes on
+   * @returns the failure of a command the person stopped during a rest, after which no call of the upload is made; nothing while the upload goes on
    */
   async ready(): Promise<Failure | undefined> {
     await this.#rest;
@@ -130,7 +130,7 @@ class Pace {
  * Make a call, and make it again after each rest the install asks for, up to six rests.
  *
  * @param call - a call that is safe to make again
- * @returns the answer, or the failure that stands: any but "too many requests", or that one once the rests ran out or the person stopped the command
+ * @returns the answer, or the failure that stands: any but "too many requests", that one once the rests ran out, or `stopped` once the person stopped the command
  */
 async function unhurried<Done>(pace: Pace, call: () => Promise<Called<Done>>): Promise<Called<Done>> {
   for (let rests = 1; ; rests += 1) {
@@ -169,7 +169,7 @@ async function sendFile(client: Client, upload: string, file: UploadFile, pace: 
   return failure;
 }
 
-/** Send files, four at a time. The first file that cannot be sent stops the rest from starting; the answer is that file's failure, or the one the person stopped the command over. */
+/** Send files, four at a time. The first file that cannot be sent stops the rest from starting; the answer is that file's failure, or `stopped` when the person stopped the command. */
 async function sendFiles<File extends UploadFile>(client: Client, upload: string, files: readonly File[], sending: { readonly arrived: (file: File) => void; readonly pace: Pace }): Promise<Failure | undefined> {
   const waiting = [...files];
   let failure: Failure | undefined;
@@ -202,9 +202,11 @@ function lacksFiles(finished: Called<Published>): boolean {
  * The outcome of a command whose upload was not finished.
  *
  * @param aftermath - what became of the upload, in words; it goes before the failure's own hint
- * @returns the failure as the command's problem
+ * @returns the failure as the command's problem; a stop is one line, that the command was stopped and what became of the upload
  */
 export function givenUp(failure: Failure, aftermath: string): Outcome {
+  if (failure.kind === "stopped") return { ok: false, problem: problem("stopped", aftermath) };
+
   const said = problemOf(failure);
   const hint = said.hint === undefined ? aftermath : `${aftermath}; ${said.hint}`;
 
@@ -212,14 +214,17 @@ export function givenUp(failure: Failure, aftermath: string): Outcome {
 }
 
 /**
- * Give an upload up after a failure.
+ * Give an upload up after a failure. Once the person stopped the command, before this or during it, the upload is given up with calls that wait a few seconds at most.
  *
  * An install that answers that the upload is live finished it, though its answer was lost: the answer is then asked for once more.
  *
  * @returns what became of the upload; nothing here throws
  */
-export async function giveUpUpload(client: Client, upload: string): Promise<GivenUp> {
-  const abandoned = await client.call("abandonPublish", { upload });
+export async function giveUpUpload(session: Pick<Session, "client" | "afterStop">, upload: string): Promise<GivenUp> {
+  const tried = await session.client.call("abandonPublish", { upload });
+  const stopped = !tried.ok && tried.failure.kind === "stopped";
+  const client = stopped ? session.afterStop : session.client;
+  const abandoned = stopped ? await client.call("abandonPublish", { upload }) : tried;
   if (abandoned.ok) return { kind: "abandoned" };
 
   const refusal = abandoned.failure.kind === "refused" ? abandoned.failure.code : undefined;
@@ -239,7 +244,7 @@ export async function giveUpUpload(client: Client, upload: string): Promise<Give
  * Four files are sent at once, each up to three times. While the install says it lacks files, it is asked which, sent those, and finished again, up to three finishes in all.
  *
  * An answer of "too many requests" to any call here counts as none of those: the upload rests as long as the answer asks, says so on the progress line, and makes the call again, up to six rests a call.
- * The answer after the sixth rest is the failure, and so is the answer a rest followed when the person stops the command during it; no call is made after that.
+ * The answer after the sixth rest is the failure. Once the person stops the command, during a rest or a call, the failure is `stopped` and no call is made after it.
  *
  * @returns the install's answer to the finish, or the first failure; the upload is then still there to be given up
  */

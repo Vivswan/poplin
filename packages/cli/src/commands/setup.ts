@@ -90,11 +90,14 @@ export async function runSetup(request: RequestOf<"setup">, io: Io): Promise<Out
   if (token === "") return refused(problem("no_setup_token"));
 
   const run = request.check ? "check" : "repair";
-  const init = { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ token }), redirect: "manual" as const, signal: AbortSignal.timeout(io.timeoutMs ?? RUN_TIMEOUT_MS) };
+  const signal = AbortSignal.any([AbortSignal.timeout(io.timeoutMs ?? RUN_TIMEOUT_MS), io.stopped]);
+  const init = { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ token }), redirect: "manual" as const, signal };
   const answer = await io.fetch(`${request.server}/setup/api/${run}`, init).catch(() => undefined);
+  const body: unknown = await answer?.json().catch(() => undefined);
+  if (body === undefined && io.stopped.aborted) return refused(problem("stopped", undefined, "the install may have had the request all the same; poplin setup --check shows what is left"));
+
   if (answer === undefined) return refused(problem("unreachable", undefined, "check the address and the network"));
 
-  const body: unknown = await answer.json().catch(() => undefined);
   const reading = v.safeParse(READING, body);
   if (reading.success && answer.ok) return shown(run, reading.output, token);
 

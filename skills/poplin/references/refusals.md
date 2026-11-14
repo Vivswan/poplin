@@ -17,6 +17,7 @@ Open this when a poplin tool or command answers with a refusal. From a tool, or 
 | `too_large`, `too_many_sites`                     | a limit of the install                           | tell the user the limit; do not delete sites to make room unasked    |
 | `stale_version`, `missing_files`, `size_mismatch` | the publish did not complete; nothing went live  | publish again, the same way                                          |
 | `unreachable`, `timeout`, `internal`              | no answer, or the install failed part way        | the change may have been made: `list_sites` before you try again     |
+| `stopped`                                         | the user stopped the command or the server       | the upload is given up or runs out in a day; ask before a retry      |
 | `not_set_up`                                      | the install has stored no settings               | try again; if it stays, the user deploys the install again           |
 | `no_working_login`                                | the new logins would let nobody log in           | the user keeps one email that is a login now in the list             |
 

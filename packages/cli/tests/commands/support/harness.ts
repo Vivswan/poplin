@@ -1,5 +1,6 @@
 // A bench for the command tests: the real API of an install in memory, the command run in process against it, and everything the command printed.
 
+import { once } from "node:events";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
@@ -42,6 +43,7 @@ export interface Ran {
  * An install and the means to run commands against it. `sent` lists every request as its method and path.
  *
  * A command's wait takes no time: it moves the install's clock on by as long, then calls `paused` with what the command printed so far, which may answer that the person stopped the command.
+ * `stop` stops the command that is running, as the person's first Ctrl-C does: at any moment, a wait or not.
  */
 export interface Bench {
   readonly install: ApiInstall;
@@ -49,6 +51,7 @@ export interface Bench {
   readonly home: string;
   hook: Hook | undefined;
   paused: ((ran: Ran) => Promise<"over" | "interrupted" | undefined>) | undefined;
+  readonly stop: () => void;
   readonly run: (line: string, options?: Options) => Promise<Ran>;
 }
 
@@ -82,6 +85,32 @@ export function folderOf(name: string, pages: Readonly<Record<string, string>>):
   return folder;
 }
 
+/**
+ * Send a request as the platform's `fetch` does one with a signal: nothing is sent once the signal aborted, and a request on its way is then rejected at once.
+ *
+ * @param send - what sends the request and answers it
+ */
+export async function sendUnlessAborted(signal: AbortSignal | null | undefined, send: () => Promise<Response>): Promise<Response> {
+  if (signal == null) return send();
+
+  signal.throwIfAborted();
+  const answered = new AbortController();
+  const aborted = once(signal, "abort", { signal: answered.signal }).then(() => Promise.reject(signal.reason));
+
+  try {
+    return await Promise.race([send(), aborted]);
+  } finally {
+    answered.abort();
+  }
+}
+
+/** What an install holds that only a finished upload may change: the sites, and the keys of the store. */
+export async function stateOf(bench: Bench): Promise<unknown> {
+  const sites = await bench.install.call("listSites", {});
+
+  return [sites.body, await bench.install.keys()];
+}
+
 /** Fail when a token is anywhere in what a command printed: a token goes to the install and nowhere else. */
 function assertNoToken(ran: Ran, tokens: readonly string[]): void {
   const printed = [...ran.out, ...ran.err, ...ran.status, ...ran.asked].join("\n");
@@ -99,6 +128,7 @@ export async function openBench(): Promise<Bench> {
   const install = await openApi();
   const home = scratch();
   const sent: string[] = [];
+  let stopping = new AbortController();
 
   const bench: Bench = {
     install,
@@ -106,21 +136,24 @@ export async function openBench(): Promise<Bench> {
     home,
     hook: undefined,
     paused: undefined,
+    stop: () => stopping.abort(),
     run: async (line, options = {}) => {
       const ran: Ran = { code: -1, out: [], err: [], status: [], asked: [], opened: [], waits: [] };
       const env = options.env ?? { POPLIN_SERVER: ORIGIN, POPLIN_TOKEN: install.tokens.admin };
+      stopping = new AbortController();
 
       const io: Io = {
         out: (text) => ran.out.push(text),
         err: (text) => ran.err.push(text),
         status: (text) => ran.status.push(text),
-        fetch: async (input, init) => {
-          const request = new Request(input, init);
-          const url = new URL(request.url);
-          sent.push(`${request.method} ${url.pathname}${url.search}`);
+        fetch: (input, init) =>
+          sendUnlessAborted(init.signal, async () => {
+            const request = new Request(input, init);
+            const url = new URL(request.url);
+            sent.push(`${request.method} ${url.pathname}${url.search}`);
 
-          return (await bench.hook?.(request)) ?? install.api.fetch(request);
-        },
+            return (await bench.hook?.(request)) ?? install.api.fetch(request);
+          }),
         machine: { env: { POPLIN_CONFIG_DIR: join(home, "config"), ...env }, platform: process.platform, home },
         terminal: options.terminal ?? { asks: false, progress: false },
         ask: async (question) => {
@@ -133,12 +166,15 @@ export async function openBench(): Promise<Bench> {
         open: (address) => {
           ran.opened.push(address);
         },
+        // A stop ends a wait, and a wait the test stops is the one stop the command hears of.
         pause: async (ms) => {
           install.clock.now += ms;
           ran.waits.push(ms);
+          if ((await bench.paused?.(ran)) === "interrupted") stopping.abort();
 
-          return (await bench.paused?.(ran)) ?? "over";
+          return stopping.signal.aborted ? "interrupted" : "over";
         },
+        stopped: stopping.signal,
       };
 
       const code = await run(words(`poplin ${line}`), io);

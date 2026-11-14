@@ -8,6 +8,7 @@ import { StdioServerTransport } from "@modelcontextprotocol/server/stdio";
 import { type ApiInstall, ORIGIN, openApi } from "../../../../app/tests/api/support/install";
 import type { Io } from "../../../src/commands/records";
 import { run } from "../../../src/commands/run";
+import { sendUnlessAborted } from "../../commands/support/harness";
 
 /** What a test may answer a request with in the install's place; nothing lets the install answer. */
 type Hook = (request: Request) => Response | undefined | Promise<Response | undefined>;
@@ -23,6 +24,7 @@ export interface Answer {
  * A running server and the means to call it.
  *
  * `written` holds every line the server wrote on its stdout and `logged` every line on its stderr; `sent` lists every request to the install as its method and path.
+ * `stop` stops the server as the person's first Ctrl-C does, and answers its exit code.
  */
 export interface McpBench {
   readonly install: ApiInstall;
@@ -34,6 +36,7 @@ export interface McpBench {
   readonly call: (tool: string, args?: Record<string, unknown>) => Promise<Answer>;
   readonly write: (line: string) => void;
   readonly close: () => Promise<number>;
+  readonly stop: () => Promise<number>;
 }
 
 /**
@@ -68,6 +71,7 @@ export async function openMcp(home: string, env?: Readonly<Record<string, string
   let text = "";
   const logged: string[] = [];
   const sent: string[] = [];
+  const stopping = new AbortController();
 
   const io: Io = {
     out: () => {
@@ -77,13 +81,14 @@ export async function openMcp(home: string, env?: Readonly<Record<string, string
     status: () => {
       throw new Error("the server wrote a progress line");
     },
-    fetch: async (target, init) => {
-      const request = new Request(target, init);
-      const url = new URL(request.url);
-      sent.push(`${request.method} ${url.pathname}${url.search}`);
+    fetch: (target, init) =>
+      sendUnlessAborted(init.signal, async () => {
+        const request = new Request(target, init);
+        const url = new URL(request.url);
+        sent.push(`${request.method} ${url.pathname}${url.search}`);
 
-      return (await bench.hook?.(request)) ?? install.api.fetch(request);
-    },
+        return (await bench.hook?.(request)) ?? install.api.fetch(request);
+      }),
     machine: { env: { POPLIN_CONFIG_DIR: `${home}/config`, ...login }, platform: process.platform, home },
     terminal: { asks: true, progress: true },
     ask: async () => {
@@ -93,6 +98,7 @@ export async function openMcp(home: string, env?: Readonly<Record<string, string
     computer: "laptop",
     open: () => undefined,
     pause: async () => "over",
+    stopped: stopping.signal,
   };
 
   const exited = run(["mcp"], io, { input, output });
@@ -128,6 +134,11 @@ export async function openMcp(home: string, env?: Readonly<Record<string, string
       assertNoToken(bench, tokens);
 
       return code;
+    },
+    stop: () => {
+      stopping.abort();
+
+      return exited;
     },
   };
 

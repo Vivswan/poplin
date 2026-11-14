@@ -151,6 +151,7 @@ async function serve(input: readonly string[], answer: Response | undefined, don
       computer: "laptop",
       open: () => undefined,
       pause: async () => "over",
+      stopped: new AbortController().signal,
     },
     { input: stdin, output: stdout },
   );

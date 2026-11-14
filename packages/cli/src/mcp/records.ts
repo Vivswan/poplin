@@ -11,6 +11,9 @@ export interface Host {
   /** Answers a value with every token this machine holds taken out of its texts. */
   readonly withoutTokens: <Value>(value: Value) => Promise<Value>;
 
+  /** Aborts when the person stops the server: every tool call on its way then ends as a stopped command does. */
+  readonly stopped: AbortSignal;
+
   /** Prints one line for a person, on stderr. */
   readonly log: (line: string) => void;
 }
