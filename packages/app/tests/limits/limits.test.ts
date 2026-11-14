@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
+import { defaultSettings, type SettingValues } from "@poplin/core/src/records/settings";
 import type { SiteId } from "@poplin/core/src/sites/ids";
 
 import { type Counters, checkLimits } from "../../src/limits/limits";
@@ -69,6 +70,17 @@ function repeated(answer: string, count: number): string[] {
 }
 
 describe("checkLimits", () => {
+  // Drift: a browser asks for every file of a page within seconds, so the per-minute defaults of a new install bound how large a page can be. Defaults sized for one request per view answer the 31st file of a page 429.
+  test.each([
+    { name: "one visitor opening a page of 100 files", visitors: 1, files: 100 },
+    { name: "two visitors opening a page of 40 files each", visitors: 2, files: 40 },
+  ])("under the settings of a new install no file is refused: $name", async ({ visitors, files }) => {
+    const settings = defaultSettings({ installer: "owner@example.com" as SettingValues["logins"][number], hostname: "poplin.example.com" });
+    const requests = Array.from({ length: visitors }, (_unused, at) => arrivals(files, { site: REPORT, visitor: `visitor-${at}`, after: at * SECOND })).flat();
+
+    expect(await answers(new MemoryCounters(), settings, requests)).toEqual(repeated("ok", visitors * files));
+  });
+
   const cases: readonly { readonly name: string; readonly settings: Settings; readonly requests: readonly Arrival[]; readonly expected: readonly string[] }[] =
     [
       {

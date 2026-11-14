@@ -158,8 +158,8 @@ The first settings. The names and text forms are those of `poplin config`:
 | `max_sites` | number | `null` | limit: how many sites; null means none |
 | `requests_per_day` | number | `100000` | limit: the day's requests, all sites |
 | `site_share_of_day` | number | `25` | limit: one site's share of the day, in percent |
-| `site_requests_per_minute` | number | `60` | limit: one site |
-| `visitor_requests_per_minute` | number | `30` | limit: one visitor |
+| `site_requests_per_minute` | number | `6000` | limit: one site |
+| `visitor_requests_per_minute` | number | `600` | limit: one visitor |
 
 The Worker stores the first settings once, while it has none. After that the dashboard is the authority: changing one of these inputs and applying again changes no stored setting.
 

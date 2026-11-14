@@ -279,8 +279,8 @@ export function defaultSettings(install: Install): SettingValues {
     max_sites: "none",
     requests_per_day: 100_000,
     site_share_of_day: 25,
-    site_requests_per_minute: 60,
-    visitor_requests_per_minute: 30,
+    site_requests_per_minute: 6000,
+    visitor_requests_per_minute: 600,
   };
 }
 

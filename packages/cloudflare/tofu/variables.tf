@@ -265,7 +265,7 @@ variable "site_share_of_day" {
 variable "site_requests_per_minute" {
   description = "The limit on one site's requests per minute."
   type        = number
-  default     = 60
+  default     = 6000
 
   validation {
     condition     = var.site_requests_per_minute >= 1 && var.site_requests_per_minute <= 9007199254740991 && floor(var.site_requests_per_minute) == var.site_requests_per_minute
@@ -276,7 +276,7 @@ variable "site_requests_per_minute" {
 variable "visitor_requests_per_minute" {
   description = "The limit on one visitor's requests per minute."
   type        = number
-  default     = 30
+  default     = 600
 
   validation {
     condition     = var.visitor_requests_per_minute >= 1 && var.visitor_requests_per_minute <= 9007199254740991 && floor(var.visitor_requests_per_minute) == var.visitor_requests_per_minute

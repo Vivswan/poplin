@@ -108,11 +108,12 @@ describe("CloudflareCounters on the bindings of wrangler.jsonc", () => {
     { setting: 1, passed: 1 },
     { setting: 2, passed: 2 },
     { setting: 30, passed: 30 },
-    { setting: 60, passed: 60 },
+    { setting: 600, passed: 600 },
     { setting: 999, passed: 999 },
     { setting: 1000, passed: 1000 },
     { setting: 2001, passed: 2000 },
     { setting: 3000, passed: 2995 },
+    { setting: 6000, passed: 5989 },
   ];
 
   // Drift: the binding's limit is fixed in wrangler.jsonc and the setting is not; a weight computed against another number makes every per-minute setting wrong at once.
