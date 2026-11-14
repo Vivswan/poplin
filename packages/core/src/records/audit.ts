@@ -6,7 +6,7 @@ import type { SiteName } from "../names/names";
 import type { SiteId } from "../sites/ids";
 import { HOLDER, type Holder, MOMENT, POSITIVE, SITE_ID, SITE_NAME } from "./fields";
 
-/** Every action the log names. The first rows are written with a change to a site, a token, or the settings; `login` stands alone. */
+/** Every action the log names. The first rows are written with a change to a site, a token, the settings, or the signing key; `login` stands alone. */
 const AUDIT_ACTIONS = [
   "create",
   "publish",
@@ -17,10 +17,12 @@ const AUDIT_ACTIONS = [
   "trash",
   "restore",
   "delete",
+  "imported",
   "token_added",
   "token_revoked",
   "settings_set",
   "settings_changed",
+  "signed-everyone-out",
   "login",
 ] as const;
 

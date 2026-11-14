@@ -64,7 +64,7 @@ function draftOf(draft: Draft): NewSite {
   const publicName = parsePublicName(draft.name);
   if (!name.ok || !publicName.ok) throw new Error(`the test's site name was refused: ${draft.name}`);
 
-  const shared = { name: name.value, folder: mintSiteFolder(), title: null, search_engines: draft.search_engines ?? false, embeddable: draft.embeddable ?? true, expires: draft.expires ?? "never" };
+  const shared = { name: name.value, folder: mintSiteFolder(), title: null, search_engines: draft.search_engines ?? false, embeddable: draft.embeddable ?? true, expires: draft.expires ?? "never", bytes: 0, files: 0 };
   if (draft.access === "public") return { ...shared, access: "public", public_name: publicName.value };
 
   return { ...shared, access: draft.access };

@@ -9,6 +9,7 @@ import type { Holder } from "../records/fields";
 import type { SiteId } from "../sites/ids";
 import type { SettingValues } from "../records/settings";
 import type { Site, SiteAccess, SiteFolder } from "../records/site";
+import type { SiteSize, Totals } from "../records/sizes";
 
 /** Who makes a change and when, in milliseconds since the epoch. */
 export interface Signed {
@@ -20,6 +21,8 @@ export interface Signed {
  * What a new site is made from.
  *
  * `folder` is minted by the caller, so the site's files can be stored before its row exists. `embeddable` is `true` when left out.
+ *
+ * `bytes` is the sum of the sizes of the files of version 1 and `files` their count, both whole numbers from 0 up.
  */
 export type NewSite = {
   readonly name: SiteName;
@@ -28,6 +31,8 @@ export type NewSite = {
   readonly search_engines: boolean;
   readonly embeddable?: boolean;
   readonly expires: "never" | number;
+  readonly bytes: number;
+  readonly files: number;
 } & SiteAccess;
 
 /** The settings of a site that change on their own; a key left out stays as it is. */
@@ -68,6 +73,33 @@ export interface SitesPage {
   readonly next?: SitesCursor;
 }
 
+/** One page of every site, the trash included, in ascending order of id. `next` is the id to pass as `after`, absent on the last page. */
+export interface ExportPage {
+  readonly sites: readonly Site[];
+  readonly next?: SiteId;
+}
+
+/** A publish as `addVersion` takes it. */
+export interface NewVersion {
+  /** The number `reserveVersion` set aside. */
+  readonly number: number;
+
+  /** How many versions the site keeps at most, the live one included. */
+  readonly keep: number;
+
+  /** The sum of the sizes of the version's files. */
+  readonly bytes: number;
+
+  /** How many files the version holds. */
+  readonly files: number;
+}
+
+/** The signing key and whether this call stored it. `kept` is a key that was already there, which is the one to use. */
+export interface SigningKey {
+  readonly kind: "created" | "kept";
+  readonly key: Uint8Array<ArrayBuffer>;
+}
+
 /** The change was made; `site` is the site after it. */
 export interface Done {
   readonly kind: "done";
@@ -103,7 +135,7 @@ export interface AuditNote {
   readonly detail: Readonly<Record<string, unknown>>;
 }
 
-/** The one doorway to stored sites, tokens, settings, and the audit log. */
+/** The one doorway to stored sites, tokens, settings, the signing key, and the audit log. */
 export interface Database {
   /**
    * Make a site at version 1 under a fresh id.
@@ -161,15 +193,10 @@ export interface Database {
   /**
    * Record a publish under a reserved number and make it live.
    *
-   * @param version - the reserved number, and how many versions the site keeps at most, the live one included
    * @returns `stale_number` when the number was not reserved or a higher version is already kept
-   * @throws {RangeError} `keep` is not a whole number from 1 up
+   * @throws {RangeError} `keep` is not a whole number from 1 up, or `bytes` or `files` is not a whole number from 0 up
    */
-  addVersion(
-    id: SiteId,
-    version: { readonly number: number; readonly keep: number },
-    signed: Signed,
-  ): Promise<Published | Refused<"not_found" | "in_trash" | "stale_number">>;
+  addVersion(id: SiteId, version: NewVersion, signed: Signed): Promise<Published | Refused<"not_found" | "in_trash" | "stale_number">>;
 
   /**
    * Make a kept version the live one.
@@ -177,6 +204,30 @@ export interface Database {
    * @param target - the version's number, or `"previous"` for the highest kept version below the live one
    */
   setLiveVersion(id: SiteId, target: number | "previous", signed: Signed): Promise<Done | Unchanged | Refused<"not_found" | "in_trash" | "no_such_version">>;
+
+  /** What the kept versions of one site hold together, in the trash or not; `undefined` for no site. It reads the site's row and its kept versions. */
+  getSiteSize(id: SiteId): Promise<SiteSize | undefined>;
+
+  /** How many sites the install has and what all their kept versions hold. It reads one row, however many sites there are. */
+  readTotals(): Promise<Totals>;
+
+  /**
+   * One page of every site as it is stored, for a backup. Tokens, the signing key, and the audit log are in no page.
+   *
+   * @param query - how many sites, from 1 to 100, and the `next` of the page before
+   * @throws {RangeError} `limit` is not a whole number from 1 to 100
+   */
+  exportSites(query: { readonly limit: number; readonly after?: SiteId }): Promise<ExportPage>;
+
+  /**
+   * Store a site from a backup exactly as it was exported: its id, folder, access, versions, owner, times, and place in or out of the trash.
+   *
+   * The site and all its versions are stored together or not at all, with one `imported` audit entry. Version numbers go on from above its highest kept version.
+   *
+   * @returns `id_taken` when a site has the id as its id or its public name, `folder_taken` when a site has the folder, `name_taken` as in `createSite`
+   * @throws {Error} the value is no site
+   */
+  importSite(site: Site, signed: Signed): Promise<Done | Refused<"id_taken" | "folder_taken" | "name_taken">>;
 
   /** Store the record of a new token. */
   addToken(token: TokenRecord, signed: Signed): Promise<{ readonly kind: "done" } | Refused<"id_taken">>;
@@ -210,6 +261,26 @@ export interface Database {
     changes: Partial<SettingValues>,
     signed: Signed,
   ): Promise<{ readonly kind: "done" | "unchanged"; readonly values: SettingValues } | Refused<"not_set_up">>;
+
+  /** The bytes of the key that signs sessions, `undefined` before one was stored. No other operation returns them. */
+  readSigningKey(): Promise<Uint8Array<ArrayBuffer> | undefined>;
+
+  /**
+   * Store the signing key when the install has none. Of callers starting at the same moment one stores its key and every other gets that key back.
+   *
+   * @param fresh - at least 32 newly drawn random bytes, used only when no key is stored
+   * @param at - the clock, in milliseconds since the epoch
+   * @throws {RangeError} `fresh` is under 32 bytes
+   */
+  ensureSigningKey(fresh: Uint8Array, at: number): Promise<SigningKey>;
+
+  /**
+   * Replace the signing key, which ends every session. It writes one `signed-everyone-out` audit entry, which holds nothing of either key.
+   *
+   * @param fresh - at least 32 newly drawn random bytes
+   * @throws {RangeError} `fresh` is under 32 bytes
+   */
+  rotateSigningKey(fresh: Uint8Array, signed: Signed): Promise<void>;
 
   /** Add an entry that goes with no change of a site, a token, or the settings. */
   appendAudit(note: AuditNote, signed: Signed): Promise<void>;

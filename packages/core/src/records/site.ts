@@ -4,7 +4,7 @@ import * as v from "valibot";
 
 import type { PublicName, SiteName } from "../names/names";
 import { mintSiteId, type SiteId } from "../sites/ids";
-import { HOLDER, type Holder, MOMENT, POSITIVE, PUBLIC_NAME, SITE_ID, SITE_NAME } from "./fields";
+import { COUNT, HOLDER, type Holder, MOMENT, POSITIVE, PUBLIC_NAME, SITE_ID, SITE_NAME } from "./fields";
 
 /** How many characters a folder key holds. */
 const FOLDER_LENGTH = 16;
@@ -22,9 +22,16 @@ const SITE_FOLDER = v.custom<SiteFolder>(isSiteFolder, "a site folder is 16 lowe
 const TITLE = v.pipe(v.string(), v.minLength(1));
 
 /** One kept publish, as the versions table holds it. */
-const VERSION = v.object({ number: POSITIVE, published_at: MOMENT, published_by: HOLDER });
+const VERSION = v.object({ number: POSITIVE, published_at: MOMENT, published_by: HOLDER, bytes: COUNT, files: COUNT });
 
-/** What a new site is made from. A public site names its public name; no other access has one. */
+/** The kept publishes of one site: at least one, no number twice. */
+const VERSIONS = v.pipe(
+  v.array(VERSION),
+  v.minLength(1),
+  v.check((versions) => new Set(versions.map((version) => version.number)).size === versions.length, "each version number is kept once"),
+);
+
+/** What a new site is made from. A public site names its public name; no other access has one. `bytes` and `files` are the size of its first version. */
 export const NEW_SITE = v.intersect([
   v.object({
     name: SITE_NAME,
@@ -33,6 +40,8 @@ export const NEW_SITE = v.intersect([
     search_engines: v.boolean(),
     embeddable: v.optional(v.boolean(), true),
     expires: v.union([v.literal("never"), MOMENT]),
+    bytes: COUNT,
+    files: COUNT,
   }),
   v.variant("access", [
     v.object({ access: v.literal("private") }),
@@ -65,7 +74,7 @@ const SITE_ROW = v.object({
   created_at: MOMENT,
   updated_at: MOMENT,
   trashed_at: v.nullable(MOMENT),
-  versions: v.pipe(v.string(), v.parseJson(), v.array(VERSION), v.minLength(1)),
+  versions: v.pipe(v.string(), v.parseJson(), VERSIONS),
 });
 
 declare const siteFolderBrand: unique symbol;
@@ -73,7 +82,10 @@ declare const siteFolderBrand: unique symbol;
 /** The key of the folder a site's files sit under in the bucket. It is made once and never changes, whatever the site's id becomes. */
 export type SiteFolder = string & { readonly [siteFolderBrand]: true };
 
-/** One publish that can still be gone back to. Times are milliseconds since the epoch. */
+/** A row of the sites table, its versions read from their JSON text. */
+type SiteRow = v.InferOutput<typeof SITE_ROW>;
+
+/** One publish that can still be gone back to. `bytes` is the sum of its files' sizes and `files` their count. Times are milliseconds since the epoch. */
 type SiteVersion = v.InferOutput<typeof VERSION>;
 
 /** Who may open a site. Only a public site holds a public name. */
@@ -109,7 +121,7 @@ function isSiteFolder(value: unknown): boolean {
   return typeof value === "string" && FOLDER_PATTERN.test(value);
 }
 
-function accessOf(row: v.InferOutput<typeof SITE_ROW>): SiteAccess {
+function accessOf(row: SiteRow): SiteAccess {
   if (row.access === "public" && row.public_name !== null) return { access: "public", public_name: row.public_name };
 
   if (row.access !== "public" && row.public_name === null) return { access: row.access };
@@ -154,4 +166,35 @@ export function siteFromRow(row: unknown): Site {
     ...accessOf(parsed.output),
     ...state,
   };
+}
+
+/**
+ * Turn a site that arrives from outside the database into the columns it is stored in.
+ *
+ * @returns the columns of the sites table, with the versions as a list in ascending order
+ * @throws {Error} the value is no site, by the rules of `siteFromRow`
+ */
+export function siteToRow(site: Site): SiteRow {
+  // A row holds the trash as a moment alone, so a trashed site without one would be stored as a live site.
+  if (site.state === "trash" && !v.is(MOMENT, site.trashed_at)) throw new Error(`site ${site.id} is in the trash since no moment`);
+
+  const columns: Omit<SiteRow, "versions"> = {
+    id: site.id,
+    name: site.name,
+    folder: site.folder,
+    access: site.access,
+    public_name: site.access === "public" ? site.public_name : null,
+    title: site.title,
+    search_engines: site.search_engines ? 1 : 0,
+    embeddable: site.embeddable ? 1 : 0,
+    expires_at: site.expires === "never" ? null : site.expires,
+    live_version: site.live_version,
+    owner: site.owner,
+    created_at: site.created_at,
+    updated_at: site.updated_at,
+    trashed_at: site.state === "trash" ? site.trashed_at : null,
+  };
+  const checked = siteFromRow({ ...columns, versions: JSON.stringify(site.versions) });
+
+  return { ...columns, versions: [...checked.versions] };
 }

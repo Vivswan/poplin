@@ -4,7 +4,7 @@ import { describe, expect, test } from "bun:test";
 
 import type { Login } from "../src/auth/logins";
 import { mintToken, type TokenId } from "../src/auth/tokens";
-import type { Database, NewSite, Signed } from "../src/database/database";
+import type { Database, NewSite, NewVersion, Signed } from "../src/database/database";
 import type { SqlDriver, SqlValue, Statement, StatementResult } from "../src/database/driver";
 import { openDatabase } from "../src/database/open";
 import { SqlDatabase } from "../src/database/sql-database";
@@ -22,6 +22,10 @@ const BY_ADA: Signed = { by: ADA, at: NOW };
 const REPORT = "report" as SiteName;
 const DOCS = "docs" as PublicName;
 const NO_SITE = "zzzzzzzzzzzz" as SiteId;
+const SIZE = { bytes: 1000, files: 4 };
+const FIRST_KEY = new Uint8Array(32).fill(0xa1);
+const SECOND_KEY = new Uint8Array(32).fill(0xb2);
+const THIRD_KEY = new Uint8Array(32).fill(0xc3);
 const SETTINGS = defaultSettings({ installer: "ada@example.com" as Login, hostname: "admin.example.com" });
 
 const STEP_THAT_FAILS_HALFWAY: Step = {
@@ -50,6 +54,31 @@ class RecordingDriver implements SqlDriver {
   }
 }
 
+/** Whether the totals row equals the counts and sums it stands for, taken afresh from every site and every version. */
+const TOTALS_ARE_TRUE = `
+SELECT t.sites = (SELECT COUNT(*) FROM sites)
+  AND t.trashed_sites = (SELECT COUNT(*) FROM sites WHERE trashed_at IS NOT NULL)
+  AND t.bytes = (SELECT COALESCE(SUM(bytes), 0) FROM versions)
+  AND t.files = (SELECT COALESCE(SUM(files), 0) FROM versions) AS true_totals
+FROM totals t`;
+
+/** A driver that, after every batch it passes on, fails when the running totals differ from the recomputed ones: so every operation of every case is checked. */
+class TotalsCheckingDriver implements SqlDriver {
+  readonly #inner: SqlDriver;
+
+  constructor(inner: SqlDriver) {
+    this.#inner = inner;
+  }
+
+  async batch(statements: readonly Statement[]): Promise<readonly StatementResult[]> {
+    const results = await this.#inner.batch(statements);
+    const [checked] = await this.#inner.batch([{ sql: TOTALS_ARE_TRUE, params: [] }]);
+    if (checked?.rows[0]?.true_totals !== 1) throw new Error(`the totals drifted from the sums after: ${statements[0]?.sql.trim().split("\n")[0]}`);
+
+    return results;
+  }
+}
+
 async function rows(driver: SqlDriver, sql: string, ...params: SqlValue[]): Promise<readonly Readonly<Record<string, unknown>>[]> {
   const [result] = await driver.batch([{ sql, params }]);
 
@@ -60,7 +89,7 @@ async function migrated(makeDriver: DriverFactory): Promise<SqlDriver> {
   const driver = await makeDriver();
   await migrate(driver, STEPS, NOW);
 
-  return driver;
+  return new TotalsCheckingDriver(driver);
 }
 
 /** Site ids handed out in order, so a test knows the id a site gets and can make two candidates collide. */
@@ -76,10 +105,14 @@ function mintFrom(...ids: string[]): () => SiteId {
 }
 
 function draft(name: SiteName, access: NewSite["access"] = "private", publicName: PublicName = name as PublicName): NewSite {
-  const fields = { name, folder: mintSiteFolder(), title: null, search_engines: false, expires: "never" as const };
+  const fields = { name, folder: mintSiteFolder(), title: null, search_engines: false, expires: "never" as const, ...SIZE };
   if (access === "public") return { ...fields, access, public_name: publicName };
 
   return { ...fields, access };
+}
+
+function publish(number: number, keep: number): NewVersion {
+  return { number, keep, ...SIZE };
 }
 
 async function made(database: Database, site: NewSite, signed: Signed = BY_ADA): Promise<Site> {
@@ -224,8 +257,16 @@ function schemaRules(label: string, makeDriver: DriverFactory): void {
       ["a live version dropped from under its site", [{ sql: "DELETE FROM versions WHERE folder = 'folder-a'", params: [] }]],
       [
         "a version of no site",
-        [{ sql: "INSERT INTO versions (folder, number, published_at, published_by) VALUES ('folder-of-no-site', 1, 0, ?1)", params: [ADA] }],
+        [{ sql: "INSERT INTO versions (folder, number, published_at, published_by, bytes, files) VALUES ('folder-of-no-site', 1, 0, ?1, 0, 0)", params: [ADA] }],
       ],
+      ["a version of a negative size", [{ sql: "UPDATE versions SET bytes = -1 WHERE folder = 'folder-a'", params: [] }]],
+      [
+        "a version of unstated size",
+        [{ sql: "INSERT INTO versions (folder, number, published_at, published_by) VALUES ('folder-a', 2, 0, ?1)", params: [ADA] }],
+      ],
+      ["a second row of totals", [{ sql: "INSERT INTO totals (id, sites, trashed_sites, bytes, files) VALUES (2, 0, 0, 0, 0)", params: [] }]],
+      ["the totals row removed", [{ sql: "DELETE FROM totals", params: [] }]],
+      ["a secret that is not the signing key", [{ sql: "INSERT INTO secrets (name, value, created_at) VALUES ('other', 'x', 0)", params: [] }]],
       ["a site moved to another folder", [{ sql: "UPDATE sites SET folder = 'folder-c' WHERE id = 'aaaaaaaaaaaa'", params: [] }]],
       ["an admin token that never expires", [{ sql: "INSERT INTO tokens (id, hash, scope, note, created_at) VALUES ('t', 'h', 'admin', '', 0)", params: [] }]],
       [
@@ -263,7 +304,7 @@ function sites(label: string, makeDriver: DriverFactory): void {
         embeddable: true,
         expires: "never",
         live_version: 1,
-        versions: [{ number: 1, published_at: NOW, published_by: ADA }],
+        versions: [{ number: 1, published_at: NOW, published_by: ADA, ...SIZE }],
         owner: ADA,
         created_at: NOW,
         updated_at: NOW,
@@ -541,8 +582,8 @@ function versions(label: string, makeDriver: DriverFactory): void {
       const site = await made(database, draft(REPORT));
       const reserved = await Promise.all([1, 2, 3].map(() => database.reserveVersion(site.id)));
       const numbers = reserved.map((answer) => (answer.kind === "reserved" ? answer.number : 0)).sort();
-      const second = await database.addVersion(site.id, { number: 2, keep: 3 }, { by: BO, at: NOW + 2 });
-      const fourth = await database.addVersion(site.id, { number: 4, keep: 2 }, { by: BO, at: NOW + 4 });
+      const second = await database.addVersion(site.id, publish(2, 3), { by: BO, at: NOW + 2 });
+      const fourth = await database.addVersion(site.id, publish(4, 2), { by: BO, at: NOW + 4 });
 
       expect(numbers).toEqual([2, 3, 4]);
       expect(second).toMatchObject({
@@ -551,10 +592,10 @@ function versions(label: string, makeDriver: DriverFactory): void {
         site: { live_version: 2, updated_at: NOW + 2, versions: [{ number: 1 }, { number: 2, published_at: NOW + 2, published_by: BO }] },
       });
       expect(fourth).toMatchObject({ kind: "done", dropped: [1], site: { live_version: 4, versions: [{ number: 2 }, { number: 4 }] } });
-      expect(await database.addVersion(site.id, { number: 3, keep: 2 }, BY_ADA)).toEqual({ kind: "stale_number" });
-      expect(await database.addVersion(site.id, { number: 5, keep: 2 }, BY_ADA)).toEqual({ kind: "stale_number" });
-      expect(await database.addVersion(NO_SITE, { number: 2, keep: 2 }, BY_ADA)).toEqual({ kind: "not_found" });
-      await expect(database.addVersion(site.id, { number: 5, keep: 0 }, BY_ADA)).rejects.toThrow(RangeError);
+      expect(await database.addVersion(site.id, publish(3, 2), BY_ADA)).toEqual({ kind: "stale_number" });
+      expect(await database.addVersion(site.id, publish(5, 2), BY_ADA)).toEqual({ kind: "stale_number" });
+      expect(await database.addVersion(NO_SITE, publish(2, 2), BY_ADA)).toEqual({ kind: "not_found" });
+      await expect(database.addVersion(site.id, publish(5, 0), BY_ADA)).rejects.toThrow(RangeError);
       expect(await auditActions(driver)).toEqual(["create", "publish", "publish"]);
     });
 
@@ -565,7 +606,7 @@ function versions(label: string, makeDriver: DriverFactory): void {
       const site = await made(database, draft(REPORT));
       for (const number of [2, 3]) {
         await database.reserveVersion(site.id);
-        await database.addVersion(site.id, { number, keep: 3 }, BY_ADA);
+        await database.addVersion(site.id, publish(number, 3), BY_ADA);
       }
 
       const moves = [
@@ -596,6 +637,227 @@ function versions(label: string, makeDriver: DriverFactory): void {
   });
 }
 
+function sizes(label: string, makeDriver: DriverFactory): void {
+  describe(`${label}: sizes`, () => {
+    // Drift: a publish is refused from these numbers alone; a total that missed a dropped version or a deleted site would refuse an install with room left.
+    test("the totals and a site's size follow every version kept, dropped, and deleted, and count the trash", async () => {
+      const database = new SqlDatabase(await migrated(makeDriver));
+      const big = await made(database, { ...draft(REPORT), bytes: 100, files: 2 });
+      const small = await made(database, { ...draft(DOCS, "public"), bytes: 7, files: 1 });
+      const seen: unknown[] = [];
+      const after = async (change: unknown): Promise<void> => {
+        await change;
+        seen.push([await database.readTotals(), await database.getSiteSize(big.id), await database.getSiteSize(small.id)]);
+      };
+
+      await after(undefined);
+      await after(database.reserveVersion(big.id));
+      await after(database.addVersion(big.id, { number: 2, keep: 2, bytes: 250, files: 5 }, BY_ADA));
+      await after(database.reserveVersion(big.id).then(() => database.addVersion(big.id, { number: 3, keep: 2, bytes: 40, files: 1 }, BY_ADA)));
+      await after(database.addVersion(big.id, { number: 2, keep: 2, bytes: 9000, files: 9 }, BY_ADA));
+      await after(database.createSite({ ...draft(REPORT, "public", DOCS), bytes: 9000, files: 9 }, BY_ADA));
+      await after(database.setLiveVersion(big.id, "previous", BY_ADA));
+      await after(database.trashSite(small.id, BY_ADA));
+      await after(database.restoreSite(small.id, BY_ADA));
+      await after(database.trashSite(small.id, BY_ADA).then(() => database.deleteSite(small.id, BY_ADA)));
+      await after(database.deleteSite(big.id, BY_ADA));
+
+      const totals = (sites: number, trashed: number, bytes: number, files: number): unknown => ({ sites, trashed_sites: trashed, bytes, files });
+      expect(seen).toEqual([
+        [totals(2, 0, 107, 3), { bytes: 100, files: 2 }, { bytes: 7, files: 1 }],
+        [totals(2, 0, 107, 3), { bytes: 100, files: 2 }, { bytes: 7, files: 1 }],
+        [totals(2, 0, 357, 8), { bytes: 350, files: 7 }, { bytes: 7, files: 1 }],
+        [totals(2, 0, 297, 7), { bytes: 290, files: 6 }, { bytes: 7, files: 1 }],
+        [totals(2, 0, 297, 7), { bytes: 290, files: 6 }, { bytes: 7, files: 1 }],
+        [totals(2, 0, 297, 7), { bytes: 290, files: 6 }, { bytes: 7, files: 1 }],
+        [totals(2, 0, 297, 7), { bytes: 290, files: 6 }, { bytes: 7, files: 1 }],
+        [totals(2, 1, 297, 7), { bytes: 290, files: 6 }, { bytes: 7, files: 1 }],
+        [totals(2, 0, 297, 7), { bytes: 290, files: 6 }, { bytes: 7, files: 1 }],
+        [totals(1, 0, 290, 6), { bytes: 290, files: 6 }, undefined],
+        [totals(0, 0, 0, 0), undefined, undefined],
+      ]);
+    });
+
+    test.each([
+      ["bytes below zero", { bytes: -1, files: 1 }],
+      ["a fraction of a file", { bytes: 1, files: 1.5 }],
+      ["bytes past what a number holds exactly", { bytes: 2 ** 53, files: 1 }],
+    ] as const)("a size with %s is refused for a new site and for a new version, and nothing is stored", async (_case, size) => {
+      const database = new SqlDatabase(await migrated(makeDriver));
+      const site = await made(database, draft(REPORT));
+      await database.reserveVersion(site.id);
+
+      await expect(database.createSite({ ...draft(DOCS), ...size }, BY_ADA)).rejects.toThrow();
+      await expect(database.addVersion(site.id, { number: 2, keep: 3, ...size }, BY_ADA)).rejects.toThrow(RangeError);
+      expect(await database.readTotals()).toEqual({ sites: 1, trashed_sites: 0, ...SIZE });
+    });
+  });
+}
+
+function backups(label: string, makeDriver: DriverFactory): void {
+  describe(`${label}: export and import`, () => {
+    // Drift: a backup that skipped a site, or put one back under another id or without a version, would break an address or lose a rollback.
+    test("every site is exported a page at a time in id order, the trash included, and reads back the same once deleted and imported", async () => {
+      const driver = await migrated(makeDriver);
+      const database = new SqlDatabase(driver, mintFrom("cccccccccccc", "aaaaaaaaaaaa", "eeeeeeeeeeee", "bbbbbbbbbbbb", "dddddddddddd"));
+      const [rolledBack, trashed] = [await made(database, draft(REPORT, "public", DOCS)), await made(database, { ...draft(REPORT), title: "Old" })];
+      for (const name of [REPORT, DOCS, REPORT]) await made(database, draft(name, "unlisted"), { by: BO, at: NOW + 1 });
+      for (const number of [2, 3]) {
+        await database.reserveVersion(rolledBack.id);
+        await database.addVersion(rolledBack.id, { number, keep: 3, bytes: number * 11, files: number }, { by: BO, at: NOW + number });
+      }
+      await database.reserveVersion(rolledBack.id);
+      await database.setLiveVersion(rolledBack.id, 2, BY_ADA);
+      await database.trashSite(trashed.id, { by: BO, at: NOW + 7 });
+
+      const pages = [await database.exportSites({ limit: 2 })];
+      while (pages.at(-1)?.next !== undefined) pages.push(await database.exportSites({ limit: 2, after: pages.at(-1)?.next as SiteId }));
+      const exported = pages.flatMap((page) => page.sites);
+      const before = await database.readTotals();
+      for (const site of exported) await database.deleteSite(site.id, BY_ADA);
+      const emptied = await database.readTotals();
+      const imported = [];
+      for (const site of exported) imported.push(await database.importSite(site, { by: BO, at: NOW + 99 }));
+      const readBack = await Promise.all(exported.map((site) => database.getSite(site.id)));
+
+      expect<unknown>(pages.map((page) => [page.sites.map((site) => site.id), page.next])).toEqual([
+        [["aaaaaaaaaaaa", "bbbbbbbbbbbb"], "bbbbbbbbbbbb"],
+        [["cccccccccccc", "dddddddddddd"], "dddddddddddd"],
+        [["eeeeeeeeeeee"], undefined],
+      ]);
+      expect(exported.map((site) => [site.state, site.live_version, site.versions.map((version) => version.number)])).toEqual([
+        ["trash", 1, [1]],
+        ["live", 1, [1]],
+        ["live", 2, [1, 2, 3]],
+        ["live", 1, [1]],
+        ["live", 1, [1]],
+      ]);
+      expect(imported).toEqual(exported.map((site) => ({ kind: "done", site })));
+      expect(readBack).toEqual(exported);
+      expect([emptied, await database.readTotals()]).toEqual([{ sites: 0, trashed_sites: 0, bytes: 0, files: 0 }, before]);
+      expect(await database.reserveVersion(rolledBack.id)).toEqual({ kind: "reserved", number: 4 });
+      expect(await rows(driver, "SELECT actor, at, site_id, site_name, detail FROM audit WHERE action = 'imported' ORDER BY seq")).toEqual(
+        exported.map((site) => ({ actor: BO, at: NOW + 99, site_id: site.id, site_name: site.name, detail: JSON.stringify({ versions: site.versions.length }) })),
+      );
+      await expect(database.exportSites({ limit: 0 })).rejects.toThrow(RangeError);
+      await expect(database.exportSites({ limit: 101 })).rejects.toThrow(RangeError);
+    });
+
+    // Drift: an import that overwrote a site, or left a row behind when it was refused, would corrupt the install it was meant to restore.
+    test.each([
+      ["id_taken", "its id is a site's id", (site: Site): Site => ({ ...site, folder: mintSiteFolder() })],
+      ["id_taken", "its id is a site's public name", (site: Site): Site => ({ ...site, id: "cccccccccccc" as SiteId, folder: mintSiteFolder() })],
+      ["folder_taken", "its folder is a site's folder", (site: Site): Site => ({ ...site, id: "ffffffffffff" as SiteId })],
+      [
+        "name_taken",
+        "its public name is a site's public name",
+        (site: Site): Site => ({ ...site, id: "ffffffffffff" as SiteId, folder: mintSiteFolder(), access: "public", public_name: "cccccccccccc" as PublicName }),
+      ],
+      [
+        "name_taken",
+        "its public name is a site's id",
+        (site: Site): Site => ({ ...site, id: "ffffffffffff" as SiteId, folder: mintSiteFolder(), access: "public", public_name: "aaaaaaaaaaaa" as PublicName }),
+      ],
+    ] as const)("an import is refused with %s when %s, and nothing of it is stored", async (kind, _case, change) => {
+      const driver = await migrated(makeDriver);
+      const database = new SqlDatabase(driver, mintFrom("aaaaaaaaaaaa", "bbbbbbbbbbbb"));
+      await made(database, draft(REPORT));
+      await made(database, draft(REPORT, "public", "cccccccccccc" as PublicName));
+      await database.reserveVersion("aaaaaaaaaaaa" as SiteId);
+      const published = await database.addVersion("aaaaaaaaaaaa" as SiteId, publish(2, 3), BY_ADA);
+      if (published.kind !== "done") throw new Error(`the fixture publish was refused: ${published.kind}`);
+
+      const everything = async (): Promise<unknown> => [
+        await rows(driver, "SELECT * FROM sites ORDER BY id"),
+        await rows(driver, "SELECT * FROM versions ORDER BY folder, number"),
+        await rows(driver, "SELECT * FROM audit ORDER BY seq"),
+        await database.readTotals(),
+      ];
+      const before = await everything();
+
+      expect(await database.importSite(change(published.site), BY_ADA)).toEqual({ kind });
+      expect(await everything()).toEqual(before);
+    });
+
+    // Drift: these values could only come from a damaged or hand-edited backup; stored, they would be a site no read could turn back into a site.
+    test.each([
+      ["a live version that is not among its versions", (site: Site): unknown => ({ ...site, live_version: 9 })],
+      ["one version number twice", (site: Site): unknown => ({ ...site, versions: [...site.versions, ...site.versions] })],
+      ["no version", (site: Site): unknown => ({ ...site, versions: [] })],
+      ["a version without a size", (site: Site): unknown => ({ ...site, versions: [{ number: 1, published_at: NOW, published_by: ADA }] })],
+      ["public access and no public name", (site: Site): unknown => ({ ...site, access: "public" })],
+      ["an id that is no site id", (site: Site): unknown => ({ ...site, id: "NOT-AN-ID" })],
+      ["a place in the trash since no moment", (site: Site): unknown => ({ ...site, state: "trash", trashed_at: null })],
+    ] as const)("an import of a site with %s throws, and nothing is stored", async (_case, change) => {
+      const database = new SqlDatabase(await migrated(makeDriver));
+      const site = await made(database, draft(REPORT));
+      await database.deleteSite(site.id, BY_ADA);
+
+      await expect(database.importSite(change(site) as Site, BY_ADA)).rejects.toThrow();
+      expect(await database.readTotals()).toEqual({ sites: 0, trashed_sites: 0, bytes: 0, files: 0 });
+    });
+  });
+}
+
+function signingKey(label: string, makeDriver: DriverFactory): void {
+  describe(`${label}: the signing key`, () => {
+    // Drift: two Workers that each kept their own key would refuse each other's cookies, signing people out at random.
+    test("starters at the same moment end with one key, a later starter gets it, and replacing it is the only thing that changes it", async () => {
+      const driver = await migrated(makeDriver);
+      const database = new SqlDatabase(driver);
+      const none = await database.readSigningKey();
+      const started = await Promise.all([FIRST_KEY, SECOND_KEY, THIRD_KEY].map((fresh) => database.ensureSigningKey(fresh, NOW)));
+      const winner = started.find((start) => start.kind === "created")?.key;
+      const later = await database.ensureSigningKey(new Uint8Array(32).fill(0xd4), NOW + 1);
+      await database.rotateSigningKey(new Uint8Array(48).fill(0xe5), { by: BO, at: NOW + 2 });
+
+      expect(none).toBeUndefined();
+      expect(started.map((start) => start.kind).sort()).toEqual(["created", "kept", "kept"]);
+      expect<unknown>(started.map((start) => start.key)).toEqual([winner, winner, winner]);
+      expect<unknown>([FIRST_KEY, SECOND_KEY, THIRD_KEY]).toContainEqual(winner);
+      expect<unknown>(later).toEqual({ kind: "kept", key: winner });
+      expect<unknown>(await database.readSigningKey()).toEqual(new Uint8Array(48).fill(0xe5));
+      expect(await rows(driver, "SELECT name, created_at FROM secrets")).toEqual([{ name: "session_key", created_at: NOW + 2 }]);
+      expect(await rows(driver, "SELECT action, actor, at, detail FROM audit ORDER BY seq")).toEqual([
+        { action: "signed-everyone-out", actor: BO, at: NOW + 2, detail: "{}" },
+      ]);
+      await expect(database.ensureSigningKey(new Uint8Array(31), NOW)).rejects.toThrow(RangeError);
+      await expect(database.rotateSigningKey(new Uint8Array(31), BY_ADA)).rejects.toThrow(RangeError);
+      expect<unknown>(await database.readSigningKey()).toEqual(new Uint8Array(48).fill(0xe5));
+    });
+
+    // Drift: a backup or a dashboard page that carried the key would let whoever reads it sign a cookie for any login.
+    test("no listing, export, settings read, or audit entry holds the key, before or after it is replaced", async () => {
+      const driver = await migrated(makeDriver);
+      const database = new SqlDatabase(driver);
+      await database.initSettings(SETTINGS, BY_ADA);
+      await database.addToken((await mintToken({ scope: "admin", note: "laptop", now: NOW })).record, BY_ADA);
+      const site = await made(database, draft(REPORT, "public", DOCS));
+      await database.trashSite((await made(database, draft(REPORT))).id, BY_ADA);
+      await database.ensureSigningKey(FIRST_KEY, NOW);
+      await database.rotateSigningKey(SECOND_KEY, BY_ADA);
+
+      const shown = JSON.stringify([
+        await database.exportSites({ limit: 100 }),
+        await database.listSites({ trash: false, limit: 100 }),
+        await database.listSites({ trash: true, limit: 100 }),
+        await database.getSite(site.id),
+        await database.getSiteSize(site.id),
+        await database.readTotals(),
+        await database.readSettings(),
+        await database.listTokens(),
+        await database.listAudit({ limit: 100 }),
+        await rows(driver, "SELECT * FROM audit"),
+      ]);
+      const needles = ["a1".repeat(32), "b2".repeat(32), "161,161", "178,178", '"161"', '"178"'];
+
+      expect(needles.filter((needle) => shown.includes(needle))).toEqual([]);
+      expect(shown).toContain("signed-everyone-out");
+      expect<unknown>(await database.readSigningKey()).toEqual(SECOND_KEY);
+    });
+  });
+}
+
 function auditLog(label: string, makeDriver: DriverFactory): void {
   describe(`${label}: the audit log`, () => {
     const signed: Signed = { by: BO, at: NOW + 1 };
@@ -617,7 +879,7 @@ function auditLog(label: string, makeDriver: DriverFactory): void {
         "a version reserved and published",
         async (database: Database, site: Site): Promise<unknown> => [
           await database.reserveVersion(site.id),
-          await database.addVersion(site.id, { number: 2, keep: 3 }, signed),
+          await database.addVersion(site.id, publish(2, 3), signed),
         ],
         ["publish"],
       ],
@@ -627,6 +889,14 @@ function auditLog(label: string, makeDriver: DriverFactory): void {
         ["token_added"],
       ],
       ["settings changed", async (database: Database): Promise<unknown> => database.changeSettings({ trash_days: 30 }, signed), ["settings_changed"]],
+      [
+        "a deleted site imported",
+        async (database: Database, site: Site): Promise<unknown> => [await database.deleteSite(site.id, signed), await database.importSite(site, signed)],
+        ["delete", "imported"],
+      ],
+      ["the signing key replaced", async (database: Database): Promise<unknown> => database.rotateSigningKey(SECOND_KEY, signed), ["signed-everyone-out"]],
+      ["a signing key stored where none was", async (database: Database): Promise<unknown> => database.ensureSigningKey(FIRST_KEY, NOW), []],
+      ["a site imported that is already there", async (database: Database, site: Site): Promise<unknown> => database.importSite(site, signed), []],
       ["a note appended", async (database: Database): Promise<unknown> => database.appendAudit({ action: "login", detail: {} }, signed), ["login"]],
       [
         "access set to what it is",
@@ -655,12 +925,12 @@ function auditLog(label: string, makeDriver: DriverFactory): void {
       ],
       [
         "a version published to a trashed site",
-        async (database: Database, _site: Site, trashed: Site): Promise<unknown> => database.addVersion(trashed.id, { number: 1, keep: 3 }, signed),
+        async (database: Database, _site: Site, trashed: Site): Promise<unknown> => database.addVersion(trashed.id, publish(1, 3), signed),
         [],
       ],
       [
         "an unreserved version published",
-        async (database: Database, site: Site): Promise<unknown> => database.addVersion(site.id, { number: 2, keep: 3 }, signed),
+        async (database: Database, site: Site): Promise<unknown> => database.addVersion(site.id, publish(2, 3), signed),
         [],
       ],
       ["the live version set to what it is", async (database: Database, site: Site): Promise<unknown> => database.setLiveVersion(site.id, 1, signed), []],
@@ -792,14 +1062,22 @@ function queryPlans(label: string, makeDriver: DriverFactory): void {
       await database.changeAccess(site.id, { access: "unlisted" }, BY_ADA);
       await database.changeDetails(site.id, { title: "T", search_engines: true, embeddable: false, expires: NOW }, BY_ADA);
       await database.reserveVersion(site.id);
-      await database.addVersion(site.id, { number: 2, keep: 3 }, BY_ADA);
+      await database.addVersion(site.id, publish(2, 3), BY_ADA);
       await database.setLiveVersion(site.id, "previous", BY_ADA);
       await database.setLiveVersion(site.id, 2, BY_ADA);
+      await database.getSiteSize(site.id);
+      await database.readTotals();
+      const exported = await database.exportSites({ limit: 10, after: NO_SITE });
+      await database.exportSites({ limit: 10 });
+      await database.readSigningKey();
+      await database.ensureSigningKey(FIRST_KEY, NOW);
+      await database.rotateSigningKey(SECOND_KEY, BY_ADA);
       const moved = await database.giveNewId(site.id, BY_ADA);
       const id = moved.kind === "done" ? moved.site.id : site.id;
       await database.trashSite(id, BY_ADA);
       await database.restoreSite(id, BY_ADA);
-      await database.deleteSite(id, BY_ADA);
+      const deleted = await database.deleteSite(id, BY_ADA);
+      const imported = deleted.kind === "done" ? await database.importSite(deleted.site, BY_ADA) : deleted;
       await database.addToken(token, BY_ADA);
       await database.getToken(token.id);
       await database.listTokens();
@@ -816,12 +1094,13 @@ function queryPlans(label: string, makeDriver: DriverFactory): void {
         const steps = plan.map((step) => String(step.detail));
         scans.push(
           ...steps
-            .filter((step) => /\bSCAN\b/.test(step) && !/\bSCAN (CONSTANT ROW|sqlite_master)\b/.test(step))
+            .filter((step) => /\bSCAN\b/.test(step) && !/\bSCAN (CONSTANT ROW|sqlite_master|j VIRTUAL TABLE)\b/.test(step))
             .map((step) => `${step} <- ${statement.sql.trim().split("\n")[0]}`),
         );
       }
 
-      // The one walk is the token list, which hands back every row it reads.
+      // The one walk of a table is the token list, which hands back every row it reads. An import walks the list of versions it was given, which is no table.
+      expect([exported.sites, imported.kind]).toEqual([[], "done"]);
       expect(driver.statements.length).toBeGreaterThan(60);
       expect(scans).toEqual([
         "SCAN tokens USING INDEX tokens_by_creation <- SELECT id, hash, scope, note, created_at, expires_at FROM tokens ORDER BY created_at DESC, id DESC",
@@ -841,6 +1120,9 @@ export function describeDatabase(label: string, makeDriver: DriverFactory): void
   schemaRules(label, makeDriver);
   sites(label, makeDriver);
   versions(label, makeDriver);
+  sizes(label, makeDriver);
+  backups(label, makeDriver);
+  signingKey(label, makeDriver);
   auditLog(label, makeDriver);
   tokensAndSettings(label, makeDriver);
   queryPlans(label, makeDriver);

@@ -4,6 +4,8 @@
 // versions     the publishes of a site that can still be gone back to
 // tokens       the hashed record of every token
 // settings     one row for the whole install
+// secrets      what the install must keep and never show, such as the key that signs sessions
+// totals       one row: how many sites there are and how much their kept versions hold
 // audit        what was done, by whom, and when; rows are only ever added
 
 import type { Step } from "./migrate";
@@ -39,6 +41,8 @@ CREATE TABLE versions (
   number INTEGER NOT NULL CHECK (number >= 1),
   published_at INTEGER NOT NULL,
   published_by TEXT NOT NULL,
+  bytes INTEGER NOT NULL CHECK (bytes >= 0),
+  files INTEGER NOT NULL CHECK (files >= 0),
   PRIMARY KEY (folder, number)
 ) STRICT, WITHOUT ROWID`;
 
@@ -61,6 +65,27 @@ CREATE TABLE settings (
   value TEXT NOT NULL CHECK (json_valid(value)),
   updated_at INTEGER NOT NULL
 ) STRICT`;
+
+/** What the install keeps and no listing, export, or audit entry shows. `value` is lowercase hex. */
+const SECRETS = `
+CREATE TABLE secrets (
+  name TEXT NOT NULL PRIMARY KEY CHECK (name IN ('session_key')),
+  value TEXT NOT NULL,
+  created_at INTEGER NOT NULL
+) STRICT, WITHOUT ROWID`;
+
+/** How many sites there are, how many of them sit in the trash, and the bytes and files of every kept version, in one row the triggers below keep true. */
+const TOTALS = `
+CREATE TABLE totals (
+  id INTEGER NOT NULL PRIMARY KEY CHECK (id = 1),
+  sites INTEGER NOT NULL CHECK (sites >= 0),
+  trashed_sites INTEGER NOT NULL CHECK (trashed_sites >= 0),
+  bytes INTEGER NOT NULL CHECK (bytes >= 0),
+  files INTEGER NOT NULL CHECK (files >= 0)
+) STRICT`;
+
+/** The one row of the totals, for an install with no site. */
+const TOTALS_START_AT_ZERO = "INSERT INTO totals (id, sites, trashed_sites, bytes, files) VALUES (1, 0, 0, 0, 0)";
 
 /** What was done, by whom, and when. */
 const AUDIT = `
@@ -87,10 +112,10 @@ CREATE TRIGGER sites_update_keeps_names_and_ids_apart BEFORE UPDATE OF id, publi
 WHEN EXISTS (SELECT 1 FROM sites WHERE id = NEW.public_name) OR EXISTS (SELECT 1 FROM sites WHERE public_name = NEW.id)
 BEGIN SELECT RAISE(ABORT, 'a public name and a site id never match'); END`;
 
-/** A site is never without its live version: the first is made with the site. */
+/** A site is never without its live version: the first is made with the site, and whoever inserts the site then states its size. */
 const FIRST_VERSION_COMES_WITH_THE_SITE = `
 CREATE TRIGGER sites_insert_makes_the_first_version AFTER INSERT ON sites
-BEGIN INSERT INTO versions (folder, number, published_at, published_by) VALUES (NEW.folder, NEW.live_version, NEW.created_at, NEW.owner); END`;
+BEGIN INSERT INTO versions (folder, number, published_at, published_by, bytes, files) VALUES (NEW.folder, NEW.live_version, NEW.created_at, NEW.owner, 0, 0); END`;
 
 /** The live version only moves to a kept version. */
 const LIVE_VERSION_IS_KEPT = `
@@ -103,6 +128,41 @@ const LIVE_VERSION_STAYS = `
 CREATE TRIGGER versions_keep_the_live_one BEFORE DELETE ON versions
 WHEN EXISTS (SELECT 1 FROM sites WHERE folder = OLD.folder AND live_version = OLD.number)
 BEGIN SELECT RAISE(ABORT, 'the live version of a site is one of its kept versions'); END`;
+
+/** The totals count a site from the moment it is there. */
+const TOTALS_COUNT_A_NEW_SITE = `
+CREATE TRIGGER totals_count_a_new_site AFTER INSERT ON sites
+BEGIN UPDATE totals SET sites = sites + 1, trashed_sites = trashed_sites + (NEW.trashed_at IS NOT NULL); END`;
+
+/** And stop counting it when it is gone. */
+const TOTALS_FORGET_A_DELETED_SITE = `
+CREATE TRIGGER totals_forget_a_deleted_site AFTER DELETE ON sites
+BEGIN UPDATE totals SET sites = sites - 1, trashed_sites = trashed_sites - (OLD.trashed_at IS NOT NULL); END`;
+
+/** A site entering or leaving the trash moves the count of trashed sites. */
+const TOTALS_FOLLOW_THE_TRASH = `
+CREATE TRIGGER totals_follow_the_trash AFTER UPDATE OF trashed_at ON sites
+BEGIN UPDATE totals SET trashed_sites = trashed_sites + (NEW.trashed_at IS NOT NULL) - (OLD.trashed_at IS NOT NULL); END`;
+
+/** The totals grow by every version kept. */
+const TOTALS_ADD_A_KEPT_VERSION = `
+CREATE TRIGGER totals_add_a_kept_version AFTER INSERT ON versions
+BEGIN UPDATE totals SET bytes = bytes + NEW.bytes, files = files + NEW.files; END`;
+
+/** They shrink by every version dropped, alone or with its site. */
+const TOTALS_TAKE_OFF_A_DROPPED_VERSION = `
+CREATE TRIGGER totals_take_off_a_dropped_version AFTER DELETE ON versions
+BEGIN UPDATE totals SET bytes = bytes - OLD.bytes, files = files - OLD.files; END`;
+
+/** And they follow a version whose size is restated. */
+const TOTALS_FOLLOW_A_RESIZED_VERSION = `
+CREATE TRIGGER totals_follow_a_resized_version AFTER UPDATE OF bytes, files ON versions
+BEGIN UPDATE totals SET bytes = bytes + NEW.bytes - OLD.bytes, files = files + NEW.files - OLD.files; END`;
+
+/** The totals row is never removed, so no change goes uncounted. */
+const TOTALS_KEEP_THEIR_ROW = `
+CREATE TRIGGER totals_keep_their_row BEFORE DELETE ON totals
+BEGIN SELECT RAISE(ABORT, 'the totals are one row that stays'); END`;
 
 /** A site keeps its folder for life. */
 const FOLDER_NEVER_CHANGES = `
@@ -122,12 +182,15 @@ BEGIN SELECT RAISE(ABORT, 'the audit log is append-only'); END`;
 /** Creates every table, index, and trigger of the first schema. */
 export const CREATE_SCHEMA: Step = {
   number: 1,
-  description: "create the sites, versions, tokens, settings, and audit tables",
+  description: "create the sites, versions, tokens, settings, secrets, totals, and audit tables",
   statements: [
     SITES,
     VERSIONS,
     TOKENS,
     SETTINGS,
+    SECRETS,
+    TOTALS,
+    TOTALS_START_AT_ZERO,
     AUDIT,
     "CREATE INDEX sites_by_change ON sites (trashed, updated_at DESC, id DESC)",
     "CREATE INDEX sites_by_owner ON sites (owner, trashed, updated_at DESC, id DESC)",
@@ -138,6 +201,13 @@ export const CREATE_SCHEMA: Step = {
     LIVE_VERSION_IS_KEPT,
     LIVE_VERSION_STAYS,
     FOLDER_NEVER_CHANGES,
+    TOTALS_COUNT_A_NEW_SITE,
+    TOTALS_FORGET_A_DELETED_SITE,
+    TOTALS_FOLLOW_THE_TRASH,
+    TOTALS_ADD_A_KEPT_VERSION,
+    TOTALS_TAKE_OFF_A_DROPPED_VERSION,
+    TOTALS_FOLLOW_A_RESIZED_VERSION,
+    TOTALS_KEEP_THEIR_ROW,
     AUDIT_KEEPS_ITS_ROWS,
     AUDIT_ROWS_NEVER_CHANGE,
   ],

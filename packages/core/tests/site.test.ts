@@ -24,7 +24,7 @@ describe("mintSiteFolder", () => {
       created_at: NOW,
       updated_at: NOW,
       trashed_at: null,
-      versions: JSON.stringify([{ number: 1, published_at: NOW, published_by: TOKEN_ID }]),
+      versions: JSON.stringify([{ number: 1, published_at: NOW, published_by: TOKEN_ID, bytes: 1000, files: 4 }]),
     };
 
     expect(folder).toMatch(/^[0-9a-z]{16}$/);

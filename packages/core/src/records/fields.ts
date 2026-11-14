@@ -16,6 +16,9 @@ export const MOMENT = v.pipe(v.number(), v.safeInteger(), v.minValue(0));
 /** A whole number from 1 up: a count, a version number, a limit. */
 export const POSITIVE = v.pipe(v.number(), v.safeInteger(), v.minValue(1));
 
+/** A whole number from 0 up: a size in bytes, a number of files. */
+export const COUNT = v.pipe(v.number(), v.safeInteger(), v.minValue(0));
+
 /** The public half of a token. */
 export const TOKEN_ID = v.custom<TokenId>(isTokenId, "a token id is 16 lowercase hex characters");
 

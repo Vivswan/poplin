@@ -9,7 +9,9 @@ import type { TokenId, TokenRecord } from "../auth/tokens";
 import type { PublicName } from "../names/names";
 import { type AuditAction, type AuditEntry, auditFromRow } from "../records/audit";
 import { SETTING_CHANGES, SETTING_VALUES, type SettingValues } from "../records/settings";
-import { NEW_SITE, SITE_DETAILS, type Site, type SiteAccess, siteFromRow } from "../records/site";
+import { signingKeyFromRow, signingKeyToText } from "../records/secret";
+import { NEW_SITE, SITE_DETAILS, type Site, type SiteAccess, siteFromRow, siteToRow } from "../records/site";
+import { type SiteSize, sizeFromRow, type Totals, totalsFromRow } from "../records/sizes";
 import { mintSiteId, type SiteId } from "../sites/ids";
 import { tokenFromRow } from "../records/token";
 import type {
@@ -17,11 +19,14 @@ import type {
   AuditNote,
   Database,
   Done,
+  ExportPage,
   NewSite,
+  NewVersion,
   Published,
   Refused,
   Reserved,
   Signed,
+  SigningKey,
   SiteDetails,
   SitesPage,
   SitesQuery,
@@ -41,7 +46,7 @@ const NEWEST = Number.MAX_SAFE_INTEGER;
 /** A site with its kept versions gathered into one JSON column, so one query gives the whole site. */
 const SELECT_SITE = `
 SELECT s.id, s.name, s.folder, s.access, s.public_name, s.title, s.search_engines, s.embeddable, s.expires_at, s.live_version, s.owner, s.created_at, s.updated_at, s.trashed_at,
-  (SELECT json_group_array(json_object('number', v.number, 'published_at', v.published_at, 'published_by', v.published_by)) FROM versions v WHERE v.folder = s.folder) AS versions
+  (SELECT json_group_array(json_object('number', v.number, 'published_at', v.published_at, 'published_by', v.published_by, 'bytes', v.bytes, 'files', v.files)) FROM versions v WHERE v.folder = s.folder) AS versions
 FROM sites s`;
 
 /** The site with id `?1`. */
@@ -70,6 +75,9 @@ SELECT ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, 1, 2, ?9, ?10, ?10, ?11
 WHERE NOT EXISTS (SELECT 1 FROM sites WHERE id = ?1)
   AND NOT EXISTS (SELECT 1 FROM sites WHERE public_name = ?1)
   AND (?5 IS NULL OR (?5 <> ?1 AND NOT EXISTS (SELECT 1 FROM sites WHERE public_name = ?5) AND NOT EXISTS (SELECT 1 FROM sites WHERE id = ?5)))`;
+
+/** The size of the first version, which the schema made with the site, stated only when the site was made. */
+const SIZE_FIRST_VERSION = "UPDATE versions SET bytes = ?2, files = ?3 WHERE folder = ?1 AND number = 1 AND changes() = 1";
 
 /** Whether a site has `?1` as its public name or its id. */
 const NAME_IS_HELD = "SELECT (EXISTS (SELECT 1 FROM sites WHERE public_name = ?1) OR EXISTS (SELECT 1 FROM sites WHERE id = ?1)) AS held";
@@ -105,8 +113,8 @@ const RESERVED = "SELECT next_version - 1 AS number FROM sites WHERE id = ?1";
 
 /** A version, only when its number was reserved and is above every kept one, so a slower, older publish never replaces a newer one. */
 const INSERT_VERSION = `
-INSERT INTO versions (folder, number, published_at, published_by)
-SELECT s.folder, ?2, ?3, ?4 FROM sites s
+INSERT INTO versions (folder, number, published_at, published_by, bytes, files)
+SELECT s.folder, ?2, ?3, ?4, ?5, ?6 FROM sites s
 WHERE s.id = ?1 AND s.trashed = 0 AND ?2 < s.next_version AND ?2 > (SELECT MAX(v.number) FROM versions v WHERE v.folder = s.folder)`;
 
 /** The version just kept made live. */
@@ -133,6 +141,38 @@ const AUDIT_LIVE = `
 INSERT INTO audit (at, actor, action, site_id, site_name, detail)
 SELECT ?1, ?2, 'live_version', id, name, json_object('version', live_version) FROM sites WHERE id = ?3 AND changes() = 1`;
 
+/** What the kept versions of the site with id `?1` hold together; `versions` is 0 for no site. */
+const SITE_SIZE = `
+SELECT COALESCE(SUM(v.bytes), 0) AS bytes, COALESCE(SUM(v.files), 0) AS files, COUNT(*) AS versions
+FROM versions v WHERE v.folder = (SELECT folder FROM sites WHERE id = ?1)`;
+
+/** The one row of running totals, which the schema keeps equal to the sums over every site and every kept version. */
+const READ_TOTALS = "SELECT sites, trashed_sites, bytes, files FROM totals WHERE id = 1";
+
+/** A page of every site in ascending order of id, from above `?1`. */
+const EXPORT_SITES = `${SELECT_SITE} WHERE s.id > ?1 ORDER BY s.id LIMIT ?2`;
+
+/** A site from a backup under the id it had, only while its id, its folder, and its public name are free. The schema adds its live version with the row. */
+const IMPORT_SITE = `
+INSERT INTO sites (id, name, folder, access, public_name, title, search_engines, embeddable, expires_at, live_version, next_version, owner, created_at, updated_at, trashed_at)
+SELECT ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15
+WHERE NOT EXISTS (SELECT 1 FROM sites WHERE id = ?1)
+  AND NOT EXISTS (SELECT 1 FROM sites WHERE public_name = ?1)
+  AND NOT EXISTS (SELECT 1 FROM sites WHERE folder = ?3)
+  AND (?5 IS NULL OR (?5 <> ?1 AND NOT EXISTS (SELECT 1 FROM sites WHERE public_name = ?5) AND NOT EXISTS (SELECT 1 FROM sites WHERE id = ?5)))`;
+
+/** Every version of the list `?2` kept under folder `?1`, only when the site's audit entry was written. The live one is there already and takes its exported values. */
+const IMPORT_VERSIONS = `
+INSERT INTO versions (folder, number, published_at, published_by, bytes, files)
+SELECT ?1, j.value ->> 'number', j.value ->> 'published_at', j.value ->> 'published_by', j.value ->> 'bytes', j.value ->> 'files'
+FROM json_each(?2) j WHERE changes() = 1
+ON CONFLICT (folder, number) DO UPDATE SET published_at = excluded.published_at, published_by = excluded.published_by, bytes = excluded.bytes, files = excluded.files`;
+
+/** Whether a site already holds an imported site's id `?1`, as its id or its public name, and whether one holds its folder `?2`. */
+const IMPORT_IS_HELD = `
+SELECT (EXISTS (SELECT 1 FROM sites WHERE id = ?1) OR EXISTS (SELECT 1 FROM sites WHERE public_name = ?1)) AS id_held,
+  EXISTS (SELECT 1 FROM sites WHERE folder = ?2) AS folder_held`;
+
 /** Every column of a token. */
 const SELECT_TOKEN = "SELECT id, hash, scope, note, created_at, expires_at FROM tokens";
 
@@ -156,6 +196,18 @@ const INSERT_SETTINGS = "INSERT INTO settings (id, value, updated_at) SELECT 1, 
 
 /** A merge patch: each key it names is replaced and every other key stays, in one statement, only when a value differs. */
 const PATCH_SETTINGS = "UPDATE settings SET value = json_patch(value, ?1), updated_at = ?2 WHERE id = 1 AND json(json_patch(value, ?1)) <> json(value)";
+
+/** The signing key, as hex text. */
+const READ_SIGNING_KEY = "SELECT value FROM secrets WHERE name = 'session_key'";
+
+/** A signing key, only while none is stored. */
+const INSERT_SIGNING_KEY =
+  "INSERT INTO secrets (name, value, created_at) SELECT 'session_key', ?1, ?2 WHERE NOT EXISTS (SELECT 1 FROM secrets WHERE name = 'session_key')";
+
+/** A signing key in place of the stored one, or as the first. */
+const REPLACE_SIGNING_KEY = `
+INSERT INTO secrets (name, value, created_at) VALUES ('session_key', ?1, ?2)
+ON CONFLICT (name) DO UPDATE SET value = excluded.value, created_at = excluded.created_at`;
 
 /** The audit entries below `?1`, the newest first. */
 const LIST_AUDIT = "SELECT seq, at, actor, action, site_id, site_name, detail FROM audit WHERE seq < ?1 ORDER BY seq DESC LIMIT ?2";
@@ -182,6 +234,10 @@ function auditPlain(signed: Signed, action: AuditAction, detail: Readonly<Record
 
 function requirePage(limit: number): void {
   if (!Number.isSafeInteger(limit) || limit < 1 || limit > MAX_PAGE) throw new RangeError(`a page holds 1 to ${MAX_PAGE} rows, not ${limit}`);
+}
+
+function requireCount(what: string, count: number): void {
+  if (!Number.isSafeInteger(count) || count < 0) throw new RangeError(`${what} is a whole number from 0 up, not ${count}`);
 }
 
 function publicNameOf(access: SiteAccess): PublicName | null {
@@ -214,6 +270,12 @@ function unreachable(site: Site | undefined): Refused<"not_found" | "in_trash"> 
   return undefined;
 }
 
+function signingKeyIn(result: StatementResult | undefined): Uint8Array<ArrayBuffer> | undefined {
+  const row = result?.rows[0];
+
+  return row === undefined ? undefined : signingKeyFromRow(row);
+}
+
 function settingsIn(result: StatementResult | undefined): SettingValues | undefined {
   const value = result?.rows[0]?.value;
   if (typeof value !== "string") return undefined;
@@ -244,7 +306,7 @@ export class SqlDatabase implements Database {
 
     for (let attempt = 0; attempt < MINT_ATTEMPTS; attempt += 1) {
       const id = this.#mintId();
-      const [inserted, , held, made] = await this.#driver.batch([
+      const [inserted, , , held, made] = await this.#driver.batch([
         sql(
           INSERT_SITE,
           id,
@@ -259,6 +321,7 @@ export class SqlDatabase implements Database {
           signed.at,
           site.embeddable ? 1 : 0,
         ),
+        sql(SIZE_FIRST_VERSION, site.folder, site.bytes, site.files),
         auditSite(signed, "create", id, detail),
         sql(NAME_IS_HELD, publicName),
         sql(SITE_BY_ID, id),
@@ -406,16 +469,15 @@ export class SqlDatabase implements Database {
     return unreachable(siteIn(after)) ?? { kind: "not_found" };
   }
 
-  async addVersion(
-    id: SiteId,
-    version: { readonly number: number; readonly keep: number },
-    signed: Signed,
-  ): Promise<Published | Refused<"not_found" | "in_trash" | "stale_number">> {
+  async addVersion(id: SiteId, version: NewVersion, signed: Signed): Promise<Published | Refused<"not_found" | "in_trash" | "stale_number">> {
     if (!Number.isSafeInteger(version.keep) || version.keep < 1) throw new RangeError(`a site keeps at least 1 version, not ${version.keep}`);
+
+    requireCount("the size of a version in bytes", version.bytes);
+    requireCount("the number of files of a version", version.files);
 
     const [before, , updated, , , after] = await this.#driver.batch([
       sql(SITE_BY_ID, id),
-      sql(INSERT_VERSION, id, version.number, signed.at, signed.by),
+      sql(INSERT_VERSION, id, version.number, signed.at, signed.by, version.bytes, version.files),
       sql(SET_LIVE_TO_NEW, id, version.number, signed.at),
       auditSite(signed, "publish", id, { version: version.number }),
       sql(DROP_OLD_VERSIONS, id, version.keep),
@@ -446,6 +508,66 @@ export class SqlDatabase implements Database {
     if (site.live_version === target) return { kind: "unchanged", site };
 
     return { kind: "no_such_version" };
+  }
+
+  async getSiteSize(id: SiteId): Promise<SiteSize | undefined> {
+    const [summed] = await this.#driver.batch([sql(SITE_SIZE, id)]);
+
+    return sizeFromRow(summed?.rows[0]);
+  }
+
+  async readTotals(): Promise<Totals> {
+    const [read] = await this.#driver.batch([sql(READ_TOTALS)]);
+
+    return totalsFromRow(read?.rows[0]);
+  }
+
+  async exportSites(query: { readonly limit: number; readonly after?: SiteId }): Promise<ExportPage> {
+    requirePage(query.limit);
+
+    // One row more than the page shows whether another page follows.
+    const [listed] = await this.#driver.batch([sql(EXPORT_SITES, query.after ?? "", query.limit + 1)]);
+    const sites = (listed?.rows ?? []).slice(0, query.limit).map(siteFromRow);
+    const last = sites.at(-1);
+    if (last === undefined || (listed?.rows.length ?? 0) <= query.limit) return { sites };
+
+    return { sites, next: last.id };
+  }
+
+  async importSite(site: Site, signed: Signed): Promise<Done | Refused<"id_taken" | "folder_taken" | "name_taken">> {
+    const row = siteToRow(site);
+    const nextVersion = Math.max(...row.versions.map((version) => version.number)) + 1;
+    const [inserted, , , held, made] = await this.#driver.batch([
+      sql(
+        IMPORT_SITE,
+        row.id,
+        row.name,
+        row.folder,
+        row.access,
+        row.public_name,
+        row.title,
+        row.search_engines,
+        row.embeddable,
+        row.expires_at,
+        row.live_version,
+        nextVersion,
+        row.owner,
+        row.created_at,
+        row.updated_at,
+        row.trashed_at,
+      ),
+      auditSite(signed, "imported", row.id, { versions: row.versions.length }),
+      sql(IMPORT_VERSIONS, row.folder, JSON.stringify(row.versions)),
+      sql(IMPORT_IS_HELD, row.id, row.folder),
+      sql(SITE_BY_ID, row.id),
+    ]);
+    if (changed(inserted)) return done(made);
+
+    if (held?.rows[0]?.id_held === 1) return { kind: "id_taken" };
+
+    if (held?.rows[0]?.folder_held === 1) return { kind: "folder_taken" };
+
+    return { kind: "name_taken" };
   }
 
   async addToken(token: TokenRecord, signed: Signed): Promise<{ readonly kind: "done" } | Refused<"id_taken">> {
@@ -516,6 +638,24 @@ export class SqlDatabase implements Database {
     if (values === undefined) return { kind: "not_set_up" };
 
     return { kind: changed(patched) ? "done" : "unchanged", values };
+  }
+
+  async readSigningKey(): Promise<Uint8Array<ArrayBuffer> | undefined> {
+    const [read] = await this.#driver.batch([sql(READ_SIGNING_KEY)]);
+
+    return signingKeyIn(read);
+  }
+
+  async ensureSigningKey(fresh: Uint8Array, at: number): Promise<SigningKey> {
+    const [inserted, read] = await this.#driver.batch([sql(INSERT_SIGNING_KEY, signingKeyToText(fresh), at), sql(READ_SIGNING_KEY)]);
+    const key = signingKeyIn(read);
+    if (key === undefined) throw new Error("the signing key was stored and is not there to read");
+
+    return { kind: changed(inserted) ? "created" : "kept", key };
+  }
+
+  async rotateSigningKey(fresh: Uint8Array, signed: Signed): Promise<void> {
+    await this.#driver.batch([sql(REPLACE_SIGNING_KEY, signingKeyToText(fresh), signed.at), auditPlain(signed, "signed-everyone-out", {})]);
   }
 
   async appendAudit(note: AuditNote, signed: Signed): Promise<void> {
