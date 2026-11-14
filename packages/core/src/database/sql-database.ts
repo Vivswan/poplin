@@ -233,11 +233,26 @@ WHERE ${PENDING_OF_OWNER} < ?11 AND ${BYTES_IN_FOLDER} + ?8 <= ?12 AND ${BYTES_H
 /** The upload with id `?1`, without its manifest. */
 const UPLOAD_BY_ID = `SELECT ${UPLOAD_COLUMNS} FROM uploads WHERE id = ?1`;
 
-/** Where the 32-bit FNV-1a hash starts. */
-const FNV_OFFSET = 0x811c9dc5;
+/** Where the 32-bit FNV-1a hash starts, as the signed number those bits are: an engine keeps a hash that starts as one in whole-number arithmetic. */
+const FNV_OFFSET = 0x811c9dc5 | 0;
 
 /** What the 32-bit FNV-1a hash multiplies by at every character. */
 const FNV_PRIME = 0x01000193;
+
+/** How many paths of a manifest are hashed side by side. */
+const HASHED_ABREAST = 4;
+
+/** The base a manifest key's digits are written in. */
+const HEX = 16;
+
+/** The digits of that base. */
+const HEX_DIGITS = "0123456789abcdef";
+
+/** How many bits one such digit stands for. */
+const HEX_DIGIT_BITS = 4;
+
+/** Where a key ends in a manifest written as a flat list: the quote and comma between its last digit and its files. A quote inside a text follows a backslash, so no path and no type holds this. */
+const KEY_END = /(?<=[0-9a-f])",\[\[/g;
 
 /** The upload with id `?1` and its whole manifest, as stored. */
 const UPLOAD_WITH_MANIFEST = `SELECT ${UPLOAD_COLUMNS}, manifest FROM uploads WHERE id = ?1`;
@@ -455,6 +470,9 @@ const DETAIL_COLUMNS: { readonly [Key in keyof Required<SiteDetails>]: (value: R
   expires: (expires) => ["expires_at", expires === "never" ? null : expires],
 };
 
+/** One file as a stored manifest holds it: its path, size, type, and place in the manifest. */
+type StoredFile = readonly [path: string, size: number, type: string, place: number];
+
 /** The `SET` and the differs-from condition of each detail given, with each stored value added to `params` and named by its place there. */
 function detailColumns(given: SiteDetails, params: SqlValue[]): { readonly sets: string[]; readonly differs: string[] } {
   const sets: string[] = [];
@@ -523,16 +541,68 @@ function unreachable(site: Site | undefined): Refused<"not_found" | "in_trash"> 
   return undefined;
 }
 
-/**
- * The key a file has in a stored manifest: the 32-bit FNV-1a hash of its path, taken over its UTF-16 units.
- *
- * @returns a letter and hex digits, which is one plain step of a JSON path whatever the path holds. Two paths may share a key
- */
-function manifestKey(path: string): string {
-  let hash = FNV_OFFSET;
-  for (let at = 0; at < path.length; at += 1) hash = Math.imul(hash ^ path.charCodeAt(at), FNV_PRIME);
+/** Carry a 32-bit FNV-1a hash on over a path, from one of its UTF-16 units to its end. */
+function hashOn(hash: number, path: string, from: number): number {
+  let carried = hash;
+  for (let at = from; at < path.length; at += 1) carried = Math.imul(carried ^ path.charCodeAt(at), FNV_PRIME);
 
-  return `f${(hash >>> 0).toString(16)}`;
+  return carried;
+}
+
+/** The 32-bit FNV-1a hash of a path, taken over its UTF-16 units. */
+function pathHash(path: string): number {
+  return hashOn(FNV_OFFSET, path, 0) >>> 0;
+}
+
+/**
+ * The hash of every path of a manifest, as `pathHash` gives it, in the manifest's order.
+ * Four paths are hashed side by side: each step of a hash waits on the one before it, and four hashes that wait at once take little longer than one.
+ */
+function pathHashes(manifest: readonly ManifestFile[]): Uint32Array {
+  const hashes = new Uint32Array(manifest.length);
+  const abreast = manifest.length - (manifest.length % HASHED_ABREAST);
+
+  for (let place = 0; place < abreast; place += HASHED_ABREAST) {
+    const first = (manifest[place] as ManifestFile).path;
+    const second = (manifest[place + 1] as ManifestFile).path;
+    const third = (manifest[place + 2] as ManifestFile).path;
+    const fourth = (manifest[place + 3] as ManifestFile).path;
+    const shared = Math.min(first.length, second.length, third.length, fourth.length);
+    let one = FNV_OFFSET;
+    let two = FNV_OFFSET;
+    let three = FNV_OFFSET;
+    let four = FNV_OFFSET;
+
+    for (let at = 0; at < shared; at += 1) {
+      one = Math.imul(one ^ first.charCodeAt(at), FNV_PRIME);
+      two = Math.imul(two ^ second.charCodeAt(at), FNV_PRIME);
+      three = Math.imul(three ^ third.charCodeAt(at), FNV_PRIME);
+      four = Math.imul(four ^ fourth.charCodeAt(at), FNV_PRIME);
+    }
+
+    hashes[place] = hashOn(one, first, shared);
+    hashes[place + 1] = hashOn(two, second, shared);
+    hashes[place + 2] = hashOn(three, third, shared);
+    hashes[place + 3] = hashOn(four, fourth, shared);
+  }
+
+  for (let place = abreast; place < manifest.length; place += 1) hashes[place] = pathHash((manifest[place] as ManifestFile).path);
+
+  return hashes;
+}
+
+/**
+ * The key a file has in a stored manifest, made from the hash of its path.
+ *
+ * @param hash - what `pathHash` gave for the path
+ * @returns a letter and the hash's hex digits, which is one plain step of a JSON path whatever the path holds. Two paths may share a key
+ */
+function manifestKey(hash: number): string {
+  const last = HEX_DIGITS[hash % HEX] as string;
+  const rest = hash >>> HEX_DIGIT_BITS;
+
+  // An engine writes a small whole number in hex several times faster than one past 31 bits.
+  return rest === 0 ? `f${last}` : `f${rest.toString(HEX)}${last}`;
 }
 
 /**
@@ -541,16 +611,31 @@ function manifestKey(path: string): string {
  * @throws {Error} two files share a path
  */
 function manifestToText(manifest: readonly ManifestFile[]): string {
-  const paths = new Set(manifest.map((file) => file.path));
-  if (paths.size < manifest.length) throw new Error("two files of an upload share a path");
+  const hashes = pathHashes(manifest);
+  const sharing = new Map<number, StoredFile[]>();
+  const keyed: (string | StoredFile[])[] = [];
 
-  const keyed: Record<string, unknown[][]> = {};
-  manifest.forEach((file, place) => {
-    const key = manifestKey(file.path);
-    keyed[key] = [...(keyed[key] ?? []), [file.path, file.size, file.content_type, place]];
-  });
+  for (let place = 0; place < manifest.length; place += 1) {
+    const { path, size, content_type: type } = manifest[place] as ManifestFile;
+    const hash = hashes[place] as number;
+    const held = sharing.get(hash);
 
-  return JSON.stringify(keyed);
+    if (held === undefined) {
+      const files: StoredFile[] = [[path, size, type, place]];
+      sharing.set(hash, files);
+      keyed.push(manifestKey(hash), files);
+      continue;
+    }
+
+    if (held.some(([other]) => other === path)) throw new Error("two files of an upload share a path");
+
+    held.push([path, size, type, place]);
+  }
+
+  // One call writes every key and its files as a flat list, which costs a long manifest a fraction of what an object with as many keys does.
+  const listed = JSON.stringify(keyed);
+
+  return `{${listed.slice(1, -1).replace(KEY_END, '":[[')}}`;
 }
 
 /**
@@ -904,7 +989,7 @@ export class SqlDatabase implements Database {
   }
 
   async getUploadFile(id: UploadId, path: string): Promise<{ readonly upload: Upload; readonly file: ManifestFile | undefined } | undefined> {
-    const [found] = await this.#driver.batch([sql(UPLOAD_WITH_FILE, id, manifestKey(path))]);
+    const [found] = await this.#driver.batch([sql(UPLOAD_WITH_FILE, id, manifestKey(pathHash(path)))]);
     const upload = uploadIn(found);
     if (upload === undefined) return undefined;
 

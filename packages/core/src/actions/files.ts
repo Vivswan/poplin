@@ -15,6 +15,9 @@ const ANY_FOLDER = "0".repeat(16) as SiteFolder;
 /** The widest version number. A path is taken only when its key fits under it, so a site never stops taking a path as its versions grow. */
 const WIDEST_VERSION = Number.MAX_SAFE_INTEGER;
 
+/** The longest prefix a site's files can have, built once: every path of a long manifest is measured against it. */
+const WIDEST_PREFIX = versionPrefix(ANY_FOLDER, WIDEST_VERSION);
+
 /** A file's key, or why its path is none: the key rule it breaks, or the backslash it holds. */
 type CheckedFileKey = CheckedKey | { readonly ok: false; readonly refusal: "backslash" };
 
@@ -30,6 +33,12 @@ export function versionPrefix(folder: SiteFolder, number: number): string {
   return `${folder}/v${number}/`;
 }
 
+function keyUnder(prefix: string, path: string): CheckedFileKey {
+  if (path.includes(BACKSLASH)) return { ok: false, refusal: "backslash" };
+
+  return parseObjectKey(`${prefix}${path}`);
+}
+
 /**
  * The key of one file of one version: `<folder>/v<number>/<path>`. This is the one place the key form is built.
  *
@@ -37,9 +46,7 @@ export function versionPrefix(folder: SiteFolder, number: number): string {
  * @returns the key, or why the path is none: a backslash in it, or the key rule it breaks
  */
 export function fileKey(folder: SiteFolder, number: number, path: string): CheckedFileKey {
-  if (path.includes(BACKSLASH)) return { ok: false, refusal: "backslash" };
-
-  return parseObjectKey(`${versionPrefix(folder, number)}${path}`);
+  return keyUnder(versionPrefix(folder, number), path);
 }
 
 /**
@@ -51,7 +58,7 @@ export function fileKey(folder: SiteFolder, number: number, path: string): Check
  * @returns `ok`, or the first rule the path breaks: a backslash in it, or a key rule, of which `too-long` counts the prefix too
  */
 export function checkFilePath(path: string): CheckedFilePath {
-  const key = fileKey(ANY_FOLDER, WIDEST_VERSION, path);
+  const key = keyUnder(WIDEST_PREFIX, path);
   if (!key.ok) return key;
 
   return { ok: true };

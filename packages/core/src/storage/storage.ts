@@ -15,11 +15,23 @@ const DEFAULT_DELETE_PAGES = 15;
 /** What joins a key's segments, and what ends a folder's prefix. */
 const KEY_SEPARATOR = "/";
 
+/** The most UTF-8 bytes one UTF-16 unit of a string becomes. */
+const MAX_BYTES_PER_UNIT = 3;
+
 /** Segments an S3 client or a URL parser would resolve away, as they read once percent-decoded. */
 const DOT_SEGMENTS: ReadonlySet<string> = new Set([".", ".."]);
 
 /** What starts a percent escape; a segment without one decodes to itself. */
 const ESCAPE = "%";
+
+/** Where a key has an empty segment: before a separator that starts it, between two in a row, or after one that ends it. */
+const EMPTY_SEGMENT = /^\/|\/\/|\/$/;
+
+/** How a segment that decodes to `.` or `..` starts: with a dot or with an escape. A key without such a start is not split to be searched. */
+const DOT_SEGMENT_START = /(?:^|\/)[.%]/;
+
+/** A character outside ASCII. Text without one is in NFC as it stands, so it is not normalised to be compared. */
+const BEYOND_ASCII = /\P{ASCII}/u;
 
 /** A control character, which the key rules refuse, or a surrogate left without its pair, which UTF-8 cannot carry. */
 const UNSTORABLE_CHARACTER = /[\p{Cc}\p{Cs}]/u;
@@ -209,17 +221,16 @@ function requireWellFormed(text: string, what: string): void {
 export function parseObjectKey(raw: string): CheckedKey {
   if (raw.length === 0) return { ok: false, refusal: "empty" };
 
-  if (UTF8.encode(raw).length > MAX_KEY_BYTES) return { ok: false, refusal: "too-long" };
+  // A key this short fits however its characters encode, so only a longer one is encoded to be measured.
+  if (raw.length * MAX_BYTES_PER_UNIT > MAX_KEY_BYTES && UTF8.encode(raw).length > MAX_KEY_BYTES) return { ok: false, refusal: "too-long" };
 
   if (UNSTORABLE_CHARACTER.test(raw)) return { ok: false, refusal: "bad-character" };
 
-  if (raw.normalize("NFC") !== raw) return { ok: false, refusal: "not-normalized" };
+  if (BEYOND_ASCII.test(raw) && raw.normalize("NFC") !== raw) return { ok: false, refusal: "not-normalized" };
 
-  const segments = raw.split(KEY_SEPARATOR);
+  if (EMPTY_SEGMENT.test(raw)) return { ok: false, refusal: "empty-segment" };
 
-  if (segments.includes("")) return { ok: false, refusal: "empty-segment" };
-
-  if (segments.some(isDotSegment)) return { ok: false, refusal: "dot-segment" };
+  if (DOT_SEGMENT_START.test(raw) && raw.split(KEY_SEPARATOR).some(isDotSegment)) return { ok: false, refusal: "dot-segment" };
 
   return { ok: true, key: raw as ObjectKey };
 }

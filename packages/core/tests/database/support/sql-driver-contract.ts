@@ -10,6 +10,7 @@ import { openDatabase } from "../../../src/database/open";
 import { SqlDatabase } from "../../../src/database/sql-database";
 import { migrate, type Step, storedVersion } from "../../../src/migrations/migrate";
 import { STEPS } from "../../../src/migrations/registry";
+import type { ManifestFile } from "../../../src/records/upload";
 import type { SiteId } from "../../../src/sites/ids";
 import {
   ADA,
@@ -46,6 +47,17 @@ const STEP_THAT_FAILS_HALFWAY: Step = {
 };
 
 const MENDED_STEP: Step = { ...STEP_THAT_FAILS_HALFWAY, statements: ["CREATE TABLE notes (text TEXT)"] };
+
+const AWKWARD_MANIFESTS: readonly (readonly [name: string, paths: readonly string[]])[] = [
+  ["dots, digits, JSON path signs, and the names an object is born with", ["index.html", "2024", "10", "9", "$", "$.a", "$[0]", "a.b[0]", "[1]", "..", "a..b", ".well-known/x", "constructor", "__proto__", "toString"]],
+  ["quotes, backslashes, line breaks, and the signs that end a key", ['say "hi"', 'x",[[y', 'f0",[[', 'abc",[["z",1', "a\\b", 'a\\",[[', "line\nbreak", "\u0000", "\ud800 alone", "it's"]],
+  ["letters beyond ASCII, composed and not", ["\u00fc/\u{1F600}.html", "e\u0301.html", "\u2028", "\u65e5\u672c/\u8a9e.html"]],
+  ["a path of 1,009 bytes beside one of a single character", [`${"long/".repeat(200)}page.html`, " ", "a"]],
+  // By the FNV-1a rule `ppkttia` hashes to 0, `painnxw` and `podj2jr` to 4, `p1fi6x1` to 10 in hex, and the two pages to 96444b56.
+  ["paths that share a key, among them a key of one digit", ["page-2794.html", "ppkttia", "painnxw", "p1fi6x1", "podj2jr", "page-64060.html", "ppktti"]],
+  ["an order that is not the sorted one", ["z.html", "index.html", "m/2.html", "a.html", "m/10.html", "m/1.html"]],
+  ...[1, 2, 3, 4, 5, 8, 9].map((count) => [`${count} paths of differing lengths`, Array.from(Array(count).keys(), (index) => `${"x".repeat(index * 3)}${index}`)] as const),
+];
 
 type DriverFactory = () => SqlDriver | Promise<SqlDriver>;
 
@@ -94,6 +106,21 @@ async function rows(driver: SqlDriver, sql: string, ...params: SqlValue[]): Prom
   const [result] = await driver.batch([{ sql, params }]);
 
   return result?.rows ?? [];
+}
+
+/** The stored text of a manifest as the plain way of building it writes it: an object filled key by key and written whole. A key is `f` and the hex of the path's 32-bit FNV-1a hash over its UTF-16 units. */
+function plainManifestText(manifest: readonly ManifestFile[]): string {
+  const keyed: Record<string, unknown[][]> = {};
+
+  manifest.forEach((file, place) => {
+    let hash = 0x811c9dc5;
+    for (let at = 0; at < file.path.length; at += 1) hash = Math.imul(hash ^ file.path.charCodeAt(at), 0x01000193);
+
+    const key = `f${(hash >>> 0).toString(16)}`;
+    keyed[key] = [...(keyed[key] ?? []), [file.path, file.size, file.content_type, place]];
+  });
+
+  return JSON.stringify(keyed);
 }
 
 async function migrated(makeDriver: DriverFactory): Promise<SqlDriver> {
@@ -480,6 +507,19 @@ function manifestRows(label: string, makeDriver: DriverFactory): void {
 
       expect([recorded, driver.statements.length - recorded, read?.file, whole?.manifest.length]).toEqual([2, 2, { path: "page-2.html", size: 2, content_type: "text/html" }, files]);
       expect(plan.map((step) => String(step.detail).split(" ")[0])).toEqual(["SEARCH"]);
+    });
+
+    // Drift: the manifest is written as text without an object ever being built, and a file is read as the one value under its key.
+    // A text that escaped a path its own way or split two paths of one key would hide a file, and other key order is no longer the stored form.
+    test.each(AWKWARD_MANIFESTS)("a manifest of %s is stored as the text the plain builder writes, and reads back whole and file by file", async (_name, paths) => {
+      const driver = await migrated(makeDriver);
+      const database = new SqlDatabase(driver);
+      const manifest = paths.map((path, index) => ({ path, size: index * 1_000_003, content_type: index % 3 === 0 ? "text/html" : `text/x-${index}; charset="utf-8"; note=a",[[` }));
+      const upload = await begunFiles(database, manifest);
+      const [stored] = await rows(driver, "SELECT manifest FROM uploads WHERE id = ?1", upload);
+      const each = await Promise.all(paths.map(async (path) => (await database.getUploadFile(upload, path))?.file));
+
+      expect([stored?.manifest, (await database.getUpload(upload))?.manifest, each]).toEqual([plainManifestText(manifest), manifest, manifest]);
     });
 
     // Drift: the cap on a manifest is measured on its list, and a database refuses a value of 2,000,000 bytes; a stored form longer than the list would be refused for a manifest the cap let through.

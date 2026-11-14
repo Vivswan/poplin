@@ -16,14 +16,14 @@ const UPLOAD_ID_PATTERN = /^[0-9a-z]{16}$/;
 /** The longest content type a file is stored with, in characters. */
 const MAX_CONTENT_TYPE_LENGTH = 255;
 
+/** How many fields a declared file holds. */
+const MANIFEST_FILE_FIELDS = 3;
+
 /** The id of a staged publish. */
 export const UPLOAD_ID = v.custom<UploadId>(isUploadId, "an upload id is 16 lowercase base36 characters");
 
-/** The media type a file is served with: text a header can carry and a store can keep as written. */
-const CONTENT_TYPE = v.pipe(v.string(), v.maxLength(MAX_CONTENT_TYPE_LENGTH), v.check(isContentType, "a content type is not empty and holds no control character and no lone surrogate"));
-
-/** One file of a publish as it is declared before its bytes are sent. */
-export const MANIFEST_FILE = v.strictObject({ path: v.string(), size: COUNT, content_type: CONTENT_TYPE });
+/** One file of a publish as it is declared before its bytes are sent: a `path`, a `size` that is a count, and a `content_type` a header can carry and a store can keep as written, and nothing besides. */
+export const MANIFEST_FILE = v.custom<ManifestFile>(isManifestFile, "a declared file holds a path, a size, and a content type");
 
 /** What finishing an upload makes: a new site, a copy of the version `from` names, the next version of a site with the settings and the page title asked with it, or a site from a backup, kept as the row `siteFromRow` reads. */
 const PLAN = v.variant("kind", [
@@ -55,8 +55,17 @@ declare const uploadIdBrand: unique symbol;
 /** Sixteen base36 characters, from `mintUploadId` or `parseUploadId`; no other code can make one. */
 export type UploadId = string & { readonly [uploadIdBrand]: true };
 
-/** One declared file: where it sits in the site, its length in bytes, and the media type it is served with. */
-export type ManifestFile = Readonly<v.InferOutput<typeof MANIFEST_FILE>>;
+/** One declared file. */
+export interface ManifestFile {
+  /** Where it sits in the site. */
+  readonly path: string;
+
+  /** Its length in bytes. */
+  readonly size: number;
+
+  /** The media type it is served with. */
+  readonly content_type: string;
+}
 
 /** What finishing an upload makes. */
 export type UploadPlan = Readonly<v.InferOutput<typeof PLAN>>;
@@ -71,6 +80,20 @@ export type UploadPlan = Readonly<v.InferOutput<typeof PLAN>>;
  * `bytes` is the sum of the declared sizes and `files` their count. `owner` is whoever began it.
  */
 export type Upload = Readonly<v.InferOutput<typeof UPLOAD_ROW>>;
+
+/** Decide whether a sent value is a declared file. A long list is checked one file at a time, so this reads each field once and builds nothing. */
+function isManifestFile(sent: unknown): boolean {
+  if (typeof sent !== "object" || sent === null) return false;
+
+  const { path, size, content_type: type } = sent as Readonly<Record<string, unknown>>;
+  if (typeof path !== "string" || typeof type !== "string") return false;
+
+  if (!Number.isSafeInteger(size) || (size as number) < 0) return false;
+
+  if (type.length > MAX_CONTENT_TYPE_LENGTH || !isContentType(type)) return false;
+
+  return Object.keys(sent).length === MANIFEST_FILE_FIELDS;
+}
 
 function isUploadId(value: unknown): boolean {
   return typeof value === "string" && UPLOAD_ID_PATTERN.test(value);
