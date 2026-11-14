@@ -200,6 +200,8 @@ async function duplicate(request: Asked<"duplicate">, session: Session): Promise
     if (upload !== undefined) await client.call("abandonPublish", { upload });
 
     throw error;
+  } finally {
+    if (io.terminal.progress) io.status("");
   }
 }
 

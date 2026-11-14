@@ -245,4 +245,15 @@ describe("upload", () => {
 
     expect([ran.code === 0, ran.waits, ran.status]).toEqual([false, [1000], ["the install asks for a pause: going on in 1 s (Ctrl-C stops)", ""]]);
   });
+
+  // Drift: a copy's progress line that is never cleared has "copied ..." printed onto its end, and a pipe is sent a line no one watches.
+  test("a duplicate clears its progress line before it says the copy is done, and writes none where no progress is shown", async () => {
+    const bench = await openBench();
+    const { label } = jsonOf(await bench.run(`${folderOf("report", TWENTY)} --json`)).site as { label: string };
+
+    const watched = await bench.run(`duplicate ${label}`, { terminal: { asks: false, progress: true } });
+    const piped = await bench.run(`duplicate ${label}`);
+
+    expect([watched.code, watched.status, piped.code, piped.status]).toEqual([0, ["copying 16 of 20 files", ""], 0, []]);
+  });
 });
