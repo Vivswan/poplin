@@ -35,7 +35,7 @@ const SITE = "Its label, e.g. report--k3f9x2ab71qz. Also taken: its bare id, or 
 /** What `publish_site` and `update_site` say of each setting. */
 const SETTINGS = {
   access: "private: only the owner. unlisted: anyone with the address. public: everyone. E.g. unlisted.",
-  public_name: "With access public: the name in the public address, e.g. docs. Left out: the site's name.",
+  public_name: "With access public: the name in the public address, e.g. docs. Left out: a public site keeps its public name; any other takes the site's name.",
   title: "The title on the owner's dashboard, e.g. Q3 sales.",
   search_engines: "true: search engines may list it once it is public.",
   embeddable: "false: other pages cannot show it in a frame.",

@@ -131,6 +131,16 @@ describe("publishSite", () => {
     expect(await world.audit()).toEqual(["create", "access", "details", "publish"]);
   });
 
+  // Drift: an update that asks for public and names no public name leaves the name alone; one that reset it would move a public site's address on a republish.
+  test("an update that asks a public site to be public keeps its public name", async () => {
+    const world = await makeWorld();
+    const id = await made(world, OWNER, "report", { access: "public", public_name: "docs" });
+    const updated = await publishSite(world.install, OWNER, { files: pages("report v2"), site: id, access: "public" });
+
+    expect(updated).toMatchObject({ ok: true, site: { access: "public", public_name: "docs", url: "https://docs-page.example.com", live_version: 2 } });
+    expect(await world.audit()).toEqual(["create", "publish"]);
+  });
+
   // Drift: each row is a publish that must leave nothing behind; the store throws on its first write here, so a check that moved after the upload fails the row.
   test.each([
     ["no index.html at the top", {}, { files: [file("docs/index.html", "x")], name: "report" }, { code: "no_index" }],

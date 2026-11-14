@@ -212,7 +212,7 @@ async function planVersion(
   const { site, settings, signed } = reached;
   if (site.state === "trash") return refuse("in_trash");
 
-  const changes = readChanges(asked.changes, { name: site.name, now: signed.at, reserved: install.reservedNames });
+  const changes = readChanges(asked.changes, { name: site.name, current: site, now: signed.at, reserved: install.reservedNames });
   if (!changes.ok) return changes;
 
   const listed = checkManifest(asked.files, asked.limits);

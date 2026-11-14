@@ -23,7 +23,7 @@ describe("updateSite", () => {
       await updateSite(world.install, OWNER, { site: second, access: "public", public_name: "report" }),
       await restoreSite(world.install, OWNER, "report"),
       await updateSite(world.install, OWNER, { site: "report", access: "unlisted" }),
-      await updateSite(world.install, OWNER, { site: "docs", access: "public" }),
+      await updateSite(world.install, OWNER, { site: "docs", access: "public", public_name: "report" }),
       await getSite(world.install, OWNER, "docs"),
     ];
 
@@ -39,6 +39,47 @@ describe("updateSite", () => {
       { ok: false, code: "not_found" },
     ]);
     expect(await world.audit()).toEqual(["create", "create", "access", "access", "trash", "restore", "access", "access"]);
+  });
+
+  // Drift: a setting left out of a change stays; an access asked again that reset the public name would move a public site's address under its readers.
+  test.each([
+    ["public again, no public name", { access: "public" }, { access: "public", public_name: "docs" }, []],
+    ["public again beside a title", { access: "public", title: "Q3 sales" }, { access: "public", public_name: "docs", title: "Q3 sales" }, ["details"]],
+    ["public again under the name it holds", { access: "public", public_name: "docs" }, { access: "public", public_name: "docs" }, []],
+    ["public again under a new name", { access: "public", public_name: "notes" }, { access: "public", public_name: "notes" }, ["access"]],
+    ["only a title", { title: "Q3 sales" }, { access: "public", public_name: "docs", title: "Q3 sales" }, ["details"]],
+  ] as readonly (readonly [string, Changes, object, readonly string[]])[])("a public site asked for %s keeps every setting left out", async (_what, changes, site, entries) => {
+    const world = await makeWorld();
+    const id = await made(world, OWNER, "report", { access: "public", public_name: "docs" });
+
+    expect(await updateSite(world.install, OWNER, { site: id, ...changes })).toMatchObject({ ok: true, before: { public_name: "docs" }, site: { id, ...site } });
+    expect(await world.audit()).toEqual(["create", ...entries]);
+  });
+
+  // Drift: the public name a site gives up is free in the same step it takes a new one, and an access asked again changes no site that already has it.
+  test("a new public name frees the old one at once, and unlisted or private asked again changes nothing", async () => {
+    const world = await makeWorld();
+    const id = await made(world, OWNER, "report", { access: "public", public_name: "docs" });
+    const other = await made(world, OWNER, "notes", { access: "unlisted" });
+    const quiet = await made(world, OWNER, "draft");
+    const steps = [
+      await updateSite(world.install, OWNER, { site: id, access: "public", public_name: "manual" }),
+      await updateSite(world.install, OWNER, { site: other, access: "public", public_name: "docs" }),
+      await updateSite(world.install, OWNER, { site: other, access: "unlisted" }),
+      await updateSite(world.install, OWNER, { site: other, access: "unlisted" }),
+      await updateSite(world.install, OWNER, { site: quiet, access: "private", search_engines: true }),
+      await updateSite(world.install, OWNER, { site: quiet, access: "public" }),
+    ];
+
+    expect(steps).toMatchObject([
+      { ok: true, site: { id, public_name: "manual" } },
+      { ok: true, site: { id: other, public_name: "docs" } },
+      { ok: true, site: { id: other, access: "unlisted", public_name: null, label: `notes--${other}` } },
+      { ok: true, before: { access: "unlisted" }, site: { id: other, access: "unlisted", label: `notes--${other}` } },
+      { ok: true, site: { id: quiet, access: "private", search_engines: true } },
+      { ok: true, site: { id: quiet, access: "public", public_name: "draft" } },
+    ]);
+    expect(await world.audit()).toEqual(["create", "create", "create", "access", "access", "access", "details", "access"]);
   });
 
   // Drift: `--expires 7d` counts from the moment it is set; a span counted from the site's creation would trash an old site at once.

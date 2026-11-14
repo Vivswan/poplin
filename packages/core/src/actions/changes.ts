@@ -37,7 +37,9 @@ export const SITE_CHANGES = v.strictObject({
 /**
  * The settings a caller asks for, on a publish or on their own.
  *
- * `public_name` goes with `access: "public"` alone and is the site's name when left out. A `title` of `null` or `""` takes the title away, and a title holds no control character and no line break.
+ * `public_name` goes with `access: "public"` alone. Left out, a public site keeps the one it holds, and a site going public takes its own name.
+ *
+ * A `title` of `null` or `""` takes the title away, and a title holds no control character and no line break.
  *
  * `expires` is `"never"`, a span from now such as `"7d"` (units `s`, `m`, `h`, `d`), or a day such as `"2026-12-01"`, which is that day's start in UTC.
  */
@@ -48,8 +50,11 @@ type Span = Exclude<SettingValues["default_expires"], "never">;
 
 /** What the changes are checked against. */
 interface Ground {
-  /** The name of the site, which a public site takes as its public name unless another is asked for. */
+  /** The name of the site, which a site going public takes as its public name unless another is asked for. */
   readonly name: SiteName;
+
+  /** Who may open the site now; absent for a site that is not made yet. */
+  readonly current?: SiteAccess;
 
   /** The moment a span of time is counted from, and that an expiry must lie after. */
   readonly now: number;
@@ -106,6 +111,9 @@ export function readExpires(text: string, now: number): "never" | number | undef
 
 function readAccess(asked: SiteChanges, ground: Ground): SiteAccess | undefined | Refused<"bad_argument" | "bad_name" | "reserved_name"> {
   if (asked.access === "public") {
+    // A public name left out is a setting left out: the site keeps the one it holds.
+    if (asked.public_name === undefined && ground.current?.access === "public") return { access: "public", public_name: ground.current.public_name };
+
     const publicName = parsePublicName(asked.public_name ?? ground.name, ground.reserved);
     if (!publicName.ok) return refuse(publicName.refusal === "reserved" ? "reserved_name" : "bad_name", "public_name");
 

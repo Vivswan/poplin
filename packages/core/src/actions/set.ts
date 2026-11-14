@@ -12,7 +12,7 @@ type SetCode = "not_set_up" | "bad_argument" | "not_found" | "not_allowed" | "in
 /**
  * Change the settings of a site. A setting left out stays as it is.
  *
- * Going public claims the public name, the site's own name unless `public_name` gives another; leaving public frees it.
+ * Going public claims the public name, the site's own name unless `public_name` gives another; leaving public frees it. A public site asked to be public again keeps its public name unless `public_name` gives another.
  *
  * @param request - `site` is a reference to the site; the rest are the settings to change, at least one
  * @returns the site after the change, or a refusal: `name_taken` when another site holds the public name, `bad_argument` when nothing is asked
@@ -25,7 +25,7 @@ export async function updateSite(install: Install, actor: Actor, request: SiteCh
   const { site, settings, signed } = reached;
   if (site.state === "trash") return refuse("in_trash");
 
-  const changes = readChanges(asked, { name: site.name, now: signed.at, reserved: install.reservedNames });
+  const changes = readChanges(asked, { name: site.name, current: site, now: signed.at, reserved: install.reservedNames });
   if (!changes.ok) return changes;
 
   if (asksNothing(changes)) return refuse("bad_argument", "settings");

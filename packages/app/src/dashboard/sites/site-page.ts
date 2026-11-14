@@ -64,7 +64,7 @@ ${ACCESSES.map((choice) => accessChoice(site, choice))}
 <div class="field when-public">
 <label for="public_name">Public name</label>
 <input type="text" id="public_name" name="public_name" value="${site.public_name ?? ""}" autocomplete="off">
-<p class="hint">Left empty, it is the site's own name.</p>
+<p class="hint">Left empty, a public site keeps its public name, and a site going public takes its own name.</p>
 </div>
 </fieldset>
 <div class="field">
