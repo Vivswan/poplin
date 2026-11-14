@@ -27,6 +27,7 @@
     "./src/actions/show-upload": "./src/actions/show-upload.ts",
     "./src/actions/sign-out": "./src/actions/sign-out.ts",
     "./src/actions/sweep": "./src/actions/sweep.ts",
+    "./src/actions/tool-inputs": "./src/actions/tool-inputs.ts",
     "./src/actions/upload-file": "./src/actions/upload-file.ts",
     "./src/api/routes": "./src/api/routes.ts",
     "./src/auth/cookie": "./src/auth/cookie.ts",

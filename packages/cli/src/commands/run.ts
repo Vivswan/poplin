@@ -3,6 +3,8 @@
 import { createClient } from "../client/client";
 import { currentLogin } from "../local/current-login";
 import { parseLogin } from "../local/login";
+import type { Host } from "../mcp/records";
+import { type Pipes, serveOnPipes } from "../mcp/stdio";
 import { VERSION } from "../poplin";
 import { exitCode } from "./exit-codes";
 import { helpText } from "./help";
@@ -160,13 +162,30 @@ function print(outcome: Outcome, json: boolean, io: Io, tokens: ReadonlySet<stri
   return exitCode({ kind: outcome.found ?? "done" });
 }
 
+/** A copy of a value with every token taken out of its texts. Its keys stay as they are: the keys of a protocol message are the protocol's. */
+function textsHidden<Value>(value: Value, tokens: ReadonlySet<string>): Value {
+  return JSON.parse(JSON.stringify(value, (_key, item: unknown) => (typeof item === "string" ? hide(item, tokens) : item)));
+}
+
+/** What the MCP server works through: no terminal, no line on stdout, and the login read anew for every tool call. */
+function mcpHost(io: Io): Host {
+  const quiet: Io = { ...io, out: io.err, status: () => undefined, terminal: { asks: false, progress: false } };
+
+  return {
+    session: () => connect({ kind: "whoami", json: false }, quiet),
+    withoutTokens: async (value) => textsHidden(value, await knownTokens(io)),
+    log: io.err,
+  };
+}
+
 /**
  * Run the words after `poplin`.
  *
  * @param io - the machine's ends: where to print, how to send, where the login is, and whether a person is there to ask
+ * @param pipes - the two ends `poplin mcp` speaks its protocol on, which no other command touches; this process's stdin and stdout unless given
  * @returns the exit code. Nothing throws: a failure nothing foresaw is printed as one line, without its stack
  */
-export async function run(argv: readonly string[], io: Io): Promise<number> {
+export async function run(argv: readonly string[], io: Io, pipes: Pipes = { input: process.stdin, output: process.stdout }): Promise<number> {
   const parsed = parseCommand(argv);
 
   if (parsed.kind === "version") {
@@ -180,6 +199,8 @@ export async function run(argv: readonly string[], io: Io): Promise<number> {
 
     return exitCode(parsed);
   }
+
+  if (parsed.kind === "mcp") return serveOnPipes(mcpHost(io), pipes);
 
   const tokens = await knownTokens(io);
 

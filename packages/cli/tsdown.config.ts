@@ -17,6 +17,8 @@ export default defineConfig([
     ...SHARED,
     entry: ["src/bin.ts"],
     dts: false,
+    // The command carries the MCP SDK. Names are kept as written, so a stack trace still names its functions.
+    minify: { compress: true, mangle: false, codegen: { removeWhitespace: true } },
     // Fails the build when the manifest names a file the tarball would not carry.
     publint: { strict: true },
   },

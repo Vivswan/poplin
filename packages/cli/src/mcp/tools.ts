@@ -1,0 +1,272 @@
+// The MCP tools: each site action as a tool an agent calls. A tool builds the request its command's parser would, and runs it with the command's own functions.
+
+import { resolve } from "node:path";
+import type * as v from "valibot";
+
+import type { TOOL_INPUTS } from "../../../core/src/actions/tool-inputs";
+import { parsePublicName, parseSiteName } from "../../../core/src/names/names";
+import { siteReference } from "../../../core/src/sites/labels";
+import { type Problem, problem, problemOf } from "../commands/problems";
+import { planPublish, sendPublish } from "../commands/publish";
+import type { Outcome, RequestOf, Session } from "../commands/records";
+import { runSiteCommand } from "../commands/site-commands";
+import { readSiteSettings, type SiteSettings } from "../commands/site-settings";
+import { countText } from "../commands/text";
+import { isUsageError } from "../commands/util";
+import { siteWord } from "../commands/wire";
+import type { Host } from "./records";
+
+/** What a `site` argument may be, for the hint of a refused one. */
+const SITE_FORMS = "a site is the label a publish answered, such as report--k3f9x2ab71qz, its id k3f9x2ab71qz, or a public site's public name";
+
+/** The names this machine keeps back: which ones an install keeps depends on its address layout, so the install answers for them. */
+const NOTHING_RESERVED: ReadonlySet<string> = new Set();
+
+/** The words the settings flags take for a switch. */
+const SWITCH = { on: "on", off: "off" } as const;
+
+/** What to do about a missing login, after the table's own hint: the server reads the login anew on every call. */
+const WHERE_TO_LOG_IN =
+  "put both in the env of this server's entry in the agent app's MCP settings, then start the server again; a token comes from the install's dashboard";
+
+/** What every tool says of its `site`. */
+const SITE = "Its label, e.g. report--k3f9x2ab71qz. Also taken: its bare id, or a public site's public name.";
+
+/** What `publish_site` and `update_site` say of each setting. */
+const SETTINGS = {
+  access: "private: only the owner. unlisted: anyone with the address. public: everyone. E.g. unlisted.",
+  public_name: "With access public: the name in the public address, e.g. docs. Left out: the site's name.",
+  title: "The title on the owner's dashboard, e.g. Q3 sales.",
+  search_engines: "true: search engines may list it once it is public.",
+  embeddable: "false: other pages cannot show it in a frame.",
+  expires: "When it moves to the trash: 7d (units s, m, h, d), 2026-12-01, or never.",
+} as const;
+
+/** The name of a tool: core lists them, one per site action. */
+export type ToolName = keyof typeof TOOL_INPUTS;
+
+/** What a tool is called with, once the server has checked it against core's schema. */
+type InputOf<Name extends ToolName> = v.InferOutput<(typeof TOOL_INPUTS)[Name]>;
+
+/** The settings a tool may be asked for, as the API names them. */
+type AskedSettings = Omit<InputOf<"update_site">, "site">;
+
+/** What names a site, as the command parser reads it. */
+type SiteReference = RequestOf<"show">["site"];
+
+/** A command about one or all sites, as `runSiteCommand` takes it. */
+type SiteRequest = Parameters<typeof runSiteCommand>[0];
+
+/**
+ * One tool.
+ *
+ * `parameters` says of each argument which forms it takes, with an example; an argument without a line does not compile.
+ * `hints` tell the agent's app whether the tool only reads, and whether it can destroy.
+ */
+interface Tool<Name extends ToolName> {
+  readonly description: string;
+  readonly parameters: Readonly<Record<keyof InputOf<Name>, string>>;
+  readonly hints: { readonly readOnlyHint?: boolean; readonly destructiveHint?: boolean };
+  readonly run: (input: InputOf<Name>, host: Host) => Promise<Outcome> | Outcome;
+}
+
+function refused(said: Problem): Outcome {
+  return { ok: false, problem: said };
+}
+
+function isProblem(value: object): value is Problem {
+  return "exit" in value;
+}
+
+function readSite(raw: string): SiteReference | Problem {
+  const reference = siteReference(raw);
+  if (!reference.ok) return problem("bad_argument", `site ${JSON.stringify(raw)}`, SITE_FORMS);
+
+  return reference.value;
+}
+
+/** Read the settings a tool was asked for with the reader of the settings flags, so a tool and a command take the same values. */
+function readSettings(asked: AskedSettings): SiteSettings | Problem {
+  const flags = new Map<string, string | true>();
+
+  if (asked.access !== undefined) flags.set(`--${asked.access}`, true);
+
+  if (asked.title !== undefined) flags.set("--title", asked.title ?? "");
+
+  if (asked.search_engines !== undefined) flags.set("--search-engines", asked.search_engines ? SWITCH.on : SWITCH.off);
+
+  if (asked.embeddable !== undefined) flags.set("--embeddable", asked.embeddable ? SWITCH.on : SWITCH.off);
+
+  if (asked.expires !== undefined) flags.set("--expires", asked.expires);
+
+  const settings = readSiteSettings(flags, Date.now());
+  if (isUsageError(settings)) return problem("bad_argument", settings.message, settings.hint);
+
+  if (asked.public_name === undefined) return settings;
+
+  const publicName = parsePublicName(asked.public_name, NOTHING_RESERVED);
+  if (!publicName.ok) return problem("bad_name", "public_name");
+
+  return { ...settings, publicName: publicName.value };
+}
+
+/** Run one call against the install, or say why there is no install to call. */
+async function online(host: Host, run: (session: Session) => Promise<Outcome>): Promise<Outcome> {
+  const session = await host.session();
+
+  if (session === "logged-out") {
+    const said = problem("no_login");
+
+    return refused({ ...said, hint: `${said.hint}; ${WHERE_TO_LOG_IN}` });
+  }
+
+  if ("code" in session) return refused(session);
+
+  return run(session);
+}
+
+async function onSite(host: Host, raw: string, request: (site: SiteReference) => SiteRequest): Promise<Outcome> {
+  const site = readSite(raw);
+  if (isProblem(site)) return refused(site);
+
+  return online(host, (session) => runSiteCommand(request(site), session));
+}
+
+/** Remove a site for good, and say what is gone. The command asks a person to type the label first; a tool is asked through `forever: true` alone. */
+async function deleteForever(raw: string, host: Host): Promise<Outcome> {
+  const site = readSite(raw);
+  if (isProblem(site)) return refused(site);
+
+  return online(host, async ({ client }) => {
+    const deleted = await client.call("deleteSite", { site: siteWord(site), forever: true });
+    if (!deleted.ok) return refused(problemOf(deleted.failure, "changes"));
+
+    const { before, left } = deleted.value;
+    const notes = left.length === 0 ? [] : ["the site is gone, and some of its files are still being removed"];
+    if (before === null) return { ok: true, value: deleted.value, lines: ["deleted for good; nothing can restore it"], notes };
+
+    const addresses = [before.addresses.site];
+    if (before.addresses.public !== null) addresses.push(before.addresses.public);
+
+    const lost = `${countText(before.files, "file")} in ${countText(before.versions.length, "kept version")}`;
+
+    return {
+      ok: true,
+      value: deleted.value,
+      lines: [`deleted for good  ${before.label}`, `gone: ${lost}; nothing can restore them`, `stopped working: ${addresses.join(" and ")}`],
+      notes,
+    };
+  });
+}
+
+/** Whether a publish makes a new site, under which name, or updates one. */
+function readTarget(site: string | undefined, name: string | undefined): RequestOf<"publish">["target"] | Problem {
+  if (site !== undefined && name !== undefined) return problem("bad_argument", "name", "a site's name is set once, when it is made: leave name out with site");
+
+  if (site !== undefined) {
+    const reference = readSite(site);
+
+    return isProblem(reference) ? reference : { kind: "update", site: reference };
+  }
+
+  if (name === undefined) return { kind: "create" };
+
+  const parsed = parseSiteName(name);
+  if (!parsed.ok) return problem("bad_name", "name");
+
+  return { kind: "create", name: parsed.value };
+}
+
+async function publish(input: InputOf<"publish_site">, host: Host): Promise<Outcome> {
+  const { path: asked, site, name, ...changes } = input;
+  if (asked === "") return refused(problem("bad_argument", "path", "the path is empty; the server's working directory is ."));
+
+  const target = readTarget(site, name);
+  if (isProblem(target)) return refused(target);
+
+  const settings = readSettings(changes);
+  if (isProblem(settings)) return refused(settings);
+
+  const path = resolve(asked);
+  const planned = await planPublish({ kind: "publish", path, target, settings, dryRun: false, json: false });
+  if (!planned.ok) return planned;
+
+  const sent = await online(host, (session) => sendPublish(planned.plan, session));
+  if (!sent.ok) return sent;
+
+  return { ...sent, value: { ...Object(sent.value), path }, lines: [`read ${path}`, ...sent.lines] };
+}
+
+/** Every tool: what it tells an agent, and how it runs. */
+export const TOOLS: { readonly [Name in ToolName]: Tool<Name> } = {
+  publish_site: {
+    description:
+      "Publish a folder or one HTML file from this machine and answer the site with its address (url). " +
+      "Without site it ALWAYS makes a new site: keep the label it answers and pass it as site to update that site later. " +
+      "A new site is private: ask the user before access unlisted or public. Hidden files and node_modules are never uploaded.",
+    parameters: {
+      path: "A folder with an index.html, or one .html file, e.g. ./report. Relative to the server's working directory; the answer names the absolute path read.",
+      site: "To update: the label an earlier publish answered, e.g. report--k3f9x2ab71qz. Left out: a new site.",
+      name: "A new site's name, e.g. q3-report: 3 to 40 lowercase letters, digits, single dashes. Left out: the folder's or file's name. Never with site.",
+      ...SETTINGS,
+      title: `${SETTINGS.title} null: the page's own title.`,
+    },
+    hints: { destructiveHint: false },
+    run: publish,
+  },
+  update_site: {
+    description: "Change a site's settings; one left out stays as it is. Ask the user before access unlisted or public.",
+    parameters: { site: SITE, ...SETTINGS, title: `${SETTINGS.title} null: no title.` },
+    hints: { destructiveHint: false },
+    run: ({ site, ...asked }, host) => {
+      const settings = readSettings(asked);
+      if (isProblem(settings)) return refused(settings);
+
+      return onSite(host, site, (reference) => ({ kind: "set", site: reference, settings, json: false }));
+    },
+  },
+  get_site: {
+    description: "Show one site: its address (url), access, settings, and kept versions.",
+    parameters: { site: SITE },
+    hints: { readOnlyHint: true },
+    run: (input, host) => onSite(host, input.site, (site) => ({ kind: "show", site, json: false })),
+  },
+  list_sites: {
+    description: "List the sites, each with its label, access, and address (url).",
+    parameters: { trash: "true: list the deleted sites restore_site can still take back." },
+    hints: { readOnlyHint: true },
+    run: (input, host) => online(host, (session) => runSiteCommand({ kind: "list", trash: input.trash, json: false }, session)),
+  },
+  rollback_site: {
+    description: "Make an earlier kept version of a site the live one. Its settings and addresses stay.",
+    parameters: { site: SITE, version: "The version to go to, e.g. 3; get_site lists them. Left out: one back." },
+    hints: { destructiveHint: false },
+    run: (input, host) => onSite(host, input.site, (site) => ({ kind: "rollback", site, to: input.version, json: false })),
+  },
+  new_link: {
+    description:
+      "Give a site a new id, so a new label and address, when its address reached someone it should not have. " +
+      "The old label and address stop working at once: use the label it answers from then on. A public site keeps its public address.",
+    parameters: { site: SITE },
+    hints: { destructiveHint: true },
+    run: (input, host) => onSite(host, input.site, (site) => ({ kind: "new-link", site, json: false })),
+  },
+  delete_site: {
+    description:
+      "Move a site to the trash, where restore_site can take it back until the day the answer names. " +
+      "With forever: true the site and every file of it are removed at once and nothing can restore them: only when the user asked for exactly that.",
+    parameters: { site: SITE, forever: "true: remove the site now and for good, with no trash. Left out: it goes to the trash." },
+    hints: { destructiveHint: true },
+    run: (input, host) => {
+      if (input.forever === true) return deleteForever(input.site, host);
+
+      return onSite(host, input.site, (site) => ({ kind: "delete", site, forever: false, json: false }));
+    },
+  },
+  restore_site: {
+    description: "Take a site back out of the trash, with the settings it had.",
+    parameters: { site: SITE },
+    hints: { destructiveHint: false },
+    run: (input, host) => onSite(host, input.site, (site) => ({ kind: "restore", site, json: false })),
+  },
+};

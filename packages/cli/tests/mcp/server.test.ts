@@ -1,0 +1,298 @@
+import { afterEach, describe, expect, test } from "bun:test";
+import { join, relative } from "node:path";
+
+import { LIMITS, ORIGIN } from "../../../app/tests/api/support/install";
+import { TOOL_INPUTS } from "../../../core/src/actions/tool-inputs";
+import { cleanUp, folderOf } from "../commands/support/harness";
+import { type Answer, type McpBench, openMcp } from "./support/bench";
+
+/** The most bytes the tools listing may cost an agent's context. */
+const LISTING_BUDGET = 6000;
+
+/** An id in the form of a site id that no site has. */
+const NO_SITE = "zzzzzzzzzzzz";
+
+/** The benches a test opened, closed after it. */
+const OPEN: McpBench[] = [];
+
+interface Site {
+  readonly id: string;
+  readonly label: string;
+  readonly url: string;
+  readonly access: string;
+  readonly state: string;
+  readonly live_version: number;
+  readonly created?: boolean;
+  readonly addresses: { readonly site: string; readonly public: string | null };
+}
+
+async function open(env?: Readonly<Record<string, string | undefined>>): Promise<McpBench> {
+  const bench = await openMcp(folderOf("home", {}), env);
+  OPEN.push(bench);
+
+  return bench;
+}
+
+function siteOf(answer: Answer): Site {
+  if (answer.error) throw new Error(`the call was refused: ${answer.text}`);
+
+  return answer.data.site as Site;
+}
+
+/** A bench with one published site. */
+async function withSite(): Promise<{ readonly bench: McpBench; readonly site: Site }> {
+  const bench = await open();
+  const site = siteOf(await bench.call("publish_site", { path: folderOf("report", { "index.html": "<title>Report</title>" }) }));
+  bench.sent.length = 0;
+
+  return { bench, site };
+}
+
+function codeOf(answer: Answer): unknown {
+  return (answer.data.error as { code?: string } | undefined)?.code;
+}
+
+afterEach(async () => {
+  for (const bench of OPEN.splice(0)) await bench.close();
+
+  cleanUp();
+});
+
+describe("the MCP server", () => {
+  test("the listing holds every one of core's tools with a schema, says something of every argument, and stays within its budget: one schema that cannot be listed takes the whole listing down, and an agent pays for every byte of it", async () => {
+    const bench = await open();
+    const { tools } = await bench.client.listTools();
+    const undescribed = tools.flatMap((tool) =>
+      Object.entries(tool.inputSchema.properties ?? {})
+        .filter(([, property]) => typeof (property as { description?: unknown }).description !== "string")
+        .map(([key]) => `${tool.name}.${key}`),
+    );
+    const listing = bench.written.find((line) => line.includes('"tools":[')) ?? "";
+
+    expect(tools.map((tool) => tool.name)).toEqual(Object.keys(TOOL_INPUTS));
+    expect(
+      tools.filter((tool) => tool.inputSchema.type !== "object" || Object.keys(tool.inputSchema.properties ?? {}).length === 0).map((tool) => tool.name),
+    ).toEqual([]);
+    expect(undescribed).toEqual([]);
+    expect(tools.filter((tool) => tool.inputSchema.additionalProperties !== false).map((tool) => tool.name)).toEqual([]);
+    expect(Buffer.byteLength(listing)).toBeGreaterThan(0);
+    expect(Buffer.byteLength(listing)).toBeLessThan(LISTING_BUDGET);
+  });
+
+  test("a publish without site makes a new private site, and with the label it answered updates that site: an agent that cannot tell the two apart makes a new site on every change", async () => {
+    const bench = await open();
+    const folder = folderOf("report", { "index.html": "<title>Report</title>", ".env": "SECRET=1", "node_modules/pkg/index.js": "x", "notes/a.html": "a" });
+
+    const made = await bench.call("publish_site", { path: folder });
+    const first = siteOf(made);
+    const updated = await bench.call("publish_site", { path: folder, site: first.label });
+    const second = siteOf(updated);
+
+    expect({ created: first.created, access: first.access, version: first.live_version }).toEqual({ created: true, access: "private", version: 1 });
+    expect({ created: second.created, label: second.label, version: second.live_version }).toEqual({ created: false, label: first.label, version: 2 });
+    expect(made.text.split("\n")).toEqual([
+      `read ${folder}`,
+      "uploaded 2 files, 22 B (2 skipped as hidden or node_modules)",
+      `made  ${first.label}  private`,
+      first.url,
+    ]);
+    expect(made.data.path).toBe(folder);
+    expect((await bench.install.keys()).filter((key) => key.includes(".env") || key.includes("node_modules"))).toEqual([]);
+    expect(await bench.install.call("listSites", {}).then((listed) => (listed.body.sites as unknown[]).length)).toBe(1);
+  });
+
+  test("a relative path is read from the server's working directory and answered as the absolute path: an agent told nothing cannot know which folder went up", async () => {
+    const bench = await open();
+    const page = join(folderOf("pages", { "one-page.html": "<title>One page</title>" }), "one-page.html");
+    const made = await bench.call("publish_site", { path: relative(process.cwd(), page) });
+
+    expect(relative(process.cwd(), page)).not.toBe(page);
+    expect(made.data.path).toBe(page);
+    expect(made.text.split("\n")[0]).toBe(`read ${page}`);
+    expect(siteOf(made).label.startsWith("one-page--")).toBe(true);
+  });
+
+  test("each tool about a site does what its command does and answers the site: a tool that drifts from its command is a second rule book", async () => {
+    const { bench, site } = await withSite();
+    await bench.call("publish_site", { path: folderOf("report", { "index.html": "<title>Second</title>" }), site: site.label });
+
+    const shown = await bench.call("get_site", { site: site.id });
+    const unlisted = await bench.call("update_site", { site: site.label, access: "unlisted", title: "Q3 sales", expires: "7d" });
+    const rolled = await bench.call("rollback_site", { site: site.label });
+    const listed = await bench.call("list_sites");
+    const trashed = await bench.call("delete_site", { site: site.label });
+    const trash = await bench.call("list_sites", { trash: true });
+    const restored = await bench.call("restore_site", { site: site.label });
+
+    expect(shown.text.split("\n").slice(0, 2)).toEqual([site.label, site.url]);
+    expect({ access: siteOf(unlisted).access, lines: unlisted.text.split("\n") }).toEqual({
+      access: "unlisted",
+      lines: [`unlisted  ${site.label}`, siteOf(unlisted).url],
+    });
+    expect({ version: siteOf(rolled).live_version, lines: rolled.text.split("\n") }).toEqual({
+      version: 1,
+      lines: [`rolled back  ${site.label}  version 1 is live`, siteOf(rolled).url],
+    });
+    expect((listed.data.sites as Site[]).map((one) => one.label)).toEqual([site.label]);
+    expect({ state: siteOf(trashed).state, last: trashed.text.split("\n").at(-1) }).toEqual({
+      state: "trash",
+      last: `to take it back: poplin restore ${site.label}`,
+    });
+    expect((trash.data.sites as Site[]).map((one) => one.label)).toEqual([site.label]);
+    expect({ state: siteOf(restored).state, access: siteOf(restored).access }).toEqual({ state: "live", access: "unlisted" });
+  });
+
+  test("new_link and delete_site with forever say what was lost, and nothing less than their own argument asks for either: an agent must be able to tell the user what is gone", async () => {
+    const { bench, site } = await withSite();
+
+    const linked = await bench.call("new_link", { site: site.label });
+    const moved = siteOf(linked);
+    const old = await bench.call("get_site", { site: site.label });
+    const kept = await bench.call("delete_site", { site: moved.label, forever: false });
+    await bench.call("restore_site", { site: moved.label });
+    const gone = await bench.call("delete_site", { site: moved.label, forever: true });
+    const after = await bench.call("get_site", { site: moved.label });
+
+    expect(linked.text.split("\n")).toEqual([
+      `new link  ${moved.label}`,
+      moved.url,
+      `the old label ${site.label} and its address ${site.addresses.site} stopped working`,
+    ]);
+    expect(moved.id).not.toBe(site.id);
+    expect(codeOf(old)).toBe("not_found");
+    expect(siteOf(kept).state).toBe("trash");
+    expect(gone.text.split("\n")).toEqual([
+      `deleted for good  ${moved.label}`,
+      "gone: 1 file in 1 kept version; nothing can restore them",
+      `stopped working: ${moved.addresses.site}`,
+    ]);
+    expect({ site: gone.data.site, before: (gone.data.before as Site).label }).toEqual({ site: null, before: moved.label });
+    expect(codeOf(after)).toBe("not_found");
+  });
+
+  test.each([
+    ["a site no install has", "get_site", { site: NO_SITE }, "not_found"],
+    ["an update of a site in the trash", "update_site", { site: "TRASHED", access: "unlisted" }, "in_trash"],
+    ["a public name another site holds", "update_site", { site: "SECOND", access: "public", public_name: "report" }, "name_taken"],
+    ["a file past the install's limit", "publish_site", { path: "LARGE" }, "too_large"],
+    ["an expiry that is no span or day", "update_site", { site: "SECOND", expires: "soon" }, "bad_argument"],
+    ["a name with a site to update", "publish_site", { path: "LARGE", site: "SECOND", name: "other" }, "bad_argument"],
+    ["a site that is a path", "delete_site", { site: "./report" }, "bad_argument"],
+    ["an empty path", "publish_site", { path: "" }, "bad_argument"],
+    ["a name that breaks the rules", "publish_site", { path: "LARGE", name: "Q3 Report" }, "bad_name"],
+    ["a folder that is not there", "publish_site", { path: "/no/such/folder" }, "unreadable"],
+  ])("%s is answered as a tool error with its code, and changes nothing: an agent acts on the code", async (_name, tool, asked, code) => {
+    const { bench, site } = await withSite();
+    await bench.call("update_site", { site: site.label, access: "public" });
+    const second = siteOf(await bench.call("publish_site", { path: folderOf("second", { "index.html": "<title>Second</title>" }) }));
+    const trashed = siteOf(await bench.call("publish_site", { path: folderOf("trashed", { "index.html": "<title>Trashed</title>" }) }));
+    await bench.call("delete_site", { site: trashed.label });
+    const large = folderOf("large", { "index.html": "x".repeat(LIMITS.fileBytes + 1) });
+    const stands: Readonly<Record<string, string>> = { TRASHED: trashed.label, SECOND: second.label, LARGE: large };
+    const args = Object.fromEntries(Object.entries(asked).map(([key, value]) => [key, typeof value === "string" ? (stands[value] ?? value) : value]));
+    const before = [
+      (await bench.install.call("listSites", {})).body,
+      (await bench.install.call("listSites", { trash: true })).body,
+      await bench.install.keys(),
+    ];
+
+    const answer = await bench.call(tool, args);
+
+    expect({ error: answer.error, code: codeOf(answer), starts: answer.text.startsWith(`${code}: `) }).toEqual({ error: true, code, starts: true });
+    expect([
+      (await bench.install.call("listSites", {})).body,
+      (await bench.install.call("listSites", { trash: true })).body,
+      await bench.install.keys(),
+    ]).toEqual(before);
+  });
+
+  test.each([
+    [
+      "an argument of the wrong type",
+      "delete_site",
+      { site: "report--k3f9x2ab71qz", forever: "yes" },
+      'forever: Invalid type: Expected boolean but received "yes"',
+    ],
+    ["an argument no tool takes", "get_site", { site: "report--k3f9x2ab71qz", force: true }, "force"],
+    ["a missing argument", "publish_site", {}, "path"],
+    ["an access that is none of the three", "update_site", { site: "report--k3f9x2ab71qz", access: "everyone" }, "access"],
+    [
+      "a title with a line break, a rule the listing cannot state",
+      "update_site",
+      { site: "report--k3f9x2ab71qz", title: "Q3\nsales" },
+      "title: a title holds no control character and no line break",
+    ],
+    [
+      "a title with a line break on a publish",
+      "publish_site",
+      { path: "./report", title: "Q3\nsales" },
+      "title: a title holds no control character and no line break",
+    ],
+  ])(
+    "%s is refused by core's schema with the table's code before anything is sent: a call the schema lets through reaches the install",
+    async (_name, tool, args, names) => {
+      const bench = await open();
+
+      const answer = await bench.call(tool, args);
+
+      expect({
+        error: answer.error,
+        code: codeOf(answer),
+        sentence: answer.text.startsWith("bad_argument: an argument is missing, unknown, or of the wrong form: "),
+        names: answer.text.includes(names),
+      }).toEqual({ error: true, code: "bad_argument", sentence: true, names: true });
+      expect(bench.sent).toEqual([]);
+    },
+  );
+
+  test.each([
+    ["no login", {}, "no_login", "not logged in"],
+    ["half a login", { POPLIN_SERVER: ORIGIN }, "bad_login", "the login cannot be used"],
+  ])(
+    "with %s the server starts, lists its tools, and answers every call with how to log in: a server that exits at start breaks the agent's app with no word why",
+    async (_name, env, code, sentence) => {
+      const bench = await open(env);
+      const { tools } = await bench.client.listTools();
+
+      const answers = [
+        await bench.call("list_sites"),
+        await bench.call("publish_site", { path: folderOf("report", { "index.html": "<title>Report</title>" }) }),
+      ];
+
+      expect(tools).toHaveLength(8);
+      expect(
+        answers.map((answer) => ({
+          error: answer.error,
+          code: codeOf(answer),
+          sentence: answer.text.includes(sentence),
+          names: answer.text.includes("POPLIN_TOKEN"),
+        })),
+      ).toEqual([
+        { error: true, code, sentence: true, names: true },
+        { error: true, code, sentence: true, names: true },
+      ]);
+      expect(bench.sent).toEqual([]);
+      expect(bench.logged).toHaveLength(1);
+    },
+  );
+
+  test("a token never leaves the server, whoever puts it into a message: the install's answer, the agent's own arguments, or a tool name", async () => {
+    const { bench, site } = await withSite();
+    const token = bench.install.tokens.admin;
+    bench.hook = () => new Response(JSON.stringify({ error: { code: "internal", message: `failed for ${token}`, about: token } }), { status: 500 });
+
+    const echoed = await bench.call("get_site", { site: site.label });
+    bench.hook = undefined;
+    const titled = await bench.call("update_site", { site: site.label, title: `the ${token}` });
+    const mistyped = await bench.call("delete_site", { site: site.label, forever: token });
+    const unknown = await bench.client.callTool({ name: token, arguments: {} }).catch((error: Error) => error.message);
+
+    expect(echoed.text).toBe("internal: the install failed to do that: [token]\ntry again; poplin doctor reports on the install");
+    expect((titled.data.site as { title: string }).title).toBe("the [token]");
+    expect(mistyped.text).toBe(
+      'bad_argument: an argument is missing, unknown, or of the wrong form: forever: Invalid type: Expected boolean but received "[token]"',
+    );
+    expect(JSON.stringify(unknown)).toContain("[token]");
+    expect(bench.written.join("\n")).not.toContain(token);
+  });
+});

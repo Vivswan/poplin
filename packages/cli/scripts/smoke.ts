@@ -22,6 +22,37 @@ assert.equal(VERSION, process.argv[2]);
 assert.deepEqual(parseSiteName("field-notes"), { ok: true, value: "field-notes" });
 assert.deepEqual(parseSiteName("Field Notes"), { ok: false, refusal: "bad-character" });
 `;
+const MCP_PROBE = `
+import assert from "node:assert/strict";
+import { spawn } from "node:child_process";
+import { once } from "node:events";
+import { createInterface } from "node:readline";
+import { SITE_ACTIONS } from "poplin/core";
+
+const [bin, config] = process.argv.slice(2);
+const env = { ...process.env, POPLIN_CONFIG_DIR: config, POPLIN_SERVER: "", POPLIN_TOKEN: "" };
+const server = spawn(process.execPath, [bin, "mcp"], { env, stdio: ["pipe", "pipe", "inherit"] });
+const answers = createInterface({ input: server.stdout })[Symbol.asyncIterator]();
+
+async function ask(id, method, params) {
+  server.stdin.write(JSON.stringify({ jsonrpc: "2.0", id, method, params }) + "\\n");
+  const { value, done } = await answers.next();
+  assert.equal(done, false, "the server closed stdout before it answered " + method);
+
+  return JSON.parse(value);
+}
+
+const hello = await ask(1, "initialize", { protocolVersion: "2025-06-18", capabilities: {}, clientInfo: { name: "smoke", version: "1.0.0" } });
+assert.equal(hello.result.serverInfo.name, "poplin");
+server.stdin.write(JSON.stringify({ jsonrpc: "2.0", method: "notifications/initialized" }) + "\\n");
+
+const listed = await ask(2, "tools/list", {});
+assert.deepEqual(listed.result.tools.map((tool) => tool.name), SITE_ACTIONS.map((action) => action.tool));
+
+server.stdin.end();
+const [code] = await once(server, "exit");
+assert.equal(code, 0, "poplin mcp exits 0 once stdin closes");
+`;
 
 function run(cwd: string, command: string, ...args: string[]): string {
   return execFileSync(command, args, { cwd, encoding: "utf8", stdio: ["ignore", "pipe", "inherit"] }).trim();
@@ -80,7 +111,11 @@ function smoke(): void {
 
   assertBin(project, version);
 
-  console.log(`${NAME}@${version} installs and runs under node ${run(project, "node", "--version")}`);
+  // The installed command serves a session as `poplin mcp` on a machine with no login. A bundle that lost a part of the MCP SDK fails here.
+  writeFileSync(join(project, "mcp-probe.mjs"), MCP_PROBE);
+  run(project, "node", "mcp-probe.mjs", join(installed, "dist", "bin.mjs"), join(scratch.path, "config"));
+
+  console.log(`${NAME}@${version} installs, runs, and serves its MCP tools under node ${run(project, "node", "--version")}`);
 }
 
 smoke();
