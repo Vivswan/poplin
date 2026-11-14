@@ -7,7 +7,7 @@ import { readTitle } from "../files/title";
 import { type Problem, problem, problemOf } from "./problems";
 import type { Io, Outcome, RequestOf, Session } from "./records";
 import { addressChange, columns, countText, searchNotes, siteLines } from "./text";
-import { givenUp, giveUpUpload, type Published, sendUpload } from "./upload";
+import { callUnhurried, givenUp, giveUpUpload, type Published, sendUpload } from "./upload";
 import { siteChanges, siteWord } from "./wire";
 
 /** The page whose own title a site shows while none is typed for it. */
@@ -130,12 +130,13 @@ export function previewPublish(plan: PublishPlan): Outcome {
  * Send a planned publish to the install.
  *
  * Four files are sent at once, each up to three times. A publish the install says lacks files is sent those and finished again, up to three finishes in all.
+ * A first step answered "too many requests" began nothing, and is made again after the rest the answer asks for, as every later step is.
  *
  * @returns the site as the install answered it. After any failure past the first step, a stop by the person included, the upload is given up, and the problem says what became of it
  */
 export async function sendPublish(plan: PublishPlan, session: Session): Promise<Outcome> {
   const { client, io } = session;
-  const begun = await client.call("beginPublish", undefined, plan.manifest);
+  const begun = await callUnhurried(io, () => client.call("beginPublish", undefined, plan.manifest));
   if (!begun.ok) return begun.failure.kind === "refused" ? { ok: false, problem: problemOf(begun.failure) } : givenUp(begun.failure, AFTERMATH.unbegun);
 
   const upload = begun.value.upload.id;

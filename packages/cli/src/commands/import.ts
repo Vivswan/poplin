@@ -3,11 +3,11 @@
 import type { ROUTES } from "../../../core/src/api/routes";
 import { showBytes } from "../../../core/src/records/settings";
 import { type Backup, type BackupSite, openBackup } from "../backup/read";
-import type { Called, Client, Failure } from "../client/client";
+import type { Called, Failure } from "../client/client";
 import { problem, problemOf } from "./problems";
 import type { Outcome, RequestOf, Session } from "./records";
 import { countText } from "./text";
-import { giveUpUpload, sendUpload, type UploadFile } from "./upload";
+import { callUnhurried, giveUpUpload, sendUpload, type UploadFile } from "./upload";
 import { siteWord } from "./wire";
 
 /** What stands between two facts of a line. */
@@ -113,14 +113,15 @@ function isRefusedAs(failure: Failure, code: string): boolean {
 }
 
 /** Begin the import of one site with every version the backup holds; one the install finds too large is begun once more with its live version alone. */
-async function begin(client: Client, format: number, site: BackupSite): Promise<{ readonly begun: Called<Begun>; readonly sending: Sending }> {
+async function begin(session: Pick<Session, "client" | "io">, format: number, site: BackupSite): Promise<{ readonly begun: Called<Begun>; readonly sending: Sending }> {
+  const send = (body: Begin): Promise<Called<Begun>> => callUnhurried(session.io, () => session.client.call("beginImport", undefined, body));
   const whole = sendingOf(format, site, false);
-  const begun = await client.call("beginImport", undefined, whole.body);
+  const begun = await send(whole.body);
   if (begun.ok || !isRefusedAs(begun.failure, TOO_LARGE) || site.versions.length < 2) return { begun, sending: whole };
 
   const live = sendingOf(format, site, true);
 
-  return { begun: await client.call("beginImport", undefined, live.body), sending: live };
+  return { begun: await send(live.body), sending: live };
 }
 
 function unfinished(site: BackupSite, failure: Failure, aftermath?: string): Result {
@@ -144,7 +145,7 @@ function finished(site: BackupSite, sending: Sending): Result {
 /** Import one site: begin, send every file, finish. An import that cannot be finished, or that the person stops, is given up, and the site is then not made. */
 async function importSite(session: Session, format: number, site: BackupSite): Promise<Result> {
   const { client, io } = session;
-  const { begun, sending } = await begin(client, format, site);
+  const { begun, sending } = await begin(session, format, site);
   if (!begun.ok) return unfinished(site, begun.failure);
 
   const upload = begun.value.upload.id;

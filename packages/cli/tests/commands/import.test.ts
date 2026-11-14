@@ -185,6 +185,25 @@ describe("import", () => {
     expect(said.sites).toMatchObject([{ code: "allowance_spent", message: "the day's free allowance of the install's database is used up until 00:00 UTC (writing)" }]);
   });
 
+  // A start answered 429 began nothing, so the start made again makes each site once.
+  // Drift: 429 is a refusal every other site would meet too, so a start that was not waited out would stop a whole restore at its first site on a zone that counts requests.
+  test("an import whose first site is begun into a 429 rests, begins it again, and imports every site once", async () => {
+    const from = await openBench();
+    const into = await openBench();
+    await filled(from);
+    const zip = await exportedZip(from);
+    const refusals = [answer(429, { error: { code: "too_many_requests", message: "no" } })];
+    into.hook = (request) => (request.method === "POST" && request.url.endsWith("/api/import/sites") ? refusals.shift() : undefined);
+
+    const ran = await into.run(`import ${zip} --json`);
+    const said = jsonOf(ran);
+    const names = async (bench: Bench): Promise<string[]> => ((await bench.install.call("exportSites", {})).body.sites as { name: string }[]).map((site) => site.name).sort();
+    const backed = await names(from);
+
+    expect([said.failed, said.stopped, ran.waits, said.imported, await names(into)]).toEqual([0, false, [2000], backed.length, backed]);
+    expect(into.sent.filter((line) => line === "POST /api/import/sites").length).toBe(backed.length + 1);
+  });
+
   // Drift: a refusal stops the run only when every other site would meet it too; the install's own 429 is a refusal, and a run that went on after Ctrl-C would import the rest of a backup the person had stopped.
   test("an import the person stops during a rest stops the run, and no later site is tried", async () => {
     const from = await openBench();

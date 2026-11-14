@@ -28,6 +28,17 @@ interface Stop {
   readonly left: readonly string[];
 }
 
+/** One start: the command, the path its starting call ends in, how many of those calls the install answers first, the refusals the next ones get, and what must have become of it. */
+interface Start {
+  readonly command: "publish" | "duplicate";
+  readonly start: string;
+  readonly answered?: number;
+  readonly refusals: readonly Response[];
+  readonly waits: readonly number[];
+  readonly code: number;
+  readonly uploads: readonly string[];
+}
+
 function isPut(request: Request): boolean {
   return request.method === "PUT";
 }
@@ -38,6 +49,11 @@ function puts(count: number): string[] {
 
 function pathEnds(end: string): (request: Request) => boolean {
   return (request) => request.method === "POST" && new URL(request.url).pathname.endsWith(end);
+}
+
+/** A JSON refusal in the install's place, with the wait it names in seconds. */
+function refusal(status: number, code: string, wait: string): Response {
+  return Response.json({ error: { code, message: "no" } }, { status, headers: { "Retry-After": wait } });
 }
 
 /** Hold the matching requests unanswered, and stop the command at the moment named. A request that does not match, or that comes after the stop, is the install's to answer. */
@@ -175,5 +191,58 @@ describe("upload", () => {
     expect([stopped.code, stopped.err]).toEqual([1, ["a file changed while it was sent", "the upload was given up and no site changed; publish again once the folder is still"]]);
     expect([(await unfinished(bench)).said, bench.sent.filter((line) => line.startsWith("DELETE")).length]).toEqual([["create abandoned"], 2]);
     expect(await stateOf(bench)).toEqual(before);
+  });
+
+  // A start answered 429 began nothing, since the zone and the install's own counts answer before any action runs: made again, it leaves one upload, never two.
+  // Drift: a start not made again gives a publish up at its first call on a zone that counts requests, and one made again after `allowance_spent` is refused the same until midnight UTC.
+  test.each<[string, Start]>([
+    [
+      "a publish, by a zone's page twice",
+      { command: "publish", start: "/uploads", refusals: [new Response("<html>slow down</html>", { status: 429 }), new Response("<html>slow down</html>", { status: 429 })], waits: [2000, 4000], code: 0, uploads: ["create finished"] },
+    ],
+    [
+      "a duplicate, with a wait named",
+      { command: "duplicate", start: "/duplicate", refusals: [refusal(429, "too_many_requests", "7")], waits: [7000], code: 0, uploads: ["create finished", "duplicate finished"] },
+    ],
+    [
+      "the second call of a duplicate",
+      { command: "duplicate", start: "/duplicate", answered: 1, refusals: [refusal(429, "too_many_requests", "3")], waits: [3000], code: 0, uploads: ["create finished", "duplicate finished"] },
+    ],
+    [
+      "a publish, by a database spent for the day",
+      { command: "publish", start: "/uploads", refusals: [refusal(503, "allowance_spent", "3600")], waits: [], code: 1, uploads: [] },
+    ],
+  ])("the start of %s is waited out and made again only when its answer is 429", async (_name, row) => {
+    const bench = await openBench();
+    const label = row.command === "duplicate" ? (jsonOf(await bench.run(`${folderOf("report", TWENTY)} --json`)).site as { label: string }).label : "";
+    const refusals = [...row.refusals];
+    const starts = pathEnds(row.start);
+    let seen = 0;
+    bench.sent.length = 0;
+
+    bench.hook = (request) => {
+      if (!starts(request)) return undefined;
+
+      seen += 1;
+
+      return seen > (row.answered ?? 0) ? refusals.shift() : undefined;
+    };
+
+    const ran = await bench.run(row.command === "duplicate" ? `duplicate ${label}` : folderOf("notes", SIX));
+    const { uploads } = await bench.install.database.listUploads({ before: Number.MAX_SAFE_INTEGER, limit: 10 });
+
+    expect([ran.code, ran.waits, refusals.length]).toEqual([row.code, [...row.waits], 0]);
+    expect(uploads.map((upload) => `${upload.plan.kind} ${upload.state}`).sort()).toEqual([...row.uploads]);
+  });
+
+  // Drift: the line of a rest is written over by the upload's progress; a start that is refused after its rest has no progress, and its refusal would be printed onto the end of that line.
+  test("a start refused after a rest leaves no line of the rest on the terminal", async () => {
+    const bench = await openBench();
+    const refusals = [refusal(429, "too_many_requests", "1"), refusal(400, "bad_name", "1")];
+    bench.hook = (request) => (pathEnds("/uploads")(request) ? refusals.shift() : undefined);
+
+    const ran = await bench.run(folderOf("notes", SIX), { terminal: { asks: false, progress: true } });
+
+    expect([ran.code === 0, ran.waits, ran.status]).toEqual([false, [1000], ["the install asks for a pause: going on in 1 s (Ctrl-C stops)", ""]]);
   });
 });

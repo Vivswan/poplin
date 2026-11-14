@@ -7,7 +7,7 @@ import type { Called, Failure } from "../client/client";
 import { problem, problemOf } from "./problems";
 import type { Outcome, RequestOf, Session } from "./records";
 import { addressChange, columns, countText, dayText, type SiteObject, searchNotes, siteLines } from "./text";
-import { givenUp, giveUpUpload } from "./upload";
+import { callUnhurried, givenUp, giveUpUpload } from "./upload";
 import { siteChanges, siteWord } from "./wire";
 
 /** How many sites one page of a listing holds: the most the API gives. */
@@ -182,7 +182,7 @@ async function duplicate(request: Asked<"duplicate">, session: Session): Promise
 
   try {
     for (let done = -1; ; ) {
-      const called = await client.call("duplicateSite", { site }, upload === undefined ? first : { upload });
+      const called = await callUnhurried(io, () => client.call("duplicateSite", { site }, upload === undefined ? first : { upload }));
       if (!called.ok) return await stopCopy(session, upload, called.failure);
 
       const { copy } = called.value;

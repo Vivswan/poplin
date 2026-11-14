@@ -93,13 +93,19 @@ class Pace {
 
   #stopped: Failure | undefined;
 
+  #told = false;
+
   constructor(io: Resting) {
     this.#io = io;
   }
 
   async #wait(failure: Failure, rests: number): Promise<void> {
     const seconds = restSeconds(failure, rests);
-    if (this.#io.terminal.progress) this.#io.status(`the install asks for a pause: going on in ${seconds} s (Ctrl-C stops)`);
+
+    if (this.#io.terminal.progress) {
+      this.#io.status(`the install asks for a pause: going on in ${seconds} s (Ctrl-C stops)`);
+      this.#told = true;
+    }
 
     try {
       if ((await this.#io.pause(seconds * MS_PER_SECOND)) === "interrupted") this.#stopped = { kind: "stopped" };
@@ -129,6 +135,11 @@ class Pace {
 
     await this.#rest;
   }
+
+  /** Take the line of a rest off the terminal, where one was told. */
+  clear(): void {
+    if (this.#told) this.#io.status("");
+  }
 }
 
 /**
@@ -146,6 +157,22 @@ async function unhurried<Done>(pace: Pace, call: () => Promise<Called<Done>>): P
     if (answered.ok || !isAskedTooOften(answered.failure) || rests > RESTS_PER_CALL) return answered;
 
     await pace.rest(answered.failure, rests);
+  }
+}
+
+/**
+ * Make one call that begins an upload or carries a copy on, and make it again after each rest the install asks for, as the calls of `sendUpload` are.
+ *
+ * @param call - a call that an answer of "too many requests" left undone, so that making it again begins nothing twice
+ * @returns the answer, or the failure that stands, as `sendUpload` answers it; the line of a rest is off the terminal by then
+ */
+export async function callUnhurried<Done>(io: Resting, call: () => Promise<Called<Done>>): Promise<Called<Done>> {
+  const pace = new Pace(io);
+
+  try {
+    return await unhurried(pace, call);
+  } finally {
+    pace.clear();
   }
 }
 
