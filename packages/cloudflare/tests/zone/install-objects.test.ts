@@ -185,31 +185,31 @@ describe("the Worker's Access binding and sweep trigger", () => {
 
 describe("a zone the OpenTofu module set up", () => {
   const pieces: readonly { readonly name: string; readonly rate: string; readonly run: Run }[] = [
-    { name: "the records", rate: WHOLE_ZONE, run: (connection) => syncDns(connection, ZONE, SUFFIXED) },
-    { name: "the routes", rate: WHOLE_ZONE, run: (connection) => syncRoutes(connection, ZONE, { layout: SUFFIXED, script: "poplin" }) },
+    { name: "the records", rate: WHOLE_ZONE, run: (connection) => syncDns(connection, ZONE, SUFFIXED, "apply") },
+    { name: "the routes", rate: WHOLE_ZONE, run: (connection) => syncRoutes(connection, ZONE, { layout: SUFFIXED, script: "poplin" }, "apply") },
     {
       name: "the login",
       rate: WHOLE_ZONE,
-      run: (connection) => syncAccess(connection, ACCOUNT, { hostname: hostOf("admin.example.com"), logins: logins() }),
+      run: (connection) => syncAccess(connection, ACCOUNT, { hostname: hostOf("admin.example.com"), logins: logins() }, "apply"),
     },
-    { name: "the rate rule of `rate_rule = zone`, on the Free plan", rate: WHOLE_ZONE, run: (connection) => syncWaf(connection, ZONE, FREE) },
+    { name: "the rate rule of `rate_rule = zone`, on the Free plan", rate: WHOLE_ZONE, run: (connection) => syncWaf(connection, ZONE, FREE, "apply") },
     {
       name: "the rate rule of `rate_rule = hostnames`, on a paid plan",
       rate: HOSTNAMES,
-      run: (connection) => syncWaf(connection, ZONE, { ...FREE, plan: "pro", rateRule: "hostnames" }),
+      run: (connection) => syncWaf(connection, ZONE, { ...FREE, plan: "pro", rateRule: "hostnames" }, "apply"),
     },
     {
       name: "the rate rule of `rate_rule = zone`, the module's default, on a paid plan",
       rate: WHOLE_ZONE,
-      run: (connection) => syncWaf(connection, ZONE, { ...FREE, plan: "pro" }),
+      run: (connection) => syncWaf(connection, ZONE, { ...FREE, plan: "pro" }, "apply"),
     },
     {
       name: "the guard rules",
       rate: WHOLE_ZONE,
-      run: (connection) => syncGuards(connection, ZONE, { layout: SUFFIXED, plan: "free", outsidePages: "blocked", searchEnginesAllowed: false }),
+      run: (connection) => syncGuards(connection, ZONE, { layout: SUFFIXED, plan: "free", outsidePages: "blocked", searchEnginesAllowed: false }, "apply"),
     },
-    { name: "the database", rate: WHOLE_ZONE, run: (connection) => syncDatabase(connection, ACCOUNT) },
-    { name: "the bot settings", rate: WHOLE_ZONE, run: (connection) => syncZoneBots(connection, ZONE, { blockBots: "auto", plan: "free", sharesZone: false }) },
+    { name: "the database", rate: WHOLE_ZONE, run: (connection) => syncDatabase(connection, ACCOUNT, "apply") },
+    { name: "the bot settings", rate: WHOLE_ZONE, run: (connection) => syncZoneBots(connection, ZONE, { blockBots: "auto", plan: "free", sharesZone: false }, "apply") },
   ];
 
   test.each(pieces)("$name: the setup client finds its own object, sends no change, and reports none", async ({ rate, run }) => {
@@ -229,7 +229,7 @@ describe("a zone the OpenTofu module set up", () => {
     await withFake(
       (asked) => answer(moduleZone(WHOLE_ZONE), asked),
       async (connection) => {
-        const synced = await syncDns(connection, ZONE, SUFFIXED);
+        const synced = await syncDns(connection, ZONE, SUFFIXED, "apply");
 
         expect(synced).toMatchObject({ ok: true, sharesZone: false });
       },

@@ -6,6 +6,8 @@
     "./src/api/api": "./src/api/api.ts",
     "./src/dashboard/dashboard": "./src/dashboard/dashboard.ts",
     "./src/dashboard/settings/free-limits": "./src/dashboard/settings/free-limits.ts",
+    "./src/dashboard/domain/records": "./src/dashboard/domain/records.ts",
+    "./src/dashboard/domain/setup": "./src/dashboard/domain/setup.ts",
     "./src/limits/limits": "./src/limits/limits.ts",
     "./src/limits/refusal": "./src/limits/refusal.ts",
     "./src/limits/visitor-key": "./src/limits/visitor-key.ts",

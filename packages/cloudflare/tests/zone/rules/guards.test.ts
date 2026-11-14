@@ -187,9 +187,9 @@ describe("syncGuards", () => {
         return reply(ruleset);
       },
       async (connection, asked) => {
-        const first = await syncGuards(connection, "zone-1", BLOCKING);
+        const first = await syncGuards(connection, "zone-1", BLOCKING, "apply");
         const sent = asked.length;
-        const second = await syncGuards(connection, "zone-1", BLOCKING);
+        const second = await syncGuards(connection, "zone-1", BLOCKING, "apply");
 
         expect(first).toMatchObject({ ok: true, report: { created: ["outside pages rule", "bots rule"], changedNothing: false } });
         expect(second).toMatchObject({ ok: true, report: { left: ["outside pages rule", "bots rule"], changedNothing: true } });
@@ -210,7 +210,7 @@ describe("syncGuards", () => {
     await withFake(
       (asked) => reply(asked.method === "GET" ? ruleset : { id: "set-custom" }),
       async (connection, asked) => {
-        expect(await syncGuards(connection, "zone-1", { ...BLOCKING, outsidePages: "allowed" })).toMatchObject({
+        expect(await syncGuards(connection, "zone-1", { ...BLOCKING, outsidePages: "allowed" }, "apply")).toMatchObject({
           ok: true,
           report: { removed: ["outside pages rule"], left: ["bots rule"] },
         });
@@ -223,7 +223,7 @@ describe("syncGuards", () => {
     await withFake(
       () => reply({ id: "set-custom", rules: ownersRules(5) }),
       async (connection, asked) => {
-        expect(await syncGuards(connection, "zone-1", BLOCKING)).toMatchObject({
+        expect(await syncGuards(connection, "zone-1", BLOCKING, "apply")).toMatchObject({
           ok: true,
           report: {
             skipped: [

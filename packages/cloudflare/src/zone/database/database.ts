@@ -4,7 +4,7 @@
 import { BaseDatabase } from "cloudflare/resources/d1/database/database";
 import { type Connection, callCloudflare } from "../client";
 import { INSTALL_OBJECTS } from "../install-objects";
-import { applySteps, type Report, reportOf, type SyncFailure } from "../sync";
+import { applySteps, type Mode, type Report, reportOf, type SyncFailure } from "../sync";
 
 const NAME = INSTALL_OBJECTS.database;
 
@@ -17,9 +17,9 @@ interface AccountDatabase {
 /** One step of a database plan; a `leave` carries the id of the database found. */
 type DatabaseStep = { readonly kind: "create"; readonly subject: typeof NAME } | { readonly kind: "leave"; readonly subject: typeof NAME; readonly id: string };
 
-/** A finished run with the id the Worker's `DB` binding takes, or the failure that stopped it. `no-id` means Cloudflare's reply named no database. */
+/** A finished run with the id the Worker's `DB` binding takes, or the failure that stopped it. The id is absent only from a plan that would create the database. `no-id` means Cloudflare's reply named no database. */
 type DatabaseSynced =
-  | { readonly ok: true; readonly report: Report; readonly id: string }
+  | { readonly ok: true; readonly report: Report; readonly id: string | undefined }
   | { readonly ok: false; readonly failure: "no-id"; readonly report: Report }
   | SyncFailure;
 
@@ -39,9 +39,10 @@ export function planDatabase(databases: readonly AccountDatabase[]): DatabaseSte
 /**
  * Make sure the account has poplin's database.
  *
+ * @param mode - `plan` reads the account's databases and sends no change
  * @returns what was created or left, and the database's id; a database with poplin's name is taken as it is, and no schema is applied
  */
-export async function syncDatabase(connection: Connection, accountId: string): Promise<DatabaseSynced> {
+export async function syncDatabase(connection: Connection, accountId: string, mode: Mode): Promise<DatabaseSynced> {
   // The `name` filter is a search, so the plan still compares each name in full.
   const listed = await callCloudflare(connection, (api) => Array.fromAsync(new BaseDatabase(api).list({ account_id: accountId, name: NAME })));
   if (!listed.ok) return { ...listed, report: reportOf([]) };
@@ -54,10 +55,10 @@ export async function syncDatabase(connection: Connection, accountId: string): P
     if (created.ok) id = created.value.uuid;
 
     return created;
-  });
+  }, mode);
   if (!synced.ok) return synced;
 
-  if (id === undefined) return { ok: false, failure: "no-id", report: synced.report };
+  if (id === undefined && mode === "apply") return { ok: false, failure: "no-id", report: synced.report };
 
   return { ...synced, id };
 }

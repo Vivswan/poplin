@@ -44,9 +44,9 @@ describe("syncDatabase", () => {
         return reply(made);
       },
       async (connection, asked) => {
-        const first = await syncDatabase(connection, "account-a");
+        const first = await syncDatabase(connection, "account-a", "apply");
         const sent = asked.length;
-        const second = await syncDatabase(connection, "account-a");
+        const second = await syncDatabase(connection, "account-a", "apply");
 
         expect(first).toMatchObject({ ok: true, id: ID, report: { created: ["poplin"], changedNothing: false } });
         expect(second).toMatchObject({ ok: true, id: ID, report: { left: ["poplin"], changedNothing: true } });
@@ -63,7 +63,7 @@ describe("syncDatabase", () => {
     await withFake(
       () => refusal(403, 10000, "Authentication error"),
       async (connection, asked) => {
-        expect(await syncDatabase(connection, "account-a")).toMatchObject({ ok: false, failure: "refused", status: 403, report: { changedNothing: true } });
+        expect(await syncDatabase(connection, "account-a", "apply")).toMatchObject({ ok: false, failure: "refused", status: 403, report: { changedNothing: true } });
         expect(asked.map((entry) => entry.method)).toEqual(["GET"]);
       },
     );
@@ -73,7 +73,7 @@ describe("syncDatabase", () => {
     await withFake(
       (asked) => (asked.method === "GET" ? page(asked, []) : reply({ name: "poplin" })),
       async (connection) => {
-        expect(await syncDatabase(connection, "account-a")).toMatchObject({ ok: false, failure: "no-id", report: { created: ["poplin"] } });
+        expect(await syncDatabase(connection, "account-a", "apply")).toMatchObject({ ok: false, failure: "no-id", report: { created: ["poplin"] } });
       },
     );
   });

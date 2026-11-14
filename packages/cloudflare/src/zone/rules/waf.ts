@@ -4,7 +4,7 @@ import type { Connection, ZonePlan } from "../client";
 import { INSTALL_OBJECTS } from "../install-objects";
 import { type DomainLayout, siteEnding } from "../layout";
 import { type PhaseRules, planOwnRule, quoted, type RuleStep, removeOwnRule, syncPhase } from "./rules";
-import type { Synced } from "../sync";
+import type { Mode, Synced } from "../sync";
 
 const RATE_REF = INSTALL_OBJECTS.rateRef;
 const RATE_SUBJECT = "rate rule";
@@ -103,8 +103,9 @@ export function planWaf(desired: DesiredRules, current: PhaseRules | undefined):
 /**
  * Make the zone's rate rule match an install.
  *
+ * @param mode - `plan` reads the rate limiting phase and sends no change
  * @returns what was created, changed, left, or removed; a rate rule the zone cannot hold, or one switched off, is a skip with its reason, never a failure
  */
-export function syncWaf(connection: Connection, zoneId: string, desired: DesiredRules): Promise<Synced> {
-  return syncPhase(connection, zoneId, RATE_PHASE, (current) => planWaf(desired, current));
+export function syncWaf(connection: Connection, zoneId: string, desired: DesiredRules, mode: Mode): Promise<Synced> {
+  return syncPhase(connection, zoneId, RATE_PHASE, (current) => planWaf(desired, current), mode);
 }

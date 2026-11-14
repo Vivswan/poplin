@@ -4,12 +4,13 @@ import type { Logins } from "@poplin/core/src/auth/logins";
 import type { Hostname } from "@poplin/core/src/names/hostname";
 import { BaseApplications } from "cloudflare/resources/zero-trust/access/applications/applications";
 import { BasePolicies } from "cloudflare/resources/zero-trust/access/policies";
-import { type CloudflareResult, type Connection, callCloudflare } from "../client";
+import { type CloudflareFailure, type CloudflareResult, type Connection, callCloudflare } from "../client";
 import { INSTALL_OBJECTS } from "../install-objects";
-import { applySteps, reportOf, type Synced } from "../sync";
+import { applySteps, type Mode, reportOf, type Synced } from "../sync";
 
 const POLICY_NAME = INSTALL_OBJECTS.accessPolicy;
 const APPLICATION_NAME = INSTALL_OBJECTS.accessApplication;
+const NOT_ENABLED = "access.api.error.not_enabled";
 
 /** A reusable policy as the account has it now. */
 interface AccountPolicy {
@@ -119,11 +120,21 @@ export function planAccess(desired: DesiredAccess, current: AccountAccess): Acce
 }
 
 /**
+ * Decide whether a failure says Access is switched off for the account, which only a click in Cloudflare's own dashboard changes.
+ *
+ * @returns `true` for a refusal that carries Cloudflare's not-enabled message, and for no other failure
+ */
+export function isAccessOff(failure: CloudflareFailure): boolean {
+  return failure.failure === "refused" && failure.errors.some((error) => error.message.includes(NOT_ENABLED));
+}
+
+/**
  * Make the account's Access match an install's login.
  *
+ * @param mode - `plan` reads the policies and applications and sends no change
  * @returns what was created, changed, and left; the application is linked to the policy the same run made
  */
-export async function syncAccess(connection: Connection, accountId: string, desired: DesiredAccess): Promise<Synced> {
+export async function syncAccess(connection: Connection, accountId: string, desired: DesiredAccess, mode: Mode): Promise<Synced> {
   const policies = await callCloudflare(connection, (api) => Array.fromAsync(new BasePolicies(api).list({ account_id: accountId })));
   if (!policies.ok) return { ...policies, report: reportOf([]) };
 
@@ -159,5 +170,5 @@ export async function syncAccess(connection: Connection, accountId: string, desi
     return callCloudflare(connection, (api) =>
       step.kind === "create" ? new BaseApplications(api).create(body) : new BaseApplications(api).update(step.id, body),
     );
-  });
+  }, mode);
 }

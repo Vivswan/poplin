@@ -9,6 +9,7 @@ import type { Site } from "@poplin/core/src/records/site";
 import { MemoryStore } from "@poplin/core/src/storage/memory";
 
 import { createDashboard } from "../../../src/dashboard/dashboard";
+import type { DomainPlug } from "../../../src/dashboard/domain/records";
 import { mintSessionCookie, readSession } from "../../../src/login/session";
 import { NOW, openInstall } from "../../sites/support/install";
 import { ADDRESSES } from "../../sites/support/layout";
@@ -48,9 +49,10 @@ export interface Opened {
 /**
  * Open a dashboard over a fresh install with the default settings and one login.
  *
+ * @param domain - the domain plug to build it with; left out, the dashboard has no Domain tab
  * @returns the dashboard's helpers: `get` and `post` carry the owner's session, and `post` sends a form as a dashboard page would, token included
  */
-export async function openDashboard(): Promise<Opened> {
+export async function openDashboard(domain?: DomainPlug): Promise<Opened> {
   const base = await openInstall();
   const clock = { now: NOW };
   const install: Install = {
@@ -75,7 +77,7 @@ export async function openDashboard(): Promise<Opened> {
     return readSession(headers, { key: await importSessionKey(stored), logins: logins.value, now: clock.now });
   };
 
-  const dashboard = createDashboard({ install, readSession: sessionOf, addresses: base.serving.addresses, csrfSecret: CSRF_SECRET });
+  const dashboard = createDashboard({ install, readSession: sessionOf, addresses: base.serving.addresses, csrfSecret: CSRF_SECRET, domain });
   const get: Opened["get"] = (path, headers = {}) => dashboard.fetch(new Request(`${ORIGIN}${path}`, { headers: { Cookie: cookie, ...headers } }));
 
   const token: Opened["token"] = async () => {

@@ -5,7 +5,7 @@ import { BaseRules } from "cloudflare/resources/rulesets/rules";
 import { BaseRulesets } from "cloudflare/resources/rulesets/rulesets";
 import { type CloudflareResult, type Connection, callCloudflare } from "../client";
 import { INSTALL_OBJECTS } from "../install-objects";
-import { applySteps, reportOf, type Synced } from "../sync";
+import { applySteps, type Mode, reportOf, type Synced } from "../sync";
 
 const NOT_FOUND_STATUS = 404;
 const LITERAL = /^[a-z0-9.-]+$/;
@@ -144,7 +144,7 @@ async function readPhase(connection: Connection, zoneId: string, phase: Phase): 
 }
 
 // Each change is sent for one rule by its id, so the phase's other rules are in no request.
-async function applyRuleSteps(connection: Connection, zoneId: string, phase: Phase, steps: readonly RuleStep[]): Promise<Synced> {
+async function applyRuleSteps(connection: Connection, zoneId: string, phase: Phase, steps: readonly RuleStep[], mode: Mode): Promise<Synced> {
   // A phase with no ruleset gets its new rules in the one request that makes the ruleset.
   const founding = steps.filter((step) => step.kind === "create" && step.rulesetId === undefined);
   const foundingRules = founding.flatMap((step) => (step.kind === "create" ? [step.rule] : []));
@@ -163,18 +163,25 @@ async function applyRuleSteps(connection: Connection, zoneId: string, phase: Pha
     if (step !== founding[0]) return { ok: true, value: undefined };
 
     return callCloudflare(connection, (api) => new BaseRulesets(api).create({ zone_id: zoneId, kind: "zone", phase, name: NEW_RULESET_NAMES[phase], rules: foundingRules }));
-  });
+  }, mode);
 }
 
 /**
  * Make poplin's rules in one phase of the zone match a plan.
  *
  * @param plan - computes the steps from the phase's entry point ruleset as it is now; a phase that never had a rule has none
+ * @param mode - `plan` reads the phase and sends no change
  * @returns what was created, changed, left, removed, and skipped, or the failure with the report of the steps done before it
  */
-export async function syncPhase(connection: Connection, zoneId: string, phase: Phase, plan: (current: PhaseRules | undefined) => RuleStep[]): Promise<Synced> {
+export async function syncPhase(
+  connection: Connection,
+  zoneId: string,
+  phase: Phase,
+  plan: (current: PhaseRules | undefined) => RuleStep[],
+  mode: Mode,
+): Promise<Synced> {
   const current = await readPhase(connection, zoneId, phase);
   if (!current.ok) return { ...current, report: reportOf([]) };
 
-  return applyRuleSteps(connection, zoneId, phase, plan(current.value));
+  return applyRuleSteps(connection, zoneId, phase, plan(current.value), mode);
 }

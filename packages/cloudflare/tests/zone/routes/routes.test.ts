@@ -83,9 +83,9 @@ describe("syncRoutes", () => {
         return reply({ id: "new" });
       },
       async (connection, asked) => {
-        const first = await syncRoutes(connection, "zone-1", { layout: SUFFIXED, script: SCRIPT });
+        const first = await syncRoutes(connection, "zone-1", { layout: SUFFIXED, script: SCRIPT }, "apply");
         const sent = asked.length;
-        const second = await syncRoutes(connection, "zone-1", { layout: SUFFIXED, script: SCRIPT });
+        const second = await syncRoutes(connection, "zone-1", { layout: SUFFIXED, script: SCRIPT }, "apply");
 
         expect(first).toMatchObject({ ok: true, report: { created: patterns, changedNothing: false } });
         expect(second).toMatchObject({ ok: true, report: { left: patterns, changedNothing: true } });

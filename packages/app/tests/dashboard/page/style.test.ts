@@ -33,6 +33,7 @@ test("every pair of a text colour and the ground it is read on meets WCAG AA, on
       ["link", "ground"],
       ["link", "lift"],
       ["danger", "ground"],
+      ["good", "ground"],
       ["onButton", "button"],
     ] as const;
 

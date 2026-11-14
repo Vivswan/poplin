@@ -3,7 +3,7 @@
 import { BaseBotManagement } from "cloudflare/resources/bot-management/bot-management";
 import { type Connection, callCloudflare, type ZonePlan } from "../client";
 import { INSTALL_OBJECTS } from "../install-objects";
-import { applySteps, reportOf, type Synced } from "../sync";
+import { applySteps, type Mode, reportOf, type Synced } from "../sync";
 
 const SUBJECT = "zone bot switches";
 const AI_BOTS_BLOCKED = { ai_bots_protection: INSTALL_OBJECTS.aiBots } as const;
@@ -76,15 +76,18 @@ export function planZoneBots(desired: DesiredZoneBots, current: ZoneSwitches | u
 /**
  * Make the zone's bot switches match an install.
  *
+ * @param mode - `plan` reads the switches and sends no change
  * @returns what was changed or left; switches poplin will not touch are a skip with its reason, decided before any request is sent
  */
-export async function syncZoneBots(connection: Connection, zoneId: string, desired: DesiredZoneBots): Promise<Synced> {
+export async function syncZoneBots(connection: Connection, zoneId: string, desired: DesiredZoneBots, mode: Mode): Promise<Synced> {
   if (skipReason(desired) !== undefined) return { ok: true, report: reportOf(planZoneBots(desired, undefined)) };
 
   const current = await callCloudflare(connection, (api) => new BaseBotManagement(api).get({ zone_id: zoneId }));
   if (!current.ok) return { ...current, report: reportOf([]) };
 
-  return applySteps(planZoneBots(desired, current.value), (step) =>
-    callCloudflare(connection, (api) => new BaseBotManagement(api).update({ zone_id: zoneId, ...step.switches })),
+  return applySteps(
+    planZoneBots(desired, current.value),
+    (step) => callCloudflare(connection, (api) => new BaseBotManagement(api).update({ zone_id: zoneId, ...step.switches })),
+    mode,
   );
 }

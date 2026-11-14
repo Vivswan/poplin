@@ -7,6 +7,8 @@
 //   POST /settings/<change>        save, sign-everyone-out
 //   GET  /activity                 the audit log
 //   GET  /usage                    the totals and the day's requests
+//   GET  /domain                   the token form and the domain's settings; only with a domain plug
+//   POST /domain/<change>          check, repair, save
 //
 // Every request is first asked for its session: without one the only answer is the way to the login. Every POST is then checked to come from a dashboard page.
 
@@ -22,15 +24,17 @@ import { showActivity } from "./activity/activity-page";
 import { framePage, refusedPage } from "./page/frame";
 import { noticeIn } from "./page/notices";
 import type { Change, Form, Page, Visit } from "./records";
-import { checkCsrfToken, importCsrfKey, mintCsrfToken } from "./security/csrf";
-import { isForm, readForm } from "./security/form";
-import { isSameOrigin } from "./security/same-origin";
+import { importCsrfKey, mintCsrfToken } from "./security/csrf";
+import { readOwnForm } from "./security/own-form";
 import { SETTINGS_CHANGES } from "./settings/settings-changes";
 import { showSettings } from "./settings/settings-page";
 import { SITE_CHANGES } from "./sites/site-changes";
 import { showSite } from "./sites/site-page";
 import { showSites } from "./sites/sites-page";
 import { showUsage } from "./usage/usage-page";
+import type { DomainPlug } from "./domain/records";
+import { DOMAIN_CHANGES } from "./domain/domain-changes";
+import { showDomain } from "./domain/domain-page";
 
 /** The methods the dashboard answers. */
 const METHODS: ReadonlySet<string> = new Set(["GET", "HEAD", "POST"]);
@@ -66,11 +70,14 @@ interface DashboardParts {
 
   /** At least 32 random bytes that sign the forms' tokens, used for nothing else. */
   readonly csrfSecret: Uint8Array<ArrayBuffer>;
+
+  /** The provider's side of the install. Left out, the dashboard has no Domain tab and answers none of its paths. */
+  readonly domain?: DomainPlug;
 }
 
-/** What the handlers of one request share. */
+/** What the handlers of one request share. `tabs` says whether the frame shows the Domain tab. */
 interface Shared {
-  Variables: { visit: Visit; form: Form };
+  Variables: { visit: Visit; form: Form; tabs: "domain" | undefined };
 }
 
 /** Something that answers a request, as a Worker's `fetch` does. */
@@ -89,7 +96,7 @@ async function respond(context: Context<Shared>, page: Page): Promise<Response> 
   const visit = context.get("visit");
   const config = await readConfig(visit.install, visit.actor);
   const title = config.ok ? config.values.dashboard_title : PLAIN_TITLE;
-  const document = await framePage(page, { title, nonce: context.get("secureHeadersNonce") ?? "", notice: noticeIn(visit.url) });
+  const document = await framePage(page, { title, nonce: context.get("secureHeadersNonce") ?? "", notice: noticeIn(visit.url), tabs: context.get("tabs") });
 
   return context.html(document, page.status ?? 200);
 }
@@ -132,6 +139,7 @@ export function createDashboard(parts: DashboardParts): Dashboard {
     const actor = { scope: "admin", holder: who.value } as const;
     const csrf = await mintCsrfToken({ key: await csrfKey, email: who.value, now: parts.install.now() });
     context.set("visit", { install: parts.install, actor, url, csrf, login: loginAddress(parts.addresses, url, "/") });
+    context.set("tabs", parts.domain === undefined ? undefined : "domain");
 
     return next();
   };
@@ -146,15 +154,10 @@ export function createDashboard(parts: DashboardParts): Dashboard {
   };
 
   const fromHere: MiddlewareHandler<Shared> = async (context, next) => {
-    if (!isForm(context.req.raw)) return refuse(context, "not_a_form", 415);
+    const sent = await readOwnForm(context.req.raw, { key: await csrfKey, email: context.get("visit").actor.holder, now: parts.install.now() });
+    if (!sent.ok) return refuse(context, sent.code, sent.status);
 
-    if (!isSameOrigin(context.req.raw)) return refuse(context, "not_from_here", 403);
-
-    const form = readForm(await context.req.text());
-    const genuine = await checkCsrfToken(form.get("csrf") ?? "", { key: await csrfKey, email: context.get("visit").actor.holder, now: parts.install.now() });
-    if (!genuine) return refuse(context, "not_from_here", 403);
-
-    context.set("form", form);
+    context.set("form", sent.form);
 
     return next();
   };
@@ -175,6 +178,18 @@ export function createDashboard(parts: DashboardParts): Dashboard {
   app.post("/settings/:change", (context) => change(context, SETTINGS_CHANGES, context.req.param("change")));
   app.get("/activity", async (context) => respond(context, await showActivity(context.get("visit"))));
   app.get("/usage", async (context) => respond(context, await showUsage(context.get("visit"))));
+
+  const { domain } = parts;
+  if (domain !== undefined) {
+    app.get("/domain", async (context) => respond(context, await showDomain(context.get("visit"), domain)));
+    app.post("/domain/:change", async (context) => {
+      const run = context.req.param("change");
+      if (run !== "check" && run !== "repair") return change(context, DOMAIN_CHANGES, run);
+
+      // A run answers with the page itself: a redirect could not carry the table, and the token is gone once the answer is sent.
+      return respond(context, await showDomain(context.get("visit"), domain, { run, form: context.get("form") }));
+    });
+  }
 
   app.notFound((context) => refuse(context, "no_page", 404));
   app.onError(() => new Response(FAILURE, { status: 500, headers: { "Content-Type": "text/plain; charset=utf-8" } }));

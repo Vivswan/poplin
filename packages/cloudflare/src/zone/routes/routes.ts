@@ -3,7 +3,7 @@
 import { BaseRoutes } from "cloudflare/resources/workers/routes";
 import { type Connection, callCloudflare } from "../client";
 import { type DomainLayout, siteEnding } from "../layout";
-import { applySteps, reportOf, type Synced } from "../sync";
+import { applySteps, type Mode, reportOf, type Synced } from "../sync";
 
 const ROUTED_ELSEWHERE = "a route poplin did not create holds this pattern";
 
@@ -63,9 +63,10 @@ export function planRoutes(desired: DesiredRoutes, routes: readonly ZoneRoute[])
 /**
  * Make the zone's Worker routes match a layout.
  *
+ * @param mode - `plan` reads the routes and sends no change
  * @returns what was created, left, and removed; a pattern another route holds is skipped, never taken over
  */
-export async function syncRoutes(connection: Connection, zoneId: string, desired: DesiredRoutes): Promise<Synced> {
+export async function syncRoutes(connection: Connection, zoneId: string, desired: DesiredRoutes, mode: Mode): Promise<Synced> {
   const listed = await callCloudflare(connection, (api) => Array.fromAsync(new BaseRoutes(api).list({ zone_id: zoneId })));
   if (!listed.ok) return { ...listed, report: reportOf([]) };
 
@@ -75,5 +76,5 @@ export async function syncRoutes(connection: Connection, zoneId: string, desired
     if (step.kind === "remove") return callCloudflare(connection, (api) => new BaseRoutes(api).delete(step.id, { zone_id: zoneId }));
 
     return callCloudflare(connection, (api) => new BaseRoutes(api).create({ zone_id: zoneId, pattern: step.subject, script: step.script }));
-  });
+  }, mode);
 }

@@ -273,9 +273,9 @@ describe("syncWaf", () => {
       },
       async (connection, asked) => {
         const desired = { layout: SUFFIXED, plan: "pro", sharesZone: true, rateRule: "hostnames" } as const;
-        const first = await syncWaf(connection, "zone-1", desired);
+        const first = await syncWaf(connection, "zone-1", desired, "apply");
         const sent = asked.length;
-        const second = await syncWaf(connection, "zone-1", desired);
+        const second = await syncWaf(connection, "zone-1", desired, "apply");
 
         expect(first).toMatchObject({ ok: true, report: { created: ["rate rule"], changedNothing: false } });
         expect(second).toMatchObject({ ok: true, report: { left: ["rate rule"], changedNothing: true } });
@@ -296,7 +296,7 @@ describe("syncWaf", () => {
     await withFake(
       () => reply(ruleset),
       async (connection, asked) => {
-        expect(await syncWaf(connection, "zone-1", { layout: SUFFIXED, plan: "free", sharesZone: false, rateRule: "zone" })).toMatchObject({
+        expect(await syncWaf(connection, "zone-1", { layout: SUFFIXED, plan: "free", sharesZone: false, rateRule: "zone" }, "apply")).toMatchObject({
           ok: true,
           report: { skipped: [{ subject: "rate rule", reason: SLOT_TAKEN }], changedNothing: true },
         });

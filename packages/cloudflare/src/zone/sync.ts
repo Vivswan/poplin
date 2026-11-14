@@ -15,6 +15,9 @@ interface Step {
 /** A step that changes something at Cloudflare. */
 export type Acting<Planned extends Step> = Exclude<Planned, { readonly kind: "leave" | "skip" }>;
 
+/** Whether a run changes Cloudflare: `plan` reads, computes the same steps, and sends no change, so its report says what `apply` would do. */
+export type Mode = "plan" | "apply";
+
 /** What a run did, by subject. `changedNothing` is true when Cloudflare already matched the desired state. */
 export interface Report {
   readonly created: readonly string[];
@@ -25,8 +28,8 @@ export interface Report {
   readonly changedNothing: boolean;
 }
 
-/** The failure that stopped a run, with the report of the steps done before it. */
-export type SyncFailure = CloudflareFailure & { readonly report: Report };
+/** The failure that stopped a run, with the report of the steps done before it. `failed` is the subject of the step that failed and `unrun` the subjects after it; both are absent when the run stopped before it had a plan. */
+export type SyncFailure = CloudflareFailure & { readonly report: Report; readonly failed?: string; readonly unrun?: readonly string[] };
 
 /** A finished run, or the failure that stopped it with the report of the steps done before it. */
 export type Synced = { readonly ok: true; readonly report: Report } | SyncFailure;
@@ -57,19 +60,22 @@ export function reportOf(steps: readonly Step[]): Report {
 /**
  * Run a plan in order, stopping at the first failure.
  *
- * @param perform - makes Cloudflare match one step; a `leave` or a `skip` never reaches it
- * @returns the report of the whole plan, or the failure with the report of the steps that finished
+ * @param perform - makes Cloudflare match one step; a `leave` or a `skip` never reaches it, and in `plan` mode no step does
+ * @returns the report of the whole plan, or the failure with the report of the steps that finished, the step that failed, and the steps never reached
  */
 export async function applySteps<Planned extends Step>(
   steps: readonly Planned[],
   perform: (step: Acting<Planned>) => Promise<CloudflareResult<unknown>>,
+  mode: Mode,
 ): Promise<Synced> {
+  if (mode === "plan") return { ok: true, report: reportOf(steps) };
+
   const done: Planned[] = [];
 
-  for (const step of steps) {
+  for (const [index, step] of steps.entries()) {
     if (acts(step)) {
       const result = await perform(step);
-      if (!result.ok) return { ...result, report: reportOf(done) };
+      if (!result.ok) return { ...result, report: reportOf(done), failed: step.subject, unrun: steps.slice(index + 1).map((later) => later.subject) };
     }
 
     done.push(step);

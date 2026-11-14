@@ -200,3 +200,11 @@ test("a HEAD of a page answers its headers and no body", async () => {
 
   expect([answer.status, await answer.text()]).toEqual([200, ""]);
 });
+
+test("a dashboard built with no domain plug has no Domain tab and answers none of its paths", async () => {
+  const opened = await openDashboard();
+  const answers = [await opened.get("/domain"), await opened.post("/domain/check", { token: "a-token-0123456789-abcdefgh" }), await opened.post("/domain/save", {})];
+
+  expect(answers.map((answer) => answer.status)).toEqual([404, 404, 404]);
+  expect(await (await opened.get("/")).text()).not.toContain('href="/domain"');
+});

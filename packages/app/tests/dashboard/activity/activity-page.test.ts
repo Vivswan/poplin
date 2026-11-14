@@ -57,3 +57,19 @@ test("a place the audit action refuses shows the refusal's sentence and not the 
   expect(page).toContain('<p class="notice refused" role="status">The value of before is not one it takes.</p>');
   expect(page).not.toContain("<script>");
 });
+
+test("a run on the domain is told truthfully from its entry: a check, a repair, and a repair that stopped with the row it stopped at", async () => {
+  const opened = await openDashboard();
+  const runs = [
+    [{ run: "check", from: "dashboard", missing: ["DNS record: admin.example.com"] }, "checked the domain"],
+    [{ run: "repair", from: "setup", created: ["DNS record: admin.example.com"] }, "repaired the domain"],
+    [{ run: "repair", from: "dashboard", created: ["DNS record: admin.example.com"], failed: ["Route: admin.example.com/*: refused with status 403"] }, "repair stopped at Route"],
+  ] as const;
+
+  for (const [index, [detail]] of runs.entries()) await opened.install.database.appendAudit({ action: "domain_synced", detail }, { by: opened.owner, at: opened.clock.now + index });
+
+  const page = await (await opened.get("/activity")).text();
+  const told = [...page.matchAll(/<td>([^<]*the domain|repair stopped[^<]*)<\/td>/g)].map((match) => match[1]);
+
+  expect(told).toEqual(runs.map(([, words]) => words).reverse());
+});

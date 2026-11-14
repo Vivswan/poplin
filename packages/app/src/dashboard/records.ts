@@ -7,8 +7,8 @@ import type { html } from "hono/html";
 /** Markup the `html` helper built: every value put into it was escaped. */
 export type Html = ReturnType<typeof html>;
 
-/** The tabs of the dashboard, in the order they are shown. */
-export type Tab = "sites" | "settings" | "activity" | "usage";
+/** The tabs of the dashboard, in the order they are shown. The last is there only on a dashboard built with a domain plug. */
+export type Tab = "sites" | "settings" | "activity" | "usage" | "domain";
 
 /** The fields of a posted form, by name; of a name sent twice the last value. */
 export type Form = ReadonlyMap<string, string>;
@@ -36,7 +36,7 @@ export interface Page {
   readonly tab: Tab;
   readonly heading: string;
   readonly body: Html;
-  readonly status?: 403 | 404 | 405 | 413 | 415;
+  readonly status?: 403 | 404 | 405 | 413 | 415 | 429 | 502;
 }
 
 /** A change a form asks for, about the subjects its address names. It answers where the browser goes next: a dashboard path that carries the result. */

@@ -36,6 +36,7 @@ const REFUSALS: Readonly<Record<ActionCode | OwnCode, string>> = {
   not_from_here: "The request did not come from this page, or the page was open for too long. Reload the page and try again.",
   no_page: "There is no such page.",
   bad_method: "The dashboard does not answer that kind of request.",
+  too_many_tries: "Too many tries. Wait a minute.",
 };
 
 /** What each finished change says. */
@@ -76,7 +77,7 @@ type ActionCode =
   | CodeOf<typeof signEveryoneOut>;
 
 /** The codes of the dashboard's own refusals: a form it cannot take, or a request it does not answer. */
-type OwnCode = "wrong_confirmation" | "not_confirmed" | "missing_field" | "not_a_form" | "too_large" | "not_from_here" | "no_page" | "bad_method";
+type OwnCode = "wrong_confirmation" | "not_confirmed" | "missing_field" | "not_a_form" | "too_large" | "not_from_here" | "no_page" | "bad_method" | "too_many_tries";
 
 /** A change that was done, or a refusal with what it is about. */
 type Result = { readonly done: keyof typeof DONE } | { readonly refused: string; readonly about?: string };

@@ -145,9 +145,9 @@ describe("syncAccess", () => {
       },
       async (connection, asked) => {
         const desired = { hostname: ADMIN, logins: loginsOf("owner@example.com") };
-        const first = await syncAccess(connection, "account-a", desired);
+        const first = await syncAccess(connection, "account-a", desired, "apply");
         const sent = asked.length;
-        const second = await syncAccess(connection, "account-a", desired);
+        const second = await syncAccess(connection, "account-a", desired, "apply");
 
         expect(first).toMatchObject({ ok: true, report: { created: ["poplin logins", "poplin"], changedNothing: false } });
         expect(second).toMatchObject({ ok: true, report: { left: ["poplin logins", "poplin"], changedNothing: true } });

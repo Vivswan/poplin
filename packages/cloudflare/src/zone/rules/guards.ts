@@ -5,7 +5,7 @@ import type { Connection, ZonePlan } from "../client";
 import { INSTALL_OBJECTS } from "../install-objects";
 import { type DomainLayout, siteEnding } from "../layout";
 import { type PhaseRules, planOwnRule, quoted, type RuleStep, removeOwnRule, syncPhase } from "./rules";
-import type { Synced } from "../sync";
+import type { Mode, Synced } from "../sync";
 
 const CUSTOM_PHASE = "http_request_firewall_custom";
 const CUSTOM_RULE_SLOTS: Readonly<Record<ZonePlan, number>> = { free: 5, pro: 20, business: 100, enterprise: 1000 };
@@ -95,8 +95,9 @@ export function planGuards(desired: DesiredGuards, current: PhaseRules | undefin
 /**
  * Make the zone's guard rules match an install.
  *
+ * @param mode - `plan` reads the custom rules phase and sends no change
  * @returns what was created, changed, left, or removed; a rule the plan has no slot for is a skip with its reason, never a failure
  */
-export function syncGuards(connection: Connection, zoneId: string, desired: DesiredGuards): Promise<Synced> {
-  return syncPhase(connection, zoneId, CUSTOM_PHASE, (current) => planGuards(desired, current));
+export function syncGuards(connection: Connection, zoneId: string, desired: DesiredGuards, mode: Mode): Promise<Synced> {
+  return syncPhase(connection, zoneId, CUSTOM_PHASE, (current) => planGuards(desired, current), mode);
 }

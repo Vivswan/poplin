@@ -24,6 +24,7 @@ const AUDIT_ACTIONS = [
   "settings_changed",
   "signed_everyone_out",
   "login",
+  "domain_synced",
 ] as const;
 
 /** A row of the audit table. `detail` is a JSON object as text. */

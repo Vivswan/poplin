@@ -254,7 +254,7 @@ describe("syncDns", () => {
     await withFake(
       (asked) => page(asked, [foreign("f1", "status-page.example.com", "A"), foreign("f2", "www.example.com", "A")]),
       async (connection, asked) => {
-        const synced = await syncDns(connection, "zone-1", SUFFIXED);
+        const synced = await syncDns(connection, "zone-1", SUFFIXED, "apply");
 
         expect(synced).toMatchObject({
           ok: false,
@@ -284,9 +284,9 @@ describe("syncDns", () => {
         return reply({ id });
       },
       async (connection, asked) => {
-        const first = await syncDns(connection, "zone-1", SUFFIXED);
+        const first = await syncDns(connection, "zone-1", SUFFIXED, "apply");
         const sent = asked.length;
-        const second = await syncDns(connection, "zone-1", SUFFIXED);
+        const second = await syncDns(connection, "zone-1", SUFFIXED, "apply");
 
         expect(first).toMatchObject({ ok: true, report: { created: ["*.example.com", "admin.example.com"], changedNothing: false } });
         expect(first.ok && first.sharesZone).toBe(true);
@@ -322,7 +322,7 @@ describe("syncDns", () => {
         return reply({ id: "p0" });
       },
       async (connection) => {
-        expect(await syncDns(connection, "zone-1", SUFFIXED)).toMatchObject({
+        expect(await syncDns(connection, "zone-1", SUFFIXED, "apply")).toMatchObject({
           ok: false,
           failure: "refused",
           status: 400,

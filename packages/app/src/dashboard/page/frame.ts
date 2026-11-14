@@ -1,4 +1,4 @@
-// The frame every dashboard page sits in: the title, the four tabs, the result of the last change, then the page.
+// The frame every dashboard page sits in: the title, the tabs, the result of the last change, then the page.
 
 import { html, raw } from "hono/html";
 
@@ -12,6 +12,7 @@ const TABS: readonly { readonly tab: Tab; readonly path: string; readonly label:
   { tab: "settings", path: "/settings", label: "Settings" },
   { tab: "activity", path: "/activity", label: "Activity" },
   { tab: "usage", path: "/usage", label: "Usage" },
+  { tab: "domain", path: "/domain", label: "Domain" },
 ];
 
 /** What the frame shows around a page. */
@@ -24,12 +25,23 @@ interface Look {
 
   /** The result of the change that led here. */
   readonly notice?: Notice;
+
+  /** Which tabs are shown beside the four every dashboard has: `domain` adds the Domain tab, and `none` shows no tab at all, as on the setup page. */
+  readonly tabs?: "domain" | "none";
 }
 
 function tabLink(entry: (typeof TABS)[number], current: Tab): Html {
   if (entry.tab === current) return html`<li><a href="${entry.path}" aria-current="page">${entry.label}</a></li>`;
 
   return html`<li><a href="${entry.path}">${entry.label}</a></li>`;
+}
+
+function tabList(current: Tab, tabs: Look["tabs"]): Html {
+  if (tabs === "none") return html``;
+
+  const shown = TABS.filter((entry) => entry.tab !== "domain" || tabs === "domain");
+
+  return html`<nav aria-label="Tabs"><ul>${shown.map((entry) => tabLink(entry, current))}</ul></nav>`;
 }
 
 function noticeLine(notice: Notice | undefined): Html {
@@ -43,7 +55,7 @@ function noticeLine(notice: Notice | undefined): Html {
  *
  * @returns an input named `csrf` holding the visit's token
  */
-export function csrfField(visit: Visit): Html {
+export function csrfField(visit: Pick<Visit, "csrf">): Html {
   return html`<input type="hidden" name="csrf" value="${visit.csrf}">`;
 }
 
@@ -78,7 +90,7 @@ export function framePage(page: Page, look: Look): Html {
 <a class="skip" href="#content">Skip to the content</a>
 <header>
 <p class="brand">${look.title}</p>
-<nav aria-label="Tabs"><ul>${TABS.map((entry) => tabLink(entry, page.tab))}</ul></nav>
+${tabList(page.tab, look.tabs)}
 </header>
 <main id="content">
 <h1>${page.heading}</h1>

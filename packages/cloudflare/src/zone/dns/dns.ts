@@ -4,7 +4,7 @@ import { BaseRecords } from "cloudflare/resources/dns/records";
 import { type Connection, callCloudflare } from "../client";
 import { INSTALL_OBJECTS } from "../install-objects";
 import { type DomainLayout, siteEnding } from "../layout";
-import { applySteps, type Report, reportOf, type SyncFailure } from "../sync";
+import { applySteps, type Mode, type Report, reportOf, type SyncFailure } from "../sync";
 
 // A Worker route answers only on a hostname with a proxied record; this address is the discard prefix, never reached.
 const PLACEHOLDER = { type: INSTALL_OBJECTS.recordType, content: INSTALL_OBJECTS.recordContent, proxied: true, ttl: 1 } as const;
@@ -160,9 +160,10 @@ export function planDns(layout: DomainLayout, records: readonly ZoneRecord[]): D
 /**
  * Make the zone's records match a layout.
  *
+ * @param mode - `plan` reads the records and sends no change
  * @returns what was created, changed, left, and removed; a zone with a record `refusedRecords` names is refused before any change, so no route can follow
  */
-export async function syncDns(connection: Connection, zoneId: string, layout: DomainLayout): Promise<DnsSynced> {
+export async function syncDns(connection: Connection, zoneId: string, layout: DomainLayout, mode: Mode): Promise<DnsSynced> {
   const listed = await callCloudflare(connection, (api) => Array.fromAsync(new BaseRecords(api).list({ zone_id: zoneId })));
   if (!listed.ok) return { ...listed, report: reportOf([]) };
 
@@ -178,7 +179,7 @@ export async function syncDns(connection: Connection, zoneId: string, layout: Do
     if (step.kind === "change") return callCloudflare(connection, (api) => new BaseRecords(api).update(step.id, body(step.subject)));
 
     return callCloudflare(connection, (api) => new BaseRecords(api).delete(step.id, { zone_id: zoneId }));
-  });
+  }, mode);
   if (!synced.ok) return synced;
 
   return { ...synced, sharesZone: sharesZone(records) };

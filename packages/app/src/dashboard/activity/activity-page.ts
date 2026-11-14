@@ -16,7 +16,7 @@ const PAGE_SIZE = 50;
 const SEQ_PATTERN = /^[1-9][0-9]{0,15}$/;
 
 /** What each action of the log is called. A key missing here does not compile. */
-const WORDS: Readonly<Record<AuditAction, string>> = {
+const WORDS: Readonly<Record<Exclude<AuditAction, "domain_synced">, string>> = {
   create: "made the site",
   publish: "published a version",
   live_version: "rolled back",
@@ -71,8 +71,22 @@ function siteCell(entry: Entry, labels: Labels): Html {
   return html`<a href="/sites/${encodeURIComponent(label)}">${entry.site.name}</a>`;
 }
 
+// A run on the domain says which it was, and a repair that stopped names the row it stopped at.
+function domainWords(detail: Entry["detail"]): string {
+  if (detail.run !== "repair") return "checked the domain";
+
+  const [failed] = Array.isArray(detail.failed) ? detail.failed : [];
+  if (typeof failed !== "string") return "repaired the domain";
+
+  return `repair stopped at ${failed.split(": ")[0]}`;
+}
+
+function wordsOf(entry: Entry): string {
+  return entry.action === "domain_synced" ? domainWords(entry.detail) : WORDS[entry.action];
+}
+
 function entryRow(entry: Entry, labels: Labels): Html {
-  return html`<tr><td>${showMoment(entry.at)}</td><td>${entry.by}</td><td>${WORDS[entry.action]}</td><td>${siteCell(entry, labels)}</td></tr>`;
+  return html`<tr><td>${showMoment(entry.at)}</td><td>${entry.by}</td><td>${wordsOf(entry)}</td><td>${siteCell(entry, labels)}</td></tr>`;
 }
 
 function paging(onFirst: boolean, entries: readonly Entry[]): Html {

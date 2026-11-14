@@ -78,8 +78,8 @@ describe("syncZoneBots", () => {
       },
       async (connection, asked) => {
         const desired = { blockBots: "auto", plan: "free", sharesZone: false } as const;
-        const first = await syncZoneBots(connection, "zone-1", desired);
-        const second = await syncZoneBots(connection, "zone-1", desired);
+        const first = await syncZoneBots(connection, "zone-1", desired, "apply");
+        const second = await syncZoneBots(connection, "zone-1", desired, "apply");
 
         expect(first).toMatchObject({ ok: true, report: { changed: ["zone bot switches"], changedNothing: false } });
         expect(second).toMatchObject({ ok: true, report: { left: ["zone bot switches"], changedNothing: true } });
@@ -104,7 +104,7 @@ describe("syncZoneBots", () => {
       await withFake(
         () => reply(UNSET),
         async (connection, asked) => {
-          expect(await syncZoneBots(connection, "zone-1", { blockBots, plan: "free", sharesZone: true })).toMatchObject({
+          expect(await syncZoneBots(connection, "zone-1", { blockBots, plan: "free", sharesZone: true }, "apply")).toMatchObject({
             ok: true,
             report: { skipped: [{ subject: "zone bot switches", reason }], changedNothing: true },
           });
@@ -118,7 +118,7 @@ describe("syncZoneBots", () => {
     await withFake(
       () => undefined,
       async (connection, asked) => {
-        expect(await syncZoneBots(connection, "zone-1", { blockBots: "on", plan: "free", sharesZone: true })).toMatchObject({
+        expect(await syncZoneBots(connection, "zone-1", { blockBots: "on", plan: "free", sharesZone: true }, "apply")).toMatchObject({
           ok: false,
           failure: "refused",
           report: { changedNothing: true },
