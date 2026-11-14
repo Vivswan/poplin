@@ -1,0 +1,9 @@
+{
+  "$schema": "https://unpkg.com/knip@6/schema.json",
+  "ignore": ["demo/**"],
+  "workspaces": {
+    ".": {
+      "entry": [".github/scripts/release-pipeline.ts"]
+    }
+  }
+}
