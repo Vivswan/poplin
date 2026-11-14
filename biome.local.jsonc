@@ -63,6 +63,11 @@
         }
       }
     },
+    // A published package's entry is the one file that re-exports: core is private, so its modules reach npm through it.
+    {
+      "includes": ["packages/cli/src/core.ts"],
+      "linter": { "rules": { "performance": { "noBarrelFile": "off" } } }
+    },
     // A describe callback is a list of cases, not one function: its length is the number of cases, and splitting
     // it would scatter one module's cases across helpers.
     {

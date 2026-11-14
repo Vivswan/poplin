@@ -6,9 +6,6 @@
 # Every green push to main gets its own run of this hook, and the runs of neighbouring commits overlap, so a job
 # here may finish after a newer commit's did.
 #
-# Replace the no-op job with this repository's work, since it costs a runner allocation on every green push until
-# you do.
-#
 # A job acts on the repository's current state, idempotently, never on "what this commit changed" or "the newest
 # commit".
 #
@@ -25,11 +22,53 @@ on:
         required: true
         type: string
 
+permissions:
+  contents: read
+
 jobs:
-  noop:
+  # Whether the owner has turned npm publishing on. This job always runs and passes, so the hook's result is success
+  # with publishing off too: a hook whose every job is skipped reports skipped, and the release leg waits on success.
+  npm-ready:
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    outputs:
+      ready: ${{ steps.probe.outputs.ready }}
     steps:
-      - env:
-          SHA: ${{ inputs.sha }}
-        run: echo "post-green hook for $SHA - nothing configured"
+      - id: probe
+        env:
+          NPM_PUBLISH: ${{ vars.NPM_PUBLISH }}
+        run: |
+          if [ "$NPM_PUBLISH" = "true" ]; then
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::npm publishing is off, so no next build was published: the repository variable NPM_PUBLISH is not \"true\"."
+          fi
+
+  # Publishes this green commit's build to npm under the `next` dist-tag, through trusted publishing: no npm token.
+  publish-next:
+    needs: [npm-ready]
+    if: needs.npm-ready.outputs.ready == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      id-token: write # the OIDC token npm exchanges for a publish
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.sha }}
+          fetch-depth: 0 # the pre-release version counts the commits under this one
+          persist-credentials: false
+      - uses: ./.github/actions/setup
+      # Node 24 carries an npm new enough for trusted publishing; the floor step holds it to that.
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+      - name: Check the npm floor
+        run: bun .github/scripts/release-pipeline.ts npm-floor
+      - name: Name the pre-release version
+        run: bun .github/scripts/release-pipeline.ts prerelease-version
+      # npm builds the package before it packs it (the package's prepack script).
+      - name: Publish under next
+        run: bun .github/scripts/release-pipeline.ts npm-publish next

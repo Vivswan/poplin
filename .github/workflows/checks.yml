@@ -74,3 +74,24 @@ jobs:
         run: tofu -chdir=tofu validate
       - name: Test
         run: tofu -chdir=tofu test
+
+  # The published package as a user gets it: packed, installed from the tarball with npm, and run under plain Node.
+  # bun installs the workspace; the Node of the matrix runs the bundler, npm, and the installed package.
+  package:
+    name: package / node ${{ matrix.node }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        node: [24, 26]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: ${{ matrix.node }}
+      - name: Pack, install, and run the package
+        run: bun run --cwd packages/cli smoke

@@ -515,5 +515,8 @@ dist
 # Package build output
 packages/*/lib/
 
+# The license the published package carries, copied from the root by its build
+packages/cli/LICENSE.md
+
 # Local tool state
 .taste-skill/

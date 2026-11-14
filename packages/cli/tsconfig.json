@@ -1,0 +1,6 @@
+{
+  "extends": "../../tsconfig.json",
+  // The build's project: declarations come from the entries and what they import, never from the whole workspace.
+  "include": ["src"],
+  "exclude": []
+}

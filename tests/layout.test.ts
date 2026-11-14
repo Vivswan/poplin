@@ -5,6 +5,8 @@ const ROOT = join(import.meta.dir, "..");
 
 const ENTRY_FIELDS = ["main", "module", "types", "bin", "exports"];
 
+const BUILT_ENTRY = /^(?:\.\/)?dist\/(.+)\.mjs$/;
+
 function scan(pattern: string): string[] {
   return [...new Bun.Glob(pattern).scanSync({ cwd: ROOT })].map((path) => path.replaceAll("\\", "/")).sort();
 }
@@ -25,12 +27,17 @@ function stringLeaves(value: unknown): string[] {
   return Object.values(value).flatMap(stringLeaves);
 }
 
+/** A published package's manifest names its build: `dist/<entry>.mjs` is built from `src/<entry>.ts`. */
+function sourceOf(entry: string): string {
+  return entry.replace(BUILT_ENTRY, "src/$1.ts");
+}
+
 /** The entry files a package's manifest names, as paths from the repository root; an `exports` target may hold one `*`. */
 async function declaredEntries(packagePath: string): Promise<string[]> {
   const manifest: Record<string, unknown> = await Bun.file(join(ROOT, packagePath, "package.json")).json();
   const declared = ENTRY_FIELDS.flatMap((field) => stringLeaves(manifest[field]));
 
-  return declared.map((entry) => join(packagePath, entry).replaceAll("\\", "/"));
+  return declared.map((entry) => join(packagePath, sourceOf(entry)).replaceAll("\\", "/"));
 }
 
 function isEntry(path: string, entry: string): boolean {

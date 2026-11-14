@@ -1,0 +1,44 @@
+{
+  "name": "poplin",
+  "version": "0.0.0",
+  "description": "Publish static sites to your own Cloudflare account: private by default, shareable by secret link, or public.",
+  "license": "SEE LICENSE IN LICENSE.md",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Vivswan/poplin.git",
+    "directory": "packages/cli"
+  },
+  "type": "module",
+  "engines": {
+    "node": ">=24"
+  },
+  "bin": {
+    "poplin": "./dist/bin.mjs"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/poplin.d.mts",
+      "default": "./dist/poplin.mjs"
+    },
+    "./core": {
+      "types": "./dist/core.d.mts",
+      "default": "./dist/core.mjs"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "tsdown",
+    "prepack": "tsdown",
+    "smoke": "bun scripts/smoke.ts"
+  },
+  "devDependencies": {
+    "publint": "0.3.25",
+    "tsdown": "0.23.7"
+  }
+}
