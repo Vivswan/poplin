@@ -57,7 +57,7 @@ const MESSAGES: Readonly<Record<Code, string>> = {
   too_many_sites: "the install holds as many sites as it may",
   not_set_up: "the install is not set up",
   too_large: "a size limit is passed",
-  too_many_requests: "too many requests came from this address, or too many logins are waiting: wait, then ask again",
+  too_many_requests: "too many requests came from this address: wait, then ask again",
   internal: "the install failed to do that",
 };
 

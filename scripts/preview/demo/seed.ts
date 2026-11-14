@@ -155,7 +155,7 @@ export async function seedWorld(world: World, samples: Samples): Promise<Seeded>
 
   world.clock.held = undefined;
   await countRequests(world, start);
-  done(await beginLogin(world.install, { scope: "publisher", computer: "studio-laptop" }), "the waiting login");
+  done(await beginLogin(world.install, { scope: "publisher", computer: "studio-laptop" }, "preview"), "the waiting login");
   const issued = done(await issueToken(world.install, world.admin, { note: ADMIN_TOKEN, scope: "admin" }), "the admin token");
 
   return { token: issued.token };

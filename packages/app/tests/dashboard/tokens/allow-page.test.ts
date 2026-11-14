@@ -12,7 +12,7 @@ const MINUTE = 60_000;
 
 /** A login begun from a computer of this name; the test fails here when it is refused. */
 async function begun(opened: Opened, scope: "admin" | "publisher", computer: string): Promise<{ readonly code: string; readonly secret: string }> {
-  const login = await beginLogin(opened.install, { scope, computer });
+  const login = await beginLogin(opened.install, { scope, computer }, `visitor of ${computer}`);
   if (!login.ok) throw new Error(`the fixture login was refused: ${login.code}`);
 
   return login;

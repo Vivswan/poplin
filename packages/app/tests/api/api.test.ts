@@ -578,10 +578,30 @@ describe("what the API refuses before any action runs", () => {
 
     expect([begun.map((answer) => answer.status), guesses.map((answer) => answer.status)]).toEqual([[200, 200, 200, 200, 200, 429], [...Array.from({ length: 25 }, () => 200), 429]]);
     expect([refused?.body, refused?.response.headers.get("Retry-After")]).toEqual([
-      { error: { code: "too_many_requests", message: "too many requests came from this address, or too many logins are waiting: wait, then ask again" } },
+      { error: { code: "too_many_requests", message: "too many requests came from this address: wait, then ask again" } },
       "39",
     ]);
     expect([...others, await begin("one"), await ask("one")].map((answer) => answer.status)).toEqual([200, 200, 200, 200]);
+  });
+
+  // Drift: the pace alone lets one address hold fifty logins waiting for good, and the entry is what tells core who asks. An entry that passed every request as one visitor would let that address keep every other computer out.
+  test("one address beginning logins as fast as it may for thirty minutes never keeps another address from beginning one, nor takes the place of one that waits", async () => {
+    const install = await openApi();
+    const begin = (visitor: string): Promise<Answered> => install.call("beginLogin", undefined, { token: null, headers: { [VISITOR_HEADER]: visitor }, body: { scope: "publisher", computer: "laptop" } });
+    const flood: number[] = [];
+    const others: unknown[] = [];
+
+    for (let minute = 0; minute < 30; minute += 1) {
+      install.clock.now = NOW + minute * 60_000;
+      const other = await begin("two");
+      for (let sent = 0; sent < 6; sent += 1) flood.push((await begin("one")).status);
+
+      const asked = await install.call("redeemLogin", undefined, { token: null, headers: { [VISITOR_HEADER]: "two" }, body: { secret: other.body.secret } });
+      others.push([other.status, asked.body]);
+    }
+
+    expect([flood.filter((status) => status === 200).length, flood.filter((status) => status === 429).length]).toEqual([150, 30]);
+    expect(others).toEqual(Array.from({ length: 30 }, () => [200, { state: "pending" }]));
   });
 
   // Drift: the count is the brake on a flood of logins; a counter that is down and let every request through would be no brake exactly when someone found a way to bring it down.

@@ -16,6 +16,7 @@ import type {
   ExportPage,
   LeftoversPage,
   LoginDecision,
+  LoginRoom,
   NewSite,
   NewUpload,
   NewVersion,
@@ -429,11 +430,18 @@ class MemoryDatabase implements Database {
     return { kind: "done", token };
   }
 
-  async addComputerLogin(login: PendingLogin, most: number): Promise<{ readonly kind: "done" } | Refused<"full" | "taken">> {
-    const kept = [...this.#logins.values()];
-    if (kept.filter((other) => other.expiresAt > login.createdAt).length >= most) return { kind: "full" };
+  async addComputerLogin(login: PendingLogin, room: LoginRoom): Promise<{ readonly kind: "done" } | Refused<"taken">> {
+    if ([...this.#logins.values()].some((other) => other.id === login.id || other.code === login.code)) return { kind: "taken" };
 
-    if (kept.some((other) => other.id === login.id || other.code === login.code)) return { kind: "taken" };
+    const oldestFirst = (one: ComputerLogin, other: ComputerLogin): number => one.createdAt - other.createdAt || one.id.localeCompare(other.id);
+    const waiting = (): ComputerLogin[] => [...this.#logins.values()].filter((other) => other.state === "pending" && other.expiresAt > login.createdAt).sort(oldestFirst);
+    const of = (visitor: string): ComputerLogin[] => waiting().filter((other) => other.visitor === visitor);
+
+    const own = of(login.visitor);
+    for (const old of own.slice(0, Math.max(0, own.length - room.perVisitor + 1))) this.#logins.delete(old.id);
+
+    const crowded = waiting().sort((one, other) => of(other.visitor).length - of(one.visitor).length || oldestFirst(one, other))[0];
+    if (crowded !== undefined && waiting().length >= room.all) this.#logins.delete(crowded.id);
 
     this.#logins.set(login.id, { ...login });
 

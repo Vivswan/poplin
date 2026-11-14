@@ -1,6 +1,6 @@
 // A computer logged in from the dashboard: a terminal asks, an admin allows or denies it under a code both see, and the terminal collects its token once.
 //
-//   beginLogin    anyone      a pending login: a code to show and a secret to keep. It grants nothing
+//   beginLogin    anyone      a pending login: a code to show and a secret to keep. It grants nothing, and no visitor's logins keep another's out
 //   showLogin     an admin    what the login under a code asks for
 //   decideLogin   an admin    allowed or denied, once
 //   redeemLogin   the secret  pending, slow_down, denied, expired, or the token, which is made at this moment and handed out once
@@ -24,8 +24,8 @@ const MAX_SECRET_LENGTH = 200;
 /** A name on one line: no control character. */
 const ONE_LINE = /^\P{Cc}*$/u;
 
-/** The most logins that may wait at one moment, decided or not. */
-const MOST_LOGINS = 50;
+/** The most logins that may wait at one moment: three of one visitor, so no visitor holds the places of the rest, and fifty of all. */
+const ROOM = { perVisitor: 3, all: 50 } as const;
 
 /** How many codes are tried for one login before giving up; a code is one of 25 billion, so a second try is already a rare event. */
 const MINT_ATTEMPTS = 3;
@@ -94,22 +94,24 @@ async function waitingLogin(install: Install, typed: string): Promise<ComputerLo
 /**
  * Begin a login. Anyone may: it grants nothing until an admin allows it, and it is gone ten minutes later.
  *
+ * No login is refused for the ones that wait. A visitor's fourth takes the place of their oldest, and the fifty-first of all that of the oldest one of the visitor with the most. One that lost its place answers `expired`.
+ *
  * @param request - the scope and the computer's name; anything is taken and checked
- * @returns the code to show a person, the secret to keep, the seconds until the login runs out, and the seconds to wait between two questions. `too_many_requests` about `logins` while as many logins wait as may
+ * @param visitor - the key the entry counts the asking visitor by, which the visitor cannot choose
+ * @returns the code to show a person, the secret to keep, the seconds until the login runs out, and the seconds to wait between two questions
  * @throws {Error} the database failed
  */
 export async function beginLogin(
   install: Install,
   request: v.InferInput<typeof LOGIN_REQUEST>,
-): Promise<{ readonly ok: true; readonly code: string; readonly secret: string; readonly expires_in: number; readonly interval: number } | Refused<"bad_argument" | "too_many_requests">> {
+  visitor: string,
+): Promise<{ readonly ok: true; readonly code: string; readonly secret: string; readonly expires_in: number; readonly interval: number } | Refused<"bad_argument">> {
   const asked = v.safeParse(LOGIN_REQUEST, request);
   if (!asked.success) return refuse("bad_argument", v.getDotPath(asked.issues[0])?.split(".")[0] ?? "request");
 
   for (let attempt = 0; attempt < MINT_ATTEMPTS; attempt += 1) {
-    const { secret, login } = await mintComputerLogin({ ...asked.output, now: install.now() });
-    const added = await install.database.addComputerLogin(login, MOST_LOGINS);
-    if (added.kind === "full") return refuse("too_many_requests", "logins");
-
+    const { secret, login } = await mintComputerLogin({ ...asked.output, visitor, now: install.now() });
+    const added = await install.database.addComputerLogin(login, ROOM);
     if (added.kind === "taken") continue;
 
     return { ok: true, code: showUserCode(login.code), secret, expires_in: (login.expiresAt - login.createdAt) / MS_PER_SECOND, interval: INTERVAL_MS / MS_PER_SECOND };

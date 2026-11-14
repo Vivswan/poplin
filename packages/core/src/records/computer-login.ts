@@ -24,6 +24,7 @@ const ALWAYS = {
   hash: v.pipe(v.string(), v.regex(HASH_PATTERN)),
   scope: v.picklist(["admin", "publisher"]),
   computer: v.string(),
+  visitor: v.string(),
   created_at: MOMENT,
   expires_at: MOMENT,
   polled_at: v.nullable(MOMENT),
@@ -53,8 +54,8 @@ export function computerLoginFromRow(row: unknown): ComputerLogin {
   const parsed = v.safeParse(LOGIN_ROW, row);
   if (!parsed.success) throw new Error(`a stored login is not a login: ${v.summarize(parsed.issues)}`);
 
-  const { id, code, hash, scope, computer, created_at: createdAt, expires_at: expiresAt, polled_at: polledAt } = parsed.output;
-  const facts = { id, code, hash, scope, computer, createdAt, expiresAt, polledAt };
+  const { id, code, hash, scope, computer, visitor, created_at: createdAt, expires_at: expiresAt, polled_at: polledAt } = parsed.output;
+  const facts = { id, code, hash, scope, computer, visitor, createdAt, expiresAt, polledAt };
   if (parsed.output.state === "pending") return { ...facts, state: "pending" };
 
   return { ...facts, state: parsed.output.state, decidedBy: parsed.output.decided_by };

@@ -108,8 +108,8 @@ async function submit(stage: Stage, page: string, action: string, fields: Readon
 
 /** Begin a login as a computer would and open the page that allows it; `query` is added to that page's address. */
 async function waitingLogin(stage: Stage, query = ""): Promise<Response> {
-  const begun = await beginLogin(stage.world.install, { scope: "publisher", computer: "studio-laptop" });
-  if (!begun.ok) return new Response("Too many logins wait in the preview. Reset the sample data on the index.\n", { status: 429 });
+  const begun = await beginLogin(stage.world.install, { scope: "publisher", computer: "studio-laptop" }, "preview");
+  if (!begun.ok) return new Response(`The preview's login was refused: ${begun.code}.\n`, { status: 500 });
 
   return seeOther(`/tokens/allow?${new URLSearchParams({ code: begun.code })}${query}`);
 }

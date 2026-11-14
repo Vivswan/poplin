@@ -21,7 +21,7 @@ const SETTINGS_BYTES = 4 * JSON_BYTES;
 /** The routes whose JSON body declares files, and so may be as long as a manifest. */
 const DECLARES_FILES: ReadonlySet<RouteName> = new Set(["beginPublish", "beginImport"]);
 
-/** The most requests one visitor may send a minute to each route that takes no token. A terminal asks for its token twelve times a minute. */
+/** The most requests one visitor may send a minute to each route that takes no token. A terminal asks for its token twelve times a minute. The pace alone bounds no visitor's waiting logins: core keeps three of each. */
 const OPEN_PER_MINUTE: Readonly<Record<OpenName, number>> = { beginLogin: 5, redeemLogin: 25 };
 
 /** What a counter that cannot answer is taken to say: the minute is full. A login is the guess the count exists to stop, so it is refused where a request for a site is let through. */
@@ -64,7 +64,12 @@ function bodyCap(name: RouteName, limits: ApiLimits): number {
 
 /** Answer one request to a route that takes no token: the visitor's count first, then what was sent, then the route's handler. */
 async function answerOpen(name: OpenName, request: Request, deps: ApiDeps): Promise<Response> {
-  const take = async (): Promise<Taken> => deps.counters.takeMinute({ scope: "visitor", key: `${name}:${await deps.visitorOf(request)}`, limit: OPEN_PER_MINUTE[name] }, deps.now());
+  const take = async (): Promise<Taken & { readonly visitor: string }> => {
+    const visitor = await deps.visitorOf(request);
+    const counted = await deps.counters.takeMinute({ scope: "visitor", key: `${name}:${visitor}`, limit: OPEN_PER_MINUTE[name] }, deps.now());
+
+    return { ...counted, visitor };
+  };
   const taken = await take().catch(() => UNCOUNTED);
   if (!taken.ok) return refusal("too_many_requests", undefined, { "Retry-After": String(Math.max(1, Math.ceil(taken.retryAfterSeconds))) });
 
@@ -77,7 +82,7 @@ async function answerOpen(name: OpenName, request: Request, deps: ApiDeps): Prom
   const sent = await readJson(request, JSON_BYTES);
   if (!sent.ok) return respond(sent);
 
-  return respond(await OPEN_HANDLERS[name]({ install: deps, body: sent.value, origin: url.origin }));
+  return respond(await OPEN_HANDLERS[name]({ install: deps, body: sent.value, origin: url.origin, visitor: taken.visitor }));
 }
 
 /** Answer one request to one route: who asks first, then what was sent, then the route's handler. */

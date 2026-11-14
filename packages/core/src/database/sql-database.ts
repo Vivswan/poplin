@@ -26,6 +26,7 @@ import type {
   ExportPage,
   LeftoversPage,
   LoginDecision,
+  LoginRoom,
   NewSite,
   NewUpload,
   NewVersion,
@@ -324,16 +325,28 @@ SELECT ?1, ?2, 'token_revoked', json_object('token', id, 'scope', scope, 'note',
 const DELETE_TOKEN = "DELETE FROM tokens WHERE id = ?1 AND changes() = 1";
 
 /** Every column of a login. */
-const SELECT_LOGIN = "SELECT id, code, hash, scope, computer, state, decided_by, created_at, expires_at, polled_at FROM logins";
+const SELECT_LOGIN = "SELECT id, code, hash, scope, computer, visitor, state, decided_by, created_at, expires_at, polled_at FROM logins";
 
-/** How many logins have not run out at `?1`. */
-const LIVE_LOGINS = "SELECT COUNT(*) AS live FROM logins WHERE expires_at > ?1";
+/** Whether id `?1` and code `?2` are both free, so the login that brings them will be stored. */
+const LOGIN_IS_NEW = "NOT EXISTS (SELECT 1 FROM logins WHERE id = ?1 OR code = ?2)";
 
-/** A new login, pending, only while fewer than `?8` have not run out at `?6` and its id and its code are free. */
+/** Room for a new login of visitor `?4`: of that visitor's logins that wait at `?3`, pending and not run out, all but the newest `?5` are removed. */
+const MAKE_ROOM_OF_VISITOR = `
+DELETE FROM logins
+WHERE id IN (SELECT id FROM logins WHERE visitor = ?4 AND state = 'pending' AND expires_at > ?3 ORDER BY created_at DESC, id DESC LIMIT -1 OFFSET ?5) AND ${LOGIN_IS_NEW}`;
+
+/** Room for a new login among all: once `?4` logins wait at `?3`, the oldest one of the visitor with the most is removed. */
+const MAKE_ROOM_OF_ALL = `
+DELETE FROM logins
+WHERE id = (
+  SELECT l.id FROM logins l WHERE l.state = 'pending' AND l.expires_at > ?3
+  ORDER BY (SELECT COUNT(*) FROM logins o WHERE o.visitor = l.visitor AND o.state = 'pending' AND o.expires_at > ?3) DESC, l.created_at, l.id LIMIT 1
+) AND (SELECT COUNT(*) FROM logins WHERE state = 'pending' AND expires_at > ?3) >= ?4 AND ${LOGIN_IS_NEW}`;
+
+/** A new login, pending, only while its id and its code are free. */
 const INSERT_LOGIN = `
-INSERT INTO logins (id, code, hash, scope, computer, created_at, expires_at)
-SELECT ?1, ?2, ?3, ?4, ?5, ?6, ?7
-WHERE (SELECT COUNT(*) FROM logins WHERE expires_at > ?6) < ?8 AND NOT EXISTS (SELECT 1 FROM logins WHERE id = ?1) AND NOT EXISTS (SELECT 1 FROM logins WHERE code = ?2)`;
+INSERT INTO logins (id, code, hash, scope, computer, visitor, created_at, expires_at)
+SELECT ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8 WHERE ${LOGIN_IS_NEW}`;
 
 /** The login under code `?1` allowed or denied by `?3`, only while it is pending and has not run out at `?4`. */
 const DECIDE_LOGIN = "UPDATE logins SET state = ?2, decided_by = ?3 WHERE code = ?1 AND state = 'pending' AND expires_at > ?4";
@@ -900,14 +913,14 @@ export class SqlDatabase implements Database {
     return { kind: "done", token: tokenFromRow(row) };
   }
 
-  async addComputerLogin(login: PendingLogin, most: number): Promise<{ readonly kind: "done" } | Refused<"full" | "taken">> {
-    const [live, inserted] = await this.#driver.batch([
-      sql(LIVE_LOGINS, login.createdAt),
-      sql(INSERT_LOGIN, login.id, login.code, login.hash, login.scope, login.computer, login.createdAt, login.expiresAt, most),
+  async addComputerLogin(login: PendingLogin, room: LoginRoom): Promise<{ readonly kind: "done" } | Refused<"taken">> {
+    const [, , inserted] = await this.#driver.batch([
+      sql(MAKE_ROOM_OF_VISITOR, login.id, login.code, login.createdAt, login.visitor, room.perVisitor - 1),
+      sql(MAKE_ROOM_OF_ALL, login.id, login.code, login.createdAt, room.all),
+      sql(INSERT_LOGIN, login.id, login.code, login.hash, login.scope, login.computer, login.visitor, login.createdAt, login.expiresAt),
     ]);
-    if (changed(inserted)) return { kind: "done" };
 
-    return { kind: Number(live?.rows[0]?.live) >= most ? "full" : "taken" };
+    return { kind: changed(inserted) ? "done" : "taken" };
   }
 
   async getComputerLogin(id: LoginId): Promise<ComputerLogin | undefined> {

@@ -12,6 +12,7 @@ const PENDING = {
   hash: "ab".repeat(32),
   scope: "publisher",
   computer: "laptop",
+  visitor: "one-visitor",
   state: "pending",
   decided_by: null,
   created_at: NOW,
@@ -26,6 +27,7 @@ function rowOf(login: ComputerLogin): Record<string, unknown> {
     hash: login.hash,
     scope: login.scope,
     computer: login.computer,
+    visitor: login.visitor,
     state: login.state,
     decided_by: login.state === "pending" ? null : login.decidedBy,
     created_at: login.createdAt,
@@ -37,7 +39,7 @@ function rowOf(login: ComputerLogin): Record<string, unknown> {
 describe("computerLoginFromRow", () => {
   // Drift: the record's fields are defined by the auth module; a field it gains or loses must fail here before a stored login cannot be checked or decided.
   test("a minted login, pending and decided, reads back from its row as it was", async () => {
-    const { login } = await mintComputerLogin({ scope: "admin", computer: "laptop", now: NOW });
+    const { login } = await mintComputerLogin({ scope: "admin", computer: "laptop", visitor: "one-visitor", now: NOW });
     const logins: ComputerLogin[] = [login, { ...login, polledAt: NOW + 5, state: "allowed", decidedBy: ADA }, { ...login, state: "denied", decidedBy: ADA }];
 
     expect(logins.map((each) => computerLoginFromRow(rowOf(each)))).toEqual(logins);

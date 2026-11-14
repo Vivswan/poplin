@@ -78,7 +78,7 @@ export const SETTINGS = defaultSettings({ installer: "ada@example.com" as Login,
 export const ADMIN = "ada@example.com" as Login;
 
 /** A bound on stored logins that no fixture reaches. */
-const MOST_LOGINS = 100;
+const ROOM = { perVisitor: 100, all: 100 };
 
 /** Gives a new, empty database on every call, one that draws its site ids from `mintId` when a case passes one. */
 type DatabaseFactory = (mintId?: () => SiteId) => Database | Promise<Database>;
@@ -95,9 +95,9 @@ function mintFrom(...ids: string[]): () => SiteId {
   };
 }
 
-/** A pending login of a publisher, asked for at a moment from a computer named `laptop`. */
-export async function pendingLogin(now: number = NOW): Promise<PendingLogin> {
-  return (await mintComputerLogin({ scope: "publisher", computer: "laptop", now })).login;
+/** A pending login of a publisher, asked for at a moment from a computer named `laptop` by a visitor. */
+export async function pendingLogin(now: number = NOW, visitor = "one-visitor"): Promise<PendingLogin> {
+  return (await mintComputerLogin({ scope: "publisher", computer: "laptop", visitor, now })).login;
 }
 
 /** A draft of a site with this name; a public one takes its name as its public name unless another is given. */
@@ -1200,9 +1200,9 @@ function computerLogins(label: string, makeDatabase: DatabaseFactory): void {
       const other = await pendingLogin();
 
       expect([
-        await database.addComputerLogin(login, MOST_LOGINS),
-        await database.addComputerLogin({ ...other, id: login.id }, MOST_LOGINS),
-        await database.addComputerLogin({ ...other, code: login.code }, MOST_LOGINS),
+        await database.addComputerLogin(login, ROOM),
+        await database.addComputerLogin({ ...other, id: login.id }, ROOM),
+        await database.addComputerLogin({ ...other, code: login.code }, ROOM),
       ]).toEqual([{ kind: "done" }, { kind: "taken" }, { kind: "taken" }]);
       expect([await database.getComputerLogin(login.id), await database.findComputerLogin(login.code), await database.getComputerLogin(other.id), await database.findComputerLogin(other.code)]).toEqual([
         login,
@@ -1213,25 +1213,36 @@ function computerLogins(label: string, makeDatabase: DatabaseFactory): void {
       expect(await auditTrail(database)).toEqual([]);
     });
 
-    // Drift: anyone may ask for a login, so without the bound the table grows with every request; counting logins that ran out would let old requests lock every new one out.
-    test("no more logins are stored than the bound, of callers at the same moment too, and one that ran out makes room", async () => {
+    // Drift: anyone may ask for a login, so the room is the only bound on the table and on what one visitor holds of it. A bound that counted a decided or stale login, or took its place, would lock a visitor out or lose an allowed computer its token.
+    test("a visitor keeps their newest waiting logins and all visitors together no more than the room, of callers at the same moment too, and a decided or stale login neither counts nor gives way", async () => {
       const database = await opened(makeDatabase);
-      const first = await pendingLogin();
-      const together = await Promise.all([pendingLogin(), pendingLogin(), pendingLogin()]);
-      await database.addComputerLogin(first, 3);
+      const room = { perVisitor: 2, all: 4 };
+      const stored = async (logins: readonly PendingLogin[]): Promise<(string | undefined)[]> => Promise.all(logins.map(async (login) => (await database.getComputerLogin(login.id))?.state));
+      const [stale, allowed, denied] = [await pendingLogin(NOW - 1), await pendingLogin(), await pendingLogin()];
+      for (const login of [stale, allowed, denied]) await database.addComputerLogin(login, { perVisitor: 3, all: 4 });
+      await database.decideComputerLogin(allowed.code, { state: "allowed", by: ADMIN, at: NOW });
+      await database.decideComputerLogin(denied.code, { state: "denied", by: ADMIN, at: NOW });
 
-      const added = await Promise.all(together.map((login) => database.addComputerLogin(login, 3)));
-      const later = await pendingLogin(first.expiresAt);
+      const own = [await pendingLogin(stale.expiresAt), await pendingLogin(stale.expiresAt + 1), await pendingLogin(stale.expiresAt + 2)];
+      for (const login of own) await database.addComputerLogin(login, room);
+      const afterOwn = await stored([stale, allowed, denied, ...own]);
 
-      expect(added.map((answer) => answer.kind).sort()).toEqual(["done", "done", "full"]);
-      expect([await database.addComputerLogin(await pendingLogin(first.expiresAt - 1), 3), await database.addComputerLogin(later, 3)]).toEqual([{ kind: "full" }, { kind: "done" }]);
+      const others = await Promise.all(["two", "three", "four"].map((visitor) => pendingLogin(stale.expiresAt + 3, visitor)));
+      const added = await Promise.all(others.map((login) => database.addComputerLogin(login, room)));
+
+      expect(afterOwn).toEqual(["pending", "allowed", "denied", undefined, "pending", "pending"]);
+      expect([added, await stored([stale, allowed, denied, ...own]), (await stored(others)).filter((state) => state === "pending").length]).toEqual([
+        [{ kind: "done" }, { kind: "done" }, { kind: "done" }],
+        ["pending", "allowed", "denied", undefined, undefined, "pending"],
+        3,
+      ]);
     });
 
     // Drift: a decision is what turns a request into a token; one that could be made twice, after the login ran out, or without its audit entry would let a denied or stale request through unseen.
     test("a pending login is decided once and before it runs out, with one audit entry that names the scope and the computer", async () => {
       const database = await opened(makeDatabase);
       const [allowed, denied, stale] = await Promise.all([pendingLogin(), pendingLogin(), pendingLogin()]);
-      for (const login of [allowed, denied, stale]) await database.addComputerLogin(login, MOST_LOGINS);
+      for (const login of [allowed, denied, stale]) await database.addComputerLogin(login, ROOM);
       const allow = { state: "allowed", by: ADMIN, at: NOW + 1 } as const;
       const deny = { state: "denied", by: ADMIN, at: NOW + 2 } as const;
 
@@ -1261,7 +1272,7 @@ function computerLogins(label: string, makeDatabase: DatabaseFactory): void {
     test("of an Allow and a Deny made at the same moment one is done, with its one audit entry", async () => {
       const database = await opened(makeDatabase);
       const login = await pendingLogin();
-      await database.addComputerLogin(login, MOST_LOGINS);
+      await database.addComputerLogin(login, ROOM);
 
       const decided = await Promise.all((["allowed", "denied"] as const).map((state) => database.decideComputerLogin(login.code, { state, by: ADMIN, at: NOW + 1 })));
       const stored = await database.getComputerLogin(login.id);
@@ -1274,7 +1285,7 @@ function computerLogins(label: string, makeDatabase: DatabaseFactory): void {
     test("an allowed login gives one token, signed by who allowed it, and is gone; no other login gives any", async () => {
       const database = await opened(makeDatabase);
       const [allowed, pending, denied, stale] = await Promise.all([pendingLogin(), pendingLogin(), pendingLogin(), pendingLogin()]);
-      for (const login of [allowed, pending, denied, stale]) await database.addComputerLogin(login, MOST_LOGINS);
+      for (const login of [allowed, pending, denied, stale]) await database.addComputerLogin(login, ROOM);
       for (const login of [allowed, stale]) await database.decideComputerLogin(login.code, { state: "allowed", by: ADMIN, at: NOW + 1 });
       await database.decideComputerLogin(denied.code, { state: "denied", by: ADMIN, at: NOW + 1 });
       const token = async (scope: "publisher" | "admin" = "publisher"): Promise<TokenRecord> => (await mintToken({ scope, note: "laptop", now: NOW + 2 })).record;
@@ -1302,7 +1313,7 @@ function computerLogins(label: string, makeDatabase: DatabaseFactory): void {
     test("a pending login notes a poll only when the one before it is old enough, and a decided login notes none", async () => {
       const database = await opened(makeDatabase);
       const login = await pendingLogin();
-      await database.addComputerLogin(login, MOST_LOGINS);
+      await database.addComputerLogin(login, ROOM);
 
       expect([
         await database.pollComputerLogin(login.id, { at: NOW + 5000, notAfter: NOW }),
@@ -1320,7 +1331,7 @@ function computerLogins(label: string, makeDatabase: DatabaseFactory): void {
     test("the sweep removes every login that ran out, whatever its state, and leaves the others", async () => {
       const database = await opened(makeDatabase);
       const [old, decided, live] = await Promise.all([pendingLogin(), pendingLogin(), pendingLogin(NOW + 1)]);
-      for (const login of [old, decided, live]) await database.addComputerLogin(login, MOST_LOGINS);
+      for (const login of [old, decided, live]) await database.addComputerLogin(login, ROOM);
       await database.decideComputerLogin(decided.code, { state: "allowed", by: ADMIN, at: NOW + 1 });
 
       expect([await database.sweepComputerLogins(old.expiresAt - 1), await database.sweepComputerLogins(old.expiresAt), await database.sweepComputerLogins(old.expiresAt)]).toEqual([0, 2, 0]);

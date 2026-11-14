@@ -234,9 +234,35 @@ property(
 );
 
 property(
+  "whatever sixteen other addresses begin and however long they wait, an address that has no login waiting begins one, and it waits until it runs out",
+  fc.asyncProperty(fc.array(fc.oneof(fc.nat({ max: 15 }), fc.constantFrom("wait" as const, "minute" as const)), { maxLength: 120 }), fc.nat({ max: 120 }), async (crowd, entry) => {
+    const install = await openApi();
+    const begin = async (visitor: string): Promise<{ readonly status: number; readonly secret: string }> => {
+      const headers = { "Content-Type": "application/json", [VISITOR_HEADER]: visitor };
+      const answer = await install.api.fetch(new Request(`${ORIGIN}/api/logins`, { method: "POST", headers, body: JSON.stringify({ scope: "publisher", computer: "laptop" }) }));
+
+      return { status: answer.status, secret: String((await answer.json()).secret) };
+    };
+    const begunAt = Math.min(entry, crowd.length);
+    let own: { readonly status: number; readonly secret: string; readonly at: number } | undefined;
+
+    for (const [at, step] of [...crowd, "wait" as const].entries()) {
+      if (at === begunAt) own = { ...(await begin("own")), at: install.clock.now };
+      if (step === "wait") install.clock.now += INTERVAL_MS;
+      if (step === "minute") install.clock.now += 60_000;
+      if (typeof step === "number") expect([200, 429]).toContain((await begin(`crowd-${step}`)).status);
+    }
+    const asked = await install.api.fetch(new Request(`${ORIGIN}/api/logins/token`, { method: "POST", headers: { "Content-Type": "application/json", [VISITOR_HEADER]: "own" }, body: JSON.stringify({ secret: own?.secret }) }));
+    const waits = own !== undefined && install.clock.now < own.at + 600_000;
+
+    expect([own?.status, asked.status, (await asked.json()).state]).toEqual([200, 200, waits ? "pending" : "expired"]);
+  }),
+);
+
+property(
   "a hostile code is refused without a throw or is a code that reads back as itself, and a hostile secret opens no login under any record",
   fc.asyncProperty(codes, secrets, fc.integer({ min: 0, max: YEAR_2100_MS }), async (typed, presented, now) => {
-    const { secret, login } = await mintComputerLogin({ scope: "publisher", computer: "laptop", now });
+    const { secret, login } = await mintComputerLogin({ scope: "publisher", computer: "laptop", visitor: "one-visitor", now });
     const code = parseUserCode(typed);
     fc.pre(presented !== secret);
 

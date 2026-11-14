@@ -131,7 +131,7 @@ CREATE TABLE uploads (
   UNIQUE (folder, number)
 ) STRICT`;
 
-/** A computer's login from the terminal's first request on. `hash` is the SHA-256 of the secret the terminal holds; `code` is what a person compares. Only a decided login names who decided it. */
+/** A computer's login from the terminal's first request on. `hash` is the SHA-256 of the secret the terminal holds; `code` is what a person compares, and `visitor` the key of whoever asked. Only a decided login names who decided it. */
 const LOGINS = `
 CREATE TABLE logins (
   id TEXT NOT NULL PRIMARY KEY,
@@ -139,6 +139,7 @@ CREATE TABLE logins (
   hash TEXT NOT NULL,
   scope TEXT NOT NULL CHECK (scope IN ('admin', 'publisher')),
   computer TEXT NOT NULL,
+  visitor TEXT NOT NULL,
   state TEXT NOT NULL DEFAULT 'pending' CHECK (state IN ('pending', 'allowed', 'denied')),
   decided_by TEXT,
   created_at INTEGER NOT NULL,

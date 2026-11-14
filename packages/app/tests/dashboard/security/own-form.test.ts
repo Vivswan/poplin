@@ -76,7 +76,7 @@ async function addVersion(opened: Opened, { id }: Site): Promise<void> {
 function ofLogin(change: string, fields: Readonly<Record<string, string>>, done: string): Arrange {
   return () =>
     inDashboard(async (opened) => {
-      const login = await beginLogin(opened.install, { scope: "publisher", computer: "laptop" });
+      const login = await beginLogin(opened.install, { scope: "publisher", computer: "laptop" }, "one-visitor");
       if (!login.ok) throw new Error(`the fixture login was refused: ${login.code}`);
 
       return { page: `/tokens/allow?code=${login.code}`, action: `/tokens/${change}`, fields: { code: login.code, ...fields }, answer: [303, `/tokens?done=${done}`] };
@@ -199,7 +199,7 @@ test("the routes posted as a browser are every form route there is: each change 
   await trash(opened, gone);
   const { record } = await mintToken({ scope: "publisher", note: "laptop", now: opened.clock.now });
   await opened.install.database.addToken(record, { by: opened.owner, at: opened.clock.now });
-  const login = await beginLogin(opened.install, { scope: "publisher", computer: "laptop" });
+  const login = await beginLogin(opened.install, { scope: "publisher", computer: "laptop" }, "one-visitor");
   if (!login.ok) throw new Error(`the fixture login was refused: ${login.code}`);
 
   const pages = ["/", "/?view=trash", `/sites/report--${live.id}`, `/sites/old--${gone.id}`, "/tokens", `/tokens/allow?code=${login.code}`, "/settings", "/activity", "/usage", "/domain"];

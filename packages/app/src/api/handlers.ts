@@ -88,6 +88,9 @@ interface OpenCall {
 
   /** The origin the request was sent to, which is the dashboard's. */
   readonly origin: string;
+
+  /** The key the asking visitor's requests are counted by. */
+  readonly visitor: string;
 }
 
 /** What the handler of a route answers: the route's `done` type, or a refusal. */
@@ -130,8 +133,8 @@ async function storeBody({ install, actor, named, query, request, limits }: Call
 }
 
 /** Begin a login, and add the address of the dashboard page where an admin decides it. */
-async function beginWithAddress({ install, body, origin }: OpenCall): ReturnType<Handler<"beginLogin">> {
-  const begun = await checked(LOGIN_REQUEST, body, (request) => beginLogin(install, request));
+async function beginWithAddress({ install, body, origin, visitor }: OpenCall): ReturnType<Handler<"beginLogin">> {
+  const begun = await checked(LOGIN_REQUEST, body, (request) => beginLogin(install, request, visitor));
   if (!begun.ok) return begun;
 
   return { ...begun, verify_url: `${origin}${ALLOW_PAGE}?${new URLSearchParams({ [CODE_KEY]: begun.code })}` };

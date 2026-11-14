@@ -38,7 +38,7 @@ const API_ROWS = {
   too_many_sites: { sentence: "the install holds as many sites as it may", hint: "poplin config max_sites shows the limit; poplin list --trash shows what still counts", exit: "failed" },
   not_set_up: { sentence: "the install is not set up", hint: "open the install's address in a browser and finish its setup", exit: "failed" },
   too_large: { sentence: "a size limit is passed", hint: "poplin config shows the limits", exit: "failed" },
-  too_many_requests: { sentence: "the install is asked too often from this address, or too many logins are waiting", hint: "wait a minute, then try again", exit: "failed" },
+  too_many_requests: { sentence: "the install is asked too often from this address", hint: "wait a minute, then try again", exit: "failed" },
   internal: { sentence: "the install failed to do that", hint: "try again; poplin doctor reports on the install", exit: "failed" },
 } as const satisfies Readonly<Record<string, Row>>;
 

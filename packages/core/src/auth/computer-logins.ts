@@ -29,13 +29,14 @@ export type LoginId = string & { readonly [loginIdBrand]: true };
 /** Eight consonants with no dash, from an alphabet without vowels and without two letters that look alike. */
 export type UserCode = string & { readonly [userCodeBrand]: true };
 
-/** What a login holds whatever its state. `hash` is the SHA-256 of the whole secret in hex; times are milliseconds since the epoch. `polledAt` is the last time the terminal was told to wait. */
+/** What a login holds whatever its state. `hash` is the SHA-256 of the whole secret in hex; times are milliseconds since the epoch. `polledAt` is the last time the terminal was told to wait, and `visitor` the key of whoever asked. */
 interface LoginFacts {
   readonly id: LoginId;
   readonly code: UserCode;
   readonly hash: string;
   readonly scope: Scope;
   readonly computer: string;
+  readonly visitor: string;
   readonly createdAt: number;
   readonly expiresAt: number;
   readonly polledAt: number | null;
@@ -47,8 +48,8 @@ export type PendingLogin = LoginFacts & { readonly state: "pending" };
 /** What is stored of a computer's login: pending, or decided by an admin. */
 export type ComputerLogin = PendingLogin | (LoginFacts & { readonly state: "allowed" | "denied"; readonly decidedBy: Login });
 
-/** What a new login asks for. `computer` is the name the terminal gave itself, stored as given. */
-type LoginRequest = { readonly scope: Scope; readonly computer: string; readonly now: number };
+/** What a new login asks for. `computer` is the name the terminal gave itself, stored as given; `visitor` is the key of whoever asks. */
+type LoginRequest = { readonly scope: Scope; readonly computer: string; readonly visitor: string; readonly now: number };
 
 function mintCode(): UserCode {
   let code = "";
@@ -99,9 +100,9 @@ export function parseLoginSecret(presented: string): LoginId | undefined {
 export async function mintComputerLogin(request: LoginRequest): Promise<{ readonly secret: string; readonly login: PendingLogin }> {
   const id = randomHex(ID_BYTES) as LoginId;
   const secret = `${SECRET_PREFIX}${id}_${randomHex(SECRET_BYTES)}`;
-  const { scope, computer, now } = request;
+  const { scope, computer, visitor, now } = request;
 
-  return { secret, login: { id, code: mintCode(), hash: await sha256Hex(secret), scope, computer, createdAt: now, expiresAt: now + LIFETIME_MS, polledAt: null, state: "pending" } };
+  return { secret, login: { id, code: mintCode(), hash: await sha256Hex(secret), scope, computer, visitor, createdAt: now, expiresAt: now + LIFETIME_MS, polledAt: null, state: "pending" } };
 }
 
 /**

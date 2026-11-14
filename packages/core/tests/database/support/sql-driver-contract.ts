@@ -217,7 +217,7 @@ function schemaRules(label: string, makeDriver: DriverFactory): void {
       params: [id, folder, ADA, state],
     });
     const login = (id: string, code: string, state: string, decidedBy: string | null): Statement => ({
-      sql: "INSERT INTO logins (id, code, hash, scope, computer, state, decided_by, created_at, expires_at) VALUES (?1, ?2, 'h', 'publisher', 'laptop', ?3, ?4, 0, 1)",
+      sql: "INSERT INTO logins (id, code, hash, scope, computer, visitor, state, decided_by, created_at, expires_at) VALUES (?1, ?2, 'h', 'publisher', 'laptop', 'one-visitor', ?3, ?4, 0, 1)",
       params: [id, code, state, decidedBy],
     });
 
@@ -375,8 +375,8 @@ function queryPlans(label: string, makeDriver: DriverFactory): void {
       const restored = await begunImport(database, gone);
       const again = await database.importUploadAsSite(restored.id, restored.site, BY_ADA);
       const [login, denied] = await Promise.all([pendingLogin(), pendingLogin()]);
-      await database.addComputerLogin(login, 10);
-      await database.addComputerLogin(denied, 10);
+      await database.addComputerLogin(login, { perVisitor: 10, all: 10 });
+      await database.addComputerLogin(denied, { perVisitor: 10, all: 10 });
       await database.getComputerLogin(login.id);
       await database.findComputerLogin(login.code);
       await database.pollComputerLogin(login.id, { at: NOW + 1, notAfter: NOW });

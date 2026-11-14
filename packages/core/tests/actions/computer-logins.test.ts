@@ -17,9 +17,12 @@ const SECOND = 1000;
 /** An admin's token: an admin, and no person behind a session. */
 const ADMIN_TOKEN: Actor = { scope: "admin", holder: "00000000000000cc" as TokenId };
 
+/** The visitor a login is begun by where a test names none. */
+const VISITOR = "one-visitor";
+
 /** A login begun at the world's clock; the test fails here when it is refused. */
-async function begun(world: World, scope: "admin" | "publisher" = "publisher"): Promise<{ readonly code: string; readonly secret: string }> {
-  const login = await beginLogin(world.install, { scope, computer: "laptop" });
+async function begun(world: World, scope: "admin" | "publisher" = "publisher", visitor = VISITOR): Promise<{ readonly code: string; readonly secret: string }> {
+  const login = await beginLogin(world.install, { scope, computer: "laptop" }, visitor);
   if (!login.ok) throw new Error(`the fixture login was refused: ${login.code}`);
 
   return login;
@@ -44,7 +47,7 @@ describe("beginLogin", () => {
   test("a begun login grants nothing: its secret is answered pending, no token exists, and nothing is logged", async () => {
     const world = await makeWorld();
 
-    const login = await beginLogin(world.install, { scope: "admin", computer: "laptop" });
+    const login = await beginLogin(world.install, { scope: "admin", computer: "laptop" }, VISITOR);
     const secret = login.ok ? login.secret : "";
 
     expect(login).toEqual({ ok: true, code: expect.stringMatching(/^[BCDFGHJKLMNPQRSTVWXZ]{4}-[BCDFGHJKLMNPQRSTVWXZ]{4}$/), secret: expect.stringMatching(/^poplin_login_[0-9a-f]{16}_[0-9a-f]{64}$/), expires_in: 600, interval: 5 });
@@ -60,18 +63,67 @@ describe("beginLogin", () => {
   ])("refuses %s, and stores nothing", async (_what, request, about) => {
     const world = await makeWorld();
 
-    expect(await beginLogin(world.install, request as Parameters<typeof beginLogin>[1])).toEqual({ ok: false, code: "bad_argument", about });
+    expect(await beginLogin(world.install, request as Parameters<typeof beginLogin>[1], VISITOR)).toEqual({ ok: false, code: "bad_argument", about });
   });
 
-  // Drift: nobody is asked before a login is begun, so the table's size is bounded here or nowhere; logins that ran out must not count, or old requests would lock every new one out.
-  test("the fifty-first waiting login is refused, and room is there again once the first ones ran out", async () => {
+  // Drift: anyone may begin a login and nobody is asked first. Were the waiting logins counted for everyone together, one address at the pace it is allowed would hold every place and no real computer could log in.
+  test("one visitor beginning five logins a minute for thirty minutes keeps three waiting, and another visitor's login is begun, allowed, and collected all the while", async () => {
     const world = await makeWorld();
-    for (let made = 0; made < 50; made += 1) await begun(world);
+    const others: boolean[] = [];
+    const flood: { readonly secret: string }[] = [];
 
-    const full = await beginLogin(world.install, { scope: "publisher", computer: "laptop" });
+    for (let minute = 0; minute < 30; minute += 1) {
+      for (let sent = 0; sent < 5; sent += 1) {
+        world.clock.now = NOW + minute * MINUTE + sent;
+        flood.push(await begun(world, "publisher", "flood"));
+      }
+
+      const other = await begun(world, "publisher", `other-${minute % 2}`);
+      const allowed = await decideLogin(world.install, ADMIN, { code: other.code, allow: true });
+      const collected = await redeemLogin(world.install, { secret: other.secret });
+      others.push(allowed.ok && collected.ok && collected.state === "allowed");
+    }
+    const answered = [];
+    for (const { secret } of flood.slice(-5)) answered.push(await redeemLogin(world.install, { secret }));
+
+    expect([others.every(Boolean), others.length, await tokenCount(world)]).toEqual([true, 30, 30]);
+    expect(answered.map((answer) => answer.ok && answer.state)).toEqual(["expired", "expired", "pending", "pending", "pending"]);
+  });
+
+  // Drift: a place is for a login somebody may still decide. A denied or stale one that kept its place would push out one that waits, and an allowed one that lost it would take the token from a computer an admin just let in.
+  test("a decided login and one that ran out hold no place, and neither an allowed nor a denied login gives way to a newer one", async () => {
+    const world = await makeWorld();
+    const stale = await begun(world);
+    world.clock.now = NOW + 10 * MINUTE - 2 * SECOND;
+    const [allowed, denied] = [await begun(world), await begun(world)];
+    await decideLogin(world.install, ADMIN, { code: allowed.code, allow: true });
+    await decideLogin(world.install, ADMIN, { code: denied.code, allow: false });
+    const waiting = [await begun(world), await begun(world)];
+    const kept = await stateOf(world, stale.code);
     world.clock.now = NOW + 10 * MINUTE;
+    waiting.push(await begun(world));
+    const pending = await Promise.all(waiting.map(({ code }) => stateOf(world, code)));
+    for (let more = 0; more < 4; more += 1) await begun(world);
 
-    expect([full, (await beginLogin(world.install, { scope: "publisher", computer: "laptop" })).ok]).toEqual([{ ok: false, code: "too_many_requests", about: "logins" }, true]);
+    expect([kept, pending]).toEqual(["pending", ["pending", "pending", "pending"]]);
+    expect([await redeemLogin(world.install, { secret: denied.secret }), await redeemLogin(world.install, { secret: allowed.secret })]).toEqual([{ ok: true, state: "denied" }, expect.objectContaining({ ok: true, state: "allowed" })]);
+  });
+
+  // Drift: the bound on all waiting logins is what keeps the table small under many addresses. Refusing the newcomer there would let a crowd of addresses do what one cannot; the place is taken from whoever holds the most.
+  test("with fifty logins waiting the next visitor is let in, and the oldest login of the visitor with the most is the one that gives way", async () => {
+    const world = await makeWorld();
+    const single = [];
+    for (let visitor = 0; visitor < 47; visitor += 1) single.push(await begun(world, "publisher", `single-${visitor}`));
+    const crowd = [];
+    for (let sent = 1; sent <= 3; sent += 1) {
+      world.clock.now = NOW + sent * SECOND;
+      crowd.push(await begun(world, "publisher", "crowd"));
+    }
+
+    const next = await begun(world, "publisher", "next");
+    const states = async (logins: readonly { readonly code: string }[]): Promise<(string | undefined)[]> => Promise.all(logins.map(({ code }) => stateOf(world, code)));
+
+    expect([await states(crowd), [...new Set(await states([...single, next]))]]).toEqual([[undefined, "pending", "pending"], ["pending"]]);
   });
 });
 

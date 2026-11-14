@@ -199,6 +199,15 @@ export interface LeftoversPage {
   readonly next?: SiteFolder;
 }
 
+/** How many logins may wait at one moment. */
+export interface LoginRoom {
+  /** The most waiting logins of one visitor. */
+  readonly perVisitor: number;
+
+  /** The most waiting logins of all visitors together. */
+  readonly all: number;
+}
+
 /** What an admin decides about a pending login, and when. */
 export interface LoginDecision {
   /** Whether the computer is let in. */
@@ -437,11 +446,13 @@ export interface Database {
   revokeToken(id: TokenId, signed: Signed): Promise<{ readonly kind: "done"; readonly token: TokenRecord } | Refused<"not_found">>;
 
   /**
-   * Store a pending login, only while fewer than `most` logins that have not run out at its `createdAt` are stored. It writes no audit entry: a pending login grants nothing.
+   * Store a pending login, and make room for it among the logins that wait: the pending ones that have not run out at its `createdAt`. It writes no audit entry: a pending login grants nothing.
    *
-   * @returns `full` at the bound, or `taken` when its id or its code is already a login's
+   * Its visitor keeps the newest `room.perVisitor` of their waiting logins, this one among them. Once `room.all` logins wait, the oldest one of the visitor with the most gives way. A decided login is never removed here.
+   *
+   * @returns `taken` when its id or its code is already a login's; no login gave way then
    */
-  addComputerLogin(login: PendingLogin, most: number): Promise<{ readonly kind: "done" } | Refused<"full" | "taken">>;
+  addComputerLogin(login: PendingLogin, room: LoginRoom): Promise<{ readonly kind: "done" } | Refused<"taken">>;
 
   /** The login whose secret has this id, whatever its state and whether or not it ran out. */
   getComputerLogin(id: LoginId): Promise<ComputerLogin | undefined>;
