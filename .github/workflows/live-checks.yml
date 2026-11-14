@@ -1,0 +1,80 @@
+# Checks a real install on the Cloudflare test account after main is green, and on a manual run.
+#
+#   build the Worker bundle -> make the standing test install match main -> run tests/live against it -> remove the run's token
+#
+# The test install stays up between runs: only what a run made (its sites, its token row) is removed.
+# The environment's secrets reach the three steps that call Cloudflare and no other step. A step that lacks a token
+# permission, or an account switch only a person can flip, is written to the step summary as skipped, with what it needs.
+#
+# It is its own workflow, not a job of post-green.yml: one lane holds every run so two never touch the install together,
+# and a lane shared across commits would cancel the hook the release leg waits on.
+
+name: Live Checks
+
+on:
+  # A run of CI on this repository's main that ended green. The job's condition holds the line: a pull request's run,
+  # or a run from a fork, never gets past it, and the code checked out is this repository's main.
+  workflow_run: # zizmor: ignore[dangerous-triggers]
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      many_files:
+        description: Also publish two thousand small files (thousands of requests on the test account)
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  live:
+    if: >-
+      github.ref == 'refs/heads/main' &&
+      (github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'push' &&
+      github.event.workflow_run.head_branch == 'main' &&
+      github.event.workflow_run.head_repository.full_name == github.repository))
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    environment: cloudflare-live-tests
+    # One lane: a run waits for the one before it, and a newer waiting run replaces an older one.
+    concurrency:
+      group: live-checks
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: main
+          persist-credentials: false
+      - uses: ./.github/actions/setup
+      - name: Build the Worker bundle
+        run: bun run --cwd packages/cloudflare build
+      - name: Make the test install match main
+        id: converge
+        timeout-minutes: 12
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          POPLIN_LIVE_LOGIN: ${{ secrets.POPLIN_LIVE_LOGIN }}
+        run: bun run --silent --cwd packages/cloudflare live:converge
+      - name: Run the live checks
+        if: steps.converge.outputs.ready == 'true'
+        timeout-minutes: 25
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          POPLIN_LIVE_LOGIN: ${{ secrets.POPLIN_LIVE_LOGIN }}
+          POPLIN_LIVE_MANY_FILES: ${{ inputs.many_files && '1' || '0' }}
+          MISSING: ${{ steps.converge.outputs.missing }}
+        run: bun run --silent --cwd packages/cloudflare live:suite "$MISSING"
+      # The suite removes its own token row; this covers a suite step that was killed before it could.
+      - name: Remove the run's token
+        if: always() && steps.converge.outputs.ready == 'true'
+        timeout-minutes: 3
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: bun run --silent --cwd packages/cloudflare live:sweep

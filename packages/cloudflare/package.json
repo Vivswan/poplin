@@ -12,7 +12,10 @@
     "typecheck": "wrangler types && tsc -p .",
     "build": "wrangler deploy --dry-run --outdir dist",
     "dev": "wrangler dev",
-    "test": "bun run build && vitest run"
+    "test": "bun run build && vitest run",
+    "live:converge": "bun scripts/live/converge.ts",
+    "live:suite": "bun scripts/live/suite.ts",
+    "live:sweep": "bun scripts/live/sweep-tokens.ts"
   },
   "dependencies": {
     "@poplin/app": "workspace:*",

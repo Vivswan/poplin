@@ -16,6 +16,7 @@
     "typecheck": "tsc -p . && tsc -p website && bun run --cwd packages/cloudflare typecheck",
     "test": "bun test --pass-with-no-tests --path-ignore-patterns 'packages/cloudflare/tests/{worker,storage,database,limits}/**'",
     "test:worker": "bun run --cwd packages/cloudflare test",
+    "live": "POPLIN_LIVE=1 bun test ./tests/live/live.test.ts",
     "knip": "knip --treat-config-hints-as-errors",
     "preview": "bun scripts/preview/serve.ts",
     "preview:stop": "bun scripts/preview/stop.ts"
