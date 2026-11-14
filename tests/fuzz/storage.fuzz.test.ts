@@ -13,15 +13,24 @@ const LAST_C0_CONTROL = 0x1f;
 const FIRST_C1_CONTROL = 0x7f;
 const LAST_C1_CONTROL = 0x9f;
 const STORE_ORIGIN = "https://bucket.example.com/";
+const DOT_SEGMENT = /^(\.|%2e){1,2}$/i;
 
 const property = fuzzTarget(import.meta.file);
 
-const segments = fc.oneof(fc.stringMatching(/^[A-Za-z0-9_-][A-Za-z0-9_.-]{0,11}$/), fc.constantFrom("index.html", "...", ".well-known", "a b", "100%", "%2e%2e", "z\u00fcrich", "~", "$1"));
+const segments = fc.oneof(fc.stringMatching(/^[A-Za-z0-9_-][A-Za-z0-9_.-]{0,11}$/), fc.constantFrom("index.html", "...", ".well-known", "a b", "100%", "%2e%2e%2e", "a%2e", "%2f", "%252e", "%zz", "z\u00fcrich", "~", "$1"));
 const uploadPaths = fc.array(segments, { minLength: 1, maxLength: 6 }).map((path) => path.join("/"));
-const keys = hostile(uploadPaths);
+const dotSegments = fc.array(fc.constantFrom(".", "%2e", "%2E"), { minLength: 1, maxLength: 2 }).map((dots) => dots.join(""));
+
+const dotPaths = fc.tuple(fc.array(segments, { maxLength: 5 }), dotSegments, fc.nat()).map(([path, dots, at]) => {
+  const cut = at % (path.length + 1);
+
+  return [...path.slice(0, cut), dots, ...path.slice(cut)].join("/");
+});
+
+const keys = hostile(fc.oneof(uploadPaths, dotPaths));
 const sitePrefixes = fc.array(fc.stringMatching(/^[a-z0-9-]{1,12}$/), { minLength: 1, maxLength: 3 }).map((folders) => `${folders.join("/")}/`);
-const sizes = fc.oneof(fc.nat(), fc.maxSafeNat(), fc.constantFrom(0, 1));
 const counts = fc.oneof(fc.nat(), fc.maxSafeInteger(), fc.double(), fc.constantFrom(0, 1, -1, 0.5, 2 ** 53, Number.NaN, Number.POSITIVE_INFINITY));
+const sizes = fc.oneof({ arbitrary: fc.oneof(fc.nat(), fc.maxSafeNat(), fc.constantFrom(0, 1)), weight: 3 }, { arbitrary: counts, weight: 1 });
 
 const ranges: fc.Arbitrary<ByteRange> = fc.oneof(
   fc.record({ offset: counts, length: fc.option(counts, { nil: undefined }) }),
@@ -52,7 +61,7 @@ property(
 
     expect(posix.normalize(joined)).toBe(joined);
     expect(stored).toEqual(joined.split("/"));
-    expect(joined.split("/").filter((segment) => segment === "" || segment === "." || segment === "..")).toEqual([]);
+    expect(joined.split("/").filter((segment) => segment === "" || DOT_SEGMENT.test(segment))).toEqual([]);
   }),
 );
 
@@ -81,9 +90,18 @@ property(
 );
 
 property(
-  "an accepted range asked in whole bytes, lies inside the object, holds at least one byte, and never more than the header asked for",
+  "a path with a segment that is one or two dots, each written plain or as the escape of a dot in either case, is refused as a dot segment, so no escape a URL parser resolves away reaches the store",
+  fc.property(dotPaths, (path) => {
+    expect<unknown>(parseObjectKey(path)).toEqual({ ok: false, refusal: "dot-segment" });
+  }),
+);
+
+property(
+  "a range of an object whose size is not a whole, safe byte count is unsatisfiable, and an accepted range is asked in whole bytes, lies inside the object, holds at least one byte, and never more than the header asked for",
   fc.property(ranges, sizes, (range, size) => {
     const span = resolveRange(range, size);
+    if (!(Number.isSafeInteger(size) && size >= 0)) expect(span).toBe("unsatisfiable");
+
     if (span === "unsatisfiable") return;
 
     const asked = "suffix" in range ? range.suffix : (range.length ?? size);

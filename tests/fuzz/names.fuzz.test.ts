@@ -4,12 +4,16 @@ import { expect } from "bun:test";
 import fc from "fast-check";
 
 import { nameFromEntry, parseSiteName, type SiteName, secretName, splitLabel } from "../../packages/core/src/names/names";
-import { applyPrefix, stripPrefix } from "../../packages/core/src/names/prefix";
+import { applyPrefix, parsePrefix, stripPrefix } from "../../packages/core/src/names/prefix";
 import { fuzzTarget } from "./config";
 import { hostile } from "./hostile";
 
 const NO_RESERVED: ReadonlySet<string> = new Set();
 const MAX_PUBLISHED_LENGTH = 40;
+const MAX_DNS_LABEL_LENGTH = 63;
+const MAX_PUBLISHED_PREFIX_LENGTH = 9;
+const DNS_LABEL_SHAPE = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/;
+const PUBLISHED_PREFIX_SHAPE = /^([a-z0-9][a-z0-9-]*)?$/;
 const PUBLISHED_SHAPE = /^[a-z0-9]+(-[a-z0-9]+)*$/;
 const PUBLISHED_SECRET = /^[0-9a-z]{12}$/;
 
@@ -29,10 +33,19 @@ const reservedSets = fc.uniqueArray(fc.oneof(fc.constantFrom("www", "admin", "in
 const secretLabels = fc.tuple(wellFormed, fc.stringMatching(PUBLISHED_SECRET)).map(([name, secret]) => `${name}--${secret}`);
 const labels = hostile(fc.oneof(wellFormed, secretLabels, fc.tuple(fc.constantFrom("page-", "p", "site--"), wellFormed).map(([prefix, name]) => `${prefix}${name}`)));
 const entries = hostile(fc.oneof(wellFormed, wellFormed.map((name) => `${name}.html`)));
-const prefixes = hostile(fc.constantFrom("page-", "", "p", "site--"));
+const rawPrefixes = hostile(fc.oneof(fc.constantFrom("page-", "", "p", "site--"), fc.stringMatching(/^[a-z0-9-]{0,12}$/)));
+
+const prefixes = rawPrefixes
+  .map((raw) => parsePrefix(raw))
+  .filter((parsed) => parsed.ok)
+  .map((parsed) => parsed.value);
 
 function followsPublishedRule(name: string): boolean {
   return name.length >= 1 && name.length <= MAX_PUBLISHED_LENGTH && PUBLISHED_SHAPE.test(name);
+}
+
+function followsPrefixRule(raw: string): boolean {
+  return raw.length <= MAX_PUBLISHED_PREFIX_LENGTH && PUBLISHED_PREFIX_SHAPE.test(raw);
 }
 
 function without(reserved: ReadonlySet<string>, name: string): ReadonlySet<string> {
@@ -40,7 +53,30 @@ function without(reserved: ReadonlySet<string>, name: string): ReadonlySet<strin
 }
 
 property(
-  "a hostile label, entry, or prefix is refused, not thrown on, and a stripped label put back behind its prefix is the label that came in",
+  "a hostile prefix is refused, not thrown on, unless it is at most 9 hostname characters with no leading dash, and an accepted one is the string that came in and reads back the name it was put before",
+  fc.property(rawPrefixes, siteNames, (raw, name) => {
+    const parsed = parsePrefix(raw);
+
+    expect(parsed.ok).toBe(followsPrefixRule(raw));
+    if (!parsed.ok) return;
+
+    expect<string>(parsed.value).toBe(raw);
+    expect<unknown>(stripPrefix(parsed.value, applyPrefix(parsed.value, name))).toEqual({ ok: true, label: name });
+  }),
+);
+
+property(
+  "the secret address of any site under any accepted prefix is a hostname label of at most 63 characters, so no configured prefix makes an address DNS cannot carry",
+  fc.property(prefixes, siteNames, (prefix, name) => {
+    const label = applyPrefix(prefix, secretName(name));
+
+    expect(label.length).toBeLessThanOrEqual(MAX_DNS_LABEL_LENGTH);
+    expect(label).toMatch(DNS_LABEL_SHAPE);
+  }),
+);
+
+property(
+  "a hostile label or entry is refused, not thrown on, and a stripped label put back behind its prefix is the label that came in",
   fc.property(labels, prefixes, reservedSets, (label, prefix, reserved) => {
     parseSiteName(label, reserved);
     nameFromEntry(label, reserved);
