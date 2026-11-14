@@ -1,0 +1,331 @@
+:root {
+  --accent: #b5382e;
+  --on-accent: #ffffff;
+  --glow: #f2b63d;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --accent: #f08a7c;
+    --on-accent: #0f1624;
+    --glow: #f4c257;
+  }
+}
+
+/* Without the script the slides read as one long page; the rules below take over once it runs. */
+.is-live body {
+  display: flex;
+  flex-direction: column;
+  height: 100dvh;
+}
+
+.is-live .wrap {
+  width: 100%;
+}
+
+.is-live .stage {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  cursor: pointer;
+  touch-action: pan-y;
+}
+
+.slide {
+  display: grid;
+  align-items: center;
+  gap: clamp(1rem, 4vw, 2rem);
+  max-width: 68rem;
+  margin-inline: auto;
+  padding: clamp(1.5rem, 5vw, 3.5rem) clamp(1rem, 4vw, 2.5rem);
+  border-bottom: 1px solid var(--line);
+}
+
+.is-live .slide {
+  min-height: 100%;
+  border-bottom: 0;
+}
+
+@keyframes arrive {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+}
+
+/* All motion in the deck sits here, so a reader who asked for less gets none. */
+@media (prefers-reduced-motion: no-preference) {
+  .is-live .slide {
+    animation: arrive 0.22s ease-out;
+  }
+
+  .progress span {
+    transition: background-color 0.2s;
+  }
+}
+
+.slide h2 {
+  max-width: 17em;
+  font-size: clamp(1.7rem, 1rem + 3.2vw, 3.4rem);
+}
+
+.lede {
+  max-width: 34em;
+  margin-top: 1.1rem;
+  font-size: clamp(1.1rem, 0.95rem + 0.8vw, 1.5rem);
+  line-height: 1.4;
+}
+
+.aside {
+  margin-top: 1rem;
+  color: var(--ink-2);
+}
+
+.hint {
+  margin-top: clamp(1.25rem, 5vw, 2.5rem);
+  color: var(--ink-3);
+  font-size: 0.9375rem;
+}
+
+.slide-title h1 {
+  font-size: clamp(3.4rem, 1.5rem + 11vw, 9rem);
+  line-height: 0.95;
+  letter-spacing: -0.03em;
+}
+
+.lantern {
+  width: min(30vw, 15rem);
+  justify-self: center;
+}
+
+.lantern-glow {
+  fill: var(--glow);
+  opacity: 0.2;
+}
+
+.lantern-globe {
+  fill: var(--glow);
+}
+
+.lantern-solid {
+  fill: var(--ink);
+}
+
+.lantern-line {
+  fill: none;
+  stroke: var(--ink);
+  stroke-width: 6;
+  stroke-linecap: round;
+}
+
+@media (min-width: 46rem) {
+  .slide-title {
+    grid-template-columns: 1fr auto;
+  }
+}
+
+.figures {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr));
+  gap: 1.5rem 2rem;
+  margin-top: clamp(1.5rem, 4vw, 3rem);
+}
+
+.figures div {
+  display: flex;
+  flex-direction: column;
+  padding-top: 0.9rem;
+  border-top: 3px solid var(--accent);
+}
+
+.figures dd {
+  font-size: clamp(2.1rem, 1.4rem + 2.6vw, 3.6rem);
+  font-weight: 600;
+  line-height: 1.1;
+  letter-spacing: -0.02em;
+}
+
+.figures dt {
+  margin-top: 0.3rem;
+  color: var(--ink-2);
+}
+
+.slide table {
+  margin-top: clamp(1.25rem, 3vw, 2.25rem);
+  font-size: clamp(0.9375rem, 0.85rem + 0.5vw, 1.1875rem);
+}
+
+.steps {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr));
+  gap: 1.5rem 2.5rem;
+  margin-top: clamp(1.5rem, 4vw, 3rem);
+  padding: 0;
+  list-style: none;
+  counter-reset: step;
+}
+
+.steps li {
+  counter-increment: step;
+}
+
+.steps li::before {
+  content: counter(step);
+  display: grid;
+  place-items: center;
+  width: 2.5rem;
+  height: 2.5rem;
+  margin-bottom: 0.9rem;
+  border-radius: 50%;
+  background: var(--accent);
+  color: var(--on-accent);
+  font-weight: 700;
+}
+
+.steps h3 {
+  font-size: 1.5rem;
+}
+
+.steps p {
+  margin-top: 0.4rem;
+  color: var(--ink-2);
+}
+
+.meters {
+  display: grid;
+  gap: 1.4rem;
+  max-width: 44rem;
+  margin-top: clamp(1.5rem, 4vw, 3rem);
+  padding: 0;
+  list-style: none;
+}
+
+.meters li {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 0.4rem 1rem;
+  align-items: baseline;
+}
+
+.meter {
+  grid-column: 1 / -1;
+  grid-row: 2;
+  width: 100%;
+  height: 10px;
+  border-radius: 5px;
+}
+
+.meter-track {
+  fill: var(--wash);
+}
+
+.meter-fill {
+  fill: var(--accent);
+}
+
+.meter-value {
+  font-size: 1.375rem;
+  font-weight: 600;
+}
+
+.milestones {
+  display: grid;
+  gap: 0;
+  margin-top: clamp(1.5rem, 4vw, 3rem);
+  padding: 0;
+  list-style: none;
+}
+
+.milestones li {
+  position: relative;
+  padding: 0 0 1.5rem 2rem;
+  border-left: 2px solid var(--ink-3);
+}
+
+.milestones li:last-child {
+  border-left-color: transparent;
+}
+
+.milestones li::before {
+  content: "";
+  position: absolute;
+  left: -8px;
+  top: 0.35rem;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 0 4px var(--ground);
+}
+
+.milestones time {
+  font-family: var(--serif);
+  font-size: 1.5rem;
+  font-weight: 700;
+}
+
+.milestones p {
+  color: var(--ink-2);
+}
+
+@media (min-width: 46rem) {
+  .milestones {
+    grid-template-columns: repeat(4, 1fr);
+  }
+
+  .milestones li {
+    padding: 1.6rem 1.5rem 0 0;
+    border-left: 0;
+    border-top: 2px solid var(--ink-3);
+  }
+
+  .milestones li::before {
+    left: 0;
+    top: -8px;
+  }
+}
+
+.asks {
+  display: grid;
+  gap: 0.9rem;
+  margin-top: clamp(1.5rem, 4vw, 2.5rem);
+  padding: 0;
+  list-style: none;
+  font-size: clamp(1.1rem, 0.95rem + 0.8vw, 1.5rem);
+}
+
+.asks li {
+  padding-left: 1.1rem;
+  border-left: 3px solid var(--accent);
+}
+
+.deck-nav {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  width: 100%;
+  padding-block: 0.75rem;
+  border-top: 1px solid var(--line);
+}
+
+.progress {
+  flex: 1;
+  display: flex;
+  gap: 4px;
+}
+
+.progress span {
+  flex: 1;
+  height: 6px;
+  border-radius: 3px;
+  background: var(--line);
+}
+
+.progress .is-done {
+  background: var(--accent);
+}
+
+.is-live .site-footer {
+  margin-top: 0;
+  padding-block: 0.5rem 0.75rem;
+}

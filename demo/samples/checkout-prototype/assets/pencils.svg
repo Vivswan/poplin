@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 96">
+  <title>Three pencils</title>
+  <g>
+    <rect x="22" y="14" width="12" height="8" rx="3" fill="#e58a9c"/>
+    <rect x="22" y="22" width="12" height="5" fill="#9aa5b8"/>
+    <rect x="22" y="27" width="12" height="42" fill="#e3a82b"/>
+    <path d="M22 69h12l-6 15z" fill="#e9cfa6"/>
+    <path d="M26 79h4l-2 5z" fill="#17233a"/>
+  </g>
+  <g transform="translate(20 0)">
+    <rect x="22" y="14" width="12" height="8" rx="3" fill="#e58a9c"/>
+    <rect x="22" y="22" width="12" height="5" fill="#9aa5b8"/>
+    <rect x="22" y="27" width="12" height="42" fill="#2f8273"/>
+    <path d="M22 69h12l-6 15z" fill="#e9cfa6"/>
+    <path d="M26 79h4l-2 5z" fill="#17233a"/>
+  </g>
+  <g transform="translate(40 0)">
+    <rect x="22" y="14" width="12" height="8" rx="3" fill="#e58a9c"/>
+    <rect x="22" y="22" width="12" height="5" fill="#9aa5b8"/>
+    <rect x="22" y="27" width="12" height="42" fill="#4a6fc0"/>
+    <path d="M22 69h12l-6 15z" fill="#e9cfa6"/>
+    <path d="M26 79h4l-2 5z" fill="#17233a"/>
+  </g>
+</svg>

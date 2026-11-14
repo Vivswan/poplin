@@ -1,0 +1,189 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Checkout prototype: Quillpond Paper Shop</title>
+    <meta name="description" content="A sample clickable prototype of a three-step checkout for an invented shop. Nothing is sent or stored." />
+    <link rel="icon" href="./favicon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="./base.css" />
+    <link rel="stylesheet" href="./site.css" />
+    <script src="./checkout.js" defer></script>
+  </head>
+  <body>
+    <a class="skip-link" href="#main">Skip to checkout</a>
+    <div class="selvedge" aria-hidden="true"></div>
+
+    <header class="wrap">
+      <div class="masthead">
+        <span><strong>Quillpond Paper Shop</strong>, an invented shop</span>
+        <span>A prototype: nothing is charged, sent, or stored</span>
+      </div>
+    </header>
+
+    <main id="main" class="wrap">
+      <h1 class="page-title">Checkout</h1>
+      <noscript><p class="notice">This prototype needs JavaScript to run.</p></noscript>
+
+      <nav aria-label="Checkout steps">
+        <ol class="stepper" id="stepper">
+          <li><button type="button" data-step="0">Cart</button></li>
+          <li><button type="button" data-step="1">Delivery</button></li>
+          <li><button type="button" data-step="2">Payment</button></li>
+        </ol>
+      </nav>
+
+      <div class="layout">
+        <div class="panels" id="panels">
+          <section class="panel" data-panel="0" aria-labelledby="cart-title">
+            <h2 id="cart-title" tabindex="-1">Your cart</h2>
+            <ul class="cart" id="cart-items"></ul>
+            <div class="empty" id="cart-empty" hidden>
+              <p>Your cart is empty.</p>
+              <button class="button" id="restore" type="button">Put the sample items back</button>
+            </div>
+            <div class="promo" data-enter>
+              <div class="field">
+                <label for="promo">Discount code</label>
+                <div class="promo-row">
+                  <input id="promo" autocomplete="off" autocapitalize="characters" spellcheck="false" aria-describedby="promo-note" />
+                  <button class="button" id="apply-promo" type="button" data-primary>Apply code</button>
+                </div>
+                <p class="hint" id="promo-note" role="status">Try SAMPLE10 for 10% off.</p>
+              </div>
+            </div>
+            <div class="actions">
+              <button class="button button-primary" id="to-delivery" type="button" data-go="1" data-primary>Continue to delivery</button>
+            </div>
+          </section>
+
+          <section class="panel" data-panel="1" aria-labelledby="delivery-title" data-enter hidden>
+            <h2 id="delivery-title" tabindex="-1">Where should it go?</h2>
+            <button class="button button-quiet" id="fill-details" type="button">Fill in sample details</button>
+
+            <div class="fields">
+              <div class="field">
+                <label for="name">Full name</label>
+                <input id="name" data-rule="name" autocomplete="off" aria-describedby="name-error" />
+                <p class="error" id="name-error" hidden></p>
+              </div>
+              <div class="field">
+                <label for="email">Email for the receipt</label>
+                <input id="email" data-rule="email" type="email" autocomplete="off" aria-describedby="email-error" />
+                <p class="error" id="email-error" hidden></p>
+              </div>
+            </div>
+
+            <fieldset class="choices">
+              <legend>Delivery</legend>
+              <label class="choice">
+                <input type="radio" name="method" value="standard" checked />
+                <span class="choice-name">Standard, 3 to 5 days</span>
+                <span class="choice-cost">$4.00, free over $40</span>
+              </label>
+              <label class="choice">
+                <input type="radio" name="method" value="express" />
+                <span class="choice-name">Express, next working day</span>
+                <span class="choice-cost">$9.00</span>
+              </label>
+              <label class="choice">
+                <input type="radio" name="method" value="pickup" />
+                <span class="choice-name">Collect from the shop counter</span>
+                <span class="choice-cost">Free</span>
+              </label>
+            </fieldset>
+
+            <div class="fields" id="address">
+              <div class="field field-wide">
+                <label for="street">Street address</label>
+                <input id="street" data-rule="street" autocomplete="off" aria-describedby="street-error" />
+                <p class="error" id="street-error" hidden></p>
+              </div>
+              <div class="field">
+                <label for="city">Town or city</label>
+                <input id="city" data-rule="city" autocomplete="off" aria-describedby="city-error" />
+                <p class="error" id="city-error" hidden></p>
+              </div>
+              <div class="field">
+                <label for="postcode">Postcode</label>
+                <input id="postcode" data-rule="postcode" autocomplete="off" aria-describedby="postcode-error" />
+                <p class="error" id="postcode-error" hidden></p>
+              </div>
+            </div>
+
+            <div class="actions">
+              <button class="button" type="button" data-go="0">Back to cart</button>
+              <button class="button button-primary" type="button" data-go="2" data-primary>Continue to payment</button>
+            </div>
+          </section>
+
+          <section class="panel" data-panel="2" aria-labelledby="payment-title" data-enter hidden>
+            <h2 id="payment-title" tabindex="-1">Pay</h2>
+            <p class="notice">This is a prototype. Do not enter a real card: use the sample one. Nothing leaves this page.</p>
+            <button class="button button-quiet" id="fill-card" type="button">Use the sample card</button>
+
+            <div class="fields">
+              <div class="field field-wide">
+                <label for="card">Card number</label>
+                <input id="card" data-rule="card" inputmode="numeric" autocomplete="off" maxlength="19" aria-describedby="card-error" />
+                <p class="error" id="card-error" hidden></p>
+              </div>
+              <div class="field">
+                <label for="expiry">Expiry, as MM/YY</label>
+                <input id="expiry" data-rule="expiry" inputmode="numeric" autocomplete="off" maxlength="5" aria-describedby="expiry-error" />
+                <p class="error" id="expiry-error" hidden></p>
+              </div>
+              <div class="field">
+                <label for="code">Security code</label>
+                <input id="code" data-rule="code" inputmode="numeric" autocomplete="off" maxlength="3" aria-describedby="code-error" />
+                <p class="error" id="code-error" hidden></p>
+              </div>
+            </div>
+
+            <div class="actions">
+              <button class="button" type="button" data-go="1">Back to delivery</button>
+              <button class="button button-primary" type="button" data-go="3" data-primary>Place order</button>
+            </div>
+          </section>
+
+          <section class="panel" data-panel="3" aria-labelledby="done-title" hidden>
+            <h2 id="done-title" tabindex="-1">Order placed</h2>
+            <p class="done-line" id="done-line"></p>
+            <p class="hint">Nothing was charged and nothing was saved. Reload the page and it is all gone.</p>
+            <div class="actions">
+              <button class="button" id="start-again" type="button">Start again</button>
+            </div>
+          </section>
+        </div>
+
+        <aside class="summary" aria-labelledby="summary-title">
+          <h2 id="summary-title">Order summary</h2>
+          <ul class="summary-lines" id="summary-lines"></ul>
+          <dl class="totals" aria-live="polite">
+            <div>
+              <dt>Items</dt>
+              <dd id="total-items"></dd>
+            </div>
+            <div id="discount-row" hidden>
+              <dt>Discount, SAMPLE10</dt>
+              <dd id="total-discount"></dd>
+            </div>
+            <div>
+              <dt>Delivery</dt>
+              <dd id="total-delivery"></dd>
+            </div>
+            <div class="grand">
+              <dt>Total</dt>
+              <dd id="total-grand"></dd>
+            </div>
+          </dl>
+          <p class="hint">Prices include tax.</p>
+        </aside>
+      </div>
+    </main>
+
+    <footer class="wrap site-footer">
+      <p>Published by an agent with poplin in one call.</p>
+    </footer>
+  </body>
+</html>

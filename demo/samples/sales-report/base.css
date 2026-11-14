@@ -1,0 +1,234 @@
+/* Shared by every sample: keep this file byte-identical across the sample folders. */
+
+:root {
+  color-scheme: light dark;
+  --ground: #edf0f5;
+  --surface: #ffffff;
+  --wash: #e2e7ef;
+  --ink: #17233a;
+  --ink-2: #46546e;
+  --ink-3: #5f6c85;
+  --line: #d2d8e3;
+  --good: #006300;
+  --bad: #b3261e;
+  --serif: Charter, "Bitstream Charter", "Sitka Text", Cambria, Georgia, serif;
+  --sans: "Avenir Next", Avenir, "Segoe UI", system-ui, -apple-system, Roboto, "Helvetica Neue", sans-serif;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --ground: #0f1624;
+    --surface: #172033;
+    --wash: #1f2b41;
+    --ink: #e8ecf4;
+    --ink-2: #b7c1d4;
+    --ink-3: #97a3ba;
+    --line: #2f3c54;
+    --good: #4cc04c;
+    --bad: #ff8a80;
+  }
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+/* Layout classes set display, so this selector is written to outrank them. */
+html body [hidden] {
+  display: none;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--ground);
+  color: var(--ink);
+  font-family: var(--sans);
+  font-size: 1.0625rem;
+  line-height: 1.55;
+}
+
+h1,
+h2,
+h3 {
+  margin: 0;
+  font-family: var(--serif);
+  font-weight: 700;
+  line-height: 1.12;
+  letter-spacing: -0.012em;
+  text-wrap: balance;
+}
+
+p,
+ul,
+ol,
+dl,
+dd,
+figure {
+  margin: 0;
+}
+
+a {
+  color: inherit;
+  text-decoration-color: var(--accent);
+  text-decoration-thickness: 2px;
+  text-underline-offset: 0.18em;
+}
+
+button,
+input,
+select {
+  font: inherit;
+  color: inherit;
+}
+
+:focus-visible {
+  outline: 3px solid var(--accent);
+  outline-offset: 3px;
+  border-radius: 3px;
+}
+
+/* The woven edge that marks the family: warp threads in the accent, one weft line through them. */
+.selvedge {
+  height: 14px;
+  background:
+    linear-gradient(var(--ground), var(--ground)) center / 100% 2px no-repeat,
+    repeating-linear-gradient(90deg, var(--accent) 0 3px, transparent 3px 6px);
+}
+
+.wrap {
+  max-width: 68rem;
+  margin-inline: auto;
+  padding-inline: clamp(1rem, 4vw, 2.5rem);
+}
+
+.masthead {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 0.25rem 1.5rem;
+  padding-block: 1.1rem;
+  border-bottom: 1px solid var(--line);
+  font-size: 0.9375rem;
+  color: var(--ink-2);
+}
+
+.masthead strong {
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.skip-link {
+  position: absolute;
+  left: 1rem;
+  top: -4rem;
+  padding: 0.5rem 0.9rem;
+  background: var(--ink);
+  color: var(--ground);
+  border-radius: 4px;
+}
+
+.skip-link:focus {
+  top: 1.25rem;
+}
+
+.table-scroll {
+  overflow-x: auto;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9375rem;
+}
+
+th,
+td {
+  padding: 0.6rem 0.5rem;
+  border-bottom: 1px solid var(--line);
+  text-align: left;
+  vertical-align: baseline;
+}
+
+thead th {
+  color: var(--ink-2);
+  font-weight: 600;
+  border-bottom-color: var(--ink-3);
+  vertical-align: bottom;
+}
+
+tbody th {
+  font-weight: 500;
+}
+
+.num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+thead .num {
+  white-space: normal;
+}
+
+tfoot th,
+tfoot td {
+  border-bottom: 0;
+  border-top: 2px solid var(--ink);
+  font-weight: 700;
+}
+
+.button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 2.75rem;
+  padding: 0.55rem 1.2rem;
+  border: 1px solid var(--ink-3);
+  border-radius: 6px;
+  background: var(--surface);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.button:hover {
+  border-color: var(--ink);
+}
+
+.button-primary {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--on-accent);
+}
+
+.button-primary:hover {
+  border-color: var(--ink);
+}
+
+.button[disabled] {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.site-footer {
+  margin-top: 3.5rem;
+  padding-block: 1.25rem 2rem;
+  border-top: 1px solid var(--line);
+  color: var(--ink-3);
+  font-size: 0.8125rem;
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
