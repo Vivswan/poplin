@@ -66,7 +66,7 @@ Adding these to a one-page tool would be a rewrite of it, so poplin is a separat
 
 | Decision | Why | What it costs |
 | --- | --- | --- |
-| Poplin runs only on Cloudflare: a Worker serves, R2 stores, Access is the login | it fits the free tier: 10 GB of storage with no egress fee, 100,000 requests a day, a login free for 50 users; there is nothing to host | a Cloudflare account is required; running it on a server of one's own is not built ([issue #2](https://github.com/Vivswan/poplin/issues/2)) |
+| Poplin runs only on Cloudflare: a Worker serves, R2 stores, Access is the login | it fits the free tier: 10 GB of storage with no egress fee, 100,000 requests a day, a login free for 50 users; there is nothing to host | a Cloudflare account is required; poplin does not run on a server of one's own, and R2 is its only storage |
 | A site is private by default | nothing is exposed until the owner says so | the owner logs in once a month per browser; an agent without the owner's cookie cannot open a private site to check it, and hands the address back |
 | The secret lives in the hostname, not the path | a site with absolute asset paths works unchanged | it needs a domain; a network that reads plain DNS lookups sees the name, though never the page |
 | Each site is its own origin | a page's scripts cannot read another site or its cookie | it needs a domain; the sites share one login cookie, so the Worker must refuse a private file that another site requests, unless the private site allows that site |
@@ -75,18 +75,8 @@ Adding these to a one-page tool would be a rewrite of it, so poplin is a separat
 | Guards keep usage inside the free tier: a storage cap, a size cap per site, request limits per site and per visitor | R2 bills past its free tier, so poplin refuses an upload past the cap; one busy site cannot starve the others | an upload can be refused; a busy site answers 429 until midnight UTC; the guards cannot save the day's request quota, see below |
 | npm is the only install path: no Homebrew formula, no standalone binary, no container image | the library, the CLI, and the local MCP server come from one package, so nothing drifts out of step | Node 24 or newer, or Bun, is required |
 | With no domain, poplin starts on the account's free `workers.dev` address; adding a domain switches on the full set | a first site costs nothing and needs no domain | sites are paths on one hostname, with [narrower guarantees](security.md#without-a-domain); every site link changes once when a domain is added; pages there cannot use browser storage, popups, or form submission |
-| No backwards-compatible code outside migrations | one shape of every record exists at a time; an old shape is deleted when the new one lands | until 1.0 anything may change, and a changed shape means running a one-time migration |
+| No backwards-compatible code outside migrations | one shape of every record exists at a time; an old shape is deleted when the new one lands | any release may change a record's shape, and a changed shape means running a one-time migration |
 
 The request quota is the one limit poplin cannot fully guard. A refused request still counts against Cloudflare's 100,000 a day; only the firewall rules that run before the Worker save requests, and they exist only with a domain.
 
 A flood from many addresses can stop the sites until midnight UTC. It costs no money: the Worker plan stops at its limit and never bills.
-
-## Not yet
-
-Left out of the first release on purpose. A thumbs-up on the issue is the vote.
-
-| Feature | Issue | Why not in the first release |
-| --- | --- | --- |
-| Markdown publishing | [#1](https://github.com/Vivswan/poplin/issues/1) | the Worker never rewrites content, so rendering belongs on the publisher's side; the first release publishes HTML only |
-| Self-hosting, without Cloudflare | [#2](https://github.com/Vivswan/poplin/issues/2) | the Worker, R2, and Access are the only host, storage, and login built; the rules are kept free of Cloudflare so another host can be added without a rewrite |
-| Storage in an S3 bucket of one's own | [#3](https://github.com/Vivswan/poplin/issues/3) | R2 is the only storage built; it sits behind one small interface, which is where a second store would go |
