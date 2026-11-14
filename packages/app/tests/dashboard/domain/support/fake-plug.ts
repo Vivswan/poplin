@@ -15,6 +15,15 @@ interface Call {
 /** What the fake says each setting does: no word of any provider. */
 const NOTES = { outside_pages: "A note on outside pages.", search_engines_allowed: "A note on search engines.", block_bots: "A note on bots." } as const;
 
+/** What the fake says of its token and of the form that makes one. */
+const TOKEN_FORM = {
+  tokenLabel: "Provider token",
+  tokenRights: ["Records: Edit", "Rules: Edit"],
+  tokenLink: "https://provider.example/tokens/new",
+  tokenByHand: ["Rules: Edit"],
+  tokenNote: "Choose what the token is for.",
+};
+
 /** A plug and the calls it received. */
 export interface FakePlug extends DomainPlug {
   readonly calls: Call[];
@@ -49,7 +58,7 @@ export function fakePlug(answer: (run: "check" | "repair", token: string) => Dom
       return reading.ok && read === undefined ? { ok: false, refusal: "not_set_up" } : reading;
     };
 
-  return { calls, tokenLabel: "Provider token", tokenRights: ["Records: Edit", "Rules: Edit"], guardNotes: NOTES, check: asked("check"), repair: asked("repair") };
+  return { calls, ...TOKEN_FORM, guardNotes: NOTES, check: asked("check"), repair: asked("repair") };
 }
 
 /** A plug over the one-missing install: a check finds it, a repair fixes it. */

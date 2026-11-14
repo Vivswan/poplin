@@ -64,20 +64,44 @@ const NO_APPLICATION = "written once the Access application exists";
 /** What a repair that wrote the variable tells the person to do next. */
 const LOGIN_READY = "The login is ready. Open your dashboard and log in:";
 
-/** The permissions a token needs, in Cloudflare's own names, by the object whose calls need them. A piece with no row here does not compile. */
+/** Every permission a token needs, in Cloudflare's own name. One has a link key only where Cloudflare's page on token template links names it: the form drops an unknown key without a word. */
+const RIGHT = {
+  zone: { name: "Zone: Read", key: "zone", type: "read" },
+  dns: { name: "DNS: Edit", key: "dns", type: "edit" },
+  routes: { name: "Workers Routes: Edit", key: "workers_routes", type: "edit" },
+  access: { name: "Access: Apps and Policies: Edit", key: "access", type: "edit" },
+  team: { name: "Access: Organizations, Identity Providers, and Groups: Read", key: "access_acct", type: "read" },
+  scripts: { name: "Workers Scripts: Edit", key: "workers_scripts", type: "edit" },
+  redirect: { name: "Single Redirect: Edit" },
+  zoneSettings: { name: "Zone Settings: Read", key: "zone_settings", type: "read" },
+  waf: { name: "Zone WAF: Edit" },
+  bots: { name: "Bot Management: Edit" },
+  database: { name: "D1: Edit", key: "d1", type: "edit" },
+} as const satisfies Readonly<Record<string, Right>>;
+
+/** The permissions the calls of each object need. A piece with no row here does not compile. */
 const RIGHTS = {
-  Zone: ["Zone: Read"],
-  "DNS record": ["DNS: Edit"],
-  "Worker route": ["Workers Routes: Edit"],
-  "Access application": ["Access: Apps and Policies: Edit"],
-  "Access policy": ["Access: Apps and Policies: Edit"],
-  "Worker variable": ["Access: Organizations, Identity Providers, and Groups: Read", "Workers Scripts: Edit"],
-  "Redirect rule": ["Single Redirect: Edit", "Zone Settings: Read"],
-  "WAF rule": ["Zone WAF: Edit"],
-  "Rate rule": ["Zone WAF: Edit"],
-  "Bot settings": ["Bot Management: Edit"],
-  "D1 database": ["D1: Edit"],
+  Zone: [RIGHT.zone],
+  "DNS record": [RIGHT.dns],
+  "Worker route": [RIGHT.routes],
+  "Access application": [RIGHT.access],
+  "Access policy": [RIGHT.access],
+  "Worker variable": [RIGHT.team, RIGHT.scripts],
+  "Redirect rule": [RIGHT.redirect, RIGHT.zoneSettings],
+  "WAF rule": [RIGHT.waf],
+  "Rate rule": [RIGHT.waf],
+  "Bot settings": [RIGHT.bots],
+  "D1 database": [RIGHT.database],
 } as const;
+
+/** Where Cloudflare's form for a new token is. The link asks for every account and every zone, the one scope a link can carry: the person narrows it on the form. */
+const TOKEN_FORM = "https://dash.cloudflare.com/profile/api-tokens";
+
+/** What the form still asks of the person once its permissions are chosen. */
+const TOKEN_SCOPE = "On the form, choose your account under Account Resources and your domain under Zone Resources, then create the token and copy it.";
+
+/** The name the form suggests for the token. */
+const TOKEN_NAME = "poplin setup";
 
 /** What each state of a step is called in a check and in a repair. */
 const STATES: Readonly<Record<Mode, Readonly<Record<"created" | "changed" | "removed", DomainState>>>> = {
@@ -102,6 +126,9 @@ interface PlugParts {
   /** What sends a call; absent outside tests. */
   readonly fetch?: Connection["fetch"];
 }
+
+/** One permission of a token: its name alone for one ticked on the form by hand, or with its key and level in a link to the form. */
+type Right = { readonly name: string } | { readonly name: string; readonly key: string; readonly type: "read" | "edit" };
 
 /** An object the table names. */
 type Piece = keyof typeof RIGHTS;
@@ -327,15 +354,27 @@ async function read(parts: PlugParts, mode: Mode, token: string, readSettings: R
   return { ok: true, rows: progress.rows, steps: progress.steps };
 }
 
+// The form reads the permissions as a JSON list of `{ key, type }`.
+function tokenLink(rights: readonly Right[]): string {
+  const chosen = rights.flatMap((right) => ("key" in right ? [{ key: right.key, type: right.type }] : []));
+
+  return `${TOKEN_FORM}?permissionGroupKeys=${encodeURIComponent(JSON.stringify(chosen))}&accountId=%2A&zoneId=all&name=${encodeURIComponent(TOKEN_NAME)}`;
+}
+
 /**
  * Build the zone plug of an install on Cloudflare.
  *
  * @returns a plug whose `check` sends no change; both refuse, alike and before reading anything, a token that is malformed, that Cloudflare refuses, or that does not show the install's domain as a zone of `accountId`; the settings are read only after that
  */
 export function createDomainPlug(parts: PlugParts): DomainPlug {
+  const needed: readonly Right[] = [...new Set(Object.values(RIGHTS).flat())];
+
   return {
     tokenLabel: "Cloudflare API token",
-    tokenRights: [...new Set(Object.values(RIGHTS).flat())],
+    tokenRights: needed.map((right) => right.name),
+    tokenLink: tokenLink(needed),
+    tokenByHand: needed.filter((right) => !("key" in right)).map((right) => right.name),
+    tokenNote: TOKEN_SCOPE,
     guardNotes: GUARD_NOTES,
     check: (token, settings) => read(parts, "plan", token, settings),
     repair: (token, settings) => read(parts, "apply", token, settings),

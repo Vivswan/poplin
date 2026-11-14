@@ -117,7 +117,8 @@ async function sentToken(request: Request): Promise<string | undefined> {
  */
 export function createSetup(parts: SetupParts): Setup {
   const csrfKey = importCsrfKey(parts.csrfSecret);
-  const asks = { tokenLabel: parts.domain.tokenLabel, tokenRights: parts.domain.tokenRights };
+  const { tokenLabel, tokenRights, tokenLink, tokenByHand, tokenNote } = parts.domain;
+  const asks = { tokenLabel, tokenRights, tokenLink, tokenByHand, tokenNote };
   const app = new Hono<Shared>();
 
   const gate: MiddlewareHandler<Shared> = async (context, next) => {

@@ -45,6 +45,15 @@ export interface DomainPlug {
   /** Every right a token needs for a check and a repair, each in the provider's own name for it. */
   readonly tokenRights: readonly string[];
 
+  /** The address of the provider's form for a new token, with as many of the rights already chosen as a link can carry. */
+  readonly tokenLink: string;
+
+  /** The rights the link cannot carry: the person adds them on the form. */
+  readonly tokenByHand: readonly string[];
+
+  /** What else the provider's form asks of the person, in one sentence, such as which account the token is for. */
+  readonly tokenNote: string;
+
   /** What each of the three settings does at this provider, in the provider's own words. */
   readonly guardNotes: Readonly<Record<GuardKey, string>>;
 

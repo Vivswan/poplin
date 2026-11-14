@@ -22,6 +22,18 @@ const OBJECTS: readonly (readonly [object: string, detail: string])[] = [
   ["Rate rule", "sample-rate-rule"],
 ];
 
+/** The rights the preview's token form names; the last is one its link does not carry. */
+const RIGHTS = ["Records: Edit", "Routes: Edit", "Login: Edit", "Rules: Edit"];
+
+/** What the preview says of its token and of the form that makes one. */
+const TOKEN_FORM = {
+  tokenLabel: "Provider token",
+  tokenRights: RIGHTS,
+  tokenLink: "https://provider.example/tokens/new",
+  tokenByHand: RIGHTS.slice(-1),
+  tokenNote: "On the form, choose the account and the domain the token is for.",
+};
+
 /** What the preview says each setting does at its provider. */
 const NOTES: DomainPlug["guardNotes"] = {
   outside_pages: "Pages of other domains framing a site or loading its files.",
@@ -84,5 +96,5 @@ export function previewPlug(state: PlugState): DomainPlug {
       return read(state);
     };
 
-  return { tokenLabel: "Provider token", tokenRights: ["Records: Edit", "Routes: Edit", "Login: Edit", "Rules: Edit"], guardNotes: NOTES, check: answer(checked), repair: answer(repaired) };
+  return { ...TOKEN_FORM, guardNotes: NOTES, check: answer(checked), repair: answer(repaired) };
 }

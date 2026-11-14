@@ -61,27 +61,35 @@ Three words the steps use: a **Worker** is the program Cloudflare runs for you, 
 
    Until all three are right, the Worker's address answers the short page, which names what is still missing or wrong.
 
-4. **Make a Cloudflare API token.** Open the page below, press Create Token, and choose Create Custom Token. Add the eleven rows of the table; Cloudflare calls them permissions. Each row is three choices: Account or Zone, the name, and Read or Edit.
+4. **Make a Cloudflare API token.** One link opens Cloudflare's form with eight of the eleven rows already chosen. The setup page of step 5 shows the same link.
 
-   ```text
-   https://dash.cloudflare.com/profile/api-tokens
-   ```
+   [Open the token form with the rows chosen](https://dash.cloudflare.com/profile/api-tokens?permissionGroupKeys=%5B%7B%22key%22%3A%22zone%22%2C%22type%22%3A%22read%22%7D%2C%7B%22key%22%3A%22dns%22%2C%22type%22%3A%22edit%22%7D%2C%7B%22key%22%3A%22workers_routes%22%2C%22type%22%3A%22edit%22%7D%2C%7B%22key%22%3A%22access%22%2C%22type%22%3A%22edit%22%7D%2C%7B%22key%22%3A%22access_acct%22%2C%22type%22%3A%22read%22%7D%2C%7B%22key%22%3A%22workers_scripts%22%2C%22type%22%3A%22edit%22%7D%2C%7B%22key%22%3A%22zone_settings%22%2C%22type%22%3A%22read%22%7D%2C%7B%22key%22%3A%22d1%22%2C%22type%22%3A%22edit%22%7D%5D&accountId=%2A&zoneId=all&name=poplin%20setup)
 
-   | Under   | Right                                                        | For                                    |
-   | ------- | ------------------------------------------------------------ | -------------------------------------- |
-   | Account | Workers Scripts: Edit                                        | giving the Worker its login            |
-   | Account | D1: Edit                                                     | the database                           |
-   | Account | Access: Apps and Policies: Edit                              | the login                              |
-   | Account | Access: Organizations, Identity Providers, and Groups: Read  | your team's name                       |
-   | Zone    | Zone: Read                                                   | finding your domain                    |
-   | Zone    | DNS: Edit                                                    | the addresses                          |
-   | Zone    | Workers Routes: Edit                                         | sending the addresses to the Worker    |
-   | Zone    | Zone WAF: Edit                                               | the rules against unwanted traffic     |
-   | Zone    | Single Redirect: Edit                                        | sending http to https                  |
-   | Zone    | Zone Settings: Read                                          | seeing whether the domain redirects already |
-   | Zone    | Bot Management: Edit                                         | blocking AI crawlers                   |
+   Then finish the form, from top to bottom:
 
-   Below the rows, under Account Resources choose your account, and under Zone Resources choose your domain. Leave the rest as it is and create the token. Cloudflare shows it once: copy it now.
+   | On the form       | Do                                                                        |
+   | ----------------- | ------------------------------------------------------------------------- |
+   | Permissions       | add the three rows the table below marks "by hand": each is three choices |
+   | Account Resources | choose Include, then your account                                         |
+   | Zone Resources    | choose Include, then Specific zone, then your domain                      |
+   | the bottom        | press Continue to summary, then Create Token                              |
+   | the next page     | copy the token now: Cloudflare shows it once                              |
+
+   | Under   | Right                                                        | For                                         | In the link |
+   | ------- | ------------------------------------------------------------ | ------------------------------------------- | ----------- |
+   | Account | Workers Scripts: Edit                                        | giving the Worker its login                 | yes         |
+   | Account | D1: Edit                                                     | the database                                | yes         |
+   | Account | Access: Apps and Policies: Edit                              | the login                                   | yes         |
+   | Account | Access: Organizations, Identity Providers, and Groups: Read  | your team's name                            | yes         |
+   | Zone    | Zone: Read                                                   | finding your domain                         | yes         |
+   | Zone    | DNS: Edit                                                    | the addresses                               | yes         |
+   | Zone    | Workers Routes: Edit                                         | sending the addresses to the Worker         | yes         |
+   | Zone    | Zone Settings: Read                                          | seeing whether the domain redirects already | yes         |
+   | Zone    | Zone WAF: Edit                                               | the rules against unwanted traffic          | by hand     |
+   | Zone    | Single Redirect: Edit                                        | sending http to https                       | by hand     |
+   | Zone    | Bot Management: Edit                                         | blocking AI crawlers                        | by hand     |
+
+   **If the form opens empty**, press Create Token, choose Create Custom Token, and add all eleven rows. Cloudflare calls a row a permission.
 
 5. **Finish on the setup page.** Open the Worker's address from step 2 with `/setup` after it. Paste the token and press Repair. Repair makes whatever is missing, which the first time is everything.
 

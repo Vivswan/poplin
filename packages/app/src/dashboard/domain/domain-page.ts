@@ -57,7 +57,8 @@ ${keys.map((key) => guardRow(key, texts[key], notes[key]))}
  * @throws {Error} the plug or the database failed
  */
 export async function showDomain(visit: Visit, plug: DomainPlug, asked?: Asked): Promise<Page> {
-  const asks = { csrf: visit.csrf, tokenLabel: plug.tokenLabel, tokenRights: plug.tokenRights, path: "/domain" } as const;
+  const { tokenLabel, tokenRights, tokenLink, tokenByHand, tokenNote } = plug;
+  const asks = { csrf: visit.csrf, tokenLabel, tokenRights, tokenLink, tokenByHand, tokenNote, path: "/domain" } as const;
   const place = { tab: "domain", heading: "Domain" } as const;
   const config = await readConfig(visit.install, visit.actor);
   if (!config.ok) return refusedPage(place, config);

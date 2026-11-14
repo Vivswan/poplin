@@ -193,6 +193,8 @@ export const COMMANDS = [
       "is never saved. It needs no login, and works only until somebody has",
       "logged in to the install: from then on the dashboard's Domain tab does the",
       "same. It makes no install: the install must already answer at --server.",
+      "To make the token, open /setup at that address in a browser: the page",
+      "links the provider's form for a new token with its rights chosen.",
     ],
   },
   {

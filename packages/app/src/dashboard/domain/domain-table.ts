@@ -47,6 +47,15 @@ interface Shown {
   /** The rights the token needs, in the provider's own names. */
   readonly tokenRights: readonly string[];
 
+  /** The address of the provider's form for a new token, with rights already chosen. */
+  readonly tokenLink: string;
+
+  /** The rights that link cannot carry. */
+  readonly tokenByHand: readonly string[];
+
+  /** What else the provider's form asks of the person. */
+  readonly tokenNote: string;
+
   /** The path the forms post under: the run's name is added to it. */
   readonly path: "/domain" | "/setup";
 
@@ -95,10 +104,17 @@ ${stepList(ran.reading.steps)}
 </table></div>`;
 }
 
+function byHand(rights: readonly string[]): Html {
+  if (rights.length === 0) return html``;
+
+  return html`<p class="hint">Add these on the form by hand:</p>
+<ul class="hint">${rights.map((right) => html`<li>${right}</li>`)}</ul>`;
+}
+
 /**
  * Build the result of the last run and the form for the next one.
  *
- * @returns the summary, the steps only a person can do, and the table, when a run was just answered; then one form with an empty token field, the rights its token needs, and the two buttons
+ * @returns the summary, the steps only a person can do, and the table, when a run was just answered; then one form with an empty token field, the way to a token with its rights, and the two buttons
  */
 export function domainBody(shown: Shown): Html {
   return html`${result(shown.ran)}
@@ -108,7 +124,10 @@ ${csrfField(shown)}
 <label for="token">${shown.tokenLabel}</label>
 <input type="password" id="token" name="token" autocomplete="off" required>
 <p class="hint">Used for this one request. Never kept.</p>
-<p class="hint">Create a token with these rights:</p>
+<p class="hint"><a href="${shown.tokenLink}" rel="noreferrer">Make the token: the form opens with the rights chosen.</a></p>
+${byHand(shown.tokenByHand)}
+<p class="hint">${shown.tokenNote}</p>
+<p class="hint">If the form opens empty, add every one of these rights:</p>
 <ul class="hint">${shown.tokenRights.map((right) => html`<li>${right}</li>`)}</ul>
 </div>
 <button type="submit">${shown.ran === undefined ? "Check" : "Check again"}</button>

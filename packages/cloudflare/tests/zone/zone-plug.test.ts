@@ -155,12 +155,38 @@ test("the rights the page asks a token for are the rights a repair's calls need,
   });
 });
 
-test("the install page lists every right the plug asks a token for, each in a row of its own: a person makes the token from that table", () => {
+/** The key of each permission in a link to the token form, with its level, as Cloudflare's page "Create API token templates" lists them. A permission that page names no key for is not here. */
+const KEY_OF: Readonly<Record<string, readonly [key: string, type: string]>> = {
+  "Zone: Read": ["zone", "read"],
+  "DNS: Edit": ["dns", "edit"],
+  "Workers Routes: Edit": ["workers_routes", "edit"],
+  "Access: Apps and Policies: Edit": ["access", "edit"],
+  "Access: Organizations, Identity Providers, and Groups: Read": ["access_acct", "read"],
+  "Workers Scripts: Edit": ["workers_scripts", "edit"],
+  "Zone Settings: Read": ["zone_settings", "read"],
+  "D1: Edit": ["d1", "edit"],
+};
+
+// Drift: the form drops a key it does not know without a word, so a right that is in neither the link nor the by-hand list is a token that fails at a repair with nothing on the page having asked for it.
+test("every right is in the link to the token form under Cloudflare's own key for it, or in the list to add by hand, and in no case both", () => {
+  const plug = createDomainPlug({ accountId: ACCOUNT, script: "poplin", layout: LAYOUT });
+  const link = new URL(plug.tokenLink);
+  const chosen = JSON.parse(link.searchParams.get("permissionGroupKeys") ?? "[]") as { key: string; type: string }[];
+  const linked = plug.tokenRights.filter((right) => !plug.tokenByHand.includes(right));
+
+  expect<unknown>(chosen.map(({ key, type }) => [key, type])).toEqual(linked.map((right) => KEY_OF[right] ?? [`no key is documented for ${right}`]));
+  expect([...plug.tokenByHand].sort()).toEqual(["Bot Management: Edit", "Single Redirect: Edit", "Zone WAF: Edit"]);
+  expect([`${link.origin}${link.pathname}`, link.searchParams.get("accountId"), link.searchParams.get("zoneId"), plug.tokenLink.includes(ACCOUNT)]).toEqual(["https://dash.cloudflare.com/profile/api-tokens", "*", "all", false]);
+});
+
+test("the install page gives the plug's own link to the token form, lists every right in a row of its own, and marks exactly the ones the link cannot carry as by hand: a person makes the token from that step", () => {
   const page = readFileSync(join(import.meta.dir, "..", "..", "..", "..", "docs", "install.md"), "utf8");
-  const listed = [...page.matchAll(/^ *\| (?:Account|Zone) +\| (.+?) +\|/gm)].map(([, right = ""]) => right);
+  const rows = [...page.matchAll(/^ *\| (?:Account|Zone) +\| (.+?) +\|.*\| (yes|by hand) +\|$/gm)].map(([, right = "", linked = ""]) => ({ right, linked }));
   const plug = createDomainPlug({ accountId: ACCOUNT, script: "poplin", layout: LAYOUT });
 
-  expect(listed.sort()).toEqual([...plug.tokenRights].sort());
+  expect(rows.map((row) => row.right).sort()).toEqual([...plug.tokenRights].sort());
+  expect(rows.filter((row) => row.linked === "by hand").map((row) => row.right).sort()).toEqual([...plug.tokenByHand].sort());
+  expect(page.includes(`(${plug.tokenLink})`)).toBe(true);
 });
 
 test("one object taken away and one changed by hand: the check names exactly those two, and the repair changes exactly those two", async () => {
