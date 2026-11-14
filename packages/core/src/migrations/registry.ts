@@ -6,6 +6,3 @@ import type { Step } from "./migrate";
 
 /** Every step, in ascending order from 1 with no gap. */
 export const STEPS: readonly Step[] = [CREATE_SCHEMA];
-
-/** The schema version this code reads and writes: the number of the last step. */
-export const SCHEMA_VERSION = STEPS.length;

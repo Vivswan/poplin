@@ -158,6 +158,27 @@ export async function begunVersion(database: Database, site: Site): Promise<Uplo
   return id;
 }
 
+/** Store a site from a backup through an upload begun in its folder, and leave no record of the upload behind. */
+export async function storedBack(database: Database, site: Site, signed: Signed = BY_ADA): ReturnType<Database["importUploadAsSite"]> {
+  const upload: NewUpload = { id: mintUploadId(), folder: site.folder, number: 1, owner: ADA, plan: { kind: "import", site: {} }, manifest: MANIFEST, created_at: NOW };
+  await database.addUpload(upload, ROOMY);
+
+  try {
+    return await database.importUploadAsSite(upload.id, site, signed);
+  } finally {
+    await database.abandonUpload(upload.id);
+    await database.removeUpload(upload.id);
+  }
+}
+
+/** What the kept versions of one site hold together, in the trash or not; `undefined` for no site. */
+async function sizeOf(database: Database, id: SiteId): Promise<{ readonly bytes: number; readonly files: number } | undefined> {
+  const site = await database.getSite(id);
+  if (site === undefined) return undefined;
+
+  return { bytes: site.versions.reduce((sum, version) => sum + version.bytes, 0), files: site.versions.reduce((sum, version) => sum + version.files, 0) };
+}
+
 /** Every site, the trash included, read a page at a time. */
 async function everySite(database: Database): Promise<Site[]> {
   const sites: Site[] = [];
@@ -259,14 +280,13 @@ function emptyInstall(label: string, makeDatabase: DatabaseFactory): void {
         await database.getSite(NO_SITE),
         await database.getSiteByPublicName(DOCS),
         await database.findServed({ id: NO_SITE }, NOW),
-        await database.getSiteSize(NO_SITE),
         await database.readTotals(),
         await database.listTokens(),
         await database.getToken(ADA),
         await database.readSettings(),
         await database.readSigningKey(),
         await database.listAudit({ limit: 100 }),
-      ]).toEqual([{ sites: [] }, { sites: [] }, { sites: [] }, undefined, undefined, undefined, undefined, NOTHING, [], undefined, undefined, undefined, []]);
+      ]).toEqual([{ sites: [] }, { sites: [] }, { sites: [] }, undefined, undefined, undefined, NOTHING, [], undefined, undefined, undefined, []]);
     });
   });
 }
@@ -325,7 +345,7 @@ function sites(label: string, makeDatabase: DatabaseFactory): void {
         const before = await everything(database);
 
         await expect(database.createSite(squatter, BY_ADA)).rejects.toThrow();
-        expect(await database.importSite({ ...holder, id: NO_SITE }, BY_ADA)).toEqual({ kind: "folder_taken" });
+        expect(await storedBack(database, { ...holder, id: NO_SITE })).toEqual({ kind: "folder_taken" });
         expect(await everything(database)).toEqual(before);
       };
 
@@ -592,7 +612,7 @@ function sites(label: string, makeDatabase: DatabaseFactory): void {
 
       expect(deleted).toEqual({ kind: "done", site: trashed } as typeof deleted);
       expect([await database.getSite(site.id), await database.getSiteByPublicName(DOCS)]).toEqual([undefined, undefined]);
-      expect([await database.getSiteSize(site.id), await database.readTotals()]).toEqual([undefined, NOTHING]);
+      expect([await sizeOf(database, site.id), await database.readTotals()]).toEqual([undefined, NOTHING]);
       expect((await database.createSite(draft(DOCS, "public"), BY_ADA)).kind).toBe("done");
     });
 
@@ -609,7 +629,7 @@ function sites(label: string, makeDatabase: DatabaseFactory): void {
       const back = sites.find((site) => site.folder === first);
       if (back === undefined || second === undefined) throw new Error("the fixture sites are not there");
 
-      await database.importSite(back, BY_ADA);
+      await storedBack(database, back);
       await database.forgetLeftover(second);
       await database.forgetLeftover(second);
 
@@ -717,7 +737,7 @@ function versions(label: string, makeDatabase: DatabaseFactory): void {
       const first = { number: 1, published_at: NOW + 1, published_by: BO, bytes: 100, files: 2 };
 
       expect([site.live_version, site.versions, (await database.getSite(site.id))?.versions]).toEqual([1, [first], [first]]);
-      expect<unknown>([await database.getSiteSize(site.id), await database.readTotals()]).toEqual([
+      expect<unknown>([await sizeOf(database, site.id), await database.readTotals()]).toEqual([
         { bytes: 100, files: 2 },
         { sites: 1, trashed_sites: 0, bytes: 100, files: 2 },
       ]);
@@ -796,7 +816,7 @@ function sizes(label: string, makeDatabase: DatabaseFactory): void {
       const seen: unknown[] = [];
       const after = async (change: unknown): Promise<void> => {
         await change;
-        seen.push([await database.readTotals(), await database.getSiteSize(big.id), await database.getSiteSize(small.id)]);
+        seen.push([await database.readTotals(), await sizeOf(database, big.id), await sizeOf(database, small.id)]);
       };
 
       await after(undefined);
@@ -865,7 +885,7 @@ function backups(label: string, makeDatabase: DatabaseFactory): void {
       for (const site of exported) await database.deleteSite(site.id, BY_ADA);
       const emptied = await database.readTotals();
       const imported = [];
-      for (const site of exported) imported.push(await database.importSite(site, { by: BO, at: NOW + 99 }));
+      for (const site of exported) imported.push(await storedBack(database, site, { by: BO, at: NOW + 99 }));
       const readBack = await Promise.all(exported.map((site) => database.getSite(site.id)));
 
       expect<unknown>(pages.map((page) => [page.sites.map((site) => site.id), page.next])).toEqual([
@@ -928,7 +948,7 @@ function backups(label: string, makeDatabase: DatabaseFactory): void {
 
       const before = await everything(database);
 
-      expect(await database.importSite(change(published.site), BY_ADA)).toEqual({ kind });
+      expect(await storedBack(database, change(published.site))).toEqual({ kind });
       expect(await everything(database)).toEqual(before);
       expect(await database.reserveVersion("aaaaaaaaaaaa" as SiteId)).toEqual({ kind: "reserved", number: 3 });
     });
@@ -948,7 +968,7 @@ function backups(label: string, makeDatabase: DatabaseFactory): void {
       const site = await made(database, draft(REPORT));
       await database.deleteSite(site.id, BY_ADA);
 
-      await expect(database.importSite(change(site) as Site, BY_ADA)).rejects.toThrow();
+      await expect(storedBack(database, change(site) as Site)).rejects.toThrow();
       expect(await database.readTotals()).toEqual({ sites: 0, trashed_sites: 0, bytes: 0, files: 0 });
     });
   });
@@ -992,7 +1012,7 @@ function signingKey(label: string, makeDatabase: DatabaseFactory): void {
         await database.listSites({ trash: false, limit: 100 }),
         await database.listSites({ trash: true, limit: 100 }),
         await database.getSite(site.id),
-        await database.getSiteSize(site.id),
+        await sizeOf(database, site.id),
         await database.readTotals(),
         await database.readSettings(),
         await database.listTokens(),
@@ -1049,12 +1069,12 @@ function auditLog(label: string, makeDatabase: DatabaseFactory): void {
       ["settings changed", async (database: Database): Promise<unknown> => database.changeSettings({ trash_days: 30 }, signed), ["settings_changed"]],
       [
         "a deleted site imported",
-        async (database: Database, site: Site): Promise<unknown> => [await database.deleteSite(site.id, signed), await database.importSite(site, signed)],
+        async (database: Database, site: Site): Promise<unknown> => [await database.deleteSite(site.id, signed), await storedBack(database, site, signed)],
         ["delete", "imported"],
       ],
       ["the signing key replaced", async (database: Database): Promise<unknown> => database.rotateSigningKey(SECOND_KEY, signed), ["signed_everyone_out"]],
       ["a signing key stored where none was", async (database: Database): Promise<unknown> => database.ensureSigningKey(FIRST_KEY, NOW), []],
-      ["a site imported that is already there", async (database: Database, site: Site): Promise<unknown> => database.importSite(site, signed), []],
+      ["a site imported that is already there", async (database: Database, site: Site): Promise<unknown> => storedBack(database, site, signed), []],
       ["a note appended", async (database: Database): Promise<unknown> => database.appendAudit({ action: "login", detail: {} }, signed), ["login"]],
       [
         "access set to what it is",
@@ -1659,7 +1679,8 @@ function uploads(label: string, makeDatabase: DatabaseFactory): void {
       if (exported === undefined) throw new Error("the fixture site is not exported");
 
       await database.deleteSite(site.id, BY_ADA);
-      const imported = await database.importSite(exported, BY_ADA);
+      const back = await begunImport(database, exported);
+      const imported = await database.importUploadAsSite(back.id, back.site, BY_ADA);
 
       expect([site, typed, second, cleared, third, imported]).toMatchObject([
         { title: null, page_title: "Field notes" },

@@ -128,7 +128,7 @@ function asks<Kind extends Request["kind"]>(request: Request, kinds: readonly Ki
   return kinds.some((kind) => kind === request.kind);
 }
 
-async function execute(request: Request, io: Io): Promise<Outcome> {
+async function execute(request: Exclude<Request, { readonly kind: "mcp" }>, io: Io): Promise<Outcome> {
   if (asks(request, ["publish"])) return publish(request, io);
 
   if (asks(request, ["login"])) return logIn(request, io);
@@ -141,9 +141,7 @@ async function execute(request: Request, io: Io): Promise<Outcome> {
 
   if (asks(request, ["export"])) return online(request, io, (session) => runExport(request, session));
 
-  if (asks(request, ["import"])) return runImport(request, (send) => online(request, io, send));
-
-  return refused(problem("not_available", `poplin ${request.kind}`));
+  return runImport(request, (send) => online(request, io, send));
 }
 
 /** Print what a command came to: with `--json` one JSON value on stdout and nothing else there, and whatever is no result on stderr. No token is printed. */

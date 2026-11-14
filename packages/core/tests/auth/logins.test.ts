@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
-import { addLogin, isLogin, type Login, type Logins, parseLogin, parseLogins, removeLogin } from "../../src/auth/logins";
+import { isLogin, type Login, type Logins, parseLogin, parseLogins } from "../../src/auth/logins";
 
 const LONGEST_LOCAL = "a".repeat(64);
 const LONG_DOMAIN = `${"d".repeat(63)}.${"d".repeat(63)}.${"d".repeat(63)}.example.com`;
@@ -86,40 +86,5 @@ describe("isLogin", () => {
     ["", false],
   ] as const)("%j may log in: %j", (email, allowed) => {
     expect(isLogin(logins("owner@example.com", "second@example.com"), email)).toBe(allowed);
-  });
-});
-
-describe("the list's changes", () => {
-  test("drift: removing the last login leaves an index nobody can open, and no later request could add one back", () => {
-    const one = logins("owner@example.com");
-    const two = addLogin(one, login("second@example.com"));
-
-    const outcomes = [
-      removeLogin(one, login("owner@example.com")),
-      removeLogin(one, login("second@example.com")),
-      removeLogin(two, login("owner@example.com")),
-      removeLogin(two, login("third@example.com")),
-    ];
-
-    expect<unknown>(outcomes).toEqual([
-      { ok: false, refusal: "last-login" },
-      { ok: false, refusal: "unknown-login" },
-      { ok: true, value: new Set(["second@example.com"]) },
-      { ok: false, refusal: "unknown-login" },
-    ]);
-  });
-
-  test("drift: a change that edited the list in place would alter the settings a request already read", () => {
-    const one = logins("owner@example.com");
-    const two = addLogin(one, login("second@example.com"));
-    const again = addLogin(two, login("second@example.com"));
-
-    removeLogin(two, login("owner@example.com"));
-
-    expect<unknown>([one, two, again]).toEqual([
-      new Set(["owner@example.com"]),
-      new Set(["owner@example.com", "second@example.com"]),
-      new Set(["owner@example.com", "second@example.com"]),
-    ]);
   });
 });

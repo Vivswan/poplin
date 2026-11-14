@@ -39,7 +39,7 @@ import type { AuditAction, AuditEntry } from "../../src/records/audit";
 import { SETTING_CHANGES, SETTING_VALUES, type SettingValues } from "../../src/records/settings";
 import { NEW_SITE, SITE_DETAILS, type Site, type SiteAccess, type SiteFolder, siteToRow } from "../../src/records/site";
 import { SWEEP_PLACE, type SweepPlace } from "../../src/records/sweep-place";
-import type { SiteSize, Totals } from "../../src/records/sizes";
+import type { Totals } from "../../src/records/sizes";
 import { type ManifestFile, manifestFromText, type Upload, type UploadId, uploadFromRow } from "../../src/records/upload";
 import { dayOf, type SiteViews, viewDays } from "../../src/records/views";
 import { mintSiteId, type SiteId } from "../../src/sites/ids";
@@ -378,16 +378,6 @@ class MemoryDatabase implements Database {
     return this.#changed(changedAt(kept, signed.at, { live_version: wanted.number }), signed, "live_version", { version: wanted.number });
   }
 
-  async getSiteSize(id: SiteId): Promise<SiteSize | undefined> {
-    const kept = this.#sites.get(id);
-    if (kept === undefined) return undefined;
-
-    return {
-      bytes: kept.fields.versions.reduce((sum, entry) => sum + entry.bytes, 0),
-      files: kept.fields.versions.reduce((sum, entry) => sum + entry.files, 0),
-    };
-  }
-
   async readTotals(): Promise<Totals> {
     const sites = [...this.#sites.values()];
     const versions = sites.flatMap((kept) => kept.fields.versions);
@@ -414,10 +404,6 @@ class MemoryDatabase implements Database {
     if (last === undefined || ids.length <= query.limit) return { sites };
 
     return { sites, next: last.id };
-  }
-
-  async importSite(site: Site, signed: Signed): Promise<Done | Refused<"id_taken" | "folder_taken" | "name_taken">> {
-    return this.#imported(site, signed);
   }
 
   async addToken(token: TokenRecord, signed: Signed): Promise<{ readonly kind: "done" } | Refused<"id_taken">> {

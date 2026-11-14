@@ -9,7 +9,7 @@ import type { SqlDriver, SqlValue, Statement, StatementResult } from "../../../s
 import { openDatabase } from "../../../src/database/open";
 import { SqlDatabase } from "../../../src/database/sql-database";
 import { migrate, type Step, storedVersion } from "../../../src/migrations/migrate";
-import { SCHEMA_VERSION, STEPS } from "../../../src/migrations/registry";
+import { STEPS } from "../../../src/migrations/registry";
 import type { SiteId } from "../../../src/sites/ids";
 import {
   ADA,
@@ -30,9 +30,12 @@ import {
   REPORT,
   SECOND_KEY,
   SETTINGS,
+  storedBack,
   TODAY,
   TOMORROW,
 } from "./database-contract";
+
+const SCHEMA_VERSION = STEPS.length;
 
 const STEP_THAT_FAILS_HALFWAY: Step = {
   number: SCHEMA_VERSION + 1,
@@ -338,7 +341,6 @@ function queryPlans(label: string, makeDriver: DriverFactory): void {
       await database.addVersion(site.id, publish(2, 3), BY_ADA);
       await database.setLiveVersion(site.id, "previous", BY_ADA);
       await database.setLiveVersion(site.id, 2, BY_ADA);
-      await database.getSiteSize(site.id);
       await database.readTotals();
       const exported = await database.exportSites({ limit: 10, after: NO_SITE });
       await database.exportSites({ limit: 10 });
@@ -350,7 +352,7 @@ function queryPlans(label: string, makeDriver: DriverFactory): void {
       await database.trashSite(id, BY_ADA);
       await database.restoreSite(id, BY_ADA);
       const deleted = await database.deleteSite(id, BY_ADA);
-      const imported = deleted.kind === "done" ? await database.importSite(deleted.site, BY_ADA) : deleted;
+      const imported = deleted.kind === "done" ? await storedBack(database, deleted.site) : deleted;
       await database.addToken(token, BY_ADA);
       await database.getToken(token.id);
       await database.listTokens();

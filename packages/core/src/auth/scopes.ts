@@ -9,17 +9,6 @@ export type Scope = "publisher" | "admin";
 export type Actor = { readonly scope: Scope; readonly holder: Holder };
 
 /**
- * Read a scope from stored or sent text.
- *
- * @returns the scope, or `undefined` for anything but the two exact lowercase words
- */
-export function parseScope(raw: string): Scope | undefined {
-  if (raw === "publisher" || raw === "admin") return raw;
-
-  return undefined;
-}
-
-/**
  * Decide whether an actor may read or change a site.
  *
  * @param owner - the holder that made the site

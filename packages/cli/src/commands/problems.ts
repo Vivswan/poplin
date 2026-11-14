@@ -73,7 +73,6 @@ const LOCAL_ROWS = {
     hint: "an install's setup closes for good once somebody has logged in: from then on its dashboard's Domain tab checks and repairs",
     exit: "failed",
   },
-  not_available: { sentence: "this build of poplin cannot do that", exit: "unavailable" },
   file_exists: { sentence: "a file is already there", hint: "to replace it: --overwrite; to write another: --out <file>", exit: "failed" },
   unwritable: { sentence: "the backup cannot be written", exit: "failed" },
   other_format: { sentence: "the install's backups are of a format this poplin does not write", hint: "update poplin", exit: "failed" },

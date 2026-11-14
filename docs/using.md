@@ -219,7 +219,6 @@ A refused command prints one sentence and often a hint. With `--json` it prints 
 | `method_not_allowed`, `unsupported_media_type` | the install and this poplin are of two versions    | update the older one                                          |
 | `too_many_requests`                            | asked too often                                    | wait a minute                                                 |
 | `internal`, `crashed`                          | something failed                                   | try again; `poplin doctor` reports on the install             |
-| `not_available`                                | this poplin cannot do that                         | nothing                                                       |
 
 **Setting up an install**
 

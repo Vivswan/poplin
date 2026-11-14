@@ -15,8 +15,8 @@ export type Login = string & { readonly [loginBrand]: true };
 /** The emails allowed to log in; it always holds at least one. */
 export type Logins = ReadonlySet<Login> & { readonly [loginsBrand]: true };
 
-/** Why an email or a change to the list was refused. `unknown-login` means the email to remove is not listed. */
-type LoginRefusal = "empty" | "too-long" | "not-an-address" | "no-logins" | "last-login" | "unknown-login";
+/** Why an email or a list of them was refused. */
+type LoginRefusal = "empty" | "too-long" | "not-an-address" | "no-logins";
 
 /** A checked value, or the reason it was refused. */
 export type CheckedLogin<Value> = { readonly ok: true; readonly value: Value } | { readonly ok: false; readonly refusal: LoginRefusal };
@@ -76,28 +76,4 @@ export function isLogin(logins: Logins, email: string): boolean {
   if (!login.ok) return false;
 
   return logins.has(login.value);
-}
-
-/**
- * Add a login.
- *
- * @returns a new list; the given one is unchanged
- */
-export function addLogin(logins: Logins, login: Login): Logins {
-  return new Set([...logins, login]) as ReadonlySet<Login> as Logins;
-}
-
-/**
- * Remove a login.
- *
- * @returns a new list, `unknown-login` when the email is not listed, or `last-login` when nobody would be left
- */
-export function removeLogin(logins: Logins, login: Login): CheckedLogin<Logins> {
-  if (!logins.has(login)) return refuse("unknown-login");
-
-  if (logins.size === 1) return refuse("last-login");
-
-  const remaining = [...logins].filter((kept) => kept !== login);
-
-  return { ok: true, value: new Set(remaining) as ReadonlySet<Login> as Logins };
 }

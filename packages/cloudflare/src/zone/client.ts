@@ -2,9 +2,6 @@
 
 import { BaseCloudflare } from "cloudflare/client";
 import { APIConnectionError, APIError } from "cloudflare/error";
-import { BaseTokens as AccountTokens } from "cloudflare/resources/accounts/tokens/tokens";
-import { BaseTokens as UserTokens } from "cloudflare/resources/user/tokens/tokens";
-import { BaseApplications } from "cloudflare/resources/zero-trust/access/applications/applications";
 import { BaseZones } from "cloudflare/resources/zones/zones";
 
 const RATE_LIMITED_STATUS = 429;
@@ -42,9 +39,6 @@ export interface Zone {
   readonly name: string;
   readonly plan: ZonePlan;
 }
-
-/** Whether a key may set up this account. `no-account-access` covers a key from another account and one without the Access permission. */
-export type KeyCheck = { readonly ok: true } | { readonly ok: false; readonly failure: "inactive-key" | "no-account-access" } | CloudflareFailure;
 
 function isRefusal(entry: unknown): entry is ApiRefusal {
   if (typeof entry !== "object" || entry === null) return false;
@@ -108,28 +102,4 @@ export async function listZones(connection: Connection, accountId: string): Prom
   const owned = zones.value.filter((zone) => zone.account.id === accountId);
 
   return { ok: true, value: owned.map((zone) => ({ id: zone.id, name: zone.name, plan: planOf(zone.plan?.name) })) };
-}
-
-/**
- * Decide whether a key may set up the account the Worker runs in.
- *
- * @param accountId - the Worker's own account, never one the key's holder names
- * @returns `ok` only for an active key that can read that account's Access applications
- */
-export async function verifyKey(connection: Connection, accountId: string): Promise<KeyCheck> {
-  let token = await callCloudflare(connection, (api) => new AccountTokens(api).verify({ account_id: accountId }));
-
-  // A key a person owns is unknown to the account's own endpoint and verifies on the user's.
-  if (!token.ok && token.failure === "refused") token = await callCloudflare(connection, (api) => new UserTokens(api).verify());
-
-  if (!token.ok) return token;
-
-  if (token.value.status !== "active") return { ok: false, failure: "inactive-key" };
-
-  const probe = await callCloudflare(connection, (api) => new BaseApplications(api).list({ account_id: accountId, per_page: 1 }));
-  if (probe.ok) return { ok: true };
-
-  if (probe.failure === "refused") return { ok: false, failure: "no-account-access" };
-
-  return probe;
 }

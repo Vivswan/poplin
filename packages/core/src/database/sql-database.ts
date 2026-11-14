@@ -15,7 +15,7 @@ import { SETTING_CHANGES, SETTING_VALUES, type SettingValues } from "../records/
 import { signingKeyFromRow, signingKeyToText } from "../records/secret";
 import { NEW_SITE, SITE_DETAILS, SITE_FOLDER, type Site, type SiteAccess, type SiteFolder, siteFromRow, siteToRow } from "../records/site";
 import { SWEEP_PLACE, type SweepPlace } from "../records/sweep-place";
-import { type SiteSize, sizeFromRow, type Totals, totalsFromRow } from "../records/sizes";
+import { type Totals, totalsFromRow } from "../records/sizes";
 import { mintSiteId, type SiteId } from "../sites/ids";
 import { tokenFromRow } from "../records/token";
 import { type ManifestFile, MANIFEST_FILE, manifestFromText, type Upload, type UploadId, uploadFromRow } from "../records/upload";
@@ -177,18 +177,13 @@ const AUDIT_LIVE = `
 INSERT INTO audit (at, actor, action, site_id, site_name, detail)
 SELECT ?1, ?2, 'live_version', id, name, json_object('version', live_version) FROM sites WHERE id = ?3 AND changes() = 1`;
 
-/** What the kept versions of the site with id `?1` hold together; `versions` is 0 for no site. */
-const SITE_SIZE = `
-SELECT COALESCE(SUM(v.bytes), 0) AS bytes, COALESCE(SUM(v.files), 0) AS files, COUNT(*) AS versions
-FROM versions v WHERE v.folder = (SELECT folder FROM sites WHERE id = ?1)`;
-
 /** The one row of running totals, which the schema keeps equal to the sums over every site and every kept version. */
 const READ_TOTALS = "SELECT sites, trashed_sites, bytes, files FROM totals WHERE id = 1";
 
 /** A page of every site in ascending order of id, from above `?1`. */
 const EXPORT_SITES = `${SELECT_SITE} WHERE s.id > ?1 ORDER BY s.id LIMIT ?2`;
 
-/** A site from a backup under the id it had, only while its id, its folder, and its public name are free, and upload `?16` is pending as the first version of its folder unless that is NULL. The schema adds its live version with the row. */
+/** A site from a backup under the id it had, only while its id, its folder, and its public name are free, and upload `?16` is pending as the first version of its folder. The schema adds its live version with the row. */
 const IMPORT_SITE = `
 INSERT INTO sites (id, name, folder, access, public_name, title, search_engines, embeddable, expires_at, live_version, next_version, owner, created_at, updated_at, trashed_at, page_title)
 SELECT ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?17
@@ -196,7 +191,7 @@ WHERE NOT EXISTS (SELECT 1 FROM sites WHERE id = ?1)
   AND NOT EXISTS (SELECT 1 FROM sites WHERE public_name = ?1)
   AND NOT EXISTS (SELECT 1 FROM sites WHERE folder = ?3)
   AND (?5 IS NULL OR (?5 <> ?1 AND NOT EXISTS (SELECT 1 FROM sites WHERE public_name = ?5) AND NOT EXISTS (SELECT 1 FROM sites WHERE id = ?5)))
-  AND (?16 IS NULL OR EXISTS (SELECT 1 FROM uploads WHERE id = ?16 AND state = 'pending' AND folder = ?3 AND number = 1))`;
+  AND EXISTS (SELECT 1 FROM uploads WHERE id = ?16 AND state = 'pending' AND folder = ?3 AND number = 1)`;
 
 /** Every version of the list `?2` kept under folder `?1`, only when the site's audit entry was written. The live one is there already and takes its exported values. */
 const IMPORT_VERSIONS = `
@@ -784,12 +779,6 @@ export class SqlDatabase implements Database {
     return { kind: "no_such_version" };
   }
 
-  async getSiteSize(id: SiteId): Promise<SiteSize | undefined> {
-    const [summed] = await this.#driver.batch([sql(SITE_SIZE, id)]);
-
-    return sizeFromRow(summed?.rows[0]);
-  }
-
   async readTotals(): Promise<Totals> {
     const [read] = await this.#driver.batch([sql(READ_TOTALS)]);
 
@@ -808,17 +797,32 @@ export class SqlDatabase implements Database {
     return { sites, next: last.id };
   }
 
-  async importSite(site: Site, signed: Signed): Promise<Done | Refused<"id_taken" | "folder_taken" | "name_taken">> {
-    const stored = await this.#storeSite(site, signed);
-    if (stored.kind === "done") return stored;
+  async importUploadAsSite(id: UploadId, site: Site, signed: Signed): Promise<Done | Refused<"id_taken" | "folder_taken" | "name_taken" | "not_pending">> {
+    const row = siteToRow(site);
+    const nextVersion = Math.max(...row.versions.map((version) => version.number)) + 1;
+    const identity: SqlValue[] = [row.id, row.name, row.folder, row.access, row.public_name, row.title, row.search_engines, row.embeddable, row.expires_at, row.live_version, nextVersion];
 
-    if (stored.kind === "not_pending") throw new Error("an import from no upload waited on one");
+    // The upload is finished straight after the audit entry, so each statement up to the versions sees the one row the statement before it wrote.
+    const results = await this.#driver.batch([
+      sql(IMPORT_SITE, ...identity, row.owner, row.created_at, row.updated_at, row.trashed_at, id, row.page_title),
+      auditSite(signed, "imported", row.id, { versions: row.versions.length }),
+      sql(FINISH_UPLOAD, id),
+      sql(IMPORT_VERSIONS, row.folder, JSON.stringify(row.versions)),
+      sql(IMPORT_IS_HELD, row.id, row.folder),
+      sql(SITE_BY_ID, row.id),
+      sql(UPLOAD_BY_ID, id),
+    ]);
+    const [held, made, waiting] = results.slice(-3);
+    if (changed(results[0])) return done(made);
 
-    return { kind: stored.kind };
-  }
+    const begun = uploadIn(waiting);
+    if (begun?.state !== "pending" || begun.folder !== row.folder || begun.number !== 1) return { kind: "not_pending" };
 
-  importUploadAsSite(id: UploadId, site: Site, signed: Signed): Promise<Done | Refused<"id_taken" | "folder_taken" | "name_taken" | "not_pending">> {
-    return this.#storeSite(site, signed, id);
+    if (held?.rows[0]?.id_held === 1) return { kind: "id_taken" };
+
+    if (held?.rows[0]?.folder_held === 1) return { kind: "folder_taken" };
+
+    return { kind: "name_taken" };
   }
 
   async addUpload(upload: NewUpload, room: UploadRoom): Promise<{ readonly kind: "done" } | Refused<"own_full" | "folder_full" | "total_full" | "sites_full">> {
@@ -1192,35 +1196,6 @@ WHERE folder = (SELECT folder FROM uploads WHERE id = ?1) AND (${differs.join(" 
     }
 
     throw new Error(`no free site id in ${MINT_ATTEMPTS} tries`);
-  }
-
-  /** Store a site from a backup under its own id; with `upload`, only while that upload is pending, and marking it finished in the same step. */
-  async #storeSite(site: Site, signed: Signed, upload?: UploadId): Promise<Done | Refused<"id_taken" | "folder_taken" | "name_taken" | "not_pending">> {
-    const row = siteToRow(site);
-    const nextVersion = Math.max(...row.versions.map((version) => version.number)) + 1;
-    const identity: SqlValue[] = [row.id, row.name, row.folder, row.access, row.public_name, row.title, row.search_engines, row.embeddable, row.expires_at, row.live_version, nextVersion];
-
-    // The upload is finished straight after the audit entry, so each statement up to the versions sees the one row the statement before it wrote.
-    const results = await this.#driver.batch([
-      sql(IMPORT_SITE, ...identity, row.owner, row.created_at, row.updated_at, row.trashed_at, upload ?? null, row.page_title),
-      auditSite(signed, "imported", row.id, { versions: row.versions.length }),
-      ...(upload === undefined ? [] : [sql(FINISH_UPLOAD, upload)]),
-      sql(IMPORT_VERSIONS, row.folder, JSON.stringify(row.versions)),
-      sql(IMPORT_IS_HELD, row.id, row.folder),
-      sql(SITE_BY_ID, row.id),
-      sql(UPLOAD_BY_ID, upload ?? null),
-    ]);
-    const [held, made, waiting] = results.slice(-3);
-    if (changed(results[0])) return done(made);
-
-    const begun = uploadIn(waiting);
-    if (upload !== undefined && (begun?.state !== "pending" || begun.folder !== row.folder || begun.number !== 1)) return { kind: "not_pending" };
-
-    if (held?.rows[0]?.id_held === 1) return { kind: "id_taken" };
-
-    if (held?.rows[0]?.folder_held === 1) return { kind: "folder_taken" };
-
-    return { kind: "name_taken" };
   }
 
   async #unchanged(id: SiteId): Promise<Unchanged | Refused<"not_found" | "in_trash">> {

@@ -15,7 +15,7 @@ import type { SiteId } from "../sites/ids";
 import type { SettingValues } from "../records/settings";
 import type { Site, SiteAccess, SiteFolder } from "../records/site";
 import type { SweepPlace } from "../records/sweep-place";
-import type { SiteSize, Totals } from "../records/sizes";
+import type { Totals } from "../records/sizes";
 import type { ManifestFile, Upload, UploadId, UploadPlan } from "../records/upload";
 import type { SiteViews } from "../records/views";
 
@@ -341,9 +341,6 @@ export interface Database {
    */
   setLiveVersion(id: SiteId, target: number | "previous", signed: Signed): Promise<Done | Unchanged | Refused<"not_found" | "in_trash" | "no_such_version">>;
 
-  /** What the kept versions of one site hold together, in the trash or not; `undefined` for no site. */
-  getSiteSize(id: SiteId): Promise<SiteSize | undefined>;
-
   /** How many sites the install has and what all their kept versions hold: at every moment the counts and sums over every site, the trash included. */
   readTotals(): Promise<Totals>;
 
@@ -356,20 +353,13 @@ export interface Database {
   exportSites(query: { readonly limit: number; readonly after?: SiteId }): Promise<ExportPage>;
 
   /**
-   * Store a site from a backup exactly as it was exported: its id, folder, access, versions, owner, times, and place in or out of the trash.
+   * Store a pending upload's site from a backup exactly as it was exported, and mark the upload finished, in one step: its id, folder, access, versions, owner, times, and place in or out of the trash.
    *
    * The site and all its versions are stored together or not at all, with one `imported` audit entry. Version numbers go on from above its highest kept version.
    *
-   * @returns the first of these that holds: `id_taken` when a site has the id as its id or its public name, `folder_taken` when a site has the folder, `name_taken` as in `createSite` or when the public name is the site's own id
-   * @throws {Error} the value is no site
-   */
-  importSite(site: Site, signed: Signed): Promise<Done | Refused<"id_taken" | "folder_taken" | "name_taken">>;
-
-  /**
-   * Store a pending upload's site from a backup as `importSite` does, and mark the upload finished, in one step.
-   *
    * @param site - the site, whose folder is the upload's
-   * @returns `not_pending` when the upload is finished, abandoned, gone, or of another folder; every other refusal as in `importSite`, which leaves the upload pending
+   * @returns the first of these that holds: `not_pending` when the upload is finished, abandoned, gone, or of another folder; `id_taken` when a site has the id as its id or its public name; `folder_taken` when a site has the folder;
+   *   `name_taken` as in `createSite` or when the public name is the site's own id. Every refusal but `not_pending` leaves the upload pending
    * @throws {Error} the value is no site
    */
   importUploadAsSite(id: UploadId, site: Site, signed: Signed): Promise<Done | Refused<"id_taken" | "folder_taken" | "name_taken" | "not_pending">>;
