@@ -4,8 +4,6 @@ import { parseSiteName } from "../src/names/names";
 import { mintSiteId } from "../src/sites/ids";
 import { siteLabel, siteReference, splitLabel } from "../src/sites/labels";
 
-const NO_OWN_NAMES: ReadonlySet<string> = new Set();
-const OWN_NAMES: ReadonlySet<string> = new Set(["admin"]);
 const ID = "k3f9x2ab71qz";
 const LONGEST_NAME = "a".repeat(40);
 
@@ -30,14 +28,12 @@ describe("splitLabel", () => {
     ["ab", { ok: false, refusal: "too-short" }],
     ["", { ok: false, refusal: "empty" }],
   ] as ReadonlyArray<readonly [string, unknown]>)("splits %j", (label, outcome) => {
-    expect<unknown>(splitLabel(label, NO_OWN_NAMES)).toEqual(outcome);
+    expect<unknown>(splitLabel(label)).toEqual(outcome);
   });
 
-  test("drift: one of the install's own names is no public name, yet a site may be called by it, since its address always carries the id", () => {
-    expect<unknown>([splitLabel("admin", OWN_NAMES), splitLabel("gallery", OWN_NAMES), splitLabel(`admin--${ID}`, OWN_NAMES), splitLabel(`gallery--${ID}`, OWN_NAMES)]).toEqual([
+  test("drift: the gallery's name is no public name, yet a site may be called by it, since its address always carries the id", () => {
+    expect<unknown>([splitLabel("gallery"), splitLabel(`gallery--${ID}`)]).toEqual([
       { ok: false, refusal: "reserved" },
-      { ok: false, refusal: "reserved" },
-      { ok: true, value: { kind: "site", name: "admin", id: ID } },
       { ok: true, value: { kind: "site", name: "gallery", id: ID } },
     ]);
   });
@@ -52,7 +48,7 @@ describe("siteLabel", () => {
     const id = mintSiteId();
     const label = siteLabel(name.value, id);
 
-    expect<unknown>([label, splitLabel(label, NO_OWN_NAMES)]).toEqual([`${raw}--${id}`, { ok: true, value: { kind: "site", name: raw, id } }]);
+    expect<unknown>([label, splitLabel(label)]).toEqual([`${raw}--${id}`, { ok: true, value: { kind: "site", name: raw, id } }]);
   });
 });
 
@@ -65,13 +61,13 @@ describe("siteReference", () => {
     ["docs", { ok: true, value: { kind: "public-name", name: "docs" } }],
     ["summer-report", { ok: true, value: { kind: "public-name", name: "summer-report" } }],
     [`${ID}z`, { ok: true, value: { kind: "public-name", name: `${ID}z` } }],
-    ["admin", { ok: false, refusal: "reserved" }],
-    [`admin--${ID}`, { ok: true, value: { kind: "site", name: "admin", id: ID } }],
+    ["gallery", { ok: false, refusal: "reserved" }],
+    [`gallery--${ID}`, { ok: true, value: { kind: "site", name: "gallery", id: ID } }],
     [`report--${ID}z`, { ok: false, refusal: "bad-id" }],
     ["Report", { ok: false, refusal: "bad-character" }],
     ["ab", { ok: false, refusal: "too-short" }],
     ["", { ok: false, refusal: "empty" }],
   ] as ReadonlyArray<readonly [string, unknown]>)("reads %j", (raw, outcome) => {
-    expect<unknown>(siteReference(raw, OWN_NAMES)).toEqual(outcome);
+    expect<unknown>(siteReference(raw)).toEqual(outcome);
   });
 });

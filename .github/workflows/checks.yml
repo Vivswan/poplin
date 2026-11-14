@@ -95,3 +95,21 @@ jobs:
           node-version: ${{ matrix.node }}
       - name: Pack, install, and run the package
         run: bun run --cwd packages/cli smoke
+
+  # The website: its TypeScript checked, and every page built under the address the Pages deploy serves it from. The
+  # build is what proves the pages render; the environment is the one .github/actions/site-build sets.
+  website:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup
+      - name: Typecheck
+        run: bunx tsc -p website
+      - name: Build
+        run: |
+          export PAGES_BASE_PATH="/${GITHUB_REPOSITORY#*/}/"
+          export PAGES_ORIGIN="https://${GITHUB_REPOSITORY_OWNER}.github.io"
+          bun run --cwd website build

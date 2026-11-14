@@ -78,14 +78,13 @@ export function nameFromEntry(entry: string): Checked<SiteName> {
 /**
  * Decide whether a string may be a public site's public name.
  *
- * @param ownNames - the names this install keeps besides `gallery`: each is a hostname of its own once the suffix follows it, such as an admin hostname that ends in the suffix. Compared as given, so the caller lists them in lowercase
  * @returns the name, or the first rule it breaks
  */
-export function parsePublicName(raw: string, ownNames: ReadonlySet<string>): Checked<PublicName> {
+export function parsePublicName(raw: string): Checked<PublicName> {
   const name = parseSiteName(raw);
   if (!name.ok) return name;
 
-  if (OWN_PUBLIC_NAMES.has(raw) || ownNames.has(raw)) return refuse("reserved");
+  if (OWN_PUBLIC_NAMES.has(raw)) return refuse("reserved");
 
   return { ok: true, value: raw as PublicName };
 }

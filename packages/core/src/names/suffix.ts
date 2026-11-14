@@ -83,14 +83,13 @@ export function stripSuffix(suffix: Suffix, label: string): Unsuffixed {
  * Read what a hostname label names.
  *
  * @param label - the first label of a hostname, in lowercase
- * @param ownNames - the names no public site may hold, as `parsePublicName` takes them
  * @returns `site` with the name and id of a label holding `--`, `public-name` for a name alone, `not-ours`, or `not-found`; no lookup is made, so a site may still not exist
  */
-export function readHostLabel(suffix: Suffix, label: string, ownNames: ReadonlySet<string>): HostLabel {
+export function readHostLabel(suffix: Suffix, label: string): HostLabel {
   const stripped = stripSuffix(suffix, label);
   if (!stripped.ok) return { kind: "not-ours" };
 
-  const parts = splitLabel(stripped.label, ownNames);
+  const parts = splitLabel(stripped.label);
   if (!parts.ok) return { kind: "not-found" };
 
   return parts.value;

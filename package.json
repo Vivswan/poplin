@@ -13,7 +13,7 @@
     "check": "bun run lint && bun run typecheck && bun run test && bun run test:worker && bun run knip",
     "lint": "biome lint .",
     "lint:fix": "biome lint --write .",
-    "typecheck": "tsc -p . && bun run --cwd packages/worker typecheck",
+    "typecheck": "tsc -p . && tsc -p website && bun run --cwd packages/worker typecheck",
     "test": "bun test --pass-with-no-tests --path-ignore-patterns 'packages/worker/**'",
     "test:worker": "bun run --cwd packages/worker test",
     "knip": "knip --treat-config-hints-as-errors"

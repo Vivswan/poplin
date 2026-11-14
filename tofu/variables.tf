@@ -39,7 +39,7 @@ variable "admin_hostname" {
 }
 
 variable "suffix" {
-  description = "The ending of every site hostname label: `-page` gives report-page.example.com."
+  description = "The ending of every site hostname label: `-page` gives report--k3f9x2ab71qz-page.example.com."
   type        = string
   default     = "-page"
 

@@ -33,14 +33,13 @@ export function siteLabel(name: SiteName, id: SiteId): SiteLabel {
  * Split a label into what it names.
  *
  * @param label - a hostname label with its suffix already stripped, in lowercase
- * @param ownNames - the names no public site may hold, as `parsePublicName` takes them
  * @returns a name and an id for a label that holds `--`, a public name for one that does not, or why it is neither; only the form is checked, not that a site exists
  */
-export function splitLabel(label: string, ownNames: ReadonlySet<string>): Checked<LabelParts> {
+export function splitLabel(label: string): Checked<LabelParts> {
   const separatorAt = label.indexOf(SEPARATOR);
 
   if (separatorAt === -1) {
-    const publicName = parsePublicName(label, ownNames);
+    const publicName = parsePublicName(label);
     if (!publicName.ok) return publicName;
 
     return { ok: true, value: { kind: "public-name", name: publicName.value } };
@@ -61,12 +60,11 @@ export function splitLabel(label: string, ownNames: ReadonlySet<string>): Checke
  * Twelve base36 characters are read as an id, though a name may look the same: whoever resolves the reference tries them as an id first and as a public name second.
  *
  * @param raw - the string as typed, in lowercase
- * @param ownNames - the names no public site may hold, as `parsePublicName` takes them
  * @returns the reference, or why the string is none; no lookup is made
  */
-export function siteReference(raw: string, ownNames: ReadonlySet<string>): Checked<SiteReference> {
+export function siteReference(raw: string): Checked<SiteReference> {
   const id = parseSiteId(raw);
   if (id.ok) return { ok: true, value: { kind: "id", id: id.value } };
 
-  return splitLabel(raw, ownNames);
+  return splitLabel(raw);
 }

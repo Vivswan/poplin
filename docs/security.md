@@ -100,7 +100,7 @@ A private site without the cookie answers exactly like an address that has no si
 | the dashboard | a strict Content-Security-Policy; it may never be framed |
 | content | the Worker never reads, parses, or rewrites a site's files |
 | the activity log | the dashboard shows the last 100 actions: publish, state change, delete, login, token issued |
-| junk hostnames | Cloudflare routes to the Worker only the hostnames that end in the marker, `-page` by default, so no other hostname under the domain reaches it; a rate rule limits each address to 300 requests per 10 seconds, and is skipped when the zone's one free rate rule is already in use |
+| junk hostnames | Cloudflare routes to the Worker only the hostnames that end in the marker, `-page` by default, so no other hostname under the domain reaches it; a rate rule limits each address to 300 requests per 10 seconds. Setup skips it when other rules hold every rate rule the plan allows, or when a Free plan zone has hostnames of its own; the OpenTofu module, which owns the zone's rate rules, stops with a message in that second case |
 
 ## Between sites
 

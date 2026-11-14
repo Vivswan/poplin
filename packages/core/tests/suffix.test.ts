@@ -5,8 +5,6 @@ import { applySuffix, DEFAULT_SUFFIX, parseSuffix, readHostLabel, type Suffix, s
 import { mintSiteId } from "../src/sites/ids";
 import { type SiteLabel, siteLabel } from "../src/sites/labels";
 
-const NO_OWN_NAMES: ReadonlySet<string> = new Set();
-const OWN_NAMES: ReadonlySet<string> = new Set(["admin"]);
 const DNS_LABEL_LIMIT = 63;
 const LONGEST_NAME = "a".repeat(40);
 const ID = "k3f9x2ab71qz";
@@ -19,7 +17,7 @@ function suffixOf(raw: string): Suffix {
 }
 
 function publicNameOf(raw: string): PublicName {
-  const parsed = parsePublicName(raw, NO_OWN_NAMES);
+  const parsed = parsePublicName(raw);
   if (!parsed.ok) throw new Error(`fixture ${JSON.stringify(raw)} is not a public name`);
 
   return parsed.value;
@@ -104,7 +102,7 @@ describe("readHostLabel", () => {
     const id = mintSiteId();
     const labels = [applySuffix(suffix, siteLabel(name, id)), applySuffix(suffix, name)];
 
-    expect<unknown>({ labels, readBack: labels.map((label) => readHostLabel(suffix, label, NO_OWN_NAMES)) }).toEqual({
+    expect<unknown>({ labels, readBack: labels.map((label) => readHostLabel(suffix, label)) }).toEqual({
       labels: [`q3-report--${id}${suffix}`, `q3-report${suffix}`],
       readBack: [
         { kind: "site", name, id },
@@ -125,15 +123,15 @@ describe("readHostLabel", () => {
     ["", { kind: "not-ours" }],
     ["-page", { kind: "not-found" }],
     ["ab-page", { kind: "not-found" }],
-    ["admin-page", { kind: "not-found" }],
+    ["admin-page", { kind: "public-name", name: "admin" }],
     ["gallery-page", { kind: "not-found" }],
-    [`admin--${ID}-page`, { kind: "site", name: "admin", id: ID }],
+    [`gallery--${ID}-page`, { kind: "site", name: "gallery", id: ID }],
     [`report--${ID}z-page`, { kind: "not-found" }],
     [`report---${ID}-page`, { kind: "not-found" }],
     ["report--page", { kind: "not-found" }],
     ["Docs-page", { kind: "not-found" }],
     ["docs--page", { kind: "not-found" }],
   ] as ReadonlyArray<readonly [string, unknown]>)("reads %j", (label, outcome) => {
-    expect<unknown>(readHostLabel(DEFAULT_SUFFIX, label, OWN_NAMES)).toEqual(outcome);
+    expect<unknown>(readHostLabel(DEFAULT_SUFFIX, label)).toEqual(outcome);
   });
 });

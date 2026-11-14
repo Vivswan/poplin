@@ -2,8 +2,6 @@ import { describe, expect, test } from "bun:test";
 
 import { nameFromEntry, parsePublicName, parseSiteName } from "../src/names/names";
 
-const NO_OWN_NAMES: ReadonlySet<string> = new Set();
-const OWN_NAMES: ReadonlySet<string> = new Set(["admin"]);
 const LONGEST_NAME = "a".repeat(40);
 
 describe("parseSiteName", () => {
@@ -67,18 +65,11 @@ describe("parsePublicName", () => {
     ["publish", { ok: true, value: "publish" }],
     ["none", { ok: true, value: "none" }],
     ["gallery", { ok: false, refusal: "reserved" }],
-    ["admin", { ok: false, refusal: "reserved" }],
+    ["admin", { ok: true, value: "admin" }],
     ["ab", { ok: false, refusal: "too-short" }],
     ["my--docs", { ok: false, refusal: "double-dash" }],
     ["Gallery", { ok: false, refusal: "bad-character" }],
   ] as ReadonlyArray<readonly [string, unknown]>)("decides %j", (raw, outcome) => {
-    expect<unknown>(parsePublicName(raw, OWN_NAMES)).toEqual(outcome);
-  });
-
-  test("drift: `gallery` is every install's own, and the rest of the set is the caller's", () => {
-    expect<unknown>([parsePublicName("gallery", NO_OWN_NAMES), parsePublicName("admin", NO_OWN_NAMES)]).toEqual([
-      { ok: false, refusal: "reserved" },
-      { ok: true, value: "admin" },
-    ]);
+    expect<unknown>(parsePublicName(raw)).toEqual(outcome);
   });
 });

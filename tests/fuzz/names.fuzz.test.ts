@@ -10,8 +10,7 @@ import { siteLabel, siteReference, splitLabel } from "../../packages/core/src/si
 import { fuzzTarget } from "./config";
 import { hostile } from "./hostile";
 
-const NO_OWN_NAMES: ReadonlySet<string> = new Set();
-const EVERY_INSTALLS_OWN = "gallery";
+const GALLERY_NAME = "gallery";
 const MIN_PUBLISHED_LENGTH = 3;
 const MAX_PUBLISHED_LENGTH = 40;
 const MAX_DNS_LABEL_LENGTH = 63;
@@ -35,7 +34,7 @@ const siteNames = wellFormed
   .map((parsed) => parsed.value);
 
 const publicNames = wellFormed
-  .map((name) => parsePublicName(name, NO_OWN_NAMES))
+  .map((name) => parsePublicName(name))
   .filter((parsed) => parsed.ok)
   .map((parsed) => parsed.value);
 
@@ -44,7 +43,6 @@ const siteIds = fc
   .map((raw) => parseSiteId(raw))
   .filter((parsed) => parsed.ok)
   .map((parsed) => parsed.value);
-const ownNameSets = fc.uniqueArray(fc.oneof(fc.constantFrom("www", "admin", "index"), wellFormed), { maxLength: 4 }).map((names): ReadonlySet<string> => new Set(names));
 const siteLabels = fc.tuple(wellFormed, fc.stringMatching(PUBLISHED_ID)).map(([name, id]) => `${name}--${id}`);
 const rawSuffixes = hostile(fc.oneof(fc.constantFrom("-page", "", "-p", "-my-pages", "page-", "--page"), fc.stringMatching(/^[a-z0-9-]{0,12}$/)));
 const labels = hostile(fc.oneof(wellFormed, siteLabels, fc.stringMatching(PUBLISHED_ID), fc.tuple(fc.oneof(wellFormed, siteLabels), fc.constantFrom("-page", "-p", "--site")).map(([site, suffix]) => `${site}${suffix}`)));
@@ -61,14 +59,6 @@ function followsPublishedRule(name: string): boolean {
 
 function followsSuffixRule(raw: string): boolean {
   return raw.length <= MAX_PUBLISHED_SUFFIX_LENGTH && PUBLISHED_SUFFIX_SHAPE.test(raw);
-}
-
-function without(ownNames: ReadonlySet<string>, name: string): ReadonlySet<string> {
-  return new Set([...ownNames].filter((kept) => kept !== name));
-}
-
-function isOwn(ownNames: ReadonlySet<string>, name: string): boolean {
-  return name === EVERY_INSTALLS_OWN || ownNames.has(name);
 }
 
 property(
@@ -102,14 +92,14 @@ property(
 
 property(
   "a hostile label or entry is refused, not thrown on, and a stripped label put back before its suffix is the label that came in",
-  fc.property(labels, suffixes, ownNameSets, (label, suffix, ownNames) => {
+  fc.property(labels, suffixes, (label, suffix) => {
     parseSiteName(label);
     nameFromEntry(label);
-    parsePublicName(label, ownNames);
+    parsePublicName(label);
     parseSiteId(label);
-    splitLabel(label, ownNames);
-    siteReference(label, ownNames);
-    readHostLabel(suffix, label, ownNames);
+    splitLabel(label);
+    siteReference(label);
+    readHostLabel(suffix, label);
 
     const stripped = stripSuffix(suffix, label);
     if (stripped.ok) expect(`${stripped.label}${suffix}`).toBe(label);
@@ -117,45 +107,45 @@ property(
 );
 
 property(
-  "every accepted name follows the published rule, every accepted public name is one the install does not keep for itself, and every accepted id is 12 base36 characters, so no site gets an address DNS cannot carry or the install answers on itself",
-  fc.property(labels, suffixes, ownNameSets, (raw, suffix, ownNames) => {
-    const checked = [parseSiteName(raw), nameFromEntry(raw), parsePublicName(raw, ownNames), splitLabel(raw, ownNames), siteReference(raw, ownNames)];
-    const accepted: readonly unknown[] = [...checked.map((outcome) => (outcome.ok ? outcome.value : undefined)), readHostLabel(suffix, raw, ownNames)];
+  "every accepted name follows the published rule, no accepted public name is the one the gallery keeps, and every accepted id is 12 base36 characters, so no site gets an address DNS cannot carry or the install answers on itself",
+  fc.property(labels, suffixes, (raw, suffix) => {
+    const checked = [parseSiteName(raw), nameFromEntry(raw), parsePublicName(raw), splitLabel(raw), siteReference(raw)];
+    const accepted: readonly unknown[] = [...checked.map((outcome) => (outcome.ok ? outcome.value : undefined)), readHostLabel(suffix, raw)];
     const parts = accepted
       .filter((value) => value !== undefined)
       .map((value): { readonly kind?: string; readonly name?: string; readonly id?: string } => (typeof value === "string" ? { name: value } : (value as object)));
     const names = parts.map((part) => part.name).filter((name) => name !== undefined);
-    const publicOnes = [parsePublicName(raw, ownNames).ok ? raw : undefined, ...parts.map((part) => (part.kind === "public-name" ? part.name : undefined))].filter((name) => name !== undefined);
+    const publicOnes = [parsePublicName(raw).ok ? raw : undefined, ...parts.map((part) => (part.kind === "public-name" ? part.name : undefined))].filter((name) => name !== undefined);
     const ids = parts.map((part) => part.id).filter((id) => id !== undefined);
 
     expect(names.filter((name) => !followsPublishedRule(name))).toEqual([]);
-    expect(publicOnes.filter((name) => isOwn(ownNames, name))).toEqual([]);
+    expect(publicOnes.filter((name) => name === GALLERY_NAME)).toEqual([]);
     expect(ids.filter((id) => !PUBLISHED_ID.test(id))).toEqual([]);
   }),
 );
 
 property(
-  "every well formed name is accepted as a name, and as a public name unless the install keeps it for itself, so a tightened rule cannot orphan published sites",
-  fc.property(fc.oneof(wellFormed, fc.constant(EVERY_INSTALLS_OWN)), ownNameSets, (name, ownNames) => {
-    expect([parseSiteName(name).ok, parsePublicName(name, ownNames).ok]).toEqual([true, !isOwn(ownNames, name)]);
+  "every well formed name is accepted as a name, and as a public name unless the gallery keeps it, so a tightened rule cannot orphan published sites",
+  fc.property(fc.oneof(wellFormed, fc.constant(GALLERY_NAME)), (name) => {
+    expect([parseSiteName(name).ok, parsePublicName(name).ok]).toEqual([true, name !== GALLERY_NAME]);
   }),
 );
 
 property(
-  "a site address built under any suffix reads back as its name and its id whatever the install keeps for itself, and a public address as its public name",
-  fc.property(siteNames, siteIds, publicNames, suffixes, ownNameSets, fc.context(), (name, id, publicName, suffix, ownNames, context) => {
+  "a site address built under any suffix reads back as its name and its id, and a public address as its public name",
+  fc.property(siteNames, siteIds, publicNames, suffixes, fc.context(), (name, id, publicName, suffix, context) => {
     const address = applySuffix(suffix, siteLabel(name, id));
     context.log(`address: ${address}`);
 
-    expect<unknown>(readHostLabel(suffix, address, ownNames)).toEqual({ kind: "site", name, id });
-    expect<unknown>(readHostLabel(suffix, applySuffix(suffix, publicName), without(ownNames, publicName))).toEqual({ kind: "public-name", name: publicName });
+    expect<unknown>(readHostLabel(suffix, address)).toEqual({ kind: "site", name, id });
+    expect<unknown>(readHostLabel(suffix, applySuffix(suffix, publicName))).toEqual({ kind: "public-name", name: publicName });
   }),
 );
 
 property(
   "an accepted label is exactly its name, or its name, two dashes, and its id, so no extra text rides along to another site",
-  fc.property(labels, ownNameSets, (label, ownNames) => {
-    const split = splitLabel(label, ownNames);
+  fc.property(labels, (label) => {
+    const split = splitLabel(label);
     if (!split.ok) return;
 
     const rebuilt = split.value.kind === "site" ? `${split.value.name}--${split.value.id}` : split.value.name;
@@ -167,24 +157,14 @@ property(
 
 property(
   "a reference a command accepts is exactly what was typed, be it an id alone, a label, or a name, and twelve base36 characters are always the id",
-  fc.property(labels, ownNameSets, (raw, ownNames) => {
-    const reference = siteReference(raw, ownNames);
+  fc.property(labels, (raw) => {
+    const reference = siteReference(raw);
     if (!reference.ok) return;
 
     const parts: { readonly name?: string; readonly id?: string } = reference.value;
 
     expect([parts.name, parts.id].filter((part) => part !== undefined).join("--")).toBe(raw);
     expect(reference.value.kind === "id").toBe(PUBLISHED_ID.test(raw));
-  }),
-);
-
-property(
-  "a label names the same site whatever else the install keeps for itself, so keeping a name cannot repoint an address",
-  fc.property(labels, ownNameSets, ownNameSets, (label, ownNames, others) => {
-    const split = splitLabel(label, ownNames);
-    if (!split.ok) return;
-
-    expect(splitLabel(label, without(others, split.value.name))).toEqual(split);
   }),
 );
 
