@@ -10,6 +10,7 @@ const CLI_ONLY_COMMANDS: Readonly<Record<string, string>> = {
   login: "a person authorizes a machine; an agent is handed the login",
   logout: "a person forgets a machine's token",
   whoami: "about the login, not about a site",
+  setup: "a person finishes an install, once, with the provider's token",
   config: "the install's settings are an admin's to change",
   doctor: "a report on the install, for the person who runs it",
   export: "a backup of the install, for the person who runs it",

@@ -15,6 +15,7 @@ import { logIn } from "./login";
 import { parseCommand } from "./parse-command";
 import { type Problem, problem, problemLines } from "./problems";
 import { planPublish, previewPublish, sendPublish } from "./publish";
+import { runSetup } from "./setup";
 import type { Io, Outcome, RequestOf, Session } from "./records";
 import type { Request } from "./requests";
 import { runSiteCommand } from "./site-commands";
@@ -57,14 +58,16 @@ function guarded(io: Io, tokens: ReadonlySet<string>): Io {
 }
 
 /**
- * The tokens this machine holds: the one in the environment and the one of the saved login, whichever the command uses.
+ * The tokens this machine holds: the two the environment may hold, the login's and the one `poplin setup` sends, and the one of the saved login, whichever the command uses.
  *
  * A login that cannot be read gives no token here, and is refused where the command looks for it.
  */
 async function knownTokens(io: Io): Promise<ReadonlySet<string>> {
   const tokens = new Set<string>();
-  const inEnvironment = io.machine.env.POPLIN_TOKEN;
-  if (inEnvironment !== undefined && inEnvironment !== "") tokens.add(inEnvironment);
+  for (const variable of ["POPLIN_TOKEN", "POPLIN_SETUP_TOKEN"]) {
+    const inEnvironment = io.machine.env[variable];
+    if (inEnvironment !== undefined && inEnvironment !== "") tokens.add(inEnvironment);
+  }
 
   const saved = await currentLogin({ ...io.machine, env: { ...io.machine.env, POPLIN_SERVER: undefined, POPLIN_TOKEN: undefined } }).catch(() => undefined);
   if (saved?.state === "logged-in") tokens.add(saved.login.token);
@@ -129,6 +132,8 @@ async function execute(request: Request, io: Io): Promise<Outcome> {
   if (asks(request, ["publish"])) return publish(request, io);
 
   if (asks(request, ["login"])) return logIn(request, io);
+
+  if (asks(request, ["setup"])) return runSetup(request, io);
 
   if (asks(request, INSTALL_COMMANDS)) return online(request, io, (session) => runInstallCommand(request, session));
 

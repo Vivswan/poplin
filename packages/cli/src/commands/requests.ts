@@ -43,6 +43,7 @@ const BUILDERS: { readonly [Name in Exclude<CommandName, "help">]: (words: Words
   login,
   logout: (words) => withInstall(words, (install) => ({ kind: "logout", ...install })),
   whoami: (words) => withInstall(words, (install) => ({ kind: "whoami", ...install })),
+  setup: (words) => withInstall(words, (install) => ({ kind: "setup", check: words.flags.has("--check"), ...install })),
   config,
   doctor: (words) => withInstall(words, (install) => ({ kind: "doctor", ...install })),
   export: exportSites,
@@ -84,6 +85,7 @@ export type Request =
   | ({ readonly kind: "list"; readonly trash: boolean } & Install)
   | ({ readonly kind: "login"; readonly publisher: boolean; readonly computer?: string; readonly browser: boolean } & Install)
   | ({ readonly kind: "logout" | "whoami" | "doctor" } & Install)
+  | ({ readonly kind: "setup"; readonly check: boolean } & Install)
   | ({ readonly kind: "config"; readonly action: ConfigAction } & Install)
   | ({ readonly kind: "export"; readonly site?: SiteRef; readonly allVersions: boolean; readonly out?: string; readonly overwrite: boolean } & Install)
   | ({ readonly kind: "import"; readonly zip: string; readonly site?: SiteRef; readonly settings: boolean; readonly logins: boolean; readonly dryRun: boolean } & Install)
