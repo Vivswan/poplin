@@ -203,6 +203,8 @@ export function createDashboard(parts: DashboardParts): Dashboard {
     secureHeaders({
       contentSecurityPolicy: { defaultSrc: ["'none'"], styleSrc: [NONCE], formAction: ["'self'"], frameAncestors: ["'none'"], baseUri: ["'none'"] },
       xFrameOptions: "DENY",
+      // A form of the page then carries the page's origin; a request to any other origin carries no referrer.
+      referrerPolicy: "same-origin",
     }),
   );
   app.use(noStore, session, method);

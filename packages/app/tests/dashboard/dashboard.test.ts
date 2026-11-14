@@ -76,7 +76,7 @@ test("without a session every request, a page that does not exist included, is a
   expect(await stored(opened)).toBe(snapshot);
 });
 
-test("every answer carries the strict policy and the no-store, no-frame, no-sniff, no-referrer headers; a page's one style element carries the policy's nonce", async () => {
+test("every answer carries the strict policy and the no-store, no-frame, no-sniff headers, with a referrer for its own origin alone; a page's one style element carries the policy's nonce", async () => {
   const opened = await openDashboard();
   const site = await opened.publish("report");
   const answers = [
@@ -94,7 +94,7 @@ test("every answer carries the strict policy and the no-store, no-frame, no-snif
     const page = await answer.text();
 
     expect(nonce).toBeString();
-    expect(["Cache-Control", "X-Frame-Options", "X-Content-Type-Options", "Referrer-Policy"].map((name) => answer.headers.get(name))).toEqual(["no-store", "DENY", "nosniff", "no-referrer"]);
+    expect(["Cache-Control", "X-Frame-Options", "X-Content-Type-Options", "Referrer-Policy"].map((name) => answer.headers.get(name))).toEqual(["no-store", "DENY", "nosniff", "same-origin"]);
     if (page !== "") expect(page.match(/<style[^>]*>/g)).toEqual([`<style nonce="${nonce}">`]);
   }
 });
@@ -126,10 +126,16 @@ test("a POST that is not a same-origin form with the session's own live token is
     ["a token of another email", { csrf: await mintCsrfToken({ key, email: "other@example.com", now: opened.clock.now }) }, 403],
     ["a token under another secret", { csrf: await mintCsrfToken({ key: await importCsrfKey(new Uint8Array(32).fill(1)), email: opened.owner, now: opened.clock.now }) }, 403],
     ["a token past twelve hours", { csrf: await mintCsrfToken({ key, email: opened.owner, now: opened.clock.now - HALF_DAY_MS - 1 }) }, 403],
-    ["no Origin", { headers: { Origin: null } }, 403],
+    ["no Origin and no mark", { headers: { Origin: null, "Sec-Fetch-Site": null } }, 403],
+    ["a withheld Origin, a same-origin mark, and no token", { csrf: null, headers: { Origin: "null" } }, 403],
+    ["no Origin, a same-origin mark, and an empty token", { csrf: "", headers: { Origin: null } }, 403],
+    ["no Origin and a same-site mark", { headers: { Origin: null, "Sec-Fetch-Site": "same-site" } }, 403],
     ["another Origin", { headers: { Origin: "https://evil.example.com" } }, 403],
     ["a site's Origin", { headers: { Origin: `https://report--${site.id}-p-poplin.example.com` } }, 403],
-    ["the Origin null", { headers: { Origin: "null" } }, 403],
+    ["the Origin null and no mark", { headers: { Origin: "null", "Sec-Fetch-Site": null } }, 403],
+    ["the Origin null and a same-site mark", { headers: { Origin: "null", "Sec-Fetch-Site": "same-site" } }, 403],
+    ["the Origin null and a cross-site mark", { headers: { Origin: "null", "Sec-Fetch-Site": "cross-site" } }, 403],
+    ["a site's Origin and a same-site mark", { headers: { Origin: `https://report--${site.id}-p-poplin.example.com`, "Sec-Fetch-Site": "same-site" } }, 403],
     ["a cross-site mark", { headers: { "Sec-Fetch-Site": "cross-site" } }, 403],
     ["a same-site mark", { headers: { "Sec-Fetch-Site": "same-site" } }, 403],
     ["a multipart body", { headers: { "Content-Type": "multipart/form-data; boundary=x" } }, 415],

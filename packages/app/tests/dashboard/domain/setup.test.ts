@@ -4,14 +4,12 @@ import type { Counters } from "../../../src/limits/limits";
 import { MemoryCounters } from "../../../src/limits/memory-counters";
 import { createSetup } from "../../../src/dashboard/domain/setup";
 import type { DomainReading } from "../../../src/dashboard/domain/records";
+import { formHeadersOf } from "../support/browser";
 import { CSRF_SECRET, ORIGIN, openDashboard } from "../support/install";
 import { type FakePlug, fakePlug, TOKEN, usualPlug } from "./support/fake-plug";
 
 /** The line above the table: its kind and its text. */
 const NOTICE = /<p class="notice (done|refused)" role="status">([^<]*)<\/p>/;
-
-/** The headers a browser sends with the page's own form. */
-const FORM = { Origin: ORIGIN, "Sec-Fetch-Site": "same-origin", "Content-Type": "application/x-www-form-urlencoded" };
 
 /** A token of the install's account. */
 const OWN = TOKEN;
@@ -73,12 +71,12 @@ async function openSetup(options: Options = {}) {
     run: string,
     token: string,
     fields: Readonly<Record<string, string>> | undefined = undefined,
-    headers: Readonly<Record<string, string>> = FORM,
+    changed: Readonly<Record<string, string>> = {},
   ): Promise<Response> =>
     setup.fetch(
       new Request(`${ORIGIN}/setup/${run}`, {
         method: "POST",
-        headers,
+        headers: { ...formHeadersOf(await get("/setup"), ORIGIN), ...changed },
         body: new URLSearchParams({ token, ...(fields ?? { csrf: await csrf() }) }).toString(),
       }),
     );
@@ -244,15 +242,15 @@ test("a post without the form's token, with a forged one, from another origin, o
   const refused = [
     await post("repair", OWN, {}),
     await post("repair", OWN, { csrf: `${opened.clock.now}.${"0".repeat(64)}` }),
-    await post("repair", OWN, { csrf }, { ...FORM, Origin: "https://evil.example.net" }),
-    await post("repair", OWN, { csrf }, { ...FORM, "Sec-Fetch-Site": "cross-site" }),
+    await post("repair", OWN, { csrf }, { Origin: "https://evil.example.net" }),
+    await post("repair", OWN, { csrf }, { "Sec-Fetch-Site": "cross-site" }),
   ];
 
   expect(refused.map((answer) => answer.status)).toEqual([403, 403, 403, 403]);
 
   address.value = "198.51.100.9";
 
-  expect((await post("repair", OWN, { csrf }, { ...FORM, "Content-Type": "application/json" })).status).toBe(415);
+  expect((await post("repair", OWN, { csrf }, { "Content-Type": "application/json" })).status).toBe(415);
   expect([(await get("/")).status, (await get("/setup/check")).status, (await post("save", OWN, { csrf })).status]).toEqual([404, 404, 404]);
   expect(plug.calls).toEqual([]);
   expect(await opened.audit()).toEqual(before);

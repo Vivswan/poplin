@@ -106,7 +106,7 @@ property(
     // Whether the request carries the owner's session is decided here, apart from anything the dashboard answers: the cookie is the minted one and the owner is still a login.
     const logins = (await opened.install.database.readSettings())?.logins ?? [];
     const loggedIn = asked.cookie === opened.cookie && logins.includes(opened.owner);
-    const fromOwnPage = asked.method === "POST" && asked.origin === ORIGIN && asked.fetchSite === "same-origin" && asked.type.startsWith(FORM) && asked.csrf === token;
+    const fromOwnPage = asked.method === "POST" && [ORIGIN, "null"].includes(asked.origin) && asked.fetchSite === "same-origin" && asked.type.startsWith(FORM) && asked.csrf === token;
     const before = await stored();
     const response = await opened.fetch(requestOf(asked));
     const page = await response.text();

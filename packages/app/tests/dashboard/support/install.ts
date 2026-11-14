@@ -14,6 +14,7 @@ import { MemoryCounters } from "../../../src/limits/memory-counters";
 import { mintSessionCookie, readSession } from "../../../src/login/session";
 import { NOW, openInstall } from "../../sites/support/install";
 import { ADDRESSES } from "../../sites/support/layout";
+import { formHeadersOf } from "./browser";
 
 /** The origin every test request is sent to. */
 export const ORIGIN = "https://poplin.example.com";
@@ -90,16 +91,15 @@ export async function openDashboard(domain?: DomainPlug): Promise<Opened> {
   const dashboard = createDashboard({ install, readSession: sessionOf, addresses: base.serving.addresses, csrfSecret: CSRF_SECRET, domain, ...codeCounts(counters) });
   const get: Opened["get"] = (path, headers = {}) => dashboard.fetch(new Request(`${ORIGIN}${path}`, { headers: { Cookie: cookie, ...headers } }));
 
-  const token: Opened["token"] = async () => {
-    const [, value = ""] = /name="csrf" value="([^"]+)"/.exec(await (await get("/settings")).text()) ?? [];
+  const tokenOf = (page: string): string => /name="csrf" value="([^"]+)"/.exec(page)?.[1] ?? "";
+  const token: Opened["token"] = async () => tokenOf(await (await get("/settings")).text());
 
-    return value;
-  };
-
+  // The headers come from a page the dashboard really answered, so a page whose policy makes a browser's form unacceptable fails every test that posts.
   const post: Opened["post"] = async (path, fields, options = {}) => {
-    const csrf = options.csrf === undefined ? await token() : options.csrf;
+    const page = await get("/settings");
+    const csrf = options.csrf === undefined ? tokenOf(await page.text()) : options.csrf;
     const body = new URLSearchParams(csrf === null ? fields : { ...fields, csrf });
-    const headers = new Headers({ Cookie: cookie, Origin: ORIGIN, "Sec-Fetch-Site": "same-origin", "Content-Type": "application/x-www-form-urlencoded" });
+    const headers = new Headers({ Cookie: cookie, ...formHeadersOf(page, ORIGIN) });
 
     for (const [name, value] of Object.entries(options.headers ?? {})) {
       if (value === null) headers.delete(name);
