@@ -1,0 +1,20 @@
+{
+  "name": "poplin-workspace",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "packages/*"
+  ],
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "lint": "biome lint .",
+    "typecheck": "tsc -p .",
+    "test": "bun test --pass-with-no-tests"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "2.6.4",
+    "typescript": "7.0.2"
+  }
+}

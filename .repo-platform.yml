@@ -1,0 +1,5 @@
+modules: [bun, release-please, pr-title, site, nightly]
+project:
+  name: Poplin
+  slug: poplin
+  description: "Agents publish static sites to your own Cloudflare account: private by default, shareable by secret link, or public."
