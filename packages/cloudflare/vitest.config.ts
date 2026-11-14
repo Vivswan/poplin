@@ -10,5 +10,10 @@ export default defineConfig({
   // Core's contract suite takes its test functions from bun; the two runners share their shape, so the same cases run here.
   resolve: { alias: { "bun:test": "vitest" } },
 
-  test: { include: ["tests/{worker,storage,database,limits}/**/*.test.ts"], testTimeout: 30_000 },
+  test: {
+    include: ["tests/{worker,storage,database,limits}/**/*.test.ts"],
+    testTimeout: 30_000,
+    // The pool sends a file's cached imports as one message, and the Cloudflare SDK takes that past workerd's 32 MiB limit.
+    fsModuleCache: false,
+  },
 });
