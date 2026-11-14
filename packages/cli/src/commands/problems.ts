@@ -1,0 +1,148 @@
+// The one table of what can go wrong: every code a command ends in, its sentence for a person, the hint that goes with it, and how the command exits.
+
+import type { Failure } from "../client/client";
+import type { Ending } from "./exit-codes";
+
+/** How a command that went wrong exits. */
+type Exit = Exclude<Ending["kind"], "done" | "version" | "help">;
+
+/** One row of the table: the sentence, what to do about it when that is known, and the exit. */
+interface Row {
+  readonly sentence: string;
+  readonly hint?: string;
+  readonly exit: Exit;
+}
+
+/** The codes the API refuses with, in the API's own spelling. */
+const API_ROWS = {
+  not_logged_in: { sentence: "no token was sent, or it expired", hint: "set POPLIN_SERVER and POPLIN_TOKEN to the install's address and a live token of it", exit: "failed" },
+  not_allowed: { sentence: "this token may not do that", hint: "a publisher's token manages only the sites it published; poplin whoami shows the token", exit: "failed" },
+  not_found: { sentence: "no site with that id or public name", hint: "poplin list shows every site", exit: "failed" },
+  no_such_version: { sentence: "the site keeps no such version", hint: "poplin show <site> lists the versions", exit: "failed" },
+  method_not_allowed: { sentence: "the install does not take that request", hint: "the install may be of another version than this poplin", exit: "failed" },
+  unsupported_media_type: { sentence: "the install does not take that request", hint: "the install may be of another version than this poplin", exit: "failed" },
+  bad_argument: { sentence: "an argument is missing, unknown, or of the wrong form", exit: "failed" },
+  bad_name: { sentence: "the name breaks the rules of a name", hint: "a name holds lowercase letters, digits, and single dashes, 3 to 40 characters", exit: "failed" },
+  reserved_name: { sentence: "the install keeps that public name for itself", hint: "to pick another: --public --name <public name>", exit: "failed" },
+  bad_path: { sentence: "a file's path is one no site can serve", hint: "rename or remove the file", exit: "failed" },
+  no_index: { sentence: "a site needs an index.html at its top", exit: "failed" },
+  size_mismatch: { sentence: "a file changed while it was sent", hint: "publish again once the folder is still", exit: "failed" },
+  name_taken: { sentence: "another site holds that public name", hint: "to pick another: poplin set <site> --public --name <public name>", exit: "failed" },
+  in_trash: { sentence: "the site sits in the trash", hint: "to take it back: poplin restore <site>", exit: "failed" },
+  not_in_trash: { sentence: "the site is not in the trash", exit: "failed" },
+  stale_version: { sentence: "a newer publish of the site went live first", hint: "publish again", exit: "failed" },
+  missing_files: { sentence: "a file of the publish did not arrive", hint: "publish again", exit: "failed" },
+  upload_finished: { sentence: "the publish is already live", exit: "failed" },
+  too_many_sites: { sentence: "the install holds as many sites as it may", hint: "poplin config max_sites shows the limit; poplin list --trash shows what still counts", exit: "failed" },
+  not_set_up: { sentence: "the install is not set up", hint: "open the install's address in a browser and finish its setup", exit: "failed" },
+  too_large: { sentence: "a size limit is passed", hint: "poplin config shows the limits", exit: "failed" },
+  internal: { sentence: "the install failed to do that", hint: "try again; poplin doctor reports on the install", exit: "failed" },
+} as const satisfies Readonly<Record<string, Row>>;
+
+/** The codes of what goes wrong on this machine, or between it and the install. */
+const LOCAL_ROWS = {
+  no_login: { sentence: "not logged in", hint: "set POPLIN_SERVER to the install's address and POPLIN_TOKEN to a token of it", exit: "no-install" },
+  bad_login: { sentence: "the login cannot be used", exit: "no-install" },
+  bad_server: { sentence: "--server takes an https:// address with nothing after the host", hint: "for example: --server https://poplin.example.com", exit: "usage-error" },
+  wrong_server: {
+    sentence: "there is no token for that install",
+    hint: "a token is sent only to the install it was saved for; set POPLIN_SERVER and POPLIN_TOKEN for the other one",
+    exit: "no-install",
+  },
+  unreadable: { sentence: "nothing can be published", exit: "failed" },
+  no_name: { sentence: "the path gives the site no name", exit: "failed" },
+  not_confirmed: { sentence: "what was typed is not the site's label, so nothing was deleted", exit: "failed" },
+  no_terminal: {
+    sentence: "delete --forever asks for the site's label to be typed, and there is no terminal to ask on",
+    hint: "without --forever the site goes to the trash, and is gone for good when its days there are over",
+    exit: "failed",
+  },
+  not_available: { sentence: "this build of poplin cannot do that", exit: "unavailable" },
+  unreachable: { sentence: "the install could not be reached", hint: "check the address and the network; poplin whoami shows the address", exit: "unreachable" },
+  timeout: { sentence: "the install took too long to answer", hint: "try again", exit: "unreachable" },
+  not_json: { sentence: "the answer is not the install's", hint: "is the address the one of your poplin install? poplin whoami shows it", exit: "unreachable" },
+  unexpected_answer: {
+    sentence: "the install answered in a form this poplin does not know",
+    hint: "a login page in front of the install answers this way, and so does an install of another version",
+    exit: "unreachable",
+  },
+  crashed: { sentence: "poplin failed in a way it has no word for", exit: "failed" },
+} as const satisfies Readonly<Record<string, Row>>;
+
+/** Every row, by its code. */
+const ROWS: Readonly<Record<string, Row>> = { ...API_ROWS, ...LOCAL_ROWS };
+
+/** What goes with a change whose answer never came: the install may have made it. */
+const MAY_HAVE_CHANGED = "the answer was lost, so the change may have been made all the same; poplin list shows the sites as they are";
+
+/** The code of each failure of a call that is no refusal. */
+const FAILURE_CODES = { unreachable: "unreachable", timeout: "timeout", "not-json": "not_json", unexpected: "unexpected_answer" } as const;
+
+/** A code of the table. */
+type Code = keyof typeof API_ROWS | keyof typeof LOCAL_ROWS;
+
+/**
+ * Why a command did not do what was asked.
+ *
+ * `message` is the code's sentence, and `about` what the code is about: an argument, a limit, a path, or a reason in words. `exit` is the ending the command exits with.
+ */
+export interface Problem {
+  readonly code: string;
+  readonly message: string;
+  readonly about?: string;
+  readonly hint?: string;
+  readonly exit: Exit;
+}
+
+function build(code: string, row: Row, about: string | undefined, hint: string | undefined): Problem {
+  const problem: { -readonly [Key in keyof Problem]: Problem[Key] } = { code, message: row.sentence, exit: row.exit };
+  if (about !== undefined) problem.about = about;
+
+  const said = hint ?? row.hint;
+  if (said !== undefined) problem.hint = said;
+
+  return problem;
+}
+
+/**
+ * Build the problem of one code of the table.
+ *
+ * @param about - what the code is about, when that is known
+ * @param hint - a hint in place of the table's own
+ */
+export function problem(code: Code, about?: string, hint?: string): Problem {
+  return build(code, ROWS[code] as Row, about, hint);
+}
+
+/**
+ * Turn the failure of a call into a problem.
+ *
+ * @param call - `changes` for a call that asks the install to change something: without an answer, the hint says the change may have been made
+ * @returns the table's row for the API's code. A code the table does not hold keeps the API's own sentence
+ */
+export function problemOf(failure: Failure, call: "reads" | "changes" = "reads"): Problem {
+  const hint = call === "changes" ? MAY_HAVE_CHANGED : undefined;
+
+  if (failure.kind === "timeout") return problem("timeout", `${failure.seconds} seconds`, hint);
+
+  if (failure.kind === "unreachable") return problem("unreachable", undefined, hint);
+
+  if (failure.kind !== "refused") return problem(FAILURE_CODES[failure.kind], `status ${failure.status}`, hint);
+
+  const rows: Readonly<Record<string, Row>> = API_ROWS;
+  const row = Object.hasOwn(rows, failure.code) ? rows[failure.code] : undefined;
+
+  return build(failure.code, row ?? { sentence: failure.message, exit: "failed" }, failure.about, undefined);
+}
+
+/**
+ * Word a problem for a person.
+ *
+ * @returns the sentence with what it is about, then the hint when there is one, a line each
+ */
+export function problemLines(said: Problem): string[] {
+  const sentence = said.about === undefined ? said.message : `${said.message}: ${said.about}`;
+  if (said.hint === undefined) return [sentence];
+
+  return [sentence, said.hint];
+}

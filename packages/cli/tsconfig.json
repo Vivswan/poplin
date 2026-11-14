@@ -1,6 +1,6 @@
 {
   "extends": "../../tsconfig.json",
-  // The build's project: declarations come from the entries and what they import, never from the whole workspace.
-  "include": ["src"],
+  // The build's project: declarations come from the two library entries and what they import. The command and what it runs are typechecked by the root project.
+  "include": ["src/poplin.ts", "src/core.ts"],
   "exclude": []
 }

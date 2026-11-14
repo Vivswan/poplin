@@ -1,13 +1,18 @@
 import { describe, expect, test } from "bun:test";
 import { spawnSync } from "node:child_process";
+import { mkdtempDisposableSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import manifest from "../package.json" with { type: "json" };
 
 const BIN = join(import.meta.dir, "..", "src", "bin.ts");
 
+/** Run the command on a machine with no login: an empty config folder, and neither login variable. */
 function run(...args: string[]): { status: number | null; stdout: string; stderr: string } {
-  const { status, stdout, stderr } = spawnSync(process.execPath, [BIN, ...args], { encoding: "utf8" });
+  using config = mkdtempDisposableSync(join(tmpdir(), "poplin-bin-"));
+  const env = { ...process.env, POPLIN_CONFIG_DIR: config.path, POPLIN_SERVER: "", POPLIN_TOKEN: "" };
+  const { status, stdout, stderr } = spawnSync(process.execPath, [BIN, ...args], { encoding: "utf8", env });
 
   return { status, stdout, stderr };
 }
@@ -25,7 +30,7 @@ describe("bin", () => {
       { status: 0, stdout: "usage: poplin list [flags]", stderr: "" },
       { status: 2, stdout: "", stderr: "usage: poplin <path> [flags]       publish a folder, or one HTML file" },
       { status: 2, stdout: "", stderr: 'unknown command "listt"' },
-      { status: 3, stdout: "", stderr: "poplin list: this build reads the command and has no connection to an install, so nothing was done." },
+      { status: 3, stdout: "", stderr: "not logged in" },
     ]);
   });
 });
