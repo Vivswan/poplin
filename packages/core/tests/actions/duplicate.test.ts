@@ -1,11 +1,14 @@
 import { describe, expect, spyOn, test } from "bun:test";
 
+import { beginPublish } from "../../src/actions/begin-publish";
 import { deleteSite } from "../../src/actions/delete";
 import { duplicateSite } from "../../src/actions/duplicate";
+import { finishPublish } from "../../src/actions/finish-publish";
 import { listSites } from "../../src/actions/list";
 import { publishSite } from "../../src/actions/publish";
 import { getSite } from "../../src/actions/show";
 import { uploadFile } from "../../src/actions/upload-file";
+import { uploadKey } from "../../src/actions/uploads";
 import type { ObjectKey } from "../../src/storage/storage";
 import { BunSqliteDriver } from "../database/support/bun-sqlite-driver";
 import { ADMIN, file, made, makeWorld, OWNER, STRANGER, type World } from "./support/actions-fixture";
@@ -81,8 +84,21 @@ describe("duplicateSite", () => {
   test("a site whose manifest fitted the cap by under the length of a few letters a file is copied, not refused as too large", async () => {
     const world = await makeWorld();
     const folder = Array.from({ length: 4 }, () => "x".repeat(218)).join("/");
-    const images = Array.from({ length: 1_600 }, (_image, at) => ({ ...file(`${folder}/${String(at).padStart(4, "0")}.png`, "x"), contentType: "image/png" }));
-    const source = await publishSite(world.install, OWNER, { name: "gallery", files: [file("index.html", "<p>home</p>"), ...images] });
+    const images = Array.from({ length: 1_600 }, (_image, at) => ({ path: `${folder}/${String(at).padStart(4, "0")}.png`, size: 1, content_type: "image/png" }));
+    const files = [{ path: "index.html", size: 1, content_type: "text/html" }, ...images];
+    const begun = await beginPublish(world.install, OWNER, { name: "gallery", files });
+    if (!begun.ok) throw new Error(`the source was refused: ${begun.code}`);
+
+    // The files go straight into the store. Sent a call each, every one reads the whole manifest again, which was all of this test's time.
+    const staged = await world.install.database.getUpload(begun.upload.id);
+    if (staged === undefined) throw new Error("the upload was not recorded");
+
+    for (const { path, content_type } of files) {
+      const key = uploadKey(staged.upload, path);
+      if (key.ok) await world.install.store.write(key.key, new Uint8Array([120]), { contentType: content_type });
+    }
+
+    const source = await finishPublish(world.install, OWNER, begun.upload.id);
     if (!source.ok) throw new Error(`the source was refused: ${source.code}`);
 
     expect(await duplicateSite(world.install, OWNER, { site: source.site.id }, 1)).toMatchObject({ ok: true, site: null, copy: { copied: 1, files: 1_601 } });
