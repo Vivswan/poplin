@@ -39,7 +39,7 @@ const BUILDERS: { readonly [Name in Exclude<CommandName, "help">]: (words: Words
   delete: (words) => withSite(words, (site, install) => ({ kind: "delete", site, forever: words.flags.has("--forever"), ...install })),
   restore: (words) => oneSite("restore", words),
   list: (words) => withInstall(words, (install) => ({ kind: "list", trash: words.flags.has("--trash"), ...install })),
-  login: (words) => withInstall(words, (install) => ({ kind: "login", publisher: words.flags.has("--publisher"), ...install })),
+  login,
   logout: (words) => withInstall(words, (install) => ({ kind: "logout", ...install })),
   whoami: (words) => withInstall(words, (install) => ({ kind: "whoami", ...install })),
   setup: (words) => withInstall(words, (install) => ({ kind: "setup", ...install })),
@@ -85,7 +85,7 @@ export type Request =
   | ({ readonly kind: "rollback"; readonly site: SiteRef; readonly to?: number } & Install)
   | ({ readonly kind: "delete"; readonly site: SiteRef; readonly forever: boolean } & Install)
   | ({ readonly kind: "list"; readonly trash: boolean } & Install)
-  | ({ readonly kind: "login"; readonly publisher: boolean } & Install)
+  | ({ readonly kind: "login"; readonly publisher: boolean; readonly computer?: string; readonly browser: boolean } & Install)
   | ({ readonly kind: "logout" | "whoami" | "setup" | "doctor" } & Install)
   | ({ readonly kind: "config"; readonly action: ConfigAction } & Install)
   | ({ readonly kind: "export"; readonly site?: SiteRef; readonly allVersions: boolean; readonly out?: string; readonly overwrite: boolean } & Install)
@@ -224,6 +224,14 @@ function rollback(words: Words): Request | UsageError {
     return usageError(`--to takes a version number such as 4, not ${JSON.stringify(to)}`, "poplin show <site> lists the versions");
 
   return withSite(words, (site, install) => ({ kind: "rollback", site, to: version, ...install }));
+}
+
+function login(words: Words): Request | UsageError {
+  const asked = { kind: "login", publisher: words.flags.has("--publisher"), browser: !words.flags.has("--no-browser") } as const;
+  const computer = flagValue(words.flags, "--name");
+  if (computer === undefined) return withInstall(words, (install) => ({ ...asked, ...install }));
+
+  return withInstall(words, (install) => ({ ...asked, computer, ...install }));
 }
 
 function readConfigAction(words: Words): ConfigAction | UsageError {

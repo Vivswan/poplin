@@ -9,6 +9,7 @@
 // audit        what was done, by whom, and when; rows are only ever added
 // request_counts   one row per UTC day and site, and one more per day under the empty site for all sites together
 // uploads      the staged publishes: begun, taking files, then live or given up
+// logins       the computers asking to be logged in: pending, then allowed or denied, and gone once used or ten minutes old
 
 import type { Step } from "./migrate";
 
@@ -128,6 +129,23 @@ CREATE TABLE uploads (
   UNIQUE (folder, number)
 ) STRICT`;
 
+/** A computer's login from the terminal's first request on. `hash` is the SHA-256 of the secret the terminal holds; `code` is what a person compares. Only a decided login names who decided it. */
+const LOGINS = `
+CREATE TABLE logins (
+  id TEXT NOT NULL PRIMARY KEY,
+  code TEXT NOT NULL UNIQUE,
+  hash TEXT NOT NULL,
+  scope TEXT NOT NULL CHECK (scope IN ('admin', 'publisher')),
+  computer TEXT NOT NULL,
+  state TEXT NOT NULL DEFAULT 'pending' CHECK (state IN ('pending', 'allowed', 'denied')),
+  decided_by TEXT,
+  created_at INTEGER NOT NULL,
+  expires_at INTEGER NOT NULL,
+  polled_at INTEGER,
+  CHECK ((state = 'pending') = (decided_by IS NULL)),
+  CHECK (expires_at > created_at)
+) STRICT`;
+
 /** A public name is an address of its own, so no new site may make a name and an id match. */
 const NAME_IS_NO_ID_ON_INSERT = `
 CREATE TRIGGER sites_insert_keeps_names_and_ids_apart BEFORE INSERT ON sites
@@ -210,7 +228,7 @@ BEGIN SELECT RAISE(ABORT, 'the audit log is append-only'); END`;
 /** Creates every table, index, and trigger of the first schema. */
 export const CREATE_SCHEMA: Step = {
   number: 1,
-  description: "create the sites, versions, tokens, settings, secrets, totals, audit, request_counts, and uploads tables",
+  description: "create the sites, versions, tokens, settings, secrets, totals, audit, request_counts, uploads, and logins tables",
   statements: [
     SITES,
     VERSIONS,
@@ -222,11 +240,13 @@ export const CREATE_SCHEMA: Step = {
     AUDIT,
     REQUEST_COUNTS,
     UPLOADS,
+    LOGINS,
     "CREATE INDEX sites_by_change ON sites (trashed, updated_at DESC, id DESC)",
     "CREATE INDEX sites_by_owner ON sites (owner, trashed, updated_at DESC, id DESC)",
     "CREATE INDEX tokens_by_creation ON tokens (created_at DESC, id DESC)",
     "CREATE INDEX uploads_by_age ON uploads (created_at, id)",
     "CREATE INDEX uploads_by_state ON uploads (state, owner, number, bytes)",
+    "CREATE INDEX logins_by_expiry ON logins (expires_at)",
     NAME_IS_NO_ID_ON_INSERT,
     NAME_IS_NO_ID_ON_UPDATE,
     FIRST_VERSION_COMES_WITH_THE_SITE,

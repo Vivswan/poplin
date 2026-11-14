@@ -10,7 +10,7 @@ const NOT_A_TOKEN = "the token must be printable ASCII with no spaces";
 const LOGIN_SCHEMA = v.pipe(
   v.strictObject(
     {
-      server: v.pipe(v.string(NOT_A_SERVER), v.check(isOrigin, NOT_A_SERVER)),
+      server: v.pipe(v.string(NOT_A_SERVER), v.check(isServer, NOT_A_SERVER)),
       token: v.pipe(v.string(NOT_A_TOKEN), v.regex(TOKEN_PATTERN, NOT_A_TOKEN)),
     },
     NOT_AN_OBJECT,
@@ -25,7 +25,12 @@ export type Login = v.InferOutput<typeof LOGIN_SCHEMA>;
 /** A login, or what is wrong with the value in words that never quote it, since it may hold a token. */
 type ParsedLogin = { readonly ok: true; readonly login: Login } | { readonly ok: false; readonly problem: string };
 
-function isOrigin(server: string): boolean {
+/**
+ * Decide whether a text is the address of an install.
+ *
+ * @returns `true` for an `https://` origin with nothing after the host
+ */
+export function isServer(server: string): boolean {
   if (!URL.canParse(server)) return false;
 
   const url = new URL(server);

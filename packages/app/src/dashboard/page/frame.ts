@@ -9,6 +9,7 @@ import { STYLE } from "./style";
 /** The tabs, in the order shown, and the path each opens. */
 const TABS: readonly { readonly tab: Tab; readonly path: string; readonly label: string }[] = [
   { tab: "sites", path: "/", label: "Sites" },
+  { tab: "tokens", path: "/tokens", label: "Tokens" },
   { tab: "settings", path: "/settings", label: "Settings" },
   { tab: "activity", path: "/activity", label: "Activity" },
   { tab: "usage", path: "/usage", label: "Usage" },

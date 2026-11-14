@@ -33,6 +33,7 @@ const CODES: Readonly<Record<Code, true>> = {
   too_many_sites: true,
   not_set_up: true,
   too_large: true,
+  too_many_requests: true,
   internal: true,
 };
 
@@ -221,7 +222,8 @@ describe("run", () => {
     ["half a login", { POPLIN_SERVER: ORIGIN }, "list", 3, "the login cannot be used: POPLIN_SERVER is set and POPLIN_TOKEN is not; set POPLIN_TOKEN too, or unset POPLIN_SERVER to use the saved login"],
     ["another install than the login's", undefined, "list --server https://other.example.com", 3, "there is no token for that install: https://other.example.com"],
     ["an address that is not https", undefined, "list --server http://localhost:8787", 2, "--server takes an https:// address with nothing after the host"],
-    ["login", {}, "login", 4, "this build of poplin cannot do that: poplin login"],
+    ["login with no install to ask", {}, "login", 3, "login needs the address of the install"],
+    ["login at an address that is not https", {}, "login --server http://localhost:8787", 2, "--server takes an https:// address with nothing after the host"],
     ["setup", {}, "setup", 4, "this build of poplin cannot do that: poplin setup"],
     ["config --reset", undefined, "config trash_days --reset", 4, "this build of poplin cannot do that: config --reset"],
   ])("%s sends nothing and exits with its own code", async (_name, env, line, code, sentence) => {

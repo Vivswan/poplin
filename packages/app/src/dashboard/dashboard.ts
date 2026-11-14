@@ -3,6 +3,9 @@
 //   GET  /                         the sites, or the trash with ?view=trash
 //   GET  /sites/<label>            one site
 //   POST /sites/<label>/<change>   settings, rollback, new-link, delete, restore, delete-forever
+//   GET  /tokens                   the tokens, and where a computer's code is typed
+//   GET  /tokens/allow?code=<code> one computer's login, to allow or deny
+//   POST /tokens/<change>          allow, deny, revoke
 //   GET  /settings                 the settings
 //   POST /settings/<change>        save, sign-everyone-out
 //   GET  /activity                 the audit log
@@ -14,11 +17,13 @@
 
 import { readConfig } from "@poplin/core/src/actions/config";
 import type { Install } from "@poplin/core/src/actions/records";
+import { ALLOW_PAGE } from "@poplin/core/src/api/routes";
 import type { Login } from "@poplin/core/src/auth/logins";
 import { type Context, Hono, type MiddlewareHandler } from "hono";
 import { bodyLimit } from "hono/body-limit";
 import { NONCE, secureHeaders } from "hono/secure-headers";
 
+import type { Counters } from "../limits/limits";
 import type { SiteAddresses } from "../sites/addresses";
 import { showActivity } from "./activity/activity-page";
 import { framePage, refusedPage } from "./page/frame";
@@ -31,6 +36,9 @@ import { showSettings } from "./settings/settings-page";
 import { SITE_CHANGES } from "./sites/site-changes";
 import { showSite } from "./sites/site-page";
 import { showSites } from "./sites/sites-page";
+import { showAllow } from "./tokens/allow-page";
+import { TOKEN_CHANGES } from "./tokens/token-changes";
+import { showTokens } from "./tokens/tokens-page";
 import { showUsage } from "./usage/usage-page";
 import type { DomainPlug } from "./domain/records";
 import { DOMAIN_CHANGES } from "./domain/domain-changes";
@@ -57,6 +65,15 @@ const NO_SESSION = { ok: false } as const;
 /** The whole answer to a failure nothing above handled: it tells nothing of the cause. */
 const FAILURE = "Something went wrong.";
 
+/** The most times a minute one visitor may look a login's code up or decide one: a person needs two, and a guesser gets no more. */
+const CODES_PER_MINUTE = 20;
+
+/** What a counter that cannot answer is taken to say: the minute is full, so a try at a code is refused. */
+const UNCOUNTED = { ok: false } as const;
+
+/** The addresses that take a login's code. */
+const CODE_PATHS = [ALLOW_PAGE, "/tokens/deny"];
+
 /** What a dashboard is built from. */
 interface DashboardParts {
   /** The install the actions work on: its database, store, clock, and addresses. */
@@ -73,6 +90,12 @@ interface DashboardParts {
 
   /** The provider's side of the install. Left out, the dashboard has no Domain tab and answers none of its paths. */
   readonly domain?: DomainPlug;
+
+  /** Where the tries at a login's code are counted, a minute at a time. */
+  readonly counters: Pick<Counters, "takeMinute">;
+
+  /** The key one visitor's tries are counted by: `visitorKey` of the address the host itself saw. */
+  readonly visitorOf: (request: Request) => Promise<string>;
 }
 
 /** What the handlers of one request share. `tabs` says whether the frame shows the Domain tab. */
@@ -111,6 +134,14 @@ async function change<Subject extends string[]>(context: Context<Shared>, change
   if (wanted === undefined) return context.notFound();
 
   return context.redirect(await wanted(context.get("visit"), ...subject, context.get("form")), 303);
+}
+
+/** Count one try at a login's code against its visitor's minute, and say whether it fits. A counter that cannot answer refuses the try. */
+async function takesCode(parts: DashboardParts, request: Request): Promise<boolean> {
+  const take = async (): Promise<{ readonly ok: boolean }> =>
+    parts.counters.takeMinute({ scope: "visitor", key: `login-code:${await parts.visitorOf(request)}`, limit: CODES_PER_MINUTE }, parts.install.now());
+
+  return (await take().catch(() => UNCOUNTED)).ok;
 }
 
 /**
@@ -162,6 +193,12 @@ export function createDashboard(parts: DashboardParts): Dashboard {
     return next();
   };
 
+  const fewCodes: MiddlewareHandler<Shared> = async (context, next) => {
+    if (!(await takesCode(parts, context.req.raw))) return refuse(context, "too_many_tries", 429);
+
+    return next();
+  };
+
   app.use(
     secureHeaders({
       contentSecurityPolicy: { defaultSrc: ["'none'"], styleSrc: [NONCE], formAction: ["'self'"], frameAncestors: ["'none'"], baseUri: ["'none'"] },
@@ -174,6 +211,10 @@ export function createDashboard(parts: DashboardParts): Dashboard {
   app.get("/", async (context) => respond(context, await showSites(context.get("visit"))));
   app.get("/sites/:site", async (context) => respond(context, await showSite(context.get("visit"), context.req.param("site"))));
   app.post("/sites/:site/:change", (context) => change(context, SITE_CHANGES, context.req.param("change"), context.req.param("site")));
+  for (const path of CODE_PATHS) app.use(path, fewCodes);
+  app.get("/tokens", async (context) => respond(context, await showTokens(context.get("visit"))));
+  app.get(ALLOW_PAGE, async (context) => respond(context, await showAllow(context.get("visit"))));
+  app.post("/tokens/:change", (context) => change(context, TOKEN_CHANGES, context.req.param("change")));
   app.get("/settings", async (context) => respond(context, await showSettings(context.get("visit"))));
   app.post("/settings/:change", (context) => change(context, SETTINGS_CHANGES, context.req.param("change")));
   app.get("/activity", async (context) => respond(context, await showActivity(context.get("visit"))));

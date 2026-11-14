@@ -130,6 +130,9 @@ property(
       terminal: { asks: false, progress: true },
       ask: async () => "",
       timeoutMs: 1000,
+      computer: "laptop",
+      open: () => undefined,
+      pause: async () => "over",
     });
     const text = printed.join("\n");
 

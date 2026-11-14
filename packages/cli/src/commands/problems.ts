@@ -15,7 +15,7 @@ interface Row {
 
 /** The codes the API refuses with, in the API's own spelling. */
 const API_ROWS = {
-  not_logged_in: { sentence: "no token was sent, or it expired", hint: "set POPLIN_SERVER and POPLIN_TOKEN to the install's address and a live token of it", exit: "failed" },
+  not_logged_in: { sentence: "no token was sent, or it expired", hint: "to log in again: poplin login", exit: "failed" },
   not_allowed: { sentence: "this token may not do that", hint: "a publisher's token manages only the sites it published; poplin whoami shows the token", exit: "failed" },
   not_found: { sentence: "no site with that id or public name", hint: "poplin list shows every site", exit: "failed" },
   no_such_version: { sentence: "the site keeps no such version", hint: "poplin show <site> lists the versions", exit: "failed" },
@@ -38,17 +38,22 @@ const API_ROWS = {
   too_many_sites: { sentence: "the install holds as many sites as it may", hint: "poplin config max_sites shows the limit; poplin list --trash shows what still counts", exit: "failed" },
   not_set_up: { sentence: "the install is not set up", hint: "open the install's address in a browser and finish its setup", exit: "failed" },
   too_large: { sentence: "a size limit is passed", hint: "poplin config shows the limits", exit: "failed" },
+  too_many_requests: { sentence: "the install is asked too often from this address, or too many logins are waiting", hint: "wait a minute, then try again", exit: "failed" },
   internal: { sentence: "the install failed to do that", hint: "try again; poplin doctor reports on the install", exit: "failed" },
 } as const satisfies Readonly<Record<string, Row>>;
 
 /** The codes of what goes wrong on this machine, or between it and the install. */
 const LOCAL_ROWS = {
-  no_login: { sentence: "not logged in", hint: "set POPLIN_SERVER to the install's address and POPLIN_TOKEN to a token of it", exit: "no-install" },
+  no_login: { sentence: "not logged in", hint: "to log in: poplin login --server <the install's address>", exit: "no-install" },
+  no_server: { sentence: "login needs the address of the install", hint: "poplin login --server https://<the install's address>", exit: "no-install" },
+  login_denied: { sentence: "the login was denied on the dashboard", hint: "nothing was saved on this machine", exit: "failed" },
+  login_expired: { sentence: "nobody allowed the login before it ran out", hint: "nothing was saved on this machine; to ask again: poplin login", exit: "failed" },
+  interrupted: { sentence: "the login was stopped", hint: "nothing was saved on this machine", exit: "failed" },
   bad_login: { sentence: "the login cannot be used", exit: "no-install" },
   bad_server: { sentence: "--server takes an https:// address with nothing after the host", hint: "for example: --server https://poplin.example.com", exit: "usage-error" },
   wrong_server: {
     sentence: "there is no token for that install",
-    hint: "a token is sent only to the install it was saved for; set POPLIN_SERVER and POPLIN_TOKEN for the other one",
+    hint: "a token is sent only to the install it was saved for; to log in to the other one: poplin login --server <its address>",
     exit: "no-install",
   },
   unreadable: { sentence: "nothing can be published", exit: "failed" },

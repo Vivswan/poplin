@@ -28,6 +28,7 @@ const STATUS = {
   too_many_sites: 409,
   not_set_up: 409,
   too_large: 413,
+  too_many_requests: 429,
   internal: 500,
 } as const;
 
@@ -56,11 +57,12 @@ const MESSAGES: Readonly<Record<Code, string>> = {
   too_many_sites: "the install holds as many sites as it may",
   not_set_up: "the install is not set up",
   too_large: "a size limit is passed",
+  too_many_requests: "too many requests came from this address, or too many logins are waiting: wait, then ask again",
   internal: "the install failed to do that",
 };
 
-/** The form of a token, wherever it sits in a text. */
-const TOKEN_SHAPE = /poplin_[0-9a-f]{16}_[0-9a-f]{64}/i;
+/** The form of a token, and of the secret of a computer's login, wherever one sits in a text. */
+const TOKEN_SHAPE = /poplin_(?:login_)?[0-9a-f]{16}_[0-9a-f]{64}/i;
 
 /** What goes on every response: no cache keeps it, and no browser guesses at its type. No header opens the API to another origin's scripts. */
 const HEADERS = { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff" } as const;
@@ -81,7 +83,7 @@ function json(status: number, body: unknown, extra: Readonly<Record<string, stri
 /**
  * Build the response of a refusal.
  *
- * @param about - the argument, the limit, or the path the code is about, as the action named it; one that holds a token is left out, since a caller may have sent a token where a name goes
+ * @param about - the argument, the limit, or the path the code is about, as the action named it; one that holds a token or a login's secret is left out, since a caller may have sent one where a name goes
  * @param headers - headers to send beside the fixed ones, such as `Allow`
  */
 export function refusal(code: Code, about?: string, headers?: Readonly<Record<string, string>>): Response {

@@ -10,12 +10,19 @@ import { MemoryStore } from "@poplin/core/src/storage/memory";
 
 import { createDashboard } from "../../../src/dashboard/dashboard";
 import type { DomainPlug } from "../../../src/dashboard/domain/records";
+import { MemoryCounters } from "../../../src/limits/memory-counters";
 import { mintSessionCookie, readSession } from "../../../src/login/session";
 import { NOW, openInstall } from "../../sites/support/install";
 import { ADDRESSES } from "../../sites/support/layout";
 
 /** The origin every test request is sent to. */
 export const ORIGIN = "https://admin.example.com";
+
+/** What counts a test dashboard's tries at a login's code, all of them as one visitor's. */
+export function codeCounts(counters = new MemoryCounters()): Pick<Parameters<typeof createDashboard>[0], "counters" | "visitorOf"> {
+  // The method is found anew on every request, so a test that swaps one in is heard.
+  return { counters: { takeMinute: (window, now) => counters.takeMinute(window, now) }, visitorOf: async () => "one-visitor" };
+}
 
 /** The key material of the test dashboard's tokens. */
 export const CSRF_SECRET = new Uint8Array(32).fill(9);
@@ -38,6 +45,7 @@ export interface Opened {
   readonly owner: Awaited<ReturnType<typeof openInstall>>["owner"];
   readonly cookie: string;
   readonly clock: { now: number };
+  readonly counters: MemoryCounters;
   readonly publish: (name: string, access?: "private" | "unlisted" | "public") => Promise<Site>;
   readonly fetch: (request: Request) => Promise<Response>;
   readonly get: (path: string, headers?: Readonly<Record<string, string>>) => Promise<Response>;
@@ -77,7 +85,8 @@ export async function openDashboard(domain?: DomainPlug): Promise<Opened> {
     return readSession(headers, { key: await importSessionKey(stored), logins: logins.value, now: clock.now });
   };
 
-  const dashboard = createDashboard({ install, readSession: sessionOf, addresses: base.serving.addresses, csrfSecret: CSRF_SECRET, domain });
+  const counters = new MemoryCounters();
+  const dashboard = createDashboard({ install, readSession: sessionOf, addresses: base.serving.addresses, csrfSecret: CSRF_SECRET, domain, ...codeCounts(counters) });
   const get: Opened["get"] = (path, headers = {}) => dashboard.fetch(new Request(`${ORIGIN}${path}`, { headers: { Cookie: cookie, ...headers } }));
 
   const token: Opened["token"] = async () => {
@@ -104,6 +113,7 @@ export async function openDashboard(domain?: DomainPlug): Promise<Opened> {
     owner: base.owner,
     cookie,
     clock,
+    counters,
     publish: (name, access = "unlisted") => base.publish({ name, access, files: {} }),
     fetch: (request) => dashboard.fetch(request),
     get,

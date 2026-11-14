@@ -150,6 +150,9 @@ property(
         return "report--k3f9x2ab71qz";
       },
       timeoutMs: 1000,
+      computer: "laptop",
+      open: () => undefined,
+      pause: async () => "over",
     });
     const text = printed.join("\n");
 

@@ -1,15 +1,18 @@
 // A client chooses the method, the path, the query, every header, and the body: the API must answer each of them with one of its published statuses, never throw, and change nothing for a caller with no live token.
+// The two routes a computer logs in through answer such a caller, and still change nothing it can use.
 
 import { expect } from "bun:test";
 import fc from "fast-check";
 
-import { ROUTES } from "../../packages/core/src/api/routes";
+import { OPEN_ROUTES, ROUTES } from "../../packages/core/src/api/routes";
 import { type ApiInstall, ORIGIN, openApi } from "../../packages/app/tests/api/support/install";
 import { fuzzTarget } from "./config";
 import { hostile } from "./hostile";
 
-const ANSWERS = [200, 400, 401, 403, 404, 405, 409, 413, 415];
+const ANSWERS = [200, 400, 401, 403, 404, 405, 409, 413, 415, 429];
 const UNPROVEN = [401, 404, 405];
+const OPEN_PATHS: readonly string[] = OPEN_ROUTES.map((name) => ROUTES[name].path());
+const UNPROVEN_ON_OPEN = [200, 400, 405, 413, 415, 429];
 const METHODS = ["GET", "GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS", "PROPFIND"];
 const CONTENT_TYPES = ["application/json", "application/json; charset=utf-8", "application/octet-stream", "text/plain", "multipart/form-data; boundary=x", "APPLICATION/JSON", ""];
 const NO_SITE = "zzzzzzzzzzzz";
@@ -186,7 +189,7 @@ property(
 
       const facts = {
         published: ANSWERS.includes(response.status),
-        unprovenRefused: proven || UNPROVEN.includes(response.status),
+        unprovenRefused: proven || (OPEN_PATHS.includes(new URL(address).pathname) ? UNPROVEN_ON_OPEN : UNPROVEN).includes(response.status),
         unprovenChanged: !Bun.deepEquals(before, after),
         crossOriginOpened: [...response.headers.keys()].some((name) => name.startsWith("access-control-")),
         stored: response.headers.get("Cache-Control") !== "no-store" || response.headers.get("X-Content-Type-Options") !== "nosniff",

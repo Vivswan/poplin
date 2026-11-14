@@ -5,6 +5,8 @@
 // An implementation keeps these rules itself, whatever it stores records in: a site always holds its live version, no two sites share a folder,
 // and no site's public name is any site's id. The cases every implementation runs are in `tests/database/support/database-contract.ts`.
 
+import type { ComputerLogin, LoginId, PendingLogin, UserCode } from "../auth/computer-logins";
+import type { Login } from "../auth/logins";
 import type { TokenId, TokenRecord } from "../auth/tokens";
 import type { PublicName, SiteName } from "../names/names";
 import type { AuditAction, AuditEntry } from "../records/audit";
@@ -185,6 +187,18 @@ export interface UploadsPage {
   readonly next?: UploadsCursor;
 }
 
+/** What an admin decides about a pending login, and when. */
+export interface LoginDecision {
+  /** Whether the computer is let in. */
+  readonly state: "allowed" | "denied";
+
+  /** The admin who decides, whose email signs the audit entry. */
+  readonly by: Login;
+
+  /** The clock, in milliseconds since the epoch: a login that ran out by then is not decided. */
+  readonly at: number;
+}
+
 /** An entry for the audit log that goes with no change, such as a login. */
 export interface AuditNote {
   readonly action: AuditAction;
@@ -213,7 +227,7 @@ export interface CountedRequests {
   readonly requests: number;
 }
 
-/** The one doorway to stored sites, tokens, settings, the signing key, the audit log, and the day's request counts. */
+/** The one doorway to stored sites, tokens, pending logins, settings, the signing key, the audit log, and the day's request counts. */
 export interface Database {
   /**
    * Make a site under a fresh id, with version 1 as its only version and its live one: published at `signed.at` by `signed.by`, of the draft's `bytes` and `files`.
@@ -393,6 +407,50 @@ export interface Database {
 
   /** Remove a token's record, so the token proves nothing from then on. */
   revokeToken(id: TokenId, signed: Signed): Promise<{ readonly kind: "done"; readonly token: TokenRecord } | Refused<"not_found">>;
+
+  /**
+   * Store a pending login, only while fewer than `most` logins that have not run out at its `createdAt` are stored. It writes no audit entry: a pending login grants nothing.
+   *
+   * @returns `full` at the bound, or `taken` when its id or its code is already a login's
+   */
+  addComputerLogin(login: PendingLogin, most: number): Promise<{ readonly kind: "done" } | Refused<"full" | "taken">>;
+
+  /** The login whose secret has this id, whatever its state and whether or not it ran out. */
+  getComputerLogin(id: LoginId): Promise<ComputerLogin | undefined>;
+
+  /** The login a person sees under this code, whatever its state and whether or not it ran out. */
+  findComputerLogin(code: UserCode): Promise<ComputerLogin | undefined>;
+
+  /**
+   * Allow or deny the login under a code, only while it is pending and has not run out. It writes one `login_allowed` or `login_denied` audit entry, which holds the scope and the computer's name and nothing of the secret.
+   *
+   * @returns the login after the decision, or `not_pending` for a code of no login and for a login that was decided or ran out
+   */
+  decideComputerLogin(code: UserCode, decision: LoginDecision): Promise<{ readonly kind: "done"; readonly login: ComputerLogin } | Refused<"not_pending">>;
+
+  /**
+   * Note that a pending login's terminal asked whether it was decided, only when it last asked at or before `notAfter`.
+   *
+   * @returns `false` for a terminal that asked again too soon, and for a login that is not pending
+   */
+  pollComputerLogin(id: LoginId, poll: { readonly at: number; readonly notAfter: number }): Promise<boolean>;
+
+  /**
+   * Turn an allowed login into its token, in one step: the token's record is stored with a `token_added` audit entry signed by the admin who allowed the login, and the login is removed.
+   *
+   * Of calls made at the same moment one is done, so a login gives one token.
+   *
+   * @param token - a new token's record, of the login's scope, made at the clock's time
+   * @returns `not_allowed` for a login that is pending, denied, gone, run out at the token's `createdAt`, or of another scope than the token
+   */
+  redeemComputerLogin(id: LoginId, token: TokenRecord): Promise<{ readonly kind: "done" } | Refused<"not_allowed">>;
+
+  /**
+   * Remove every login that ran out at or before a moment, whatever its state.
+   *
+   * @returns how many were removed
+   */
+  sweepComputerLogins(now: number): Promise<number>;
 
   /** The install's settings, `undefined` before setup stored them. */
   readSettings(): Promise<SettingValues | undefined>;

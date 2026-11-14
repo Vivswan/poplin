@@ -1,6 +1,6 @@
 // The Worker: every request and every scheduled run enters here.
 //
-//   <admin hostname>/api and below   the API, which checks the bearer token itself
+//   <admin hostname>/api and below   the API, which checks the bearer token itself; its two login routes take none and are counted by visitor
 //   <admin hostname>/login           the login, which checks the Access token itself
 //   <admin hostname>/...             the dashboard, which checks the session cookie itself
 //   any other hostname               the limits, then serving; one that is no site's gets serving's own 404
@@ -12,7 +12,10 @@
 // so a removed login or "sign everyone out" ends a dashboard session at once and a site's within the minute.
 
 import { createDashboard } from "@poplin/app/src/dashboard/dashboard";
+import { visitorKey } from "@poplin/app/src/limits/visitor-key";
 import { readSession } from "@poplin/app/src/login/session";
+import type { Database } from "@poplin/core/src/database/database";
+import { clientAddress } from "../limits/client-address";
 import { INSTALL_OBJECTS } from "../zone/install-objects";
 import type { Bindings } from "./bindings";
 import { type Held, readHeld } from "./held";
@@ -51,11 +54,14 @@ function failureAnswer(request: Request, failure: Failure): Response {
 
 /** Where the dashboard answers: every path of the admin hostname that is neither the API nor the login. */
 function answerDashboard(request: Request, instance: Instance, held: Held): Promise<Response> {
+  const now = instance.install.now();
   const dashboard = createDashboard({
     install: instance.install,
-    readSession: (headers) => readSession(headers, { key: held.sessionKey, logins: held.logins, now: instance.install.now() }),
+    readSession: (headers) => readSession(headers, { key: held.sessionKey, logins: held.logins, now }),
     addresses: instance.addresses,
     csrfSecret: held.formsSecret,
+    counters: instance.counters,
+    visitorOf: (asked) => visitorKey(clientAddress(asked.headers), held.visitorSecret, now),
   });
 
   return dashboard.fetch(request);
@@ -75,7 +81,7 @@ export function createWorker(given: Partial<Outside> = {}): Required<Pick<Export
 
   async function attempt(env: Bindings): Promise<Started> {
     try {
-      const started = await startInstance(env, outside);
+      const started = await startInstance(env, outside, visitorOf);
       if (!started.ok) starting = undefined;
 
       return started;
@@ -93,9 +99,9 @@ export function createWorker(given: Partial<Outside> = {}): Required<Pick<Export
   }
 
   // A read that fails means the install may have lost its settings or its key, so the instance starts again from its bindings.
-  async function read(instance: Instance): Promise<Held> {
+  async function read(database: Database): Promise<Held> {
     try {
-      return await readHeld(instance.install.database);
+      return await readHeld(database);
     } catch (error) {
       starting = undefined;
       holding = undefined;
@@ -104,11 +110,18 @@ export function createWorker(given: Partial<Outside> = {}): Required<Pick<Export
     }
   }
 
-  function held(instance: Instance, lifetime: number): Promise<Held> {
+  function held(database: Database, lifetime: number): Promise<Held> {
     const at = outside.now();
-    if (holding === undefined || at - holding.at >= lifetime) holding = { at, value: read(instance) };
+    if (holding === undefined || at - holding.at >= lifetime) holding = { at, value: read(database) };
 
     return holding.value;
+  }
+
+  // The API counts a computer that logs in by the same key a site counts its visitors by, under the secret a site request trusts.
+  async function visitorOf(request: Request, database: Database): Promise<string> {
+    const { visitorSecret } = await held(database, SETTINGS_LIFETIME_MS);
+
+    return visitorKey(clientAddress(request.headers), visitorSecret, outside.now());
   }
 
   async function answer(request: Request, env: Bindings): Promise<Response> {
@@ -117,13 +130,13 @@ export function createWorker(given: Partial<Outside> = {}): Required<Pick<Export
 
     const { instance } = started;
     const url = new URL(request.url);
-    if (url.hostname !== instance.layout.adminHostname) return answerSite(request, instance, await held(instance, SETTINGS_LIFETIME_MS));
+    if (url.hostname !== instance.layout.adminHostname) return answerSite(request, instance, await held(instance.install.database, SETTINGS_LIFETIME_MS));
 
     if (url.pathname === API_PATH || url.pathname.startsWith(`${API_PATH}/`)) return instance.api.fetch(request);
 
-    if (url.pathname === INSTALL_OBJECTS.loginPath) return answerLogin(request, instance, await held(instance, FRESH));
+    if (url.pathname === INSTALL_OBJECTS.loginPath) return answerLogin(request, instance, await held(instance.install.database, FRESH));
 
-    return answerDashboard(request, instance, await held(instance, FRESH));
+    return answerDashboard(request, instance, await held(instance.install.database, FRESH));
   }
 
   return {

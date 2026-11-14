@@ -61,7 +61,7 @@ A search engine's crawler reads a public site without `noindex` only when both a
 | --- | --- | --- |
 | a person at the dashboard or a private site | a login cookie | one login through Cloudflare Access, by email code or Google; the Worker checks the email against the list of allowed logins, then sets the cookie |
 | the CLI, or an agent through `poplin mcp` | a token the Worker issues | the person runs `poplin login` once and allows that computer in a browser; the token is listed on the dashboard and can be revoked there |
-| a machine with no browser | the same kind of token | `poplin login` prints an address and a short code to open on another device; or a token created on the dashboard and placed where the agent runs |
+| a machine with no browser | the same kind of token | `poplin login` prints an address and a short code to open on another device, where the person allows that computer |
 | the Worker, to the bucket and the database | its bindings inside Cloudflare | no bucket key and no database key exists outside Cloudflare |
 
 A token the Worker issues is never a Cloudflare API key. It has one of two scopes:

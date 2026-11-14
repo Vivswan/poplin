@@ -134,10 +134,21 @@ export const COMMANDS = [
   {
     name: "login",
     group: "you, on this machine",
-    about: "authorize this machine",
+    about: "log this machine in: you allow it on the dashboard",
     arguments: [],
-    flags: [{ name: "--publisher", about: "save a publisher's token, for an agent" }, ...INSTALL_FLAGS],
-    examples: ["poplin login", "poplin login --publisher"],
+    flags: [
+      { name: "--publisher", about: "save a publisher's token, for an agent" },
+      { name: "--name", value: "<name>", about: "what the dashboard calls this machine" },
+      { name: "--no-browser", about: "print the address, and open no browser" },
+      ...INSTALL_FLAGS,
+    ],
+    examples: ["poplin login --server https://poplin.example.com", "poplin login --publisher --name ci-runner"],
+    notes: [
+      "It prints an address and a code. Open the address in a browser where you",
+      "are logged in to the dashboard, check the code, and allow it. The token is",
+      "saved on this machine. With --json the address and the code are the first",
+      "line, and the result the second.",
+    ],
   },
   {
     name: "logout",

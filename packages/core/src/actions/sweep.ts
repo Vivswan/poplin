@@ -1,4 +1,4 @@
-// The sweep a scheduled job runs: expired sites go to the trash, sites whose time in the trash has passed go for good, and uploads past their time go with their files.
+// The sweep a scheduled job runs: expired sites go to the trash, sites whose time in the trash has passed go for good, uploads past their time go with their files, and logins that ran out go last.
 
 import * as v from "valibot";
 
@@ -33,12 +33,15 @@ const STEP = v.strictObject({ limit: v.pipe(POSITIVE, v.maxValue(MAX_STEP)), fro
  * What one call did. `next` is where the walk goes on, and is absent once it has looked at every site, all of the trash, and every old upload.
  *
  * `uploads` counts the upload records removed. `left` names the prefixes of removed sites and of old uploads that may still hold files.
+ *
+ * `logins` counts the logins of computers removed because they ran out, which the last step of a walk does.
  */
 interface Swept {
   readonly ok: true;
   readonly trashed: number;
   readonly deleted: number;
   readonly uploads: number;
+  readonly logins: number;
   readonly left: readonly string[];
   readonly next?: v.InferOutput<typeof PLACE>;
 }
@@ -110,7 +113,7 @@ async function removeOldUploads(install: Install, uploads: readonly Upload[]): P
 }
 
 /**
- * Take one step of the walk that moves every site past its expiry to the trash, removes for good every site that has sat in the trash for `trash_days`, then removes every upload begun over 25 hours ago.
+ * Take one step of the walk that moves every site past its expiry to the trash, removes for good every site that has sat in the trash for `trash_days`, removes every upload begun over 25 hours ago, then removes every login of a computer that ran out.
  *
  * One step lists once and looks at up to `limit` sites or uploads, so its cost is bounded: one read per site looked at, one change per site moved or removed, and one bounded file removal per site or upload removed.
  * A walk run again at the same moment finds nothing left to do.
@@ -138,16 +141,17 @@ export async function sweepExpired(
   if ("uploads" in from) {
     const old = await install.database.listUploads({ before: sweepableBefore(signed.at), limit, after: from.after });
     const removed = await removeOldUploads(install, old.uploads);
-    const swept = { ok: true as const, trashed: 0, deleted: 0, ...removed };
+    const swept = { ok: true as const, trashed: 0, deleted: 0, logins: 0, ...removed };
+    if (old.next !== undefined) return { ...swept, next: { uploads: true, after: old.next } };
 
-    return old.next === undefined ? swept : { ...swept, next: { uploads: true, after: old.next } };
+    return { ...swept, logins: await install.database.sweepComputerLogins(signed.at) };
   }
 
   const page = await install.database.listSites({ trash: from.trash, limit, after: from.after });
   const trashed = from.trash ? 0 : await trashExpired(install, page.sites, signed);
   const { deleted, left } = from.trash ? await removeSatOut(install, page.sites, { trashDays: settings.trash_days, signed }) : { deleted: 0, left: [] };
 
-  const done = { ok: true as const, trashed, deleted, uploads: 0, left };
+  const done = { ok: true as const, trashed, deleted, uploads: 0, logins: 0, left };
   if (page.next !== undefined) return { ...done, next: { trash: from.trash, after: page.next } };
 
   if (!from.trash) return { ...done, next: { trash: true } };

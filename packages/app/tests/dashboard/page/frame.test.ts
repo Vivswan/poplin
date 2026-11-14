@@ -23,6 +23,7 @@ test("a heading, a title, a notice, and a nonce reach the document escaped, in t
 test("the frame marks exactly one tab as the current page: the page's own", async () => {
   const frames = [
     ["sites", "Sites"],
+    ["tokens", "Tokens"],
     ["settings", "Settings"],
     ["activity", "Activity"],
     ["usage", "Usage"],

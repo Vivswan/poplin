@@ -33,6 +33,8 @@ const WORDS: Readonly<Record<Exclude<AuditAction, "domain_synced">, string>> = {
   settings_changed: "changed the settings of the install",
   "signed_everyone_out": "signed everyone out",
   login: "logged in",
+  login_allowed: "allowed a computer to log in",
+  login_denied: "denied a computer's login",
 };
 
 /** One entry of the log. */

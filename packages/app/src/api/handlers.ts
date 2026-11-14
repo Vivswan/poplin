@@ -5,6 +5,7 @@ import { beginImport, IMPORT_REQUEST } from "@poplin/core/src/actions/begin-impo
 import { AUDIT_QUERY, listAudit } from "@poplin/core/src/actions/audit-log";
 import { beginPublish, PUBLISH_REQUEST, type UploadLimits } from "@poplin/core/src/actions/begin-publish";
 import { SITE_CHANGES } from "@poplin/core/src/actions/changes";
+import { beginLogin, LOGIN_REQUEST, LOGIN_SECRET, redeemLogin } from "@poplin/core/src/actions/computer-logins";
 import { changeConfig, readConfig } from "@poplin/core/src/actions/config";
 import { DELETE_OPTIONS, deleteSite } from "@poplin/core/src/actions/delete";
 import { EXPORT_FILE_QUERY, EXPORT_FILES_QUERY, EXPORT_QUERY, EXPORT_SITE_QUERY, exportFile, exportFiles, exportSettings, exportSite, exportSites } from "@poplin/core/src/actions/export";
@@ -21,7 +22,7 @@ import { getSite } from "@poplin/core/src/actions/show";
 import { signEveryoneOut } from "@poplin/core/src/actions/sign-out";
 import { showUpload } from "@poplin/core/src/actions/show-upload";
 import { uploadFile } from "@poplin/core/src/actions/upload-file";
-import type { ROUTES } from "@poplin/core/src/api/routes";
+import { ALLOW_PAGE, CODE_KEY, type OPEN_ROUTES, type ROUTES } from "@poplin/core/src/api/routes";
 import type { Actor } from "@poplin/core/src/auth/scopes";
 import type { TokenRecord } from "@poplin/core/src/auth/tokens";
 import * as v from "valibot";
@@ -43,6 +44,9 @@ export const QUERIES: { readonly [Name in RouteName]?: QueryShape } = {
 
 /** The name of a route in the table. */
 export type RouteName = keyof typeof ROUTES;
+
+/** The name of a route that takes no token. */
+export type OpenName = (typeof OPEN_ROUTES)[number];
 
 /** One request as its handler takes it: who asks, and what the route's path, query, and body hold. */
 export interface Call {
@@ -74,8 +78,20 @@ export interface Call {
   readonly limits: UploadLimits;
 }
 
+/** One request to a route that takes no token: nobody asks, so there is no actor. */
+interface OpenCall {
+  /** The install the action runs on. */
+  readonly install: Install;
+
+  /** The parsed JSON body. */
+  readonly body: unknown;
+
+  /** The origin the request was sent to, which is the dashboard's. */
+  readonly origin: string;
+}
+
 /** What the handler of a route answers: the route's `done` type, or a refusal. */
-type Handler<Name extends RouteName> = (call: Call) => Promise<Result<NonNullable<(typeof ROUTES)[Name]["types"]>["done"]>>;
+type Handler<Name extends RouteName, Asked = Call> = (call: Asked) => Promise<Result<NonNullable<(typeof ROUTES)[Name]["types"]>["done"]>>;
 
 /** Check a sent value against an action's schema, and run the action on what passes. */
 async function checked<Schema extends v.GenericSchema, Answer>(
@@ -113,8 +129,22 @@ async function storeBody({ install, actor, named, query, request, limits }: Call
   }
 }
 
-/** The handler of every route, by the route's name. A route without one does not compile. */
-export const HANDLERS: { readonly [Name in RouteName]: Handler<Name> } = {
+/** Begin a login, and add the address of the dashboard page where an admin decides it. */
+async function beginWithAddress({ install, body, origin }: OpenCall): ReturnType<Handler<"beginLogin">> {
+  const begun = await checked(LOGIN_REQUEST, body, (request) => beginLogin(install, request));
+  if (!begun.ok) return begun;
+
+  return { ...begun, verify_url: `${origin}${ALLOW_PAGE}?${new URLSearchParams({ [CODE_KEY]: begun.code })}` };
+}
+
+/** The handler of every route that takes no token, by the route's name. */
+export const OPEN_HANDLERS: { readonly [Name in OpenName]: Handler<Name, OpenCall> } = {
+  beginLogin: beginWithAddress,
+  redeemLogin: ({ install, body }) => checked(LOGIN_SECRET, body, (request) => redeemLogin(install, request)),
+};
+
+/** The handler of every route that takes a token, by the route's name. A route without one does not compile. */
+export const HANDLERS: { readonly [Name in Exclude<RouteName, OpenName>]: Handler<Name> } = {
   whoami: async ({ token }) => ({ ok: true, token: tokenObject(token) }),
   logout: ({ install, actor, token }) => revokeToken(install, actor, token.id),
   listTokens: ({ install, actor }) => listTokens(install, actor),

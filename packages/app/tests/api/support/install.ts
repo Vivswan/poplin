@@ -12,6 +12,7 @@ import type { ObjectStore } from "@poplin/core/src/storage/storage";
 import { BunSqliteDriver } from "@poplin/core/tests/database/support/bun-sqlite-driver";
 
 import { type ApiLimits, createApi } from "../../../src/api/api";
+import { MemoryCounters } from "../../../src/limits/memory-counters";
 import { ADDRESSES } from "../../sites/support/layout";
 
 /** The moment every test request arrives at, unless the test moves the clock. */
@@ -22,6 +23,9 @@ export const ORIGIN = "https://admin.example.com";
 
 /** What one request to the test install can carry: small, so a test passes each cap with a few bytes. */
 export const LIMITS: ApiLimits = { fileBytes: 64, files: 8, manifestBytes: 4096 };
+
+/** The request header a test names its visitor in; every request without it comes from one visitor. */
+export const VISITOR_HEADER = "Test-Visitor";
 
 /** The admin whose settings the install starts with. */
 const INSTALLER = "ada@example.com" as Login;
@@ -50,12 +54,15 @@ export interface Answered {
  * A test install. `tokens` are whole tokens: an admin's, and two publishers'. `reported` holds every failure the API was told of.
  *
  * `calls` counts every batch sent to the database and every call made to the store, since the test last set it to zero.
+ *
+ * `counters` count the requests to the routes that take no token; a test breaks them by replacing `takeMinute`.
  */
 export interface ApiInstall {
   readonly api: ReturnType<typeof createApi>;
   readonly database: Database;
   readonly store: MemoryStore;
   readonly calls: { database: number; store: number };
+  readonly counters: MemoryCounters;
   readonly clock: { now: number };
   readonly tokens: { readonly admin: string; readonly owner: string; readonly stranger: string };
   readonly reported: unknown[];
@@ -145,6 +152,7 @@ export async function openApi(overrides: Partial<ReturnType<typeof defaultSettin
   const store = new MemoryStore();
   const clock = { now: NOW };
   const reported: unknown[] = [];
+  const counters = new MemoryCounters();
   const api = createApi({
     database,
     store: counted(store, calls),
@@ -154,6 +162,9 @@ export async function openApi(overrides: Partial<ReturnType<typeof defaultSettin
     readToken: (id) => database.getToken(id),
     limits: LIMITS,
     report: (error) => reported.push(error),
+    // Found anew on every request, so a test that swaps the method in is heard.
+    counters: { takeMinute: (window, now) => counters.takeMinute(window, now) },
+    visitorOf: async (request) => request.headers.get(VISITOR_HEADER) ?? "one-visitor",
   });
 
   const ask = async (request: Request): Promise<Answered> => {
@@ -171,6 +182,7 @@ export async function openApi(overrides: Partial<ReturnType<typeof defaultSettin
     database,
     store,
     calls,
+    counters,
     clock,
     tokens: { admin, owner, stranger },
     reported,

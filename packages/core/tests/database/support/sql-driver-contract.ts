@@ -13,6 +13,7 @@ import { SCHEMA_VERSION, STEPS } from "../../../src/migrations/registry";
 import type { SiteId } from "../../../src/sites/ids";
 import {
   ADA,
+  ADMIN,
   BY_ADA,
   begunImport,
   begunSite,
@@ -24,6 +25,7 @@ import {
   NO_SITE,
   NOW,
   OTHER_SITE,
+  pendingLogin,
   publish,
   REPORT,
   SECOND_KEY,
@@ -214,6 +216,10 @@ function schemaRules(label: string, makeDriver: DriverFactory): void {
       sql: "INSERT INTO uploads (id, folder, number, owner, state, plan, manifest, bytes, files, created_at) VALUES (?1, ?2, 2, ?3, ?4, '{}', '[]', 0, 1, 0)",
       params: [id, folder, ADA, state],
     });
+    const login = (id: string, code: string, state: string, decidedBy: string | null): Statement => ({
+      sql: "INSERT INTO logins (id, code, hash, scope, computer, state, decided_by, created_at, expires_at) VALUES (?1, ?2, 'h', 'publisher', 'laptop', ?3, ?4, 0, 1)",
+      params: [id, code, state, decidedBy],
+    });
 
     // Drift: these are the states no code path may leave behind; each row is one written straight in SQL, past every check the code makes.
     test.each([
@@ -252,11 +258,16 @@ function schemaRules(label: string, makeDriver: DriverFactory): void {
       ["a second upload under one folder and number", [upload("upload-b", "folder-a", "pending")]],
       ["an upload of no file", [{ sql: "UPDATE uploads SET files = 0 WHERE id = 'upload-a'", params: [] }]],
       ["an upload whose manifest is no JSON", [{ sql: "UPDATE uploads SET manifest = 'index.html' WHERE id = 'upload-a'", params: [] }]],
+      ["a login that was allowed by nobody", [login("login-b", "CODEB", "allowed", null)]],
+      ["a pending login somebody decided", [login("login-b", "CODEB", "pending", ADMIN)]],
+      ["a login in a state that is none of the three", [login("login-b", "CODEB", "redeemed", ADMIN)]],
+      ["a second login under one code", [login("login-b", "CODEA", "pending", null)]],
+      ["a login that runs out before it was asked for", [{ sql: "UPDATE logins SET expires_at = 0 WHERE id = 'login-a'", params: [] }]],
       ["an audit entry rewritten", [{ sql: "UPDATE audit SET actor = 'someone' WHERE seq = 1", params: [] }]],
       ["an audit entry removed", [{ sql: "DELETE FROM audit WHERE seq = 1", params: [] }]],
     ] as ReadonlyArray<readonly [string, readonly Statement[]]>)("refuses %s", async (_state, statements) => {
       const driver = await migrated(makeDriver);
-      await driver.batch([stored, upload("upload-a", "folder-a", "pending"), { sql: "INSERT INTO audit (at, actor, action, detail) VALUES (0, ?1, 'login', '{}')", params: [ADA] }]);
+      await driver.batch([stored, upload("upload-a", "folder-a", "pending"), login("login-a", "CODEA", "pending", null), { sql: "INSERT INTO audit (at, actor, action, detail) VALUES (0, ?1, 'login', '{}')", params: [ADA] }]);
 
       await expect(driver.batch(statements)).rejects.toThrow();
     });
@@ -363,6 +374,16 @@ function queryPlans(label: string, makeDriver: DriverFactory): void {
       await database.deleteSite(gone.id, BY_ADA);
       const restored = await begunImport(database, gone);
       const again = await database.importUploadAsSite(restored.id, restored.site, BY_ADA);
+      const [login, denied] = await Promise.all([pendingLogin(), pendingLogin()]);
+      await database.addComputerLogin(login, 10);
+      await database.addComputerLogin(denied, 10);
+      await database.getComputerLogin(login.id);
+      await database.findComputerLogin(login.code);
+      await database.pollComputerLogin(login.id, { at: NOW + 1, notAfter: NOW });
+      await database.decideComputerLogin(login.code, { state: "allowed", by: ADMIN, at: NOW + 1 });
+      await database.decideComputerLogin(denied.code, { state: "denied", by: ADMIN, at: NOW + 1 });
+      const redeemed = await database.redeemComputerLogin(login.id, (await mintToken({ scope: "publisher", note: "laptop", now: NOW + 2 })).record);
+      const swept = await database.sweepComputerLogins(denied.expiresAt);
       await storedVersion(driver);
 
       const scans: string[] = [];
@@ -377,8 +398,8 @@ function queryPlans(label: string, makeDriver: DriverFactory): void {
       }
 
       // The one walk of a table is the token list, which hands back every row it reads. An import walks the list of versions it was given, and a file lookup the manifest of its own row: neither is a table.
-      expect([exported.sites, imported.kind, again.kind]).toEqual([[], "done", "done"]);
-      expect(driver.statements.length).toBeGreaterThan(90);
+      expect([exported.sites, imported.kind, again.kind, redeemed.kind, swept]).toEqual([[], "done", "done", "done", 1]);
+      expect(driver.statements.length).toBeGreaterThan(105);
       expect(scans).toEqual([
         "SCAN tokens USING INDEX tokens_by_creation <- SELECT id, hash, scope, note, created_at, expires_at FROM tokens ORDER BY created_at DESC, id DESC",
       ]);

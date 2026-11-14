@@ -8,7 +8,7 @@ import type { html } from "hono/html";
 export type Html = ReturnType<typeof html>;
 
 /** The tabs of the dashboard, in the order they are shown. The last is there only on a dashboard built with a domain plug. */
-export type Tab = "sites" | "settings" | "activity" | "usage" | "domain";
+export type Tab = "sites" | "tokens" | "settings" | "activity" | "usage" | "domain";
 
 /** The fields of a posted form, by name; of a name sent twice the last value. */
 export type Form = ReadonlyMap<string, string>;

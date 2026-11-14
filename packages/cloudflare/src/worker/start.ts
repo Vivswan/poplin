@@ -46,6 +46,9 @@ export interface Outside {
   readonly fetch: Parameters<typeof accessKeys>[0]["fetch"];
 }
 
+/** The key one visitor's requests are counted by, from the address Cloudflare saw and the secret the instance holds for the database. */
+export type VisitorOf = (request: Request, database: Database) => Promise<string>;
+
 /** Everything a request is answered from. One is built per Worker instance: the counters and the Access keys remember what they saw. */
 export interface Instance {
   /** The install's domain, admin hostname, and suffix. */
@@ -103,10 +106,11 @@ async function ensureSettings(database: Database, binding: unknown, now: number)
 /**
  * Make one Worker instance ready to answer.
  *
+ * @param visitorOf - how the API counts a computer that logs in, which has no token to be known by
  * @returns the instance, or the first thing that stopped it. Nothing is kept between calls, so a call after a failure starts from the beginning
  * @throws whatever the database rejects with while the settings or the key are stored
  */
-export async function startInstance(env: Bindings, outside: Outside): Promise<Started> {
+export async function startInstance(env: Bindings, outside: Outside, visitorOf: VisitorOf): Promise<Started> {
   const zone = readZoneBinding(env.ZONE);
   if (!zone.ok) return badBinding("ZONE", zone.refusal);
 
@@ -139,13 +143,22 @@ export async function startInstance(env: Bindings, outside: Outside): Promise<St
     reservedNames: addresses.reservedNames,
   };
   const keys = accessKeys({ teamDomain: access.value.teamDomain, fetch: outside.fetch });
+  const counters = new CloudflareCounters({ limiter: env.MINUTE_LIMITS, database });
+  const api = createApi({
+    ...install,
+    readToken: (id) => database.getToken(id),
+    limits: API_LIMITS,
+    report: (error) => console.error("poplin: an API request failed", error),
+    counters,
+    visitorOf: (request) => visitorOf(request, database),
+  });
 
   const instance: Instance = {
     layout,
     install,
     addresses,
-    counters: new CloudflareCounters({ limiter: env.MINUTE_LIMITS, database }),
-    api: createApi({ ...install, readToken: (id) => database.getToken(id), limits: API_LIMITS, report: (error) => console.error("poplin: an API request failed", error) }),
+    counters,
+    api,
     identify: accessIdentity({ keys, audience: access.value.audience }),
   };
 

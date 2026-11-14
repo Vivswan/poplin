@@ -6,9 +6,11 @@
 // The address carries a code, never a sentence, so a crafted link can only show a line of this table.
 
 import type { listAudit } from "@poplin/core/src/actions/audit-log";
+import type { decideLogin, showLogin } from "@poplin/core/src/actions/computer-logins";
 import type { changeConfig, readConfig } from "@poplin/core/src/actions/config";
 import type { deleteSite } from "@poplin/core/src/actions/delete";
 import type { listSites } from "@poplin/core/src/actions/list";
+import type { listTokens } from "@poplin/core/src/actions/manage-tokens";
 import type { newLink } from "@poplin/core/src/actions/new-link";
 import type { restoreSite } from "@poplin/core/src/actions/restore";
 import type { rollbackSite } from "@poplin/core/src/actions/rollback";
@@ -37,6 +39,8 @@ const REFUSALS: Readonly<Record<ActionCode | OwnCode, string>> = {
   no_page: "There is no such page.",
   bad_method: "The dashboard does not answer that kind of request.",
   too_many_tries: "Too many tries. Wait a minute.",
+  no_such_login: "No login waits under that code. It was allowed or denied already, or its 10 minutes ran out. Run poplin login again.",
+  no_such_token: "No token has that id. It may be revoked already.",
 };
 
 /** What each finished change says. */
@@ -48,6 +52,9 @@ const DONE = {
   restored: "Restored from the trash.",
   deleted: "Deleted forever.",
   deleted_files_left: "Deleted forever, but some of its files could not be removed from the bucket.",
+  allowed: "Allowed. The computer collects its token within a few seconds.",
+  denied: "Denied. The computer was not logged in.",
+  revoked: "Revoked. The token works nowhere now.",
 } as const;
 
 /** The sentence for a code this table does not hold. */
@@ -74,10 +81,13 @@ type ActionCode =
   | CodeOf<typeof readConfig>
   | CodeOf<typeof changeConfig>
   | CodeOf<typeof listAudit>
+  | CodeOf<typeof listTokens>
+  | CodeOf<typeof showLogin>
+  | CodeOf<typeof decideLogin>
   | CodeOf<typeof signEveryoneOut>;
 
 /** The codes of the dashboard's own refusals: a form it cannot take, or a request it does not answer. */
-type OwnCode = "wrong_confirmation" | "not_confirmed" | "missing_field" | "not_a_form" | "too_large" | "not_from_here" | "no_page" | "bad_method" | "too_many_tries";
+type OwnCode = "wrong_confirmation" | "not_confirmed" | "missing_field" | "not_a_form" | "too_large" | "not_from_here" | "no_page" | "bad_method" | "too_many_tries" | "no_such_token";
 
 /** A change that was done, or a refusal with what it is about. */
 type Result = { readonly done: keyof typeof DONE } | { readonly refused: string; readonly about?: string };

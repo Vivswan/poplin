@@ -1,7 +1,7 @@
 // One scheduled run of the sweep: as many steps of core's walk as fit one invocation's calls.
 //
-//   one step, at most      1 settings read + 1 listing + 5 x (1 read + 1 change + 30 bucket calls) = 162 calls
-//   one run, at most       290 calls: a step starts only while 162 more still fit
+//   one step, at most      1 settings read + 1 listing + 5 x (1 read + 1 change + 30 bucket calls) + 1 removal of old logins = 163 calls
+//   one run, at most       290 calls: a step starts only while 163 more still fit
 //   one invocation         300 calls: an instance that starts in it makes up to 10 before the run
 //   a run with nothing to remove costs 7 calls a step, so it looks at about 95 sites or uploads
 //
@@ -14,7 +14,7 @@ import { SWEEPER, sweepExpired } from "@poplin/core/src/actions/sweep";
 const STEP_ITEMS = 5;
 
 /** The most database and bucket calls one step can make, as the table above adds them up. */
-const STEP_CALLS = 162;
+const STEP_CALLS = 163;
 
 /** The most database and bucket calls one run makes, which leaves 10 of an invocation's 300 to an instance that starts first. */
 const RUN_CALLS = 290;

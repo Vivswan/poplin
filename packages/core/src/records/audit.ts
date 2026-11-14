@@ -6,7 +6,7 @@ import type { SiteName } from "../names/names";
 import type { SiteId } from "../sites/ids";
 import { HOLDER, type Holder, MOMENT, POSITIVE, SITE_ID, SITE_NAME } from "./fields";
 
-/** Every action the log names. The first rows are written with a change to a site, a token, the settings, or the signing key; `login` stands alone. */
+/** Every action the log names. The first rows are written with a change to a site, a token, the settings, or the signing key; `login` stands alone, and the last two go with a computer's login that an admin decided. */
 const AUDIT_ACTIONS = [
   "create",
   "publish",
@@ -25,6 +25,8 @@ const AUDIT_ACTIONS = [
   "signed_everyone_out",
   "login",
   "domain_synced",
+  "login_allowed",
+  "login_denied",
 ] as const;
 
 /** A row of the audit table. `detail` is a JSON object as text. */

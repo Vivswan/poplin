@@ -2,8 +2,9 @@
 
 import { describe, expect, test } from "bun:test";
 
+import { mintComputerLogin, type PendingLogin } from "../../../src/auth/computer-logins";
 import type { Login } from "../../../src/auth/logins";
-import { mintToken, type TokenId } from "../../../src/auth/tokens";
+import { mintToken, type TokenId, type TokenRecord } from "../../../src/auth/tokens";
 import type { Database, NewSite, NewUpload, NewVersion, Signed } from "../../../src/database/database";
 import type { PublicName, SiteName } from "../../../src/names/names";
 import type { AuditAction, AuditEntry } from "../../../src/records/audit";
@@ -73,6 +74,12 @@ const BY_BO_LATER: Signed = { by: BO, at: NOW + 5 };
 /** The settings of a new install. */
 export const SETTINGS = defaultSettings({ installer: "ada@example.com" as Login, hostname: "admin.example.com" });
 
+/** The admin who decides the fixture logins. */
+export const ADMIN = "ada@example.com" as Login;
+
+/** A bound on stored logins that no fixture reaches. */
+const MOST_LOGINS = 100;
+
 /** Gives a new, empty database on every call, one that draws its site ids from `mintId` when a case passes one. */
 type DatabaseFactory = (mintId?: () => SiteId) => Database | Promise<Database>;
 
@@ -86,6 +93,11 @@ function mintFrom(...ids: string[]): () => SiteId {
 
     return next as SiteId;
   };
+}
+
+/** A pending login of a publisher, asked for at a moment from a computer named `laptop`. */
+export async function pendingLogin(now: number = NOW): Promise<PendingLogin> {
+  return (await mintComputerLogin({ scope: "publisher", computer: "laptop", now })).login;
 }
 
 /** A draft of a site with this name; a public one takes its name as its public name unless another is given. */
@@ -1156,6 +1168,144 @@ function tokensAndSettings(label: string, makeDatabase: DatabaseFactory): void {
   });
 }
 
+function computerLogins(label: string, makeDatabase: DatabaseFactory): void {
+  describe(`${label}: the logins of computers`, () => {
+    // Drift: the record `mintComputerLogin` makes is what a presented secret is checked against, and the code is what an admin is shown; a field lost on the way through a row would refuse every login.
+    test("a pending login reads back as minted by its id and by its code, and a second one under its id or its code is refused", async () => {
+      const database = await opened(makeDatabase);
+      const login = await pendingLogin();
+      const other = await pendingLogin();
+
+      expect([
+        await database.addComputerLogin(login, MOST_LOGINS),
+        await database.addComputerLogin({ ...other, id: login.id }, MOST_LOGINS),
+        await database.addComputerLogin({ ...other, code: login.code }, MOST_LOGINS),
+      ]).toEqual([{ kind: "done" }, { kind: "taken" }, { kind: "taken" }]);
+      expect([await database.getComputerLogin(login.id), await database.findComputerLogin(login.code), await database.getComputerLogin(other.id), await database.findComputerLogin(other.code)]).toEqual([
+        login,
+        login,
+        undefined,
+        undefined,
+      ]);
+      expect(await auditTrail(database)).toEqual([]);
+    });
+
+    // Drift: anyone may ask for a login, so without the bound the table grows with every request; counting logins that ran out would let old requests lock every new one out.
+    test("no more logins are stored than the bound, of callers at the same moment too, and one that ran out makes room", async () => {
+      const database = await opened(makeDatabase);
+      const first = await pendingLogin();
+      const together = await Promise.all([pendingLogin(), pendingLogin(), pendingLogin()]);
+      await database.addComputerLogin(first, 3);
+
+      const added = await Promise.all(together.map((login) => database.addComputerLogin(login, 3)));
+      const later = await pendingLogin(first.expiresAt);
+
+      expect(added.map((answer) => answer.kind).sort()).toEqual(["done", "done", "full"]);
+      expect([await database.addComputerLogin(await pendingLogin(first.expiresAt - 1), 3), await database.addComputerLogin(later, 3)]).toEqual([{ kind: "full" }, { kind: "done" }]);
+    });
+
+    // Drift: a decision is what turns a request into a token; one that could be made twice, after the login ran out, or without its audit entry would let a denied or stale request through unseen.
+    test("a pending login is decided once and before it runs out, with one audit entry that names the scope and the computer", async () => {
+      const database = await opened(makeDatabase);
+      const [allowed, denied, stale] = await Promise.all([pendingLogin(), pendingLogin(), pendingLogin()]);
+      for (const login of [allowed, denied, stale]) await database.addComputerLogin(login, MOST_LOGINS);
+      const allow = { state: "allowed", by: ADMIN, at: NOW + 1 } as const;
+      const deny = { state: "denied", by: ADMIN, at: NOW + 2 } as const;
+
+      expect([
+        await database.decideComputerLogin(allowed.code, allow),
+        await database.decideComputerLogin(allowed.code, deny),
+        await database.decideComputerLogin(denied.code, deny),
+        await database.decideComputerLogin(denied.code, allow),
+        await database.decideComputerLogin(stale.code, { ...allow, at: stale.expiresAt }),
+        await database.decideComputerLogin((await pendingLogin()).code, allow),
+      ]).toEqual([
+        { kind: "done", login: { ...allowed, state: "allowed", decidedBy: ADMIN } },
+        { kind: "not_pending" },
+        { kind: "done", login: { ...denied, state: "denied", decidedBy: ADMIN } },
+        { kind: "not_pending" },
+        { kind: "not_pending" },
+        { kind: "not_pending" },
+      ]);
+      expect((await auditTrail(database)).map((entry) => [entry.at, entry.by, entry.action, entry.detail])).toEqual([
+        [NOW + 1, ADMIN, "login_allowed", { scope: "publisher", computer: "laptop" }],
+        [NOW + 2, ADMIN, "login_denied", { scope: "publisher", computer: "laptop" }],
+      ]);
+      expect(await database.getComputerLogin(stale.id)).toEqual(stale);
+    });
+
+    // Drift: two admins, or one who presses twice, decide at the same moment; both heard would leave a login allowed in the audit log and denied in its row.
+    test("of an Allow and a Deny made at the same moment one is done, with its one audit entry", async () => {
+      const database = await opened(makeDatabase);
+      const login = await pendingLogin();
+      await database.addComputerLogin(login, MOST_LOGINS);
+
+      const decided = await Promise.all((["allowed", "denied"] as const).map((state) => database.decideComputerLogin(login.code, { state, by: ADMIN, at: NOW + 1 })));
+      const stored = await database.getComputerLogin(login.id);
+
+      expect(decided.map((answer) => answer.kind).sort()).toEqual(["done", "not_pending"]);
+      expect((await auditTrail(database)).map((entry) => entry.action)).toEqual([stored?.state === "allowed" ? "login_allowed" : "login_denied"]);
+    });
+
+    // Drift: the token is handed out once; a login that stayed after its token was stored, or two callers both served, would mint a second token nobody allowed.
+    test("an allowed login gives one token, signed by who allowed it, and is gone; no other login gives any", async () => {
+      const database = await opened(makeDatabase);
+      const [allowed, pending, denied, stale] = await Promise.all([pendingLogin(), pendingLogin(), pendingLogin(), pendingLogin()]);
+      for (const login of [allowed, pending, denied, stale]) await database.addComputerLogin(login, MOST_LOGINS);
+      for (const login of [allowed, stale]) await database.decideComputerLogin(login.code, { state: "allowed", by: ADMIN, at: NOW + 1 });
+      await database.decideComputerLogin(denied.code, { state: "denied", by: ADMIN, at: NOW + 1 });
+      const token = async (scope: "publisher" | "admin" = "publisher"): Promise<TokenRecord> => (await mintToken({ scope, note: "laptop", now: NOW + 2 })).record;
+
+      expect([
+        await database.redeemComputerLogin(pending.id, await token()),
+        await database.redeemComputerLogin(denied.id, await token()),
+        await database.redeemComputerLogin(stale.id, { ...(await token()), createdAt: stale.expiresAt }),
+        await database.redeemComputerLogin(allowed.id, await token("admin")),
+      ]).toEqual([{ kind: "not_allowed" }, { kind: "not_allowed" }, { kind: "not_allowed" }, { kind: "not_allowed" }]);
+
+      const candidates = [await token(), await token()];
+      const together = await Promise.all(candidates.map((candidate) => database.redeemComputerLogin(allowed.id, candidate)));
+      const stored = await database.listTokens();
+      const entries = (await auditTrail(database)).filter((entry) => entry.action === "token_added");
+
+      expect(together.map((answer) => answer.kind).sort()).toEqual(["done", "not_allowed"]);
+      expect(await database.redeemComputerLogin(allowed.id, await token())).toEqual({ kind: "not_allowed" });
+      expect(await database.getComputerLogin(allowed.id)).toBeUndefined();
+      expect(stored).toEqual(candidates.filter((_candidate, index) => together[index]?.kind === "done"));
+      expect(entries.map((entry) => [entry.at, entry.by, entry.detail])).toEqual([[NOW + 2, ADMIN, { token: stored[0]?.id, scope: "publisher", note: "laptop" }]]);
+    });
+
+    // Drift: a terminal that asks without pause would cost a write a request; one never told to slow down has no reason to.
+    test("a pending login notes a poll only when the one before it is old enough, and a decided login notes none", async () => {
+      const database = await opened(makeDatabase);
+      const login = await pendingLogin();
+      await database.addComputerLogin(login, MOST_LOGINS);
+
+      expect([
+        await database.pollComputerLogin(login.id, { at: NOW + 5000, notAfter: NOW }),
+        await database.pollComputerLogin(login.id, { at: NOW + 6000, notAfter: NOW + 1000 }),
+        await database.pollComputerLogin(login.id, { at: NOW + 10_000, notAfter: NOW + 5000 }),
+      ]).toEqual([true, false, true]);
+      expect(await database.getComputerLogin(login.id)).toEqual({ ...login, polledAt: NOW + 10_000 });
+
+      await database.decideComputerLogin(login.code, { state: "denied", by: ADMIN, at: NOW + 11_000 });
+
+      expect(await database.pollComputerLogin(login.id, { at: NOW + 20_000, notAfter: NOW + 15_000 })).toBe(false);
+    });
+
+    // Drift: a login nobody decided or collected would stay for ever; a sweep that took a live one would end a login a person is in the middle of.
+    test("the sweep removes every login that ran out, whatever its state, and leaves the others", async () => {
+      const database = await opened(makeDatabase);
+      const [old, decided, live] = await Promise.all([pendingLogin(), pendingLogin(), pendingLogin(NOW + 1)]);
+      for (const login of [old, decided, live]) await database.addComputerLogin(login, MOST_LOGINS);
+      await database.decideComputerLogin(decided.code, { state: "allowed", by: ADMIN, at: NOW + 1 });
+
+      expect([await database.sweepComputerLogins(old.expiresAt - 1), await database.sweepComputerLogins(old.expiresAt), await database.sweepComputerLogins(old.expiresAt)]).toEqual([0, 2, 0]);
+      expect([await database.getComputerLogin(old.id), await database.getComputerLogin(decided.id), await database.getComputerLogin(live.id)]).toEqual([undefined, undefined, live]);
+    });
+  });
+}
+
 function requestCounts(label: string, makeDatabase: DatabaseFactory): void {
   describe(`${label}: the day's request counts`, () => {
     // Drift: the limits on a day's requests read these two numbers; a site's requests left out of the total, or yesterday's carried over, would refuse the wrong site.
@@ -1456,6 +1606,7 @@ export function describeDatabase(label: string, makeDatabase: DatabaseFactory): 
   signingKey(label, makeDatabase);
   auditLog(label, makeDatabase);
   tokensAndSettings(label, makeDatabase);
+  computerLogins(label, makeDatabase);
   requestCounts(label, makeDatabase);
   uploads(label, makeDatabase);
 }

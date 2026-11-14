@@ -1,7 +1,7 @@
 // The HTTP API as one table: every route's method and path, with the types of what it takes and what it answers.
 //
 // The server registers its handlers from this table and a client builds its requests from it, so the two cannot differ.
-// A request carries `Authorization: Bearer <token>`. A JSON body goes with `Content-Type: application/json`, a file's bytes with `application/octet-stream`.
+// A request carries `Authorization: Bearer <token>`, but for the routes of `OPEN_ROUTES`, which a computer with no token calls to get one. A JSON body goes with `Content-Type: application/json`, a file's bytes with `application/octet-stream`.
 // An export and an import are a run of small requests the client drives: `exportSites` a page at a time, then `exportFiles` and `exportFile` for each version; `beginImport`, then the upload routes under the id it answers.
 
 import type * as v from "valibot";
@@ -11,6 +11,7 @@ import type { beginImport, ImportRequest } from "../actions/begin-import";
 import type { AUDIT_QUERY, listAudit } from "../actions/audit-log";
 import type { beginPublish, PUBLISH_REQUEST } from "../actions/begin-publish";
 import type { SiteChanges } from "../actions/changes";
+import type { beginLogin, LOGIN_REQUEST, LOGIN_SECRET, Redeemed } from "../actions/computer-logins";
 import type { changeConfig, readConfig } from "../actions/config";
 import type { DELETE_OPTIONS, deleteSite } from "../actions/delete";
 import type { EXPORT_FILE_QUERY, EXPORT_FILES_QUERY, EXPORT_QUERY, EXPORT_SITE_QUERY, exportFile, exportFiles, exportSettings, exportSite, exportSites } from "../actions/export";
@@ -30,6 +31,12 @@ const BASE = "/api";
 
 /** The response header of a route that answers bytes, holding the media type the file is stored with, percent-encoded as `encodeURIComponent` does. */
 export const STORED_TYPE_HEADER = "Poplin-Content-Type";
+
+/** The dashboard page where an admin allows or denies a computer's login; the code goes in its query. */
+export const ALLOW_PAGE = "/tokens/allow";
+
+/** The query key of that page that holds the code. */
+export const CODE_KEY = "code";
 
 /** What a route's request carries: no body, a JSON value, or the raw bytes of one file. */
 type Sends = "nothing" | "json" | "bytes";
@@ -118,6 +125,8 @@ export const ROUTES = {
   listTokens: ask<void, Answer<typeof listTokens>>("GET", "/tokens", () => `${BASE}/tokens`),
   issueToken: send<void, v.InferInput<typeof TOKEN_REQUEST>, Answer<typeof issueToken>>("POST", "/tokens", () => `${BASE}/tokens`),
   revokeToken: ask<{ readonly token: string }, Answer<typeof revokeToken>>("DELETE", "/tokens/:token", ({ token }) => `${BASE}/tokens/${encodeURIComponent(token)}`),
+  beginLogin: send<void, v.InferInput<typeof LOGIN_REQUEST>, Answer<typeof beginLogin> & { readonly verify_url: string }>("POST", "/logins", () => `${BASE}/logins`),
+  redeemLogin: send<void, v.InferInput<typeof LOGIN_SECRET>, Redeemed>("POST", "/logins/token", () => `${BASE}/logins/token`),
 
   listSites: ask<v.InferInput<typeof LIST_QUERY>, Answer<typeof listSites>>("GET", "/sites", ({ trash, limit, after }) => {
     return `${BASE}/sites${queryOf({ trash, limit, after_updated_at: after?.updated_at, after_id: after?.id })}`;
@@ -166,3 +175,6 @@ export const ROUTES = {
   signEveryoneOut: ask<void, Answer<typeof signEveryoneOut>>("DELETE", "/sessions", () => `${BASE}/sessions`),
   listAudit: ask<v.InferInput<typeof AUDIT_QUERY>, Answer<typeof listAudit>>("GET", "/audit", ({ limit, before }) => `${BASE}/audit${queryOf({ limit, before })}`),
 } as const;
+
+/** The routes that take no token: a computer calls them to get one. `beginLogin` answers `verify_url`, the address of `ALLOW_PAGE` on the install that was asked, with the code. */
+export const OPEN_ROUTES = ["beginLogin", "redeemLogin"] as const satisfies readonly (keyof typeof ROUTES)[];

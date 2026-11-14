@@ -1,15 +1,13 @@
 // Bearer tokens for agents and the CLI: minting one, the hashed record kept of it, and checking a presented one.
 
-import { toHex } from "../records/hex";
 import type { Scope } from "./scopes";
+import { randomHex, sameText, sha256Hex } from "./util";
 
 const TOKEN_PREFIX = "poplin_";
 const ID_BYTES = 8;
 const SECRET_BYTES = 32;
 const TOKEN_PATTERN = new RegExp(`^${TOKEN_PREFIX}([0-9a-f]{${ID_BYTES * 2}})_[0-9a-f]{${SECRET_BYTES * 2}}$`);
 const ADMIN_LIFETIME_MS = 30 * 24 * 60 * 60 * 1000;
-const HMAC = { name: "HMAC", hash: "SHA-256" } as const;
-const ENCODER = new TextEncoder();
 
 declare const tokenIdBrand: unique symbol;
 
@@ -36,22 +34,6 @@ export type Minted = { readonly token: string; readonly record: TokenRecord };
 
 function refuse(refusal: TokenRefusal): { readonly ok: false; readonly refusal: TokenRefusal } {
   return { ok: false, refusal };
-}
-
-function randomHex(byteCount: number): string {
-  return toHex(crypto.getRandomValues(new Uint8Array(byteCount)));
-}
-
-async function sha256Hex(text: string): Promise<string> {
-  return toHex(new Uint8Array(await crypto.subtle.digest(HMAC.hash, ENCODER.encode(text))));
-}
-
-async function sameText(left: string, right: string): Promise<boolean> {
-  // The platform compares the two MACs in constant time; the key lives for this one comparison.
-  const key = await crypto.subtle.importKey("raw", crypto.getRandomValues(new Uint8Array(SECRET_BYTES)), HMAC, false, ["sign", "verify"]);
-  const mac = await crypto.subtle.sign(HMAC.name, key, ENCODER.encode(left));
-
-  return crypto.subtle.verify(HMAC.name, key, mac, ENCODER.encode(right));
 }
 
 /**

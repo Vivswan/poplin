@@ -2,7 +2,7 @@
 // Without these the pieces could each pass their own tests and still not be joined into a product that publishes a site and serves it.
 
 import { reset } from "cloudflare:test";
-import { ROUTES } from "@poplin/core/src/api/routes";
+import { OPEN_ROUTES, ROUTES } from "@poplin/core/src/api/routes";
 import { settingsFromText } from "@poplin/core/src/records/settings";
 import { beforeEach, describe, expect, test } from "vitest";
 import bundle from "../../dist/worker.js?raw";
@@ -17,6 +17,19 @@ const LARGE_BYTES = 5 * 1024 * 1024;
 
 /** The example first settings of wrangler.jsonc. */
 const FIRST = BINDINGS.FIRST_SETTINGS as Readonly<Record<string, string>>;
+
+/** The milliseconds of one minute, which is how long the rate limiting binding counts for. */
+const MINUTE_MS = 60_000;
+
+/** Values in the form of a site, an upload, a token's id, a path, and a version, for a request to every route. */
+const NAMED = { site: "zzzzzzzzzzzz", upload: "zzzzzzzzzzzzzzzz", token: "00000000000000aa", path: "index.html", version: 1 };
+
+/** What the API answers a computer that begins a login. */
+interface Begun {
+  readonly code: string;
+  readonly secret: string;
+  readonly verify_url: string;
+}
 
 /** The headers a dashboard form is posted with. */
 const FORM = { "Content-Type": "application/x-www-form-urlencoded", Origin: ADMIN };
@@ -323,6 +336,83 @@ describe("the admin hostname", () => {
     expect(sites.headers.get("Content-Security-Policy")).toContain("default-src 'none'");
     expect([unmarked.status, after.site.state, unknown.status]).toEqual([403, "live", 404]);
     expect([privately.status, signedOut.status, withinTheMinute.status, afterTheMinute.status]).toEqual([200, 302, 200, 302]);
+  });
+});
+
+describe("a computer's login", () => {
+  /** Begin a login with no token, from a computer at this address. */
+  async function begin(worker: ReturnType<typeof instance>, address: string): Promise<Response> {
+    const headers = { "Content-Type": "application/json", "CF-Connecting-IP": address };
+
+    return ask(worker, `${ADMIN}${ROUTES.beginLogin.path()}`, { method: "POST", headers, body: JSON.stringify({ scope: "publisher", computer: "laptop" }) });
+  }
+
+  function collect(worker: ReturnType<typeof instance>, secret: string): Promise<Response> {
+    return api(worker, null, "POST", ROUTES.redeemLogin.path(), { secret });
+  }
+
+  // Drift: the pieces each hold their own rule, and the entry joins them: a route not mounted, a return path dropped at the login, or a dashboard built without its counters would leave no way to a first token.
+  test("a computer with no token begins a login, the owner allows it on the dashboard after the login brings them back to its page, and the computer collects one token", async () => {
+    const worker = instance(w);
+    const begun = await done<Begun>(await begin(worker, "192.0.2.1"));
+    const waiting = await done<{ state: string }>(await collect(worker, begun.secret));
+
+    const stranger = await ask(worker, begun.verify_url);
+    const login = await logIn(worker, w, stranger.headers.get("Location") ?? "");
+    const session = { Cookie: cookieOf(login) };
+    const page = await (await ask(worker, `${ADMIN}${login.headers.get("Location")}`, { headers: session })).text();
+    const [, csrf = ""] = /name="csrf" value="([^"]+)"/.exec(page) ?? [];
+    const form = new URLSearchParams({ code: begun.code, confirm: "yes", csrf }).toString();
+
+    const unsigned = await ask(worker, `${ADMIN}/tokens/allow`, { method: "POST", headers: FORM, body: form });
+    w.clock.now += 5000;
+    const untouched = await done<{ state: string }>(await collect(worker, begun.secret));
+    const allowed = await ask(worker, `${ADMIN}/tokens/allow`, { method: "POST", headers: { ...session, ...FORM }, body: form });
+    w.clock.now += 5000;
+    const collected = await done<{ state: string; token: string }>(await collect(worker, begun.secret));
+    const again = await done<{ state: string }>(await collect(worker, begun.secret));
+    const who = await done<{ token: { scope: string; note: string } }>(await api(worker, collected.token, "GET", ROUTES.whoami.path()));
+
+    expect([begun.verify_url, waiting.state]).toEqual([`${ADMIN}/tokens/allow?code=${begun.code}`, "pending"]);
+    expect([stranger.status, stranger.headers.get("Location")]).toEqual([302, `${ADMIN}/login?return=${encodeURIComponent(`/tokens/allow?code=${begun.code}`)}`]);
+    expect([login.status, login.headers.get("Location"), page.includes(`>${begun.code}</p>`)]).toEqual([302, `/tokens/allow?code=${begun.code}`, true]);
+    expect([unsigned.status, untouched.state]).toEqual([303, "pending"]);
+    expect([allowed.status, allowed.headers.get("Location")]).toEqual([303, "/tokens?done=allowed"]);
+    expect([collected.state, again.state, who.token]).toMatchObject(["allowed", "expired", { scope: "publisher", note: "laptop" }]);
+  });
+
+  // Drift: the two login routes are the only ones a request with no token may reach; an entry that let a third through would hand the install to anyone who can reach its address.
+  test("every other route of the API refuses a request with no token", async () => {
+    const worker = instance(w);
+    const open: readonly string[] = OPEN_ROUTES;
+    const closed = Object.entries(ROUTES).filter(([name]) => !open.includes(name));
+    const statuses: [string, number][] = [];
+
+    for (const [name, route] of closed) {
+      const path = (route.path as (args: object) => string)(NAMED);
+      const answer = await api(worker, null, route.method, path, route.sends === "json" ? {} : undefined);
+      statuses.push([name, answer.status]);
+    }
+
+    expect(closed.length).toBeGreaterThan(25);
+    expect(statuses.filter(([, status]) => status !== 401)).toEqual([]);
+  });
+
+  // Drift: the counts are keyed by the address Cloudflare saw; an entry that passed no key, or one key for everyone, would let one computer lock every other out, or count nobody.
+  test("the sixth login one address begins in a minute is refused, and another address begins one", async () => {
+    const worker = instance(w);
+    let statuses: number[] = [];
+    let started = 0;
+
+    // The binding's minute is the wall clock's, not the test's: a run that crosses one is made again.
+    do {
+      started = Math.floor(Date.now() / MINUTE_MS);
+      statuses = [];
+      for (let sent = 0; sent < 6; sent += 1) statuses.push((await begin(worker, "192.0.2.1")).status);
+      statuses.push((await begin(worker, "192.0.2.2")).status);
+    } while (Math.floor(Date.now() / MINUTE_MS) !== started);
+
+    expect(statuses).toEqual([200, 200, 200, 200, 200, 429, 200]);
   });
 });
 

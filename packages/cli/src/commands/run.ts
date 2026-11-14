@@ -2,7 +2,7 @@
 
 import { createClient } from "../client/client";
 import { currentLogin } from "../local/current-login";
-import { parseLogin } from "../local/login";
+import { isServer } from "../local/login";
 import type { Host } from "../mcp/records";
 import { type Pipes, serveOnPipes } from "../mcp/stdio";
 import { VERSION } from "../poplin";
@@ -11,6 +11,7 @@ import { runExport } from "./export";
 import { helpText } from "./help";
 import { runImport } from "./import";
 import { runInstallCommand } from "./install-commands";
+import { logIn } from "./login";
 import { parseCommand } from "./parse-command";
 import { type Problem, problem, problemLines } from "./problems";
 import { planPublish, previewPublish, sendPublish } from "./publish";
@@ -20,14 +21,6 @@ import { runSiteCommand } from "./site-commands";
 
 /** What stands where a token would have been printed. */
 const HIDDEN = "[token]";
-
-/** A token that passes the form of one, to check `--server` with the rule a login is checked by. */
-const ANY_TOKEN = "token";
-
-/** The commands this build cannot do, each with what to do in its place when there is such a thing. */
-const IN_ITS_PLACE: Readonly<Record<string, string>> = {
-  login: "set POPLIN_SERVER to the install's address and POPLIN_TOKEN to a token from its dashboard",
-};
 
 /** The commands about the login and the install that this build runs. */
 const INSTALL_COMMANDS = ["whoami", "logout", "config", "doctor"] as const;
@@ -92,7 +85,7 @@ function asksJson(argv: readonly string[]): boolean {
  * `--server` picks the install, and must be the one the login is for: a token is sent to no other address.
  */
 async function connect(request: OnlineRequest, io: Io): Promise<Session | Problem | "logged-out"> {
-  if (request.server !== undefined && !parseLogin({ server: request.server, token: ANY_TOKEN }).ok) return problem("bad_server");
+  if (request.server !== undefined && !isServer(request.server)) return problem("bad_server");
 
   const current = await currentLogin(io.machine);
   if (current.state === "logged-out") return "logged-out";
@@ -135,6 +128,8 @@ function asks<Kind extends Request["kind"]>(request: Request, kinds: readonly Ki
 async function execute(request: Request, io: Io): Promise<Outcome> {
   if (asks(request, ["publish"])) return publish(request, io);
 
+  if (asks(request, ["login"])) return logIn(request, io);
+
   if (asks(request, INSTALL_COMMANDS)) return online(request, io, (session) => runInstallCommand(request, session));
 
   if (asks(request, SITE_COMMANDS)) return online(request, io, (session) => runSiteCommand(request, session));
@@ -143,7 +138,7 @@ async function execute(request: Request, io: Io): Promise<Outcome> {
 
   if (asks(request, ["import"])) return runImport(request, (send) => online(request, io, send));
 
-  return refused(problem("not_available", `poplin ${request.kind}`, IN_ITS_PLACE[request.kind]));
+  return refused(problem("not_available", `poplin ${request.kind}`));
 }
 
 /** Print what a command came to: with `--json` one JSON value on stdout and nothing else there, and whatever is no result on stderr. No token is printed. */

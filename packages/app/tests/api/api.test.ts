@@ -1,10 +1,17 @@
 import { describe, expect, test } from "bun:test";
 
-import { ROUTES } from "@poplin/core/src/api/routes";
+import { decideLogin } from "@poplin/core/src/actions/computer-logins";
+import type { Install } from "@poplin/core/src/actions/records";
+import { OPEN_ROUTES, ROUTES } from "@poplin/core/src/api/routes";
+import type { Login } from "@poplin/core/src/auth/logins";
 
-import { type Answered, type ApiInstall, LIMITS, NOW, ORIGIN, openApi, requestOf } from "./support/install";
+import { ADDRESSES } from "../sites/support/layout";
+import { type Answered, type ApiInstall, LIMITS, NOW, ORIGIN, openApi, requestOf, VISITOR_HEADER } from "./support/install";
 
 type RouteName = keyof typeof ROUTES;
+
+/** A route that takes a token: every route but the two a computer logs in through. */
+type TokenRoute = Exclude<RouteName, (typeof OPEN_ROUTES)[number]>;
 
 /** What a route's path is built from, and the body it goes with. */
 interface Sample {
@@ -31,6 +38,9 @@ const BACKED_UP = {
   ...{ owner: "ada@example.com", created_at: 1, updated_at: 1, state: "live" },
 };
 
+/** Every route that takes a token, in the table's order. */
+const TOKEN_ROUTES = Object.keys(ROUTES).filter((name) => !(OPEN_ROUTES as readonly string[]).includes(name));
+
 /** What a browser sends ahead of a script's request from another origin. */
 const PREFLIGHT = { Origin: "https://www.example.com", "Access-Control-Request-Method": "GET" };
 
@@ -45,6 +55,8 @@ const LONG_FILE = { path: "index.html", size: LIMITS.fileBytes + 1, content_type
 
 /** The most calls to the database and the store each route may make for one request, the token's lookup included. A route missing here does not compile. */
 const BUDGET: Readonly<Record<RouteName, number>> = {
+  beginLogin: 1,
+  redeemLogin: 2,
   whoami: 1,
   logout: 2,
   listTokens: 2,
@@ -75,8 +87,8 @@ const BUDGET: Readonly<Record<RouteName, number>> = {
   listAudit: 2,
 };
 
-/** A request to every route, each well formed, about a site and an upload that the fixture names. A route missing here does not compile. */
-function samples(site: string, upload: string): Readonly<Record<RouteName, Sample>> {
+/** A request to every route that takes a token, each well formed, about a site and an upload that the fixture names. A route missing here does not compile. */
+function samples(site: string, upload: string): Readonly<Record<TokenRoute, Sample>> {
   return {
     whoami: { args: undefined },
     logout: { args: undefined },
@@ -160,6 +172,11 @@ async function stateOf(install: ApiInstall): Promise<unknown> {
   return [sites.body, trash.body, await install.keys(), await install.audit(), (await install.database.listTokens()).length];
 }
 
+/** The test install as the rule book takes it, for a step that only a dashboard session can take. */
+function installOf(install: ApiInstall): Install {
+  return { database: install.database, store: install.store, now: () => install.clock.now, addressOf: ADDRESSES.addressOf, reservedNames: ADDRESSES.reservedNames };
+}
+
 describe("createApi", () => {
   // Drift: the CLI's client is built from core's table alone; a route the API answers under another method, path, or query would break it with no test of either side failing.
   test("every route of core's table is answered as the table says, inside its budget of calls, and carries the fixed headers", async () => {
@@ -187,6 +204,9 @@ describe("createApi", () => {
     expect((await done("listTokens", undefined)).body.tokens).toHaveLength(4);
     expect(part(await done("whoami", undefined, { token: issued.body.token }), "token")).toMatchObject({ scope: "publisher", note: "ci", expires: "never" });
     await done("revokeToken", { token: part(issued, "record").id as string });
+    const login = await done("beginLogin", undefined, { token: null, body: { scope: "publisher", computer: "laptop" } });
+    expect(login.body).toMatchObject({ expires_in: 600, interval: 5, verify_url: `${ORIGIN}/tokens/allow?code=${login.body.code}` });
+    expect((await done("redeemLogin", undefined, { token: null, body: { secret: login.body.secret } })).body).toEqual({ state: "pending" });
 
     const begun = await done("beginPublish", undefined, { body: { name: "report", files: manifest(PAGES) } });
     const upload = part(begun, "upload").id as string;
@@ -274,7 +294,7 @@ describe("createApi", () => {
     const refused = { error: { code: "not_logged_in", message: "no token was sent, or it is not a live token of this install" } };
     install.clock.now = NOW;
 
-    expect(answers).toEqual(Object.keys(ROUTES).map((name) => [name, 401, refused]));
+    expect(answers).toEqual(TOKEN_ROUTES.map((name) => [name, 401, refused]));
     expect(await stateOf(install)).toEqual(before);
   });
 
@@ -524,6 +544,89 @@ describe("what the API refuses before any action runs", () => {
 
     expect(answers.map((answered) => answered.status)).toEqual([400, 400, 401, 400, 400]);
     expect(texts.filter((text) => text.includes(secret) || text.includes(token.slice(0, 40)) || text.includes(install.tokens.admin.slice(0, 40)))).toEqual([]);
+  });
+
+  // Drift: a computer that logs in has no token yet. The two routes it calls must answer without one, and must be the only two that do: the 401 test above walks every other.
+  test("the two routes of a login answer a request with no token, with a dead one, and with a cookie, and hand out nothing but a wait", async () => {
+    const install = await openApi();
+    const before = await stateOf(install);
+    const sent = [{ token: null }, { token: "let-me-in" }, { token: null, headers: { Cookie: `session=${install.tokens.admin}` } }];
+
+    const begun = await Promise.all(sent.map((with_) => install.call("beginLogin", undefined, { ...with_, body: { scope: "admin", computer: "laptop" } })));
+    const asked = await Promise.all(begun.map((login, at) => install.call("redeemLogin", undefined, { ...sent[at], body: { secret: login.body.secret } })));
+
+    expect(begun.map((login) => [login.status, Object.keys(login.body).sort()])).toEqual(sent.map(() => [200, ["code", "expires_in", "interval", "secret", "verify_url"]]));
+    expect(asked.map((answer) => [answer.status, answer.body])).toEqual(sent.map(() => [200, { state: "pending" }]));
+    expect(await stateOf(install)).toEqual(before);
+  });
+
+  // Drift: nobody is asked before these two routes run, so the count by address is the only brake on a flood of logins and on guesses at a secret.
+  test("one address begins five logins and asks twenty-five times a minute; the next request is answered 429 with when to come back, and another address and the next minute are not", async () => {
+    const install = await openApi();
+    const begin = (visitor: string): Promise<Answered> => install.call("beginLogin", undefined, { token: null, headers: { [VISITOR_HEADER]: visitor }, body: { scope: "publisher", computer: "laptop" } });
+    const ask = (visitor: string): Promise<Answered> => install.call("redeemLogin", undefined, { token: null, headers: { [VISITOR_HEADER]: visitor }, body: { secret: `poplin_login_${"0".repeat(16)}_${"0".repeat(64)}` } });
+    install.clock.now = NOW + 1000;
+
+    const begun = [];
+    for (let sent = 0; sent < 6; sent += 1) begun.push(await begin("one"));
+    const guesses = [];
+    for (let sent = 0; sent < 26; sent += 1) guesses.push(await ask("one"));
+    const refused = begun.at(-1);
+    const others = [await begin("two"), await ask("two")];
+    install.clock.now = NOW + 60_000;
+
+    expect([begun.map((answer) => answer.status), guesses.map((answer) => answer.status)]).toEqual([[200, 200, 200, 200, 200, 429], [...Array.from({ length: 25 }, () => 200), 429]]);
+    expect([refused?.body, refused?.response.headers.get("Retry-After")]).toEqual([
+      { error: { code: "too_many_requests", message: "too many requests came from this address, or too many logins are waiting: wait, then ask again" } },
+      "39",
+    ]);
+    expect([...others, await begin("one"), await ask("one")].map((answer) => answer.status)).toEqual([200, 200, 200, 200]);
+  });
+
+  // Drift: the count is the brake on a flood of logins; a counter that is down and let every request through would be no brake exactly when someone found a way to bring it down.
+  test("a counter that cannot answer refuses a login that is begun, as over the count, and the install is not asked anything", async () => {
+    const install = await openApi();
+    install.counters.takeMinute = () => Promise.reject(new Error("the counter is down"));
+    Object.assign(install.calls, { database: 0, store: 0 });
+
+    const begun = await install.call("beginLogin", undefined, { token: null, body: { scope: "publisher", computer: "laptop" } });
+
+    expect([begun.status, part(begun, "error").code, begun.response.headers.get("Retry-After")]).toEqual([429, "too_many_requests", "60"]);
+    expect([install.calls, install.reported]).toEqual([{ database: 0, store: 0 }, []]);
+  });
+
+  // Drift: the count is also the brake on guesses at a secret; a counter that is down must not turn an allowed login into a token for whoever asks while nothing counts.
+  test("a counter that cannot answer refuses the question for a token, and the allowed login is still there to collect once it counts again", async () => {
+    const install = await openApi();
+    const { takeMinute } = install.counters;
+    const begun = await install.call("beginLogin", undefined, { token: null, body: { scope: "publisher", computer: "laptop" } });
+    const allowed = await decideLogin(installOf(install), { scope: "admin", holder: "ada@example.com" as Login }, { code: String(begun.body.code), allow: true });
+    const ask = (): Promise<Answered> => install.call("redeemLogin", undefined, { token: null, body: { secret: begun.body.secret } });
+    install.counters.takeMinute = () => Promise.reject(new Error("the counter is down"));
+
+    const refused = await ask();
+    const tokens = (await install.database.listTokens()).length;
+    install.counters.takeMinute = takeMinute;
+
+    expect([allowed.ok, refused.status, part(refused, "error").code, refused.response.headers.get("Retry-After"), tokens]).toEqual([true, 429, "too_many_requests", "60", 3]);
+    expect([(await ask()).body.state, (await install.database.listTokens()).length]).toEqual(["allowed", 4]);
+  });
+
+  // Drift: what these routes are sent comes from anyone at all; each row must end in a refusal that stores nothing and echoes no secret.
+  test.each([
+    ["a body that is no JSON", "beginLogin", { body: "scope=admin", headers: { "Content-Type": "application/json" } }, 400, "bad_argument", "body"],
+    ["a form in place of JSON", "beginLogin", { body: "scope=admin", headers: { "Content-Type": "application/x-www-form-urlencoded" } }, 415, "unsupported_media_type", undefined],
+    ["a body over the cap", "redeemLogin", { body: { secret: "x".repeat(70_000) } }, 413, "too_large", "body"],
+    ["a secret where a key goes too", "redeemLogin", { body: { secret: "x", [`poplin_login_${"0".repeat(16)}_${"a".repeat(64)}`]: true } }, 400, "bad_argument", undefined],
+    ["a secret of another form", "redeemLogin", { body: { secret: 7 } }, 400, "bad_argument", "secret"],
+  ] as const)("a login route sent %s refuses it", async (_what, name, sent, status, code, about) => {
+    const install = await openApi();
+    const before = await stateOf(install);
+
+    const answered = await install.call(name, undefined, { token: null, ...sent });
+
+    expect([answered.status, part(answered, "error").code, part(answered, "error").about]).toEqual([status, code, about]);
+    expect([await stateOf(install), JSON.stringify(answered.body).includes("poplin_login_")]).toEqual([before, false]);
   });
 
   // Drift: a store or a database that fails mid-request must not take the Worker down with it, nor tell the caller what failed inside.

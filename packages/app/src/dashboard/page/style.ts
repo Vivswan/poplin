@@ -55,6 +55,9 @@ button.danger { color: var(--danger); background: transparent; border-color: var
 .setting ~ button { margin-top: 1rem; }
 .when-public { display: none; }
 fieldset:has(input[value="public"]:checked) .when-public { display: block; }
+.code { margin: 0 0 1rem; font: 700 2.5rem/1.2 ui-monospace, "SF Mono", Menlo, Consolas, monospace; letter-spacing: 0.12em; overflow-wrap: anywhere; }
+td form { margin: 0; }
+td button { padding: 0.125rem 0.75rem; font-size: 0.875rem; }
 meter { display: block; width: 100%; max-width: 20rem; height: 1rem; }
 @media (max-width: 40rem) {
   dl, .setting { grid-template-columns: minmax(0, 1fr); }

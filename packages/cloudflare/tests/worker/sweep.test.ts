@@ -3,6 +3,7 @@
 import { reset } from "cloudflare:test";
 import { publishSite } from "@poplin/core/src/actions/publish";
 import { ROUTES } from "@poplin/core/src/api/routes";
+import { parseUserCode } from "@poplin/core/src/auth/computer-logins";
 import { beforeEach, describe, expect, test } from "vitest";
 import { ADMIN, api, ask, BINDINGS, countedBindings, done, installOf, instance, OWNER, page, publish, sweep, tokenOf, type World, wait, world } from "./support/install";
 
@@ -71,6 +72,27 @@ describe("the scheduled run", () => {
     expect((await ask(worker, `${ADMIN}/api/sites/${kept.label}`, { headers: { Authorization: `Bearer ${token}` } })).status).toBe(200);
     expect(activity.map((entry) => `${entry.action} ${entry.site?.id === brief.id} by ${entry.by}`)).toEqual(["delete true by sweep@poplin.invalid", "trash true by sweep@poplin.invalid"]);
     expect(await database.listUploads({ before: w.clock.now, limit: 100 })).toEqual({ uploads: [] });
+  });
+
+  // Drift: a login nobody allowed or collected leaves the table by the sweep alone; a run that never reached the end of the walk would keep every one for good.
+  test("a login that ran out is removed by the run that ends the walk, and one still waiting stays", async () => {
+    const worker = instance(w);
+    await ask(worker, `${ADMIN}/api/whoami`);
+    const begin = async (): Promise<string> => (await done<{ code: string }>(await api(worker, null, "POST", ROUTES.beginLogin.path(), { scope: "publisher", computer: "laptop" }))).code;
+    const { database } = await installOf(w);
+    const stored = async (shown: string): Promise<boolean> => {
+      const code = parseUserCode(shown);
+
+      return code !== undefined && (await database.findComputerLogin(code)) !== undefined;
+    };
+    const old = await begin();
+
+    wait(w, 1);
+    toTheSitesTurn();
+    const waiting = await begin();
+    await sweep(worker, w);
+
+    expect([await stored(old), await stored(waiting)]).toEqual([false, true]);
   });
 
   // Drift: a run that walked until the walk ended would pass Cloudflare's per-invocation limit on a large install and be cut off mid-change; one that forgot its place would look at the same sites every time.

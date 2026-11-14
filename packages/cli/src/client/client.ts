@@ -66,6 +66,11 @@ const CONFIG_ANSWER = v.looseObject({ values: SETTING_VALUES });
 const ANSWERS = {
   whoami: v.looseObject({ token: TOKEN }),
   logout: v.looseObject({ token: TOKEN }),
+  beginLogin: v.looseObject({ code: v.string(), secret: v.string(), verify_url: v.string(), expires_in: v.number(), interval: v.number() }),
+  redeemLogin: v.variant("state", [
+    v.looseObject({ state: v.picklist(["pending", "slow_down", "denied", "expired"]) }),
+    v.looseObject({ state: v.literal("allowed"), token: v.string(), record: TOKEN }),
+  ]),
   listSites: v.looseObject({ sites: v.array(SITE), next: v.optional(v.looseObject({ updated_at: v.number(), id: v.string() })) }),
   getSite: SITE_ANSWER,
   updateSite: SITE_ANSWER,
@@ -138,8 +143,8 @@ interface ClientOptions {
   /** The origin of the install, such as `https://poplin.example.com`. */
   readonly server: string;
 
-  /** The token every request presents. It goes into the `Authorization` header and nowhere else. */
-  readonly token: string;
+  /** The token every request presents. It goes into the `Authorization` header and nowhere else. A computer that is logging in has none, and sends no such header. */
+  readonly token?: string;
 
   /** What sends the requests. */
   readonly fetch: Fetch;
@@ -172,8 +177,10 @@ function failed(failure: Failure): { readonly ok: false; readonly failure: Failu
 }
 
 /** The headers and the body of one request. A stream is sent as it is read, which the request must say. */
-function requestOf(route: Route<never, unknown, unknown>, token: string, body: unknown, length: number | undefined): RequestInit {
-  const headers: Record<string, string> = { Authorization: `Bearer ${token}`, Accept: "application/json" };
+function requestOf(route: Route<never, unknown, unknown>, token: string | undefined, body: unknown, length: number | undefined): RequestInit {
+  const headers: Record<string, string> = { Accept: "application/json" };
+  if (token !== undefined) headers.Authorization = `Bearer ${token}`;
+
   if (route.sends === "nothing") return { method: route.method, headers };
 
   if (route.sends === "json") return { method: route.method, headers: { ...headers, "Content-Type": "application/json" }, body: JSON.stringify(body) };

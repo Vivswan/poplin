@@ -5,9 +5,11 @@
 
 import * as v from "valibot";
 
+import type { ComputerLogin, LoginId, PendingLogin, UserCode } from "../auth/computer-logins";
 import type { TokenId, TokenRecord } from "../auth/tokens";
 import type { PublicName } from "../names/names";
 import { type AuditAction, type AuditEntry, auditFromRow } from "../records/audit";
+import { computerLoginFromRow } from "../records/computer-login";
 import { SETTING_CHANGES, SETTING_VALUES, type SettingValues } from "../records/settings";
 import { signingKeyFromRow, signingKeyToText } from "../records/secret";
 import { NEW_SITE, SITE_DETAILS, type Site, type SiteAccess, siteFromRow, siteToRow } from "../records/site";
@@ -22,6 +24,7 @@ import type {
   Database,
   Done,
   ExportPage,
+  LoginDecision,
   NewSite,
   NewUpload,
   NewVersion,
@@ -313,6 +316,44 @@ SELECT ?1, ?2, 'token_revoked', json_object('token', id, 'scope', scope, 'note',
 /** The removal itself, only when its audit entry was written. */
 const DELETE_TOKEN = "DELETE FROM tokens WHERE id = ?1 AND changes() = 1";
 
+/** Every column of a login. */
+const SELECT_LOGIN = "SELECT id, code, hash, scope, computer, state, decided_by, created_at, expires_at, polled_at FROM logins";
+
+/** How many logins have not run out at `?1`. */
+const LIVE_LOGINS = "SELECT COUNT(*) AS live FROM logins WHERE expires_at > ?1";
+
+/** A new login, pending, only while fewer than `?8` have not run out at `?6` and its id and its code are free. */
+const INSERT_LOGIN = `
+INSERT INTO logins (id, code, hash, scope, computer, created_at, expires_at)
+SELECT ?1, ?2, ?3, ?4, ?5, ?6, ?7
+WHERE (SELECT COUNT(*) FROM logins WHERE expires_at > ?6) < ?8 AND NOT EXISTS (SELECT 1 FROM logins WHERE id = ?1) AND NOT EXISTS (SELECT 1 FROM logins WHERE code = ?2)`;
+
+/** The login under code `?1` allowed or denied by `?3`, only while it is pending and has not run out at `?4`. */
+const DECIDE_LOGIN = "UPDATE logins SET state = ?2, decided_by = ?3 WHERE code = ?1 AND state = 'pending' AND expires_at > ?4";
+
+/** The audit entry of a decided login, written only when the statement before it changed a row. It names the scope and the computer, and nothing of the secret. */
+const AUDIT_LOGIN = `
+INSERT INTO audit (at, actor, action, detail)
+SELECT ?1, ?2, ?3, json_object('scope', scope, 'computer', computer) FROM logins WHERE code = ?4 AND changes() = 1`;
+
+/** The time `?2` a pending login's terminal last asked, only when it last asked at or before `?3`. */
+const POLL_LOGIN = "UPDATE logins SET polled_at = ?2 WHERE id = ?1 AND state = 'pending' AND (polled_at IS NULL OR polled_at <= ?3)";
+
+/** A token for login `?1`, only while the login is allowed, has not run out at `?5`, and is of the token's scope `?7`. */
+const INSERT_TOKEN_OF_LOGIN = `
+INSERT INTO tokens (id, hash, scope, note, created_at, expires_at)
+SELECT ?2, ?3, l.scope, ?4, ?5, ?6 FROM logins l
+WHERE l.id = ?1 AND l.state = 'allowed' AND l.expires_at > ?5 AND l.scope = ?7 AND NOT EXISTS (SELECT 1 FROM tokens WHERE id = ?2)`;
+
+/** The audit entry of that token, signed by whoever allowed login `?2`, written only when the token was stored. */
+const AUDIT_TOKEN_OF_LOGIN = "INSERT INTO audit (at, actor, action, detail) SELECT ?1, decided_by, 'token_added', ?3 FROM logins WHERE id = ?2 AND changes() = 1";
+
+/** The login removed, only when its token's audit entry was written. */
+const DELETE_REDEEMED_LOGIN = "DELETE FROM logins WHERE id = ?1 AND changes() = 1";
+
+/** Every login that ran out at or before `?1`, removed. */
+const DELETE_OLD_LOGINS = "DELETE FROM logins WHERE expires_at <= ?1";
+
 /** The settings, as JSON text. */
 const READ_SETTINGS = "SELECT value FROM settings WHERE id = 1";
 
@@ -435,6 +476,12 @@ function uploadIn(result: StatementResult | undefined): Upload | undefined {
   const row = result?.rows[0];
 
   return row === undefined ? undefined : uploadFromRow(row);
+}
+
+function loginIn(result: StatementResult | undefined): ComputerLogin | undefined {
+  const row = result?.rows[0];
+
+  return row === undefined ? undefined : computerLoginFromRow(row);
 }
 
 function signingKeyIn(result: StatementResult | undefined): Uint8Array<ArrayBuffer> | undefined {
@@ -827,6 +874,64 @@ export class SqlDatabase implements Database {
     if (!changed(deleted) || row === undefined) return { kind: "not_found" };
 
     return { kind: "done", token: tokenFromRow(row) };
+  }
+
+  async addComputerLogin(login: PendingLogin, most: number): Promise<{ readonly kind: "done" } | Refused<"full" | "taken">> {
+    const [live, inserted] = await this.#driver.batch([
+      sql(LIVE_LOGINS, login.createdAt),
+      sql(INSERT_LOGIN, login.id, login.code, login.hash, login.scope, login.computer, login.createdAt, login.expiresAt, most),
+    ]);
+    if (changed(inserted)) return { kind: "done" };
+
+    return { kind: Number(live?.rows[0]?.live) >= most ? "full" : "taken" };
+  }
+
+  async getComputerLogin(id: LoginId): Promise<ComputerLogin | undefined> {
+    const [found] = await this.#driver.batch([sql(`${SELECT_LOGIN} WHERE id = ?1`, id)]);
+
+    return loginIn(found);
+  }
+
+  async findComputerLogin(code: UserCode): Promise<ComputerLogin | undefined> {
+    const [found] = await this.#driver.batch([sql(`${SELECT_LOGIN} WHERE code = ?1`, code)]);
+
+    return loginIn(found);
+  }
+
+  async decideComputerLogin(code: UserCode, decision: LoginDecision): Promise<{ readonly kind: "done"; readonly login: ComputerLogin } | Refused<"not_pending">> {
+    const [updated, , after] = await this.#driver.batch([
+      sql(DECIDE_LOGIN, code, decision.state, decision.by, decision.at),
+      sql(AUDIT_LOGIN, decision.at, decision.by, decision.state === "allowed" ? "login_allowed" : "login_denied", code),
+      sql(`${SELECT_LOGIN} WHERE code = ?1`, code),
+    ]);
+    const login = loginIn(after);
+    if (!changed(updated) || login === undefined) return { kind: "not_pending" };
+
+    return { kind: "done", login };
+  }
+
+  async pollComputerLogin(id: LoginId, poll: { readonly at: number; readonly notAfter: number }): Promise<boolean> {
+    const [polled] = await this.#driver.batch([sql(POLL_LOGIN, id, poll.at, poll.notAfter)]);
+
+    return changed(polled);
+  }
+
+  async redeemComputerLogin(id: LoginId, token: TokenRecord): Promise<{ readonly kind: "done" } | Refused<"not_allowed">> {
+    const expires = token.scope === "admin" ? token.expiresAt : null;
+    const detail = JSON.stringify({ token: token.id, scope: token.scope, note: token.note });
+    const [inserted] = await this.#driver.batch([
+      sql(INSERT_TOKEN_OF_LOGIN, id, token.id, token.hash, token.note, token.createdAt, expires, token.scope),
+      sql(AUDIT_TOKEN_OF_LOGIN, token.createdAt, id, detail),
+      sql(DELETE_REDEEMED_LOGIN, id),
+    ]);
+
+    return { kind: changed(inserted) ? "done" : "not_allowed" };
+  }
+
+  async sweepComputerLogins(now: number): Promise<number> {
+    const [removed] = await this.#driver.batch([sql(DELETE_OLD_LOGINS, now)]);
+
+    return removed?.changes ?? 0;
   }
 
   async readSettings(): Promise<SettingValues | undefined> {

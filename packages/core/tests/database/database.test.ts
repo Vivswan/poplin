@@ -5,6 +5,7 @@ import { isDeepStrictEqual } from "node:util";
 
 import * as v from "valibot";
 
+import type { ComputerLogin, LoginId, PendingLogin, UserCode } from "../../src/auth/computer-logins";
 import type { TokenId, TokenRecord } from "../../src/auth/tokens";
 import type {
   Address,
@@ -13,6 +14,7 @@ import type {
   Database,
   Done,
   ExportPage,
+  LoginDecision,
   NewSite,
   NewUpload,
   NewVersion,
@@ -134,6 +136,8 @@ class MemoryDatabase implements Database {
   readonly #sites = new Map<SiteId, Kept>();
 
   readonly #tokens = new Map<TokenId, TokenRecord>();
+
+  readonly #logins = new Map<LoginId, ComputerLogin>();
 
   readonly #audit: AuditEntry[] = [];
 
@@ -403,6 +407,63 @@ class MemoryDatabase implements Database {
     this.#log(signed, "token_revoked", null, { token: token.id, scope: token.scope, note: token.note });
 
     return { kind: "done", token };
+  }
+
+  async addComputerLogin(login: PendingLogin, most: number): Promise<{ readonly kind: "done" } | Refused<"full" | "taken">> {
+    const kept = [...this.#logins.values()];
+    if (kept.filter((other) => other.expiresAt > login.createdAt).length >= most) return { kind: "full" };
+
+    if (kept.some((other) => other.id === login.id || other.code === login.code)) return { kind: "taken" };
+
+    this.#logins.set(login.id, { ...login });
+
+    return { kind: "done" };
+  }
+
+  async getComputerLogin(id: LoginId): Promise<ComputerLogin | undefined> {
+    return this.#logins.get(id);
+  }
+
+  async findComputerLogin(code: UserCode): Promise<ComputerLogin | undefined> {
+    return this.#loginUnder(code);
+  }
+
+  async decideComputerLogin(code: UserCode, decision: LoginDecision): Promise<{ readonly kind: "done"; readonly login: ComputerLogin } | Refused<"not_pending">> {
+    const pending = this.#loginUnder(code);
+    if (pending?.state !== "pending" || pending.expiresAt <= decision.at) return { kind: "not_pending" };
+
+    const login: ComputerLogin = { ...pending, state: decision.state, decidedBy: decision.by };
+    this.#logins.set(login.id, login);
+    this.#log(decision, decision.state === "allowed" ? "login_allowed" : "login_denied", null, { scope: login.scope, computer: login.computer });
+
+    return { kind: "done", login };
+  }
+
+  async pollComputerLogin(id: LoginId, poll: { readonly at: number; readonly notAfter: number }): Promise<boolean> {
+    const login = this.#logins.get(id);
+    if (login?.state !== "pending" || (login.polledAt !== null && login.polledAt > poll.notAfter)) return false;
+
+    this.#logins.set(id, { ...login, polledAt: poll.at });
+
+    return true;
+  }
+
+  async redeemComputerLogin(id: LoginId, token: TokenRecord): Promise<{ readonly kind: "done" } | Refused<"not_allowed">> {
+    const login = this.#logins.get(id);
+    if (login?.state !== "allowed" || login.expiresAt <= token.createdAt || login.scope !== token.scope || this.#tokens.has(token.id)) return { kind: "not_allowed" };
+
+    this.#tokens.set(token.id, { ...token });
+    this.#log({ by: login.decidedBy, at: token.createdAt }, "token_added", null, { token: token.id, scope: token.scope, note: token.note });
+    this.#logins.delete(id);
+
+    return { kind: "done" };
+  }
+
+  async sweepComputerLogins(now: number): Promise<number> {
+    const old = [...this.#logins.values()].filter((login) => login.expiresAt <= now);
+    for (const login of old) this.#logins.delete(login.id);
+
+    return old.length;
   }
 
   async readSettings(): Promise<SettingValues | undefined> {
@@ -702,6 +763,10 @@ class MemoryDatabase implements Database {
     this.#log(signed, action, kept.fields, detail);
 
     return { kind: "done", site: siteOf(kept) };
+  }
+
+  #loginUnder(code: UserCode): ComputerLogin | undefined {
+    return [...this.#logins.values()].find((login) => login.code === code);
   }
 
   #log(signed: Signed, action: AuditAction, site: { readonly id: SiteId; readonly name: SiteName } | null, detail: Readonly<Record<string, unknown>>): void {

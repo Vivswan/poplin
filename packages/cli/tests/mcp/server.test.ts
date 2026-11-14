@@ -249,11 +249,11 @@ describe("the MCP server", () => {
   );
 
   test.each([
-    ["no login", {}, "no_login", "not logged in"],
-    ["half a login", { POPLIN_SERVER: ORIGIN }, "bad_login", "the login cannot be used"],
+    ["no login", {}, "no_login", "not logged in", "poplin login --server"],
+    ["half a login", { POPLIN_SERVER: ORIGIN }, "bad_login", "the login cannot be used", "POPLIN_TOKEN"],
   ])(
     "with %s the server starts, lists its tools, and answers every call with how to log in: a server that exits at start breaks the agent's app with no word why",
-    async (_name, env, code, sentence) => {
+    async (_name, env, code, sentence, fix) => {
       const bench = await open(env);
       const { tools } = await bench.client.listTools();
 
@@ -268,7 +268,7 @@ describe("the MCP server", () => {
           error: answer.error,
           code: codeOf(answer),
           sentence: answer.text.includes(sentence),
-          names: answer.text.includes("POPLIN_TOKEN"),
+          names: answer.text.includes(fix),
         })),
       ).toEqual([
         { error: true, code, sentence: true, names: true },

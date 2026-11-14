@@ -90,6 +90,9 @@ export async function openMcp(home: string, env?: Readonly<Record<string, string
       throw new Error("the server asked a question");
     },
     timeoutMs: 2000,
+    computer: "laptop",
+    open: () => undefined,
+    pause: async () => "over",
   };
 
   const exited = run(["mcp"], io, { input, output });

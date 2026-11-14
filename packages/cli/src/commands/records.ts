@@ -36,6 +36,15 @@ export interface Io {
 
   /** How long one call may take, in milliseconds, in place of the client's defaults. */
   readonly timeoutMs?: number;
+
+  /** The name this computer gives itself when it asks to be logged in. */
+  readonly computer: string;
+
+  /** Hands an address to the person's browser, when this machine has one to open. It never throws, and a browser that did not open is not heard of. */
+  readonly open: (address: string) => void;
+
+  /** Waits so many milliseconds. It answers `interrupted`, at once, when the person stops the command during the wait. */
+  readonly pause: (ms: number) => Promise<"over" | "interrupted">;
 }
 
 /** What a command that talks to an install runs with. */

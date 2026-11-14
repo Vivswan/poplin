@@ -148,6 +148,9 @@ async function serve(input: readonly string[], answer: Response | undefined, don
       terminal: { asks: true, progress: true },
       ask: async () => "report--k3f9x2ab71qz",
       timeoutMs: 1000,
+      computer: "laptop",
+      open: () => undefined,
+      pause: async () => "over",
     },
     { input: stdin, output: stdout },
   );

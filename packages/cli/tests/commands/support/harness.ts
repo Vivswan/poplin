@@ -27,21 +27,28 @@ interface Options {
   readonly typed?: string;
 }
 
-/** What one command printed, and how it exited. `asked` holds the questions it put. */
+/** What one command printed, and how it exited. `asked` holds the questions it put, `opened` the addresses it handed to a browser, and `waits` how long each of its waits was, in milliseconds. */
 export interface Ran {
   readonly code: number;
   readonly out: string[];
   readonly err: string[];
   readonly status: string[];
   readonly asked: string[];
+  readonly opened: string[];
+  readonly waits: number[];
 }
 
-/** An install and the means to run commands against it. `sent` lists every request as its method and path. */
+/**
+ * An install and the means to run commands against it. `sent` lists every request as its method and path.
+ *
+ * A command's wait takes no time: it moves the install's clock on by as long, then calls `paused` with what the command printed so far, which may answer that the person stopped the command.
+ */
 export interface Bench {
   readonly install: ApiInstall;
   readonly sent: string[];
   readonly home: string;
   hook: Hook | undefined;
+  paused: ((ran: Ran) => Promise<"over" | "interrupted" | undefined>) | undefined;
   readonly run: (line: string, options?: Options) => Promise<Ran>;
 }
 
@@ -98,8 +105,9 @@ export async function openBench(): Promise<Bench> {
     sent,
     home,
     hook: undefined,
+    paused: undefined,
     run: async (line, options = {}) => {
-      const ran: Ran = { code: -1, out: [], err: [], status: [], asked: [] };
+      const ran: Ran = { code: -1, out: [], err: [], status: [], asked: [], opened: [], waits: [] };
       const env = options.env ?? { POPLIN_SERVER: ORIGIN, POPLIN_TOKEN: install.tokens.admin };
 
       const io: Io = {
@@ -121,6 +129,16 @@ export async function openBench(): Promise<Bench> {
           return options.typed ?? "";
         },
         timeoutMs: 2000,
+        computer: "test-computer",
+        open: (address) => {
+          ran.opened.push(address);
+        },
+        pause: async (ms) => {
+          install.clock.now += ms;
+          ran.waits.push(ms);
+
+          return (await bench.paused?.(ran)) ?? "over";
+        },
       };
 
       const code = await run(words(`poplin ${line}`), io);

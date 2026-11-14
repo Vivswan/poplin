@@ -2,13 +2,14 @@
 
 import type { UploadLimits } from "@poplin/core/src/actions/begin-publish";
 import type { Install } from "@poplin/core/src/actions/records";
-import { ROUTES } from "@poplin/core/src/api/routes";
+import { OPEN_ROUTES, ROUTES } from "@poplin/core/src/api/routes";
 import { siteReference } from "@poplin/core/src/sites/labels";
 import { Hono } from "hono";
 
+import type { Counters, Taken } from "../limits/limits";
 import { authenticate, type ReadToken } from "./authenticate";
 import { hasContentType, readJson, readQuery } from "./body";
-import { type Call, HANDLERS, QUERIES, type RouteName } from "./handlers";
+import { type Call, HANDLERS, OPEN_HANDLERS, type OpenName, QUERIES, type RouteName } from "./handlers";
 import { refusal, respond, respondFile } from "./respond";
 
 /** The most bytes the JSON body of a route may hold, unless it declares files or imports the settings. */
@@ -19,6 +20,12 @@ const SETTINGS_BYTES = 4 * JSON_BYTES;
 
 /** The routes whose JSON body declares files, and so may be as long as a manifest. */
 const DECLARES_FILES: ReadonlySet<RouteName> = new Set(["beginPublish", "beginImport"]);
+
+/** The most requests one visitor may send a minute to each route that takes no token. A terminal asks for its token twelve times a minute. */
+const OPEN_PER_MINUTE: Readonly<Record<OpenName, number>> = { beginLogin: 5, redeemLogin: 25 };
+
+/** What a counter that cannot answer is taken to say: the minute is full. A login is the guess the count exists to stop, so it is refused where a request for a site is let through. */
+const UNCOUNTED = { ok: false, retryAfterSeconds: 60 } as const;
 
 /** What one request can carry: a file's bytes, a publish's file count, and the JSON that declares a publish's files. */
 export interface ApiLimits extends UploadLimits {
@@ -36,6 +43,16 @@ export interface ApiDeps extends Install {
 
   /** Told of every failure a request ends in, before the request is answered 500. */
   readonly report?: (error: unknown) => void;
+
+  /** Where the requests to the routes that take no token are counted, a minute at a time. */
+  readonly counters: Pick<Counters, "takeMinute">;
+
+  /** The key one visitor's requests are counted by: `visitorKey` of the address the host itself saw, never of a header a visitor can set. */
+  readonly visitorOf: (request: Request) => Promise<string>;
+}
+
+function isOpen(name: RouteName): name is OpenName {
+  return (OPEN_ROUTES as readonly RouteName[]).includes(name);
 }
 
 /** The most bytes the JSON body of a route may hold. */
@@ -45,8 +62,28 @@ function bodyCap(name: RouteName, limits: ApiLimits): number {
   return name === "importSettings" ? SETTINGS_BYTES : JSON_BYTES;
 }
 
+/** Answer one request to a route that takes no token: the visitor's count first, then what was sent, then the route's handler. */
+async function answerOpen(name: OpenName, request: Request, deps: ApiDeps): Promise<Response> {
+  const take = async (): Promise<Taken> => deps.counters.takeMinute({ scope: "visitor", key: `${name}:${await deps.visitorOf(request)}`, limit: OPEN_PER_MINUTE[name] }, deps.now());
+  const taken = await take().catch(() => UNCOUNTED);
+  if (!taken.ok) return refusal("too_many_requests", undefined, { "Retry-After": String(Math.max(1, Math.ceil(taken.retryAfterSeconds))) });
+
+  if (!hasContentType(request, ROUTES[name].sends)) return refusal("unsupported_media_type");
+
+  const url = new URL(request.url);
+  const query = readQuery(url, {});
+  if (!query.ok) return respond(query);
+
+  const sent = await readJson(request, JSON_BYTES);
+  if (!sent.ok) return respond(sent);
+
+  return respond(await OPEN_HANDLERS[name]({ install: deps, body: sent.value, origin: url.origin }));
+}
+
 /** Answer one request to one route: who asks first, then what was sent, then the route's handler. */
 async function answer(name: RouteName, request: Request, params: Readonly<Record<string, string>>, deps: ApiDeps): Promise<Response> {
+  if (isOpen(name)) return answerOpen(name, request, deps);
+
   const route = ROUTES[name];
   const token = await authenticate(request, deps.readToken, deps.now());
   if (token === undefined) return refusal("not_logged_in");
@@ -83,6 +120,8 @@ async function answer(name: RouteName, request: Request, params: Readonly<Record
  * Build the API of one install.
  *
  * Every request is authenticated by `Authorization: Bearer <token>` alone, and whether the token may do what it asks is decided by the action. `HEAD` is answered as `GET` without its body.
+ *
+ * The two routes a computer logs in through take no token: they are counted by visitor, and what they hand out is decided by an admin on the dashboard.
  *
  * @returns the handler of every request under `/api`. It answers a path that is no route 404, a route under another method 405 with `Allow`, and a failure of the store or the database 500, and it never throws
  */
