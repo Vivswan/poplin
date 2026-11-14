@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 
 import { ROUTES } from "@poplin/core/src/api/routes";
 
-import { type Answered, type ApiInstall, LIMITS, NOW, ORIGIN, openApi, requestOf } from "./install";
+import { type Answered, type ApiInstall, LIMITS, NOW, ORIGIN, openApi, requestOf } from "./support/install";
 
 type RouteName = keyof typeof ROUTES;
 

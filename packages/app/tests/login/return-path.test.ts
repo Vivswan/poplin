@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { safeReturn } from "../../src/login/return-path";
 import { hostnameAddresses } from "../../src/sites/hostname-addresses";
-import { SUFFIXED } from "../layouts";
+import { SUFFIXED } from "../../../cloudflare/tests/zone/support/layouts";
 
 const ADDRESSES = hostnameAddresses(SUFFIXED);
 const SITE = "report--k3f9x2ab71qz-page.example.com";

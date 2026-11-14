@@ -9,8 +9,8 @@
       "includeEntryExports": true,
       "ignoreIssues": { "src/actions.ts": ["exports"] }
     },
-    "packages/worker": {
-      "ignoreDependencies": ["cloudflare"]
+    "packages/cloudflare": {
+      "entry": ["tests/**/*.test.ts"]
     }
   }
 }

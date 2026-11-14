@@ -3,7 +3,7 @@
 // Every change names who made it and when, and writes its audit entry in the same atomic step: both are kept, or neither.
 //
 // An implementation keeps these rules itself, whatever it stores records in: a site always holds its live version, no two sites share a folder,
-// and no site's public name is any site's id. The cases every implementation runs are in `tests/database-contract.ts`.
+// and no site's public name is any site's id. The cases every implementation runs are in `tests/database/support/database-contract.ts`.
 
 import type { TokenId, TokenRecord } from "../auth/tokens";
 import type { PublicName, SiteName } from "../names/names";

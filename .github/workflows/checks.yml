@@ -37,8 +37,8 @@ jobs:
   # The product's tests and the three tree guards on every OS a user publishes from. The runtime is the bun that
   # .bun-version pins: the tests import bun:test, which no other runtime provides. The release pipeline's tests run in
   # `check` alone: that pipeline runs on ubuntu and nowhere else. The fuzz tests run in `check` alone. The Worker's tests
-  # run in `check` alone too: they need the Workers runtime, and the root `test` script this job calls leaves
-  # `packages/worker` out.
+  # run in `check` alone too: they need the Workers runtime, and the root `test` script this job calls leaves the
+  # Workers-runtime tests of `packages/cloudflare` out.
   matrix:
     name: test / ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
@@ -68,13 +68,13 @@ jobs:
         with:
           tofu_version: 1.13.9
       - name: Format
-        run: tofu fmt -check -recursive tofu
+        run: tofu fmt -check -recursive packages/cloudflare/tofu
       - name: Init
-        run: tofu -chdir=tofu init -backend=false -input=false
+        run: tofu -chdir=packages/cloudflare/tofu init -backend=false -input=false
       - name: Validate
-        run: tofu -chdir=tofu validate
+        run: tofu -chdir=packages/cloudflare/tofu validate
       - name: Test
-        run: tofu -chdir=tofu test
+        run: tofu -chdir=packages/cloudflare/tofu test
 
   # The published package as a user gets it: packed, installed from the tarball with npm, and run under plain Node.
   # bun installs the workspace; the Node of the matrix runs the bundler, npm, and the installed package.

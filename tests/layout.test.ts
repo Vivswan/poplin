@@ -1,11 +1,17 @@
 import { describe, expect, test } from "bun:test";
-import { basename, join } from "node:path";
+import { join } from "node:path";
 
 const ROOT = join(import.meta.dir, "..");
 
 const ENTRY_FIELDS = ["main", "module", "types", "bin", "exports"];
 
 const BUILT_ENTRY = /^(?:\.\/)?dist\/(.+)\.mjs$/;
+
+const UNMIRRORED: readonly (readonly [path: string, reason: string])[] = [
+  ["packages/cloudflare/tests/login/login.test.ts", "drives the app package's login through the real Access check"],
+];
+
+const SUPPORT_FILE = /^(packages\/[^/]+)\/tests\/(.+)\/support\/[^/]+\.ts$/;
 
 function scan(pattern: string): string[] {
   return [...new Bun.Glob(pattern).scanSync({ cwd: ROOT })].map((path) => path.replaceAll("\\", "/")).sort();
@@ -58,11 +64,18 @@ describe("package layout", () => {
     expect(loose.filter((path) => !entries.some((entry) => isEntry(path, entry)))).toEqual([]);
   });
 
-  test("every test is named after a source module of its package: without this a renamed or deleted module leaves its test behind", () => {
+  test("every test mirrors a source file of its package, tests/<path>/<name>.test.ts for src/<path>/<name>.ts: without this a moved or deleted module leaves its test behind", () => {
     const tests = scan("packages/*/tests/**/*.test.ts");
-    const modules = new Set(scan("packages/*/src/**/*.ts").map((path) => `${packageOf(path)}/${basename(path, ".ts")}`));
+    const sources = new Set(scan("packages/*/src/**/*.ts"));
 
     expect(tests.length).toBeGreaterThan(0);
-    expect(tests.filter((path) => !modules.has(`${packageOf(path)}/${basename(path, ".test.ts")}`))).toEqual([]);
+    expect(tests.filter((path) => !sources.has(path.replace("/tests/", "/src/").replace(/\.test\.ts$/, ".ts")))).toEqual(UNMIRRORED.map(([path]) => path));
+  });
+
+  test("every other file under tests/ sits in the support/ folder of a concept its package has: without this a shared fixture reads as a test with no source", () => {
+    const shared = scan("packages/*/tests/**/*.ts").filter((path) => !path.endsWith(".test.ts"));
+    const concepts = new Set(scan("packages/*/src/**/*.ts").map((path) => path.slice(0, path.lastIndexOf("/"))));
+
+    expect(shared.filter((path) => !concepts.has(path.replace(SUPPORT_FILE, "$1/src/$2")))).toEqual([]);
   });
 });

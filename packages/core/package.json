@@ -42,10 +42,10 @@
     "./src/sites/labels": "./src/sites/labels.ts",
     "./src/storage/memory": "./src/storage/memory.ts",
     "./src/storage/storage": "./src/storage/storage.ts",
-    "./tests/bun-sqlite-driver": "./tests/bun-sqlite-driver.ts",
-    "./tests/database-contract": "./tests/database-contract.ts",
-    "./tests/sql-driver-contract": "./tests/sql-driver-contract.ts",
-    "./tests/storage-contract": "./tests/storage-contract.ts"
+    "./tests/database/support/bun-sqlite-driver": "./tests/database/support/bun-sqlite-driver.ts",
+    "./tests/database/support/database-contract": "./tests/database/support/database-contract.ts",
+    "./tests/database/support/sql-driver-contract": "./tests/database/support/sql-driver-contract.ts",
+    "./tests/storage/support/storage-contract": "./tests/storage/support/storage-contract.ts"
   },
   "dependencies": {
     "valibot": "1.5.0"

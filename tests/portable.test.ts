@@ -9,29 +9,10 @@ import { dirname, join, posix } from "node:path";
 const ROOT = join(import.meta.dir, "..");
 
 /** The folders and files that hold no provider: another provider is added without touching them. One that does not exist is skipped. */
-const PORTABLE: readonly string[] = [
-  "packages/core",
-  "packages/cli",
-  "packages/app/src/api",
-  "packages/app/src/sites",
-  "packages/app/src/limits",
-  "packages/app/src/login/login.ts",
-  "packages/app/src/login/session.ts",
-  "packages/app/src/login/return-path.ts",
-  "packages/app/tests/sites",
-  "packages/app/tests/limits",
-  "packages/app/tests/login/session.test.ts",
-  "packages/app/tests/login/return-path.test.ts",
-];
+const PORTABLE: readonly string[] = ["packages/core", "packages/app", "packages/cli"];
 
 /** The only places the provider lives: portable source imports nothing from them. */
-const PROVIDER: readonly string[] = [
-  "packages/worker",
-  "packages/app/src/cloudflare",
-  "packages/app/src/login/access-token.ts",
-  "packages/app/src/login/keys.ts",
-  "tofu",
-];
+const PROVIDER: readonly string[] = ["packages/cloudflare"];
 
 /** The provider's own modules, as an import path or a manifest dependency. */
 const PROVIDER_MODULE = /^(?:cloudflare(?:[:/].*)?|@cloudflare\/.*|wrangler(?:\/.*)?|miniflare(?:\/.*)?)$/;
@@ -51,9 +32,14 @@ const FORBIDDEN: readonly (readonly [rule: string, pattern: RegExp])[] = [
 /** The findings on the tree today that another change removes: `<path>: <what was found>`, then the owner and the reason. A row that finds nothing fails, so the list only shrinks. */
 const ALLOWED: readonly (readonly [finding: string, owner: string, reason: string])[] = [
   [
-    "packages/app/tests/sites/install.ts: ../../src/cloudflare/layout",
+    "packages/app/tests/sites/support/install.ts: ../../../../cloudflare/src/zone/layout",
     "serving fixtures",
     "the fixture should build its addresses without the provider's layout parser",
+  ],
+  [
+    "packages/app/tests/login/return-path.test.ts: ../../../cloudflare/tests/zone/support/layouts",
+    "return-path tests",
+    "the test should build its addresses without the provider's layout parser",
   ],
   ["packages/app/tests/login/session.test.ts: CF_Authorization", "session tests", "a provider's cookie name as test noise"],
 ];
@@ -235,14 +221,14 @@ describe("provider code stays out of the portable packages", () => {
     ["a runtime module", 'import { env } from "cloudflare:workers";', "provider import", "cloudflare:workers"],
     ["the deploy tool", 'const { unstable_dev } = await import("wrangler");', "provider import", "wrangler"],
     ["a require", 'const sdk = require("cloudflare");', "provider import", "cloudflare"],
-    ["a re-export", 'export { buildClient } from "../../../app/src/cloudflare/client";', "provider import", "../../../app/src/cloudflare/client"],
-    ["the Worker package by name", 'import { r2Storage } from "@poplin/worker/src/r2";', "provider import", "@poplin/worker/src/r2"],
-    ["the Worker package by path", 'import { r2Storage } from "../../../worker/src/r2.ts";', "provider import", "../../../worker/src/r2.ts"],
+    ["a re-export", 'export { buildClient } from "../../../cloudflare/src/zone/client";', "provider import", "../../../cloudflare/src/zone/client"],
+    ["the Cloudflare package by name", 'import { r2Storage } from "@poplin/cloudflare/src/storage/r2";', "provider import", "@poplin/cloudflare/src/storage/r2"],
+    ["the Cloudflare package by path", 'import { r2Storage } from "../../../cloudflare/src/storage/r2.ts";', "provider import", "../../../cloudflare/src/storage/r2.ts"],
     [
       "the Access token check",
-      'import { verifyAccessToken } from "@poplin/app/src/login/access-token";',
+      'import { verifyAccessToken } from "@poplin/cloudflare/src/login/access-token";',
       "provider import",
-      "@poplin/app/src/login/access-token",
+      "@poplin/cloudflare/src/login/access-token",
     ],
     ["an import broken over lines", 'import {\n  buildClient,\n} from\n  "cloudflare";', "provider import", "cloudflare"],
     ["a bucket binding", "function open(bucket: R2Bucket): Storage {", "provider type", "R2Bucket"],
@@ -270,7 +256,7 @@ describe("provider code stays out of the portable packages", () => {
   ])("names %s", (_, line, rule, what) => {
     using tree = planted({
       "packages/app/package.json": '{ "name": "@poplin/app" }',
-      "packages/worker/package.json": '{ "name": "@poplin/worker" }',
+      "packages/cloudflare/package.json": '{ "name": "@poplin/cloudflare" }',
       "packages/cli/src/sites/planted.ts": `// A planted file.\n${line}\n`,
     });
     const at = 1 + lineOf(line, line.indexOf(what));
@@ -280,15 +266,15 @@ describe("provider code stays out of the portable packages", () => {
 
   test("drift: a portable package whose manifest or TypeScript settings name the provider takes it in with no import to give it away", () => {
     using tree = planted({
-      "packages/worker/package.json": '{ "name": "@poplin/worker" }',
+      "packages/cloudflare/package.json": '{ "name": "@poplin/cloudflare" }',
       "packages/core/package.json":
-        '{\n  "name": "@poplin/core",\n  "dependencies": { "valibot": "1.5.0" },\n  "devDependencies": {\n    "wrangler": "4.0.0",\n    "@poplin/worker": "workspace:*"\n  }\n}\n',
+        '{\n  "name": "@poplin/core",\n  "dependencies": { "valibot": "1.5.0" },\n  "devDependencies": {\n    "wrangler": "4.0.0",\n    "@poplin/cloudflare": "workspace:*"\n  }\n}\n',
       "packages/cli/tsconfig.json": '{\n  "extends": "../../tsconfig.json",\n  "compilerOptions": { "types": ["bun", "@cloudflare/workers-types"] }\n}\n',
     });
 
     expect(violations(tree.path)).toEqual([
       "provider dependency: packages/core/package.json:5: wrangler",
-      "provider dependency: packages/core/package.json:6: @poplin/worker",
+      "provider dependency: packages/core/package.json:6: @poplin/cloudflare",
       "provider types: packages/cli/tsconfig.json:3: @cloudflare/workers-types",
     ]);
   });
@@ -351,12 +337,12 @@ describe("provider code stays out of the portable packages", () => {
       "const sizes = { rcf: 1, cfg: 2 };",
     ].join("\n");
     using tree = planted({
-      "packages/app/package.json": '{ "name": "@poplin/app", "dependencies": { "cloudflare": "7.3.0" } }',
-      "packages/worker/package.json": '{ "name": "@poplin/worker", "devDependencies": { "wrangler": "4.0.0" } }',
-      "packages/worker/src/r2.ts": providerCode,
-      "packages/app/src/cloudflare/client.ts": providerCode,
-      "packages/app/src/login/access-token.ts": providerCode,
-      "packages/app/src/login/keys.ts": providerCode,
+      "packages/app/package.json": '{ "name": "@poplin/app" }',
+      "packages/cloudflare/package.json": '{ "name": "@poplin/cloudflare", "dependencies": { "cloudflare": "7.3.0" }, "devDependencies": { "wrangler": "4.0.0" } }',
+      "packages/cloudflare/src/storage/r2.ts": providerCode,
+      "packages/cloudflare/src/zone/client.ts": providerCode,
+      "packages/cloudflare/src/login/access-token.ts": providerCode,
+      "packages/cloudflare/src/login/keys.ts": providerCode,
       "packages/cli/node_modules/wrangler/index.js": providerCode,
       "packages/cli/dist/bin.mjs": providerCode,
       "packages/cli/README.md": providerCode,

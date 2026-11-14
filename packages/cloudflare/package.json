@@ -1,0 +1,27 @@
+{
+  "name": "@poplin/cloudflare",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./src/worker/bindings": "./src/worker/bindings.ts",
+    "./src/database/d1": "./src/database/d1.ts",
+    "./src/storage/r2": "./src/storage/r2.ts",
+    "./src/zone/zone-binding": "./src/zone/zone-binding.ts"
+  },
+  "scripts": {
+    "typecheck": "wrangler types && tsc -p .",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@poplin/app": "workspace:*",
+    "@poplin/core": "workspace:*",
+    "cloudflare": "7.3.0",
+    "jose": "6.2.17",
+    "valibot": "1.5.0"
+  },
+  "devDependencies": {
+    "@cloudflare/vitest-plugin": "1.8.2",
+    "vitest": "5.1.0",
+    "wrangler": "4.162.0"
+  }
+}

@@ -4,7 +4,7 @@ import { expect } from "bun:test";
 import fc from "fast-check";
 
 import { serveSite } from "../../packages/app/src/sites/serve";
-import { labelHost, NOW, openInstall } from "../../packages/app/tests/sites/install";
+import { labelHost, NOW, openInstall } from "../../packages/app/tests/sites/support/install";
 import { fuzzTarget } from "./config";
 import { hostile } from "./hostile";
 

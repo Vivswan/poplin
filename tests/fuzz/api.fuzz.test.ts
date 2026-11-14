@@ -4,7 +4,7 @@ import { expect } from "bun:test";
 import fc from "fast-check";
 
 import { ROUTES } from "../../packages/core/src/api/routes";
-import { type ApiInstall, ORIGIN, openApi } from "../../packages/app/tests/api/install";
+import { type ApiInstall, ORIGIN, openApi } from "../../packages/app/tests/api/support/install";
 import { fuzzTarget } from "./config";
 import { hostile } from "./hostile";
 

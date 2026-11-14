@@ -3,14 +3,16 @@
   "private": true,
   "type": "module",
   "exports": {
-    "./src/cloudflare/zone-binding": "./src/cloudflare/zone-binding.ts"
+    "./src/limits/limits": "./src/limits/limits.ts",
+    "./src/limits/visitor-key": "./src/limits/visitor-key.ts",
+    "./src/login/login": "./src/login/login.ts",
+    "./src/login/session": "./src/login/session.ts",
+    "./src/sites/hostname-addresses": "./src/sites/hostname-addresses.ts"
   },
   "dependencies": {
     "@poplin/core": "workspace:*",
-    "cloudflare": "7.3.0",
     "hono": "4.13.18",
     "ipaddr.js": "2.5.0",
-    "jose": "6.2.17",
     "valibot": "1.5.0"
   }
 }

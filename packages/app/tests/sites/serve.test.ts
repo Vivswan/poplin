@@ -1,7 +1,7 @@
 import { beforeAll, describe, expect, test } from "bun:test";
 import type { Site } from "@poplin/core/src/records/site";
 import { serveSite } from "../../src/sites/serve";
-import { type Install, labelHost, NOW, openInstall } from "./install";
+import { type Install, labelHost, NOW, openInstall } from "./support/install";
 
 const HTML = "text/html; charset=utf-8";
 const SCRIPT = "text/javascript";
