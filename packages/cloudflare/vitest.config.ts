@@ -3,6 +3,7 @@
 import { cloudflareTest } from "@cloudflare/vitest-plugin";
 import { defineConfig } from "vitest/config";
 import { EXAMPLE_BINDINGS } from "./tests/worker/support/example-bindings";
+import { RuntimeLog } from "./tests/worker/support/runtime-log";
 
 export default defineConfig({
   plugins: [cloudflareTest({ wrangler: { configPath: "../../wrangler.jsonc" }, miniflare: { bindings: EXAMPLE_BINDINGS } })],
@@ -13,6 +14,7 @@ export default defineConfig({
   test: {
     include: ["tests/{worker,storage,database,limits}/**/*.test.ts"],
     testTimeout: 30_000,
+    reporters: ["default", new RuntimeLog()],
     // The pool sends a file's cached imports as one message, and the Cloudflare SDK takes that past workerd's 32 MiB limit.
     fsModuleCache: false,
   },
