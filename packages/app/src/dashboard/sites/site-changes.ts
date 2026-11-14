@@ -1,5 +1,6 @@
 // The changes the forms of a site's page ask for. Each calls one action and answers the page to show next, with the result in its address.
 
+import { abandonPublish } from "@poplin/core/src/actions/abandon-publish";
 import { deleteSite } from "@poplin/core/src/actions/delete";
 import { duplicateSite } from "@poplin/core/src/actions/duplicate";
 import { newLink } from "@poplin/core/src/actions/new-link";
@@ -99,6 +100,17 @@ async function duplicate(visit: Visit, reference: string, form: Form): Promise<s
   return `${withNotice(sitePath(reference), { done: "copying" })}&${progress}`;
 }
 
+/** Give up the copy in progress that the form names, and remove its files as far as one request goes. The site it was copied from is not changed. */
+async function cancelCopy(visit: Visit, reference: string, form: Form): Promise<string> {
+  const fields = requireFields(form, ["upload"]);
+  if (fields === undefined) return refused(reference, { code: "missing_field" });
+
+  const given = await abandonPublish(visit.install, visit.actor, fields.upload);
+  if (!given.ok) return refused(reference, given);
+
+  return withNotice(sitePath(reference), { done: given.left.length === 0 ? "copy_cancelled" : "copy_cancelled_files_left" });
+}
+
 async function moveToTrash(visit: Visit, reference: string): Promise<string> {
   const trashed = await deleteSite(visit.install, visit.actor, { site: reference });
   if (!trashed.ok) return refused(reference, trashed);
@@ -134,6 +146,7 @@ export const SITE_CHANGES: Readonly<Record<string, Change<[string]>>> = {
   rollback: rollBack,
   "new-link": makeNewLink,
   duplicate,
+  "cancel-copy": cancelCopy,
   delete: moveToTrash,
   restore,
   "delete-forever": deleteForever,

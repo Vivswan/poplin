@@ -125,7 +125,7 @@ ${others.map((version) => html`<option value="${version.number}">v${version.numb
 </form>`;
 }
 
-/** The form that begins a copy; or, on the page a copy in progress came back to, the form that goes on with it. */
+/** The form that begins a copy; or, on the page a copy in progress came back to, the form that goes on with it and the one that cancels it. */
 function duplicateForm(visit: Visit, site: Shown): Html {
   const upload = parseUploadId(visit.url.searchParams.get("copy") ?? "");
   const [copied, files] = [visit.url.searchParams.get("copied") ?? "", visit.url.searchParams.get("files") ?? ""];
@@ -137,6 +137,12 @@ ${csrfField(visit)}
 <input type="hidden" name="upload" value="${upload}">
 <p>Copying: ${copied} of ${files} files. The copy is no site until every file is there.</p>
 <button type="submit">Keep copying</button>
+</form>
+<form method="post" action="${action(site, "cancel-copy")}">
+${csrfField(visit)}
+<input type="hidden" name="upload" value="${upload}">
+<p>A copy that is not finished is removed after a day. Cancel removes it now.</p>
+<button type="submit">Cancel the copy</button>
 </form>`;
   }
 

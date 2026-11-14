@@ -131,6 +131,52 @@ describe("run", () => {
     expect(summary(await bench.run("duplicate zzzzzzzzzzzz"))).toMatchObject({ code: 1, out: [] });
   });
 
+  // Drift: a copy that is not finished is a pending upload; left behind by a command that failed, it holds a place under max_sites, max_total_size, and the pending uploads for a day.
+  test.each<[string, () => Response, number]>([
+    ["the install fails", () => answer(500, { error: { code: "internal", message: "no" } }), 1],
+    [
+      "nothing answers",
+      () => {
+        throw new Error("the connection broke");
+      },
+      5,
+    ],
+  ])("a duplicate whose second call ends because %s gives the copy up and says so, as a publish that fails does", async (_name, fail, code) => {
+    const bench = await openBench();
+    const pages = Object.fromEntries(Array.from({ length: 7 }, (_page, at) => [`pages/${at}.html`, `<p>${at}</p>`]));
+    const made = jsonOf(await bench.run(`${folderOf("report", { "index.html": "<title>Report</title>", ...pages })} --json`));
+    const { label } = made.site as { label: string };
+    const before = await stateOf(bench);
+    bench.sent.length = 0;
+    bench.hook = (request) => (bench.sent.length > 1 && request.url.endsWith("/duplicate") ? fail() : undefined);
+
+    const failed = await bench.run(`duplicate ${label}`);
+    const uploads = await bench.install.database.listUploads({ before: Number.MAX_SAFE_INTEGER, limit: 10 });
+
+    expect([failed.code, failed.out, failed.err[1]?.split(";")[0]]).toEqual([code, [], "the copy was given up and no site was made"]);
+    expect(bench.sent.map((sent) => sent.replace(/[0-9a-z]{16}$/, ":upload"))).toEqual([`POST /api/sites/${label}/duplicate`, `POST /api/sites/${label}/duplicate`, "DELETE /api/uploads/:upload"]);
+    expect(uploads.uploads.filter((upload) => upload.plan.kind === "duplicate").map((upload) => upload.state)).toEqual(["abandoned"]);
+    expect(await stateOf(bench)).toEqual(before);
+  });
+
+  test("a duplicate whose last call went through with its answer lost is reported as done: without this a copy that is a site is reported as a failure", async () => {
+    const bench = await openBench();
+    const made = jsonOf(await bench.run(`${folderOf("report", { "index.html": "<title>Report</title>", "about.html": "a", "more.html": "b", "last.html": "c" })} --json`));
+    const { label } = made.site as { label: string };
+    bench.sent.length = 0;
+    bench.hook = async (request) => {
+      if (bench.sent.length !== 2) return undefined;
+
+      await bench.install.api.fetch(request);
+
+      throw new Error("the connection broke");
+    };
+
+    const copied = await bench.run(`duplicate ${label} --name report-draft`);
+
+    expect([copied.code, copied.out[0]?.replace(/--[0-9a-z]{12}/, "--:id"), copied.err]).toEqual([0, "copied  report-draft--:id  private  4 files", []]);
+  });
+
   test("list follows every page of the install: without this a listing stops at the first hundred sites", async () => {
     const { bench } = await withSite();
     const folder = folderOf("more", { "index.html": "x" });

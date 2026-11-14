@@ -3,10 +3,11 @@
 import type { ROUTES } from "../../../core/src/api/routes";
 import { showBytes } from "../../../core/src/records/settings";
 import { showViews } from "../../../core/src/records/views";
-import type { Called } from "../client/client";
+import type { Called, Failure } from "../client/client";
 import { problem, problemOf } from "./problems";
 import type { Outcome, RequestOf, Session } from "./records";
 import { addressChange, columns, countText, dayText, type SiteObject, searchNotes, siteLines } from "./text";
+import { givenUp, giveUpUpload } from "./upload";
 import { siteChanges, siteWord } from "./wire";
 
 /** How many sites one page of a listing holds: the most the API gives. */
@@ -14,6 +15,16 @@ const PAGE = 100;
 
 /** The most pages `list` asks for: a thousand sites. Past it the listing stops with a note. */
 const MAX_PAGES = 10;
+
+/** The status of an answer the install gave. */
+const OK = 200;
+
+/** What became of a copy that was not finished, in words. */
+const AFTERMATH = {
+  abandoned: "the copy was given up and no site was made",
+  unknown: "the copy could not be given up: it runs out by itself within a day, and poplin list shows whether a site was made",
+  live: "the copy was made all the same, and its answer was lost; poplin list shows it",
+} as const;
 
 /** The commands this module runs, as the parser read them. */
 type SiteRequest = RequestOf<"set" | "show" | "list" | "rollback" | "new-link" | "duplicate" | "delete" | "restore">;
@@ -143,24 +154,51 @@ async function newLink(request: OneSite, { client }: Session): Promise<Outcome> 
   return { ok: true, value: linked.value, lines: [...siteLines("new link", site, []), ...dead] };
 }
 
-/** Copy a site: the install copies a few files a call, so the call is sent again with the upload it answered until it answers the new site. */
+function copied(site: SiteObject): string[] {
+  return siteLines("copied", site, [site.access, countText(site.files, "file")]);
+}
+
+/**
+ * Give up a copy that a call failed in the middle of.
+ *
+ * @param upload - the upload the copy's last answer named; none when the first call failed, which may have made the copy or begun it all the same
+ * @returns the failure with what became of the copy, or the copy as done when the install finished it though its answer was lost
+ */
+async function stopCopy(client: Session["client"], upload: string | undefined, failure: Failure): Promise<Outcome> {
+  if (upload === undefined) return failed({ ok: false, failure });
+
+  const became = await giveUpUpload(client, upload);
+  if (became.kind === "published") return { ok: true, value: became.answer, lines: copied(became.answer.site) };
+
+  return givenUp(failure, AFTERMATH[became.kind]);
+}
+
+/** Copy a site: the install copies a few files a call, so the call is sent again with the upload it answered until it answers the new site. A copy that cannot be finished is given up, as a publish is. */
 async function duplicate(request: Asked<"duplicate">, { client, io }: Session): Promise<Outcome> {
   const site = siteWord(request.site);
-  let asked: { readonly name?: string; readonly upload?: string } = request.name === undefined ? {} : { name: request.name };
+  const first = request.name === undefined ? {} : { name: request.name };
+  let upload: string | undefined;
 
-  for (let copied = -1; ; ) {
-    const called = await client.call("duplicateSite", { site }, asked);
-    if (!called.ok) return failed(called);
+  try {
+    for (let done = -1; ; ) {
+      const called = await client.call("duplicateSite", { site }, upload === undefined ? first : { upload });
+      if (!called.ok) return await stopCopy(client, upload, called.failure);
 
-    const { copy } = called.value;
-    if (called.value.site !== null) return { ok: true, value: called.value, lines: siteLines("copied", called.value.site, [called.value.site.access, countText(copy.files, "file")]) };
+      const { copy } = called.value;
+      if (called.value.site !== null) return { ok: true, value: called.value, lines: copied(called.value.site) };
 
-    // A call that copied nothing more would be sent for ever.
-    if (copy.copied <= copied) return { ok: false, problem: problem("unexpected_answer") };
+      upload = copy.upload;
 
-    copied = copy.copied;
-    asked = { upload: copy.upload };
-    if (io.terminal.progress) io.status(`copying ${copy.copied} of ${countText(copy.files, "file")}`);
+      // A call that copied nothing more would be sent for ever.
+      if (copy.copied <= done) return await stopCopy(client, upload, { kind: "unexpected", status: OK });
+
+      done = copy.copied;
+      if (io.terminal.progress) io.status(`copying ${copy.copied} of ${countText(copy.files, "file")}`);
+    }
+  } catch (error) {
+    if (upload !== undefined) await client.call("abandonPublish", { upload });
+
+    throw error;
   }
 }
 

@@ -1,8 +1,9 @@
-// The steps a publish and an import share once an upload is begun: send every file, finish, and give the upload up when it cannot be finished.
+// The steps a publish, an import, and a duplicate share once an upload is begun: send every file, finish, and give the upload up when it cannot be finished.
 
 import type { ROUTES } from "../../../core/src/api/routes";
 import type { Called, Client, Failure } from "../client/client";
-import type { Io } from "./records";
+import { problemOf } from "./problems";
+import type { Io, Outcome } from "./records";
 
 /** How many files are on their way at once. */
 const UPLOADS_AT_ONCE = 4;
@@ -195,6 +196,19 @@ async function sendFiles<File extends UploadFile>(client: Client, upload: string
 
 function lacksFiles(finished: Called<Published>): boolean {
   return !finished.ok && finished.failure.kind === "refused" && finished.failure.code === "missing_files";
+}
+
+/**
+ * The outcome of a command whose upload was not finished.
+ *
+ * @param aftermath - what became of the upload, in words; it goes before the failure's own hint
+ * @returns the failure as the command's problem
+ */
+export function givenUp(failure: Failure, aftermath: string): Outcome {
+  const said = problemOf(failure);
+  const hint = said.hint === undefined ? aftermath : `${aftermath}; ${said.hint}`;
+
+  return { ok: false, problem: { ...said, hint } };
 }
 
 /**

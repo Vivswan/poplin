@@ -5,6 +5,7 @@
 //
 // The address carries a code, never a sentence, so a crafted link can only show a line of this table.
 
+import type { abandonPublish } from "@poplin/core/src/actions/abandon-publish";
 import type { listAudit } from "@poplin/core/src/actions/audit-log";
 import type { decideLogin, showLogin } from "@poplin/core/src/actions/computer-logins";
 import type { changeConfig, readConfig } from "@poplin/core/src/actions/config";
@@ -35,6 +36,7 @@ const REFUSALS: Readonly<Record<ActionCode | OwnCode, string>> = {
   no_index: "The site has no index.html to copy.",
   too_many_sites: "The install holds as many sites as it may, so no copy was made.",
   missing_files: "A file of the copy did not arrive. Duplicate the site again.",
+  upload_finished: "The copy is finished already: it is a site of its own now, in the list of sites.",
   stale_version: "A newer publish went live first.",
   id_taken: "A site here already has that id.",
   wrong_confirmation: "The typed label did not match, so nothing was deleted.",
@@ -61,6 +63,8 @@ const DONE = {
   restored: "Restored from the trash.",
   duplicated: "This is the copy: a new private site with its own address. The site it was copied from is unchanged.",
   copying: `The copy is not finished: one request copies ${COPIES_PER_CALL} files. Press Keep copying until it is.`,
+  copy_cancelled: "The copy was cancelled and its files removed. No site was made.",
+  copy_cancelled_files_left: "The copy was cancelled, and no site was made. Its remaining files are being removed from the bucket.",
   deleted: "Deleted forever.",
   deleted_files_left: "Deleted forever. Its remaining files are being removed from the bucket.",
   allowed: "Allowed. The computer collects its token within a few seconds.",
@@ -90,6 +94,7 @@ type ActionCode =
   | CodeOf<typeof deleteSite>
   | CodeOf<typeof restoreSite>
   | CodeOf<typeof duplicateSite>
+  | CodeOf<typeof abandonPublish>
   | CodeOf<typeof readConfig>
   | CodeOf<typeof changeConfig>
   | CodeOf<typeof listAudit>

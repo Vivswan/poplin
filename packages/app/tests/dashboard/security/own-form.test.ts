@@ -29,6 +29,12 @@ const POSTED_TO = /<form method="post" action="([^"]+)"|formaction="([^"]+)"/g;
 /** The two runs a token form asks for; they are routed apart from the changes. */
 const RUNS = ["check", "repair"];
 
+/** An upload id that no upload has. */
+const NO_UPLOAD = "0000000000000000";
+
+/** The query a site's page is opened with while a copy of it is in progress. */
+const COPYING = `copy=${NO_UPLOAD}&copied=1&files=2`;
+
 /** What answers a request: a dashboard, or a setup page. */
 type Fetch = (request: Request) => Promise<Response>;
 
@@ -51,7 +57,7 @@ async function inDashboard(arrange: (opened: Opened) => Promise<Omit<Shown, "fet
   return { fetch: opened.fetch, cookie: opened.cookie, ...(await arrange(opened)) };
 }
 
-function ofSite(change: string, arrange: (opened: Opened, path: string, site: Site) => Promise<Pick<Shown, "fields" | "answer">>): Arrange {
+function ofSite(change: string, arrange: (opened: Opened, path: string, site: Site) => Promise<Pick<Shown, "fields" | "answer"> & Partial<Pick<Shown, "page">>>): Arrange {
   return () =>
     inDashboard(async (opened) => {
       const site = await opened.publish("report", "public");
@@ -112,6 +118,8 @@ const FORMS: Readonly<Record<string, Arrange>> = {
   "/sites/:site/new-link": ofSite("new-link", async () => ({ fields: {}, answer: [303, "a new label"] })),
   // The fixture's site is a row without files, so the action behind the form answers that there is no page to copy: the form itself was taken.
   "/sites/:site/duplicate": ofSite("duplicate", async (_opened, path) => ({ fields: { name: "" }, answer: [303, `${path}?refused=no_index`] })),
+  // No copy is in progress under the id the page was opened with, so the action answers that the copy is gone: the form itself was taken.
+  "/sites/:site/cancel-copy": ofSite("cancel-copy", async (_opened, path) => ({ page: `${path}?${COPYING}`, fields: { upload: NO_UPLOAD }, answer: [303, `${path}?refused=not_found&about=upload`] })),
   "/sites/:site/delete": ofSite("delete", async (_opened, path) => ({ fields: {}, answer: [303, `${path}?done=trashed`] })),
   "/sites/:site/restore": ofSite("restore", async (opened, path, site) => {
     await trash(opened, site);
@@ -204,7 +212,7 @@ test("the routes posted as a browser are every form route there is: each change 
   const login = await beginLogin(opened.install, { scope: "publisher", computer: "laptop" }, "one-visitor");
   if (!login.ok) throw new Error(`the fixture login was refused: ${login.code}`);
 
-  const pages = ["/", "/?view=trash", `/sites/report--${live.id}`, `/sites/old--${gone.id}`, "/tokens", `/tokens/allow?code=${login.code}`, "/settings", "/activity", "/usage", "/domain"];
+  const pages = ["/", "/?view=trash", `/sites/report--${live.id}`, `/sites/report--${live.id}?${COPYING}`, `/sites/old--${gone.id}`, "/tokens", `/tokens/allow?code=${login.code}`, "/settings", "/activity", "/usage", "/domain"];
   const seen = new Set<string>();
 
   for (const path of pages) {

@@ -179,6 +179,20 @@ describe("the MCP server", () => {
     expect(codeOf(await bench.call("duplicate_site", { site: site.label, name: "Not A Name" }))).toBe("bad_name");
   });
 
+  // Drift: the tool runs the command's flow; a tool with a loop of its own would leave a half copy pending when a call of it fails.
+  test("duplicate_site gives a copy up when a later call of it fails: an agent that tries again must not find the install full of half copies", async () => {
+    const bench = await open();
+    const pages = { "index.html": "<title>Report</title>", "about.html": "a", "more.html": "b", "last.html": "c" };
+    const site = siteOf(await bench.call("publish_site", { path: folderOf("report", pages) }));
+    bench.sent.length = 0;
+    bench.hook = (request) => (bench.sent.length > 1 && request.url.endsWith("/duplicate") ? new Response("{}", { status: 500, headers: { "Content-Type": "application/json" } }) : undefined);
+
+    const failed = await bench.call("duplicate_site", { site: site.label });
+    const uploads = await bench.install.database.listUploads({ before: Number.MAX_SAFE_INTEGER, limit: 10 });
+
+    expect([failed.error, bench.sent.at(-1)?.slice(0, 20), uploads.uploads.filter((upload) => upload.plan.kind === "duplicate").map((upload) => upload.state)]).toEqual([true, "DELETE /api/uploads/", ["abandoned"]]);
+  });
+
   test("new_link and delete_site with forever say what was lost, and nothing less than their own argument asks for either: an agent must be able to tell the user what is gone", async () => {
     const { bench, site } = await withSite();
 

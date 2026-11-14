@@ -4,7 +4,7 @@ import { publishSite } from "@poplin/core/src/actions/publish";
 import { getSite } from "@poplin/core/src/actions/show";
 import type { Site } from "@poplin/core/src/records/site";
 
-import { landing, type Opened, openDashboard } from "../support/install";
+import { landing, ORIGIN, type Opened, openDashboard } from "../support/install";
 
 const NOTICE = /<p class="notice (done|refused)" role="status">([^<]*)<\/p>/;
 
@@ -19,6 +19,15 @@ async function shown(opened: Opened, reference: string): Promise<Extract<Awaited
   const answer = await getSite(opened.install, { scope: "admin", holder: opened.owner }, reference);
 
   return answer.ok ? answer.site : answer.code;
+}
+
+/** The files of a site that one request does not copy whole. */
+function sixteenPages(): { path: string; size: number; contentType: string; open: () => ReadableStream<Uint8Array> }[] {
+  return Array.from({ length: 16 }, (_page, at) => {
+    const bytes = new TextEncoder().encode(`<p>${at}</p>`);
+
+    return { path: at === 0 ? "index.html" : `pages/${at}.html`, size: bytes.length, contentType: "text/html", open: () => new Blob([bytes]).stream() };
+  });
 }
 
 // Drift: the settings form posts the name with every save; one that renamed on every save, or lost the page it lands on after a rename, would leave the owner on a dead address.
@@ -38,12 +47,7 @@ test("the settings form renames a site when its name field changes, lands on the
 // Drift: one request copies 15 files; a form that showed a half copy as a site, or lost the upload between requests, would leave a broken site or a copy nobody can finish.
 test("the duplicate form makes a private copy and lands on it; a site of more files than one request copies comes back to its own page until the copy is whole", async () => {
   const opened = await openDashboard();
-  const files = Array.from({ length: 16 }, (_page, at) => {
-    const bytes = new TextEncoder().encode(`<p>${at}</p>`);
-
-    return { path: at === 0 ? "index.html" : `pages/${at}.html`, size: bytes.length, contentType: "text/html", open: () => new Blob([bytes]).stream() };
-  });
-  const published = await publishSite(opened.install, { scope: "admin", holder: opened.owner }, { name: "report", access: "public", files });
+  const published = await publishSite(opened.install, { scope: "admin", holder: opened.owner }, { name: "report", access: "public", files: sixteenPages() });
   if (!published.ok) throw new Error(`the fixture site was refused: ${published.code}`);
 
   const { site } = published;
@@ -69,6 +73,28 @@ test("the duplicate form makes a private copy and lands on it; a site of more fi
     { id: site.id, access: "public", public_name: "report" },
   ]);
   expect((await opened.audit()).slice(0, 2).map((entry) => entry.action)).toEqual(["duplicate", "create"]);
+});
+
+// Drift: a copy that is not finished holds a place under the limits for a day; a page that offers no way to give it up leaves a copy begun by mistake to count until then.
+test("the page of a copy in progress offers to cancel it: the copy's files go, no site is made, and the copy cannot be gone on with", async () => {
+  const opened = await openDashboard();
+  const published = await publishSite(opened.install, { scope: "admin", holder: opened.owner }, { name: "report", files: sixteenPages() });
+  if (!published.ok) throw new Error(`the fixture site was refused: ${published.code}`);
+
+  const path = `/sites/report--${published.site.id}`;
+  const keys = await opened.install.store.list({ prefix: "" });
+  const begun = await opened.post(`${path}/duplicate`, {});
+  const upload = new URL(begun.headers.get("Location") ?? "", ORIGIN).searchParams.get("copy") ?? "";
+  const waiting = await landing(opened, begun);
+
+  const cancelled = await opened.post(`${path}/cancel-copy`, { upload });
+  const again = await opened.post(`${path}/duplicate`, { upload });
+  const twice = await opened.post(`${path}/cancel-copy`, { upload });
+
+  expect(waiting).toContain(`<form method="post" action="${path}/cancel-copy">`);
+  expect([cancelled.headers.get("Location"), NOTICE.exec(await landing(opened, cancelled))?.[2]]).toEqual([`${path}?done=copy_cancelled`, "The copy was cancelled and its files removed. No site was made."]);
+  expect([again.headers.get("Location"), twice.headers.get("Location")]).toEqual([`${path}?refused=not_found&about=upload`, `${path}?done=copy_cancelled`]);
+  expect([(await opened.install.store.list({ prefix: "" })).objects.length, (await opened.install.database.readTotals()).sites]).toEqual([keys.objects.length, 1]);
 });
 
 test("each form of a live site does its change through the action, writes the action's audit entry, and lands on a page that says so", async () => {

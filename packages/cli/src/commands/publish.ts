@@ -2,13 +2,12 @@
 
 import type { ROUTES } from "../../../core/src/api/routes";
 import { showBytes } from "../../../core/src/records/settings";
-import type { Failure } from "../client/client";
 import { type PublishFile, readFiles } from "../files/read";
 import { readTitle } from "../files/title";
 import { type Problem, problem, problemOf } from "./problems";
 import type { Io, Outcome, RequestOf, Session } from "./records";
 import { addressChange, columns, countText, searchNotes, siteLines } from "./text";
-import { giveUpUpload, type Published, sendUpload } from "./upload";
+import { givenUp, giveUpUpload, type Published, sendUpload } from "./upload";
 import { siteChanges, siteWord } from "./wire";
 
 /** The page whose own title a site shows while none is typed for it. */
@@ -87,13 +86,6 @@ function published(plan: PublishPlan, answer: Published): Outcome {
   const lines = [`uploaded ${summary(plan)}`, ...siteLines(site.created ? "made" : "updated", site, facts), ...addressChange(answer.before, site)];
 
   return { ok: true, value: answer, lines, notes: searchNotes(plan.manifest, site) };
-}
-
-function givenUp(failure: Failure, aftermath: string): Outcome {
-  const said: Problem = problemOf(failure);
-  const hint = said.hint === undefined ? aftermath : `${aftermath}; ${said.hint}`;
-
-  return { ok: false, problem: { ...said, hint } };
 }
 
 /**
