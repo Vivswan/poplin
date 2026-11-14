@@ -15,6 +15,7 @@ const PLAIN_HEADERS = {
   "cache-control": "no-store",
   "content-security-policy": "frame-ancestors 'none'",
   "referrer-policy": "no-referrer",
+  "strict-transport-security": "max-age=15552000",
   "x-content-type-options": "nosniff",
   "x-robots-tag": "noindex",
 };
@@ -25,7 +26,7 @@ const HOMES = ["hidden home", "report home", "shop home", "", "", ""];
 const NOT_FOUND = { status: 404, body: "Not found\n", headers: { ...PLAIN_HEADERS, "content-type": "text/plain; charset=utf-8" } };
 const NO_FILE = { ...NOT_FOUND, headers: { ...NOT_FOUND.headers, "cache-control": "public, max-age=86400" } };
 
-const HARDENING = { "accept-ranges": "bytes", "referrer-policy": "no-referrer", "x-content-type-options": "nosniff" };
+const HARDENING = { "accept-ranges": "bytes", "referrer-policy": "no-referrer", "strict-transport-security": "max-age=15552000", "x-content-type-options": "nosniff" };
 const BLOCKING = { "content-security-policy": "frame-ancestors https://*.example.com", vary: "Sec-Fetch-Site, Sec-Fetch-Mode, Sec-Fetch-Dest, Origin, Referer" };
 const SITE_HEADERS = { ...HARDENING, ...BLOCKING, "x-robots-tag": "noindex" };
 
@@ -451,7 +452,7 @@ describe("a page and the version it was published in", () => {
     const tag = await liveTag();
     const before = world.install.keys.length;
     const answers = [await serve(holding(tag, method)), await serve(holding(`W/${tag}`, method)), await serve(holding(`"other", ${tag}`, method))];
-    const kept = { ...BLOCKING, "referrer-policy": "no-referrer", "x-content-type-options": "nosniff", "x-robots-tag": "noindex" };
+    const kept = { ...BLOCKING, "referrer-policy": "no-referrer", "strict-transport-security": "max-age=15552000", "x-content-type-options": "nosniff", "x-robots-tag": "noindex" };
     const unchanged = { status: 304, body: "", headers: { ...kept, "cache-control": "public, max-age=300, must-revalidate", etag: tag } };
 
     expect({ answers: await Promise.all(answers.map(whole)), reads: world.install.keys.length - before }).toEqual({ answers: [unchanged, unchanged, unchanged], reads: 0 });

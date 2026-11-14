@@ -2,9 +2,10 @@
 
 import * as v from "valibot";
 
+import { isLoopback } from "../../../core/src/api/loopback";
+
 const SECURE = "https:";
 const PLAIN = "http:";
-const LOOPBACK_HOSTS: ReadonlySet<string> = new Set(["127.0.0.1", "localhost", "[::1]"]);
 const TOKEN_PATTERN = /^[\x21-\x7e]+$/;
 const NOT_AN_OBJECT = "it must hold a server and a token and nothing else";
 const NOT_A_SERVER = "the server must be an https:// address with nothing after the host, such as https://poplin.example.com";
@@ -42,7 +43,7 @@ export function isServer(server: string): boolean {
   // An origin has no credentials, path, query, or fragment, so any of them makes the text differ from it.
   if (url.origin !== server) return false;
 
-  return url.protocol === SECURE || (url.protocol === PLAIN && LOOPBACK_HOSTS.has(url.hostname));
+  return url.protocol === SECURE || (url.protocol === PLAIN && isLoopback(url.hostname));
 }
 
 /**

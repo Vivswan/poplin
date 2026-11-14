@@ -23,7 +23,7 @@ import type { Site } from "@poplin/core/src/records/site";
 import type { ByteRange, ObjectInfo, ObjectKey, ObjectStore, ReadResult } from "@poplin/core/src/storage/storage";
 import type { Addressed, SiteAddresses } from "./addresses";
 import { fileKeys } from "./file-keys";
-import { clearHeldFiles, heldVersion, isPage, missingFileCache, siteHeaders, versionTag } from "./headers";
+import { clearHeldFiles, HTTPS_ALONE, heldVersion, isPage, missingFileCache, siteHeaders, versionTag } from "./headers";
 import { parseRange } from "./range";
 
 /** The methods a site answers. */
@@ -35,11 +35,12 @@ const ALLOW = "GET, HEAD";
 /** The request headers that name the page a request came from; the first that holds an address decides. */
 const REQUESTER_HEADERS = ["Origin", "Referer"] as const;
 
-/** The headers of every answer that is not a file: never cached, never indexed, never framed. */
+/** The headers of every answer that is not a file: never cached, never indexed, never framed, and over https alone from then on. */
 const PLAIN_HEADERS = {
   "Cache-Control": "no-store",
   "Content-Security-Policy": "frame-ancestors 'none'",
   "Referrer-Policy": "no-referrer",
+  "Strict-Transport-Security": HTTPS_ALONE,
   "X-Content-Type-Options": "nosniff",
   "X-Robots-Tag": "noindex",
 } as const;

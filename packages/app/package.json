@@ -16,7 +16,8 @@
     "./src/login/session": "./src/login/session.ts",
     "./src/sites/hostname-addresses": "./src/sites/hostname-addresses.ts",
     "./src/sites/paused": "./src/sites/paused.ts",
-    "./src/sites/serve": "./src/sites/serve.ts"
+    "./src/sites/serve": "./src/sites/serve.ts",
+    "./src/transport/to-https": "./src/transport/to-https.ts"
   },
   "dependencies": {
     "@poplin/core": "workspace:*",

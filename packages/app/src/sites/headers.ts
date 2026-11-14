@@ -41,6 +41,9 @@ const WEAK = /^W\//;
 /** The header that tells a browser to drop what it holds of the site, and what it drops: the cached files. */
 const CLEAR_CACHE = ["Clear-Site-Data", '"cache"'] as const;
 
+/** A browser that got any answer of a site asks for it over https alone for 180 days, as the dashboard has it. It names this hostname alone: the domain is the person's own and holds other things. */
+export const HTTPS_ALONE = "max-age=15552000";
+
 /** No page may show the site in a frame. */
 const FRAME_NONE = "frame-ancestors 'none'";
 
@@ -142,13 +145,14 @@ function frameRule(facts: FileFacts): string | undefined {
 /**
  * Build the headers of a site's file.
  *
- * @returns the content type, the hardening headers, the cache rule, and the frame rule, with no entity tag; never an `Access-Control-Allow-*` header, so no script of another origin reads the file
+ * @returns the content type, the hardening headers, the https rule, the cache rule, and the frame rule, with no entity tag; never an `Access-Control-Allow-*` header, so no script of another origin reads the file
  */
 export function siteHeaders(facts: FileFacts): Headers {
   const headers = new Headers({
     "Content-Type": SENDABLE.test(facts.contentType) ? facts.contentType : OPAQUE_TYPE,
     "X-Content-Type-Options": "nosniff",
     "Referrer-Policy": "no-referrer",
+    "Strict-Transport-Security": HTTPS_ALONE,
     "Cache-Control": cacheControl(facts),
   });
 

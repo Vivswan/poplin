@@ -464,6 +464,38 @@ describe("the product, from a token to an opened site", () => {
   });
 });
 
+describe("a request over plain http", () => {
+  /** An address on each kind of hostname the Worker answers, and on one it does not know. */
+  const plain: readonly (readonly [kind: string, address: string])[] = [
+    ["a site", "http://report--k3f9x2ab71qz-p-poplin.example.com/a/b.html?c=d"],
+    ["the admin hostname", "http://poplin.example.com/sites?page=2"],
+    ["the Worker's own address", "http://poplin.example.workers.dev/setup"],
+    ["a hostname of nobody", "http://elsewhere.example.net/"],
+  ];
+
+  // Drift: without the provider's redirect rule, which needs a permission of its own, a site answered over http as it answers over https.
+  test.each(plain)("to %s is sent to the same address over https, whatever its method, before the database or the bucket is asked and with no cookie", async (_kind, address) => {
+    const tally = { calls: 0 };
+    const answers = [];
+    for (const method of ["GET", "POST"]) {
+      for (const bindings of [countedBindings(tally), { ...countedBindings(tally), ZONE: undefined, ACCOUNT_ID: undefined } as Bindings]) {
+        const answer = await ask(instance(w), address, { method, headers: { Cookie: "__Secure-poplin-session=x" } }, bindings);
+        answers.push([answer.status, answer.headers.get("Location"), answer.headers.get("Set-Cookie"), await answer.text()]);
+      }
+    }
+
+    expect(answers).toEqual(Array.from({ length: 4 }, () => [308, address.replace("http://", "https://"), null, ""]));
+    expect(tally.calls).toBe(0);
+  });
+
+  // Drift: the preview and a local run answer on this machine over http, where no network is crossed and no https exists.
+  test("to this machine itself is answered as any other request", async () => {
+    const answer = await ask(instance(w), "http://127.0.0.1/");
+
+    expect([answer.status === 308, answer.headers.get("Location")]).toEqual([false, null]);
+  });
+});
+
 describe("the admin hostname", () => {
   // Drift: a path of the admin hostname would be answered without the check its piece owns.
   test("the API answers a token and refuses none, and the login refuses a request Access did not sign", async () => {

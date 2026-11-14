@@ -17,6 +17,7 @@
 import { createDashboard } from "@poplin/app/src/dashboard/dashboard";
 import { visitorKey } from "@poplin/app/src/limits/visitor-key";
 import { readSession } from "@poplin/app/src/login/session";
+import { toHttps } from "@poplin/app/src/transport/to-https";
 import type { Database } from "@poplin/core/src/database/database";
 import { AllowanceSpent } from "@poplin/core/src/database/driver";
 import { clientAddress } from "../limits/client-address";
@@ -211,7 +212,8 @@ export function createWorker(given: Partial<Outside> = {}): Required<Pick<Export
   return {
     async fetch(request, env) {
       try {
-        return await answer(request, env);
+        // Before the instance starts: a request over plain http reads nothing of the install.
+        return toHttps(request) ?? (await answer(request, env));
       } catch (error) {
         console.error("poplin: a request failed", error);
         if (error instanceof AllowanceSpent) return answerSpent(request, env, error, outside.now());

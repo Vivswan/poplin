@@ -31,6 +31,7 @@
     "./src/actions/sweep": "./src/actions/sweep.ts",
     "./src/actions/tool-inputs": "./src/actions/tool-inputs.ts",
     "./src/actions/upload-file": "./src/actions/upload-file.ts",
+    "./src/api/loopback": "./src/api/loopback.ts",
     "./src/api/routes": "./src/api/routes.ts",
     "./src/auth/computer-logins": "./src/auth/computer-logins.ts",
     "./src/auth/cookie": "./src/auth/cookie.ts",
