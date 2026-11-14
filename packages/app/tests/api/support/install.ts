@@ -132,8 +132,12 @@ export function requestOf<Name extends RouteName>(name: Name, args: ArgsOf<Name>
   return new Request(`${ORIGIN}${route.path(args)}`, { method: route.method, headers, body, duplex: "half" } as RequestInit);
 }
 
-/** Open a fresh install with default settings, laid over by `overrides`, and its three tokens. */
-export async function openApi(overrides: Partial<ReturnType<typeof defaultSettings>> = {}): Promise<ApiInstall> {
+/**
+ * Open a fresh install with default settings, laid over by `overrides`, and its three tokens.
+ *
+ * @param limits - what one request can carry, in place of the small caps of `LIMITS`
+ */
+export async function openApi(overrides: Partial<ReturnType<typeof defaultSettings>> = {}, limits: ApiLimits = LIMITS): Promise<ApiInstall> {
   const calls = { database: 0, store: 0 };
   const driver = new CountingDriver(calls);
   const opened = await openDatabase(driver, NOW);
@@ -161,7 +165,7 @@ export async function openApi(overrides: Partial<ReturnType<typeof defaultSettin
     publicAddressOf: ADDRESSES.publicAddressOf,
     reservedNames: ADDRESSES.reservedNames,
     readToken: (id) => database.getToken(id),
-    limits: LIMITS,
+    limits,
     report: (error) => reported.push(error),
     // Found anew on every request, so a test that swaps the method in is heard.
     counters: { takeMinute: (window, now) => counters.takeMinute(window, now) },

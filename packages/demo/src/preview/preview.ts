@@ -29,7 +29,7 @@ import { type Samples, seedWorld } from "./seed";
 import { ADDRESSES, openWorld, type World } from "./world";
 
 /** What one request to the preview's API may carry. */
-const API_LIMITS = { fileBytes: 100_000_000, files: 10_000, manifestBytes: 2_000_000, copies: 15 } as const;
+const API_LIMITS = { fileBytes: 100_000_000, files: 10_000, manifestBytes: 2_000_000 } as const;
 
 /** The free plan of the preview's invented host: the numbers are samples, and no real plan is behind them. */
 const FREE_LIMITS = {

@@ -32,8 +32,8 @@ export interface ApiLimits extends UploadLimits {
   /** The most bytes the JSON body that begins a publish or an import may hold. */
   readonly manifestBytes: number;
 
-  /** The most files one request copies for a duplicate: two bucket calls each. */
-  readonly copies: number;
+  /** The most files one request copies for a duplicate, where that is fewer than the request's budget of calls fits. Left out, the budget alone decides. */
+  readonly copies?: number;
 }
 
 /** What the API is given: the install its actions run on, how a token's record is found, and what one request can carry. */

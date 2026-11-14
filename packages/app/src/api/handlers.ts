@@ -77,7 +77,7 @@ export interface Call {
   readonly request: Request;
 
   /** What one request can carry, and how many files of a copy it makes. */
-  readonly limits: UploadLimits & { readonly copies: number };
+  readonly limits: UploadLimits & { readonly copies?: number };
 }
 
 /** One request to a route that takes no token: nobody asks, so there is no actor. */

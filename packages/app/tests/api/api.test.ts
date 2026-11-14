@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 
 import { decideLogin } from "@poplin/core/src/actions/computer-logins";
+import { publishSite } from "@poplin/core/src/actions/publish";
 import type { Install } from "@poplin/core/src/actions/records";
 import { OPEN_ROUTES, ROUTES } from "@poplin/core/src/api/routes";
 import type { Login } from "@poplin/core/src/auth/logins";
@@ -366,6 +367,34 @@ describe("createApi", () => {
 
     expect([admin.status, part(admin, "error").code, unknown.status, part(unknown, "error")]).toEqual([403, "not_allowed", 400, expect.objectContaining({ code: "bad_argument", about: "expires" })]);
     expect([others.status, own.status, (await install.call("whoami", undefined, { token: install.tokens.owner })).status]).toEqual([403, 200, 401]);
+  });
+
+  // Drift: a host ends a request that makes more than 50 calls to the database and the store, and the route reads the token before the action runs. A fixed count handed to the action copied fewer files than fit.
+  test.each([
+    [1, 1],
+    [48, 3],
+    [300, 19],
+    [1_001, 49],
+  ])("a copy of %i files through the route is whole after %i requests, none of which makes more than 50 calls to the database and the store", async (count, requests) => {
+    const install = await openApi({}, { fileBytes: 64, files: 10_000, manifestBytes: 2_000_000 });
+    const files = Array.from({ length: count }, (_page, at) => ({ path: at === 0 ? "index.html" : `pages/${at}.html`, size: 1, contentType: "text/html", open: () => new Blob(["x"]).stream() }));
+    const source = await publishSite(installOf(install), { scope: "admin", holder: "ada@example.com" as Login }, { name: "report", files });
+    if (!source.ok) throw new Error(`the source was refused: ${source.code}`);
+
+    const spent: number[] = [];
+    let upload: string | undefined;
+
+    for (let site: unknown = null; site === null; ) {
+      Object.assign(install.calls, { database: 0, store: 0 });
+      const step = await install.call("duplicateSite", { site: source.site.id }, { body: upload === undefined ? {} : { upload } });
+      if (step.status !== 200) throw new Error(`a request was refused: ${JSON.stringify(step.body)}`);
+
+      spent.push(install.calls.database + install.calls.store);
+      upload = part(step, "copy").upload as string;
+      site = step.body.site;
+    }
+
+    expect([spent.length, spent.filter((calls) => calls > 50)]).toEqual([requests, []]);
   });
 });
 
