@@ -25,6 +25,14 @@ export function codeCounts(counters = new MemoryCounters()): Pick<Parameters<typ
   return { counters: { takeMinute: (window, now) => counters.takeMinute(window, now) }, visitorOf: async () => "one-visitor" };
 }
 
+/** A small free plan of the tests' own: each sentence names its part, so a warning shown beside the wrong field is seen. */
+export const FREE_LIMITS = {
+  totalBytes: { most: 10_000_000_000, warning: "all sites are above the free 10 GB" },
+  siteBytes: { most: 10_000_000_000, warning: "one site is above the free 10 GB" },
+  requestsPerDay: { most: 100_000, warning: "above the free 100,000 requests a day" },
+  logins: { most: 50, warning: "above the free 50 users" },
+} as const;
+
 /** The key material of the test dashboard's tokens. */
 export const CSRF_SECRET = new Uint8Array(32).fill(9);
 
@@ -88,7 +96,7 @@ export async function openDashboard(domain?: DomainPlug): Promise<Opened> {
   };
 
   const counters = new MemoryCounters();
-  const dashboard = createDashboard({ install, readSession: sessionOf, loginPath: "/login", csrfSecret: CSRF_SECRET, domain, ...codeCounts(counters) });
+  const dashboard = createDashboard({ install, readSession: sessionOf, loginPath: "/login", csrfSecret: CSRF_SECRET, domain, freeLimits: FREE_LIMITS, ...codeCounts(counters) });
   const get: Opened["get"] = (path, headers = {}) => dashboard.fetch(new Request(`${ORIGIN}${path}`, { headers: { Cookie: cookie, ...headers } }));
 
   const tokenOf = (page: string): string => /name="csrf" value="([^"]+)"/.exec(page)?.[1] ?? "";

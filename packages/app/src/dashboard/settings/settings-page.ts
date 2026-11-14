@@ -7,7 +7,7 @@ import { html } from "hono/html";
 import { csrfField, refusedPage } from "../page/frame";
 import type { Html, Page, Visit } from "../records";
 import { DOMAIN_SETTINGS } from "./constants";
-import { freeLimitWarnings } from "./free-limits";
+import { type FreeLimits, freeLimitWarnings } from "./free-limits";
 
 /** What each setting means, in a line. A key missing here does not compile. */
 const MEANINGS: { readonly [Key in keyof SettingValues]: string } = {
@@ -89,16 +89,16 @@ ${csrfField(visit)}
 /**
  * Show the settings.
  *
- * @returns one input per ordinary setting in one form, the Domain tab's settings as text, a warning beside each stored value that is above a free limit of Cloudflare, and the sign-out form
+ * @returns one input per ordinary setting in one form, the Domain tab's settings as text, a warning beside each stored value that is above a limit of the free plan, and the sign-out form
  */
-export async function showSettings(visit: Visit): Promise<Page> {
+export async function showSettings(visit: Visit, freeLimits: FreeLimits): Promise<Page> {
   const place = { tab: "settings", heading: "Settings" } as const;
   const config = await readConfig(visit.install, visit.actor);
   if (!config.ok) return refusedPage(place, config);
 
   const texts = settingsToText(config.values);
   const defaults = defaultTexts(config.values, visit.url.hostname);
-  const warnings = freeLimitWarnings(config.values);
+  const warnings = freeLimitWarnings(config.values, freeLimits);
   const rows = (Object.keys(texts) as Key[]).map((key): Row => ({ key, text: texts[key], fallback: defaults[key], warning: warnings.get(key) }));
   const ordinary = rows.filter((row) => !DOMAIN_SETTINGS.includes(row.key));
   const zone = rows.filter((row) => DOMAIN_SETTINGS.includes(row.key));

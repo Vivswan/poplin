@@ -19,6 +19,7 @@ import { visitorKey } from "@poplin/app/src/limits/visitor-key";
 import { readSession } from "@poplin/app/src/login/session";
 import type { Database } from "@poplin/core/src/database/database";
 import { clientAddress } from "../limits/client-address";
+import { FREE_LIMITS } from "../limits/free-limits";
 import { INSTALL_OBJECTS } from "../zone/install-objects";
 import type { Bindings } from "./bindings";
 import { type Held, readHeld } from "./held";
@@ -82,6 +83,7 @@ function answerDashboard(request: Request, instance: Instance, held: Held): Prom
     loginPath: INSTALL_OBJECTS.loginPath,
     csrfSecret: held.formsSecret,
     domain: instance.domain,
+    freeLimits: FREE_LIMITS,
     counters: instance.counters,
     visitorOf: (asked) => visitorKey(clientAddress(asked.headers), held.visitorSecret, now),
   });

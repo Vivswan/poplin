@@ -6,6 +6,7 @@ import fc from "fast-check";
 
 import { createDashboard } from "../../packages/app/src/dashboard/dashboard";
 import { type ApiInstall, ORIGIN, openApi, VISITOR_HEADER } from "../../packages/app/tests/api/support/install";
+import { FREE_LIMITS } from "../../packages/app/tests/dashboard/support/install";
 import { ADDRESSES } from "../../packages/app/tests/sites/support/layout";
 import { holdsSecret, mintComputerLogin, parseLoginSecret, parseUserCode, showUserCode } from "../../packages/core/src/auth/computer-logins";
 import type { Login } from "../../packages/core/src/auth/logins";
@@ -88,6 +89,7 @@ async function openDesk(): Promise<Desk> {
       readSession: async (headers) => (headers.get("Cookie") === SESSION ? { ok: true, value: ADA } : { ok: false }),
       loginPath: "/login",
       csrfSecret: new Uint8Array(32).fill(9),
+      freeLimits: FREE_LIMITS,
       counters: install.counters,
       // Every request is its own visitor: the counts by address have their own test, and here they would only hide steps.
       visitorOf: async () => nextVisitor(desk),

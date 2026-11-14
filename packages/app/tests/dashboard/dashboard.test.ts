@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 
 import { createDashboard } from "../../src/dashboard/dashboard";
 import { importCsrfKey, mintCsrfToken } from "../../src/dashboard/security/csrf";
-import { CSRF_SECRET, codeCounts, LOGIN, ORIGIN, type Opened, openDashboard } from "./support/install";
+import { CSRF_SECRET, codeCounts, FREE_LIMITS, LOGIN, ORIGIN, type Opened, openDashboard } from "./support/install";
 
 const CSP = /^default-src 'none'; style-src 'nonce-([A-Za-z0-9+/=]+)'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'$/;
 const HALF_DAY_MS = 12 * 60 * 60 * 1000;
@@ -196,6 +196,7 @@ test("a session that cannot be read, as when the database is down, is answered l
     readSession: () => Promise.reject(new Error("the database is down")),
     loginPath: "/login",
     csrfSecret: CSRF_SECRET,
+    freeLimits: FREE_LIMITS,
     ...codeCounts(),
   });
   const answer = await broken.fetch(new Request(`${ORIGIN}/settings`, { headers: { Cookie: opened.cookie } }));

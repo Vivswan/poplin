@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { createDashboard } from "../../../app/src/dashboard/dashboard";
 import { MemoryCounters } from "../../../app/src/limits/memory-counters";
 import { NOW, ORIGIN } from "../../../app/tests/api/support/install";
+import { FREE_LIMITS } from "../../../app/tests/dashboard/support/install";
 import { ADDRESSES } from "../../../app/tests/sites/support/layout";
 import type { Login as Email } from "../../../core/src/auth/logins";
 import { type Bench, cleanUp, jsonOf, openBench, type Ran } from "./support/harness";
@@ -68,6 +69,7 @@ async function openDesk(): Promise<Desk> {
     readSession: async (headers) => (headers.get("Cookie") === SESSION ? { ok: true, value: ADA } : { ok: false }),
     loginPath: "/login",
     csrfSecret: new Uint8Array(32).fill(9),
+    freeLimits: FREE_LIMITS,
     counters: new MemoryCounters(),
     visitorOf: async () => "the-admin",
   });

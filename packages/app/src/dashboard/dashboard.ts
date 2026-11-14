@@ -30,6 +30,7 @@ import { noticeIn } from "./page/notices";
 import type { Change, Form, Page, Visit } from "./records";
 import { importCsrfKey, mintCsrfToken } from "./security/csrf";
 import { readOwnForm } from "./security/own-form";
+import type { FreeLimits } from "./settings/free-limits";
 import { SETTINGS_CHANGES } from "./settings/settings-changes";
 import { showSettings } from "./settings/settings-page";
 import { SITE_CHANGES } from "./sites/site-changes";
@@ -89,6 +90,9 @@ interface DashboardParts {
 
   /** The provider's side of the install. Left out, the dashboard has no Domain tab and answers none of its paths. */
   readonly domain?: DomainPlug;
+
+  /** The host's free plan, which the Settings tab warns a value above. */
+  readonly freeLimits: FreeLimits;
 
   /** Where the tries at a login's code are counted, a minute at a time. */
   readonly counters: Pick<Counters, "takeMinute">;
@@ -216,7 +220,7 @@ export function createDashboard(parts: DashboardParts): Dashboard {
   app.get("/tokens", async (context) => respond(context, await showTokens(context.get("visit"))));
   app.get(ALLOW_PAGE, async (context) => respond(context, await showAllow(context.get("visit"))));
   app.post("/tokens/:change", (context) => change(context, TOKEN_CHANGES, context.req.param("change")));
-  app.get("/settings", async (context) => respond(context, await showSettings(context.get("visit"))));
+  app.get("/settings", async (context) => respond(context, await showSettings(context.get("visit"), parts.freeLimits)));
   app.post("/settings/:change", (context) => change(context, SETTINGS_CHANGES, context.req.param("change")));
   app.get("/activity", async (context) => respond(context, await showActivity(context.get("visit"))));
   app.get("/usage", async (context) => respond(context, await showUsage(context.get("visit"))));

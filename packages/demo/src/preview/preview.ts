@@ -31,6 +31,14 @@ import { ADDRESSES, openWorld, type World } from "./world";
 /** What one request to the preview's API may carry. */
 const API_LIMITS = { fileBytes: 100_000_000, files: 10_000, manifestBytes: 2_000_000, copies: 15 } as const;
 
+/** The free plan of the preview's invented host: the numbers are samples, and no real plan is behind them. */
+const FREE_LIMITS = {
+  totalBytes: { most: 10_000_000_000, warning: "above the sample host's free 10 GB; a real host bills storage past its own" },
+  siteBytes: { most: 10_000_000_000, warning: "one site of this size is above the sample host's free 10 GB; a real host bills storage past its own" },
+  requestsPerDay: { most: 100_000, warning: "above the sample host's free 100,000 requests a day; a real host serves nothing more without its paid plan" },
+  logins: { most: 50, warning: "above the 50 users the sample host takes for free; a real host bills users past its own" },
+} as const;
+
 /** Where the dashboard of the install that holds nothing is mounted. */
 const EMPTY_PREFIX = "/empty";
 
@@ -151,7 +159,7 @@ async function answerLogin(request: Request, world: World): Promise<Response> {
 }
 
 function dashboardMount(world: World, prefix: string): Mount {
-  const dashboard = createDashboard({ install: world.install, readSession: sessionOf(world), loginPath: "/login", csrfSecret: world.csrfSecret, domain: previewPlug("partial"), ...countsOf(world) });
+  const dashboard = createDashboard({ install: world.install, readSession: sessionOf(world), loginPath: "/login", csrfSecret: world.csrfSecret, domain: previewPlug("partial"), freeLimits: FREE_LIMITS, ...countsOf(world) });
   const answer: Mount["answer"] = (request) => (new URL(request.url).pathname === "/login" ? answerLogin(request, world) : dashboard.fetch(request));
 
   return { prefix, origin: ADMIN_ORIGIN, base: "", holds: "pages", answer };
