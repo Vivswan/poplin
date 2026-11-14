@@ -167,6 +167,21 @@ const KEY_OF: Readonly<Record<string, readonly [key: string, type: string]>> = {
   "D1: Edit": ["d1", "edit"],
 };
 
+/** The first box of Cloudflare's token form for each permission: whether it is given on the account or on a zone. */
+const SCOPE_OF: Readonly<Record<string, "Account" | "Zone">> = {
+  "Zone: Read": "Zone",
+  "DNS: Edit": "Zone",
+  "Workers Routes: Edit": "Zone",
+  "Access: Apps and Policies: Edit": "Account",
+  "Access: Organizations, Identity Providers, and Groups: Read": "Account",
+  "Workers Scripts: Edit": "Account",
+  "Single Redirect: Edit": "Zone",
+  "Zone Settings: Read": "Zone",
+  "Zone WAF: Edit": "Zone",
+  "Bot Management: Edit": "Zone",
+  "D1: Edit": "Account",
+};
+
 // Drift: the form drops a key it does not know without a word, so a right that is in neither the link nor the by-hand list is a token that fails at a repair with nothing on the page having asked for it.
 test("every right is in the link to the token form under Cloudflare's own key for it, or in the list to add by hand, and in no case both", () => {
   const plug = createDomainPlug({ accountId: ACCOUNT, script: "poplin", layout: LAYOUT });
@@ -179,13 +194,15 @@ test("every right is in the link to the token form under Cloudflare's own key fo
   expect([`${link.origin}${link.pathname}`, link.searchParams.get("accountId"), link.searchParams.get("zoneId"), plug.tokenLink.includes(ACCOUNT)]).toEqual(["https://dash.cloudflare.com/profile/api-tokens", "*", "all", false]);
 });
 
-test("the install page gives the plug's own link to the token form, lists every right in a row of its own, and marks exactly the ones the link cannot carry as by hand: a person makes the token from that step", () => {
+// Drift: the form has three boxes for a permission and the page names each, so a row whose boxes are not Cloudflare's own scope, name, and level is a permission nobody finds on the form.
+test("the install page gives the plug's own link to the token form, and names the three boxes of every right: all of them in the table for an empty form, and exactly the ones the link cannot carry in the table to add by hand", () => {
   const page = readFileSync(join(import.meta.dir, "..", "..", "..", "..", "docs", "install.md"), "utf8");
-  const rows = [...page.matchAll(/^ *\| (?:Account|Zone) +\| (.+?) +\|.*\| (yes|by hand) +\|$/gm)].map(([, right = "", linked = ""]) => ({ right, linked }));
+  const rows = [...page.matchAll(/^ *\| (Account|Zone) +\| (.+?) +\| (Edit|Read) +\|(.*)$/gm)].map(([, first, second, third, rest = ""]) => ({ boxes: `${first} / ${second}: ${third}`, more: rest !== "" }));
   const plug = createDomainPlug({ accountId: ACCOUNT, script: "poplin", layout: LAYOUT });
+  const boxed = (rights: readonly string[]): string[] => rights.map((right) => `${SCOPE_OF[right] ?? "no scope is known"} / ${right}`).sort();
 
-  expect(rows.map((row) => row.right).sort()).toEqual([...plug.tokenRights].sort());
-  expect(rows.filter((row) => row.linked === "by hand").map((row) => row.right).sort()).toEqual([...plug.tokenByHand].sort());
+  expect(rows.filter((row) => row.more).map((row) => row.boxes).sort()).toEqual(boxed(plug.tokenRights));
+  expect(rows.filter((row) => !row.more).map((row) => row.boxes).sort()).toEqual(boxed(plug.tokenByHand));
   expect(page.includes(`(${plug.tokenLink})`)).toBe(true);
 });
 
