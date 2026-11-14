@@ -1,8 +1,8 @@
-// One scheduled run of the sweep: as many steps of core's walk as fit one invocation's calls.
+// One scheduled run of the sweep: as many steps of core's walk as fit one invocation's calls, from where the run before stopped.
 //
 //   one step, at most      1 settings read + 1 listing + 5 x (1 read + 1 change + 30 bucket calls + 1 leftover forgotten) = 167 calls
 //   a step of leftovers    1 settings read + 1 listing + 5 x (30 bucket calls + 1 leftover forgotten) + 1 removal of old logins = 158 calls
-//   one run, at most       290 calls: a step starts only while 167 more still fit
+//   one run, at most       290 calls: 1 read of the walk's place, the steps, and 1 write of the place; a step starts only while 167 more and the write still fit
 //   one invocation         300 calls: an instance that starts in it makes up to 10 before the run
 //   a run with nothing to remove costs 7 calls a step, so it looks at about 90 sites or uploads
 //
@@ -20,14 +20,14 @@ const STEP_CALLS = 167;
 /** The most database and bucket calls one run makes, which leaves 10 of an invocation's 300 to an instance that starts first. */
 const RUN_CALLS = 290;
 
-/** The four parts of the walk, in its own order: the sites, the trash, the uploads, the leftovers. */
-const PARTS: readonly Place[] = [{ trash: false }, { trash: true }, { uploads: true }, { leftovers: true }];
+/** The calls a run makes around its steps that a step must leave room for: the write of the place. */
+const PLACE_CALLS = 1;
 
-/** How long one part keeps the first turn; the cron trigger fires this often, so each run without a place to resume begins with the next part. */
-const TURN_MS = 15 * 60 * 1000;
+/** Where a walk begins: at the newest site. The steps go on from there through the trash, the uploads, and the leftovers. */
+const START: NonNullable<Place> = { trash: false };
 
-/** Where the walk stands, as one step answers it and the next takes it. */
-export type Place = NonNullable<Parameters<typeof sweepExpired>[2]["from"]>;
+/** Where the walk stands, as the database keeps it between two runs; `undefined` once it reached its end. */
+type Place = Awaited<ReturnType<Install["database"]["readSweepPlace"]>>;
 
 /** Wrap a database or a bucket so every call of a method of it is counted. */
 function counted<Target extends object>(target: Target, tally: { calls: number }): Target {
@@ -46,23 +46,23 @@ function counted<Target extends object>(target: Target, tally: { calls: number }
 }
 
 /**
- * Run the sweep for one scheduled invocation.
+ * Run the sweep for one scheduled invocation: go on where the run before stopped, and keep where this one stops.
  *
- * @param from - where the run before stopped; absent, the run begins with the part whose turn it is at `scheduledTime`, so no part waits behind a long one forever
- * @returns where the next run goes on, or `undefined` once the walk reached its end
- * @throws {Error} the sweep was refused, or the database failed; what was moved or removed before stays so
+ * The place is kept in the database, since Cloudflare may start a new instance for every run. A walk takes one run for about every 90 items, and the next walk begins when one ends, so every site, upload, and leftover is looked at within that many runs.
+ *
+ * @throws {Error} the sweep was refused, or the database failed; what was moved or removed before stays so, and the next run begins where this one began
  */
-export async function runSweep(install: Install, scheduledTime: number, from?: Place): Promise<Place | undefined> {
+export async function runSweep(install: Install): Promise<void> {
   const tally = { calls: 0 };
   const watched: Install = { ...install, database: counted(install.database, tally), store: counted(install.store, tally) };
-  let place = from ?? PARTS[Math.floor(scheduledTime / TURN_MS) % PARTS.length];
+  let place: Place = (await watched.database.readSweepPlace()) ?? START;
 
-  while (place !== undefined && tally.calls + STEP_CALLS <= RUN_CALLS) {
+  while (place !== undefined && tally.calls + STEP_CALLS + PLACE_CALLS <= RUN_CALLS) {
     const swept = await sweepExpired(watched, SWEEPER, { limit: STEP_ITEMS, from: place });
     if (!swept.ok) throw new Error(`the sweep was refused: ${swept.code}`);
 
     place = swept.next;
   }
 
-  return place;
+  await watched.database.keepSweepPlace(place);
 }

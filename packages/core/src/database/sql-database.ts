@@ -13,6 +13,7 @@ import { computerLoginFromRow } from "../records/computer-login";
 import { SETTING_CHANGES, SETTING_VALUES, type SettingValues } from "../records/settings";
 import { signingKeyFromRow, signingKeyToText } from "../records/secret";
 import { NEW_SITE, SITE_DETAILS, SITE_FOLDER, type Site, type SiteAccess, type SiteFolder, siteFromRow, siteToRow } from "../records/site";
+import { SWEEP_PLACE, type SweepPlace } from "../records/sweep-place";
 import { type SiteSize, sizeFromRow, type Totals, totalsFromRow } from "../records/sizes";
 import { mintSiteId, type SiteId } from "../sites/ids";
 import { tokenFromRow } from "../records/token";
@@ -374,6 +375,15 @@ const DELETE_REDEEMED_LOGIN = "DELETE FROM logins WHERE id = ?1 AND changes() = 
 /** Every login that ran out at or before `?1`, removed. */
 const DELETE_OLD_LOGINS = "DELETE FROM logins WHERE expires_at <= ?1";
 
+/** Where the sweep's walk stopped, as JSON text. */
+const READ_SWEEP_PLACE = "SELECT place FROM sweep_place WHERE id = 1";
+
+/** Where the sweep's walk stopped, in place of what was kept. */
+const KEEP_SWEEP_PLACE = "INSERT INTO sweep_place (id, place) VALUES (1, ?1) ON CONFLICT (id) DO UPDATE SET place = excluded.place";
+
+/** The sweep's place forgotten. */
+const FORGET_SWEEP_PLACE = "DELETE FROM sweep_place";
+
 /** The settings, as JSON text. */
 const READ_SETTINGS = "SELECT value FROM settings WHERE id = 1";
 
@@ -509,6 +519,15 @@ function signingKeyIn(result: StatementResult | undefined): Uint8Array<ArrayBuff
   const row = result?.rows[0];
 
   return row === undefined ? undefined : signingKeyFromRow(row);
+}
+
+function placeIn(result: StatementResult | undefined): SweepPlace | undefined {
+  const text = result?.rows[0]?.place;
+  if (typeof text !== "string") return undefined;
+
+  const place = v.safeParse(SWEEP_PLACE, JSON.parse(text));
+
+  return place.success ? place.output : undefined;
 }
 
 function settingsIn(result: StatementResult | undefined): SettingValues | undefined {
@@ -969,6 +988,18 @@ export class SqlDatabase implements Database {
     const [removed] = await this.#driver.batch([sql(DELETE_OLD_LOGINS, now)]);
 
     return removed?.changes ?? 0;
+  }
+
+  async readSweepPlace(): Promise<SweepPlace | undefined> {
+    const [read] = await this.#driver.batch([sql(READ_SWEEP_PLACE)]);
+
+    return placeIn(read);
+  }
+
+  async keepSweepPlace(place: SweepPlace | undefined): Promise<void> {
+    const kept = place === undefined ? sql(FORGET_SWEEP_PLACE) : sql(KEEP_SWEEP_PLACE, JSON.stringify(v.parse(SWEEP_PLACE, place)));
+
+    await this.#driver.batch([kept]);
   }
 
   async readSettings(): Promise<SettingValues | undefined> {

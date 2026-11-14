@@ -1191,6 +1191,25 @@ function tokensAndSettings(label: string, makeDatabase: DatabaseFactory): void {
   });
 }
 
+function sweepPlace(label: string, makeDatabase: DatabaseFactory): void {
+  describe(`${label}: the place of the scheduled sweep`, () => {
+    // Drift: a new instance may make every scheduled run, so the kept place is all that carries a walk from one run to the next. One that read back changed would skip sites, and one never forgotten would keep a new walk from starting.
+    test("the place reads back as it was kept, the last one kept is the one read, and a forgotten one is gone", async () => {
+      const database = await opened(makeDatabase);
+      const inTrash = { trash: true, after: { updated_at: NOW, id: OTHER_SITE } } as const;
+      const before = await database.readSweepPlace();
+
+      await database.keepSweepPlace(inTrash);
+      const first = await database.readSweepPlace();
+      await database.keepSweepPlace({ leftovers: true });
+      const second = await database.readSweepPlace();
+      await database.keepSweepPlace(undefined);
+
+      expect([before, first, second, await database.readSweepPlace()]).toEqual([undefined, inTrash, { leftovers: true }, undefined]);
+    });
+  });
+}
+
 function computerLogins(label: string, makeDatabase: DatabaseFactory): void {
   describe(`${label}: the logins of computers`, () => {
     // Drift: the record `mintComputerLogin` makes is what a presented secret is checked against, and the code is what an admin is shown; a field lost on the way through a row would refuse every login.
@@ -1670,6 +1689,7 @@ export function describeDatabase(label: string, makeDatabase: DatabaseFactory): 
   auditLog(label, makeDatabase);
   tokensAndSettings(label, makeDatabase);
   computerLogins(label, makeDatabase);
+  sweepPlace(label, makeDatabase);
   requestCounts(label, makeDatabase);
   uploads(label, makeDatabase);
 }

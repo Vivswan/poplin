@@ -23,7 +23,7 @@ import { type Held, readHeld } from "./held";
 import { answerLogin } from "./login";
 import { answerSite } from "./site";
 import { type Failure, type Instance, type Outside, type Started, startInstance } from "./start";
-import { type Place, runSweep } from "./sweep";
+import { runSweep } from "./sweep";
 import { plain } from "./util";
 
 /** How long a site request trusts the settings and the logins an instance read. */
@@ -78,7 +78,6 @@ export function createWorker(given: Partial<Outside> = {}): Required<Pick<Export
   const outside: Outside = { now: given.now ?? Date.now, fetch: given.fetch ?? ((url, init) => fetch(url, init)) };
   let starting: Promise<Started> | undefined;
   let holding: { readonly at: number; readonly value: Promise<Held> } | undefined;
-  let sweepFrom: Place | undefined;
 
   async function attempt(env: Bindings): Promise<Started> {
     try {
@@ -151,11 +150,11 @@ export function createWorker(given: Partial<Outside> = {}): Required<Pick<Export
       }
     },
 
-    async scheduled(controller, env) {
+    async scheduled(_controller, env) {
       const started = await start(env);
       if (!started.ok) throw new Error(`the sweep did not run. ${failureText(started.failure)}`);
 
-      sweepFrom = await runSweep(started.instance.install, controller.scheduledTime, sweepFrom);
+      await runSweep(started.instance.install);
     },
   };
 }

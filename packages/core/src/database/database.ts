@@ -14,6 +14,7 @@ import type { Holder } from "../records/fields";
 import type { SiteId } from "../sites/ids";
 import type { SettingValues } from "../records/settings";
 import type { Site, SiteAccess, SiteFolder } from "../records/site";
+import type { SweepPlace } from "../records/sweep-place";
 import type { SiteSize, Totals } from "../records/sizes";
 import type { ManifestFile, Upload, UploadId, UploadPlan } from "../records/upload";
 
@@ -490,6 +491,12 @@ export interface Database {
    * @returns how many were removed
    */
   sweepComputerLogins(now: number): Promise<number>;
+
+  /** Where the scheduled sweep's walk stopped: `undefined` before a run kept a place, once a walk ended, and for a kept place no walk can go on from. */
+  readSweepPlace(): Promise<SweepPlace | undefined>;
+
+  /** Keep where the scheduled sweep's walk stopped, in place of what was kept; `undefined` forgets it, for a walk that ended. */
+  keepSweepPlace(place: SweepPlace | undefined): Promise<void>;
 
   /** The install's settings, `undefined` before setup stored them. */
   readSettings(): Promise<SettingValues | undefined>;

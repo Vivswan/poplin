@@ -5,9 +5,10 @@ import * as v from "valibot";
 import type { Login } from "../auth/logins";
 import type { Actor } from "../auth/scopes";
 import type { Signed } from "../database/database";
-import { MOMENT, POSITIVE, SITE_ID } from "../records/fields";
-import { SITE_FOLDER, type Site, type SiteFolder } from "../records/site";
-import { UPLOAD_ID, type Upload } from "../records/upload";
+import { POSITIVE } from "../records/fields";
+import type { Site, SiteFolder } from "../records/site";
+import { SWEEP_PLACE, type SweepPlace } from "../records/sweep-place";
+import type { Upload } from "../records/upload";
 import { emptyLeftover, removeSite } from "./delete";
 import { enterInstall } from "./reach";
 import { type Install, type Refused, refuse } from "./records";
@@ -20,21 +21,11 @@ const MAX_STEP = 100;
 /** Who signs the audit entry of every site a scheduled sweep moves or removes. No person logs in under a `.invalid` address. */
 export const SWEEPER = { scope: "admin", holder: "sweep@poplin.invalid" as Login } as const;
 
-/** Where a walk stands: in the sites or in the trash, after which site; in the uploads, after which upload; or in the leftovers, after which folder. */
-const PLACE = v.union([
-  v.strictObject({ trash: v.boolean(), after: v.optional(v.strictObject({ updated_at: MOMENT, id: SITE_ID })) }),
-  v.strictObject({ uploads: v.literal(true), after: v.optional(v.strictObject({ created_at: MOMENT, id: UPLOAD_ID })) }),
-  v.strictObject({ leftovers: v.literal(true), after: v.optional(SITE_FOLDER) }),
-]);
-
 /** A step that did nothing. */
 const NOTHING_SWEPT = { ok: true, trashed: 0, deleted: 0, uploads: 0, emptied: 0, logins: 0, left: [] } as const;
 
 /** What one call of the sweep may ask for. */
-const STEP = v.strictObject({ limit: v.pipe(POSITIVE, v.maxValue(MAX_STEP)), from: v.optional(PLACE, { trash: false }) });
-
-/** Where a walk stands. */
-type Place = v.InferOutput<typeof PLACE>;
+const STEP = v.strictObject({ limit: v.pipe(POSITIVE, v.maxValue(MAX_STEP)), from: v.optional(SWEEP_PLACE, { trash: false }) });
 
 /**
  * What one call did. `next` is where the walk goes on, and is absent once it has looked at every site, all of the trash, every old upload, and every leftover.
@@ -52,7 +43,7 @@ interface Swept {
   readonly logins: number;
   readonly emptied: number;
   readonly left: readonly string[];
-  readonly next?: Place;
+  readonly next?: SweepPlace;
 }
 
 /** Move the sites past their expiry to the trash, and answer how many went. */
@@ -136,7 +127,7 @@ async function emptyLeftovers(install: Install, folders: readonly SiteFolder[]):
 }
 
 /** One step over the sites or over the trash. */
-async function sweepSites(install: Install, from: Extract<Place, { readonly trash: boolean }>, rule: { readonly limit: number; readonly trashDays: number; readonly signed: Signed }): Promise<Swept> {
+async function sweepSites(install: Install, from: Extract<SweepPlace, { readonly trash: boolean }>, rule: { readonly limit: number; readonly trashDays: number; readonly signed: Signed }): Promise<Swept> {
   const page = await install.database.listSites({ trash: from.trash, limit: rule.limit, after: from.after });
   const trashed = from.trash ? 0 : await trashExpired(install, page.sites, rule.signed);
   const { deleted, left } = from.trash ? await removeSatOut(install, page.sites, rule) : { deleted: 0, left: [] };
@@ -150,7 +141,7 @@ async function sweepSites(install: Install, from: Extract<Place, { readonly tras
 }
 
 /** One step over the old uploads. */
-async function sweepUploads(install: Install, from: Extract<Place, { readonly uploads: true }>, rule: { readonly limit: number; readonly signed: Signed }): Promise<Swept> {
+async function sweepUploads(install: Install, from: Extract<SweepPlace, { readonly uploads: true }>, rule: { readonly limit: number; readonly signed: Signed }): Promise<Swept> {
   const old = await install.database.listUploads({ before: sweepableBefore(rule.signed.at), limit: rule.limit, after: from.after });
   const removed = await removeOldUploads(install, old.uploads);
 
@@ -158,7 +149,7 @@ async function sweepUploads(install: Install, from: Extract<Place, { readonly up
 }
 
 /** One step over the leftovers. The one that has looked at the last of them ends the walk by removing the logins that ran out. */
-async function sweepLeftovers(install: Install, from: Extract<Place, { readonly leftovers: true }>, rule: { readonly limit: number; readonly signed: Signed }): Promise<Swept> {
+async function sweepLeftovers(install: Install, from: Extract<SweepPlace, { readonly leftovers: true }>, rule: { readonly limit: number; readonly signed: Signed }): Promise<Swept> {
   const page = await install.database.listLeftovers({ limit: rule.limit, after: from.after });
   const swept = { ...NOTHING_SWEPT, ...(await emptyLeftovers(install, page.folders)) };
   if (page.next !== undefined) return { ...swept, next: { leftovers: true, after: page.next } };

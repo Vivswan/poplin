@@ -10,12 +10,6 @@ import { ADMIN, api, ask, BINDINGS, countedBindings, done, installOf, instance, 
 /** The most database and bucket calls one scheduled invocation may make, the start of its instance included: the entry's own stated budget, under Cloudflare's 1,000 on the Free plan. */
 const INVOCATION_CALLS = 300;
 
-/** A quarter of an hour: one run begins with the sites, the next with the trash, the third with the uploads, the fourth with the leftovers. */
-const TURN_MS = 15 * 60 * 1000;
-
-/** The place of the trash among the parts of the walk. */
-const TRASH_TURN = 1;
-
 /** The files one removal takes from a folder whose list pages hold one object each. */
 const WHOLE_REMOVAL = 15;
 
@@ -26,13 +20,6 @@ const MOST_STEP_CALLS = 167;
 const HTML = new TextEncoder().encode("<p>short-lived</p>");
 
 let w: World;
-
-/** Move the clock to the next quarter hour whose run begins with the part at this place of the walk: 0 for the sites. */
-function toTheTurnOf(part: number): void {
-  const turn = Math.ceil(w.clock.now / TURN_MS);
-
-  w.clock.now = (turn + ((4 + part - (turn % 4)) % 4)) * TURN_MS;
-}
 
 /** The bucket with every list page cut to one object, so one removal, which walks 15 pages, takes 15 files. */
 function shortPages(bucket: R2Bucket): R2Bucket {
@@ -74,12 +61,10 @@ describe("the scheduled run", () => {
     const stored = await keysUnder("");
 
     wait(w, 2);
-    toTheTurnOf(0);
     await sweep(worker, w);
     const afterExpiry = await states();
 
     wait(w, 8 * 24);
-    toTheTurnOf(0);
     await sweep(worker, w);
     const { database } = await installOf(w);
     const left = await keysUnder("");
@@ -108,7 +93,6 @@ describe("the scheduled run", () => {
     const old = await begin();
 
     wait(w, 1);
-    toTheTurnOf(0);
     const waiting = await begin();
     await sweep(worker, w);
 
@@ -157,7 +141,6 @@ describe("the scheduled run", () => {
     }
 
     wait(w, 8 * 24);
-    toTheTurnOf(TRASH_TURN);
     const counted = countedBindings(tally);
     await sweep(instance(w), w, { ...counted, SITES: shortPages(counted.SITES) });
 
@@ -166,16 +149,14 @@ describe("the scheduled run", () => {
     expect(tally.calls).toBeLessThanOrEqual(INVOCATION_CALLS);
   });
 
-  // Drift: a run that walked until the walk ended would pass Cloudflare's per-invocation limit on a large install and be cut off mid-change; one that forgot its place would look at the same sites every time.
-  test("an invocation that starts its instance stops inside its call budget on an install too large for one run, and the next run of the instance goes on where it stopped", async () => {
+  // Drift: Cloudflare may start a new instance for every cron run, and the listing is newest first. A place kept in the instance's memory starts every run at the newest site, so an expired site behind more live ones than a run looks at is never reached.
+  test("an expired site behind ninety-six newer live ones reaches the trash although every run starts a new instance, and each run stays inside its call budget", async () => {
     const tally = { calls: 0 };
-    const worker = instance(w);
     await ask(instance(w), `${ADMIN}/api/whoami`);
     const install = await installOf(w);
     const file = { path: "index.html", size: HTML.byteLength, contentType: "text/html", open: () => new Blob([HTML]).stream() };
 
-    // The listing is newest first: the three expired sites come last, behind more lasting sites than one run looks at.
-    for (const [count, name, expires] of [[3, "brief", "1h"], [110, "lasting", "never"]] as const) {
+    for (const [count, name, expires] of [[1, "brief", "1h"], [96, "lasting", "never"]] as const) {
       for (let made = 0; made < count; made += 1) {
         const site = await publishSite(install, { scope: "admin", holder: OWNER }, { name: `${name}-${made}`, expires, files: [file] });
         if (!site.ok) throw new Error(`the test's site was refused: ${site.code}`);
@@ -184,17 +165,16 @@ describe("the scheduled run", () => {
       wait(w, 2);
     }
 
-    toTheTurnOf(0);
-    await sweep(worker, w, countedBindings(tally));
-    const first = { calls: tally.calls, trash: (await states()).trash };
+    const runs = [];
+    for (let run = 0; run < 3; run += 1) {
+      wait(w, 0.25);
+      tally.calls = 0;
+      await sweep(instance(w), w, countedBindings(tally));
+      runs.push({ calls: tally.calls, trash: (await states()).trash });
+    }
 
-    wait(w, 0.25);
-    tally.calls = 0;
-    await sweep(worker, w);
-
-    expect(first.calls).toBeGreaterThan(INVOCATION_CALLS / 3);
-    expect(first.calls).toBeLessThanOrEqual(INVOCATION_CALLS);
-    expect(tally.calls).toBeLessThanOrEqual(INVOCATION_CALLS);
-    expect([first.trash, (await states()).trash]).toEqual([0, 3]);
+    expect(runs.map((run) => run.trash)).toEqual([0, 1, 1]);
+    expect(runs[0]?.calls).toBeGreaterThan(INVOCATION_CALLS / 3);
+    expect(Math.max(...runs.map((run) => run.calls))).toBeLessThanOrEqual(INVOCATION_CALLS);
   });
 });

@@ -38,6 +38,7 @@ import type { PublicName, SiteName } from "../../src/names/names";
 import type { AuditAction, AuditEntry } from "../../src/records/audit";
 import { SETTING_CHANGES, SETTING_VALUES, type SettingValues } from "../../src/records/settings";
 import { NEW_SITE, SITE_DETAILS, type Site, type SiteAccess, type SiteFolder, siteToRow } from "../../src/records/site";
+import { SWEEP_PLACE, type SweepPlace } from "../../src/records/sweep-place";
 import type { SiteSize, Totals } from "../../src/records/sizes";
 import { type ManifestFile, manifestFromText, type Upload, type UploadId, uploadFromRow } from "../../src/records/upload";
 import { mintSiteId, type SiteId } from "../../src/sites/ids";
@@ -152,6 +153,8 @@ class MemoryDatabase implements Database {
   readonly #mintId: () => SiteId;
 
   #settings: SettingValues | undefined;
+
+  #sweepPlace: SweepPlace | undefined;
 
   #signingKey: Uint8Array<ArrayBuffer> | undefined;
 
@@ -492,6 +495,14 @@ class MemoryDatabase implements Database {
     for (const login of old) this.#logins.delete(login.id);
 
     return old.length;
+  }
+
+  async readSweepPlace(): Promise<SweepPlace | undefined> {
+    return this.#sweepPlace;
+  }
+
+  async keepSweepPlace(place: SweepPlace | undefined): Promise<void> {
+    this.#sweepPlace = place === undefined ? undefined : v.parse(SWEEP_PLACE, place);
   }
 
   async readSettings(): Promise<SettingValues | undefined> {
