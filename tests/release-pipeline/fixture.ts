@@ -6,6 +6,7 @@ import { devNull, tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import type { Ancestry, Packument } from "../../.github/scripts/release-pipeline/records.js";
 
+/** The pipeline's entry script, run as a workflow step runs it. */
 const ENTRY = join(import.meta.dir, "../../.github/scripts/release-pipeline.ts");
 
 /** Late on the 13th in New York is the 14th in UTC: the source commit, a merge, is stamped with it. */
@@ -184,6 +185,8 @@ export async function withRegistry<T>(answers: Answer[], body: (url: string, req
 /**
  * Puts a scripted npm first on PATH: `--version` prints the version, and any other call prints itself with the folder
  * it ran in (its last two segments) and the GITHUB_SHA it saw, then exits with `failing.status` when it is the failing command.
+ *
+ * POSIX only: the fake npm is a `#!/bin/sh` script and PATH is joined with `:`, so the tests that use it run on Linux and macOS.
  *
  * @param body - takes the PATH to run a subcommand with, and a reader of every call but `--version` so far
  */

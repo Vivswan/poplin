@@ -11,11 +11,13 @@ import { releaseVersion } from "../../.github/scripts/release-pipeline/release-v
 const SEMVER =
   /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-((?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*)(?:\.(?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*))*))?(?:\+([0-9a-zA-Z-]+(?:\.[0-9a-zA-Z-]+)*))?$/;
 
+/** A sha whose first seven characters hold a letter: npm keeps such an identifier as written. */
 const SHA = "b8df084c1d2e3f4a5b6c7d8e9f0a1b2c3d4e5f6a";
 
 /** A sha whose first seven characters are digits with a leading zero: bare, npm would rewrite it to 123456. */
 const DIGIT_SHA = "0123456789abcdef0123456789abcdef01234567";
 
+/** A position on main, on the 13th unless a date is given. */
 const at = (count: number, date = "20260913"): MainPosition => ({ count, date });
 
 describe("prereleaseVersion", () => {

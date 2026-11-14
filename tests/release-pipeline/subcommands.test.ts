@@ -6,6 +6,7 @@
 import { describe, expect, setDefaultTimeout, test } from "bun:test";
 import { type Answer, type Checkout, record, SOURCE_DATE, type StepResult, shallowClone, subcommand, withCheckout, withNpm, withRegistry } from "./fixture.js";
 
+/** The OIDC request URL a step is given: without one a publish is refused. */
 const OIDC = "https://oidc.example.com/token";
 
 /** The step's environment: the source commit, the local registry, the scripted npm, no pause between reads. */
@@ -26,6 +27,7 @@ const nextCalls = (checkout: Checkout): string[] => [
   `npm publish --tag next (in packages/cli, GITHUB_SHA=${checkout.source})`,
 ];
 
+/** A step's whole stdout or stderr: the tests compare it complete, final newline included. */
 const lines = (...each: string[]): string => each.map((line) => `${line}\n`).join("");
 
 // A dozen git and bun spawns per test pass bun's 5 s default on a loaded machine.

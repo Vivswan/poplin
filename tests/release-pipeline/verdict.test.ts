@@ -7,29 +7,52 @@ import type { ConfirmVerdict, NextVerdict, Packument, PublishVerdict } from "../
 import { stablePublishVerdict } from "../../.github/scripts/release-pipeline/stable-verdict.js";
 import { graphAncestry, record } from "./fixture.js";
 
+/** Main's first commit. */
 const SEED = "a1".repeat(20);
+
+/** Main's second commit: the one this run publishes. */
 const SOURCE = "b2".repeat(20);
+
+/** Main's third commit. */
 const AFTER = "c3".repeat(20);
+
+/** Main's fourth commit. */
 const FURTHER = "d4".repeat(20);
+
+/** A commit on a branch off the first, never merged. */
 const SIDE = "e5".repeat(20);
 
 /** Main is seed, source, after, further; side branches off seed and is never merged. */
 const MAIN = graphAncestry({ [SEED]: [], [SOURCE]: [SEED], [AFTER]: [SOURCE], [FURTHER]: [AFTER], [SIDE]: [SEED] });
 
+/** The pre-release this run mints, from the source commit. */
 const OWN = "2.1.1-main.2.20260913.gb2b2b2b";
+
+/** The pre-release of main's first commit. */
 const ANCESTOR = "2.1.1-main.1.20260912.ga1a1a1a";
+
+/** The pre-release of main's third commit. */
 const DESCENDANT = "2.1.1-main.3.20260914.gc3c3c3c";
+
+/** The pre-release of main's fourth commit. */
 const FURTHEST = "2.1.1-main.4.20260915.gd4d4d4d";
+
+/** A pre-release of the side commit, with this run's count and date. */
 const UNRELATED = "2.1.1-main.2.20260913.ge5e5e5e";
+
+/** A pre-release whose sha names no commit in the graph. */
 const UNRESOLVED = "2.1.1-main.9.20260901.g0000000";
 
 /** A descendant's pre-release whose identifiers sort below this run's: only the sha places it. */
 const DESCENDANT_LOW = "2.1.1-main.0.gc3c3c3c";
 
+/** The verdict that publishes this run's version, with the notices it prints. */
 const goes = (...notices: string[]): NextVerdict => ({ publish: true, version: OWN, notices });
 
+/** The verdict for a version the registry already holds. */
 const rerun: NextVerdict = { publish: false, version: OWN, reason: `${OWN} is already on the registry`, notices: [] };
 
+/** The verdict that stands down for a descendant's pre-release, named by version and short sha. */
 const stale = (version: string, sha7: string): NextVerdict => ({
   publish: false,
   version: OWN,
