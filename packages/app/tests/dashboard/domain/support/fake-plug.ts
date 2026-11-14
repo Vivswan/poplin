@@ -55,7 +55,7 @@ export function fakePlug(answer: (run: "check" | "repair", token: string) => Dom
       const read = reading.ok ? await settings() : undefined;
       calls.push({ run, token, settings: read });
 
-      return reading.ok && read === undefined ? { ok: false, refusal: "not_set_up" } : reading;
+      return reading;
     };
 
   return { calls, ...TOKEN_FORM, guardNotes: NOTES, check: asked("check"), repair: asked("repair") };

@@ -149,9 +149,11 @@ function typedDomain(sent: Sent): string {
  * The plug asks for the settings only once the token is proven for the install's own account, so nothing is stored, and nothing of the install is read, for anybody else.
  * A repair stores the typed email as the only login. A check stores nothing, and shows what such a repair would change.
  */
-async function settingsWith(install: SetupParts["install"], run: DomainRun, login: Login | undefined): Promise<SettingValues | undefined> {
+async function settingsWith(install: SetupParts["install"], run: DomainRun, login: Login | undefined): Promise<SettingValues> {
   const stored = await install.database.readSettings();
-  if (login === undefined || stored === undefined) return stored;
+  if (stored === undefined) throw new Error("the install has no settings, which every install stores before it answers a request");
+
+  if (login === undefined) return stored;
 
   if (run === "check") return { ...stored, logins: [login] };
 

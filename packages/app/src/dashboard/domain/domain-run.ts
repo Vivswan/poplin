@@ -9,7 +9,7 @@ import type { DomainPlug, DomainReading, DomainSettings, ReadSettings } from "./
 const HIDDEN = "[token]";
 
 /** The status of a page that holds no table. */
-export const REFUSAL_STATUS = { token: 403, unreachable: 502, not_set_up: 404, no_domain: 403, bad_domain: 400, bad_login: 400, allowance_spent: 503 } as const;
+export const REFUSAL_STATUS = { token: 403, unreachable: 502, no_domain: 403, bad_domain: 400, bad_login: 400, allowance_spent: 503 } as const;
 
 /** What a form asks of the plug: `check` reads, `repair` changes. */
 export type DomainRun = "check" | "repair";
@@ -83,7 +83,7 @@ export async function runDomain(plug: DomainPlug, install: Pick<Install, "databa
   if (!reading.ok || asked.unrecorded === true) return reading;
 
   const by = asked.by ?? read?.logins[0];
-  if (by === undefined) throw new Error("a table was read with no settings behind it, so the audit entry has nobody to name");
+  if (by === undefined) throw new Error("a table was read with no login behind it, so the audit entry has nobody to name");
 
   await install.database.appendAudit({ action: "domain_synced", detail: { run: asked.run, from: asked.from, ...byState(reading) } }, { by, at: install.now() });
 

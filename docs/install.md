@@ -158,7 +158,7 @@ A second person needs two steps, because Cloudflare's login page keeps its own l
 | 1    | the dashboard, Settings | add the email to `logins`, and save          |
 | 2    | the dashboard, Domain   | paste a token as in step 3, and press Repair |
 
-Removing a login needs step 1 alone: the person is out of the dashboard at once, and out of private sites within a minute.
+A new login works after step 2, not before. Removing another person's login needs step 1 alone: that person is out of the dashboard at once, and out of private sites within a minute. Your own email cannot be the one you remove.
 
 ## The Domain tab
 

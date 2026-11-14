@@ -4,12 +4,12 @@
 //   partial         some objects missing or changed  a repair stops at a failure
 //   access-off      the login service is not on      a step only a person can do
 //   done            every object stands              nothing to repair
-//   token-refused, unreachable, not-set-up           no table, only the refusal
+//   token-refused, unreachable                       no table, only the refusal
 
 import type { DomainPlug, DomainReading, DomainRow, DomainState } from "../../../app/src/dashboard/domain/records";
 
 /** Every state a preview plug can be in, as the address of the setup page names it. */
-export const PLUG_STATES = ["fresh", "partial", "access-off", "done", "token-refused", "unreachable", "not-set-up"] as const;
+export const PLUG_STATES = ["fresh", "partial", "access-off", "done", "token-refused", "unreachable"] as const;
 
 /** The objects of the sample install, as a provider would name them. */
 const OBJECTS: readonly (readonly [object: string, detail: string])[] = [
@@ -45,7 +45,7 @@ const NOTES: DomainPlug["guardNotes"] = {
 const ACCESS_STEP = { text: "Turn the login service on for the account, then check again.", address: "https://provider.example.com/sample-account" };
 
 /** The refusal of each state that reads no table. */
-const REFUSALS: Partial<Record<PlugState, Extract<DomainReading, { ok: false }>["refusal"]>> = { "token-refused": "token", unreachable: "unreachable", "not-set-up": "not_set_up" };
+const REFUSALS: Partial<Record<PlugState, Extract<DomainReading, { ok: false }>["refusal"]>> = { "token-refused": "token", unreachable: "unreachable" };
 
 /** One state of the preview's plug. */
 export type PlugState = (typeof PLUG_STATES)[number];
@@ -91,7 +91,7 @@ export function previewPlug(state: PlugState): DomainPlug {
       const refusal = token === "" ? "token" : REFUSALS[state];
       if (refusal !== undefined) return { ok: false, refusal };
 
-      if ((await settings()) === undefined) return { ok: false, refusal: "not_set_up" };
+      await settings();
 
       return read(state);
     };

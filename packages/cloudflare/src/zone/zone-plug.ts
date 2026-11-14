@@ -46,9 +46,6 @@ const ALWAYS_STOPPED = "also stops every method but GET and HEAD, and the paths 
 /** The subject of the bots rule, whose row carries the list above. */
 const BOTS_RULE = "bots rule";
 
-/** The reading of a proven token on an install with no stored settings. */
-const NOT_SET_UP: DomainReading = { ok: false, refusal: "not_set_up" };
-
 /** What the Access rows say on an account whose Access is switched off. */
 const ACCESS_OFF = "Access is off for the account";
 
@@ -366,7 +363,6 @@ async function read(parts: PlugParts, mode: Mode, token: string, readSettings: R
 
   // The token is proven: only now is anything of the install read.
   const settings = await readSettings();
-  if (settings === undefined) return NOT_SET_UP;
 
   const { layout } = parts;
   const { plan } = zone;

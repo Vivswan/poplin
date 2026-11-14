@@ -139,12 +139,13 @@ test("a wrong token, a token of another account, and a malformed one get the sam
   expect(answers[0]).not.toContain("example.com");
 });
 
-test("only the install's own token learns that the install has no settings yet, and nothing is written", async () => {
+// Drift: an install stores its settings before it answers any request, so the page has no answer for one without: it must fail shut, and say nothing of why.
+test("a store with no settings in it, which no running install has, fails the run for the install's own token: no table, no word of the cause, and nothing written", async () => {
   const { opened, post, reads } = await openSetup({ settings: "none" });
   const before = await opened.audit();
   const answer = await post("repair", OWN);
 
-  expect([answer.status, NOTICE.exec(await answer.text())?.[2], reads.count]).toEqual([404, "This install is not set up yet.", 1]);
+  expect([answer.status, await answer.text(), reads.count]).toEqual([500, "Something went wrong.", 1]);
   expect(await opened.audit()).toEqual(before);
 });
 

@@ -149,11 +149,11 @@ An install begins five logins a minute for all computers together. In a minute t
 | `poplin config versions_kept`                                        | shows one setting                                 |
 | `poplin config versions_kept 10`                                     | changes one setting                               |
 | `poplin doctor`                                                      | checks that the install answers; changes nothing  |
-| `poplin setup --server https://poplin.your-name.workers.dev`         | finishes a new install, as its setup page does    |
-| `poplin setup --check --server https://poplin.your-name.workers.dev` | lists what a setup would change; changes nothing  |
+| `poplin setup --server https://poplin.your-name.workers.dev --domain example.com --login you@example.com` | finishes a new install, as its setup page does |
+| `poplin setup --check --server https://poplin.your-name.workers.dev` | lists what that would change, with the same flags; changes nothing |
 | `poplin help rollback`                                               | shows the help of one command                     |
 
-`poplin setup` reads the Cloudflare API token from `POPLIN_SETUP_TOKEN` in the environment. It needs no login, and it works only until the first login to the install. [Install](install.md#from-a-terminal-instead) shows where it fits.
+`poplin setup` reads the Cloudflare API token from `POPLIN_SETUP_TOKEN` in the environment. A new install needs `--domain` and `--login`. On an install that has them, `--login` alone corrects a first login that was mistyped. It needs no login, and it works only until the first login to the install. [Install](install.md#from-a-terminal-instead) shows where it fits.
 
 The settings `poplin config` takes:
 
@@ -237,6 +237,9 @@ A refused command prints one sentence and often a hint. With `--json` it prints 
 | `no_setup_token`        | `POPLIN_SETUP_TOKEN` holds no token                         | put the token of [Install](install.md), step 3, in it         |
 | `setup_token_refused`   | the token was refused, or it is of another account          | make one with the rights step 3 lists, in the install's account |
 | `setup_provider_silent` | Cloudflare gave the install no answer                       | try again                                                     |
+| `setup_no_domain`       | the token shows no such domain                              | give `--domain` a domain that is Active in the token's account |
+| `setup_bad_domain`      | `--domain` holds more than a domain                         | the domain alone: `--domain example.com`                      |
+| `setup_bad_login`       | `--login` holds no email address                            | a new install needs both: `--domain <domain> --login <email>` |
 | `setup_closed`          | nothing at that address takes a setup                       | after the first login, use the dashboard's Domain tab         |
 
 **Naming a site**

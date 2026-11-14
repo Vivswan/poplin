@@ -41,7 +41,7 @@ const SAMPLE_TOKEN = "sample-token";
 const CSRF_FIELD = /name="csrf" value="([^"]+)"/;
 
 /** The status a check answers with in each state of the plug that reads no table. */
-const SETUP_STATUS: Partial<Record<PlugState, number>> = { "token-refused": 403, unreachable: 502, "not-set-up": 404 };
+const SETUP_STATUS: Partial<Record<PlugState, number>> = { "token-refused": 403, unreachable: 502 };
 
 /** What each state of the plug shows, in the index's words. */
 const SETUP_WORDS: Readonly<Record<PlugState, string>> = {
@@ -51,7 +51,6 @@ const SETUP_WORDS: Readonly<Record<PlugState, string>> = {
   done: "every object stands",
   "token-refused": "the token is refused",
   unreachable: "the provider does not answer",
-  "not-set-up": "the install has no settings",
 };
 
 /** The sentences the dashboard says after a change to a site, by the code its address carries. */

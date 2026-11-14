@@ -82,6 +82,7 @@ A search engine's crawler reads a public site without `noindex` only when both a
 | the CLI, or an agent through `poplin mcp` | a token the Worker issues | the person runs `poplin login` once and allows that computer in a browser; the token is listed on the dashboard and can be revoked there |
 | a machine with no browser | the same kind of token | `poplin login` prints an address and a short code to open on another device, where the person allows that computer |
 | the Worker, to the bucket and the database | its bindings inside Cloudflare | no bucket key and no database key exists outside Cloudflare |
+| the person who sets the install up | a Cloudflare API token, pasted into the setup page or the Domain tab | the person makes it at Cloudflare; the Worker uses it for that one request and never stores, logs, or shows it |
 
 A token the Worker issues is never a Cloudflare API key. It has one of two scopes:
 
@@ -100,6 +101,8 @@ What guards each address:
 | the API, which the CLI and `poplin mcp` call | the token the Worker issued; no Access in front, so a machine needs no browser after its login |
 | a private site, `-p-poplin` | Cloudflare Access, before the Worker runs; then the Worker checks Access's token and the email |
 | an unlisted site; a public site | nothing |
+| the setup page, `/setup`, until the first login | the pasted Cloudflare API token alone: it must act on the install's own account. On a Worker that has no domain yet, a token changes only what its own account holds, and reads and writes nothing this Worker keeps. Anyone may open the page and gets the form and nothing of the install; five tries a minute from one address. After the first login it answers 404 for good |
+| the Worker's own `workers.dev` address | it answers the setup page and nothing else: no site, no API, no login, no dashboard |
 
 One Access application covers the login path and every address that ends in `-p-poplin.<domain>`. It is made once at install, never per site.
 

@@ -39,7 +39,6 @@ const REFUSED = v.object({ ok: v.literal(false), refusal: v.string() });
 const REFUSALS: Readonly<Record<string, () => Problem>> = {
   token: () => problem("setup_token_refused"),
   unreachable: () => problem("setup_provider_silent"),
-  not_set_up: () => problem("not_set_up"),
   too_many_tries: () => problem("too_many_requests"),
   no_domain: () => problem("setup_no_domain"),
   bad_domain: () => problem("setup_bad_domain"),

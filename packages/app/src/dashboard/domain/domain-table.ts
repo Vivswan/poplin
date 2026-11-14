@@ -40,7 +40,6 @@ const REPAIRED: readonly DomainState[] = ["created", "changed", "removed"];
 const REFUSALS = {
   token: "Token refused.",
   unreachable: "No answer from the provider. Try again.",
-  not_set_up: "This install is not set up yet.",
   no_domain: "The token shows no domain of that name.",
   bad_domain: "The domain is no domain. Type it alone, such as example.com.",
   bad_login: "The email is no email address.",

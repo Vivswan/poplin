@@ -420,13 +420,6 @@ test("an API that does not answer is told apart from a refused token, so the own
   expect(await plug.check(TOKEN, SETTINGS)).toEqual({ ok: false, refusal: "unreachable" });
 });
 
-test("a proven token on an install with no settings is told so and reads nothing further: only the zone list was asked for", async () => {
-  await withAccount(emptyAccount(), async (plug, asked) => {
-    expect(await plug.repair(TOKEN, async () => undefined)).toEqual({ ok: false, refusal: "not_set_up" });
-    expect([...new Set(asked.map((entry) => `${entry.method} ${entry.path.split("?")[0]}`))]).toEqual(["GET /zones"]);
-  });
-});
-
 test("Access refused as not switched on after the policy was already made is a stopped repair: the made row stays in the table", async () => {
   const account = { ...emptyAccount(), refuse: `POST /accounts/${ACCOUNT}/access/apps`, refuseMessage: "access.api.error.not_enabled" };
 
