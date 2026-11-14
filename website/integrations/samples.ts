@@ -6,9 +6,8 @@ import type { AstroIntegration } from "astro";
 const MODULE_ID = "virtual:poplin-samples";
 const RESOLVED_ID = `\0${MODULE_ID}`;
 const TITLE = /<title[^>]*>([^<]*)<\/title>/i;
-const GALLERY_PAGE = "index.html";
 
-/** One sample site found under the samples folder, as the gallery lists it. */
+/** One sample site found under the samples folder, as a page shows it. */
 interface Sample {
   /** The folder name, which is also the last segment of the sample's address. */
   readonly name: string;
@@ -31,8 +30,7 @@ function measureFolder(folder: string): { files: number; bytes: number } {
 
 function readSample(samplesDir: string, name: string): Sample | undefined {
   const indexFile = join(samplesDir, name, "index.html");
-  // A folder named like the gallery's own page would be copied over it.
-  if (name.startsWith(".") || name === GALLERY_PAGE || !existsSync(indexFile)) {
+  if (name.startsWith(".") || !existsSync(indexFile)) {
     return undefined;
   }
   const html = readFileSync(indexFile, "utf8");
@@ -40,21 +38,20 @@ function readSample(samplesDir: string, name: string): Sample | undefined {
   return { name, titleHtml: title, ...measureFolder(join(samplesDir, name)) };
 }
 
-function listSamples(samplesDir: string): Sample[] {
-  if (!existsSync(samplesDir)) {
+function listSamples(samplesDir: string, only: string): Sample[] {
+  if (!existsSync(join(samplesDir, only))) {
     return [];
   }
-  const folders = readdirSync(samplesDir, { withFileTypes: true }).filter((entry) => entry.isDirectory());
-  const names = folders.map((entry) => entry.name).sort();
-  return names.map((name) => readSample(samplesDir, name)).filter((sample) => sample !== undefined);
+  const sample = readSample(samplesDir, only);
+  return sample === undefined ? [] : [sample];
 }
 
 /**
- * Lists the sample sites in `samplesDir` for the gallery page and copies each into the built site at `demo/<name>/`.
- * A missing or empty folder yields an empty list, so the site builds before any sample exists.
+ * Offers the one sample site named `only` in `samplesDir` to the pages and copies it into the built site at `demo/<name>/`.
+ * A missing folder yields an empty list, so the site builds without it.
  */
-export function samplesIntegration(samplesDir: string): AstroIntegration {
-  const samples = listSamples(samplesDir);
+export function samplesIntegration(samplesDir: string, only: string): AstroIntegration {
+  const samples = listSamples(samplesDir, only);
   return {
     name: "poplin-samples",
     hooks: {

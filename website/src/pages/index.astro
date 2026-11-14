@@ -1,6 +1,5 @@
 ---
 import { samples } from "virtual:poplin-samples";
-import SampleTile from "../components/SampleTile.astro";
 import Page from "../layouts/Page.astro";
 import { REPOSITORY_URL, sitePath } from "../lib/paths.ts";
 
@@ -8,39 +7,23 @@ const SITE = "report--k3f9x2ab71qz";
 const ADDRESS = `${SITE}-page.example.com`;
 const PUBLIC_ADDRESS = "report-page.example.com";
 
-// The report sample plays the published site; any sample stands in when that folder is absent.
-const shown = samples.find((sample) => sample.name === "sales-report") ?? samples[0];
-const shownSize = shown === undefined ? "" : `${shown.files} files, ${Math.round(shown.bytes / 1024)} KB`;
-const others = samples.filter((sample) => sample !== shown);
+// One example folder plays the published site: in the access panel, and behind the action beside the transcript.
+const example = samples[0];
+const exampleAddress = example === undefined ? undefined : sitePath(`demo/${encodeURIComponent(example.name)}/`);
+const exampleSize = example === undefined ? "" : `${example.files} files, ${Math.round(example.bytes / 1024)} KB`;
 const keeps = [
-  {
-    say: "Roll back a bad update.",
-    result: "Poplin keeps the last 3 versions of a site by default. Going back needs no upload.",
-  },
-  {
-    say: "Bring back a deleted site.",
-    result: "A deleted site waits in the trash, 7 days by default, before it is gone.",
-  },
-  {
-    say: "Let a demo end by itself.",
-    result: "Give a site an end date. It moves to the trash that day.",
-  },
-  {
-    say: "Take everything out.",
-    result: "One zip holds every site and the settings, as plain files.",
-  },
+  { say: "Roll back a bad update.", result: "Poplin keeps the last 3 versions of a site by default. Going back needs no upload." },
+  { say: "Bring back a deleted site.", result: "A deleted site waits in the trash, 7 days by default, before it is gone." },
+  { say: "Let a site end by itself.", result: "Give a site an end date. It moves to the trash that day." },
+  { say: "Give a site a new address.", result: "One command replaces the address. The old one stops at once." },
+  { say: "Take everything out.", result: "One zip holds every site and the settings, as plain files." },
 ];
-const freeTier = [
-  { name: "Worker", value: "100,000 requests a day, account-wide" },
-  { name: "Bucket", value: "10 GB stored" },
-  { name: "Login", value: "50 users" },
-  { name: "Address", value: "workers.dev, or your domain" },
-];
-const guards = [
-  { name: "All sites together", value: "9 GB" },
-  { name: "One site", value: "200 MB" },
-  { name: "One site, each minute", value: "60 requests" },
-  { name: "One visitor, each minute", value: "30 requests" },
+const trust = [
+  { say: "It runs in your account.", result: "One Worker, one bucket for the files, and one database for the records, inside your own Cloudflare account." },
+  { say: "Nothing reads your pages.", result: "The Worker stores each file as sent and serves it as stored. It never opens or rewrites a page." },
+  { say: "The free limits stop.", result: "The Worker stops at 100,000 requests a day and never bills. The sites pause until midnight UTC." },
+  { say: "Storage is capped.", result: "By default poplin refuses an upload past 9 GB in all, or 200 MB for one site, because the bucket bills past 10 GB." },
+  { say: "Requests are limited.", result: "By default one visitor gets 30 requests a minute and one site 60." },
 ];
 ---
 
@@ -49,299 +32,257 @@ const guards = [
   description="Poplin lets an AI agent or a person publish a static site to their own Cloudflare account with one call. A site is private by default, unlisted for anyone who has its address, or public."
   path=""
 >
-  <section class="hero frame" aria-labelledby="title">
-    <div class="hero-say">
+  <section class="hero part split frame" aria-labelledby="title">
+    <div class="say">
       <h1 id="title">A private site, in one call.</h1>
       <p class="lead">
         Poplin lets an AI agent, or you, publish a folder or one HTML file to your own Cloudflare account. It stays
         private until you share it.
       </p>
       <p class="status">In development, not released.</p>
-      <a class="button" href={sitePath("demo/")}>See the sample sites</a>
+      <a class="button" href={sitePath("docs/")}>Read the documentation</a>
     </div>
 
-    <dl class="hero-foot">
-      <dt>Private</dt>
-      <dd>Only you, after one login. The default.</dd>
-      <dt>Unlisted</dt>
-      <dd>Anyone who has the address.</dd>
-      <dt>Public</dt>
-      <dd>Everyone.</dd>
-    </dl>
+    <form class="panel access" data-ui aria-label="A published site and who can open it">
+      <header class="panel-head">
+        <p class="panel-name"><code>{SITE}</code></p>
+        <p class="panel-title">One address. You choose who can open it.</p>
+      </header>
 
-    <div class="stage">
-      <form class="panel access" data-ui aria-label="A published site and who can open it">
-        <header class="panel-head">
-          <p class="panel-name"><code>report</code></p>
-          <p class="panel-title">{shown === undefined ? "Quarterly report" : <Fragment set:html={shown.titleHtml} />}</p>
-        </header>
+      <fieldset class="segments">
+        <legend>Who can open it</legend>
+        <label><input type="radio" name="access" value="private" checked /><span>Private</span></label>
+        <label><input type="radio" name="access" value="unlisted" /><span>Unlisted</span></label>
+        <label><input type="radio" name="access" value="public" /><span>Public</span></label>
+      </fieldset>
 
-        <fieldset class="segments">
-          <legend>Who can open it</legend>
-          <label><input type="radio" name="access" value="private" checked /><span>Private</span></label>
-          <label><input type="radio" name="access" value="unlisted" /><span>Unlisted</span></label>
-          <label><input type="radio" name="access" value="public" /><span>Public</span></label>
-        </fieldset>
-
-        <dl class="facts">
-          <div>
-            <dt>Address</dt>
-            <dd><code>https://{ADDRESS}</code></dd>
-          </div>
-          <div data-show="public">
-            <dt>Public name</dt>
-            <dd><code>https://{PUBLIC_ADDRESS}</code></dd>
-          </div>
-          <div>
-            <dt>You, logged in</dt>
-            <dd class="yes">opens it</dd>
-          </div>
-          <div>
-            <dt>Someone who has the address</dt>
-            <dd data-show="private">sees a plain Not found page</dd>
-            <dd data-show="unlisted public" class="yes">opens it, with no login</dd>
-          </div>
-          <div>
-            <dt>Everyone else</dt>
-            <dd data-show="private unlisted">would have to guess the address</dd>
-            <dd data-show="public" class="yes">opens it, at the public name</dd>
-          </div>
-        </dl>
-
-        <div class="view">
-          <p class="view-label" data-show="private">What anyone but you sees</p>
-          <p class="view-label" data-show="unlisted">What someone who has the address sees</p>
-          <p class="view-label" data-show="public">What everyone sees</p>
-          <div class="view-missing" data-show="private">
-            <p><strong>404</strong> Not found</p>
-            <p><span class="fake-link">Log in</span></p>
-          </div>
-          {
-            shown === undefined ? (
-              <div class="view-site view-plain" data-show="unlisted public">
-                <p>The published site opens here.</p>
-              </div>
-            ) : (
-              <div class="view-site" data-show="unlisted public">
-                <iframe
-                  src={sitePath(`demo/${encodeURIComponent(shown.name)}/`)}
-                  title="The published report, as a visitor sees it"
-                  sandbox="allow-scripts"
-                  loading="lazy"
-                />
-              </div>
-            )
-          }
+      <dl class="facts">
+        <div>
+          <dt>Address</dt>
+          <dd><code>https://{ADDRESS}</code></dd>
         </div>
-      </form>
-    </div>
+        <div data-show="public">
+          <dt>Public name</dt>
+          <dd><code>https://{PUBLIC_ADDRESS}</code></dd>
+        </div>
+        <div>
+          <dt>You, logged in</dt>
+          <dd class="yes">opens it</dd>
+        </div>
+        <div>
+          <dt>Someone who has the address</dt>
+          <dd data-show="private">is sent to the login</dd>
+          <dd data-show="unlisted public" class="yes">opens it, with no login</dd>
+        </div>
+        <div>
+          <dt>Everyone else</dt>
+          <dd data-show="private unlisted">would have to guess the address</dd>
+          <dd data-show="public" class="yes">opens it, at the public name</dd>
+        </div>
+      </dl>
+
+      <div class="view">
+        <p class="view-label" data-show="private">What anyone but you gets at that address</p>
+        <p class="view-label" data-show="unlisted">What someone who has the address gets</p>
+        <p class="view-label" data-show="public">What everyone gets</p>
+        <div class="view-missing" data-show="private">
+          <p><strong>Log in</strong></p>
+          <p>This address opens after a login.</p>
+        </div>
+        {
+          exampleAddress === undefined ? (
+            <div class="view-site view-plain" data-show="unlisted public">
+              <p>The published page opens here.</p>
+            </div>
+          ) : (
+            <div class="view-site" data-show="unlisted public">
+              <iframe src={exampleAddress} title="The published page, as a visitor gets it" sandbox="allow-scripts" loading="lazy" tabindex="-1" />
+            </div>
+          )
+        }
+      </div>
+    </form>
   </section>
 
-  <section class="split" aria-labelledby="one-call">
-    <div class="split-in">
-      <pre data-rise><code>$ poplin ./report
-{shownSize === "" ? "" : `uploading ${shownSize}\n`}made  {SITE}  private
-https://{ADDRESS}</code></pre>
-      <p class="split-word" aria-hidden="true">One call.</p>
-    </div>
-    <div class="split-out">
-      <table class="panel dashboard" data-ui data-rise>
-        <caption>Your dashboard</caption>
-        <thead>
-          <tr>
-            <th scope="col">Site</th>
-            <th scope="col">Access</th>
-            <th scope="col">Versions</th>
-            <th scope="col">Published by</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr class="row-new">
-            <td><code>report</code></td>
-            <td><span class="chip chip-private">Private</span></td>
-            <td>1</td>
-            <td>an agent, just now</td>
-          </tr>
-          <tr>
-            <td><code>launch-deck</code></td>
-            <td><span class="chip chip-unlisted">Unlisted</span></td>
-            <td>3</td>
-            <td>an agent</td>
-          </tr>
-          <tr>
-            <td><code>trip-summary</code></td>
-            <td><span class="chip chip-public">Public</span></td>
-            <td>2</td>
-            <td>you</td>
-          </tr>
-          <tr>
-            <td><code>checkout-prototype</code></td>
-            <td><span class="chip chip-private">Private</span></td>
-            <td>1</td>
-            <td>an agent</td>
-          </tr>
-        </tbody>
-      </table>
-      <p class="split-word" aria-hidden="true">One more row.</p>
-    </div>
-    <h2 id="one-call" class="visually-hidden">One call adds one row to your dashboard</h2>
-  </section>
-
-  <section class="strip" aria-labelledby="travels">
-    <div class="field field-1">
-      <h2 id="travels">From agent to reader.</h2>
-      <div class="card" data-ui data-rise>
-        <p class="card-name"><code>report</code></p>
-        <p>Sent by an agent, over MCP</p>
-        <p>{shownSize === "" ? "A folder of files" : shownSize}</p>
-        <p class="chip chip-plain">Publishing</p>
-      </div>
-      <p class="clause">First an agent publishes a folder.</p>
-    </div>
-    <div class="field field-2">
-      <div class="card" data-ui data-rise>
-        <p class="card-name"><code>report</code></p>
-        <p>In your own bucket</p>
-        <p>Version 1, stored as sent</p>
-        <p class="chip chip-private">Private</p>
-      </div>
-      <p class="clause">Then your Worker stores it, unread.</p>
-    </div>
-    <div class="field field-3">
-      <div class="card" data-ui data-rise>
-        <p class="card-name"><code>report</code></p>
-        <p>Opened by you</p>
-        <p>After one login</p>
-        <p class="chip chip-private">Private</p>
-      </div>
-      <p class="clause">Then you open it, and no one else.</p>
-    </div>
-    <div class="field field-4">
-      <div class="card" data-ui data-rise>
-        <p class="card-name"><code>report</code></p>
-        <p>Opened by anyone who has the address</p>
-        <p>Same site, same address</p>
-        <p class="chip chip-unlisted">Unlisted</p>
-      </div>
-      <p class="clause">Then you share it, when you choose.</p>
-    </div>
-  </section>
-
-  <section class="bands" aria-labelledby="keeps">
-    <div class="band band-head frame">
-      <h2 id="keeps">After you publish.</h2>
-    </div>
-    {
-      keeps.map((keep, index) => (
-        <div class={`band band-${index + 1}`}>
-          <p class="band-row frame" data-rise>
-            <span class="band-say">{keep.say}</span>
-            <span class="band-then">{keep.result}</span>
+  <section class="part split frame" aria-labelledby="publish">
+    <div class="say">
+      <h2 id="publish">One command.</h2>
+      <p>Point poplin at a folder or one HTML file. It answers with the new site and its address. The site is private.</p>
+      <p>An update names the site, so a new publish can never overwrite one by accident. An agent makes the same calls through the MCP server on your machine.</p>
+      {
+        example !== undefined && exampleAddress !== undefined && (
+          <p>
+            <a class="more" href={exampleAddress} data-example data-example-title={example.titleHtml === "" ? example.name : example.titleHtml}>
+              See what that command put up
+            </a>
           </p>
-        </div>
-      ))
-    }
+        )
+      }
+    </div>
+    <pre class="terminal" data-ui><code>$ poplin ./report
+{exampleSize === "" ? "" : `uploading ${exampleSize}\n`}made  {SITE}  private
+https://{ADDRESS}
+
+$ poplin ./report --site {SITE}
+updated  {SITE}  version 2  private
+https://{ADDRESS}</code></pre>
   </section>
 
-  <section class="tier frame" aria-labelledby="tier">
-    <div class="rows">
-      <h2 id="tier">It fits the free tier.</h2>
-      <p class="group">Cloudflare gives</p>
-      <ul>
-        {
-          freeTier.map((row) => (
-            <li data-rise>
-              <span class="dot dot-blue" aria-hidden="true" />
-              <span class="row-name">{row.name}</span>
-              <span class="row-value">{row.value}</span>
-            </li>
-          ))
-        }
-      </ul>
-      <p class="group">Poplin holds itself to, by default</p>
-      <ul>
-        {
-          guards.map((row) => (
-            <li data-rise>
-              <span class="dot dot-red" aria-hidden="true" />
-              <span class="row-name">{row.name}</span>
-              <span class="row-value">{row.value}</span>
-            </li>
-          ))
-        }
-      </ul>
+  <section class="part split frame" aria-labelledby="dashboard">
+    <div class="say">
+      <h2 id="dashboard">Every site, on one page.</h2>
+      <p>Your dashboard lists each site, who can open it, and its versions. Only you can open the dashboard.</p>
     </div>
-    <div class="tier-note" data-rise>
-      <p>There is no server to keep up. One Worker serves every site from one bucket, with one database for the records, inside your own account.</p>
-      <p>
-        The Worker stops at its daily limit and never bills. A flood of requests can stop the sites until midnight
-        UTC. It costs no money.
-      </p>
-      <p>Poplin refuses an upload past its storage limit, because the bucket bills past its free tier.</p>
-    </div>
+    <table class="panel dashboard" data-ui>
+      <caption>Your dashboard</caption>
+      <thead>
+        <tr>
+          <th scope="col">Site</th>
+          <th scope="col">Access</th>
+          <th scope="col">Versions</th>
+          <th scope="col">Published by</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr class="row-new">
+          <td><code>report</code></td>
+          <td><span class="chip chip-private">Private</span></td>
+          <td>2</td>
+          <td>an agent, just now</td>
+        </tr>
+        <tr>
+          <td><code>launch-deck</code></td>
+          <td><span class="chip chip-unlisted">Unlisted</span></td>
+          <td>3</td>
+          <td>an agent</td>
+        </tr>
+        <tr>
+          <td><code>trip-summary</code></td>
+          <td><span class="chip chip-public">Public</span></td>
+          <td>2</td>
+          <td>you</td>
+        </tr>
+      </tbody>
+    </table>
   </section>
 
-  <section class="starts frame" aria-labelledby="starts">
-    <form class="plans" aria-labelledby="starts">
+  <section class="part rows frame" aria-labelledby="keeps">
+    <h2 id="keeps">After you publish.</h2>
+    <dl class="rows-list">
+      {
+        keeps.map((keep) => (
+          <div>
+            <dt>{keep.say}</dt>
+            <dd>{keep.result}</dd>
+          </div>
+        ))
+      }
+    </dl>
+  </section>
+
+  <section class="part rows frame" aria-labelledby="trust">
+    <h2 id="trust">Yours, and inside the free tier.</h2>
+    <dl class="rows-list">
+      {
+        trust.map((fact) => (
+          <div>
+            <dt>{fact.say}</dt>
+            <dd>{fact.result}</dd>
+          </div>
+        ))
+      }
+    </dl>
+  </section>
+
+  <section class="part split starts frame" aria-labelledby="starts">
+    <form class="say plans" aria-labelledby="starts">
       <h2 id="starts">Where sites open.</h2>
       <label class="plan">
-        <input type="radio" name="start" value="none" checked />
-        <span class="plan-name">No domain</span>
+        <input type="radio" name="start" value="own" checked />
+        <span class="plan-name">Your domain</span>
       </label>
       <label class="plan">
-        <input type="radio" name="start" value="own" />
-        <span class="plan-name">Your domain</span>
+        <input type="radio" name="start" value="none" />
+        <span class="plan-name">No domain</span>
       </label>
     </form>
     <div class="plan-stage">
-      <div data-show="none">
-        <p class="plan-figure"><code>poplin.you.workers.dev/{SITE}/</code></p>
-        <p>
-          Sites are paths on the free address every Cloudflare account has. Public and unlisted sites can be whole
-          folders. A private site is one self-contained file, unless the install allows folders.
-        </p>
-        <p>Pages there cannot use browser storage, popups, or form submission, and links inside a site are relative.</p>
-      </div>
       <div data-show="own">
         <p class="plan-figure"><code>{ADDRESS}</code></p>
-        <p>
-          Each site gets an address of its own, so the browser keeps your sites apart. Private sites can be whole
-          folders, and pages may use browser storage and forms.
-        </p>
-        <p>Site addresses end in a marker, <code>-page</code> by default. Cloudflare routes only those to the Worker, so no other address under your domain reaches it.</p>
+        <p>Each site gets an address of its own, so the browser keeps your sites apart. Private sites can be whole folders.</p>
+        <p>Site addresses end in a marker, <code>-page</code> by default. Cloudflare routes only those to the Worker.</p>
       </div>
-      <a class="button" href={sitePath("docs/security.html#without-a-domain")}>Read what each one protects</a>
+      <div data-show="none">
+        <p class="plan-figure"><code>poplin.you.workers.dev/{SITE}/</code></p>
+        <p>Sites are paths on the free address every Cloudflare account has. A private site is one self-contained file, unless the install allows folders.</p>
+        <p>Pages there cannot use browser storage, popups, or form submission.</p>
+      </div>
+      <p><a class="more" href={sitePath("docs/security.html#without-a-domain")}>Read what each one protects</a></p>
     </div>
+  </section>
+
+  <section class="part rows close frame" aria-labelledby="close">
+    <h2 id="close">Not released.</h2>
+    <dl class="rows-list">
+      <div>
+        <dt>There is no install command yet.</dt>
+        <dd>
+          Poplin is in development. The <a href={sitePath("docs/")}>documentation</a> and the
+          <a href={REPOSITORY_URL}>source</a> are public, and one page <a href={sitePath("compare/")}>compares it with other tools</a>.
+        </dd>
+      </div>
+    </dl>
   </section>
 
   {
-    samples.length > 0 && (
-      <section class="tiles frame" aria-labelledby="samples">
-        <h2 id="samples">What an agent publishes.</h2>
-        <ul>
-          {[...(shown === undefined ? [] : [shown]), ...others].map((sample, index) => (
-            <SampleTile sample={sample} tone={index % 4} />
-          ))}
-        </ul>
-      </section>
+    example !== undefined && exampleAddress !== undefined && (
+      <dialog class="example" aria-labelledby="example-title">
+        <header class="example-head">
+          <h2 id="example-title">
+            <Fragment set:html={example.titleHtml === "" ? example.name : example.titleHtml} />
+          </h2>
+          <a class="example-out" href={exampleAddress} target="_blank" rel="noopener">Open in a new tab</a>
+          <button class="example-close" type="button" autofocus>Close</button>
+        </header>
+        <iframe title="An example of a page published with poplin" sandbox="allow-scripts" />
+      </dialog>
     )
   }
-
-  <section class="close" aria-labelledby="close">
-    <div class="close-say">
-      <h2 id="close">Not released.</h2>
-      <p>Poplin is in development. There is no install command. The source and the documentation are public.</p>
-    </div>
-    <ul class="close-rows">
-      <li>
-        <a class="close-link" href={sitePath("docs/")}>Read the documentation</a>
-      </li>
-      <li>
-        <a class="close-link" href={REPOSITORY_URL}>Read the source on GitHub</a>
-      </li>
-      <li>
-        <a class="close-link" href={sitePath("compare/")}>Compare it with other tools</a>
-      </li>
-    </ul>
-  </section>
 </Page>
+
+<script>
+  // The example link is a plain link; with script it opens the same page over this one, in a dialog.
+  const dialog = document.querySelector<HTMLDialogElement>("dialog.example");
+  const frame = dialog?.querySelector("iframe");
+
+  if (dialog && frame && typeof dialog.showModal === "function") {
+    let opener: HTMLAnchorElement | undefined;
+
+    for (const link of document.querySelectorAll<HTMLAnchorElement>("a[data-example]")) {
+      link.addEventListener("click", (event) => {
+        // A click that asks for a new tab or window keeps its meaning.
+        if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+
+        event.preventDefault();
+        opener = link;
+        frame.src = link.href;
+        dialog.showModal();
+      });
+    }
+
+    dialog.querySelector("button")?.addEventListener("click", () => dialog.close());
+    // The dialog fills its box with its own parts, so a press and a release that both land on the dialog itself are on the backdrop.
+    let pressedOutside = false;
+    dialog.addEventListener("pointerdown", (event) => {
+      pressedOutside = event.target === dialog;
+    });
+    dialog.addEventListener("click", (event) => {
+      if (pressedOutside && event.target === dialog) dialog.close();
+    });
+    // Focus may have gone into the framed page, where the browser cannot hand it back by itself.
+    dialog.addEventListener("close", () => {
+      frame.removeAttribute("src");
+      opener?.focus();
+    });
+  }
+</script>

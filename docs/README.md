@@ -43,5 +43,4 @@ The owner's private page that lists every site is the dashboard. [Security](secu
 
 | Page                        | What it covers                                    |
 | --------------------------- | ------------------------------------------------- |
-| [Comparison](comparison.md) | what poplin and four other tools do               |
 | [Security](security.md)     | what poplin protects against and what it does not |

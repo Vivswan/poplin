@@ -1,7 +1,42 @@
 ---
-// The docs page is the one owner of these facts; this page renders it, so the two cannot disagree.
-import { Content as Comparison } from "../../../docs/comparison.md";
 import Page from "../layouts/Page.astro";
+
+// Each cell is taken from the tool's own pages. Poplin's column comes first; the others keep the order below.
+const tools = [
+  { name: "Poplin", href: undefined },
+  { name: "handbill", href: "https://handbill.dev" },
+  { name: "anvilnine/artifacts", href: "https://github.com/anvilnine/artifacts" },
+  { name: "Pagecast", href: "https://github.com/Amal-David/pagecast" },
+  { name: "Birta", href: "https://birta.dev" },
+];
+const rows = [
+  {
+    ask: "Where it runs",
+    cells: ["your Cloudflare account", "your Cloudflare account, or hosted", "a server you run", "an app on your computer, publishing to Cloudflare Pages", "hosted"],
+  },
+  { ask: "Private pages behind a login", cells: ["yes, the default", "no", "no; a password per page", "no; a password per page", "yes, for invited people"] },
+  { ask: "A link that is hard to guess", cells: ["yes", "yes", "yes", "yes", "yes, per version"] },
+  { ask: "Public pages", cells: ["yes", "yes, self-hosted only", "yes", "yes", "yes"] },
+  {
+    ask: "Same address when access changes",
+    cells: ["yes", "no", "yes; a private link carries a token", "a password is set or removed in place; a short public link is a new address, and the old one redirects", "yes"],
+  },
+  { ask: "Whole folders", cells: ["yes", "no; one HTML file", "yes", "yes", "yes"] },
+  { ask: "A page listing your sites", cells: ["yes, private", "not stated; the CLI lists them", "yes", "yes, on your computer", "yes"] },
+  { ask: "MCP for agents", cells: ["yes, on your machine", "not stated; ships an agent skill", "yes, in the server", "yes, on your machine", "yes"] },
+  {
+    ask: "Versions and rollback",
+    cells: ["yes, the last 3 by default", "no", "a history with git storage; rollback not stated", "a deploy history; rollback not stated", "yes, the last 10"],
+  },
+  { ask: "Needs a domain", cells: ["no", "self-hosted yes; hosted no", "you set the address; the default is localhost", "no", "no"] },
+  { ask: "Needs a server kept running", cells: ["no", "no", "yes", "no", "no"] },
+  { ask: "Source code", cells: ["public", "public, MIT", "public, MIT", "public, MIT", "not stated"] },
+];
+const groups = [
+  { name: "Hosted static hosts", examples: "Surge, GitHub Pages", differs: "the host stores the files; poplin stores them in your own account" },
+  { name: "Tunnels", examples: "Tailscale Funnel, Cloudflare Quick Tunnels, ngrok", differs: "a tunnel exposes a program on your machine; poplin serves stored files" },
+  { name: "Self-hosted tools", examples: "Smallweb", differs: "it serves from a machine you operate; poplin runs on Cloudflare Workers" },
+];
 ---
 
 <Page
@@ -9,7 +44,62 @@ import Page from "../layouts/Page.astro";
   description="What poplin, handbill, anvilnine/artifacts, Pagecast, and Birta each do, taken from each tool's own pages."
   path="compare/"
 >
-  <section class="page-prose frame">
-    <Comparison />
+  <section class="hero part frame" aria-labelledby="title">
+    <h1 id="title">Compared.</h1>
+    <p class="lead">Poplin beside four other tools. Each cell comes from the tool's own pages.</p>
+  </section>
+
+  <section class="part frame" aria-labelledby="tools">
+    <h2 id="tools" class="visually-hidden">Poplin and four other tools</h2>
+    <div class="scroll">
+      <table class="compare">
+        <thead>
+          <tr>
+            <th scope="col"><span class="visually-hidden">Question</span></th>
+            {
+              tools.map((tool, index) => (
+                <th scope="col" class={index === 0 ? "ours" : undefined}>
+                  {tool.href === undefined ? tool.name : <a href={tool.href}>{tool.name}</a>}
+                  {index === 0 && <span class="ours-mark">this tool</span>}
+                </th>
+              ))
+            }
+          </tr>
+        </thead>
+        <tbody>
+          {
+            rows.map((row) => (
+              <tr>
+                <th scope="row">{row.ask}</th>
+                {row.cells.map((cell, index) => (
+                  <td class={index === 0 ? "ours" : undefined}>{cell}</td>
+                ))}
+              </tr>
+            ))
+          }
+        </tbody>
+      </table>
+    </div>
+    <p class="note">"Not stated" means the tool's own pages do not say. Poplin's source is under the Individual and Small Organization License.</p>
+    <p class="note">
+      Poplin's one-Worker shape follows <a href="https://github.com/viktoravelino/handbill">handbill</a> by Viktor Avelino (MIT).
+    </p>
+  </section>
+
+  <section class="part rows frame" aria-labelledby="groups">
+    <h2 id="groups">Other kinds of tool.</h2>
+    <dl class="rows-list">
+      {
+        groups.map((group) => (
+          <div>
+            <dt>
+              {group.name}
+              <span class="examples">{group.examples}</span>
+            </dt>
+            <dd>{group.differs}</dd>
+          </div>
+        ))
+      }
+    </dl>
   </section>
 </Page>

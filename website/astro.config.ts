@@ -11,5 +11,6 @@ export default defineConfig({
   trailingSlash: "always",
   // Rasters are made at build time from the repository's own SVG drawings, so processing them is safe.
   image: { dangerouslyProcessSVG: true },
-  integrations: [samplesIntegration(samplesDir)],
+  // One sample folder stands in for a published page; the others stay out of the built site.
+  integrations: [samplesIntegration(samplesDir, "sales-report")],
 });
