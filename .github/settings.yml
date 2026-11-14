@@ -50,6 +50,9 @@ labels:
     - name: fix-lint
       color: fbca04
       description: Lint / formatting fixes
+    - name: fuzz-nightly
+      color: B60205
+      description: Automated nightly fuzz failure
     - name: github_actions
       color: "000000"
       description: Pull requests that update GitHub Actions code
