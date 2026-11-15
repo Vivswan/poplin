@@ -8,11 +8,6 @@ const { before, letters, after } = EXAMPLE_ADDRESS;
 
 <code class="address">{before}<span class="swap letter">{letters.map((letter) => <span data-show={letter.shows}>{letter.is}</span>)}</span>{after}</code>
 
-<script>
-  // The first choice marks the form, so the letter is lit on every change after it and never on the page's first paint.
-  document.querySelector(".access")?.addEventListener("change", (event) => (event.currentTarget as HTMLElement).classList.add("chosen"), { once: true });
-</script>
-
 <style>
   .address {
     letter-spacing: 0.02em;
@@ -27,19 +22,9 @@ const { before, letters, after } = EXAMPLE_ADDRESS;
     font-weight: 700;
   }
 
-  /* The letter that has just changed is lit for a moment. */
-  @media (prefers-reduced-motion: no-preference) {
-    :global(.access.chosen:has(input[value="unlisted"]:checked)) [data-show~="unlisted"],
-    :global(.access.chosen:has(input[value="public"]:checked)) [data-show~="public"],
-    :global(.access.chosen:has(input[value="private"]:checked)) [data-show~="private"] {
-      animation: flip 700ms var(--ease);
-    }
-  }
-
-  @keyframes flip {
-    from {
-      background: var(--accent);
-      color: var(--on-accent);
-    }
+  /* The letter that has just changed is lit for a moment: the page's script runs `--lit` from 1 to 0. */
+  .letter span {
+    background: color-mix(in srgb, var(--accent) calc(var(--lit, 0) * 100%), transparent);
+    color: color-mix(in srgb, var(--on-accent) calc(var(--lit, 0) * 100%), var(--accent-text));
   }
 </style>

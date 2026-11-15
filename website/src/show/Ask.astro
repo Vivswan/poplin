@@ -20,14 +20,14 @@ const HOST = EXAMPLE_HOST;
       Agent
     </p>
     <div class="talk">
-      <p class="you part" style="--d:0ms">
+      <p class="you part">
         <span class="file">
           <Folder />
           report
         </span>
         Publish this report
       </p>
-      <p class="tool part" style="--d:400ms">
+      <p class="tool part">
         <Wrench />
         <span>poplin</span>
         <code>publish_site ./report</code>
@@ -36,7 +36,7 @@ const HOST = EXAMPLE_HOST;
           <Check class="done" />
         </span>
       </p>
-      <p class="reply part" style="--d:1300ms">
+      <p class="reply part">
         It is online, and private.
         <code>{HOST}</code>
       </p>
@@ -248,46 +248,9 @@ const HOST = EXAMPLE_HOST;
     font-style: normal;
   }
 
-  /* The request plays once: the ask, the tool at work, the answer. */
-  @media (prefers-reduced-motion: no-preference) {
-    :global(.path.play) .part {
-      animation: arrive 350ms var(--ease) var(--d) both;
-    }
-
-    :global(.path.play) .spin {
-      animation: work 700ms linear 400ms both;
-    }
-
-    :global(.path.play) .done {
-      animation: arrive 200ms var(--ease) 1100ms both;
-    }
-
-    :global(.js .path:not(.play)) .part,
-    :global(.js .path:not(.play)) .done {
-      opacity: 0;
-    }
-  }
-
-  @keyframes arrive {
-    from {
-      opacity: 0;
-      transform: translateY(6px);
-    }
-  }
-
-  @keyframes work {
-    from {
-      opacity: 1;
-      transform: rotate(0);
-    }
-
-    85% {
-      opacity: 1;
-    }
-
-    to {
-      opacity: 0;
-      transform: rotate(540deg);
-    }
+  /* The request plays once, by the page's script: the ask, the tool at work, the answer. Until it does they wait unseen. */
+  :global(.moves) .part,
+  :global(.moves) .done {
+    opacity: 0;
   }
 </style>

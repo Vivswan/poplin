@@ -258,20 +258,11 @@ html:not(.js) [data-copy] {
   visibility: hidden;
 }
 
-@media (prefers-reduced-motion: no-preference) {
-  .access [data-show] {
-    transition:
-      opacity 220ms var(--ease),
-      visibility 0s 220ms;
-  }
-}
-
 .access:has(input[value="private"]:checked) [data-show~="private"],
 .access:has(input[value="unlisted"]:checked) [data-show~="unlisted"],
 .access:has(input[value="public"]:checked) [data-show~="public"] {
   opacity: 1;
   visibility: visible;
-  transition-delay: 0s;
 }
 
 @supports not selector(:has(*)) {

@@ -55,8 +55,9 @@ const card = await getImage({ src: social, width: 1200, height: 630, format: "pn
     <meta name="twitter:card" content="summary_large_image" />
     <slot name="head" />
     <script is:inline>
-      // Runs before the first paint, so a remembered theme never flashes the other one.
+      // Runs before the first paint, so a remembered theme never flashes the other one, and what plays once starts unseen.
       document.documentElement.classList.add("js");
+      if (!matchMedia("(prefers-reduced-motion: reduce)").matches) document.documentElement.classList.add("moves");
       try {
         const theme = localStorage.getItem("theme");
         if (theme === "light" || theme === "dark") document.documentElement.dataset.theme = theme;
@@ -122,34 +123,6 @@ const card = await getImage({ src: social, width: 1200, height: 630, format: "pn
           // The choice still holds for this page; it is only not remembered.
         }
       });
-
-      // A fragment plays what the product does once, when it comes into view. One marked "after" waits for the request
-      // before it to finish, and no longer than that.
-      const REQUEST_MS = 1750;
-      let requestStart: number | undefined;
-      const play = (part: HTMLElement) => {
-        requestStart ??= performance.now();
-        if (part.dataset.play === "after") {
-          part.style.setProperty("--wait", `${Math.max(0, REQUEST_MS - (performance.now() - requestStart))}ms`);
-        }
-        part.classList.add("play");
-      };
-      const waiting = document.querySelectorAll<HTMLElement>("[data-play]");
-      if ("IntersectionObserver" in window) {
-        const watch = new IntersectionObserver(
-          (entries) => {
-            for (const entry of entries) {
-              if (!entry.isIntersecting) continue;
-              play(entry.target as HTMLElement);
-              watch.unobserve(entry.target);
-            }
-          },
-          { threshold: 0 },
-        );
-        for (const part of waiting) watch.observe(part);
-      } else {
-        for (const part of waiting) play(part);
-      }
 
       for (const button of document.querySelectorAll<HTMLButtonElement>("button[data-copy]")) {
         button.addEventListener("click", async () => {

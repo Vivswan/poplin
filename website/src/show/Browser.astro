@@ -8,7 +8,7 @@ import Sign from "./Sign.astro";
 const page = sitePath(EXAMPLE_PAGE_PATH);
 ---
 
-<figure class="browser" data-play="after" aria-label="A browser showing the published site at its address">
+<figure class="browser" aria-label="A browser showing the published site at its address">
   <div class="bar">
     <Sign />
     <span class="host"><Address /></span>
@@ -19,6 +19,8 @@ const page = sitePath(EXAMPLE_PAGE_PATH);
 </figure>
 
 <script>
+  import { resize } from "motion";
+
   // The example is always laid out as on a desk-sized screen and scaled to the frame, so its charts are in view at
   // every width. Without this the stylesheet's half-scale stands.
   const PAGE_WIDTH = 1120;
@@ -32,7 +34,7 @@ const page = sitePath(EXAMPLE_PAGE_PATH);
       page.style.transform = `scale(${scale})`;
     };
     fit();
-    new ResizeObserver(fit).observe(view);
+    resize(view, fit);
   }
 </script>
 
@@ -86,37 +88,8 @@ const page = sitePath(EXAMPLE_PAGE_PATH);
     }
   }
 
-  /* The launch plays once, when the frame is in view and the answer has arrived: the frame with its address, then the page. */
-  @media (prefers-reduced-motion: no-preference) {
-    .browser.play {
-      animation: arrive 350ms var(--ease) var(--wait, 0ms) both;
-    }
-
-    .browser.play .view {
-      animation: render 550ms var(--ease) calc(var(--wait, 0ms) + 400ms) both;
-    }
-
-    :global(.js) .browser:not(.play) {
-      opacity: 0;
-    }
-  }
-
-  @keyframes arrive {
-    from {
-      opacity: 0;
-      transform: translateY(6px);
-    }
-  }
-
-  @keyframes render {
-    from {
-      opacity: 0;
-      clip-path: inset(0 0 100% 0);
-    }
-
-    to {
-      opacity: 1;
-      clip-path: inset(0);
-    }
+  /* The launch plays once, by the page's script: the frame with its address, then the page. Until it does the frame waits unseen. */
+  :global(.moves) .browser {
+    opacity: 0;
   }
 </style>

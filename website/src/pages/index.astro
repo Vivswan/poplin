@@ -41,7 +41,7 @@ const pickerRules = `${AGENTS.map((agent) => `.byhand:has(option[value="${agent.
     </section>
 
     <!-- One path from the request to the site. The form carries the two switches, so they work with no script. -->
-    <form class="access path" data-play aria-label="From a request to a site" onsubmit="return false">
+    <form class="access path" aria-label="From a request to a site" onsubmit="return false">
       <section class="step" aria-labelledby="ask">
         <div class="say">
           <h2 id="ask">Ask, or type</h2>
@@ -103,7 +103,7 @@ const pickerRules = `${AGENTS.map((agent) => `.byhand:has(option[value="${agent.
       <section class="step wide" aria-labelledby="yours">
         <div class="say">
           <h2 id="yours">It runs in your account</h2>
-          <p>Every request passes your guards first, and a private site adds a login. The free plan covers 100,000 requests a day. Past that, the sites pause until midnight UTC.</p>
+          <p>Every request passes the guards you add, and a private site adds a login. The free plan covers 100,000 requests a day. Past that, the sites pause until midnight UTC.</p>
         </div>
         <Account />
       </section>
@@ -126,6 +126,85 @@ const pickerRules = `${AGENTS.map((agent) => `.byhand:has(option[value="${agent.
     </form>
   </div>
 </Site>
+
+<script>
+  import { animate, inView, scopeMotion } from "motion";
+  import { EASE } from "../lib/ease.ts";
+
+  // How long the request takes, in seconds: the browser's frame arrives when it is done.
+  const REQUEST = 1.75;
+  const FADE = 0.22;
+  const arrive = { opacity: [0, 1], transform: ["translateY(6px)", "none"] };
+  const root = document.documentElement;
+  const path = document.querySelector<HTMLElement>(".path");
+  const runner = path?.querySelector<HTMLElement>(".runner");
+  const shows = [...(path?.querySelectorAll<HTMLElement>("[data-show]") ?? [])];
+  const opens = (part: HTMLElement, choice: string) => part.dataset.show?.split(" ").includes(choice) ?? false;
+
+  // The mark is set before the first paint; if less motion was asked for since, nothing here will play, so nothing waits unseen.
+  if (matchMedia("(prefers-reduced-motion: reduce)").matches) root.classList.remove("moves");
+
+  // Everything that moves lives in one scope, which stands only while the reader has not asked for less motion. When
+  // they ask, the library stops it all and puts every style back, and the stylesheet alone runs the switch.
+  scopeMotion(
+    (scope) => {
+      // The page's first script marks the root when what plays may play; the same mark hides it until it does.
+      if (!path || !runner || !root.classList.contains("moves")) return;
+
+      // The request plays once, when the path comes into view: the ask, the tool at work, the answer, and the dot that
+      // carries it down the rail. The frame waits for the request to finish, and no longer than that.
+      // Each part's fade and move are `opacity` and `transform`, which the library hands to one engine, so they stay in step.
+      inView(path, () => {
+        const asked = performance.now();
+        const fall = (runner.parentElement?.clientHeight ?? 0) - runner.offsetTop;
+        animate([
+          [".ask .you", arrive, { duration: 0.35, ease: EASE, at: 0 }],
+          [".ask .tool", arrive, { duration: 0.35, ease: EASE, at: 0.4 }],
+          [".ask .spin", { transform: ["rotate(0deg)", "rotate(540deg)"] }, { duration: 0.7, ease: "linear", at: 0.4 }],
+          [".ask .spin", { opacity: [1, 1, 0] }, { duration: 0.7, times: [0, 0.85, 1], ease: "linear", at: 0.4 }],
+          [".ask .done", arrive, { duration: 0.2, ease: EASE, at: 1.1 }],
+          [".ask .reply", arrive, { duration: 0.35, ease: EASE, at: 1.3 }],
+          [runner, { transform: ["translateY(0px)", `translateY(${fall}px)`] }, { duration: 0.4, ease: EASE, at: 1.45 }],
+          [runner, { opacity: [1, 1, 0] }, { duration: 0.4, times: [0, 0.85, 1], ease: ["linear", EASE], at: 1.45 }],
+        ]);
+        inView(".browser", (frame) => {
+          const wait = Math.max(0, REQUEST - (performance.now() - asked) / 1000);
+          animate([
+            [frame, arrive, { duration: 0.35, ease: EASE, at: wait }],
+            [".browser .view", { opacity: [0, 1], clipPath: ["inset(0% 0% 100% 0%)", "inset(0% 0% 0% 0%)"] }, { duration: 0.55, ease: EASE, at: wait + 0.4 }],
+          ]);
+        });
+      });
+
+      // The access switch: the stylesheet alone decides what each choice shows, and this paces the change. What leaves
+      // fades out as what arrives fades in, and the address's letter is lit for a moment when it changes.
+      const fade = (choice: string, duration: number) => {
+        for (const part of shows) {
+          animate(part, { opacity: opens(part, choice) ? 1 : 0, visibility: opens(part, choice) ? "visible" : "hidden" }, { duration, ease: EASE });
+        }
+      };
+      let chosen = path.querySelector<HTMLInputElement>('input[name="access"]:checked')?.value ?? "";
+      fade(chosen, 0);
+      const pace = scope.bind((event: Event) => {
+        const choice = event.target;
+        if (!(choice instanceof HTMLInputElement) || choice.name !== "access") return;
+
+        fade(choice.value, FADE);
+        for (const letter of shows) {
+          if (letter.closest(".letter") && opens(letter, choice.value) && !opens(letter, chosen)) animate(letter, { "--lit": [1, 0] }, { duration: 0.7, ease: EASE });
+        }
+        chosen = choice.value;
+      });
+      path.addEventListener("change", pace);
+
+      return () => {
+        path.removeEventListener("change", pace);
+        root.classList.remove("moves");
+      };
+    },
+    { matchMedia: "(prefers-reduced-motion: no-preference)" },
+  );
+</script>
 
 <style>
   .hero {
@@ -208,6 +287,7 @@ const pickerRules = `${AGENTS.map((agent) => `.byhand:has(option[value="${agent.
     box-shadow: inset 0 0 0 1.5px var(--muted);
   }
 
+  /* The publish travels down the rail from the request to the site, by the page's script. */
   .runner {
     background: var(--accent);
     opacity: 0;
@@ -248,29 +328,6 @@ const pickerRules = `${AGENTS.map((agent) => `.byhand:has(option[value="${agent.
 
   .wrap {
     padding-bottom: clamp(56px, 8vw, 96px);
-  }
-
-  /* The publish travels down the rail from the request to the site. */
-  @media (prefers-reduced-motion: no-preference) {
-    .path.play .runner {
-      animation: travel 400ms var(--ease) 1450ms both;
-    }
-  }
-
-  @keyframes travel {
-    from {
-      top: 7px;
-      opacity: 1;
-    }
-
-    85% {
-      opacity: 1;
-    }
-
-    to {
-      top: 100%;
-      opacity: 0;
-    }
   }
 
   @media (max-width: 720px) {
