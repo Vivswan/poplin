@@ -12,6 +12,7 @@ import { checkLimits, type Counters, countRequest, isPageView, type Refusal } fr
 import { refusalResponse } from "@poplin/app/src/limits/refusal";
 import { type VisitorKey, visitorKey } from "@poplin/app/src/limits/visitor-key";
 import { serveSite } from "@poplin/app/src/sites/serve";
+import { noteProblem } from "@poplin/core/src/actions/problems";
 import { isLogin } from "@poplin/core/src/auth/logins";
 import type { Address } from "@poplin/core/src/database/database";
 import type { Site } from "@poplin/core/src/records/site";
@@ -88,6 +89,8 @@ export async function answerSite(request: Request, instance: Instance, held: Hel
   const now = instance.install.now();
   const addressed = instance.addresses.resolve(new URL(request.url));
   const proof = await proofOf(request, addressed, { instance, held, now });
+  // Noted before the limits: a full minute answers first, and the keys were still not to be had.
+  if (proof.kind === "unchecked") await noteProblem(instance.install, "login_unchecked");
   const cameAround = proof.kind === "refused" || proof.kind === "unchecked";
   const address = cameAround ? undefined : queryOf(addressed);
   const found = address === undefined ? undefined : await database.findServed(address, now);
@@ -99,7 +102,12 @@ export async function answerSite(request: Request, instance: Instance, held: Hel
     served === undefined
       ? await takeVisitorMinute(instance.counters, { key: visitor, limit: held.settings.visitor_requests_per_minute }, now)
       : await checkLimits({ settings: held.settings, site: served.id, visitor, now }, instance.counters);
-  if (!verdict.ok) return refusalResponse(verdict);
+  if (!verdict.ok) {
+    // The day's limit of requests is noted once on the day it is reached. A full minute is the limit at work, and is no problem.
+    if (verdict.which === "day") await noteProblem(instance.install, "requests_limit_reached");
+
+    return refusalResponse(verdict);
+  }
 
   if (proof.kind === "unchecked") return plain(request, 503, "The login cannot be checked right now. Try again.", { "Retry-After": "60" });
 

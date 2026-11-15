@@ -85,6 +85,7 @@ describe("sending one file of an upload", () => {
       "not_found upload",
     ]);
     expect([writes.mock.calls.length, counted]).toEqual([3, { writes: 6, most: 5 }]);
+    expect((await world.install.database.listProblems(dayOf(world.clock.now))).map(({ kind, count }) => [kind, count])).toEqual([["writes_limit_reached", 1]]);
   });
 
   // Drift: every refusal is decided from the one file and the upload the lookup answers; a lookup that lost either would store bytes nobody declared, or another publisher's.

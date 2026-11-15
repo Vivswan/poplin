@@ -18,9 +18,10 @@ import { createConsole } from "@poplin/app/src/console/console";
 import { visitorKey } from "@poplin/app/src/limits/visitor-key";
 import { readSession } from "@poplin/app/src/login/session";
 import { toHttps } from "@poplin/app/src/transport/to-https";
+import { meterNoted, noteProblem } from "@poplin/core/src/actions/problems";
+import type { Install } from "@poplin/core/src/actions/records";
 import type { Database } from "@poplin/core/src/database/database";
 import { AllowanceSpent } from "@poplin/core/src/database/driver";
-import { meterStore } from "@poplin/core/src/storage/metered";
 import { clientAddress } from "../limits/client-address";
 import { FREE_LIMITS } from "../limits/free-limits";
 import { INSTALL_OBJECTS } from "../zone/install-objects";
@@ -90,8 +91,8 @@ function failureAnswer(request: Request, failure: Stopped): Response {
 /** Where the dashboard answers: every path of the admin hostname that is neither the API nor the login. */
 async function answerDashboard(request: Request, instance: Instance, held: Held): Promise<Response> {
   const now = instance.install.now();
-  // As the API does: every listing of the bucket this request makes is counted against the day, and written down once.
-  const meter = meterStore(instance.install.store, { database: instance.install.database, now: instance.install.now });
+  // As the API does: every listing of the bucket this request makes is counted against the day, and written down once. What goes wrong with the count is noted.
+  const meter = meterNoted(instance.install);
   // A request that changes nothing takes the settings its session was just checked against. A change reads them itself, inside its own step.
   const known = request.method === "GET" ? { knownSettings: held.settings } : {};
   const dashboard = createConsole({
@@ -136,12 +137,32 @@ async function answerAdmin(request: Request, instance: Instance, ways: Ways): Pr
   return answerDashboard(request, instance, await ways.held(FRESH));
 }
 
-/** Run the scheduled sweep of a started instance. A Worker with nothing set has no site to sweep; any other start that failed is thrown. */
+/** Run the scheduled sweep of a started instance, and note a run that failed. A Worker with nothing set has no site to sweep; any other start that failed is thrown. */
 async function sweep(started: Started, latest: Outside["latest"]): Promise<void> {
-  if (started.ok) return runSweep(started.instance.install, latest, started.instance);
+  if (started.ok) {
+    return runSweep(started.instance.install, latest, started.instance).catch(async (error: unknown) => {
+      await noteProblem(started.instance.install, "sweep_failed", error);
+
+      throw error;
+    });
+  }
 
   const { failure } = started;
   if (failure.kind !== "unset") throw new Error(`the sweep did not run. ${failureText(failure)}`);
+}
+
+/**
+ * Answer a request that failed, and note the failure where an install was reached and its database may still take a note.
+ *
+ * @param failed - the clock's time, and the install the instance last answered from, if it has started
+ */
+async function answerFailure(request: Request, env: Bindings, error: unknown, failed: { readonly now: number; readonly noting: Pick<Install, "database" | "now"> | undefined }): Promise<Response> {
+  console.error("poplin: a request failed", error);
+  if (error instanceof AllowanceSpent) return answerSpent(request, env, error, failed.now);
+
+  if (failed.noting !== undefined) await noteProblem(failed.noting, "request_failed", error);
+
+  return plain(request, 503, TRY_AGAIN);
 }
 
 /** What the instance is given, with the runtime's own clock and `fetch` wherever a part is left out. */
@@ -159,13 +180,14 @@ function outsideOf(given: Partial<Outside>): Outside {
  * Make the handlers of one Worker instance.
  *
  * @param given - the clock, the fetch of the Access keys, the fetch of setup's calls to Cloudflare, the asking for the newest version, and the fetch that starts a build; the runtime's own when absent
- * @returns `fetch`, which never throws, and `scheduled`, which throws when the sweep could not run
+ * @returns `fetch`, which never throws, and `scheduled`, which throws when the sweep could not run. A request or a sweep that failed is noted as a problem of the install, where its database still takes a note
  */
 export function createWorker(given: Partial<Outside> = {}): Required<Pick<ExportedHandler<Bindings>, "fetch" | "scheduled">> {
   const outside = outsideOf(given);
   let starting: Promise<Started> | undefined;
   let holding: { readonly at: number; readonly value: Promise<Held> } | undefined;
   let loggedInOnce = false;
+  let noting: Pick<Install, "database" | "now"> | undefined;
 
   async function attempt(env: Bindings): Promise<Started> {
     try {
@@ -228,6 +250,7 @@ export function createWorker(given: Partial<Outside> = {}): Required<Pick<Export
     }
 
     const { instance } = started;
+    noting = instance.install;
     const { hostname } = new URL(request.url);
     const { database } = instance.install;
     const ways: Ways = { held: (lifetime) => held(database, lifetime), setupOpen: () => setupOpen(database) };
@@ -244,10 +267,7 @@ export function createWorker(given: Partial<Outside> = {}): Required<Pick<Export
         // Before the instance starts: a request over plain http reads nothing of the install.
         return toHttps(request) ?? (await answer(request, env));
       } catch (error) {
-        console.error("poplin: a request failed", error);
-        if (error instanceof AllowanceSpent) return answerSpent(request, env, error, outside.now());
-
-        return plain(request, 503, TRY_AGAIN);
+        return answerFailure(request, env, error, { now: outside.now(), noting });
       }
     },
 
