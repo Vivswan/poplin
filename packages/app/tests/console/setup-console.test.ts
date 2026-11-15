@@ -89,6 +89,21 @@ function bootOf(page: string): unknown {
 }
 
 describe("the page", () => {
+  // Drift: every request would ask the database twice whether anybody has logged in.
+  test.each(["/setup", "/setup/assets/app.js", "/setup/api/check"])("asks once whether it is open, for %s", async (path) => {
+    const asked = { count: 0 };
+    const { get } = await openSetup({
+      open: async () => {
+        asked.count += 1;
+
+        return true;
+      },
+    });
+    await get(path);
+
+    expect(asked.count).toBe(1);
+  });
+
   // Drift: the page would name the install's domain, a login, or a setting to somebody who has proven nothing, or a client's script would be blocked or let read another origin.
   test.each([
     [false, "login"],

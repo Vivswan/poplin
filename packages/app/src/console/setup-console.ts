@@ -93,7 +93,8 @@ export type SetupRoutes = typeof setupRoutes;
  * @throws {RangeError} the CSRF secret is under 32 bytes
  */
 export function createSetupConsole(parts: SetupConsoleParts): { readonly fetch: (request: Request) => Promise<Response> } {
-  const setup = createSetup(parts);
+  // The gate below asks whether the page is open, once a request, before anything reaches the page's own handler: that one is told yes.
+  const setup = createSetup({ ...parts, open: async () => true });
   const at = parts.at ?? SETUP_PATH;
   const { tokenLabel, tokenRights, tokenLink, tokenOptional, tokenNote } = parts.domain;
   const start = { boxes: "plugFor" in parts.domain ? "first" : "login", form: { tokenLabel, tokenRights, tokenLink, tokenOptional, tokenNote } };

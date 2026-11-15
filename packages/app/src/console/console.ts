@@ -11,6 +11,7 @@ import type { Install } from "@poplin/core/src/actions/records";
 import type { Rebuilding } from "@poplin/core/src/actions/start-update";
 import type { Login } from "@poplin/core/src/auth/logins";
 import { Hono, type MiddlewareHandler } from "hono";
+import { bodyLimit } from "hono/body-limit";
 import { csrf } from "hono/csrf";
 import { secureHeaders } from "hono/secure-headers";
 
@@ -110,6 +111,9 @@ function sessionCheck(parts: ConsoleParts): MiddlewareHandler<Shared> {
   };
 }
 
+/** The most bytes a change's body holds: no change of the console comes near it. */
+const MOST_BODY_BYTES = 1_048_576;
+
 /** Let a change through only when its media type is JSON, whatever parameters follow it. */
 const jsonOnly: MiddlewareHandler<Shared> = async (context, next) => {
   const [type = ""] = (context.req.header("Content-Type") ?? "").split(";");
@@ -142,7 +146,7 @@ export function createConsole(parts: ConsoleParts): Console {
   });
 
   app.use(noStore, sessionCheck(parts));
-  app.post("*", csrf(), jsonOnly);
+  app.post("*", bodyLimit({ maxSize: MOST_BODY_BYTES, onError: (context) => refused(context, { code: "too_large" }) }), csrf(), jsonOnly);
 
   app.route("/data", dataRoutes);
   app.all("/data/*", (context) => refused(context, { code: "no_page" }));

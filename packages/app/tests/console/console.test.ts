@@ -163,6 +163,7 @@ describe("a change", () => {
     ["plain text from another site", { "Content-Type": "text/plain", Origin: "https://evil.example", "Sec-Fetch-Site": "cross-site" }, 403],
     ["a form from this origin", { "Content-Type": "application/x-www-form-urlencoded" }, 415],
     ["a type that only starts like JSON", { "Content-Type": "application/json-not-real" }, 415],
+    ["a body that declares two megabytes", { "Content-Length": "2000000" }, 413],
   ])("sent as %s is refused and changes nothing", async (_case, headers, status) => {
     const opened = await openConsole();
     const site = await opened.base.publish("first-name", "private");
