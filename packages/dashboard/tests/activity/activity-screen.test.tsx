@@ -101,7 +101,6 @@ function whenOrder(): string | null {
 afterEach(() => {
   cleanup();
   globalThis.fetch = OWN_FETCH;
-  window.localStorage.clear();
   asked.length = 0;
   counted.length = 0;
   answered.page = PAGE;

@@ -4,6 +4,7 @@
 //
 // The page stays for every test file of the run, which is the client's alone: `bun run test` in this package. The runtime's own `fetch`, `Request`, `Response`, and `Headers` are put back at once, so a test still calls them.
 
+import { afterAll, afterEach, beforeEach } from "bun:test";
 import { GlobalRegistrator } from "@happy-dom/global-registrator";
 
 /** The start values every component test runs under. */
@@ -11,6 +12,24 @@ const TEST_BOOT = { base: "/next", email: "mira@example.com", title: "poplin", v
 
 /** What of the runtime the page must not replace: the tests that run after it call these. */
 const OWN = { fetch: globalThis.fetch, Request: globalThis.Request, Response: globalThis.Response, Headers: globalThis.Headers };
+
+function keptKeys(): readonly string[] {
+  return [window.localStorage, window.sessionStorage].flatMap((store) => [...Array(store.length).keys()].map((at) => store.key(at) ?? ""));
+}
+
+function emptyStores(): void {
+  window.localStorage.clear();
+  window.sessionStorage.clear();
+}
+
+/** Emptied before the throw, so one left key fails one test and not every test after it. */
+function refuseKept(): void {
+  const keys = keptKeys();
+  if (keys.length === 0) return;
+
+  emptyStores();
+  throw new Error(`left: ${keys.join(", ")}`);
+}
 
 if (!GlobalRegistrator.isRegistered) {
   GlobalRegistrator.register({ url: "https://poplin.example.com/next/" });
@@ -24,6 +43,11 @@ if (document.getElementById("boot") === null) {
   block.textContent = JSON.stringify(TEST_BOOT);
   document.head.append(block);
 }
+
+// Every test file shares the page's two stores, so a key one file left would be the state another starts from. Hooks set here hold for every file: the first two run around each test, the last once the whole run ends.
+beforeEach(refuseKept);
+afterEach(emptyStores);
+afterAll(refuseKept);
 
 /** Empty the page a test file drew into, so the file that follows starts from an empty body. */
 export async function clearPage(): Promise<void> {

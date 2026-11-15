@@ -56,10 +56,7 @@ function drawn(list: Ended): void {
   render(<Held list={list} />);
 }
 
-afterEach(() => {
-  cleanup();
-  window.localStorage.clear();
-});
+afterEach(cleanup);
 
 afterAll(clearPage);
 

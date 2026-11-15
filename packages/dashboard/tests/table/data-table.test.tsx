@@ -115,7 +115,6 @@ afterAll(clearPage);
 afterEach(() => {
   cleanup();
   globalThis.ResizeObserver = OWN_WATCHER;
-  window.localStorage.clear();
   seen.sorted = [];
   seen.opened = [];
 });

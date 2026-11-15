@@ -38,10 +38,7 @@ async function drawWith(domainNote: { readonly label: string; readonly sentence:
   );
 }
 
-afterEach(() => {
-  cleanup();
-  localStorage.removeItem(THEME_KEY);
-});
+afterEach(cleanup);
 afterAll(clearPage);
 
 describe("the note on the domain at the side", () => {

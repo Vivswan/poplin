@@ -82,7 +82,6 @@ async function readAfter(reads: number): Promise<void> {
 afterEach(() => {
   cleanup();
   globalThis.fetch = OWN_FETCH;
-  window.localStorage.clear();
   asked.length = 0;
 });
 afterAll(clearPage);

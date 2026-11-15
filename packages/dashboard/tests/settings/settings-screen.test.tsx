@@ -140,7 +140,6 @@ afterEach(() => {
   toast.dismiss();
   cleanup();
   globalThis.fetch = OWN_FETCH;
-  window.localStorage.clear();
   saves.length = 0;
   sentTo.length = 0;
   held.length = 0;

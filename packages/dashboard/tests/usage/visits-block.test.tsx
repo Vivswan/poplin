@@ -109,7 +109,6 @@ function rowsOf(table: HTMLElement): readonly (readonly string[])[] {
 
 afterEach(() => {
   cleanup();
-  localStorage.clear();
   asked.length = 0;
   globalThis.fetch = OWN_FETCH;
 });
