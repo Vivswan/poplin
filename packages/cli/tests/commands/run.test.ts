@@ -315,7 +315,7 @@ describe("run", () => {
 
     expect(who.out.slice(0, 2)).toEqual([`install  ${ORIGIN}`, "role     admin"]);
     expect(jsonOf(await bench.run("whoami --json"))).toMatchObject({ server: ORIGIN, token: { scope: "admin", note: "a test" } });
-    expect(doctor.out.map((line) => line.split(/ {2,}/).slice(0, 2).join(" "))).toEqual(["ok install", "ok version", "ok login", "ok settings", "ok sites", "ok trash", "nothing was changed"]);
+    expect(doctor.out.map((line) => line.split(/ {2,}/).slice(0, 2).join(" "))).toEqual(["ok install", "ok version", "ok login", "ok settings", "ok sites", "ok trash", "ok problems", "nothing was changed"]);
     expect(asPublisher.out[3]).toBe("ok  settings  not read: this token is no admin's");
     expect((await bench.run("config trash_days")).out).toEqual(["7"]);
     expect((await bench.run("config")).out).toContain("max_site_size                200MB");
@@ -606,6 +606,32 @@ describe("run", () => {
 
     expect([before.domain, report.code, rows(report.out), rows(asPublisher.out)]).toEqual(["none", 0, line === undefined ? [] : [`ok  domain    ${line}`], []]);
     expect(jsonOf(await bench.run("doctor --json")).domain).toEqual(code === undefined ? "none" : { code, about: code === "check_again" ? null : "Sample piece" });
+  });
+
+  // Drift: what the install noted as gone wrong is shown on the dashboard, and this row is where a person at a terminal, or a script, hears of it.
+  // A problem of today that read as `ok` would pass a health check; one of last week that read as `failed` would fail it for good.
+  test.each([
+    { name: "nothing in the week", noted: [], code: 0, row: "ok  problems  none in 7 days", json: { today: [], week: [] } },
+    { name: "a problem of an earlier day", noted: [["sweep_failed", 2]], code: 0, row: "ok  problems  none today; in 7 days: sweep_failed", json: { today: [], week: ["sweep_failed"] } },
+    { name: "a problem of over a week ago", noted: [["sweep_failed", 8]], code: 0, row: "ok  problems  none in 7 days", json: { today: [], week: [] } },
+    {
+      name: "two kinds today, one of them also earlier",
+      noted: [["request_failed", 3], ["sweep_failed", 0], ["request_failed", 0]],
+      code: 1,
+      row: "failed  problems  2 kinds today: request_failed, sweep_failed",
+      json: { today: ["request_failed", "sweep_failed"], week: ["request_failed", "sweep_failed"] },
+    },
+  ] as const)("doctor says what went wrong in the install's last week, and fails for a problem of today alone: $name", async ({ noted, code, row, json }) => {
+    const bench = await openBench();
+    const { now } = bench.install.clock;
+    for (const [kind, daysAgo] of noted) await bench.install.database.noteProblem({ kind, at: now - daysAgo * 86_400_000, count: 1, more: false, name: null, message: null });
+
+    const report = await bench.run("doctor");
+    const asPublisher = await bench.run("doctor", { env: { POPLIN_SERVER: ORIGIN, POPLIN_TOKEN: bench.install.tokens.owner } });
+    const rows = (out: readonly string[]): string[] => out.filter((line) => line.split(/ {2,}/)[1] === "problems").map((line) => line.replace(/ {2,}/g, "  "));
+
+    expect([report.code, rows(report.out), rows(asPublisher.out)]).toEqual([code, [row], []]);
+    expect(jsonOf(await bench.run("doctor --json")).problems).toEqual(json);
   });
 
   test("doctor exits 1 when a check fails, with its report still printed: without this a script reads a failed check as health", async () => {

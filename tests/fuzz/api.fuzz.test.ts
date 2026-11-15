@@ -93,6 +93,7 @@ function pathsOf({ site, upload, trash, limit, forever }: Named): Readonly<Recor
     "/api/sessions": [ROUTES.sessions.$path()],
     "/api/audit": [ROUTES.audit.$path({ query: { limit, site } })],
     "/api/domain": [ROUTES.domain.$path()],
+    "/api/problems": [ROUTES.problems.$path()],
     "/api/update": [ROUTES.update.$path()],
     "/api/update/address": [ROUTES.update.address.$path()],
   };
