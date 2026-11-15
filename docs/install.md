@@ -205,15 +205,38 @@ npx poplin setup --server https://poplin.your-name.workers.dev --domain example.
 
 ## Update the install
 
-Cloudflare builds again whenever your copy of poplin on GitHub changes. Bring that copy up to date, from a terminal with git:
+An update is one more build. Run in Cloudflare's build, poplin's deploy fetches a release of poplin from GitHub and deploys that, under the name, the bucket, and the database your copy's `wrangler.jsonc` names. Your copy on GitHub stays as it is, and nothing updates on its own.
 
-```sh
-git clone https://github.com/your-name/poplin
-git -C poplin pull https://github.com/Vivswan/poplin main
-git -C poplin push
+```text
+in the build's log:   poplin: deploying 0.3.1 (was asked for latest)
 ```
 
-An install made from a terminal updates with `git -C poplin pull` and `bun run --cwd poplin deploy`. What step 4 gave the Worker stays.
+**In the browser.** Cloudflare's documentation gives these steps for building again:
+
+| Step | In Cloudflare's dashboard                                              |
+| ---- | ---------------------------------------------------------------------- |
+| 1    | open your Worker                                                       |
+| 2    | select Deployments, then View build history at the bottom of the page  |
+| 3    | select the ellipses next to the newest build, then select Retry build  |
+
+When it deploys a release, poplin's deploy prints the line above, with the version. When it cannot find or fetch the release it deploys nothing, and prints one line that starts with `poplin:`, holds `Nothing was deployed`, and says what to do.
+
+**Choose the version.** The build reads one build variable, `POPLIN_VERSION`. Cloudflare's documentation puts build variables in your Worker's Settings, under Build, in Build variables and secrets.
+
+| `POPLIN_VERSION`     | The build deploys                                                            |
+| -------------------- | ---------------------------------------------------------------------------- |
+| not set, or `latest` | the newest release. With no release published, the files of your copy        |
+| a version: `0.2.0`   | that release. This keeps an install on one version, or takes it back to one  |
+| `this`               | the files of your copy as they are, for changing poplin in your own copy     |
+
+A release refuses a database whose schema a newer release changed. The install then answers `This install's database is newer than its code: update poplin.` until a release that knows that schema is deployed again.
+
+**From a terminal.** An install made from a terminal updates with the two commands below. They deploy the files in that folder: nothing is fetched, and `POPLIN_VERSION` is not read. What step 4 gave the Worker stays.
+
+```sh
+git -C poplin pull
+bun run --cwd poplin deploy
+```
 
 ## With OpenTofu
 

@@ -11,7 +11,7 @@
   "scripts": {
     "typecheck": "wrangler types ./worker-configuration.d.ts --config ../../wrangler.jsonc && tsc -p .",
     "build": "wrangler deploy --dry-run --outdir packages/cloudflare/dist --config ../../wrangler.jsonc",
-    "deploy": "wrangler deploy --config ../../wrangler.jsonc",
+    "deploy": "bun scripts/deploy.ts",
     "test": "bun run build && vitest run",
     "live:converge": "bun scripts/live/converge.ts",
     "live:suite": "bun scripts/live/suite.ts",
