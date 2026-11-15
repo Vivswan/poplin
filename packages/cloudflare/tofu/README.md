@@ -231,7 +231,7 @@ The Domain tab's check and repair take two permissions more. Zone Settings: Read
 | --- | --- |
 | stop a write once R2's free allowance is used | Cloudflare has no spending cap on R2. The limits the Worker enforces, `max_total_size` and `max_files_per_day` among them, bound what a publish stores and declares, and the usage alerts, once `usage_alert_percents` is set, tell the logins at the shares it names |
 | delete the files of a dropped version or of a site past its days in the trash | the Worker's sweep does. Every site keeps its files under a folder of random letters, live or dropped alike, so no bucket rule can tell the two apart |
-| read the zone's plan without a warning | the provider marks the zone's `plan` as deprecated, so every plan and apply prints one warning that names `data.cloudflare_zone.this.plan`. The module reads it for the Free plan check, the rate rule, and Bot Fight Mode |
+| read the zone's plan without a warning | the provider marks the zone's `plan` as deprecated, so every plan and apply prints one warning that names `data.cloudflare_zone.this.plan`. The module reads it for the Free plan check, the rate rule, and Bot Fight Mode. The provider's other source of the plan, `cloudflare_zone_subscription`, takes Billing: Read on the account, a permission the module does not ask for |
 | check the account's Workers plan | the provider reads the zone's plan, which the module checks, and not the account's Workers plan |
 | build the Worker | build the bundle with `bun run --cwd packages/cloudflare build` and pass its path in `worker_bundle_path` |
 | read the Zero Trust team domain | pass it in `access_team_domain` |
