@@ -84,6 +84,8 @@ Look at the folder first: what is in it will be on the site, and an unlisted or 
 
 **The site is static.** Files are served as they are. Relative links between them work (`<a href="notes/q3.html">`, `<img src="chart.svg">`). There is no server code, no form handler, and no database, so build pages that need none.
 
+**A site can bring its own page for a wrong address:** a file named `404.html` at the root of the folder. A visitor who asks for a file the site does not have gets that page, with status 404. A site without one answers a plain `Not found`.
+
 **A wrong publish can be taken back.** `rollback_site` puts the version before it live again, when the install still keeps one. The address stays the same.
 
 ## After you publish, tell the user
