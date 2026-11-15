@@ -20,6 +20,7 @@ import { answerOf, api, Refused } from "@/lib/api";
 import { FRAME_KEY } from "@/lib/frame";
 import { sayDone, sayRefused } from "@/lib/notify";
 import { shortMoment, wholeMoment } from "@/lib/sites";
+import { useChosenTimeZone } from "@/lib/timezone";
 import { AppShell } from "@/shell/app-shell";
 
 /** What an install that remembers no run says in place of a count, and where the rows would be. */
@@ -88,6 +89,7 @@ function sayRan(summary: Ran["summary"]): void {
 
 /** Draw the Domain screen. */
 export function DomainScreen(): ReactNode {
+  useChosenTimeZone();
   const client = useQueryClient();
   const { data, error, refetch } = useDomain();
   const [made, setMade] = useState<Made>();

@@ -2,6 +2,8 @@
 
 import { type RefObject, useEffect, useLayoutEffect, useRef, useState } from "react";
 
+import { useTimeZoneChoice } from "@/lib/timezone";
+
 /** The width of the area a table scrolls in, measured again whenever it changes: 0 until it is first measured. */
 export function useRoom(): readonly [RefObject<HTMLDivElement | null>, number] {
   const frame = useRef<HTMLDivElement>(null);
@@ -39,7 +41,7 @@ function fittedWidths(table: HTMLTableElement): ReadonlyMap<string, number> {
 }
 
 /**
- * The width each column's heading and values need, measured when what the table shows changes and once the page's fonts are in.
+ * The width each column's heading and values need, measured when what the table shows changes, once the page's fonts are in, and when a person chooses another time zone, which makes a written time longer or shorter.
  *
  * @param shows - what the table shows, and whether it is in sight at all: a change of any of these is a reason to measure again; always the same count of them
  * @returns the reference to give the table, and the widths by column id, empty until the first measuring
@@ -48,6 +50,7 @@ export function useFitted(shows: readonly unknown[]): readonly [RefObject<HTMLTa
   const table = useRef<HTMLTableElement>(null);
   const [fitted, setFitted] = useState<ReadonlyMap<string, number>>(new Map());
   const [fonts, setFonts] = useState(false);
+  const [timeZone] = useTimeZoneChoice();
   useEffect(() => void document.fonts?.ready.then(() => setFonts(true)), []);
   // biome-ignore lint/correctness/useExhaustiveDependencies: the list is what the table shows, handed in by the table.
   useLayoutEffect(() => {
@@ -56,7 +59,7 @@ export function useFitted(shows: readonly unknown[]): readonly [RefObject<HTMLTa
     const next = fittedWidths(table.current);
     // The same widths as before are no change: a new map would draw the table again for nothing, over and over.
     setFitted((before) => (before.size === next.size && [...next].every(([id, width]) => before.get(id) === width) ? before : next));
-  }, [fonts, ...shows]);
+  }, [fonts, timeZone, ...shows]);
 
   return [table, fitted];
 }

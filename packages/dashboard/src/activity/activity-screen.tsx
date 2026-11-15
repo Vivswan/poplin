@@ -184,10 +184,9 @@ export function ActivityScreen(): ReactNode {
   const site = query.get("site") ?? "";
   const { data: page, error, isPlaceholderData } = useActivityPage(query);
   const logins = page?.logins;
-  // The screen reads the choice of time zone itself: its columns are made anew with it, so the rows are drawn, and measured, in the new time zone.
+  // The screen reads the choice of time zone itself, so its rows are drawn again, in the new time zone, when the choice changes.
   const [timeZone, chooseTimeZone] = useTimeZoneChoice();
-  // biome-ignore lint/correctness/useExhaustiveDependencies: a When cell writes its time in the time zone chosen, which it reads as it is drawn.
-  const columns = useMemo(() => activityColumns(logins ?? {}), [logins, timeZone]);
+  const columns = useMemo(() => activityColumns(logins ?? {}), [logins]);
   const layout = useTableLayout("activity", columns);
   const instead = insteadOfRows(error?.message, page, kind, site, () => void navigate({ to: PATH }));
   const move = (changes: Readonly<Record<string, string>>, replace = false): void =>
