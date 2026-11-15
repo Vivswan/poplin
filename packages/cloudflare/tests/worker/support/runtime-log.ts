@@ -13,12 +13,12 @@ const KNOWN: readonly Known[] = [
   // The bucket's local simulation leaves a promise of its own unhandled when an upload is cut: twice for each of the three tests of tests/storage/r2.test.ts that cut one.
   { line: "uncaught exception; source = Uncaught (in promise); stack = Error: Network connection lost.", most: 6 },
 
-  // Cloudflare's SDK reads an empty form as text before a client's first form request: once in each of the four tests of tests/worker/setup.test.ts that write a variable onto the Worker.
+  // Cloudflare's SDK reads an empty form as text before a client's first form request: once in each of the four tests of setup.test.ts that write a variable onto the Worker, and of the three rows of request-budget.test.ts that repair.
   {
     line:
       'console warning; message = Called .text() on an HTTP body which does not appear to be text. The body\'s Content-Type is "multipart/form-data; boundary=". ' +
       "The result will probably be corrupted. Consider checking the Content-Type header before interpreting entities as text.",
-    most: 4,
+    most: 7,
   },
 ];
 
