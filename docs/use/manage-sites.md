@@ -18,7 +18,7 @@ A publish takes these flags too.
 | `poplin set report--k3f9x2ab71qz --expires 7d`          | moves it to the trash in 7 days                   |
 | `poplin set report--k3f9x2ab71qz --expires 2026-12-01`  | moves it to the trash on that day                 |
 | `poplin set report--k3f9x2ab71qz --expires never`       | keeps it                                          |
-| `poplin set report--k3f9x2ab71qz --search-engines on`   | lets search engines list it, once it is public    |
+| `poplin set report--k3f9x2ab71qz --search-engines on`   | lets search engines list it, once it is public and Let search engines in is on |
 | `poplin set report--k3f9x2ab71qz --embeddable off`      | stops other pages from showing it in a frame      |
 
 Every other example runs the same way, with `npx` before `poplin`.
@@ -63,8 +63,8 @@ For a site that is not in the trash, the panel has the link, who can open it, th
 | ----------------------------- | -------------------------------------------------------------------------------- |
 | Private, Unlisted, or Public  | asks first, as the next table shows; Cancel leaves the site as it is             |
 | a Public name that is refused | says why at the field, and keeps what was typed                                  |
-| Show in search engines        | on a site that is not public: `Only a public site is listed.`                    |
-| Show in search engines        | on a public site, while Let search engines in is off: `Off for every site in Settings.` |
+| Show in search engines        | on any site, while Let search engines in is off: `Off for every site in Settings.` |
+| Show in search engines        | on a site that is not public, while it is on: `Only a public site is listed.`    |
 
 | From                | To       | The question says                                                                  | Its button       |
 | ------------------- | -------- | ---------------------------------------------------------------------------------- | ---------------- |

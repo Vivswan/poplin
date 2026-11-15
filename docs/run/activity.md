@@ -16,7 +16,7 @@ The dashboard's Activity screen lists every change of a site, a token, or a sett
 | Only this site, at the end of a row  | shows that site's entries, also those from before a rename or a new link    |
 | `Only Q3 sales`, beside the search   | names the one site whose entries are shown; Show every site, on it, takes it away |
 | UTC, Your time                       | writes every time in UTC, or in the browser's time zone                      |
-| When                                 | a press on the heading puts the oldest first                                 |
+| When, or When (UTC) while UTC is on  | the heading of the times; a press on it puts the oldest first                |
 | `1 to 50 of 1,234`                   | at the foot: which entries the page shows, of how many                       |
 | 50 per page                          | holds 100 or 200 entries a page; the browser keeps the choice                |
 | First page, Previous page, Next page | go to the pages around the one shown; a new page shows from its first entry  |
@@ -24,7 +24,16 @@ The dashboard's Activity screen lists every change of a site, a token, or a sett
 
 The total is counted through the newest 10,000 entries. A longer log reads `1 to 50 of 10,000+`.
 
-A filtered list looks through 5,000 entries at a time, and its total through the newest 5,000. Where it stopped before the log's end, the foot says `Searched the newest 5,000 entries.`, and Search further goes on from there.
+A filtered list looks through 5,000 entries at a time, and its total through the newest 5,000. Where it stopped before the log's end, the screen says how far it looked, and Search further goes on from there.
+
+| The list stopped                                 | The screen says                                                                            |
+| ------------------------------------------------ | ------------------------------------------------------------------------------------------ |
+| with some entries found                          | `Searched the newest 5,000 entries.`                                                       |
+| with none found                                  | `Nothing in the newest 5,000 entries.`, then `Older entries are not searched yet.`         |
+| again, after Search further from the first page  | the count of all it looked through, as in `Nothing in the newest 10,000 entries.`          |
+| on a page that Next page or Previous page led to | `Searched 5,000 more entries.`, or `Nothing in 5,000 more entries.`                        |
+
+With none found, Show all activity stands beside Search further. With the oldest first, the first stop says `oldest` for `newest`. The second line names the side the search has not reached: `Older entries are not searched yet.`, or `Newer entries are not searched yet.`
 
 ## Find by site
 
