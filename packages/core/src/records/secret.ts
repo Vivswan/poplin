@@ -1,15 +1,12 @@
 // The one place a row of the secrets table becomes what the install uses: the signing key as bytes, and the address that starts a rebuild. Neither leaves the database in any other record.
 
+import { hexToUint8Array, uint8ArrayToHex } from "uint8array-extras";
 import * as v from "valibot";
 
 import { MOMENT } from "./fields";
-import { toHex } from "./hex";
 
 /** The fewest bytes a signing key holds: the output size of HMAC-SHA-256. */
 const KEY_BYTES = 32;
-
-/** Two lowercase hex characters, one byte. */
-const HEX_BYTE = /[0-9a-f]{2}/g;
 
 /** A row of the secrets table: the key as lowercase hex, whole bytes, at least 32 of them. */
 const SECRET_ROW = v.object({ value: v.pipe(v.string(), v.regex(/^(?:[0-9a-f]{2})+$/), v.minLength(KEY_BYTES * 2)) });
@@ -32,7 +29,7 @@ export interface UpdateAddress {
 export function signingKeyToText(key: Uint8Array): string {
   if (key.length < KEY_BYTES) throw new RangeError(`a signing key holds at least ${KEY_BYTES} bytes, not ${key.length}`);
 
-  return toHex(key);
+  return uint8ArrayToHex(key);
 }
 
 /**
@@ -44,7 +41,7 @@ export function signingKeyFromRow(row: unknown): Uint8Array<ArrayBuffer> {
   const parsed = v.safeParse(SECRET_ROW, row);
   if (!parsed.success) throw new Error("the stored signing key is not a key");
 
-  return Uint8Array.from(parsed.output.value.match(HEX_BYTE) ?? [], (pair) => Number.parseInt(pair, 16));
+  return hexToUint8Array(parsed.output.value);
 }
 
 /**

@@ -4,6 +4,7 @@
 import { reset } from "cloudflare:test";
 import { OPEN_ROUTES, ROUTES } from "@poplin/core/src/api/routes";
 import { settingsFromText } from "@poplin/core/src/records/settings";
+import { hexToUint8Array, uint8ArrayToHex } from "uint8array-extras";
 import { beforeEach, describe, expect, test, vi } from "vitest";
 import manifest from "../../../cli/package.json?raw";
 import built from "../../dist/worker.js";
@@ -741,5 +742,17 @@ describe("the built bundle", () => {
     const answered = await done<{ version: string }>(await api(built, token, "GET", ROUTES.whoami.path()));
 
     expect(answered.version).toBe((JSON.parse(manifest) as { version: string }).version);
+  });
+});
+
+describe("bytes as hex, inside the runtime the Worker runs in", () => {
+  // Drift: stored hashes, the signing key, and visitor keys were written in these exact characters; a hex library that failed in this runtime, or wrote capitals, would match none of them.
+  test.each([
+    [[], ""],
+    [[0], "00"],
+    [[0x00, 0x0f, 0xff], "000fff"],
+    [[0xde, 0xad, 0xbe, 0xef], "deadbeef"],
+  ])("the bytes %j are %j, both ways", (bytes, hex) => {
+    expect({ written: uint8ArrayToHex(Uint8Array.from(bytes)), read: Array.from(hexToUint8Array(hex)) }).toEqual({ written: hex, read: bytes });
   });
 });

@@ -4,7 +4,7 @@
 //
 // It is bound to the email of the session and lives twelve hours. Nothing is stored: the token is checked against the key alone.
 
-import { toHex } from "@poplin/core/src/records/hex";
+import { hexToUint8Array, uint8ArrayToHex } from "uint8array-extras";
 
 const LIFETIME_MS = 12 * 60 * 60 * 1000;
 const MIN_SECRET_BYTES = 32;
@@ -22,12 +22,6 @@ interface Binding {
 
 function signedText(email: string, issuedAt: number): Uint8Array<ArrayBuffer> {
   return ENCODER.encode(`${PURPOSE}\n${email}\n${issuedAt}`);
-}
-
-function fromHex(text: string): Uint8Array<ArrayBuffer> {
-  const pairs = text.match(/../g) ?? [];
-
-  return Uint8Array.from(pairs, (pair) => Number.parseInt(pair, 16));
 }
 
 /**
@@ -51,7 +45,7 @@ export function importCsrfKey(secret: Uint8Array<ArrayBuffer>): Promise<CryptoKe
 export async function mintCsrfToken(binding: Binding): Promise<string> {
   const signature = await crypto.subtle.sign(HMAC.name, binding.key, signedText(binding.email, binding.now));
 
-  return `${binding.now}.${toHex(new Uint8Array(signature))}`;
+  return `${binding.now}.${uint8ArrayToHex(signature)}`;
 }
 
 /**
@@ -65,7 +59,7 @@ export async function checkCsrfToken(token: string, binding: Binding): Promise<b
   if (issued === undefined || signature === undefined) return false;
 
   const issuedAt = Number(issued);
-  const genuine = await crypto.subtle.verify(HMAC.name, binding.key, fromHex(signature), signedText(binding.email, issuedAt));
+  const genuine = await crypto.subtle.verify(HMAC.name, binding.key, hexToUint8Array(signature), signedText(binding.email, issuedAt));
   if (!genuine) return false;
 
   return binding.now - issuedAt <= LIFETIME_MS;

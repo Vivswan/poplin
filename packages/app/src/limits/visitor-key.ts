@@ -6,9 +6,9 @@
 // The address comes from the caller, which reads it from wherever its host puts the address the host itself saw, never from a header a visitor can set.
 // The key is a keyed hash of the day and the network, so it cannot be turned back into an address, and yesterday's key says nothing about today's.
 
-import { toHex } from "@poplin/core/src/records/hex";
 import { dayOf } from "@poplin/core/src/records/views";
 import ipaddr from "ipaddr.js";
+import { uint8ArrayToHex } from "uint8array-extras";
 
 /** What stands in for the network when the address is absent or is no address: all such requests share one count. */
 const NO_NETWORK = "unknown";
@@ -52,5 +52,5 @@ export async function visitorKey(address: string | undefined, secret: CryptoKey,
   const hash = await crypto.subtle.sign("HMAC", secret, new TextEncoder().encode(`${dayOf(now)}\n${network}`));
   const bytes = new Uint8Array(hash, 0, KEY_BYTES);
 
-  return toHex(bytes) as VisitorKey;
+  return uint8ArrayToHex(bytes) as VisitorKey;
 }

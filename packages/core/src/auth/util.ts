@@ -1,6 +1,6 @@
 // What the credentials share: random hex, a SHA-256 digest in hex, and a comparison that takes the same time wherever two texts differ.
 
-import { toHex } from "../records/hex";
+import { uint8ArrayToHex } from "uint8array-extras";
 
 const KEY_BYTES = 32;
 const HMAC = { name: "HMAC", hash: "SHA-256" } as const;
@@ -12,7 +12,7 @@ const ENCODER = new TextEncoder();
  * @returns lowercase hex, two characters a byte
  */
 export function randomHex(byteCount: number): string {
-  return toHex(crypto.getRandomValues(new Uint8Array(byteCount)));
+  return uint8ArrayToHex(crypto.getRandomValues(new Uint8Array(byteCount)));
 }
 
 /**
@@ -21,7 +21,7 @@ export function randomHex(byteCount: number): string {
  * @returns the SHA-256 of its UTF-8 bytes, as 64 lowercase hex characters
  */
 export async function sha256Hex(text: string): Promise<string> {
-  return toHex(new Uint8Array(await crypto.subtle.digest(HMAC.hash, ENCODER.encode(text))));
+  return uint8ArrayToHex(await crypto.subtle.digest(HMAC.hash, ENCODER.encode(text)));
 }
 
 /**

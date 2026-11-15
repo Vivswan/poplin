@@ -54,7 +54,6 @@
     "./src/names/names": "./src/names/names.ts",
     "./src/names/marker": "./src/names/marker.ts",
     "./src/records/audit": "./src/records/audit.ts",
-    "./src/records/hex": "./src/records/hex.ts",
     "./src/records/settings": "./src/records/settings.ts",
     "./src/records/site": "./src/records/site.ts",
     "./src/records/update": "./src/records/update.ts",
@@ -75,6 +74,7 @@
     "nanoid": "6.0.2",
     "pretty-bytes": "7.2.0",
     "semver": "7.8.6",
+    "uint8array-extras": "1.6.0",
     "valibot": "1.5.0"
   },
   "devDependencies": {

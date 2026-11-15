@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test";
+import { createHmac } from "node:crypto";
 
 import { checkCsrfToken, importCsrfKey, mintCsrfToken } from "../../../src/dashboard/security/csrf";
 
@@ -7,7 +8,8 @@ const TWELVE_HOURS_MS = 12 * 60 * 60 * 1000;
 const EMAIL = "owner@example.com";
 
 test("a token holds for the email and the key it was made with, for twelve hours, and for nothing else", async () => {
-  const key = await importCsrfKey(new Uint8Array(32).fill(3));
+  const secret = new Uint8Array(32).fill(3);
+  const key = await importCsrfKey(secret);
   const otherKey = await importCsrfKey(new Uint8Array(32).fill(4));
   const token = await mintCsrfToken({ key, email: EMAIL, now: NOW });
   const [issued = "", signature = ""] = token.split(".");
@@ -27,7 +29,8 @@ test("a token holds for the email and the key it was made with, for twelve hours
     ["without a signature", `${issued}.`, { key, email: EMAIL, now: NOW }, false],
   ] as const;
 
-  expect(token).toMatch(/^1700000000000\.[0-9a-f]{64}$/);
+  // Drift: open forms carry tokens written in lowercase hex; another spelling of the same signature would refuse every one of them.
+  expect(token).toBe(`${NOW}.${createHmac("sha256", secret).update(`poplin-dashboard-csrf\n${EMAIL}\n${NOW}`).digest("hex")}`);
 
   for (const [what, value, binding, holds] of cases) expect([what, await checkCsrfToken(value, binding)]).toEqual([what, holds]);
 });
