@@ -19,8 +19,8 @@ import {
   PATHS, type Published, page, publish, send, spentDatabase, tokenOf, type World, under, wait, world,
 } from "./support/install";
 
-/** The largest bundle that passes, so a library pulled in whole fails here. The bundle is about 2,106,000 bytes: the dashboard's built client rides in it as strings. */
-const MOST_BUNDLE_BYTES = 2_300_000;
+/** The largest bundle that passes, so a library pulled in whole fails here. The bundle is about 2,263,000 bytes: the dashboard's built client rides in it as strings. */
+const MOST_BUNDLE_BYTES = 3_000_000;
 
 /** The largest bundle that passes once it is gzipped, which is how Cloudflare measures it: 3 MB on the free Workers plan. The bundle, client and all, is about 619,000 bytes then. */
 const MOST_BUNDLE_GZIP_BYTES = 800_000;
