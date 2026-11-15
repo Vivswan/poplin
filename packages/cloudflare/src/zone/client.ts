@@ -5,7 +5,6 @@ import { APIConnectionError, APIError } from "cloudflare/error";
 import { BaseZones } from "cloudflare/resources/zones/zones";
 
 const RATE_LIMITED_STATUS = 429;
-const WHOLE_SECONDS = /^\d+$/;
 const ZONE_PLANS: ReadonlySet<string> = new Set(["free", "pro", "business", "enterprise"]);
 
 /** Where to send a call and the key that authorises it. `baseUrl` and `fetch` are absent outside tests. */
@@ -21,10 +20,10 @@ interface ApiRefusal {
   readonly message: string;
 }
 
-/** A call that did not succeed. `refused` is Cloudflare's own answer; `network` means no answer arrived. */
+/** A call that did not succeed. `refused` is Cloudflare's own answer, `rate-limited` a last answer that asked to wait (429), and `network` means no answer arrived. */
 export type CloudflareFailure =
   | { readonly ok: false; readonly failure: "refused"; readonly status: number; readonly errors: readonly ApiRefusal[] }
-  | { readonly ok: false; readonly failure: "rate-limited"; readonly retryAfterSeconds: number | undefined }
+  | { readonly ok: false; readonly failure: "rate-limited" }
   | { readonly ok: false; readonly failure: "network"; readonly message: string };
 
 /** The `result` of Cloudflare's reply, or why there is none. */
@@ -47,17 +46,10 @@ function isRefusal(entry: unknown): entry is ApiRefusal {
   return "code" in entry && typeof entry.code === "number" && "message" in entry && typeof entry.message === "string";
 }
 
-function retryAfterSeconds(headers: Headers | undefined): number | undefined {
-  const hint = headers?.get("retry-after") ?? "";
-  if (!WHOLE_SECONDS.test(hint)) return undefined;
-
-  return Number(hint);
-}
-
 function failureOf(error: APIError): CloudflareFailure {
   if (error instanceof APIConnectionError || error.status === undefined) return { ok: false, failure: "network", message: error.message };
 
-  if (error.status === RATE_LIMITED_STATUS) return { ok: false, failure: "rate-limited", retryAfterSeconds: retryAfterSeconds(error.headers) };
+  if (error.status === RATE_LIMITED_STATUS) return { ok: false, failure: "rate-limited" };
 
   const errors: unknown = error.errors;
   const refusals = Array.isArray(errors) ? errors.filter(isRefusal) : [];
@@ -76,11 +68,13 @@ function planOf(name: string | undefined): ZonePlan {
 /**
  * Make one call to the Cloudflare API with the key the caller holds.
  *
+ * A busy answer (429), a failure of Cloudflare's own (5xx), and a dropped connection are tried again by the SDK, twice at most, after the wait Cloudflare names, or else up to half a second and then up to one.
+ *
  * @param call - builds an SDK resource on the given client and awaits one request
- * @returns the reply's `result`, or the failure; a refusal by Cloudflare is a value, never an exception, and nothing is retried
+ * @returns the reply's `result`, or the failure of the last try; a refusal by Cloudflare is a value, never an exception
  */
 export async function callCloudflare<Value>(connection: Connection, call: (api: BaseCloudflare) => Promise<Value>): Promise<CloudflareResult<Value>> {
-  const api = new BaseCloudflare({ apiToken: connection.key, baseURL: connection.baseUrl, fetch: connection.fetch, maxRetries: 0, logLevel: "off" });
+  const api = new BaseCloudflare({ apiToken: connection.key, baseURL: connection.baseUrl, fetch: connection.fetch, logLevel: "off" });
 
   try {
     return { ok: true, value: await call(api) };

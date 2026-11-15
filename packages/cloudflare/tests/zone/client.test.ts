@@ -38,26 +38,24 @@ describe("callCloudflare", () => {
     );
   });
 
-  const limited: readonly { readonly name: string; readonly headers: Record<string, string>; readonly retryAfterSeconds: number | undefined }[] = [
-    { name: "a hint in seconds", headers: { "retry-after": "7" }, retryAfterSeconds: 7 },
-    { name: "no hint", headers: {}, retryAfterSeconds: undefined },
-    { name: "a hint that is a date", headers: { "retry-after": "Wed, 21 Oct 2026 07:28:00 GMT" }, retryAfterSeconds: undefined },
+  const busy: readonly { readonly name: string; readonly status: number; readonly times: number; readonly asks: number; readonly ends: unknown }[] = [
+    { name: "a 429 once", status: 429, times: 1, asks: 2, ends: { ok: true, value: { id: "zone-1" } } },
+    { name: "a 502 once", status: 502, times: 1, asks: 2, ends: { ok: true, value: { id: "zone-1" } } },
+    { name: "a 429 twice", status: 429, times: 2, asks: 3, ends: { ok: true, value: { id: "zone-1" } } },
+    { name: "a 429 every time", status: 429, times: 3, asks: 3, ends: { ok: false, failure: "rate-limited" } },
   ];
 
-  test.each(limited)(
-    "a 429 with $name is its own outcome and is asked once: a hidden retry would spend the Worker's subrequests",
-    async ({ headers, retryAfterSeconds }) => {
-      await withFake(
-        () => refusal(429, 971, "Please wait and consider throttling your request speed", headers),
-        async (connection, asked) => {
-          const result = await callCloudflare(connection, (api) => new BaseZones(api).get({ zone_id: "zone-1" }));
+  // Drift: a repair is some thirty calls in a row and stops at the first that fails. Asked once, one busy answer ends it; asked without end, it spends the fifty requests a Worker may send.
+  test.each(busy)("$name is asked $asks times in all and ends as $ends", async ({ status, times, asks, ends }) => {
+    await withFake(
+      (_entry, earlier) => (earlier < times ? refusal(status, 971, "Please wait and consider throttling your request speed", { "retry-after-ms": "1" }) : reply({ id: "zone-1" })),
+      async (connection, asked) => {
+        const result: unknown = await callCloudflare(connection, (api) => new BaseZones(api).get({ zone_id: "zone-1" }));
 
-          expect(result).toEqual({ ok: false, failure: "rate-limited", retryAfterSeconds });
-          expect(asked).toHaveLength(1);
-        },
-      );
-    },
-  );
+        expect([result, asked.length]).toEqual([ends, asks]);
+      },
+    );
+  });
 
   test("an answer that never arrives is a network failure, apart from a refusal", async () => {
     let closed = { key: "test-key", baseUrl: "" };

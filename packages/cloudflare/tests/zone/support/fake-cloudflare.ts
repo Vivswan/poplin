@@ -6,11 +6,11 @@ import { type Asked, bodyOf, refusal } from "./replies";
 /**
  * Serve hand-written replies on a local port for the length of one test.
  *
- * @param respond - answers one request; anything it does not know is a 404 in Cloudflare's envelope
+ * @param respond - answers one request, told how many came before it; anything it does not know is a 404 in Cloudflare's envelope
  * @param run - receives the connection to the fake and the live list of what was asked
  */
 export async function withFake(
-  respond: (asked: Asked) => Response | undefined,
+  respond: (asked: Asked, earlier: number) => Response | undefined,
   run: (connection: Connection, asked: readonly Asked[]) => Promise<void>,
 ): Promise<void> {
   const asked: Asked[] = [];
@@ -22,7 +22,7 @@ export async function withFake(
 
       asked.push(entry);
 
-      return respond(entry) ?? refusal(404, 7003, "No route for that URI");
+      return respond(entry, asked.length - 1) ?? refusal(404, 7003, "No route for that URI");
     },
   });
 
