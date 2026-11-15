@@ -7,7 +7,7 @@ import { cleanup, fireEvent, render, within } from "@testing-library/react";
 import type { ReactNode } from "react";
 
 import type { AccessActions } from "@/access/access-actions";
-import type { Token, Waiting, WaitingLogin } from "@/access/access-queries";
+import type { Ended, Token, Waiting, WaitingLogin } from "@/access/access-queries";
 import { TokensTab } from "@/access/tokens-tab";
 
 /** A login that waits. */
@@ -15,6 +15,9 @@ const WAITING_LOGIN = { id: "0cbb997f737c56ae", scope: "admin", computer: "build
 
 /** A token that is allowed. */
 const TOKEN = { id: "cd45ee5db1827382", scope: "publisher", note: "report agent", created: 1_794_000_000_000, expires: "never" } as Token;
+
+/** A token a person removed. */
+const ENDED = { tokens: [{ id: "00000000000000a1", scope: "publisher", note: "old laptop", created: 1_793_000_000_000, ended: 1_794_000_000_000, how: "removed", by: "mira@example.com" }], more: false } as Ended;
 
 /** The order of a list nobody sorted. */
 const UNSORTED = { key: "allowed", descending: true };
@@ -31,11 +34,12 @@ const ACTIONS = {
 } as unknown as AccessActions;
 
 /** Draw the tab over what the server listed. */
-function Tab({ tokens = [TOKEN], failure }: { readonly tokens?: readonly Token[] | null; readonly failure?: string }): ReactNode {
+function Tab({ tokens = [TOKEN], failure, ended, waits = [WAITING_LOGIN] }: { readonly tokens?: readonly Token[] | null; readonly failure?: string; readonly ended?: Ended; readonly waits?: readonly WaitingLogin[] }): ReactNode {
   return (
     <TokensTab
       tokens={tokens ?? undefined}
-      waiting={{ logins: [WAITING_LOGIN], more: 0 } as Waiting}
+      ended={ended}
+      waiting={{ logins: waits, more: 0 } as Waiting}
       failure={failure}
       waitingFailure={undefined}
       sort={UNSORTED}
@@ -103,5 +107,19 @@ describe("a waiting login with no token beside it", () => {
 
     expect(row("build-server").getByRole("button", { name: "Review build-server" })).toBeDefined();
     expect(within(document.body).getAllByText("The tokens were not read.").length).toBeGreaterThan(0);
+  });
+});
+
+describe("the removed tokens under the list", () => {
+  // Drift: the fold would be missing where it matters most, on an install whose every token was removed, or stand empty where none ever was.
+  test.each([
+    ["under the tokens that work", [TOKEN], [WAITING_LOGIN], ENDED, true],
+    ["where no token works and none waits", [], [], ENDED, true],
+    ["nowhere, where no token ended", [TOKEN], [WAITING_LOGIN], { tokens: [], more: false } as Ended, false],
+    ["nowhere, while they are being read", [TOKEN], [WAITING_LOGIN], undefined, false],
+  ] as const)("they are offered %s", (_where, tokens, waits, ended, offered) => {
+    render(<Tab tokens={tokens} waits={waits} ended={ended} />);
+
+    expect(within(document.body).queryAllByRole("button", { name: /^Removed tokens/ }).length > 0).toBe(offered);
   });
 });

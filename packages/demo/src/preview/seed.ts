@@ -72,6 +72,7 @@ const [HISTORY_DAYS, EARLIER_DAYS, CHECK_EVERY] = [31, 170, 7];
 
 /** What happened to the install besides the making of its sites, the oldest moment first. The settings end with a second login, a limit on the sites, and a day's requests above the provider's free limit, so its warning shows. */
 const HISTORY: readonly PlainMoment[] = [
+  { ago: 44.5, does: "token", by: "mira", note: "first setup", scope: "admin" },
   { ago: 30.9, does: "token", by: "mira", note: "report agent" },
   { ago: 30.8, does: "token", by: "mira", note: "travel agent" },
   { ago: 29.6, does: "settings", by: "mira", changes: { logins: ["mira@example.com", SECOND_ADMIN] } },
@@ -79,11 +80,14 @@ const HISTORY: readonly PlainMoment[] = [
   { ago: 28.9, does: "domain", by: "mira", run: "check" },
   { ago: 28.8, does: "domain", by: "mira", run: "repair" },
   { ago: 26.5, does: "token", by: "jonas", note: "old laptop" },
+  { ago: 25.1, does: "token", by: "jonas", note: "nightly build" },
+  { ago: 24.8, does: "token", by: "mira", note: "intern laptop" },
   { ago: 24.4, does: "login", by: "mira" },
   { ago: 23.2, does: "login", by: "jonas" },
   { ago: 21.6, does: "login", by: "mira" },
   { ago: 17.3, does: "login", by: "jonas" },
   { ago: 14.1, does: "login", by: "mira" },
+  { ago: 13.9, does: "revoke", by: "jonas", note: "intern laptop" },
   { ago: 12.4, does: "login", by: "jonas" },
   { ago: 11.2, does: "computer", by: "mira", computer: "design-laptop", allow: true },
   { ago: 10.6, does: "login", by: "jonas" },
@@ -91,6 +95,7 @@ const HISTORY: readonly PlainMoment[] = [
   { ago: 7.4, does: "login", by: "mira" },
   { ago: 6.1, does: "computer", by: "jonas", computer: "kiosk-display", allow: false },
   { ago: 4.3, does: "login", by: "mira" },
+  { ago: 4.1, does: "revoke", by: "nightly build", note: "nightly build" },
   { ago: 2.9, does: "login", by: "jonas" },
   { ago: 1.8, does: "login", by: "jonas" },
   { ago: 1, does: "settings", by: "mira", changes: { max_sites: 40, requests_per_day: 250_000 } },
@@ -120,9 +125,10 @@ interface SampleFile {
 /** The files of every sample site, by the name of its folder under `demo/samples`. */
 export type Samples = Readonly<Record<string, readonly SampleFile[]>>;
 
-/** A moment that touches no site: how many days ago it happens, what is done, and by whom. A `computer` asks to publish and is allowed or denied. */
+/** A moment that touches no site: how many days ago it happens, what is done, and by whom. A token is a publisher's unless it names another scope. A `computer` asks to publish and is allowed or denied. */
 type PlainMoment = { readonly ago: number; readonly by: Who } & (
-  | { readonly does: "token" | "revoke"; readonly note: string }
+  | { readonly does: "token"; readonly note: string; readonly scope?: "admin" }
+  | { readonly does: "revoke"; readonly note: string }
   | { readonly does: "settings"; readonly changes: Readonly<Record<string, unknown>> }
   | { readonly does: "domain"; readonly run: "check" | "repair" }
   | { readonly does: "computer"; readonly computer: string; readonly allow: boolean }
@@ -228,9 +234,10 @@ async function play(world: World, cast: Cast, moment: Moment): Promise<void> {
 
   switch (moment.does) {
     case "token": {
-      const { record } = done(await issueToken(install, actor, { note: moment.note, scope: "publisher" }), `the token of ${moment.note}`);
+      const scope = moment.scope ?? "publisher";
+      const { record } = done(await issueToken(install, actor, { note: moment.note, scope }), `the token of ${moment.note}`);
       cast.tokens.set(moment.note, record.id);
-      cast.actors.set(moment.note, { scope: "publisher", holder: record.id });
+      cast.actors.set(moment.note, { scope, holder: record.id });
 
       return undefined;
     }

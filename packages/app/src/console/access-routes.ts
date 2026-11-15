@@ -6,14 +6,14 @@
 //   POST /logins/decide            allow or deny the login under a code; counted as a try at a code
 //   GET  /people                   the emails that can log in, and which one asks
 //   POST /people/add, /remove      one email in, or out, in one step each
-//   GET  /tokens                   every token, never its value; ?sort= with ?dir=
-//   POST /tokens/<id>/remove       the token stops working
+//   GET  /tokens                   every token that works, never its value; ?sort= with ?dir=; and the newest that ended
+//   POST /tokens/<id>/remove       the token stops working, and is listed among the ended ones
 
 import { vValidator } from "@hono/valibot-validator";
 import { decideLogin, listLogins, showLogin } from "@poplin/core/src/actions/computer-logins";
 import { readConfig } from "@poplin/core/src/actions/config";
 import { addLogin, removeLogin } from "@poplin/core/src/actions/logins";
-import { listTokens, revokeToken } from "@poplin/core/src/actions/manage-tokens";
+import { listTokenStates, revokeToken } from "@poplin/core/src/actions/manage-tokens";
 import { CODE_KEY } from "@poplin/core/src/api/routes";
 import { Hono, type MiddlewareHandler } from "hono";
 import * as v from "valibot";
@@ -48,7 +48,7 @@ const DECISION = v.object({ code: v.string(), allow: v.boolean(), confirm: v.opt
 const PERSON = v.object({ login: v.string() });
 
 /** One token as the listing answers it. */
-type Token = Extract<Awaited<ReturnType<typeof listTokens>>, { ok: true }>["tokens"][number];
+type Token = Extract<Awaited<ReturnType<typeof listTokenStates>>, { ok: true }>["tokens"][number];
 
 /** Refuse a try at a login's code that does not fit the asking visitor's minute. */
 const fewCodes: MiddlewareHandler<Shared> = async (context, next) => {
@@ -129,9 +129,10 @@ export const accessRoutes = new Hono<Shared>()
   .get("/tokens", vValidator("query", TOKENS_QUERY, refuseInvalid), async (context) => {
     const { install, actor } = context.get("asker");
     const { sort, dir } = context.req.valid("query");
-    const listed = await listTokens(install, actor);
+    const listed = await listTokenStates(install, actor);
+    if (!listed.ok) return refused(context, listed);
 
-    return listed.ok ? context.json({ ok: true as const, tokens: sortedTokens(listed.tokens, sort, dir === "desc") }) : refused(context, listed);
+    return context.json({ ok: true as const, tokens: sortedTokens(listed.tokens, sort, dir === "desc"), ended: listed.ended, more: listed.more });
   })
   .post("/tokens/:token/remove", vValidator("param", ONE_TOKEN, refuseInvalid), vValidator("json", NOTHING, refuseInvalid), async (context) => {
     const { install, actor } = context.get("asker");

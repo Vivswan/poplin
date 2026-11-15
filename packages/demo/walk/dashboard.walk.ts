@@ -1,4 +1,4 @@
-// The link walk: every place the dashboard's own controls lead to, on a wide screen and on a phone, in the light scheme and in the dark one. A question is opened and left, so nothing is changed until the last stop, which starts the sample data over.
+// The link walk: every place the dashboard's own controls lead to, on a wide screen and on a phone, in the light scheme and in the dark one. A question is opened and left. One token is removed near the end, and the last stop starts the sample data over.
 
 import { readFile } from "node:fs/promises";
 
@@ -236,6 +236,15 @@ const STOPS: readonly Stop[] = [
     close: leaveBy("Keep"),
   },
   {
+    name: "a removed token, which then stands under Removed tokens",
+    open: async (page) => {
+      await fromRowMenu(page, SAMPLE.token, "Remove");
+      await leaveBy("Remove")(page);
+      await page.getByRole("button", { name: /^Removed tokens/ }).click();
+    },
+    shows: (page, wide) => [rows(page, wide, "Removed tokens").getByText(SAMPLE.token, { exact: true })],
+  },
+  {
     name: "the review of a waiting login",
     open: (page) => page.getByRole("button", { name: `Review ${SAMPLE.login}`, exact: true }).click(),
     shows: (page) => [
@@ -330,7 +339,7 @@ function question(page: Page, title: string | RegExp): Locator {
   return page.getByRole("alertdialog", { name: title, exact: true });
 }
 
-/** Leave a question by the button that does not do the change. */
+/** Leave a question by one of its buttons. */
 function leaveBy(label: string): (page: Page) => Promise<void> {
   return (page) => page.getByRole("alertdialog").getByRole("button", { name: label, exact: true }).click();
 }

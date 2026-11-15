@@ -6,7 +6,7 @@ import { useMatches, useNavigate, useParams } from "@tanstack/react-router";
 import { type ReactNode, useMemo, useRef } from "react";
 
 import { accessActions } from "@/access/access-actions";
-import { ACCESS_KEY, usePeople, useReview, useTokens, useWaiting } from "@/access/access-queries";
+import { ACCESS_KEY, useEndedTokens, usePeople, useReview, useTokens, useWaiting } from "@/access/access-queries";
 import { askedIn, TOKENS_PATH, PEOPLE_PATH, tokenSortOf, tokenSortQuery } from "@/access/access-values";
 import { PeopleTab } from "@/access/people-tab";
 import { ReviewDialog } from "@/access/review-dialog";
@@ -56,6 +56,7 @@ export function AccessScreen(): ReactNode {
   const sort = tokenSortOf(query);
   const people = usePeople(tab === "people");
   const tokens = useTokens(sort, tab === "tokens");
+  const ended = useEndedTokens(sort, tab === "tokens");
   const kept = listQuery(query);
   const opener = useRef<HTMLElement | null>(null);
   const openReview = (id: string): void => {
@@ -79,6 +80,7 @@ export function AccessScreen(): ReactNode {
         ) : (
           <TokensTab
             tokens={tokens.data}
+            ended={ended.data}
             waiting={listed ? waiting.data : undefined}
             failure={tokens.error?.message}
             waitingFailure={listed ? waiting.error?.message : undefined}

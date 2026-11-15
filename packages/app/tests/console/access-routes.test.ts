@@ -7,6 +7,9 @@ import { issueToken } from "@poplin/core/src/actions/manage-tokens";
 
 import { openConsole } from "./support/console";
 
+/** One day, in milliseconds. */
+const DAY_MS = 86_400_000;
+
 /** A console the tests ask. */
 type Opened = Awaited<ReturnType<typeof openConsole>>;
 
@@ -197,5 +200,28 @@ describe("the tokens", () => {
     expect(removed).toEqual({ ok: true, name: "report agent" });
     expect([again.sentence, malformed.sentence]).toEqual(["That token is gone already.", "That token is gone already."]);
     expect((await read(await opened.get("/data/tokens"))).tokens).toEqual([]);
+  });
+
+  // Drift: a removed token would vanish from the screen with who removed it, an admin token past its 30 days would stand among the working ones, or an ended token's hash would reach the screen.
+  test("that ended are listed apart, the one that ended last first, each with how it ended and no secret", async () => {
+    const opened = await openConsole();
+    const admin = { scope: "admin", holder: opened.base.owner } as const;
+    const now = opened.base.clock.now;
+    const issue = async (note: string, scope: "admin" | "publisher", at: number): Promise<string> => {
+      opened.base.clock.now = at;
+      const issued = await issueToken(opened.base.install, admin, { note, scope });
+
+      return issued.ok ? issued.record.id : "";
+    };
+    const [laptop, agent] = [await issue("old laptop", "admin", now - 31 * DAY_MS), await issue("report agent", "publisher", now - 2000), await issue("atlas", "publisher", now - 1000)];
+    opened.base.clock.now = now;
+    await opened.change(`/data/tokens/${agent}/remove`, {});
+    const listed = await read(await opened.get("/data/tokens?sort=name&dir=asc"));
+
+    expect([(listed.tokens as readonly Answer[]).map((token) => token.note), listed.more]).toEqual([["atlas"], false]);
+    expect(listed.ended).toEqual([
+      { id: agent, scope: "publisher", note: "report agent", created: now - 2000, ended: now, how: "removed", by: opened.base.owner },
+      { id: laptop, scope: "admin", note: "old laptop", created: now - 31 * DAY_MS, ended: now - DAY_MS, how: "ran_out" },
+    ]);
   });
 });

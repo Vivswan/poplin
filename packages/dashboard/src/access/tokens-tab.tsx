@@ -1,11 +1,12 @@
-// The Tokens tab of Access: one list of the logins that wait to be allowed and the tokens that are, with Review or Remove at each row's end, and the command that logs a computer in behind a button. A token's value and a login's code are never here.
+// The Tokens tab of Access: one list of the logins that wait to be allowed and the tokens that are, with Review or Remove at each row's end, and the removed tokens folded away under it. A token's value and a login's code are never here.
 
 import { CopyIcon, PlusIcon } from "lucide-react";
 import { type ReactNode, useMemo, useState } from "react";
 
 import type { AccessActions } from "@/access/access-actions";
-import type { Token, Waiting, WaitingLogin } from "@/access/access-queries";
+import type { Ended, Token, Waiting, WaitingLogin } from "@/access/access-queries";
 import { computerName, SCOPE_WORDS, TOKEN_ORDERS } from "@/access/access-values";
+import { RemovedTokens } from "@/access/removed-tokens";
 import { RowMenu } from "@/access/row-menu";
 import { type TokenRow, tokenRows } from "@/access/token-rows";
 import { Unread } from "@/access/unread";
@@ -51,6 +52,9 @@ const COLUMNS: readonly ColumnSpec<TokenRow>[] = [
 interface TokensTabProps {
   /** The tokens in the order the address asks for; `undefined` while they are being read. */
   readonly tokens: readonly Token[] | undefined;
+
+  /** The tokens that ended; `undefined` while they are being read. */
+  readonly ended?: Ended | undefined;
 
   /** The newest waiting logins and how many more wait; `undefined` while they are being read, and where they are not to be told of. */
   readonly waiting: Waiting | undefined;
@@ -194,6 +198,13 @@ function afterRows(more: number, unread: string | undefined): ReactNode {
   );
 }
 
+/** The name of each token that has one, by its id: what a token removed by another token is said to be removed by. */
+function namesOf(tokens: readonly Token[], ended: Ended | undefined): Record<string, string> {
+  const named = [...tokens, ...(ended?.tokens ?? [])].filter((token) => token.note.trim() !== "");
+
+  return Object.fromEntries(named.map((token) => [token.id, token.note]));
+}
+
 /** The question before a token is removed. */
 function leavingQuestion(token: Token | undefined): Question | undefined {
   if (token === undefined) return undefined;
@@ -202,13 +213,21 @@ function leavingQuestion(token: Token | undefined): Question | undefined {
 }
 
 /** Draw the Tokens tab. */
-export function TokensTab({ tokens, waiting, failure, waitingFailure, sort, onSort, onReview, actions, onRetry }: TokensTabProps): ReactNode {
+export function TokensTab({ tokens, ended, waiting, failure, waitingFailure, sort, onSort, onReview, actions, onRetry }: TokensTabProps): ReactNode {
   const [leaving, setLeaving] = useState<Token>();
   const layout = useTableLayout("tokens", COLUMNS);
   const rows = useMemo(() => tokenRows(waiting?.logins ?? [], tokens ?? []), [waiting, tokens]);
   // A read of the tokens that was refused does not hide the logins that wait: they are listed, and the refusal is said under them.
   const unreadTokens = tokens === undefined ? failure : undefined;
   const after = afterRows(waiting?.more ?? 0, unreadTokens ?? waitingFailure);
+  const names = useMemo(() => namesOf(tokens ?? [], ended), [tokens, ended]);
+  const removed = ended === undefined || ended.tokens.length === 0 ? undefined : <RemovedTokens ended={ended} names={names} />;
+  const afterAll = after === undefined && removed === undefined ? undefined : (
+    <>
+      {after}
+      {removed}
+    </>
+  );
 
   const actionOf = (row: TokenRow): ReactNode => {
     const { shown } = computerName(row.name);
@@ -232,16 +251,19 @@ export function TokensTab({ tokens, waiting, failure, waitingFailure, sort, onSo
 
     if (tokens !== undefined && rows.length === 0) {
       return (
-        <Empty className="flex-none py-16">
-          <EmptyHeader>
-            <EmptyTitle>No tokens yet</EmptyTitle>
-            <EmptyDescription>Run this on a computer or agent:</EmptyDescription>
-          </EmptyHeader>
-          <EmptyContent className="max-w-full">
-            <LoginCommand onCopy={actions.copyCommand} />
-            {after}
-          </EmptyContent>
-        </Empty>
+        <div className="min-h-0 flex-1 overflow-y-auto">
+          <Empty className="flex-none py-16">
+            <EmptyHeader>
+              <EmptyTitle>{removed === undefined ? "No tokens yet" : "No tokens"}</EmptyTitle>
+              <EmptyDescription>Run this on a computer or agent:</EmptyDescription>
+            </EmptyHeader>
+            <EmptyContent className="max-w-full">
+              <LoginCommand onCopy={actions.copyCommand} />
+              {after}
+            </EmptyContent>
+          </Empty>
+          {removed}
+        </div>
       );
     }
 
@@ -259,7 +281,7 @@ export function TokensTab({ tokens, waiting, failure, waitingFailure, sort, onSo
             actions={actionOf}
             actionsWidth={ACTION_WIDTH}
             loading={tokens === undefined && rows.length === 0}
-            after={after}
+            after={afterAll}
           />
         </div>
         <div className="min-h-0 flex-1 overflow-y-auto md:hidden">
@@ -279,7 +301,7 @@ export function TokensTab({ tokens, waiting, failure, waitingFailure, sort, onSo
               </li>
             ))}
           </ul>
-          {after}
+          {afterAll}
         </div>
       </>
     );

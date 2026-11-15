@@ -67,7 +67,7 @@ export const SITE_HISTORY: readonly SiteMoment[] = [
 const SETTINGS = ["title", "search_engines", "embeddable", "expires"] as const;
 
 /** Who does a thing: one of the two people, or an agent by the note of its token. */
-export type Who = "mira" | "jonas" | "report agent" | "travel agent";
+export type Who = "mira" | "jonas" | "report agent" | "travel agent" | "nightly build";
 
 /** One sample site as it is first made. */
 export interface Draft {
