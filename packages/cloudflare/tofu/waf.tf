@@ -27,6 +27,11 @@ resource "cloudflare_ruleset" "rate" {
       condition     = var.rate_rule != "zone" || length(local.other_names) == 0
       error_message = "rate_rule = \"zone\" counts every request of the zone, and the zone has hostnames of its own: ${join(", ", local.other_names)}. Set rate_rule to \"hostnames\" on a paid plan, or to \"off\"."
     }
+
+    precondition {
+      condition     = var.rate_rule != "hostnames" || !local.free_plan
+      error_message = "rate_rule = \"hostnames\" reads the hostname, and a rate rule of the Free plan may read the path alone. Set rate_rule to \"zone\", or to \"off\"."
+    }
   }
 }
 
@@ -57,5 +62,6 @@ resource "cloudflare_bot_management" "zone" {
   ai_bots_protection = "block"
 
   # No rule can exempt a request from Bot Fight Mode, and it may challenge poplin's own command line and agents, so only `on` switches it on.
-  fight_mode = var.block_bots == "on"
+  # It is a switch of the Free plan alone, so on a paid plan it is never switched on.
+  fight_mode = local.free_plan && var.block_bots == "on"
 }

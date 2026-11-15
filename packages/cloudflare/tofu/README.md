@@ -61,6 +61,26 @@ DNS has no partial wildcard, so the wildcard record covers every name under the 
 | its own record under a name the routes take, such as `status-poplin.example.com` or `poplin.example.com` | stops with an error that names it |
 | its own hostnames, while `rate_rule` is `zone` | stops with an error that names them |
 | its own hostnames, while `block_bots` is `auto` | sets no bot setting, and the `block_bots` output names them |
+| the Free plan, while `rate_rule` is `hostnames` | stops with an error: a rate rule of the Free plan reads the path alone |
+| a paid plan, while `block_bots` is `on` | blocks AI bots and leaves Bot Fight Mode off: only the Free plan has it |
+
+## The same objects as the setup page
+
+The setup page's Repair and this module make the same objects with the same values. A test holds both to one list, `src/zone/install-pieces.ts`, and a second to one table of values, `src/zone/install-objects.ts`.
+
+| Object | The setup page | This module | Where they differ |
+| --- | --- | --- | --- |
+| DNS records | Repair | `cloudflare_dns_record.poplin` | Repair also removes a marked record the install no longer uses, and skips a name an NS record holds; here a record outside the state stays, and Cloudflare refuses a name an NS record holds |
+| Worker routes | Repair | `cloudflare_workers_route.worker` | Repair also removes a route of the Worker the install no longer uses, and skips a pattern another Worker holds; here a route outside the state stays, and Cloudflare refuses a pattern that is taken |
+| Access policy and application | Repair | `cloudflare_zero_trust_access_policy.logins`, `cloudflare_zero_trust_access_application.login` | nowhere |
+| the Worker's values | Repair | the bindings of `cloudflare_workers_script.poplin` | Repair writes the domain, the first login, the account, and the login's audience, and keeps every other binding; here every binding is declared, with the public word and every first setting |
+| Redirect rule | Repair | `cloudflare_ruleset.https` | Repair writes none where the zone's own Always Use HTTPS is on and the install has no rule yet; here `https_redirect` says so |
+| Guard rules | Repair | `cloudflare_ruleset.guards` | Repair adds its rules beside the zone's own; here they are the whole ruleset |
+| Rate rule | Repair | `cloudflare_ruleset.rate` | Repair picks `zone` on the Free plan and `hostnames` on a paid one, and skips a rule the zone cannot hold; here `rate_rule` says which, and an apply stops |
+| Bot settings | Repair | `cloudflare_bot_management.zone` | Repair only switches on; here an apply also switches Bot Fight Mode off unless `block_bots` is `on` and the zone is on the Free plan |
+| D1 database | Repair, or the deploy | `cloudflare_d1_database.records` | nowhere |
+| R2 bucket, public access off | the deploy; a new bucket has no public address | `cloudflare_r2_bucket.sites`, `cloudflare_r2_managed_domain.sites` | Repair does not read the bucket |
+| Worker and its sweep trigger | the deploy | `cloudflare_workers_script.poplin`, `cloudflare_workers_cron_trigger.sweep` | nowhere |
 
 ## Names and marks
 
@@ -115,7 +135,7 @@ The zone's bot settings cover every hostname of the zone, the dashboard and the 
 | `on` | AI bots blocked, Bot Fight Mode on | AI bots blocked, Bot Fight Mode on |
 | `off` | nothing set | nothing set |
 
-No rule can exempt a request from Bot Fight Mode, and it may challenge `poplin` run from a cloud host.
+Bot Fight Mode is a switch of the Free plan: on a paid plan `on` blocks AI bots and leaves it off. No rule can exempt a request from Bot Fight Mode, and it may challenge `poplin` run from a cloud host.
 
 ## Inputs
 
@@ -187,7 +207,7 @@ The Worker stores the first settings once, while it has none. After that the das
 | D1: Edit | the account | the database |
 | Workers Scripts: Edit | the account | the Worker and its cron trigger |
 | Access: Apps and Policies: Edit | the account | the login |
-| Zone: Read | the zone | the domain's name |
+| Zone: Read | the zone | the domain's name and its plan |
 | DNS: Edit | the zone | the records, and reading the zone's own |
 | Workers Routes: Edit | the zone | the routes |
 | Zone WAF: Edit | the zone | the rate rule and the guard rules |
@@ -212,7 +232,7 @@ The Domain tab's check and repair take two permissions more. Zone Settings: Read
 | add to custom rules the zone already has | the guard rules are the zone's whole custom ruleset. Set `guard_rules` to `false` on a zone with custom rules of its own, and add the `guard_rule_expressions` to them |
 | keep bot settings the zone already has | the module sets the AI bot block and Bot Fight Mode both. Set `block_bots` to `off` on a zone that sets its own |
 | stop a bot Cloudflare has not verified | a bot that presents as a browser passes both rules; telling it apart takes a bot score, which the Free plan does not have |
-| read the zone's plan | a Free plan rate rule reads the path alone: `rate_rule` is `zone` there, and `hostnames` on a paid plan. The input is explicit here; poplin's own setup takes the same three values and only offers the plan's as its default. Bot Fight Mode is a setting of the Free plan: `block_bots` is `auto` or `off` on a paid plan |
+| pick the rate rule from the zone's plan | `rate_rule` is explicit: `zone` on the Free plan, `hostnames` on a paid plan. An apply stops where the plan refuses the one chosen |
 | keep a name several levels deep from the Worker | `a.b-poplin.example.com` also matches the site route; the Worker answers that it is no site |
 | put a login in front of an unlisted or a public site | only an address that ends in `-p-poplin` is behind Access; the Worker sends a private site asked for at any other address there |
 | change a record the zone already has | a record whose comment does not start with `poplin: ` is read and never changed |

@@ -5,6 +5,7 @@ mock_provider "cloudflare" {
     defaults = {
       name    = "example.com"
       account = { id = "0123456789abcdef0123456789abcdef", name = "example account" }
+      plan    = { legacy_id = "free", name = "Free Website", id = "0", price = 0, currency = "USD", frequency = "", can_subscribe = false, is_subscribed = false, legacy_discount = false, externally_managed = false }
     }
   }
 
@@ -107,6 +108,15 @@ run "public_word_of_the_installs_own" {
   variables {
     public_word = "wiki"
     rate_rule   = "hostnames"
+  }
+
+  override_data {
+    target = data.cloudflare_zone.this
+    values = {
+      name    = "example.com"
+      account = { id = "0123456789abcdef0123456789abcdef", name = "example account" }
+      plan    = { legacy_id = "pro", name = "Pro Website", id = "0", price = 25, currency = "USD", frequency = "", can_subscribe = false, is_subscribed = false, legacy_discount = false, externally_managed = false }
+    }
   }
 
   assert {
@@ -548,6 +558,15 @@ run "rate_rule_on_the_hostnames" {
   }
 
   override_data {
+    target = data.cloudflare_zone.this
+    values = {
+      name    = "example.com"
+      account = { id = "0123456789abcdef0123456789abcdef", name = "example account" }
+      plan    = { legacy_id = "pro", name = "Pro Website", id = "0", price = 25, currency = "USD", frequency = "", can_subscribe = false, is_subscribed = false, legacy_discount = false, externally_managed = false }
+    }
+  }
+
+  override_data {
     target = data.cloudflare_dns_records.zone
     values = {
       result = [{
@@ -683,5 +702,40 @@ run "block_bots_forced_on_a_zone_with_other_hostnames" {
   assert {
     condition     = cloudflare_bot_management.zone[0].ai_bots_protection == "block" && cloudflare_bot_management.zone[0].fight_mode == true
     error_message = "block_bots = on is the caller's word that the whole zone may be covered: both switches are set whatever the zone holds."
+  }
+}
+
+# The setup page skips a rate rule that reads the hostname on the Free plan, which refuses one. The module stops instead of sending it.
+run "rate_rule_on_the_hostnames_of_a_free_zone" {
+  command = plan
+
+  variables {
+    rate_rule = "hostnames"
+  }
+
+  expect_failures = [cloudflare_ruleset.rate]
+}
+
+# The setup page switches Bot Fight Mode on only on the Free plan, the one plan that has it.
+run "block_bots_forced_on_a_paid_plan" {
+  command = plan
+
+  variables {
+    block_bots = "on"
+    rate_rule  = "hostnames"
+  }
+
+  override_data {
+    target = data.cloudflare_zone.this
+    values = {
+      name    = "example.com"
+      account = { id = "0123456789abcdef0123456789abcdef", name = "example account" }
+      plan    = { legacy_id = "pro", name = "Pro Website", id = "0", price = 25, currency = "USD", frequency = "", can_subscribe = false, is_subscribed = false, legacy_discount = false, externally_managed = false }
+    }
+  }
+
+  assert {
+    condition     = cloudflare_bot_management.zone[0].ai_bots_protection == "block" && cloudflare_bot_management.zone[0].fight_mode == false
+    error_message = "On a paid plan the AI bot block is set and Bot Fight Mode is never switched on."
   }
 }

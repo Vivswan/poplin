@@ -34,6 +34,9 @@ locals {
 
   domain = data.cloudflare_zone.this.name
 
+  # Whether the zone is on the Free plan, whose rate rules read the path alone and which alone has Bot Fight Mode.
+  free_plan = data.cloudflare_zone.this.plan.legacy_id == "free"
+
   # The dashboard, the login, and the API: always `poplin` under the domain. No site hostname is that name, since each ends in a dash and a word.
   admin_host = "poplin.${local.domain}"
 

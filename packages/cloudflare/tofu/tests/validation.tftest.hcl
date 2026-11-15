@@ -5,6 +5,7 @@ mock_provider "cloudflare" {
     defaults = {
       name    = "example.com"
       account = { id = "0123456789abcdef0123456789abcdef", name = "example account" }
+      plan    = { legacy_id = "free", name = "Free Website", id = "0", price = 0, currency = "USD", frequency = "", can_subscribe = false, is_subscribed = false, legacy_discount = false, externally_managed = false }
     }
   }
 

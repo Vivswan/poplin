@@ -14,6 +14,7 @@ import { type Connection, findZones, listZones, type Zone } from "./client";
 import { syncDatabase } from "./database/database";
 import { syncDns } from "./dns/dns";
 import { INSTALL_OBJECTS } from "./install-objects";
+import type { INSTALL_PIECES } from "./install-pieces";
 import { HTTPS_SWITCH, syncHttps } from "./https/https";
 import { type DomainLayout, privateSitesPattern } from "./layout";
 import { syncRoutes } from "./routes/routes";
@@ -92,7 +93,7 @@ const RIGHT = {
   database: { name: "D1: Edit", key: "d1", type: "edit" },
 } as const satisfies Readonly<Record<string, Right>>;
 
-/** The permissions the calls of each object use, the one its changes use first. A piece with no row here does not compile. */
+/** The permissions the calls of each object use, the one its changes use first. A piece with no row here, or with none in the list the OpenTofu module is held to, does not compile. */
 const RIGHTS = {
   Zone: [RIGHT.zone],
   "DNS record": [RIGHT.dns],
@@ -105,7 +106,7 @@ const RIGHTS = {
   "Rate rule": [RIGHT.waf],
   "Bot settings": [RIGHT.bots],
   "D1 database": [RIGHT.database],
-} as const;
+} as const satisfies Readonly<Record<keyof typeof INSTALL_PIECES.repair, readonly Right[]>>;
 
 /** Where Cloudflare's form for a new token is. The link asks for every account and every zone, the one scope a link can carry: the person narrows it on the form. */
 const TOKEN_FORM = "https://dash.cloudflare.com/profile/api-tokens";
