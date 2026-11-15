@@ -41,7 +41,9 @@ export function VisitsPicker({ picked, onPick }: VisitsPickerProps): ReactNode {
   const [typed, setTyped] = useState("");
   const [asked] = useDebounce(typed.trim(), REST);
   const [open, setOpen] = useState(false);
-  const { data: options = [] } = useOptions(asked, open);
+  const { data: options = [], isPlaceholderData } = useOptions(asked, open);
+  // While the typing rests and while its answer is read, the list still holds the sites of an earlier text.
+  const stale = typed.trim() !== asked || isPlaceholderData;
   const ticked: readonly Option[] = picked.map((site) => ({ id: site.id, title: site.title, name: "" }));
   const full = picked.length >= MOST_PICKED;
 
@@ -52,8 +54,10 @@ export function VisitsPicker({ picked, onPick }: VisitsPickerProps): ReactNode {
       onOpenChange={setOpen}
       items={options}
       filter={null}
+      autoHighlight
       value={ticked}
-      onValueChange={(next: readonly Option[]) => onPick(pickedAfter(picked, next))}
+      // Enter over a list from before the typed text would tick a site the text does not find: the key waits for the list of that text.
+      onValueChange={(next: readonly Option[], details) => (stale && details.event.type === "keydown" ? details.cancel() : onPick(pickedAfter(picked, next)))}
       inputValue={typed}
       onInputValueChange={setTyped}
       isItemEqualToValue={(item: Option, value: Option) => item.id === value.id}

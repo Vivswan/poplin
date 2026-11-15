@@ -604,6 +604,27 @@ test.describe("on a phone, in a question", () => {
   });
 });
 
+// Drift: Enter after typing would tick nothing again, or tick the first site of the list from before the typed text, which the text does not find.
+test("in the list that picks the sites of the graph, Enter ticks the site the typed text finds, and none of the list before it", async ({ page }) => {
+  await arrive(page);
+  await toSection(page, "Usage");
+  await page.getByRole("combobox", { name: "Compare sites", exact: true }).click();
+  const find = page.getByRole("combobox", { name: "Find a site", exact: true });
+  const lines = page.getByRole("list", { name: "Lines", exact: true });
+
+  await find.fill(SAMPLE.site);
+  await expect(page.getByRole("option")).toHaveText([new RegExp(`^${SAMPLE.site}`)]);
+  // The list still holds the first text's site when Enter follows the second text at once.
+  await find.fill(SAMPLE.graphed);
+  await find.press("Enter");
+  await expect(page.getByRole("option")).toHaveText([new RegExp(`^${SAMPLE.graphed}`)]);
+  await expect(lines.getByText(SAMPLE.site, { exact: true })).toHaveCount(0);
+
+  await find.press("Enter");
+  await expect(lines.getByText(SAMPLE.graphed, { exact: true })).toBeVisible();
+  await expect(lines.getByText(SAMPLE.site, { exact: true })).toHaveCount(0);
+});
+
 // Drift: the figures of a column would be as wide as their shapes again, or come from whatever the visitor's machine has, so its times and numbers would end at different places row by row.
 test("two times of the same length take the same room in the face the dashboard carries, where its own face alone gives each its own", async ({ page }) => {
   await arrive(page);
