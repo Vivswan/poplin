@@ -21,7 +21,8 @@ const JSON_TYPE = "application/json";
 const FORM = "application/x-www-form-urlencoded";
 const INTERVAL_MS = 5000;
 const MINUTE_MS = 60_000;
-const STARTS_PER_MINUTE = 5;
+const STARTS_PER_MINUTE = 8;
+const OWN_STARTS_PER_MINUTE = 2;
 const CREDENTIAL = /poplin_(?:login_)?[0-9a-f]{16}_[0-9a-f]{64}/g;
 const YEAR_2100_MS = 4_102_444_800_000;
 const MOST_NAME_LENGTH = 100;
@@ -73,7 +74,7 @@ class Starts {
     }
 
     const own = this.#own.get(visitor) ?? 0;
-    if (own >= STARTS_PER_MINUTE) return 429;
+    if (own >= OWN_STARTS_PER_MINUTE) return 429;
 
     this.#own.set(visitor, own + 1);
     if (this.#all >= STARTS_PER_MINUTE) return 429;
@@ -290,7 +291,7 @@ property(
 );
 
 property(
-  "whatever sixteen other addresses begin and however long they wait, an address that has no login waiting begins one unless five were begun that minute, and it waits until it runs out",
+  "whatever sixteen other addresses begin and however long they wait, an address that has no login waiting begins one unless eight were begun that minute, and it waits until it runs out",
   fc.asyncProperty(fc.array(fc.oneof(fc.nat({ max: 15 }), fc.constantFrom("wait" as const, "minute" as const)), { maxLength: 120 }), fc.nat({ max: 120 }), async (crowd, entry) => {
     const install = await openApi();
     const begin = async (visitor: string): Promise<{ readonly status: number; readonly secret: string }> => {

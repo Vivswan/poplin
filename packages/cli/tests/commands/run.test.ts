@@ -365,7 +365,7 @@ describe("run", () => {
       [`7.9.0 is out; the install runs ${INSTALL_VERSION}`, "an update link is saved, since 2023-11-14", "nothing was started"],
       [`a build of the install has started; 7.9.0 is the newest version, and the install runs ${INSTALL_VERSION} until the build is done`],
     ]);
-    expect([again.code, jsonOf(again)]).toEqual([1, { error: { code: "too_many_requests", message: "the install is asked too often from this address", about: "update", hint: "wait a minute, then try again" } }]);
+    expect([again.code, jsonOf(again)]).toEqual([1, { error: { code: "too_many_requests", message: "the install is asked too often", about: "update", hint: "wait a minute, then try again" } }]);
     expect(jsonOf(echoed).address).toEqual({ set: true, since: NOW });
     expect([forgotten.out, await bench.install.database.readUpdateAddress()]).toEqual([["the update link is removed"], undefined]);
     expect(bench.install.provider.sent).toEqual([["POST", "manual", "no body", REBUILD_ADDRESS]]);
