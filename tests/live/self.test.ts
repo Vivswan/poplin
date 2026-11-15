@@ -84,6 +84,8 @@ const CASES: readonly Case[] = [
     { L1: "skipped", private: "failed", L5: "failed" },
   ],
   ["an install whose own count of a visitor lags behind a burst still shows its own limit", { lateCount: true }, {}, { L1: "skipped" }],
+  ["a rate rule that starts to block seconds after the burst passed its limit still shows its block", { lateRule: true }, {}, { L1: "skipped" }],
+  ["a zone with no rate rule, on a run not told so, fails the check of that rule", { noRateRule: true }, {}, { L1: "skipped", "burst-rate-rule": "failed" }],
   ["an install with no limit of its own fails the check of that limit", { noOwnLimit: true }, {}, { L1: "skipped", "own-limit": "failed" }],
   [
     "a zone whose rules are gone, on a run not told so, fails the checks of those rules",

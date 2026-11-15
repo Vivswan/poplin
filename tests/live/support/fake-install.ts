@@ -38,6 +38,9 @@ const RULE_WINDOW_MS = 10_000;
 /** How late a request enters the own count of an install whose count lags, in milliseconds. */
 const LAG_MS = 1000;
 
+/** How late a request enters the count of a rate rule whose count lags, in milliseconds. */
+const RULE_LAG_MS = 3000;
+
 /** The headers of the fake's own refusals. */
 const REFUSAL_HEADERS = { "Cache-Control": "no-store", "Content-Type": "text/plain; charset=utf-8" };
 
@@ -69,6 +72,12 @@ export interface FakeSwitches {
 
   /** A fault: the install counts no visitor, so it has no limit of its own. */
   readonly noOwnLimit?: boolean;
+
+  /** The rate rule's count takes a request in three seconds late, as the edge's does: it starts to block some seconds after the request past its limit. */
+  readonly lateRule?: boolean;
+
+  /** A fault: the zone holds no rate rule, on a run not told so. */
+  readonly noRateRule?: boolean;
 }
 
 /** A fake install: what sends a request to it, an admin's token, and the pause that moves its time on. */
@@ -105,6 +114,10 @@ export async function openFake(switches: FakeSwitches = {}): Promise<Fake> {
 
   const arrivedIn = (from: number, to: number): number => arrivals.filter((at) => at > from && at <= to).length;
 
+  // How far each count runs behind the requests.
+  const ruleLag = switches.lateRule === true ? RULE_LAG_MS : 0;
+  const ownLag = switches.lateCount === true ? LAG_MS : 0;
+
   // The zone's rules on a site hostname: the guard rule, the bot block, the rate rule. Then the install's own count of one visitor.
   const edge = (request: Request, url: URL): Response | undefined => {
     const guarded = switches.noGuards !== true;
@@ -113,10 +126,9 @@ export async function openFake(switches: FakeSwitches = {}): Promise<Fake> {
     if (CRAWLERS.test(request.headers.get("User-Agent") ?? "")) return new Response("blocked", { status: 403 });
 
     arrivals.push(time);
-    if (arrivedIn(time - RULE_WINDOW_MS, time) > RULE_LIMIT) return new Response("error code: 1015", { status: 429 });
+    if (switches.noRateRule !== true && arrivedIn(time - ruleLag - RULE_WINDOW_MS, time - ruleLag) > RULE_LIMIT) return new Response("error code: 1015", { status: 429 });
 
-    const counted = arrivedIn(time - OWN_WINDOW_MS, switches.lateCount === true ? time - LAG_MS : time);
-    if (switches.noOwnLimit !== true && counted > OWN_LIMIT) return refusal(429, "Too many requests. Try again in 60 seconds.\n", { "Retry-After": "60" });
+    if (switches.noOwnLimit !== true && arrivedIn(time - OWN_WINDOW_MS, time - ownLag) > OWN_LIMIT) return refusal(429, "Too many requests. Try again in 60 seconds.\n", { "Retry-After": "60" });
 
     return undefined;
   };

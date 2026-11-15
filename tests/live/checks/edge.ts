@@ -5,8 +5,14 @@ import { expect } from "bun:test";
 import { type Bench, type Check, Skip } from "../records";
 import { GHOST_ID, labelAddress } from "../util";
 
-/** The most requests the burst sends: past the rate rule's 300 in ten seconds. */
+/** The most requests the burst sends before the paced ones: past the rate rule's 300 in ten seconds. */
 const BURST = 340;
+
+/** The time from one request to the next after the burst, in milliseconds: 400 in ten seconds, so every ten seconds stay past the rule's 300. */
+const TAIL_PACE_MS = 25;
+
+/** The most requests sent after the burst: twenty seconds of them. The rule's count runs up to a few seconds behind the requests. */
+const TAIL = 800;
 
 /** How many requests of the burst are in flight together. */
 const BURST_LANES = 20;
@@ -52,7 +58,6 @@ interface Run {
 
 /** What a finished run met. `saw` is what a failure says of it: the requests, the time, and each answer's count, with nothing an install wrote. */
 interface Met extends Pick<Run, "own" | "rule"> {
-  readonly ms: number;
   readonly saw: string;
 }
 
@@ -88,11 +93,25 @@ async function closeRun(bench: Bench, run: Run): Promise<Met> {
 
   const counts = [...run.answers].map(([answer, count]) => `${answer} x${count}`).join(", ");
 
-  return { own: run.own, rule: run.rule, ms, saw: `${run.sent} requests in ${ms} ms were answered: ${counts}` };
+  return { own: run.own, rule: run.rule, saw: `${run.sent} requests in ${ms} ms were answered: ${counts}` };
+}
+
+/** One request every `paceMs`, however long an answer takes, until the run has sent `most` or `met` says it is over. */
+async function pace(bench: Bench, run: Run, pacing: { readonly most: number; readonly paceMs: number; readonly met: () => boolean }): Promise<void> {
+  const asked: Promise<void>[] = [];
+  const failures: unknown[] = [];
+
+  while (run.sent < pacing.most && !pacing.met() && failures.length === 0) {
+    asked.push(ask(bench, run).catch((error: unknown) => void failures.push(error)));
+    await bench.pause(pacing.paceMs);
+  }
+
+  await Promise.all(asked);
+  if (failures.length > 0) throw failures[0];
 }
 
 /**
- * One request every `PACE_MS`, however long an answer takes, until the install's own limit or the rate rule answers.
+ * Paced requests, until the install's own limit or the rate rule answers.
  *
  * A burst does not reliably show the install's own limit: its count is kept per location and catches up in the background, and an instance holds the settings of up to a minute ago.
  */
@@ -100,21 +119,18 @@ async function sendPaced(bench: Bench): Promise<Met> {
   // The rule may count every request of the zone, so what the checks before sent leaves its window first.
   await bench.pause(RULE_LAPSE_MS);
   const run = openRun();
-  const asked: Promise<void>[] = [];
-  const failures: unknown[] = [];
-
-  while (run.sent < PACED && !run.own && !run.rule && failures.length === 0) {
-    asked.push(ask(bench, run).catch((error: unknown) => void failures.push(error)));
-    await bench.pause(PACE_MS);
-  }
-
-  await Promise.all(asked);
-  if (failures.length > 0) throw failures[0];
+  await pace(bench, run, { most: PACED, paceMs: PACE_MS, met: () => run.own || run.rule });
 
   return closeRun(bench, run);
 }
 
-/** Many requests at once, until the rate rule answers. */
+/**
+ * Many requests at once, then paced ones that keep every ten seconds past the rule's limit, until the rate rule answers.
+ *
+ * The rule's count runs behind the requests, so a burst that is over in a second or two may end before the rule's first block.
+ *
+ * @throws {Skip} the burst alone took the rule's whole window and met no block: the runner never passed the rule's limit
+ */
 async function sendBurst(bench: Bench): Promise<Met> {
   const run = openRun();
 
@@ -122,6 +138,9 @@ async function sendBurst(bench: Bench): Promise<Met> {
     while (run.sent < BURST && !run.rule) await ask(bench, run);
   };
   await Promise.all(Array.from({ length: BURST_LANES }, lane));
+  if (!run.rule && Date.now() - run.started >= RULE_WINDOW_MS) throw new Skip("a runner that sends 300 requests inside ten seconds");
+
+  await pace(bench, run, { most: BURST + TAIL, paceMs: TAIL_PACE_MS, met: () => run.rule });
 
   return closeRun(bench, run);
 }
@@ -223,12 +242,10 @@ export const EDGE_CHECKS: readonly Check[] = [
   },
   {
     id: "burst-rate-rule",
-    name: "a burst past 300 requests in ten seconds is blocked by the rate rule",
+    name: "a burst past 300 requests in ten seconds, kept up, is blocked by the rate rule",
     needs: ["rate-rule"],
     run: async (bench) => {
       const burst = await sendBurst(bench);
-      if (!burst.rule && burst.ms >= RULE_WINDOW_MS) throw new Skip("a runner that sends 300 requests inside ten seconds");
-
       expect(burst.rule, burst.saw).toBe(true);
     },
   },
