@@ -5,6 +5,8 @@
 #   packages/cli/...           -> its tests, the fuzz tests, and the layout guard
 #   packages/cloudflare/...    -> its tests, the Worker's in the Workers runtime, and the layout guard
 #   packages/demo/...          -> its tests and the layout guard
+#   packages/dashboard/..., packages/app/src/console/...
+#                              -> also the dashboard client's tests, which run in a process of their own: the client reads the console's route types
 #   anything else              -> every test, the Worker's included: the other packages depend on core
 #
 # A job runs when a staged file is left after its `glob` and `exclude`. The jobs run in order, and the first that fails stops the rest.
@@ -53,3 +55,9 @@ pre-commit:
     - name: demo tests
       glob: "packages/demo/**"
       run: bun run test ./packages/demo/ ./tests/layout.test.ts
+
+    - name: dashboard client tests
+      glob:
+        - "packages/dashboard/**"
+        - "packages/app/src/console/**"
+      run: bun run test:client

@@ -1,0 +1,3 @@
+# The component tests need a document before React's DOM half is first loaded: it decides at load how it hears a field change.
+[test]
+preload = ["./tests/lib/support/page.ts"]
