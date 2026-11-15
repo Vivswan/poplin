@@ -310,9 +310,14 @@ function useOffer(): { readonly offer: Offer | undefined; readonly started: bool
   return { offer: update !== null && starts && !started ? { newest: update.newest, ask: () => setAsking(true) } : undefined, started, question };
 }
 
-/** The sections on a phone: behind a button at the top, in a sheet that closes once a place is chosen. */
-function PhoneSections({ current }: { readonly current: Section }): ReactNode {
+/** The sections on a phone: behind a button at the top, in a sheet that closes once a place is chosen or an update is asked about. */
+function PhoneSections({ current, offer, started }: { readonly current: Section; readonly offer: Offer | undefined; readonly started: boolean }): ReactNode {
   const [open, setOpen] = useState(false);
+  // The question of an update is drawn over the page: the sheet makes room for it.
+  const askAndClose = (): void => {
+    setOpen(false);
+    offer?.ask();
+  };
 
   return (
     <Sheet open={open} onOpenChange={setOpen}>
@@ -333,7 +338,7 @@ function PhoneSections({ current }: { readonly current: Section }): ReactNode {
         </nav>
         <div className="mt-auto flex flex-col gap-2">
           <DomainNote onGo={() => setOpen(false)} />
-          <p className="px-2.5 text-xs leading-5 text-faint">Running poplin {BOOT.version}</p>
+          <VersionLine offer={offer === undefined ? undefined : { ...offer, ask: askAndClose }} started={started} />
           <Email className="px-2.5 pb-1" />
         </div>
       </SheetContent>
@@ -383,7 +388,7 @@ export function AppShell({
       </aside>
       <main className="flex min-h-0 min-w-0 flex-col">
         <header className="flex h-14 shrink-0 items-center gap-3 px-6 max-md:gap-2 max-md:px-4">
-          <PhoneSections current={current} />
+          <PhoneSections current={current} offer={offer} started={started} />
           <h1 className="min-w-0 truncate text-base font-bold">{heading}</h1>
           <div className="ml-auto flex items-center gap-2">
             {tools}

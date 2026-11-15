@@ -234,6 +234,18 @@ const STOPS: readonly Stop[] = [
     close: leaveBy("Cancel"),
   },
   {
+    name: "the notes of the newer version in the sections of a phone, and from there the question before an update",
+    only: "narrow",
+    open: async (page) => {
+      await page.getByRole("button", { name: "Sections", exact: true }).click();
+      const sections = page.getByRole("dialog");
+      await expect(sections.locator(`a[href="${RELEASES}"][target="_blank"][rel="noreferrer"]`, { hasText: "What changed" })).toBeVisible();
+      await sections.getByRole("button", { name: "Update now", exact: true }).click();
+    },
+    shows: (page) => [question(page, /^Update to /)],
+    close: leaveBy("Cancel"),
+  },
+  {
     name: "the dialog that adds a user, with an email typed",
     open: async (page) => {
       await toSection(page, "Access");
@@ -718,6 +730,50 @@ test.describe("on a phone, on Usage", () => {
       return { atOnce: whole.length >= 5, scrolls: whole.length < list.children.length };
     });
     expect(shown).toEqual({ atOnce: true, scrolls: true });
+  });
+});
+
+for (const viewport of VIEWPORTS) {
+  test.describe(`on Usage, at ${viewport.width} pixels`, () => {
+    test.use({ viewport: { width: viewport.width, height: viewport.height } });
+
+    // Drift: the block would take its name from its heading's id again, and Firefox ends a page whose block is read by that name twice; or the one line left would not be drawn.
+    test("with one site compared and all sites switched off, the block is still read by its name, and the site's line alone is drawn", async ({ page }) => {
+      await arrive(page);
+      await toSection(page, "Usage");
+      const switches = page.getByRole("region", { name: "Visits", exact: true }).locator("button[aria-pressed]");
+      await tickSite(page);
+      await expect(switches).toHaveCount(2);
+
+      await switches.first().click();
+      await expect(page.locator("path[data-line]")).toHaveCount(1);
+
+      const after = await switches.evaluateAll((all) => all.map((one) => [one.getAttribute("aria-pressed"), (one as HTMLButtonElement).disabled]));
+      expect(after).toEqual([
+        ["false", false],
+        ["true", true],
+      ]);
+      const drawn = await page.locator("path[data-line]").evaluate((line) => (line.getAttribute("d") ?? "").split(/[ML,]/).filter(Boolean).map(Number));
+      expect(drawn.every(Number.isFinite) && drawn.length > 2).toBe(true);
+    });
+  });
+}
+
+test.describe("on a phone, on Activity", () => {
+  test.use({ viewport: PHONE });
+
+  // Drift: a phone's rows would end with no button again, and typing a site's title would be the one way to that site's entries.
+  test("a row about a site ends with Only this site, which keeps that site's entries under a mark that names it", async ({ page }) => {
+    await arrive(page);
+    await toSection(page, "Activity");
+    const entries = page.getByRole("list", { name: "Activity", exact: true }).getByRole("listitem");
+    const ofSite = page.getByRole("link", { name: SAMPLE.site, exact: true });
+
+    await entries.filter({ has: ofSite }).first().getByRole("button", { name: "Only this site", exact: true }).click();
+    await expect(page.getByText(`Only ${SAMPLE.site}`, { exact: true })).toBeVisible();
+    await expect(entries.filter({ hasNot: ofSite })).toHaveCount(0);
+    await expect(entries.filter({ has: ofSite })).not.toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Only this site", exact: true })).toHaveCount(0);
   });
 });
 

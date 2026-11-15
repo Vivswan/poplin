@@ -2,14 +2,14 @@
 
 import { MOST_IN_FILE } from "@poplin/app/src/console/activity-file";
 import { DownloadIcon } from "lucide-react";
-import { type ReactNode, useState } from "react";
+import { type ReactNode, useEffect, useRef, useState } from "react";
 
 import { narrowingOf } from "@/activity/activity-queries";
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuGroup, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { api } from "@/lib/api";
 import { BOOT } from "@/lib/boot";
-import { sayDone, send } from "@/lib/notify";
+import { sayDone, send, unsay } from "@/lib/notify";
 import { showCount } from "@/lib/sites";
 
 /** The formats of a file, as the menu names them. */
@@ -26,6 +26,9 @@ const FILE_WORDS = {
   whole: { done: `Downloaded ${A_FILE}.`, more: `Download the next ${A_FILE}`, next: `Next ${A_FILE}` },
   filtered: { done: "Downloaded a part.", more: "Download the next part", next: "Next part" },
 } as const;
+
+/** What the name of a file's result starts with, before the file's number. Each has its own name: a result that was pressed is still leaving when the next is said. */
+const RESULT = "activity-download";
 
 /** A format's value. */
 type Format = (typeof FORMATS)[number]["value"];
@@ -85,9 +88,34 @@ export function DownloadMenu({ query, fitsOne, empty }: DownloadMenuProps): Reac
   const narrowing = narrowingOf(query);
   const of = JSON.stringify(narrowing);
   const [kept, keep] = useState<NextFile>();
+  const trigger = useRef<HTMLButtonElement>(null);
+  // The name of the one result of a file that may still be shown.
+  const shown = useRef<string>(undefined);
+  // A result outlives the screen it was said on: it leaves with the menu, which alone knows its name.
+  useEffect(
+    () => () => {
+      if (shown.current !== undefined) unsay(shown.current);
+    },
+    [],
+  );
   // A file of other filters has no next one here.
   const next = kept?.of === of ? kept : undefined;
   const words = FILE_WORDS[Object.keys(narrowing).length === 0 ? "whole" : "filtered"];
+
+  /** Take away the result said before, whose way to a next file is spent, and note the name of the one said in its place. */
+  const replaceResult = (name?: string): void => {
+    if (shown.current !== undefined && shown.current !== name) unsay(shown.current);
+    shown.current = name;
+  };
+
+  /** Say that the file with no next one was saved. */
+  const sayLast = (ofSeveral: boolean): void => {
+    replaceResult();
+    // The button that saved the last of several files leaves with the way to a next one: the focus goes to the menu's button before it is lost.
+    if (ofSeveral) trigger.current?.focus();
+
+    sayDone(ofSeveral ? "Downloaded the last part." : "Download started.");
+  };
 
   /** Save one file, and say what was saved: with the way to the next file where the log goes on. */
   const save = async (format: Format, from?: NextFile): Promise<void> => {
@@ -100,9 +128,12 @@ export function DownloadMenu({ query, fitsOne, empty }: DownloadMenuProps): Reac
     saveFrom(fileAddress(narrowing, format, { after: places.from, part: from !== undefined || places.after !== null ? part : undefined }));
     const then = places.after === null ? undefined : { of, format, after: places.after, part: part + 1 };
     keep(then);
-    if (then !== undefined) return sayDone(words.done, { label: words.more, run: () => void save(format, then) });
+    if (then === undefined) return sayLast(from !== undefined);
 
-    return sayDone(from === undefined ? "Download started." : "Downloaded the last part.");
+    const name = `${RESULT}-${part}`;
+    replaceResult(name);
+
+    return sayDone(words.done, { label: words.more, run: () => void save(format, then), id: name });
   };
 
   return (
@@ -116,7 +147,7 @@ export function DownloadMenu({ query, fitsOne, empty }: DownloadMenuProps): Reac
         </span>
       )}
       <DropdownMenu>
-        <DropdownMenuTrigger render={<Button variant="outline" aria-label="Download" disabled={empty} />}>
+        <DropdownMenuTrigger render={<Button ref={trigger} variant="outline" aria-label="Download" disabled={empty} />}>
           <DownloadIcon />
           <span className="max-md:hidden">Download</span>
         </DropdownMenuTrigger>
