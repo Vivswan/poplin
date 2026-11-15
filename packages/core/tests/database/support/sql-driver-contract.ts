@@ -504,12 +504,14 @@ function queryPlans(label: string, makeDriver: DriverFactory): void {
       const earlier = `select "earlier_ids"."id" from "earlier_ids" inner join "sites" on "sites"."folder" = "earlier_ids"."folder" where ${holds}`;
       const about = `(instr("audit"."site_name", lower(?)) > 0 OR "audit"."site_id" IN (select "id" from "sites" where ${holds}) OR "audit"."site_id" IN (${earlier}))`;
       const newest = '(SELECT max("audit"."seq") FROM "audit")';
+      const newestKept = '(select "seq", "audit"."action" in (?) as "kept" from "audit" order by "audit"."seq" desc limit ?) "newest"';
       const page = 'select "seq", "at", "actor", "action", "site_id", "site_name", "detail" from "audit" where';
       const bySite = [
-        `SELECT min(?, coalesce(${newest} - (SELECT min("audit"."seq") FROM "audit") + 1, 0)) AS seen, (select count(*) as "found" from "audit" where ("audit"."seq" > ${newest} - ? and "audit"."action" in (?) and ${about})) AS found`,
+        `SELECT coalesce(${newest} - ? < (SELECT min("audit"."seq") FROM "audit"), 1) AS whole, (select count(*) as "found" from "audit" where ("audit"."seq" > ${newest} - ? and "audit"."action" in (?) and ${about})) AS found`,
         `${page} ("audit"."seq" < (SELECT max("audit"."seq") + 1 FROM "audit") AND "audit"."seq" >= (SELECT max("audit"."seq") + 1 FROM "audit") - ? and "audit"."action" in (?) and ${about}) order by "audit"."seq" desc limit ?`,
         `${page} ("audit"."seq" > ? AND "audit"."seq" <= ? + ? and ${about}) order by "audit"."seq" asc limit ?`,
       ];
+      const counted = `select coalesce(min("newest"."seq") <= (SELECT min("audit"."seq") FROM "audit"), 1) as "whole", coalesce(sum("kept"), 0) as "found" from ${newestKept}`;
       const readOnce = (statement: string): string[] => [`SCAN sites <- ${statement}`, `SCAN earlier_ids USING COVERING INDEX earlier_ids_by_folder <- ${statement}`];
       const tokenScan = 'SCAN tokens USING INDEX tokens_by_creation <- select "id", "hash", "scope", "note", "created_at", "expires_at" from "tokens"';
       const newestFirst = 'order by "tokens"."created_at" desc, "tokens"."id" desc';
@@ -518,8 +520,8 @@ function queryPlans(label: string, makeDriver: DriverFactory): void {
       expect(scans).toEqual([
         `${tokenScan} where "tokens"."removed_at" is null ${newestFirst}`,
         `${tokenScan} where ("tokens"."removed_at" is null and ("tokens"."expires_at" is null or "tokens"."expires_at" > ?)) ${newestFirst}`,
-        'SCAN audit <- select count(*) as "seen", coalesce(sum("kept"), 0) as "found" from (select "audit"."action" in (?) as "kept" from "audit" order by "audit"."seq" desc limit ?) "newest"',
-        'SCAN newest <- select count(*) as "seen", coalesce(sum("kept"), 0) as "found" from (select "audit"."action" in (?) as "kept" from "audit" order by "audit"."seq" desc limit ?) "newest"',
+        `SCAN audit <- ${counted}`,
+        `SCAN newest <- ${counted}`,
         ...bySite.flatMap(readOnce),
         'SCAN logins USING INDEX logins_by_visitor <- delete from "logins" where "logins"."expires_at" <= ?',
         "SCAN schema_steps <- SELECT * FROM schema_steps ORDER BY step",

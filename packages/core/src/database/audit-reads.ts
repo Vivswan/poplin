@@ -1,6 +1,6 @@
 // The statements that search the audit log, count it and find where a part of it ends, and what each answers. Each reads no further than it is told, since the provider charges every row a statement reads.
 
-import { and, asc, count, desc, eq, inArray, lt, type SQL, sql as fragment, sum } from "drizzle-orm";
+import { and, asc, count, desc, eq, inArray, lt, min, type SQL, sql as fragment, sum } from "drizzle-orm";
 import * as v from "valibot";
 
 import type { AuditAction } from "../records/audit";
@@ -12,8 +12,8 @@ import { audit, earlierIds, sites } from "./schema";
 import { holding } from "./site-statements";
 import { BUILD, built, written } from "./statements";
 
-/** What a count of the audit log answers: the entries it read, and those among them the narrowing keeps. */
-const AUDIT_COUNT_ROW = v.object({ seen: COUNT, found: COUNT });
+/** What a count of the audit log answers: whether it read the log to its oldest entry, as 1 or 0, and how many of the entries it read the narrowing keeps. */
+const AUDIT_COUNT_ROW = v.object({ whole: v.picklist([0, 1]), found: COUNT });
 
 /** The oldest and the newest `seq` of the log, as the statement of its ends answers them: both `null` for an empty log. */
 const AUDIT_ENDS_ROW = v.object({ oldest: v.nullable(POSITIVE), newest: v.nullable(POSITIVE) });
@@ -104,26 +104,28 @@ export function auditStopIn(ends: StatementResult | undefined, query: AuditSearc
 export function auditCountAsked(query: AuditCountQuery): Statement {
   if (!Number.isSafeInteger(query.most) || query.most < 1) throw new RangeError(`a count reads at least 1 entry, not ${query.most}`);
 
+  const oldestSeq = fragment`(SELECT min(${audit.seq}) FROM ${audit})`;
+
   // A text or an id finds a site among the sites, and the engine charges that look once an entry inside a reading that is counted from: under either the entries are counted where they are narrowed, by their place in the log.
   if (query.site !== undefined || query.of !== undefined) {
     const newestSeq = fragment`(SELECT max(${audit.seq}) FROM ${audit})`;
     const kept = and(fragment`${audit.seq} > ${newestSeq} - ${query.most}`, auditAmong(query.actions), auditAbout(query.site), auditOf(query.of));
     const found = BUILD.select({ found: count().as("found") }).from(audit).where(kept);
 
-    return written(fragment`SELECT min(${query.most}, coalesce(${newestSeq} - (SELECT min(${audit.seq}) FROM ${audit}) + 1, 0)) AS seen, ${found} AS found`);
+    return written(fragment`SELECT coalesce(${newestSeq} - ${query.most} < ${oldestSeq}, 1) AS whole, ${found} AS found`);
   }
 
   const kept = auditAmong(query.actions) ?? fragment`1`;
-  const newest = BUILD.select({ kept: fragment<number>`${kept}`.as("kept") }).from(audit).orderBy(desc(audit.seq)).limit(query.most).as("newest");
+  const newest = BUILD.select({ seq: audit.seq, kept: fragment<number>`${kept}`.as("kept") }).from(audit).orderBy(desc(audit.seq)).limit(query.most).as("newest");
 
-  return built(BUILD.select({ seen: count().as("seen"), found: fragment`coalesce(${sum(newest.kept)}, 0)`.as("found") }).from(newest));
+  return built(BUILD.select({ whole: fragment`coalesce(${min(newest.seq)} <= ${oldestSeq}, 1)`.as("whole"), found: fragment`coalesce(${sum(newest.kept)}, 0)`.as("found") }).from(newest));
 }
 
-/** Read what the count's statement answered. A log of as many entries as were read may go on behind them, so the count is then the least it can be. */
-export function auditCountIn(result: StatementResult | undefined, most: number): AuditCount {
-  const { seen, found } = v.parse(AUDIT_COUNT_ROW, result?.rows[0]);
+/** Read what the count's statement answered. A count that did not reach the log's oldest entry is the least it can be: the log goes on behind what was read. */
+export function auditCountIn(result: StatementResult | undefined): AuditCount {
+  const { whole, found } = v.parse(AUDIT_COUNT_ROW, result?.rows[0]);
 
-  return { count: found, whole: seen < most };
+  return { count: found, whole: whole === 1 };
 }
 
 /**

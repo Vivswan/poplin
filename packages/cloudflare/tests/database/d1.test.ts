@@ -188,9 +188,9 @@ const ROWS: Readonly<Record<string, readonly [read: number, written: number]>> =
   "searchAudit, the oldest first, the next page of one kind": [27, 0],
   "listAudit, a reading for a file": [45, 0],
   "endOfAuditPart, of twenty entries": [21, 0],
-  "countAudit": [45, 0],
+  "countAudit": [46, 0],
   "countAudit, one kind, the sites named with a text": [64, 0],
-  "countAudit, no further back than five entries": [5, 0],
+  "countAudit, no further back than five entries, and where the log starts": [6, 0],
   "no site: getSiteByPublicName": [0, 0],
   "no site: giveNewId": [732, 0],
   "no site: reserveVersion": [0, 0],
@@ -733,7 +733,7 @@ describe("D1: the rows every operation of the database costs of a day's allowanc
     await cost("endOfAuditPart, of twenty entries", () => database.endOfAuditPart({ entries: 20 }));
     await cost("countAudit", () => database.countAudit({ most: 10_000 }));
     await cost("countAudit, one kind, the sites named with a text", () => database.countAudit({ most: 10_000, actions: ["create"], site: "site-1" }));
-    await cost("countAudit, no further back than five entries", () => database.countAudit({ most: 5, actions: ["create"] }));
+    await cost("countAudit, no further back than five entries, and where the log starts", () => database.countAudit({ most: 5, actions: ["create"] }));
 
     await database.trashSite(sixth.id, BY_ADA);
     const version: Parameters<typeof database.publishUploadAsVersion>[1] = { keep: 2, details: {} };

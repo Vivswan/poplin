@@ -356,7 +356,7 @@ export interface AuditCount {
   /** The entries found among those read. */
   readonly count: number;
 
-  /** Whether the log ended before the count had read its most: `count` is then exact, and otherwise the least it can be, since the log may go on. */
+  /** Whether the count read the log to its oldest entry: `count` is then exact, and otherwise the least it can be, since the log goes on. */
   readonly whole: boolean;
 }
 

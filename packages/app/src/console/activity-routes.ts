@@ -281,7 +281,7 @@ export const activityRoutes = new Hono<Shared>()
     const counted = await countAudit(install, actor, context.req.valid("query"));
     if (!counted.ok) return refused(context, counted);
 
-    // A count that read its most is the least the total can be: the log may go on behind what was read.
+    // A count that did not reach the log's oldest entry is the least the total can be.
     return context.json({ ok: true as const, total: counted.count, whole: counted.whole });
   })
   .get("/activity/download", vValidator("query", FILE_QUERY, refuseInvalid), async (context) => {

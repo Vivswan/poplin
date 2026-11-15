@@ -268,18 +268,19 @@ export function auditLog(label: string, makeDatabase: DatabaseFactory): void {
     });
 
     // Drift: the total the Activity screen shows is this count; one that counted past its bound would read a long log whole, and one that called a cut count exact would show a wrong total.
-    test("a count keeps the narrowing of a page and reads no further back than it is told, saying when the log goes on", async () => {
+    // A log of exactly as many entries as the count reads was said to go on: the screen wrote its exact total with a plus.
+    test("a count keeps the narrowing of a page and reads no further back than it is told, saying that the log goes on only when it does", async () => {
       const database = await opened(makeDatabase);
       const report = await made(database, draft(REPORT));
       await database.appendAudit({ action: "login", detail: {} }, { by: BO, at: NOW });
       await made(database, draft(DOCS));
       await database.trashSite(report.id, { by: BO, at: NOW + 1 });
 
-      const whole = [{ most: 5 }, { most: 100, actions: ["create"] }, { most: 100, site: "o" }, { most: 100, actions: ["login"], site: "o" }, { most: 100, actions: [] }] as const;
-      const cut = [{ most: 4 }, { most: 3 }, { most: 2, actions: ["create"] }, { most: 1, actions: ["create"] }] as const;
+      const whole = [{ most: 5 }, { most: 4 }, { most: 100, actions: ["create"] }, { most: 100, site: "o" }, { most: 4, site: "o" }, { most: 100, actions: ["login"], site: "o" }, { most: 100, actions: [] }] as const;
+      const cut = [{ most: 3 }, { most: 3, site: "o" }, { most: 2, actions: ["create"] }, { most: 1, actions: ["create"] }] as const;
       const counted = await Promise.all([...whole, ...cut].map(async (query) => Object.values(await database.countAudit(query))));
 
-      expect(counted).toEqual([[4, true], [2, true], [3, true], [0, true], [0, true], [4, false], [3, false], [1, false], [0, false]]);
+      expect(counted).toEqual([[4, true], [4, true], [2, true], [3, true], [3, true], [0, true], [0, true], [3, false], [2, false], [1, false], [0, false]]);
       await expect(database.countAudit({ most: 0 })).rejects.toThrow(RangeError);
     });
 

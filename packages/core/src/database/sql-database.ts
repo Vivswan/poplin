@@ -1177,7 +1177,7 @@ export class SqlDatabase implements Database {
   async countAudit(query: AuditCountQuery): Promise<AuditCount> {
     const [counted] = await this.#driver.batch([auditCountAsked(query)]);
 
-    return auditCountIn(counted, query.most);
+    return auditCountIn(counted);
   }
 
   async endOfAuditPart(query: AuditPartQuery): Promise<number | undefined> {
