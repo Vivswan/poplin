@@ -1,24 +1,27 @@
-// The Usage screen: what the install holds and has answered today, each number beside its limit, with words only once a number nears it.
+// The Usage screen: what the install holds and has answered today, each number beside its limit, with words only once a number nears it, and the way to the setting that holds the limit.
 
 import { showBytes } from "@poplin/core/src/records/settings";
 import { Link } from "@tanstack/react-router";
 import { cn } from "cn";
+import { ArrowUpRightIcon } from "lucide-react";
 import { type ReactNode, useMemo } from "react";
 
 import { Progress } from "@/components/ui/progress";
 import { Skeleton } from "@/components/ui/skeleton";
 import { showCount } from "@/lib/sites";
+import { settingAddress } from "@/settings/setting-address";
+import { IconButton } from "@/shared/icon-button";
 import { AppShell } from "@/shell/app-shell";
-import { type ColumnSpec, ColumnsMenu, DataTable } from "@/table/data-table";
+import { type ColumnSpec, DataTable } from "@/table/data-table";
 import { useTableLayout } from "@/table/layout";
 import { type Line, useUsage } from "@/usage/usage-queries";
 import { shareOf } from "@/usage/usage-values";
 
 /** What each line counts, in the words of the screen. */
 const NAMES: Readonly<Record<Line["what"], string>> = {
-  stored: "Stored",
-  sites: "Sites, the trash included",
-  trashed: "Sites in the trash",
+  stored: "Storage",
+  sites: "Sites",
+  trashed: "In the trash",
   files: "Files",
   requests: "Requests today",
 };
@@ -65,16 +68,30 @@ function usageColumns(): readonly ColumnSpec<Line>[] {
   ];
 }
 
+/** The way from a line to the setting that holds its limit, also where that setting sets none; nothing for a line no setting bounds. */
+function LimitLink({ line }: { readonly line: Line }): ReactNode {
+  if (line.setting === null) return null;
+
+  return (
+    <IconButton label="Change this limit" link={<Link {...settingAddress(line.setting)} />}>
+      <ArrowUpRightIcon />
+    </IconButton>
+  );
+}
+
 /** The lines on a phone: the name over the number and its limit, and the share under them. */
 function PhoneList({ lines }: { readonly lines: readonly Line[] }): ReactNode {
   return (
     <ul aria-label="Usage" className="border-t md:hidden">
       {lines.map((line) => (
         <li key={line.what} className="flex min-h-16 flex-col justify-center gap-1 border-b px-4 py-2">
-          <span className="flex items-baseline gap-2">
+          <span className="flex items-center gap-2">
             <span className="min-w-0 flex-1 truncate">{NAMES[line.what]}</span>
             <span className="shrink-0 tabular-nums">{amount(line, line.used)}</span>
             <span className="shrink-0 text-xs text-muted-foreground tabular-nums">{line.limit === null ? "No limit" : `of ${amount(line, line.limit)}`}</span>
+            <span className="flex w-10 shrink-0 justify-end">
+              <LimitLink line={line} />
+            </span>
           </span>
           <ShareCell line={line} />
         </li>
@@ -92,11 +109,6 @@ export function UsageScreen(): ReactNode {
   return (
     <AppShell current="usage" heading="Usage">
       <section aria-label="Usage" className="flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto">
-        <div className="flex shrink-0 flex-wrap items-center gap-2 px-6 pb-3 max-md:px-4">
-          <div className="ml-auto max-md:hidden">
-            <ColumnsMenu columns={columns} layout={layout} />
-          </div>
-        </div>
         {error === null ? null : <p className="px-6 py-8 text-muted-foreground max-md:px-4">{error.message}</p>}
         {usage === undefined && error === null ? (
           <div className="flex flex-col border-t" aria-busy="true">
@@ -110,22 +122,18 @@ export function UsageScreen(): ReactNode {
         {usage === undefined ? null : (
           <>
             <div className="shrink-0 max-md:hidden">
-              <DataTable label="Usage" columns={columns} rows={usage.lines} rowId={(line) => line.what} layout={layout} sort={AS_GIVEN} />
+              <DataTable
+                label="Usage"
+                columns={columns}
+                rows={usage.lines}
+                rowId={(line) => line.what}
+                layout={layout}
+                sort={AS_GIVEN}
+                actions={(line) => <LimitLink line={line} />}
+              />
             </div>
             <PhoneList lines={usage.lines} />
-            <div className="flex flex-col gap-1 px-6 py-4 text-xs text-muted-foreground max-md:px-4">
-              <p>Requests are counted from a sample, so today's number is approximate. The day is the UTC day, {usage.day}.</p>
-              <p>
-                Limits are changed in{" "}
-                <Link
-                  to="/settings"
-                  className="rounded-sm text-link underline-offset-2 outline-none hover:underline focus-visible:ring-2 focus-visible:ring-ring"
-                >
-                  Settings
-                </Link>
-                .
-              </p>
-            </div>
+            <p className="px-6 py-4 text-xs text-muted-foreground max-md:px-4">Requests today are an estimate. The day is counted in UTC.</p>
           </>
         )}
       </section>
