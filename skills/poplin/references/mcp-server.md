@@ -49,9 +49,9 @@ In PowerShell the first line is `$env:POPLIN_CONFIG_DIR = "C:\Users\user\poplin-
 
 | With a login of your own                       | Where                                                     |
 | ---------------------------------------------- | --------------------------------------------------------- |
-| the login is listed under the name you gave it | the dashboard's Access screen, beside its id              |
-| each version you publish shows that name       | the site's list of versions on the dashboard, until the login is revoked: then its id |
-| each change you make shows that login's id     | the dashboard's Activity tab                              |
-| the user can end it alone                      | Revoke, on the Access screen; their own login stays       |
+| the login is listed under the name you gave it | the dashboard's Access screen, under Tokens               |
+| each version you publish shows that name       | the site's list of versions on the dashboard, until the login is removed: then its id |
+| each change you make shows that name           | the dashboard's Activity screen, until the login is removed: then its id |
+| the user can end it alone                      | Remove, in the menu of its row under Tokens; their own login stays |
 
 The login is saved as a file in that folder, and it runs out after 30 days, like the user's own. A command you run outside the server uses the computer's saved login, unless the variable is set for it too.

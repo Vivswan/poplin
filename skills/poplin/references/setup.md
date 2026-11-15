@@ -127,7 +127,7 @@ The last command opens Cloudflare in the user's browser to ask for access, then 
 
 ### c. Make a Cloudflare API token
 
-On the Setup page, under First, make a token, the user presses Open the token form. Cloudflare's form opens in a new tab with eight permissions already chosen.
+On the Setup page, under Make a token, the user presses Open the token form. Cloudflare's form opens in a new tab with eight permissions already chosen.
 
 | On the form       | The user                                               |
 | ----------------- | ------------------------------------------------------ |
@@ -141,20 +141,19 @@ If the form opens empty, step 3 of the [install guide](https://github.com/Vivswa
 
 ### d. Finish on the setup page
 
-Back on the Setup page, the user fills three boxes and presses Repair.
+Back on the Setup page, under Fill in three boxes, the user fills each box and presses Repair.
 
-| Box                  | Holds                                                     |
-| -------------------- | --------------------------------------------------------- |
-| Domain               | their domain alone, with nothing before it: `example.com` |
-| Your email           | an email whose inbox they can read: the first login       |
-| Cloudflare API token | the token of part c                                       |
+| Box        | Holds                                                     |
+| ---------- | --------------------------------------------------------- |
+| Domain     | their domain alone, with nothing before it: `example.com` |
+| Your email | an email whose inbox they can read: the first login       |
+| Token      | the token of part c                                       |
 
 Ask the user to copy you the lines the page shows above its table. They hold no token.
 
 | The lines say                                       | Means               | Next                                       |
 | --------------------------------------------------- | ------------------- | ------------------------------------------ |
-| a count that is repaired, or `Nothing to repair.`   | the install is made | part e                                     |
-| also a count of optional rows that are not set up   | nothing is wrong    | go on; the install works without them      |
+| a count that is repaired, or `Nothing to repair`    | the install is made | part e                                     |
 | a count that is not done, or that is to repair      | a row needs work    | ask for those rows, then the install guide |
 | one sentence and no table, such as `Token refused.` | the run was refused | the install guide                          |
 
@@ -187,7 +186,7 @@ The user opens the dashboard's address, `https://poplin.example.com` with their 
 | ----------------------------------- | ----------------------------------------------------------------------------------- |
 | the browser cannot find the site    | a new address takes a few minutes: wait, then reload                                |
 | no code arrives                     | the email differs from part d: on the Setup page, the right email, the token, Repair |
-| the dashboard, with `No sites yet.` | the install is ready: step 4                                                        |
+| the dashboard, with `No sites yet`  | the install is ready: step 4                                                        |
 
 This first login closes the Setup page for good.
 
@@ -201,11 +200,11 @@ Run the login with the dashboard's address. It prints a web address and a short 
 npx poplin login --server https://poplin.example.com
 ```
 
-Give the user both, each on its own line. The address opens a page headed Allow this computer?, which shows a code.
+Give the user both, each on its own line. The address opens the dashboard on a question that starts with Allow and names the computer. It shows a code.
 
 | The page's code | The user                                                 |
 | --------------- | -------------------------------------------------------- |
-| is the same     | ticks the box that names the code, then presses Allow    |
+| is the same     | ticks The codes match, then presses Allow                |
 | is another      | presses Deny: that approval would go to some other login |
 
 If you read output as JSON, add `--json`: the first line then carries the web address and the code.
