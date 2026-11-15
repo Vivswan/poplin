@@ -22,6 +22,15 @@ export function dayText(moment: number): string {
   return date.toISOString().slice(0, DAY_LENGTH);
 }
 
+/**
+ * Say that a dry run sent nothing.
+ *
+ * @param asked - whether the install was asked how it reads the site's address, the one thing a dry run may ask
+ */
+export function dryRunText(asked: boolean): string {
+  return asked ? "nothing was sent: --dry-run asked the install only how it reads the site's address" : "nothing was sent: --dry-run calls no install";
+}
+
 /** Word a count with its noun: `1 file`, `42 files`. */
 export function countText(count: number, noun: string): string {
   return `${count} ${noun}${count === 1 ? "" : "s"}`;

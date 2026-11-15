@@ -10,6 +10,7 @@ import { uploadFile } from "@poplin/core/src/actions/upload-file";
 import { ALLOW_PAGE, CODE_KEY } from "@poplin/core/src/api/routes";
 import type { Actor } from "@poplin/core/src/auth/scopes";
 import type { TokenRecord } from "@poplin/core/src/auth/tokens";
+import type { PublicWord } from "@poplin/core/src/names/marker";
 import * as v from "valibot";
 
 import { capBody } from "./body";
@@ -22,6 +23,15 @@ type AnswerOf<Action extends (...parameters: never[]) => Promise<unknown>> = Awa
 
 /** The answer of a begun login, with the address of the dashboard page where an admin decides it. */
 type Begun = Extract<AnswerOf<typeof beginLogin>, { readonly ok: true }> & { readonly verify_url: string };
+
+/** What an install says of itself to whoever asks who they are. */
+interface Running {
+  /** The version of poplin the install runs. */
+  readonly version: string;
+
+  /** The word every public-name address of the install ends in. */
+  readonly publicWord: PublicWord;
+}
 
 /** One file as its upload sends it: the upload it belongs to, the query that names its path, and the request whose body holds its bytes. */
 interface SentFile {
@@ -100,13 +110,13 @@ export async function saveAddress(install: Install, actor: Actor, body: unknown,
 }
 
 /**
- * Say who a token is and which version the install runs, with the newer release when one is out.
+ * Say who a token is, which version the install runs, and the word its public addresses end in, with the newer release when one is out.
  *
- * @param version - the version of poplin the install runs
+ * @param running - the version of poplin the install runs, and the public word it was installed with
  */
-export async function answerWhoami(install: Install, token: TokenRecord, version: string): Promise<{ readonly ok: true } & v.InferOutput<typeof WHOAMI_ANSWER>> {
-  const update = await updateOf(install, version);
-  const answer = { ok: true, token: tokenObject(token), version } as const;
+export async function answerWhoami(install: Install, token: TokenRecord, running: Running): Promise<{ readonly ok: true } & v.InferOutput<typeof WHOAMI_ANSWER>> {
+  const update = await updateOf(install, running.version);
+  const answer = { ok: true, token: tokenObject(token), version: running.version, public_word: running.publicWord } as const;
 
   return update === undefined ? answer : { ...answer, update };
 }

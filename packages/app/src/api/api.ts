@@ -28,6 +28,7 @@ import { signEveryoneOut } from "@poplin/core/src/actions/sign-out";
 import { type Rebuilding, START_OPTIONS, startUpdate } from "@poplin/core/src/actions/start-update";
 import { removeUpdateAddress, type UPDATE_ADDRESS_REQUEST, updateAddressState } from "@poplin/core/src/actions/update-address";
 import { AllowanceSpent } from "@poplin/core/src/database/driver";
+import type { PublicWord } from "@poplin/core/src/names/marker";
 import type { SettingValues } from "@poplin/core/src/records/settings";
 import { WritesSpent } from "@poplin/core/src/storage/metered";
 import { Hono } from "hono";
@@ -67,6 +68,9 @@ export interface ApiDeps extends Install, Gate {
   /** The version of poplin the install runs, as its build stated it. */
   readonly version: string;
 
+  /** The word every public-name address of the install ends in, chosen once at install. A client reads a public site's address with it. */
+  readonly publicWord: PublicWord;
+
   /** Told of every failure a request ends in, before the request is answered 500. */
   readonly report?: (error: unknown) => void;
 
@@ -84,7 +88,7 @@ function routesOf(deps: Omit<ApiDeps, "store">, install: ReturnType<typeof meter
 
   return new Hono()
     .basePath("/api")
-    .get("/whoami", token, install, noQuery, async (context) => respond(await answerWhoami(context.var.install, context.var.token, deps.version)))
+    .get("/whoami", token, install, noQuery, async (context) => respond(await answerWhoami(context.var.install, context.var.token, deps)))
     .delete("/token", token, install, noQuery, async (context) => respond(await revokeToken(context.var.install, context.var.actor, context.var.token.id)))
     .get("/tokens", token, install, noQuery, async (context) => respond(await listTokens(context.var.install, context.var.actor)))
     .post("/tokens", token, install, json, noQuery, sent<v.InferInput<typeof TOKEN_REQUEST>>(JSON_BYTES), async (context) => {

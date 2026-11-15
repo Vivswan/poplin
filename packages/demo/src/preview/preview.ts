@@ -22,6 +22,7 @@ import type { Rebuilding } from "../../../core/src/actions/start-update";
 import { importSessionKey } from "../../../core/src/auth/cookie";
 import { parseLogins } from "../../../core/src/auth/logins";
 import type { SqlDriver } from "../../../core/src/database/driver";
+import { DEFAULT_PUBLIC_WORD } from "../../../core/src/names/marker";
 import type { ObjectStore } from "../../../core/src/storage/storage";
 import { changingPlug, PLUG_STATES, type PlugState, previewFirstRun, previewPlug } from "./domain-plug";
 import { type Entry, galleryOf, STAGES } from "./gallery";
@@ -202,7 +203,8 @@ function dashboardMount(world: World, prefix: string, host: Host): Mount {
 
 function apiMount(world: World, version: string): Mount {
   const { database } = world.install;
-  const api = createApi({ ...world.install, readToken: (id) => database.getToken(id), limits: API_LIMITS, version, report: (error) => console.error("preview: an API request failed", error), rebuild: REBUILD, ...countsOf(world) });
+  const said = { version, publicWord: DEFAULT_PUBLIC_WORD, report: (error: unknown) => console.error("preview: an API request failed", error) };
+  const api = createApi({ ...world.install, ...said, readToken: (id) => database.getToken(id), limits: API_LIMITS, rebuild: REBUILD, ...countsOf(world) });
 
   return { prefix: "/api", origin: ADMIN_ORIGIN, base: "/api", holds: "json", answer: api.fetch };
 }

@@ -97,6 +97,57 @@ describe("run", () => {
     expect(json).toEqual((await answered(bench.install.routes.sites[":site"].$get({ param: { site: label } }))).body);
   });
 
+  // Drift: only the install knows the word its public addresses end in. A command that guessed it would read `notes-site.example.com` as the public name `notes` on an install whose word is `page`, and delete the site at `notes-page`.
+  test.each([
+    ["page", "https://LABEL-p-poplin.example.com/", ["GET /api/sites/LABEL"]],
+    ["page", "https://LABEL-u-poplin.example.com/", ["GET /api/sites/LABEL"]],
+    ["page", "https://notes-page.example.com/", ["GET /api/whoami", "GET /api/sites/notes"]],
+    ["site", "https://notes-site.example.com/guide", ["GET /api/whoami", "GET /api/sites/notes"]],
+    ["site", "ID", ["GET /api/sites/ID"]],
+    ["site", "LABEL", ["GET /api/sites/LABEL"]],
+    ["site", "notes", ["GET /api/sites/notes"]],
+    ["page", "https://notes-site.example.com/", "https://poplin.example.com"],
+    ["site", "https://notes-page.example.com/", "https://poplin.example.com"],
+    ["page", "https://notes-page.example.org/", "example.org"],
+  ] as const)("on an install whose public word is %j, %s names the one site, or none: %j", async (publicWord, form, outcome) => {
+    const bench = await openBench(publicWord);
+    const label = (jsonOf(await bench.run(`${folderOf("report", { "index.html": "<title>Report</title>" })} --public --public-name notes --json`)).site as { label: string }).label;
+    const typed = form.replace("LABEL", label).replace("ID", label.slice(-12));
+    const before = await stateOf(bench);
+    bench.sent.length = 0;
+
+    const shown = await bench.run(`show ${typed}`);
+    const asked = [...bench.sent];
+    const deleted = await bench.run(`delete ${typed} --json`);
+
+    if (typeof outcome === "string") {
+      expect([shown.code, shown.out, shown.err[0]?.startsWith("no site with that id or public name: "), shown.err[0]?.includes(outcome), jsonOf(deleted).error]).toEqual([1, [], true, true, expect.objectContaining({ code: "not_found" })]);
+      expect([asked, await stateOf(bench)]).toEqual([outcome === "example.org" ? [] : ["GET /api/whoami"], before]);
+
+      return;
+    }
+
+    expect([shown.code, shown.out[0], asked]).toEqual([0, label, outcome.map((request) => request.replace("LABEL", label).replace("ID", label.slice(-12)))]);
+    expect((jsonOf(deleted).site as { label: string }).label).toBe(label);
+  });
+
+  // Drift: a dry run is read as calling no install; one that asks how an address reads must say so, and still change nothing.
+  test("a dry run that names a public site by its address asks the install how the address reads and nothing else, and says so", async () => {
+    const bench = await openBench();
+    const folder = folderOf("report", { "index.html": "<title>Report</title>" });
+    await bench.run(`${folder} --public --public-name notes`);
+    const before = await stateOf(bench);
+    bench.sent.length = 0;
+
+    const dry = await bench.run(`${folder} --site notes-page.example.com --dry-run`);
+    const none = await bench.run(`${folder} --site notes-site.example.com --dry-run`);
+    const noZip = await bench.run(`import ${join(folder, "none.zip")} --site notes-page.example.com --dry-run`);
+
+    expect([dry.code, dry.out[0], dry.out.at(-1)]).toEqual([0, "would update notes", "nothing was sent: --dry-run asked the install only how it reads the site's address"]);
+    expect([noZip.code, noZip.err[1]]).toEqual([1, "nothing of the backup was sent: the install was asked only how it reads the site's address"]);
+    expect([none.code, none.out, bench.sent, await stateOf(bench)]).toEqual([1, [], ["GET /api/whoami", "GET /api/whoami", "GET /api/whoami"], before]);
+  });
+
   // Drift: a person holds the address, not the label. Each form must ask the install for the same site by its label, and an address of another install must reach no install at all.
   test("a site named by its address is asked for by its label, and an address under another domain or port is refused before anything is sent", async () => {
     const { bench, label } = await withSite();
@@ -109,7 +160,7 @@ describe("run", () => {
     for (const address of typed) expect((await bench.run(`show ${address}`)).out).toEqual(shown);
 
     expect((await bench.run("show https://docs-page.example.com/guide")).out).toEqual(byPublicName);
-    expect(bench.sent).toEqual([...typed.map(() => `GET /api/sites/${label}`), "GET /api/sites/docs"]);
+    expect(bench.sent).toEqual([...typed.map(() => `GET /api/sites/${label}`), "GET /api/whoami", "GET /api/sites/docs"]);
 
     bench.sent.length = 0;
     const foreign = [`https://${label}-p-poplin.example.org/`, `https://${label}-p-poplin.evil.example/`, `https://${label}-p-poplin.example.com:8443/`, "https://docs-page.example.com.evil.example/"];
@@ -445,7 +496,7 @@ describe("run", () => {
     const machine = { env: { POPLIN_CONFIG_DIR: join(bench.home, "config") }, platform: process.platform, home: bench.home };
     await saveLogin({ server: ORIGIN, token } as Login, machine);
     const deep = `${'{"a":'.repeat(10_000)}1${"}".repeat(10_000)}`;
-    bench.hook = () => new Response(`{"token":{"id":"0000000000000000","scope":"admin","note":"","created":0,"expires":"never"},"version":"1.0.0","more":${deep}}`, { status: 200 });
+    bench.hook = () => new Response(`{"token":{"id":"0000000000000000","scope":"admin","note":"","created":0,"expires":"never"},"version":"1.0.0","public_word":"page","more":${deep}}`, { status: 200 });
 
     const typed = await bench.run(`show ${token} --json`, { env: {} });
     const dry = await bench.run(`${folderOf("report", { "index.html": "x" })} --dry-run --title ${token}`, { env: {} });

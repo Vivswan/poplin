@@ -1,7 +1,7 @@
 // The requests: what each command asks for once its words are read, with every argument checked.
 
 import { type Checked, parsePublicName, parseSiteName, type SiteName } from "../../../core/src/names/names";
-import { readSiteReference, type TypedSite } from "../../../core/src/sites/references";
+import { readSiteReference, type SettledSite, type TypedSite } from "../../../core/src/sites/references";
 import type { CommandName } from "./command-table";
 import { isSettingKey, readSetting, SETTING_SAMPLES, type SettingKey } from "./install-settings";
 import { readSiteSettings, type SiteSettings } from "./site-settings";
@@ -32,7 +32,7 @@ const REFUSALS: Readonly<Record<Refusal, string>> = {
 };
 
 /** The command of every request: each command of the table but `help`, which asks nothing of an install. */
-const BUILDERS: { readonly [Name in Exclude<CommandName, "help">]: (words: Words, now: number) => Request | UsageError } = {
+const BUILDERS: { readonly [Name in Exclude<CommandName, "help">]: (words: Words, now: number) => TypedRequest | UsageError } = {
   publish,
   set,
   show: (words) => oneSite("show", words),
@@ -56,9 +56,6 @@ const BUILDERS: { readonly [Name in Exclude<CommandName, "help">]: (words: Words
 
 type Refusal = Extract<ReturnType<typeof readSiteReference>, { readonly ok: false }>["refusal"];
 
-/** What names a site: its label's name and id, its id alone, or a public name, with the domain of an address that was typed. No lookup has been made. */
-type SiteRef = TypedSite;
-
 /** What every command that talks to an install carries: whether to answer in JSON, and the install `--server` chose. */
 interface Install {
   readonly json: boolean;
@@ -78,25 +75,35 @@ type ConfigAction = { readonly kind: "show-all" } | { readonly kind: "show"; rea
 type UpdateAction = "start" | "check" | "save" | "forget";
 
 /** A publish makes a new site, named after the path unless `name` is given, or updates the site it names. */
-type PublishTarget = { readonly kind: "create"; readonly name?: SiteName } | { readonly kind: "update"; readonly site: SiteRef };
+type PublishTarget<Site> = { readonly kind: "create"; readonly name?: SiteName } | { readonly kind: "update"; readonly site: Site };
 
-/** One command with its checked arguments. `path` and `zip` are as typed: no file has been read. */
-export type Request =
-  | ({ readonly kind: "publish"; readonly path: string; readonly target: PublishTarget; readonly settings: SiteSettings; readonly dryRun: boolean } & Install)
-  | ({ readonly kind: "set"; readonly site: SiteRef; readonly settings: SiteSettings } & Install)
-  | ({ readonly kind: "show" | "new-link" | "restore"; readonly site: SiteRef } & Install)
-  | ({ readonly kind: "rollback"; readonly site: SiteRef; readonly to?: number } & Install)
-  | ({ readonly kind: "duplicate"; readonly site: SiteRef; readonly name?: SiteName } & Install)
-  | ({ readonly kind: "delete"; readonly site: SiteRef; readonly forever: boolean } & Install)
+/**
+ * One command with its checked arguments. `path` and `zip` are as typed: no file has been read.
+ *
+ * `Site` is what names a site: its label's name and id, its id alone, or a public name, with the domain of an address that was typed. No lookup has been made.
+ */
+type Asked<Site> =
+  | ({ readonly kind: "publish"; readonly path: string; readonly target: PublishTarget<Site>; readonly settings: SiteSettings; readonly dryRun: boolean } & Install)
+  | ({ readonly kind: "set"; readonly site: Site; readonly settings: SiteSettings } & Install)
+  | ({ readonly kind: "show" | "new-link" | "restore"; readonly site: Site } & Install)
+  | ({ readonly kind: "rollback"; readonly site: Site; readonly to?: number } & Install)
+  | ({ readonly kind: "duplicate"; readonly site: Site; readonly name?: SiteName } & Install)
+  | ({ readonly kind: "delete"; readonly site: Site; readonly forever: boolean } & Install)
   | ({ readonly kind: "list"; readonly trash: boolean } & Install)
   | ({ readonly kind: "login"; readonly publisher: boolean; readonly computer?: string; readonly browser: boolean } & Install)
   | ({ readonly kind: "logout" | "whoami" | "doctor" } & Install)
   | ({ readonly kind: "setup"; readonly check: boolean; readonly domain?: string; readonly login?: string } & Install)
   | ({ readonly kind: "config"; readonly action: ConfigAction } & Install)
   | ({ readonly kind: "update"; readonly action: UpdateAction; readonly anyway: boolean } & Install)
-  | ({ readonly kind: "export"; readonly site?: SiteRef; readonly allVersions: boolean; readonly out?: string; readonly overwrite: boolean } & Install)
-  | ({ readonly kind: "import"; readonly zip: string; readonly site?: SiteRef; readonly settings: boolean; readonly logins: boolean; readonly dryRun: boolean } & Install)
+  | ({ readonly kind: "export"; readonly site?: Site; readonly allVersions: boolean; readonly out?: string; readonly overwrite: boolean } & Install)
+  | ({ readonly kind: "import"; readonly zip: string; readonly site?: Site; readonly settings: boolean; readonly logins: boolean; readonly dryRun: boolean } & Install)
   | { readonly kind: "mcp" };
+
+/** A command as the parser read it: the site it names may be an address only its install can read. */
+export type TypedRequest = Asked<TypedSite>;
+
+/** A command whose site, when it names one, is read: what every command runs on. */
+export type Request = Asked<SettledSite>;
 
 function readInstall(flags: Flags): Install | UsageError {
   const json = flags.has("--json");
@@ -108,7 +115,7 @@ function readInstall(flags: Flags): Install | UsageError {
   return { json, server };
 }
 
-function readSite(raw: string, what: string): SiteRef | UsageError {
+function readSite(raw: string, what: string): TypedSite | UsageError {
   const reference = readSiteReference(raw);
   if (reference.ok) return reference.value;
 
@@ -124,21 +131,21 @@ function readName<Name>(flag: "--name" | "--public-name", raw: string, parsed: C
   return parsed.value;
 }
 
-function withInstall(words: Words, build: (install: Install) => Request): Request | UsageError {
+function withInstall(words: Words, build: (install: Install) => TypedRequest): TypedRequest | UsageError {
   const install = readInstall(words.flags);
   if (isUsageError(install)) return install;
 
   return build(install);
 }
 
-function withSite(words: Words, build: (site: SiteRef, install: Install) => Request): Request | UsageError {
+function withSite(words: Words, build: (site: TypedSite, install: Install) => TypedRequest): TypedRequest | UsageError {
   const site = readSite(words.positionals[0] ?? "", "<site>");
   if (isUsageError(site)) return site;
 
   return withInstall(words, (install) => build(site, install));
 }
 
-function oneSite(kind: "show" | "new-link" | "restore", words: Words): Request | UsageError {
+function oneSite(kind: "show" | "new-link" | "restore", words: Words): TypedRequest | UsageError {
   return withSite(words, (site, install) => ({ kind, site, ...install }));
 }
 
@@ -163,7 +170,7 @@ function withNames(flags: Flags, given: SiteSettings): SiteSettings | UsageError
 }
 
 /** Whether a publish creates or updates. `--name` is the new site's name, and the new name of a site that is updated. */
-function planPublish(flags: Flags, given: SiteSettings): { readonly target: PublishTarget; readonly settings: SiteSettings } | UsageError {
+function planPublish(flags: Flags, given: SiteSettings): { readonly target: PublishTarget<TypedSite>; readonly settings: SiteSettings } | UsageError {
   const siteText = flagValue(flags, "--site");
   const named = withNames(flags, given);
   if (isUsageError(named)) return named;
@@ -181,7 +188,7 @@ function planPublish(flags: Flags, given: SiteSettings): { readonly target: Publ
   return { target: { kind: "create", name }, settings };
 }
 
-function publish(words: Words, now: number): Request | UsageError {
+function publish(words: Words, now: number): TypedRequest | UsageError {
   const [path = ""] = words.positionals;
   if (path === "") return usageError("the path is empty", "to publish the current folder: poplin .");
 
@@ -194,7 +201,7 @@ function publish(words: Words, now: number): Request | UsageError {
   return withInstall(words, (install) => ({ kind: "publish", path, ...plan, dryRun: words.flags.has("--dry-run"), ...install }));
 }
 
-function set(words: Words, now: number): Request | UsageError {
+function set(words: Words, now: number): TypedRequest | UsageError {
   const given = readSiteSettings(words.flags, now);
   if (isUsageError(given)) return given;
 
@@ -206,7 +213,7 @@ function set(words: Words, now: number): Request | UsageError {
   return withSite(words, (site, install) => ({ kind: "set", site, settings, ...install }));
 }
 
-function rollback(words: Words): Request | UsageError {
+function rollback(words: Words): TypedRequest | UsageError {
   const to = flagValue(words.flags, "--to");
   if (to === undefined) return withSite(words, (site, install) => ({ kind: "rollback", site, ...install }));
 
@@ -217,7 +224,7 @@ function rollback(words: Words): Request | UsageError {
   return withSite(words, (site, install) => ({ kind: "rollback", site, to: version, ...install }));
 }
 
-function duplicate(words: Words): Request | UsageError {
+function duplicate(words: Words): TypedRequest | UsageError {
   const nameText = flagValue(words.flags, "--name");
   if (nameText === undefined) return withSite(words, (site, install) => ({ kind: "duplicate", site, ...install }));
 
@@ -227,7 +234,7 @@ function duplicate(words: Words): Request | UsageError {
   return withSite(words, (site, install) => ({ kind: "duplicate", site, name, ...install }));
 }
 
-function login(words: Words): Request | UsageError {
+function login(words: Words): TypedRequest | UsageError {
   const asked = { kind: "login", publisher: words.flags.has("--publisher"), browser: !words.flags.has("--no-browser") } as const;
   const computer = flagValue(words.flags, "--name");
   if (computer === undefined) return withInstall(words, (install) => ({ ...asked, ...install }));
@@ -235,7 +242,7 @@ function login(words: Words): Request | UsageError {
   return withInstall(words, (install) => ({ ...asked, computer, ...install }));
 }
 
-function setup(words: Words): Request | UsageError {
+function setup(words: Words): TypedRequest | UsageError {
   const domain = flagValue(words.flags, "--domain");
   const first = flagValue(words.flags, "--login");
   const typed = { ...(domain === undefined ? {} : { domain }), ...(first === undefined ? {} : { login: first }) };
@@ -261,14 +268,14 @@ function readConfigAction(words: Words): ConfigAction | UsageError {
   return { kind: "change", key, value };
 }
 
-function config(words: Words): Request | UsageError {
+function config(words: Words): TypedRequest | UsageError {
   const action = readConfigAction(words);
   if (isUsageError(action)) return action;
 
   return withInstall(words, (install) => ({ kind: "config", action, ...install }));
 }
 
-function update(words: Words): Request | UsageError {
+function update(words: Words): TypedRequest | UsageError {
   const asked: readonly (readonly [flag: string, action: UpdateAction])[] = [
     ["--check", "check"],
     ["--save-address", "save"],
@@ -284,7 +291,7 @@ function update(words: Words): Request | UsageError {
   return withInstall(words, (install) => ({ kind: "update", action: first?.[1] ?? "start", anyway, ...install }));
 }
 
-function exportSites(words: Words): Request | UsageError {
+function exportSites(words: Words): TypedRequest | UsageError {
   const out = flagValue(words.flags, "--out");
   if (out === "") return usageError("--out needs the path of the zip to write", "poplin export --out backup.zip");
 
@@ -295,7 +302,7 @@ function exportSites(words: Words): Request | UsageError {
   return withSite(words, (site, install) => ({ kind: "export", site, ...asked, ...install }));
 }
 
-function importBackup(words: Words): Request | UsageError {
+function importBackup(words: Words): TypedRequest | UsageError {
   const [zip = ""] = words.positionals;
   if (zip === "") return usageError("the path of the zip is empty", "poplin import <zip>");
 
@@ -320,6 +327,6 @@ function importBackup(words: Words): Request | UsageError {
  * @param now - the time, in milliseconds since the epoch; an expiry must lie after it
  * @returns the request, or the first argument or flag value that was written wrong
  */
-export function buildRequest(command: Exclude<CommandName, "help">, words: Words, now: number): Request | UsageError {
+export function buildRequest(command: Exclude<CommandName, "help">, words: Words, now: number): TypedRequest | UsageError {
   return BUILDERS[command](words, now);
 }

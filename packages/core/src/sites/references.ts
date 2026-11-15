@@ -5,11 +5,12 @@
 //   docs                                                      a public name
 //   https://report--k3f9x2ab71qz-p-poplin.example.com/a?b#c   the address, with or without `https://`, a path, a query, a fragment
 //   report--k3f9x2ab71qz-p-poplin                             the first label of the address
-//   https://docs-page.example.com/                            a public site's address
+//   https://docs-page.example.com/                            a public site's address, which only its install reads
 // A word without a dot is never read as a public address: `docs-page` is itself a public name.
+// A public address ends in the word its install chose, so it is kept unread here, and `settleSite` reads it with the word the install answers.
 
 import { ADMIN_LABEL, parseHostname } from "../names/hostname";
-import { keptPublicNames, MARKER, parsePublicWord, readHostLabel } from "../names/marker";
+import { type HostParts, keptPublicNames, MARKER, parsePublicWord, readHostLabel } from "../names/marker";
 import type { Checked } from "../names/names";
 import { siteReference } from "./labels";
 
@@ -41,8 +42,18 @@ type SiteReference = Extract<ReturnType<typeof siteReference>, { readonly ok: tr
 /** Why a typed string names no site: a rule of a name or an id, `no-site-url` for a URL with its scheme that is not a site's, or `no-site-address` for any other text only an address holds. */
 type TypedRefusal = Extract<Checked<unknown>, { readonly ok: false }>["refusal"] | "no-site-url" | "no-site-address";
 
-/** The site a typed string names. `under` is set when an address was typed: the domain it sits under, with its port when it names one, such as `example.com`. */
-export type TypedSite = SiteReference & { readonly under?: string };
+/** A site as an install is asked for it. `under` is set when an address was typed: the domain it sits under, with its port when it names one, such as `example.com`. */
+export type SettledSite = SiteReference & { readonly under?: string };
+
+/** An address of the form of a public site's. `label` is its first label, whose last word is the public word of the install it is under, or is not. */
+interface UnreadAddress {
+  readonly kind: "address";
+  readonly label: string;
+  readonly under: string;
+}
+
+/** What a typed string names: a site, or an address only its install can read. */
+export type TypedSite = SettledSite | UnreadAddress;
 
 /** A typed site, or why the string names none. */
 type CheckedTyped = { readonly ok: true; readonly value: TypedSite } | { readonly ok: false; readonly refusal: TypedRefusal };
@@ -66,21 +77,26 @@ function parseAddress(address: string): URL | undefined {
   return url;
 }
 
+/** The site a label address names: its id, with the name the label carried. */
+function ofParts(parts: Extract<HostParts, { readonly kind: "site" }>): SiteReference {
+  return parts.name === undefined ? { kind: "id", id: parts.id } : { kind: "site", name: parts.name, id: parts.id };
+}
+
 /**
  * Read the first label of a site's hostname without knowing the install.
  *
- * The word the label ends in is taken as the public word, so the label is read as that install would read it. Only the install that is asked knows whether the word is its own.
+ * A label address reads the same under every install. Any other label is read with its own last word as the public word, which says only that it has the form of a public address.
+ *
+ * @returns the site of a label address, `public` for the form of a public address, else `undefined`
  */
-function readFirstLabel(label: string): SiteReference | undefined {
+function readFirstLabel(label: string): SiteReference | "public" | undefined {
   const publicWord = parsePublicWord(label.slice(label.lastIndexOf(DASH) + DASH.length));
   if (publicWord === undefined) return undefined;
 
   const parts = readHostLabel(label, { publicWord, reserved: keptPublicNames(publicWord) });
-  if (parts.kind === "public-name") return parts;
+  if (parts.kind === "public-name") return "public";
 
-  if (parts.kind !== "site") return undefined;
-
-  return parts.name === undefined ? { kind: "id", id: parts.id } : { kind: "site", name: parts.name, id: parts.id };
+  return parts.kind === "site" ? ofParts(parts) : undefined;
 }
 
 /** The first label of a hostname, and what stands after it with the port: `under` of a typed site. */
@@ -100,7 +116,7 @@ function readUrl(address: string): TypedSite | undefined {
   const site = host === undefined ? undefined : readFirstLabel(host.label);
   if (host === undefined || site === undefined) return undefined;
 
-  return { ...site, under: host.under };
+  return site === "public" ? { kind: "address", ...host } : { ...site, under: host.under };
 }
 
 /** Read an address. A text the platform reads as a URL with a host was typed with its scheme and is read as it stands; any other is read as a host with no scheme before it. */
@@ -128,9 +144,26 @@ export function isOfInstall(site: TypedSite, server: string): boolean {
 }
 
 /**
+ * Read a typed site as its install reads it: an address of the form of a public site's is one only under the install's own public word.
+ *
+ * @param site - what `readSiteReference` read, of an install `isOfInstall` holds for
+ * @param publicWord - what the install answered as the word its public addresses end in
+ * @returns the site, which is `site` itself unless it was an unread address; `undefined` for an address that is no site's under that word
+ */
+export function settleSite(site: TypedSite, publicWord: string): SettledSite | undefined {
+  if (site.kind !== "address") return site;
+
+  const word = parsePublicWord(publicWord);
+  const parts = word === undefined ? undefined : readHostLabel(site.label, { publicWord: word, reserved: keptPublicNames(word) });
+  if (parts === undefined || parts.kind === "not-ours" || parts.kind === "not-found") return undefined;
+
+  return { ...(parts.kind === "site" ? ofParts(parts) : parts), under: site.under };
+}
+
+/**
  * Read what a person typed or pasted to name a site.
  *
- * Whatever `siteReference` reads means what it means there. A site's address, or the first label of one that carries the id, is read down to the same reference.
+ * Whatever `siteReference` reads means what it means there. A site's address, or the first label of one that carries the id, is read down to the same reference. A public site's address is kept unread, for `settleSite`.
  *
  * @param typed - the string as typed; whitespace and one pair of quotes or angle brackets around it are dropped, and a hostname is lowered
  * @returns the reference, or why the string is none; no lookup is made, and whether an address is this install's is for `isOfInstall` to say
@@ -143,7 +176,7 @@ export function readSiteReference(typed: string): CheckedTyped {
   if (reference.ok || !text.endsWith(MARKER)) return reference;
 
   const site = readFirstLabel(text);
-  if (site === undefined || site.kind === "public-name") return reference;
+  if (site === undefined || site === "public") return reference;
 
   return { ok: true, value: site };
 }

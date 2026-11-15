@@ -6,7 +6,7 @@ import { type Command, CommanderError } from "commander";
 
 import { BARE_COMMAND, COMMANDS, type CommandName, type CommandSpec, HELP_FLAG, VERSION_FLAG } from "./command-table";
 import { argumentsOf, buildProgram } from "./program";
-import { buildRequest, type Request } from "./requests";
+import { buildRequest, type TypedRequest } from "./requests";
 import { type Flags, isUsageError, looksLikePath, nearest, type UsageError, usageError } from "./util";
 
 /** Every command of the table, by the word that runs it. */
@@ -51,7 +51,7 @@ interface TypedWords {
 }
 
 /** What a command line asks for: a command's request, the help of a command or of `poplin` itself, the version, or a refusal. `asked` is false for the help an empty command line gets. */
-export type Parsed = Request | { readonly kind: "help"; readonly topic?: CommandName; readonly asked: boolean } | { readonly kind: "version" } | UsageError;
+export type Parsed = TypedRequest | { readonly kind: "help"; readonly topic?: CommandName; readonly asked: boolean } | { readonly kind: "version" } | UsageError;
 
 /** What ends the reading of a line before commander is through with it: the answer is known. */
 class Answered extends Error {

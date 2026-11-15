@@ -5,6 +5,7 @@ import { mintToken } from "@poplin/core/src/auth/tokens";
 import type { Database } from "@poplin/core/src/database/database";
 import type { SqlDriver, Statement, StatementResult } from "@poplin/core/src/database/driver";
 import { openDatabase } from "@poplin/core/src/database/open";
+import { DEFAULT_PUBLIC_WORD, parsePublicWord } from "@poplin/core/src/names/marker";
 import { defaultSettings } from "@poplin/core/src/records/settings";
 import { MemoryStore } from "@poplin/core/src/storage/memory";
 import type { ObjectStore } from "@poplin/core/src/storage/storage";
@@ -13,7 +14,7 @@ import { type ClientRequestOptions, hc } from "hono/client";
 
 import { type Api, type ApiLimits, createApi } from "../../../src/api/api";
 import { MemoryCounters } from "../../../src/limits/memory-counters";
-import { ADDRESSES } from "../../sites/support/layout";
+import { addressesUnder } from "../../sites/support/layout";
 
 /** The moment every test request arrives at, unless the test moves the clock. */
 export const NOW = 1_700_000_000_000;
@@ -141,8 +142,9 @@ export async function answered(sent: Promise<Pick<Response, "status" | "headers"
  * Open a fresh install with default settings, laid over by `overrides`, and its three tokens.
  *
  * @param limits - what one request can carry, in place of the small caps of `LIMITS`
+ * @param publicWord - the word the install's public addresses end in, in place of `page`
  */
-export async function openApi(overrides: Partial<ReturnType<typeof defaultSettings>> = {}, limits: ApiLimits = LIMITS): Promise<ApiInstall> {
+export async function openApi(overrides: Partial<ReturnType<typeof defaultSettings>> = {}, limits: ApiLimits = LIMITS, publicWord: string = DEFAULT_PUBLIC_WORD): Promise<ApiInstall> {
   const calls = { database: 0, store: 0 };
   const driver = new CountingDriver(calls);
   const opened = await openDatabase(driver, NOW);
@@ -163,16 +165,21 @@ export async function openApi(overrides: Partial<ReturnType<typeof defaultSettin
   const reported: unknown[] = [];
   const counters = new MemoryCounters();
   const provider: ApiInstall["provider"] = { status: 200, sent: [] };
+  const word = parsePublicWord(publicWord);
+  if (word === undefined) throw new Error(`the test's public word was refused: ${publicWord}`);
+
+  const addresses = addressesUnder(word);
   const api = createApi({
     database,
     store: counted(store, calls),
     now: () => clock.now,
-    addressOf: ADDRESSES.addressOf,
-    publicAddressOf: ADDRESSES.publicAddressOf,
-    reservedNames: ADDRESSES.reservedNames,
+    addressOf: addresses.addressOf,
+    publicAddressOf: addresses.publicAddressOf,
+    reservedNames: addresses.reservedNames,
     readToken: (id) => database.getToken(id),
     limits,
     version: INSTALL_VERSION,
+    publicWord: word,
     report: (error) => reported.push(error),
     // Found anew on every request, so a test that swaps the method in is heard.
     counters: { takeMinute: (window, now) => counters.takeMinute(window, now) },

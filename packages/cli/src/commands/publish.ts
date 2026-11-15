@@ -9,7 +9,7 @@ import { type PublishFile, readFiles } from "../files/read";
 import { readTitle } from "../files/title";
 import { type Problem, problem, problemOf } from "./problems";
 import type { Io, Outcome, RequestOf, Session } from "./records";
-import { addressChange, columns, countText, searchNotes, siteLines } from "./text";
+import { addressChange, columns, countText, dryRunText, searchNotes, siteLines } from "./text";
 import { abandonUpload, callUnhurried, givenUp, giveUpUpload, type Published, sendUpload } from "./upload";
 import { siteChanges, siteWord } from "./wire";
 
@@ -115,9 +115,11 @@ export async function planPublish(request: PublishRequest): Promise<{ readonly o
 }
 
 /**
- * Say what a publish would send, for `--dry-run`. No install is called, so nothing anywhere changes.
+ * Say what a publish would send, for `--dry-run`. Nothing anywhere changes.
+ *
+ * @param addressRead - whether the install was asked how it reads the address of the site to update; it is called for nothing else
  */
-export function previewPublish(plan: PublishPlan): Outcome {
+export function previewPublish(plan: PublishPlan, addressRead: boolean): Outcome {
   const { files, ...asked } = plan.manifest;
   const target = asked.site === undefined ? `would make a new site named ${asked.name}` : `would update ${asked.site}`;
   const rows = files.map((file) => [`  ${file.path}`, showBytes(file.size), file.content_type]);
@@ -125,7 +127,7 @@ export function previewPublish(plan: PublishPlan): Outcome {
   return {
     ok: true,
     value: { dry_run: true, ...asked, count: files.length, bytes: plan.bytes, skipped: plan.skipped, files },
-    lines: [target, `would upload ${summary(plan)}`, ...columns(rows), "nothing was sent: --dry-run calls no install"],
+    lines: [target, `would upload ${summary(plan)}`, ...columns(rows), dryRunText(addressRead)],
   };
 }
 

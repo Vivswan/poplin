@@ -60,7 +60,7 @@ describe("parseCommand", () => {
     [`poplin show ${ADDRESS}/page?x=1#top`, { kind: "show", site: ADDRESSED, ...PLAIN }],
     [`poplin show ${LABEL}-u-poplin.example.com/`, { kind: "show", site: ADDRESSED, ...PLAIN }],
     [`poplin show ${LABEL}-p-poplin`, { kind: "show", site: REPORT, ...PLAIN }],
-    ["poplin delete https://docs-page.example.com/", { kind: "delete", site: { kind: "public-name", name: "docs", under: "example.com" }, forever: false, ...PLAIN }],
+    ["poplin delete https://docs-page.example.com/", { kind: "delete", site: { kind: "address", label: "docs-page", under: "example.com" }, forever: false, ...PLAIN }],
     [`poplin ./report --site ${ADDRESS}`, { ...CREATE, path: "./report", target: { kind: "update", site: ADDRESSED } }],
     [`poplin export ${ADDRESS}`, { kind: "export", site: ADDRESSED, allVersions: false, overwrite: false, ...PLAIN }],
     [`poplin import backup.zip --site ${ADDRESS}`, { kind: "import", zip: "backup.zip", site: ADDRESSED, settings: false, logins: false, dryRun: false, ...PLAIN }],

@@ -6,7 +6,7 @@ import type * as v from "valibot";
 import { DELETED_SITE } from "../../../core/src/actions/delete";
 import type { TOOL_INPUTS } from "../../../core/src/actions/tool-inputs";
 import { parsePublicName, parseSiteName } from "../../../core/src/names/names";
-import { readSiteReference } from "../../../core/src/sites/references";
+import { readSiteReference, type TypedSite } from "../../../core/src/sites/references";
 import { type Problem, problem, problemOf } from "../commands/problems";
 import { planPublish, sendPublish } from "../commands/publish";
 import type { Outcome, RequestOf, Session } from "../commands/records";
@@ -14,7 +14,7 @@ import { runSiteCommand } from "../commands/site-commands";
 import { readSiteSettings, type SiteSettings } from "../commands/site-settings";
 import { countText } from "../commands/text";
 import { isUsageError } from "../commands/util";
-import { foreignAddress, siteWord } from "../commands/wire";
+import { readByInstall, siteWord } from "../commands/wire";
 import type { Host } from "./records";
 
 /** What a `site` argument may be, for the hint of a refused one. */
@@ -52,8 +52,11 @@ type InputOf<Name extends ToolName> = v.InferOutput<(typeof TOOL_INPUTS)[Name]>;
 /** The settings a tool may be asked for, as the API names them. */
 type AskedSettings = Omit<InputOf<"update_site">, "site">;
 
-/** What names a site, as the command parser reads it. */
+/** What names a site, as a command runs on it. */
 type SiteReference = RequestOf<"show">["site"];
+
+/** What a publish does, as a command runs on it: it makes a new site, or updates one. */
+type Target = RequestOf<"publish">["target"];
 
 /** A command about one or all sites, as `runSiteCommand` takes it. */
 type SiteRequest = Parameters<typeof runSiteCommand>[0];
@@ -79,7 +82,7 @@ function isProblem(value: object): value is Problem {
   return "exit" in value;
 }
 
-function readSite(raw: string): SiteReference | Problem {
+function readSite(raw: string): TypedSite | Problem {
   const reference = readSiteReference(raw);
   if (!reference.ok) return problem("bad_argument", `site ${JSON.stringify(raw)}`, SITE_FORMS);
 
@@ -120,8 +123,8 @@ function readSettings(asked: AskedSettings): SiteSettings | Problem {
   return { ...settings, ...names };
 }
 
-/** Run one call against the install, or say why there is no install to call. A site typed as the address of another install is refused before the call. */
-async function online(host: Host, site: SiteReference | undefined, run: (session: Session) => Promise<Outcome>): Promise<Outcome> {
+/** Run one call against the install, or say why there is no install to call. */
+async function online(host: Host, run: (session: Session) => Promise<Outcome>): Promise<Outcome> {
   const session = await host.session();
 
   if (session === "logged-out") {
@@ -130,25 +133,31 @@ async function online(host: Host, site: SiteReference | undefined, run: (session
 
   if ("code" in session) return refused(session);
 
-  const foreign = foreignAddress(site, session.server);
-  if (foreign !== undefined) return refused(foreign);
-
   return run(session);
 }
 
-async function onSite(host: Host, raw: string, request: (site: SiteReference) => SiteRequest): Promise<Outcome> {
-  const site = readSite(raw);
-  if (isProblem(site)) return refused(site);
+/** Run one call about a site, read as the install reads it. A site typed as the address of another install, or as an address that is no site's of this one, is refused before the call. */
+async function withSite(host: Host, typed: TypedSite, run: (site: SiteReference, session: Session) => Promise<Outcome>): Promise<Outcome> {
+  return online(host, async (session) => {
+    const site = await readByInstall(typed, session);
 
-  return online(host, site, (session) => runSiteCommand(request(site), session));
+    return isProblem(site) ? refused(site) : run(site, session);
+  });
+}
+
+async function onSite(host: Host, raw: string, request: (site: SiteReference) => SiteRequest): Promise<Outcome> {
+  const typed = readSite(raw);
+  if (isProblem(typed)) return refused(typed);
+
+  return withSite(host, typed, (site, session) => runSiteCommand(request(site), session));
 }
 
 /** Remove a site for good, and say what is gone. The command asks a person to type the label first; a tool is asked through `forever: true` alone. */
 async function deleteForever(raw: string, host: Host): Promise<Outcome> {
-  const site = readSite(raw);
-  if (isProblem(site)) return refused(site);
+  const typed = readSite(raw);
+  if (isProblem(typed)) return refused(typed);
 
-  return online(host, site, async ({ client }) => {
+  return withSite(host, typed, async (site, { client }) => {
     const deleted = await client.call(DELETED_SITE, (api) => api.sites[":site"].$delete({ param: { site: siteWord(site) }, query: { forever: "true" } }));
     if (!deleted.ok) return refused(problemOf(deleted.failure, "changes"));
 
@@ -170,12 +179,13 @@ async function deleteForever(raw: string, host: Host): Promise<Outcome> {
   });
 }
 
-/** Whether a publish makes a new site, under which name, or updates one, which a name sent with it renames. */
-function readTarget(site: string | undefined, name: string | undefined): RequestOf<"publish">["target"] | Problem {
+/** Whether a publish makes a new site, under which name, or updates one, which a name sent with it renames. `unread` updates a site whose address only the install can read. */
+function readTarget(site: string | undefined, name: string | undefined): Target | { readonly kind: "unread"; readonly address: TypedSite } | Problem {
   if (site !== undefined) {
-    const reference = readSite(site);
+    const typed = readSite(site);
+    if (isProblem(typed)) return typed;
 
-    return isProblem(reference) ? reference : { kind: "update", site: reference };
+    return typed.kind === "address" ? { kind: "unread", address: typed } : { kind: "update", site: typed };
   }
 
   if (name === undefined) return { kind: "create" };
@@ -184,6 +194,25 @@ function readTarget(site: string | undefined, name: string | undefined): Request
   if (!parsed.ok) return problem("bad_name", "name");
 
   return { kind: "create", name: parsed.value };
+}
+
+/** Plan a publish and send it. The plan comes first, so a path that cannot be read is said with no install called. */
+async function sendPlanned(host: Host, target: Target, plan: (to: Target) => ReturnType<typeof planPublish>): Promise<Outcome> {
+  const planned = await plan(target);
+  if (!planned.ok) return planned;
+
+  if (target.kind === "create") return online(host, (session) => sendPublish(planned.plan, session));
+
+  return withSite(host, target.site, (_site, session) => sendPublish(planned.plan, session));
+}
+
+/** Update the site an address names: the install reads the address first, since the plan holds the site it reads as. */
+async function sendToAddress(host: Host, address: TypedSite, plan: (to: Target) => ReturnType<typeof planPublish>): Promise<Outcome> {
+  return withSite(host, address, async (site, session) => {
+    const planned = await plan({ kind: "update", site });
+
+    return planned.ok ? sendPublish(planned.plan, session) : planned;
+  });
 }
 
 async function publish(input: InputOf<"publish_site">, host: Host): Promise<Outcome> {
@@ -197,10 +226,8 @@ async function publish(input: InputOf<"publish_site">, host: Host): Promise<Outc
   if (isProblem(settings)) return refused(settings);
 
   const path = resolve(asked);
-  const planned = await planPublish({ kind: "publish", path, target, settings, dryRun: false, json: false });
-  if (!planned.ok) return planned;
-
-  const sent = await online(host, target.kind === "update" ? target.site : undefined, (session) => sendPublish(planned.plan, session));
+  const plan = (to: Target): ReturnType<typeof planPublish> => planPublish({ kind: "publish", path, target: to, settings, dryRun: false, json: false });
+  const sent = await (target.kind === "unread" ? sendToAddress(host, target.address, plan) : sendPlanned(host, target, plan));
   if (!sent.ok) return sent;
 
   return { ...sent, value: { ...Object(sent.value), path }, lines: [`read ${path}`, ...sent.lines] };
@@ -243,7 +270,7 @@ export const TOOLS: { readonly [Name in ToolName]: Tool<Name> } = {
     description: "List the sites, each with its label, access, and address (url); views in the data are about how often its pages were opened.",
     parameters: { trash: "true: list the deleted sites restore_site can still take back." },
     hints: { readOnlyHint: true },
-    run: (input, host) => online(host, undefined, (session) => runSiteCommand({ kind: "list", trash: input.trash, json: false }, session)),
+    run: (input, host) => online(host, (session) => runSiteCommand({ kind: "list", trash: input.trash, json: false }, session)),
   },
   rollback_site: {
     description: "Make an earlier kept version of a site the live one. Its settings and addresses stay.",

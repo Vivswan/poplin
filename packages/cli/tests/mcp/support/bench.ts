@@ -60,9 +60,10 @@ function assertNoToken(bench: McpBench, tokens: readonly string[]): void {
  *
  * @param env - the environment, in place of the admin's login
  * @param home - the home folder the saved login is looked for under
+ * @param publicWord - the word the install's public addresses end in, in place of `page`
  */
-export async function openMcp(home: string, env?: Readonly<Record<string, string | undefined>>): Promise<McpBench> {
-  const install = await openApi();
+export async function openMcp(home: string, env?: Readonly<Record<string, string | undefined>>, publicWord?: string): Promise<McpBench> {
+  const install = await openApi(undefined, undefined, publicWord);
   const login = env ?? { POPLIN_SERVER: ORIGIN, POPLIN_TOKEN: install.tokens.admin };
   const tokens = [...Object.values(install.tokens), login.POPLIN_TOKEN ?? ""].filter((token) => token !== "");
   const input = new PassThrough();

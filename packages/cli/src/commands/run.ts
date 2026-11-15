@@ -17,10 +17,10 @@ import { type Problem, problem, problemLines } from "./problems";
 import { planPublish, previewPublish, sendPublish } from "./publish";
 import { runSetup } from "./setup";
 import type { Io, Outcome, RequestOf, Session } from "./records";
-import type { Request } from "./requests";
+import type { Request, TypedRequest } from "./requests";
 import { runSiteCommand } from "./site-commands";
 import { runUpdate } from "./update";
-import { foreignAddress } from "./wire";
+import { readByInstall } from "./wire";
 
 /** How long each call may take that a stopped command gives its upload up with, in milliseconds: 4 seconds. */
 export const AFTER_STOP_TIMEOUT_MS = 4000;
@@ -36,6 +36,12 @@ const SITE_COMMANDS = ["set", "show", "list", "rollback", "new-link", "duplicate
 
 /** A command that talks to an install. */
 type OnlineRequest = RequestOf<"publish" | "export" | "import" | "update" | (typeof INSTALL_COMMANDS)[number] | (typeof SITE_COMMANDS)[number]>;
+
+/** A command whose site, when it names one, is read. */
+type Command = Exclude<Request, { readonly kind: "mcp" }>;
+
+/** A command as it runs, or the address it names that only its install can read, with the way to put the site the address reads as in its place. */
+type Split = { readonly request: Command } | { readonly address: Parameters<typeof readByInstall>[0]; readonly read: (site: RequestOf<"show">["site"]) => Command };
 
 function refused(said: Problem): Outcome {
   return { ok: false, problem: said };
@@ -92,7 +98,7 @@ function asksJson(argv: readonly string[]): boolean {
  *
  * `--server` picks the install, and must be the one the login is for: a token is sent to no other address.
  */
-async function connect(request: OnlineRequest, io: Io): Promise<Session | Problem | "logged-out"> {
+async function connect(request: { readonly server?: string }, io: Io): Promise<Session | Problem | "logged-out"> {
   if (request.server !== undefined && !isServer(request.server)) return problem("bad_server");
 
   const current = await currentLogin(io.machine);
@@ -112,13 +118,20 @@ async function connect(request: OnlineRequest, io: Io): Promise<Session | Proble
 }
 
 /** The site a command names, when it names one: its own, or the one a publish updates. */
-function namedSite(request: OnlineRequest): Parameters<typeof foreignAddress>[0] {
+function namedSite(request: OnlineRequest): RequestOf<"show">["site"] | undefined {
   if (request.kind === "publish") return request.target.kind === "update" ? request.target.site : undefined;
 
   return "site" in request ? request.site : undefined;
 }
 
-async function online(request: OnlineRequest, io: Io, run: (session: Session) => Promise<Outcome>): Promise<Outcome> {
+/**
+ * Run a command against the install it talks to.
+ *
+ * @param reached - the session the install already read the command's site in: the command runs on it, and nothing is asked twice
+ */
+async function online(request: OnlineRequest, io: Io, run: (session: Session) => Promise<Outcome>, reached?: Session): Promise<Outcome> {
+  if (reached !== undefined) return run(reached);
+
   const session = await connect(request, io);
 
   if (session === "logged-out" && request.kind === "logout") return { ok: true, value: { revoked: false }, lines: ["no login is saved on this machine"] };
@@ -127,19 +140,20 @@ async function online(request: OnlineRequest, io: Io, run: (session: Session) =>
 
   if ("code" in session) return refused(session);
 
-  const foreign = foreignAddress(namedSite(request), session.server);
-  if (foreign !== undefined) return refused(foreign);
+  const site = namedSite(request);
+  const read = site === undefined ? undefined : await readByInstall(site, session);
+  if (read !== undefined && "code" in read) return refused(read);
 
   return run(session);
 }
 
-async function publish(request: RequestOf<"publish">, io: Io): Promise<Outcome> {
+async function publish(request: RequestOf<"publish">, io: Io, reached?: Session): Promise<Outcome> {
   const planned = await planPublish(request);
   if (!planned.ok) return planned;
 
-  if (request.dryRun) return previewPublish(planned.plan);
+  if (request.dryRun) return previewPublish(planned.plan, reached !== undefined);
 
-  return online(request, io, (session) => sendPublish(planned.plan, session));
+  return online(request, io, (session) => sendPublish(planned.plan, session), reached);
 }
 
 /** Tell the requests of some commands from the rest. */
@@ -147,8 +161,44 @@ function asks<Kind extends Request["kind"]>(request: Request, kinds: readonly Ki
   return kinds.some((kind) => kind === request.kind);
 }
 
-async function execute(request: Exclude<Request, { readonly kind: "mcp" }>, io: Io): Promise<Outcome> {
-  if (asks(request, ["publish"])) return publish(request, io);
+/**
+ * Tell a command that can run as it was read from one whose site only its install can read.
+ *
+ * @returns the command, or the address it names with the way to put the site the address reads as in its place
+ */
+function split(request: Exclude<TypedRequest, { readonly kind: "mcp" }>): Split {
+  if (request.kind === "publish") {
+    const { target } = request;
+    if (target.kind === "create") return { request: { ...request, target } };
+
+    const { site } = target;
+    if (site.kind !== "address") return { request: { ...request, target: { kind: "update", site } } };
+
+    return { address: site, read: (read) => ({ ...request, target: { kind: "update", site: read } }) };
+  }
+
+  if (request.kind === "export" || request.kind === "import") {
+    const { site, ...rest } = request;
+    if (site === undefined) return { request: rest };
+
+    return site.kind === "address" ? { address: site, read: (read) => ({ ...rest, site: read }) } : { request: { ...rest, site } };
+  }
+
+  if (!("site" in request)) return { request };
+
+  const { site, ...rest } = request;
+  if (site.kind !== "address") return { request: { ...rest, site } };
+
+  return { address: site, read: (read) => ({ ...rest, site: read }) };
+}
+
+/**
+ * Run a command whose site is read.
+ *
+ * @param reached - the session the install read the site's address in, when it was asked: the command goes on in it, and a dry run says that the install was asked
+ */
+async function dispatch(request: Command, io: Io, reached?: Session): Promise<Outcome> {
+  if (asks(request, ["publish"])) return publish(request, io, reached);
 
   if (asks(request, ["login"])) return logIn(request, io);
 
@@ -156,13 +206,31 @@ async function execute(request: Exclude<Request, { readonly kind: "mcp" }>, io: 
 
   if (asks(request, INSTALL_COMMANDS)) return online(request, io, (session) => runInstallCommand(request, session));
 
-  if (asks(request, SITE_COMMANDS)) return online(request, io, (session) => runSiteCommand(request, session));
+  if (asks(request, SITE_COMMANDS)) return online(request, io, (session) => runSiteCommand(request, session), reached);
 
-  if (asks(request, ["export"])) return online(request, io, (session) => runExport(request, session));
+  if (asks(request, ["export"])) return online(request, io, (session) => runExport(request, session), reached);
 
   if (asks(request, ["update"])) return online(request, io, (session) => runUpdate(request, session));
 
-  return runImport(request, (send) => online(request, io, send));
+  return runImport(request, (send) => online(request, io, send, reached), reached !== undefined);
+}
+
+/**
+ * Run a command. One whose site only its install can read asks the install first, a dry run too: the address is read by no one else.
+ */
+async function execute(typed: Exclude<TypedRequest, { readonly kind: "mcp" }>, io: Io): Promise<Outcome> {
+  const command = split(typed);
+  if ("request" in command) return dispatch(command.request, io);
+
+  const session = await connect(typed, io);
+  if (session === "logged-out") return refused(problem("no_login"));
+
+  if ("code" in session) return refused(session);
+
+  const site = await readByInstall(command.address, session);
+  if ("code" in site) return refused(site);
+
+  return dispatch(command.read(site), io, session);
 }
 
 /** Print what a command came to: with `--json` one JSON value on stdout and nothing else there, and whatever is no result on stderr. No token is printed. */
@@ -197,7 +265,7 @@ function mcpHost(io: Io): Host {
   const quiet: Io = { ...io, out: io.err, status: () => undefined, terminal: { asks: false, progress: false } };
 
   return {
-    session: () => connect({ kind: "whoami", json: false }, quiet),
+    session: () => connect({}, quiet),
     stopped: io.stopped,
     withoutTokens: async (value) => textsHidden(value, await knownTokens(io)),
     log: io.err,

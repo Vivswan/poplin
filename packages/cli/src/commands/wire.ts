@@ -1,17 +1,15 @@
 // What the parser read, put into the forms the API takes.
 
 import type { SiteChanges } from "../../../core/src/actions/changes";
+import { WHOAMI_ANSWER } from "../../../core/src/actions/manage-tokens";
 import { siteLabel } from "../../../core/src/sites/labels";
-import { isOfInstall } from "../../../core/src/sites/references";
-import { type Problem, problem } from "./problems";
-import type { Request } from "./requests";
+import { isOfInstall, type SettledSite, settleSite, type TypedSite } from "../../../core/src/sites/references";
+import { type Problem, problem, problemOf } from "./problems";
+import type { Session } from "./records";
 import type { SiteSettings } from "./site-settings";
 
-/** What names a site on a command line, as the parser read it. */
-type SiteRef = Extract<Request, { readonly site: unknown }>["site"];
-
 /** The word the API takes for a site: the label, the bare id, or the public name, as it was typed. */
-export function siteWord(site: SiteRef): string {
+export function siteWord(site: SettledSite): string {
   if (site.kind === "site") return siteLabel(site.name, site.id);
 
   if (site.kind === "id") return site.id;
@@ -20,16 +18,22 @@ export function siteWord(site: SiteRef): string {
 }
 
 /**
- * Refuse a site that was typed as an address of another install, before anything is sent.
+ * Read a typed site as the install of a session reads it, before anything about the site is sent.
  *
- * @param site - the site a command names, when it names one
- * @param server - the origin of the install the command talks to
- * @returns `not_found` for an address under another domain or port than the install's sites, else nothing
+ * An address of the form of a public site's ends in a word its install chose, so the install is asked for the word: one call, and only for such an address.
+ *
+ * @param site - the site a command names, as it was typed
+ * @returns the site. `not_found` for an address under another domain or port than the install's sites, and for one that is no site's under the install's word; else why the install did not answer
  */
-export function foreignAddress(site: SiteRef | undefined, server: string): Problem | undefined {
-  if (site === undefined || isOfInstall(site, server)) return undefined;
+export async function readByInstall(site: TypedSite, session: Pick<Session, "client" | "server">): Promise<SettledSite | Problem> {
+  if (!isOfInstall(site, session.server)) return problem("not_found", `the address is under ${site.under}, which is not where ${session.server} keeps its sites`);
 
-  return problem("not_found", `the address is under ${site.under}, which is not where ${server} keeps its sites`);
+  if (site.kind !== "address") return site;
+
+  const answered = await session.client.call(WHOAMI_ANSWER, (api) => api.whoami.$get());
+  if (!answered.ok) return problemOf(answered.failure);
+
+  return settleSite(site, answered.value.public_word) ?? problem("not_found", `${site.label}.${site.under} is not the address of a site of ${session.server}`);
 }
 
 /**

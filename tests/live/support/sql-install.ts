@@ -7,6 +7,7 @@ import type { Fetch } from "../../../packages/cli/src/client/client";
 import type { Login } from "../../../packages/core/src/auth/logins";
 import { mintToken } from "../../../packages/core/src/auth/tokens";
 import { openDatabase } from "../../../packages/core/src/database/open";
+import { DEFAULT_PUBLIC_WORD } from "../../../packages/core/src/names/marker";
 import { defaultSettings, type SettingValues } from "../../../packages/core/src/records/settings";
 import { MemoryStore } from "../../../packages/core/src/storage/memory";
 import { BunSqliteDriver } from "../../../packages/core/tests/database/support/bun-sqlite-driver";
@@ -71,6 +72,7 @@ export async function openSqlInstall(): Promise<SqlInstall> {
     readToken: (id) => database.getToken(id),
     limits: LIMITS,
     version: VERSION,
+    publicWord: DEFAULT_PUBLIC_WORD,
     counters,
     visitorOf: async () => "one-visitor",
     rebuild: { accepts: () => false, fetch: async () => Promise.reject(new Error("the fake starts no build")) },

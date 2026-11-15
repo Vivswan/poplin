@@ -79,7 +79,7 @@ export async function openInstall(driver: SqlDriver, store: ObjectStore): Promis
   const { database } = opened;
   const install: Install = { database, store, now, addressOf: layout.addressOf, publicAddressOf: layout.publicAddressOf, reservedNames: layout.reservedNames };
   const counted = { counters: new MemoryCounters(), visitorOf: async () => "local" };
-  const api = createApi({ ...install, ...counted, readToken: (id) => database.getToken(id), limits: API_LIMITS, version: VERSION, rebuild: REBUILD });
+  const api = createApi({ ...install, ...counted, readToken: (id) => database.getToken(id), limits: API_LIMITS, version: VERSION, publicWord: DEFAULT_PUBLIC_WORD, rebuild: REBUILD });
 
   const served: Running["served"] = async (hostLabel, path) => {
     const settings = await database.readSettings();

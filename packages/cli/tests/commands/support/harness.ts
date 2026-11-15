@@ -154,9 +154,11 @@ function assertNoToken(ran: Ran, tokens: readonly string[]): void {
  * Open a fresh install and a way to run commands against it, logged in as the admin through the environment.
  *
  * Every run is checked for a printed token before it is handed back.
+ *
+ * @param publicWord - the word the install's public addresses end in, in place of `page`
  */
-export async function openBench(): Promise<Bench> {
-  const install = await openApi();
+export async function openBench(publicWord?: string): Promise<Bench> {
+  const install = await openApi(undefined, undefined, publicWord);
   const home = scratch();
   const sent: string[] = [];
   let stopping = new AbortController();

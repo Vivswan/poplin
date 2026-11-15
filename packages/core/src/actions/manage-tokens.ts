@@ -26,8 +26,8 @@ export const TOKEN_OBJECT = v.object({
 /** What revoking a token answers, and so a logout: the token as it was. */
 export const REVOKED_TOKEN = v.object({ token: TOKEN_OBJECT });
 
-/** What the API answers a token that asks who it is: the token, the version the install runs, and a newer release when one is known. */
-export const WHOAMI_ANSWER = v.object({ token: TOKEN_OBJECT, version: v.string(), update: v.optional(UPDATE_NOTICE) });
+/** What the API answers a token that asks who it is: the token, the version the install runs, the word its public addresses end in, and a newer release when one is known. */
+export const WHOAMI_ANSWER = v.object({ token: TOKEN_OBJECT, version: v.string(), public_word: v.string(), update: v.optional(UPDATE_NOTICE) });
 
 /**
  * A token as a caller sees it: never the token itself, nor its hash. Times are milliseconds since the epoch.

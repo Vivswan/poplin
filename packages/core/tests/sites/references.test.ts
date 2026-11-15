@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
-import { isOfInstall, readSiteReference } from "../../src/sites/references";
+import { isOfInstall, readSiteReference, settleSite } from "../../src/sites/references";
 
 const ID = "k3f9x2ab71qz";
 const LABEL = `report--${ID}`;
@@ -33,10 +33,10 @@ describe("readSiteReference", () => {
     [`${LABEL}-p-poplin`, SITE],
     [`${LABEL}-u-poplin`, SITE],
     [`${LABEL}-poplin`, SITE],
-    ["https://docs-page.example.com/", { kind: "public-name", name: "docs", under: "example.com" }],
-    ["docs-page.example.com", { kind: "public-name", name: "docs", under: "example.com" }],
-    ["https://q3-docs-site.example.com/guide", { kind: "public-name", name: "q3-docs", under: "example.com" }],
-    ["https://docs-poplin.example.com/", { kind: "public-name", name: "docs", under: "example.com" }],
+    ["https://docs-page.example.com/", { kind: "address", label: "docs-page", under: "example.com" }],
+    ["docs-page.example.com", { kind: "address", label: "docs-page", under: "example.com" }],
+    ["https://q3-docs-site.example.com/guide", { kind: "address", label: "q3-docs-site", under: "example.com" }],
+    ["https://docs-poplin.example.com/", { kind: "address", label: "docs-poplin", under: "example.com" }],
     [`  ${LABEL}\n`, SITE],
     [`"${LABEL}"`, SITE],
     [`'${ID}'`, { kind: "id", id: ID }],
@@ -90,6 +90,24 @@ describe("readSiteReference", () => {
     [`<<${LABEL}>>`, { ok: false, refusal: "bad-character" }],
   ] as ReadonlyArray<readonly [string, unknown]>)("%j reads as %j", (typed, outcome) => {
     expect<unknown>(readSiteReference(typed)).toEqual(outcome);
+  });
+});
+
+describe("settleSite", () => {
+  // Drift: the public word is the install's own, so one address is a site under one install and nothing under another; a guess would change or delete the site of another name.
+  test.each([
+    ["https://docs-page.example.com/", "page", { kind: "public-name", name: "docs", under: "example.com" }],
+    ["https://docs-site.example.com/", "site", { kind: "public-name", name: "docs", under: "example.com" }],
+    ["https://q3-docs-site.example.com:8443/guide", "site", { kind: "public-name", name: "q3-docs", under: "example.com:8443" }],
+    ["https://docs-poplin.example.com/", "poplin", { kind: "public-name", name: "docs", under: "example.com" }],
+    ["https://notes-site.example.com/", "page", undefined],
+    ["https://docs-page.example.com/", "site", undefined],
+    ["https://docs-poplin.example.com/", "page", undefined],
+  ] as ReadonlyArray<readonly [string, string, unknown]>)("%j, under the public word %j, is %j", (typed, publicWord, site) => {
+    const read = readSiteReference(typed);
+    if (!read.ok) throw new Error(`fixture is no site: ${typed}`);
+
+    expect<unknown>(settleSite(read.value, publicWord)).toEqual(site);
   });
 });
 

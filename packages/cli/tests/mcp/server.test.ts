@@ -29,8 +29,8 @@ interface Site {
   readonly addresses: { readonly site: string; readonly public: string | null };
 }
 
-async function open(env?: Readonly<Record<string, string | undefined>>): Promise<McpBench> {
-  const bench = await openMcp(folderOf("home", {}), env);
+async function open(env?: Readonly<Record<string, string | undefined>>, publicWord?: string): Promise<McpBench> {
+  const bench = await openMcp(folderOf("home", {}), env, publicWord);
   OPEN.push(bench);
 
   return bench;
@@ -166,6 +166,41 @@ describe("the MCP server", () => {
     });
     expect((trash.data.sites as Site[]).map((one) => one.label)).toEqual([site.label]);
     expect({ state: siteOf(restored).state, access: siteOf(restored).access }).toEqual({ state: "live", access: "unlisted" });
+  });
+
+  // Drift: a tool reads a site as its command does. A public site's address ends in a word only the install knows; a tool that guessed it would update or delete the site of another public name.
+  test.each([
+    ["page", "https://LABEL-p-poplin.example.com/", ["GET /api/sites/LABEL"]],
+    ["page", "https://LABEL-u-poplin.example.com/", ["GET /api/sites/LABEL"]],
+    ["page", "https://notes-page.example.com/", ["GET /api/whoami", "GET /api/sites/notes"]],
+    ["site", "https://notes-site.example.com/guide", ["GET /api/whoami", "GET /api/sites/notes"]],
+    ["site", "ID", ["GET /api/sites/ID"]],
+    ["site", "LABEL", ["GET /api/sites/LABEL"]],
+    ["site", "notes", ["GET /api/sites/notes"]],
+    ["page", "https://notes-site.example.com/", ["GET /api/whoami"]],
+    ["site", "https://notes-page.example.com/", ["GET /api/whoami"]],
+    ["page", "https://notes-page.example.org/", []],
+  ] as const)("on an install whose public word is %j, the site %s is asked for as the command asks: %j", async (publicWord, form, requests) => {
+    const bench = await open(undefined, publicWord);
+    const folder = folderOf("report", { "index.html": "<title>Report</title>" });
+    const site = siteOf(await bench.call("publish_site", { path: folder, access: "public", public_name: "notes" }));
+    const typed = form.replace("LABEL", site.label).replace("ID", site.id);
+    const expected = requests.map((request) => request.replace("LABEL", site.label).replace("ID", site.id));
+    bench.sent.length = 0;
+
+    const shown = await bench.call("get_site", { site: typed });
+    const asked = [...bench.sent];
+    const updated = await bench.call("publish_site", { path: folder, site: typed });
+    const deleted = await bench.call("delete_site", { site: typed, forever: true });
+    const left = ((await answered(bench.install.routes.sites.$get())).body.sites as unknown[]).length;
+
+    if (expected.at(-1)?.startsWith("GET /api/sites/") === true) {
+      expect([asked, siteOf(shown).label, siteOf(updated).live_version, deleted.error, left]).toEqual([expected, site.label, 2, false, 0]);
+
+      return;
+    }
+
+    expect([asked, codeOf(shown), codeOf(updated), codeOf(deleted), left]).toEqual([expected, "not_found", "not_found", "not_found", 1]);
   });
 
   test("duplicate_site answers a new private site under its own label and leaves the original as it was: an agent that reads the copy as the original would change the wrong one", async () => {

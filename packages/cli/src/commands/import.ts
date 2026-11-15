@@ -10,7 +10,7 @@ import { type Backup, type BackupSite, openBackup } from "../backup/read";
 import type { Called, Failure } from "../client/client";
 import { problem, problemOf } from "./problems";
 import type { Outcome, RequestOf, Session } from "./records";
-import { countText } from "./text";
+import { countText, dryRunText } from "./text";
 import { abandonUpload, callUnhurried, giveUpUpload, sendUpload, type UploadFile } from "./upload";
 import { siteWord } from "./wire";
 
@@ -25,6 +25,9 @@ const TOO_LARGE = "too_large";
 
 /** The statuses of a refusal that every other site would meet too: no login, not an admin's, an install that is asked too often, or one whose database is spent for the day. */
 const REFUSED_FOR_ALL: readonly number[] = [401, 403, 429, 503];
+
+/** What goes with a zip refused after the install read the address `--site` gave. */
+const ONLY_ASKED = "nothing of the backup was sent: the install was asked only how it reads the site's address";
 
 /** What became of an upload that was not finished, in words. */
 const AFTERMATH = {
@@ -237,8 +240,8 @@ async function send(backup: Backup, request: ImportRequest, chosen: Chosen, sess
   return reported(request, results);
 }
 
-/** Say what an import would send, for `--dry-run`. No install is called. */
-async function preview(backup: Backup, request: ImportRequest, chosen: Chosen): Promise<Outcome> {
+/** Say what an import would send, for `--dry-run`. The install is called for nothing but how it reads the address `--site` gave, which `asked` says. */
+async function preview(backup: Backup, request: ImportRequest, chosen: Chosen, asked: boolean): Promise<Outcome> {
   const sites: Sized[] = [];
 
   for await (const site of backup.sites()) {
@@ -251,22 +254,23 @@ async function preview(backup: Backup, request: ImportRequest, chosen: Chosen): 
   return {
     ok: true,
     value: { dry_run: true, file: request.zip, format: backup.manifest.format, settings: request.settings, sites },
-    lines: [...lines, "the backup passed every check; nothing was sent: --dry-run calls no install"],
+    lines: [...lines, `the backup passed every check; ${dryRunText(asked)}`],
   };
 }
 
 /**
  * Import a backup: every site of it, or the one `--site` names.
  *
- * The whole zip is checked first, and a zip that fails any check is refused with nothing sent. A site the install already has is `skipped`, which is what a run that is started again meets for every site it finished before.
+ * The whole zip is checked before anything of it is sent, and a zip that fails any check is refused with nothing sent. A site the install already has is `skipped`, which is what a run that is started again meets for every site it finished before.
  * A site the install finds too large with every version is sent once more with its live version alone.
  *
  * @param online - runs the sending against the install; it is not called for `--dry-run`, nor for a zip that is refused
+ * @param asked - whether the install was asked how it reads the address `--site` gave
  * @returns one line per site and a last line with the counts; an outcome that exits as a failure when any site failed
  */
-export async function runImport(request: ImportRequest, online: Online): Promise<Outcome> {
+export async function runImport(request: ImportRequest, online: Online, asked: boolean): Promise<Outcome> {
   const opened = await openBackup(request.zip);
-  if (!opened.ok) return { ok: false, problem: problem("bad_backup", opened.reason) };
+  if (!opened.ok) return { ok: false, problem: problem("bad_backup", opened.reason, asked ? ONLY_ASKED : undefined) };
 
   const { backup } = opened;
 
@@ -276,7 +280,7 @@ export async function runImport(request: ImportRequest, online: Online): Promise
     const chosen = await chosenLabels(backup, request.site);
     if (request.site !== undefined && chosen?.size === 0) return { ok: false, problem: problem("not_in_backup", siteWord(request.site)) };
 
-    if (request.dryRun) return await preview(backup, request, chosen);
+    if (request.dryRun) return await preview(backup, request, chosen, asked);
 
     return await online((session) => send(backup, request, chosen, session));
   } finally {
