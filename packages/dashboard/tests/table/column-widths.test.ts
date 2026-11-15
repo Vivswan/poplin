@@ -44,9 +44,9 @@ describe("the widths of a table's columns", () => {
     expect(widthsOf(COLUMNS, sizes, 1000)).toMatchObject({ drawn });
   });
 
-  // Drift: a table too narrow for its columns would squeeze one or draw empty room between them again, where it is to scroll sideways.
-  test.each([420, 300, 579])("keep every column's own width and leave no room empty in a room of %d, which they do not fit", (free) => {
-    expect(widthsOf(COLUMNS, {}, free)).toEqual({ drawn: { name: 120, colour: 100, weight: 80, origin: 320 }, spare: 0 });
+  // Drift: a table too narrow for its columns would squeeze one under what its values give, or keep a value whole that gives, so the dots of a hidden link would stay at their longest in the very room that is shortest.
+  test.each([420, 300, 579])("draw each column at the least its values give and leave no room empty in a room of %d, which they do not fit", (free) => {
+    expect(widthsOf(COLUMNS, {}, free)).toEqual({ drawn: { name: 120, colour: 60, weight: 80, origin: 320 }, spare: 0 });
   });
 
   // Drift: a table a few pixels wider than its room would scroll sideways with a column cut under the rows' actions, where the end of one value was all it took to fit; or a width a person set would be taken back for the room's sake.
@@ -69,8 +69,8 @@ describe("the widths of a table's columns", () => {
 
   // Drift: a fixed column dragged very wide would cover every other column, with no way to reach them.
   test("leave room beside a fixed column for the narrowest of another column", () => {
-    expect(widthsOf(COLUMNS, { name: 900 }, 400)).toMatchObject({ drawn: { name: 352, colour: 100 }, spare: 0 });
-    expect(widthsOf(COLUMNS, { name: 250 }, 400)).toMatchObject({ drawn: { name: 250, colour: 100 } });
+    expect(widthsOf(COLUMNS, { name: 900 }, 400)).toMatchObject({ drawn: { name: 352, colour: 60 }, spare: 0 });
+    expect(widthsOf(COLUMNS, { name: 250 }, 400)).toMatchObject({ drawn: { name: 250, colour: 60 } });
   });
 
   // Drift: a table with only its fixed column would be drawn narrower than its room, with rows that stop short.

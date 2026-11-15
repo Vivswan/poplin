@@ -1,7 +1,7 @@
 // How wide each shown column of a table is drawn in the room the table has.
 // A column is as wide as a person made it, or as its heading and values need, up to a cap. Room the columns leave over goes to the column that grows, or stays empty after the last one.
 // Columns that need a little more than the room fit it where a value gives: a part of it is cut shorter, down to the least the cell allows.
-// Columns that need more than that keep their widths: the table is then wider than its room and scrolls sideways.
+// Columns that need more than that are drawn at that least: the table is then wider than its room and scrolls sideways by the rest.
 
 /** The narrowest any column is drawn, in pixels: room for the first letters of its heading and for the edge that resizes it. */
 export const NARROWEST = 48;
@@ -43,11 +43,11 @@ export interface ColumnWidths {
 }
 
 /**
- * The widths of columns that need more than their room, with the columns nobody sized drawn as much narrower as their values give, where that makes the table fit.
+ * The widths of columns that need more than their room, with the columns nobody sized drawn as much narrower as their values give.
  *
  * @param drawn - the width of each column before anything gives
  * @param over - how much more than the room the columns need, in pixels
- * @returns the widths that fit the room; `drawn` itself where the values give less than `over`
+ * @returns the widths that fit the room, or, where the values give less than `over`, each column at the least its values allow
  */
 function fitting(
   shown: readonly SizedColumn[],
@@ -60,8 +60,6 @@ function fitting(
 
     return Math.max(0, width - Math.max(NARROWEST, Math.ceil(fitted.least.get(column.id) ?? width)));
   };
-  if (shown.reduce((sum, column) => sum + gives(column), 0) < over) return drawn;
-
   const narrower = new Map(drawn);
   let left = over;
   for (const column of shown) {
@@ -76,8 +74,8 @@ function fitting(
 /**
  * The width each shown column is drawn at, and the room left empty after the last.
  *
- * A width a person set wins over the fitted one. Where the columns need more than the room, the columns nobody sized give what their values can, and the table fits;
- * where that is not enough no column is drawn narrower for the room's sake, and the table scrolls sideways. Only a fixed column is held back, so the narrowest of another column stays in reach.
+ * A width a person set wins over the fitted one. Columns that need more than the room give what their values can, and the table scrolls sideways by what is still missing.
+ * Only a fixed column is held back, so the narrowest of another column stays in reach.
  *
  * @param fitted - what the table measured of each column; a column not measured yet is drawn at the narrowest
  * @param sizes - the widths a person set, by column id
