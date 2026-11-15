@@ -11,6 +11,7 @@ import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyTitle } from "
 import { Popover, PopoverContent, PopoverDescription, PopoverHeader, PopoverTitle, PopoverTrigger } from "@/components/ui/popover";
 import { Select, SelectContent, SelectGroup, SelectItem, SelectSeparator, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { searchOf, useAddressQuery } from "@/lib/address";
+import { copy } from "@/lib/notify";
 import { type Site, shownName } from "@/lib/sites";
 import { useChosenTimeZone } from "@/lib/timezone";
 import { IconButton } from "@/shared/icon-button";
@@ -89,6 +90,21 @@ function SortSelect({ query, onChoose }: { readonly query: URLSearchParams; read
   );
 }
 
+/** The command that publishes a folder, with the way to copy it right after it. */
+function PublishCommand(): ReactNode {
+  return (
+    <span className="flex w-fit max-w-full items-center gap-1 rounded-md border bg-muted/40 py-0.5 pr-0.5 pl-2.5">
+      <code className="min-w-0 truncate text-left font-mono text-xs">{PUBLISH_COMMAND}</code>
+      <IconButton
+        label="Copy the command"
+        onClick={() => void copy(PUBLISH_COMMAND, { done: "Copied.", failed: "Not copied. Select the command and copy it." })}
+      >
+        <CopyIcon />
+      </IconButton>
+    </span>
+  );
+}
+
 /** How a new site is made: said behind a button, since nothing on this screen makes one. */
 function NewSite(): ReactNode {
   return (
@@ -102,7 +118,7 @@ function NewSite(): ReactNode {
           <PopoverTitle>Publish a folder</PopoverTitle>
           <PopoverDescription>An agent publishes a site for you, or run this where the folder is:</PopoverDescription>
         </PopoverHeader>
-        <code className="rounded-md border bg-muted/40 px-2.5 py-1.5 font-mono text-xs">{PUBLISH_COMMAND}</code>
+        <PublishCommand />
       </PopoverContent>
     </Popover>
   );
@@ -203,7 +219,7 @@ function NoRows(props: NoRowsProps): ReactNode {
       </EmptyHeader>
       <EmptyContent>
         {button === undefined ? (
-          <code className="rounded-md border bg-muted/40 px-2.5 py-1.5 font-mono text-xs">{PUBLISH_COMMAND}</code>
+          <PublishCommand />
         ) : (
           <Button variant="outline" onClick={button[1]}>
             {button[0]}

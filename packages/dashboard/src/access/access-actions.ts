@@ -2,7 +2,7 @@
 
 import type { Review, Token } from "@/access/access-queries";
 import { answerOf, api, Refused } from "@/lib/api";
-import { sayDone, sayRefused, send } from "@/lib/notify";
+import { copy, sayDone, sayRefused, send } from "@/lib/notify";
 
 /** What each decision says once it is done. */
 const DECIDED = {
@@ -139,14 +139,7 @@ export function accessActions(onChanged: () => void): AccessActions {
       onChanged();
       sayDone("Removed. Its token works nowhere now.");
     },
-    copyCommand: async (command) => {
-      try {
-        await navigator.clipboard.writeText(command);
-        sayDone("Copied.");
-      } catch {
-        sayRefused("Not copied. Select the command and copy it.");
-      }
-    },
+    copyCommand: (command) => copy(command, { done: "Copied.", failed: "Not copied. Select the command and copy it." }),
     signEveryoneOut: async () => {
       const done = await send(api.settings["sign-everyone-out"].$post({ json: {} }));
       if (done !== undefined) window.location.reload();

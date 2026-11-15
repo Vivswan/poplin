@@ -1,7 +1,7 @@
 // What is done to a site from the table or its panel: each change is sent, its result is said in one line, and a change that one press can take back offers Undo.
 
 import { answerOf, api, Refused } from "@/lib/api";
-import { sayDone, sayRefused, send } from "@/lib/notify";
+import { copy, sayDone, send } from "@/lib/notify";
 import { ACCESSES, type Access, type Site, shownName } from "@/lib/sites";
 import type { NamingRefusal, SiteNaming } from "@/sites/edit-site-dialog";
 
@@ -66,14 +66,7 @@ export function siteActions(onChanged: (before: Site, after: Site | null) => voi
   return {
     restore,
     makeLive,
-    copyLink: async (site) => {
-      try {
-        await navigator.clipboard.writeText(site.url);
-        sayDone("Link copied.");
-      } catch {
-        sayRefused("Not copied. Open the site and copy its address.");
-      }
-    },
+    copyLink: (site) => copy(site.url, { done: "Link copied.", failed: "Not copied. Open the site and copy its address." }),
     setAccess: (site, access) =>
       run(site, send(routes.access.$post({ param: at(site), json: { access } })), ACCESSES.find((entry) => entry.access === access)?.now ?? "Saved."),
     setSetting: (site, setting, on) => {

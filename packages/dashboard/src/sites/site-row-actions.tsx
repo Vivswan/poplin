@@ -47,7 +47,7 @@ export function SiteRowActions({ site, actions, onAsk, onRemoved }: SiteRowActio
           <MoreHorizontalIcon />
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="w-40">
-          <DropdownMenuItem render={<a href={site.url} target="_blank" rel="noreferrer" />}>Open</DropdownMenuItem>
+          <DropdownMenuItem render={<a href={site.url} target="_blank" rel="noreferrer" />}>Open the site</DropdownMenuItem>
           <DropdownMenuItem onClick={() => onAsk(site, { kind: "naming" })}>Edit</DropdownMenuItem>
           <DropdownMenuItem onClick={() => onAsk(site, { kind: "new-link" })}>New link</DropdownMenuItem>
           <DropdownMenuSeparator />

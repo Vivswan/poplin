@@ -30,6 +30,20 @@ export function sayRefused(sentence: string): void {
 }
 
 /**
+ * Copy a text, and say in one line that it was copied, or that it was not.
+ *
+ * @param says - the line of a text that was copied, and the line of a browser that copies nothing, which says what to do by hand
+ */
+export async function copy(text: string, says: { readonly done: string; readonly failed: string }): Promise<void> {
+  try {
+    await navigator.clipboard.writeText(text);
+    sayDone(says.done);
+  } catch {
+    sayRefused(says.failed);
+  }
+}
+
+/**
  * Send a change and say its refusal.
  *
  * @param asked - a call of `api`
