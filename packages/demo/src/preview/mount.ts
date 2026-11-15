@@ -145,7 +145,8 @@ function rewrittenKind(response: Response, here: Mount): Kind | undefined {
   const type = response.headers.get("Content-Type") ?? "";
   if (response.body === null || response.status === 206) return undefined;
 
-  if (type.startsWith("application/json")) return here.holds === "json" ? "json" : undefined;
+  // The console answers JSON beside its pages, and the addresses in it are the install's own too.
+  if (type.startsWith("application/json")) return here.holds === "site" ? undefined : "json";
 
   if (here.holds === "json") return undefined;
 

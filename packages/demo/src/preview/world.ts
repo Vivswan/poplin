@@ -39,6 +39,9 @@ interface Kept {
 
   /** The bytes that sign the forms' tokens. */
   readonly csrfSecret?: Uint8Array<ArrayBuffer>;
+
+  /** When the install was set up, in milliseconds since the epoch: now when left out. A seeded install was set up before its sample history began. */
+  readonly since?: number;
 }
 
 /** One demo install and what is built around it. */
@@ -88,7 +91,7 @@ export async function openWorld(driver: SqlDriver, kept: Kept = {}): Promise<Wor
   if (holder === undefined) throw new Error("the demo's login was refused");
 
   const { database } = opened;
-  await database.initSettings(defaultSettings({ installer: holder, hostname: DASHBOARD_TITLE }), { by: holder, at: now() });
+  await database.initSettings(defaultSettings({ installer: holder, hostname: DASHBOARD_TITLE }), { by: holder, at: kept.since ?? now() });
   await database.ensureSigningKey(crypto.getRandomValues(new Uint8Array(KEY_BYTES)), now());
 
   return {

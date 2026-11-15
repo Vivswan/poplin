@@ -32,23 +32,30 @@ interface Flags {
 
   /** Whether `/gallery` answers. */
   readonly gallery: boolean;
+
+  /** Whether the client is served hot by its dev server, in front of a watched preview. */
+  readonly dev: boolean;
 }
 
 /**
- * Read the flags of a command line: `--port <port>`, `--watch`, `--gallery`.
+ * Read the flags of a command line: `--port <port>`, `--watch`, `--gallery`, `--dev`.
  *
  * @param args - the arguments after the script's own path
  * @param defaultPort - the port of a command line that names none
  * @returns the flags
- * @throws {TypeError} a flag is not one of the three
+ * @throws {TypeError} a flag is not one of the four
  * @throws {RangeError} the port is none
  */
 export function readFlags(args: readonly string[], defaultPort: number = DEFAULT_PORT): Flags {
-  const { values } = parseArgs({ args: [...args], options: { port: { type: "string" }, watch: { type: "boolean" }, gallery: { type: "boolean" } }, strict: true });
+  const { values } = parseArgs({
+    args: [...args],
+    options: { port: { type: "string" }, watch: { type: "boolean" }, gallery: { type: "boolean" }, dev: { type: "boolean" } },
+    strict: true,
+  });
   const port = values.port === undefined ? defaultPort : Number(values.port);
   if (!Number.isInteger(port) || port < 1 || port > 65_535) throw new RangeError(`--port takes a port from 1 to 65535, not ${JSON.stringify(values.port)}`);
 
-  return { port, watch: values.watch === true, gallery: values.gallery === true };
+  return { port, watch: values.watch === true, gallery: values.gallery === true, dev: values.dev === true };
 }
 
 /** The pid file of the preview on a port. */

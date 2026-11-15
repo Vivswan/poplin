@@ -3,7 +3,7 @@
 //   /...                     the dashboard of the seeded install, as its sample admin; `/login` stands in for the provider's login
 //   /served/<host label>/... a site as serving answers it at that hostname; `?as=visitor` asks as a stranger
 //   /api/...                 the API of the seeded install
-//   /setup/<state>/...       the setup page over a domain plug held in that state
+//   /setup/<state>/...       the setup screen over a domain plug held in that state; `first` is an install with nothing set, `shut` a page that is closed
 //   /empty/...               the dashboard of an install that holds nothing
 //   /gallery                 every page and every state of it, as a link; only when the host asks for it, and linked from nowhere
 //   /state/<name>            a page reached only by a form, shown at an address of its own
@@ -12,8 +12,8 @@
 // Every piece is the product's own handler, asked at the hostname it expects; `mount.ts` maps the addresses both ways.
 
 import { createApi } from "../../../app/src/api/api";
-import { createDashboard } from "../../../app/src/dashboard/dashboard";
-import { createSetup } from "../../../app/src/dashboard/domain/setup";
+import { createConsole } from "../../../app/src/console/console";
+import { createSetupConsole } from "../../../app/src/console/setup-console";
 import { logIn } from "../../../app/src/login/login";
 import { serveSite } from "../../../app/src/sites/serve";
 import { type Asking, checkForUpdate } from "../../../core/src/actions/check-update";
@@ -22,12 +22,12 @@ import { importSessionKey } from "../../../core/src/auth/cookie";
 import { parseLogins } from "../../../core/src/auth/logins";
 import type { SqlDriver } from "../../../core/src/database/driver";
 import type { ObjectStore } from "../../../core/src/storage/storage";
-import { PLUG_STATES, type PlugState, previewPlug } from "./domain-plug";
+import { changingPlug, PLUG_STATES, type PlugState, previewFirstRun, previewPlug } from "./domain-plug";
 import { type Entry, galleryOf, STAGES } from "./gallery";
 import { rebased, unbased } from "./base";
 import { ADMIN_ORIGIN, askMount, type Mount, previewValue, SERVED_PREFIX, siteOrigin } from "./mount";
 import { galleryPage, loginPage, missingPage, plainPage } from "./own-pages";
-import { type Samples, seedWorld } from "./seed";
+import { keepLoginsWaiting, type Samples, seedWorld } from "./seed";
 import { ADDRESSES, openWorld, type World } from "./world";
 
 /** What one request to the preview's API may carry. */
@@ -54,11 +54,17 @@ const SAMPLE_REBUILD = "https://provider.example/rebuilds/sample";
 /** The stand-in for the provider's rebuild: it takes the sample address alone and answers every start as taken, without a request. */
 const REBUILD: Omit<Rebuilding, "counters"> = { accepts: (address) => address.href === SAMPLE_REBUILD, fetch: async () => new Response(null, { status: 204 }) };
 
+/** How long before now the seeded install was set up, in days, which is before its sample history begins, and a day in milliseconds. */
+const [SEEDED_DAYS, DAY_MS] = [45, 86_400_000];
+
 /** Where the dashboard of the install that holds nothing is mounted. */
 const EMPTY_PREFIX = "/empty";
 
 /** The setup state whose page is shut, beside the states of the plug. */
 const SHUT = "shut";
+
+/** The setup state of an install with nothing set, which the setup screen asks its domain and first login. */
+const FIRST = "first";
 
 /** The visitor whose every counted try is refused, so the pages of a full minute can be seen. */
 const FLOODED = "flooded";
@@ -85,6 +91,9 @@ export interface Host {
 
   /** The version of poplin the demo's installs say they run. */
   readonly version: string;
+
+  /** Reads one built file of the console's client by its name; without it the console answers no file. */
+  readonly consoleAsset?: Parameters<typeof createConsole>[0]["asset"];
 
   /** Whether `/gallery` answers; it does not when left out. */
   readonly gallery?: boolean;
@@ -128,7 +137,7 @@ interface Scene {
 }
 
 /** What counts the tries of the preview's pages: every visitor is one, but the one called `flooded`, who is always refused. */
-function countsOf(world: World): Pick<Parameters<typeof createDashboard>[0], "counters" | "visitorOf"> {
+function countsOf(world: World): Pick<Parameters<typeof createConsole>[0], "counters" | "visitorOf"> {
   return {
     counters: { takeMinute: async (window, now) => (window.key.endsWith(`:${FLOODED}`) ? { ok: false, retryAfterSeconds: 60 } : world.counters.takeMinute(window, now)) },
     visitorOf: async (request) => previewValue(request.headers, "preview-visitor") ?? "local",
@@ -136,7 +145,7 @@ function countsOf(world: World): Pick<Parameters<typeof createDashboard>[0], "co
 }
 
 /** The session of every request: the sample admin, unless the address asked as a visitor. */
-function sessionOf(world: World): Parameters<typeof createDashboard>[0]["readSession"] {
+function sessionOf(world: World): Parameters<typeof createConsole>[0]["readSession"] {
   return async (headers) => (previewValue(headers, "as") === "visitor" ? { ok: false } : { ok: true, value: world.admin.holder });
 }
 
@@ -167,21 +176,24 @@ async function answerLogin(request: Request, world: World): Promise<Response> {
   return new Response(null, { status: 302, headers: { Location: outcome.location, "Set-Cookie": outcome.setCookie } });
 }
 
-function dashboardMount(world: World, prefix: string, version: string): Mount {
-  const dashboard = createDashboard({
+/** The dashboard of one install at a place of the preview. It answers under its own base path, so its page, its files, and its data all stay at that place. */
+function dashboardMount(world: World, prefix: string, version: string, asset: NonNullable<Host["consoleAsset"]>): Mount {
+  const dashboard = createConsole({
     install: world.install,
     version,
     readSession: sessionOf(world),
     loginPath: "/login",
-    csrfSecret: world.csrfSecret,
-    domain: previewPlug("partial"),
+    base: prefix,
+    asset,
     freeLimits: FREE_LIMITS,
-    demo: { reset: RESET_PATH },
+    rebuild: REBUILD,
+    demo: { reset: `${prefix}${RESET_PATH}` },
+    domain: changingPlug(),
     ...countsOf(world),
   });
   const answer: Mount["answer"] = (request) => (new URL(request.url).pathname === "/login" ? answerLogin(request, world) : dashboard.fetch(request));
 
-  return { prefix, origin: ADMIN_ORIGIN, base: "", holds: "pages", answer };
+  return { prefix, origin: ADMIN_ORIGIN, base: prefix, holds: "pages", answer };
 }
 
 function apiMount(world: World, version: string): Mount {
@@ -191,16 +203,20 @@ function apiMount(world: World, version: string): Mount {
   return { prefix: "/api", origin: ADMIN_ORIGIN, base: "/api", holds: "json", answer: api.fetch };
 }
 
-function setupMount(world: World, state: PlugState | typeof SHUT): Mount {
-  const setup = createSetup({
+/** The setup screen over a plug held in one state, at an address of its own. */
+function setupScreenMount(world: World, state: PlugState | typeof SHUT | typeof FIRST, asset: NonNullable<Host["consoleAsset"]>): Mount {
+  const at = `/setup/${state}`;
+  const setup = createSetupConsole({
     install: world.install,
-    domain: previewPlug(state === SHUT ? "done" : state),
+    domain: state === FIRST ? previewFirstRun() : previewPlug(state === SHUT ? "done" : state),
     open: async () => state !== SHUT,
     csrfSecret: world.csrfSecret,
+    asset,
+    at,
     ...countsOf(world),
   });
 
-  return { prefix: `/setup/${state}`, origin: ADMIN_ORIGIN, base: "/setup", holds: "pages", answer: setup.fetch };
+  return { prefix: at, origin: ADMIN_ORIGIN, base: at, holds: "pages", answer: setup.fetch };
 }
 
 /** The mount of the site a path names by its host label: its own hostname, asked through serving with the settings as they are now. */
@@ -226,15 +242,24 @@ function sampleLatest(version: string): Asking["fetch"] {
 /** Open the two installs, the seeded one first: a host that keeps the demo hands its drivers and stores out in that order every time. */
 async function openScene(host: Host, resumed: boolean): Promise<Scene> {
   const kept = (): Parameters<typeof openWorld>[1] => ({ store: host.openStore?.(), csrfSecret: host.formSecret?.() });
-  const seeded = await openWorld(host.openDriver(), kept());
+  const seeded = await openWorld(host.openDriver(), { ...kept(), ...(resumed ? {} : { since: Date.now() - SEEDED_DAYS * DAY_MS }) });
   const empty = await openWorld(host.openDriver(), kept());
   const { token } = resumed ? { token: "" } : await seedWorld(seeded, host.samples);
   // The seeded install alone learns of a newer version and keeps an address to update at: the empty one shows a dashboard with no notice.
   if (!resumed) await checkForUpdate(seeded.install, { fetch: sampleLatest(host.version) });
   if (!resumed) await seeded.install.database.keepUpdateAddress(SAMPLE_REBUILD, { by: seeded.admin.holder, at: seeded.install.now() });
-  const setups = ([...PLUG_STATES, SHUT] as const).map((state) => setupMount(seeded, state));
+  const asset = host.consoleAsset ?? (async () => undefined);
+  const pages = dashboardMount(seeded, "", host.version, asset);
+  const keepWaiting = keepLoginsWaiting(seeded);
+  // A login runs out ten minutes after the seed: a visitor who comes later still finds one to review.
+  const answer: Mount["answer"] = async (request) => {
+    await keepWaiting();
 
-  return { seeded, token, dashboard: dashboardMount(seeded, "", host.version), mounts: [dashboardMount(empty, EMPTY_PREFIX, host.version), apiMount(seeded, host.version), ...setups] };
+    return pages.answer(request);
+  };
+  const screens = ([...PLUG_STATES, SHUT, FIRST] as const).map((state) => setupScreenMount(seeded, state, asset));
+
+  return { seeded, token, dashboard: { ...pages, answer }, mounts: [dashboardMount(empty, EMPTY_PREFIX, host.version, asset), apiMount(seeded, host.version), ...screens] };
 }
 
 /** The stage a path names; none for every other path. */

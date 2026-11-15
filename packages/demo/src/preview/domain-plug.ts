@@ -5,8 +5,10 @@
 //   access-off      the login service is not on      a step only a person can do
 //   done            every object stands              nothing to repair
 //   token-refused, unreachable                       no table, only the refusal
+//
+// The console's plug is one that changes: its first check finds pieces to repair, a repair mends them, and every run after finds them in place.
 
-import type { DomainPlug, DomainReading, DomainRow, DomainState } from "../../../app/src/dashboard/domain/records";
+import type { DomainPlug, DomainReading, DomainRow, DomainState, FirstRun } from "../../../app/src/dashboard/domain/records";
 
 /** Every state a preview plug can be in, as the address of the setup page names it. */
 export const PLUG_STATES = ["fresh", "partial", "access-off", "done", "token-refused", "unreachable"] as const;
@@ -47,6 +49,15 @@ const ACCESS_STEP = { text: "Turn the login service on for the account, then che
 /** The refusal of each state that reads no table. */
 const REFUSALS: Partial<Record<PlugState, Extract<DomainReading, { ok: false }>["refusal"]>> = { "token-refused": "token", unreachable: "unreachable" };
 
+/** The tokens the changing plug answers with a refusal, so that each refusal can be seen: it takes any other. */
+const REFUSED_TOKENS: Readonly<Record<string, Extract<DomainReading, { ok: false }>["refusal"]>> = { wrong: "token", offline: "unreachable" };
+
+/** The place of the optional piece among the objects, and what its row says while the token lacks its right. */
+const OPTIONAL_ROW = { place: 6, detail: "sample-rate-rule: add this right to the token and press Repair: Rules: Edit" } as const;
+
+/** What the row a repair of the `partial` state fails at says: the piece, why, and what to add. */
+const FAILED_DETAIL = "the dashboard: the provider refused the change. Add this right to the token: Routes: Edit";
+
 /** One state of the preview's plug. */
 export type PlugState = (typeof PLUG_STATES)[number];
 
@@ -72,11 +83,57 @@ function checked(state: PlugState): DomainReading {
 function repaired(state: PlugState): DomainReading {
   if (state === "fresh") return table(rows("created"));
 
-  if (state === "partial") return table(rows("present", { 1: "created", 3: "failed", 4: "not-run", 5: "not-run", 6: "not-run" }));
+  if (state === "partial") {
+    const stopped = rows("present", { 1: "created", 3: "failed", 4: "not-run", 5: "not-run", 6: "not-run" });
+
+    return table(stopped.map((row) => (row.state === "failed" ? { ...row, detail: FAILED_DETAIL } : row)));
+  }
 
   if (state === "access-off") return table(rows("present", { 4: "missing", 5: "missing" }), [ACCESS_STEP]);
 
   return table(rows("present"));
+}
+
+/** The rows of the changing plug: the optional piece waits for its right, and two pieces are as `broken` says. */
+function changing(broken: readonly [DomainState, DomainState] | undefined): DomainReading {
+  const found = rows("present", broken === undefined ? {} : { 1: broken[0], 5: broken[1] });
+
+  return table(found.map((row, place) => (place === OPTIONAL_ROW.place ? { ...row, state: "optional", detail: OPTIONAL_ROW.detail } : row)));
+}
+
+/**
+ * Build a plug whose install a repair mends: a check before it finds two pieces to repair, the repair says what it did, and every run after finds each piece in place.
+ *
+ * @returns a plug that refuses the token `wrong`, does not answer for the token `offline`, and takes any other
+ */
+export function changingPlug(): DomainPlug {
+  let mended = false;
+  const answer =
+    (run: "check" | "repair"): DomainPlug["check"] =>
+    async (token, settings) => {
+      const refusal = token === "" ? "token" : REFUSED_TOKENS[token];
+      if (refusal !== undefined) return { ok: false, refusal };
+
+      await settings();
+      if (mended) return changing(undefined);
+
+      if (run === "check") return changing(["missing", "differs"]);
+
+      mended = true;
+
+      return changing(["created", "changed"]);
+    };
+
+  return { ...TOKEN_FORM, guardNotes: NOTES, check: answer("check"), repair: answer("repair") };
+}
+
+/**
+ * Build the provider's side of an install with nothing set.
+ *
+ * @returns a first run whose plug creates every object; it takes any text with a dot in it as a domain
+ */
+export function previewFirstRun(): FirstRun {
+  return { ...TOKEN_FORM, plugFor: (first) => (first.domain.includes(".") ? previewPlug("fresh") : undefined) };
 }
 
 /**

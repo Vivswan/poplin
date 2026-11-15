@@ -41,6 +41,7 @@ Poplin publishes a static site to the user's own Cloudflare account with one cal
 - Check the links and images of every Markdown page, with lychee installed: `bun run links`
 - Turn the hooks on, once per clone: `bun run hooks`
 - Click through the product on this machine, over sample data in memory: `bun run preview`, then open `http://127.0.0.1:4400/`
+- Work on the dashboard with every edit shown at once: `bun run preview --dev`
 - Stop it: `bun run preview:stop`; `--port` runs a second one beside it, `--watch` restarts it when its source changes, and `--gallery` lists every state at `/gallery`
 - Backwards-compatible code lives only in `migrations/`. Everywhere else an old shape is deleted outright.
 - Provider-specific code lives only in `packages/cloudflare/`; `tests/portable.test.ts` holds the line.
