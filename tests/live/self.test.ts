@@ -40,6 +40,9 @@ const WITH_TOKEN = [
 /** How many files the fake's publish of many files holds: what the caps of the API's test install take. */
 const MANY_FILES = 7;
 
+/** How long one install's run of every check may take, in milliseconds: each publishes, reads and removes sites in this process with no wait in it, all of it work of the processor, which on a busy machine passes the five seconds a test gets. */
+const RUN_MS = 30_000;
+
 /** The benches a test opened, closed after it. */
 const OPENED: (() => void)[] = [];
 
@@ -154,5 +157,5 @@ describe("the live checks, against a local fake", () => {
     expect(switches.noToken === true ? [] : left.value.sites).toEqual([]);
     // A check that grew into a loop of publishes would be held back on the real install alone, and a route the meter does not know would be billed uncounted.
     expect({ stopped: meter.stopped(), uncounted }).toEqual({ stopped: undefined, uncounted: [] });
-  });
+  }, RUN_MS);
 });
