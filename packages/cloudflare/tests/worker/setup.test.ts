@@ -7,7 +7,7 @@ import { readShell } from "../../../app/tests/console/support/shell";
 import type { Bindings } from "../../src/worker/bindings";
 import { type Account, emptyAccount, OTHER_TOKEN, TEAM, TOKEN } from "../zone/support/fake-install";
 import type { Asked } from "../zone/support/replies";
-import { ADMIN, accessHeaders, ask, BINDINGS, cloudflareOf, cookieOf, countedBindings, installOf, instance, logIn, OWNER, page, publish, send, sweep, type World, tokenOf, under, world } from "./support/install";
+import { ADMIN, accessHeaders, ask, awayFromMinuteEnd, BINDINGS, cloudflareOf, cookieOf, countedBindings, installOf, instance, logIn, OWNER, page, publish, send, sweep, type World, tokenOf, under, world } from "./support/install";
 
 /** The Worker's own address, which Cloudflare gives it whatever its routes. */
 const OWN = "https://poplin.example-account.workers.dev";
@@ -206,6 +206,7 @@ describe("the setup page", () => {
     const worker = instance(w, cloudflareOf(account, asked));
     const from = { "CF-Connecting-IP": "192.0.2.7" };
     const statuses: number[] = [];
+    await awayFromMinuteEnd();
     for (let post = 0; post < 5; post += 1) statuses.push((await repair(worker, `${ADMIN}/setup`, { token: OTHER_TOKEN }, from)).status);
 
     const calls = asked.length;
@@ -292,6 +293,7 @@ describe("a Worker with nothing set", () => {
     const worker = instance(w, cloudflareOf(account, asked));
     const from = { "CF-Connecting-IP": "192.0.2.9" };
     const statuses: number[] = [];
+    await awayFromMinuteEnd();
     for (let post = 0; post < 5; post += 1) statuses.push((await first(worker, "no-such-token-0123456789", DEPLOYED, from)).status);
 
     const calls = asked.length;

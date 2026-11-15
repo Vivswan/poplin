@@ -17,7 +17,7 @@ import { readShell } from "../../../app/tests/console/support/shell";
 import type { Bindings } from "../../src/worker/bindings";
 import { signer } from "../login/support/access";
 import {
-  ADMIN, type Answer, type ApiCalls, accessHeaders, ask, api, BINDINGS, cookieOf, countedBindings, done, freePlanBindings, installOf, instance, logIn, OWNER,
+  ADMIN, type Answer, type ApiCalls, accessHeaders, ask, api, awayFromMinuteEnd, BINDINGS, cookieOf, countedBindings, done, freePlanBindings, installOf, instance, logIn, OWNER,
   PATHS, type Published, page, publish, send, spentDatabase, tokenOf, type World, under, wait, world,
 } from "./support/install";
 
@@ -47,12 +47,6 @@ const FIRST = BINDINGS.FIRST_SETTINGS as Readonly<Record<string, string>>;
 
 /** What every host answers on a database another build of poplin made. */
 const MADE_BY_ANOTHER_BUILD = "This install's database was made by another build of poplin, so its records are not the ones this build reads. Deploy the build that made it, or delete the database and poplin makes it anew.";
-
-/** The milliseconds of one minute, which is how long the rate limiting binding counts for. */
-const MINUTE_MS = 60_000;
-
-/** The end of a minute, in milliseconds: too little of it for a test that counts requests within one. */
-const MINUTE_END_MS = 2000;
 
 /** The most entries one file of the audit log holds. */
 const FILE_ENTRIES = 2000;
@@ -594,6 +588,7 @@ describe("the product, from a token to an opened site", () => {
     await publish(worker, await tokenOf(w, "publisher"), { name: "docs", access: "public" }, [page("<p>docs</p>")]);
 
     const from = (visitor: string): Promise<Response> => ask(worker, address, { headers: { "CF-Connecting-IP": visitor } });
+    await awayFromMinuteEnd();
     const answers = [await from("203.0.113.7"), await from("203.0.113.7"), await from("203.0.113.7"), await from("198.51.100.9")];
 
     expect(answers.map((answer) => answer.status)).toEqual([served, served, 429, served]);
@@ -606,7 +601,7 @@ describe("the product, from a token to an opened site", () => {
     const worker = instance(w);
     await ask(worker, `${ADMIN}/api/whoami`, {}, strict);
     const site = await publish(worker, await tokenOf(w, "publisher"), { name: "docs", access: "public" }, [page("<p>docs</p>")]);
-
+    await awayFromMinuteEnd();
     const renamed = await ask(worker, `https://other--${site.id}-u-poplin.example.com/`, { headers: { "CF-Connecting-IP": "203.0.113.7" } });
     const real = await ask(worker, "https://docs-page.example.com/", { headers: { "CF-Connecting-IP": "198.51.100.9" } });
 
@@ -620,7 +615,7 @@ describe("the product, from a token to an opened site", () => {
     await ask(worker, `${ADMIN}/api/whoami`, {}, strict);
     const site = await publish(worker, await tokenOf(w, "publisher"), { name: "report" }, [page("<h1>report</h1>")]);
     const owner = await accessHeaders(w);
-
+    await awayFromMinuteEnd();
     const probes = [await ask(worker, `${under(site, "u")}/`, { headers: { "CF-Connecting-IP": "203.0.113.7" } }), await ask(worker, `${under(site, "u")}/`, { headers: { "CF-Connecting-IP": "203.0.113.8" } })];
     const real = await ask(worker, `${under(site, "p")}/`, { headers: { ...owner, "CF-Connecting-IP": "198.51.100.9" } });
     const again = await ask(worker, `${under(site, "p")}/`, { headers: { ...owner, "CF-Connecting-IP": "192.0.2.44" } });
@@ -906,9 +901,7 @@ describe("a computer's login", () => {
     const token = await tokenOf(w, "admin");
     const start = (): Promise<Answer> => api(worker, token).update.$post({ query: { anyway: "true" } });
 
-    // The binding's minute is the wall clock's, not the test's: a run that would cross one waits for the next.
-    const left = MINUTE_MS - (Date.now() % MINUTE_MS);
-    if (left < MINUTE_END_MS) await new Promise((resolve) => setTimeout(resolve, left));
+    await awayFromMinuteEnd();
 
     const elsewhere = await api(worker, token).update.address.$put({ query: {}, json: { address: "https://example.com/client/v4/workers/builds/deploy_hooks/a1b2c3d4" } });
     const unsaved = await start();
@@ -933,9 +926,7 @@ describe("a computer's login", () => {
     const begun: number[] = [];
     const asked: number[] = [];
 
-    // The binding's minute is the wall clock's, not the test's: a run that would cross one waits for the next.
-    const left = MINUTE_MS - (Date.now() % MINUTE_MS);
-    if (left < MINUTE_END_MS) await new Promise((resolve) => setTimeout(resolve, left));
+    await awayFromMinuteEnd();
 
     for (let sent = 0; sent < 5; sent += 1) begun.push((await begin(worker, "192.0.2.1")).status);
     begun.push((await begin(worker, "192.0.2.2")).status);

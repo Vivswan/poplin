@@ -34,6 +34,12 @@ export const PATHS: ApiCalls = hc<Api>(ADMIN).api;
 /** The milliseconds of one hour. */
 const HOUR_MS = 3_600_000;
 
+/** The milliseconds of one minute, which is how long the rate limiting binding counts for. */
+const MINUTE_MS = 60_000;
+
+/** The end of a minute, in milliseconds: too little of it for a test that counts requests within one. */
+const MINUTE_END_MS = 2000;
+
 /** The queries D1 answers one invocation on Cloudflare's Free plan. */
 const FREE_QUERIES = 50;
 
@@ -314,6 +320,16 @@ export function spentDatabase(spent: keyof typeof SPENT): D1Database {
   };
 
   return binding as D1Database;
+}
+
+/**
+ * Wait for the next minute when this one is about to end, before a run that counts requests within a minute.
+ *
+ * The binding's minute is the wall clock's, not the test's: a run that crossed one would begin its count anew.
+ */
+export async function awayFromMinuteEnd(): Promise<void> {
+  const left = MINUTE_MS - (Date.now() % MINUTE_MS);
+  if (left < MINUTE_END_MS) await scheduler.wait(left);
 }
 
 /** Move the clock forward. */
