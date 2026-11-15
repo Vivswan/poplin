@@ -435,6 +435,8 @@ test("two times of the same length take the same room in the face the dashboard 
   const measured = await page.evaluate(
     async ([times, figures, ownFace]) => {
       const carried = await document.fonts.load(`14px ${figures}`, "0");
+      // The control is measured in the dashboard's own face, so that one has to be there too: a face that stands in for it may draw its figures at one width.
+      await document.fonts.load(`14px ${ownFace}`, times[0]);
       const widthOf = (text: string, family: string): number => {
         const span = document.createElement("span");
         span.textContent = text;
