@@ -1,4 +1,4 @@
-// The questions the Sites screen asks before a change of a site: its title and name, a new link, and who can open it. They are asked from a row's menu and from the panel alike, and drawn once, beside both.
+// The questions the Sites screen asks before a change of a site: its title and name, a new link, a copy, and who can open it. They are asked from a row's menu and from the panel alike, and drawn once, beside both.
 
 import { type ReactNode, type RefObject, useRef } from "react";
 import { useDebounce } from "use-debounce";
@@ -7,6 +7,7 @@ import { ACCESSES, type Access, LONGEST_NAME, plainAddress, type Site, shownName
 import { AskDialog } from "@/shared/ask-dialog";
 import { Confirm, type Question } from "@/shared/confirm";
 import { DeleteForGoodQuestion } from "@/sites/delete-for-good-question";
+import { DuplicateDialog } from "@/sites/duplicate-dialog";
 import { EditSiteDialog } from "@/sites/edit-site-dialog";
 import type { SiteActions } from "@/sites/site-actions";
 import { usePublicAddress } from "@/sites/site-queries";
@@ -27,7 +28,7 @@ const OPENS_TO: Readonly<Record<Exclude<Access, "public">, string>> = {
 };
 
 /** What is asked about a site before it is changed. */
-export type Ask = { readonly kind: "naming" } | { readonly kind: "new-link" } | { readonly kind: "access"; readonly access: Access };
+export type Ask = { readonly kind: "naming" } | { readonly kind: "new-link" } | { readonly kind: "duplicate" } | { readonly kind: "access"; readonly access: Access };
 
 /** A question that is open: the site it is about, and what is asked. */
 export interface Asked {
@@ -108,6 +109,7 @@ export function SiteQuestions({
   return (
     <>
       <EditSiteDialog site={named} onClose={onClose} onSave={actions.name} returnTo={returnTo} />
+      <DuplicateDialog site={asked?.ask.kind === "duplicate" ? asked.site : undefined} onClose={onClose} returnTo={returnTo} />
       <Confirm question={asked === undefined ? undefined : questionOf(asked)} onAnswer={answer} />
       <DeleteForGoodQuestion />
       <AskDialog

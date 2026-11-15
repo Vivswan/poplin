@@ -40,6 +40,9 @@ const GRAPH = { sites: 50, days: 365 } as const;
 /** The logins of computers that may wait at one moment, all visitors together. */
 const MOST_WAITING = 50;
 
+/** The files one request of a copy copies, for a site of up to a thousand files. */
+const COPIED_AT_ONCE = 112;
+
 /** The label of the made-up site 1, as the dashboard's addresses name a site. */
 const LABEL = `site-1--${siteId(1)}`;
 
@@ -57,6 +60,15 @@ async function fullFrame(stage: Stage): Promise<void> {
   await stage.install.database.keepUpdateCheck({ checked_at: now, news: NEWER });
   await stage.install.database.keepUpdateAddress(HOOK, { by: OWNER, at: now });
   await sql(`INSERT INTO domain_check (id, ran_at, ran_by, run, pieces, users_changed_at) VALUES (1, ?1, ?2, 'check', '[]', ?1)`, now, OWNER);
+}
+
+/** Begin a copy of a site of 1,001 files as the Sites screen does, unmeasured: its first request copies 113 files and names the upload the later ones go on with. */
+async function begunCopy(stage: Stage): Promise<{ readonly upload: string; readonly session: Record<string, string> }> {
+  await siteWithFiles(stage, TWO_PAGES);
+  const session = await sessionOf(stage);
+  const begun = await done<{ copy: { upload: string } }>(await post(unmeasured(stage), `/data/sites/${LABEL}/duplicate`, { name: "copy" }, session));
+
+  return { upload: begun.copy.upload, session };
 }
 
 /** A change of the made-up site 1, kept in every version it may keep, sent as the Sites screen sends it. */
@@ -184,6 +196,60 @@ export const CONSOLE_ROWS: readonly BudgetRow[] = [
     },
     status: 200,
     budget: { queries: 8, reads: 0, writes: 2 },
+  },
+  {
+    group,
+    name: "Sites screen: duplicate a site of 112 files, whole in one request",
+    route: "POST /data/sites/:site/duplicate",
+    // Worst of a small copy: as many files as one request copies, so the same request stages the copy, copies every file, lists it again, and makes the site.
+    arrange: async (stage) => {
+      await siteWithFiles(stage, COPIED_AT_ONCE);
+      const session = await sessionOf(stage);
+
+      return (measured) => post(measured, `/data/sites/${LABEL}/duplicate`, { name: "copy" }, session);
+    },
+    status: 200,
+    budget: { queries: 9, reads: 112, writes: 114 },
+  },
+  {
+    group,
+    name: "Sites screen: duplicate a site of 1,001 files: first request",
+    route: "POST /data/sites/:site/duplicate",
+    // Worst of a first request: a version listed in two pages, where a request copies the most files it ever does.
+    arrange: async (stage) => {
+      await siteWithFiles(stage, TWO_PAGES);
+      const session = await sessionOf(stage);
+
+      return (measured) => post(measured, `/data/sites/${LABEL}/duplicate`, { name: "copy" }, session);
+    },
+    status: 200,
+    budget: { queries: 5, reads: 113, writes: 115 },
+  },
+  {
+    group,
+    name: "Sites screen: duplicate a site of 1,001 files: a later request",
+    route: "POST /data/sites/:site/duplicate",
+    // Worst of a later request: the copy is listed for what it lacks, and as many more files are copied.
+    arrange: async (stage) => {
+      const begun = await begunCopy(stage);
+
+      return (measured) => post(measured, `/data/sites/${LABEL}/duplicate`, { upload: begun.upload }, begun.session);
+    },
+    status: 200,
+    budget: { queries: 4, reads: 113, writes: 114 },
+  },
+  {
+    group,
+    name: "Sites screen: cancel a copy of 1,001 files after its first request",
+    route: "POST /data/copies/:upload/cancel",
+    // Worst: the copy holds as many files as one request copies, 113, which one listing finds and one removal takes away. A removal is free and is not counted here.
+    arrange: async (stage) => {
+      const begun = await begunCopy(stage);
+
+      return (measured) => post(measured, `/data/copies/${begun.upload}/cancel`, {}, begun.session);
+    },
+    status: 200,
+    budget: { queries: 4, reads: 0, writes: 1 },
   },
   {
     group,
