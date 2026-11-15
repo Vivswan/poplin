@@ -72,7 +72,7 @@ async function repaired(context: Context<SetupShared>) {
   if (mediaTypeOf(answered.headers.get("Content-Type")) !== "application/json") return context.text(await answered.text(), answered.status === 404 ? 404 : 500);
 
   const read = (await answered.json()) as Answered;
-  if (read.ok) return context.json({ ...runDone("repair", read), expects: read.expects ?? null }, 200);
+  if (read.ok) return context.json({ ...runDone("repair", read, false), expects: read.expects ?? null }, 200);
 
   const wait = answered.headers.get("Retry-After");
 

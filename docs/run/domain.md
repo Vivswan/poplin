@@ -16,6 +16,8 @@ After the first login, Domain does what the setup page did.
 | Repair              | fixes every piece that needs it                                                                |
 | the table           | one row per piece, in the columns Piece, State, and Detail                                     |
 
+After a user is added or removed under Access, the line says `Users changed. Press Repair.` until a Repair: Cloudflare's login page keeps its own list of users.
+
 Check and Repair each open a dialog that asks for a token:
 
 | Step | In the dialog | Do                                                                                                  |
@@ -34,9 +36,9 @@ ok  domain    The login for private sites is missing or changed, so private site
 | ----------------- | -------------------------------------------------------------------------------------------------------- |
 | What is kept      | the last Check or Repair of the Domain screen: when it ran, who ran it, and how each piece stood            |
 | What is not kept  | the token, which is used for the one request                                                             |
-| What the row says | the most serious thing to act on: the login first, then records and routes, then any other piece         |
+| What the row says | the most serious thing to act on: the login, then records and routes, changed users, any other piece     |
 | When there is one | only when that run left something to act on, and only for an admin; `domain` under `--json` has the same |
-| After 30 days     | the row only asks for a new Check: the install does not look at the domain between runs                  |
+| After 30 days     | the row only asks for a new Check, or a Repair after changed users: no look at the domain between runs   |
 | Optional pieces   | a rule that was left out, or that only lacks an optional right, raises no row                            |
 
 ## Optional: block junk traffic and crawlers

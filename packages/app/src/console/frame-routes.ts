@@ -15,8 +15,8 @@ import { Hono } from "hono";
 
 import { NOTHING, refused, refuseInvalid, type Shared } from "./data";
 
-/** What the side says in a few words when a piece of the domain needs work, and when the last check is only old. */
-const [NEEDS_FIXING, CHECK_IS_OLD] = ["Domain needs fixing", "Domain check is old"];
+/** What the side says in a few words when a piece of the domain needs work, when the users changed since the last repair, and when the last check is only old. */
+const [NEEDS_FIXING, USERS_CHANGED, CHECK_IS_OLD] = ["Domain needs fixing", "Users changed", "Domain check is old"];
 
 /** The one thing to act on at the domain, as the side shows it. */
 interface DomainNote {
@@ -56,9 +56,10 @@ async function domainNoteOf(install: Install, actor: Actor): Promise<DomainNote 
   const state = await domainState(install, actor);
   if (!state.ok || state.note === "none") return null;
 
-  const quiet = state.note.code === "check_again";
+  const { code } = state.note;
+  if (code === "check_again") return { label: CHECK_IS_OLD, sentence: DOMAIN_SENTENCES[code], quiet: true };
 
-  return { label: quiet ? CHECK_IS_OLD : NEEDS_FIXING, sentence: DOMAIN_SENTENCES[state.note.code], quiet };
+  return { label: code === "users_changed" ? USERS_CHANGED : NEEDS_FIXING, sentence: DOMAIN_SENTENCES[code], quiet: false };
 }
 
 /**

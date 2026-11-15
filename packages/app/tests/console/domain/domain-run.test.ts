@@ -66,6 +66,31 @@ test("a run is kept as the last check of the domain: when, by whom, which run, a
   expect(await synced()).toBe(1);
 });
 
+// Drift: the domain's login lets in the users of the last repair that reached it. Settled by a check, a repair that left the login undone, or one that began before the user was added, a new user is locked out and no screen says why.
+test.each([
+  { name: "a check", run: "check", login: "present", addedAfter: 0, waits: true },
+  { name: "a repair that left the login undone", run: "repair", login: "failed", addedAfter: 0, waits: true },
+  { name: "a repair under way when the user was added", run: "repair", login: "changed", addedAfter: 1, waits: true },
+  { name: "a repair that changed the login", run: "repair", login: "changed", addedAfter: 0, waits: false },
+  { name: "a repair that found the login standing", run: "repair", login: "present", addedAfter: 0, waits: false },
+] as const)("users that changed still wait after $name: $waits", async ({ run, login, addedAfter, waits }) => {
+  const { opened, asked, kept } = await openRun();
+  const rows: DomainRow[] = [{ object: "Record", state: "missing", detail: "every site", part: "reach" }, { object: "Login policy", state: login, detail: "the logins", part: "login" }];
+  await runDomain(fakePlug(() => ({ ok: true, rows: [], steps: [] })), opened.install, asked);
+  // The plug is slow: the clock moves on while it works.
+  const slow = fakePlug(() => {
+    opened.clock.now += 5;
+
+    return { ok: true, rows, steps: [] };
+  });
+  await opened.install.database.addLogin("bo@example.com" as typeof opened.owner, { by: opened.owner, at: opened.install.now() + addedAfter });
+  await runDomain(slow, opened.install, { ...asked, run });
+
+  const remembered = await kept();
+
+  expect([remembered?.run, remembered?.users_changed_at === null]).toEqual([run, !waits]);
+});
+
 // Drift: the token is a key to the whole account at the provider, and the kept run is answered to every admin who asks. A plug that hands the token back in any text, however long, must leave no byte of it in what the install stores.
 test("the kept run holds nothing of the token, even from a plug that hands it back in every text and in texts longer than are kept", async () => {
   const { opened, asked, kept } = await openRun();

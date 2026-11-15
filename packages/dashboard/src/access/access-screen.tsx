@@ -13,7 +13,9 @@ import { PeopleTab } from "@/access/people-tab";
 import { ReviewDialog } from "@/access/review-dialog";
 import { TokensTab } from "@/access/tokens-tab";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { DOMAIN_KEY } from "@/domain/domain-queries";
 import { searchOf, useAddressQuery } from "@/lib/address";
+import { FRAME_KEY } from "@/lib/frame";
 import { useChosenTimeZone } from "@/lib/timezone";
 import { ScreenTabs } from "@/shared/screen-tabs";
 import { AppShell } from "@/shell/app-shell";
@@ -47,7 +49,12 @@ export function AccessScreen(): ReactNode {
   const client = useQueryClient();
   // The login under review is not read again after a change: a read by code is a counted try, and the review closes anyway.
   const actions = useMemo(
-    () => accessActions(() => void client.invalidateQueries({ predicate: ({ queryKey }) => queryKey[0] === ACCESS_KEY[0] && queryKey[1] !== "review" })),
+    () =>
+      accessActions(
+        () => void client.invalidateQueries({ predicate: ({ queryKey }) => queryKey[0] === ACCESS_KEY[0] && queryKey[1] !== "review" }),
+        // The side and the Domain screen say that a repair waits once the users changed.
+        () => void Promise.all([client.invalidateQueries({ queryKey: FRAME_KEY }), client.invalidateQueries({ queryKey: DOMAIN_KEY })]),
+      ),
     [client],
   );
   const review = useReview(asked);

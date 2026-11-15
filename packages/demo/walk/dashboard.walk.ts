@@ -30,6 +30,12 @@ const RELEASES = "https://github.com/Vivswan/poplin/releases";
 /** An email typed into the dialog that adds a user, and never sent. */
 const TYPED_EMAIL = "walk@example.com";
 
+/** A user the walk adds and then removes. */
+const ADDED_EMAIL = "walk-user@example.com";
+
+/** What the Domain screen says at its top once a user was added or removed, until a repair. */
+const USERS_CHANGED = "Users changed. Press Repair.";
+
 /** The kinds of file whose refusal breaks a screen. */
 const NEEDED_KINDS = ["document", "script", "stylesheet", "font"];
 
@@ -108,7 +114,7 @@ const STOPS: readonly Stop[] = [
   {
     name: "Domain, from the side",
     open: (page) => toSection(page, "Domain"),
-    shows: (page) => [screenHeading(page, "Domain"), page.getByRole("status").filter({ hasText: "Nothing to repair" })],
+    shows: (page) => [screenHeading(page, "Domain"), domainLine(page, "Nothing to repair")],
   },
   {
     name: "the token a repair asks for",
@@ -236,6 +242,45 @@ const STOPS: readonly Stop[] = [
     close: leaveBy("Cancel"),
   },
   {
+    name: "a user added, after which a repair waits",
+    open: async (page) => {
+      await page.getByRole("button", { name: "Add a user", exact: true }).click();
+      await addPerson(page).getByRole("textbox", { name: "Email", exact: true }).fill(ADDED_EMAIL);
+      await addPerson(page).getByRole("button", { name: "Add a user", exact: true }).click();
+    },
+    shows: (page) => [said(page, "Added. Next, open Domain and press Repair.")],
+  },
+  {
+    name: "Domain, which says the users changed",
+    open: (page) => toSection(page, "Domain"),
+    shows: (page) => [domainLine(page, USERS_CHANGED)],
+  },
+  {
+    name: "a repair, after which no user waits",
+    open: repair,
+    shows: (page) => [domainLine(page, /repaired|Nothing to repair/)],
+  },
+  {
+    name: "that user removed, after which a repair waits again",
+    open: async (page) => {
+      await toSection(page, "Access");
+      await fromRowMenu(page, ADDED_EMAIL, "Remove");
+      await leaveBy("Remove")(page);
+    },
+    shows: (page) => [said(page, "Removed. Next, open Domain and press Repair.")],
+  },
+  {
+    name: "Domain, which says the users changed once more",
+    open: (page) => toSection(page, "Domain"),
+    shows: (page) => [domainLine(page, USERS_CHANGED)],
+  },
+  {
+    name: "a second repair, after which nothing is left",
+    open: repair,
+    shows: (page) => [domainLine(page, "Nothing to repair")],
+    close: (page) => toSection(page, "Access"),
+  },
+  {
     name: "how a token is added, from the tokens",
     open: async (page) => {
       await page.getByRole("tab", { name: "Tokens", exact: true }).click();
@@ -335,6 +380,19 @@ async function narrowSites(page: Page, filter: string): Promise<void> {
 async function fromRowMenu(page: Page, row: string, entry: string): Promise<void> {
   await page.getByRole("button", { name: `More for ${row}`, exact: true }).click();
   await page.getByRole("menuitem", { name: entry, exact: true }).click();
+}
+
+/** The line at the top of the Domain screen, by what it says. */
+function domainLine(page: Page, says: string | RegExp): Locator {
+  return page.getByRole("status").filter({ hasText: says });
+}
+
+/** Repair the sample domain from the Domain screen, with a token its sample provider takes. */
+async function repair(page: Page): Promise<void> {
+  const dialog = page.getByRole("dialog", { name: "Repair the domain", exact: true });
+  await page.getByRole("button", { name: "Repair", exact: true }).click();
+  await dialog.getByLabel("Token", { exact: true }).fill("sample-token");
+  await dialog.getByRole("button", { name: "Repair", exact: true }).click();
 }
 
 /** The dialog that adds a person. */

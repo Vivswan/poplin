@@ -1,6 +1,6 @@
 // The data of the Domain screen: what a token must hold, the last run the install remembers, and the two runs themselves.
 //
-//   GET  /domain             the token form's facts, the remembered run
+//   GET  /domain             the token form's facts, the remembered run, and whether the users changed since the last repair
 //   POST /domain/check       read every piece with the token in the body; changes nothing at the provider
 //   POST /domain/repair      make every piece match, with the stored settings a repair carries to the domain
 //
@@ -32,7 +32,11 @@ async function ran(context: Context<Shared, string, { out: { json: v.InferOutput
   try {
     const reading = await runDomain(plug, install, { run, token: context.req.valid("json").token, settings: async () => config.values, by: actor.holder, from: "dashboard" });
 
-    return reading.ok ? context.json(runDone(run, reading)) : context.json(runRefusal(reading.refusal), REFUSAL_STATUS[reading.refusal]);
+    if (!reading.ok) return context.json(runRefusal(reading.refusal), REFUSAL_STATUS[reading.refusal]);
+
+    const kept = await domainState(install, actor);
+
+    return context.json(runDone(run, reading, kept.ok && kept.waits));
   } catch (error) {
     // The run is kept after the plug has answered: a database that takes no more today refuses it, whatever the plug did.
     if (!(error instanceof AllowanceSpent)) throw error;

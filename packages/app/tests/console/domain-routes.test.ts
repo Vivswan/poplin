@@ -74,6 +74,7 @@ describe("what the screen opens with", () => {
       by: opened.base.owner,
       run: "check",
       stale: false,
+      waits: false,
       rows: [
         { piece: "DNS record", state: "present", tone: "good", detail: "*.example.com" },
         { piece: "DNS record", state: "needs repair", tone: "bad", detail: "poplin.example.com" },
@@ -82,6 +83,35 @@ describe("what the screen opens with", () => {
       ],
       summary: { line: "1 to repair", tone: "bad" },
     });
+  });
+
+  // Drift: Access sends a person to Domain to press Repair. A screen that then says nothing is left, a check that clears what only a repair settles, or a removed user that raises nothing, leaves the domain's login out of step with the users.
+  test.each([
+    ["added", "/data/people/add"],
+    ["removed", "/data/people/remove"],
+  ] as const)("says that a repair waits once a user was %s, through a check, until a repair that leaves the login standing", async (_what, path) => {
+    const opened = await openConsole("", fakePlug(() => ({ ok: true, rows: [{ object: "Login policy", state: "present", detail: "the logins", part: "login" }], steps: [] })));
+    const login = "bo@example.com";
+    const shown = async (): Promise<unknown> => {
+      const { last } = (await (await opened.get("/data/domain")).json()) as { readonly last: { readonly waits: boolean; readonly summary: Ran["summary"] } };
+      const { domainNote } = (await (await opened.get("/data/frame")).json()) as { readonly domainNote: { readonly sentence: string } | null };
+
+      return [last.waits, last.summary.line, last.summary.tone, domainNote?.sentence ?? null];
+    };
+    const ran = async (run: "check" | "repair"): Promise<string> => ((await (await opened.change(`/data/domain/${run}`, { token: TOKEN })).json()) as Ran).summary.line;
+    if (path.endsWith("remove")) await opened.change("/data/people/add", { login });
+
+    const lines = [await ran("repair")];
+    const before = await shown();
+    await opened.change(path, { login });
+    const waiting = await shown();
+    lines.push(await ran("check"));
+    const checked = await shown();
+    lines.push(await ran("repair"));
+
+    const [quiet, raised] = [[false, "Nothing to repair", "good", null], [true, "Users changed. Press Repair.", "bad", "Users changed. Open Domain and press Repair."]];
+    expect([before, waiting, checked, await shown()]).toEqual([quiet, raised, raised, quiet]);
+    expect(lines).toEqual(["Nothing to repair", "Users changed. Press Repair.", "Nothing to repair"]);
   });
 
   // Drift: a console built without the provider's side would answer a screen it cannot run.
@@ -197,12 +227,22 @@ describe("the line that counts a run's rows", () => {
   ] as const)("after a %s of %p says %s", (run, rows, line, tone) => {
     const reading: Extract<DomainReading, { ok: true }> = { ok: true, rows: [...rows], steps: [] };
 
-    expect(runDone(run, reading).summary).toEqual({ line, tone });
+    expect(runDone(run, reading, false).summary).toEqual({ line, tone });
+  });
+
+  // Drift: a user added in Access cannot log in until a repair, and a green "Nothing to repair" would say there is nothing to do. Said over a count of work, it would hide the pieces a repair must also mend.
+  test.each([
+    ["check", rowsIn("present", "optional"), "Users changed. Press Repair.", "bad"],
+    ["repair", rowsIn("created", "present"), "Users changed. Press Repair.", "bad"],
+    ["check", rowsIn("present", "missing"), "1 to repair", "bad"],
+    ["repair", rowsIn("created", "failed"), "1 not done", "bad"],
+  ] as const)("after a %s of %p while changed users wait for a repair says %s", (run, rows, line, tone) => {
+    expect(runDone(run, { ok: true, rows: [...rows], steps: [] }, true).summary).toEqual({ line, tone });
   });
 
   // Drift: an optional piece that is not set up would read as a failure.
   test("draws an optional piece as idle, in the words the install guide quotes", () => {
-    expect(runDone("check", { ok: true, rows: rowsIn("optional"), steps: [] }).rows).toEqual([
+    expect(runDone("check", { ok: true, rows: rowsIn("optional"), steps: [] }, false).rows).toEqual([
       { piece: "Piece 0", state: "optional", tone: "idle", detail: "detail 0" },
     ]);
   });
@@ -213,6 +253,7 @@ describe("the run the install remembers", () => {
   test("is drawn with each piece's state, counted as a check", () => {
     const kept = keptAnswer({
       stale: true,
+      waits: true,
       check: {
         ran_at: 1_700_000_000_000,
         by: BY,
@@ -231,6 +272,7 @@ describe("the run the install remembers", () => {
       by: "mira@example.com",
       run: "repair",
       stale: true,
+      waits: true,
       rows: [
         { piece: "DNS record", state: "present", tone: "good", detail: "every site" },
         { piece: "Login policy", state: "needs repair", tone: "bad", detail: "the logins" },
@@ -239,7 +281,7 @@ describe("the run the install remembers", () => {
       ],
       summary: { line: "2 not done", tone: "bad" },
     });
-    expect(keptAnswer({ check: null, stale: false })).toBeNull();
+    expect(keptAnswer({ check: null, stale: false, waits: false })).toBeNull();
   });
 
   // Drift: a piece the last run failed at, or never reached, would be counted as nothing to do.
@@ -248,7 +290,7 @@ describe("the run the install remembers", () => {
     ["missing_right", "failed"],
     ["not_run", "not run"],
   ] as const)("counts a piece unread for %s as not done", (reason, state) => {
-    const kept = keptAnswer({ stale: false, check: { ran_at: 1, by: BY, run: "check", pieces: [unread(reason)] } });
+    const kept = keptAnswer({ stale: false, waits: false, check: { ran_at: 1, by: BY, run: "check", pieces: [unread(reason)] } });
 
     expect([kept?.summary.line, kept?.summary.tone, kept?.rows[0]?.state]).toEqual(["1 not done", "bad", state]);
   });

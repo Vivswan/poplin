@@ -17,7 +17,7 @@ const COLLECTED_AFTER_MS = 6000;
 /** What a person's change says once it is done. */
 const PEOPLE_SAID = {
   added: "Added. Next, open Domain and press Repair.",
-  removed: "Removed. That user can no longer log in.",
+  removed: "Removed. Next, open Domain and press Repair.",
   gone: "That user was removed already.",
 } as const;
 
@@ -70,8 +70,9 @@ function decisionWords(login: Review, decision: Decision): string {
  * Build the changes of the Access screen.
  *
  * @param onChanged - called after every done change, and after a login turned out to be gone, so the lists read again
+ * @param onUsersChanged - called after a person was added or taken out, which the domain then waits a repair for, so what is said of the domain reads again
  */
-export function accessActions(onChanged: () => void): AccessActions {
+export function accessActions(onChanged: () => void, onUsersChanged: () => void): AccessActions {
   // A person someone else took out meanwhile is gone as asked: that is said plainly, and is no refusal.
   const removePerson: AccessActions["removePerson"] = async (email) => {
     try {
@@ -87,6 +88,7 @@ export function accessActions(onChanged: () => void): AccessActions {
     }
 
     onChanged();
+    onUsersChanged();
     sayDone(PEOPLE_SAID.removed);
   };
 
@@ -123,6 +125,7 @@ export function accessActions(onChanged: () => void): AccessActions {
       try {
         const added = await answerOf(api.people.add.$post({ json: { login: email } }));
         onChanged();
+        onUsersChanged();
         sayDone(PEOPLE_SAID.added, { run: () => void removePerson(added.login) });
 
         return undefined;

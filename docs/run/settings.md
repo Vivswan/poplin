@@ -74,7 +74,9 @@ A user is an email in `logins`, which can log in to the dashboard. A second user
 
 A new user can log in after step 2, not before. `poplin config logins` shows the same list.
 
-Removing another user needs no Repair: choose Remove in the menu at the end of that user's row, and press Remove when asked. That user is out of the dashboard at once, and out of private sites within a minute. Your own email cannot be the one you remove.
+To remove another user, choose Remove in the menu at the end of that user's row, and press Remove when asked. That user is out of the dashboard at once, and out of private sites within a minute. Your own email cannot be the one you remove.
+
+After either change Domain says `Users changed. Press Repair.` until a Repair: a removed user is taken off Cloudflare's list by it too.
 
 Sign everyone out, on the same tab, makes every browser log in to the dashboard again, yours too. [Security](../about/security.md#hardening) says what it ends and what it leaves.
 

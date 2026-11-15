@@ -83,8 +83,10 @@ function shownOf(ran: Ran | undefined, last: Domain["last"]): { readonly line: s
 
 /** Say what a run found, in the words of its count. */
 function sayRan(summary: Ran["summary"]): void {
-  if (summary.tone === "good") sayDone(`${summary.line}.`);
-  else sayRefused(`${summary.line}.`);
+  const said = summary.line.endsWith(".") ? summary.line : `${summary.line}.`;
+
+  if (summary.tone === "good") sayDone(said);
+  else sayRefused(said);
 }
 
 /** Draw the Domain screen. */

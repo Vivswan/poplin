@@ -1,4 +1,5 @@
 // One run of the domain plug for the Domain tab or the setup page: the token goes in, the rows come out, and the install keeps the run: its pieces as the last check of the domain, and one audit entry that says what was found or done.
+// A repair that leaves every piece of the login standing has carried the users to the domain, so a change of the users from before it waits for a repair no more.
 
 import type { Install } from "@poplin/core/src/actions/records";
 import type { AuditEntry } from "@poplin/core/src/records/audit";
@@ -82,6 +83,11 @@ function byState(reading: Extract<DomainReading, { ok: true }>): Record<string, 
   );
 }
 
+/** Whether a run carried the users to the domain: a repair, with no piece of the login left undone. */
+function carriedUsers(run: DomainRun, pieces: readonly CheckedPiece[]): boolean {
+  return run === "repair" && pieces.every((piece) => piece.part !== "login" || piece.state === "ok");
+}
+
 /** A row as the install remembers it. */
 function remembered(row: DomainRow): CheckedPiece {
   const named = { piece: row.object, detail: row.detail, part: row.part };
@@ -100,10 +106,12 @@ function remembered(row: DomainRow): CheckedPiece {
  *
  * @returns the plug's reading with the token taken out of every text. A reading that is no table, such as a refused token, keeps nothing, so the run kept before stays the last one.
  *   An unrecorded run keeps nothing either, nor does one signed by a name that holds the token.
- *   Nothing kept ever holds the token
+ *   Nothing kept ever holds the token. A repair that left the login standing settles a change of the users from before it began
  * @throws {Error} the plug or the database failed; nothing was kept
  */
 export async function runDomain(plug: DomainPlug, install: Pick<Install, "database" | "now">, asked: Asked): Promise<DomainReading> {
+  // A user added while the run is under way is not in the settings it carries, and still waits after it.
+  const began = install.now();
   let read: DomainSettings | undefined;
   const settings: ReadSettings = async () => {
     read = await asked.settings();
@@ -121,8 +129,10 @@ export async function runDomain(plug: DomainPlug, install: Pick<Install, "databa
   // An email typed on the setup page can hold the token, in whatever case, and a name cannot be scrubbed: such a run is not kept.
   if (asked.token !== "" && by.toLowerCase().includes(asked.token.toLowerCase())) return reading;
 
-  const check = { ran_at: install.now(), by, run: asked.run, pieces: keptPieces(reading.rows.map(remembered)) };
-  await install.database.keepDomainCheck(check, { run: asked.run, from: asked.from, ...byState(reading) });
+  const pieces = reading.rows.map(remembered);
+  const check = { ran_at: install.now(), by, run: asked.run, pieces: keptPieces(pieces) };
+  const detail = { run: asked.run, from: asked.from, ...byState(reading) };
+  await install.database.keepDomainCheck(check, detail, carriedUsers(asked.run, pieces) ? began : undefined);
 
   return reading;
 }

@@ -1,6 +1,6 @@
 // What the Domain screen and the setup screen are answered after a run: every piece as a row to draw, one line that counts what is left, and the steps only a person can do. A run that read no table is answered as a refusal that names the box it is about.
 //
-//   2 to repair
+//   2 to repair                      or, with nothing to repair after a user was added or removed: Users changed. Press Repair.
 //   Piece         State     Detail
 //   DNS record    missing   poplin.example.com
 //
@@ -51,6 +51,9 @@ const RUN_SENTENCES: Readonly<Record<string, string>> = {
   allowance_spent: "The database takes no more today: its free allowance for the day is used up. Try again after midnight UTC.",
 };
 
+/** The line of a domain with nothing to repair whose users changed since the last repair: the login lets in the users of that repair. */
+const USERS_CHANGED: Summary = { line: "Users changed. Press Repair.", tone: "bad" };
+
 /** The box of the form each refusal is about. A refusal missing here is about no box. */
 const ABOUT: Readonly<Record<string, string>> = { token: "token", no_domain: "domain", bad_domain: "domain", bad_login: "login" };
 
@@ -100,10 +103,11 @@ type UnreadReason = Extract<KeptPiece, { readonly state: "unread" }>["reason"];
 /** One piece as the install remembers it from its last run. */
 type KeptPiece = DomainCheck["pieces"][number];
 
-/** What the install remembers of its domain: the last run that read its pieces, `null` before any, and whether that run is too old to go by. */
+/** What the install remembers of its domain: the last run that read its pieces, `null` before any, whether that run is too old to go by, and whether the users changed with no repair after it. */
 interface Kept {
   readonly check: DomainCheck | null;
   readonly stale: boolean;
+  readonly waits: boolean;
 }
 
 /** The remembered run, as a screen draws it. */
@@ -120,6 +124,9 @@ interface Last {
   /** Whether it is too old to go by. */
   readonly stale: boolean;
 
+  /** Whether the users changed with no repair after it. */
+  readonly waits: boolean;
+
   /** Every piece as that run left it. */
   readonly rows: readonly ShownRow[];
 
@@ -132,12 +139,14 @@ function count(rows: readonly DomainRow[], states: readonly DomainState[]): numb
 }
 
 /** A run goes on past a row that failed for a right and stops at any other failure, and the rows alone do not say which: the line counts what is left and claims neither. An optional piece that is not set up is no work left over. */
-function summaryOf(run: DomainRun, rows: readonly DomainRow[]): Summary {
+function summaryOf(run: DomainRun, rows: readonly DomainRow[], waits: boolean): Summary {
   const failed = count(rows, ["failed"]);
   if (failed > 0) return { line: `${failed + count(rows, UNDONE)} not done`, tone: "bad" };
 
   const waiting = count(rows, TO_REPAIR);
   if (waiting > 0) return { line: `${waiting} to repair`, tone: "bad" };
+
+  if (waits) return USERS_CHANGED;
 
   const repaired = count(rows, REPAIRED);
   if (run === "repair" && repaired > 0) return { line: `${repaired} repaired`, tone: "good" };
@@ -151,14 +160,15 @@ function summaryOf(run: DomainRun, rows: readonly DomainRow[]): Summary {
  * @returns the pieces of that run with the line that counts them; `null` for an install that remembers none
  */
 export function keptAnswer(kept: Kept): Last | null {
-  const { check, stale } = kept;
+  const { check, stale, waits } = kept;
   if (check === null) return null;
 
   const drawn = check.pieces.map((piece) => ({ piece, as: KEPT[piece.state === "unread" ? piece.reason : piece.state] }));
-  const summary = summaryOf("check", drawn.map(({ piece, as }) => ({ object: piece.piece, detail: piece.detail, part: piece.part, state: as.counts })));
+  const counted = drawn.map(({ piece, as }) => ({ object: piece.piece, detail: piece.detail, part: piece.part, state: as.counts }));
+  const summary = summaryOf("check", counted, waits);
   const rows = drawn.map(({ piece, as }) => ({ piece: piece.piece, state: as.state, tone: as.tone, detail: piece.detail }));
 
-  return { ran_at: check.ran_at, by: check.by, run: check.run, stale, rows, summary };
+  return { ran_at: check.ran_at, by: check.by, run: check.run, stale, waits, rows, summary };
 }
 
 /**
@@ -177,10 +187,11 @@ export function runRefusal(code: string): RunRefused {
  * Write a run that read its table as a screen draws it.
  *
  * @param reading - the run's reading, with the token already taken out of every text
+ * @param waits - whether the users changed with no repair after it, this run included
  * @returns the rows in the run's order, the line that counts them, and the steps only a person can do
  */
-export function runDone(run: DomainRun, reading: Extract<DomainReading, { readonly ok: true }>): RunDone {
+export function runDone(run: DomainRun, reading: Extract<DomainReading, { readonly ok: true }>, waits: boolean): RunDone {
   const rows = reading.rows.map((row) => ({ piece: row.object, state: domainStateWords(row.state), tone: TONES[row.state], detail: row.detail }));
 
-  return { ok: true, rows, steps: reading.steps, summary: summaryOf(run, reading.rows) };
+  return { ok: true, rows, steps: reading.steps, summary: summaryOf(run, reading.rows, waits) };
 }
