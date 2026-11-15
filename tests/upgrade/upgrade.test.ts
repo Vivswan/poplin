@@ -26,7 +26,7 @@ describe("the upgrade from the last release", () => {
     test(
       `an install ${RELEASE} made and filled upgrades to this code with no finding`,
       async () => {
-        using tree = checkOut(HERE.root, RELEASE);
+        await using tree = checkOut(HERE.root, RELEASE);
 
         expect(await upgradeFindings(tree)).toEqual([]);
       },

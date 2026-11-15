@@ -1,6 +1,6 @@
 // The upgrade check's own test. Drift: a check that finds nothing proves nothing until it is seen to find a break, and a check that finds something proves nothing until it is seen to pass where nothing broke.
 
-import { describe, expect, test } from "bun:test";
+import { afterAll, describe, expect, test } from "bun:test";
 import { mkdirSync, mkdtempDisposableSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -36,22 +36,31 @@ function moduleTree(text: string): Tree & Disposable {
 }
 
 describe("the upgrade check", () => {
+  // The older commit's tree is removed while the tests after it run, and the file's end waits for it.
+  let removed: Promise<void> = Promise.resolve();
+  afterAll(() => removed, UPGRADE_MS);
+
   test(
-    "an install this code made and filled upgrades to this code with no finding: without this a finding of the check could be the check's own fault",
+    "an install made before the first step was last edited in place is found unreadable by this code, and its backup refused with its settings: without this the break that left an install with unreadable settings passes the check",
     async () => {
-      expect(await upgradeFindings(HERE)).toEqual([]);
+      const tree = checkOut(HERE.root, EDITED_IN_PLACE);
+
+      try {
+        const findings = await upgradeFindings(tree);
+        const shapes = new Set(findings.map(({ shape }) => shape));
+
+        expect([shapes.has("database"), shapes.has("settings"), shapes.has("backup")]).toEqual([true, true, true]);
+      } finally {
+        removed = Promise.resolve(tree[Symbol.asyncDispose]());
+      }
     },
     UPGRADE_MS,
   );
 
   test(
-    "an install made before the first step was last edited in place is found unreadable by this code, and its backup refused with its settings: without this the break that left an install with unreadable settings passes the check",
+    "an install this code made and filled upgrades to this code with no finding: without this a finding of the check could be the check's own fault",
     async () => {
-      using tree = checkOut(HERE.root, EDITED_IN_PLACE);
-      const findings = await upgradeFindings(tree);
-      const shapes = new Set(findings.map(({ shape }) => shape));
-
-      expect([shapes.has("database"), shapes.has("settings"), shapes.has("backup")]).toEqual([true, true, true]);
+      expect(await upgradeFindings(HERE)).toEqual([]);
     },
     UPGRADE_MS,
   );

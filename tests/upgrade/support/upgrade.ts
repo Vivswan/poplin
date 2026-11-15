@@ -72,7 +72,7 @@ function idsOf(answer: unknown): string[] {
 
 /** Every site an install holds, in the trash or out of it, by its id. Throws when the install does not list them. */
 async function held(cli: Tree, machine: Machine): Promise<Map<string, unknown>> {
-  const [live, trashed] = [await runCli(cli, machine, ["list"]), await runCli(cli, machine, ["list", "--trash"])];
+  const [live, trashed] = await Promise.all([runCli(cli, machine, ["list"]), runCli(cli, machine, ["list", "--trash"])]);
   const sites = [live, trashed].flatMap((ran): unknown[] => {
     const listed = field(ran.answer, "sites");
     if (ran.exit !== 0 || !Array.isArray(listed)) throw new Error(`\`${ran.line}\` listed no sites: ${firstLine(ran)}`);
@@ -106,36 +106,49 @@ function lost(sites: ReadonlyMap<string, unknown>, backedUp: readonly string[], 
   });
 }
 
-/** A backup of this code, imported by that code's command into its own install: all of it, or none of it with a refusal. */
-async function olderImport(scene: Scene, zip: string, sites: readonly string[]): Promise<string[]> {
-  const [before, source] = [await held(scene.from, scene.there), await held(HERE, scene.here)];
-  const ran = await runCli(scene.from, scene.there, ["import", zip]);
-  const after = await held(scene.from, scene.there);
-  if (ran.exit === 0) return lost(source, sites, after).map((line) => `${scene.from.name} said it imported this code's backup, and ${line}`);
+/** That code's install around its command's import of a backup of this code. */
+interface OlderImport {
+  /** How the import ended. */
+  readonly ran: Ran;
 
-  if (ran.answer === undefined) return [`${scene.from.name} failed on this code's backup with no refusal: ${firstLine(ran)}`];
+  /** The sites that install held before the import, and after it. */
+  readonly sites: { readonly before: ReadonlyMap<string, unknown>; readonly after: ReadonlyMap<string, unknown> };
 
-  return after.size === before.size ? [] : [`${scene.from.name} refused this code's backup and kept ${after.size - before.size} of its sites: half an import`];
+  /** The sites the backup was made of, as this code's install held them, and their ids. */
+  readonly backedUp: { readonly sites: ReadonlyMap<string, unknown>; readonly ids: readonly string[] };
 }
 
-/** A backup each code exports, imported by the other. */
+/** A backup of this code, imported by that code's command into its own install: all of it, or none of it with a refusal. */
+function olderFaults(from: Tree, { ran, sites, backedUp }: OlderImport): string[] {
+  if (ran.exit === 0) return lost(backedUp.sites, backedUp.ids, sites.after).map((line) => `${from.name} said it imported this code's backup, and ${line}`);
+
+  if (ran.answer === undefined) return [`${from.name} failed on this code's backup with no refusal: ${firstLine(ran)}`];
+
+  const kept = sites.after.size - sites.before.size;
+
+  return kept === 0 ? [] : [`${from.name} refused this code's backup and kept ${kept} of its sites: half an import`];
+}
+
+/** A backup each code exports, imported by the other. What only reads an install, or works on the other one, is run together. */
 async function backupFaults(scene: Scene): Promise<string[]> {
   const [theirs, ours] = [join(scene.home, "that.zip"), join(scene.home, "this.zip")];
   const kept = await runCli(HERE, scene.here, ["publish", scene.folder, "--name", "kept"]);
-  const [exported, made] = [
-    await runCli(scene.from, scene.there, ["export", "--all-versions", "--out", theirs]),
-    await runCli(HERE, scene.here, ["export", "--all-versions", "--out", ours]),
-  ];
+  const [exported, made, before, backedUp] = await Promise.all([
+    runCli(scene.from, scene.there, ["export", "--all-versions", "--out", theirs]),
+    runCli(HERE, scene.here, ["export", "--all-versions", "--out", ours]),
+    held(scene.from, scene.there),
+    held(HERE, scene.here),
+  ]);
   const stuck = [kept, exported, made].find((ran) => ran.exit !== 0);
   if (stuck !== undefined) return [`\`${stuck.line}\` failed against the install of its own code: ${firstLine(stuck)}`];
 
-  const older = await olderImport(scene, ours, idsOf(made.answer));
-  const source = await held(scene.from, scene.there);
-  const imported = await runCli(HERE, scene.here, ["import", theirs]);
+  const [ran, imported] = await Promise.all([runCli(scene.from, scene.there, ["import", ours]), runCli(HERE, scene.here, ["import", theirs])]);
+  const after = await held(scene.from, scene.there);
+  const older = olderFaults(scene.from, { ran, sites: { before, after }, backedUp: { sites: backedUp, ids: idsOf(made.answer) } });
   if (imported.exit !== 0)
     return [...older, fault(imported) ?? `this code refuses the backup of ${scene.from.name} and asks for an update, and it is the newer of the two`];
 
-  const missing = lost(source, idsOf(exported.answer), await held(HERE, scene.here));
+  const missing = lost(after, idsOf(exported.answer), await held(HERE, scene.here));
   const settings = fault(await runCli(HERE, scene.here, ["import", theirs, "--settings"]));
 
   return [
@@ -148,9 +161,9 @@ async function backupFaults(scene: Scene): Promise<string[]> {
 /** Each code's command against the other's install, and that code's command against its own, which the walk must fit. */
 async function wire(scene: Scene): Promise<{ readonly findings: Finding[]; readonly site: string | undefined }> {
   const both = [scene.from, HERE];
-  const own = await walk({ cli: scene.from, machine: scene.there, folder: scene.folder, both: [scene.from] }, "walk-own");
-  // The two walk two installs, so neither waits for the other.
-  const [ahead, behind] = await Promise.all([
+  // Each walks a site of its own, so none waits for another.
+  const [own, ahead, behind] = await Promise.all([
+    walk({ cli: scene.from, machine: scene.there, folder: scene.folder, both: [scene.from] }, "walk-own"),
     walk({ cli: HERE, machine: scene.there, folder: scene.folder, both }, "walk-ahead"),
     walk({ cli: scene.from, machine: scene.here, folder: scene.folder, both }, "walk-behind"),
   ]);
@@ -171,8 +184,11 @@ async function wire(scene: Scene): Promise<{ readonly findings: Finding[]; reado
 /** Every finding of one scene. The install `from` made stops answering before this code opens it. */
 async function findingsOf(scene: Scene, listening: Listening, fresh: Awaited<ReturnType<typeof newInstall>>): Promise<Finding[]> {
   const walked = await wire(scene);
-  const login = await attempt("login file", "saving and reading a login", () => loginFaults(scene));
-  const backup = await attempt("backup", "exporting and importing", () => backupFaults(scene));
+  // The login is saved in a folder of its own and only read back, so the backups do not wait for it.
+  const [login, backup] = await Promise.all([
+    attempt("login file", "saving and reading a login", () => loginFaults(scene)),
+    attempt("backup", "exporting and importing", () => backupFaults(scene)),
+  ]);
   const before = await capture({ from: scene.from, seeded: scene.seeded, machine: scene.there, folder: scene.folder });
   await listening.stop();
   const inPlace = await upgradeInPlace({ from: scene.from, seeded: scene.seeded, machine: scene.there, folder: scene.folder }, before, walked.site, fresh);

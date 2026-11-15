@@ -65,14 +65,20 @@ export function lastRelease(root: string): string | undefined {
   return newest;
 }
 
+/** Remove a tree's folder in a process of its own: its tens of thousands of files, removed from here, hold up whatever else this process runs. */
+async function removed(folder: string): Promise<void> {
+  const removal = Bun.spawn(["rm", "-rf", folder], { stdio: ["ignore", "ignore", "inherit"] });
+  if ((await removal.exited) !== 0) throw new Error(`${folder} was not removed`);
+}
+
 /**
  * Put the code of one commit in a folder of its own, with its packages installed from its own lockfile.
  *
  * @param ref - a tag or a commit of the repository at `root`
- * @returns the tree; the folder is removed when the caller's scope ends
+ * @returns the tree; disposing it removes the folder, which takes seconds for the packages it holds and holds up nothing meanwhile
  * @throws {Error} the commit is not in the repository, or its packages did not install
  */
-export function checkOut(root: string, ref: string): Tree & Disposable {
+export function checkOut(root: string, ref: string): Tree & AsyncDisposable {
   const folder = mkdtempDisposableSync(join(tmpdir(), "poplin-tree-"));
 
   try {
@@ -86,7 +92,7 @@ export function checkOut(root: string, ref: string): Tree & Disposable {
     throw cause;
   }
 
-  return { root: folder.path, name: ref, [Symbol.dispose]: () => folder.remove() };
+  return { root: folder.path, name: ref, [Symbol.asyncDispose]: () => removed(folder.path) };
 }
 
 /**

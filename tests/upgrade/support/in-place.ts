@@ -138,16 +138,15 @@ async function rowsOf(driver: SqlDriver): Promise<ReadonlyMap<string, number>> {
   return new Map(names.map((name, at) => [name, Number(counted[at]?.rows[0]?.held)]));
 }
 
-/** Ask every read with one tree's command, then show each site of `sites`; left out, the first sites the first read lists. */
+/** Ask every read with one tree's command, then show each site of `sites`; left out, the first sites the first read lists. None changes the install, so those of a kind are asked together. */
 async function readAll(cli: Tree, machine: Machine, sites?: readonly string[]): Promise<Before["reads"]> {
-  const reads: { shape: Shape; ran: Ran }[] = [];
-  for (const [shape, line] of READS) reads.push({ shape, ran: await runCli(cli, machine, line) });
+  const reads = await Promise.all(READS.map(async ([shape, line]) => ({ shape, ran: await runCli(cli, machine, line) })));
 
   const listed = field(reads[0]?.ran.answer, "sites");
   const ids = sites ?? (Array.isArray(listed) ? listed.slice(0, MOST_SHOWN).map((site) => String(field(site, "id"))) : []);
-  for (const id of ids) reads.push({ shape: "database", ran: await runCli(cli, machine, ["show", id]) });
+  const shown = await Promise.all(ids.map(async (id) => ({ shape: "database" as const, ran: await runCli(cli, machine, ["show", id]) })));
 
-  return reads;
+  return [...reads, ...shown];
 }
 
 /**
