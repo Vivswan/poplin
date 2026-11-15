@@ -100,6 +100,7 @@ function PhoneList({
         >
           <Link
             {...toProblem(problem)}
+            data-opens={problemId(problem)}
             className="flex min-h-16 flex-col justify-center gap-0.5 px-4 py-2 outline-none focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring"
           >
             <span className="truncate">{problem.sentence}</span>
@@ -134,8 +135,7 @@ export function ProblemsBlock(): ReactNode {
     return { to: HOMES.usage.to, search: searchOf(next) };
   };
   // A second press on the open row closes its panel, as it does in every list.
-  const toProblem = (problem: Problem): UsageAddress =>
-    address({ [PROBLEM_KEY]: problemId(problem) === opened ? undefined : problemId(problem) });
+  const toProblem = (problem: Problem): UsageAddress => address({ [PROBLEM_KEY]: problemId(problem) === opened ? undefined : problemId(problem) });
   const problems = data?.problems;
 
   return (
@@ -165,7 +165,7 @@ export function ProblemsBlock(): ReactNode {
               layout={layout}
               sort={AS_GIVEN}
               selected={opened}
-              onOpen={(problem) => void navigate(toProblem(problem))}
+              opens={{ name: (problem) => `Details of ${problem.sentence}`, open: (problem) => void navigate(toProblem(problem)) }}
               actions={(problem) => <LimitLink problem={problem} />}
             />
           </div>

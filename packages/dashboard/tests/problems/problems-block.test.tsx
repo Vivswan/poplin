@@ -98,7 +98,7 @@ describe("the panel of a problem", () => {
   // Drift: a press on a row would open nothing, the address would not hold the open problem, so a reload or a link would lose it, or the panel would miss what to do.
   test("opens at a press on a row, is held by the address, and says when it came, how often, and what to do", async () => {
     const router = await draw("/usage");
-    fireEvent.click(within(screen.getByRole("table", { name: "Problems" })).getByText("A request failed"));
+    fireEvent.click(within(screen.getByRole("table", { name: "Problems" })).getByRole("button", { name: "Details of A request failed" }));
     await waitFor(() => expect(screen.queryAllByRole("complementary", { name: "A request failed" }).length).toBe(1));
     const panel = screen.getByRole("complementary", { name: "A request failed" });
 
