@@ -1,4 +1,4 @@
-// The line of the update link, the address that starts an update of the install. It is a credential: it is pasted into a field that hides it, it waits for the screen's Save like a setting, and once saved the block says only that one is set, and since when.
+// The block of the update link, the address that starts an update of the install. It is a credential: it is pasted into a field that hides it and waits for the screen's Save like a setting. Once saved, the block says only that one is set, and since when.
 
 import { useQueryClient } from "@tanstack/react-query";
 import { type ReactNode, useState } from "react";
