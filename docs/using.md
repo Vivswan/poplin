@@ -144,6 +144,8 @@ An install begins five logins a minute for all computers together. In a minute t
 
 A computer keeps one saved login: a new `poplin login` replaces it. An agent on the computer uses that login and does not log in itself. `POPLIN_SERVER` and `POPLIN_TOKEN` in the environment stand in for a saved login.
 
+`POPLIN_CONFIG_DIR` in the environment names another folder for the saved login, read when the two names above are not set. Set for an agent's tools alone, it gives the agent a login of its own, which shows under its own name: [the skill's page](../skills/poplin/references/mcp-server.md#optional-a-login-of-your-own) has the step.
+
 `--publisher` is for a computer or a script that should only publish, such as a build server or a shared machine.
 
 | A publisher's login | What                                                                                                                            |
