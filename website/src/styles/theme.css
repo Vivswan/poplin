@@ -124,6 +124,13 @@ main {
   flex: 1;
 }
 
+/* A wide window gets a wider column, with the same margins around it. */
+@media (min-width: 1250px) {
+  :root {
+    --measure: 1120px;
+  }
+}
+
 .wrap {
   width: min(100%, calc(var(--measure) + 2 * var(--edge)));
   margin-inline: auto;

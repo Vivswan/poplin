@@ -73,8 +73,9 @@ const told = [
   import { EASE } from "../lib/ease.ts";
 
   // One timeline drives the whole figure, round after round. Leaving the screen or the tab ends the round.
-  // The dot slows a little under each box, so the stay shows. Speeds are pixels a second; times are seconds.
+  // The dot slows a little under each box, so the stay shows. Speeds are pixels a second, set for a path `PACED` pixels long; times are seconds.
   const SPEED = 150;
+  const PACED = 852;
   const SLOW = 0.75;
   const SPLIT = 0.9;
   const REST = 1;
@@ -104,14 +105,16 @@ const told = [
         return (far ? end : near) - start;
       };
 
+      // A longer path is crossed faster, so a round takes about as long at any width.
+      const speed = SPEED * Math.max(1, (down ? frame.height : frame.width) / PACED);
       // The dot's stops: under each box's near edge, then out from under its far one. The last is the Worker's.
       const stops = [{ place: 0, at: 0 }];
       const answers: [box: HTMLElement, from: number, to: number][] = [[visitor, 0, LEAVE]];
       for (const box of passed) {
         const rect = box.getBoundingClientRect();
         const last = stops.at(-1) ?? { place: 0, at: 0 };
-        const into = last.at + (along(rect, false) - last.place) / SPEED;
-        const out = into + (along(rect, true) - along(rect, false)) / (SPEED * SLOW);
+        const into = last.at + (along(rect, false) - last.place) / speed;
+        const out = into + (along(rect, true) - along(rect, false)) / (speed * SLOW);
         stops.push({ place: along(rect, false), at: into }, { place: along(rect, true), at: out });
         answers.push([box, Math.max(into, LEAVE), out]);
       }

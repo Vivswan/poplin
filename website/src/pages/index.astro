@@ -330,6 +330,18 @@ const pickerRules = `${AGENTS.map((agent) => `.byhand:has(option[value="${agent.
     padding-bottom: clamp(56px, 8vw, 96px);
   }
 
+  /* In a wide window the column is wider: the words get more room, and a picture grows only a little. */
+  @media (min-width: 1250px) {
+    .step:not(.wide) {
+      grid-template-columns: minmax(0, 1fr) 640px;
+      column-gap: 64px;
+    }
+
+    .step:not(.wide) .say p {
+      max-width: 340px;
+    }
+  }
+
   @media (max-width: 720px) {
     .path {
       padding-left: 20px;
