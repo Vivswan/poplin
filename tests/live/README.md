@@ -13,10 +13,40 @@ Live Checks workflow
   build the Worker bundle
   packages/cloudflare/scripts/live/converge.ts   bucket, database, login, wrangler deploy, the Domain tab's repair
   packages/cloudflare/scripts/live/suite.ts      a token for the run -> bun test tests/live/live.test.ts -> the token removed
-  step summary                                   one table of the install's pieces, one of the checks
+  packages/cloudflare/scripts/live/reset.ts      a token for the reset -> the install put back -> every token removed
+  step summary                                   one table of the install's pieces, one of the checks, one of the reset
 ```
 
-The test install stays up between runs. A run removes what it made: every site whose name starts with `live-`, and its own token row. A site of a run that was killed expires after a day, and its token row after an hour.
+## The test install
+
+One install on the Cloudflare test account, called staging. It stays up between runs.
+
+|             | Staging                                                                          |
+| ----------- | -------------------------------------------------------------------------------- |
+| Runs        | the latest main                                                                  |
+| Who gets in | the owner alone, behind the login; the demo's site is public                     |
+| Updated     | after every green main                                                           |
+| Put back    | after every run of the checks, whatever they came to, and at 00:00 UTC every day |
+
+| A reset removes                      | A reset leaves                                                               |
+| ------------------------------------ | ---------------------------------------------------------------------------- |
+| every site but the demo's, for good  | the logins and every other setting                                           |
+| everything in the trash              | the Worker, the bucket, the database, and the zone's objects                 |
+| every token, its own among them      | the four sample sites of `demo/samples`, published anew, each private        |
+| every login of a computer that waits | the demo: a public site with the public name `demo`, updated where it stands |
+
+The demo is what `bun run demo:build` writes, at `demo-<public word>.<domain>`. The install serves its files, and the demo's worker answers every address inside it.
+
+The owner sets these; the environment is `cloudflare-live-tests`.
+
+| Set                     | Where                        | For                                                                       |
+| ----------------------- | ---------------------------- | ------------------------------------------------------------------------- |
+| R2 switched on          | the Cloudflare account       | the bucket                                                                |
+| Zero Trust switched on  | the Cloudflare account       | the login                                                                 |
+| `CLOUDFLARE_API_TOKEN`  | a secret of the environment  | every step that calls Cloudflare                                          |
+| `CLOUDFLARE_ACCOUNT_ID` | a secret of the environment  | the same                                                                  |
+| `POPLIN_LIVE_LOGIN`     | a secret of the environment  | the login the install lets in                                             |
+| `DEMO_URL`              | a variable of the repository | the demo's whole https address, for the website; absent, it shows no link |
 
 ## What a run skips
 
@@ -29,7 +59,8 @@ A run that cannot make the install answer, or cannot start the checks, fails: th
 | a token permission for a rule, the bot settings, or the login       | the piece of the install that permission makes, and the checks behind it |
 | Access switched on for the account                                  | `L1`                                                                     |
 | an install that sends a private site's address to its letter p form | `L1`, `L4`, `L5`                                                         |
-| a Worker route for the public word's hostnames                      | `public-name`                                                            |
+| a Worker route for the public word's hostnames                      | `public-name`, `demo`                                                    |
+| a public site named `demo`, which the reset publishes               | `demo`                                                                   |
 | a plan whose bot settings the API can change                        | `crawler`                                                                |
 | the guard rule, the redirect rule, or the rate rule on the zone     | `L8-method`, `L8-scanner`, `L8-http`, `burst-rate-rule`                  |
 | a run started by hand with the many-files check switched on         | `L10`: two thousand uploads, so not on every green main                  |
