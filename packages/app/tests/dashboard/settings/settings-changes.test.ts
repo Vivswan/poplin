@@ -69,14 +69,14 @@ test("text a setting does not take, a missing field, and a form that names a Dom
   const withoutOne = await fields(opened);
   delete withoutOne.trash_days;
   const refusals = [
-    [await fields(opened, { trash_days: "soon" }), "/settings?refused=bad_argument&about=trash_days", "The value of trash_days is not one it takes."],
-    [await fields(opened, { trash_days: "0" }), "/settings?refused=bad_argument&about=trash_days", "The value of trash_days is not one it takes."],
-    [await fields(opened, { max_total_size: "9 GB" }), "/settings?refused=bad_argument&about=max_total_size", "The value of max_total_size is not one it takes."],
-    [await fields(opened, { logins: "" }), "/settings?refused=bad_argument&about=logins", "The value of logins is not one it takes."],
-    [await fields(opened, { logins: "<script>" }), "/settings?refused=bad_argument&about=logins", "The value of logins is not one it takes."],
-    [await fields(opened, { trash_days: " 30 " }), "/settings?refused=bad_argument&about=trash_days", "The value of trash_days is not one it takes."],
-    [await fields(opened, { dashboard_title: "" }), "/settings?refused=bad_argument&about=dashboard_title", "The value of dashboard_title is not one it takes."],
-    [await fields(opened, { site_share_of_day: "101%" }), "/settings?refused=bad_argument&about=site_share_of_day", "The value of site_share_of_day is not one it takes."],
+    [await fields(opened, { trash_days: "soon" }), "/settings?refused=bad_argument&about=trash_days", "Use a whole number, 1 or more."],
+    [await fields(opened, { trash_days: "0" }), "/settings?refused=bad_argument&about=trash_days", "Use a whole number, 1 or more."],
+    [await fields(opened, { max_total_size: "9 GB" }), "/settings?refused=bad_argument&about=max_total_size", "Use a size such as 200MB or 9GB."],
+    [await fields(opened, { logins: "" }), "/settings?refused=bad_argument&about=logins", "Use whole email addresses, each one once."],
+    [await fields(opened, { logins: "<script>" }), "/settings?refused=bad_argument&about=logins", "Use whole email addresses, each one once."],
+    [await fields(opened, { trash_days: " 30 " }), "/settings?refused=bad_argument&about=trash_days", "Use a whole number, 1 or more."],
+    [await fields(opened, { dashboard_title: "" }), "/settings?refused=bad_argument&about=dashboard_title", "Type a title."],
+    [await fields(opened, { site_share_of_day: "101%" }), "/settings?refused=bad_argument&about=site_share_of_day", "Use a whole number from 1 to 100."],
     [withoutOne, "/settings?refused=missing_field", "The form was incomplete, so nothing was changed."],
     [{}, "/settings?refused=missing_field", "The form was incomplete, so nothing was changed."],
   ] as const;

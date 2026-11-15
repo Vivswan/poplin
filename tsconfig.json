@@ -22,6 +22,7 @@
     "packages/cloudflare/tests/storage",
     "packages/cloudflare/tests/database",
     "packages/cloudflare/tests/limits",
-    "packages/demo/src/browser/worker.ts"
+    "packages/demo/src/browser/worker.ts",
+    "packages/dashboard"
   ]
 }

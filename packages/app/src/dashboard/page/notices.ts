@@ -12,6 +12,7 @@ import type { changeConfig, readConfig } from "@poplin/core/src/actions/config";
 import type { deleteSite } from "@poplin/core/src/actions/delete";
 import type { duplicateSite } from "@poplin/core/src/actions/duplicate";
 import type { listSites } from "@poplin/core/src/actions/list";
+import type { addLogin, removeLogin } from "@poplin/core/src/actions/logins";
 import type { listTokens } from "@poplin/core/src/actions/manage-tokens";
 import type { newLink } from "@poplin/core/src/actions/new-link";
 import type { restoreSite } from "@poplin/core/src/actions/restore";
@@ -19,13 +20,16 @@ import type { rollbackSite } from "@poplin/core/src/actions/rollback";
 import type { updateSite } from "@poplin/core/src/actions/set";
 import type { getSite } from "@poplin/core/src/actions/show";
 import type { signEveryoneOut } from "@poplin/core/src/actions/sign-out";
+import type { startUpdate } from "@poplin/core/src/actions/start-update";
 import { siteReference } from "@poplin/core/src/sites/labels";
+
+import type { DomainReading } from "../domain/records";
 
 /** What each refusal code says. `{about}` is the field or setting the code is about. A code of an action missing here does not compile. */
 const REFUSALS: Readonly<Record<ActionCode | OwnCode, string>> = {
   not_set_up: "This install is not set up yet.",
   not_allowed: "This login may not do that.",
-  not_found: "No such site.",
+  not_found: "No site is at this address. It may have been deleted, or the link is an old one.",
   in_trash: "The site sits in the trash. Restore it first.",
   not_in_trash: "The site is not in the trash.",
   name_taken: "Another site holds that public name. Choose another.",
@@ -52,9 +56,23 @@ const REFUSALS: Readonly<Record<ActionCode | OwnCode, string>> = {
   no_such_login: "No login waits under that code. It was allowed or denied already, or its 10 minutes ran out. Run poplin login again.",
   no_working_login: "Your own email has to stay in the logins, so nothing was changed. Another admin can take it out.",
   no_such_token: "No token has that id. It may be revoked already.",
+  token_gone: "That token is gone already.",
+  login_gone: "That login no longer waits: it was allowed or denied, or its 10 minutes ran out. On the computer, run poplin login again.",
+  already_a_login: "That email can log in already.",
+  not_a_login: "That email is not in the list. It may have been removed already.",
   allowance_spent: "The storage takes no more writes today: max_storage_writes_per_day is reached. It works again after midnight UTC.",
   no_more_writing: "The database takes no more changes today: its free allowance for writing is used up. Changes work again after midnight UTC.",
   no_more_reading: "The dashboard is paused: the free allowance of the database for reading is used up for today. It is back after midnight UTC.",
+  token: "Token refused. Paste the whole token, made for this account and this domain.",
+  unreachable: "No answer from the provider. Try again.",
+  no_domain: "The token shows no domain of that name.",
+  bad_domain: "The domain is no domain. Type it alone, such as example.com.",
+  bad_login: "The email is no email address.",
+  no_update_address: "No rebuild address is saved, so no update was started. Save one in Settings, under Updates.",
+  no_update: "No newer version is known, so no update was started.",
+  too_many_requests: "An update was started in this minute already. Wait a minute.",
+  update_unreachable: "The rebuild address did not answer, so no update was started. Try again.",
+  update_refused: "The rebuild address refused the request, so no update was started. Check the address in Settings, under Updates.",
 };
 
 /** What a code says when what it is about gives it another meaning: `too_large` is a form's own refusal, and about a limit a copy that does not fit it; `not_found` is a site, and about an upload a copy. `other` stands for any limit not named. */
@@ -69,6 +87,25 @@ const ABOUT_REFUSALS: Readonly<Record<string, Readonly<Record<string, string>>>>
   },
   bad_argument: {
     expires: "Deletes itself takes never, a span such as 7d, or a day such as 2026-12-01.",
+    address: "That is not an address the host starts a rebuild at. Paste the whole address, starting with https://.",
+    default_expires: "Use never, or a span such as 12h or 30d.",
+    default_search_engines: "Use on or off.",
+    versions_kept: "Use a whole number, 1 or more.",
+    trash_days: "Use a whole number, 1 or more.",
+    logins: "Use whole email addresses, each one once.",
+    login: "That is not an email address. Type one, such as name@example.com.",
+    dashboard_title: "Type a title.",
+    max_total_size: "Use a size such as 200MB or 9GB.",
+    max_site_size: "Use a size such as 200MB or 9GB.",
+    max_sites: "Use none, or a whole number, 1 or more.",
+    max_files_per_publish: "Use a whole number from 1 to 10000.",
+    max_files_per_day: "Use a whole number, 1 or more.",
+    max_storage_writes_per_day: "Use a whole number, 1 or more.",
+    requests_per_day: "Use a whole number, 1 or more.",
+    site_share_of_day: "Use a whole number from 1 to 100.",
+    site_requests_per_minute: "Use a whole number, 1 or more.",
+    visitor_requests_per_minute: "Use a whole number, 1 or more.",
+    update_check: "Use on or off.",
   },
   not_found: {
     upload: "That copy can no longer be gone on with: it was cancelled, or its day to finish ran out. Unless the list of sites shows it, duplicate the site again.",
@@ -125,12 +162,21 @@ type ActionCode =
   | CodeOf<typeof changeConfig>
   | CodeOf<typeof listAudit>
   | CodeOf<typeof listTokens>
+  | CodeOf<typeof addLogin>
+  | CodeOf<typeof removeLogin>
   | CodeOf<typeof showLogin>
   | CodeOf<typeof decideLogin>
-  | CodeOf<typeof signEveryoneOut>;
+  | CodeOf<typeof signEveryoneOut>
+  | CodeOf<typeof startUpdate>;
+
+/** Why a run of the domain plug read no table. */
+type RunRefusal = Extract<DomainReading, { readonly ok: false }>["refusal"];
 
 /** The codes of the dashboard's own refusals: a form it cannot take, or a request it does not answer. */
-type OwnCode = "wrong_confirmation" | "not_confirmed" | "missing_field" | "not_a_form" | "too_large" | "not_from_here" | "no_page" | "bad_method" | "too_many_tries" | "no_such_token" | "no_more_writing" | "no_more_reading";
+type OwnCode = "wrong_confirmation" | "not_confirmed" | "missing_field" | "not_a_form" | "too_large" | "not_from_here" | "no_page" | "bad_method" | "too_many_tries" | "no_such_token" | "no_more_writing" | "no_more_reading" | AccessCode | RunRefusal;
+
+/** The codes of the Access screen's own refusals: a token or a waiting login that is gone. */
+type AccessCode = "token_gone" | "login_gone";
 
 /** A change that was done, or a refusal with what it is about. `site` is the label of the site a done change can be taken back on. */
 type Result = { readonly done: keyof typeof DONE; readonly site?: string } | { readonly refused: string; readonly about?: string };

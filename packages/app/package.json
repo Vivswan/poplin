@@ -5,6 +5,10 @@
   "exports": {
     "./src/api/api": "./src/api/api.ts",
     "./src/api/respond": "./src/api/respond.ts",
+    "./src/console/console": "./src/console/console.ts",
+    "./src/console/routes": "./src/console/routes.ts",
+    "./src/console/setup-console": "./src/console/setup-console.ts",
+    "./src/console/shell": "./src/console/shell.ts",
     "./src/dashboard/dashboard": "./src/dashboard/dashboard.ts",
     "./src/dashboard/settings/free-limits": "./src/dashboard/settings/free-limits.ts",
     "./src/dashboard/domain/records": "./src/dashboard/domain/records.ts",
@@ -20,6 +24,7 @@
     "./src/transport/to-https": "./src/transport/to-https.ts"
   },
   "dependencies": {
+    "@hono/valibot-validator": "0.6.2",
     "@poplin/core": "workspace:*",
     "hono": "4.13.18",
     "ipaddr.js": "2.5.0",

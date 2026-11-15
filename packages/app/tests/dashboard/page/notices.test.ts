@@ -8,7 +8,7 @@ test("a refusal names what it is about only when that is a plain name; anything 
   const cases = [
     ["title", "The value of title is not one it takes."],
     ["expires", "Deletes itself takes never, a span such as 7d, or a day such as 2026-12-01."],
-    ["max_total_size", "The value of max_total_size is not one it takes."],
+    ["max_total_size", "Use a size such as 200MB or 9GB."],
     [undefined, "The value of a field is not one it takes."],
     ["<script>", "The value of a field is not one it takes."],
     ["Call 555 now", "The value of a field is not one it takes."],
@@ -27,7 +27,7 @@ test("a refusal that names a limit or an upload says so: the limit a copy does n
     ["too_large", "max_pending_uploads", "Too many copies and uploads are unfinished at once. Finish or cancel one; an unfinished one is removed about a day after it began. No copy was made."],
     ["too_large", "max_manifest_size", "The copy does not fit a limit of the install: max_manifest_size. No copy was made."],
     ["too_large", "<script>", "The form was too large, so nothing was changed."],
-    ["not_found", undefined, "No such site."],
+    ["not_found", undefined, "No site is at this address. It may have been deleted, or the link is an old one."],
     ["not_found", "upload", "That copy can no longer be gone on with: it was cancelled, or its day to finish ran out. Unless the list of sites shows it, duplicate the site again."],
   ] as const;
 

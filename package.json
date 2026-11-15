@@ -10,11 +10,12 @@
     "node": ">=24"
   },
   "scripts": {
-    "check": "bun run lint && bun run typecheck && bun run test && bun run test:worker && bun run knip",
+    "check": "bun run lint && bun run typecheck && bun run test && bun run test:client && bun run test:worker && bun run knip",
     "lint": "biome lint .",
     "lint:fix": "biome lint --write .",
-    "typecheck": "tsc -p . && tsc -p website && bun run --cwd packages/cloudflare typecheck && bun run --cwd packages/demo typecheck",
-    "test": "bun test --pass-with-no-tests --path-ignore-patterns 'packages/cloudflare/tests/{worker,storage,database,limits}/**'",
+    "typecheck": "tsc -p . && tsc -p website && bun run --cwd packages/cloudflare typecheck && bun run --cwd packages/demo typecheck && bun run --cwd packages/dashboard typecheck",
+    "test": "bun test --pass-with-no-tests --path-ignore-patterns 'packages/cloudflare/tests/{worker,storage,database,limits}/**' --path-ignore-patterns 'packages/dashboard/**'",
+    "test:client": "bun run --cwd packages/dashboard test",
     "test:worker": "bun run --cwd packages/cloudflare test",
     "live": "POPLIN_LIVE=1 bun test ./tests/live/live.test.ts",
     "knip": "knip --treat-config-hints-as-errors",

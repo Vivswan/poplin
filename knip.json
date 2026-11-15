@@ -15,6 +15,10 @@
     },
     "packages/cloudflare": {
       "entry": ["src/worker/worker.ts", "tests/**/*.test.ts"]
+    },
+    "packages/dashboard": {
+      "entry": ["src/main.tsx", "tests/**/*.test.{ts,tsx}"],
+      "ignore": ["src/components/ui/**"]
     }
   }
 }

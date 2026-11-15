@@ -270,7 +270,7 @@ test("every refusal of an action comes back as its code in the address and its s
     [`${inTrash}/rollback`, { version: "previous" }, `${inTrash}?refused=in_trash`, "The site sits in the trash. Restore it first."],
     [`${inTrash}/new-link`, {}, `${inTrash}?refused=in_trash`, "The site sits in the trash. Restore it first."],
     [`${inTrash}/delete`, {}, `${inTrash}?refused=in_trash`, "The site sits in the trash. Restore it first."],
-    ["/sites/report--000000000000/delete", {}, "/sites/report--000000000000?refused=not_found", "No such site."],
+    ["/sites/report--000000000000/delete", {}, "/sites/report--000000000000?refused=not_found", "No site is at this address. It may have been deleted, or the link is an old one."],
     ["/sites/Not%20A%20Site/new-link", {}, "/sites/Not%20A%20Site?refused=bad_argument&about=site", "The value of site is not one it takes."],
   ] as const;
 

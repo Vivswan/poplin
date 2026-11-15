@@ -170,6 +170,9 @@ async function settingsWith(install: SetupParts["install"], run: DomainRun, logi
  */
 async function runOnce(parts: SetupParts, run: DomainRun, sent: Sent): Promise<DomainReading> {
   const { domain, install } = parts;
+  // A token pasted into the email's box is no email: it is refused before the plug is asked, so it is never stored as a login or answered back.
+  if (sent.token !== "" && sent.login.toLowerCase().includes(sent.token.toLowerCase())) return { ok: false, refusal: "bad_login" };
+
   if (!("plugFor" in domain)) {
     const typed = sent.login.trim() === "" ? undefined : parseLogin(sent.login);
     if (typed?.ok === false) return { ok: false, refusal: "bad_login" };

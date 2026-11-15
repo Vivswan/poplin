@@ -39,6 +39,8 @@
   },
   // Reads an .astro file whole, so a name its template uses counts as used.
   "html": { "experimentalFullSupportEnabled": true },
+  // Reads the dashboard's stylesheet, which is written in the directives of its CSS framework.
+  "css": { "parser": { "tailwindDirectives": true } },
   // A later entry replaces an earlier entry's options for the same rule, so a narrower place repeats what it keeps.
   "overrides": [
     // Source outside a migrations folder imports none: a step outlives its release only where code reaches for it. tests/no-old-shapes.test.ts plants each leak.
@@ -345,8 +347,15 @@
     // A describe callback is a list of cases, not one function: its length is the number of cases, and splitting
     // it would scatter one module's cases across helpers.
     {
-      "includes": ["**/tests/**/*.ts"],
+      "includes": ["**/tests/**/*.ts", "**/tests/**/*.tsx"],
       "linter": { "rules": { "complexity": { "noExcessiveLinesPerFunction": "off" } } }
+    },
+    // The components the UI library's own tooling writes stay as it wrote them, so a newer one replaces a file
+    // cleanly: they are neither linted nor formatted here.
+    {
+      "includes": ["packages/dashboard/src/components/**"],
+      "linter": { "enabled": false },
+      "formatter": { "enabled": false }
     }
   ]
 }

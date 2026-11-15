@@ -28,7 +28,7 @@ import { type Context, Hono, type MiddlewareHandler } from "hono";
 import { bodyLimit } from "hono/body-limit";
 import { NONCE, secureHeaders } from "hono/secure-headers";
 
-import type { Counters } from "../limits/limits";
+import { type CodeTries, takesCode } from "../limits/code-tries";
 import { safeReturn } from "../login/return-path";
 import { showActivity } from "./activity/activity-page";
 import { COPY_SCRIPT, COPY_SCRIPT_PATH } from "./page/copy-script";
@@ -72,20 +72,14 @@ const NO_SESSION = { ok: false } as const;
 /** The whole answer to a failure nothing above handled: it tells nothing of the cause. */
 const FAILURE = "Something went wrong.";
 
-/** The most times a minute one visitor may look a login's code up or decide one: a person needs two, and a guesser gets no more. */
-const CODES_PER_MINUTE = 20;
-
 /** The notice of each allowance of the database that is used up for the day. */
 const SPENT_NOTICES = { writing: "no_more_writing", reading: "no_more_reading" } as const;
-
-/** What a counter that cannot answer is taken to say: the minute is full, so a try at a code is refused. */
-const UNCOUNTED = { ok: false } as const;
 
 /** The addresses that take a login's code. */
 const CODE_PATHS = [ALLOW_PAGE, "/tokens/deny"];
 
 /** What a dashboard is built from. */
-interface DashboardParts {
+interface DashboardParts extends CodeTries {
   /** The install the actions work on: its database, store, clock, and addresses. */
   readonly install: Install;
 
@@ -109,12 +103,6 @@ interface DashboardParts {
 
   /** Set by a host whose install is a demo over sample data: `reset` is the address, outside the dashboard's own, that a form posts to, to start the data over. Left out, as on every real install, no page says "Demo". */
   readonly demo?: { readonly reset: string };
-
-  /** Where the tries at a login's code are counted, a minute at a time. */
-  readonly counters: Pick<Counters, "takeMinute">;
-
-  /** The key one visitor's tries are counted by: `visitorKey` of the address the host itself saw. */
-  readonly visitorOf: (request: Request) => Promise<string>;
 }
 
 /** What the handlers of one request share. `tabs` says whether the frame shows the Domain tab. */
@@ -214,14 +202,6 @@ function chooseTheme(context: Context<Shared>): Response {
   return context.redirect(safeReturn(form.get("back")), 303);
 }
 
-/** Count one try at a login's code against its visitor's minute, and say whether it fits. A counter that cannot answer refuses the try. */
-async function takesCode(parts: DashboardParts, request: Request): Promise<boolean> {
-  const take = async (): Promise<{ readonly ok: boolean }> =>
-    parts.counters.takeMinute({ scope: "visitor", key: `login-code:${await parts.visitorOf(request)}`, limit: CODES_PER_MINUTE }, parts.install.now());
-
-  return (await take().catch(() => UNCOUNTED)).ok;
-}
-
 /**
  * Build the dashboard.
  *
@@ -274,7 +254,7 @@ export function createDashboard(parts: DashboardParts): Dashboard {
   };
 
   const fewCodes: MiddlewareHandler<Shared> = async (context, next) => {
-    if (!(await takesCode(parts, context.req.raw))) return refuse(context, "too_many_tries", 429);
+    if (!(await takesCode(parts, context.req.raw, parts.install.now))) return refuse(context, "too_many_tries", 429);
 
     return next();
   };

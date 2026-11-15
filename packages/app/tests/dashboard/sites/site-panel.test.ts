@@ -200,7 +200,7 @@ test("an expiry no calendar holds, which the database keeps though the set actio
 test("a reference to no site answers 404 with the refusal's sentence, and the reference itself is not echoed", async () => {
   const opened = await openDashboard();
   const cases = [
-    ["/sites/report--000000000000", "No such site."],
+    ["/sites/report--000000000000", "No site is at this address. It may have been deleted, or the link is an old one."],
     ["/sites/%3Cscript%3Ealert(1)%3C%2Fscript%3E", "The value of site is not one it takes."],
     ["/sites/%E0%A4%A", "The value of site is not one it takes."],
   ] as const;
