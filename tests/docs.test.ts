@@ -8,6 +8,7 @@ import { SETTING_SAMPLES } from "../packages/cli/src/commands/install-settings";
 import { parseCommand } from "../packages/cli/src/commands/parse-command";
 import { problem } from "../packages/cli/src/commands/problems";
 import { TOOLS } from "../packages/cli/src/mcp/tools";
+import { PROBLEM_KINDS } from "../packages/core/src/records/problem";
 import { words } from "../packages/cli/tests/commands/support/command-line";
 import { readPage } from "./support/markdown-page";
 
@@ -231,10 +232,10 @@ describe("the pages a person reads", () => {
     expect(unique(named).filter((flag) => !flags.has(flag))).toEqual([]);
   });
 
-  test("every word written like a tool, a code, a setting, or a module input is one: without this a renamed one stays in a page", async () => {
+  test("every word written like a tool, a code, a setting, a kind of problem, or a module input is one: without this a renamed one stays in a page", async () => {
     const module = (await Promise.all(MODULE_FILES.map((path) => read(ROOT, path)))).flatMap((text) => groups(text, MODULE_NAME));
     const inputs = Object.values(TOOLS).flatMap((tool) => Object.keys(tool.parameters));
-    const known = [...Object.keys(TOOLS), ...inputs, ...Object.keys(SETTING_SAMPLES), ...OTHER_WORDS];
+    const known = [...Object.keys(TOOLS), ...inputs, ...Object.keys(SETTING_SAMPLES), ...PROBLEM_KINDS, ...OTHER_WORDS];
     const unknown: string[] = [];
 
     for (const path of PAGES) {
