@@ -2,6 +2,7 @@
 //
 //   FUZZ_RUNS     runs of each property; 5000 by default, unlimited once FUZZ_SECONDS is set
 //   FUZZ_SECONDS  wall-clock budget of the whole directory, shared equally by its files and then by a file's properties; 15 by default
+//                 a property goes past its share until ten of its runs have held, so a slow machine still checks it
 //   FUZZ_SEED     replays the seed a failure printed
 //   FUZZ_PATH     with FUZZ_SEED, jumps straight to the counterexample path a failure printed
 //   FUZZ_REPORTS  a directory that receives one `<target>-<n>/report.md` per failing property
@@ -25,6 +26,7 @@ const REPORTS = setting("FUZZ_REPORTS");
 const TARGET_BUDGET_MS = ((SECONDS ?? DEFAULT_SECONDS) * 1000) / TARGET_COUNT;
 const REPLAYABLE_NAME = /^[\w ,.-]+$/;
 const HUNG_RUN_MS = 5000;
+const FLOOR_RUNS = 10;
 const TEST_TIMEOUT_SLACK_MS = 30_000;
 
 /** Registers one property of a target as a test. The name goes into a shell replay command, so it holds only letters, digits, spaces, and `_ , . -`. */
@@ -55,12 +57,26 @@ function replay(): { seed?: number; path?: string } {
   return { seed: SEED, path: REPLAY_PATH };
 }
 
-/** Ends a check between two runs: a run asked for after the budget is answered as an interrupt and never begun. */
+/** Ends a check between two runs: a run asked for after the budget, once `FLOOR_RUNS` runs have held, is answered as an interrupt and never begun. */
 function endsAfter<Ts>(budgetMs: number): fc.Plugin<Ts> {
   return () => {
     const end = Date.now() + budgetMs;
+    let held = 0;
+    const count = (outcome: fc.PreconditionFailure | { error: unknown } | null): typeof outcome => {
+      if (outcome === null) held += 1;
 
-    return { decorateRun: (run) => (value) => (Date.now() < end ? run(value) : new fc.PreconditionFailure(true)) };
+      return outcome;
+    };
+
+    return {
+      decorateRun: (run) => (value) => {
+        if (held >= FLOOR_RUNS && Date.now() >= end) return new fc.PreconditionFailure(true);
+
+        const outcome = run(value);
+
+        return outcome instanceof Promise ? outcome.then(count) : count(outcome);
+      },
+    };
   };
 }
 
