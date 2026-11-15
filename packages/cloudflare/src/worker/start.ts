@@ -12,6 +12,7 @@ import type { Counters } from "@poplin/app/src/limits/limits";
 import type { DomainPlug, FirstRun } from "@poplin/app/src/dashboard/domain/records";
 import type { Identify } from "@poplin/app/src/login/login";
 import { hostnameAddresses } from "@poplin/app/src/sites/hostname-addresses";
+import type { Asking } from "@poplin/core/src/actions/check-update";
 import type { Install } from "@poplin/core/src/actions/records";
 import { parseLogins } from "@poplin/core/src/auth/logins";
 import type { Database } from "@poplin/core/src/database/database";
@@ -66,6 +67,9 @@ export interface Outside {
 
   /** Sends setup's calls to Cloudflare; the runtime's own fetch when absent. */
   readonly cloudflare?: Connection["fetch"];
+
+  /** What asks the project's website, once a day, which version of poplin is the newest. */
+  readonly latest: Asking;
 }
 
 /** The key one visitor's requests are counted by, from the address Cloudflare saw and the secret the instance holds for the database. */

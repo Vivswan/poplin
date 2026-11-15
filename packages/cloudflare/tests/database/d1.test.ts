@@ -172,12 +172,26 @@ describe("D1: the rows a computer's login costs of a day's allowance", () => {
 
 describe("D1: the rows a scheduled sweep costs of a day's allowance", () => {
   // Drift: the sweep runs 96 times a day, and a day allows 100,000 rows written. A run that wrote a row with nothing due would spend the allowance of an install nobody uses.
-  test("a run writes no row on an install that holds nothing, and none on one whose site, upload, and login are not due", async () => {
+  // The one row a day is the answer to the day's question about a newer version, which the first run of the day asks.
+  test("the day's first run writes the one row of the newest version; a later run writes none on an install that holds nothing, and none on one whose site, upload, and login are not due", async () => {
     const { install, rows } = await meteredInstall();
+    const website = { asked: 0 };
+    const latest = {
+      fetch: async (): Promise<Response> => {
+        website.asked += 1;
+
+        return Response.json({ version: "0.2.0", released: "2026-12-01", notes: "https://example.com/changelog/", database: false });
+      },
+    };
     await install.database.initSettings(defaultSettings({ installer: "ada@example.com" as Login, hostname: "poplin.example.com" }), { by: PUBLISHER.holder, at: NOW });
     rows.read = 0;
     rows.written = 0;
-    await runSweep(install);
+    await runSweep(install, latest);
+    const first = { ...rows };
+
+    rows.read = 0;
+    rows.written = 0;
+    await runSweep(install, latest);
     const idle = { ...rows };
 
     await publishSite(install, PUBLISHER, { name: "report", files: [{ path: "index.html", size: 4, contentType: "text/html", open: () => new Blob(["page"]).stream() }] });
@@ -185,11 +199,13 @@ describe("D1: the rows a scheduled sweep costs of a day's allowance", () => {
     await beginLogin(install, { scope: "publisher", computer: "laptop" }, "visitor-1");
     rows.read = 0;
     rows.written = 0;
-    await runSweep(install);
+    await runSweep(install, latest);
 
-    expect([idle, rows]).toEqual([
-      { read: 8, written: 0 },
-      { read: 10, written: 0 },
+    expect([first, idle, rows, website.asked]).toEqual([
+      { read: 11, written: 1 },
+      { read: 9, written: 0 },
+      { read: 11, written: 0 },
+      1,
     ]);
   });
 });

@@ -23,6 +23,7 @@ import { updateSite } from "@poplin/core/src/actions/set";
 import { getSite } from "@poplin/core/src/actions/show";
 import { signEveryoneOut } from "@poplin/core/src/actions/sign-out";
 import { showUpload } from "@poplin/core/src/actions/show-upload";
+import { updateOf } from "@poplin/core/src/actions/update";
 import { uploadFile } from "@poplin/core/src/actions/upload-file";
 import { ALLOW_PAGE, CODE_KEY, type OPEN_ROUTES, type ROUTES } from "@poplin/core/src/api/routes";
 import type { Actor } from "@poplin/core/src/auth/scopes";
@@ -145,6 +146,14 @@ async function beginWithAddress({ install, body, origin, visitor }: OpenCall): R
   return { ...begun, verify_url: `${origin}${ALLOW_PAGE}?${new URLSearchParams({ [CODE_KEY]: begun.code })}` };
 }
 
+/** Say who the token is and which version the install runs, with the newer release when one is out. */
+async function answerWhoami({ install, token, version }: Call): ReturnType<Handler<"whoami">> {
+  const update = await updateOf(install, version);
+  const answer = { ok: true, token: tokenObject(token), version } as const;
+
+  return update === undefined ? answer : { ...answer, update };
+}
+
 /** The handler of every route that takes no token, by the route's name. */
 export const OPEN_HANDLERS: { readonly [Name in OpenName]: Handler<Name, OpenCall> } = {
   beginLogin: beginWithAddress,
@@ -153,7 +162,7 @@ export const OPEN_HANDLERS: { readonly [Name in OpenName]: Handler<Name, OpenCal
 
 /** The handler of every route that takes a token, by the route's name. A route without one does not compile. */
 export const HANDLERS: { readonly [Name in Exclude<RouteName, OpenName>]: Handler<Name> } = {
-  whoami: async ({ token, version }) => ({ ok: true, token: tokenObject(token), version }),
+  whoami: answerWhoami,
   logout: ({ install, actor, token }) => revokeToken(install, actor, token.id),
   listTokens: ({ install, actor }) => listTokens(install, actor),
   issueToken: ({ install, actor, body }) => checked(TOKEN_REQUEST, body, (request) => issueToken(install, actor, request)),

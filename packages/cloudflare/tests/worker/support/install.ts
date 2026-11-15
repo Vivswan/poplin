@@ -40,6 +40,9 @@ const SPENT = {
   write: "D1_ERROR: Your account has exceeded D1's free tier daily row write limit.",
 } as const;
 
+/** The project's website with no file that names the newest version, so no test asks the real one. */
+const NO_WEBSITE: Outside["latest"] = { fetch: async () => new Response("Not found\n", { status: 404 }) };
+
 /** One Worker instance. */
 export type Worker = ReturnType<typeof createWorker>;
 
@@ -99,11 +102,12 @@ export function cloudflareOf(account: Account, asked: Asked[]): NonNullable<Outs
  * Make one Worker instance of a world.
  *
  * @param cloudflare - what answers the setup client's calls; left out, a call to Cloudflare fails the test
+ * @param latest - what answers the day's question about the newest version; left out, a website that has no such file
  */
-export function instance(from: World, cloudflare?: Outside["cloudflare"]): Worker {
+export function instance(from: World, cloudflare?: Outside["cloudflare"], latest: Outside["latest"] = NO_WEBSITE): Worker {
   const unasked: NonNullable<Outside["cloudflare"]> = async () => Promise.reject(new Error("the test asked Cloudflare and gave it no stand-in"));
 
-  return createWorker({ now: () => from.clock.now, fetch: from.certs.fetch, cloudflare: cloudflare ?? unasked });
+  return createWorker({ now: () => from.clock.now, fetch: from.certs.fetch, cloudflare: cloudflare ?? unasked, latest });
 }
 
 export async function ask(worker: Worker, url: string, init: RequestInit = {}, bindings: Bindings = BINDINGS): Promise<Response> {

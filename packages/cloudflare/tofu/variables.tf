@@ -299,3 +299,9 @@ variable "visitor_requests_per_minute" {
     error_message = "visitor_requests_per_minute must be a whole number from 1 to 9007199254740991."
   }
 }
+
+variable "update_check" {
+  description = "Whether the install asks the project's website, once a day, which version of poplin is the newest."
+  type        = bool
+  default     = true
+}

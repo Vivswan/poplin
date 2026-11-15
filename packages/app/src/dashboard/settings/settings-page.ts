@@ -29,6 +29,7 @@ const MEANINGS: { readonly [Key in keyof SettingValues]: string } = {
   site_share_of_day: "The share of the day's requests one site may take, such as 25%.",
   site_requests_per_minute: "The requests one site answers in a minute.",
   visitor_requests_per_minute: "The requests one visitor is answered in a minute.",
+  update_check: "Whether the install asks the project's website, once a day, which version is the newest: on or off.",
 };
 
 /** The default of the one setting whose default this page cannot know. */

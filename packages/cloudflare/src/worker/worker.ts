@@ -119,8 +119,8 @@ async function answerAdmin(request: Request, instance: Instance, ways: Ways): Pr
 }
 
 /** Run the scheduled sweep of a started instance. A Worker with nothing set has no site to sweep; any other start that failed is thrown. */
-async function sweep(started: Started): Promise<void> {
-  if (started.ok) return runSweep(started.instance.install);
+async function sweep(started: Started, latest: Outside["latest"]): Promise<void> {
+  if (started.ok) return runSweep(started.instance.install, latest);
 
   const { failure } = started;
   if (failure.kind !== "unset") throw new Error(`the sweep did not run. ${failureText(failure)}`);
@@ -129,11 +129,11 @@ async function sweep(started: Started): Promise<void> {
 /**
  * Make the handlers of one Worker instance.
  *
- * @param given - the clock, the fetch of the Access keys, and the fetch of setup's calls to Cloudflare; the runtime's own when absent
+ * @param given - the clock, the fetch of the Access keys, the fetch of setup's calls to Cloudflare, and the asking for the newest version; the runtime's own when absent
  * @returns `fetch`, which never throws, and `scheduled`, which throws when the sweep could not run
  */
 export function createWorker(given: Partial<Outside> = {}): Required<Pick<ExportedHandler<Bindings>, "fetch" | "scheduled">> {
-  const outside: Outside = { now: given.now ?? Date.now, fetch: given.fetch ?? ((url, init) => fetch(url, init)), cloudflare: given.cloudflare };
+  const outside: Outside = { now: given.now ?? Date.now, fetch: given.fetch ?? ((url, init) => fetch(url, init)), cloudflare: given.cloudflare, latest: given.latest ?? { fetch: (address, init) => fetch(address, init) } };
   let starting: Promise<Started> | undefined;
   let holding: { readonly at: number; readonly value: Promise<Held> } | undefined;
   let loggedInOnce = false;
@@ -223,7 +223,7 @@ export function createWorker(given: Partial<Outside> = {}): Required<Pick<Export
     },
 
     async scheduled(_controller, env) {
-      await sweep(await start(env));
+      await sweep(await start(env), outside.latest);
     },
   };
 }

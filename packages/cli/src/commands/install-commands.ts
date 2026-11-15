@@ -123,12 +123,17 @@ function versionCheck(install: string): Check {
   return { check: "version", ok: true, detail: install === VERSION ? both : `${both}: ${TWO_VERSIONS}` };
 }
 
+/** The newer release the install has learned of, as one line of the report. It is a finding, not a failure. */
+function updateCheck(update: { readonly current: string; readonly newest: string; readonly notes: string }): Check {
+  return { check: "update", ok: true, detail: `${update.newest} is out (this install runs ${update.current}): ${update.notes}` };
+}
+
 /** Report on the install with calls that only read: who the token is, the settings, and the sites. Nothing is changed. */
 async function doctor({ client, server, source }: Session): Promise<Outcome> {
   const who = await client.call("whoami", undefined);
   if (!who.ok) return failed(who.failure);
 
-  const { token, version } = who.value;
+  const { token, version, update } = who.value;
   const settings = await client.call("readConfig", undefined);
   const sites = await client.call("listSites", {});
   const trash = await client.call("listSites", { trash: true });
@@ -138,6 +143,7 @@ async function doctor({ client, server, source }: Session): Promise<Outcome> {
   const checks: Check[] = [
     { check: "install", ok: true, detail: `${server} answers` },
     versionCheck(version),
+    ...(update === undefined ? [] : [updateCheck(update)]),
     { check: "login", ok: true, detail: `${token.scope} token ${token.id}, ${source === "file" ? "saved on this machine" : "from the environment"}, expires ${expiryText(token.expires)}` },
     checkOf("settings", settings.ok ? undefined : settings.failure, kept),
     checkOf("sites", sites.ok ? undefined : sites.failure, live),
@@ -145,7 +151,7 @@ async function doctor({ client, server, source }: Session): Promise<Outcome> {
   ];
   const lines = columns(checks.map((check) => [check.ok ? "ok" : "failed", check.check, check.detail]));
 
-  const outcome: Outcome = { ok: true, value: { server, version, poplin: VERSION, token, checks }, lines: [...lines, "nothing was changed"] };
+  const outcome: Outcome = { ok: true, value: { server, version, poplin: VERSION, update: update ?? null, token, checks }, lines: [...lines, "nothing was changed"] };
 
   return checks.every((check) => check.ok) ? outcome : { ...outcome, found: "failed" };
 }

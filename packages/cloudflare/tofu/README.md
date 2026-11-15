@@ -162,6 +162,7 @@ The first settings. The names and text forms are those of `poplin config`:
 | `site_share_of_day` | number | `25` | limit: one site's share of the day, in percent |
 | `site_requests_per_minute` | number | `6000` | limit: one site |
 | `visitor_requests_per_minute` | number | `600` | limit: one visitor |
+| `update_check` | bool | `true` | whether the install asks the project's website, once a day, which version is the newest |
 
 The Worker stores the first settings once, while it has none. After that the dashboard is the authority: changing one of these inputs and applying again changes no stored setting.
 

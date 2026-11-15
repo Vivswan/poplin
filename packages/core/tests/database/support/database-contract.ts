@@ -1287,6 +1287,23 @@ function sweepPlace(label: string, makeDatabase: DatabaseFactory): void {
   });
 }
 
+function updateCheck(label: string, makeDatabase: DatabaseFactory): void {
+  describe(`${label}: the newest release the install knows of`, () => {
+    // Drift: the day's one question about a newer version is asked again only when the kept moment is of another day. A moment or a release that read back changed would ask on every scheduled run, or show a release nobody published.
+    test("what was kept reads back as it was, with a release and with none, and the last kept is the one read", async () => {
+      const database = await opened(makeDatabase);
+      const release = { version: "0.2.0", released: "2026-12-01", notes: "https://example.com/changelog/#v0-2-0", database: true };
+      const before = await database.readUpdateCheck();
+
+      await database.keepUpdateCheck({ checked_at: NOW, news: null });
+      const none = await database.readUpdateCheck();
+      await database.keepUpdateCheck({ checked_at: NOW + 1, news: release });
+
+      expect([before, none, await database.readUpdateCheck()]).toEqual([undefined, { checked_at: NOW, news: null }, { checked_at: NOW + 1, news: release }]);
+    });
+  });
+}
+
 function computerLogins(label: string, makeDatabase: DatabaseFactory): void {
   describe(`${label}: the logins of computers`, () => {
     // Drift: the record `mintComputerLogin` makes is what a presented secret is checked against, and the code is what an admin is shown; a field lost on the way through a row would refuse every login.
@@ -1920,6 +1937,7 @@ export function describeDatabase(label: string, makeDatabase: DatabaseFactory): 
   computerLogins(label, makeDatabase);
   loginRoom(label, makeDatabase);
   sweepPlace(label, makeDatabase);
+  updateCheck(label, makeDatabase);
   requestCounts(label, makeDatabase);
   uploads(label, makeDatabase);
   uploadFiles(label, makeDatabase);

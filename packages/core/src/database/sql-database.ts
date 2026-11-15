@@ -15,6 +15,7 @@ import { SETTING_CHANGES, SETTING_VALUES, type SettingValues } from "../records/
 import { signingKeyFromRow, signingKeyToText } from "../records/secret";
 import { NEW_SITE, SITE_DETAILS, SITE_FOLDER, type Site, type SiteAccess, type SiteFolder, siteFromRow, siteToRow } from "../records/site";
 import { SWEEP_PLACE, type SweepPlace } from "../records/sweep-place";
+import { UPDATE_CHECK, type UpdateCheck } from "../records/update";
 import { type Totals, totalsFromRow } from "../records/sizes";
 import { mintSiteId, type SiteId } from "../sites/ids";
 import { tokenFromRow } from "../records/token";
@@ -416,6 +417,12 @@ const KEEP_SWEEP_PLACE = "INSERT INTO sweep_place (id, place) VALUES (1, ?1) ON 
 /** The sweep's place forgotten. */
 const FORGET_SWEEP_PLACE = "DELETE FROM sweep_place";
 
+/** When the newest release was last asked for, and the newest known, as JSON text or NULL. */
+const READ_UPDATE_CHECK = "SELECT checked_at, news FROM update_check WHERE id = 1";
+
+/** The last asking and its answer, in place of what was kept. */
+const KEEP_UPDATE_CHECK = "INSERT INTO update_check (id, checked_at, news) VALUES (1, ?1, ?2) ON CONFLICT (id) DO UPDATE SET checked_at = excluded.checked_at, news = excluded.news";
+
 /** The settings, as JSON text. */
 const READ_SETTINGS = "SELECT value FROM settings WHERE id = 1";
 
@@ -700,6 +707,16 @@ function placeIn(result: StatementResult | undefined): SweepPlace | undefined {
   const place = v.safeParse(SWEEP_PLACE, JSON.parse(text));
 
   return place.success ? place.output : undefined;
+}
+
+function updateCheckIn(result: StatementResult | undefined): UpdateCheck | undefined {
+  const row = result?.rows[0];
+  if (row === undefined) return undefined;
+
+  const news: unknown = typeof row.news === "string" ? JSON.parse(row.news) : null;
+  const check = v.safeParse(UPDATE_CHECK, { checked_at: row.checked_at, news });
+
+  return check.success ? check.output : undefined;
 }
 
 function settingsIn(result: StatementResult | undefined): SettingValues | undefined {
@@ -1191,6 +1208,18 @@ export class SqlDatabase implements Database {
     const kept = place === undefined ? sql(FORGET_SWEEP_PLACE) : sql(KEEP_SWEEP_PLACE, JSON.stringify(v.parse(SWEEP_PLACE, place)));
 
     await this.#driver.batch([kept]);
+  }
+
+  async readUpdateCheck(): Promise<UpdateCheck | undefined> {
+    const [read] = await this.#driver.batch([sql(READ_UPDATE_CHECK)]);
+
+    return updateCheckIn(read);
+  }
+
+  async keepUpdateCheck(check: UpdateCheck): Promise<void> {
+    const { checked_at, news } = v.parse(UPDATE_CHECK, check);
+
+    await this.#driver.batch([sql(KEEP_UPDATE_CHECK, checked_at, news === null ? null : JSON.stringify(news))]);
   }
 
   async readSettings(): Promise<SettingValues | undefined> {

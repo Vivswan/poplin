@@ -13,6 +13,7 @@
 // logins       the computers asking to be logged in: pending, then allowed or denied, and gone once used or ten minutes old
 // leftovers    the folders of removed sites, each until its files are gone from the bucket
 // sweep_place  one row while a walk of the scheduled sweep is under way: where its last run stopped
+// update_check one row once the install has asked for the newest release: when it asked, and the newest it knows
 
 import type { Step } from "./migrate";
 
@@ -171,6 +172,14 @@ CREATE TABLE sweep_place (
   place TEXT NOT NULL CHECK (json_valid(place))
 ) STRICT`;
 
+/** When the install last asked for the newest release, and the newest it has learned of, as JSON; `news` is NULL while no release is known. */
+const UPDATE_CHECK = `
+CREATE TABLE update_check (
+  id INTEGER NOT NULL PRIMARY KEY CHECK (id = 1),
+  checked_at INTEGER NOT NULL,
+  news TEXT CHECK (news IS NULL OR json_valid(news))
+) STRICT`;
+
 /** A site that is removed leaves its folder to be emptied, whatever removed it. */
 const REMOVED_SITE_LEAVES_ITS_FOLDER = `
 CREATE TRIGGER sites_delete_leaves_the_folder AFTER DELETE ON sites
@@ -263,7 +272,7 @@ BEGIN SELECT RAISE(ABORT, 'the audit log is append-only'); END`;
 /** Creates every table, index, and trigger of the first schema. */
 export const CREATE_SCHEMA: Step = {
   number: 1,
-  description: "create the sites, versions, tokens, settings, secrets, totals, audit, request_counts, declared_files, uploads, logins, leftovers, and sweep_place tables",
+  description: "create the sites, versions, tokens, settings, secrets, totals, audit, request_counts, declared_files, uploads, logins, leftovers, sweep_place, and update_check tables",
   statements: [
     SITES,
     VERSIONS,
@@ -279,6 +288,7 @@ export const CREATE_SCHEMA: Step = {
     LOGINS,
     LEFTOVERS,
     SWEEP_PLACE,
+    UPDATE_CHECK,
     "CREATE INDEX sites_by_change ON sites (trashed, updated_at DESC, id DESC)",
     "CREATE INDEX sites_by_owner ON sites (owner, trashed, updated_at DESC, id DESC)",
     "CREATE INDEX tokens_by_creation ON tokens (created_at DESC, id DESC)",

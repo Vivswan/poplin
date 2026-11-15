@@ -16,6 +16,7 @@ import type { SettingValues } from "../records/settings";
 import type { Site, SiteAccess, SiteFolder } from "../records/site";
 import type { SweepPlace } from "../records/sweep-place";
 import type { Totals } from "../records/sizes";
+import type { UpdateCheck } from "../records/update";
 import type { ManifestFile, Upload, UploadId, UploadPlan } from "../records/upload";
 import type { SiteViews } from "../records/views";
 
@@ -495,6 +496,16 @@ export interface Database {
 
   /** Keep where the scheduled sweep's walk stopped, in place of what was kept; `undefined` forgets it, for a walk that ended. */
   keepSweepPlace(place: SweepPlace | undefined): Promise<void>;
+
+  /** When the install last asked for the newest release and the newest it knows: `undefined` before it ever asked, and for a kept answer that cannot be read. */
+  readUpdateCheck(): Promise<UpdateCheck | undefined>;
+
+  /**
+   * Keep when the install asked for the newest release and what it knows, in place of what was kept. No audit entry is written.
+   *
+   * @throws {Error} a value breaks its rule
+   */
+  keepUpdateCheck(check: UpdateCheck): Promise<void>;
 
   /** The install's settings, `undefined` before setup stored them. */
   readSettings(): Promise<SettingValues | undefined>;

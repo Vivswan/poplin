@@ -59,7 +59,7 @@ const LONG_FILE = { path: "index.html", size: LIMITS.fileBytes + 1, content_type
 const BUDGET: Readonly<Record<RouteName, number>> = {
   beginLogin: 1,
   redeemLogin: 2,
-  whoami: 1,
+  whoami: 3,
   logout: 2,
   listTokens: 2,
   issueToken: 2,
@@ -182,6 +182,18 @@ function installOf(install: ApiInstall): Install {
 }
 
 describe("createApi", () => {
+  // Drift: `whoami` is where the CLI and an agent learn that a newer version is out. An answer without the release, or with one on an install that knows none, would leave `poplin doctor` silent or wrong.
+  test("whoami carries the newer release once the install has learned of one, and no such key before", async () => {
+    const install = await openApi();
+    const before = (await install.call("whoami", undefined)).body;
+    await install.database.keepUpdateCheck({ checked_at: NOW, news: { version: "7.9.0", released: "2026-12-01", notes: "https://example.com/changelog/#v7-9-0", database: false } });
+
+    expect(["update" in before, (await install.call("whoami", undefined)).body.update]).toEqual([
+      false,
+      { current: INSTALL_VERSION, newest: "7.9.0", released: "2026-12-01", notes: "https://example.com/changelog/#v7-9-0", database: false },
+    ]);
+  });
+
   // Drift: the CLI's client is built from core's table alone; a route the API answers under another method, path, or query would break it with no test of either side failing.
   test("every route of core's table is answered as the table says, inside its budget of calls, and carries the fixed headers", async () => {
     const install = await openApi();

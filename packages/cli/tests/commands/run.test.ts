@@ -436,6 +436,22 @@ describe("run", () => {
     expect(jsonOf(await bench.run("doctor --json"))).toMatchObject({ version: installed, poplin: VERSION });
   });
 
+  // Drift: the install learns of a newer release by itself, and this row is where a person at a terminal hears of it. A row printed with nothing to say would teach them to skip it.
+  test("doctor names a newer release with its notes once the install has learned of one, and prints no such row before", async () => {
+    const bench = await openBench();
+    const before = await bench.run("doctor");
+    const unknown = jsonOf(await bench.run("doctor --json"));
+    await bench.install.database.keepUpdateCheck({ checked_at: 1_700_000_000_000, news: { version: "7.9.0", released: "2026-12-01", notes: "https://example.com/changelog/#v7-9-0", database: false } });
+
+    const report = await bench.run("doctor");
+
+    expect(before.out.map((line) => line.split(/ {2,}/)[1])).not.toContain("update");
+    expect(unknown).toMatchObject({ update: null });
+    expect([report.code, report.out[2]]).toEqual([0, `ok  update    7.9.0 is out (this install runs ${INSTALL_VERSION}): https://example.com/changelog/#v7-9-0`]);
+    expect(jsonOf(await bench.run("doctor --json"))).toMatchObject({ update: { current: INSTALL_VERSION, newest: "7.9.0", notes: "https://example.com/changelog/#v7-9-0" } });
+    expect(jsonOf(await bench.run("whoami --json"))).toMatchObject({ update: { newest: "7.9.0" } });
+  });
+
   test("doctor exits 1 when a check fails, with its report still printed: without this a script reads a failed check as health", async () => {
     const bench = await openBench();
     bench.hook = (request) => (request.url.endsWith("/api/config") ? answer(500, { error: { code: "internal", message: "no" } }) : undefined);

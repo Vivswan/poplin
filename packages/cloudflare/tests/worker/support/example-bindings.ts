@@ -27,5 +27,6 @@ export const EXAMPLE_BINDINGS = {
     site_share_of_day: "25%",
     site_requests_per_minute: "6000",
     visitor_requests_per_minute: "600",
+    update_check: "on",
   },
 } as const;

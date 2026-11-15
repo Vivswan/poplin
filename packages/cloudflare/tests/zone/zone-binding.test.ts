@@ -80,7 +80,7 @@ describe("readZoneBinding", () => {
 describe("the bindings the module gives the Worker", () => {
   test("FIRST_SETTINGS in the module, and the literal its test pins, carry exactly the keys of the stored settings: a key missing would stop the Worker storing any", () => {
     const written = [...readFileSync(join(MODULE, "main.tf"), "utf8").matchAll(/^ +(\w+) += .*$/gm)].map(([, key = ""]) => key);
-    const first = written.slice(written.indexOf("default_expires"), written.indexOf("visitor_requests_per_minute") + 1);
+    const first = written.slice(written.indexOf("default_expires"), written.indexOf("update_check") + 1);
     const pinned = literalAfter("tests/zone.tftest.hcl", "bindings[4].json) == {");
 
     expect(first.sort()).toEqual(SETTING_KEYS);

@@ -10,6 +10,9 @@ import { ADMIN, api, ask, BINDINGS, done, freePlanBindings, installOf, instance,
 /** The most database and bucket calls one scheduled invocation may make, the start of its instance included: 50 to the database, which is all D1 answers on the Free plan, and 250 to the bucket. */
 const INVOCATION_CALLS = 300;
 
+/** The milliseconds of one UTC day. */
+const DAY_MS = 86_400_000;
+
 /** The files one removal takes from a folder whose list pages hold one object each. */
 const WHOLE_REMOVAL = 15;
 
@@ -77,6 +80,36 @@ describe("the scheduled run", () => {
     expect((await ask(worker, `${ADMIN}/api/sites/${kept.label}`, { headers: { Authorization: `Bearer ${token}` } })).status).toBe(200);
     expect(activity.map((entry) => `${entry.action} ${entry.site?.id === brief.id} by ${entry.by}`)).toEqual(["delete true by sweep@poplin.invalid", "trash true by sweep@poplin.invalid"]);
     expect(await database.listUploads({ before: w.clock.now, limit: 100 })).toEqual({ uploads: [] });
+  });
+
+  // Drift: nothing but the scheduled run ever asks which version is the newest. An entry that did not hand it the fetch, or a run that asked every time, would leave the install silent or have it ask the website 96 times a day.
+  test("the runs of one day ask the website once, the API then names the newer version to a token, and the next day's first run asks again", async () => {
+    const asked: string[] = [];
+    const release = { version: "999.0.0", released: "2026-12-01", notes: "https://example.com/changelog/#v999-0-0", database: true };
+    const latest = {
+      fetch: async (address: string): Promise<Response> => {
+        asked.push(new URL(address).pathname.split("/").at(-1) ?? "");
+
+        return Response.json(release);
+      },
+    };
+    const token = await tokenOf(w, "publisher");
+    const whoami = async (): Promise<unknown> => (await done<{ update?: unknown }>(await api(instance(w, undefined, latest), token, "GET", ROUTES.whoami.path()))).update;
+    w.clock.now = Math.ceil(w.clock.now / DAY_MS) * DAY_MS;
+    const before = await whoami();
+
+    for (let run = 0; run < 3; run += 1) {
+      await sweep(instance(w, undefined, latest), w);
+      wait(w, 0.25);
+    }
+
+    const sameDay = asked.length;
+    const after = await whoami();
+    wait(w, 24);
+    await sweep(instance(w, undefined, latest), w);
+
+    expect([before, sameDay, asked]).toEqual([undefined, 1, ["latest.json", "latest.json"]]);
+    expect(after).toMatchObject({ newest: "999.0.0", released: "2026-12-01", notes: release.notes, database: true });
   });
 
   // Drift: a login nobody allowed or collected leaves the table by the sweep alone; a run that never reached the end of the walk would keep every one for good.

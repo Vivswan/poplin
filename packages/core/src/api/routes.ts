@@ -25,6 +25,7 @@ import type { ROLLBACK_OPTIONS } from "../actions/rollback";
 import type { showUpload } from "../actions/show-upload";
 import type { signEveryoneOut } from "../actions/sign-out";
 import type { SiteAnswer } from "../actions/site-object";
+import type { Update } from "../actions/update";
 import type { uploadFile } from "../actions/upload-file";
 import type { SettingValues } from "../records/settings";
 
@@ -122,7 +123,7 @@ function send<Args, Body, Done>(method: Route<Args, Body, Done>["method"], patte
 
 /** Every route of the API, by the name of the action it runs. A done request answers 200 with the JSON of its `done` type, or with the bytes of its `done` type's `body`; any other answers an `ApiError`. */
 export const ROUTES = {
-  whoami: ask<void, { readonly token: TokenObject; readonly version: string }>("GET", "/whoami", () => `${BASE}/whoami`),
+  whoami: ask<void, { readonly token: TokenObject; readonly version: string; readonly update?: Update }>("GET", "/whoami", () => `${BASE}/whoami`),
   logout: ask<void, Answer<typeof revokeToken>>("DELETE", "/token", () => `${BASE}/token`),
   listTokens: ask<void, Answer<typeof listTokens>>("GET", "/tokens", () => `${BASE}/tokens`),
   issueToken: send<void, v.InferInput<typeof TOKEN_REQUEST>, Answer<typeof issueToken>>("POST", "/tokens", () => `${BASE}/tokens`),

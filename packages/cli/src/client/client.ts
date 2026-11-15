@@ -3,6 +3,7 @@
 import * as v from "valibot";
 
 import { ROUTES, type Route, STORED_TYPE_HEADER } from "../../../core/src/api/routes";
+import { textUpTo } from "../../../core/src/api/text-up-to";
 import { SETTING_VALUES } from "../../../core/src/records/settings";
 
 /** How long a call that carries JSON, or nothing, may take: 30 seconds. */
@@ -46,6 +47,9 @@ const TOKEN = v.looseObject({
   expires: v.union([v.literal("never"), v.number()]),
 });
 
+/** A newer release than the one the install runs, as an answer holds it. */
+const UPDATE = v.looseObject({ current: v.string(), newest: v.string(), notes: v.string() });
+
 /** A staged publish as an answer holds it. */
 const UPLOAD = v.looseObject({ id: v.string(), state: v.string(), version: v.number(), files: v.number(), bytes: v.number(), expires: v.number() });
 
@@ -65,7 +69,7 @@ const CONFIG_ANSWER = v.looseObject({ values: SETTING_VALUES });
 
 /** The form of the answer to a done request, for every route this client calls. An answer of another form is a failure, so no command reads a key that is not there. */
 const ANSWERS = {
-  whoami: v.looseObject({ token: TOKEN, version: v.string() }),
+  whoami: v.looseObject({ token: TOKEN, version: v.string(), update: v.optional(UPDATE) }),
   logout: v.looseObject({ token: TOKEN }),
   beginLogin: v.looseObject({ code: v.string(), secret: v.string(), verify_url: v.string(), expires_in: v.number(), interval: v.number() }),
   redeemLogin: v.variant("state", [
@@ -211,23 +215,7 @@ function requestOf(route: Route<never, unknown, unknown>, token: string | undefi
 async function readText(response: Response): Promise<string | undefined> {
   if (response.body === null) return "";
 
-  const reader = response.body.getReader();
-  const decoder = new TextDecoder();
-  let text = "";
-  let bytes = 0;
-
-  try {
-    for (let chunk = await reader.read(); !chunk.done; chunk = await reader.read()) {
-      bytes += chunk.value.byteLength;
-      if (bytes > MAX_ANSWER_BYTES) return undefined;
-
-      text += decoder.decode(chunk.value, { stream: true });
-    }
-  } finally {
-    await reader.cancel().catch(() => undefined);
-  }
-
-  return text + decoder.decode();
+  return textUpTo(response.body, MAX_ANSWER_BYTES);
 }
 
 function parseJson(text: string): { readonly value: unknown } | undefined {

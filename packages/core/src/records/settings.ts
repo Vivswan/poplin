@@ -62,6 +62,7 @@ const VALUES = {
   site_share_of_day: v.pipe(v.number(), v.safeInteger(), v.minValue(1), v.maxValue(100)),
   site_requests_per_minute: POSITIVE,
   visitor_requests_per_minute: POSITIVE,
+  update_check: v.boolean(),
 };
 
 /** Every setting, as the settings are stored and read. */
@@ -93,6 +94,7 @@ const FORMS: { readonly [Key in SettingKey]: TextForm<SettingValues[Key]> } = {
   site_share_of_day: percent(),
   site_requests_per_minute: whole(),
   visitor_requests_per_minute: whole(),
+  update_check: onOff(),
 };
 
 /** The suffix of each unit of an amount and how many base units it holds. */
@@ -281,6 +283,7 @@ export function defaultSettings(install: Install): SettingValues {
     site_share_of_day: 25,
     site_requests_per_minute: 6000,
     visitor_requests_per_minute: 600,
+    update_check: true,
   };
 }
 

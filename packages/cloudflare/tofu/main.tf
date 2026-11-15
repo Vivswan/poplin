@@ -154,5 +154,6 @@ locals {
     site_share_of_day           = "${var.site_share_of_day}%"
     site_requests_per_minute    = tostring(var.site_requests_per_minute)
     visitor_requests_per_minute = tostring(var.visitor_requests_per_minute)
+    update_check                = var.update_check ? "on" : "off"
   }
 }

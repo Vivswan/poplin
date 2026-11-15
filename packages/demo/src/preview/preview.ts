@@ -16,6 +16,7 @@ import { createDashboard } from "../../../app/src/dashboard/dashboard";
 import { createSetup } from "../../../app/src/dashboard/domain/setup";
 import { logIn } from "../../../app/src/login/login";
 import { serveSite } from "../../../app/src/sites/serve";
+import { type Asking, checkForUpdate } from "../../../core/src/actions/check-update";
 import { importSessionKey } from "../../../core/src/auth/cookie";
 import { parseLogins } from "../../../core/src/auth/logins";
 import type { SqlDriver } from "../../../core/src/database/driver";
@@ -40,6 +41,9 @@ const FREE_LIMITS = {
   requestsPerDay: { most: 100_000, warning: "above the sample host's free 100,000 requests a day; a real host serves nothing more without its paid plan" },
   logins: { most: 50, warning: "above the 50 users the sample host takes for free; a real host bills users past its own" },
 } as const;
+
+/** When the sample release the seeded install knows of came out, and where its notes are. No such release exists. */
+const SAMPLE_RELEASE = { released: "2026-12-01", notes: "https://example.com/changelog/", database: false } as const;
 
 /** Where the dashboard of the install that holds nothing is mounted. */
 const EMPTY_PREFIX = "/empty";
@@ -202,12 +206,21 @@ function siteMount(world: World, label: string): Mount {
   return { prefix: `${SERVED_PREFIX}/${label}`, origin: siteOrigin(label), base: "", holds: "site", answer };
 }
 
+/** The stand-in for the project's website: it names a release one minor version above the running one, so the notice of a newer version can be seen. Nothing is fetched. */
+function sampleLatest(version: string): Asking["fetch"] {
+  const [major = "0", minor = "0"] = version.split(".");
+
+  return async () => Response.json({ ...SAMPLE_RELEASE, version: `${major}.${Number(minor) + 1}.0` });
+}
+
 /** Open the two installs, the seeded one first: a host that keeps the demo hands its drivers and stores out in that order every time. */
 async function openScene(host: Host, resumed: boolean): Promise<Scene> {
   const kept = (): Parameters<typeof openWorld>[1] => ({ store: host.openStore?.(), csrfSecret: host.formSecret?.() });
   const seeded = await openWorld(host.openDriver(), kept());
   const empty = await openWorld(host.openDriver(), kept());
   const { token } = resumed ? { token: "" } : await seedWorld(seeded, host.samples);
+  // The seeded install alone learns of a newer version: the empty one shows a dashboard with no notice.
+  if (!resumed) await checkForUpdate(seeded.install, { fetch: sampleLatest(host.version) });
   const setups = ([...PLUG_STATES, SHUT] as const).map((state) => setupMount(seeded, state));
 
   return { seeded, token, dashboard: dashboardMount(seeded, ""), mounts: [dashboardMount(empty, EMPTY_PREFIX), apiMount(seeded, host.version), ...setups] };

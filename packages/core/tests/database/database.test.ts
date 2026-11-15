@@ -40,6 +40,7 @@ import { SETTING_CHANGES, SETTING_VALUES, type SettingValues } from "../../src/r
 import { NEW_SITE, SITE_DETAILS, type Site, type SiteAccess, type SiteFolder, siteToRow } from "../../src/records/site";
 import { SWEEP_PLACE, type SweepPlace } from "../../src/records/sweep-place";
 import type { Totals } from "../../src/records/sizes";
+import { UPDATE_CHECK, type UpdateCheck } from "../../src/records/update";
 import { MANIFEST_FILE, type ManifestFile, type Upload, type UploadId, uploadFromRow } from "../../src/records/upload";
 import { dayOf, type SiteViews, viewDays } from "../../src/records/views";
 import { mintSiteId, type SiteId } from "../../src/sites/ids";
@@ -163,6 +164,8 @@ class MemoryDatabase implements Database {
   #settings: SettingValues | undefined;
 
   #sweepPlace: SweepPlace | undefined;
+
+  #updateCheck: UpdateCheck | undefined;
 
   #signingKey: Uint8Array<ArrayBuffer> | undefined;
 
@@ -503,6 +506,14 @@ class MemoryDatabase implements Database {
 
   async keepSweepPlace(place: SweepPlace | undefined): Promise<void> {
     this.#sweepPlace = place === undefined ? undefined : v.parse(SWEEP_PLACE, place);
+  }
+
+  async readUpdateCheck(): Promise<UpdateCheck | undefined> {
+    return this.#updateCheck;
+  }
+
+  async keepUpdateCheck(check: UpdateCheck): Promise<void> {
+    this.#updateCheck = v.parse(UPDATE_CHECK, check);
   }
 
   async readSettings(): Promise<SettingValues | undefined> {

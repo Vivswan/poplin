@@ -167,10 +167,29 @@ The settings `poplin config` takes:
 | `max_total_size`, `max_site_size`, `max_sites`                                          | size limits                                              |
 | `max_files_per_publish`, `max_files_per_day`                                            | how many files one publish holds, and all publishes begun in one UTC day |
 | `requests_per_day`, `site_share_of_day`, `site_requests_per_minute`, `visitor_requests_per_minute` | request limits                                |
+| `update_check`                                                                          | whether the install asks which version is the newest     |
 
 An import and a copy count as a publish, with every version an import holds. A publish that is given up or runs out gives none of the day's files back.
 
 Every command that talks to the install also takes `--json`, for the answer as JSON, and `--server`, to name the install.
+
+## A newer version
+
+```text
+$ poplin doctor
+ok  install   https://poplin.example.com answers
+ok  version   install 0.1.0, this poplin 0.1.0
+ok  update    0.2.0 is out (this install runs 0.1.0): https://example.com/changelog/#v0-2-0
+```
+
+| Question             | Answer                                                                                             |
+| -------------------- | -------------------------------------------------------------------------------------------------- |
+| What is checked      | one file on the project's website, `latest.json`, which names the newest release                   |
+| How often            | once a UTC day, by the install itself; a day with no answer is tried again the next day            |
+| What is sent         | a plain request for the file: no version, no id, and no address of the install is put in it        |
+| What Cloudflare adds | a `CF-Worker` header on every request a Worker sends, which names the install's domain             |
+| Where it shows       | the `update` row of `poplin doctor`, and `update` under `--json`; no row when nothing newer is out |
+| Switching it off     | `poplin config update_check off`: nothing is asked, and a release learned before is not shown      |
 
 ## The agent tools
 

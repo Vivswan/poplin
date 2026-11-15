@@ -254,4 +254,12 @@ describe("the local preview", () => {
     expect(text).toContain(`"${ORIGIN}/served/lisbon-page/"`);
     expect(text).not.toContain("https://");
   });
+
+  // Drift: the notice of a newer version has no other way to be seen on this machine: no scheduled run happens here, and the real website names no release above a development build.
+  test("the seeded install knows of a release one minor version above its own, learned from a stand-in and not from the network", async () => {
+    const preview = await openPreview(false);
+    const who = await preview.fetch(new Request(`${ORIGIN}/api/whoami`, { headers: { Authorization: `Bearer ${preview.token()}` } }));
+
+    expect(((await who.json()) as { update?: unknown }).update).toEqual({ current: VERSION, newest: "1.1.0", released: "2026-12-01", notes: "https://example.com/changelog/", database: false });
+  });
 });
