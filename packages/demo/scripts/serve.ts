@@ -8,7 +8,10 @@
 //
 // This file and its neighbours start the server and keep the pid file. The demo itself is `../src/preview/`, which names no runtime.
 
+import { constants } from "node:os";
 import { basename, join } from "node:path";
+
+import concurrently, { type CloseEvent } from "concurrently";
 
 import manifest from "../../cli/package.json" with { type: "json" };
 import type { ClientFiles } from "../../app/src/console/shell";
@@ -20,6 +23,12 @@ import { DEFAULT_PORT, HOST, markRunning, PID_PATH, pidFile, readFlags, stopRunn
 
 /** The flag of bun itself that starts a script anew whenever a file it loads changes. */
 const WATCH_FLAG = "--watch";
+
+/** This script's file, as it is named from its own folder. */
+const THIS_SCRIPT = basename(import.meta.path);
+
+/** What a shell adds to a signal's number to answer the exit code of a process the signal ended. */
+const SIGNAL_BASE = 128;
 
 /** The signals that end the preview. */
 const END_SIGNALS = ["SIGINT", "SIGTERM"] as const;
@@ -63,31 +72,42 @@ const BUILT_CLIENT: ClientFiles = {
   },
 };
 
-/** Wait for the first of two processes that run as one to end, end the other, and answer the code of the one that ended. A signal that ends this process ends both. */
-async function together(client: Bun.Subprocess, watched: Bun.Subprocess): Promise<number> {
-  for (const signal of END_SIGNALS) {
-    process.on(signal, () => {
-      client.kill(signal);
-      watched.kill(signal);
-    });
-  }
+/** The exit code of a process as the library tells its end: the code itself, or, for one a signal ended, what a shell answers for that signal. */
+function exitCodeOf(ended: CloseEvent | undefined): number {
+  if (typeof ended?.exitCode === "number") return ended.exitCode;
 
-  const code = await Promise.race([client.exited, watched.exited]);
-  client.kill();
-  watched.kill();
+  return SIGNAL_BASE + (constants.signals[ended?.exitCode as NodeJS.Signals] ?? 0);
+}
 
-  return code;
+/**
+ * Run the client's process and the watched preview as one, and wait: when either ends the other is ended, and a signal that ends this process ends both.
+ *
+ * Each command line is made of plain words only, a script of the client and this script by its place in its own folder, so nothing in it needs quoting for a shell.
+ *
+ * @param client - the script of the client to run, in the client's folder, with its flags, and what it adds to the environment
+ * @param watched - the flags this script is run again with under bun's watch mode, and what that adds to the environment
+ * @returns the exit code of the one that ended first
+ */
+async function together(
+  client: { readonly script: string; readonly flags?: readonly string[]; readonly env?: Readonly<Record<string, string>> },
+  watched: { readonly flags: readonly string[]; readonly env: Readonly<Record<string, string>> },
+): Promise<number> {
+  const { result } = concurrently(
+    [
+      { name: "client", command: ["bun", "run", client.script, ...(client.flags ?? [])].join(" "), cwd: CONSOLE, env: client.env ?? {} },
+      { name: "preview", command: ["bun", WATCH_FLAG, THIS_SCRIPT, ...watched.flags].join(" "), cwd: import.meta.dir, env: watched.env },
+    ],
+    { killOthersOn: ["success", "failure"], raw: true },
+  );
+  // The library answers every process's end, in the order they ended, whether or not one of them failed.
+  const [first] = await result.catch((ended: readonly CloseEvent[]) => ended);
+
+  return exitCodeOf(first);
 }
 
 /** Run this script again under bun's watch mode and wait for it: the watched process is the preview, and this one only holds the terminal. Beside it the client is built anew whenever its own sources change. */
-async function watch(args: readonly string[]): Promise<number> {
-  const client = Bun.spawn([process.execPath, "run", "watch"], { cwd: CONSOLE, stdio: ["ignore", "ignore", "inherit"] });
-  const watched = Bun.spawn([process.execPath, WATCH_FLAG, import.meta.path, ...args], {
-    stdio: ["inherit", "inherit", "inherit"],
-    env: { ...process.env, [CLIENT_WATCHED]: "1" },
-  });
-
-  return together(client, watched);
+function watch(args: readonly string[]): Promise<number> {
+  return together({ script: "watch" }, { flags: args, env: { [CLIENT_WATCHED]: "1" } });
 }
 
 /**
@@ -101,18 +121,12 @@ async function develop(port: number, args: readonly string[]): Promise<number> {
 
   // A preview already on the dev server's port gives the port up first, as a plain start does.
   await stopRunning(port);
-  const client = Bun.spawn([process.execPath, "run", "dev", "--port", String(port)], {
-    cwd: CONSOLE,
-    stdio: ["ignore", "ignore", "inherit"],
-    env: { ...process.env, [PREVIEW_ORIGIN]: `http://${HOST}:${behind}` },
-  });
-  const watched = Bun.spawn([process.execPath, WATCH_FLAG, import.meta.path, "--port", String(behind), ...args], {
-    stdio: ["inherit", "inherit", "inherit"],
-    env: { ...process.env, [CLIENT_DEV]: String(port) },
-  });
   console.log(`poplin local preview, hot: http://${HOST}:${port}/   (the preview behind it: http://${HOST}:${behind}/)`);
 
-  return together(client, watched);
+  return together(
+    { script: "dev", flags: ["--port", String(port)], env: { [PREVIEW_ORIGIN]: `http://${HOST}:${behind}` } },
+    { flags: ["--port", String(behind), ...args], env: { [CLIENT_DEV]: String(port) } },
+  );
 }
 
 async function serve(port: number, gallery: boolean): Promise<void> {
