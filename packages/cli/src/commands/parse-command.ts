@@ -2,7 +2,10 @@
 
 import { parseArgs } from "node:util";
 
+import { type Command, CommanderError } from "commander";
+
 import { BARE_COMMAND, COMMANDS, type CommandName, type CommandSpec, HELP_FLAG, VERSION_FLAG } from "./command-table";
+import { argumentsOf, buildProgram } from "./program";
 import { buildRequest, type Request } from "./requests";
 import { type Flags, isUsageError, looksLikePath, nearest, type UsageError, usageError } from "./util";
 
@@ -19,11 +22,20 @@ const PARSE_OPTIONS = Object.fromEntries(
   [...TAKES_VALUE].map(([name, takesValue]) => [name.slice(2), { type: takesValue ? ("string" as const) : ("boolean" as const) }]),
 );
 
+/** How many arguments commander is given: the command word, the most arguments a command takes, and one more to be counted as too many. */
+const MOST_COUNTED = Math.max(...COMMANDS.map((spec: CommandSpec) => spec.arguments.length)) + 2;
+
 /** The word that ends the flags: every word after it is an argument. */
 const TERMINATOR = "--";
 
 /** A word that can be put after `poplin ./` in a hint as it is, with nothing a shell or a terminal reads. */
 const PLAIN_WORD = /^[\w.-]+$/;
+
+/** The one word commander quotes in the message of a refusal: the argument it misses. */
+const QUOTED = /'(.*)'/s;
+
+/** The refusals of commander that are answered in the product's words, by commander's code for each. */
+const REFUSALS = { missing: "commander.missingArgument", tooMany: "commander.excessArguments" } as const;
 
 /** One flag as typed: its name with the dashes, its value when one came with it, and whether the value was joined by `=`. */
 interface TypedFlag {
@@ -40,6 +52,16 @@ interface TypedWords {
 
 /** What a command line asks for: a command's request, the help of a command or of `poplin` itself, the version, or a refusal. `asked` is false for the help an empty command line gets. */
 export type Parsed = Request | { readonly kind: "help"; readonly topic?: CommandName; readonly asked: boolean } | { readonly kind: "version" } | UsageError;
+
+/** What ends the reading of a line before commander is through with it: the answer is known. */
+class Answered extends Error {
+  readonly parsed: Parsed;
+
+  constructor(parsed: Parsed) {
+    super("the command line is answered");
+    this.parsed = parsed;
+  }
+}
 
 function splitWords(argv: readonly string[]): TypedWords {
   const { tokens } = parseArgs({ args: [...argv], options: PARSE_OPTIONS, strict: false, tokens: true, allowPositionals: true });
@@ -74,18 +96,6 @@ function unknownCommand(word: string, publishHint: boolean): UsageError {
   return usageError(`unknown command ${JSON.stringify(word)}`, hints.join(" "));
 }
 
-/** The command a line runs and the arguments after it. A first word that is no command is published only when it looks like a path. */
-function resolveCommand(positionals: readonly string[]): { readonly spec: (typeof COMMANDS)[number]; readonly rest: readonly string[] } | undefined {
-  const [word = "", ...rest] = positionals;
-  const named = SPECS.get(word);
-  if (named !== undefined) return { spec: named, rest };
-
-  const bare = SPECS.get(BARE_COMMAND);
-  if (bare === undefined || !looksLikePath(word)) return undefined;
-
-  return { spec: bare, rest: positionals };
-}
-
 /** Whether a flag stands as a word of its own before `--`, even where the flag before it would take it as a value. */
 function asks(argv: readonly string[], flag: string): boolean {
   const end = argv.indexOf(TERMINATOR);
@@ -93,7 +103,8 @@ function asks(argv: readonly string[], flag: string): boolean {
   return argv.slice(0, end === -1 ? argv.length : end).includes(flag);
 }
 
-function withoutCommand(argv: readonly string[], flags: readonly TypedFlag[]): Parsed {
+/** Answer for a line with no argument on it: the help or the version when asked, and else what its first flag lacks. */
+function withoutWord(argv: readonly string[], flags: readonly TypedFlag[]): Parsed {
   if (asks(argv, HELP_FLAG)) return { kind: "help", asked: true };
 
   if (asks(argv, VERSION_FLAG)) return { kind: "version" };
@@ -104,6 +115,14 @@ function withoutCommand(argv: readonly string[], flags: readonly TypedFlag[]): P
   if (!TAKES_VALUE.has(first.name)) return unknownFlag(first.name, [...TAKES_VALUE.keys()], "poplin help <command>");
 
   return usageError(`${first.name} needs a command or a path before or after it`, "poplin --help lists the commands");
+}
+
+/** Answer for a line whose first word is neither a command nor a path. */
+function withoutCommand(word: string, flags: readonly TypedFlag[]): UsageError {
+  const stray = flags.find((flag) => !TAKES_VALUE.has(flag.name));
+  if (stray !== undefined) return unknownFlag(stray.name, [...TAKES_VALUE.keys()], "poplin help <command>");
+
+  return unknownCommand(word, true);
 }
 
 function readFlag(flag: TypedFlag, spec: CommandSpec, seen: Flags): string | true | UsageError {
@@ -147,22 +166,6 @@ function readFlags(typed: readonly TypedFlag[], spec: CommandSpec): Flags | Usag
   return flags;
 }
 
-function countArguments(spec: CommandSpec, given: readonly string[]): UsageError | undefined {
-  const usage =
-    `poplin ${spec.name} ${spec.arguments.map((argument) => (argument.required ? `<${argument.name}>` : `[<${argument.name}>]`)).join(" ")}`.trimEnd();
-  const missing = spec.arguments.find((argument, index) => argument.required && given[index] === undefined);
-
-  if (missing !== undefined) return usageError(`poplin ${spec.name} needs a ${missing.name}`, usage);
-
-  if (given.length > spec.arguments.length) {
-    const extra = given.slice(spec.arguments.length).map((word) => JSON.stringify(word));
-
-    return usageError(`too many arguments for poplin ${spec.name}: ${extra.join(" ")}`, usage);
-  }
-
-  return undefined;
-}
-
 function helpOf(topic: string | undefined): Parsed {
   if (topic === undefined) return { kind: "help", asked: true };
 
@@ -170,6 +173,18 @@ function helpOf(topic: string | undefined): Parsed {
   if (spec === undefined) return unknownCommand(topic, false);
 
   return { kind: "help", topic: spec.name, asked: true };
+}
+
+/** A refusal of commander in the product's words: a command was given too few arguments, or too many. */
+function refusalOf(refused: CommanderError, spec: CommandSpec, given: readonly string[]): UsageError | undefined {
+  const usage = `poplin ${spec.name} ${argumentsOf(spec)}`.trimEnd();
+  if (refused.code === REFUSALS.missing) return usageError(`poplin ${spec.name} needs a ${QUOTED.exec(refused.message)?.[1] ?? ""}`, usage);
+
+  if (refused.code !== REFUSALS.tooMany) return undefined;
+
+  const extra = given.slice(spec.arguments.length).map((word) => JSON.stringify(word));
+
+  return usageError(`too many arguments for poplin ${spec.name}: ${extra.join(" ")}`, usage);
 }
 
 /**
@@ -183,29 +198,60 @@ function helpOf(topic: string | undefined): Parsed {
  */
 export function parseCommand(argv: readonly string[], now: number = Date.now()): Parsed {
   const typed = splitWords(argv);
-  if (typed.positionals.length === 0) return withoutCommand(argv, typed.flags);
+  const given = SPECS.has(typed.positionals[0] ?? "") ? typed.positionals.slice(1) : typed.positionals;
+  const program = buildProgram();
+  let reached: { readonly spec: (typeof COMMANDS)[number]; readonly flags: Flags } | undefined;
 
-  const resolved = resolveCommand(typed.positionals);
+  /** Go into a command: its help and the version are answered whatever else is on the line, and then every flag must be one of its own. */
+  const enter = (command: Command): void => {
+    const spec = SPECS.get(command.name());
+    if (spec === undefined) return;
 
-  if (resolved === undefined) {
-    const stray = typed.flags.find((flag) => !TAKES_VALUE.has(flag.name));
-    if (stray !== undefined) return unknownFlag(stray.name, [...TAKES_VALUE.keys()], "poplin help <command>");
+    if (asks(argv, HELP_FLAG)) throw new Answered({ kind: "help", topic: spec.name, asked: true });
 
-    return unknownCommand(typed.positionals[0] ?? "", true);
+    if (asks(argv, VERSION_FLAG)) throw new Answered({ kind: "version" });
+
+    const flags = readFlags(typed.flags, spec);
+    if (isUsageError(flags)) throw new Answered(flags);
+
+    reached = { spec, flags };
+  };
+
+  /** Answer for a line whose first word is no command: it is published only when that word looks like a path. */
+  const bare = (words: readonly string[]): void => {
+    const [word] = words;
+    const publish = program.commands.find((command) => command.name() === BARE_COMMAND);
+
+    if (word === undefined) throw new Answered(withoutWord(argv, typed.flags));
+
+    if (publish === undefined || !looksLikePath(word)) throw new Answered(withoutCommand(word, typed.flags));
+
+    enter(publish);
+    publish.parse([TERMINATOR, ...words], { from: "user" });
+  };
+
+  /** Answer for a command whose flags are its own and whose arguments commander has counted. */
+  const answer = (words: readonly string[]): void => {
+    if (reached === undefined) return;
+
+    throw new Answered(reached.spec.name === "help" ? helpOf(words[0]) : buildRequest(reached.spec.name, { positionals: words, flags: reached.flags }, now));
+  };
+
+  program.hook("preSubcommand", (_program, command) => enter(command)).action((words: string[]) => bare(words));
+
+  for (const command of program.commands) command.action(() => answer(command.args));
+
+  try {
+    // The flags are read above, so commander is given the arguments alone, each as an argument whatever it starts with. It counts them, and needs no more of them than it can count.
+    program.parse([TERMINATOR, ...typed.positionals.slice(0, MOST_COUNTED)], { from: "user" });
+  } catch (error) {
+    if (error instanceof Answered) return error.parsed;
+
+    const refusal = error instanceof CommanderError && reached !== undefined ? refusalOf(error, reached.spec, given) : undefined;
+    if (refusal !== undefined) return refusal;
+
+    throw error;
   }
 
-  const { spec, rest } = resolved;
-  if (asks(argv, HELP_FLAG)) return { kind: "help", topic: spec.name, asked: true };
-
-  if (asks(argv, VERSION_FLAG)) return { kind: "version" };
-
-  const flags = readFlags(typed.flags, spec);
-  if (isUsageError(flags)) return flags;
-
-  const miscounted = countArguments(spec, rest);
-  if (miscounted !== undefined) return miscounted;
-
-  if (spec.name === "help") return helpOf(rest[0]);
-
-  return buildRequest(spec.name, { positionals: rest, flags }, now);
+  throw new Error("commander read a command line and ran no command");
 }

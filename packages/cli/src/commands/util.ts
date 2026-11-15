@@ -2,6 +2,8 @@
 
 import { posix, win32 } from "node:path";
 
+import editDistance from "damerau-levenshtein";
+
 /** The most edits between a typed word and the word suggested for it. A swap of two neighbours counts as one. */
 const MAX_EDITS = 1;
 
@@ -20,30 +22,6 @@ export interface UsageError {
 
 /** The flags a command line gave, by name with the dashes: the value of a flag that takes one, `true` for a switch. */
 export type Flags = ReadonlyMap<string, string | true>;
-
-/** How many single-character edits turn `typed` into `known`: an insert, a delete, a replace, or a swap of two neighbours. */
-function edits(typed: string, known: string): number {
-  let twoBack: number[] = [];
-  let previous = Array.from({ length: known.length + 1 }, (_, column) => column);
-
-  for (let row = 1; row <= typed.length; row += 1) {
-    const current = [row];
-
-    for (let column = 1; column <= known.length; column += 1) {
-      const same = typed[row - 1] === known[column - 1];
-      const swapped = row > 1 && column > 1 && typed[row - 1] === known[column - 2] && typed[row - 2] === known[column - 1];
-      const replaced = (previous[column - 1] ?? 0) + (same ? 0 : 1);
-      const swap = swapped ? (twoBack[column - 2] ?? 0) + 1 : Number.POSITIVE_INFINITY;
-
-      current.push(Math.min((previous[column] ?? 0) + 1, (current[column - 1] ?? 0) + 1, replaced, swap));
-    }
-
-    twoBack = previous;
-    previous = current;
-  }
-
-  return previous[known.length] ?? 0;
-}
 
 /**
  * Refuse a command line.
@@ -94,5 +72,5 @@ export function looksLikePath(word: string): boolean {
  */
 export function nearest(typed: string, known: readonly string[]): string | undefined {
   // The length check keeps a very long typed word from costing a table per known word.
-  return known.find((word) => Math.abs(word.length - typed.length) <= MAX_EDITS && edits(typed, word) <= MAX_EDITS);
+  return known.find((word) => Math.abs(word.length - typed.length) <= MAX_EDITS && editDistance(typed, word).steps <= MAX_EDITS);
 }
