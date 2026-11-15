@@ -13,7 +13,7 @@ import * as v from "valibot";
 import type { Actor } from "../auth/scopes";
 import type { Database } from "../database/database";
 import { AllowanceSpent } from "../database/driver";
-import { PROBLEM_DAYS_KEPT, type Problem, type ProblemKind } from "../records/problem";
+import { PROBLEM, PROBLEM_DAYS_KEPT, type ProblemKind } from "../records/problem";
 import { problemDetail } from "../records/problem-detail";
 import { dayOf, daysUpTo } from "../records/views";
 import { meterStore } from "../storage/metered";
@@ -27,6 +27,9 @@ const NOTED = new WeakMap<Database, Map<ProblemKind, Noted>>();
 
 /** How many days back a listing may go: a whole number from 1 to the days kept. */
 const DAYS = v.pipe(v.number(), v.safeInteger(), v.minValue(1), v.maxValue(PROBLEM_DAYS_KEPT));
+
+/** What the list answers: the UTC day it was read on, and the problems of the days asked for. */
+export const PROBLEMS_LISTED = v.object({ today: v.pipe(v.string(), v.isoDate()), problems: v.array(PROBLEM) });
 
 /** The last hour of the clock a kind was noted in, and the tries since that no row holds yet. */
 interface Noted {
@@ -96,19 +99,20 @@ export function meterNoted(install: Pick<Install, "database" | "store" | "now">,
  * List what went wrong in the last days, the kind last seen first. It is one read of the database.
  *
  * @param days - how many UTC days back, today included: 1 to 30
- * @returns one entry per kind and day. `not_allowed` for anyone but an admin, and `bad_argument` about `days` for a number that is no such count
+ * @returns the UTC day of the reading, and one entry per kind and day. `not_allowed` for anyone but an admin, and `bad_argument` about `days` for a number that is no such count
  */
 export async function listProblems(
   install: Pick<Install, "database" | "now">,
   actor: Actor,
   days: number,
-): Promise<{ readonly ok: true; readonly problems: readonly Problem[] } | Refused<"not_allowed" | "bad_argument">> {
+): Promise<({ readonly ok: true } & Readonly<v.InferOutput<typeof PROBLEMS_LISTED>>) | Refused<"not_allowed" | "bad_argument">> {
   if (actor.scope !== "admin") return refuse("not_allowed");
 
   const asked = v.safeParse(DAYS, days);
   if (!asked.success) return refuse("bad_argument", "days");
 
-  const [since] = daysUpTo(dayOf(install.now()), asked.output);
+  const today = dayOf(install.now());
+  const [since] = daysUpTo(today, asked.output);
 
-  return { ok: true, problems: await install.database.listProblems(since ?? dayOf(install.now())) };
+  return { ok: true, today, problems: [...(await install.database.listProblems(since ?? today))] };
 }
