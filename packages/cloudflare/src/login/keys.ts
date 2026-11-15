@@ -1,57 +1,54 @@
-// The public keys Access signs its tokens with, held in memory and fetched from the team's certs address under a fetch limit.
+// The public keys Access signs its tokens with: jose keeps them in memory and fetches them from the team's certs address.
 //
-//   keys younger than an hour          ->  used as they are
-//   older, or a key id they lack       ->  one fetch, unless one was started in the last minute
+//   keys younger than an hour             ->  used as they are
+//   older, or a key id they lack          ->  one fetch, unless the keys were fetched in the last minute
+//   a fetch that began in the last minute ->  its answer again, a failure included, so the address is asked once a minute at most
 
-import { createLocalJWKSet, type JSONWebKeySet } from "jose";
+import { createRemoteJWKSet, customFetch, errors, type FetchImplementation, type JWTVerifyGetKey } from "jose";
 
 const CERTS_PATH = "/cdn-cgi/access/certs";
 const KEYS_LIFETIME_MS = 60 * 60 * 1000;
 const REFETCH_INTERVAL_MS = 60 * 1000;
 const FETCH_TIMEOUT_MS = 5 * 1000;
 
-/** The part of `fetch` the keys need. It may reject; a redirect counts as a failure. */
-type CertsFetch = (url: string, init: { readonly redirect: "error"; readonly signal: AbortSignal }) => Promise<{ readonly ok: boolean; json(): Promise<unknown> }>;
-
-/** Finds the key a token's header names; rejects with jose's `JWKSNoMatchingKey` when the set holds none. */
-export type KeySet = ReturnType<typeof createLocalJWKSet>;
-
-/** Where the keys come from. `teamDomain` is `https://<team>.cloudflareaccess.com`, with no trailing slash. */
+/** Where the keys come from. `teamDomain` is `https://<team>.cloudflareaccess.com`, with no trailing slash. `fetch` may reject; jose follows no redirect and takes status 200 alone. */
 interface KeySource {
   readonly teamDomain: string;
-  readonly fetch: CertsFetch;
+  readonly fetch: FetchImplementation;
 }
 
-/** What is held between requests. `attemptedAt` is the start of the last fetch, failed ones included. */
-interface Held {
-  keys: KeySet | undefined;
-  fetchedAt: number;
-  attemptedAt: number;
-  pending: Promise<KeySet | undefined> | undefined;
+/** One answer of the certs address, read to its end: held as plain values, since a body cannot be read by another request than the one that fetched it. */
+interface Answer {
+  readonly status: number;
+  readonly body: string;
 }
 
-/** The team's keys. Both calls take the time in milliseconds and never reject. */
+/** The team's keys. */
 export interface AccessKeys {
   /** The team the keys belong to, which is also the issuer its tokens name. */
   readonly teamDomain: string;
 
-  /** The keys in hand, fetched first when there are none or they are over an hour old. `undefined` when they cannot be had now. */
-  readonly current: (now: number) => Promise<KeySet | undefined>;
-
-  /** Keys fetched because a token named an unknown key id. `undefined` when a fetch began under a minute ago, or failed. */
-  readonly refetched: (now: number) => Promise<KeySet | undefined>;
+  /** Finds the key a token's header names. It rejects with jose's `JWKSNoMatchingKey` when the keys hold none, `JWKSMultipleMatchingKeys` when they hold several, and `KeysUnavailable` when the keys cannot be had now. */
+  readonly find: JWTVerifyGetKey;
 }
 
-async function fetchKeys(source: KeySource): Promise<KeySet | undefined> {
-  try {
-    const signal = AbortSignal.timeout(FETCH_TIMEOUT_MS);
-    const response = await source.fetch(`${source.teamDomain}${CERTS_PATH}`, { redirect: "error", signal });
-    if (!response.ok) return undefined;
+/** The keys cannot be had now: the certs address failed, answered something that is no key set, or was asked under a minute ago and failed then. */
+export class KeysUnavailable extends Error {}
 
-    return createLocalJWKSet((await response.json()) as JSONWebKeySet);
-  } catch {
-    return undefined;
-  }
+/** A fetch whose answer stands for a minute: whoever asks within it gets that answer and starts no fetch. */
+function oncePerMinute(fetch: FetchImplementation): FetchImplementation {
+  let asked: { readonly at: number; readonly answer: Promise<Answer> } | undefined;
+
+  return async (url, init) => {
+    if (asked === undefined || Date.now() - asked.at >= REFETCH_INTERVAL_MS) {
+      const answer = fetch(url, init).then(async (response) => ({ status: response.status, body: await response.text() }));
+      asked = { at: Date.now(), answer };
+    }
+
+    const { status, body } = await asked.answer;
+
+    return new Response(body, { status });
+  };
 }
 
 /**
@@ -60,33 +57,23 @@ async function fetchKeys(source: KeySource): Promise<KeySet | undefined> {
  * @returns keys that are fetched at most once a minute, whatever the tokens say
  */
 export function accessKeys(source: KeySource): AccessKeys {
-  const held: Held = { keys: undefined, fetchedAt: 0, attemptedAt: Number.NEGATIVE_INFINITY, pending: undefined };
+  const keys = createRemoteJWKSet(new URL(`${source.teamDomain}${CERTS_PATH}`), {
+    cacheMaxAge: KEYS_LIFETIME_MS,
+    cooldownDuration: REFETCH_INTERVAL_MS,
+    timeoutDuration: FETCH_TIMEOUT_MS,
+    [customFetch]: oncePerMinute(source.fetch),
+  });
 
-  async function refetched(now: number): Promise<KeySet | undefined> {
-    if (held.pending !== undefined) return held.pending;
+  const find: JWTVerifyGetKey = async (header, token) => {
+    try {
+      return await keys(header, token);
+    } catch (error) {
+      // These two say which keys the token's header picks out of keys that are in hand.
+      if (error instanceof errors.JWKSNoMatchingKey || error instanceof errors.JWKSMultipleMatchingKeys) throw error;
 
-    if (now - held.attemptedAt < REFETCH_INTERVAL_MS) return undefined;
+      throw new KeysUnavailable(undefined, { cause: error });
+    }
+  };
 
-    held.attemptedAt = now;
-    held.pending = fetchKeys(source);
-
-    const keys = await held.pending;
-    held.pending = undefined;
-
-    if (keys === undefined) return undefined;
-
-    held.keys = keys;
-    held.fetchedAt = now;
-
-    return keys;
-  }
-
-  async function current(now: number): Promise<KeySet | undefined> {
-    const age = now - held.fetchedAt;
-    if (held.keys !== undefined && age >= 0 && age < KEYS_LIFETIME_MS) return held.keys;
-
-    return refetched(now);
-  }
-
-  return { teamDomain: source.teamDomain, current, refetched };
+  return { teamDomain: source.teamDomain, find };
 }

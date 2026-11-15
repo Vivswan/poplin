@@ -1,4 +1,4 @@
-import { beforeAll, describe, expect, test } from "bun:test";
+import { afterEach, beforeAll, describe, expect, setSystemTime, test } from "bun:test";
 import { SignJWT, UnsecuredJWT } from "jose";
 import { accessIdentity } from "../../src/login/access-token";
 import { accessKeys } from "../../src/login/keys";
@@ -15,7 +15,10 @@ let stranger: Signer;
 type Verdict = Awaited<ReturnType<ReturnType<typeof accessIdentity>>>;
 type Forgery = readonly [name: string, refusal: string, token: () => Promise<string | undefined> | string | undefined];
 
+/** Check a token at a time. The keys are kept by the clock of the runtime, so that clock is set to the time. */
 function check(served: Certs, token: string | undefined, now: number = NOW, keys = accessKeys({ teamDomain: TEAM, fetch: served.fetch })): Promise<Verdict> {
+  setSystemTime(new Date(now));
+
   return accessIdentity({ keys, audience: AUDIENCE })(headersOf(token), now);
 }
 
@@ -30,6 +33,10 @@ function part(value: unknown): string {
 beforeAll(async () => {
   team = await signer("team-key");
   stranger = await signer("stranger-key");
+});
+
+afterEach(() => {
+  setSystemTime();
 });
 
 describe("an Access token", () => {
@@ -113,6 +120,13 @@ describe("the team's keys", () => {
 
     expect(await check(served, forged, NOW + 2 * MINUTE_MS, keys)).toEqual(refused("unknown-key"));
     expect(served.calls).toHaveLength(3);
+  });
+
+  // Drift: a token that names no key, checked against a team with two, would be answered as keys that cannot be had: a 503 that asks a forger to come back, where the token is refused.
+  test("a token with no key id is malformed whichever keys the team has", async () => {
+    const served = certs(team, await signer("second-key"));
+
+    expect(await check(served, await sign(team, {}, null))).toEqual(refused("malformed"));
   });
 
   // Drift: after Access rotates its key, logins would fail until the hour's cache ran out.

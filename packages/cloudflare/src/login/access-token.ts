@@ -4,7 +4,7 @@
 
 import { type Login, parseLogin } from "@poplin/core/src/auth/logins";
 import { errors, type JWTPayload, jwtVerify } from "jose";
-import type { AccessKeys, KeySet } from "./keys";
+import { type AccessKeys, KeysUnavailable } from "./keys";
 import type { Identify } from "@poplin/app/src/login/login";
 import type { RequestHeaders } from "@poplin/app/src/login/session";
 
@@ -51,6 +51,8 @@ function refuse(refusal: TokenRefusal): Refused {
 }
 
 function refusalOf(error: unknown): TokenRefusal {
+  if (error instanceof KeysUnavailable) return "keys-unavailable";
+
   if (error instanceof errors.JWKSNoMatchingKey) return "unknown-key";
 
   if (error instanceof errors.JWSSignatureVerificationFailed) return "bad-signature";
@@ -62,9 +64,9 @@ function refusalOf(error: unknown): TokenRefusal {
   return "malformed";
 }
 
-async function verifiedClaims(token: string, check: AccessCheck, keys: KeySet): Promise<Checked<JWTPayload>> {
+async function claimsOf(token: string, check: AccessCheck): Promise<Checked<JWTPayload>> {
   try {
-    const { payload, protectedHeader } = await jwtVerify(token, keys, {
+    const { payload, protectedHeader } = await jwtVerify(token, check.keys.find, {
       algorithms: ALGORITHMS,
       issuer: check.keys.teamDomain,
       audience: check.audience,
@@ -80,19 +82,6 @@ async function verifiedClaims(token: string, check: AccessCheck, keys: KeySet): 
   } catch (error) {
     return refuse(refusalOf(error));
   }
-}
-
-async function claimsOf(token: string, check: AccessCheck): Promise<Checked<JWTPayload>> {
-  const keys = await check.keys.current(check.now);
-  if (keys === undefined) return refuse("keys-unavailable");
-
-  const claims = await verifiedClaims(token, check, keys);
-  if (claims.ok || claims.refusal !== "unknown-key") return claims;
-
-  const newer = await check.keys.refetched(check.now);
-  if (newer === undefined) return claims;
-
-  return verifiedClaims(token, check, newer);
 }
 
 async function verifyAccessToken(headers: RequestHeaders, check: AccessCheck): Promise<Checked<Login>> {
