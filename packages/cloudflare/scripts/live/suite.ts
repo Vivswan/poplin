@@ -61,6 +61,8 @@ async function runSuite(run: Run, missing: string): Promise<number | Stop> {
   if (isStop(found)) return found;
 
   const database = await findDatabase(run);
+  if (database === undefined) return { kind: "skipped", needs: "the install's database, which the converge step makes" };
+
   if (typeof database !== "string") return database;
 
   const swept = await removeTokens(run, database, Date.now());

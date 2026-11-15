@@ -1,9 +1,11 @@
-# Checks a real install on the Cloudflare test account after main is green, and on a manual run.
+# Checks a real install on the Cloudflare test account after main is green, and on a manual run. Puts it back to the sample sites after each run, and at midnight UTC.
 #
-#   build the Worker bundle -> make the standing test install match main -> run tests/live against it -> remove the run's token
+#   build the Worker bundle -> make the standing test install match main -> run tests/live against it -> put the install back
 #
-# The test install stays up between runs: only what a run made (its sites, its token row) is removed.
-# The environment's secrets reach the three steps that call Cloudflare and no other step. Each step prints what it did.
+#   put back: every site but the demo removed, the trash emptied, the samples of demo/samples and the demo published, waiting logins and every token removed
+#
+# The test install stays up between runs, with its logins and its settings.
+# The environment's secrets reach the steps that call Cloudflare and no other step. Each step prints what it did.
 # A piece the install answers without, lacking a token permission or an account switch only a person can flip, is a
 # warning and a skipped row of the step summary, with what it needs. Anything else that stops a step fails the run.
 #
@@ -20,6 +22,10 @@ on:
     workflows: [CI]
     types: [completed]
     branches: [main]
+  # Midnight UTC. A schedule runs the default branch's own file and nothing a pull request or a fork wrote; a fork's
+  # schedule has none of this repository's secrets.
+  schedule:
+    - cron: "0 0 * * *"
   workflow_dispatch:
     inputs:
       many_files:
@@ -35,13 +41,14 @@ jobs:
     if: >-
       github.ref == 'refs/heads/main' &&
       (github.event_name == 'workflow_dispatch' ||
-      (github.event.workflow_run.conclusion == 'success' &&
+      (github.event_name == 'workflow_run' &&
+      github.event.workflow_run.conclusion == 'success' &&
       github.event.workflow_run.event == 'push' &&
       github.event.workflow_run.head_branch == 'main' &&
       github.event.workflow_run.head_sha == github.sha &&
       github.event.workflow_run.head_repository.full_name == github.repository))
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 55
     environment: cloudflare-live-tests
     # One lane: a run waits for the one before it, and a newer waiting run replaces an older one.
     concurrency:
@@ -72,11 +79,35 @@ jobs:
           POPLIN_LIVE_MANY_FILES: ${{ inputs.many_files && '1' || '0' }}
           MISSING: ${{ steps.converge.outputs.missing }}
         run: bun run --silent --cwd packages/cloudflare live:suite "$MISSING"
-      # The suite removes its own token row; this covers a suite step that was killed before it could.
-      - name: Remove the run's token
+      # Whatever the checks came to, so the owner finds the samples and the demo. It removes every token, and with them
+      # the row of a suite step that was killed before it could remove its own.
+      - name: Put the test install back
         if: always() && steps.converge.outcome == 'success'
-        timeout-minutes: 3
+        timeout-minutes: 10
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-        run: bun run --silent --cwd packages/cloudflare live:sweep
+        run: bun run --silent --cwd packages/cloudflare live:reset
+
+  # The midnight run. It shares the lane of the checks, so it never touches the install while they do. On an account
+  # that holds no test install it says so and ends green.
+  reset:
+    if: github.event_name == 'schedule' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: cloudflare-live-tests
+    concurrency:
+      group: live-checks
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: main
+          persist-credentials: false
+      - uses: ./.github/actions/setup
+      - name: Put the test install back
+        timeout-minutes: 10
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: bun run --silent --cwd packages/cloudflare live:reset

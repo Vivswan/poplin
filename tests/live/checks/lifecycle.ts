@@ -17,6 +17,19 @@ const EDGE_ORIGIN_ERRORS: ReadonlySet<number> = new Set([520, 521, 522, 523, 525
 /** Why the public name's address is skipped on an install whose routes do not reach it. */
 const NO_PUBLIC_ROUTE = "a Worker route for the public word's hostnames";
 
+/** The public name of the site that holds the demo on the test install. */
+const DEMO = "demo";
+
+/** Why the demo's check is skipped on an install that holds no such site. */
+const NO_DEMO = "a public site named demo, which the reset of the test install publishes";
+
+/** The content type of a script as the install stores it. */
+const SCRIPT = /^text\/javascript\b/;
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
 /** The site a command answered, after a command that must exit 0. */
 function siteOf(ran: Ran): LiveSite {
   expect(ran.code).toBe(0);
@@ -109,6 +122,25 @@ export const LIFECYCLE_CHECKS: readonly Check[] = [
       const after = await bench.visit(address);
       expect(after.status).toBe(404);
       await expectRefused(bench.domain, after, text);
+    },
+  },
+  {
+    id: "demo",
+    name: "the demo opens at its public name, and its worker is served as a script",
+    needs: ["token"],
+    run: async (bench) => {
+      const shown = await bench.cli("show", DEMO);
+      if (isRecord(shown.value.error) && shown.value.error.code === "not_found") throw new Skip(NO_DEMO);
+
+      const address = siteOf(shown).addresses.public ?? "";
+      const first = await bench.visit(address).catch(() => undefined);
+      if (first === undefined || EDGE_ORIGIN_ERRORS.has(first.status)) throw new Skip(NO_PUBLIC_ROUTE);
+
+      expect({ status: first.status, type: first.headers.get("Content-Type") }).toEqual({ status: 200, type: expect.stringMatching(HTML) });
+
+      // A browser registers a worker only from a script's media type: the install sends `nosniff` with every file.
+      const worker = await bench.visit(`${address}/sw.js`);
+      expect({ status: worker.status, type: worker.headers.get("Content-Type") }).toEqual({ status: 200, type: expect.stringMatching(SCRIPT) });
     },
   },
   {

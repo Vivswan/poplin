@@ -15,7 +15,7 @@
     "test": "bun run build && vitest run",
     "live:converge": "bun scripts/live/converge.ts",
     "live:suite": "bun scripts/live/suite.ts",
-    "live:sweep": "bun scripts/live/sweep-tokens.ts"
+    "live:reset": "bun scripts/live/reset.ts"
   },
   "dependencies": {
     "@poplin/app": "workspace:*",

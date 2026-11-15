@@ -1,11 +1,13 @@
 // The live checks run against a local fake, so their own logic is exercised with no deployed install: a check that passed on anything, or a skip that hid a fault, would otherwise go unseen until a real run.
 
 import { afterEach, describe, expect, test } from "bun:test";
+import { writeFileSync } from "node:fs";
+import { join } from "node:path";
 
 import { openBench } from "./bench";
 import { probeMissing } from "./capabilities";
 import { CHECKS } from "./checks";
-import type { Missing, Outcome } from "./records";
+import type { Bench, Missing, Outcome } from "./records";
 import { runCheck } from "./report";
 import { FAKE_DOMAIN, type FakeSwitches, openFake } from "./support/fake-install";
 
@@ -18,6 +20,7 @@ const WITH_TOKEN = [
   "unlisted",
   "public",
   "public-name",
+  "demo",
   "update-rollback",
   "rename",
   "new-link",
@@ -37,10 +40,10 @@ const MANY_FILES = 7;
 /** The benches a test opened, closed after it. */
 const OPENED: (() => void)[] = [];
 
-/** One fake install, what the run knows of it, and the checks that do not pass on it: `skipped` or `failed`, by id. `L1` is skipped unless the case says the login is in front. */
+/** One fake install, what the run knows of it, and the checks that do not pass on it, by id. `L1` is skipped unless the login is in front, and `demo` unless the install holds the demo's site: whole, or without its worker. */
 type Case = readonly [
   what: string,
-  switches: FakeSwitches & { readonly noToken?: boolean },
+  switches: FakeSwitches & { readonly noToken?: boolean; readonly demoSite?: "whole" | "no-worker" },
   known: Missing,
   notPassed: Readonly<Record<string, "skipped" | "failed">>,
 ];
@@ -48,6 +51,8 @@ type Case = readonly [
 const CASES: readonly Case[] = [
   ["an install with no login in front passes every check but the login's and a person's", {}, {}, { L1: "skipped" }],
   ["an install behind a login passes the login's check too", { access: true }, {}, {}],
+  ["an install that holds the demo's site passes the demo's check", { demoSite: "whole" }, {}, { L1: "skipped" }],
+  ["a demo's site that lost its worker fails the demo's check", { demoSite: "no-worker" }, {}, { L1: "skipped", demo: "failed" }],
   ["an install whose routes miss the public word skips the public name's address", { noPublicRoute: true }, {}, { L1: "skipped", "public-name": "skipped" }],
   [
     "a run told what the zone lacks skips the checks of each lacking rule, and the many-files publish it was not asked for",
@@ -83,6 +88,14 @@ const CASES: readonly Case[] = [
   ],
 ];
 
+/** Publish the demo's site as the reset of the test install does: a first page, and beside it the worker, unless the case leaves it out. */
+async function publishDemoSite(bench: Bench, kind: "whole" | "no-worker"): Promise<void> {
+  const folder = bench.folder("<title>a demo</title>");
+  if (kind === "whole") writeFileSync(join(folder, "sw.js"), "self.addEventListener('fetch', () => undefined);");
+
+  expect((await bench.cli("publish", folder, "--name", "demo", "--public", "--public-name", "demo")).code).toBe(0);
+}
+
 afterEach(() => {
   for (const close of OPENED.splice(0)) close();
 });
@@ -104,15 +117,18 @@ describe("the live checks, against a local fake", () => {
     await settle();
     Object.assign(missing, await probeMissing(bench, { ...known, ...(switches.noToken === true ? { token: "a token" } : {}) }));
 
+    if (switches.demoSite !== undefined) await publishDemoSite(bench, switches.demoSite);
+
     const outcomes = [];
     for (const check of CHECKS) outcomes.push(await runCheck(bench, check));
 
-    const expected = Object.fromEntries(
-      CHECKS.map((check): [string, Outcome["result"]] => [check.id, BY_HAND.includes(check.id) ? "skipped" : (notPassed[check.id] ?? "passed")]),
-    );
+    const unmet: Case[3] = switches.demoSite === undefined ? { demo: "skipped", ...notPassed } : notPassed;
+    const expected = Object.fromEntries(CHECKS.map((check): [string, Outcome["result"]] => [check.id, BY_HAND.includes(check.id) ? "skipped" : (unmet[check.id] ?? "passed")]));
     expect(Object.fromEntries(outcomes.map((outcome) => [outcome.id, outcome.result]))).toEqual(expected);
 
     await sweep();
+    if (switches.demoSite !== undefined) expect((await bench.cli("delete", "demo")).code).toBe(0);
+
     const left = await bench.cli("list");
     expect(switches.noToken === true ? [] : left.value.sites).toEqual([]);
   });

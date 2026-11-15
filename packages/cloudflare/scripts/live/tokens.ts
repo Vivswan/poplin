@@ -21,8 +21,12 @@ const STALE_MS = 24 * 60 * 60 * 1000;
 /** The token permission the database calls need. */
 const PERMISSION = "D1: Edit";
 
-/** Run one statement on the install's database. */
-async function query(run: Run, databaseId: string, sql: string, params: readonly string[]): Promise<Stop | undefined> {
+/**
+ * Run one statement on the install's database.
+ *
+ * @returns why the statement did not run, or `undefined` once it did
+ */
+export async function runSql(run: Run, databaseId: string, sql: string, params: readonly string[]): Promise<Stop | undefined> {
   const done = await callCloudflare(run.connection, (api) =>
     Array.fromAsync(new BaseDatabase(api).query(databaseId, { account_id: run.accountId, sql, params: [...params] })),
   );
@@ -33,13 +37,13 @@ async function query(run: Run, databaseId: string, sql: string, params: readonly
 /**
  * Find the id of the install's database.
  *
- * @returns the id, hidden, or why there is none
+ * @returns the id, hidden; `undefined` for an account that holds no such database; or why the account's databases could not be read
  */
-export async function findDatabase(run: Run): Promise<string | Stop> {
+export async function findDatabase(run: Run): Promise<string | Stop | undefined> {
   const found = await syncDatabase(run.connection, run.accountId, "plan");
   if (!found.ok) return found.failure === "no-id" ? { kind: "failed", what: "Cloudflare named no database" } : stopOf(found, PERMISSION);
 
-  if (found.id === undefined) return { kind: "skipped", needs: "the install's database, which the converge step makes" };
+  if (found.id === undefined) return undefined;
 
   run.hide(found.id);
 
@@ -54,7 +58,7 @@ export async function findDatabase(run: Run): Promise<string | Stop> {
 export function removeTokens(run: Run, databaseId: string, now: number): Promise<Stop | undefined> {
   const sql = `DELETE FROM tokens WHERE note = ? OR (note LIKE ? AND created_at < ${now - STALE_MS})`;
 
-  return query(run, databaseId, sql, [`${NOTE_PREFIX}${run.id}`, `${NOTE_PREFIX}%`]);
+  return runSql(run, databaseId, sql, [`${NOTE_PREFIX}${run.id}`, `${NOTE_PREFIX}%`]);
 }
 
 /**
@@ -67,7 +71,7 @@ export async function seedToken(run: Run, databaseId: string, now: number): Prom
   run.hide(token);
 
   const sql = `INSERT INTO tokens (id, hash, scope, note, created_at, expires_at) VALUES (?, ?, 'admin', ?, ${now}, ${now + LIFETIME_MS})`;
-  const stopped = await query(run, databaseId, sql, [record.id, record.hash, record.note]);
+  const stopped = await runSql(run, databaseId, sql, [record.id, record.hash, record.note]);
 
   return stopped ?? token;
 }
