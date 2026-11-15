@@ -30,6 +30,12 @@ const TRASHED = { title: "Notes from the offsite", name: "old-notes" } as const;
 /** How a moment is written: the day with two figures, and the time to the minute. */
 const MOMENT = String.raw`\d{2} [A-Z][a-z]{2} \d{4}, \d{2}:\d{2}`;
 
+/** The key the browser keeps the choice of the graph under: its days, and its sites by the titles they were picked with. */
+const VISITS_CHOICE_KEY = "poplin.usage.visits";
+
+/** A site's title too long for two names of the graph's lines to share a row of a phone. */
+const LONG_TITLE = "Field notes of the northern team, part";
+
 /** Where the notes of a newer version are read: the page of the project's releases. */
 const RELEASES = "https://github.com/Vivswan/poplin/releases";
 
@@ -494,6 +500,23 @@ async function tickSite(page: Page): Promise<void> {
   await page.keyboard.press("Escape");
 }
 
+/** Tick every site in the list that picks the sites of the graph, and close the list. */
+async function pickEverySite(page: Page): Promise<void> {
+  await page.getByRole("combobox", { name: "Compare sites", exact: true }).click();
+  await page.getByRole("button", { name: "Select all", exact: true }).click();
+  await page.keyboard.press("Escape");
+}
+
+/** Of the names of the graph's lines: how many there are, how many show whole at once in their room, and on how many rows those stand. */
+async function wholeNames(names: Locator): Promise<{ readonly all: number; readonly whole: number; readonly rows: number }> {
+  return names.evaluate((list) => {
+    const room = (list.closest("[data-slot='scroll-area']") ?? list).getBoundingClientRect();
+    const whole = [...list.children].map((name) => name.getBoundingClientRect()).filter((name) => name.top >= room.top - 1 && name.bottom <= room.bottom + 1);
+
+    return { all: list.children.length, whole: whole.length, rows: new Set(whole.map((name) => Math.round(name.top))).size };
+  });
+}
+
 /** The panel of the sample site: over the end of the table on a wide screen, in the list's place on a narrow one. */
 function panel(page: Page): Locator {
   return page.getByRole("dialog", { name: SAMPLE.site, exact: true });
@@ -791,19 +814,34 @@ test.describe("on a phone, on Usage", () => {
   test("with every site picked, five names of the lines or more show at once, and the rest by scrolling", async ({ page }) => {
     await arrive(page);
     await toSection(page, "Usage");
-    await page.getByRole("combobox", { name: "Compare sites", exact: true }).click();
-    await page.getByRole("button", { name: "Select all", exact: true }).click();
-    await pressEscape(page);
+    await pickEverySite(page);
     const names = page.getByRole("list", { name: "Lines", exact: true });
     await expect(names.getByRole("listitem")).not.toHaveCount(1);
 
-    const shown = await names.evaluate((list) => {
-      const room = (list.closest("[data-slot='scroll-area']") ?? list).getBoundingClientRect();
-      const whole = [...list.children].map((name) => name.getBoundingClientRect()).filter((name) => name.top >= room.top - 1 && name.bottom <= room.bottom + 1);
+    const shown = await wholeNames(names);
+    expect({ atOnce: shown.whole >= 5, scrolls: shown.whole < shown.all }).toEqual({ atOnce: true, scrolls: true });
+  });
 
-      return { atOnce: whole.length >= 5, scrolls: whole.length < list.children.length };
-    });
-    expect(shown).toEqual({ atOnce: true, scrolls: true });
+  // Drift: the room of the names would be some pixels short of six rows again, where every name takes a row of its own, and the sixth would be cut.
+  test("with nine sites of long titles picked, each name takes a row of its own, and six of them show whole at once", async ({ page }) => {
+    await arrive(page);
+    await toSection(page, "Usage");
+    await pickEverySite(page);
+    // A line is named by the title its site was picked with, which the browser keeps: nine are kept, each under a long one.
+    await page.evaluate(
+      ({ key, title }) => {
+        const choice = JSON.parse(localStorage.getItem(key) ?? "{}");
+        const sites = choice.sites.slice(0, 9).map((site: object, at: number) => ({ ...site, title: `${title} ${at + 1}` }));
+        localStorage.setItem(key, JSON.stringify({ ...choice, sites }));
+      },
+      { key: VISITS_CHOICE_KEY, title: LONG_TITLE },
+    );
+    await toSection(page, "Sites");
+    await toSection(page, "Usage");
+    const names = page.getByRole("list", { name: "Lines", exact: true });
+    await expect(names.getByText(`${LONG_TITLE} 9`, { exact: true })).toBeAttached();
+
+    expect(await wholeNames(names)).toEqual({ all: 10, whole: 6, rows: 6 });
   });
 });
 
