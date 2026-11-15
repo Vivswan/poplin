@@ -1,4 +1,4 @@
-// Every live check, in the order a run makes them. The edge checks come last: their burst uses up the visitor's minute.
+// Every live check, in the order a run makes them. The edge checks come last: their last two use up the visitor's minute.
 
 import { EDGE_CHECKS } from "./checks/edge";
 import { LETTER_CHECKS } from "./checks/letters";

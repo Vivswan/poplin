@@ -3,9 +3,11 @@
 //   poplin.example.com/api...        the real API
 //   poplin.example.com/login         the login: a redirect off the domain with the login in front, a 403 without
 //   poplin.example.com/...           a redirect to the login
-//   *-poplin.example.com             the edge's rules, then the real serving
+//   *-poplin.example.com             the edge's rules, the install's own count of one visitor, then the real serving
 //   *-page.example.com               the same, on an install whose routes reach the public word
 //   any other hostname               no answer
+//
+// The fake's time stands still while requests are sent and moves on only in a pause, so its two limits count as the real ones do: by the minute and by ten seconds.
 
 import { serveSite } from "../../../packages/app/src/sites/serve";
 import { openApi } from "../../../packages/app/tests/api/support/install";
@@ -24,8 +26,17 @@ const LOGIN_PAGE = "https://team.example.net/login";
 /** The most requests the fake's own limit lets one minute hold. */
 const OWN_LIMIT = 120;
 
+/** How long the fake's own limit counts over, in milliseconds. */
+const OWN_WINDOW_MS = 60_000;
+
 /** The most requests the fake's rate rule lets through. */
 const RULE_LIMIT = 300;
+
+/** How long the fake's rate rule counts over, in milliseconds. */
+const RULE_WINDOW_MS = 10_000;
+
+/** How late a request enters the own count of an install whose count lags, in milliseconds. */
+const LAG_MS = 1000;
 
 /** The headers of the fake's own refusals. */
 const REFUSAL_HEADERS = { "Cache-Control": "no-store", "Content-Type": "text/plain; charset=utf-8" };
@@ -52,12 +63,19 @@ export interface FakeSwitches {
 
   /** A fault: a letter p address opens for a request with no login behind it. */
   readonly leaksPrivate?: boolean;
+
+  /** The install's own count of a visitor takes a request in a second late, as a count kept per location and caught up in the background does. */
+  readonly lateCount?: boolean;
+
+  /** A fault: the install counts no visitor, so it has no limit of its own. */
+  readonly noOwnLimit?: boolean;
 }
 
-/** A fake install: what sends a request to it, and an admin's token. */
+/** A fake install: what sends a request to it, an admin's token, and the pause that moves its time on. */
 interface Fake {
   readonly fetch: Fetch;
   readonly token: string;
+  readonly pause: (ms: number) => Promise<void>;
 }
 
 /** The zone's redirect rule: plain http moves to https, on every hostname of the install. */
@@ -81,7 +99,11 @@ export async function openFake(switches: FakeSwitches = {}): Promise<Fake> {
   const settings = await install.database.readSettings();
   if (settings === undefined) throw new Error("the fake install has no settings");
 
-  let siteRequests = 0;
+  // When each request the rules let through came, on the fake's own time.
+  const arrivals: number[] = [];
+  let time = 0;
+
+  const arrivedIn = (from: number, to: number): number => arrivals.filter((at) => at > from && at <= to).length;
 
   // The zone's rules on a site hostname: the guard rule, the bot block, the rate rule. Then the install's own count of one visitor.
   const edge = (request: Request, url: URL): Response | undefined => {
@@ -90,10 +112,11 @@ export async function openFake(switches: FakeSwitches = {}): Promise<Fake> {
 
     if (CRAWLERS.test(request.headers.get("User-Agent") ?? "")) return new Response("blocked", { status: 403 });
 
-    siteRequests += 1;
-    if (siteRequests > RULE_LIMIT) return new Response("error code: 1015", { status: 429 });
+    arrivals.push(time);
+    if (arrivedIn(time - RULE_WINDOW_MS, time) > RULE_LIMIT) return new Response("error code: 1015", { status: 429 });
 
-    if (siteRequests > OWN_LIMIT) return refusal(429, "Too many requests. Try again in 60 seconds.\n", { "Retry-After": "60" });
+    const counted = arrivedIn(time - OWN_WINDOW_MS, switches.lateCount === true ? time - LAG_MS : time);
+    if (switches.noOwnLimit !== true && counted > OWN_LIMIT) return refusal(429, "Too many requests. Try again in 60 seconds.\n", { "Retry-After": "60" });
 
     return undefined;
   };
@@ -142,5 +165,9 @@ export async function openFake(switches: FakeSwitches = {}): Promise<Fake> {
     return answerSite(request, url);
   };
 
-  return { fetch, token: install.tokens.admin };
+  const pause = async (ms: number): Promise<void> => {
+    time += ms;
+  };
+
+  return { fetch, token: install.tokens.admin, pause };
 }

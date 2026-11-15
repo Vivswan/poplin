@@ -83,6 +83,8 @@ const CASES: readonly Case[] = [
     {},
     { L1: "skipped", private: "failed", L5: "failed" },
   ],
+  ["an install whose own count of a visitor lags behind a burst still shows its own limit", { lateCount: true }, {}, { L1: "skipped" }],
+  ["an install with no limit of its own fails the check of that limit", { noOwnLimit: true }, {}, { L1: "skipped", "own-limit": "failed" }],
   [
     "a zone whose rules are gone, on a run not told so, fails the checks of those rules",
     { noGuards: true },
@@ -127,7 +129,7 @@ describe("the live checks, against a local fake", () => {
       run: "selftest",
       missing,
       fetch: watched,
-      pause: async () => undefined,
+      pause: fake.pause,
       manyFiles: MANY_FILES,
     });
     OPENED.push(close);

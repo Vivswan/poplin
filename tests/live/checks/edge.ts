@@ -11,8 +11,14 @@ const BURST = 340;
 /** How many requests of the burst are in flight together. */
 const BURST_LANES = 20;
 
-/** How long the rate rule keeps its block after the burst, with a margin, in milliseconds. */
-const BLOCK_MS = 12_000;
+/** How long the rate rule counts a request, and keeps its block, with a margin, in milliseconds. */
+const RULE_LAPSE_MS = 12_000;
+
+/** The most requests the paced run sends: past the 600 a minute an install with its first settings gives one visitor. */
+const PACED = 700;
+
+/** The time from one paced request to the next, in milliseconds: 200 in ten seconds, under the rate rule's 300, and 1,200 in a minute. */
+const PACE_MS = 50;
 
 /** How the install's own refusal of a visitor past the minute's limit starts. */
 const OWN_LIMIT_TEXT = "Too many requests.";
@@ -26,15 +32,29 @@ const OUTSIDE_PAGE = { "Sec-Fetch-Site": "cross-site", "Sec-Fetch-Mode": "no-cor
 /** The window the rate rule counts in, in milliseconds. */
 const RULE_WINDOW_MS = 10_000;
 
-/** The two refusals a burst can meet: the install's own limit, and the rate rule in front of it. `inWindow` says whether the whole burst fitted the rule's window. */
-interface Burst {
-  readonly own: boolean;
-  readonly rule: boolean;
-  readonly inWindow: boolean;
+/** What a run of requests for one address has met so far. */
+interface Run {
+  /** The install's own limit answered: a 429 in its words, with `Retry-After`. */
+  own: boolean;
+
+  /** The rate rule in front of the install answered: any other 429. */
+  rule: boolean;
+
+  /** How many requests were sent. */
+  sent: number;
+
+  /** How many times each answer came, by its status and, for a 429, by which side sent it. */
+  readonly answers: Map<string, number>;
+
+  /** When the run began, in milliseconds since the epoch. */
+  readonly started: number;
 }
 
-/** The burst of each bench, sent once: its two checks read the same one. */
-const BURSTS = new WeakMap<Bench, Promise<Burst>>();
+/** What a finished run met. `saw` is what a failure says of it: the requests, the time, and each answer's count, with nothing an install wrote. */
+interface Met extends Pick<Run, "own" | "rule"> {
+  readonly ms: number;
+  readonly saw: string;
+}
 
 /** Whether a hostname answers a stranger with a success; one that does not answer at all does not. */
 async function answersOk(bench: Bench, address: string): Promise<boolean> {
@@ -43,41 +63,70 @@ async function answersOk(bench: Bench, address: string): Promise<boolean> {
   return response?.ok === true;
 }
 
-async function sendBurst(bench: Bench): Promise<Burst> {
-  const address = labelAddress(bench.domain, GHOST_ID, "u");
-  const seen = { own: false, rule: false };
-  const started = Date.now();
-  let sent = 0;
+function openRun(): Run {
+  return { own: false, rule: false, sent: 0, answers: new Map(), started: Date.now() };
+}
+
+/** Ask once for a site that is not there, and keep which side answered. */
+async function ask(bench: Bench, run: Run): Promise<void> {
+  run.sent += 1;
+  const response = await bench.visit(labelAddress(bench.domain, GHOST_ID, "u"));
+  const body = await response.text();
+  const limited = response.status === 429;
+  const own = limited && body.startsWith(OWN_LIMIT_TEXT) && response.headers.has("Retry-After");
+  run.own ||= own;
+  run.rule ||= limited && !own;
+
+  const answer = limited ? `429 of ${own ? "the install" : "the rate rule"}` : String(response.status);
+  run.answers.set(answer, (run.answers.get(answer) ?? 0) + 1);
+}
+
+async function closeRun(bench: Bench, run: Run): Promise<Met> {
+  const ms = Date.now() - run.started;
+  // The rule's block covers every hostname it counts, so nothing is sent until it has lapsed.
+  if (run.rule) await bench.pause(RULE_LAPSE_MS);
+
+  const counts = [...run.answers].map(([answer, count]) => `${answer} x${count}`).join(", ");
+
+  return { own: run.own, rule: run.rule, ms, saw: `${run.sent} requests in ${ms} ms were answered: ${counts}` };
+}
+
+/**
+ * One request every `PACE_MS`, however long an answer takes, until the install's own limit or the rate rule answers.
+ *
+ * A burst does not reliably show the install's own limit: its count is kept per location and catches up in the background, and an instance holds the settings of up to a minute ago.
+ */
+async function sendPaced(bench: Bench): Promise<Met> {
+  // The rule may count every request of the zone, so what the checks before sent leaves its window first.
+  await bench.pause(RULE_LAPSE_MS);
+  const run = openRun();
+  const asked: Promise<void>[] = [];
+  const failures: unknown[] = [];
+
+  while (run.sent < PACED && !run.own && !run.rule && failures.length === 0) {
+    asked.push(ask(bench, run).catch((error: unknown) => void failures.push(error)));
+    await bench.pause(PACE_MS);
+  }
+
+  await Promise.all(asked);
+  if (failures.length > 0) throw failures[0];
+
+  return closeRun(bench, run);
+}
+
+/** Many requests at once, until the rate rule answers. */
+async function sendBurst(bench: Bench): Promise<Met> {
+  const run = openRun();
 
   const lane = async (): Promise<void> => {
-    while (sent < BURST && !(seen.own && seen.rule)) {
-      sent += 1;
-      const response = await bench.visit(address);
-      const body = await response.text();
-      if (response.status !== 429) continue;
-
-      const own = body.startsWith(OWN_LIMIT_TEXT) && response.headers.has("Retry-After");
-      seen.own ||= own;
-      seen.rule ||= !own;
-    }
+    while (run.sent < BURST && !run.rule) await ask(bench, run);
   };
-
   await Promise.all(Array.from({ length: BURST_LANES }, lane));
-  const inWindow = Date.now() - started < RULE_WINDOW_MS;
-  // The rule's block covers every hostname it counts, so nothing is sent until it has lapsed.
-  if (seen.rule) await bench.pause(BLOCK_MS);
 
-  return { ...seen, inWindow };
+  return closeRun(bench, run);
 }
 
-function burstOf(bench: Bench): Promise<Burst> {
-  const burst = BURSTS.get(bench) ?? sendBurst(bench);
-  BURSTS.set(bench, burst);
-
-  return burst;
-}
-
-/** Every check a stranger makes alone. The two burst checks come last: they use up the visitor's minute. */
+/** Every check a stranger makes alone. The two checks of the limits come last: they use up the visitor's minute. */
 export const EDGE_CHECKS: readonly Check[] = [
   {
     id: "api-token",
@@ -164,11 +213,12 @@ export const EDGE_CHECKS: readonly Check[] = [
     },
   },
   {
-    id: "burst-own-limit",
-    name: "a burst from one visitor meets the install's own limit, with Retry-After",
+    id: "own-limit",
+    name: "one visitor's requests, fewer than the rate rule blocks, meet the install's own limit, with Retry-After",
     needs: [],
     run: async (bench) => {
-      expect((await burstOf(bench)).own).toBe(true);
+      const paced = await sendPaced(bench);
+      expect(paced.own, paced.saw).toBe(true);
     },
   },
   {
@@ -176,10 +226,10 @@ export const EDGE_CHECKS: readonly Check[] = [
     name: "a burst past 300 requests in ten seconds is blocked by the rate rule",
     needs: ["rate-rule"],
     run: async (bench) => {
-      const burst = await burstOf(bench);
-      if (!burst.rule && !burst.inWindow) throw new Skip("a runner that sends 300 requests inside ten seconds");
+      const burst = await sendBurst(bench);
+      if (!burst.rule && burst.ms >= RULE_WINDOW_MS) throw new Skip("a runner that sends 300 requests inside ten seconds");
 
-      expect(burst.rule).toBe(true);
+      expect(burst.rule, burst.saw).toBe(true);
     },
   },
 ];
