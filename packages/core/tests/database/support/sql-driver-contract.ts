@@ -37,7 +37,7 @@ import {
   storedBack,
   TODAY,
   TOMORROW,
-} from "./database-contract";
+} from "./database-fixtures";
 
 const SCHEMA_VERSION = STEPS.length;
 

@@ -1,11 +1,10 @@
-// The database interface over SQLite. Every statement poplin runs outside a migration step is built in this file from the schema `schema.ts` declares, and every row leaves it as a checked value.
+// The database interface over SQLite. Every statement poplin runs outside a migration step is built in this file or in a `-statements` file beside it, from the schema `schema.ts` declares, and every row leaves it as a checked value.
 //
 // A change is one batch: the statement that changes a row carries its own condition, and each statement after it runs only when the one before it changed a row.
 // So a change and its audit entry are kept together or not at all, and nothing is decided from an earlier read.
 
-import { and, asc, desc, eq, exists, getTableName, gt, inArray, isNotNull, isNull, lt, lte, ne, notExists, or, type SQL, sql as fragment } from "drizzle-orm";
-import { alias, type SQLiteColumn, type SQLiteTable } from "drizzle-orm/sqlite-core";
-import { drizzle } from "drizzle-orm/sqlite-proxy";
+import { and, asc, desc, eq, gt, inArray, isNull, lt, lte, ne, notExists, or, type SQL, sql as fragment } from "drizzle-orm";
+import { alias } from "drizzle-orm/sqlite-core";
 import * as v from "valibot";
 
 import type { ComputerLogin, LoginId, PendingLogin, UserCode } from "../auth/computer-logins";
@@ -15,7 +14,7 @@ import type { PublicName, SiteName } from "../names/names";
 import { type AuditAction, type AuditEntry, auditFromRow } from "../records/audit";
 import type { DomainCheck } from "../records/domain-check";
 import { computerLoginFromRow } from "../records/computer-login";
-import { LOGIN, SITE_ID, SITE_NAME } from "../records/fields";
+import { LOGIN } from "../records/fields";
 import { SETTING_CHANGES, SETTING_VALUES, type SettingValues } from "../records/settings";
 import { signingKeyFromRow, signingKeyToText, type UpdateAddress, updateAddressFromRow } from "../records/secret";
 import { NEW_SITE, SITE_DETAILS, SITE_FOLDER, type Site, type SiteAccess, type SiteFolder, siteFromRow, siteToRow } from "../records/site";
@@ -62,10 +61,80 @@ import type {
   UploadsPage,
 } from "./database";
 import { domainCheckAsked, domainCheckIn, domainCheckKept } from "./domain-check";
-import type { SqlDriver, SqlValue, Statement, StatementResult } from "./driver";
+import type { SqlDriver, Statement, StatementResult } from "./driver";
 import { contentsValues, servedIn, versionsWithContents } from "./served";
 import { fileUnderKey, manifestFromText, manifestKey, manifestToText } from "./manifest";
-import { audit, declaredFiles, leftovers, logins, requestCounts, secrets, settings, sites, sweepPlace, tokens, totals, updateCheck, uploads, versions } from "./schema";
+import {
+  audit,
+  declaredFiles,
+  leftovers,
+  logins,
+  requestCounts,
+  secrets,
+  settings,
+  sites,
+  sweepPlace,
+  tokens,
+  totals,
+  updateCheck,
+  uploads,
+  versions,
+} from "./schema";
+import {
+  ENDED_TOKEN_FIELDS,
+  NOT_REMOVED,
+  TOKEN_COLUMNS,
+  TOKEN_FIELDS,
+  isNewLogin,
+  loginsWhere,
+  makeRoomOfAll,
+  makeRoomOfVisitor,
+  tokenById,
+} from "./login-statements";
+import {
+  A_KEPT_VERSION,
+  DEFAULT_DIRECTIONS,
+  LISTED_FIELDS,
+  NAMED_SITE,
+  OTHER,
+  SITE_FIELDS,
+  TITLE_KEY,
+  VERSION_COLUMNS,
+  cursorPlace,
+  dropOldVersions,
+  insertSite,
+  isFirstPending,
+  isFree,
+  isServed,
+  moveLive,
+  narrowing,
+  publicNameIsFree,
+  publicNameOf,
+  requireCursor,
+  setAccess,
+  siteById,
+  sitesWhere,
+  storedDetails,
+  versionsOfSite,
+} from "./site-statements";
+import { BUILD, CHANGED, ONE, bare, built, insertFrom, qualified, written } from "./statements";
+import {
+  AN_UPLOAD,
+  A_VERSION,
+  BYTES_HELD,
+  SITES_HELD,
+  UPLOAD_FIELDS,
+  addWrites,
+  bytesIn,
+  canPublish,
+  dropEarlierDays,
+  finishUpload,
+  folderOf,
+  hasAccess,
+  pendingOf,
+  uploadById,
+  writesOf,
+} from "./upload-statements";
 
 /** How many ids are tried for one site before giving up; an id is about 62 random bits, so a second try is already a rare event. */
 const MINT_ATTEMPTS = 5;
@@ -79,70 +148,14 @@ const MAX_AUDIT_PAGE = 1000;
 /** Where a page of the audit log starts when no page came before it: past the newest entry, and ahead of the oldest. */
 const AUDIT_START = { desc: Number.MAX_SAFE_INTEGER, asc: 0 } as const;
 
-/** Where statements are built from the declared schema. None is run here: each goes to the driver, in a batch. */
-const BUILD = drizzle(() => Promise.reject(new Error("a statement is run by the driver, in a batch")));
-
-/** True when the statement before it in the batch changed one row. */
-const CHANGED = fragment`changes() = 1`;
-
-/** A row that stands for "there is one" in a subquery. */
-const ONE = { one: fragment`1` };
-
 /** The columns an audit entry is written with; `seq` is the engine's to give. */
 const AUDIT_COLUMNS = [audit.at, audit.actor, audit.action, audit.site_id, audit.site_name, audit.detail];
 
 /** The columns an audit entry of a change to no site is written with. */
 const PLAIN_AUDIT_COLUMNS = [audit.at, audit.actor, audit.action, audit.detail];
 
-/** The columns a token is written with. */
-const TOKEN_COLUMNS = [tokens.id, tokens.hash, tokens.scope, tokens.note, tokens.created_at, tokens.expires_at];
-
-/** What is read of a token that can still prove something: the columns it was written with. */
-const TOKEN_FIELDS = { id: tokens.id, hash: tokens.hash, scope: tokens.scope, note: tokens.note, created_at: tokens.created_at, expires_at: tokens.expires_at };
-
-/** What is read of a token that ended: never its hash. */
-const ENDED_TOKEN_FIELDS = { id: tokens.id, scope: tokens.scope, note: tokens.note, created_at: tokens.created_at, expires_at: tokens.expires_at, removed_at: tokens.removed_at, removed_by: tokens.removed_by };
-
-/** True of a token that was not removed. Every read of a token that may prove something holds it. */
-const NOT_REMOVED = isNull(tokens.removed_at);
-
-/** The columns a version is written with. */
-const VERSION_COLUMNS = [versions.folder, versions.number, versions.published_at, versions.published_by, versions.bytes, versions.files, versions.missing_page, versions.bare_files];
-
 /** The largest whole number the engine counts with exactly: the bound of a day on an install that has stored no settings. */
 const NO_BOUND = Number.MAX_SAFE_INTEGER;
-
-/** Every column of an upload but its manifest. */
-const UPLOAD_FIELDS = {
-  id: uploads.id,
-  folder: uploads.folder,
-  number: uploads.number,
-  owner: uploads.owner,
-  state: uploads.state,
-  plan: uploads.plan,
-  bytes: uploads.bytes,
-  files: uploads.files,
-  dropped: uploads.dropped,
-  created_at: uploads.created_at,
-};
-
-/** The bytes of every pending upload and every kept version together. */
-const BYTES_HELD = fragment`((SELECT COALESCE(SUM(${uploads.bytes}), 0) FROM ${uploads} WHERE ${uploads.state} = 'pending') + (SELECT ${totals.bytes} FROM ${totals} WHERE ${totals.id} = 1))`;
-
-/** The sites there are and the ones the pending uploads would make. Only a new site's upload has number 1. */
-const SITES_HELD = fragment`((SELECT COALESCE(SUM(${uploads.number} = 1), 0) FROM ${uploads} WHERE ${uploads.state} = 'pending') + (SELECT ${totals.sites} FROM ${totals} WHERE ${totals.id} = 1))`;
-
-/** The `uploads` table as `u`, for a subquery inside a statement on the same table. In the template an alias stands for its short name alone, so a FROM names the table before it. */
-const AN_UPLOAD = alias(uploads, "u");
-
-/** The `sites` table as `s`. */
-const ITS_SITE = alias(sites, "s");
-
-/** The `versions` table as `v`. */
-const A_VERSION = alias(versions, "v");
-
-/** The `versions` table as `k`, for the kept versions inside a subquery on `v`. */
-const A_KEPT_VERSION = alias(versions, "k");
 
 /** The `request_counts` table as `c`, joined to the days and the sites a read of views names. */
 const A_COUNT = alias(requestCounts, "c");
@@ -153,67 +166,6 @@ const READ_SETTINGS = built(BUILD.select({ value: settings.value }).from(setting
 /** The signing key, as hex text. */
 const READ_SIGNING_KEY = built(BUILD.select({ value: secrets.value }).from(secrets).where(eq(secrets.name, "session_key")));
 
-/** The `sites` table under a second name, for a statement that asks about the other sites. */
-const OTHER = alias(sites, "other");
-
-/** A site with its kept versions gathered into one JSON column, so one statement gives the whole site. */
-const SITE_FIELDS = {
-  id: sites.id,
-  name: sites.name,
-  folder: sites.folder,
-  access: sites.access,
-  public_name: sites.public_name,
-  title: sites.title,
-  page_title: sites.page_title,
-  search_engines: sites.search_engines,
-  embeddable: sites.embeddable,
-  expires_at: sites.expires_at,
-  live_version: sites.live_version,
-  owner: sites.owner,
-  created_at: sites.created_at,
-  updated_at: sites.updated_at,
-  trashed_at: sites.trashed_at,
-  versions: versionsOfSite().as("versions"),
-};
-
-/** A site as a listing reads it: with the key a listing by title goes by. */
-const LISTED_FIELDS = { ...SITE_FIELDS, title_key: sites.title_key };
-
-/** What a listing by title goes by, as the `title_key` column of a row holds it. */
-const TITLE_KEY = v.object({ title_key: v.string() });
-
-/** The id and the name of a site, as `getSiteNames` reads them. */
-const NAMED_SITE = v.object({ id: SITE_ID, name: SITE_NAME });
-
-/** The place of each access in a listing sorted by access, as the `access_rank` column of a site holds it: from the most private to the most open. */
-const ACCESS_RANKS = { private: 0, unlisted: 1, public: 2 } as const;
-
-/** The direction a listing takes when none is asked: the last change first, a name, an access and a title from the start. */
-const DEFAULT_DIRECTIONS = { updated: "desc", name: "asc", access: "asc", title: "asc" } as const;
-
-/**
- * A site whose name holds a text, or whose title does: the typed one, else the page's own, which is the one a listing shows.
- * The text is looked for as it stands, with no sign read as a pattern. Only the letters A to Z match either case: the engine's `lower` changes no other.
- */
-function holding(text: string): SQL {
-  return fragment`(instr(${sites.name}, lower(${text})) > 0 OR instr(lower(coalesce(${sites.title}, ${sites.page_title})), lower(${text})) > 0)`;
-}
-
-/** The conditions that narrow a listing to what its query asks for: the trash or not, and each filter given. */
-function narrowing(query: SitesQuery): SQL[] {
-  const conditions: SQL[] = [eq(sites.trashed, query.trash ? 1 : 0)];
-
-  if (query.owner !== undefined) conditions.push(eq(sites.owner, query.owner));
-
-  if (query.named !== undefined) conditions.push(holding(query.named));
-
-  if (query.access !== undefined) conditions.push(eq(sites.access, query.access));
-
-  if (query.expires !== undefined) conditions.push(query.expires === "set" ? isNotNull(sites.expires_at) : isNull(sites.expires_at));
-
-  return conditions;
-}
-
 /** The form of a day: a date such as `2026-11-13`, which sorts as text in the order of time. */
 const DAY_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -223,116 +175,6 @@ const ALL_SITES = "";
 /** The most sites one read of names or of views takes: a page of a listing or of the log. */
 const MOST_SITES_ASKED = 100;
 
-/** What the builder gives for one statement. */
-interface BuiltQuery {
-  readonly sql: string;
-  readonly params: readonly unknown[];
-}
-
-/**
- * A column with its table's name before it.
- * A built statement that reads one table writes its selected columns bare, and a subquery inside the selection would read a bare column as its own.
- */
-function qualified(column: SQLiteColumn): SQL {
-  return fragment`${fragment.identifier(getTableName(column.table))}.${fragment.identifier(column.name)}`;
-}
-
-/** A column by its name alone, as the column list of an `INSERT` takes it. */
-function bare(column: SQLiteColumn): SQL {
-  return fragment`${fragment.identifier(column.name)}`;
-}
-
-/**
- * The kept versions of the site a statement selects, gathered into one JSON value.
- *
- * @param withContents - whether each carries what it holds, as serving reads it: whether it has a `404.html`, and of the live one its files without an extension. It costs no row more
- */
-function versionsOfSite(withContents = false): SQL<string> {
-  const kept = [versions.number, versions.published_at, versions.published_by, versions.bytes, versions.files];
-  const pairs = kept.map((column) => fragment`${fragment.raw(`'${column.name}'`)}, ${qualified(column)}`);
-  const bareOfLive = fragment`CASE WHEN ${qualified(versions.number)} = ${qualified(sites.live_version)} THEN ${qualified(versions.bare_files)} END`;
-  if (withContents) pairs.push(fragment`'missing_page', ${qualified(versions.missing_page)}`, fragment`'bare_files', ${bareOfLive}`);
-
-  const version = fragment`json_object(${fragment.join(pairs, fragment`, `)})`;
-
-  return fragment<string>`(SELECT json_group_array(${version}) FROM ${versions} WHERE ${qualified(versions.folder)} = ${qualified(sites.folder)})`;
-}
-
-/** A built statement as the driver takes it. */
-function built(query: { toSQL(): BuiltQuery } | { getQuery(): BuiltQuery }): Statement {
-  const { sql: text, params } = "toSQL" in query ? query.toSQL() : query.getQuery();
-
-  return { sql: text, params: params as SqlValue[] };
-}
-
-/** The sites a condition holds for, each with its kept versions. */
-function sitesWhere(condition: SQL | undefined): Statement {
-  return built(BUILD.select(SITE_FIELDS).from(sites).where(condition));
-}
-
-/** The site with the given id, with its kept versions. */
-function siteById(id: SiteId): Statement {
-  return sitesWhere(eq(sites.id, id));
-}
-
-/** Added to a lookup by address: the site is outside the trash and not past its expiry at `now`. */
-function isServed(now: number): SQL | undefined {
-  return and(eq(sites.trashed, 0), or(isNull(sites.expires_at), gt(sites.expires_at, now)));
-}
-
-/** How many times the store was written to or listed on a day. */
-function writesOf(day: string): SQL {
-  return fragment`(SELECT COALESCE(SUM(${declaredFiles.writes}), 0) FROM ${declaredFiles} WHERE ${declaredFiles.day} = ${day})`;
-}
-
-/** The counts of every day before the one before the given day, dropped. Yesterday's stay: an upload that began just before midnight is still counted against it. */
-function dropEarlierDays(day: string): Statement {
-  return built(BUILD.delete(declaredFiles).where(fragment`${declaredFiles.day} < date(${day}, '-1 day')`));
-}
-
-/** So many more writes on a day, on the row it shares with the day's declared files, only while the condition holds. */
-function addWrites(day: string, writes: number, condition: SQL): Statement {
-  const counted = bare(declaredFiles.writes);
-  const added = fragment`SELECT ${day}, 0, ${writes} WHERE ${condition} ON CONFLICT (${bare(declaredFiles.day)}) DO UPDATE SET ${counted} = ${counted} + excluded.${counted}`;
-
-  return insertFrom(declaredFiles, [declaredFiles.day, declaredFiles.files, declaredFiles.writes], added);
-}
-
-/** A new access for a live site, only when it differs and the public name asked for is free: no other site has it as its public name, and no site as its id. */
-function setAccess(id: SiteId, access: SiteAccess["access"], publicName: PublicName | null): Statement {
-  const heldByAnother = (name: PublicName): SQL | undefined => and(eq(OTHER.public_name, name), ne(OTHER.id, id));
-  const isFree = (name: PublicName): SQL | undefined =>
-    and(notExists(BUILD.select(ONE).from(OTHER).where(heldByAnother(name))), notExists(BUILD.select(ONE).from(OTHER).where(eq(OTHER.id, name))));
-  const differs = or(ne(sites.access, access), fragment`${sites.public_name} IS NOT ${publicName}`);
-  const live = and(eq(sites.id, id), eq(sites.trashed, 0), differs, publicName === null ? undefined : isFree(publicName));
-
-  return built(BUILD.update(sites).set({ access, public_name: publicName }).where(live));
-}
-
-/** The details given, as the columns of `sites` store them. */
-function storedDetails(given: SiteDetails): Partial<Pick<typeof sites.$inferInsert, "name" | "title" | "search_engines" | "embeddable" | "expires_at">> {
-  return {
-    ...(given.name === undefined ? {} : { name: given.name }),
-    ...(given.title === undefined ? {} : { title: given.title }),
-    ...(given.search_engines === undefined ? {} : { search_engines: given.search_engines ? 1 : 0 }),
-    ...(given.embeddable === undefined ? {} : { embeddable: given.embeddable ? 1 : 0 }),
-    ...(given.expires === undefined ? {} : { expires_at: given.expires === "never" ? null : given.expires }),
-  };
-}
-
-/** A statement written with the template, for what the builder has no word for. */
-function written(text: SQL): Statement {
-  return built(BUILD.all(text));
-}
-
-/**
- * An `INSERT` of the columns named, from a `SELECT`.
- * The insert builder names every column of a table, and a key the engine would give costs one row read more when it is named.
- */
-function insertFrom(table: SQLiteTable, columns: readonly SQLiteColumn[], select: SQL): Statement {
-  return written(fragment`INSERT INTO ${table} (${fragment.join(columns.map(bare), fragment`, `)}) ${select}`);
-}
-
 /** The audit entry of a change to the site now at the given id, written only when the statement before it changed a row. */
 function auditOfSite(signed: Signed, action: AuditAction, id: SiteId, detail: Readonly<Record<string, unknown>>): Statement {
   const entry = fragment`SELECT ${signed.at}, ${signed.by}, ${action}, ${sites.id}, ${sites.name}, ${JSON.stringify(detail)} FROM ${sites} WHERE ${sites.id} = ${id} AND ${CHANGED}`;
@@ -340,126 +182,11 @@ function auditOfSite(signed: Signed, action: AuditAction, id: SiteId, detail: Re
   return insertFrom(audit, AUDIT_COLUMNS, entry);
 }
 
-/** The upload with the given id, without its manifest; none for no id. */
-function uploadById(id: UploadId | null): Statement {
-  return built(BUILD.select(UPLOAD_FIELDS).from(uploads).where(fragment`${uploads.id} = ${id}`));
-}
-
-/** An upload marked finished and its manifest dropped, only when the statement before it changed a row. */
-function finishUpload(id: UploadId | null): Statement {
-  return built(BUILD.update(uploads).set({ state: "finished", manifest: "{}" }).where(and(fragment`${uploads.id} = ${id}`, CHANGED)));
-}
-
-/** How many pending uploads a holder began. */
-function pendingOf(owner: string): SQL {
-  return fragment`(SELECT COUNT(*) FROM ${uploads} WHERE ${uploads.state} = 'pending' AND ${uploads.owner} = ${owner})`;
-}
-
-/** The bytes a folder would hold: what its pending uploads declare, and the `staying` newest kept versions of its site. */
-function bytesIn(folder: string, staying: number): SQL {
-  const pending = fragment`(SELECT COALESCE(SUM(${uploads.bytes}), 0) FROM ${uploads} WHERE ${uploads.state} = 'pending' AND ${uploads.folder} = ${folder})`;
-  const newest = fragment`(SELECT ${versions.number} FROM ${versions} WHERE ${versions.folder} = ${folder} ORDER BY ${versions.number} DESC LIMIT ${staying})`;
-
-  return fragment`(${pending} + (SELECT COALESCE(SUM(${versions.bytes}), 0) FROM ${versions} WHERE ${versions.folder} = ${folder} AND ${versions.number} IN ${newest}))`;
-}
-
-/** Whether no site has a name as its id, and none as its public name. */
-function isFree(name: string): SQL | undefined {
-  return and(notExists(BUILD.select(ONE).from(OTHER).where(eq(OTHER.id, name))), notExists(BUILD.select(ONE).from(OTHER).where(eq(OTHER.public_name, name))));
-}
-
-/** A new site, only while its id and its public name are free, and its upload, when it has one, is pending as the first version of its folder. Its owner is whoever began that upload, or `signed.by`. */
-function insertSite(id: SiteId, site: v.InferOutput<typeof NEW_SITE>, signed: Signed, upload: UploadId | undefined): Statement {
-  const publicName = publicNameOf(site);
-  const columns = [
-    sites.id,
-    sites.name,
-    sites.folder,
-    sites.access,
-    sites.public_name,
-    sites.title,
-    sites.search_engines,
-    sites.expires_at,
-    sites.live_version,
-    sites.next_version,
-    sites.owner,
-    sites.created_at,
-    sites.updated_at,
-    sites.embeddable,
-    sites.page_title,
-  ];
-  const owner = fragment`COALESCE((SELECT ${uploads.owner} FROM ${uploads} WHERE ${uploads.id} = ${upload ?? null}), ${signed.by})`;
-  const expires = site.expires === "never" ? null : site.expires;
-  const identity = fragment`${id}, ${site.name}, ${site.folder}, ${site.access}, ${publicName}, ${site.title}, ${site.search_engines ? 1 : 0}, ${expires}`;
-  const values = fragment`${identity}, 1, 2, ${owner}, ${signed.at}, ${signed.at}, ${site.embeddable ? 1 : 0}, ${site.page_title ?? null}`;
-  const conditions = and(isFree(id), publicNameIsFree(publicName, id), upload === undefined ? undefined : isFirstPending(upload, site.folder));
-
-  return insertFrom(sites, columns, fragment`SELECT ${values} WHERE ${conditions}`);
-}
-
-/** Whether a public name, when one is asked, is not the site's own id and is free. */
-function publicNameIsFree(publicName: PublicName | null, id: SiteId): SQL | undefined {
-  return publicName === null ? undefined : and(fragment`${publicName} <> ${id}`, isFree(publicName));
-}
-
-/** Whether an upload is pending as the first version of a folder. */
-function isFirstPending(upload: UploadId, folder: SiteFolder): SQL {
-  return exists(BUILD.select(ONE).from(uploads).where(and(eq(uploads.id, upload), eq(uploads.state, "pending"), eq(uploads.folder, folder), eq(uploads.number, 1))));
-}
-
-/** The folder of an upload, as a subquery. */
-function folderOf(upload: UploadId): SQL {
-  return fragment`(SELECT ${uploads.folder} FROM ${uploads} WHERE ${uploads.id} = ${upload})`;
-}
-
-/** Whether an upload can be made its site's next version: it is pending, its site is live, and its number was set aside and is above every kept one. */
-function canPublish(upload: UploadId): SQL {
-  const above = fragment`(SELECT MAX(${A_VERSION.number}) FROM ${versions} ${A_VERSION} WHERE ${A_VERSION.folder} = ${ITS_SITE.folder})`;
-  const ready = fragment`${AN_UPLOAD.id} = ${upload} AND ${AN_UPLOAD.state} = 'pending' AND ${ITS_SITE.trashed} = 0 AND ${AN_UPLOAD.number} < ${ITS_SITE.next_version} AND ${AN_UPLOAD.number} > ${above}`;
-
-  return fragment`EXISTS (SELECT 1 FROM ${uploads} ${AN_UPLOAD} JOIN ${sites} ${ITS_SITE} ON ${ITS_SITE.folder} = ${AN_UPLOAD.folder} WHERE ${ready})`;
-}
-
-/** Whether the site of an upload has the access asked with it, under the public name asked; true when no access is asked. */
-function hasAccess(upload: UploadId, access: string | null, publicName: string | null): SQL {
-  const asked = fragment`${sites.folder} = ${folderOf(upload)} AND ${sites.access} = ${access} AND ${sites.public_name} IS ${publicName}`;
-
-  return fragment`(${access} IS NULL OR EXISTS (SELECT 1 FROM ${sites} WHERE ${asked}))`;
-}
-
 /** The audit entry of a change made with an upload to its site, written only when the statement before it changed a row. */
 function auditWithUpload(signed: Signed, action: AuditAction, upload: UploadId, detail: Readonly<Record<string, unknown>>): Statement {
   const entry = fragment`SELECT ${signed.at}, ${signed.by}, ${action}, ${sites.id}, ${sites.name}, ${JSON.stringify(detail)} FROM ${sites} WHERE ${sites.folder} = ${folderOf(upload)} AND ${CHANGED}`;
 
   return insertFrom(audit, AUDIT_COLUMNS, entry);
-}
-
-/** A kept version of a site, as a subquery of a statement on `sites` asks for it. */
-function keptVersion(condition: SQL): SQL {
-  return fragment`FROM ${versions} WHERE ${versions.folder} = ${sites.folder} AND ${condition}`;
-}
-
-/** The kept version a move of the live version goes to: the number given, or the highest below the live one. */
-function moveLive(id: SiteId, target: number | "previous", at: number): Statement {
-  const live = and(eq(sites.id, id), eq(sites.trashed, 0));
-
-  if (target === "previous") {
-    const below = keptVersion(fragment`${versions.number} < ${sites.live_version}`);
-    const previous = fragment<number>`(SELECT MAX(${versions.number}) ${below})`;
-
-    return built(BUILD.update(sites).set({ live_version: previous, updated_at: at }).where(and(live, fragment`EXISTS (SELECT 1 ${below})`)));
-  }
-
-  const kept = fragment`EXISTS (SELECT 1 ${keptVersion(fragment`${versions.number} = ${target}`)})`;
-
-  return built(BUILD.update(sites).set({ live_version: target, updated_at: at }).where(and(live, ne(sites.live_version, target), kept)));
-}
-
-/** The versions under a folder beyond the `keep` highest dropped, only after a publish. */
-function dropOldVersions(folder: SQL, keep: number): Statement {
-  const highest = fragment`(SELECT ${versions.number} FROM ${versions} WHERE ${versions.folder} = ${folder} ORDER BY ${versions.number} DESC LIMIT ${keep})`;
-
-  return built(BUILD.delete(versions).where(fragment`${CHANGED} AND ${versions.folder} = ${folder} AND ${versions.number} NOT IN ${highest}`));
 }
 
 /** The audit entry of a change to no site, written only when the statement before it changed a row. */
@@ -502,64 +229,12 @@ function requestsOf(day: string, site: string): Statement {
   return built(BUILD.select({ requests: requestCounts.requests }).from(requestCounts).where(and(eq(requestCounts.day, day), eq(requestCounts.site, site))));
 }
 
-/** The token with the given id, unless it was removed. */
-function tokenById(id: TokenId): Statement {
-  return built(BUILD.select(TOKEN_FIELDS).from(tokens).where(and(eq(tokens.id, id), NOT_REMOVED)));
-}
-
-/** The logins a condition holds for. */
-function loginsWhere(condition: SQL | undefined): Statement {
-  return built(BUILD.select().from(logins).where(condition));
-}
-
-/** Whether a login's id and its code are both free, so the login that brings them will be stored. */
-function isNewLogin(login: PendingLogin): SQL {
-  return fragment`NOT EXISTS (SELECT 1 FROM ${logins} WHERE ${logins.id} = ${login.id} OR ${logins.code} = ${login.code})`;
-}
-
-/** Room for a new login of its visitor: of that visitor's logins that wait, pending and not run out, all but the newest `keep` are removed. */
-function makeRoomOfVisitor(login: PendingLogin, keep: number): Statement {
-  const waiting = fragment`${logins.visitor} = ${login.visitor} AND ${logins.state} = 'pending' AND ${logins.expires_at} > ${login.createdAt}`;
-  const beyond = fragment`(SELECT ${logins.id} FROM ${logins} WHERE ${waiting} ORDER BY ${logins.created_at} DESC, ${logins.id} DESC LIMIT -1 OFFSET ${keep})`;
-
-  return built(BUILD.delete(logins).where(fragment`${logins.id} IN ${beyond} AND ${isNewLogin(login)}`));
-}
-
-/**
- * Room for a new login among all: once `all` logins wait, the oldest one of the visitor with the most is removed.
- * One pass finds it: each visitor's oldest is its `created_at` in sixteen digits then its id, and `9999 - held` in four digits puts the visitor with the most first.
- */
-function makeRoomOfAll(login: PendingLogin, all: number): Statement {
-  const oldest = fragment`MIN(printf('%016d', ${logins.created_at}) || ${logins.id})`;
-  const byVisitor = fragment`SELECT COUNT(*) AS held, ${oldest} AS oldest FROM ${logins} WHERE ${logins.state} = 'pending' AND ${logins.expires_at} > ${login.createdAt} GROUP BY ${logins.visitor}`;
-  const evicted = fragment`(SELECT CASE WHEN SUM(held) >= ${all} THEN substr(MIN(printf('%04d', 9999 - held) || oldest), 21) END FROM (${byVisitor}))`;
-
-  return built(BUILD.delete(logins).where(fragment`${logins.id} = ${evicted} AND ${isNewLogin(login)}`));
-}
-
 function requirePage(limit: number): void {
   if (!Number.isSafeInteger(limit) || limit < 1 || limit > MAX_PAGE) throw new RangeError(`a page holds 1 to ${MAX_PAGE} rows, not ${limit}`);
 }
 
-/** A cursor carries what its listing goes by: a listing by name the last site's name, one by access its access, one by title the title it stands under. */
-function requireCursor(query: SitesQuery): void {
-  const { after, sort } = query;
-  if (after === undefined || sort === undefined || sort === "updated") return;
-
-  if (after[sort] === undefined) throw new RangeError(`a page after another of a listing by ${sort} names the ${sort} of that page's last site`);
-}
-
-/** What a cursor holds of the column its listing goes by; `requireCursor` has seen that it holds it. */
-function cursorPlace(after: NonNullable<SitesQuery["after"]>, sort: NonNullable<SitesQuery["sort"]>): string | number {
-  return { updated: after.updated_at, name: after.name ?? "", access: ACCESS_RANKS[after.access ?? "private"], title: after.title ?? "" }[sort];
-}
-
 function requireCount(what: string, count: number): void {
   if (!Number.isSafeInteger(count) || count < 0) throw new RangeError(`${what} is a whole number from 0 up, not ${count}`);
-}
-
-function publicNameOf(access: SiteAccess): PublicName | null {
-  return access.access === "public" ? access.public_name : null;
 }
 
 function siteIn(result: StatementResult | undefined): Site | undefined {

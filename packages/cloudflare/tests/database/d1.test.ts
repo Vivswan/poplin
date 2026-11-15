@@ -20,7 +20,8 @@ import type { PublicName, SiteName } from "@poplin/core/src/names/names";
 import type { Site, SiteFolder } from "@poplin/core/src/records/site";
 import type { UploadId } from "@poplin/core/src/records/upload";
 import type { SiteId } from "@poplin/core/src/sites/ids";
-import { BY_ADA, begunFiles, begunSite, begunVersion, describeDatabase, draft, numberedFiles, pendingLogin, publish, storedBack } from "@poplin/core/tests/database/support/database-contract";
+import { describeDatabase } from "@poplin/core/tests/database/support/database-contract";
+import { BY_ADA, begunFiles, begunSite, begunVersion, draft, numberedFiles, pendingLogin, publish, storedBack } from "@poplin/core/tests/database/support/database-fixtures";
 import { describeSqlDriver, sqlDatabaseOver } from "@poplin/core/tests/database/support/sql-driver-contract";
 
 import type { Bindings } from "../../src/worker/bindings";
