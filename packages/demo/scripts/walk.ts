@@ -1,4 +1,4 @@
-// The demo in real browsers: build it, serve it as the website does, and walk it as a visitor would.
+// The demo in real browsers: build it, serve it as a static host does, and walk it as a visitor would.
 //
 //   bun run test:browser                     every engine Playwright has a browser for on this machine
 //   bun run test:browser chromium firefox    these engines, each of which must be there
@@ -14,7 +14,7 @@ import { type Browser, type BrowserContext, type BrowserType, chromium, firefox,
 import { buildDemo } from "./build";
 import { serveStatic } from "./static-host";
 
-/** The path the website serves the demo at. */
+/** The path the host serves the demo's folder at: under a folder, where the demo's own base path shows. */
 const AT = "/poplin/demo/";
 
 /** The browsers a walk can run in. */

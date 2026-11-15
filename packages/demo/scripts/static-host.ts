@@ -1,4 +1,4 @@
-// A static host for the built demo, as the project's website is one: files only, under a base path, the 404 page for the rest, and no answer to a form.
+// A static host for the built demo: files only, under a base path, the 404 page for the rest, and no answer to a form.
 
 import { existsSync, statSync } from "node:fs";
 import { join, normalize, sep } from "node:path";
@@ -6,7 +6,7 @@ import { join, normalize, sep } from "node:path";
 import { notFoundPage } from "./deep-links";
 import { HOST, PID_PATH } from "./running";
 
-/** How long a browser keeps a file, as the website's host says it. */
+/** How long a browser keeps a file. */
 const CACHE = "max-age=600";
 
 /** What the host serves, and where. */

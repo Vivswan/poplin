@@ -3,18 +3,16 @@
 //   index.html      the first page: it registers the worker, then loads the dashboard through it
 //   sw.js           the worker: the demo, the product's own code, and the sample sites, minified
 //   sql-wasm.wasm   SQLite
-//   404.html        for a host that serves the demo alone: it sends a deep link through the first page
+//   404.html        sends an address inside the demo through the first page, on a host that answers a missing path with it
 //
-//   bun scripts/build.ts --out <folder>                         another folder
-//   bun scripts/build.ts --out <site>/demo --not-found <site>/404.html --at /poplin/demo/
-//                                                               inside a website: no 404.html of its own, the site's 404 page gets the deep-link script
+//   bun scripts/build.ts --out <folder>   another folder
 
 import { mkdir, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { parseArgs } from "node:util";
 import { gzipSync } from "node:zlib";
 
-import { notFoundPage, withDeepLinks } from "./deep-links";
+import { notFoundPage } from "./deep-links";
 import { readSamples } from "./samples";
 
 /** The folder of the browser host's sources. */
@@ -33,9 +31,6 @@ const TAG_LENGTH = 12;
 interface Target {
   /** The folder to write; whatever it held is removed first. */
   readonly out: string;
-
-  /** A website's own 404 page and the path the site serves the demo's folder at: the page gets the deep-link script, and the folder gets no 404 page. */
-  readonly host?: { readonly notFound: string; readonly at: string };
 }
 
 /** One written file and what it weighs. */
@@ -74,7 +69,7 @@ async function bundle(samples: string, tag: string): Promise<string> {
  * Build the demo into a folder.
  *
  * @returns what was written into the folder, in the order a browser loads it. The same sources give the same bytes, so a host that deploys them again starts no visitor over
- * @throws {Error} the worker did not bundle, a sample could not be read, or the host's 404 page has no head
+ * @throws {Error} the worker did not bundle, or a sample could not be read
  */
 export async function buildDemo(target: Target): Promise<readonly Built[]> {
   const samples = await packedSamples();
@@ -87,14 +82,12 @@ export async function buildDemo(target: Target): Promise<readonly Built[]> {
     "index.html": await Bun.file(join(BROWSER, "index.html")).text(),
     "sw.js": await bundle(samples, tag),
     "sql-wasm.wasm": wasm,
+    "404.html": notFoundPage("/"),
   };
-  if (target.host === undefined) files["404.html"] = notFoundPage("/");
 
   await rm(target.out, { recursive: true, force: true });
   await mkdir(target.out, { recursive: true });
   await Promise.all(Object.entries(files).map(([name, content]) => Bun.write(join(target.out, name), content)));
-
-  if (target.host !== undefined) await Bun.write(target.host.notFound, withDeepLinks(await Bun.file(target.host.notFound).text(), target.host.at));
 
   return Object.entries(files).map(([name, content]) => {
     const bytes = Buffer.from(content);
@@ -104,13 +97,9 @@ export async function buildDemo(target: Target): Promise<readonly Built[]> {
 }
 
 if (import.meta.main) {
-  const { values } = parseArgs({ options: { out: { type: "string" }, "not-found": { type: "string" }, at: { type: "string" } }, strict: true });
-  const { "not-found": notFound, at } = values;
-  if ((notFound === undefined) !== (at === undefined))
-    throw new TypeError("--not-found and --at go together: a website's 404 page, and the path the site serves the demo at");
-
+  const { values } = parseArgs({ options: { out: { type: "string" } }, strict: true });
   const out = values.out ?? DIST;
-  const built = await buildDemo({ out, host: notFound === undefined || at === undefined ? undefined : { notFound, at } });
+  const built = await buildDemo({ out });
   const total = built.reduce((sum, file) => sum + file.gzipped, 0);
 
   console.log(`the demo, as static files in ${out}`);

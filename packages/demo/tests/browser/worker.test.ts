@@ -14,7 +14,7 @@ const TOTAL_BUDGET = 500_000;
 /** A module of one runtime, as a bundle names it: an import a browser cannot resolve. */
 const RUNTIME_MODULE = /["'`](?:node|bun):[a-z_/]+["'`]|\brequire\(/g;
 
-test("the built demo stays inside its budget, names no module a browser lacks, and builds the same bytes twice: without this a dependency's server branch rides along unseen, or every deploy of the website starts each visitor over", async () => {
+test("the built demo stays inside its budget, names no module a browser lacks, and builds the same bytes twice: without this a dependency's server branch rides along unseen, or every publish of the demo starts each visitor over", async () => {
   using first = mkdtempDisposableSync(join(tmpdir(), "poplin-demo-"));
   using second = mkdtempDisposableSync(join(tmpdir(), "poplin-demo-"));
   const built = await buildDemo({ out: first.path });
@@ -29,14 +29,13 @@ test("the built demo stays inside its budget, names no module a browser lacks, a
   expect(readFileSync(join(second.path, "sw.js"), "utf8")).toBe(script);
 });
 
-test("inside a website the build writes no 404 page of its own and puts the deep-link script into the site's: without this a link to a page inside the demo ends on the website's 404 page", async () => {
+test("the built 404 page sends an address inside the demo through the first page at the site's root: without this a link to a page inside the demo, on a site that holds the demo at its root, ends on Not found", async () => {
   using site = mkdtempDisposableSync(join(tmpdir(), "poplin-site-"));
-  const notFound = join(site.path, "404.html");
-  await Bun.write(notFound, "<!doctype html><html><head><title>No page</title></head><body>No page at this address.</body></html>");
-  const built = await buildDemo({ out: join(site.path, "demo"), host: { notFound, at: "/poplin/demo/" } });
-  const page = readFileSync(notFound, "utf8");
+  await buildDemo({ out: site.path });
+  const [, script = ""] = /<script>([^<]*)<\/script>/.exec(readFileSync(join(site.path, "404.html"), "utf8")) ?? [];
+  const sent: string[] = [];
 
-  expect(built.map((file) => file.name)).toEqual(["index.html", "sw.js", "sql-wasm.wasm"]);
-  expect(page).toMatch(/<title>No page<\/title><script>[^<]*"\/poplin\/demo\/"[^<]*<\/script><\/head>/);
-  expect(page).toContain("<body>No page at this address.</body>");
+  new Function("location", script)({ pathname: "/settings", search: "?done=saved", hash: "#content", replace: (address: string) => sent.push(address) });
+
+  expect(sent).toEqual(["/?to=%2Fsettings%3Fdone%3Dsaved#content"]);
 });

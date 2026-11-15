@@ -3,9 +3,6 @@
 //
 //   /poplin/demo/settings?done=saved#content   ->   /poplin/demo/?to=%2Fsettings%3Fdone%3Dsaved#content
 
-/** The end of a page's head, where the script goes. */
-const HEAD_END = "</head>";
-
 /** The `script` element that sends an address inside the demo to the demo's first page; on any other address it does nothing. */
 function deepLinkScript(at: string): string {
   const demo = JSON.stringify(at);
@@ -14,24 +11,9 @@ function deepLinkScript(at: string): string {
 }
 
 /**
- * Put the script into a host's own 404 page.
+ * Write the 404 page of a host that serves the demo.
  *
- * @param page - the whole page
- * @param at - the path the demo's folder is served at, with its closing slash, such as `/poplin/demo/`
- * @returns the page with the script at the end of its head
- * @throws {Error} the page has no head to put it in
- */
-export function withDeepLinks(page: string, at: string): string {
-  const end = page.indexOf(HEAD_END);
-  if (end === -1) throw new Error("the 404 page has no </head> to put the demo's deep-link script before");
-
-  return `${page.slice(0, end)}${deepLinkScript(at)}${page.slice(end)}`;
-}
-
-/**
- * Write a whole 404 page for a host that serves nothing but the demo.
- *
- * @param at - the path the demo's folder is served at, with its closing slash
+ * @param at - the path the demo's folder is served at, with its closing slash, such as `/` or `/poplin/demo/`
  * @returns a page that sends an address inside the demo on, and says "Not found" for any other
  */
 export function notFoundPage(at: string): string {
