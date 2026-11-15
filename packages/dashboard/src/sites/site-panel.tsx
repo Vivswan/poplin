@@ -142,13 +142,15 @@ function VersionsBlock({ shown, onMakeLive }: { readonly shown: Shown; readonly 
   );
 }
 
-/** What stands under the switch for search engines while it changes nothing: the site is not public, or the install keeps search engines out of every site, which is said with the way to that setting. */
+/** What stands under the switch for search engines while it changes nothing: the install keeps search engines out of every site, which is said with the way to that setting, or the site is not public. Where both hold, the install's is said alone. */
 function SearchNote({ open, allowed }: { readonly open: boolean; readonly allowed: boolean }): ReactNode {
   if (open && allowed) return null;
 
   return (
     <FieldDescription className="-mt-1 text-[13px] leading-5">
-      {open ? (
+      {allowed ? (
+        "Only a public site is listed."
+      ) : (
         <>
           Off for every site in{" "}
           <Link {...settingAddress("search_engines_allowed")} className="text-link underline-offset-2 hover:underline">
@@ -156,8 +158,6 @@ function SearchNote({ open, allowed }: { readonly open: boolean; readonly allowe
           </Link>
           .
         </>
-      ) : (
-        "Only a public site is listed."
       )}
     </FieldDescription>
   );

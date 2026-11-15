@@ -171,7 +171,7 @@ function PhoneList({
                 <AccessMark access={site.access} className="shrink-0" />
               </span>
               <span className="flex min-w-0 items-center">
-                <SiteLink site={site} whole={reveal.shows(site)} wraps={reveal.shows(site)} className="mr-1 text-muted-foreground" />
+                <SiteLink site={site} whole={reveal.shows(site)} wraps={reveal.shows(site)} gives={!reveal.shows(site)} className="mr-1 text-muted-foreground" />
                 {addressParts(site.url, site.id).hidden === "" ? null : <RevealButton site={site} reveal={reveal} className="relative -my-2 shrink-0" />}
                 <IconButton label="Copy the link" onClick={() => onCopy(site)} className="relative -my-2 shrink-0">
                   <CopyIcon />

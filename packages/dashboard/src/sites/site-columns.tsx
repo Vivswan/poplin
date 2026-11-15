@@ -3,9 +3,9 @@
 import { showBytes } from "@poplin/core/src/records/settings";
 import { cn } from "cn";
 import { CopyIcon, ExternalLinkIcon, EyeIcon, EyeOffIcon, GlobeIcon, LinkIcon, LockIcon } from "lucide-react";
-import type { ReactNode } from "react";
+import { Fragment, type ReactNode } from "react";
 
-import { ACCESSES, type Access, addressParts, expiryOf, type Site, shortMoment, showCount, wholeMoment } from "@/lib/sites";
+import { ACCESSES, type Access, type AddressParts, addressParts, expiryOf, type Site, shortMoment, showCount, wholeMoment } from "@/lib/sites";
 import { IconButton } from "@/shared/icon-button";
 import { type LoginNames, Who } from "@/shared/who";
 import { SITE_ORDERS } from "@/sites/sites-query";
@@ -65,6 +65,34 @@ function HiddenId({ length }: { readonly length: number }): ReactNode {
   );
 }
 
+/** A part of a link that may go on in the next line after any of its dashes, and nowhere else while a dash is in reach. */
+function AtDashes({ text }: { readonly text: string }): ReactNode {
+  const pieces = text.split(/(?<=-)(?!-)/);
+
+  return pieces.map((piece, at) => (
+    // The pieces of one text never change places: the place is the key.
+    // biome-ignore lint/suspicious/noArrayIndexKey: see above.
+    <Fragment key={at}>
+      {at === 0 ? null : <wbr />}
+      {piece}
+    </Fragment>
+  ));
+}
+
+/** A link that goes on in the next line where it is too long: after a dash while one is in reach, with the dots of a hidden id kept whole. */
+function WrappedLink({ parts, masked, title, className }: { readonly parts: AddressParts; readonly masked: boolean; readonly title: string; readonly className?: string }): ReactNode {
+  const { before, hidden, after } = parts;
+
+  return (
+    <span className={cn("min-w-0 font-mono text-xs wrap-anywhere", className)} title={title}>
+      <AtDashes text={before} />
+      {before.endsWith("-") ? <wbr /> : null}
+      {masked ? <HiddenId length={hidden.length} /> : hidden}
+      <AtDashes text={after} />
+    </span>
+  );
+}
+
 /**
  * An address of a site as text: the site's own part, which tells it from every other row, with its id left out. What every address starts with is not drawn.
  *
@@ -72,8 +100,8 @@ function HiddenId({ length }: { readonly length: number }): ReactNode {
  *
  * @param address - the address to write; the site's link when left out
  * @param whole - `true` shows the id too; otherwise as many dots stand where it is, and Copy still gives the whole address
- * @param wraps - `true` goes on in the next line where the text is too long, and cuts nothing
- * @param gives - `true` tells a table what may give for the room's sake: the dots of a hidden id, down to a few, and then the end of the name, down to its first letters and the mark that it is cut
+ * @param wraps - `true` goes on in the next line where the text is too long, after a dash, and cuts nothing
+ * @param gives - `true` lets the text give for the room's sake, and tells a table what may: the dots of a hidden id, down to a few, and then the end of the name, down to its first letters and the mark that it is cut
  */
 export function SiteLink({
   site,
@@ -90,17 +118,18 @@ export function SiteLink({
   readonly gives?: boolean;
   readonly className?: string;
 }): ReactNode {
-  const { shared, before, hidden, after } = addressParts(address, site.id);
+  const parts = addressParts(address, site.id);
+  const { shared, before, hidden, after } = parts;
+  const masked = hidden !== "" && !whole;
+  const title = masked ? "Part of the link is hidden here. Copy gives the whole link." : `${shared}${before}${hidden}${after}`;
+  if (wraps) return <WrappedLink parts={parts} masked={masked} title={title} className={className} />;
+
   // The least is as wide as the letters that stay and the mark: a table reads it from the part's style.
   const giving = gives ? { "data-gives": true, style: { minWidth: `${Math.min(before.length, LEAST_NAME_LETTERS + 1)}ch` } } : {};
-  const masked = hidden !== "" && !whole;
 
   return (
-    <span
-      className={cn("min-w-0 font-mono text-xs", wraps ? "break-all" : "inline-flex max-w-full overflow-hidden align-bottom", className)}
-      title={masked ? "Part of the link is hidden here. Copy gives the whole link." : `${shared}${before}${hidden}${after}`}
-    >
-      <span className={wraps ? undefined : "truncate"} {...giving}>
+    <span className={cn("inline-flex max-w-full min-w-0 overflow-hidden align-bottom font-mono text-xs", className)} title={title}>
+      <span className="truncate" {...giving}>
         {before}
       </span>
       {masked && gives ? (
@@ -110,7 +139,7 @@ export function SiteLink({
         </span>
       ) : null}
       {hidden === "" ? null : (
-        <span className={wraps ? undefined : "shrink-0"}>
+        <span className="shrink-0">
           {masked && !gives ? <HiddenId length={hidden.length} /> : null}
           {masked ? null : hidden}
           {after}
