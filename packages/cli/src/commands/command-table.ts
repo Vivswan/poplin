@@ -13,7 +13,7 @@ const EVERYWHERE: readonly FlagSpec[] = [
 ];
 
 /** The argument that names one site. */
-const SITE = { name: "site", about: "its label, its bare id, or its public name" };
+const SITE = { name: "site", about: "its label, id, public name, or address" };
 
 /** The settings of a site, the same when it is published and when it is changed. */
 const SITE_SETTINGS: readonly FlagSpec[] = [
@@ -49,7 +49,7 @@ export const COMMANDS = [
     about: "put a new site up, or update one with --site",
     arguments: [{ name: "path", about: "a folder with an index.html, or one HTML file", required: true }],
     flags: [
-      { name: "--site", value: "<site>", about: "update that site instead of making a new one" },
+      { name: "--site", value: "<site>", about: "update it: its label, id, public name, or address" },
       { name: "--name", value: "<name>", about: "the site's name; with --site, its new name" },
       { name: "--dry-run", about: "list the files and the name, and upload nothing" },
       ...SITE_SETTINGS,

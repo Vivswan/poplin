@@ -10,6 +10,9 @@ const SECOND_LABEL = "report--w8t1c5n0ze4u";
 const REPORT = { kind: "site", name: "report", id: ID };
 const SECOND = { kind: "site", name: "report", id: "w8t1c5n0ze4u" };
 const PLAIN = { json: false };
+const ADDRESS = `https://${LABEL}-p-poplin.example.com`;
+const ADDRESSED = { ...REPORT, under: "example.com" };
+const SITE_FORMS = "a site is its label report--k3f9x2ab71qz, its id k3f9x2ab71qz, a public site's public name, or its address";
 const SWAPPED = misspelled("list");
 const CREATE = { kind: "publish", target: { kind: "create" }, settings: {}, dryRun: false, ...PLAIN };
 const SEVEN_DAYS = { kind: "span", span: { count: 7, unit: "d" } };
@@ -54,6 +57,13 @@ describe("parseCommand", () => {
     [`poplin set ${LABEL} --expires never`, { kind: "set", site: REPORT, settings: { expires: { kind: "never" } }, ...PLAIN }],
     [`poplin show ${LABEL}`, { kind: "show", site: REPORT, ...PLAIN }],
     [`poplin show ${ID}`, { kind: "show", site: { kind: "id", id: ID }, ...PLAIN }],
+    [`poplin show ${ADDRESS}/page?x=1#top`, { kind: "show", site: ADDRESSED, ...PLAIN }],
+    [`poplin show ${LABEL}-u-poplin.example.com/`, { kind: "show", site: ADDRESSED, ...PLAIN }],
+    [`poplin show ${LABEL}-p-poplin`, { kind: "show", site: REPORT, ...PLAIN }],
+    ["poplin delete https://docs-page.example.com/", { kind: "delete", site: { kind: "public-name", name: "docs", under: "example.com" }, forever: false, ...PLAIN }],
+    [`poplin ./report --site ${ADDRESS}`, { ...CREATE, path: "./report", target: { kind: "update", site: ADDRESSED } }],
+    [`poplin export ${ADDRESS}`, { kind: "export", site: ADDRESSED, allVersions: false, overwrite: false, ...PLAIN }],
+    [`poplin import backup.zip --site ${ADDRESS}`, { kind: "import", zip: "backup.zip", site: ADDRESSED, settings: false, logins: false, dryRun: false, ...PLAIN }],
     [`poplin rollback ${LABEL}`, { kind: "rollback", site: REPORT, ...PLAIN }],
     [`poplin rollback ${LABEL} --to 4`, { kind: "rollback", site: REPORT, to: 4, ...PLAIN }],
     [`poplin new-link ${LABEL}`, { kind: "new-link", site: REPORT, ...PLAIN }],
@@ -185,16 +195,25 @@ describe("parseCommand", () => {
       "poplin show Report",
       refusal(
         '<site> "Report" is not a site: a name holds lowercase letters, digits, and single dashes',
-        "a site is its label report--k3f9x2ab71qz, its id k3f9x2ab71qz, or a public site's public name",
+        SITE_FORMS,
       ),
     ],
     [
       "poplin show report--k3f9",
       refusal(
         '<site> "report--k3f9" is not a site: the part after the two dashes is not an id of 12 lowercase letters and digits',
-        "a site is its label report--k3f9x2ab71qz, its id k3f9x2ab71qz, or a public site's public name",
+        SITE_FORMS,
       ),
     ],
+    [
+      "poplin show https://example.com/report",
+      refusal('<site> "https://example.com/report" is not a site: it is an address, but not a site\'s, such as https://report--k3f9x2ab71qz-p-poplin.example.com', SITE_FORMS),
+    ],
+    [
+      "poplin show <https://example.com/report>",
+      refusal('<site> "<https://example.com/report>" is not a site: it is an address, but not a site\'s, such as https://report--k3f9x2ab71qz-p-poplin.example.com', SITE_FORMS),
+    ],
+    ["poplin show report.html", refusal('<site> "report.html" is not a site: it is not the address of a site, such as report--k3f9x2ab71qz-p-poplin.example.com', SITE_FORMS)],
     ["poplin ./report --site ./other", refusal('"./other" is a path. Give the site\'s label; poplin list shows it.')],
     [
       `poplin ./report --site ${LABEL} --unlisted --public-name docs`,

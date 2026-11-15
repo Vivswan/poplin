@@ -7,6 +7,7 @@ import { type AccessLetter, keptPublicNames, letterOf, parsePublicWord, publicHo
 import { nameFromEntry, parsePublicName, parseSiteName } from "../../packages/core/src/names/names";
 import { parseSiteId } from "../../packages/core/src/sites/ids";
 import { siteLabel, siteReference, splitLabel } from "../../packages/core/src/sites/labels";
+import { isOfInstall, readSiteReference } from "../../packages/core/src/sites/references";
 import { fuzzTarget } from "./config";
 import { hostile } from "./hostile";
 
@@ -57,6 +58,29 @@ const publicWords = fc
 const layouts = publicWords.map((publicWord) => ({ publicWord, reserved: keptPublicNames(publicWord) }));
 const accesses = fc.constantFrom("private" as const, "unlisted" as const, "public" as const);
 const letters = fc.constantFrom<AccessLetter>("p", "u");
+
+const domains = fc.tuple(fc.constantFrom("example.com", "sites.example.org", "a.b.example.net"), fc.constantFrom("", ":8443"));
+const dressings = fc.record({
+  scheme: fc.constantFrom("https://", "http://", "HTTPS://", ""),
+  dot: fc.constantFrom("", "."),
+  path: fc.constantFrom("", "/", "/pages/1.html?x=1#top", "?x", "#y"),
+  wrap: fc.constantFrom<readonly [string, string]>(["", ""], ['"', '"'], ["'", "'"], ["<", ">"], [" ", "\n"]),
+  capitals: fc.boolean(),
+});
+const addressedSites = fc.oneof(
+  fc.tuple(siteNames, siteIds, fc.constantFrom("-p", "-u", "")).map(([name, id, letter]) => ({ label: `${siteLabel(name, id)}${letter}-poplin`, site: { kind: "site", name, id } })),
+  fc.tuple(siteIds, letters).map(([id, letter]) => ({ label: siteHostLabel(id, letter), site: { kind: "id", id } })),
+  fc
+    .tuple(publicWords, wellFormed)
+    .map(([publicWord, raw]) => ({ publicWord, name: parsePublicName(raw, keptPublicNames(publicWord)) }))
+    .map(({ publicWord, name }) => (name.ok ? { label: publicHostLabel(name.value, publicWord), site: { kind: "public-name", name: name.value } } : undefined))
+    .filter((addressed) => addressed !== undefined),
+);
+const typedAddresses = fc.tuple(addressedSites, domains, dressings).map(([{ label, site }, [domain, port], { scheme, dot, path, wrap, capitals }]) => {
+  const host = `${label}.${domain}`;
+
+  return { text: `${wrap[0]}${scheme}${capitals ? host.toUpperCase() : host}${dot}${port}${path}${wrap[1]}`, site, under: `${domain}${port}` };
+});
 
 function followsPublishedRule(name: string): boolean {
   return name.length >= MIN_PUBLISHED_LENGTH && name.length <= MAX_PUBLISHED_LENGTH && PUBLISHED_SHAPE.test(name);
@@ -193,5 +217,37 @@ property(
     expect(parseSiteName(derived.value)).toEqual(derived);
     expect(entry).toMatch(/^[\x21-\x7e]+$/);
     expect([derived.value, `${derived.value}.html`]).toContain(entry.toLowerCase());
+  }),
+);
+
+property(
+  "a hostile typed site is refused, not thrown on, a word a command took before reads as it did, and whatever else is taken is an address, a marked label, or a padded or wrapped form of one, with an id and a name of the published shape",
+  fc.property(hostile(fc.oneof(wellFormed, siteLabels, fc.stringMatching(PUBLISHED_ID), typedAddresses.map((typed) => typed.text))), (raw) => {
+    const typed = readSiteReference(raw);
+    const before = siteReference(raw);
+
+    if (before.ok) expect<unknown>(typed).toEqual(before);
+
+    if (!typed.ok) return;
+
+    const parts: { readonly name?: string; readonly id?: string } = typed.value;
+
+    if (parts.id !== undefined) expect(parts.id).toMatch(PUBLISHED_ID);
+
+    if (parts.name !== undefined) expect(followsPublishedRule(parts.name)).toBe(true);
+
+    if (!before.ok) expect(/[./:]|-poplin|^\s|\s$|^["'<]/.test(raw)).toBe(true);
+  }),
+);
+
+property(
+  "the address of any site, with or without a scheme, a path, a port, capitals, a trailing dot, or a wrapping pair, names the same id and name as its label, sits under its own domain, and is of no other install",
+  fc.property(typedAddresses, ({ text, site, under }) => {
+    const typed = readSiteReference(text);
+
+    expect<unknown>(typed).toEqual({ ok: true, value: { ...site, under } });
+    if (!typed.ok) return;
+
+    expect([isOfInstall(typed.value, `https://poplin.${under}`), isOfInstall(typed.value, `https://poplin.other.${under}`), isOfInstall(typed.value, `https://${under}`)]).toEqual([true, false, false]);
   }),
 );

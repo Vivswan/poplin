@@ -2,6 +2,8 @@
 
 import type { SiteChanges } from "../../../core/src/actions/changes";
 import { siteLabel } from "../../../core/src/sites/labels";
+import { isOfInstall } from "../../../core/src/sites/references";
+import { type Problem, problem } from "./problems";
 import type { Request } from "./requests";
 import type { SiteSettings } from "./site-settings";
 
@@ -15,6 +17,19 @@ export function siteWord(site: SiteRef): string {
   if (site.kind === "id") return site.id;
 
   return site.name;
+}
+
+/**
+ * Refuse a site that was typed as an address of another install, before anything is sent.
+ *
+ * @param site - the site a command names, when it names one
+ * @param server - the origin of the install the command talks to
+ * @returns `not_found` for an address under another domain or port than the install's sites, else nothing
+ */
+export function foreignAddress(site: SiteRef | undefined, server: string): Problem | undefined {
+  if (site === undefined || isOfInstall(site, server)) return undefined;
+
+  return problem("not_found", `the address is under ${site.under}, which is not where ${server} keeps its sites`);
 }
 
 /**

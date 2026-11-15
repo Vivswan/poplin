@@ -97,6 +97,34 @@ describe("run", () => {
     expect(json).toEqual((await answered(bench.install.routes.sites[":site"].$get({ param: { site: label } }))).body);
   });
 
+  // Drift: a person holds the address, not the label. Each form must ask the install for the same site by its label, and an address of another install must reach no install at all.
+  test("a site named by its address is asked for by its label, and an address under another domain or port is refused before anything is sent", async () => {
+    const { bench, label } = await withSite();
+    await bench.run(`set ${label} --public --public-name docs`);
+    const shown = (await bench.run(`show ${label}`)).out;
+    const byPublicName = (await bench.run("show docs")).out;
+    bench.sent.length = 0;
+
+    const typed = [`https://${label}-p-poplin.example.com/pages/1.html?x=1#top`, `${label}-u-poplin.example.com/`, `"<https://${label}-u-poplin.EXAMPLE.com./>"`, `${label}-p-poplin`];
+    for (const address of typed) expect((await bench.run(`show ${address}`)).out).toEqual(shown);
+
+    expect((await bench.run("show https://docs-page.example.com/guide")).out).toEqual(byPublicName);
+    expect(bench.sent).toEqual([...typed.map(() => `GET /api/sites/${label}`), "GET /api/sites/docs"]);
+
+    bench.sent.length = 0;
+    const foreign = [`https://${label}-p-poplin.example.org/`, `https://${label}-p-poplin.evil.example/`, `https://${label}-p-poplin.example.com:8443/`, "https://docs-page.example.com.evil.example/"];
+    const refused = await Promise.all(foreign.map(async (address) => summary(await bench.run(`delete ${address}`))));
+
+    expect(refused).toEqual(
+      ["example.org", "evil.example", "example.com:8443", "example.com.evil.example"].map((under) => ({
+        code: 1,
+        out: [],
+        err: [`no site with that id or public name: the address is under ${under}, which is not where https://poplin.example.com keeps its sites`, "poplin list shows every site"],
+      })),
+    );
+    expect(bench.sent).toEqual([]);
+  });
+
   test("set --name prints the new label and the name it had, and the label typed before the rename still names the site: an agent holds the old label", async () => {
     const { bench, label } = await withSite();
     const renamed = `notes--${label.slice(-12)}`;

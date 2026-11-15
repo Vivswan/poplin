@@ -1,7 +1,7 @@
 // The requests: what each command asks for once its words are read, with every argument checked.
 
 import { type Checked, parsePublicName, parseSiteName, type SiteName } from "../../../core/src/names/names";
-import { siteReference } from "../../../core/src/sites/labels";
+import { readSiteReference, type TypedSite } from "../../../core/src/sites/references";
 import type { CommandName } from "./command-table";
 import { isSettingKey, readSetting, SETTING_SAMPLES, type SettingKey } from "./install-settings";
 import { readSiteSettings, type SiteSettings } from "./site-settings";
@@ -11,7 +11,7 @@ import { type Flags, flagValue, isUsageError, looksLikePath, nearest, type Usage
 const VERSION_PATTERN = /^[1-9]\d*$/;
 
 /** What a site argument may be, for the hint of a refused one. */
-const SITE_FORMS = "a site is its label report--k3f9x2ab71qz, its id k3f9x2ab71qz, or a public site's public name";
+const SITE_FORMS = "a site is its label report--k3f9x2ab71qz, its id k3f9x2ab71qz, a public site's public name, or its address";
 
 /** The names the parser keeps back: which ones an install keeps depends on its address layout, so the install answers for them. */
 const NOTHING_RESERVED: ReadonlySet<string> = new Set();
@@ -27,6 +27,8 @@ const REFUSALS: Readonly<Record<Refusal, string>> = {
   "double-dash": "a name holds single dashes only",
   reserved: "the install keeps that name for itself",
   "bad-id": "the part after the two dashes is not an id of 12 lowercase letters and digits",
+  "no-site-url": "it is an address, but not a site's, such as https://report--k3f9x2ab71qz-p-poplin.example.com",
+  "no-site-address": "it is not the address of a site, such as report--k3f9x2ab71qz-p-poplin.example.com",
 };
 
 /** The command of every request: each command of the table but `help`, which asks nothing of an install. */
@@ -52,10 +54,10 @@ const BUILDERS: { readonly [Name in Exclude<CommandName, "help">]: (words: Words
   mcp: () => ({ kind: "mcp" }),
 };
 
-type Refusal = Extract<Checked<unknown>, { readonly ok: false }>["refusal"];
+type Refusal = Extract<ReturnType<typeof readSiteReference>, { readonly ok: false }>["refusal"];
 
-/** What names a site: its label's name and id, its id alone, or a public name. No lookup has been made. */
-type SiteRef = Extract<ReturnType<typeof siteReference>, { readonly ok: true }>["value"];
+/** What names a site: its label's name and id, its id alone, or a public name, with the domain of an address that was typed. No lookup has been made. */
+type SiteRef = TypedSite;
 
 /** What every command that talks to an install carries: whether to answer in JSON, and the install `--server` chose. */
 interface Install {
@@ -107,12 +109,13 @@ function readInstall(flags: Flags): Install | UsageError {
 }
 
 function readSite(raw: string, what: string): SiteRef | UsageError {
-  if (looksLikePath(raw)) return usageError(`${JSON.stringify(raw)} is a path. Give the site's label; poplin list shows it.`);
+  const reference = readSiteReference(raw);
+  if (reference.ok) return reference.value;
 
-  const reference = siteReference(raw);
-  if (!reference.ok) return usageError(`${what} ${JSON.stringify(raw)} is not a site: ${REFUSALS[reference.refusal]}`, SITE_FORMS);
+  // An address holds a slash and a dot as a path does, so a path is one only once it read as no site, and never when a scheme was typed.
+  if (reference.refusal !== "no-site-url" && looksLikePath(raw)) return usageError(`${JSON.stringify(raw)} is a path. Give the site's label; poplin list shows it.`);
 
-  return reference.value;
+  return usageError(`${what} ${JSON.stringify(raw)} is not a site: ${REFUSALS[reference.refusal]}`, SITE_FORMS);
 }
 
 function readName<Name>(flag: "--name" | "--public-name", raw: string, parsed: Checked<Name>): Name | UsageError {

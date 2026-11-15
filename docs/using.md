@@ -26,7 +26,7 @@ report--k3f9x2ab71qz
 the name: taken from the folder or the file
 ```
 
-That is the label. Every command and tool takes it to name one site. The bare id (`k3f9x2ab71qz`) works too, and so does the public name of a public site (`docs`).
+That is the label. Every command and tool takes it to name one site. The bare id (`k3f9x2ab71qz`) works too, and so do the public name of a public site (`docs`) and the site's address, pasted whole (`https://report--k3f9x2ab71qz-p-poplin.example.com/`).
 
 ## Publish
 

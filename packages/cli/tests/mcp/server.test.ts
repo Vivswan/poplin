@@ -144,7 +144,7 @@ describe("the MCP server", () => {
 
     const shown = await bench.call("get_site", { site: site.id });
     const unlisted = await bench.call("update_site", { site: site.label, access: "unlisted", title: "Q3 sales", expires: "7d" });
-    const rolled = await bench.call("rollback_site", { site: site.label });
+    const rolled = await bench.call("rollback_site", { site: site.addresses.site });
     const listed = await bench.call("list_sites");
     const trashed = await bench.call("delete_site", { site: site.label });
     const trash = await bench.call("list_sites", { trash: true });
@@ -232,6 +232,8 @@ describe("the MCP server", () => {
     ["an expiry that is no span or day", "update_site", { site: "SECOND", expires: "soon" }, "bad_argument"],
     ["a new name that breaks the rules", "update_site", { site: "SECOND", name: "Q3 Report" }, "bad_name"],
     ["a site that is a path", "delete_site", { site: "./report" }, "bad_argument"],
+    ["an address that is no site's", "delete_site", { site: "https://poplin.example.com/" }, "bad_argument"],
+    ["the address of a site of another install", "delete_site", { site: "ELSEWHERE" }, "not_found"],
     ["a site that is a Windows path", "delete_site", { site: "C:\\report" }, "bad_argument"],
     ["an empty path", "publish_site", { path: "" }, "bad_argument"],
     ["a name that breaks the rules", "publish_site", { path: "LARGE", name: "Q3 Report" }, "bad_name"],
@@ -243,7 +245,7 @@ describe("the MCP server", () => {
     const trashed = siteOf(await bench.call("publish_site", { path: folderOf("trashed", { "index.html": "<title>Trashed</title>" }) }));
     await bench.call("delete_site", { site: trashed.label });
     const large = folderOf("large", { "index.html": "x".repeat(LIMITS.fileBytes + 1) });
-    const stands: Readonly<Record<string, string>> = { TRASHED: trashed.label, SECOND: second.label, LARGE: large };
+    const stands: Readonly<Record<string, string>> = { TRASHED: trashed.label, SECOND: second.label, LARGE: large, ELSEWHERE: `https://${second.label}-p-poplin.example.org/` };
     const args = Object.fromEntries(Object.entries(asked).map(([key, value]) => [key, typeof value === "string" ? (stands[value] ?? value) : value]));
     const before = [
       (await answered(bench.install.routes.sites.$get())).body,

@@ -20,6 +20,7 @@ import type { Io, Outcome, RequestOf, Session } from "./records";
 import type { Request } from "./requests";
 import { runSiteCommand } from "./site-commands";
 import { runUpdate } from "./update";
+import { foreignAddress } from "./wire";
 
 /** How long each call may take that a stopped command gives its upload up with, in milliseconds: 4 seconds. */
 export const AFTER_STOP_TIMEOUT_MS = 4000;
@@ -110,6 +111,13 @@ async function connect(request: OnlineRequest, io: Io): Promise<Session | Proble
   return { client, afterStop, io, server, source: current.source };
 }
 
+/** The site a command names, when it names one: its own, or the one a publish updates. */
+function namedSite(request: OnlineRequest): Parameters<typeof foreignAddress>[0] {
+  if (request.kind === "publish") return request.target.kind === "update" ? request.target.site : undefined;
+
+  return "site" in request ? request.site : undefined;
+}
+
 async function online(request: OnlineRequest, io: Io, run: (session: Session) => Promise<Outcome>): Promise<Outcome> {
   const session = await connect(request, io);
 
@@ -118,6 +126,9 @@ async function online(request: OnlineRequest, io: Io, run: (session: Session) =>
   if (session === "logged-out") return refused(problem("no_login"));
 
   if ("code" in session) return refused(session);
+
+  const foreign = foreignAddress(namedSite(request), session.server);
+  if (foreign !== undefined) return refused(foreign);
 
   return run(session);
 }

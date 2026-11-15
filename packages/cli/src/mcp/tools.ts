@@ -6,7 +6,7 @@ import type * as v from "valibot";
 import { DELETED_SITE } from "../../../core/src/actions/delete";
 import type { TOOL_INPUTS } from "../../../core/src/actions/tool-inputs";
 import { parsePublicName, parseSiteName } from "../../../core/src/names/names";
-import { siteReference } from "../../../core/src/sites/labels";
+import { readSiteReference } from "../../../core/src/sites/references";
 import { type Problem, problem, problemOf } from "../commands/problems";
 import { planPublish, sendPublish } from "../commands/publish";
 import type { Outcome, RequestOf, Session } from "../commands/records";
@@ -14,11 +14,11 @@ import { runSiteCommand } from "../commands/site-commands";
 import { readSiteSettings, type SiteSettings } from "../commands/site-settings";
 import { countText } from "../commands/text";
 import { isUsageError } from "../commands/util";
-import { siteWord } from "../commands/wire";
+import { foreignAddress, siteWord } from "../commands/wire";
 import type { Host } from "./records";
 
 /** What a `site` argument may be, for the hint of a refused one. */
-const SITE_FORMS = "a site is the label a publish answered, such as report--k3f9x2ab71qz, its id k3f9x2ab71qz, or a public site's public name";
+const SITE_FORMS = "a site is the label a publish answered, such as report--k3f9x2ab71qz, its id k3f9x2ab71qz, a public site's public name, or its address (url)";
 
 /** The names this machine keeps back: which ones an install keeps depends on its address layout, so the install answers for them. */
 const NOTHING_RESERVED: ReadonlySet<string> = new Set();
@@ -30,7 +30,7 @@ const SWITCH = { on: "on", off: "off" } as const;
 const HOW_TO_LOG_IN = "run `poplin login --server <address>` on this computer";
 
 /** What every tool says of its `site`. */
-const SITE = "Its label, e.g. report--k3f9x2ab71qz. Also taken: its bare id, or a public site's public name.";
+const SITE = "Its label, e.g. report--k3f9x2ab71qz. Also taken: its bare id, its address (url), or a public site's public name.";
 
 /** What `publish_site` and `update_site` say of each setting. */
 const SETTINGS = {
@@ -80,7 +80,7 @@ function isProblem(value: object): value is Problem {
 }
 
 function readSite(raw: string): SiteReference | Problem {
-  const reference = siteReference(raw);
+  const reference = readSiteReference(raw);
   if (!reference.ok) return problem("bad_argument", `site ${JSON.stringify(raw)}`, SITE_FORMS);
 
   return reference.value;
@@ -120,8 +120,8 @@ function readSettings(asked: AskedSettings): SiteSettings | Problem {
   return { ...settings, ...names };
 }
 
-/** Run one call against the install, or say why there is no install to call. */
-async function online(host: Host, run: (session: Session) => Promise<Outcome>): Promise<Outcome> {
+/** Run one call against the install, or say why there is no install to call. A site typed as the address of another install is refused before the call. */
+async function online(host: Host, site: SiteReference | undefined, run: (session: Session) => Promise<Outcome>): Promise<Outcome> {
   const session = await host.session();
 
   if (session === "logged-out") {
@@ -130,6 +130,9 @@ async function online(host: Host, run: (session: Session) => Promise<Outcome>): 
 
   if ("code" in session) return refused(session);
 
+  const foreign = foreignAddress(site, session.server);
+  if (foreign !== undefined) return refused(foreign);
+
   return run(session);
 }
 
@@ -137,7 +140,7 @@ async function onSite(host: Host, raw: string, request: (site: SiteReference) =>
   const site = readSite(raw);
   if (isProblem(site)) return refused(site);
 
-  return online(host, (session) => runSiteCommand(request(site), session));
+  return online(host, site, (session) => runSiteCommand(request(site), session));
 }
 
 /** Remove a site for good, and say what is gone. The command asks a person to type the label first; a tool is asked through `forever: true` alone. */
@@ -145,7 +148,7 @@ async function deleteForever(raw: string, host: Host): Promise<Outcome> {
   const site = readSite(raw);
   if (isProblem(site)) return refused(site);
 
-  return online(host, async ({ client }) => {
+  return online(host, site, async ({ client }) => {
     const deleted = await client.call(DELETED_SITE, (api) => api.sites[":site"].$delete({ param: { site: siteWord(site) }, query: { forever: "true" } }));
     if (!deleted.ok) return refused(problemOf(deleted.failure, "changes"));
 
@@ -197,7 +200,7 @@ async function publish(input: InputOf<"publish_site">, host: Host): Promise<Outc
   const planned = await planPublish({ kind: "publish", path, target, settings, dryRun: false, json: false });
   if (!planned.ok) return planned;
 
-  const sent = await online(host, (session) => sendPublish(planned.plan, session));
+  const sent = await online(host, target.kind === "update" ? target.site : undefined, (session) => sendPublish(planned.plan, session));
   if (!sent.ok) return sent;
 
   return { ...sent, value: { ...Object(sent.value), path }, lines: [`read ${path}`, ...sent.lines] };
@@ -212,7 +215,7 @@ export const TOOLS: { readonly [Name in ToolName]: Tool<Name> } = {
       "A new site is private: ask the user before access unlisted or public. Hidden files and node_modules are never uploaded.",
     parameters: {
       path: "A folder with an index.html, or one .html file, e.g. ./report. Relative to the server's working directory; the answer names the absolute path read.",
-      site: "To update: the label an earlier publish answered, e.g. report--k3f9x2ab71qz. Left out: a new site.",
+      site: "To update: the label an earlier publish answered, e.g. report--k3f9x2ab71qz, or its address (url). Left out: a new site.",
       ...SETTINGS,
       name: "The site's name, e.g. q3-report: 3 to 40 lowercase letters, digits, single dashes. New site, left out: the folder or file name. With site: renames it.",
     },
@@ -240,7 +243,7 @@ export const TOOLS: { readonly [Name in ToolName]: Tool<Name> } = {
     description: "List the sites, each with its label, access, and address (url); views in the data are about how often its pages were opened.",
     parameters: { trash: "true: list the deleted sites restore_site can still take back." },
     hints: { readOnlyHint: true },
-    run: (input, host) => online(host, (session) => runSiteCommand({ kind: "list", trash: input.trash, json: false }, session)),
+    run: (input, host) => online(host, undefined, (session) => runSiteCommand({ kind: "list", trash: input.trash, json: false }, session)),
   },
   rollback_site: {
     description: "Make an earlier kept version of a site the live one. Its settings and addresses stay.",
