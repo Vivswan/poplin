@@ -76,7 +76,7 @@ export function SettingRow({ row, text, refusal, onChange, marked, note }: Setti
       controlId={id}
       anchor={settingAnchor(row.key)}
       marked={marked}
-      says={[words.about, words.hint ?? ""]}
+      says={[words.about]}
       fallback={readOf(row, row.fallback)}
       onReset={text === row.fallback ? undefined : reset}
       warnings={warningsOf(row, text)}

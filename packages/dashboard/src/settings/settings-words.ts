@@ -48,13 +48,12 @@ const WORDS: Readonly<Record<string, Words>> = {
   block_bots: {
     block: "visitors",
     label: "Block bots",
-    about: "Turns AI crawlers away from the whole domain.",
-    hint: "Automatic does it only if nothing else is on the domain.",
+    about: "Automatic blocks AI crawlers if the domain is only poplin's.",
     choices: { auto: "Automatic", on: "Always", off: "Never" },
   },
   max_total_size: { block: "storage", label: "All sites together", about: "The most all sites hold, the trash included." },
   max_site_size: { block: "storage", label: "One site", about: "The most one site holds." },
-  max_sites: { block: "storage", label: "Number of sites", about: "The most sites this install holds.", unit: "sites", empty: "No limit", hint: "Empty means no limit." },
+  max_sites: { block: "storage", label: "Number of sites", about: "The most sites this install holds, or empty for no limit.", unit: "sites", empty: "No limit" },
   max_files_per_publish: { block: "publishing", label: "Files per publish", about: "The most files in one publish, up to 10,000.", unit: "files" },
   max_files_per_day: { block: "publishing", label: "Files per day", about: "The most files published or duplicated in one UTC day.", unit: "files" },
   max_storage_writes_per_day: { block: "publishing", label: "Storage writes per day", about: "A published file counts as 1 write, a duplicated file as 2.", unit: "writes" },
@@ -97,9 +96,6 @@ interface Words {
 
   /** What the options of a choice are called, by option. */
   readonly choices?: Readonly<Record<string, string>>;
-
-  /** One more short sentence after the first, for what a person must know to fill the control in. */
-  readonly hint?: string;
 }
 
 /** One block as it is drawn: its heading and its rows, in the order of the words; a setting that has none comes last. */

@@ -86,7 +86,7 @@ const ABOUT_REFUSALS: Readonly<Record<string, Readonly<Record<string, string>>>>
     max_total_size: "Use a whole number, 1 or more.",
     max_site_size: "Use a whole number, 1 or more.",
     max_sites: "Use a whole number, 1 or more, or leave it empty for no limit.",
-    max_files_per_publish: "Use a whole number from 1 to 10000.",
+    max_files_per_publish: "Use a whole number from 1 to 10,000.",
     max_files_per_day: "Use a whole number, 1 or more.",
     max_storage_writes_per_day: "Use a whole number, 1 or more.",
     requests_per_day: "Use a whole number, 1 or more.",

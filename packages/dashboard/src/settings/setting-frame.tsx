@@ -3,7 +3,7 @@
 
 import { cn } from "cn";
 import { CircleHelpIcon, TriangleAlertIcon } from "lucide-react";
-import type { ReactNode } from "react";
+import { type ReactNode, useLayoutEffect } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverDescription, PopoverTitle, PopoverTrigger } from "@/components/ui/popover";
@@ -43,7 +43,7 @@ interface SettingFrameProps {
   /** The control, at its own width. */
   readonly children: ReactNode;
 
-  /** The line under the control, drawn only while it has something to say: a refusal. */
+  /** The line under the control, drawn only while it has something to say: a refusal. The control is described by it, whatever kind of control it is. */
   readonly under?: ReactNode;
 
   /** `true` for a switch: on a phone it stays beside its name, where a field goes under it. */
@@ -129,6 +129,13 @@ export function SettingFrame({
   beside = false,
 }: SettingFrameProps): ReactNode {
   const sentences = says.filter((sentence) => sentence !== "");
+  const underId = `${controlId}-under`;
+  // The control is drawn by the caller, in one of many kinds: the line under it is named at whatever holds the control's id once both are drawn.
+  useLayoutEffect(() => {
+    const control = document.getElementById(controlId);
+    if (under === undefined) control?.removeAttribute("aria-describedby");
+    else control?.setAttribute("aria-describedby", underId);
+  });
 
   return (
     <div
@@ -163,7 +170,11 @@ export function SettingFrame({
           {children}
           {warnings.length === 0 ? null : <Warnings warnings={warnings} />}
         </div>
-        {under === undefined ? null : <div className="text-[13px] leading-5 empty:hidden">{under}</div>}
+        {under === undefined ? null : (
+          <div id={underId} className="text-[13px] leading-5 empty:hidden">
+            {under}
+          </div>
+        )}
       </div>
     </div>
   );

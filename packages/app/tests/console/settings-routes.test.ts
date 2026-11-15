@@ -175,7 +175,7 @@ describe("a save", () => {
       trash_days: "Use a whole number, 1 or more.",
       max_total_size: "Use a whole number, 1 or more.",
       max_sites: "Use a whole number, 1 or more, or leave it empty for no limit.",
-      max_files_per_publish: `Use a whole number from 1 to ${MOST_FILES_PER_PUBLISH}.`,
+      max_files_per_publish: `Use a whole number from 1 to ${MOST_FILES_PER_PUBLISH.toLocaleString("en-US")}.`,
       site_share_of_day: "Use a whole number from 1 to 100.",
     });
   });

@@ -44,6 +44,17 @@ const EXPIRY: Row = {
   repair: false,
 };
 
+/** One row of each kind of control, with the text it is refused at. */
+const KINDS: readonly (readonly [string, Row, string])[] = [
+  ["a switch", { ...SIZE, key: "update_check", control: { kind: "switch" }, unit: "", fallback: "on" }, "on"],
+  ["a choice", { ...SIZE, key: "block_bots", control: { kind: "choice", options: ["auto", "on", "off"] }, unit: "", fallback: "auto" }, "auto"],
+  ["a number", SIZE, "0MB"],
+  ["a number that is a word now", EXPIRY, "never"],
+  ["a number that can be a word", EXPIRY, "0d"],
+  ["a list", { ...SIZE, key: "logins", control: { kind: "lines" }, unit: "", fallback: "" }, "one,one"],
+  ["a text", { ...SIZE, key: "a_new_text" as Row["key"], control: { kind: "text" }, unit: "", fallback: "" }, "as it is"],
+];
+
 /** The row over a text it holds itself, as the screen does: a text the row sends is collected and drawn. */
 function Held({ row, first, sent }: { readonly row: Row; readonly first: string; readonly sent: string[] }): ReactNode {
   const [text, setText] = useState(first);
@@ -104,6 +115,22 @@ describe("the row of a setting", () => {
     fireEvent.click(within(page.getByRole("dialog", { name: "All sites together" })).getByRole("button", { name: "Reset" }));
 
     expect([lines, sent]).toEqual([["The most all sites hold, the trash included.", "Default: 9,000 MBReset"], ["9000MB"]]);
+  });
+
+  // Drift: a refusal would stand under a control that does not name it, so a screen reader would never read why the value was refused; or one kind of control would be left out.
+  test.each(KINDS)("names the refusal under it at its control, which is %s", (_what, row, text) => {
+    render(<SettingRow row={row} text={text} refusal="Use another value." onChange={() => undefined} marked={false} />);
+    const named = document.getElementById(`setting-${row.key}-control`)?.getAttribute("aria-describedby");
+
+    expect(document.getElementById(named ?? "none")?.textContent).toBe("Use another value.");
+  });
+
+  // Drift: a control would go on naming a line that is gone once its value is taken.
+  test("names nothing at a control with no line under it", () => {
+    const { rerender } = render(<SettingRow row={SIZE} text="0MB" refusal="Use another value." onChange={() => undefined} marked={false} />);
+    rerender(<SettingRow row={SIZE} text="1MB" refusal={undefined} onChange={() => undefined} marked={false} />);
+
+    expect(document.getElementById("setting-max_total_size-control")?.getAttribute("aria-describedby")).toBeNull();
   });
 
   // Drift: a warning would have no mark after the control, or two warnings would run together as one paragraph.
