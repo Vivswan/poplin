@@ -1,4 +1,7 @@
 ---
+import Check from "@lucide/astro/icons/check";
+import Minus from "@lucide/astro/icons/minus";
+import X from "@lucide/astro/icons/x";
 import { ROWS, TOOLS } from "../lib/compare.ts";
 
 // Poplin beside the tools people reach for to put a page online. The facts live in one table of data; this draws it.
@@ -25,19 +28,13 @@ import { ROWS, TOOLS } from "../lib/compare.ts";
               return (
                 <td class:list={[index === 0 && "ours", answer === "no" && "no"]} title={fact}>
                   {answer === "yes" && (
-                    <svg viewBox="0 0 16 16" role="img" aria-label={`yes: ${fact}`}>
-                      <path d="M3.5 8.5l3 3 6-7" />
-                    </svg>
+                    <Check role="img" aria-label={`yes: ${fact}`} />
                   )}
                   {answer === "no" && (
-                    <svg viewBox="0 0 16 16" role="img" aria-label={`no: ${fact}`}>
-                      <path d="M4.5 4.5l7 7M11.5 4.5l-7 7" />
-                    </svg>
+                    <X role="img" aria-label={`no: ${fact}`} />
                   )}
                   {answer === "not stated" && (
-                    <svg class="unsaid" viewBox="0 0 16 16" role="img" aria-label={`not stated: ${fact}`}>
-                      <path d="M4.5 8h7" />
-                    </svg>
+                    <Minus class="unsaid" role="img" aria-label={`not stated: ${fact}`} />
                   )}
                   {answer === "partly" && (
                     <>
@@ -127,25 +124,16 @@ import { ROWS, TOOLS } from "../lib/compare.ts";
   }
 
   svg {
-    width: 16px;
-    height: 16px;
-    display: block;
     margin-inline: auto;
-    fill: none;
-    stroke: var(--fg);
-    stroke-width: 1.8;
-    stroke-linecap: round;
-    stroke-linejoin: round;
   }
 
   .no svg,
   .unsaid {
-    stroke: var(--muted);
+    color: var(--muted);
   }
 
   .ours svg {
-    stroke: var(--accent-text);
-    stroke-width: 2.2;
+    color: var(--accent-text);
   }
 
   /* Between a phone and a desk the whole table fits its column with tighter cells; only a phone scrolls sideways. */

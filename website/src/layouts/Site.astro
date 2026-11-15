@@ -3,6 +3,9 @@ import "@fontsource/libre-franklin/latin-400.css";
 import "@fontsource/libre-franklin/latin-600.css";
 import "@fontsource/libre-franklin/latin-700.css";
 import "../styles/theme.css";
+import Monitor from "@lucide/astro/icons/monitor";
+import Moon from "@lucide/astro/icons/moon";
+import Sun from "@lucide/astro/icons/sun";
 import { getImage } from "astro:assets";
 import { REPOSITORY_URL, sitePath } from "../lib/paths.ts";
 import { released } from "../lib/released.ts";
@@ -82,17 +85,9 @@ const card = await getImage({ src: social, width: 1200, height: 630, format: "pn
           }
           <li>
             <button class="theme" type="button" data-theme-switch aria-label="Theme: system">
-              <svg class="system" viewBox="0 0 16 16" aria-hidden="true">
-                <rect x="2" y="3" width="12" height="8" rx="1.5"></rect>
-                <path d="M6 13.500h4M8 11v2.500"></path>
-              </svg>
-              <svg class="light" viewBox="0 0 16 16" aria-hidden="true">
-                <circle cx="8" cy="8" r="2.75"></circle>
-                <path d="M8 1.75v1.500M8 12.750v1.500M1.750 8h1.500M12.750 8h1.500M3.600 3.600l1.050 1.050M11.350 11.350l1.050 1.050M3.600 12.400l1.050-1.050M11.350 4.650l1.050-1.050"></path>
-              </svg>
-              <svg class="dark" viewBox="0 0 16 16" aria-hidden="true">
-                <path d="M13.250 9.500A5.750 5.750 0 0 1 6.500 2.750a5.750 5.750 0 1 0 6.750 6.750z"></path>
-              </svg>
+              <Monitor class="system" />
+              <Sun class="light" />
+              <Moon class="dark" />
             </button>
           </li>
         </ul>

@@ -1,4 +1,6 @@
 ---
+import ChevronDown from "@lucide/astro/icons/chevron-down";
+import ChevronRight from "@lucide/astro/icons/chevron-right";
 import { AGENTS } from "../lib/agents.ts";
 import { EXAMPLE_DASHBOARD } from "../lib/example.ts";
 import { SETUP_PROMPT } from "../lib/paths.ts";
@@ -12,7 +14,7 @@ import Copy from "./Copy.astro";
 
   <details class="byhand">
     <summary>
-      <svg class="chev" viewBox="0 0 12 12" aria-hidden="true"><path d="M4.5 2.5L8 6l-3.500 3.500"></path></svg>
+      <ChevronRight class="chev" />
       Or add it yourself
     </summary>
     <div class="steps">
@@ -24,7 +26,7 @@ import Copy from "./Copy.astro";
             <select name="agent" aria-label="Your agent">
               {AGENTS.map((agent) => <option value={agent.id}>{agent.name}</option>)}
             </select>
-            <svg viewBox="0 0 12 12" aria-hidden="true"><path d="M2.5 4.5L6 8l3.5-3.5"></path></svg>
+            <ChevronDown />
           </span>
         </label>
         <span class="where">
@@ -63,7 +65,8 @@ import Copy from "./Copy.astro";
   summary {
     display: inline-flex;
     align-items: center;
-    gap: 8px;
+    gap: 6px;
+    vertical-align: top;
     color: var(--muted);
     cursor: pointer;
     list-style: none;
@@ -74,15 +77,7 @@ import Copy from "./Copy.astro";
   }
 
   .chev {
-    position: static;
-    width: 12px;
-    height: 12px;
-    margin: 0;
-    fill: none;
-    stroke: currentColor;
-    stroke-width: 1.6;
-    stroke-linecap: round;
-    stroke-linejoin: round;
+    margin: -2px 0 -2px -2px;
   }
 
   details[open] .chev {
@@ -125,7 +120,7 @@ import Copy from "./Copy.astro";
     justify-items: stretch;
     width: 100%;
     min-width: 0;
-    margin-top: 16px;
+    margin-top: 16.5px;
     border-radius: 9px;
     background: var(--fill);
     overflow: hidden;
@@ -190,16 +185,10 @@ import Copy from "./Copy.astro";
 
   .select svg {
     position: absolute;
-    right: 14px;
+    right: 12px;
     top: 50%;
-    width: 12px;
-    height: 12px;
-    margin-top: -6px;
-    fill: none;
-    stroke: var(--muted);
-    stroke-width: 1.6;
-    stroke-linecap: round;
-    stroke-linejoin: round;
+    margin-top: -8px;
+    color: var(--muted);
     pointer-events: none;
   }
 

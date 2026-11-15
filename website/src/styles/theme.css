@@ -184,6 +184,16 @@ main {
   text-decoration: underline;
 }
 
+/* Every icon is drawn the same: a 16px box with the drawing 14px inside it, and one stroke. */
+.lucide {
+  flex: none;
+  display: block;
+  width: 16px;
+  height: 16px;
+  padding: 1px;
+  stroke-width: 2.5;
+}
+
 .mark {
   display: inline-flex;
   align-items: center;
@@ -226,15 +236,8 @@ main {
 }
 
 /* One of three marks shows: the screen while the system decides, the sun or the moon once one is chosen. */
-.theme svg {
+.theme .lucide {
   display: none;
-  width: 16px;
-  height: 16px;
-  fill: none;
-  stroke: currentColor;
-  stroke-width: 1.4;
-  stroke-linecap: round;
-  stroke-linejoin: round;
 }
 
 :root:not([data-theme]) .theme .system,

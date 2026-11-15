@@ -1,4 +1,6 @@
 ---
+import Check from "@lucide/astro/icons/check";
+import X from "@lucide/astro/icons/x";
 import { EXAMPLE_PUBLIC_NAME } from "../lib/example.ts";
 import Address from "./Address.astro";
 import Sign from "./Sign.astro";
@@ -31,13 +33,9 @@ const states = ["private", "unlisted", "public"];
           <dt>{row.who}</dt>
           <dd class="swap">
             {row.opens.length < states.length && (
-              <svg data-show={states.filter((state) => !row.opens.includes(state)).join(" ")} viewBox="0 0 16 16" role="img" aria-label="cannot open it">
-                <path d="M4.5 4.5l7 7M11.5 4.5l-7 7" />
-              </svg>
+              <X data-show={states.filter((state) => !row.opens.includes(state)).join(" ")} role="img" aria-label="cannot open it" />
             )}
-            <svg data-show={row.opens.join(" ")} class="yes" viewBox="0 0 16 16" role="img" aria-label="opens it">
-              <path d="M3.5 8.5l3 3 6-7" />
-            </svg>
+            <Check data-show={row.opens.join(" ")} class="yes" role="img" aria-label="opens it" />
           </dd>
         </div>
       ))
@@ -110,20 +108,8 @@ const states = ["private", "unlisted", "public"];
     justify-self: end;
   }
 
-  svg {
-    display: block;
-    width: 16px;
-    height: 16px;
-    fill: none;
-    stroke: currentColor;
-    stroke-width: 1.5;
-    stroke-linecap: round;
-    stroke-linejoin: round;
-  }
-
   .yes {
     color: var(--ok);
-    stroke-width: 2;
   }
 
   /* On a phone the panel gives its padding to the address, so the whole address shows. */

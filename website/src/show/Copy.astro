@@ -1,4 +1,6 @@
 ---
+import CopyIcon from "@lucide/astro/icons/copy";
+
 interface Props {
   /** What the button copies, shown beside it. */
   command: string;
@@ -40,10 +42,7 @@ const pieces = command.split(/(https?:\/\/[^\s,]+)/);
   }
   <button type="button" data-copy={command} aria-label={`Copy: ${command}`}>
     <span class="idle">
-      <svg viewBox="0 0 16 16" aria-hidden="true">
-        <rect x="5.5" y="5.5" width="8" height="8" rx="1.5"></rect>
-        <path d="M10.5 5.5v-2a1 1 0 0 0-1-1h-6a1 1 0 0 0-1 1v6a1 1 0 0 0 1 1h2"></path>
-      </svg>
+      <CopyIcon />
       Copy
     </span>
     <span data-said aria-live="polite"></span>
@@ -94,7 +93,7 @@ const pieces = command.split(/(https?:\/\/[^\s,]+)/);
     flex: none;
     display: inline-grid;
     place-items: center;
-    padding: 7px 8px;
+    padding: 6px 8px;
     border: 0;
     border-radius: 6px;
     background: var(--surface);
@@ -116,19 +115,10 @@ const pieces = command.split(/(https?:\/\/[^\s,]+)/);
   .idle {
     display: inline-flex;
     align-items: center;
-    gap: 5px;
+    gap: 3px;
   }
 
   button[data-told] .idle {
     visibility: hidden;
-  }
-
-  svg {
-    width: 14px;
-    height: 14px;
-    fill: none;
-    stroke: currentColor;
-    stroke-width: 1.4;
-    stroke-linejoin: round;
   }
 </style>
