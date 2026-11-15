@@ -63,7 +63,7 @@ The CLI and the MCP tools print both addresses when a change moved a site.
 What a private site costs:
 
 - **One login step per site.** The first open of each private site passes once through Cloudflare's login. It is silent while the login session lasts.
-- **Embedding needs a direct visit first.** A private site shown inside another page, as a frame, an image, or a style, loads only in a browser that opened that private site itself during the login session. Unlisted and public sites embed as before.
+- **Embedding needs a direct visit first, and works as a frame alone.** A private site loads in a frame of another site of the install, in a browser that opened that private site itself during the login session. It loads in no page of another domain. [Between sites](between-sites.md) has the rows. Unlisted and public sites embed as before.
 
 | Switch for search engines | Set on | Off, the default | On |
 | --- | --- | --- | --- |
@@ -135,19 +135,19 @@ Poplin's icon is answered only for a site the address may open. Every address ab
 
 | Measure | What poplin does |
 | --- | --- |
-| the dashboard's cookie | HttpOnly, Secure, SameSite Lax, for the dashboard's hostname alone: no script can read it, no site receives it, and a cross-site post does not carry it |
+| the dashboard's cookie | HttpOnly, Secure, SameSite Lax, for the dashboard's hostname alone, under a `__Host-` name: no script can read it, no site receives it, and no site can set or replace it. A browser counts every site of the install as the same site as the dashboard, so SameSite Lax holds back only what a page of another domain sends, a followed link aside; the row on writes covers a site's page |
 | the login of a private site | Cloudflare Access's cookie, HttpOnly and SameSite Lax, one per site hostname, 30 days |
 | a removed login | the Worker checks the email against the allowed logins on every request: the dashboard stops at once, a private site within one minute, whatever session Access still holds |
-| writes to the dashboard | the Origin header must be the dashboard itself; the CLI and `poplin mcp` use bearer tokens, never the cookie |
+| writes to the dashboard | a write is refused when its `Origin` or `Sec-Fetch-Site` header names any page but the dashboard's own, a site of the same install included, and when it is not JSON; the CLI and `poplin mcp` use bearer tokens, never the cookie |
 | tokens at rest | a token itself is never stored: the database keeps its SHA-256 hash. An admin token runs out after 30 days, a publisher token lives until it is removed. A removed token's row is kept, and it never logs in again; [Removed tokens](../run/settings.md#tokens) lists the 50 that ended last |
 | the signing key | kept in the database, where the Worker can rotate it; Sign everyone out, under Access, rotates it and ends every dashboard session. A private site's login is Access's own: removing the login ends it. A computer's token is revoked on its own |
 | the bucket and the database | R2 public access stays off; the database is reached only through the Worker's binding |
-| site headers | `X-Content-Type-Options: nosniff`, `Referrer-Policy: no-referrer`, correct content types |
+| site headers | `X-Content-Type-Options: nosniff`, `Referrer-Policy: no-referrer`, and correct content types on every answer of a site but three: the 308 from plain http, the 429 of a limit, and the page of a paused site carry neither header. A private site's files carry one more, which [Between sites](between-sites.md) describes |
 | page views | a site shows about how often its pages were opened, from a sampled count per site and UTC day kept a year; it counts opens, not people: no address, cookie, or browser name of a visitor is stored |
 | the dashboard | a strict Content-Security-Policy; it may never be framed |
 | content | the Worker never reads, parses, or rewrites a site's files, and adds none to them. A site that holds no `favicon.ico` is answered poplin's own icon at `/favicon.ico`, from the Worker's code |
 | the activity log | the dashboard shows every action under Activity: publish, state change, delete, login, token issued. [Activity](../run/activity.md) says how it is paged and saved as files |
-| plain http | the Worker sends every request over `http` to the same address over `https`, with a 308, before it reads anything of the install; an optional rule at Cloudflare's edge does the same before the Worker runs. Every answer of a site and of the dashboard tells the browser to use `https` alone for 180 days. The zone's other hostnames are left as they are |
+| plain http | the Worker sends every request over `http` to the same address over `https`, with a 308, before it reads anything of the install; an optional rule at Cloudflare's edge does the same before the Worker runs. Every answer of a site and of the dashboard tells the browser to use `https` alone for 180 days, but for the 308 from plain http, the 429 of a limit, the page of a paused site, and the Worker's own plain answers, such as the one of an install that could not start. The zone's other hostnames are left as they are |
 | junk requests | the optional bots rule at Cloudflare's edge blocks, on the site hostnames, every method but GET and HEAD and the paths scanners ask for: `*.php`, `/.env`, `/.env.*`, `/.git/`, `/wp-admin/`, `/cgi-bin/`, `/phpmyadmin` |
 | junk hostnames | Cloudflare routes to the Worker only the hostnames that end in `-poplin` or the public word, so no other hostname under the domain reaches it; an optional rate rule limits each address to 300 requests per 10 seconds, [counted in each data center](../run/limits-and-cost.md#where-a-limit-is-counted). Setup skips it when other rules hold every rate rule the plan allows, or when a Free plan zone has hostnames of its own; the OpenTofu module, which owns the zone's rate rules, stops with a message in that second case |
 
