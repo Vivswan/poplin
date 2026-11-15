@@ -43,7 +43,7 @@ describe("poplin setup", () => {
         "present   DNS record    *.example.com",
         "missing   DNS record    poplin.example.com",
         "present   Worker route  poplin.example.com/*",
-        "left-out  Rate rule     rate rule: the domain has other hostnames",
+        "left out  Rate rule     rate rule: the domain has other hostnames",
         "the login is set to expect ada@example.com",
         "1 to repair",
       ],
@@ -65,6 +65,22 @@ describe("poplin setup", () => {
 
     expect([plain.code, plain.out]).toEqual([1, ["missing  Login  the login is off for the account", "the login is set to expect ada@example.com", "Switch the login on.", "https://provider.example.com/login", "1 not done"]]);
     expect([json.code, jsonOf(json)]).toEqual([1, { run: "repair", rows: [{ object: "Login", state: "missing", detail: "the login is off for the account" }], steps: reading.steps, expects: "ada@example.com" }]);
+  });
+
+  // Drift: a state is a word of the wire, and a terminal that printed it raw would say `optional` where the Domain screen says the object is not set up and need not be.
+  test.each([
+    ["optional", "not set up: optional"],
+    ["left-out", "left out"],
+    ["not-run", "not run"],
+    ["present", "present"],
+  ] as const)("a row in state %j is printed as %j, and --json keeps the state as the install sent it", async (state, words) => {
+    const bench = await openBench();
+    withSetup(bench, fakePlug(() => ({ ok: true, rows: [{ object: "Bot settings", state, detail: "Bots: Edit", part: "rest" }], steps: [] })));
+
+    const plain = await bench.run(`${SETUP} --check`, { env: ENV });
+    const json = await bench.run(`${SETUP} --check --json`, { env: ENV });
+
+    expect([plain.out[0], jsonOf(json).rows]).toEqual([`${words}  Bot settings  Bots: Edit`, [{ object: "Bot settings", state, detail: "Bots: Edit" }]]);
   });
 
   // Drift: a repair that goes on past a refused piece makes rows beside it, and a script that read the exit code alone would take the install for complete.

@@ -7,6 +7,7 @@
 
 import * as v from "valibot";
 
+import { domainStateWords } from "../../../core/src/records/domain-states";
 import { isServer } from "../local/login";
 import { type Problem, problem } from "./problems";
 import type { Io, Outcome, RequestOf } from "./records";
@@ -74,7 +75,7 @@ function shown(run: "check" | "repair", reading: Reading, token: string): Outcom
   const waiting = rows.filter((row) => UNFINISHED.has(row.state)).length;
   const expects = reading.expects === undefined ? {} : { expects: safe(reading.expects) };
   const login = reading.expects === undefined ? [] : [`the login is set to expect ${safe(reading.expects)}`];
-  const lines = [...columns(rows.map((row) => [row.state, row.object, row.detail])), ...login, ...steps.flatMap((step) => [step.text, step.address]), summary(run, waiting)];
+  const lines = [...columns(rows.map((row) => [domainStateWords(row.state), row.object, row.detail])), ...login, ...steps.flatMap((step) => [step.text, step.address]), summary(run, waiting)];
   const outcome: Outcome = { ok: true, value: { run, rows, steps, ...expects }, lines };
 
   return waiting > 0 ? { ...outcome, found: "failed" } : outcome;
