@@ -25,7 +25,7 @@ interface FreeLimit {
   /** The most the free plan takes. A value at it earns no warning. */
   readonly most: number;
 
-  /** The sentence shown beside a value above it: what the limit is, and what going over costs. */
+  /** The sentence shown for a value above it: the limit's number, and what happens past it. */
   readonly warning: string;
 }
 
@@ -49,9 +49,9 @@ function readsAMonth(values: SettingValues): number {
 /**
  * Find the settings that are above a limit of the free plan.
  *
- * @returns the warning of each such setting, by its key, one sentence for each limit it is above; empty when every value is within the limits
+ * @returns the warnings of each such setting, by its key, one sentence for each limit it is above; empty when every value is within the limits
  */
-export function freeLimitWarnings(values: SettingValues, limits: FreeLimits): ReadonlyMap<keyof SettingValues, string> {
+export function freeLimitWarnings(values: SettingValues, limits: FreeLimits): ReadonlyMap<keyof SettingValues, readonly string[]> {
   const rows: readonly (readonly [keyof SettingValues, number, FreeLimit])[] = [
     ["max_total_size", sizeBytes(values.max_total_size), limits.totalBytes],
     ["max_site_size", sizeBytes(values.max_site_size), limits.siteBytes],
@@ -62,13 +62,12 @@ export function freeLimitWarnings(values: SettingValues, limits: FreeLimits): Re
     ["requests_per_day", values.requests_per_day, limits.requestsPerDay],
     ["logins", values.logins.length, limits.logins],
   ];
-  const warnings = new Map<keyof SettingValues, string>();
+  const warnings = new Map<keyof SettingValues, readonly string[]>();
 
   for (const [setting, value, limit] of rows) {
     if (value <= limit.most) continue;
 
-    const said = warnings.get(setting);
-    warnings.set(setting, said === undefined ? limit.warning : `${said}; ${limit.warning}`);
+    warnings.set(setting, [...(warnings.get(setting) ?? []), limit.warning]);
   }
 
   return warnings;

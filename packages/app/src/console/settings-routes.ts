@@ -1,7 +1,7 @@
 // The data of the Settings screen: every setting as a row, a save of some of them, the address that starts a rebuild, and the sign-out of every browser.
 //
-//   GET  /settings                         every setting with its control, its text, its default, and its warning; and whether a rebuild address is saved
-//   POST /settings                         save some settings, each as the text it is typed in
+//   GET  /settings                         every setting with its control, its text, its default, and its warnings; and whether a rebuild address is saved
+//   POST /settings                         save some settings together, each as the text it is typed in: all of them, or on a refusal none
 //   POST /settings/update-address          save the address that starts a rebuild
 //   POST /settings/update-address/remove   remove it
 //   POST /settings/sign-everyone-out       end every session, this one included
@@ -14,13 +14,10 @@ import { defaultSettings, SETTING_VALUES, type SettingValues, settingsFromText, 
 import { Hono } from "hono";
 import * as v from "valibot";
 
-import { DOMAIN_SETTINGS } from "./settings/constants";
+import { ACCESS_SETTINGS, DOMAIN_SETTINGS } from "./settings/constants";
 import { type FreeLimits, freeLimitWarnings } from "./settings/free-limits";
 import { NOTHING, refused, refuseInvalid, type Shared } from "./data";
-import { type Control, controlOf } from "./setting-controls";
-
-/** The default of the one setting whose default depends on who set the install up. */
-const DEFAULT_LOGINS = "The email of whoever set the install up";
+import { type Control, controlOf, screenText, unitOf } from "./setting-controls";
 
 /** What a save carries: the text of each setting it changes, by the setting's key. */
 const SAVE = v.object({ texts: v.record(v.string(), v.string()) });
@@ -36,43 +33,57 @@ interface Row {
   /** What it is changed with. */
   readonly control: Control;
 
-  /** Its value in the form it is typed in, such as `9GB`, `25%`, `on`. */
+  /** Its value in the form the screen types it in, such as `9000MB`, `25%`, `on`, `never`. A save takes the same form. */
   readonly text: string;
 
-  /** What follows the digits in the text of a number, such as `%`; empty for every other setting. */
-  readonly suffix: string;
+  /** What follows the digits in the text of a number, such as `MB` or `%`; empty for a plain count and for every other setting. */
+  readonly unit: string;
 
-  /** Its default, as shown. */
+  /** Its default, in the form of `text`. */
   readonly fallback: string;
 
   /** Whether its value is another than the default. */
   readonly changed: boolean;
 
-  /** The host's sentence for a value above a limit of its free plan, or `null`. */
-  readonly warning: string | null;
+  /** The host's sentences for a value above limits of its free plan, one for each limit; empty for a value within them. */
+  readonly warnings: readonly string[];
 
-  /** `true` for a setting that also changes rules on the domain: it is shown here and changed where the domain is. */
-  readonly elsewhere: boolean;
+  /** `true` for a setting that also changes rules on the domain, in a dashboard that has the Domain screen: the domain's own rules follow at the next repair. */
+  readonly repair: boolean;
 }
 
-function rowsOf(values: SettingValues, freeLimits: FreeLimits): readonly Row[] {
+/** Every setting's text as the screen types it. */
+function screenTexts(values: SettingValues): Readonly<Record<Key, string>> {
   const texts = settingsToText(values);
-  const [installer] = values.logins;
-  const defaults = installer === undefined ? texts : settingsToText(defaultSettings({ installer }));
-  const warnings = freeLimitWarnings(values, freeLimits);
+  for (const key of Object.keys(texts) as Key[]) texts[key] = screenText(SETTING_VALUES.entries[key], values[key], texts[key]);
 
-  return (Object.keys(texts) as Key[]).map((key) => {
-    const value = values[key];
+  return texts;
+}
+
+/**
+ * The rows of the screen.
+ *
+ * @param facts - the host's free limits, and whether the dashboard has the Domain screen
+ */
+function rowsOf(values: SettingValues, facts: { readonly freeLimits: FreeLimits; readonly domain: boolean }): readonly Row[] {
+  const texts = screenTexts(values);
+  const [installer] = values.logins;
+  const defaults = installer === undefined ? texts : screenTexts(defaultSettings({ installer }));
+  const warnings = freeLimitWarnings(values, facts.freeLimits);
+  const shown = (Object.keys(texts) as Key[]).filter((key) => !ACCESS_SETTINGS.includes(key));
+
+  return shown.map((key) => {
+    const control = controlOf(SETTING_VALUES.entries[key]);
 
     return {
       key,
-      control: controlOf(SETTING_VALUES.entries[key]),
+      control,
       text: texts[key],
-      suffix: typeof value === "number" ? texts[key].slice(String(value).length) : "",
-      fallback: key === "logins" ? DEFAULT_LOGINS : defaults[key],
+      unit: control.kind === "number" ? unitOf(SETTING_VALUES.entries[key], texts[key]) : "",
+      fallback: defaults[key],
       changed: texts[key] !== defaults[key],
-      warning: warnings.get(key) ?? null,
-      elsewhere: DOMAIN_SETTINGS.includes(key),
+      warnings: warnings.get(key) ?? [],
+      repair: facts.domain && DOMAIN_SETTINGS.includes(key),
     };
   });
 }
@@ -87,7 +98,7 @@ export const settingsRoutes = new Hono<Shared>()
     const address = await updateAddressState(install, actor);
     if (!address.ok) return refused(context, address);
 
-    const rows = rowsOf(config.values, context.get("host").freeLimits);
+    const rows = rowsOf(config.values, { freeLimits: context.get("host").freeLimits, domain: context.get("domain") !== undefined });
 
     return context.json({ ok: true as const, rows, updateAddress: { set: address.set, since: address.since } });
   })
@@ -98,7 +109,7 @@ export const settingsRoutes = new Hono<Shared>()
     if (!config.ok) return refused(context, config);
 
     const current = settingsToText(config.values);
-    const held = Object.keys(texts).filter((key): key is Key => Object.hasOwn(current, key) && !DOMAIN_SETTINGS.includes(key as Key));
+    const held = Object.keys(texts).filter((key): key is Key => Object.hasOwn(current, key) && !ACCESS_SETTINGS.includes(key as Key));
     const stranger = Object.keys(texts).find((key) => !held.includes(key as Key));
     if (stranger !== undefined) return refused(context, { code: "bad_argument", about: stranger });
 
@@ -109,8 +120,7 @@ export const settingsRoutes = new Hono<Shared>()
     const changed = await changeConfig(install, actor, Object.fromEntries(held.map((key) => [key, read.values[key]])));
     if (!changed.ok) return refused(context, changed);
 
-    // The login in front of the dashboard keeps a list of its own, which only a repair of the domain brings up to the stored one.
-    return context.json({ ok: true as const, loginsChanged: changed.values.logins.join() !== config.values.logins.join() });
+    return context.json({ ok: true as const });
   })
   .post("/settings/update-address", vValidator("json", UPDATE_ADDRESS_REQUEST, refuseInvalid), async (context) => {
     const { install, actor } = context.get("asker");

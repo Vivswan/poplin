@@ -59,7 +59,32 @@ const STOPS: readonly Stop[] = [
   {
     name: "Settings, from the side",
     open: (page) => toSection(page, "Settings"),
-    shows: (page) => [screenHeading(page, "Settings"), page.getByRole("form", { name: "Sites", exact: true })],
+    shows: (page) => [
+      screenHeading(page, "Settings"),
+      page.getByRole("tab", { name: "New sites", selected: true }),
+      page.getByRole("switch", { name: "Show new sites in search engines", exact: true }),
+    ],
+  },
+  {
+    name: "what a setting means, behind its question mark",
+    open: (page) => page.getByRole("button", { name: "About: Keep deleted sites in the trash for", exact: true }).click(),
+    shows: (page) => [page.getByRole("dialog").getByText("Default: 7 days", { exact: true })],
+    close: pressEscape,
+  },
+  {
+    name: "Visitors, the second tab of the settings",
+    open: (page) => page.getByRole("tab", { name: "Visitors", exact: true }).click(),
+    shows: (page) => [page.getByRole("tab", { name: "Visitors", selected: true }), page.getByRole("switch", { name: "Allow search engines to list your sites", exact: true })],
+  },
+  {
+    name: "Limits, the third tab of the settings",
+    open: (page) => page.getByRole("tab", { name: "Limits", exact: true }).click(),
+    shows: (page) => [page.getByRole("tab", { name: "Limits", selected: true }), page.getByRole("textbox", { name: "Storage for all sites together", exact: true })],
+  },
+  {
+    name: "Updates, the last tab of the settings",
+    open: (page) => page.getByRole("tab", { name: "Updates", exact: true }).click(),
+    shows: (page) => [page.getByRole("tab", { name: "Updates", selected: true }), page.getByRole("switch", { name: "Check for a newer version", exact: true })],
   },
   {
     name: "the question before everyone is signed out",

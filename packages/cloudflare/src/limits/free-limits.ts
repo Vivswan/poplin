@@ -47,21 +47,21 @@ const FREE_FILES_PER_PUBLISH = 5000;
 
 /** The limits the dashboard of an install on Cloudflare warns against. */
 export const FREE_LIMITS: FreeLimits = {
-  totalBytes: { most: FREE_STORAGE_BYTES, warning: "above Cloudflare's free 10 GB; storage past that is billed by Cloudflare" },
-  siteBytes: { most: FREE_STORAGE_BYTES, warning: "one site of this size is above Cloudflare's free 10 GB; storage past that is billed by Cloudflare" },
-  filesPerPublish: { most: FREE_FILES_PER_PUBLISH, warning: "a publish this large may not start within the free plan's processing time" },
+  totalBytes: { most: FREE_STORAGE_BYTES, warning: "Cloudflare stores 10 GB for free and bills storage past that." },
+  siteBytes: { most: FREE_STORAGE_BYTES, warning: "Cloudflare stores 10 GB for free and bills storage past that." },
+  filesPerPublish: { most: FREE_FILES_PER_PUBLISH, warning: "A publish of more than 5,000 files may not start on Cloudflare's free plan." },
   filesPerDay: {
     most: Math.floor(FREE_WRITES_A_MONTH / DAYS_A_MONTH),
-    warning: "a month of such days is above Cloudflare's free 1,000,000 R2 write operations; operations past that are billed by Cloudflare",
+    warning: "A month of such days passes Cloudflare's 1,000,000 free storage writes, and Cloudflare bills the rest.",
   },
   storageWritesPerDay: {
     most: FREE_WRITES_A_DAY,
-    warning: "a month of such days is above Cloudflare's free 1,000,000 R2 Class A operations; operations past that are billed by Cloudflare",
+    warning: "A month of such days passes Cloudflare's 1,000,000 free storage writes, and Cloudflare bills the rest.",
   },
   storageReadsPerMonth: {
     most: FREE_READS_A_MONTH,
-    warning: "a month of such days can read the bucket more than Cloudflare's free 10,000,000 times; reads past that are billed by Cloudflare",
+    warning: "A month of such days can pass Cloudflare's 10,000,000 free storage reads, and Cloudflare bills the rest.",
   },
-  requestsPerDay: { most: 100_000, warning: "above Cloudflare's free 100,000 requests a day; has no effect without the paid Workers plan" },
-  logins: { most: 50, warning: "above the 50 users Cloudflare Access takes for free; users past that are billed by Cloudflare" },
+  requestsPerDay: { most: 100_000, warning: "Cloudflare's free plan serves 100,000 requests a day, so a higher value needs its paid plan." },
+  logins: { most: 50, warning: "Cloudflare lets 50 people log in for free and bills each one past that." },
 };

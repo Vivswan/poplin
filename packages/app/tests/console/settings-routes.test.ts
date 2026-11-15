@@ -1,20 +1,23 @@
-// The Settings screen's routes: the control each setting gets from its type, what a row says, what a save changes and refuses, the rebuild address that no answer holds, and the sign-out.
+// The Settings screen's routes: the control each setting gets from its type, the one unit an amount is typed in, what a row says, what a save changes and refuses, the rebuild address that no answer holds, and the sign-out.
 
 import { describe, expect, test } from "bun:test";
 
 import { SETTING_VALUES } from "@poplin/core/src/records/settings";
 import * as v from "valibot";
 
+import type { DomainPlug } from "../../src/console/domain/records";
 import { CONTROL_KINDS, controlOf } from "../../src/console/setting-controls";
 import { openConsole, REBUILD_HOST } from "./support/console";
 
 /** One setting as the route answers it. */
 interface Row {
   readonly key: string;
-  readonly control: { readonly kind: string; readonly least?: number | null; readonly most?: number | null };
+  readonly control: { readonly kind: string; readonly least?: number | null; readonly most?: number | null; readonly word?: string | null };
   readonly text: string;
+  readonly unit: string;
+  readonly fallback: string;
   readonly changed: boolean;
-  readonly elsewhere: boolean;
+  readonly repair: boolean;
 }
 
 /** What the route answers. */
@@ -41,97 +44,123 @@ describe("the control of a setting", () => {
   test.each([
     ["update_check", { kind: "switch" }],
     ["block_bots", { kind: "choice", options: ["auto", "on", "off"] }],
-    ["trash_days", { kind: "number", least: 1, most: null }],
-    ["site_share_of_day", { kind: "number", least: 1, most: 100 }],
+    ["trash_days", { kind: "number", least: 1, most: null, word: null }],
+    ["site_share_of_day", { kind: "number", least: 1, most: 100, word: null }],
     ["logins", { kind: "lines" }],
-    ["max_sites", { kind: "text" }],
-    ["max_total_size", { kind: "text" }],
+    ["max_sites", { kind: "number", least: 1, most: null, word: "none" }],
+    ["max_total_size", { kind: "number", least: 1, most: null, word: null }],
+    ["default_expires", { kind: "number", least: 1, most: null, word: "never" }],
   ] as const)("%s is changed with its own control", (key, control) => {
     expect(controlOf(SETTING_VALUES.entries[key])).toEqual(control);
   });
 
-  // Drift: a type with no control would stop the whole screen, where every setting can still be typed as text.
-  test("is the text control for a type that has none", () => {
-    expect(controlOf(v.date())).toEqual({ kind: "text" });
+  // Drift: a type with no control would stop the whole screen, where every setting can still be typed as text. An amount in units the screen has none of, or a choice between two words, would be drawn as a number it is not.
+  test.each([
+    ["a type that has none", v.date()],
+    ["an amount of a kind the screen has no unit for", v.strictObject({ count: v.number(), unit: v.picklist(["km", "mi"]) })],
+    ["one of two words", v.union([v.literal("never"), v.literal("always")])],
+    ["a word or a text", v.union([v.literal("none"), v.string()])],
+  ])("is the text control for %s", (_what, schema) => {
+    expect(controlOf(schema)).toEqual({ kind: "text" });
   });
 });
 
 describe("the rows", () => {
-  // Drift: a row would lose its default, its warning, or the mark of a setting changed elsewhere, or a new setting would be left out.
-  test("hold every setting of the rule book, each with its text, its default, and its state", async () => {
+  // Drift: a row would lose its default or its warnings, a new setting would be left out, or the logins, which the Access screen changes, would come back as a row.
+  test("hold every setting of the rule book but the logins, each with its text, its default, and its warnings, one for each limit", async () => {
     const opened = await openConsole();
     const changed = await opened.change("/data/settings", { texts: { requests_per_day: "250000", site_share_of_day: "40%" } });
     const { rows } = await settingsOf(opened);
     const byKey: Readonly<Record<string, unknown>> = Object.fromEntries(rows.map((row) => [row.key, row]));
 
     expect(changed.status).toBe(200);
-    expect(rows.map((row) => row.key)).toEqual(Object.keys(SETTING_VALUES.entries));
-    expect([byKey.requests_per_day, byKey.site_share_of_day, byKey.logins, byKey.block_bots]).toEqual([
+    expect(rows.map((row) => row.key)).toEqual(Object.keys(SETTING_VALUES.entries).filter((key) => key !== "logins"));
+    expect([byKey.requests_per_day, byKey.site_share_of_day, byKey.block_bots]).toEqual([
       {
         key: "requests_per_day",
-        control: { kind: "number", least: 1, most: null },
+        control: { kind: "number", least: 1, most: null, word: null },
         text: "250000",
-        suffix: "",
+        unit: "",
         fallback: "100000",
         changed: true,
-        warning: "above the free 10,000,000 reads a month; above the free 100,000 requests a day",
-        elsewhere: false,
+        warnings: ["above the free 10,000,000 reads a month", "above the free 100,000 requests a day"],
+        repair: false,
       },
-      { key: "site_share_of_day", control: { kind: "number", least: 1, most: 100 }, text: "40%", suffix: "%", fallback: "25%", changed: true, warning: null, elsewhere: false },
-      { key: "logins", control: { kind: "lines" }, text: opened.base.owner, suffix: "", fallback: "The email of whoever set the install up", changed: false, warning: null, elsewhere: false },
-      { key: "block_bots", control: { kind: "choice", options: ["auto", "on", "off"] }, text: "auto", suffix: "", fallback: "auto", changed: false, warning: null, elsewhere: true },
+      { key: "site_share_of_day", control: { kind: "number", least: 1, most: 100, word: null }, text: "40%", unit: "%", fallback: "25%", changed: true, warnings: [], repair: false },
+      { key: "block_bots", control: { kind: "choice", options: ["auto", "on", "off"] }, text: "auto", unit: "", fallback: "auto", changed: false, warnings: [], repair: false },
     ]);
+  });
+
+  // Drift: a size would be shown in the unit it was stored in, so the screen's fixed MB would stand beside a count of GB; or a value that is no whole number of the screen's unit would be rounded, and a save of the row would change it.
+  test.each([
+    ["a size stored in GB", {}, "max_total_size", { text: "9000MB", unit: "MB", fallback: "9000MB", changed: false }],
+    ["the same size saved in MB", { max_total_size: "9000MB" }, "max_total_size", { text: "9000MB", unit: "MB", changed: false }],
+    ["a size that is no whole number of MB", { max_site_size: "500KB" }, "max_site_size", { text: "500KB", unit: "KB", fallback: "200MB", changed: true }],
+    ["a span of whole days stored in hours", { default_expires: "48h" }, "default_expires", { text: "2d", unit: "d", fallback: "never", changed: true }],
+    ["a span that is no whole number of days", { default_expires: "12h" }, "default_expires", { text: "12h", unit: "h" }],
+    ["no span at all", {}, "default_expires", { text: "never", unit: "d", changed: false }],
+    ["no count at all", {}, "max_sites", { text: "none", unit: "", changed: false }],
+  ])("write %s in the one unit the screen types it in", async (_what, texts, key, row) => {
+    const opened = await openConsole();
+    if (Object.keys(texts).length > 0) await opened.change("/data/settings", { texts });
+
+    expect((await settingsOf(opened)).rows.find((entry) => entry.key === key)).toMatchObject(row);
+  });
+
+  // Drift: the line that sends a person to the Domain screen would show in a dashboard that has none, or be missing where a repair is what carries the change to the domain.
+  test("mark the settings a repair carries to the domain only in a dashboard with the Domain screen", async () => {
+    const marked = async (domain?: DomainPlug): Promise<readonly string[]> => (await settingsOf(await openConsole("", domain))).rows.filter((row) => row.repair).map((row) => row.key);
+
+    expect([await marked(), await marked({} as DomainPlug)]).toEqual([[], ["outside_pages", "search_engines_allowed", "block_bots"]]);
   });
 });
 
 describe("a save", () => {
-  // Drift: a save of one group would write another group's settings, or miss that the logins changed and need a repair.
-  test("changes the settings it names and no other, and says when the logins changed", async () => {
+  // Drift: a save would write a setting it does not name, or refuse the settings that also change the domain's rules, which this screen changes.
+  test("changes the settings it names, the ones of the domain included, and no other", async () => {
     const opened = await openConsole();
     const before = await textsOf(opened);
-    const logins = `${opened.base.owner},jonas@example.com`;
-    const plain = await opened.change("/data/settings", { texts: { trash_days: "30", default_search_engines: "on" } });
-    const withLogins = await opened.change("/data/settings", { texts: { logins } });
+    const saved = await opened.change("/data/settings", { texts: { trash_days: "30", default_search_engines: "on", block_bots: "off", outside_pages: "allowed" } });
 
-    expect([await plain.json(), await withLogins.json()]).toEqual([
-      { ok: true, loginsChanged: false },
-      { ok: true, loginsChanged: true },
-    ]);
-    expect(await textsOf(opened)).toEqual({ ...before, trash_days: "30", default_search_engines: "on", logins });
+    expect(await saved.json()).toEqual({ ok: true });
+    expect(await textsOf(opened)).toEqual({ ...before, trash_days: "30", default_search_engines: "on", block_bots: "off", outside_pages: "allowed" });
   });
 
   // Drift: a refused save would write the settings before the refused one, or name the wrong field.
   test.each([
-    ["text that is not in the setting's form", { versions_kept: "9", trash_days: "soon" }, 400, "bad_argument", "trash_days"],
-    ["a number outside its range", { site_share_of_day: "140%" }, 400, "bad_argument", "site_share_of_day"],
-    ["a setting changed where the domain is", { block_bots: "on" }, 400, "bad_argument", "block_bots"],
-    ["a key that is no setting", { colour: "blue" }, 400, "bad_argument", "colour"],
-    ["no setting at all", {}, 400, "bad_argument", "settings"],
-    ["logins without the admin's own email", { logins: "jonas@example.com" }, 409, "no_working_login", "logins"],
-  ])("refuses %s and changes nothing", async (_what, texts, status, code, about) => {
+    ["text that is not in the setting's form", { versions_kept: "9", trash_days: "soon" }, "bad_argument", "trash_days"],
+    ["a number outside its range", { site_share_of_day: "140%" }, "bad_argument", "site_share_of_day"],
+    ["the logins, which the Access screen changes", { trash_days: "9", logins: "owner@example.com,jonas@example.com" }, "bad_argument", "logins"],
+    ["a key that is no setting", { colour: "blue" }, "bad_argument", "colour"],
+    ["no setting at all", {}, "bad_argument", "settings"],
+  ])("refuses %s and changes nothing", async (_what, texts, code, about) => {
     const opened = await openConsole();
     const before = await textsOf(opened);
     const response = await opened.change("/data/settings", { texts });
 
-    expect([response.status, await response.json()]).toMatchObject([status, { ok: false, code, about }]);
+    expect([response.status, await response.json()]).toMatchObject([400, { ok: false, code, about }]);
     expect(await textsOf(opened)).toEqual(before);
   });
 
   // Drift: a setting would be refused in the general sentence, which names its key and no rule, or a number's sentence would tell a range its schema no longer has.
   test("is refused in a sentence that tells the setting's rule and not its key, a number's with the range of its schema", async () => {
     const opened = await openConsole();
-    const saved = (await settingsOf(opened)).rows.filter((row) => !row.elsewhere);
+    const saved = (await settingsOf(opened)).rows;
     const told: [string, string][] = [];
     for (const row of saved) {
       const refusal = (await (await opened.change("/data/settings", { texts: { [row.key]: "" } })).json()) as { readonly sentence: string };
       told.push([row.key, refusal.sentence]);
     }
-    const rangeOf = ({ least, most }: Row["control"]): string => (most === null ? `Use a whole number, ${least} or more.` : `Use a whole number from ${least} to ${most}.`);
+    const rangeOf = ({ least, most, word }: Row["control"]): string => {
+      if (most !== null) return `Use a whole number from ${least} to ${most}.`;
+
+      return word === "none" ? `Use a whole number, ${least} or more, or leave it empty for no limit.` : `Use a whole number, ${least} or more.`;
+    };
     const ranges = new Map(saved.filter((row) => row.control.kind === "number").map((row) => [row.key, rangeOf(row.control)]));
 
     expect(told.filter(([key, sentence]) => sentence.includes(key) || sentence.includes("is not one it takes"))).toEqual([]);
     expect(told.filter(([key]) => ranges.has(key))).toEqual([...ranges]);
-    expect(Object.fromEntries(told)).toMatchObject({ trash_days: "Use a whole number, 1 or more.", default_expires: "Use never, or a span such as 12h or 30d." });
+    expect(Object.fromEntries(told)).toMatchObject({ trash_days: "Use a whole number, 1 or more.", max_total_size: "Use a whole number, 1 or more." });
   });
 });
 

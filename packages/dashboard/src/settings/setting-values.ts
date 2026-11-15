@@ -1,63 +1,107 @@
-// How a setting's text is put into its control and read back: a number without its suffix, a list one entry on a line, everything else as it is typed.
+// How a setting's text is put into its control and read back, and how a value is written where it is only read. The text is the one form the server shows and takes: `9000MB`, `25%`, `on`, `never`.
 
 import type { Row } from "@/settings/settings-queries";
-import { wordsOf } from "@/settings/settings-words";
-
-/** What a switch's two states are called. */
-const SWITCH_WORDS: Readonly<Record<string, string>> = { on: "On", off: "Off" };
+import { unitWord, wordsOf } from "@/settings/settings-words";
 
 /** How a number is written where it is only read: with separators between its thousands. */
 const COUNT_FORMAT = new Intl.NumberFormat("en-US");
 
-/** A whole number as text. */
-const DIGITS = /^[0-9]+$/;
+/** The two parts of a number's text: its digits, which may be none, and the unit after them. */
+const PARTS = /^([0-9]*)(.*)$/;
 
-function withoutSuffix(row: Row, text: string): string {
-  return row.suffix !== "" && text.endsWith(row.suffix) ? text.slice(0, -row.suffix.length) : text;
+/** A number's text taken apart. */
+interface Parts {
+  /** The count; `null` for the word of no number and for a text with no digits. */
+  readonly count: number | null;
+
+  /** The unit after the digits, such as `MB`, `%`, or nothing. */
+  readonly unit: string;
+}
+
+/** The word of a number control that can hold no number, such as `never`; `null` for every other row. */
+function wordOf(row: Row): string | null {
+  return row.control.kind === "number" ? row.control.word : null;
 }
 
 /**
- * What a control shows for a setting's text.
+ * Take a number's text apart.
  *
- * @param text - the setting's value in the form it is saved in, such as `25%` or `a@example.com,b@example.com`
- * @returns the digits of a number, the entries of a list one on a line, any other text unchanged
+ * @param text - the setting's text, such as `9000MB`, `25%`, `MB`, or `never`
+ * @returns the count and the unit the text itself carries; for the word of no number, no count and the unit of the row
  */
-export function shownOf(row: Row, text: string = row.text): string {
-  if (row.control.kind === "number") return withoutSuffix(row, text);
+export function partsOf(row: Row, text: string): Parts {
+  if (text === wordOf(row)) return { count: null, unit: row.unit };
 
-  return row.control.kind === "lines" ? text.split(",").join("\n") : text;
+  const [, digits = "", unit = ""] = PARTS.exec(text) ?? [];
+
+  return { count: digits === "" ? null : Number(digits), unit };
 }
 
 /**
- * What is saved for what a control holds: `shownOf` read back.
+ * The text of a number: `partsOf` read back.
  *
- * @param shown - what the control holds, as it was typed
- * @returns the text the setting is saved as. Typed text is trimmed, a number gets its suffix back, and the lines of a list are joined, the empty ones left out
+ * @returns the count with its unit. No count is the word of no number where the row has one and no choice of its own for it, and otherwise the unit alone, which the server refuses
  */
-export function sentOf(row: Row, shown: string): string {
-  if (row.control.kind === "number") return `${shown.trim()}${row.suffix}`;
+export function textOf(row: Row, { count, unit }: Parts): string {
+  if (count !== null) return `${count}${unit}`;
 
-  if (row.control.kind !== "lines") return shown.trim();
-
-  return shown
-    .split(/[\n,]/)
-    .map((entry) => entry.trim())
-    .filter((entry) => entry !== "")
-    .join(",");
+  return wordsOf(row.key).wordLabels === undefined ? (wordOf(row) ?? unit) : unit;
 }
 
 /**
- * Write a value of a setting where it is only read: a default, or a setting changed elsewhere.
+ * Whether a switch is on.
  *
- * @returns `On` or `Off` for a switch, a number with separators and its unit, any other text unchanged
+ * @param text - the setting's text: `on` or `off`, or for a choice of two drawn as a switch one of its options
+ */
+export function isOn(row: Row, text: string): boolean {
+  return text === (wordsOf(row.key).on ?? "on");
+}
+
+/**
+ * The text of a switch: `isOn` read back.
+ *
+ * @returns `on` or `off`; for a choice of two drawn as a switch, the option that is on or the other one
+ */
+export function switchText(row: Row, on: boolean): string {
+  const onText = wordsOf(row.key).on;
+  if (onText === undefined || row.control.kind !== "choice") return on ? "on" : "off";
+
+  return on ? onText : (row.control.options.find((option) => option !== onText) ?? onText);
+}
+
+/**
+ * What an option of a choice is called.
+ *
+ * @returns the setting's own word for it, or the option with a capital letter
+ */
+export function choiceLabel(row: Row, option: string): string {
+  return wordsOf(row.key).choices?.[option] ?? `${option.slice(0, 1).toUpperCase()}${option.slice(1)}`;
+}
+
+/** Whether a row is drawn as a switch: an on or off, or a choice of two whose words name the one that is on. */
+export function isSwitch(row: Row): boolean {
+  return row.control.kind === "switch" || (row.control.kind === "choice" && wordsOf(row.key).on !== undefined);
+}
+
+/**
+ * Write a value of a setting where it is only read: its default.
+ *
+ * @returns `On` or `Off` for a switch, the option's name for a choice, a number with separators and its unit, the name of the word of no number, any other text unchanged
  */
 export function readOf(row: Row, text: string): string {
-  if (row.control.kind === "switch") return SWITCH_WORDS[text] ?? text;
+  if (isSwitch(row)) return isOn(row, text) ? "On" : "Off";
+
+  if (row.control.kind === "choice") return choiceLabel(row, text);
 
   if (row.control.kind !== "number") return text;
 
-  const digits = withoutSuffix(row, text);
-  const unit = row.suffix === "" ? ` ${wordsOf(row.key).unit ?? ""}` : row.suffix;
+  const words = wordsOf(row.key);
+  if (text === wordOf(row)) return words.wordLabels?.word ?? words.empty ?? text;
 
-  return DIGITS.test(digits) ? `${COUNT_FORMAT.format(Number(digits))}${unit}`.trim() : text;
+  const parts = partsOf(row, text);
+  if (parts.count === null) return text;
+
+  const unit = unitWord(row.key, parts.unit);
+
+  return unit === "%" ? `${COUNT_FORMAT.format(parts.count)}%` : `${COUNT_FORMAT.format(parts.count)} ${unit}`.trim();
 }

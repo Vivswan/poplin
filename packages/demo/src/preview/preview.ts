@@ -37,14 +37,14 @@ const API_LIMITS = { fileBytes: 100_000_000, files: 10_000, manifestBytes: 2_000
 
 /** The free plan of the preview's invented host: the numbers are samples, and no real plan is behind them. */
 const FREE_LIMITS = {
-  totalBytes: { most: 10_000_000_000, warning: "above the sample host's free 10 GB; a real host bills storage past its own" },
-  siteBytes: { most: 10_000_000_000, warning: "one site of this size is above the sample host's free 10 GB; a real host bills storage past its own" },
-  filesPerPublish: { most: 5000, warning: "a publish this large may not start within the sample host's free processing time" },
-  filesPerDay: { most: 32_258, warning: "a month of such days is above the sample host's free 1,000,000 stored files; a real host bills the ones past its own" },
-  storageWritesPerDay: { most: 30_281, warning: "a month of such days is above the sample host's free 1,000,000 writes and listings; a real host bills the ones past its own" },
-  storageReadsPerMonth: { most: 10_000_000, warning: "a month of such days can read the storage more than the sample host's free 10,000,000 times; a real host bills the reads past its own" },
-  requestsPerDay: { most: 100_000, warning: "above the sample host's free 100,000 requests a day; a real host serves nothing more without its paid plan" },
-  logins: { most: 50, warning: "above the 50 users the sample host takes for free; a real host bills users past its own" },
+  totalBytes: { most: 10_000_000_000, warning: "The sample host stores 10 GB for free, and a real host bills storage past its own." },
+  siteBytes: { most: 10_000_000_000, warning: "The sample host stores 10 GB for free, and a real host bills storage past its own." },
+  filesPerPublish: { most: 5000, warning: "A publish of more than 5,000 files may not start on the sample host's free plan." },
+  filesPerDay: { most: 32_258, warning: "A month of such days passes the sample host's 1,000,000 free storage writes, and a real host bills the rest." },
+  storageWritesPerDay: { most: 30_281, warning: "A month of such days passes the sample host's 1,000,000 free storage writes, and a real host bills the rest." },
+  storageReadsPerMonth: { most: 10_000_000, warning: "A month of such days can pass the sample host's 10,000,000 free storage reads, and a real host bills the rest." },
+  requestsPerDay: { most: 100_000, warning: "The sample host's free plan serves 100,000 requests a day, so a higher value needs a paid plan." },
+  logins: { most: 50, warning: "The sample host lets 50 people log in for free, and a real host bills each one past its own." },
 } as const;
 
 /** When the sample release the seeded install knows of came out, and where its notes are: the page of the project's releases. No such release exists. */

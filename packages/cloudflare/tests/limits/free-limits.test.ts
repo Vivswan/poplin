@@ -40,5 +40,5 @@ test.each([
 test("a day of requests above both the free requests and the free month of reads is told both", () => {
   const told = freeLimitWarnings({ ...settings, requests_per_day: 110_000 }, FREE_LIMITS).get("requests_per_day");
 
-  expect(told).toBe(`${FREE_LIMITS.storageReadsPerMonth.warning}; ${FREE_LIMITS.requestsPerDay.warning}`);
+  expect(told).toEqual([FREE_LIMITS.storageReadsPerMonth.warning, FREE_LIMITS.requestsPerDay.warning]);
 });

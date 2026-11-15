@@ -6,7 +6,7 @@ test("a refusal names what it is about only when that is a plain name; anything 
   const cases = [
     ["title", "The value of title is not one it takes."],
     ["expires", "Deletes itself takes never, a span such as 7d, or a day such as 2026-12-01."],
-    ["max_total_size", "Use a size such as 200MB or 9GB."],
+    ["max_sites", "Use a whole number, 1 or more, or leave it empty for no limit."],
     [undefined, "The value of a field is not one it takes."],
     ["<script>", "The value of a field is not one it takes."],
     ["Call 555 now", "The value of a field is not one it takes."],

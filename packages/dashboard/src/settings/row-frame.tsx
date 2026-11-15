@@ -6,7 +6,7 @@ import type { ReactNode } from "react";
 import { FieldDescription, FieldLabel } from "@/components/ui/field";
 
 /** The four cells of a row, and of the headings above the rows. Under the width of a tablet they stand one under the other. */
-export const ROW_GRID = "grid gap-x-6 gap-y-2 px-6 max-md:px-4 md:grid-cols-[minmax(0,5fr)_minmax(0,4fr)_minmax(0,3fr)_minmax(0,3fr)]";
+const ROW_GRID = "grid gap-x-6 gap-y-2 px-6 max-md:px-4 md:grid-cols-[minmax(0,5fr)_minmax(0,4fr)_minmax(0,3fr)_minmax(0,3fr)]";
 
 /** What a row is drawn from. */
 interface RowFrameProps {

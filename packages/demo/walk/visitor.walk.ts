@@ -14,13 +14,13 @@ const SCREENS = [
   { path: "tokens", heading: "Access", holds: { role: "table", name: "People" } },
   { path: "activity", heading: "Activity", holds: { role: "table", name: "Activity" } },
   { path: "usage", heading: "Usage", holds: { role: "table", name: "Usage" } },
-  { path: "settings", heading: "Settings", holds: { role: "form", name: "Sites" } },
+  { path: "settings", heading: "Settings", holds: { role: "form", name: "Settings" } },
   { path: "domain", heading: "Domain", holds: { role: "heading", name: "First, make a token" } },
   { path: "?view=trash", heading: "Sites", holds: { role: "table", name: "Sites in the trash" } },
 ] as const;
 
-/** A setting that is typed and saved with its group, and the value a test gives it. */
-const SETTING = { group: "Sites", label: "Versions kept", value: "5" } as const;
+/** A setting that is typed and then saved with the screen's one Save, and the value a test gives it. */
+const SETTING = { label: "Published versions kept per site", value: "5" } as const;
 
 /** A deep link with a query the screen reads and a fragment. */
 const DEEP_LINK = "activity?kind=sites#content";
@@ -102,9 +102,8 @@ test("a reload keeps the visit", async ({ page }) => {
 test("a setting typed and saved is still there after a reload", async ({ page }) => {
   await arrive(page);
   await page.goto("settings");
-  const group = page.getByRole("form", { name: SETTING.group, exact: true });
-  await group.getByRole("textbox", { name: SETTING.label, exact: true }).fill(SETTING.value);
-  await group.getByRole("button", { name: "Save", exact: true }).click();
+  await page.getByRole("textbox", { name: SETTING.label, exact: true }).fill(SETTING.value);
+  await page.getByRole("region", { name: "Unsaved changes", exact: true }).getByRole("button", { name: "Save", exact: true }).click();
   await expect(said(page, "Saved.")).toBeVisible();
   await page.reload();
 
