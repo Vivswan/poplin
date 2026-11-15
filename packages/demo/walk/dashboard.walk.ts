@@ -4,7 +4,7 @@ import { readFile } from "node:fs/promises";
 
 import { expect, type Locator, type Page } from "@playwright/test";
 
-import { arrive, openPanel, RESET_MS, said, screenHeading, siteName, test } from "./visit";
+import { arrive, openPanel, reset, said, screenHeading, siteName, test } from "./visit";
 
 /** The screens the walk is taken on. A wide one shows tables and the side navigation; a narrow one shows lists, and the sections behind a button. */
 const VIEWPORTS = [
@@ -275,9 +275,8 @@ const STOPS: readonly Stop[] = [
   },
   {
     name: "a reset of the sample data, which keeps the screen it was pressed on",
-    open: (page) => page.getByRole("button", { name: "Reset", exact: true }).click(),
+    open: reset,
     shows: (page) => [said(page, "Sample data reset."), screenHeading(page, "Access")],
-    within: RESET_MS,
   },
 ];
 
@@ -294,9 +293,6 @@ interface Stop {
 
   /** What is on the screen once the place is reached. */
   readonly shows: (page: Page, wide: boolean) => readonly Locator[];
-
-  /** How long the place may take to show, in milliseconds; left out, as long as any wait gets. */
-  readonly within?: number;
 
   /** Leaves the place without changing anything; what it showed is then gone. Left out, the place stays open for the next stop. */
   readonly close?: (page: Page) => Promise<void>;
@@ -434,7 +430,7 @@ for (const { width, height, wide } of VIEWPORTS) {
         for (const stop of STOPS.filter((each) => each.only === undefined || (each.only === "wide") === wide)) {
           await test.step(stop.name, async () => {
             await stop.open(page, wide);
-            for (const shown of stop.shows(page, wide)) await expect(shown).toBeVisible({ timeout: stop.within });
+            for (const shown of stop.shows(page, wide)) await expect(shown).toBeVisible();
 
             expect.soft(problems.splice(0), stop.name).toEqual([]);
             if (stop.close === undefined) return;
@@ -474,8 +470,7 @@ test.describe("on a phone, while a line says a result", () => {
   // Drift: a line would lie over the header or the screen's own controls under it again, where a pointer that rests on it keeps it there, and no control under it could be pressed.
   test("the whole line lies under the header and the controls of the screen, and the button of the sections opens them", async ({ page }) => {
     await arrive(page);
-    await page.getByRole("button", { name: "Reset", exact: true }).click();
-    await expect(said(page, "Sample data reset.")).toBeVisible({ timeout: RESET_MS });
+    await reset(page);
 
     // The line slides up into its place, so its place is read until it has come to rest.
     await expect(async () => {

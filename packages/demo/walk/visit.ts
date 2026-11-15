@@ -9,7 +9,13 @@ export const WHAT_IT_IS = "Your agent publishes a folder as a website, in your o
 export const FIRST_LOAD_MS = 30_000;
 
 /** How long a Reset may take to say that it is done, in milliseconds: the worker seeds both installs again and the open screen reads its data again before the line shows, which on a busy machine passes the five seconds a wait gets. */
-export const RESET_MS = 30_000;
+const RESET_MS = 30_000;
+
+/** What the dashboard says once the sample data is new again. */
+const RESET_DONE = "Sample data reset.";
+
+/** What the dashboard says when the sample data could not be made new. The line leaves after a few seconds. */
+const RESET_REFUSED = "The sample data was not reset. Try again.";
 
 /** The address of the Sites screen when it shows the trash. */
 export const TRASH = "./?view=trash";
@@ -87,6 +93,15 @@ export async function trash(page: Page, name: string): Promise<void> {
 
   await expect(said(page, `${name} moved to the trash.`)).toBeVisible();
   await expect(siteName(page, name)).toHaveCount(0);
+}
+
+/** Press Reset and wait until the dashboard says the sample data is new. A reset the dashboard says failed ends the wait at once, under the words it said. */
+export async function reset(page: Page): Promise<void> {
+  await page.getByRole("button", { name: "Reset", exact: true }).click();
+
+  const answer = said(page, RESET_DONE).or(said(page, RESET_REFUSED)).first();
+  await expect(answer).toBeVisible({ timeout: RESET_MS });
+  expect(await answer.textContent(), "what the dashboard said of the reset").toBe(RESET_DONE);
 }
 
 /** A test whose browser is watched: it fails when a page threw an error or asked another origin, whatever else it checks. */
