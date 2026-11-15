@@ -48,7 +48,7 @@ function dueVersion(running: Running, now: number): string | undefined {
 /**
  * Start the update that is due, if one is, and keep the try. It adds no call to the database while none is due.
  *
- * A start costs six calls to the database and one request, whether the provider takes it or not, and a day with no saved address one.
+ * A start costs six calls to the database and one request, seven when the provider did not take it and that is noted as a problem, and a day with no saved address one.
  *
  * @param running - what `checkForUpdate` answered on this run, and the version the install runs
  * @throws {Error} the database failed; a request that was sent stays sent, and its version stays kept as taken, so it is not started again by itself

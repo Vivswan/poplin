@@ -18,6 +18,7 @@ import { importSettings, SETTINGS_IMPORT } from "@poplin/core/src/actions/import
 import { LIST_QUERY, listSites } from "@poplin/core/src/actions/list";
 import { issueToken, listTokens, revokeToken, TOKEN_REQUEST } from "@poplin/core/src/actions/manage-tokens";
 import { newLink } from "@poplin/core/src/actions/new-link";
+import { noteProblem } from "@poplin/core/src/actions/problems";
 import type { Install } from "@poplin/core/src/actions/records";
 import { restoreSite } from "@poplin/core/src/actions/restore";
 import { ROLLBACK_OPTIONS, rollbackSite } from "@poplin/core/src/actions/rollback";
@@ -188,7 +189,7 @@ export function createApi(deps: ApiDeps): { readonly fetch: (request: Request) =
   app.use(methodNotAllowed({ app, onMethodNotAllowed: (_context, allowed) => refusal("method_not_allowed", undefined, { Allow: allowed.join(", ") }) }));
   app.route("/", routesOf(deps, metered(deps, deps.report)));
   app.notFound(() => refusal("not_found", "route"));
-  app.onError((error) => {
+  app.onError(async (error) => {
     // The one such error is the refusal of a request with no live token: an answer, and no failure to report.
     if (error instanceof HTTPException) return error.getResponse();
 
@@ -197,6 +198,8 @@ export function createApi(deps: ApiDeps): { readonly fetch: (request: Request) =
 
     deps.report?.(error);
     if (error instanceof AllowanceSpent) return spentRefusal(error, deps.now());
+
+    await noteProblem(deps, "api_failed", error);
 
     return refusal("internal");
   });

@@ -22,6 +22,9 @@ interface Parts {
 
   /** How many listings beyond the setting's bound are taken; 0 when left out. The scheduled sweep has some, so no other work of a day keeps it from removing files. */
   readonly spare?: number;
+
+  /** Told of a listing the day has no room for, before it is refused. */
+  readonly refused?: () => Promise<void>;
 }
 
 /** A store that counts, and what writes its count down. */
@@ -62,7 +65,11 @@ export function meterStore(inner: ObjectStore, parts: Parts): Metered {
     async list(options: ListOptions): Promise<ListPage> {
       const counted = first !== undefined;
       first ??= parts.database.takeStorageWrite(day, parts.spare ?? 0);
-      if (!(await first)) throw new WritesSpent();
+      if (!(await first)) {
+        await parts.refused?.();
+
+        throw new WritesSpent();
+      }
 
       if (counted) later += 1;
 

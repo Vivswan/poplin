@@ -8,7 +8,7 @@ import { POSITIVE } from "../records/fields";
 import { mintSiteFolder, type Site, siteFromRow, siteToRow } from "../records/site";
 import { MANIFEST_FILE, type ManifestFile, mintUploadId, type Upload, type UploadPlan } from "../records/upload";
 import { parseSiteId } from "../sites/ids";
-import { checkManifest, ENTRY_PAGE, FULL, roomUnder, type UploadLimits } from "./begin-publish";
+import { checkManifest, ENTRY_PAGE, refuseFull, roomUnder, type UploadLimits } from "./begin-publish";
 import { BACKUP_FORMAT, type ExportedSite } from "./export";
 import { enterInstall } from "./reach";
 import { type Install, type Refused, refuse } from "./records";
@@ -168,7 +168,7 @@ export async function beginImport(
 
   const upload = { ...placed, id: mintUploadId(), owner: actor.holder, manifest: files, created_at: entered.signed.at };
   const added = await install.database.addUpload(upload, roomUnder(entered.settings, { makesSite: true, writes: files.length }, entered.signed.at));
-  if (added.kind !== "done") return FULL[added.kind];
+  if (added.kind !== "done") return refuseFull(install, added.kind);
 
   const bytes = files.reduce((sum, file) => sum + file.size, 0);
 

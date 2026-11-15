@@ -7,6 +7,7 @@ import { COUNT } from "../records/fields";
 import { type ManifestFile, parseUploadId, type Upload } from "../records/upload";
 import { dayOf } from "../records/views";
 import type { ObjectKey } from "../storage/storage";
+import { noteProblem } from "./problems";
 import { type Install, type Refused, refuse } from "./records";
 import { isKeptVersion, isWithinReach, uploadKey, uploadObject } from "./uploads";
 
@@ -60,6 +61,7 @@ async function countLostWrite(install: Install, upload: Upload): Promise<boolean
   if (counted === undefined || counted.writes <= counted.most) return false;
 
   await install.database.abandonUpload(upload.id);
+  await noteProblem(install, "writes_limit_reached");
 
   return true;
 }
