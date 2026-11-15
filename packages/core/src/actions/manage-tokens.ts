@@ -104,6 +104,24 @@ export async function listTokens(install: Install, actor: Actor): Promise<{ read
 }
 
 /**
+ * Name the tokens among some holders: what a screen writes where a token published or changed something. A removed token and one that ran out keep their names.
+ *
+ * @param holders - whoever a page names; an email is no token and is skipped
+ * @returns the note of each token that has one, by the token's id, or `not_allowed` for anyone but an admin
+ */
+export async function nameTokens(
+  install: Install,
+  actor: Actor,
+  holders: readonly string[],
+): Promise<{ readonly ok: true; readonly names: Readonly<Record<string, string>> } | Refused<"not_allowed">> {
+  if (actor.scope !== "admin") return refuse("not_allowed");
+
+  const ids = holders.filter((holder) => v.is(TOKEN_ID, holder));
+
+  return { ok: true, names: Object.fromEntries(await install.database.getTokenNames(ids)) };
+}
+
+/**
  * List the tokens that work, the newest first, and apart from them the 50 that ended last: the removed ones and the ones that ran out.
  *
  * @returns `more` says that more than 50 ended. `not_allowed` for anyone but an admin

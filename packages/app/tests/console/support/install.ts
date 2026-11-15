@@ -38,7 +38,7 @@ interface Owned {
   readonly cookie: string;
   readonly clock: { now: number };
   readonly counters: MemoryCounters;
-  readonly publish: (name: string, access?: "private" | "unlisted" | "public") => Promise<Site>;
+  readonly publish: (name: string, access?: "private" | "unlisted" | "public", by?: Site["owner"]) => Promise<Site>;
   readonly audit: () => Promise<readonly AuditEntry[]>;
 }
 
@@ -51,7 +51,7 @@ export function codeCounts(counters = new MemoryCounters()): CodeTries {
 /**
  * Open a fresh install with the default settings and one login, who holds a session.
  *
- * @returns the install and its helpers: `publish` makes a site, and `cookie` is the owner's session
+ * @returns the install and its helpers: `publish` makes a site, published by the owner unless it names who, and `cookie` is the owner's session
  */
 export async function openOwned(): Promise<Owned> {
   const base = await openInstall();
@@ -75,7 +75,7 @@ export async function openOwned(): Promise<Owned> {
     cookie: setCookie.slice(0, setCookie.indexOf(";")),
     clock,
     counters: new MemoryCounters(),
-    publish: (name, access = "unlisted") => base.publish({ name, access, files: {} }),
+    publish: (name, access = "unlisted", by = base.owner) => base.publish({ name, access, files: {}, by }),
     audit: () => base.database.listAudit({ limit: 100 }),
   };
 }

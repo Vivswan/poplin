@@ -148,6 +148,8 @@ const ROWS: Readonly<Record<string, readonly [read: number, written: number]>> =
   "addToken": [2, 6],
   "getToken": [1, 0],
   "listTokens": [2, 0],
+  "getTokenNames, 1 of 2": [1, 0],
+  "getTokenNames, 1 of 2 among 250 ids": [251, 0],
   "revokeToken": [4, 4],
   "listTokenStates": [3, 0],
   "addComputerLogin": [6, 3],
@@ -659,6 +661,8 @@ describe("D1: the rows every operation of the database costs of a day's allowanc
     await database.addToken(publisher, BY_ADA);
     await cost("getToken", () => database.getToken(admin.id));
     await cost("listTokens", () => database.listTokens());
+    await cost("getTokenNames, 1 of 2", () => database.getTokenNames([publisher.id]));
+    await cost("getTokenNames, 1 of 2 among 250 ids", () => database.getTokenNames([...Array.from({ length: 249 }, (_none, index) => index.toString(16).padStart(16, "0") as TokenId), publisher.id]));
     await cost("revokeToken", () => database.revokeToken(admin.id, BY_ADA));
     await cost("listTokenStates", () => database.listTokenStates(NOW + 1, 50));
     const login = await pendingLogin(NOW, "one-visitor");

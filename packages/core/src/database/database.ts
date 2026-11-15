@@ -602,6 +602,13 @@ export interface Database {
   listTokens(): Promise<readonly TokenRecord[]>;
 
   /**
+   * The note of each of these ids' tokens that has one, read in one step however many ids there are: a removed token and one that ran out keep theirs. An id that is no token's, and a token with no note, are left out.
+   *
+   * @param ids - the tokens to name; each is read once
+   */
+  getTokenNames(ids: readonly TokenId[]): Promise<ReadonlyMap<TokenId, string>>;
+
+  /**
    * The tokens that work at a moment and the newest that ended, in one read. Every token is in exactly one of the two, or among the ended ones left out.
    *
    * @param now - a token that runs out at this moment has ended

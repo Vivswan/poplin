@@ -76,6 +76,11 @@ function cursorOf(next: NonNullable<Listing["after"]>): string {
   return by === undefined ? `${next.updated_at}-${next.id}` : `${next.updated_at}-${next.id}~${by}`;
 }
 
+/** Whoever published a version the site keeps: every holder a row of it can show. */
+function publishersOf(site: Row): readonly string[] {
+  return site.versions.map((version) => version.published_by);
+}
+
 /** One page of the table as its address asks for it: the sites in the listing's own order, and the cursor of the following page or `null`. */
 async function sitesPage(
   { install, actor }: Shared["Variables"]["asker"],
@@ -98,7 +103,7 @@ export const siteRoutes = new Hono<Shared>()
     const page = await sitesPage(context.get("asker"), context.req.valid("query"));
     if (!page.ok) return refused(context, page);
 
-    return context.json({ ...page, logins: await loginNames(context.get("asker")) });
+    return context.json({ ...page, logins: await loginNames(context.get("asker"), page.sites.flatMap(publishersOf)) });
   })
   .get("/sites/:site", vValidator("param", ONE_SITE, refuseInvalid), async (context) => {
     const { install, actor } = context.get("asker");
@@ -110,7 +115,7 @@ export const siteRoutes = new Hono<Shared>()
     const config = await readConfig(install, actor);
     if (!config.ok) return refused(context, config);
 
-    return context.json({ ok: true as const, site: shown.site, logins: await loginNames(context.get("asker")), search_engines_allowed: config.values.search_engines_allowed });
+    return context.json({ ok: true as const, site: shown.site, logins: await loginNames(context.get("asker"), publishersOf(shown.site)), search_engines_allowed: config.values.search_engines_allowed });
   })
   .post("/sites/:site/naming", vValidator("param", ONE_SITE, refuseInvalid), vValidator("json", CHANGES.naming, refuseInvalid), async (context) => {
     const { install, actor } = context.get("asker");

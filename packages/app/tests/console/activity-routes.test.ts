@@ -1,11 +1,12 @@
 // The Activity screen's routes: which entries a page holds under each narrowing, what each entry says of its site and its token, how a page goes on and back in either order, how many entries the log is said to hold, and the file the log is saved as.
 
-import { describe, expect, test } from "bun:test";
+import { describe, expect, spyOn, test } from "bun:test";
 
 import { deleteSite } from "@poplin/core/src/actions/delete";
-import { issueToken } from "@poplin/core/src/actions/manage-tokens";
+import { issueToken, revokeToken } from "@poplin/core/src/actions/manage-tokens";
 import { newLink } from "@poplin/core/src/actions/new-link";
 import { updateSite } from "@poplin/core/src/actions/set";
+import type { TokenId } from "@poplin/core/src/auth/tokens";
 import { AUDIT_WINDOW } from "@poplin/core/src/database/database";
 import { siteLabel } from "@poplin/core/src/sites/labels";
 
@@ -26,7 +27,7 @@ interface Page {
 }
 
 /** An install with a renamed site, a site deleted for good, and a named token: one entry of each kind of site, and one of access. */
-async function openWithHistory(): Promise<{ readonly opened: Awaited<ReturnType<typeof openConsole>>; readonly keptLabel: string; readonly token: string }> {
+async function openWithHistory(): Promise<{ readonly opened: Awaited<ReturnType<typeof openConsole>>; readonly keptLabel: string; readonly token: TokenId }> {
   const opened = await openConsole();
   const { install, owner, publish } = opened.base;
   const actor = { scope: "admin", holder: owner } as const;
@@ -117,12 +118,29 @@ describe("a page of the log", () => {
     expect([page.entries.length, page.entries.filter((entry) => entry.site?.label === null).length]).toEqual([101, 0]);
   });
 
-  // Drift: one screen would write a login by its name and another by its id: the log, the Sites table, and a site's panel answer the same names.
-  test("gives the name of each login that has one, by the login's id, as the Sites table and a site do", async () => {
-    const { opened, keptLabel, token } = await openWithHistory();
-    const answers = await Promise.all(["/data/activity", "/data/sites", `/data/sites/${keptLabel}`].map(async (path) => (await opened.get(path)).json()));
+  // Drift: one screen would write a login by its name and another by its id, or drop the name once the login is removed. A page that read every login the install holds would cost more with each login ever made.
+  test("gives the name of each login it shows, a removed one too, as the Sites table, a site and the file do, and reads no login it does not show", async () => {
+    const { opened, token } = await openWithHistory();
+    const { install, owner, publish } = opened.base;
+    const actor = { scope: "admin", holder: owner } as const;
+    const unnamed = await issueToken(install, actor, { scope: "publisher", note: "" });
+    await issueToken(install, actor, { scope: "publisher", note: "shown nowhere" });
+    if (!unnamed.ok) throw new Error("the test token was refused");
+    const site = await publish("by-a-login", "unlisted", token);
+    await publish("by-no-name", "unlisted", unnamed.record.id);
+    await revokeToken(install, actor, token);
+    const named = spyOn(install.database, "getTokenNames");
+    spyOn(install.database, "listTokens").mockRejectedValue(new Error("a page read every login"));
+
+    const paths = ["/data/activity", "/data/sites", `/data/sites/${siteLabel(site.name, site.id)}`];
+    // One after another, so that the reads are told in the order of the pages.
+    const answers: unknown[] = [];
+    for (const path of paths) answers.push(await (await opened.get(path)).json());
+    const file = await (await opened.get("/data/activity/download?site=by-a")).text();
 
     expect(answers.map((answer) => (answer as Page).logins)).toEqual(Array.from({ length: 3 }, () => ({ [token]: "the laptop" })));
+    expect(file.split("\r\n")[1]?.split(",").slice(1)).toEqual(["the laptop", "Made the site", "by-a-login", "create"]);
+    expect(named.mock.calls.map(([ids]) => [...ids].sort())).toEqual([[token, unnamed.record.id].sort(), [token, unnamed.record.id].sort(), [token], [token]]);
   });
 
   // Drift: a second page would repeat or skip entries, go on against the order it is read in, or a last page would offer a page after it.

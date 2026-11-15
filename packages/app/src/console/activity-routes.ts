@@ -188,7 +188,7 @@ function fileOf(
   asker: Asker,
   narrowing: Narrowing,
   first: Read,
-  writer: { readonly head: string; readonly lineOf: (entry: Entry) => string; readonly cut: string; readonly stopped: string },
+  writer: { readonly head: string; readonly lineOf: (entry: Entry, logins: Readonly<Record<string, string>>) => string; readonly cut: string; readonly stopped: string },
 ): ReadableStream<Uint8Array> {
   const encoder = new TextEncoder();
   const state = { reading: first, written: 0 };
@@ -199,7 +199,9 @@ function fileOf(
     },
     async pull(controller) {
       const { entries: reading } = state.reading;
-      if (reading.length > 0) controller.enqueue(encoder.encode(reading.map(writer.lineOf).join("")));
+      // Each reading names its own logins, so a file reads the logins it writes and no others.
+      const logins = await loginNames(asker, reading.map((entry) => entry.by));
+      if (reading.length > 0) controller.enqueue(encoder.encode(reading.map((entry) => writer.lineOf(entry, logins)).join("")));
 
       state.written += reading.length;
       const ending = await endingOf(asker, narrowing, state, writer);
@@ -234,7 +236,7 @@ export const activityRoutes = new Hono<Shared>()
 
     const page = back === undefined ? read.entries.slice(0, size) : read.entries.slice(0, size).reverse();
     const beyond = read.entries.length > size;
-    const [now, logins] = await Promise.all([sitesNow(asker.install, page), loginNames(asker)]);
+    const [now, logins] = await Promise.all([sitesNow(asker.install, page), loginNames(asker, page.map((entry) => entry.by))]);
     const entries = page.map(({ site, ...entry }) => ({
       ...entry,
       // The name is the one the site had then; the label and the title are the ones it has now, each `null` once it is no site.
@@ -266,10 +268,9 @@ export const activityRoutes = new Hono<Shared>()
     const first = await listAuditForFile(asker.install, asker.actor, { ...narrowing, after });
     if (!first.ok) return refused(context, first);
 
-    const logins = await loginNames(asker);
     const writer = FILE_WRITERS[format];
     const day = new Date(asker.install.now()).toISOString().slice(0, DAY_LENGTH);
-    const lineOf = (entry: Entry): string => writer.line(fileEntryOf(entry, logins));
+    const lineOf = (entry: Entry, logins: Readonly<Record<string, string>>): string => writer.line(fileEntryOf(entry, logins));
     const body = fileOf(asker, narrowing, first, { head: writer.head, lineOf, cut: writer.cut(CUT_NOTE), stopped: writer.cut(STOPPED_NOTE) });
 
     const name = part === undefined ? day : `${day}-${part}`;

@@ -4,7 +4,7 @@ import { describe, expect, test } from "bun:test";
 
 import type { LoginId, PendingLogin } from "../../../src/auth/computer-logins";
 import type { Login } from "../../../src/auth/logins";
-import { mintToken, type TokenRecord } from "../../../src/auth/tokens";
+import { mintToken, type TokenId, type TokenRecord } from "../../../src/auth/tokens";
 import type { Signed } from "../../../src/database/database";
 import {
   ADA,
@@ -84,6 +84,42 @@ export function signingKey(label: string, makeDatabase: DatabaseFactory): void {
 
 export function tokensAndSettings(label: string, makeDatabase: DatabaseFactory): void {
   describe(`${label}: tokens and settings`, () => {
+    // Drift: a screen writes who published by the token's note. A read that lost the note of a removed token would show its bare id in every row it published, and one that gave an empty note would write nothing there.
+    test("the notes of many tokens are read at once, a removed one's too, and nothing for a token with no note or an id that is no token's", async () => {
+      const database = await opened(makeDatabase);
+      const admin = (await mintToken({ scope: "admin", note: "laptop", now: NOW })).record;
+      const removed = (await mintToken({ scope: "publisher", note: "agent", now: NOW })).record;
+      const unnamed = (await mintToken({ scope: "publisher", note: "", now: NOW })).record;
+      for (const token of [admin, removed, unnamed]) await database.addToken(token, BY_ADA);
+      await database.revokeToken(removed.id, BY_ADA);
+
+      const names = await database.getTokenNames([admin.id, removed.id, unnamed.id, BO, admin.id]);
+
+      expect<unknown>([[...names].sort(), [...(await database.getTokenNames([]))]]).toEqual([
+        [
+          [admin.id, "laptop"],
+          [removed.id, "agent"],
+        ].sort(),
+        [],
+      ]);
+    });
+
+    // Drift: each id asked is a value bound to a statement, and a database binds only so many to one: the provider's takes 100. A read that bound more would fail there as an error of the engine, on a page that names many tokens.
+    test("the notes of more ids than one statement binds are read, the first and the last among them", async () => {
+      const database = await opened(makeDatabase);
+      const first = (await mintToken({ scope: "publisher", note: "agent", now: NOW })).record;
+      const last = (await mintToken({ scope: "publisher", note: "ci", now: NOW })).record;
+      for (const token of [first, last]) await database.addToken(token, BY_ADA);
+      const none = Array.from({ length: 250 }, (_none, index) => index.toString(16).padStart(16, "0") as TokenId);
+
+      expect<unknown>([...(await database.getTokenNames([first.id, ...none, last.id]))].sort()).toEqual(
+        [
+          [first.id, "agent"],
+          [last.id, "ci"],
+        ].sort(),
+      );
+    });
+
     // Drift: the record `mintToken` makes is what a presented token is checked against; a field lost on the way through a row would refuse every token.
     test("a minted token's record reads back as minted, lists newest first, and has no record once revoked", async () => {
       const database = await opened(makeDatabase);

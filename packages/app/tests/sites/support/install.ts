@@ -36,7 +36,7 @@ const WRITTEN_TYPE = "application/octet-stream";
 /** A file to publish: its body and the content type the store answers for it. */
 type Files = Readonly<Record<string, readonly [body: string | Uint8Array, contentType: string]>>;
 
-/** What a test site is made from; the name doubles as the public name of a public site. `unlisted_files` stores the site as one made from no list of files, so nothing is known of what its version holds. */
+/** What a test site is made from; the name doubles as the public name of a public site. `by` publishes it, the owner when left out. `unlisted_files` stores the site as one made from no list of files, so nothing is known of what its version holds. */
 interface Draft {
   readonly name: string;
   readonly access: "private" | "unlisted" | "public";
@@ -45,6 +45,7 @@ interface Draft {
   readonly embeddable?: boolean;
   readonly expires?: "never" | number;
   readonly unlisted_files?: boolean;
+  readonly by?: Site["owner"];
 }
 
 /** A test install. `keys` lists every key the store was asked for, and `bodies` every stream it handed out. */
@@ -141,7 +142,7 @@ export async function openInstall(): Promise<Install> {
 
   const publish = async (draft: Draft): Promise<Site> => {
     const contents = draft.unlisted_files === true ? undefined : contentsOf(Object.keys(draft.files));
-    const made = await database.createSite(draftOf(draft), { by: owner, at: NOW }, contents);
+    const made = await database.createSite(draftOf(draft), { by: draft.by ?? owner, at: NOW }, contents);
     if (made.kind !== "done") throw new Error(`the test's site was refused: ${made.kind}`);
 
     for (const [path, [body, contentType]] of Object.entries(draft.files)) {

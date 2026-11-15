@@ -1,6 +1,6 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, spyOn, test } from "bun:test";
 
-import { issueToken, listTokenStates, listTokens, revokeToken } from "../../src/actions/manage-tokens";
+import { issueToken, listTokenStates, listTokens, nameTokens, revokeToken } from "../../src/actions/manage-tokens";
 import { verifyToken } from "../../src/auth/tokens";
 import { ADMIN, DAY, makeWorld, NOW, OWNER } from "./support/actions-fixture";
 
@@ -51,5 +51,19 @@ describe("the tokens that work and the ones that ended", () => {
       undefined,
       { ok: false, code: "not_found" },
     ]);
+  });
+
+  // Drift: a page names whoever its rows hold, emails among them, and a request may call the database only so often. A page that asked once for each row would fail when long, and one that answered a publisher would tell it of the other tokens.
+  test("the tokens among the holders of a page are named in one call of the database, emails are skipped, and only an admin is answered", async () => {
+    const world = await makeWorld();
+    const issued = await issueToken(world.install, ADMIN, { scope: "publisher", note: "agent" });
+    if (!issued.ok) throw new Error("the token was not issued");
+    const others = Array.from({ length: 150 }, (_other, index) => index.toString(16).padStart(16, "0"));
+    const reads = spyOn(world.install.database, "getTokenNames");
+
+    const named = await nameTokens(world.install, ADMIN, [ADMIN.holder, ...others, issued.record.id]);
+    const sizes = reads.mock.calls.map(([ids]) => ids.length);
+
+    expect<unknown>([named, sizes, await nameTokens(world.install, OWNER, [issued.record.id])]).toEqual([{ ok: true, names: { [issued.record.id]: "agent" } }, [151], { ok: false, code: "not_allowed" }]);
   });
 });

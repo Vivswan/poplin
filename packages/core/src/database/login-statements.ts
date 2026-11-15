@@ -1,9 +1,11 @@
 // The statements that read tokens and the logins of computers, and the ones that make room for a new login.
 
-import { and, eq, isNull, type SQL, sql as fragment } from "drizzle-orm";
+import { and, eq, inArray, isNull, type SQL, sql as fragment } from "drizzle-orm";
+import * as v from "valibot";
 
 import type { PendingLogin } from "../auth/computer-logins";
 import type { TokenId } from "../auth/tokens";
+import { TOKEN_ID } from "../records/fields";
 import type { Statement } from "./driver";
 import { logins, tokens } from "./schema";
 import { BUILD, built } from "./statements";
@@ -17,12 +19,20 @@ export const TOKEN_FIELDS = { id: tokens.id, hash: tokens.hash, scope: tokens.sc
 /** What is read of a token that ended: never its hash. */
 export const ENDED_TOKEN_FIELDS = { id: tokens.id, scope: tokens.scope, note: tokens.note, created_at: tokens.created_at, expires_at: tokens.expires_at, removed_at: tokens.removed_at, removed_by: tokens.removed_by };
 
+/** The id and the note of a token, as `getTokenNames` reads them. */
+export const NAMED_TOKEN = v.object({ id: TOKEN_ID, note: v.string() });
+
 /** True of a token that was not removed. Every read of a token that may prove something holds it. */
 export const NOT_REMOVED = isNull(tokens.removed_at);
 
 /** The token with the given id, unless it was removed. */
 export function tokenById(id: TokenId): Statement {
   return built(BUILD.select(TOKEN_FIELDS).from(tokens).where(and(eq(tokens.id, id), NOT_REMOVED)));
+}
+
+/** The id and the note of each of these tokens that has a note, removed or not: a name proves nothing. The ids are the only values bound to the statement, and a database binds only so many. */
+export function tokenNames(ids: readonly TokenId[]): Statement {
+  return built(BUILD.select({ id: tokens.id, note: tokens.note }).from(tokens).where(and(inArray(tokens.id, ids), fragment`${tokens.note} <> ''`)));
 }
 
 /** The logins a condition holds for. */

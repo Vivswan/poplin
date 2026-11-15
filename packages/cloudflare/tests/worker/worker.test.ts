@@ -718,7 +718,7 @@ describe("the admin hostname", () => {
 
 describe("the audit log as a file", () => {
   // Drift: the log is only ever added to, so its file is the one answer of the dashboard that grows with it. Built whole, read a listing's page at a time, or with no bound, it would pass what the Free plan gives one request.
-  test("a log longer than a file holds is sent a reading at a time, 2,000 entries in 6 queries and a row read an entry, and says that the log holds more; where the next file goes on costs 3 queries and the same rows", async () => {
+  test("a log longer than a file holds is sent a reading at a time, 2,000 entries in 5 queries and a row read an entry, and says that the log holds more; where the next file goes on costs 3 queries and the same rows", async () => {
     const session = { Cookie: cookieOf(await logIn(instance(w), w)) };
     await BINDINGS.DB.prepare(
       "WITH RECURSIVE counted(entry) AS (SELECT 1 UNION ALL SELECT entry + 1 FROM counted WHERE entry < ?) INSERT INTO audit (at, actor, action, detail) SELECT ?, ?, 'login', '{}' FROM counted",
@@ -745,7 +745,7 @@ describe("the audit log as a file", () => {
     expect(pieces.map((piece) => piece.split("\r\n").length - 1)).toEqual([1, 1000, 1000, 1]);
     expect(pieces.at(-1)).toBe('"2,000 entries. The log holds more: download the next part."\r\n');
     expect([file, await next.json(), { calls: tally.calls - start.calls - file.calls, read: rows.read - start.read - file.read }]).toEqual([
-      { calls: 6, read: FILE_ENTRIES + 4 },
+      { calls: 5, read: FILE_ENTRIES + 3 },
       { ok: true, after: expect.stringMatching(/^[1-9]\d*$/) },
       { calls: 3, read: FILE_ENTRIES + 3 },
     ]);

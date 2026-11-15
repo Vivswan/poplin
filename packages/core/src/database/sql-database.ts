@@ -87,6 +87,7 @@ import {
 } from "./schema";
 import {
   ENDED_TOKEN_FIELDS,
+  NAMED_TOKEN,
   NOT_REMOVED,
   TOKEN_COLUMNS,
   TOKEN_FIELDS,
@@ -95,6 +96,7 @@ import {
   makeRoomOfAll,
   makeRoomOfVisitor,
   tokenById,
+  tokenNames,
 } from "./login-statements";
 import {
   A_KEPT_VERSION,
@@ -183,6 +185,9 @@ const ALL_SITES = "";
 
 /** The most sites one read of names or of views takes: a page of a listing or of the log. */
 const MOST_SITES_ASKED = 100;
+
+/** How many tokens one statement names: a database binds only so many values to one. */
+const TOKENS_A_STATEMENT = 100;
 
 /** The audit entry of a change to the site now at the given id, written only when the statement before it changed a row. */
 function auditOfSite(signed: Signed, action: AuditAction, id: SiteId, detail: Readonly<Record<string, unknown>>): Statement {
@@ -833,6 +838,19 @@ export class SqlDatabase implements Database {
     const [listed] = await this.#driver.batch([built(BUILD.select(TOKEN_FIELDS).from(tokens).where(NOT_REMOVED).orderBy(desc(tokens.created_at), desc(tokens.id)))]);
 
     return (listed?.rows ?? []).map(tokenFromRow);
+  }
+
+  async getTokenNames(ids: readonly TokenId[]): Promise<ReadonlyMap<TokenId, string>> {
+    const asked = [...new Set(ids)];
+    if (asked.length === 0) return new Map();
+
+    const statements: Statement[] = [];
+    for (let from = 0; from < asked.length; from += TOKENS_A_STATEMENT) statements.push(tokenNames(asked.slice(from, from + TOKENS_A_STATEMENT)));
+
+    const found = await this.#driver.batch(statements);
+    const named = found.flatMap((some) => some.rows).map((row) => v.parse(NAMED_TOKEN, row));
+
+    return new Map(named.map(({ id, note }) => [id, note]));
   }
 
   async listTokenStates(now: number, mostEnded: number): Promise<TokenStates> {
