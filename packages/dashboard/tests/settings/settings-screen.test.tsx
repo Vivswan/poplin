@@ -11,6 +11,7 @@ import { ThemeProvider } from "@/components/theme-provider";
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { BOOT } from "@/lib/boot";
+import { settingAddress } from "@/settings/setting-address";
 import type { Row } from "@/settings/settings-queries";
 import { SettingsScreen } from "@/settings/settings-screen";
 
@@ -80,9 +81,9 @@ function serve({ refusedKey, holds = false }: { readonly refusedKey?: string; re
 }
 
 /** Draw the screen and wait for its rows. */
-async function drawn(): Promise<ReturnType<typeof within>> {
+async function drawn(address = "/settings"): Promise<ReturnType<typeof within>> {
   await drawAt(
-    "/settings",
+    address,
     <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
       <ThemeProvider storageKey="test.theme">
         <TooltipProvider>
@@ -161,6 +162,17 @@ describe("the one page", () => {
       ],
       false,
     ]);
+  });
+});
+
+describe("the address of one setting", () => {
+  // Drift: a link of another screen would land on the top of the page, and the person would have to find the setting it meant among twenty.
+  test("points its line out: the line is shaded and its control has the focus", async () => {
+    const { to, hash } = settingAddress("trash_days");
+    const page = await drawn(`${to}#${hash}`);
+    await waitFor(() => expect(document.activeElement).toBe(field(page, "Keep deleted sites")));
+
+    expect([document.getElementById(hash)?.contains(document.activeElement), document.getElementById(hash)?.classList.contains("bg-muted/50")]).toEqual([true, true]);
   });
 });
 

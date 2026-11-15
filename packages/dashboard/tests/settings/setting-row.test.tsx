@@ -25,7 +25,7 @@ const SIZE: Row = {
 /** Draw the line over a text, and collect every text it sends. */
 function drawn(row: Row, text = row.text): { readonly page: ReturnType<typeof within>; readonly sent: string[] } {
   const sent: string[] = [];
-  render(<SettingRow row={row} text={text} refusal={undefined} onChange={(next) => sent.push(next)} />);
+  render(<SettingRow row={row} text={text} refusal={undefined} onChange={(next) => sent.push(next)} marked={false} />);
 
   return { page: within(document.body), sent };
 }

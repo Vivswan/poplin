@@ -6,6 +6,7 @@ import type { ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { Hint } from "@/shared/hint";
 import { RowLine } from "@/settings/row-line";
+import { settingAnchor } from "@/settings/setting-address";
 import { SettingControl } from "@/settings/setting-control";
 import { isSwitch, readOf } from "@/settings/setting-values";
 import type { Row } from "@/settings/settings-queries";
@@ -24,6 +25,9 @@ interface SettingRowProps {
 
   /** Called with the setting's text after a change. */
   readonly onChange: (text: string) => void;
+
+  /** `true` while an address points the line out. */
+  readonly marked: boolean;
 }
 
 /**
@@ -32,11 +36,11 @@ interface SettingRowProps {
  * @returns the id the control is found under, to give it the focus
  */
 export function controlId(key: string): string {
-  return `setting-${key}`;
+  return `${settingAnchor(key)}-control`;
 }
 
 /** Draw the line of a setting. */
-export function SettingRow({ row, text, refusal, onChange }: SettingRowProps): ReactNode {
+export function SettingRow({ row, text, refusal, onChange, marked }: SettingRowProps): ReactNode {
   const words = wordsOf(row.key);
   const id = controlId(row.key);
 
@@ -62,7 +66,7 @@ export function SettingRow({ row, text, refusal, onChange }: SettingRowProps): R
   );
 
   return (
-    <RowLine label={words.label} controlId={id} about={about} small={isSwitch(row)} refusal={refusal}>
+    <RowLine label={words.label} controlId={id} anchor={settingAnchor(row.key)} marked={marked} about={about} small={isSwitch(row)} refusal={refusal}>
       {row.warnings.length === 0 ? null : (
         <Hint label={`Warning: ${row.warnings.join(" ")}`} icon={<TriangleAlertIcon />} className="text-warn hover:text-warn">
           {() => row.warnings.map((warning) => <p key={warning}>{warning}</p>)}

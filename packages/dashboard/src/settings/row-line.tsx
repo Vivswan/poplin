@@ -18,6 +18,12 @@ interface RowLineProps {
   /** The id of the control the name belongs to. */
   readonly controlId: string;
 
+  /** The id of the line itself, where an address can name it. */
+  readonly anchor?: string;
+
+  /** `true` while the line is pointed out: it is shaded as under a pointer. */
+  readonly marked?: boolean;
+
   /** What the question mark opens; left out, the line has no question mark. It is handed a function that closes it. */
   readonly about?: (close: () => void) => ReactNode;
 
@@ -35,9 +41,9 @@ interface RowLineProps {
 }
 
 /** Draw one line. */
-export function RowLine({ label, controlId, about, help, small = false, refusal, children }: RowLineProps): ReactNode {
+export function RowLine({ label, controlId, anchor, marked = false, about, help, small = false, refusal, children }: RowLineProps): ReactNode {
   return (
-    <div className={cn(ROW_LOOK, small && "max-md:grid-cols-[minmax(0,1fr)_auto]")}>
+    <div id={anchor} className={cn(ROW_LOOK, "motion-safe:transition-colors", marked && "bg-muted/50", small && "max-md:grid-cols-[minmax(0,1fr)_auto]")}>
       <div className="flex min-w-0 flex-col">
         <span className="flex min-h-8 min-w-0 items-center gap-1">
           <FieldLabel id={`${controlId}-label`} htmlFor={controlId} className="font-normal">
