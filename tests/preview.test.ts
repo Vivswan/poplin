@@ -25,8 +25,8 @@ const RUNTIME_NAME = /\bBun\.|["'](?:bun|node):|\bprocess\.|import\.meta\.(?:dir
 /** An import: the first group is what it names. */
 const IMPORT = /from "([^"]+)"/g;
 
-/** Where the demo may import from: its own two folders, the portable source of the app and of core, and SQLite built for a browser. */
-const PORTABLE_IMPORT = /^(?:\.\/|\.\.\/(?:preview|browser)\/|\.\.\/\.\.\/\.\.\/(?:app|core)\/src\/|sql\.js(?:\/dist\/sql-wasm-browser\.js)?$)/;
+/** Where the demo may import from: its own two folders, the portable source of the app and of core, and the libraries a browser runs, SQLite built for one among them. */
+const PORTABLE_IMPORT = /^(?:\.\/|\.\.\/(?:preview|browser)\/|\.\.\/\.\.\/\.\.\/(?:app|core)\/src\/|(?:sql\.js(?:\/dist\/sql-wasm-browser\.js)?|idb-keyval)$)/;
 
 /** The command that starts a preview. */
 const SERVE = join(import.meta.dir, "..", "packages", "demo", "scripts", "serve.ts");

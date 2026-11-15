@@ -5,6 +5,8 @@
 //
 // A browser stops an idle worker after about half a minute, so after every answer the whole demo is written to IndexedDB.
 
+import { createStore, del, get, set } from "idb-keyval";
+
 import type { Samples } from "../preview/seed";
 // The first module of the bundle to run: every other one builds its requests and responses with the classes this one puts in place.
 import { plainResponse } from "./free-headers";
@@ -34,8 +36,11 @@ const CACHE_PREFIX = "poplin-demo-";
 /** The cache that holds SQLite's file, so a start after the first needs no network. */
 const CACHE = `${CACHE_PREFIX}${BUILD}`;
 
-/** The IndexedDB database, its one object store, and the key the demo is saved under. */
-const KEPT = { database: "poplin-demo", store: "demo", key: "saved" } as const;
+/** The demo's one object store in IndexedDB. */
+const STORE = createStore("poplin-demo", "demo");
+
+/** The key the demo is saved under. */
+const SAVED_KEY = "saved";
 
 /** What is written to IndexedDB: the demo, and the build that saved it. */
 interface Kept {
@@ -52,28 +57,6 @@ let written: Promise<unknown> = Promise.resolve();
 /** Whether a write waits its turn: it takes the demo as it is when it starts, so one write covers every answer before it. */
 let waiting = false;
 
-/** Run one request against the demo's store in IndexedDB, to the end of its transaction: a write that was asked for can still be undone until then. */
-async function kept<Result>(mode: IDBTransactionMode, ask: (store: IDBObjectStore) => IDBRequest<Result>): Promise<Result> {
-  const database = await new Promise<IDBDatabase>((resolve, reject) => {
-    const opening = indexedDB.open(KEPT.database, 1);
-    opening.onupgradeneeded = () => opening.result.createObjectStore(KEPT.store);
-    opening.onsuccess = () => resolve(opening.result);
-    opening.onerror = () => reject(opening.error);
-  });
-
-  try {
-    return await new Promise<Result>((resolve, reject) => {
-      const transaction = database.transaction(KEPT.store, mode);
-      const asked = ask(transaction.objectStore(KEPT.store));
-      transaction.oncomplete = () => resolve(asked.result);
-      transaction.onerror = () => reject(transaction.error);
-      transaction.onabort = () => reject(transaction.error);
-    });
-  } finally {
-    database.close();
-  }
-}
-
 /** A browser may shut IndexedDB to a worker. The demo then runs without it, and starts over when the browser stops the worker. */
 function unkept(error: unknown): undefined {
   console.warn("demo: nothing is kept across a stop of the worker", error);
@@ -83,9 +66,22 @@ function unkept(error: unknown): undefined {
 
 /** The demo a worker of this build saved, if any. */
 async function readSaved(): Promise<SavedDemo | undefined> {
-  const saved: Kept | undefined = await kept("readonly", (store) => store.get(KEPT.key)).catch(unkept);
+  try {
+    const saved = await get<Kept>(SAVED_KEY, STORE);
 
-  return saved?.build === BUILD ? saved.demo : undefined;
+    return saved?.build === BUILD ? saved.demo : undefined;
+  } catch (error) {
+    return unkept(error);
+  }
+}
+
+/** Drop what a worker saved. */
+async function dropSaved(): Promise<void> {
+  try {
+    await del(SAVED_KEY, STORE);
+  } catch (error) {
+    unkept(error);
+  }
 }
 
 /** Write the demo to IndexedDB, after the write before it. */
@@ -97,7 +93,7 @@ function save(demo: Awaited<NonNullable<typeof running>>): Promise<unknown> {
     .then(() => {
       waiting = false;
 
-      return kept("readwrite", (store) => store.put({ build: BUILD, demo: demo.save() } satisfies Kept, KEPT.key));
+      return set(SAVED_KEY, { build: BUILD, demo: demo.save() } satisfies Kept, STORE);
     })
     .catch(unkept);
 
@@ -170,7 +166,7 @@ async function dropOldCaches(): Promise<void> {
 
 self.addEventListener("install", (event) => {
   // A new build takes over at once and starts from the seed: what an older build saved may not fit it.
-  event.waitUntil(Promise.all([wasmBytes(), kept("readwrite", (store) => store.delete(KEPT.key)).catch(unkept), self.skipWaiting()]));
+  event.waitUntil(Promise.all([wasmBytes(), dropSaved(), self.skipWaiting()]));
 });
 
 self.addEventListener("activate", (event) => {
