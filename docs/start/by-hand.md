@@ -32,7 +32,7 @@ Two words the steps use: a **Worker** is the program Cloudflare runs for you, an
 | a payment method on the account | step 1 asks for one. [What can cost money](../run/limits-and-cost.md#what-can-cost-money) says when it is charged      |
 | a GitHub account                | free. Step 2 puts a copy of poplin's code there                                                          |
 | Node.js, on your own computer   | version 24 or higher, for step 6 alone                                                                   |
-| an agent, to publish by asking  | one that can run commands on your computer, such as Claude Code or Codex. A chat in a browser cannot     |
+| an agent, to publish by asking  | an AI tool that runs in a terminal on your computer, such as Claude Code or Codex. You install it yourself, it may cost money, and poplin brings none. A chat in a browser cannot run commands |
 
 **A domain that is not on Cloudflare yet** is added on Cloudflare's home page. Cloudflare shows two nameservers; paste them in the Nameservers setting at the shop where you bought the domain. The domain turns Active up to a day later.
 
@@ -49,19 +49,26 @@ Two words the steps use: a **Worker** is the program Cloudflare runs for you, an
    | Zero Trust, in the left menu                | pick a team name and the Free plan | the login in front of your dashboard |
    | Storage & databases, then R2, then Overview | finish the checkout it shows       | the storage for your sites' files    |
 
-   The team name can be any word: it only names your login page. Each is done when Cloudflare shows its overview instead of the sign-up.
+   The team name can be any word: it only names your login page. Each sign-up asks for the payment method and names its price: finish it as it stands. Each is done when Cloudflare shows its overview instead of the sign-up.
 
 2. **Make the Worker.** Click the button and sign in to GitHub when asked.
 
    [![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/Vivswan/poplin)
 
-   Where the form asks for an account, pick your own GitHub account and your own Cloudflare account. Change nothing else: the names it suggests must stay, the project `poplin`, the bucket `poplin-sites`, the database `poplin`. Then press the last button of the form.
+   Where the form asks for an account, pick your own GitHub account and your own Cloudflare account. Change nothing else: the names it suggests must stay, the project `poplin`, the bucket `poplin-sites`, the database `poplin`. Then press the button at the bottom of the form, the one that starts the deploy.
 
-   Cloudflare copies poplin to your GitHub account and builds the Worker. After a few minutes a page opens with the Worker's own address at its top, the one ending in `workers.dev`. Note it. Where this page says `your-name`, yours has a word of your account:
+   | The form or GitHub asks                         | Answer                                                           |
+   | ----------------------------------------------- | ---------------------------------------------------------------- |
+   | whether Cloudflare may reach your GitHub account | allow it: Cloudflare puts the copy there and builds from it      |
+   | whether the copy is private or public           | either works. The copy holds poplin's code and no token         |
+
+   Cloudflare copies poplin to your GitHub account and builds the Worker. Keep the tab open: after a few minutes it shows the Worker's page, with the Worker's own address on it, the one ending in `workers.dev`. Note it. Where this page says `your-name`, yours has a word of your account:
 
    ```text
    https://poplin.your-name.workers.dev
    ```
+
+   **To find the address again**, open `https://dash.cloudflare.com`, go to Workers & Pages, and select the Worker `poplin`: its page names the address.
 
    **If the build fails**, [When a step fails](when-a-step-fails.md#step-2-the-build-fails) has the next step.
 
@@ -80,7 +87,14 @@ Two words the steps use: a **Worker** is the program Cloudflare runs for you, an
    | the bottom        | press Continue to summary, then Create Token                                                                       |
    | the next page     | The token is shown once: paste it into a note now; you need it in the next step.                                   |
 
-   Keep the note for as long as you may add a login or a permission: both ask for the token again. If you lose the note, Cloudflare makes the token's text anew: [Roll](when-a-step-fails.md#step-4-the-page-shows-something-else).
+   The install never stores the token, so after step 5 you choose:
+
+   | You                  | Then                                                                                         |
+   | -------------------- | -------------------------------------------------------------------------------------------- |
+   | keep the token       | keep its note where you keep passwords, such as a password manager                           |
+   | delete it            | at Cloudflare, My Profile, then API Tokens. The install and every site keep working          |
+
+   A token is asked for again only by Check and Repair on the dashboard's [Domain](../run/domain.md) screen, such as after you add a user or a permission. With none left, make a new one with the same link. If you lose the note, Cloudflare makes the token's text anew: [Roll](when-a-step-fails.md#step-4-the-page-shows-something-else).
 
    **If the form opens empty**, [When a step fails](when-a-step-fails.md#step-3-the-form-opens-empty) has the rows to add by hand.
 
@@ -105,7 +119,14 @@ Two words the steps use: a **Worker** is the program Cloudflare runs for you, an
    WAF rule             optional   ... add this right to the account token and press Repair: Zone WAF: Edit
    ```
 
-   **It worked when** the page says `The login is ready.` The sample shows a few of the rows, and your counts may differ. `repaired` counts the rows Repair made. The page calls a permission a right. The token is used for that one request and kept nowhere. Repair is safe to repeat.
+   **It worked when** the page says `The login is ready.` The sample shows a few of the rows, and your counts may differ. `repaired` counts the rows Repair made: on a first run it makes them all, and nothing was broken. The page calls a permission a right. The token is used for that one request and kept nowhere. Repair is safe to repeat.
+
+   | Piece              | It is                                               |
+   | ------------------ | --------------------------------------------------- |
+   | DNS record         | what makes an address under your domain exist       |
+   | Worker route       | what sends that address to the Worker               |
+   | Access application | Cloudflare's login in front of the dashboard        |
+   | WAF rule           | an optional rule that stops junk before the Worker  |
 
    With the eight permissions, Repair adds a DNS record, routes, and a login of poplin's own. It removes only a record that carries poplin's mark and a route that names poplin's Worker. A website or a mailbox on the domain stays as it is.
 
@@ -115,11 +136,11 @@ Two words the steps use: a **Worker** is the program Cloudflare runs for you, an
 
 5. **Open your dashboard and log in.** Cloudflare's login asks for your email, the one of step 4, and sends a code to its inbox. A new address can take a few minutes to answer: until then the browser says it cannot find the site; wait a few minutes and reload.
 
-   **If no code arrives**, [When a step fails](when-a-step-fails.md#step-5-no-code-arrives) has the fix.
-
    ```text
    https://poplin.example.com
    ```
+
+   **If no code arrives**, [When a step fails](when-a-step-fails.md#step-5-no-code-arrives) has the fix.
 
    After the code, the dashboard opens on Sites, which says `No sites yet`.
 
@@ -159,5 +180,14 @@ Your install is ready, and it publishes two ways.
 
 | Publish            | Do                                                                                                                                |
 | ------------------ | --------------------------------------------------------------------------------------------------------------------------------- |
-| by asking an agent | paste the line of [With an agent](with-an-agent.md) into Claude Code, Codex, or another agent that runs commands                  |
-| by a command       | `npx poplin ./report`: see [Publish](../use/publish.md)                                                                                      |
+| by asking an agent | set the agent up once, with the line of [With an agent](with-an-agent.md). Then say `Put this report online.`                     |
+| by a command       | `npx poplin ./report`: see [Publish](../use/publish.md)                                                                           |
+
+`./report` is a folder named `report` inside the folder the terminal is in. A folder that is somewhere else is named by its whole path:
+
+```text
+Mac:      npx poplin ~/Desktop/report
+Windows:  npx poplin C:\Users\user\Desktop\report
+```
+
+On a Mac, `~` is your own folder. On Windows, `user` stands for your own name on the computer. To take an install down, see [Remove](../run/remove.md).
