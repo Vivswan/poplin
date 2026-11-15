@@ -38,10 +38,31 @@ repository:
 #     target: branch
 #     enforcement: active
 
-# The environment for the tests that run against a real Cloudflare account: only a job in a main run that names it can read its secrets.
+# The environments for the tests that run against a real Cloudflare account: only a job in a main run that names one can read its secrets.
+# Each of the two test accounts has its own, and the secrets carry the same names in both.
 # The secrets are set on GitHub, never declared here: an absent `secrets` key leaves live secrets untouched.
 environments:
   - name: cloudflare-live-tests
+    deployment_branch_policy:
+      protected_branches: false
+      custom_branch_policies: true
+    deployment_branch_policies:
+      - name: main
+    # Declared off, not omitted: a reviewer rule or a wait timer added by hand would park every run, and only a declared value heals it.
+    reviewers: []
+    wait_timer: 0
+    prevent_self_review: false
+  - name: with-domain-ci-tests
+    deployment_branch_policy:
+      protected_branches: false
+      custom_branch_policies: true
+    deployment_branch_policies:
+      - name: main
+    # Declared off, not omitted: a reviewer rule or a wait timer added by hand would park every run, and only a declared value heals it.
+    reviewers: []
+    wait_timer: 0
+    prevent_self_review: false
+  - name: without-domain-ci-tests
     deployment_branch_policy:
       protected_branches: false
       custom_branch_policies: true

@@ -148,7 +148,7 @@ test("a login that waits is still there to review after a demo is opened from a 
   const after = await read<Listed>(second, "/data/logins");
   const [waiting] = after.logins;
   const reviewed = await read<{ readonly login?: { readonly code: string } }>(second, `/data/logins/${waiting?.id}`);
-  const decision = { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ code: reviewed.login?.code, allow: true, confirm: true }) };
+  const decision = { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ code: reviewed.login?.code, allow: true, confirm: true, scope: "publisher" }) };
   const decided = await second.fetch(new Request(`${HOME}/data/logins/decide`, decision));
   const third = await open(second.save());
   const { tokens } = await read<{ readonly tokens: readonly { readonly note: string }[] }>(third, "/data/tokens");

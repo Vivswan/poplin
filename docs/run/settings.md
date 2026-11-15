@@ -53,7 +53,7 @@ The dashboard's Settings screen changes the same settings, all but `logins`: cha
 
 An install made with the Deploy button has a build at Cloudflare to make the update link for. One made from a terminal or with the OpenTofu module has none: with no update link saved it answers `no_update_address`, and updates as [Update the install](update.md#update-the-install) says.
 
-`poplin setup` reads the Cloudflare API token from `POPLIN_SETUP_TOKEN` in the environment. A new install needs `--domain` and `--login`. On an install that has them, `--login` alone corrects a first login that was mistyped. It needs no login, and it works only until the first login to the install. [From a terminal instead](../start/from-a-terminal.md) shows where it fits.
+`poplin setup` reads the account token from `POPLIN_SETUP_TOKEN` in the environment. A new install needs `--domain` and `--login`. On an install that has them, `--login` alone corrects a first login that was mistyped. It needs no login, and it works only until the first login to the install. [From a terminal instead](../start/from-a-terminal.md) shows where it fits.
 
 The settings `poplin config` takes:
 
@@ -79,7 +79,7 @@ A user is an email in `logins`, which can log in to the dashboard. A second user
 | Step | Where                        | Do                                                           |
 | ---- | ---------------------------- | ------------------------------------------------------------ |
 | 1    | the dashboard, Access, Users | press Add a user, type the email, and press Add a user again |
-| 2    | the dashboard, Domain         | press Repair, paste a token as in [step 3](../start/by-hand.md#the-steps), and press Repair again |
+| 2    | the dashboard, Domain         | press Repair, paste an account token as in [step 3](../start/by-hand.md#the-steps), and press Repair again |
 
 A new user can log in after step 2, not before. `poplin config logins` shows the same list.
 
@@ -106,7 +106,7 @@ $ poplin login --server https://poplin.example.com
   ->  the login is saved on this computer
 ```
 
-An install begins five logins a minute for all computers together. In a minute that is full, `poplin login` waits and asks again.
+An install begins two logins a minute from one address, and eight a minute for all addresses together. In a minute that is full, `poplin login` is told how long to wait, waits, and asks again.
 
 A computer keeps one saved login: a new `poplin login` replaces it. An agent on the computer uses that login and does not log in itself. `POPLIN_SERVER` and `POPLIN_TOKEN` in the environment stand in for a saved login.
 

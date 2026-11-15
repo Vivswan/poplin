@@ -836,7 +836,7 @@ describe("what the API refuses before any action runs", () => {
   test("the two routes of a login answer a request with no token, with a dead one, and with a cookie, and hand out nothing but a wait", async () => {
     const install = await openApi();
     const before = await stateOf(install);
-    const sent = [install.as(null), install.as("let-me-in"), install.as(null, { Cookie: `session=${install.tokens.admin}` })];
+    const sent = [install.as(null), install.as("let-me-in", { [VISITOR_HEADER]: "two" }), install.as(null, { [VISITOR_HEADER]: "three", Cookie: `session=${install.tokens.admin}` })];
 
     const begun = await Promise.all(sent.map((api) => answered(api.logins.$post({ json: { scope: "admin", computer: "laptop" }, query: {} }))));
     const asked = await Promise.all(begun.map((login, at) => answered((sent[at] as ApiClient).logins.token.$post({ json: { secret: login.body.secret as string }, query: {} }))));
@@ -847,47 +847,47 @@ describe("what the API refuses before any action runs", () => {
   });
 
   // Drift: nobody is asked before these two routes run, so the count by address is the brake on one address's flood of logins and on its guesses at a secret.
-  test("one address begins five logins and asks twenty-five times a minute; the next request is answered 429 with when to come back, and another address's question and the next minute are not", async () => {
+  test("one address begins two logins and asks twenty-five times a minute; the next request is answered 429 with when to come back, and another address's login, its question, and the next minute are not", async () => {
     const install = await openApi();
     const begin = (visitor: string): Promise<Answered> => answered(install.as(null, { [VISITOR_HEADER]: visitor }).logins.$post({ json: { scope: "publisher", computer: "laptop" }, query: {} }));
     const ask = (visitor: string): Promise<Answered> => answered(install.as(null, { [VISITOR_HEADER]: visitor }).logins.token.$post({ json: { secret: `poplin_login_${"0".repeat(16)}_${"0".repeat(64)}` }, query: {} }));
     install.clock.now = NOW + 1000;
 
     const begun = [];
-    for (let sent = 0; sent < 6; sent += 1) begun.push(await begin("one"));
+    for (let sent = 0; sent < 3; sent += 1) begun.push(await begin("one"));
     const guesses = [];
     for (let sent = 0; sent < 26; sent += 1) guesses.push(await ask("one"));
     const refused = begun.at(-1);
     const others = [await begin("two"), await ask("two")];
     install.clock.now = NOW + 60_000;
 
-    expect([begun.map((answer) => answer.status), guesses.map((answer) => answer.status)]).toEqual([[200, 200, 200, 200, 200, 429], [...Array.from({ length: 25 }, () => 200), 429]]);
-    expect([refused?.body, refused?.response.headers.get("Retry-After")]).toEqual([
-      { error: { code: "too_many_requests", message: "too many requests came from this address: wait, then ask again" } },
-      "39",
-    ]);
-    expect([...others, await begin("one"), await ask("one")].map((answer) => answer.status)).toEqual([429, 200, 200, 200]);
+    expect([begun.map((answer) => answer.status), guesses.map((answer) => answer.status)]).toEqual([[200, 200, 429], [...Array.from({ length: 25 }, () => 200), 429]]);
+    expect([refused?.body, refused?.response.headers.get("Retry-After")]).toEqual([{ error: { code: "too_many_requests", message: "the install is asked too often: wait, then ask again" } }, "39"]);
+    expect([...others, await begin("one"), await ask("one")].map((answer) => answer.status)).toEqual([200, 200, 200, 200]);
   });
 
   // Drift: every login begun writes four rows whoever begins it, and addresses are cheap. Without a count of all of them together, a few addresses spend the database's free day of writing in hours.
-  test("five logins are begun in a minute by all addresses together; the sixth address is answered 429 with when to come back, its question is not, and the next minute begins five more", async () => {
+  test("eight logins are begun in a minute by all addresses together; the ninth is answered 429 with when to come back, its address's question is not, and the next minute begins eight more", async () => {
     const install = await openApi();
     const begin = (visitor: string): Promise<Answered> => answered(install.as(null, { [VISITOR_HEADER]: visitor }).logins.$post({ json: { scope: "publisher", computer: "laptop" }, query: {} }));
     install.clock.now = NOW + 1000;
 
     const first = [];
-    for (const visitor of ["one", "two", "three", "four", "five", "six", "six"]) first.push(await begin(visitor));
-    const asked = await install.as(null, { [VISITOR_HEADER]: "six" }).logins.token.$post({ json: { secret: first[0]?.body.secret as string }, query: {} });
+    for (const visitor of ["one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "nine"]) first.push(await begin(visitor));
+    const asked = await install.as(null, { [VISITOR_HEADER]: "nine" }).logins.token.$post({ json: { secret: first[0]?.body.secret as string }, query: {} });
     install.clock.now = NOW + 60_000;
     const next = [];
-    for (const visitor of ["six", "six", "six", "six", "six", "one"]) next.push(await begin(visitor));
+    for (const visitor of ["nine", "nine", "one", "one", "two", "two", "three", "three", "four"]) next.push(await begin(visitor));
 
-    expect([first.map((answer) => answer.status), asked.status, next.map((answer) => answer.status)]).toEqual([[200, 200, 200, 200, 200, 429, 429], 200, [200, 200, 200, 200, 200, 429]]);
+    expect([first.map((answer) => answer.status), asked.status, next.map((answer) => answer.status)]).toEqual([[200, 200, 200, 200, 200, 200, 200, 200, 429, 429], 200, [200, 200, 200, 200, 200, 200, 200, 200, 429]]);
     expect([first.at(-1)?.response.headers.get("Retry-After"), part(first.at(-1) as Answered, "error").code]).toEqual(["39", "too_many_requests"]);
   });
 
-  // Drift: the pace alone lets one address hold fifty logins waiting for good, and the entry is what tells core who asks. An entry that passed every request as one visitor would let that address take the place of every other computer's login.
-  test("one address beginning logins as fast as it may for thirty minutes takes the four starts a minute another address left, and never the place of a login that waits", async () => {
+  // Drift: an entry that passed every request as one visitor would let one address take every other computer's place. A share as large as the minute of all would let one address refuse every other computer's login.
+  test.each([
+    ["one address", ["one"], 60],
+    ["three addresses", ["one", "three", "four"], 180],
+  ])("%s beginning logins as fast as they may for thirty minutes spend their own shares alone: another address begins its login every minute, and no login that waits loses its place", async (_who, flooding, begins) => {
     const install = await openApi();
     const begin = (visitor: string): Promise<Answered> => answered(install.as(null, { [VISITOR_HEADER]: visitor }).logins.$post({ json: { scope: "publisher", computer: "laptop" }, query: {} }));
     const flood: number[] = [];
@@ -895,15 +895,41 @@ describe("what the API refuses before any action runs", () => {
 
     for (let minute = 0; minute < 30; minute += 1) {
       install.clock.now = NOW + minute * 60_000;
+      for (const visitor of flooding) for (let sent = 0; sent < 3; sent += 1) flood.push((await begin(visitor)).status);
       const other = await begin("two");
-      for (let sent = 0; sent < 6; sent += 1) flood.push((await begin("one")).status);
 
       const asked = await answered(install.as(null, { [VISITOR_HEADER]: "two" }).logins.token.$post({ json: { secret: other.body.secret as string }, query: {} }));
       others.push([other.status, asked.body]);
     }
 
-    expect([flood.filter((status) => status === 200).length, flood.filter((status) => status === 429).length]).toEqual([120, 60]);
+    expect([flood.filter((status) => status === 200).length, flood.filter((status) => status === 429).length]).toEqual([begins, flooding.length * 30]);
     expect(others).toEqual(Array.from({ length: 30 }, () => [200, { state: "pending" }]));
+  });
+
+  // Drift: a login counted for its visitor at a minute's last moment, and for all in the next minute, would let two addresses spend four addresses' starts there, and refuse the rest.
+  test("logins begun as a minute ends are counted in that minute for all too, so the next minute still begins eight", async () => {
+    const install = await openApi();
+    const begin = (visitor: string): Promise<Answered> => answered(install.as(null, { [VISITOR_HEADER]: visitor }).logins.$post({ json: { scope: "publisher", computer: "laptop" }, query: {} }));
+    const takeMinute = install.counters.takeMinute.bind(install.counters);
+    const nextMinute = (Math.floor(NOW / 60_000) + 1) * 60_000;
+    // The minute ends between a login's two counts.
+    install.counters.takeMinute = async (window, now) => {
+      const taken = await takeMinute(window, now);
+      if (window.scope === "visitor") install.clock.now = nextMinute;
+
+      return taken;
+    };
+
+    const ending = [];
+    for (const visitor of ["one", "one", "two", "two"]) {
+      install.clock.now = nextMinute - 1;
+      ending.push((await begin(visitor)).status);
+    }
+    install.counters.takeMinute = takeMinute;
+    const next = [];
+    for (const visitor of ["one", "one", "two", "two", "three", "three", "four", "four"]) next.push((await begin(visitor)).status);
+
+    expect([ending, next]).toEqual([[200, 200, 200, 200], Array.from({ length: 8 }, () => 200)]);
   });
 
   // Drift: the count is the brake on a flood of logins; a counter that is down and let every request through would be no brake exactly when someone found a way to bring it down.
@@ -923,7 +949,7 @@ describe("what the API refuses before any action runs", () => {
     const install = await openApi();
     const { takeMinute } = install.counters;
     const begun = await answered(install.as(null).logins.$post({ json: { scope: "publisher", computer: "laptop" }, query: {} }));
-    const allowed = await decideLogin(installOf(install), { scope: "admin", holder: "ada@example.com" as Login }, { code: String(begun.body.code), allow: true });
+    const allowed = await decideLogin(installOf(install), { scope: "admin", holder: "ada@example.com" as Login }, { code: String(begun.body.code), allow: true, scope: "publisher" });
     const ask = (): Promise<Answered> => answered(install.as(null).logins.token.$post({ json: { secret: begun.body.secret as string }, query: {} }));
     install.counters.takeMinute = () => Promise.reject(new Error("the counter is down"));
 
@@ -955,7 +981,7 @@ describe("what the API refuses before any action runs", () => {
   // Drift: a store or a database that fails mid-request must not take the Worker down with it, nor tell the caller what failed inside.
   test("a failure of the database is answered 500 with the code alone, and reported once", async () => {
     const install = await openApi();
-    install.database.readSettings = () => Promise.reject(new Error("the database is down"));
+    install.database.listShownSites = () => Promise.reject(new Error("the database is down"));
 
     const answer = await listed(install);
 
@@ -966,7 +992,7 @@ describe("what the API refuses before any action runs", () => {
   // Drift: a caller that reads only "the install failed" tries again at once, all day; the code and the wait are what tell it the database is spent until midnight UTC.
   test("a database whose day's allowance is used up is answered 503 with the code, what ran out, and the seconds to midnight UTC", async () => {
     const install = await openApi();
-    install.database.readSettings = () => Promise.reject(new AllowanceSpent("writing"));
+    install.database.listShownSites = () => Promise.reject(new AllowanceSpent("writing"));
 
     const answer = await listed(install);
 

@@ -42,6 +42,7 @@ import type {
   Database,
   Done,
   ExportPage,
+  FrameRecords,
   LeftoversPage,
   LoginDecision,
   LoginRoom,
@@ -53,6 +54,9 @@ import type {
   RequestCounts,
   Reserved,
   ServedSite,
+  SettingsAndKey,
+  SettingsAndSite,
+  ShownSitesPage,
   Signed,
   SigningKey,
   SiteDetails,
@@ -60,6 +64,7 @@ import type {
   SiteNamed,
   SitesPage,
   SitesQuery,
+  SitesShown,
   TokenStates,
   Unchanged,
   UploadedVersion,
@@ -109,6 +114,7 @@ import {
   NAMED_FIELDS,
   NAMED_SITE,
   OTHER,
+  SHOWN_BESIDE,
   SITE_FIELDS,
   TITLE_KEY,
   VERSION_COLUMNS,
@@ -121,6 +127,7 @@ import {
   keepEarlierId,
   moveLive,
   narrowing,
+  pageWithBeside,
   publicNameIsFree,
   publicNameOf,
   requireCursor,
@@ -178,6 +185,14 @@ const READ_SETTINGS = built(BUILD.select({ value: settings.value }).from(setting
 
 /** The signing key, as hex text. */
 const READ_SIGNING_KEY = built(BUILD.select({ value: secrets.value }).from(secrets).where(eq(secrets.name, "session_key")));
+
+/** The address that starts a rebuild, and when it was saved. */
+const READ_UPDATE_ADDRESS = built(BUILD.select({ value: secrets.value, created_at: secrets.created_at }).from(secrets).where(eq(secrets.name, "update_address")));
+
+/** The last asking for a newer version, its news and its start as JSON text. */
+const READ_UPDATE_CHECK = built(
+  BUILD.select({ checked_at: updateCheck.checked_at, news: updateCheck.news, seen_at: updateCheck.seen_at, auto: updateCheck.auto }).from(updateCheck).where(eq(updateCheck.id, 1)),
+);
 
 /** The form of a day: a date such as `2026-11-13`, which sorts as text in the order of time. */
 const DAY_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
@@ -243,6 +258,43 @@ function addRequests(day: string, site: string, requests: number, views: number)
 /** The count of a day for a site; no row when nothing was counted. */
 function requestsOf(day: string, site: string): Statement {
   return built(BUILD.select({ requests: requestCounts.requests }).from(requestCounts).where(and(eq(requestCounts.day, day), eq(requestCounts.site, site))));
+}
+
+/**
+ * One page of a listing as a query: one row more than the page, which shows whether another page follows. Each row names what the page is ordered by `listed_by`.
+ *
+ * @throws {RangeError} the limit is no page's, or the cursor lacks what its order goes by
+ */
+function pageAsked(query: SitesQuery) {
+  requirePage(query.limit);
+  requireCursor(query);
+
+  // The trash is listed by when each site went there, the sites by when their content last changed.
+  const moment = query.trash ? sites.trashed_at : sites.updated_at;
+  const sort = query.sort ?? "updated";
+  const descending = (query.dir ?? DEFAULT_DIRECTIONS[sort]) === "desc";
+  const column = { updated: fragment`${moment}`, name: fragment`${sites.name}`, access: fragment`${sites.access_rank}`, title: fragment`${sites.title_key}` }[sort];
+  const conditions = narrowing(query);
+
+  if (query.after !== undefined) conditions.push(fragment`(${column}, ${sites.id}) ${descending ? fragment`<` : fragment`>`} (${cursorPlace(query.after, sort)}, ${query.after.id})`);
+
+  const fields = { ...LISTED_FIELDS, listed_by: column.as("listed_by") };
+  const page = BUILD.select(fields).from(sites).where(and(...conditions)).orderBy(descending ? desc(column) : asc(column), descending ? desc(sites.id) : asc(sites.id)).limit(query.limit + 1);
+
+  return { page, descending };
+}
+
+/** The page a listing's statement answered: its sites, and where the page after it starts when one follows. */
+function pageIn(listed: StatementResult | undefined, query: SitesQuery): SitesPage {
+  const rows = (listed?.rows ?? []).slice(0, query.limit);
+  const listedSites = rows.map(siteFromRow);
+  const last = listedSites.at(-1);
+  if (last === undefined || (listed?.rows.length ?? 0) <= query.limit) return { sites: listedSites };
+
+  // The key is read as the engine holds it: cut and lowered here, it could differ from the one the order goes by.
+  const listedBy = { updated: {}, name: { name: last.name }, access: { access: last.access }, title: { title: v.parse(TITLE_KEY, rows.at(-1)).title_key } }[query.sort ?? "updated"];
+
+  return { sites: listedSites, next: { updated_at: last.state === "trash" ? last.trashed_at : last.updated_at, id: last.id, ...listedBy } };
 }
 
 function requirePage(limit: number): void {
@@ -321,6 +373,12 @@ function updateCheckIn(result: StatementResult | undefined): UpdateCheck | undef
   return check.success ? check.output : undefined;
 }
 
+function updateAddressIn(result: StatementResult | undefined): UpdateAddress | undefined {
+  const row = result?.rows[0];
+
+  return row === undefined ? undefined : updateAddressFromRow(row);
+}
+
 function settingsIn(result: StatementResult | undefined): SettingValues | undefined {
   const value = result?.rows[0]?.value;
   if (typeof value !== "string") return undefined;
@@ -364,6 +422,12 @@ export class SqlDatabase implements Database {
     const [found] = await this.#driver.batch([siteById(id)]);
 
     return siteIn(found);
+  }
+
+  async getSiteWithSettings(id: SiteId): Promise<SettingsAndSite> {
+    const [stored, found] = await this.#driver.batch([READ_SETTINGS, siteById(id)]);
+
+    return { settings: settingsIn(stored), site: siteIn(found) };
   }
 
   async getSiteNames(ids: readonly SiteId[]): Promise<ReadonlyMap<SiteId, SiteNamed>> {
@@ -415,30 +479,21 @@ export class SqlDatabase implements Database {
   }
 
   async listSites(query: SitesQuery): Promise<SitesPage> {
-    requirePage(query.limit);
-    requireCursor(query);
+    const [listed] = await this.#driver.batch([built(pageAsked(query).page)]);
 
-    // The trash is listed by when each site went there, the sites by when their content last changed.
-    const moment = query.trash ? sites.trashed_at : sites.updated_at;
-    const sort = query.sort ?? "updated";
-    const descending = (query.dir ?? DEFAULT_DIRECTIONS[sort]) === "desc";
-    const column = { updated: fragment`${moment}`, name: fragment`${sites.name}`, access: fragment`${sites.access_rank}`, title: fragment`${sites.title_key}` }[sort];
-    const conditions = narrowing(query);
+    return pageIn(listed, query);
+  }
 
-    if (query.after !== undefined) conditions.push(fragment`(${column}, ${sites.id}) ${descending ? fragment`<` : fragment`>`} (${cursorPlace(query.after, sort)}, ${query.after.id})`);
+  async listShownSites(query: SitesQuery, shown: SitesShown): Promise<ShownSitesPage> {
+    requireDay(shown.day);
+    const { page, descending } = pageAsked(query);
+    const [stored, listed] = await this.#driver.batch([READ_SETTINGS, pageWithBeside(fragment`${page}`, shown, descending)]);
+    const beside = (listed?.rows ?? []).slice(0, query.limit).map((row) => v.parse(SHOWN_BESIDE, row));
+    const { sites: listedSites, next } = pageIn(listed, query);
+    const views = new Map(listedSites.map((site, at) => [site.id, beside[at]?.views ?? { today: 0, week: 0 }]));
+    const publishers = new Map(beside.flatMap((row) => Object.entries(row.publishers) as [TokenId, string][]));
 
-    // One row more than the page shows whether another page follows.
-    const page = BUILD.select(LISTED_FIELDS).from(sites).where(and(...conditions)).orderBy(descending ? desc(column) : asc(column), descending ? desc(sites.id) : asc(sites.id)).limit(query.limit + 1);
-    const [listed] = await this.#driver.batch([built(page)]);
-    const rows = (listed?.rows ?? []).slice(0, query.limit);
-    const listedSites = rows.map(siteFromRow);
-    const last = listedSites.at(-1);
-    if (last === undefined || (listed?.rows.length ?? 0) <= query.limit) return { sites: listedSites };
-
-    // The key is read as the engine holds it: cut and lowered here, it could differ from the one the order goes by.
-    const listedBy = { updated: {}, name: { name: last.name }, access: { access: last.access }, title: { title: v.parse(TITLE_KEY, rows.at(-1)).title_key } }[sort];
-
-    return { sites: listedSites, next: { updated_at: last.state === "trash" ? last.trashed_at : last.updated_at, id: last.id, ...listedBy } };
+    return { sites: listedSites, ...(next === undefined ? {} : { next }), settings: settingsIn(stored), views, publishers };
   }
 
   async changeAccess(id: SiteId, access: SiteAccess, signed: Signed): Promise<Done | Unchanged | Refused<"not_found" | "in_trash" | "name_taken">> {
@@ -972,8 +1027,7 @@ export class SqlDatabase implements Database {
   }
 
   async readUpdateCheck(): Promise<UpdateCheck | undefined> {
-    const asked = BUILD.select({ checked_at: updateCheck.checked_at, news: updateCheck.news, seen_at: updateCheck.seen_at, auto: updateCheck.auto }).from(updateCheck).where(eq(updateCheck.id, 1));
-    const [read] = await this.#driver.batch([built(asked)]);
+    const [read] = await this.#driver.batch([READ_UPDATE_CHECK]);
 
     return updateCheckIn(read);
   }
@@ -1044,6 +1098,12 @@ export class SqlDatabase implements Database {
     return settingsIn(read);
   }
 
+  async readFrame(): Promise<FrameRecords> {
+    const [stored, address, domain, update] = await this.#driver.batch([READ_SETTINGS, READ_UPDATE_ADDRESS, domainCheckAsked(), READ_UPDATE_CHECK]);
+
+    return { settings: settingsIn(stored), updateAddress: updateAddressIn(address), domainCheck: domainCheckIn(domain), updateCheck: updateCheckIn(update) };
+  }
+
   async initSettings(values: SettingValues, signed: Signed): Promise<{ readonly kind: "done" | "already_set"; readonly values: SettingValues }> {
     const checked = v.parse(SETTING_VALUES, values);
     const noneStored = fragment`NOT EXISTS (SELECT 1 FROM ${settings} WHERE ${settings.id} = 1)`;
@@ -1107,6 +1167,12 @@ export class SqlDatabase implements Database {
     return signingKeyIn(read);
   }
 
+  async readSettingsAndKey(): Promise<SettingsAndKey> {
+    const [stored, key] = await this.#driver.batch([READ_SETTINGS, READ_SIGNING_KEY]);
+
+    return { settings: settingsIn(stored), key: signingKeyIn(key) };
+  }
+
   async ensureSigningKey(fresh: Uint8Array, at: number): Promise<SigningKey> {
     const text = signingKeyToText(fresh);
     const stored = await this.readSigningKey();
@@ -1126,11 +1192,9 @@ export class SqlDatabase implements Database {
   }
 
   async readUpdateAddress(): Promise<UpdateAddress | undefined> {
-    const address = BUILD.select({ value: secrets.value, created_at: secrets.created_at }).from(secrets).where(eq(secrets.name, "update_address"));
-    const [read] = await this.#driver.batch([built(address)]);
-    const row = read?.rows[0];
+    const [read] = await this.#driver.batch([READ_UPDATE_ADDRESS]);
 
-    return row === undefined ? undefined : updateAddressFromRow(row);
+    return updateAddressIn(read);
   }
 
   async keepUpdateAddress(address: string, signed: Signed): Promise<void> {

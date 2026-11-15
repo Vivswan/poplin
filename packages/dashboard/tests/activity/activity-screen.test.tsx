@@ -165,6 +165,21 @@ describe("the log of one site", () => {
     });
   });
 
+  // Drift: a phone's list would offer the filter on no row again, where typing a site's title was the one way to its entries; or offer it on a row about no site.
+  test("a phone's row about a site ends with Only this site, which asks for the entries of that site; a row about none has no such button", async () => {
+    await draw("/activity");
+    const none = within(document.querySelector('ul[aria-label="Activity"]') as HTMLElement).queryAllByRole("button").length;
+    cleanup();
+    answered.page = SITE_PAGE;
+    await draw("/activity");
+    const before = asked.length;
+
+    fireEvent.click(within(document.querySelector('ul[aria-label="Activity"]') as HTMLElement).getByRole("button", { name: "Only this site" }));
+    await readAfter(before);
+
+    expect([none, window.location.search, asked.at(-1)]).toEqual([0, "?of=abcdefghijkl", "?of=abcdefghijkl"]);
+  });
+
   // Drift: a text and an id would be sent together, from an address that holds both or from a text typed over a log of one site, and the server refuses the two together.
   test("a text takes the place of the id: in an address that holds both, and typed into the search", async () => {
     await draw("/activity?of=abcdefghijkl&site=notes");

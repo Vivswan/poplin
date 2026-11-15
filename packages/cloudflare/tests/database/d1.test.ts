@@ -92,6 +92,7 @@ const ROWS: Readonly<Record<string, readonly [read: number, written: number]>> =
   "ensureSigningKey, the first": [2, 1],
   "ensureSigningKey, kept": [1, 0],
   "readSigningKey": [1, 0],
+  "readSettingsAndKey": [2, 0],
   "rotateSigningKey": [1, 3],
   "keepUpdateAddress": [1, 3],
   "readUpdateAddress": [1, 0],
@@ -103,6 +104,7 @@ const ROWS: Readonly<Record<string, readonly [read: number, written: number]>> =
   "keepDomainCheck": [2, 3],
   "keepDomainCheck, 200 pieces over the run before": [2, 3],
   "readDomainCheck": [1, 0],
+  "readFrame": [3, 0],
   "keepSweepPlace": [1, 1],
   "readSweepPlace": [1, 0],
   "keepSweepPlace, forgotten": [0, 1],
@@ -111,6 +113,8 @@ const ROWS: Readonly<Record<string, readonly [read: number, written: number]>> =
   "createSite, name taken": [4, 0],
   "getSite": [3, 0],
   "getSite, none": [0, 0],
+  "getSiteWithSettings": [4, 0],
+  "getSiteWithSettings, none": [1, 0],
   "getSiteNames": [10, 0],
   "getSiteByPublicName": [2, 0],
   "getSiteByFolder": [3, 0],
@@ -174,6 +178,8 @@ const ROWS: Readonly<Record<string, readonly [read: number, written: number]>> =
   "readDailyViews, a year": [2198, 0],
   "readDailyViews, a year, fifty sites": [18668, 0],
   "listSites": [18, 0],
+  "listShownSites, with the views and the publishers": [73, 0],
+  "listShownSites, with the views": [61, 0],
   "listSites, the next page": [18, 0],
   "listSites, by name, one holder, a text, an access": [23, 0],
   "listSites, by access": [18, 0],
@@ -419,6 +425,18 @@ describe("D1: the rows a listing, a change to a site, and a page of the audit lo
       "a page of the sites that never expire": [32, 0],
       "a page of the trash": [1, 0],
     });
+
+    // The trash is ordered by when a site went there, which the engine sorts every site of the trash for. What a screen shows beside a site is read for the sites of its page alone, never for each one sorted.
+    for (const id of ids.slice(0, 8)) await database.trashSite(id, BY_ADA);
+    const trash = { trash: true, limit: 3 } as const;
+
+    expect({
+      "a page of three of the eight in the trash": await cost(() => database.listSites(trash)),
+      "the same page as a screen lists it, with the settings, the views, and the publishers": await cost(() => database.listShownSites(trash, { day: DAY, publishers: true })),
+    }).toEqual({
+      "a page of three of the eight in the trash": [30, 0],
+      "the same page as a screen lists it, with the settings, the views, and the publishers": [67, 0],
+    });
   });
 });
 
@@ -615,6 +633,7 @@ describe("D1: the rows every operation of the database costs of a day's allowanc
     await cost("ensureSigningKey, the first", () => database.ensureSigningKey(new Uint8Array(32).fill(1), NOW));
     await cost("ensureSigningKey, kept", () => database.ensureSigningKey(new Uint8Array(32).fill(2), NOW));
     await cost("readSigningKey", () => database.readSigningKey());
+    await cost("readSettingsAndKey", () => database.readSettingsAndKey());
     await cost("rotateSigningKey", () => database.rotateSigningKey(new Uint8Array(32).fill(3), BY_ADA));
     await cost("keepUpdateAddress", () => database.keepUpdateAddress("https://example.com/hook", BY_ADA));
     await cost("readUpdateAddress", () => database.readUpdateAddress());
@@ -636,6 +655,8 @@ describe("D1: the rows every operation of the database costs of a day's allowanc
     await cost("createSite, name taken", () => database.createSite({ ...draft("open" as SiteName, "public", "open" as PublicName), folder: folder(SITES + 2) }, BY_ADA));
     await cost("getSite", () => database.getSite(first.id));
     await cost("getSite, none", () => database.getSite(NOBODY));
+    await cost("getSiteWithSettings", () => database.getSiteWithSettings(first.id));
+    await cost("getSiteWithSettings, none", () => database.getSiteWithSettings(NOBODY));
     await cost("getSiteNames", () => database.getSiteNames(sites.slice(0, 5).map((made) => made.id)));
     await cost("getSiteByPublicName", () => database.getSiteByPublicName("open" as PublicName));
     await cost("getSiteByFolder", () => database.getSiteByFolder(first.folder));
@@ -718,6 +739,8 @@ describe("D1: the rows every operation of the database costs of a day's allowanc
     await cost("readDailyViews, a year, fifty sites", () => database.readDailyViews(fifty, DAY, 365));
 
     const page = await cost("listSites", () => database.listSites({ trash: false, limit: 5 }));
+    await cost("listShownSites, with the views and the publishers", () => database.listShownSites({ trash: false, limit: 5 }, { day: DAY, publishers: true }));
+    await cost("listShownSites, with the views", () => database.listShownSites({ trash: false, limit: 5 }, { day: DAY, publishers: false }));
     await cost("listSites, the next page", () => database.listSites({ trash: false, limit: 5, ...(page.next === undefined ? {} : { after: page.next }) }));
     await cost("listSites, by name, one holder, a text, an access", () =>
       database.listSites({ trash: false, limit: 5, sort: "name", owner: BY_ADA.by, named: "site-1", access: "private", expires: "never" }),
@@ -778,6 +801,7 @@ describe("D1: the rows every operation of the database costs of a day's allowanc
     const pieces = Array.from({ length: 200 }, (_piece, at) => ({ piece: "Record", detail: `record ${at}`, part: "reach", state: "needs_repair" }) as const);
     await cost("keepDomainCheck, 200 pieces over the run before", () => database.keepDomainCheck({ ran_at: NOW + 1, by: BY_ADA.by, run: "repair", pieces }, { run: "repair" }));
     await cost("readDomainCheck", () => database.readDomainCheck());
+    await cost("readFrame", () => database.readFrame());
 
     // The logins change after every read of the log, so that the entries they write are read by no page of it above.
     const person = "bo@example.com" as Login;

@@ -135,6 +135,27 @@ export interface SitesPage {
   readonly next?: SitesCursor;
 }
 
+/** What a screen that lists sites reads beside them. */
+export interface SitesShown {
+  /** The UTC day, such as `2026-11-13`, that the views of each site are read up to: that day and the six before it. */
+  readonly day: string;
+
+  /** Whether the note of each token that published a kept version is read. */
+  readonly publishers: boolean;
+}
+
+/** One page of sites with what a screen shows beside them. */
+export interface ShownSitesPage extends SitesPage {
+  /** The install's settings, `undefined` before setup stored them. */
+  readonly settings: SettingValues | undefined;
+
+  /** The page views of every site of the page, zeros where nothing was counted. */
+  readonly views: ReadonlyMap<SiteId, SiteViews>;
+
+  /** The note of each token that published a kept version of a site of the page and has a note, removed or not; empty when none were asked for. */
+  readonly publishers: ReadonlyMap<TokenId, string>;
+}
+
 /** One page of every site, the trash included, in ascending order of id. `next` is the id to pass as `after`, absent on the last page. */
 export interface ExportPage {
   readonly sites: readonly Site[];
@@ -163,6 +184,26 @@ export interface NewVersion {
 export interface SigningKey {
   readonly kind: "created" | "kept";
   readonly key: Uint8Array<ArrayBuffer>;
+}
+
+/** The settings and the bytes of the signing key as one read gave them; each is `undefined` before it was stored. */
+export interface SettingsAndKey {
+  readonly settings: SettingValues | undefined;
+  readonly key: Uint8Array<ArrayBuffer> | undefined;
+}
+
+/** The settings and one site as one read gave them: the settings are `undefined` before setup stored them, the site when no site has the id. */
+export interface SettingsAndSite {
+  readonly settings: SettingValues | undefined;
+  readonly site: Site | undefined;
+}
+
+/** What the frame around every screen of the dashboard is drawn from, as one read gave it; each is `undefined` where its own read gives that. */
+export interface FrameRecords {
+  readonly settings: SettingValues | undefined;
+  readonly updateAddress: UpdateAddress | undefined;
+  readonly domainCheck: RememberedCheck | undefined;
+  readonly updateCheck: UpdateCheck | undefined;
 }
 
 /** The change was made; `site` is the site after it. */
@@ -435,6 +476,9 @@ export interface Database {
   /** The site with this id, in the trash or not. */
   getSite(id: SiteId): Promise<Site | undefined>;
 
+  /** The settings and the site with this id, in the trash or not, read together in one step: what an action on one site starts from. */
+  getSiteWithSettings(id: SiteId): Promise<SettingsAndSite>;
+
   /**
    * The name each of these ids' sites has now and the title it is listed under, in the trash or not, read in one step. An id that is no site's is left out.
    *
@@ -467,6 +511,14 @@ export interface Database {
    * @throws {RangeError} `limit` is not a whole number from 1 to 100
    */
   listSites(query: SitesQuery): Promise<SitesPage>;
+
+  /**
+   * One page of the sites, or of the trash, with the settings, the views of each site, and who published its versions, all read in one step.
+   *
+   * @returns the page `listSites` gives for the query, and beside it what `readSettings`, `readViews`, and `getTokenNames` give
+   * @throws {RangeError} `limit` is not a whole number from 1 to 100, or `day` is not a date
+   */
+  listShownSites(query: SitesQuery, shown: SitesShown): Promise<ShownSitesPage>;
 
   /** Set who may open a site. Going public claims the public name; leaving public frees it. `name_taken` as in `createSite`. */
   changeAccess(id: SiteId, access: SiteAccess, signed: Signed): Promise<Done | Unchanged | Refused<"not_found" | "in_trash" | "name_taken">>;
@@ -731,6 +783,13 @@ export interface Database {
   readSettings(): Promise<SettingValues | undefined>;
 
   /**
+   * Read what the dashboard's frame is drawn from, in one step: the settings, the address that starts a rebuild, the kept run of the domain, and the last asking for a newer version.
+   *
+   * @returns each as its own read gives it
+   */
+  readFrame(): Promise<FrameRecords>;
+
+  /**
    * Store the settings of a new install.
    *
    * @returns `already_set` with the settings already there, which are left as they are
@@ -769,8 +828,15 @@ export interface Database {
    */
   removeLogin(login: Login, signed: Signed): Promise<{ readonly kind: "done" | "unchanged"; readonly values: SettingValues } | Refused<"not_set_up" | "no_working_login">>;
 
-  /** The bytes of the key that signs sessions, `undefined` before one was stored. No other operation returns them. */
+  /** The bytes of the key that signs sessions, `undefined` before one was stored. Only this and `readSettingsAndKey` return them. */
   readSigningKey(): Promise<Uint8Array<ArrayBuffer> | undefined>;
+
+  /**
+   * Read the settings and the signing key together, in one step: what a session is checked against.
+   *
+   * @returns each as its own read gives it, `undefined` before it was stored
+   */
+  readSettingsAndKey(): Promise<SettingsAndKey>;
 
   /**
    * Store the signing key when the install has none. Of callers starting at the same moment one stores its key and every other gets that key back.

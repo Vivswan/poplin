@@ -5,7 +5,7 @@ order: 30
 
 # Domain
 
-What the dashboard's Domain screen shows and does, the last check it keeps, and the optional rules a token can switch on; the first Repair is step 4 of [By hand](../start/by-hand.md#the-steps).
+What the dashboard's Domain screen shows and does, the last check it keeps, and the optional rules an account token can switch on; the first Repair is step 4 of [By hand](../start/by-hand.md#the-steps).
 
 After the first login, Domain does what the setup page did.
 

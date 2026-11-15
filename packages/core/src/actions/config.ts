@@ -4,7 +4,7 @@ import * as v from "valibot";
 
 import type { Actor } from "../auth/scopes";
 import { SETTING_CHANGES } from "../records/settings";
-import { type Install, type Refused, refuse } from "./records";
+import { type Install, type Refused, refuse, settingsOf } from "./records";
 import { type Stored, storeSettings } from "./store-settings";
 
 /**
@@ -15,7 +15,7 @@ import { type Stored, storeSettings } from "./store-settings";
 export async function readConfig(install: Install, actor: Actor): Promise<Stored | Refused<"not_allowed" | "not_set_up">> {
   if (actor.scope !== "admin") return refuse("not_allowed");
 
-  const values = await install.database.readSettings();
+  const values = await settingsOf(install);
   if (values === undefined) return refuse("not_set_up");
 
   return { ok: true, values };

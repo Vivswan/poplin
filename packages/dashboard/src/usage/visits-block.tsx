@@ -218,9 +218,10 @@ export function VisitsBlock(): ReactNode {
   }, [visits, ofChoiceBefore, choice, setChoice]);
 
   return (
-    <section aria-labelledby="visits-heading" className="flex shrink-0 flex-col gap-3 px-6 pb-6 max-md:px-4">
+    // Named in its own words: Firefox 159 ends a page whose block is named by its heading's id once two scripts of different worlds read that name.
+    <section aria-label="Visits" className="flex shrink-0 flex-col gap-3 px-6 pb-6 max-md:px-4">
       <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
-        <h2 id="visits-heading" className="text-sm font-medium">
+        <h2 className="text-sm font-medium">
           Visits
         </h2>
         {counted ? (

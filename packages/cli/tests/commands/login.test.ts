@@ -37,6 +37,7 @@ interface Decision {
   readonly code: string;
   readonly allow: boolean;
   readonly confirm?: boolean;
+  readonly scope?: string;
 }
 
 /** A login that waits, as the dashboard shows it for review. */
@@ -153,10 +154,10 @@ async function waitingAt(desk: Desk, address: string): Promise<Waiting["login"]>
   return ((await (await desk.get(`/data/logins/find?code=${codeIn(address)}`)).json()) as Waiting).login;
 }
 
-/** Allow the login at an address as a person does: open the address, tick the box, press Allow. */
+/** Allow the login at an address for all it asks, as a person may: open the address, choose what it asks for, say the code is theirs, press Allow. */
 async function allow(desk: Desk, address: string): Promise<undefined> {
   await desk.get(address);
-  await desk.decide({ code: codeIn(address), allow: true, confirm: true });
+  await desk.decide({ code: codeIn(address), allow: true, confirm: true, scope: (await waitingAt(desk, address)).scope });
 }
 
 afterEach(cleanUp);
@@ -171,7 +172,7 @@ describe("logIn", () => {
     const ran = await desk.login(`login --server ${ORIGIN}`, async (address) => {
       opened = (await desk.get(address)).status;
       shown = await waitingAt(desk, address);
-      await desk.decide({ code: codeIn(address), allow: true, confirm: true });
+      await desk.decide({ code: codeIn(address), allow: true, confirm: true, scope: shown.scope });
 
       return undefined;
     });
@@ -183,7 +184,7 @@ describe("logIn", () => {
     expect([ran.code, ran.err, ran.out.slice(0, 5)]).toEqual([
       0,
       [],
-      ["open this address, and allow this computer there:", `  ${ORIGIN}/tokens/allow?code=${code}`, "allow it only if the page shows this code:", `  ${code}`, "the code works for 10 minutes"],
+      ["open this address, and allow this login there:", `  ${ORIGIN}/tokens/allow?code=${code}`, "the page asks for the last 4 letters of this code:", `  ${code}`, "the code works for 10 minutes"],
     ]);
     expect(ran.out.slice(5).map((line) => line.split(/ {2,}/)[0])).toEqual(["logged in: the token is saved on this machine", "install", "role", "token", "expires"]);
     expect([ran.opened, ran.waits, desk.bench.sent]).toEqual([[`${ORIGIN}/tokens/allow?code=${code}`], [5000], ["POST /api/logins", "POST /api/logins/token"]]);
@@ -241,7 +242,7 @@ describe("logIn", () => {
     let answered: Response | undefined;
 
     const ran = await desk.login(`login --server ${ORIGIN}`, async (address) => {
-      answered = await desk.decide({ code: codeIn(address), allow: true, ...ticked }, options);
+      answered = await desk.decide({ code: codeIn(address), allow: true, scope: "admin", ...ticked }, options);
 
       return undefined;
     });
@@ -312,7 +313,7 @@ describe("logIn", () => {
     expect([ran.code, ran.waits, questions]).toEqual([0, [5000, 90_000, 5000], 3]);
   });
 
-  // Drift: an install begins five logins a minute for everybody together, so a login can be asked to wait through no fault of its own. One that gave up at the first 429 would fail in a busy minute, and one that asked on for ever would tell nobody.
+  // Drift: an install begins eight logins a minute for everybody together, so a login can be asked to wait through no fault of its own. One that gave up at the first 429 would fail in a busy minute, and one that asked on for ever would tell nobody.
   test.each([
     ["twice", 2, 0, [39_000, 60_000, 5000]],
     ["six times", 6, 1, [39_000, 60_000, 60_000, 60_000, 60_000]],
@@ -337,7 +338,7 @@ describe("logIn", () => {
 
     const ran = await desk.bench.run(`login --server ${ORIGIN}`, { env: {} });
 
-    expect([ran.code, ran.waits, begun, ran.err[0]]).toEqual([code, waits, Math.min(refusals, 5) + 1, code === 0 ? undefined : "the install is asked too often from this address"]);
+    expect([ran.code, ran.waits, begun, ran.err[0]]).toEqual([code, waits, Math.min(refusals, 5) + 1, code === 0 ? undefined : "the install is asked too often"]);
   });
 
   // Drift: the browser goes where the install says; an install, or whatever answers in its place, that named another site would send the admin there with the dashboard's trust.
@@ -375,6 +376,8 @@ describe("logIn", () => {
       return undefined;
     });
     const kept = desk.saved();
+    // One address begins two logins a minute: the third is begun in the next.
+    desk.bench.install.clock.now += 60_000;
     const again = await desk.login("login", (address) => allow(desk, address));
 
     expect([denied.code, kept, again.code, desk.saved()?.server]).toEqual([1, before, 0, ORIGIN]);

@@ -24,7 +24,13 @@ What gets published is a site: one HTML file, or a folder of files with an `inde
 
 ## Use it from an AI agent
 
-Paste this line into an agent that can run commands on your computer, such as Claude Code or Codex. A chat in a browser cannot.
+Paste this line into an agent, such as Claude Code or Codex. A chat in a browser cannot run commands, so it cannot publish.
+
+| An agent here is | What that means for you                                             |
+| ---------------- | ------------------------------------------------------------------- |
+| an AI tool       | it runs in a terminal on your own computer, and runs commands there |
+| a separate tool  | you install it yourself, and it may cost money                      |
+| not in poplin    | poplin brings none. Without one, you publish with a command         |
 
 ```text
 Look at https://github.com/Vivswan/poplin, read its skill, and help me set up poplin.
@@ -32,7 +38,7 @@ Look at https://github.com/Vivswan/poplin, read its skill, and help me set up po
 
 The agent sets poplin up with you: it tells you what to click in your browser, checks each step, and does the rest. It acts as you, with the login the setup saves on your computer.
 
-Have ready what [What you need](docs/start/by-hand.md#what-you-need) lists; a first install takes about an hour and twenty minutes. [With an agent](docs/start/with-an-agent.md) shows who does what.
+Have ready a Cloudflare account with a domain and a payment method on it, and a GitHub account: [What you need](docs/start/by-hand.md#what-you-need) has the whole list. A first install takes about an hour and twenty minutes. [With an agent](docs/start/with-an-agent.md) shows who does what.
 
 | You have       | The agent                                                                      |
 | -------------- | ------------------------------------------------------------------------------ |
@@ -65,7 +71,7 @@ npx poplin set report--k3f9x2ab71qz --public --public-name docs   # everyone, at
 
 ## Where it runs
 
-In your own Cloudflare account, on the Free plan. You need the account and a domain on it.
+In your own Cloudflare account, on the Free plan. Cloudflare asks for a payment method to switch two parts on, the bucket and the login: [What can cost money](docs/run/limits-and-cost.md#what-can-cost-money) says when it is charged. You need the account and a domain on it.
 
 | The install is  | It                                              |
 | --------------- | ----------------------------------------------- |
@@ -80,3 +86,4 @@ In your own Cloudflare account, on the Free plan. You need the account and a dom
 | [The guide](docs/README.md)               | every command, every agent tool, and every error     |
 | [Install](docs/start/by-hand.md)          | getting your own install                             |
 | [Security](docs/about/security.md)        | what poplin protects against and what it does not    |
+| [Remove](docs/run/remove.md)              | taking an install down, piece by piece               |

@@ -54,16 +54,40 @@ describe("beginLogin", () => {
     expect([parseToken(secret).ok, await redeemLogin(world.install, { secret }), await tokenCount(world), await world.audit()]).toEqual([false, { ok: true, state: "pending" }, 0, []]);
   });
 
-  // Drift: the name is shown to the admin who decides; a name that could hold a line break or run for pages would let a request dress itself up as part of the page.
+  // Drift: the name is shown to the admin who decides; a name that could hold a line break, run for pages, or turn its letters around would let a request dress itself up as part of the page.
   test.each([
     ["a scope that is neither", { scope: "owner", computer: "laptop" }, "scope"],
     ["a name with a line break", { scope: "admin", computer: "laptop\nallowed by ada" }, "computer"],
+    ["a name with a tab", { scope: "admin", computer: "laptop\tada" }, "computer"],
+    ["a name with a line separator", { scope: "admin", computer: "laptop\u2028allowed by ada" }, "computer"],
+    ["a name with a paragraph separator", { scope: "admin", computer: "laptop\u2029allowed by ada" }, "computer"],
+    ["a name whose letters an override turns around", { scope: "admin", computer: "laptop \u202Eada yb dewolla" }, "computer"],
+    ["a name with an isolate that turns its letters around", { scope: "admin", computer: "\u2067laptop\u2069" }, "computer"],
+    ["a name with a right-to-left mark", { scope: "admin", computer: "laptop\u200F" }, "computer"],
+    ["a name with a space of no width", { scope: "admin", computer: "lap\u200Btop" }, "computer"],
+    ["a name with a byte order mark", { scope: "admin", computer: "\uFEFFlaptop" }, "computer"],
+    ["a name with half of a pair", { scope: "admin", computer: "laptop\uD83D" }, "computer"],
     ["a name of 101 characters", { scope: "admin", computer: "x".repeat(101) }, "computer"],
     ["a key that is not asked for", { scope: "admin", computer: "laptop", note: "ci" }, "note"],
   ])("refuses %s, and stores nothing", async (_what, request, about) => {
     const world = await makeWorld();
 
     expect(await beginLogin(world.install, request as Parameters<typeof beginLogin>[1], VISITOR)).toEqual({ ok: false, code: "bad_argument", about });
+  });
+
+  // Drift: a rule that refused more than what hides or turns text would lock out a computer named in another script.
+  test.each([
+    ["none", ""],
+    ["one of 100 characters", "x".repeat(100)],
+    ["one with spaces and marks", "Ada's laptop (studio) #2"],
+    ["one in another script", "\u05DE\u05D7\u05E9\u05D1 \u0634\u0628\u0643\u0629 \u30CE\u30FC\u30C8"],
+    ["one with a picture of two code units", "laptop \u{1F4BB}"],
+  ])("takes a name that is %s, and lists it as given", async (_what, computer) => {
+    const world = await makeWorld();
+    const login = await beginLogin(world.install, { scope: "publisher", computer }, VISITOR);
+    const listed = await listLogins(world.install, ADMIN);
+
+    expect([login.ok, listed.ok ? listed.logins.map((entry) => entry.computer) : undefined]).toEqual([true, [computer]]);
   });
 
   // Drift: anyone may begin a login and nobody is asked first. Were the waiting logins counted for everyone together, one address at the pace it is allowed would hold every place and no real computer could log in.
@@ -79,7 +103,7 @@ describe("beginLogin", () => {
       }
 
       const other = await begun(world, "publisher", `other-${minute % 2}`);
-      const allowed = await decideLogin(world.install, ADMIN, { code: other.code, allow: true });
+      const allowed = await decideLogin(world.install, ADMIN, { code: other.code, allow: true, scope: "publisher" });
       const collected = await redeemLogin(world.install, { secret: other.secret });
       others.push(allowed.ok && collected.ok && collected.state === "allowed");
     }
@@ -96,7 +120,7 @@ describe("beginLogin", () => {
     const stale = await begun(world);
     world.clock.now = NOW + 10 * MINUTE - 2 * SECOND;
     const [allowed, denied] = [await begun(world), await begun(world)];
-    await decideLogin(world.install, ADMIN, { code: allowed.code, allow: true });
+    await decideLogin(world.install, ADMIN, { code: allowed.code, allow: true, scope: "publisher" });
     await decideLogin(world.install, ADMIN, { code: denied.code, allow: false });
     const waiting = [await begun(world), await begun(world)];
     const kept = await stateOf(world, stale.code);
@@ -135,7 +159,7 @@ describe("listLogins", () => {
     world.clock.now = NOW + MINUTE;
     const recent = await begun(world, "publisher", "a-fourth-visitor");
     await decideLogin(world.install, ADMIN, { code: denied.code, allow: false });
-    await decideLogin(world.install, ADMIN, { code: allowed.code, allow: true });
+    await decideLogin(world.install, ADMIN, { code: allowed.code, allow: true, scope: "publisher" });
 
     const listed = await listLogins(world.install, ADMIN);
     world.clock.now = NOW + 10 * MINUTE;
@@ -165,25 +189,25 @@ describe("decideLogin", () => {
     const world = await makeWorld();
     const { code, secret } = await begun(world, "admin");
 
-    expect([await showLogin(world.install, actor, code), await decideLogin(world.install, actor, { code, allow: true })]).toEqual([
+    expect([await showLogin(world.install, actor, code), await decideLogin(world.install, actor, { code, allow: true, scope: "publisher" })]).toEqual([
       { ok: false, code: "not_allowed" },
       { ok: false, code: "not_allowed" },
     ]);
     expect([await redeemLogin(world.install, { secret }), await world.audit()]).toEqual([{ ok: true, state: "pending" }, []]);
   });
 
-  // Drift: the admin's choice at Allow is the last word on what a computer may do. A choice that could raise a publisher's request, or one that was dropped on the way, would hand out an admin's token nobody meant to give.
+  // Drift: the admin's choice at Allow is the last word on what a computer may do. A choice that could raise a publisher's request, was dropped on the way, or was left out and read as "what it asked" would hand out an admin's token nobody chose.
   test.each([
     ["an admin's request lowered to a publisher's", "admin", "publisher", "publisher"],
     ["an admin's request allowed as asked", "admin", "admin", "admin"],
-    ["an admin's request allowed with no scope named", "admin", undefined, "admin"],
+    ["an admin's request allowed with no scope named", "admin", undefined, undefined],
     ["a publisher's request allowed as asked", "publisher", "publisher", "publisher"],
     ["a publisher's request raised to an admin's", "publisher", "admin", undefined],
   ] as const)("%s", async (_what, asks, scope, becomes) => {
     const world = await makeWorld();
     const { code, secret } = await begun(world, asks);
 
-    const decided = await decideLogin(world.install, ADMIN, { code, allow: true, ...(scope === undefined ? {} : { scope }) });
+    const decided = await decideLogin(world.install, ADMIN, { code, allow: true, ...(scope === undefined ? {} : { scope }) } as Parameters<typeof decideLogin>[2]);
     const redeemed = await redeemLogin(world.install, { secret });
 
     if (becomes === undefined) {
@@ -208,7 +232,7 @@ describe("decideLogin", () => {
       shown,
       shown,
     ]);
-    expect([await decideLogin(world.install, ADMIN, { code, allow: false }), await decideLogin(world.install, ADMIN, { code, allow: true }), await showLogin(world.install, ADMIN, code)]).toEqual([
+    expect([await decideLogin(world.install, ADMIN, { code, allow: false }), await decideLogin(world.install, ADMIN, { code, allow: true, scope: "publisher" }), await showLogin(world.install, ADMIN, code)]).toEqual([
       shown,
       { ok: false, code: "no_such_login" },
       { ok: false, code: "no_such_login" },
@@ -227,7 +251,7 @@ describe("decideLogin", () => {
     const { code, secret } = await begun(world);
     world.clock.now = NOW + later;
 
-    expect([await showLogin(world.install, ADMIN, typed ?? code), await decideLogin(world.install, ADMIN, { code: typed ?? code, allow: true })]).toEqual([
+    expect([await showLogin(world.install, ADMIN, typed ?? code), await decideLogin(world.install, ADMIN, { code: typed ?? code, allow: true, scope: "publisher" })]).toEqual([
       { ok: false, code: "no_such_login" },
       { ok: false, code: "no_such_login" },
     ]);
@@ -241,7 +265,7 @@ describe("redeemLogin", () => {
     const world = await makeWorld();
     const { code, secret } = await begun(world);
     const other = await begun(world);
-    await decideLogin(world.install, ADMIN, { code, allow: true });
+    await decideLogin(world.install, ADMIN, { code, allow: true, scope: "publisher" });
     const forged = `${secret.slice(0, -1)}${secret.endsWith("0") ? "1" : "0"}`;
 
     const answers = [await redeemLogin(world.install, { secret: forged }), await redeemLogin(world.install, { secret: other.secret }), await redeemLogin(world.install, { secret })];
@@ -259,7 +283,7 @@ describe("redeemLogin", () => {
   test("of questions asked at the same moment one is answered the token", async () => {
     const world = await makeWorld();
     const { code, secret } = await begun(world, "admin");
-    await decideLogin(world.install, ADMIN, { code, allow: true });
+    await decideLogin(world.install, ADMIN, { code, allow: true, scope: "publisher" });
 
     const answers = await Promise.all([1, 2, 3].map(() => redeemLogin(world.install, { secret })));
 
@@ -271,7 +295,7 @@ describe("redeemLogin", () => {
     const world = await makeWorld();
     const [denied, late] = [await begun(world), await begun(world)];
     await decideLogin(world.install, ADMIN, { code: denied.code, allow: false });
-    await decideLogin(world.install, ADMIN, { code: late.code, allow: true });
+    await decideLogin(world.install, ADMIN, { code: late.code, allow: true, scope: "publisher" });
 
     const refused = await redeemLogin(world.install, { secret: denied.secret });
     world.clock.now = NOW + 10 * MINUTE;

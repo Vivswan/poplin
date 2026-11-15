@@ -4,7 +4,7 @@ import { type Login, type Logins, parseLogin, parseLogins } from "@poplin/core/s
 import { mintSessionCookie, readSession } from "../../src/login/session";
 
 const NOW = 1_700_000_000_000;
-const NAME = "__Secure-poplin-session";
+const NAME = "__Host-poplin-session";
 const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
 
 function loginOf(email: string): Login {
@@ -81,13 +81,40 @@ describe("the session cookie", () => {
     expect(await readSession(headers, { key, logins: loginsOf("owner@example.com"), now: NOW })).toEqual({ ok: false, refusal: "not-a-login" });
   });
 
-  // Drift: a site of the same domain could plant a cookie of this name ahead of the real one and sign the owner out.
-  test("a planted cookie ahead of the real one does not hide it", async () => {
+  // Drift: a browser holds one cookie of this name for the dashboard, so two in one request are not a browser's own; none would be picked from among them, whichever comes first.
+  test.each([
+    ["a planted one ahead of the real one", (real: string) => [`${NAME}=planted`, real]],
+    ["a planted one behind the real one", (real: string) => [real, `${NAME}=planted`]],
+    ["the real one twice", (real: string) => [real, real]],
+  ] as const)("a request with %s is refused", async (_name, pairsOf) => {
     const key = await keyOf(1);
-    const headers = cookieHeader(`${NAME}=planted`, await minted(await keyOf(2)), await minted(key));
+    const session = await readSession(cookieHeader(...pairsOf(await minted(key))), { key, logins: loginsOf("owner@example.com"), now: NOW });
 
-    expect(await readSession(headers, { key, logins: loginsOf("owner@example.com"), now: NOW })).toMatchObject({ ok: true });
+    expect(session).toEqual({ ok: false, refusal: "several" });
   });
+
+  // Drift: a name a sibling hostname can set would be taken as the session again. A browser keeps a no-break space, and other characters a text trim drops, as part of a cookie's name: such a name is one a site may choose.
+  test.each([
+    ["the name before this one", "__Secure-poplin-session"],
+    ["the name with no prefix", "poplin-session"],
+    ["the prefix in small letters", "__host-poplin-session"],
+    ["a no-break space before the name", `${String.fromCharCode(0xa0)}${NAME}`],
+    ["a line separator before the name", `${String.fromCharCode(0x2028)}${NAME}`],
+    ["a byte-order mark before the name", `${String.fromCharCode(0xfeff)}${NAME}`],
+  ])("a genuine value under %s is no session, and beside the real cookie it does not count as a second one", async (_case, other) => {
+    const key = await keyOf(1);
+    const real = await minted(key);
+    const check = { key, logins: loginsOf("owner@example.com"), now: NOW };
+    const planted = `${other}=${real.slice(NAME.length + 1)}`;
+    // A host hands the header over as text, which may hold characters the `Headers` class of a test's runtime refuses.
+    const sent = (...pairs: string[]): { get: () => string } => ({ get: () => pairs.join("; ") });
+
+    expect([await readSession(sent(planted), check), await readSession(sent(real, planted), check)]).toEqual([
+      { ok: false, refusal: "missing" },
+      { ok: true, value: loginOf("owner@example.com") },
+    ]);
+  });
+
 
   // Drift: a request without a usable cookie would throw, or be told apart wrongly by the caller.
   test.each([

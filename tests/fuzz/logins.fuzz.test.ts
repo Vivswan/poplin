@@ -9,6 +9,7 @@ import { type ApiInstall, ORIGIN, openApi, VISITOR_HEADER } from "../../packages
 import { CLIENT } from "../../packages/app/tests/console/support/console";
 import { FREE_LIMITS } from "../../packages/app/tests/console/support/install";
 import { ADDRESSES } from "../../packages/app/tests/sites/support/layout";
+import { plainComputerName } from "../../packages/core/src/actions/computer-logins";
 import { holdsSecret, mintComputerLogin, parseLoginSecret, parseUserCode, showUserCode } from "../../packages/core/src/auth/computer-logins";
 import type { Login } from "../../packages/core/src/auth/logins";
 import { fuzzTarget } from "./config";
@@ -20,9 +21,12 @@ const JSON_TYPE = "application/json";
 const FORM = "application/x-www-form-urlencoded";
 const INTERVAL_MS = 5000;
 const MINUTE_MS = 60_000;
-const STARTS_PER_MINUTE = 5;
+const STARTS_PER_MINUTE = 8;
+const OWN_STARTS_PER_MINUTE = 2;
 const CREDENTIAL = /poplin_(?:login_)?[0-9a-f]{16}_[0-9a-f]{64}/g;
 const YEAR_2100_MS = 4_102_444_800_000;
+const MOST_NAME_LENGTH = 100;
+const NAME_BREAKERS = [[0x00, 0x1f], [0x7f, 0x9f], [0xad, 0xad], [0x61c, 0x61c], [0x200b, 0x200f], [0x2028, 0x202e], [0x2060, 0x2064], [0x2066, 0x206f], [0xfeff, 0xfeff], [0xd800, 0xdfff]] as const;
 
 /** One thing a stranger, a terminal, or the admin does. `login` picks one of the logins begun so far. */
 type Step =
@@ -70,7 +74,7 @@ class Starts {
     }
 
     const own = this.#own.get(visitor) ?? 0;
-    if (own >= STARTS_PER_MINUTE) return 429;
+    if (own >= OWN_STARTS_PER_MINUTE) return 429;
 
     this.#own.set(visitor, own + 1);
     if (this.#all >= STARTS_PER_MINUTE) return 429;
@@ -81,9 +85,14 @@ class Starts {
   }
 }
 
-const property = fuzzTarget(import.meta.file);
+/** Whether a text holds a code point that breaks a line, hides, or turns text around: `NAME_BREAKERS` lists the first and last of each run, a half of a pair among them. A pair that is whole is read as the one character it is. */
+function breaksName(text: string): boolean {
+  return [...text].some((character) => NAME_BREAKERS.some(([first, last]) => (character.codePointAt(0) ?? 0) >= first && (character.codePointAt(0) ?? 0) <= last));
+}
 
+const property = fuzzTarget(import.meta.file);
 const secrets = hostile(fc.stringMatching(/^poplin_login_[0-9a-f]{16}_[0-9a-f]{64}$/));
+const names = hostile(fc.constantFrom("laptop", "Ada's laptop (studio)", "\u05de\u05d7\u05e9\u05d1 ci", "build \u{1f4bb} 2", "x".repeat(MOST_NAME_LENGTH)));
 const codes = hostile(fc.stringMatching(/^[BCDFGHJKLMNPQRSTVWXZ]{4}-[BCDFGHJKLMNPQRSTVWXZ]{4}$/));
 const picks = fc.nat({ max: 7 });
 const steps: fc.Arbitrary<Step> = fc.oneof(
@@ -194,7 +203,7 @@ function guarded(step: Extract<Step, { kind: "decide" }>): number | undefined {
 }
 
 async function decide(desk: Desk, login: Known, step: Extract<Step, { kind: "decide" }>): Promise<void> {
-  const decision = { code: login.code, allow: step.allow, ...(step.ticked ? { confirm: true } : {}) };
+  const decision = { code: login.code, allow: step.allow, ...(step.allow ? { scope: login.scope } : {}), ...(step.ticked ? { confirm: true } : {}) };
   const body = step.json ? JSON.stringify(decision) : new URLSearchParams(Object.entries(decision).map(([key, value]) => [key, String(value)])).toString();
 
   const headers = new Headers({ Origin: step.origin, "Sec-Fetch-Site": step.origin === ORIGIN ? "same-origin" : "cross-site", "Content-Type": step.json ? JSON_TYPE : FORM });
@@ -282,7 +291,7 @@ property(
 );
 
 property(
-  "whatever sixteen other addresses begin and however long they wait, an address that has no login waiting begins one unless five were begun that minute, and it waits until it runs out",
+  "whatever sixteen other addresses begin and however long they wait, an address that has no login waiting begins one unless eight were begun that minute, and it waits until it runs out",
   fc.asyncProperty(fc.array(fc.oneof(fc.nat({ max: 15 }), fc.constantFrom("wait" as const, "minute" as const)), { maxLength: 120 }), fc.nat({ max: 120 }), async (crowd, entry) => {
     const install = await openApi();
     const begin = async (visitor: string): Promise<{ readonly status: number; readonly secret: string }> => {
@@ -318,5 +327,25 @@ property(
     if (code !== undefined) expect([/^[BCDFGHJKLMNPQRSTVWXZ]{8}$/.test(code), parseUserCode(showUserCode(code))]).toEqual([true, code]);
 
     expect([await holdsSecret(presented, login), await holdsSecret(secret, login), parseLoginSecret(secret)]).toEqual([false, true, login.id]);
+  }),
+);
+
+property(
+  "whatever a computer calls itself, the install takes no text as its name that breaks a line, hides a part, or turns around, takes what the cleaner makes of it every time, and the cleaner leaves a name the install takes as it is",
+  fc.asyncProperty(names, async (text) => {
+    const install = await openApi();
+    const begin = async (visitor: string, computer: string): Promise<number> => {
+      const headers = { "Content-Type": "application/json", [VISITOR_HEADER]: visitor };
+
+      return (await install.api.fetch(new Request(`${ORIGIN}/api/logins`, { method: "POST", headers, body: JSON.stringify({ scope: "publisher", computer }) }))).status;
+    };
+    const name = plainComputerName(text);
+    const given = await begin("as-given", text);
+    const taken = given === 200 ? [text] : [];
+
+    if (breaksName(text) || text.length > MOST_NAME_LENGTH) expect(given).toBe(400);
+
+    expect([await begin("cleaned", name), name.length <= MOST_NAME_LENGTH, breaksName(name), plainComputerName(name), ...taken]).toEqual([200, true, false, name, ...taken.map(() => name)]);
+    expect((await install.database.listWaitingComputerLogins(install.clock.now)).map((login) => login.computer).sort()).toEqual([name, ...taken].sort());
   }),
 );

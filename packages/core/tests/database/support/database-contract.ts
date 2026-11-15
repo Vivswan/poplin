@@ -4,6 +4,7 @@ import { describe, expect, test } from "bun:test";
 
 import type { SiteName } from "../../../src/names/names";
 import type { Login } from "../../../src/auth/logins";
+import { mintToken, type TokenRecord } from "../../../src/auth/tokens";
 import type { DomainCheck } from "../../../src/records/domain-check";
 import type { SiteId } from "../../../src/sites/ids";
 import { auditLog, everLoggedIn } from "./audit-contract";
@@ -159,6 +160,19 @@ function updateCheck(label: string, makeDatabase: DatabaseFactory): void {
 
       expect([before, written, await database.readUpdateCheck()]).toEqual([undefined, { checked_at: NOW + 1, news: null, seen_at: null, auto: { ...start, taken: "0.2.0" } }, written]);
     });
+
+    // Drift: the frame of every screen is drawn from one read of four records. One that gave a record differently from its own read would show a release, a start, or an alarm that the screen behind it denies.
+    test("the frame's one read gives the settings, the saved address, the kept run, and the last asking, each as its own read gives it: nothing on an empty install, then each once it is kept", async () => {
+      const database = await opened(makeDatabase);
+      const empty = await database.readFrame();
+      await database.initSettings(SETTINGS, BY_ADA);
+      await database.keepUpdateAddress("https://builds.provider.example/hooks/first-3f9c", BY_ADA);
+      await database.keepDomainCheck({ ran_at: NOW, by: ADA, run: "check", pieces: [{ piece: "Record", detail: "every site", part: "reach", state: "ok" }] }, { run: "check" });
+      await database.keepUpdateCheck({ checked_at: NOW, news: null });
+      const each = { settings: await database.readSettings(), updateAddress: await database.readUpdateAddress(), domainCheck: await database.readDomainCheck(), updateCheck: await database.readUpdateCheck() };
+
+      expect([empty, Object.values(each).includes(undefined), await database.readFrame()]).toEqual([{ settings: undefined, updateAddress: undefined, domainCheck: undefined, updateCheck: undefined }, false, each]);
+    });
   });
 }
 
@@ -186,6 +200,7 @@ function domainCheck(label: string, makeDatabase: DatabaseFactory): void {
       await database.keepDomainCheck(second, { run: "repair", from: "setup" });
 
       expect([before, kept, await database.readDomainCheck()]).toEqual([undefined, { ...first, users_changed_at: null }, { ...second, users_changed_at: null }]);
+      expect(await database.readFrame()).toEqual({ settings: undefined, updateAddress: undefined, domainCheck: { ...second, users_changed_at: null }, updateCheck: undefined });
       expect((await auditTrail(database)).map(({ action, by, at, detail }) => ({ action, by, at, detail }))).toEqual([
         { action: "domain_synced", by: ADA, at: NOW, detail: { run: "check", from: "dashboard" } },
         { action: "domain_synced", by: ADA, at: NOW + 5, detail: { run: "repair", from: "setup" } },
@@ -373,6 +388,42 @@ function requestCounts(label: string, makeDatabase: DatabaseFactory): void {
         { site: 0, all: 19 },
         { site: 0, all: 9 },
       ]);
+    });
+
+    // Drift: a screen's page is one read that stands for four. One that gave a site other views than its own read, or lost the note of whoever published it, would show a table that its own panels deny.
+    test("the page a screen lists is the plain page and, beside it, the settings, each site's views, and the note of each token that published one: what the four reads give apart", async () => {
+      const database = await opened(makeDatabase);
+      await database.initSettings(SETTINGS, BY_ADA);
+      const minted = (note: string): Promise<TokenRecord> => mintToken({ scope: "publisher", note, now: NOW }).then((token) => token.record);
+      const [named, removed, unnamed] = [await minted("ci"), await minted("agent"), await minted("")];
+      for (const token of [named, removed, unnamed]) await database.addToken(token, BY_ADA);
+      await database.revokeToken(removed.id, BY_ADA);
+      const day = new Date(NOW).toISOString().slice(0, 10);
+      const before = new Date(NOW - 6 * 86_400_000).toISOString().slice(0, 10);
+      const sites = [];
+      for (const [at, by] of [named.id, removed.id, unnamed.id, ADA].entries()) sites.push(await made(database, draft(`site-${at}` as SiteName), { by, at: NOW + at }));
+      const [first, second] = sites.map((site) => site.id) as [SiteId, SiteId];
+      await database.addRequests({ day, site: first, requests: 9, views: 7 });
+      await database.addRequests({ day: before, site: first, requests: 5, views: 4 });
+      await database.addRequests({ day, site: second, requests: 2, views: 0 });
+      // Counted seven days back: the first day that a week ending today does not hold.
+      await database.addRequests({ day: new Date(NOW - 7 * 86_400_000).toISOString().slice(0, 10), site: second, requests: 3, views: 3 });
+      const query = { trash: false, limit: 3, sort: "name" } as const;
+      const plain = await database.listSites(query);
+      const ids = plain.sites.map((site) => site.id);
+
+      const shown = await database.listShownSites(query, { day, publishers: true });
+      const bare = await database.listShownSites({ ...query, ...(plain.next === undefined ? {} : { after: plain.next }) }, { day, publishers: false });
+
+      expect<unknown>([plain.sites.length, plain.next === undefined, { sites: shown.sites, next: shown.next }]).toEqual([3, false, plain]);
+      expect([shown.settings, [...shown.views], [...shown.publishers].sort()]).toEqual([SETTINGS, [...(await database.readViews(ids, day))], [...(await database.getTokenNames([named.id, removed.id, unnamed.id, ADA]))].sort()]);
+      expect([...shown.views.values()]).toEqual([
+        { today: 7, week: 11 },
+        { today: 0, week: 0 },
+        { today: 0, week: 0 },
+      ]);
+      expect<unknown>([bare.sites.map((site) => site.name), [...bare.views.values()], [...bare.publishers]]).toEqual([["site-3"], [{ today: 0, week: 0 }], []]);
+      await expect(database.listShownSites(query, { day: "tomorrow", publishers: true })).rejects.toThrow(RangeError);
     });
 
     // Drift: additions from several Worker instances land at once; one read back and written again would lose the others.

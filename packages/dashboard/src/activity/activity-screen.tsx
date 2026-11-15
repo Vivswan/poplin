@@ -114,29 +114,32 @@ function OrderSelect({ descending, onChoose }: { readonly descending: boolean; r
   );
 }
 
-/** The log on a phone: one row an entry, what was done and to which site over who did it and when, and after the last row what follows the list. */
-function PhoneList({ page, place, after }: { readonly page: Page; readonly place: string; readonly after: ReactNode }): ReactNode {
+/** The log on a phone: one row an entry, what was done and to which site over who did it and when, with the row's action at its end, and after the last row what follows the list. */
+function PhoneList({ page, place, actions, after }: { readonly page: Page; readonly place: string; readonly actions: (entry: Entry) => ReactNode; readonly after: ReactNode }): ReactNode {
   const list = useTopOfPlace(place);
 
   return (
     <div ref={list} className="line-room min-h-0 flex-1 overflow-y-auto md:hidden">
       <ul aria-label="Activity" className="border-t">
         {page.entries.map((entry) => (
-          <li key={entry.seq} tabIndex={-1} className="flex min-h-16 flex-col justify-center gap-0.5 border-b px-4 py-2 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring">
-            <span className="flex min-w-0 items-baseline gap-2">
-              <span className="truncate">{whatOf(entry)}</span>
-              <span className="min-w-0 shrink-0 truncate">
-                <SiteThen entry={entry} />
+          <li key={entry.seq} tabIndex={-1} className="group/row flex min-h-16 items-center gap-2 border-b px-4 py-2 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring">
+            <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+              <span className="flex min-w-0 items-baseline gap-2">
+                <span className="truncate">{whatOf(entry)}</span>
+                <span className="min-w-0 shrink-0 truncate">
+                  <SiteThen entry={entry} />
+                </span>
               </span>
-            </span>
-            <span className="flex min-w-0 items-center gap-2 text-xs text-muted-foreground">
-              <span className="min-w-0 truncate">
-                <Who by={entry.by} logins={page.logins} unnamed="a token" />
+              <span className="flex min-w-0 items-center gap-2 text-xs text-muted-foreground">
+                <span className="min-w-0 truncate">
+                  <Who by={entry.by} logins={page.logins} unnamed="a token" />
+                </span>
+                <span className="shrink-0">
+                  <When entry={entry} />
+                </span>
               </span>
-              <span className="shrink-0">
-                <When entry={entry} />
-              </span>
-            </span>
+            </div>
+            {actions(entry)}
           </li>
         ))}
       </ul>
@@ -288,7 +291,7 @@ export function ActivityScreen(): ReactNode {
                 list={list}
               />
             </div>
-            {page === undefined ? null : <PhoneList page={page} place={place} after={pages} />}
+            {page === undefined ? null : <PhoneList page={page} place={place} actions={rowActions} after={pages} />}
           </>
         )}
       </section>

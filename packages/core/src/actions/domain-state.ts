@@ -15,7 +15,7 @@
 import * as v from "valibot";
 
 import type { Actor } from "../auth/scopes";
-import { type CheckedPiece, DOMAIN_CHECK } from "../records/domain-check";
+import { type CheckedPiece, DOMAIN_CHECK, type RememberedCheck } from "../records/domain-check";
 import { COUNT } from "../records/fields";
 import { type Install, type Refused, refuse } from "./records";
 import { DAY_MS } from "./site-object";
@@ -69,20 +69,18 @@ function noteOf(pieces: readonly CheckedPiece[]): "none" | Extract<DomainNote, {
 }
 
 /**
- * Say what the install remembers of its domain, and the one thing to act on. It is one read of the database, and asks the provider nothing.
+ * Say what a kept run tells of the domain at a moment, and the one thing to act on. Nothing is read.
  *
+ * @param remembered - the kept run, `undefined` before any
+ * @param now - the moment, in milliseconds since the epoch
  * @returns the last run with its age and the note; `none` before any run and when every needed piece stood. A run over 30 days old raises `check_again` in place of whatever it found, and nothing when it found nothing.
- *   Users that changed with no repair after it raise `users_changed` over all but a broken login or site that a run under 30 days old found.
- *   `not_allowed` for anyone but an admin
+ *   Users that changed with no repair after it raise `users_changed` over all but a broken login or site that a run under 30 days old found
  */
-export async function domainState(install: Pick<Install, "database" | "now">, actor: Actor): Promise<DomainState | Refused<"not_allowed">> {
-  if (actor.scope !== "admin") return refuse("not_allowed");
-
-  const remembered = await install.database.readDomainCheck();
+export function domainStateOf(remembered: RememberedCheck | undefined, now: number): DomainState {
   if (remembered === undefined) return { ok: true, check: null, age: null, stale: false, waits: false, note: "none" };
 
   const { users_changed_at: changedAt, ...check } = remembered;
-  const age = Math.max(0, install.now() - check.ran_at);
+  const age = Math.max(0, now - check.ran_at);
   const stale = age > STALE_AFTER_MS;
   const waits = changedAt !== null;
   const found = noteOf(check.pieces);
@@ -90,4 +88,15 @@ export async function domainState(install: Pick<Install, "database" | "now">, ac
   if (waits && !urgent) return { ok: true, check, age, stale, waits, note: { code: "users_changed", about: null } };
 
   return { ok: true, check, age, stale, waits, note: stale && found !== "none" ? { code: "check_again", about: null } : found };
+}
+
+/**
+ * Say what the install remembers of its domain, and the one thing to act on. It is one read of the database, and asks the provider nothing.
+ *
+ * @returns what `domainStateOf` says of the kept run at the clock's time, or `not_allowed` for anyone but an admin
+ */
+export async function domainState(install: Pick<Install, "database" | "now">, actor: Actor): Promise<DomainState | Refused<"not_allowed">> {
+  if (actor.scope !== "admin") return refuse("not_allowed");
+
+  return domainStateOf(await install.database.readDomainCheck(), install.now());
 }

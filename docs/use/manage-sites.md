@@ -48,7 +48,7 @@ Every other example runs the same way, with `npx` before `poplin`.
 | Press                         | Does                                                       |
 | ----------------------------- | ---------------------------------------------------------- |
 | a site's title                | opens the site in a new tab; not for a site in the trash   |
-| the rest of its row           | opens its panel; a second press closes it                  |
+| the rest of its row           | opens its panel; a second press, or one beside it, closes  |
 | the eye after the link        | shows the id, which is hidden as dots, and hides it again  |
 | Copy the link                 | copies the whole link, a hidden id included                |
 | Open the site                 | opens the site in a new tab                                |
@@ -65,6 +65,15 @@ For a site that is not in the trash, the panel has the link, who can open it, th
 | a Public name that is refused | says why at the field, and keeps what was typed                                  |
 | Show in search engines        | on any site, while Let search engines in is off: `Off for every site in Settings.` |
 | Show in search engines        | on a site that is not public, while it is on: `Only a public site is listed.`    |
+| Change, after Deletes itself  | opens a menu; a choice is saved at once, with Undo                               |
+
+| In the menu           | The site deletes itself                                                              |
+| --------------------- | ------------------------------------------------------------------------------------ |
+| 1 day, 7 days, 30 days | that long after the save; the menu shows the day and time before you choose          |
+| On a day...           | when the day you pick starts, in the time zone the dashboard shows; shown before Save |
+| Never                 | never                                                                                |
+
+For a site that deletes itself, the panel then shows the day and time, and `Then its link stops working, and it moves to the trash.`
 
 | From                | To       | The question says                                                                  | Its button       |
 | ------------------- | -------- | ---------------------------------------------------------------------------------- | ---------------- |
@@ -75,6 +84,14 @@ For a site that is not in the trash, the panel has the link, who can open it, th
 | Private or Unlisted | Public   | `Everyone can open it, at a public link. No login.`, over the field Public name    | Make it public   |
 
 The field Public name starts with the site's name. Under it, `Its link will be` shows the address the site gets for the name typed, such as `docs-page.example.com`.
+
+For a site in the trash, the panel has Restore and Delete for good. Its row has Restore, and Delete for good in the menu after it.
+
+| Delete for good       | Does, or says                                                             |
+| --------------------- | ------------------------------------------------------------------------- |
+| the question          | `This cannot be undone, and the site's files go too.`                     |
+| its button            | stays off until you type the site's name, which the question shows        |
+| once it is done       | the site leaves the list; nothing restores it                             |
 
 [Who can open a site](who-can-open.md) says what a public name is. Let search engines in is in [Settings](../run/settings.md#change-a-setting), under Visitors.
 

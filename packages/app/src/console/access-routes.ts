@@ -3,7 +3,7 @@
 //   GET  /logins                   the newest logins that wait, without their codes, and how many more wait
 //   GET  /logins/find?code=<code>  the login a terminal's address names, to review; counted as a try at a code
 //   GET  /logins/<id>              one waiting login, to review
-//   POST /logins/decide            allow or deny the login under a code; counted as a try at a code
+//   POST /logins/decide            allow the login under a code with the scope the person chose, or deny it; counted as a try at a code
 //   GET  /people                   the emails that can log in, and which one asks
 //   POST /people/add, /remove      one email in, or out, in one step each
 //   GET  /tokens                   every token that works, never its value; ?sort= with ?dir=; and the newest that ended
@@ -41,8 +41,11 @@ const ONE_TOKEN = v.object({ token: v.string() });
 /** The code a terminal's address carries. */
 const CODED = v.object({ [CODE_KEY]: v.string() });
 
-/** What a decision carries: the code, whether the computer is let in, whether the box was ticked, and the scope it is let in with. */
-const DECISION = v.object({ code: v.string(), allow: v.boolean(), confirm: v.optional(v.boolean()), scope: v.optional(v.picklist(["publisher", "admin"])) });
+/** What a decision carries: the code and whether the computer is let in; for one that is, whether the person said its code is theirs, and the scope they chose, which is never left to what the computer asked. */
+const DECISION = v.variant("allow", [
+  v.object({ code: v.string(), allow: v.literal(false) }),
+  v.object({ code: v.string(), allow: v.literal(true), confirm: v.optional(v.boolean()), scope: v.picklist(["publisher", "admin"]) }),
+]);
 
 /** One email to add or take out, as it was typed. */
 const PERSON = v.object({ login: v.string() });
@@ -100,13 +103,14 @@ export const accessRoutes = new Hono<Shared>()
   })
   .post("/logins/decide", fewCodes, vValidator("json", DECISION, refuseInvalid), async (context) => {
     const { install, actor } = context.get("asker");
-    const { code, allow, confirm, scope } = context.req.valid("json");
-    // A computer is let in only by one who said the codes match; keeping one out needs no such word.
-    if (allow && confirm !== true) return refused(context, { code: "not_confirmed", about: "confirm" });
+    const decision = context.req.valid("json");
+    // A computer is let in only by one who said its code is their own; keeping one out needs no such word.
+    if (decision.allow && decision.confirm !== true) return refused(context, { code: "not_confirmed", about: "confirm" });
 
-    const decided = await decideLogin(install, actor, { code, allow, ...(allow && scope !== undefined ? { scope } : {}) });
+    const { code } = decision;
+    const decided = await decideLogin(install, actor, decision.allow ? { code, allow: true, scope: decision.scope } : { code, allow: false });
 
-    return decided.ok ? context.json({ ok: true as const, allowed: allow, scope: decided.login.scope }) : refused(context, decided);
+    return decided.ok ? context.json({ ok: true as const, allowed: decision.allow, scope: decided.login.scope }) : refused(context, decided);
   })
   .get("/people", async (context) => {
     const { install, actor } = context.get("asker");

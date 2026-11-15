@@ -9,13 +9,26 @@ import { SITE_ID, SITE_NAME } from "../records/fields";
 import { type NEW_SITE, type SiteAccess, type SiteFolder, TITLE } from "../records/site";
 import type { SiteId } from "../sites/ids";
 import type { UploadId } from "../records/upload";
-import type { Signed, SiteDetails, SitesQuery } from "./database";
+import { SITE_VIEWS, viewDays } from "../records/views";
+import type { Signed, SiteDetails, SitesQuery, SitesShown } from "./database";
 import type { Statement } from "./driver";
-import { earlierIds, sites, uploads, versions } from "./schema";
-import { BUILD, CHANGED, ONE, built, insertFrom, qualified } from "./statements";
+import { earlierIds, requestCounts, sites, tokens, uploads, versions } from "./schema";
+import { BUILD, CHANGED, ONE, built, insertFrom, qualified, written } from "./statements";
 
 /** The columns a version is written with. */
 export const VERSION_COLUMNS = [versions.folder, versions.number, versions.published_at, versions.published_by, versions.bytes, versions.files, versions.missing_page, versions.bare_files];
+
+/** The `request_counts` table as `w`, for the week of views of the site a statement selects. */
+const A_WEEK_COUNT = alias(requestCounts, "w");
+
+/** The `tokens` table as `p`, for the token that published a version. */
+const A_PUBLISHER = alias(tokens, "p");
+
+/** What a listing for a screen reads beside a site, each as JSON text: its views, and the note of each token that published a kept version of it, by the token's id. */
+export const SHOWN_BESIDE = v.object({
+  views: v.pipe(v.string(), v.parseJson(), SITE_VIEWS),
+  publishers: v.pipe(v.string(), v.parseJson(), v.record(v.string(), v.string())),
+});
 
 /** The `versions` table as `k`, for the kept versions inside a subquery on `v`. */
 export const A_KEPT_VERSION = alias(versions, "k");
@@ -106,6 +119,30 @@ export function versionsOfSite(withContents = false): SQL<string> {
   const version = fragment`json_object(${fragment.join(pairs, fragment`, `)})`;
 
   return fragment<string>`(SELECT json_group_array(${version}) FROM ${versions} WHERE ${qualified(versions.folder)} = ${qualified(sites.folder)})`;
+}
+
+/**
+ * One page of a listing with what a screen shows beside each of its sites. The page is cut first, so nothing is read for a site the page does not hold.
+ *
+ * Each site carries its page views on a day and over the week that ends with it as `views`, zeros where nothing was counted, each day's row found by its key.
+ * As `publishers` it carries the note of each token that published a kept version of it and has one, each token found by its key; an empty object when none are asked for.
+ *
+ * @param page - the page's own statement, ordered and cut, which names what it is ordered by `listed_by`
+ * @param descending - whether the page runs from the last to the first
+ */
+export function pageWithBeside(page: SQL, shown: SitesShown, descending: boolean): Statement {
+  const days = fragment.join(
+    viewDays(shown.day).map((one) => fragment`${one}`),
+    fragment`, `,
+  );
+  const today = fragment`coalesce(sum(CASE WHEN ${A_WEEK_COUNT.day} = ${shown.day} THEN ${A_WEEK_COUNT.views} ELSE 0 END), 0)`;
+  const sums = fragment`json_object('week', coalesce(sum(${A_WEEK_COUNT.views}), 0), 'today', ${today})`;
+  const views = fragment`(SELECT ${sums} FROM ${requestCounts} AS ${A_WEEK_COUNT} WHERE ${A_WEEK_COUNT.site} = page.id AND ${A_WEEK_COUNT.day} IN (${days}))`;
+  const publishedBy = fragment`(SELECT kept.value ->> 'published_by' FROM json_each(page.versions) AS kept)`;
+  const noted = fragment`(SELECT json_group_object(${A_PUBLISHER.id}, ${A_PUBLISHER.note}) FROM ${tokens} AS ${A_PUBLISHER} WHERE ${A_PUBLISHER.id} IN ${publishedBy} AND ${A_PUBLISHER.note} <> '')`;
+  const direction = descending ? fragment`DESC` : fragment`ASC`;
+
+  return written(fragment`SELECT page.*, ${views} AS views, ${shown.publishers ? noted : fragment`'{}'`} AS publishers FROM ${page} AS page ORDER BY page.listed_by ${direction}, page.id ${direction}`);
 }
 
 /** The sites a condition holds for, each with its kept versions. */

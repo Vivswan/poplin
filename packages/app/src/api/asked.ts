@@ -11,11 +11,11 @@ import type { Counters, Taken } from "../limits/limits";
 import { hasContentType, readJson } from "./body";
 import { refusal, respond } from "./respond";
 
-/** The most requests one visitor may send a minute to each route that takes no token. A terminal asks for its token twelve times a minute. The pace alone bounds no visitor's waiting logins: core keeps three of each. */
-const OPEN_PER_MINUTE = { beginLogin: 5, redeemLogin: 25 } as const;
+/** The most requests one visitor may send a minute to each route that takes no token. A terminal begins its login once, so one visitor's share is a quarter of what all may begin; it asks for its token twelve times a minute. */
+const OPEN_PER_MINUTE = { beginLogin: 2, redeemLogin: 25 } as const;
 
-/** The most logins all visitors together may begin a minute. A day then begins 7,200 at most: 28,800 rows written and 417,600 read, under a third of what a free day of the database takes. */
-const STARTS_PER_MINUTE = 5;
+/** The most logins all visitors together may begin a minute: the ceiling on their cost, which one visitor's share never fills. A day begins 11,520 at most: 46,080 rows written and 668,160 read, under half of a free day of the database. */
+const STARTS_PER_MINUTE = 8;
 
 /** What a counter that cannot answer is taken to say: the minute is full. A login is the guess the count exists to stop, so it is refused where a request for a site is let through. */
 const UNCOUNTED = { ok: false, retryAfterSeconds: 60 } as const;
@@ -42,13 +42,15 @@ export interface Gate extends Pick<Install, "now"> {
   readonly visitorOf: (request: Request) => Promise<string>;
 }
 
-/** Count one request to a route that takes no token: against its visitor's minute, and a login that fits there against the minute of all logins begun. */
+/** Count one request to a route that takes no token: against its visitor's minute first, so a visitor past its own share takes nothing from the rest, and a login that fits there against the minute of all logins begun. */
 async function takeOpen(name: OpenName, request: Request, gate: Gate): Promise<Taken & { readonly visitor: string }> {
   const visitor = await gate.visitorOf(request);
-  const own = await gate.counters.takeMinute({ scope: "visitor", key: `${name}:${visitor}`, limit: OPEN_PER_MINUTE[name] }, gate.now());
+  // Both counts are of one moment, so a login counted in its visitor's minute is never counted in the next minute of all.
+  const now = gate.now();
+  const own = await gate.counters.takeMinute({ scope: "visitor", key: `${name}:${visitor}`, limit: OPEN_PER_MINUTE[name] }, now);
   if (!own.ok || name !== "beginLogin") return { ...own, visitor };
 
-  return { ...(await gate.counters.takeMinute({ scope: "install", key: name, limit: STARTS_PER_MINUTE }, gate.now())), visitor };
+  return { ...(await gate.counters.takeMinute({ scope: "install", key: name, limit: STARTS_PER_MINUTE }, now)), visitor };
 }
 
 /**

@@ -16,6 +16,7 @@ import {
   NOW,
   NO_SITE,
   REPORT,
+  SETTINGS,
   auditActions,
   auditDetails,
   auditTrail,
@@ -44,6 +45,9 @@ export function sites(label: string, makeDatabase: DatabaseFactory): void {
 
       expect([first.name, second.name, first.id === second.id]).toEqual([REPORT, REPORT, false]);
       expect([await database.getSite(first.id), await database.getSite(second.id)]).toEqual([first, second]);
+      expect(await database.getSiteWithSettings(first.id)).toEqual({ settings: undefined, site: first });
+      await database.initSettings(SETTINGS, BY_ADA);
+      expect([await database.getSiteWithSettings(second.id), await database.getSiteWithSettings(NO_SITE)]).toEqual([{ settings: SETTINGS, site: second }, { settings: SETTINGS, site: undefined }]);
       expect(first).toEqual({
         id: first.id,
         name: REPORT,

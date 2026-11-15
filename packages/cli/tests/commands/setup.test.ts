@@ -7,7 +7,7 @@ import { ORIGIN } from "../../../app/tests/api/support/install";
 import { fakePlug, firstRunOf, TOKEN, usualPlug } from "../../../app/tests/console/support/fake-plug";
 import { type Bench, cleanUp, jsonOf, openBench } from "./support/harness";
 
-/** The environment of a person who has a provider's token and no login. */
+/** The environment of a person who has an account token and no login. */
 const ENV = { POPLIN_SETUP_TOKEN: TOKEN };
 
 /** The command line of a setup of the test install. */
@@ -90,7 +90,7 @@ describe("poplin setup", () => {
       ok: true,
       rows: [
         { object: "Record", state: "created", detail: "poplin.example.com", part: "reach" },
-        { object: "Rule", state: "failed", detail: "refused. Add this right to the token: Rule: Edit", part: "rest" },
+        { object: "Rule", state: "failed", detail: "refused. Add this right to the account token: Rule: Edit", part: "rest" },
       ],
       steps: [],
     };
@@ -115,7 +115,7 @@ describe("poplin setup", () => {
   });
 
   const refused: readonly { readonly name: string; readonly reading?: DomainReading; readonly open?: boolean; readonly code: number; readonly says: string }[] = [
-    { name: "a token the provider refuses", reading: { ok: false, refusal: "token" }, code: 1, says: "the token was refused, or it is not of the install's own account" },
+    { name: "a token the provider refuses", reading: { ok: false, refusal: "token" }, code: 1, says: "the account token was refused, or it is not of the install's own account" },
     { name: "a provider that does not answer", reading: { ok: false, refusal: "unreachable" }, code: 5, says: "the install got no answer from its provider" },
     { name: "a database that takes no more for the day", reading: { ok: false, refusal: "allowance_spent" }, code: 1, says: "a day's allowance of the install is used up until 00:00 UTC" },
     { name: "a setup that is shut", open: false, code: 1, says: "nothing at that address takes a setup" },

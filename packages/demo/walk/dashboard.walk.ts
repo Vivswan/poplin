@@ -4,7 +4,7 @@ import { readFile } from "node:fs/promises";
 
 import { expect, type Locator, type Page } from "@playwright/test";
 
-import { arrive, openPanel, reset, said, screenHeading, siteName, test } from "./visit";
+import { arrive, openPanel, reset, said, screenHeading, siteName, TRASH, test } from "./visit";
 
 /** The screens the walk is taken on. A wide one shows tables and the side navigation; a narrow one shows lists, and the sections behind a button. */
 const VIEWPORTS = [
@@ -23,6 +23,12 @@ const SCHEMES = ["light", "dark"] as const;
 
 /** What the sample data holds that the walk opens: an unlisted site by its title, a site by its title for the graph, a person who is not the visitor, a token, and a login that waits. */
 const SAMPLE = { site: "Pricing", graphed: "Team handbook", person: "jonas@example.com", token: "design-laptop", login: "build-server" } as const;
+
+/** The sample site that is in the trash: what the list calls it, which is its title, and its name, which its link holds. */
+const TRASHED = { title: "Notes from the offsite", name: "old-notes" } as const;
+
+/** How a moment is written: the day with two figures, and the time to the minute. */
+const MOMENT = String.raw`\d{2} [A-Z][a-z]{2} \d{4}, \d{2}:\d{2}`;
 
 /** Where the notes of a newer version are read: the page of the project's releases. */
 const RELEASES = "https://github.com/Vivswan/poplin/releases";
@@ -53,6 +59,9 @@ const OWN_FACE = '"Libre Franklin Variable"';
 
 /** The mark of a filled button among the classes the UI library draws it with. */
 const FILLED = /(^| )bg-primary( |$)/;
+
+/** The path of the data of one waiting login, which a review reads. */
+const LOGIN_DATA = /\/data\/logins\/[0-9a-f]+$/;
 
 /** Every place of the walk, in the order it is taken: each starts where the one before it ended. */
 const STOPS: readonly Stop[] = [
@@ -234,6 +243,18 @@ const STOPS: readonly Stop[] = [
     close: leaveBy("Cancel"),
   },
   {
+    name: "the notes of the newer version in the sections of a phone, and from there the question before an update",
+    only: "narrow",
+    open: async (page) => {
+      await page.getByRole("button", { name: "Sections", exact: true }).click();
+      const sections = page.getByRole("dialog");
+      await expect(sections.locator(`a[href="${RELEASES}"][target="_blank"][rel="noreferrer"]`, { hasText: "What changed" })).toBeVisible();
+      await sections.getByRole("button", { name: "Update now", exact: true }).click();
+    },
+    shows: (page) => [question(page, /^Update to /)],
+    close: leaveBy("Cancel"),
+  },
+  {
     name: "the dialog that adds a user, with an email typed",
     open: async (page) => {
       await toSection(page, "Access");
@@ -319,18 +340,29 @@ const STOPS: readonly Stop[] = [
     shows: (page, wide) => [rows(page, wide, "Removed tokens").getByText(SAMPLE.token, { exact: true })],
   },
   {
-    name: "the review of a waiting login",
-    open: (page) => page.getByRole("button", { name: `Review ${SAMPLE.login}`, exact: true }).click(),
+    name: "the review of a waiting login, which names it in quotes and starts at the least it may change",
+    open: (page, wide) => reviewOf(page, wide, SAMPLE.login).click(),
     shows: (page) => [
-      page
-        .getByRole("dialog", { name: `Allow ${SAMPLE.login}?`, exact: true })
-        .getByRole("checkbox", { name: "The codes match", exact: true }),
+      review(page).getByText("Allow it only if you started this login yourself.", { exact: true }),
+      review(page).getByText(`"${SAMPLE.login}"`, { exact: true }),
+      review(page).getByRole("button", { name: "Own sites only", exact: true, pressed: true }),
+      review(page).getByRole("button", { name: "Allow", exact: true, disabled: true }),
     ],
-    close: (page) =>
-      page
-        .getByRole("dialog", { name: `Allow ${SAMPLE.login}?`, exact: true })
-        .getByRole("button", { name: "Close", exact: true })
-        .click(),
+    close: (page) => review(page).getByRole("button", { name: "Close", exact: true }).click(),
+  },
+  {
+    name: "the review a terminal's link opens, which shows no whole code and turns Allow on once its last letters are typed",
+    open: async (page, wide) => {
+      const read = page.waitForResponse((response) => LOGIN_DATA.test(new URL(response.url()).pathname));
+      await reviewOf(page, wide, SAMPLE.login).click();
+      const { code } = ((await (await read).json()) as { readonly login: { readonly code: string } }).login;
+      await page.goto(`tokens/allow?code=${code}`);
+      await expect(review(page).getByRole("button", { name: "Allow", exact: true, disabled: true })).toBeVisible();
+      await expect(review(page).getByText(code)).toHaveCount(0);
+      await review(page).getByRole("textbox", { name: "Last 4 letters of the code in your terminal", exact: true }).fill(code.slice(-4));
+    },
+    shows: (page) => [review(page).getByText(/^Anyone can start a login and send its link\./), review(page).getByRole("button", { name: "Allow", exact: true, disabled: false })],
+    close: (page) => review(page).getByRole("button", { name: "Close", exact: true }).click(),
   },
   {
     name: "a reset of the sample data, which keeps the screen it was pressed on",
@@ -418,6 +450,19 @@ async function narrowSites(page: Page, filter: string): Promise<void> {
   await page.getByRole("option", { name: filter, exact: true }).click();
 }
 
+/** The review of a waiting login, under the title every review has. */
+function review(page: Page): Locator {
+  return page.getByRole("dialog", { name: "Allow this login?", exact: true });
+}
+
+/** The button that opens the review of the waiting login that gave itself a name: its row says the name, the button does not. */
+function reviewOf(page: Page, wide: boolean, name: string): Locator {
+  return rows(page, wide, "Tokens")
+    .getByRole(wide ? "row" : "listitem")
+    .filter({ hasText: name })
+    .getByRole("button", { name: "Review", exact: true });
+}
+
 /** Press one entry of the menu at the end of a row, which is named after what the row holds. */
 async function fromRowMenu(page: Page, row: string, entry: string): Promise<void> {
   await page.getByRole("button", { name: `More for ${row}`, exact: true }).click();
@@ -449,7 +494,7 @@ async function tickSite(page: Page): Promise<void> {
   await page.keyboard.press("Escape");
 }
 
-/** The panel of the sample site: beside the table on a wide screen, over the list on a narrow one. */
+/** The panel of the sample site: over the end of the table on a wide screen, in the list's place on a narrow one. */
 function panel(page: Page): Locator {
   return page.getByRole("dialog", { name: SAMPLE.site, exact: true });
 }
@@ -610,25 +655,56 @@ test.describe("on a screen 1920 px wide", () => {
   });
 });
 
-test.describe("on a screen 1440 px wide, beside a site's panel", () => {
+test.describe("on a screen 1440 px wide, under a site's panel", () => {
   test.use({ viewport: VIEWPORTS[0] });
 
-  // Drift: the panel takes the room of a column, and the table would scroll sideways again with the end of its last column under the rows' actions; or the name in a link would be cut while dots still stand for more than a few letters of its id.
-  test("the sites fit their room: the dots of a hidden id give, each name stays whole, and no cell lies under the rows' actions", async ({ page }) => {
+  // Drift: an open panel would take a column's room from the table again, which was then laid out anew at every open and close; or a press beside the panel would leave it open; or a press on another row would only close it.
+  test("the table keeps its width under the panel, a press on another row moves the panel to that site, and a press beside the panel closes it", async ({ page }) => {
     await arrive(page);
+    const table = page.getByRole("table", { name: "Sites", exact: true });
+    const width = async (): Promise<number> => Math.round((await table.boundingBox())?.width ?? Number.NaN);
+    const without = await width();
+
     await openPanel(page, SAMPLE.site);
     await expect(panel(page).getByRole("heading", { name: SAMPLE.site, exact: true })).toBeVisible();
-    await sitesFit(page);
+    expect(await width()).toBe(without);
 
-    const links = await page.getByRole("table", { name: "Sites", exact: true }).evaluate((table) => {
-      const parts = [...table.querySelectorAll<HTMLElement>("[data-gives]")];
-      const names = parts.filter((part) => part.matches(".truncate"));
-      // The dots that find no room stand in a line under the first, which is not shown.
-      const dots = parts.filter((part) => !part.matches(".truncate")).map((part) => part.firstElementChild);
+    await openPanel(page, SAMPLE.graphed);
+    await expect(page.getByRole("dialog", { name: SAMPLE.graphed, exact: true })).toBeVisible();
+    await expect(panel(page)).toHaveCount(0);
 
-      return { cutNames: names.filter((name) => name.scrollWidth > name.clientWidth).length, fewerDots: dots.some((row) => (row?.scrollHeight ?? 0) > (row?.clientHeight ?? 0)) };
-    });
-    expect(links).toEqual({ cutNames: 0, fewerDots: true });
+    await page.getByRole("searchbox", { name: "Find a site", exact: true }).click();
+    await expect(page.getByRole("dialog")).toHaveCount(0);
+    expect(await width()).toBe(without);
+  });
+
+  // Drift: Escape would leave the focus in the search again after the panel was told to stay once, at a press on another row or on a result's button: the library gives no focus back after a close it was refused.
+  test("the focus is back on the row of the site whose panel Escape closed, after the panel moved from another row, came back by the browser's Back, and after Undo was pressed", async ({ page }) => {
+    await arrive(page);
+    const row = (name: string): Locator => page.getByRole("row").filter({ has: page.locator(`[data-slot="site-name"][title=${JSON.stringify(name)}]`) });
+    const moved = page.getByRole("dialog", { name: SAMPLE.graphed, exact: true });
+
+    await openPanel(page, SAMPLE.site);
+    await openPanel(page, SAMPLE.graphed);
+    await moved.getByRole("heading", { name: SAMPLE.graphed, exact: true }).click();
+    await pressEscape(page);
+    await expect(row(SAMPLE.graphed)).toBeFocused();
+
+    // The panel that Back brings up again was opened by no press: its site's row still takes the focus, not the row pressed last.
+    await openPanel(page, SAMPLE.site);
+    await openPanel(page, SAMPLE.graphed);
+    await page.goBack();
+    await panel(page).getByRole("heading", { name: SAMPLE.site, exact: true }).click();
+    await pressEscape(page);
+    await expect(row(SAMPLE.site)).toBeFocused();
+
+    await openPanel(page, SAMPLE.site);
+    await panel(page).getByRole("switch", { name: "Allow embedding", exact: true }).click();
+    await lines(page).getByRole("button", { name: "Undo", exact: true }).click();
+    await expect(lines(page).filter({ hasText: "Put back." })).toBeVisible();
+    await panel(page).getByRole("heading", { name: SAMPLE.site, exact: true }).click();
+    await pressEscape(page);
+    await expect(row(SAMPLE.site)).toBeFocused();
   });
 });
 
@@ -698,6 +774,16 @@ test.describe("on a phone, after a site's panel", () => {
   });
 });
 
+// Drift: a group of the settings would take its name from its heading by an id again: Firefox ends the page when such a name is read once by the walk's own scripts and once among the page's.
+test("a group of the settings is found by its name twice, by a count and among the page's own scripts, and the page stays", async ({ page }) => {
+  await arrive(page);
+  await toSection(page, "Settings");
+  const group = page.getByRole("region", { name: "New sites", exact: true });
+
+  await expect(group).toHaveCount(1);
+  expect(await group.evaluateAll((all) => all.length)).toBe(1);
+});
+
 test.describe("on a phone, on Usage", () => {
   test.use({ viewport: PHONE });
 
@@ -718,6 +804,50 @@ test.describe("on a phone, on Usage", () => {
       return { atOnce: whole.length >= 5, scrolls: whole.length < list.children.length };
     });
     expect(shown).toEqual({ atOnce: true, scrolls: true });
+  });
+});
+
+for (const viewport of VIEWPORTS) {
+  test.describe(`on Usage, at ${viewport.width} pixels`, () => {
+    test.use({ viewport: { width: viewport.width, height: viewport.height } });
+
+    // Drift: the block would take its name from its heading's id again, and Firefox ends a page whose block is read by that name twice; or the one line left would not be drawn.
+    test("with one site compared and all sites switched off, the block is still read by its name, and the site's line alone is drawn", async ({ page }) => {
+      await arrive(page);
+      await toSection(page, "Usage");
+      const switches = page.getByRole("region", { name: "Visits", exact: true }).locator("button[aria-pressed]");
+      await tickSite(page);
+      await expect(switches).toHaveCount(2);
+
+      await switches.first().click();
+      await expect(page.locator("path[data-line]")).toHaveCount(1);
+
+      const after = await switches.evaluateAll((all) => all.map((one) => [one.getAttribute("aria-pressed"), (one as HTMLButtonElement).disabled]));
+      expect(after).toEqual([
+        ["false", false],
+        ["true", true],
+      ]);
+      const drawn = await page.locator("path[data-line]").evaluate((line) => (line.getAttribute("d") ?? "").split(/[ML,]/).filter(Boolean).map(Number));
+      expect(drawn.every(Number.isFinite) && drawn.length > 2).toBe(true);
+    });
+  });
+}
+
+test.describe("on a phone, on Activity", () => {
+  test.use({ viewport: PHONE });
+
+  // Drift: a phone's rows would end with no button again, and typing a site's title would be the one way to that site's entries.
+  test("a row about a site ends with Only this site, which keeps that site's entries under a mark that names it", async ({ page }) => {
+    await arrive(page);
+    await toSection(page, "Activity");
+    const entries = page.getByRole("list", { name: "Activity", exact: true }).getByRole("listitem");
+    const ofSite = page.getByRole("link", { name: SAMPLE.site, exact: true });
+
+    await entries.filter({ has: ofSite }).first().getByRole("button", { name: "Only this site", exact: true }).click();
+    await expect(page.getByText(`Only ${SAMPLE.site}`, { exact: true })).toBeVisible();
+    await expect(entries.filter({ hasNot: ofSite })).toHaveCount(0);
+    await expect(entries.filter({ has: ofSite })).not.toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Only this site", exact: true })).toHaveCount(0);
   });
 });
 
@@ -958,4 +1088,57 @@ test("two times of the same length take the same room in the face the dashboard 
   expect([measured.carried, measured.first]).toEqual([["loaded"], true]);
   expect(measured.shown[0]).toBe(measured.shown[1]);
   expect(measured.control[0]).not.toBe(measured.control[1]);
+});
+
+// Drift: a site could be told when to delete itself from a terminal alone, or the panel would show a span where the day it ends on is asked for.
+test("in a site's panel, a span is shown as the moment it ends before it is saved and after, Undo takes it away again, and a day is picked in a dialog that one Escape leaves", async ({ page }) => {
+  const fact = panel(page).locator("dd").filter({ has: page.getByRole("button", { name: "Change when it deletes itself", exact: true }) });
+  const change = panel(page).getByRole("button", { name: "Change when it deletes itself", exact: true });
+  await arrive(page);
+  await openPanel(page, SAMPLE.site);
+  await expect(fact).toHaveText("NeverChange");
+
+  await change.click();
+  await expect(page.getByRole("menuitem")).toHaveText([new RegExp(`^1 day${MOMENT}$`), new RegExp(`^7 days${MOMENT}$`), new RegExp(`^30 days${MOMENT}$`), "On a day...", "Never"]);
+  await page.getByRole("menuitem", { name: /^7 days/ }).click();
+  await expect(said(page, "Saved.")).toBeVisible();
+  await expect(fact).toHaveText(new RegExp(`^${MOMENT}ChangeThen its link stops working, and it moves to the trash\\.$`));
+
+  await lines(page).filter({ hasText: "Saved." }).getByRole("button", { name: "Undo", exact: true }).click();
+  await expect(said(page, "Put back.")).toBeVisible();
+  await expect(fact).toHaveText("NeverChange");
+
+  await change.click();
+  await page.getByRole("menuitem", { name: "On a day...", exact: true }).click();
+  const day = page.getByRole("dialog", { name: "Pick a day", exact: true });
+  await expect(day.getByRole("button", { name: "Save", exact: true })).toBeDisabled();
+  await day.getByRole("gridcell").getByRole("button", { disabled: false }).first().click();
+  await expect(day.getByText(/^Deletes itself \d{2} [A-Z][a-z]{2} \d{4}, 00:00$/)).toBeVisible();
+  await pressEscape(page);
+  await expect(day).toBeHidden();
+  await expect(change).toBeFocused();
+  await expect(fact).toHaveText("NeverChange");
+});
+
+// Drift: a site in the trash could be removed for good from a terminal alone, or one press would remove it, with its title where its name is asked for.
+test("a site in the trash is deleted for good only once its name is typed, with the focus on Cancel first; it then leaves the list with no Undo, and Activity says so", async ({ page }) => {
+  const asks = question(page, `Delete ${TRASHED.title} for good?`);
+  const remove = asks.getByRole("button", { name: "Delete for good", exact: true });
+  await arrive(page);
+  await page.goto(TRASH);
+  await fromRowMenu(page, TRASHED.title, "Delete for good");
+  await expect(asks.getByRole("button", { name: "Cancel", exact: true })).toBeFocused();
+  await expect(remove).toBeDisabled();
+
+  await asks.getByRole("textbox", { name: "Site's name", exact: true }).fill(TRASHED.title);
+  await expect(remove).toBeDisabled();
+  await asks.getByRole("textbox", { name: "Site's name", exact: true }).fill(TRASHED.name);
+  await remove.click();
+  await expect(said(page, `${TRASHED.title} deleted for good.`)).toBeVisible();
+  await expect(siteName(page, TRASHED.title)).toHaveCount(0);
+  await expect(lines(page).getByRole("button")).toHaveCount(0);
+  await expect(page.getByLabel("Find a site", { exact: true }).filter({ visible: true })).toBeFocused();
+
+  await toSection(page, "Activity");
+  await expect(page.locator(':text-is("Deleted for good"):visible').first()).toBeVisible();
 });

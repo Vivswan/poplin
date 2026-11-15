@@ -6,7 +6,7 @@ import type { decideLogin, showLogin } from "@poplin/core/src/actions/computer-l
 import type { changeConfig, readConfig } from "@poplin/core/src/actions/config";
 import type { deleteSite } from "@poplin/core/src/actions/delete";
 import type { duplicateSite } from "@poplin/core/src/actions/duplicate";
-import type { listSites } from "@poplin/core/src/actions/list";
+import type { listSitesWithNames } from "@poplin/core/src/actions/list";
 import type { addLogin, removeLogin } from "@poplin/core/src/actions/logins";
 import type { listTokens } from "@poplin/core/src/actions/manage-tokens";
 import type { newLink } from "@poplin/core/src/actions/new-link";
@@ -38,7 +38,7 @@ const REFUSALS: Readonly<Record<ActionCode | OwnCode, string>> = {
   upload_finished: "The copy is finished already: it is a site of its own now, in the list of sites.",
   stale_version: "A newer publish went live first.",
   id_taken: "A site here already has that id.",
-  not_confirmed: "Tick the box first.",
+  not_confirmed: "Type the last letters of the code first.",
   not_json: "The request was not sent as JSON, so nothing was changed.",
   too_large: "The request was too large, so nothing was changed.",
   no_page: "There is no such page.",
@@ -75,7 +75,7 @@ const ABOUT_REFUSALS: Readonly<Record<string, Readonly<Record<string, string>>>>
     other: "The copy does not fit a limit of the install: {about}. No copy was made.",
   },
   bad_argument: {
-    expires: "Deletes itself takes never, a span such as 7d, or a day such as 2026-12-01.",
+    expires: "Pick a day that is still ahead.",
     address: "That is not an update link of the host. Paste the whole link, starting with https://.",
     default_expires: "Use a whole number, 1 or more.",
     default_search_engines: "Use on or off.",
@@ -118,7 +118,7 @@ type CodeOf<Action extends (...asked: never[]) => Promise<unknown>> = Extract<Aw
 
 /** Every code the actions the dashboard calls may refuse with. */
 type ActionCode =
-  | CodeOf<typeof listSites>
+  | CodeOf<typeof listSitesWithNames>
   | CodeOf<typeof getSite>
   | CodeOf<typeof updateSite>
   | CodeOf<typeof rollbackSite>
