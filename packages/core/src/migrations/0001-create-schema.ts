@@ -38,6 +38,7 @@ CREATE TABLE sites (
   updated_at INTEGER NOT NULL,
   trashed_at INTEGER,
   trashed INTEGER GENERATED ALWAYS AS (trashed_at IS NOT NULL) VIRTUAL,
+  access_rank INTEGER GENERATED ALWAYS AS (CASE access WHEN 'private' THEN 0 WHEN 'unlisted' THEN 1 WHEN 'public' THEN 2 END) VIRTUAL,
   CHECK ((access = 'public') = (public_name IS NOT NULL)),
   CHECK (public_name IS NOT id),
   CHECK (next_version > live_version)
@@ -306,6 +307,8 @@ export const CREATE_SCHEMA: Step = {
     DOMAIN_CHECK,
     "CREATE INDEX sites_by_change ON sites (trashed, updated_at DESC, id DESC)",
     "CREATE INDEX sites_by_owner ON sites (owner, trashed, updated_at DESC, id DESC)",
+    "CREATE INDEX sites_by_name ON sites (trashed, name, id)",
+    "CREATE INDEX sites_by_access ON sites (trashed, access_rank, id)",
     "CREATE INDEX tokens_by_creation ON tokens (created_at DESC, id DESC)",
     "CREATE INDEX uploads_by_age ON uploads (created_at, id)",
     "CREATE INDEX uploads_by_state ON uploads (state, owner, number, bytes)",

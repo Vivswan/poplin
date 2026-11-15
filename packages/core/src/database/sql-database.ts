@@ -162,15 +162,8 @@ const SITE_FIELDS = {
 /** The id and the name of a site, as `getSiteNames` reads them. */
 const NAMED_SITE = v.object({ id: SITE_ID, name: SITE_NAME });
 
-/** The place of each access in a listing sorted by access: from the most private to the most open. */
+/** The place of each access in a listing sorted by access, as the `access_rank` column of a site holds it: from the most private to the most open. */
 const ACCESS_RANKS = { private: 0, unlisted: 1, public: 2 } as const;
-
-/** The same places, as the listing's statement computes them. */
-const ACCESS_RANK = fragment`CASE ${sites.access} ${fragment.raw(
-  Object.entries(ACCESS_RANKS)
-    .map(([access, rank]) => `WHEN '${access}' THEN ${rank}`)
-    .join(" "),
-)} END`;
 
 /** The direction a listing takes when none is asked: the last change first, a name and an access from the start. */
 const DEFAULT_DIRECTIONS = { updated: "desc", name: "asc", access: "asc" } as const;
@@ -678,7 +671,7 @@ export class SqlDatabase implements Database {
     const moment = query.trash ? sites.trashed_at : sites.updated_at;
     const sort = query.sort ?? "updated";
     const descending = (query.dir ?? DEFAULT_DIRECTIONS[sort]) === "desc";
-    const column = { updated: fragment`${moment}`, name: fragment`${sites.name}`, access: ACCESS_RANK }[sort];
+    const column = { updated: fragment`${moment}`, name: fragment`${sites.name}`, access: fragment`${sites.access_rank}` }[sort];
     const conditions = narrowing(query);
 
     if (query.after !== undefined) {

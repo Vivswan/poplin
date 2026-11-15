@@ -5,7 +5,7 @@ import { describe, expect, test } from "bun:test";
 import { type LoginId, mintComputerLogin, type PendingLogin } from "../../../src/auth/computer-logins";
 import type { Login } from "../../../src/auth/logins";
 import { mintToken, type TokenId, type TokenRecord } from "../../../src/auth/tokens";
-import type { Database, NewSite, NewUpload, NewVersion, Signed } from "../../../src/database/database";
+import type { Database, NewSite, NewUpload, NewVersion, Signed, SitesPage } from "../../../src/database/database";
 import type { PublicName, SiteName } from "../../../src/names/names";
 import type { AuditAction, AuditEntry } from "../../../src/records/audit";
 import type { DomainCheck } from "../../../src/records/domain-check";
@@ -764,6 +764,27 @@ function sites(label: string, makeDatabase: DatabaseFactory): void {
       // Drift: a cursor that lacks what its order goes by has no place in that order; started from the top instead, the page would repeat its sites.
       await expect(database.listSites({ trash: false, limit: 1, sort: "name", after: { updated_at: NOW, id: "aaaaaaaaaaaa" as SiteId } })).rejects.toThrow(RangeError);
       await expect(database.listSites({ trash: false, limit: 1, sort: "access", after: { updated_at: NOW, id: "aaaaaaaaaaaa" as SiteId, name: REPORT } })).rejects.toThrow(RangeError);
+    });
+
+    // Drift: the place of an access is held by the schema, which orders the listing, and by the cursor, which starts the next page. Were the two to differ, or the order to follow the spelling, a page would repeat or skip sites.
+    test.each([
+      ["asc", ["bbbbbbbbbbbb", "eeeeeeeeeeee", "cccccccccccc", "aaaaaaaaaaaa", "dddddddddddd"]],
+      ["desc", ["dddddddddddd", "aaaaaaaaaaaa", "cccccccccccc", "eeeeeeeeeeee", "bbbbbbbbbbbb"]],
+    ] as const)("a listing by access, %s, pages through the sites by how open each is and not by how its access is spelled, each site once", async (dir, order) => {
+      const database = await opened(makeDatabase, mintFrom("aaaaaaaaaaaa", "bbbbbbbbbbbb", "cccccccccccc", "dddddddddddd", "eeeeeeeeeeee"));
+      const accesses = ["public", "private", "unlisted", "public", "private"] as const;
+      for (const [index, access] of accesses.entries()) await made(database, draft(`site-${index}` as SiteName, access));
+
+      const listed: string[] = [];
+      let after: SitesPage["next"];
+
+      do {
+        const page = await database.listSites({ trash: false, limit: 2, sort: "access", dir, ...(after === undefined ? {} : { after }) });
+        listed.push(...page.sites.map((site) => site.id));
+        after = page.next;
+      } while (after !== undefined);
+
+      expect(listed).toEqual([...order]);
     });
   });
 }
