@@ -54,6 +54,9 @@ const ADDED_EMAIL = "walk-user@example.com";
 /** What the Domain screen says at its top once a user was added or removed, until a repair. */
 const USERS_CHANGED = "Users changed. Press Repair.";
 
+/** The name of the button that opens the sections on a narrow screen: it says how many problems the sections hold, where they hold any. */
+const SECTIONS_BUTTON = /^Sections(, \d+ problems?)?$/;
+
 /** The kinds of file whose refusal breaks a screen. */
 const NEEDED_KINDS = ["document", "script", "stylesheet", "font"];
 
@@ -224,7 +227,7 @@ const STOPS: readonly Stop[] = [
     name: "the notes of the newer version in the sections of a phone, and from there the question before an update",
     only: "narrow",
     open: async (page) => {
-      await page.getByRole("button", { name: "Sections", exact: true }).click();
+      await page.getByRole("button", { name: SECTIONS_BUTTON }).click();
       const sections = page.getByRole("dialog");
       await expect(sections.locator(`a[href="${RELEASES}"][target="_blank"][rel="noreferrer"]`, { hasText: "What changed" })).toBeVisible();
       await sections.getByRole("button", { name: "Update now", exact: true }).click();
@@ -382,12 +385,12 @@ async function saveLog(page: Page): Promise<void> {
   expect([file.suggestedFilename(), first]).toEqual([expect.stringMatching(/^poplin-activity-\d{4}-\d{2}-\d{2}\.csv$/), "When (UTC),Who,What,Site,Title,Action"]);
 }
 
-/** Go to a section by its entry at the side, which a narrow screen keeps behind a button. */
+/** Go to a section by its entry at the side, which a narrow screen keeps behind a button. A section whose screen holds a problem says how many after its name. */
 async function toSection(page: Page, label: string): Promise<void> {
-  const behind = page.getByRole("button", { name: "Sections", exact: true });
+  const behind = page.getByRole("button", { name: SECTIONS_BUTTON });
   if (await behind.isVisible()) await behind.click();
 
-  await page.getByRole("navigation", { name: "Sections", exact: true }).getByRole("link", { name: label, exact: true }).click();
+  await page.getByRole("navigation", { name: "Sections", exact: true }).getByRole("link", { name: new RegExp(`^${label}( \\d+ problems?)?$`) }).click();
 }
 
 /** The stops that open a screen from the side, each with the screen's name. */
@@ -806,7 +809,7 @@ test.describe("on a phone, while a line says a result", () => {
       expect((line?.y ?? Number.NaN) + (line?.height ?? Number.NaN)).toBeLessThanOrEqual(PHONE.height);
     }).toPass();
 
-    await page.getByRole("button", { name: "Sections", exact: true }).click();
+    await page.getByRole("button", { name: SECTIONS_BUTTON }).click();
     await expect(page.getByRole("navigation", { name: "Sections", exact: true })).toBeVisible();
   });
 
@@ -1178,6 +1181,35 @@ test("the list that picks the sites of the graph stands in the order of the titl
   const titles = await page.getByRole("option").evaluateAll((options) => options.map((option) => option.firstElementChild?.textContent ?? ""));
   expect(titles).toContain(SAMPLE.graphed);
   expect(titles).toEqual([...titles].sort((left, right) => (left.toLowerCase() < right.toLowerCase() ? -1 : 1)));
+});
+
+// Drift: what went wrong would be remembered and shown nowhere: no mark at the side, no list on Usage, a row that opens nothing, or details that cannot be copied into a report.
+test("a section whose screen holds a problem says so at the side, Usage lists what went wrong, a row opens its panel, the panel's details are copied, and Escape gives the list back with the focus in it", async ({ page }) => {
+  await arrive(page);
+  const sections = page.getByRole("navigation", { name: "Sections", exact: true });
+  await expect(sections.getByRole("link", { name: "Usage 2 problems", exact: true })).toBeVisible();
+  await expect(sections.getByRole("link", { name: "Domain 1 problem", exact: true })).toBeVisible();
+  await expect(sections.getByRole("link", { name: "Settings", exact: true })).toBeVisible();
+
+  await toSection(page, "Usage");
+  await rows(page, true, "Problems").getByText("A request failed", { exact: true }).click();
+  const panel = page.getByRole("complementary", { name: "A request failed", exact: true });
+  await expect(panel.getByText("What to do", { exact: true })).toBeVisible();
+  await expect(panel.getByText(/ 12\+ times\.$/)).toBeVisible();
+
+  // The walk's own clipboard takes the copy: an engine may let no page write to the real one, and the text is what matters.
+  await page.evaluate(() => Object.defineProperty(navigator, "clipboard", { value: { writeText: async (text: string) => void document.body.setAttribute("data-copied", text) }, configurable: true }));
+  await panel.getByRole("button", { name: "Copy the details", exact: true }).click();
+  await expect(said(page, "Details copied.")).toBeVisible();
+  expect((await page.locator("body").getAttribute("data-copied"))?.split("\n").slice(0, 2)).toEqual([expect.stringMatching(/^poplin \S+: request_failed$/), "A request failed"]);
+
+  await page.keyboard.press("Escape");
+  await expect(panel).toBeHidden();
+  await expect(rows(page, true, "Problems")).toBeVisible();
+  expect(await page.evaluate(() => document.activeElement !== document.body)).toBe(true);
+
+  await toSection(page, "Domain");
+  await expect(page.getByRole("group", { name: "The login could not be checked", exact: true }).getByRole("button", { name: "Copy the details", exact: true })).toBeVisible();
 });
 
 // Drift: Enter after typing would tick nothing again, or tick the first site of the list from before the typed text, which the text does not find.
