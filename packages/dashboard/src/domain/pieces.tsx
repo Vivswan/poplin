@@ -60,16 +60,13 @@ function pieceColumns(): ColumnSpec<Piece & { readonly place: number }>[] {
     {
       id: "piece",
       header: "Piece",
-      size: 232,
       fixed: true,
       cell: (piece) => <span className={cn(piece.tone === "bad" && "font-medium")}>{piece.piece}</span>,
     },
-    { id: "state", header: "State", size: 200, minSize: 184, cell: (piece) => <StateMark piece={piece} /> },
+    { id: "state", header: "State", widest: 200, cell: (piece) => <StateMark piece={piece} /> },
     {
       id: "detail",
       header: "Detail",
-      size: 560,
-      minSize: 240,
       grows: true,
       cell: (piece) => (
         <span className={cn("block py-3 leading-5 break-words whitespace-normal", piece.tone !== "bad" && "text-muted-foreground")}>{piece.detail}</span>

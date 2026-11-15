@@ -18,10 +18,10 @@ interface Fruit {
 
 /** The test table's columns: the first fixed, the last hidden until chosen. */
 const COLUMNS: readonly ColumnSpec<Fruit>[] = [
-  { id: "name", header: "Name", size: 200, sortable: "asc", fixed: true, cell: (fruit) => fruit.name },
-  { id: "colour", header: "Colour", size: 120, sortable: "desc", cell: (fruit) => fruit.colour },
-  { id: "weight", header: "Weight", size: 100, numeric: true, cell: (fruit) => `${fruit.weight} g` },
-  { id: "origin", header: "Origin", size: 100, hidden: true, cell: () => "Somewhere" },
+  { id: "name", header: "Name", sortable: "asc", fixed: true, cell: (fruit) => fruit.name },
+  { id: "colour", header: "Colour", sortable: "desc", cell: (fruit) => fruit.colour },
+  { id: "weight", header: "Weight", numeric: true, cell: (fruit) => `${fruit.weight} g` },
+  { id: "origin", header: "Origin", hidden: true, cell: () => "Somewhere" },
 ];
 
 /** The rows of the test table. */
@@ -32,8 +32,8 @@ const ROWS: readonly Fruit[] = [
 
 /** The columns of a second table, shown in the first one's place. */
 const OTHER_COLUMNS: readonly ColumnSpec<Fruit>[] = [
-  { id: "name", header: "Name", size: 200, fixed: true, cell: (fruit) => fruit.name },
-  { id: "weight", header: "Weight", size: 100, cell: (fruit) => `${fruit.weight} g` },
+  { id: "name", header: "Name", fixed: true, cell: (fruit) => fruit.name },
+  { id: "weight", header: "Weight", cell: (fruit) => `${fruit.weight} g` },
 ];
 
 /** The order of the test table when nobody sorted it. */

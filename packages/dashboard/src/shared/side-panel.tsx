@@ -1,17 +1,17 @@
-// The panel of one thing, opened from a list. On a wide screen it stands beside the list; on a narrower one it slides over the list, which stays underneath.
+// The panel of one thing, opened from a list. On a wide screen it stands beside the list; on a narrower one it takes the list's place until it is closed.
 // Escape closes it either way, and the focus goes into it when it opens and back to where it came from when it closes.
 
 import { Dialog } from "@base-ui/react/dialog";
+import { cn } from "cn";
 import { XIcon } from "lucide-react";
 import { type KeyboardEvent, type ReactElement, type ReactNode, useRef, useState, useSyncExternalStore } from "react";
 
-import { Sheet, SheetContent, SheetDescription, SheetTitle } from "@/components/ui/sheet";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
 import { IconButton } from "@/shared/icon-button";
 
-/** The width from which a panel stands beside its list. */
-const BESIDE = "(min-width: 1280px)";
+/** The width from which a panel stands beside its list: the list then still has room for its fixed column, one more, and a row's actions, and for its tools above them. */
+const BESIDE = "(min-width: 1040px)";
 
 /** What a panel is drawn from. */
 interface SidePanelProps {
@@ -21,7 +21,7 @@ interface SidePanelProps {
   /** The link Close is drawn as: it leads back to the list. */
   readonly closeLink: ReactElement;
 
-  /** What Escape and a press outside do: the move back to the list. */
+  /** What Escape does: the move back to the list. */
   readonly onClose: () => void;
 
   /** The words of the way back to the list, such as "Back to sites": what a screen reader is told Close does. */
@@ -44,7 +44,7 @@ function subscribeToWidth(onChange: () => void): () => void {
 /**
  * Whether the screen is wide enough for a panel to stand beside its list.
  *
- * A screen lays its list out for the panel beside it only when this says so; under it the panel lies over the list and takes no room.
+ * A screen lays its list out for the panel beside it only when this says so; under it the panel takes the whole row and the list is out of sight.
  */
 export function useStandsBeside(): boolean {
   return useSyncExternalStore(subscribeToWidth, () => window.matchMedia(BESIDE).matches);
@@ -149,14 +149,22 @@ function closesAtEscape(onClose: () => void): (event: KeyboardEvent<HTMLElement>
   };
 }
 
-/** The panel beside its list: the library's dialog without its modal layer, so the list stays in use. It moves the focus to the heading, closes on Escape, and gives the focus back. */
-function BesidePanel({ title, closeLink, onClose, back, beside, children }: SidePanelProps): ReactNode {
-  // The dialog is drawn into its own place in the page, beside the list, and not over the page.
+/**
+ * Draw a panel: the library's dialog without its modal layer, drawn into its own place in the page and never over it, so nothing is dimmed and the rest of the page stays in use.
+ *
+ * It moves the focus to the heading, closes on Escape, and gives the focus back. Beside its list it is set off by a hairline; where it has the row to itself it lies over the list's place.
+ */
+export function SidePanel({ title, closeLink, onClose, back, beside, children }: SidePanelProps): ReactNode {
   const [place, setPlace] = useState<HTMLElement | null>(null);
   const heading = useRef<HTMLHeadingElement>(null);
+  const standsBeside = useStandsBeside();
 
   return (
-    <aside ref={setPlace} aria-label={title ?? "Details"} className="flex min-h-0 flex-col border-l">
+    <aside
+      ref={setPlace}
+      aria-label={title ?? "Details"}
+      className={cn("flex min-h-0 min-w-0 flex-col bg-background", standsBeside ? "border-l" : "col-start-1 row-start-1")}
+    >
       {place === null ? null : (
         <Dialog.Root open modal={false} disablePointerDismissal onOpenChange={(open) => (open ? undefined : onClose())}>
           <Dialog.Portal container={place} className="flex min-h-0 flex-1 flex-col">
@@ -165,7 +173,7 @@ function BesidePanel({ title, closeLink, onClose, back, beside, children }: Side
               onKeyDownCapture={closesAtEscape(onClose)}
               className="flex min-h-0 flex-1 flex-col overflow-y-auto outline-none"
             >
-              <header className="flex h-[81px] shrink-0 items-center gap-1 px-6">
+              <header className={cn("flex shrink-0 items-center gap-1 px-6 max-md:px-4", standsBeside ? "h-20" : "h-14")}>
                 <Dialog.Title ref={heading} tabIndex={-1} className="min-w-0 truncate text-base font-bold outline-none" title={title}>
                   {title ?? <Skeleton className="h-5 w-40" />}
                 </Dialog.Title>
@@ -181,31 +189,4 @@ function BesidePanel({ title, closeLink, onClose, back, beside, children }: Side
       )}
     </aside>
   );
-}
-
-/** The panel over its list: the library's sheet, which holds the focus, closes on Escape and on a press outside, and gives the focus back. */
-function OverPanel({ title, onClose, back, beside, children }: SidePanelProps): ReactNode {
-  return (
-    <Sheet open onOpenChange={(open) => (open ? undefined : onClose())}>
-      <SheetContent
-        side="right"
-        onKeyDownCapture={closesAtEscape(onClose)}
-        className="gap-0 overflow-y-auto data-[side=right]:w-full data-[side=right]:sm:max-w-[440px]"
-      >
-        <header className="flex h-14 shrink-0 items-center gap-1 pr-12 pl-6 max-md:pl-4">
-          <SheetTitle className="min-w-0 truncate text-base font-bold" title={title}>
-            {title ?? "Details"}
-          </SheetTitle>
-          {beside}
-        </header>
-        <SheetDescription className="sr-only">Escape closes this: {back.toLowerCase()}.</SheetDescription>
-        {children}
-      </SheetContent>
-    </Sheet>
-  );
-}
-
-/** Draw a panel: beside its list where the screen is wide enough, over it where it is not. */
-export function SidePanel(props: SidePanelProps): ReactNode {
-  return useStandsBeside() ? <BesidePanel {...props} /> : <OverPanel {...props} />;
 }

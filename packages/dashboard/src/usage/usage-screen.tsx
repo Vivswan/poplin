@@ -53,17 +53,15 @@ function ShareCell({ line }: { readonly line: Line }): ReactNode {
 /** The columns of the Usage table. */
 function usageColumns(): readonly ColumnSpec<Line>[] {
   return [
-    { id: "what", header: "What", size: 300, minSize: 220, fixed: true, cell: (line) => NAMES[line.what] },
-    { id: "used", header: "Used", size: 160, minSize: 112, numeric: true, cell: (line) => <span className="tabular-nums">{amount(line, line.used)}</span> },
+    { id: "what", header: "What", fixed: true, cell: (line) => NAMES[line.what] },
+    { id: "used", header: "Used", numeric: true, cell: (line) => <span className="tabular-nums">{amount(line, line.used)}</span> },
     {
       id: "limit",
       header: "Limit",
-      size: 160,
-      minSize: 112,
       numeric: true,
       cell: (line) => <span className="text-muted-foreground tabular-nums">{line.limit === null ? "No limit" : amount(line, line.limit)}</span>,
     },
-    { id: "share", header: "Share of the limit", size: 480, minSize: 240, grows: true, cell: (line) => <ShareCell line={line} /> },
+    { id: "share", header: "Share of the limit", grows: true, cell: (line) => <ShareCell line={line} /> },
   ];
 }
 

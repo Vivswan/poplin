@@ -46,7 +46,7 @@ const PUBLISH_COMMAND = "npx poplin ./my-folder";
 function FilterSelect({ filter, onChoose }: { readonly filter: Filter; readonly onChoose: (filter: Filter) => void }): ReactNode {
   return (
     <Select items={FILTERS} value={filter} onValueChange={(value) => onChoose(value as Filter)}>
-      <SelectTrigger aria-label="Which sites" className="w-36 max-md:w-32">
+      <SelectTrigger aria-label="Which sites" className="w-36 shrink-0 max-md:w-32 @max-md:w-25">
         <SelectValue />
       </SelectTrigger>
       <SelectContent alignItemWithTrigger={false} align="start">
@@ -94,7 +94,7 @@ function NewSite(): ReactNode {
     <Popover>
       <PopoverTrigger render={<Button variant="outline" />}>
         <PlusIcon data-icon="inline-start" />
-        <span className="max-md:sr-only">New site</span>
+        <span className="max-md:sr-only @max-xl:sr-only">New site</span>
       </PopoverTrigger>
       <PopoverContent align="end" className="w-72">
         <PopoverHeader>
@@ -401,7 +401,11 @@ export function SitesScreen(): ReactNode {
   return (
     <AppShell current="sites" heading="Sites">
       <div className={cn("grid min-h-0 flex-1 grid-cols-1", opened !== undefined && beside && "grid-cols-[minmax(0,1fr)_440px]")}>
-        <section aria-label="Sites" className="flex min-h-0 min-w-0 flex-col">
+        {/* Where the panel has the row to itself the list keeps its place under it, out of sight and out of reach, so it is found as it was left. */}
+        <section
+          aria-label="Sites"
+          className={cn("@container col-start-1 row-start-1 flex min-h-0 min-w-0 flex-col", opened !== undefined && !beside && "invisible")}
+        >
           <Toolbar query={query} filter={filter} search={search} columns={<ColumnsMenu columns={columns} layout={layout} />} onStay={stay} />
           {nothing ? (
             <NoRows

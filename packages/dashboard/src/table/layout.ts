@@ -3,6 +3,8 @@
 import { useMemo } from "react";
 import useLocalStorageState from "use-local-storage-state";
 
+import { NARROWEST } from "@/table/column-widths";
+
 /** What of a column the layout needs to know. */
 export interface LayoutColumn {
   /** The column's key. */
@@ -52,8 +54,8 @@ interface Kept {
 /** The first part of every key the layouts are kept under. */
 const KEY_PREFIX = "poplin.table.";
 
-/** The narrowest and the widest a kept width may be. */
-const [NARROWEST, WIDEST] = [56, 4000];
+/** The widest a kept width may be, in pixels. */
+const WIDEST = 4000;
 
 function startOf(columns: readonly LayoutColumn[]): Kept {
   const fixed = columns.filter((column) => column.fixed === true);

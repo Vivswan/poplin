@@ -89,7 +89,7 @@ export function PeopleList({ actions }: { readonly actions: AccessActions }): Re
   const [leaving, setLeaving] = useState<Person>();
   const people = useMemo<readonly Person[]>(() => (data?.logins ?? []).map((email) => ({ email, you: email === data?.you })), [data]);
   const columns = useMemo<readonly ColumnSpec<Person>[]>(
-    () => [{ id: "email", header: "Email", size: 320, fixed: true, grows: true, cell: (person) => <span title={person.email}>{person.email}</span> }],
+    () => [{ id: "email", header: "Email", fixed: true, cell: (person) => <span title={person.email}>{person.email}</span> }],
     [],
   );
   const layout = useTableLayout("people", columns);

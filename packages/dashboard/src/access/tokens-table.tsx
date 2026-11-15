@@ -61,10 +61,10 @@ function Allowed({ token }: { readonly token: Token }): ReactNode {
 
 /** The columns of the tokens. */
 const COLUMNS: readonly ColumnSpec<Token>[] = [
-  { id: "name", header: "Name", size: 280, fixed: true, grows: true, sortable: TOKEN_ORDERS.first.name, cell: (token) => <TokenName token={token} /> },
-  { id: "scope", header: "Can change", size: 180, cell: (token) => <span className="text-muted-foreground">{SCOPE_WORDS[token.scope]}</span> },
-  { id: "allowed", header: "Allowed", size: 180, sortable: TOKEN_ORDERS.first.allowed, cell: (token) => <Allowed token={token} /> },
-  { id: "expires", header: "Runs out", size: 160, cell: (token) => <span className="text-muted-foreground">{expiryOf(token.expires)}</span> },
+  { id: "name", header: "Name", fixed: true, sortable: TOKEN_ORDERS.first.name, cell: (token) => <TokenName token={token} /> },
+  { id: "scope", header: "Can change", cell: (token) => <span className="text-muted-foreground">{SCOPE_WORDS[token.scope]}</span> },
+  { id: "allowed", header: "Allowed", sortable: TOKEN_ORDERS.first.allowed, cell: (token) => <Allowed token={token} /> },
+  { id: "expires", header: "Runs out", cell: (token) => <span className="text-muted-foreground">{expiryOf(token.expires)}</span> },
 ];
 
 /**
