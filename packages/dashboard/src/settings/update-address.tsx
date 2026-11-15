@@ -1,23 +1,24 @@
-// The line of the update link, the address that starts an update of the install. It is a credential: it is pasted into a field that hides it, it waits for the screen's Save like a setting, and once saved the line says only that one is set, and since when.
+// The line of the update link, the address that starts an update of the install. It is a credential: it is pasted into a field that hides it, it waits for the screen's Save like a setting, and once saved the block says only that one is set, and since when.
 
 import { useQueryClient } from "@tanstack/react-query";
 import { type ReactNode, useState } from "react";
 
 import { Button } from "@/components/ui/button";
+import { FieldError } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { api } from "@/lib/api";
 import { sayDone, send } from "@/lib/notify";
 import { wholeMoment } from "@/lib/sites";
 import { Confirm } from "@/shared/confirm";
 import type { AddressDraft } from "@/settings/address-draft";
-import { RowLine } from "@/settings/row-line";
+import { SettingFrame } from "@/settings/setting-frame";
 import { SETTINGS_KEY, type UpdateAddress } from "@/settings/settings-queries";
 
-/** The id of the field the address is typed into. */
+/** The id of the field the link is pasted into. */
 export const ADDRESS_FIELD = "update-address";
 
-/** What the line's question mark says of the link. */
-const MEANING = "Lets poplin update itself.";
+/** What the block says the link does. */
+const SAYS = "Lets poplin update itself.";
 
 /** The question before the link is removed: it cannot be read back, so nothing puts it back. */
 const REMOVE = {
@@ -28,7 +29,7 @@ const REMOVE = {
 } as const;
 
 /**
- * Draw the line of the update link.
+ * Draw the block of the update link.
  *
  * @param state - whether a link is saved, and since when
  * @param draft - the link while it is pasted
@@ -37,6 +38,7 @@ export function UpdateAddressRow({ state, draft }: { readonly state: UpdateAddre
   const client = useQueryClient();
   const [asking, setAsking] = useState(false);
   const since = state.set ? state.since : null;
+  const pasting = draft.open || draft.typed !== "";
 
   const remove = async (yes: boolean): Promise<void> => {
     setAsking(false);
@@ -50,44 +52,46 @@ export function UpdateAddressRow({ state, draft }: { readonly state: UpdateAddre
   };
 
   return (
-    <RowLine
-      label="Update link"
+    <SettingFrame
+      name="Update link"
       controlId={ADDRESS_FIELD}
-      about={() => <p>{MEANING}</p>}
-      help={since === null ? "Not set" : `Set ${wholeMoment(since)}`}
-      refusal={draft.refusal}
+      says={SAYS}
+      under={draft.refusal === undefined ? undefined : <FieldError className="text-[13px]">{draft.refusal}</FieldError>}
     >
-      {draft.open || draft.typed !== "" ? null : (
-        <>
-          <Button type="button" variant="outline" onClick={draft.show}>
-            {since === null ? "Add" : "Replace"}
-          </Button>
-          {since === null ? null : (
-            <Button type="button" variant="ghost" onClick={() => setAsking(true)}>
-              Remove
-            </Button>
-          )}
-        </>
-      )}
-      {draft.open || draft.typed !== "" ? (
+      {pasting ? (
         <>
           <Input
             id={ADDRESS_FIELD}
             type="password"
+            aria-labelledby={`${ADDRESS_FIELD}-label`}
             value={draft.typed}
             onChange={(event) => draft.type(event.target.value)}
             placeholder="Paste the update link"
             autoComplete="off"
             spellCheck={false}
             aria-invalid={draft.refusal !== undefined}
-            className="w-64 min-w-0 max-md:w-auto max-md:flex-1"
+            className="w-72 max-w-full min-w-0"
           />
           <Button type="button" variant="ghost" onClick={draft.discard}>
             Cancel
           </Button>
         </>
-      ) : null}
+      ) : (
+        <div className="flex flex-col items-start gap-2">
+          <p>{since === null ? "Not set" : `Set ${wholeMoment(since)}`}</p>
+          <div className="flex items-center gap-2">
+            <Button type="button" variant="outline" onClick={draft.show}>
+              {since === null ? "Add" : "Replace"}
+            </Button>
+            {since === null ? null : (
+              <Button type="button" variant="ghost" onClick={() => setAsking(true)}>
+                Remove
+              </Button>
+            )}
+          </div>
+        </div>
+      )}
       <Confirm question={asking ? REMOVE : undefined} onAnswer={(yes) => void remove(yes)} />
-    </RowLine>
+    </SettingFrame>
   );
 }

@@ -19,10 +19,10 @@ export const UPDATES = "updates";
 /** What the units of a number's text are called beside its field. A unit missing here is shown as it is, such as `MB` or `%`. */
 const UNIT_WORDS: Readonly<Record<string, string>> = { d: "days", h: "hours", m: "minutes", s: "seconds", B: "bytes" };
 
-/** The most letters the note behind a question mark holds: one short sentence. Anything longer belongs in the docs. */
+/** The most letters the sentence under a setting's name holds: one short sentence. Anything longer belongs in the docs. */
 export const MOST_ABOUT = 60;
 
-/** What each setting is called, the one short sentence its question mark holds, and what its control needs, in the order the settings of a block are shown. */
+/** What each setting is called, the one short sentence under its name, and what its control needs, in the order the settings of a block are shown. */
 const WORDS: Readonly<Record<string, Words>> = {
   default_expires: {
     block: "sites",
@@ -31,29 +31,40 @@ const WORDS: Readonly<Record<string, Words>> = {
     wordLabels: { word: "Never", number: "After" },
     start: "30",
   },
-  default_search_engines: { block: "sites", label: "Show in search engines", about: "What a new public site starts with." },
-  versions_kept: { block: "sites", label: "Versions kept", about: "The live version counts as one.", unit: "versions" },
+  default_search_engines: { block: "sites", label: "Search engines", about: "What a new public site starts with.", switchLabel: "Show new sites in search engines" },
+  versions_kept: { block: "sites", label: "Versions kept", about: "How many versions a site keeps, the live one included.", unit: "versions" },
   trash_days: { block: "sites", label: "Keep deleted sites", about: "After that, a deleted site is gone for good.", unit: "days" },
-  search_engines_allowed: { block: "visitors", label: "Allow search engines", about: "Each public site also has its own switch." },
-  outside_pages: { block: "visitors", label: "Allow embedding on other websites", about: "While off, other websites cannot frame your sites.", on: "allowed" },
+  search_engines_allowed: {
+    block: "visitors",
+    label: "Allow search engines",
+    about: "Each public site also has its own switch.",
+    switchLabel: "Let search engines list public sites",
+  },
+  outside_pages: {
+    block: "visitors",
+    label: "Allow embedding",
+    about: "While off, other websites cannot frame your sites.",
+    on: "allowed",
+    switchLabel: "Let other websites embed your sites",
+  },
   block_bots: {
     block: "visitors",
     label: "Block bots",
     about: "Automatic blocks AI crawlers on a poplin-only domain.",
     choices: { auto: "Automatic", on: "Always", off: "Never" },
   },
-  max_total_size: { block: "storage", label: "All sites together", about: "Counts every site and the trash." },
-  max_site_size: { block: "storage", label: "One site", about: "" },
-  max_sites: { block: "storage", label: "Number of sites", about: "Empty means no limit.", unit: "sites", empty: "No limit" },
-  max_files_per_publish: { block: "publishing", label: "Files per publish", about: "At most 10,000.", unit: "files" },
+  max_total_size: { block: "storage", label: "All sites together", about: "The most all sites hold, the trash included." },
+  max_site_size: { block: "storage", label: "One site", about: "The most one site holds." },
+  max_sites: { block: "storage", label: "Number of sites", about: "The most sites this install holds.", unit: "sites", empty: "No limit", hint: "Empty means no limit." },
+  max_files_per_publish: { block: "publishing", label: "Files per publish", about: "The most files in one publish, up to 10,000.", unit: "files" },
   max_files_per_day: { block: "publishing", label: "Files per day", about: "Counts every publish and copy in one UTC day.", unit: "files" },
   max_storage_writes_per_day: { block: "publishing", label: "Storage writes per day", about: "A published file is 1 write, a copied file 2.", unit: "writes" },
   requests_per_day: { block: "traffic", label: "Requests per day", about: "All sites together, in one UTC day.", unit: "requests" },
   site_share_of_day: { block: "traffic", label: "One site's share", about: "The part of the requests per day one site may use." },
-  site_requests_per_minute: { block: "traffic", label: "One site per minute", about: "", unit: "requests" },
-  visitor_requests_per_minute: { block: "traffic", label: "One visitor per minute", about: "", unit: "requests" },
-  update_check: { block: "updates", label: "Check for new versions", about: "Asks the project's website once a day." },
-  auto_update: { block: "updates", label: "Update automatically", about: "Needs the check above and an update link." },
+  site_requests_per_minute: { block: "traffic", label: "One site per minute", about: "The most requests one site answers in a minute.", unit: "requests" },
+  visitor_requests_per_minute: { block: "traffic", label: "One visitor per minute", about: "The most requests one visitor gets in a minute.", unit: "requests" },
+  update_check: { block: "updates", label: "Check for new versions", about: "Asks the project's website once a day.", switchLabel: "Check once a day" },
+  auto_update: { block: "updates", label: "Update automatically", about: "Needs the check above and an update link.", switchLabel: "Update without asking" },
 };
 
 /** A block's id. */
@@ -67,7 +78,7 @@ interface Words {
   /** Its name: two to five everyday words that start with the thing or the action. */
   readonly label: string;
 
-  /** The one short sentence its question mark holds, of `MOST_ABOUT` letters at most; empty where the name says it all. */
+  /** The one short sentence under its name, of `MOST_ABOUT` letters at most; empty for none. */
   readonly about: string;
 
   /** What a plain count counts, such as `files`; left out for a number whose text carries its unit. */
@@ -87,6 +98,12 @@ interface Words {
 
   /** What the options of a choice are called, by option. */
   readonly choices?: Readonly<Record<string, string>>;
+
+  /** What stands at the right of a switch: what being on does, in a few words. Left out, the name stands there. */
+  readonly switchLabel?: string;
+
+  /** A line under the control that is always there, for what a person must know to fill it in. */
+  readonly hint?: string;
 }
 
 /** One block as it is drawn: its heading and its rows, in the order of the words; a setting that has none comes last. */

@@ -67,16 +67,10 @@ const STOPS: readonly Stop[] = [
     shows: (page) => [
       screenHeading(page, "Settings"),
       page.getByRole("heading", { name: "New sites", exact: true }),
-      page.getByRole("switch", { name: "Show in search engines", exact: true }),
+      page.getByRole("switch", { name: "Show new sites in search engines", exact: true }),
       page.getByRole("textbox", { name: "All sites together", exact: true }),
-      page.getByRole("switch", { name: "Check for new versions", exact: true }),
+      page.getByRole("switch", { name: "Check once a day", exact: true }),
     ],
-  },
-  {
-    name: "what a setting means, behind its question mark",
-    open: (page) => page.getByRole("button", { name: "About: Keep deleted sites", exact: true }).click(),
-    shows: (page) => [page.getByRole("dialog").getByText("Default: 7 days", { exact: true })],
-    close: pressEscape,
   },
   {
     name: "the question before everyone is signed out",

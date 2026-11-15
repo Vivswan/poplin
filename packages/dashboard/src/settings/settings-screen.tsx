@@ -1,4 +1,4 @@
-// The Settings screen: one page, every setting one line under the heading of its block, and one Save for everything that was changed, in a bar that floats over the foot of the screen while a change waits.
+// The Settings screen: one page that reads from top to bottom, every setting a block under the heading of its group, and one Save for everything that was changed, in a bar that floats over the foot of the screen while a change waits.
 
 import { Link, useLocation } from "@tanstack/react-router";
 import { cn } from "cn";
@@ -12,8 +12,8 @@ import { Confirm } from "@/shared/confirm";
 import { LeaveGuard } from "@/shared/leave-guard";
 import { SAVE_BAR_ROOM, SaveBar } from "@/shared/save-bar";
 import { type AddressDraft, useAddressDraft } from "@/settings/address-draft";
-import { ROW_LOOK } from "@/settings/row-line";
 import { settingAnchor, settingOfAnchor } from "@/settings/setting-address";
+import { SettingFrame } from "@/settings/setting-frame";
 import { controlId, SettingRow } from "@/settings/setting-row";
 import { useDraft } from "@/settings/settings-draft";
 import { type Settings, useSettings } from "@/settings/settings-queries";
@@ -21,13 +21,13 @@ import { blocksOf, UPDATES } from "@/settings/settings-words";
 import { ADDRESS_FIELD, UpdateAddressRow } from "@/settings/update-address";
 import { AppShell } from "@/shell/app-shell";
 
-/** The look of a block's heading: small and quiet. One hairline above it, across the page, sets the blocks apart; the rows under it stand together with no rule between them. */
-const HEADING = "mt-4 border-t px-6 pt-5 pb-1.5 text-xs font-medium text-muted-foreground max-md:px-4";
+/** The look of a group's heading: larger than a setting's name, with clear room above it. */
+const HEADING = "mt-12 text-lg leading-7 font-bold";
 
-/** The first heading of the page has no block above it to be set apart from. */
-const FIRST_HEADING = "mt-0 border-t-0";
+/** The id of the button that ends every session. */
+const SIGN_OUT_BUTTON = "sign-everyone-out";
 
-/** How long a line an address names stays shaded, in milliseconds. */
+/** How long a block an address names stays shaded, in milliseconds. */
 const MARKED_FOR = 2000;
 
 /** The question before every session is ended. */
@@ -38,13 +38,13 @@ const SIGN_OUT = {
   removes: true,
 } as const;
 
-/** The waiting changes of the settings, as the rows need them. */
+/** The waiting changes of the settings, as the blocks need them. */
 type Draft = ReturnType<typeof useDraft>;
 
-/** The line over the settings that also change the domain's rules: those follow at the next repair. */
+/** The line under the heading of the settings that also change the domain's rules: those follow at the next repair. */
 function RepairNote(): ReactNode {
   return (
-    <p className="px-6 pb-1.5 text-[13px] text-muted-foreground max-md:px-4">
+    <p className="mt-1 text-muted-foreground">
       The rules on your domain change after Repair in{" "}
       <Link to="/domain" className="text-link underline-offset-2 hover:underline">
         Domain
@@ -54,7 +54,7 @@ function RepairNote(): ReactNode {
   );
 }
 
-/** The last block of the page: the button that ends every session, behind a question. */
+/** The last group of the page: the button that ends every session, behind a question. */
 function Sessions(): ReactNode {
   const [asking, setAsking] = useState(false);
 
@@ -72,21 +72,18 @@ function Sessions(): ReactNode {
       <h2 id="sessions" className={HEADING}>
         Sessions
       </h2>
-      <div className={cn(ROW_LOOK, "items-center")}>
-        <p>Every browser logs in again</p>
-        <div>
-          <Button type="button" variant="destructive" onClick={() => setAsking(true)}>
-            Sign everyone out
-          </Button>
-        </div>
-      </div>
+      <SettingFrame name="Sign everyone out" controlId={SIGN_OUT_BUTTON} says="Every browser logs in again, this one too.">
+        <Button id={SIGN_OUT_BUTTON} type="button" variant="destructive" onClick={() => setAsking(true)}>
+          Sign everyone out
+        </Button>
+      </SettingFrame>
       <Confirm question={asking ? SIGN_OUT : undefined} onAnswer={(yes) => void signOut(yes)} />
     </section>
   );
 }
 
-/** The lines of the page: every block of settings under its heading, the update link at the end of Updates, and the sign-out last. */
-function Rows({
+/** The blocks of the page: every group of settings under its heading, the update link at the end of Updates, and the sign-out last. */
+function Groups({
   settings,
   draft,
   address,
@@ -98,10 +95,10 @@ function Rows({
   readonly marked: string | undefined;
 }): ReactNode {
   return (
-    <div className="pb-8">
-      {blocksOf(settings.rows).map((block, index) => (
+    <>
+      {blocksOf(settings.rows).map((block) => (
         <section key={block.id} aria-labelledby={`block-${block.id}`}>
-          <h2 id={`block-${block.id}`} className={cn(HEADING, index === 0 && FIRST_HEADING)}>
+          <h2 id={`block-${block.id}`} className={HEADING}>
             {block.heading}
           </h2>
           {block.rows.some((row) => row.repair) ? <RepairNote /> : null}
@@ -119,17 +116,19 @@ function Rows({
         </section>
       ))}
       <Sessions />
-    </div>
+    </>
   );
 }
 
-/** What stands in the rows' place before they are read. */
+/** What stands in the blocks' place before they are read. */
 function Waiting(): ReactNode {
   return (
-    <div className="flex flex-col pt-5" aria-busy="true">
-      {[0, 1, 2, 3].map((row) => (
-        <div key={row} className="flex h-12 items-center px-6 max-md:px-4">
-          <Skeleton className="h-4 w-full max-w-3xl" />
+    <div className="mt-12 flex flex-col gap-10" aria-busy="true">
+      {[0, 1, 2].map((block) => (
+        <div key={block} className="flex flex-col gap-2.5">
+          <Skeleton className="h-5 w-40" />
+          <Skeleton className="h-4 w-80 max-w-full" />
+          <Skeleton className="h-8 w-48" />
         </div>
       ))}
     </div>
@@ -142,9 +141,9 @@ function focus(id: string): void {
 }
 
 /**
- * Point out the setting the address names, once its line is drawn: the line comes into view, its control takes the focus, and the line is shaded for a moment.
+ * Point out the setting the address names, once its block is drawn: the block comes into view, its control takes the focus, and the block is shaded for a moment.
  *
- * @param drawn - whether the rows are on the page
+ * @param drawn - whether the blocks are on the page
  * @returns the key of the setting that is pointed out now; none before and after
  */
 function useNamedSetting(drawn: boolean): string | undefined {
@@ -152,10 +151,10 @@ function useNamedSetting(drawn: boolean): string | undefined {
   const [marked, setMarked] = useState<string>();
 
   useEffect(() => {
-    const line = named === undefined || !drawn ? null : document.getElementById(settingAnchor(named));
-    if (named === undefined || line === null) return undefined;
+    const block = named === undefined || !drawn ? null : document.getElementById(settingAnchor(named));
+    if (named === undefined || block === null) return undefined;
 
-    line.scrollIntoView({ block: "center" });
+    block.scrollIntoView({ block: "center" });
     document.getElementById(controlId(named))?.focus({ preventScroll: true });
     setMarked(named);
     const done = window.setTimeout(() => setMarked(undefined), MARKED_FOR);
@@ -190,10 +189,14 @@ export function SettingsScreen(): ReactNode {
   return (
     <AppShell current="settings" heading="Settings">
       <form onSubmit={(event) => void save(event)} noValidate aria-label="Settings" className="relative flex min-h-0 flex-1 flex-col border-t">
-        <div className={cn("min-h-0 flex-1 overflow-y-auto", count > 0 && SAVE_BAR_ROOM)}>
-          {error === null ? null : <p className="px-6 py-8 text-muted-foreground max-md:px-4">{error.message}</p>}
+        <div className={cn("min-h-0 flex-1 overflow-y-auto px-6 pt-8 pb-12 max-md:px-4", count > 0 && SAVE_BAR_ROOM)}>
+          <p aria-hidden="true" className="text-2xl leading-8 font-bold tracking-tight">
+            Settings
+          </p>
+          <p className="mt-1 text-muted-foreground">How this install treats new sites, visitors, limits, and updates.</p>
+          {error === null ? null : <p className="py-8 text-muted-foreground">{error.message}</p>}
           {settings === undefined && error === null ? <Waiting /> : null}
-          {settings === undefined ? null : <Rows settings={settings} draft={draft} address={address} marked={marked} />}
+          {settings === undefined ? null : <Groups settings={settings} draft={draft} address={address} marked={marked} />}
         </div>
         <SaveBar count={count} busy={busy} onDiscard={discard} />
       </form>

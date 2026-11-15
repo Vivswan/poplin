@@ -5,6 +5,7 @@ import type { ReactNode } from "react";
 
 import { Input } from "@/components/ui/input";
 import { InputGroup, InputGroupAddon, InputGroupInput, InputGroupText } from "@/components/ui/input-group";
+import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
@@ -12,8 +13,8 @@ import { choiceLabel, isOn, isSwitch, partsOf, switchText, textOf } from "@/sett
 import type { Row } from "@/settings/settings-queries";
 import { unitWord, wordsOf } from "@/settings/settings-words";
 
-/** The width of a field or a choice: one for all on a wide screen, the whole line under the width of a tablet. */
-const WIDE = "w-44 max-md:w-full";
+/** The width of a field or a choice: one for all. */
+const WIDE = "w-48";
 
 /** The two values of the choice before a number that can also be a word. */
 const WORD_CHOICE = { word: "word", number: "number" } as const;
@@ -52,9 +53,14 @@ interface ControlProps {
 }
 
 function SwitchControl({ row, id, text, onChange, refused }: ControlProps): ReactNode {
+  const words = wordsOf(row.key);
+
   return (
-    <span className="flex h-8 items-center">
-      <Switch id={id} aria-labelledby={`${id}-label`} checked={isOn(row, text)} onCheckedChange={(checked) => onChange(switchText(row, checked))} aria-invalid={refused} />
+    <span className="flex min-h-8 items-center gap-3">
+      <Switch id={id} aria-labelledby={`${id}-does`} checked={isOn(row, text)} onCheckedChange={(checked) => onChange(switchText(row, checked))} aria-invalid={refused} />
+      <Label id={`${id}-does`} htmlFor={id} className="font-normal">
+        {words.switchLabel ?? words.label}
+      </Label>
     </span>
   );
 }
@@ -126,7 +132,7 @@ function CountField({ row, id, text, onChange, refused, className }: ControlProp
           placeholder={wordsOf(row.key).empty}
         />
         {unit === "" ? null : (
-          <InputGroupAddon align="inline-end">
+          <InputGroupAddon align="inline-end" className="self-stretch border-l py-0 pl-2.5">
             <InputGroupText>{unit}</InputGroupText>
           </InputGroupAddon>
         )}
@@ -149,7 +155,7 @@ function NumberControl(props: ControlProps): ReactNode {
   const choose = (chosen: string): void => onChange(chosen === WORD_CHOICE.word ? word : `${start ?? ""}${row.unit}`);
 
   return (
-    <span className="flex items-center gap-2 max-md:w-full">
+    <span className="flex items-center gap-2">
       <Choice
         id={text === word ? id : `${id}-choice`}
         labelledBy={`${id}-label`}
@@ -159,7 +165,7 @@ function NumberControl(props: ControlProps): ReactNode {
         refused={false}
         className="w-28 shrink-0"
       />
-      {text === word ? null : <CountField {...props} className="w-32 max-md:min-w-0 max-md:flex-1" />}
+      {text === word ? null : <CountField {...props} className="w-36" />}
     </span>
   );
 }

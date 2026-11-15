@@ -1,18 +1,18 @@
-// The line of one setting: its name, the question mark that holds one short sentence, its default, and the way back to it, and after it the control, with one icon after it for the host's warnings.
+// The block of one setting: its name, one short sentence, the control, and under the control only what is needed: a refusal, the host's warnings, a hint, and the default with the way back to it while the value differs.
 
 import { TriangleAlertIcon } from "lucide-react";
 import type { ReactNode } from "react";
 
 import { Button } from "@/components/ui/button";
-import { Hint } from "@/shared/hint";
-import { RowLine } from "@/settings/row-line";
+import { FieldError } from "@/components/ui/field";
 import { settingAnchor } from "@/settings/setting-address";
 import { SettingControl } from "@/settings/setting-control";
-import { isSwitch, readOf } from "@/settings/setting-values";
+import { SettingFrame } from "@/settings/setting-frame";
+import { readOf } from "@/settings/setting-values";
 import type { Row } from "@/settings/settings-queries";
 import { wordsOf } from "@/settings/settings-words";
 
-/** What a setting's line is drawn from. */
+/** What a setting's block is drawn from. */
 interface SettingRowProps {
   /** The setting. */
   readonly row: Row;
@@ -26,7 +26,7 @@ interface SettingRowProps {
   /** Called with the setting's text after a change. */
   readonly onChange: (text: string) => void;
 
-  /** `true` while an address points the line out. */
+  /** `true` while an address points the block out. */
   readonly marked: boolean;
 }
 
@@ -39,40 +39,35 @@ export function controlId(key: string): string {
   return `${settingAnchor(key)}-control`;
 }
 
-/** Draw the line of a setting. */
+/** Draw the block of a setting. */
 export function SettingRow({ row, text, refusal, onChange, marked }: SettingRowProps): ReactNode {
   const words = wordsOf(row.key);
   const id = controlId(row.key);
 
-  const about = (close: () => void): ReactNode => (
+  const under = (
     <>
-      {words.about === "" ? null : <p>{words.about}</p>}
-      <p className="text-muted-foreground">Default: {readOf(row, row.fallback)}</p>
+      {refusal === undefined ? null : <FieldError className="text-[13px]">{refusal}</FieldError>}
+      {row.warnings.map((warning) => (
+        <p key={warning} className="flex items-start gap-1.5 text-warn">
+          <TriangleAlertIcon className="mt-0.5 size-3.5 shrink-0" aria-label="Warning" />
+          {warning}
+        </p>
+      ))}
+      {words.hint === undefined ? null : <p>{words.hint}</p>}
       {text === row.fallback ? null : (
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          className="self-start"
-          onClick={() => {
-            onChange(row.fallback);
-            close();
-          }}
-        >
-          Reset to default
-        </Button>
+        <p className="flex items-center gap-2">
+          Default: {readOf(row, row.fallback)}
+          <Button type="button" variant="link" size="xs" className="h-auto p-0 text-[13px] text-link" onClick={() => onChange(row.fallback)}>
+            Reset
+          </Button>
+        </p>
       )}
     </>
   );
 
   return (
-    <RowLine label={words.label} controlId={id} anchor={settingAnchor(row.key)} marked={marked} about={about} small={isSwitch(row)} refusal={refusal}>
+    <SettingFrame name={words.label} controlId={id} anchor={settingAnchor(row.key)} marked={marked} says={words.about} under={under}>
       <SettingControl row={row} id={id} text={text} onChange={onChange} refused={refusal !== undefined} />
-      {row.warnings.length === 0 ? null : (
-        <Hint label={`Warning: ${row.warnings.join(" ")}`} icon={<TriangleAlertIcon />} className="text-warn hover:text-warn">
-          {() => row.warnings.map((warning) => <p key={warning}>{warning}</p>)}
-        </Hint>
-      )}
-    </RowLine>
+    </SettingFrame>
   );
 }

@@ -94,7 +94,7 @@ async function drawn(address = "/settings"): Promise<ReturnType<typeof within>> 
     </QueryClientProvider>,
   );
   const page = within(document.body);
-  await waitFor(() => page.getAllByRole("button", { name: /^About: / }));
+  await waitFor(() => page.getByRole("heading", { name: "New sites" }));
 
   return page;
 }
@@ -109,7 +109,7 @@ async function press(target: HTMLElement): Promise<void> {
 
 /** The switch of the search engines of new sites. */
 function engines(page: ReturnType<typeof within>): HTMLElement {
-  return page.getByRole("switch", { name: "Show in search engines" });
+  return page.getByRole("switch", { name: "Show new sites in search engines" });
 }
 
 /** The field of a count, by the name of its setting. */
@@ -151,14 +151,14 @@ describe("the one page", () => {
   // Drift: a setting that arrives with no words would be shown under its raw key, or under a heading nobody looks for it under; or the settings would be split over tabs again.
   test("holds every setting once under the heading of its block, a setting with no words under the heading its key reads like, with a readable name", async () => {
     await drawn();
-    const blocks = [...document.querySelectorAll("form section")].map((block) => [block.querySelector("h2")?.textContent, ...[...block.querySelectorAll("label")].map((label) => label.textContent)]);
+    const blocks = [...document.querySelectorAll("form section")].map((block) => [block.querySelector("h2")?.textContent, ...[...block.querySelectorAll("h3")].map((name) => name.textContent)]);
 
     expect([blocks, document.body.textContent?.includes("update_channel")]).toEqual([
       [
-        ["New sites", "Show in search engines", "Keep deleted sites"],
+        ["New sites", "Search engines", "Keep deleted sites"],
         ["Storage", "All sites together"],
         ["Updates", "Check for new versions", "Update channel", "Update link"],
-        ["Sessions"],
+        ["Sessions", "Sign everyone out"],
       ],
       false,
     ]);
@@ -167,12 +167,12 @@ describe("the one page", () => {
 
 describe("the address of one setting", () => {
   // Drift: a link of another screen would land on the top of the page, and the person would have to find the setting it meant among twenty.
-  test("points its line out: the line is shaded and its control has the focus", async () => {
+  test("points its block out: the block is shaded and its control has the focus", async () => {
     const { to, hash } = settingAddress("trash_days");
     const page = await drawn(`${to}#${hash}`);
     await waitFor(() => expect(document.activeElement).toBe(field(page, "Keep deleted sites")));
 
-    expect([document.getElementById(hash)?.contains(document.activeElement), document.getElementById(hash)?.classList.contains("bg-muted/50")]).toEqual([true, true]);
+    expect([document.getElementById(hash)?.contains(document.activeElement), document.getElementById(hash)?.classList.contains("bg-muted/60")]).toEqual([true, true]);
   });
 });
 
