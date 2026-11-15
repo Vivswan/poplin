@@ -51,7 +51,7 @@ export function signingKeyFromRow(row: unknown): Uint8Array<ArrayBuffer> {
  */
 export function updateAddressFromRow(row: unknown): UpdateAddress {
   const parsed = v.safeParse(ADDRESS_ROW, row);
-  if (!parsed.success) throw new Error("the stored update address is not an address");
+  if (!parsed.success) throw new Error("the stored update link is not an address");
 
   return { address: parsed.output.value, since: parsed.output.created_at };
 }

@@ -14,7 +14,7 @@ import { dayText } from "./text";
 const ADDRESS_VARIABLE = "POPLIN_UPDATE_ADDRESS";
 
 /** What goes with an address the install did not take. */
-const NOT_TAKEN = "the install takes its own provider's https address that starts a rebuild, and no other";
+const NOT_TAKEN = "the install takes its own provider's update link, starting with https://, and no other";
 
 /** The two facts of an answer about the address, and no other key of it: an install that sent the address back is not repeated. */
 function stateOf(answer: { readonly set: boolean; readonly since: number | null }): { readonly set: boolean; readonly since: number | null } {
@@ -41,7 +41,7 @@ async function save({ client, io }: Session): Promise<Outcome> {
   if (address === "") return { ok: false, problem: problem("no_address_to_save") };
 
   const saved = await client.call(UPDATE_ADDRESS_STATE, (api) => api.update.address.$put({ json: { address } }));
-  if (saved.ok) return { ok: true, value: stateOf(saved.value), lines: ["the rebuild address is saved; to update: poplin update"] };
+  if (saved.ok) return { ok: true, value: stateOf(saved.value), lines: ["the update link is saved; to update: poplin update"] };
 
   if (saved.failure.kind === "refused" && saved.failure.code === "bad_argument") return { ok: false, problem: problem("bad_argument", ADDRESS_VARIABLE, NOT_TAKEN) };
 
@@ -52,10 +52,10 @@ async function forget({ client }: Session): Promise<Outcome> {
   const removed = await client.call(UPDATE_ADDRESS_STATE, (api) => api.update.address.$delete());
   if (!removed.ok) return failed(removed.failure);
 
-  return { ok: true, value: stateOf(removed.value), lines: ["the rebuild address is removed"] };
+  return { ok: true, value: stateOf(removed.value), lines: ["the update link is removed"] };
 }
 
-/** Say what an update would do, with calls that only read: the newer version when one is out, and whether an address is saved. */
+/** Say what an update would do, with calls that only read: the newer version when one is out, and whether an update link is saved. */
 async function check({ client }: Session): Promise<Outcome> {
   const who = await client.call(WHOAMI_ANSWER, (api) => api.whoami.$get());
   if (!who.ok) return failed(who.failure);
@@ -67,7 +67,7 @@ async function check({ client }: Session): Promise<Outcome> {
   const { since } = state.value;
   const lines = [
     update === undefined ? `no newer version is known; the install runs ${version}` : `${update.newest} is out; the install runs ${version}`,
-    since === null ? "no rebuild address is saved" : `a rebuild address is saved, since ${dayText(since)}`,
+    since === null ? "no update link is saved" : `an update link is saved, since ${dayText(since)}`,
     "nothing was started",
   ];
 

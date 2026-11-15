@@ -349,8 +349,8 @@ describe("createApi", () => {
     expect([[...walked].sort(), over]).toEqual([[...ROUTE_KEYS].sort(), []]);
   });
 
-  // Drift: the rebuild address is typed once and is a credential from then on. A route that echoed it, in an answer, a refusal, a header, the log, or a backup, would hand it to every admin token and every reader of a backup.
-  test("no route hands a typed rebuild address back, kept or refused", async () => {
+  // Drift: the update link is typed once and is a credential from then on. A route that echoed it, in an answer, a refusal, a header, the log, or a backup, would hand it to every admin token and every reader of a backup.
+  test("no route hands a typed update link back, kept or refused", async () => {
     const install = await openApi();
     const site = await published(install, { name: "report" });
     const upload = await staged(install, { site });

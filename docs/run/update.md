@@ -47,17 +47,17 @@ ok  version   install 0.2.0, this poplin 0.1.0: the install and this poplin are 
 
 ## Optional: update with one command
 
-`poplin update` has the install start that build itself, at a Deploy Hook you make once. Nothing else needs it. Cloudflare's documentation gives these steps for making one:
+`poplin update` has the install start that build itself, at its update link. The update link is a secret address your host gives. poplin calls it to update itself. Nothing else needs it. Cloudflare calls it a Deploy Hook, and its documentation gives these steps for making one:
 
 | Step | In Cloudflare's dashboard                                  |
 | ---- | ---------------------------------------------------------- |
 | 1    | go to Workers & Pages and select your Worker               |
 | 2    | go to Settings, then Builds, then Deploy Hooks             |
 | 3    | enter a name and select the branch to build: `main`        |
-| 4    | select Create and copy the generated URL                   |
+| 4    | select Create and copy the generated URL: the update link  |
 
 ```sh
-export POPLIN_UPDATE_ADDRESS="paste the URL here"
+export POPLIN_UPDATE_ADDRESS="paste the update link here"
 npx poplin update --save-address
 npx poplin update
 ```
@@ -65,23 +65,23 @@ npx poplin update
 In PowerShell on Windows the first line is this one, and the other two are the same:
 
 ```powershell
-$env:POPLIN_UPDATE_ADDRESS = "paste the URL here"
+$env:POPLIN_UPDATE_ADDRESS = "paste the update link here"
 ```
 
 | Line                           | Does                                                                                         |
 | ------------------------------ | -------------------------------------------------------------------------------------------- |
-| `poplin update --save-address` | saves the URL in the install, once; the install never shows it again                         |
+| `poplin update --save-address` | saves the update link in the install, once; the install never shows it again                 |
 | `poplin update`                | starts the build when a newer version is out; `--anyway` starts it whatever the version      |
-| `poplin update --check`        | says which version is out and whether a URL is saved; starts nothing                         |
-| `poplin update --forget-address` | removes the saved URL                                                                      |
+| `poplin update --check`        | says which version is out and whether an update link is saved; starts nothing                |
+| `poplin update --forget-address` | removes the saved update link                                                              |
 
-The install takes a URL of this form alone, and only an admin's login saves it or starts an update. One update a minute can be started. [Security](../about/security.md#who-holds-which-credential) says what the URL can do.
+The install takes an update link of this form alone, and only an admin's login saves it or starts an update. One update a minute can be started. [Security](../about/security.md#who-holds-which-credential) says what the link can do.
 
 ```text
 https://api.cloudflare.com/client/v4/workers/builds/deploy_hooks/<DEPLOY_HOOK_ID>
 ```
 
-Cloudflare builds neither an install made from a terminal nor one the OpenTofu module made, so neither has a Deploy Hook unless you connect a build of your own. With no URL saved, `poplin update` answers `no_update_address` and starts nothing.
+Cloudflare builds neither an install made from a terminal nor one the OpenTofu module made, so neither has an update link unless you connect a build of your own. With none saved, `poplin update` answers `no_update_address` and starts nothing.
 
 ## Optional: update by itself
 
@@ -98,7 +98,7 @@ npx poplin config auto_update on
 | a version newer than the install's is out                | nothing starts                                        |
 | the release does not change the database                 | it never starts by itself: you start it               |
 | 3 days passed since the install first knew of the version | it waits                                             |
-| a Deploy Hook is saved                                   | nothing starts                                        |
+| an update link is saved                                  | nothing starts                                        |
 | it has not started that version, or a newer one, before  | it never starts one version twice                     |
 
 | Question                 | Answer                                                                                                 |
@@ -158,4 +158,4 @@ nothing was changed
 | Where it shows       | the foot of the dashboard's side, on every page: `0.2.0 is out` and a link, What changed           |
 | Where else           | the `update` row of `poplin doctor`, and `update` under `--json`; no row when nothing newer is out |
 | Switching it off     | `poplin config update_check off`: nothing is asked, and a release learned before is not shown      |
-| Updating to it       | `poplin update`, once a Deploy Hook is saved; [Update the install](#update-the-install) has the way of every kind of install |
+| Updating to it       | `poplin update`, once an update link is saved; [Update the install](#update-the-install) has the way of every kind of install |

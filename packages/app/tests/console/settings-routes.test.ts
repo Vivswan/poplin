@@ -1,4 +1,4 @@
-// The Settings screen's routes: the control each setting gets from its type, the one unit an amount is typed in, what a row says, what a save changes and refuses, the rebuild address that no answer holds, and the sign-out.
+// The Settings screen's routes: the control each setting gets from its type, the one unit an amount is typed in, what a row says, what a save changes and refuses, the update link that no answer holds, and the sign-out.
 
 import { describe, expect, test } from "bun:test";
 
@@ -157,7 +157,7 @@ describe("a save", () => {
   });
 });
 
-describe("the rebuild address", () => {
+describe("the update link", () => {
   // Drift: the address is a credential, and an answer or the log would hand it to whoever reads them.
   test("is saved, told only as set since a moment, and removed, with no answer holding it", async () => {
     const opened = await openConsole();
@@ -183,7 +183,7 @@ describe("the rebuild address", () => {
 
     expect([response.status, await response.json()]).toEqual([
       400,
-      { ok: false, code: "bad_argument", about: "address", sentence: "That is not an address the host starts a rebuild at. Paste the whole address, starting with https://." },
+      { ok: false, code: "bad_argument", about: "address", sentence: "That is not an update link of the host. Paste the whole link, starting with https://." },
     ]);
     expect((await settingsOf(opened)).updateAddress).toEqual({ set: false, since: null });
   });

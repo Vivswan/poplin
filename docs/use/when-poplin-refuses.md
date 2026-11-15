@@ -33,10 +33,10 @@ A refused command prints one sentence and often a hint. With `--json` it prints 
 
 | Code                 | Means                                                       | What to do                                                     |
 | -------------------- | ----------------------------------------------------------- | -------------------------------------------------------------- |
-| `no_update_address`  | the install has no Deploy Hook saved                        | put its URL in `POPLIN_UPDATE_ADDRESS`, then `poplin update --save-address`; an install with no Deploy Hook updates as [Update the install](../run/update.md#update-the-install) says |
-| `no_address_to_save` | `POPLIN_UPDATE_ADDRESS` holds no URL                        | put the Deploy Hook's URL in it for this one command           |
-| `no_update`          | no newer version is known to the install                    | `poplin update --anyway` rebuilds all the same                 |
-| `update_refused`     | Cloudflare refused to start the build, with the status shown | make a new Deploy Hook and save it                             |
+| `no_update_address`  | the install has no update link saved                        | put the link in `POPLIN_UPDATE_ADDRESS`, then `poplin update --save-address`; an install with no update link updates as [Update the install](../run/update.md#update-the-install) says |
+| `no_address_to_save` | `POPLIN_UPDATE_ADDRESS` holds no update link                | put the update link in it for this one command                 |
+| `no_update`          | no newer version is known to the install                    | `poplin update --anyway` updates all the same                  |
+| `update_refused`     | Cloudflare refused to start the build, with the status shown | make a new update link and save it                             |
 | `update_unreachable` | Cloudflare did not answer in time; the build may have started | wait a minute, then try again                                |
 
 **Setting up an install**

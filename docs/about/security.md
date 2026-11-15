@@ -82,7 +82,7 @@ A public site is without `noindex` only when both are on. The bots rule is one o
 | a machine with no browser | the same kind of token | `poplin login` prints an address and a short code to open on another device, where the person allows that computer |
 | the Worker, to the bucket and the database | its bindings inside Cloudflare | no bucket key and no database key exists outside Cloudflare |
 | the person who sets the install up | a Cloudflare API token, pasted into the setup page or the Domain tab | the person makes it at Cloudflare; the Worker uses it for that one request and never stores, logs, or shows it |
-| the Worker, to start its own update | a Deploy Hook URL, saved once by an admin with `poplin update --save-address` | an admin makes it at Cloudflare. It is no API token: Cloudflare's documentation says it triggers a build for one branch, and that anyone who has it can. The Worker keeps it in its database, sends it one empty POST when an admin starts an update, and never shows, logs, or exports it. Deleting the hook at Cloudflare ends it |
+| the Worker, to start its own update | an update link, saved once by an admin with `poplin update --save-address` | an admin makes it at Cloudflare, which calls it a Deploy Hook. It is no API token: Cloudflare's documentation says it triggers a build for one branch, and that anyone who has it can. The Worker keeps it in its database, sends it one empty POST when an admin starts an update, and never shows, logs, or exports it. Deleting it at Cloudflare ends it |
 
 A token the Worker issues is never a Cloudflare API key. It has one of two scopes:
 

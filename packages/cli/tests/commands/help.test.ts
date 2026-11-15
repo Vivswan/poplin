@@ -45,7 +45,7 @@ const PRINTED: readonly (readonly [line: string, key: string, named: string])[] 
   ["doctor --json", "checks", "the checks"],
   ["config --json", "values", "the settings"],
   ["whoami --json", "token", "the token"],
-  ["update --check --json", "address", "an address"],
+  ["update --check --json", "address", "an update link"],
   ["list --json", "sites", "the sites"],
   ["logout --json", "revoked", "revoked"],
 ];

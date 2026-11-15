@@ -338,8 +338,8 @@ describe("run", () => {
     expect([replaced.code, replaced.err[0], (await bench.run("config logins")).out]).toEqual([1, "the change would leave no login that works: logins", ["ada@example.com,second@example.com"]]);
   });
 
-  // Drift: the rebuild address is a credential a person pastes once. Each row is one `poplin update` line, what it prints, what the install then keeps, and what reached the provider: the address is in no line, even when the install hands it back.
-  test("update saves the address from the environment alone, says only that one is saved, starts one rebuild, and never prints the address", async () => {
+  // Drift: the update link is a credential a person pastes once. Each row is one `poplin update` line, what it prints, what the install then keeps, and what reached the provider: the address is in no line, even when the install hands it back.
+  test("update saves the update link from the environment alone, says only that one is saved, starts one update, and never prints the link", async () => {
     const bench = await openBench();
     const login = { POPLIN_SERVER: ORIGIN, POPLIN_TOKEN: bench.install.tokens.admin };
     const withAddress = { env: { ...login, POPLIN_UPDATE_ADDRESS: REBUILD_ADDRESS } };
@@ -358,16 +358,16 @@ describe("run", () => {
     const forgotten = await bench.run("update --forget-address", withAddress);
     const printed = [none, empty, other, saved, checked, started, again, echoed, forgotten].flatMap((ran) => [...ran.out, ...ran.err]);
 
-    expect([none.code, none.err]).toEqual([1, ["the install has no rebuild address", "put the provider's address in POPLIN_UPDATE_ADDRESS, then: poplin update --save-address"]]);
-    expect([empty.code, empty.err[0], other.code, other.err[0]]).toEqual([1, "POPLIN_UPDATE_ADDRESS holds no address", 1, "an argument is missing, unknown, or of the wrong form: POPLIN_UPDATE_ADDRESS"]);
+    expect([none.code, none.err]).toEqual([1, ["the install has no update link", "put the update link in POPLIN_UPDATE_ADDRESS, then: poplin update --save-address"]]);
+    expect([empty.code, empty.err[0], other.code, other.err[0]]).toEqual([1, "POPLIN_UPDATE_ADDRESS holds no update link", 1, "an argument is missing, unknown, or of the wrong form: POPLIN_UPDATE_ADDRESS"]);
     expect([saved.out, checked.out, started.out]).toEqual([
-      ["the rebuild address is saved; to update: poplin update"],
-      [`7.9.0 is out; the install runs ${INSTALL_VERSION}`, "a rebuild address is saved, since 2023-11-14", "nothing was started"],
+      ["the update link is saved; to update: poplin update"],
+      [`7.9.0 is out; the install runs ${INSTALL_VERSION}`, "an update link is saved, since 2023-11-14", "nothing was started"],
       [`a build of the install has started; 7.9.0 is the newest version, and the install runs ${INSTALL_VERSION} until the build is done`],
     ]);
     expect([again.code, jsonOf(again)]).toEqual([1, { error: { code: "too_many_requests", message: "the install is asked too often from this address", about: "update", hint: "wait a minute, then try again" } }]);
     expect(jsonOf(echoed).address).toEqual({ set: true, since: NOW });
-    expect([forgotten.out, await bench.install.database.readUpdateAddress()]).toEqual([["the rebuild address is removed"], undefined]);
+    expect([forgotten.out, await bench.install.database.readUpdateAddress()]).toEqual([["the update link is removed"], undefined]);
     expect(bench.install.provider.sent).toEqual([["POST", "manual", "no body", REBUILD_ADDRESS]]);
     expect(printed.filter((line) => line.includes("3f9c2a7e5b") || line.includes("elsewhere") || line.includes("builds.provider"))).toEqual([]);
   });

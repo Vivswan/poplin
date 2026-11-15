@@ -57,11 +57,11 @@ const REFUSALS: Readonly<Record<ActionCode | OwnCode, string>> = {
   no_domain: "The token shows no domain of that name.",
   bad_domain: "The domain is no domain. Type it alone, such as example.com.",
   bad_login: "The email is no email address.",
-  no_update_address: "No rebuild address is saved, so no update was started. Save one in Settings, under Updates.",
+  no_update_address: "No update link is saved, so no update was started. Save one in Settings, under Updates.",
   no_update: "No newer version is known, so no update was started.",
   too_many_requests: "An update was started in this minute already. Wait a minute.",
-  update_unreachable: "The rebuild address did not answer, so no update was started. Try again.",
-  update_refused: "The rebuild address refused the request, so no update was started. Check the address in Settings, under Updates.",
+  update_unreachable: "The update link did not answer. The update may have started all the same: wait a minute, then try again.",
+  update_refused: "The update link refused the request, so no update was started. Check the link in Settings, under Updates.",
 };
 
 /** What a code says when what it is about gives it another meaning: `too_large` is a request that is too large, and about a limit a copy that does not fit it; `not_found` is a site, and about an upload a copy. `other` stands for any limit not named. */
@@ -76,7 +76,7 @@ const ABOUT_REFUSALS: Readonly<Record<string, Readonly<Record<string, string>>>>
   },
   bad_argument: {
     expires: "Deletes itself takes never, a span such as 7d, or a day such as 2026-12-01.",
-    address: "That is not an address the host starts a rebuild at. Paste the whole address, starting with https://.",
+    address: "That is not an update link of the host. Paste the whole link, starting with https://.",
     default_expires: "Use a whole number, 1 or more.",
     default_search_engines: "Use on or off.",
     versions_kept: "Use a whole number, 1 or more.",

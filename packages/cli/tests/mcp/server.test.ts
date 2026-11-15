@@ -380,7 +380,7 @@ describe("the MCP server", () => {
   );
 
   // Drift: an agent that could start an update, or change where one is started, would replace the code of the install it publishes to. No tool is one, and no tool's call goes near those routes.
-  test("no tool starts an update or touches the rebuild address: each one, called so that it reaches the install, asks only for sites", async () => {
+  test("no tool starts an update or touches the update link: each one, called so that it reaches the install, asks only for sites", async () => {
     const { bench, site } = await withSite();
     await bench.install.database.keepUpdateAddress(REBUILD_ADDRESS, { by: "ada@example.com" as never, at: NOW });
     const path = folderOf("again", { "index.html": "<title>Again</title>" });

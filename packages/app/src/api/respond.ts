@@ -69,14 +69,14 @@ const MESSAGES: Readonly<Record<Code, string>> = {
   no_working_login: "the change would leave no login that works",
   already_a_login: "that email is a login already",
   not_a_login: "that email is no login",
-  no_update_address: "the install has no address that starts its rebuild: save one first",
+  no_update_address: "the install has no update link: save one first",
   no_update: "no newer version is known to the install",
   too_large: "a size limit is passed",
   too_many_requests: "too many requests came from this address: wait, then ask again",
   internal: "the install failed to do that",
-  update_refused: "the install's provider refused to start the rebuild, with this status",
+  update_refused: "the install's provider refused to start the update, with this status",
   allowance_spent: "a day's allowance of the install is used up: ask again after midnight UTC",
-  update_unreachable: "the install's provider did not answer the request to rebuild",
+  update_unreachable: "the install's provider did not answer the request to update",
 };
 
 /** The setting that bounds the times a day the store is written to or listed, which a refusal for it is about. */
