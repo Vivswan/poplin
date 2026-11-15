@@ -642,6 +642,29 @@ test.describe("on a phone, after a site's panel", () => {
   });
 });
 
+test.describe("on a phone, on Usage", () => {
+  test.use({ viewport: PHONE });
+
+  // Drift: the names of the lines would scroll in a room as low as a wide screen's again, which shows two of a dozen where a row holds one name.
+  test("with every site picked, five names of the lines or more show at once, and the rest by scrolling", async ({ page }) => {
+    await arrive(page);
+    await toSection(page, "Usage");
+    await page.getByRole("combobox", { name: "Compare sites", exact: true }).click();
+    await page.getByRole("button", { name: "Select all", exact: true }).click();
+    await pressEscape(page);
+    const names = page.getByRole("list", { name: "Lines", exact: true });
+    await expect(names.getByRole("listitem")).not.toHaveCount(1);
+
+    const shown = await names.evaluate((list) => {
+      const room = (list.closest("[data-slot='scroll-area']") ?? list).getBoundingClientRect();
+      const whole = [...list.children].map((name) => name.getBoundingClientRect()).filter((name) => name.top >= room.top - 1 && name.bottom <= room.bottom + 1);
+
+      return { atOnce: whole.length >= 5, scrolls: whole.length < list.children.length };
+    });
+    expect(shown).toEqual({ atOnce: true, scrolls: true });
+  });
+});
+
 test.describe("on a phone, in a question", () => {
   test.use({ viewport: PHONE });
 

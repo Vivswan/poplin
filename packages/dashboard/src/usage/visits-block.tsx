@@ -96,7 +96,7 @@ function Legend({ lines, shown, onSwitch }: LegendProps): ReactNode {
   if (lines.length < LEGEND_SCROLLS_FROM) return names;
 
   return (
-    <ScrollArea className="h-[92px]">
+    <ScrollArea className="h-[92px] max-md:h-[240px]">
       <ScrollAreaParts.Content>{names}</ScrollAreaParts.Content>
     </ScrollArea>
   );
