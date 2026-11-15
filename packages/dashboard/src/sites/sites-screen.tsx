@@ -16,7 +16,7 @@ import { copy } from "@/lib/notify";
 import { addressParts, type Site, shownName } from "@/lib/sites";
 import { useChosenTimeZone } from "@/lib/timezone";
 import { IconButton } from "@/shared/icon-button";
-import { Pages, queryWith } from "@/shared/pages";
+import { Pages, queryWith, useShownPlace, useTopOfPlace } from "@/shared/pages";
 import { SearchBox } from "@/shared/search-box";
 import { useStandsBeside } from "@/shared/side-panel";
 import type { LoginNames } from "@/shared/who";
@@ -133,6 +133,7 @@ function PhoneList({
   rowActions,
   onCopy,
   reveal,
+  place,
   after,
 }: {
   readonly sites: readonly Site[];
@@ -141,10 +142,13 @@ function PhoneList({
   readonly rowActions: (site: Site) => ReactNode;
   readonly onCopy: (site: Site) => void;
   readonly reveal: Reveal;
+  readonly place: string;
   readonly after: ReactNode;
 }): ReactNode {
+  const list = useTopOfPlace(place);
+
   return (
-    <div className="min-h-0 flex-1 overflow-y-auto md:hidden">
+    <div ref={list} className="min-h-0 flex-1 overflow-y-auto md:hidden">
       <ul aria-label="Sites" className="border-t">
         {sites.map((site) => (
           <li
@@ -381,6 +385,13 @@ function useShownTable(filter: Filter, { onCopy, reveal, logins }: ColumnParts) 
   return { columns, layout, label: trash ? "Sites in the trash" : "Sites", actionsWidth: trash ? RESTORE_WIDTH : undefined };
 }
 
+/** Read the page of sites the address asks for, with the place of the page that is shown: the address is ahead of the rows while the next page is read. */
+function useShownSites(query: URLSearchParams) {
+  const read = useSitesPage(query);
+
+  return { ...read, place: useShownPlace(query.toString(), read.data !== undefined && !read.isPlaceholderData) };
+}
+
 /** Draw the Sites screen for the address: the table, and the panel of the site the path names. */
 export function SitesScreen(): ReactNode {
   useChosenTimeZone();
@@ -390,7 +401,7 @@ export function SitesScreen(): ReactNode {
   const filter = filterOf(query);
   const search = query.get("q") ?? "";
   const beside = useStandsBeside();
-  const { data: page, error, isPending, isPlaceholderData, refetch } = useSitesPage(query);
+  const { data: page, error, isPending, isPlaceholderData, refetch, place } = useShownSites(query);
 
   const { toTable, toSite, stay } = useSitePlaces(query);
   const follow = useCallback((site: Pick<Site, "label">): void => void navigate({ ...toSite(site), replace: true }), [navigate, toSite]);
@@ -406,7 +417,6 @@ export function SitesScreen(): ReactNode {
     <SiteRowActions site={site} actions={actions} onAsk={ask} onRemoved={(gone) => (gone.label === opened ? void navigate(toTable) : undefined)} />
   );
   const sites = page?.sites ?? [];
-  const later = query.get("after") !== null;
   const pages = (
     <Pages
       query={query}
@@ -435,7 +445,7 @@ export function SitesScreen(): ReactNode {
               failure={error?.message}
               filter={filter}
               search={search}
-              later={later}
+              later={query.get("after") !== null}
               onRetry={() => void refetch()}
               onShowAll={() => void navigate({ to: "/" })}
               onFirst={toFirst}
@@ -456,10 +466,11 @@ export function SitesScreen(): ReactNode {
                   actions={rowActions}
                   actionsWidth={actionsWidth}
                   loading={isPending}
+                  page={place}
                   after={pages}
                 />
               </div>
-              <PhoneList sites={sites} opened={opened} onOpen={open} rowActions={rowActions} onCopy={copy} reveal={reveal} after={pages} />
+              <PhoneList sites={sites} opened={opened} onOpen={open} rowActions={rowActions} onCopy={copy} reveal={reveal} place={place} after={pages} />
             </>
           )}
         </section>

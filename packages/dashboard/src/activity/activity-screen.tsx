@@ -4,7 +4,7 @@ import { MOST_IN_FILE } from "@poplin/app/src/console/activity-file";
 import { whatOf } from "@poplin/app/src/console/activity-what";
 import { useNavigate } from "@tanstack/react-router";
 import { ListFilterIcon } from "lucide-react";
-import { type ReactNode, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { type ReactNode, useMemo } from "react";
 
 import { activityColumns, SiteThen, When } from "@/activity/activity-columns";
 import { ActivityFoot } from "@/activity/activity-foot";
@@ -20,6 +20,7 @@ import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { searchOf, useAddressQuery } from "@/lib/address";
 import { ownTimeZoneName, useTimeZoneChoice, TIMEZONES, type TimeZoneChoice } from "@/lib/timezone";
 import { IconButton } from "@/shared/icon-button";
+import { useShownPlace, useTopOfPlace } from "@/shared/pages";
 import { SearchBox } from "@/shared/search-box";
 import { Who } from "@/shared/who";
 import { AppShell } from "@/shell/app-shell";
@@ -113,12 +114,7 @@ function OrderSelect({ descending, onChoose }: { readonly descending: boolean; r
 
 /** The log on a phone: one row an entry, what was done and to which site over who did it and when, and after the last row what follows the list. */
 function PhoneList({ page, place, after }: { readonly page: Page; readonly place: string; readonly after: ReactNode }): ReactNode {
-  const list = useRef<HTMLDivElement>(null);
-  // A new page starts from its first entry, however far the page before was scrolled.
-  // biome-ignore lint/correctness/useExhaustiveDependencies: the place is the reason to scroll, not a value the scrolling reads.
-  useLayoutEffect(() => {
-    if (list.current !== null) list.current.scrollTop = 0;
-  }, [place]);
+  const list = useTopOfPlace(place);
 
   return (
     <div ref={list} className="min-h-0 flex-1 overflow-y-auto md:hidden">
@@ -182,19 +178,6 @@ function insteadOfRows(failure: string | undefined, page: Page | undefined, kind
       )}
     </Empty>
   );
-}
-
-/**
- * The place of the page that is shown: the address asks for a page before its entries are there, and the list starts from its top only once they are.
- *
- * @param asked - the place the address asks for
- * @param there - whether the entries drawn are those of that place
- */
-function useShownPlace(asked: string, there: boolean): string {
-  const [place, setPlace] = useState(asked);
-  if (there && place !== asked) setPlace(asked);
-
-  return place;
 }
 
 /** Draw the Activity screen for the address: the log narrowed, ordered, and paged as its query says. */

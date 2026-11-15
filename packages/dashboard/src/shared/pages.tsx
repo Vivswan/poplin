@@ -1,6 +1,6 @@
 // The ways to the first and the following page of a list, under its last row, with which rows of the list the page shows.
 
-import type { ReactNode } from "react";
+import { type ReactNode, type RefObject, useLayoutEffect, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { showCount } from "@/lib/sites";
@@ -51,6 +51,35 @@ export function queryWith(query: URLSearchParams, changes: Readonly<Record<strin
   }
 
   return next;
+}
+
+/**
+ * The place of the page that is shown: the address asks for a page before its rows are there, and the list starts from its top only once they are.
+ *
+ * @param asked - the place the address asks for, in any words that differ from page to page
+ * @param there - whether the rows drawn are those of that place
+ */
+export function useShownPlace(asked: string, there: boolean): string {
+  const [place, setPlace] = useState(asked);
+  if (there && place !== asked) setPlace(asked);
+
+  return place;
+}
+
+/**
+ * Show a list that scrolls in a box of its own from its first row when its page changes, however far the page before was scrolled.
+ *
+ * @param place - the place of the page that is shown
+ * @returns what the box is tied to
+ */
+export function useTopOfPlace(place: string): RefObject<HTMLDivElement | null> {
+  const box = useRef<HTMLDivElement>(null);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: the place is the reason to scroll, not a value the scrolling reads.
+  useLayoutEffect(() => {
+    if (box.current !== null) box.current.scrollTop = 0;
+  }, [place]);
+
+  return box;
 }
 
 /** Draw the ways to the first and the following page, then where the page is in its list. Both ways keep their places on every page, and one that leads nowhere is dimmed. Nothing is drawn for a list that fits one page. */
