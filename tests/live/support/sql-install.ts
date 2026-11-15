@@ -27,8 +27,8 @@ const INSTALLER = "ada@example.com" as Login;
 /** The version the fake says it runs. */
 const VERSION = "1.0.0";
 
-/** What one request can carry: room for the repository's sample sites. */
-const LIMITS = { fileBytes: 1_000_000, files: 100, manifestBytes: 100_000 };
+/** What one request can carry: room for the repository's sample sites and the built demo, whose largest file is the dashboard's script of about 1 MB. */
+const LIMITS = { fileBytes: 2_000_000, files: 100, manifestBytes: 100_000 };
 
 /** A fake install: what sends a request to it, and its database as SQL reaches it. */
 interface SqlInstall {
