@@ -219,6 +219,22 @@ export function auditLog(label: string, makeDatabase: DatabaseFactory): void {
       ]);
     });
 
+    // Drift: the Activity screen shows a site by the title it has now, which no entry holds: a search by what the screen shows would find nothing, or miss the entries from before a new link, or the count would tell another number than the page holds.
+    test("a text finds the entries of a site by the title and the name it has now, whatever the case of its letters, those from before a new link among them, and the count agrees", async () => {
+      const database = await opened(makeDatabase);
+      const report = await made(database, { ...draft(REPORT), title: "Q3 sales" });
+      await made(database, { ...draft(DOCS), page_title: "Handbook" });
+      const moved = await database.giveNewId(report.id, BY_ADA);
+      if (moved.kind !== "done") throw new Error("no new id was given");
+
+      await database.changeDetails(moved.site.id, { name: "figures" as SiteName }, BY_ADA);
+      const texts = ["q3 SALES", "figures", "REPORT", "handbook", "sales handbook"];
+      const pages = await Promise.all(texts.map(async (site) => (await database.searchAudit({ limit: 100, dir: "asc", site })).entries.map((entry) => entry.action)));
+      const counts = await Promise.all(texts.map(async (site) => (await database.countAudit({ most: 100, site })).count));
+
+      expect([pages, counts]).toEqual([[["create", "new_id", "details"], ["create", "new_id", "details"], ["create", "new_id"], ["create"], []], [3, 3, 2, 1, 0]]);
+    });
+
     // Drift: the total the Activity screen shows is this count; one that counted past its bound would read a long log whole, and one that called a cut count exact would show a wrong total.
     test("a count keeps the narrowing of a page and reads no further back than it is told, saying when the log goes on", async () => {
       const database = await opened(makeDatabase);

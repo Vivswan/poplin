@@ -12,7 +12,7 @@ The dashboard's Activity screen lists every change of a site, a token, or a sett
 | On the screen                        | Does                                                                         |
 | ------------------------------------ | ---------------------------------------------------------------------------- |
 | All activity                         | narrows the list to Sites, Access, or Settings                               |
-| Find by site                         | keeps the entries about a site whose name then held the text                 |
+| Find by site                         | keeps the entries about a site the text finds, by its title or its name      |
 | UTC, Your time                       | writes every time in UTC, or in the browser's time zone                      |
 | When                                 | a press on the heading puts the oldest first                                 |
 | `1 to 50 of 1,234`                   | at the foot: which entries the page shows, of how many                       |

@@ -1,6 +1,6 @@
 // The data of the Activity screen: one page of the audit log, the newest entry first, or the oldest first when asked, and how many entries the log holds.
 //
-//   GET /activity         one page; ?kind= keeps one kind of action, ?site= the entries about a site whose name then held the text, ?dir=asc the oldest first, ?size= how many entries it holds,
+//   GET /activity         one page; ?kind= keeps one kind of action, ?site= the entries about a site the text finds, by the name it had then or by the name or the title it has now, ?dir=asc the oldest first, ?size= how many entries it holds,
 //                         ?after= goes on after a page in that direction, ?back= goes back to the page ahead of one
 //                         a narrowed page looks at 5,000 entries of the log and no more: one that stopped there says so, and its place goes on from where it stopped
 //   GET /activity/total   how many entries the log holds, counted no further back than the newest 10,000, or the newest 5,000 under ?kind= and ?site=

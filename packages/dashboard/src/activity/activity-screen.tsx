@@ -1,4 +1,4 @@
-// The Activity screen: the audit log in one table, the newest entry first or the oldest, narrowed by the kind of action and by a site's name.
+// The Activity screen: the audit log in one table, the newest entry first or the oldest, narrowed by the kind of action and by a site.
 
 import { MOST_IN_FILE } from "@poplin/app/src/console/activity-file";
 import { whatOf } from "@poplin/app/src/console/activity-what";
@@ -232,7 +232,7 @@ export function ActivityScreen(): ReactNode {
               sent={site}
               onSearch={(text) => move({ site: text }, true)}
               placeholder="Find by site"
-              label="Find activity by a site's name"
+              label="Find activity by a site's title or name"
               maxLength={MAX_SEARCH}
             />
           </div>

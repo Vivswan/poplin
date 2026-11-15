@@ -404,7 +404,7 @@ function storedRows(label: string, makeDriver: DriverFactory): void {
 function queryPlans(label: string, makeDriver: DriverFactory): void {
   describe(`${label}: how the engine runs each statement`, () => {
     // Drift: D1 bills and limits by rows read; one statement that walks a whole table costs a row per site on every request.
-    test("no statement of any operation walks the sites table, or any table but the token list, the logins, and the newest entries a count of the log is held to: every lookup and every page goes through a key or an index", async () => {
+    test("no statement walks a table but the token list, the logins, the newest entries a count of the log is held to, and the sites, once, for a search of the log by a site: every other lookup and every page goes through a key or an index", async () => {
       const inner = await migrated(makeDriver);
       const driver = new RecordingDriver(inner);
       const database = new SqlDatabase(driver);
@@ -450,6 +450,7 @@ function queryPlans(label: string, makeDriver: DriverFactory): void {
       await database.listAudit({ limit: 10 });
       await database.listAudit({ limit: 10, dir: "asc" });
       await database.listAudit({ limit: 10, dir: "asc", after: 1 });
+      await database.countAudit({ most: 10, actions: ["login"] });
       await database.countAudit({ most: 10, actions: ["login"], site: "report" });
       await database.endOfAuditPart({ entries: 2, after: 9 });
       await database.searchAudit({ limit: 10, actions: ["login"], site: "report" });
@@ -496,6 +497,18 @@ function queryPlans(label: string, makeDriver: DriverFactory): void {
 
       // The two token lists walk the tokens that were not removed, and the sweep walks the logins, which the room keeps few. An import walks the list of versions it was given, and a new login the visitors its own count gave: neither is a table.
       // The ledger holds one row a step. A count of the log walks its newest entries, as many as it is told, and then what it read of them.
+      // A search of the log by a site reads the sites once: the log holds no title, and a text finds a site by the one it has now. Each earlier id is read once with them, through its index.
+      const holds = '(instr("sites"."name", lower(?)) > 0 OR instr(lower(coalesce("sites"."title", "sites"."page_title")), lower(?)) > 0)';
+      const earlier = `select "earlier_ids"."id" from "earlier_ids" inner join "sites" on "sites"."folder" = "earlier_ids"."folder" where ${holds}`;
+      const about = `(instr("audit"."site_name", lower(?)) > 0 OR "audit"."site_id" IN (select "id" from "sites" where ${holds}) OR "audit"."site_id" IN (${earlier}))`;
+      const newest = '(SELECT max("audit"."seq") FROM "audit")';
+      const page = 'select "seq", "at", "actor", "action", "site_id", "site_name", "detail" from "audit" where';
+      const bySite = [
+        `SELECT min(?, coalesce(${newest} - (SELECT min("audit"."seq") FROM "audit") + 1, 0)) AS seen, (select count(*) as "found" from "audit" where ("audit"."seq" > ${newest} - ? and "audit"."action" in (?) and ${about})) AS found`,
+        `${page} ("audit"."seq" < (SELECT max("audit"."seq") + 1 FROM "audit") AND "audit"."seq" >= (SELECT max("audit"."seq") + 1 FROM "audit") - ? and "audit"."action" in (?) and ${about}) order by "audit"."seq" desc limit ?`,
+        `${page} ("audit"."seq" > ? AND "audit"."seq" <= ? + ? and ${about}) order by "audit"."seq" asc limit ?`,
+      ];
+      const readOnce = (statement: string): string[] => [`SCAN sites <- ${statement}`, `SCAN earlier_ids USING COVERING INDEX earlier_ids_by_folder <- ${statement}`];
       const tokenScan = 'SCAN tokens USING INDEX tokens_by_creation <- select "id", "hash", "scope", "note", "created_at", "expires_at" from "tokens"';
       const newestFirst = 'order by "tokens"."created_at" desc, "tokens"."id" desc';
       expect([exported.sites, imported.kind, again.kind, redeemed.kind, swept]).toEqual([[], "done", "done", "done", 1]);
@@ -503,8 +516,9 @@ function queryPlans(label: string, makeDriver: DriverFactory): void {
       expect(scans).toEqual([
         `${tokenScan} where "tokens"."removed_at" is null ${newestFirst}`,
         `${tokenScan} where ("tokens"."removed_at" is null and ("tokens"."expires_at" is null or "tokens"."expires_at" > ?)) ${newestFirst}`,
-        'SCAN audit <- select count(*) as "seen", coalesce(sum("kept"), 0) as "found" from (select ("audit"."action" in (?) and instr("audit"."site_name", ?) > 0) as "kept" from "audit" order by "audit"."seq" desc limit ?) "newest"',
-        'SCAN newest <- select count(*) as "seen", coalesce(sum("kept"), 0) as "found" from (select ("audit"."action" in (?) and instr("audit"."site_name", ?) > 0) as "kept" from "audit" order by "audit"."seq" desc limit ?) "newest"',
+        'SCAN audit <- select count(*) as "seen", coalesce(sum("kept"), 0) as "found" from (select "audit"."action" in (?) as "kept" from "audit" order by "audit"."seq" desc limit ?) "newest"',
+        'SCAN newest <- select count(*) as "seen", coalesce(sum("kept"), 0) as "found" from (select "audit"."action" in (?) as "kept" from "audit" order by "audit"."seq" desc limit ?) "newest"',
+        ...bySite.flatMap(readOnce),
         'SCAN logins USING INDEX logins_by_visitor <- delete from "logins" where "logins"."expires_at" <= ?',
         "SCAN schema_steps <- SELECT * FROM schema_steps ORDER BY step",
       ]);

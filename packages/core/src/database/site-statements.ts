@@ -71,7 +71,7 @@ export const DEFAULT_DIRECTIONS = { updated: "desc", name: "asc", access: "asc",
  * A site whose name holds a text, or whose title does: the typed one, else the page's own, which is the one a listing shows.
  * The text is looked for as it stands, with no sign read as a pattern. Only the letters A to Z match either case: the engine's `lower` changes no other.
  */
-function holding(text: string): SQL {
+export function holding(text: string): SQL {
   return fragment`(instr(${sites.name}, lower(${text})) > 0 OR instr(lower(coalesce(${sites.title}, ${sites.page_title})), lower(${text})) > 0)`;
 }
 

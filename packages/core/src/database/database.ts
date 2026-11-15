@@ -311,7 +311,7 @@ export interface AuditSearch extends AuditQuery {
   /** Only the entries of these actions; every entry when absent. */
   readonly actions?: readonly AuditAction[];
 
-  /** Only the entries about a site whose name then held this text; every entry when absent. */
+  /** Only the entries about a site this text finds: one whose name then held it, or that holds it now in its name or its listed title, whatever the case of its letters A to Z; every entry when absent. */
   readonly site?: string;
 }
 
@@ -332,7 +332,7 @@ export interface AuditCountQuery {
   /** Only the entries of these actions; every entry when absent. */
   readonly actions?: readonly AuditAction[];
 
-  /** Only the entries about a site whose name then held this text; every entry when absent. */
+  /** Only the entries about a site this text finds: one whose name then held it, or that holds it now in its name or its listed title, whatever the case of its letters A to Z; every entry when absent. */
   readonly site?: string;
 }
 
@@ -784,6 +784,7 @@ export interface Database {
 
   /**
    * One page of the entries a narrowing keeps, looked for among no more than `AUDIT_WINDOW` entries of the log from where the reading starts, so a rare match costs a window and not the log.
+   * A reading narrowed by a site reads the sites and their earlier ids once more than that.
    *
    * @param query - what `listAudit` takes, and the narrowing: `actions`, `site`, or both
    * @returns the entries found, and where the reading stopped when the window ended before the page was full and the log goes on behind it
@@ -793,6 +794,7 @@ export interface Database {
 
   /**
    * Count the entries of the audit log a narrowing keeps, reading no further back than the newest `most` entries, so a long log costs no more than `most` rows.
+   * A count narrowed by a site reads the sites and their earlier ids once more than that.
    *
    * @returns the count, and whether the whole log was read
    * @throws {RangeError} `most` is not a whole number of at least 1

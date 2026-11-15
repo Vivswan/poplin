@@ -35,6 +35,16 @@ const BINDINGS: Bindings = env;
 /** The moment every fixture is made at. */
 const NOW = 1_700_000_000_000;
 
+/** How many sites the log that is searched by a site is about. */
+const SEARCHED_SITES = 60;
+
+/** Writes a window of entries, each about one of the sites there are, under a name none of them has. */
+const LOG_ABOUT_SITES = `
+INSERT INTO audit (at, actor, action, site_id, site_name, detail)
+WITH RECURSIVE entry(n) AS (SELECT 1 UNION ALL SELECT n + 1 FROM entry WHERE n < ${AUDIT_WINDOW})
+SELECT 1700000000000, '00000000000000aa', 'details', site.id, 'old', '{}'
+FROM entry JOIN (SELECT id, row_number() OVER (ORDER BY created_at) - 1 AS place FROM sites) AS site ON site.place = n % ${SEARCHED_SITES}`;
+
 /** A publisher's token, which begins the fixture publishes. */
 const PUBLISHER: Actor = { scope: "publisher", holder: "00000000000000aa" as TokenId };
 
@@ -166,13 +176,13 @@ const ROWS: Readonly<Record<string, readonly [read: number, written: number]>> =
   "changeDetails": [6, 4],
   "changeDetails, the same": [6, 0],
   "listAudit": [20, 0],
-  "searchAudit, one kind, the sites named with a text": [49, 0],
+  "searchAudit, one kind, the sites named with a text": [65, 0],
   "listAudit, the oldest first": [20, 0],
   "searchAudit, the oldest first, the next page of one kind": [27, 0],
   "listAudit, a reading for a file": [45, 0],
   "endOfAuditPart, of twenty entries": [21, 0],
   "countAudit": [45, 0],
-  "countAudit, one kind, the sites named with a text": [45, 0],
+  "countAudit, one kind, the sites named with a text": [64, 0],
   "countAudit, no further back than five entries": [5, 0],
   "no site: getSiteByPublicName": [0, 0],
   "no site: giveNewId": [732, 0],
@@ -390,7 +400,7 @@ describe("D1: the rows a listing, a change to a site, and a page of the audit lo
       "a detail that changes": [6, 4],
       "the same detail again": [6, 0],
       "a page of twenty entries": [20, 0],
-      "a page of the entries of one kind for one site": [36, 0],
+      "a page of the entries of one kind for one site": [67, 0],
       "a page by name": [33, 0],
       "the page by name after it": [34, 0],
       "a page by title": [33, 0],
@@ -402,9 +412,46 @@ describe("D1: the rows a listing, a change to a site, and a page of the audit lo
   });
 });
 
+describe("D1: the rows a search of the audit log by a site costs of a day's allowance", () => {
+  // Drift: a text finds a site by the title it has now, which the log does not hold, so the sites are read. Read once an entry, a search would cost the window several times over, each row charged.
+  test("a window of entries about sixty sites, three of them given a new link: a search reads the window, each site once, and each earlier id once", async () => {
+    const { driver, rows } = await meteredDatabase();
+    const opened = await openDatabase(driver, NOW);
+    if (opened.kind !== "open") throw new Error(`the database did not open: ${opened.kind}`);
+
+    const database = new SqlDatabase(driver);
+    for (let index = 0; index < SEARCHED_SITES; index += 1) {
+      const site = { ...draft(`site-${index}` as SiteName), title: `Title ${index}`, folder: `fold${String(index).padStart(12, "0")}` as SiteFolder };
+      const made = await database.createSite(site, { ...BY_ADA, at: NOW + index });
+      if (made.kind === "done" && index < 3) await database.giveNewId(made.site.id, BY_ADA);
+    }
+    await driver.batch([{ sql: LOG_ABOUT_SITES, params: [] }]);
+    const cost = async (run: () => Promise<unknown>): Promise<number> => {
+      rows.read = 0;
+      await run();
+
+      return rows.read;
+    };
+
+    expect({
+      "a page for a title no site has": await cost(() => database.searchAudit({ limit: 51, site: "Nowhere" })),
+      "a page for a title one site has": await cost(() => database.searchAudit({ limit: 51, site: "title 59" })),
+      "a count for a title no site has": await cost(() => database.countAudit({ most: AUDIT_WINDOW, site: "Nowhere" })),
+      "a count for a title every site has": await cost(() => database.countAudit({ most: AUDIT_WINDOW, site: "TITLE" })),
+    }).toEqual({
+      // The window, the sites once, and a few rows more: where the log starts and ends, and the three earlier ids, each with its site.
+      "a page for a title no site has": AUDIT_WINDOW + SEARCHED_SITES + 11,
+      // A page is full at its 51st entry and one more: this site's entries are one in sixty.
+      "a page for a title one site has": 3092,
+      "a count for a title no site has": AUDIT_WINDOW + SEARCHED_SITES + 9,
+      "a count for a title every site has": AUDIT_WINDOW + SEARCHED_SITES + 3,
+    });
+  });
+});
+
 describe("D1: the rows a narrowed page of a long audit log costs of a day's allowance", () => {
   // Drift: a narrowing is a text inside a name, which no index serves, so the engine reads every entry it passes. A page that looked on until it was full would read the whole log for a rare site, each row charged.
-  test("a log of five entries more than a window, and two about sites: a narrowed page reads its window and five rows more for where the log starts and ends, never the log", async () => {
+  test("a log of five entries more than a window, and two about sites: a narrowed page reads its window and seven rows more, for where the log starts and ends and for a look at the sites, of which there are none, never the log", async () => {
     const { driver, rows } = await meteredDatabase();
     const opened = await openDatabase(driver, NOW);
     if (opened.kind !== "open") throw new Error(`the database did not open: ${opened.kind}`);
@@ -425,11 +472,11 @@ describe("D1: the rows a narrowed page of a long audit log costs of a day's allo
       "a page that fills at once": await cost(() => database.searchAudit({ limit: 51, actions: ["login"] })),
       "a count under a narrowing": await cost(() => database.countAudit({ most: AUDIT_WINDOW, site: "o" })),
     }).toEqual({
-      "the newest page of a rare site": AUDIT_WINDOW + 5,
-      "the page that goes on from where it stopped": 9,
-      "the oldest page of a rare site": AUDIT_WINDOW + 5,
+      "the newest page of a rare site": AUDIT_WINDOW + 7,
+      "the page that goes on from where it stopped": 11,
+      "the oldest page of a rare site": AUDIT_WINDOW + 7,
       "a page that fills at once": 56,
-      "a count under a narrowing": AUDIT_WINDOW,
+      "a count under a narrowing": AUDIT_WINDOW + 5,
     });
   });
 });

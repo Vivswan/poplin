@@ -76,7 +76,7 @@ async function reading(install: Install, asked: Asked): Promise<Reading> {
  *
  * `after` is the `seq` of the last entry of the page before, in either direction: an opaque cursor taken from that entry, never a count.
  *
- * @param query - `limit` is 1 to 100; `dir` is `desc`, the newest first, unless `asc` is asked; `kind` keeps the entries of that kind, and `site` those about a site whose name then held that text
+ * @param query - `limit` is 1 to 100; `dir` is `desc`, the newest first, unless `asc` is asked; `kind` keeps the entries of that kind, and `site` those about a site the text finds, by the name it had then or by what it holds now
  * @returns the entries, and `stopped_at` when a narrowed reading stopped short with the log going on; `not_allowed` for anyone but an admin, or `bad_argument` naming the key that was refused
  */
 export async function listAudit(install: Install, actor: Actor, query: v.InferInput<typeof AUDIT_QUERY> = {}): Promise<Reading | Refused<"not_allowed" | "bad_argument">> {

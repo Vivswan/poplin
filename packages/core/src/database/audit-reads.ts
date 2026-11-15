@@ -1,13 +1,14 @@
 // The statements that search the audit log, count it and find where a part of it ends, and what each answers. Each reads no further than it is told, since the provider charges every row a statement reads.
 
-import { and, asc, count, desc, inArray, lt, type SQL, sql as fragment, sum } from "drizzle-orm";
+import { and, asc, count, desc, eq, inArray, lt, type SQL, sql as fragment, sum } from "drizzle-orm";
 import * as v from "valibot";
 
 import type { AuditAction } from "../records/audit";
 import { COUNT, POSITIVE } from "../records/fields";
 import { AUDIT_WINDOW, type AuditCount, type AuditCountQuery, type AuditPartQuery, type AuditSearch } from "./database";
 import type { Statement, StatementResult } from "./driver";
-import { audit } from "./schema";
+import { audit, earlierIds, sites } from "./schema";
+import { holding } from "./site-statements";
 import { BUILD, built, written } from "./statements";
 
 /** What a count of the audit log answers: the entries it read, and those among them the narrowing keeps. */
@@ -21,9 +22,19 @@ function auditAmong(actions: readonly AuditAction[] | undefined): SQL | undefine
   return actions === undefined ? undefined : inArray(audit.action, [...actions]);
 }
 
-/** The condition an entry of the audit log meets to be about a site whose name then held a text; `undefined` when no text is asked. */
+/**
+ * The condition an entry of the audit log meets to be about a site a text finds; `undefined` when no text is asked.
+ *
+ * The text finds a site whose name then held it, and a site that holds it now in its name or its listed title, as a listing of the sites finds one: the entries of such a site from before a new link are among them.
+ * The sites that hold the text now are read once for the statement, not once an entry.
+ */
 function auditAbout(site: string | undefined): SQL | undefined {
-  return site === undefined ? undefined : fragment`instr(${audit.site_name}, ${site}) > 0`;
+  if (site === undefined) return undefined;
+
+  const now = BUILD.select({ id: sites.id }).from(sites).where(holding(site));
+  const before = BUILD.select({ id: earlierIds.id }).from(earlierIds).innerJoin(sites, eq(sites.folder, earlierIds.folder)).where(holding(site));
+
+  return fragment`(instr(${audit.site_name}, lower(${site})) > 0 OR ${audit.site_id} IN ${now} OR ${audit.site_id} IN ${before})`;
 }
 
 /** Build the statement that reads the oldest and the newest `seq` of the log: two rows read, whatever the log's length. */
@@ -69,14 +80,23 @@ export function auditStopIn(ends: StatementResult | undefined, query: AuditSearc
 }
 
 /**
- * Build the statement that counts the entries a narrowing keeps among the newest `most` of the log.
+ * Build the statement that counts the entries a narrowing keeps among the newest `most` of the log. An entry's `seq` is its place: the log is only ever added to, one `seq` after the other.
  *
  * @throws {RangeError} `most` is not a whole number of at least 1
  */
 export function auditCountAsked(query: AuditCountQuery): Statement {
   if (!Number.isSafeInteger(query.most) || query.most < 1) throw new RangeError(`a count reads at least 1 entry, not ${query.most}`);
 
-  const kept = and(auditAmong(query.actions), auditAbout(query.site)) ?? fragment`1`;
+  // A text finds a site among the sites, and the engine charges that look once an entry inside a reading that is counted from: under a text the entries are counted where they are narrowed, by their place in the log.
+  if (query.site !== undefined) {
+    const newestSeq = fragment`(SELECT max(${audit.seq}) FROM ${audit})`;
+    const kept = and(fragment`${audit.seq} > ${newestSeq} - ${query.most}`, auditAmong(query.actions), auditAbout(query.site));
+    const found = BUILD.select({ found: count().as("found") }).from(audit).where(kept);
+
+    return written(fragment`SELECT min(${query.most}, coalesce(${newestSeq} - (SELECT min(${audit.seq}) FROM ${audit}) + 1, 0)) AS seen, ${found} AS found`);
+  }
+
+  const kept = auditAmong(query.actions) ?? fragment`1`;
   const newest = BUILD.select({ kept: fragment<number>`${kept}`.as("kept") }).from(audit).orderBy(desc(audit.seq)).limit(query.most).as("newest");
 
   return built(BUILD.select({ seen: count().as("seen"), found: fragment`coalesce(${sum(newest.kept)}, 0)`.as("found") }).from(newest));
