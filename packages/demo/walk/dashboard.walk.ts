@@ -554,6 +554,33 @@ test.describe("on a screen 1024 px wide", () => {
   });
 });
 
+test.describe("on a screen 1920 px wide", () => {
+  test.use({ viewport: { width: 1920, height: 1080 } });
+
+  // Drift: on a wide screen the settings would stand at the left edge again, beside an empty right half; or the bar that saves them would end at another edge than they do.
+  test("the settings stand in the middle, and the words and buttons of the bar that saves them end where they end", async ({ page }) => {
+    await arrive(page);
+    await toSection(page, "Settings");
+    await page.getByRole("switch", { name: "Show in search engines", exact: true }).click();
+    await expect(page.getByRole("region", { name: "Unsaved changes", exact: true })).toBeVisible();
+
+    const room = await page.getByRole("form", { name: "Settings", exact: true }).evaluate((form) => {
+      const area = form.getBoundingClientRect();
+      const margins = (column: Element | null | undefined): { readonly left: number; readonly right: number } => {
+        const at = column?.getBoundingClientRect();
+
+        return { left: Math.round((at?.left ?? Number.NaN) - area.left), right: Math.round(area.right - (at?.right ?? Number.NaN)) };
+      };
+
+      return { settings: margins(form.querySelector("section[aria-labelledby]")?.parentElement), bar: margins(form.querySelector("[data-slot='save-bar'] > div")) };
+    });
+    expect(Math.abs(room.settings.left - room.settings.right)).toBeLessThanOrEqual(1);
+    // The control: a column as wide as its room would have equal margins too.
+    expect(room.settings.left).toBeGreaterThan(100);
+    expect(room.bar).toEqual(room.settings);
+  });
+});
+
 test.describe("on a screen 1440 px wide, beside a site's panel", () => {
   test.use({ viewport: VIEWPORTS[0] });
 

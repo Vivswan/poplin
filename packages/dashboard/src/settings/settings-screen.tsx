@@ -17,8 +17,8 @@ import { blocksOf, UPDATES } from "@/settings/settings-words";
 import { ADDRESS_FIELD, UpdateAddressRow } from "@/settings/update-address";
 import { AppShell } from "@/shell/app-shell";
 
-/** The column the page is read in: no wider than this, so a name and its control are never a whole screen apart. The rows ask how wide it is. */
-const COLUMN = "@container w-full max-w-[1100px]";
+/** The column the page is read in: no wider than this, so a name and its control are never a whole screen apart, and in the middle of a wider screen. The rows ask how wide it is. */
+const COLUMN = "@container mx-auto w-full max-w-[1100px]";
 
 /** A group: its heading over its rows, and a line between it and the group before. */
 const GROUP = "mt-5 border-t pt-5 first-of-type:mt-0 first-of-type:border-t-0 first-of-type:pt-0";
@@ -172,7 +172,7 @@ export function SettingsScreen(): ReactNode {
             {settings === undefined ? null : <Groups settings={settings} draft={draft} address={address} marked={marked} />}
           </div>
         </div>
-        <SaveBar count={count} busy={busy} onDiscard={discard} />
+        <SaveBar count={count} busy={busy} onDiscard={discard} column={COLUMN} />
       </form>
       <LeaveGuard unsaved={count > 0} />
     </AppShell>
