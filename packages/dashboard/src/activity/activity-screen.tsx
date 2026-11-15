@@ -13,7 +13,7 @@ import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectVa
 import { Skeleton } from "@/components/ui/skeleton";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { searchOf, useAddressQuery } from "@/lib/address";
-import { ownZoneName, useZoneChoice, ZONES, type ZoneChoice } from "@/lib/time-zone";
+import { ownTimeZoneName, useTimeZoneChoice, TIMEZONES, type TimeZoneChoice } from "@/lib/timezone";
 import { IconButton } from "@/shared/icon-button";
 import { Pages, queryWith } from "@/shared/pages";
 import { SearchBox } from "@/shared/search-box";
@@ -56,8 +56,8 @@ function KindSelect({ kind, onChoose }: { readonly kind: Kind; readonly onChoose
   );
 }
 
-/** The words of the browser's own zone: "Your time" with the zone's short name. A phone shows the short name alone, unless that is UTC itself, which the other choice is called. */
-function OwnZoneLabel({ name }: { readonly name: string }): ReactNode {
+/** The words of the browser's own time zone: "Your time" with the time zone's short name. A phone shows the short name alone, unless that is UTC itself, which the other choice is called. */
+function OwnTimeZoneLabel({ name }: { readonly name: string }): ReactNode {
   if (name === "UTC") return "Your time";
 
   return (
@@ -69,21 +69,21 @@ function OwnZoneLabel({ name }: { readonly name: string }): ReactNode {
   );
 }
 
-/** The zone the times are written in: the browser's own, named, or UTC. The choice holds on every screen. */
-function ZoneToggle({ choice, onChoose: choose }: { readonly choice: ZoneChoice; readonly onChoose: (choice: ZoneChoice) => void }): ReactNode {
-  const own = ownZoneName();
+/** The time zone the times are written in: the browser's own, named, or UTC. The choice holds on every screen. */
+function TimeZoneToggle({ choice, onChoose: choose }: { readonly choice: TimeZoneChoice; readonly onChoose: (choice: TimeZoneChoice) => void }): ReactNode {
+  const own = ownTimeZoneName();
 
   return (
     <ToggleGroup
       aria-label="Time zone"
       value={[choice]}
-      onValueChange={(value) => (value[0] === undefined ? undefined : choose(value[0] as ZoneChoice))}
+      onValueChange={(value) => (value[0] === undefined ? undefined : choose(value[0] as TimeZoneChoice))}
       variant="outline"
       spacing={0}
     >
-      {ZONES.map((zone) => (
-        <ToggleGroupItem key={zone} value={zone} className="px-3 aria-pressed:bg-chosen aria-pressed:font-bold">
-          {zone === "utc" ? "UTC" : <OwnZoneLabel name={own} />}
+      {TIMEZONES.map((timeZone) => (
+        <ToggleGroupItem key={timeZone} value={timeZone} className="px-3 aria-pressed:bg-chosen aria-pressed:font-bold">
+          {timeZone === "utc" ? "UTC" : <OwnTimeZoneLabel name={own} />}
         </ToggleGroupItem>
       ))}
     </ToggleGroup>
@@ -184,10 +184,10 @@ export function ActivityScreen(): ReactNode {
   const site = query.get("site") ?? "";
   const { data: page, error, isPlaceholderData } = useActivityPage(query);
   const logins = page?.logins;
-  // The screen reads the choice of zone itself: its columns are made anew with it, so the rows are drawn, and measured, in the new zone.
-  const [zone, chooseZone] = useZoneChoice();
-  // biome-ignore lint/correctness/useExhaustiveDependencies: a When cell writes its time in the zone chosen, which it reads as it is drawn.
-  const columns = useMemo(() => activityColumns(logins ?? {}), [logins, zone]);
+  // The screen reads the choice of time zone itself: its columns are made anew with it, so the rows are drawn, and measured, in the new time zone.
+  const [timeZone, chooseTimeZone] = useTimeZoneChoice();
+  // biome-ignore lint/correctness/useExhaustiveDependencies: a When cell writes its time in the time zone chosen, which it reads as it is drawn.
+  const columns = useMemo(() => activityColumns(logins ?? {}), [logins, timeZone]);
   const layout = useTableLayout("activity", columns);
   const instead = insteadOfRows(error?.message, page, kind, site, () => void navigate({ to: PATH }));
   const move = (changes: Readonly<Record<string, string>>, replace = false): void =>
@@ -227,7 +227,7 @@ export function ActivityScreen(): ReactNode {
               descending={sortOf(query).descending}
               onChoose={(descending) => void navigate({ to: PATH, search: searchOf(sortedQuery(query, { key: "when", descending })) })}
             />
-            <ZoneToggle choice={zone} onChoose={chooseZone} />
+            <TimeZoneToggle choice={timeZone} onChoose={chooseTimeZone} />
           </div>
         </div>
         {instead ?? (

@@ -3,7 +3,7 @@
 import type { InferResponseType } from "hono/client";
 
 import type { api } from "@/lib/api";
-import { dayIn, momentIn } from "@/lib/time-zone";
+import { dayIn, momentIn } from "@/lib/timezone";
 
 /** A site as the data routes answer it. Times are milliseconds since the epoch. */
 export type Site = InferResponseType<(typeof api.sites)[":site"]["$get"], 200>["site"];
@@ -33,7 +33,7 @@ export function shownName(site: Pick<Site, "name" | "title">): string {
 }
 
 /**
- * Write a moment briefly: how long ago within a week, the day in the zone a person chose otherwise.
+ * Write a moment briefly: how long ago within a week, the day in the time zone a person chose otherwise.
  *
  * @param now - the moment it is read at
  */
@@ -53,7 +53,7 @@ export function showCount(count: number): string {
   return COUNT_FORMAT.format(count);
 }
 
-/** Write a moment whole, to the minute, in the zone a person chose. */
+/** Write a moment whole, to the minute, in the time zone a person chose. */
 export function wholeMoment(moment: number): string {
   return momentIn(moment);
 }

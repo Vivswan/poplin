@@ -5,7 +5,7 @@ import { cn } from "cn";
 import { type FormEvent, type ReactNode, useEffect, useState } from "react";
 
 import { Skeleton } from "@/components/ui/skeleton";
-import { useChosenZone } from "@/lib/time-zone";
+import { useChosenTimeZone } from "@/lib/timezone";
 import { LeaveGuard } from "@/shared/leave-guard";
 import { SAVE_BAR_ROOM, SaveBar } from "@/shared/save-bar";
 import { type AddressDraft, useAddressDraft } from "@/settings/address-draft";
@@ -126,7 +126,7 @@ function useNamedSetting(drawn: boolean): string | undefined {
 
 /** Draw the Settings screen. */
 export function SettingsScreen(): ReactNode {
-  useChosenZone();
+  useChosenTimeZone();
   const { data: settings, error } = useSettings();
   // A refused setting may be out of sight: its field takes the focus.
   const draft = useDraft(settings?.rows ?? [], (key) => focus(controlId(key)));
