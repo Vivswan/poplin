@@ -1,4 +1,4 @@
-// The frame around every screen: what it says of the domain at the side, and the way past the sections.
+// The frame around every screen: what it marks and says at the side, and the way past the sections.
 
 import { clearPage } from "../lib/support/page";
 
@@ -16,16 +16,19 @@ import { drawAt } from "../lib/support/router";
 /** The key the look is kept under in these tests. */
 const THEME_KEY = "test.theme";
 
-/** What the frame holds besides the note on the domain. */
-const FRAME = { ok: true, update: null, starts: false } as const;
+/** What the frame holds besides the note on the domain and the marks. */
+const FRAME = { ok: true, update: null, starts: false, recent: [] } as const;
 
 /** A newer release the install knows of, with an update link saved. */
 const NEWER = { update: { current: BOOT.version, newest: "1.1.0", released: "2026-11-02", notes: "https://example.com/notes", database: false }, starts: true } as const;
 
-/** Draw the frame around an empty screen, over a frame that holds the note given. */
-async function drawWith(domainNote: { readonly label: string; readonly sentence: string; readonly quiet: boolean } | null, more: Partial<typeof NEWER> = {}): Promise<void> {
+/** The marks of an install where nothing went wrong. */
+const NO_MARKS = { usage: null, domain: null, settings: null };
+
+/** Draw the frame around an empty screen, over a frame that holds the note given, and what else of the frame a test sets. */
+async function drawWith(domainNote: { readonly label: string; readonly sentence: string; readonly quiet: boolean } | null, more: Partial<typeof NEWER> & { readonly marks?: object } = {}): Promise<void> {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  client.setQueryData(FRAME_KEY, { ...FRAME, ...more, domainNote });
+  client.setQueryData(FRAME_KEY, { ...FRAME, marks: NO_MARKS, ...more, domainNote });
 
   await drawAt(
     "/",
@@ -44,20 +47,38 @@ async function drawWith(domainNote: { readonly label: string; readonly sentence:
 afterEach(cleanup);
 afterAll(clearPage);
 
-describe("the note on the domain at the side", () => {
-  // Drift: a domain that needs a repair would show only on its own screen, an old check would be drawn as an alarm, or the note would lead nowhere.
+describe("the mark at a section of the side", () => {
+  // Drift: a problem would show only on its own screen, the mark would be a colour with no name for a screen reader, or a section with nothing wrong would carry one.
+  test("names how many problems the section's screen holds, on the section's link, and stands at no section without one", async () => {
+    await drawWith(null, { marks: { usage: { count: 2, says: "A request failed" }, domain: { count: 1, says: "The login could not be checked" }, settings: null } });
+    const marked = screen.getAllByRole("img").map((mark) => [mark.closest("a")?.getAttribute("href"), mark.getAttribute("aria-label")]);
+
+    expect(marked).toEqual([
+      [`${BOOT.base}/usage`, "2 problems"],
+      [`${BOOT.base}/domain`, "1 problem"],
+    ]);
+    expect(screen.getByRole("link", { name: "Usage 2 problems" }) !== null).toBe(true);
+  });
+
+  // Drift: on a phone the sections are behind a button, so a problem would show nowhere until a person happened to open them.
   test.each([
-    ["an alarm", { label: "Domain needs fixing", sentence: "A piece of the domain is missing or changed.", quiet: false }, true],
-    ["a quiet word", { label: "Domain check is old", sentence: "The last check of the domain is over 30 days old.", quiet: true }, false],
-  ] as const)("is %s that leads to the Domain screen", async (_what, note, alarm) => {
+    ["no section holds a problem", { usage: null, domain: null, settings: null }, "Sections"],
+    ["two sections hold three", { usage: { count: 2, says: "A request failed" }, domain: { count: 1, says: "The login could not be checked" }, settings: null }, "Sections, 3 problems"],
+  ] as const)("the button that opens the sections on a phone is named %s", async (_what, marks, name) => {
+    await drawWith(null, { marks });
+
+    expect(screen.getAllByRole("button", { name: /^Sections/, hidden: true }).map((button) => button.getAttribute("aria-label"))).toEqual([name]);
+  });
+});
+
+describe("the note on the domain at the side", () => {
+  // Drift: an old check would be drawn as an alarm, or the reminder would lead nowhere.
+  test("is a quiet word that leads to the Domain screen while the last check is only old", async () => {
+    const note = { label: "Domain check is old", sentence: "The last check of the domain is over 30 days old.", quiet: true };
     await drawWith(note);
     const link = screen.getByRole("link", { name: note.label });
 
-    expect([link.getAttribute("href"), link.querySelector("svg") !== null, link.className.includes("text-destructive")]).toEqual([
-      `${BOOT.base}/domain`,
-      alarm,
-      alarm,
-    ]);
+    expect([link.getAttribute("href"), link.querySelector("svg"), link.className.includes("text-destructive")]).toEqual([`${BOOT.base}/domain`, null, false]);
   });
 
   // Drift: a domain with nothing to do would still carry a line at the side.
