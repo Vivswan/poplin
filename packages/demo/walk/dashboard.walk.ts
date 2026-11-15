@@ -51,6 +51,9 @@ const FIGURES = '"Even Figures"';
 /** The dashboard's own face alone, whose figures are each as wide as their shape: what the times are measured in as the control. */
 const OWN_FACE = '"Libre Franklin Variable"';
 
+/** The mark of a filled button among the classes the UI library draws it with. */
+const FILLED = /(^| )bg-primary( |$)/;
+
 /** Every place of the walk, in the order it is taken: each starts where the one before it ended. */
 const STOPS: readonly Stop[] = [
   {
@@ -545,6 +548,33 @@ test.describe("on a phone, while a line says a result", () => {
 
     await page.getByRole("button", { name: "Sections", exact: true }).click();
     await expect(page.getByRole("navigation", { name: "Sections", exact: true })).toBeVisible();
+  });
+});
+
+test.describe("on a phone, in a question", () => {
+  test.use({ viewport: PHONE });
+
+  // Drift: a question that leads with not doing it would draw its filled button under the other one again, where every other question has it on top.
+  test("the filled button is the upper one, also where not doing it leads", async ({ page }) => {
+    await arrive(page);
+    const upper = async (): Promise<Locator> => {
+      const buttons = page.getByRole("alertdialog").getByRole("button");
+      await expect(buttons).toHaveCount(2);
+      const [first, second] = await Promise.all([buttons.first().boundingBox(), buttons.last().boundingBox()]);
+
+      return (first?.y ?? Number.NaN) < (second?.y ?? Number.NaN) ? buttons.first() : buttons.last();
+    };
+
+    await fromRowMenu(page, SAMPLE.site, "New link");
+    await expect(await upper()).toHaveText("Make a new link");
+    await expect(await upper()).toHaveClass(FILLED);
+    await leaveBy("Cancel")(page);
+
+    await toSection(page, "Settings");
+    await page.getByRole("textbox", { name: "Keep deleted sites", exact: true }).fill("9");
+    await toSection(page, "Sites");
+    await expect(await upper()).toHaveText("Stay");
+    await expect(await upper()).toHaveClass(FILLED);
   });
 });
 

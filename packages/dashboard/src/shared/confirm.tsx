@@ -62,7 +62,8 @@ export function Confirm({ question, onAnswer }: { readonly question: Question | 
           <AlertDialogTitle>{shown?.title}</AlertDialogTitle>
           <AlertDialogDescription>{shown?.says}</AlertDialogDescription>
         </AlertDialogHeader>
-        <AlertDialogFooter>
+        {/* A narrow screen stacks the two buttons, the last one on top: where not doing it leads, the first one is on top, so the filled button is the upper one of every question. */}
+        <AlertDialogFooter className={shown?.rather === true ? "max-sm:flex-col" : undefined}>
           <AlertDialogCancel variant={shown?.rather === true ? "default" : "outline"}>{shown?.no ?? "Cancel"}</AlertDialogCancel>
           <AlertDialogAction variant={actionLook(shown)} onClick={() => onAnswer(true)}>
             {shown?.yes}
