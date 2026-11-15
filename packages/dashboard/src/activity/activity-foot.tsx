@@ -4,19 +4,16 @@ import { AUDIT_WINDOW } from "@poplin/core/src/database/database";
 import type { ReactNode } from "react";
 
 import type { Page, Total } from "@/activity/activity-queries";
-import { FROM_KEY } from "@/activity/activity-words";
+import { FROM_KEY, SEARCHED_KEY, sortOf } from "@/activity/activity-words";
 import { PAGE_SIZES, type PageSize } from "@/activity/page-size";
 import { Button } from "@/components/ui/button";
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyTitle } from "@/components/ui/empty";
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { showCount } from "@/lib/sites";
-import { PAGE_WAY } from "@/shared/pages";
+import { PAGE_WAY, useShownPlace } from "@/shared/pages";
 
 /** The sizes of a page, as the select names them. */
 const SIZES = PAGE_SIZES.map((value) => ({ value, label: `${value} per page` }));
-
-/** How many entries of the log a narrowed page looks at before it stops, as the screen writes it. */
-const SEARCHED = showCount(AUDIT_WINDOW);
 
 /** What the foot is drawn from. */
 interface ActivityFootProps {
@@ -92,11 +89,43 @@ function stoppedWay(query: URLSearchParams, page: Page): "after" | "back" | unde
   return query.get("back") === null ? "after" : "back";
 }
 
+/**
+ * Read how many entries of the log were looked at ahead of a page: none ahead of the first page, and what the address carries on a page that Search further led to.
+ *
+ * @returns `undefined` where nobody counted: on a page reached by Next page or Previous page
+ */
+function searchedAhead(query: URLSearchParams): number | undefined {
+  if (query.get("back") !== null) return undefined;
+  if (query.get("after") === null) return 0;
+
+  const carried = Number(query.get(SEARCHED_KEY) ?? "");
+
+  return Number.isSafeInteger(carried) && carried > 0 ? carried : undefined;
+}
+
+/** Name the place a search goes on to from a page: the page after it, with the page's own share counted in where the way to the page was counted. */
+function onwardFrom(next: Readonly<Record<string, string>>, ahead: number | undefined): Readonly<Record<string, string>> {
+  return ahead === undefined ? next : { ...next, [SEARCHED_KEY]: String(ahead + AUDIT_WINDOW) };
+}
+
+/** Say how far a page that stopped looking has looked: from the log's end it started at where every entry on the way was counted, and by its own share otherwise. */
+function searchedWords(query: URLSearchParams): string {
+  const ahead = searchedAhead(query);
+  if (ahead === undefined) return `${showCount(AUDIT_WINDOW)} more entries`;
+
+  return `the ${sortOf(query).descending ? "newest" : "oldest"} ${showCount(ahead + AUDIT_WINDOW)} entries`;
+}
+
+/** Name the entries a page that stopped looking has not looked at: the ones behind it in the direction it was read. */
+function unsearched(query: URLSearchParams): "Older" | "Newer" {
+  return sortOf(query).descending === (query.get("back") === null) ? "Older" : "Newer";
+}
+
 /** Say that a narrowed page stopped looking before the log's end, with the way to look further. */
-function SearchedSoFar({ busy, onSearch }: { readonly busy: boolean; readonly onSearch: () => void }): ReactNode {
+function SearchedSoFar({ searched, busy, onSearch }: { readonly searched: string; readonly busy: boolean; readonly onSearch: () => void }): ReactNode {
   return (
     <p className="flex flex-wrap items-center gap-2 px-6 pb-3 text-muted-foreground max-md:px-4">
-      {`Searched the newest ${SEARCHED} entries.`}
+      {`Searched ${searched}.`}
       <Button variant="outline" size="sm" disabled={busy} onClick={onSearch} {...PAGE_WAY}>
         Search further
       </Button>
@@ -104,13 +133,31 @@ function SearchedSoFar({ busy, onSearch }: { readonly busy: boolean; readonly on
   );
 }
 
+/** What the words of a page that stopped looking with none found are drawn from. */
+interface NothingSoFarProps {
+  /** How far the page has looked, as `searchedWords` says it. */
+  readonly searched: string;
+
+  /** The entries it has not looked at, as `unsearched` names them. */
+  readonly left: string;
+
+  /** Whether the page is being replaced. */
+  readonly busy: boolean;
+
+  /** Looks further. */
+  readonly onSearch: () => void;
+
+  /** Shows every entry of the log. */
+  readonly onShowAll?: (() => void) | undefined;
+}
+
 /** Say that a narrowed page stopped looking with no entry found: this is what the page holds, with the way to look further first and the way to every entry beside it. */
-function NothingSoFar({ busy, onSearch, onShowAll }: { readonly busy: boolean; readonly onSearch: () => void; readonly onShowAll?: (() => void) | undefined }): ReactNode {
+function NothingSoFar({ searched, left, busy, onSearch, onShowAll }: NothingSoFarProps): ReactNode {
   return (
     <Empty className="flex-none py-16">
       <EmptyHeader>
-        <EmptyTitle>{`Nothing in the newest ${SEARCHED} entries.`}</EmptyTitle>
-        <EmptyDescription>Older entries are not searched yet.</EmptyDescription>
+        <EmptyTitle>{`Nothing in ${searched}.`}</EmptyTitle>
+        <EmptyDescription>{`${left} entries are not searched yet.`}</EmptyDescription>
       </EmptyHeader>
       <EmptyContent className="flex-row justify-center max-sm:flex-col">
         <Button disabled={busy} onClick={onSearch} {...PAGE_WAY}>
@@ -149,7 +196,7 @@ export function ActivityFoot({ query, page, total, size, onSize, onMove, busy = 
   const step = Number(size);
   const from = firstEntryOf(query, page, step);
   const to = from === undefined ? undefined : from + rows - 1;
-  const on = (): void => onMove(placeOf("after", page.next, to === undefined ? undefined : to + 1));
+  const next = (): Readonly<Record<string, string>> => placeOf("after", page.next, to === undefined ? undefined : to + 1);
   const back = (): void => {
     const first = from === undefined ? undefined : from - step;
     // A page that would start at the list's first entry is the first page itself, read whole.
@@ -158,10 +205,13 @@ export function ActivityFoot({ query, page, total, size, onSize, onMove, busy = 
   };
   // A page that stopped looking goes on in the direction it was read, by Search further alone: the page's own way there is dimmed.
   const stopped = stoppedWay(query, page);
-  const further = stopped === "back" ? back : on;
-  if (rows === 0) return stopped === undefined ? null : <NothingSoFar busy={busy} onSearch={further} onShowAll={onShowAll} />;
+  const further = stopped === "back" ? back : (): void => onMove(onwardFrom(next(), searchedAhead(query)));
+  // While another page is on its way the address is ahead of the page: the words are those of the address the page shown was read at.
+  const read = new URLSearchParams(useShownPlace(query.toString(), !busy));
+  const words = searchedWords(read);
+  if (rows === 0) return stopped === undefined ? null : <NothingSoFar searched={words} left={unsearched(read)} busy={busy} onSearch={further} onShowAll={onShowAll} />;
 
-  const searched = stopped === undefined ? null : <SearchedSoFar busy={busy} onSearch={further} />;
+  const searched = stopped === undefined ? null : <SearchedSoFar searched={words} busy={busy} onSearch={further} />;
 
   const of = to === undefined ? undefined : totalWords(page, to, total);
   const paged = page.previous !== null || page.next !== null;
@@ -169,7 +219,7 @@ export function ActivityFoot({ query, page, total, size, onSize, onMove, busy = 
   return (
     <>
       <nav aria-label="Pages" className="flex flex-wrap items-center gap-x-2 gap-y-2 px-6 py-3 max-md:px-4">
-        {paged ? <Ways page={page} busy={busy} stopped={stopped} onFirst={() => onMove({})} onBack={back} onOn={on} /> : null}
+        {paged ? <Ways page={page} busy={busy} stopped={stopped} onFirst={() => onMove({})} onBack={back} onOn={() => onMove(next())} /> : null}
         {paged || rows > Number(PAGE_SIZES[0]) ? (
           <Select items={SIZES} value={size} onValueChange={(value) => onSize(value as PageSize)}>
             <SelectTrigger size="sm" aria-label="Entries per page">

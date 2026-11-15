@@ -17,6 +17,9 @@ export const KINDS = [
 /** The key of the address that holds the number of a page's first entry. */
 export const FROM_KEY = "from";
 
+/** The key of the address that holds how many entries of the log were looked at ahead of a page that Search further led to. */
+export const SEARCHED_KEY = "searched";
+
 /** The orders of the log: by when an entry was written, the newest first in a table nobody sorted. */
 const ACTIVITY_ORDERS: Orders = { first: { when: "desc" }, unsorted: { key: "when", descending: true } };
 
@@ -47,12 +50,13 @@ export function sortOf(query: URLSearchParams): Sort {
 
 /**
  * Write the log's query with some of it changed. A change that names no place of a page starts at the first one, and a page is reached from the one ahead of it or the one after it, never both.
+ * How far a search has looked is kept only by the change that names it.
  *
  * @param changes - the keys to set; an empty value takes a key away
  * @returns a new query
  */
 export function logQuery(query: URLSearchParams, changes: Readonly<Record<string, string>>): URLSearchParams {
-  return queryWith(query, "back" in changes ? changes : { back: "", ...changes });
+  return queryWith(query, { [SEARCHED_KEY]: "", ...("back" in changes ? {} : { back: "" }), ...changes });
 }
 
 /**

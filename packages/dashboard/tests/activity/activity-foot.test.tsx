@@ -3,11 +3,15 @@
 import { clearPage } from "../lib/support/page";
 
 import { afterAll, afterEach, describe, expect, test } from "bun:test";
-import { act, cleanup, fireEvent, render, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, getNodeText, render, within } from "@testing-library/react";
+import type { ReactNode } from "react";
 
 import { ActivityFoot } from "@/activity/activity-foot";
 import type { Page, Total } from "@/activity/activity-queries";
 import type { PageSize } from "@/activity/page-size";
+
+/** The second line of a page that stopped with none found: which entries it has not looked at. */
+const LEFT = { older: "Older entries are not searched yet.", newer: "Newer entries are not searched yet." } as const;
 
 /** What a press on the foot asked for: a move to a page, or another size of a page. */
 type Asked = Readonly<Record<string, string>> | PageSize;
@@ -86,20 +90,38 @@ describe("the foot of the log", () => {
   });
 
   // Drift: a narrowed page that stopped looking would read as the log's last, with no way to the older entries of a rare site; or the way on would be offered twice, or would count the next page's rows from the wrong number.
+  // Drift: a search that went on would still say it looked at one share of the log, or name the end of the log it did not start from.
   test.each([
-    ["a page that stopped with some entries found", "site=o", pageOf(3, "9", null, true), { total: { ok: true, total: 3, whole: false } }, ["1 to 3 of 3+", ["Search further"], { after: "9", from: "4" }]],
-    ["a page that stopped with none found", "site=o", pageOf(0, "9", null, true), {}, [null, ["Search further"], { after: "9", from: "1" }]],
-    ["a page gone back to that stopped", "site=o&back=2", pageOf(0, "3", "5002", true), {}, [null, ["Search further"], { back: "5002" }]],
-    ["a page that goes on from a stop with none found, counted from 1", "site=o&after=9&from=1", pageOf(3, "4", "8", true), {}, ["1 to 3", ["First page", "Previous page", "Search further"], { after: "4", from: "4" }]],
-    ["a page gone back to that stopped after three entries found", "site=o&back=2&from=51", pageOf(3, "3", "5002", true), {}, ["98 to 100", ["First page", "Next page", "Search further"], { back: "5002", from: "48" }]],
-    ["a page gone back to that stopped within a page of the list's start", "site=o&back=2&from=3", pageOf(3, "3", "5002", true), {}, ["50 to 52", ["First page", "Next page", "Search further"], {}]],
-  ] as const)("on %s the foot says how far it searched, and Search further is the one way on in the direction it was read", (_what, query, page, more, [says, ways, place]) => {
+    ["a page that stopped with some found", "site=o", pageOf(3, "9", null, true), { total: { ok: true, total: 3, whole: false } }, ["1 to 3 of 3+", "Searched the newest 5,000 entries.", ["Search further"], { after: "9", from: "4", searched: "5000" }]],
+    ["a page that stopped with none found", "site=o", pageOf(0, "9", null, true), {}, [null, `Nothing in the newest 5,000 entries. ${LEFT.older}`, ["Search further"], { after: "9", from: "1", searched: "5000" }]],
+    ["the page a search went on to, stopped again", "site=o&after=9&from=1&searched=5000", pageOf(0, "4", "8", true), {}, [null, `Nothing in the newest 10,000 entries. ${LEFT.older}`, ["Search further"], { after: "4", from: "1", searched: "10000" }]],
+    ["a log read from its oldest entry", "site=o&sort=when&dir=asc", pageOf(0, "5001", null, true), {}, [null, `Nothing in the oldest 5,000 entries. ${LEFT.newer}`, ["Search further"], { after: "5001", from: "1", searched: "5000" }]],
+    ["a page gone back to that stopped", "site=o&back=2", pageOf(0, "3", "5002", true), {}, [null, `Nothing in 5,000 more entries. ${LEFT.newer}`, ["Search further"], { back: "5002" }]],
+    ["a page reached by Next page, which nobody counted the way to", "site=o&after=9&from=1", pageOf(3, "4", "8", true), {}, ["1 to 3", "Searched 5,000 more entries.", ["First page", "Previous page", "Search further"], { after: "4", from: "4" }]],
+    ["a page gone back to that stopped after three entries found", "site=o&back=2&from=51", pageOf(3, "3", "5002", true), {}, ["98 to 100", "Searched 5,000 more entries.", ["First page", "Next page", "Search further"], { back: "5002", from: "48" }]],
+    ["a page gone back to that stopped within a page of the list's start", "site=o&back=2&from=3", pageOf(3, "3", "5002", true), {}, ["50 to 52", "Searched 5,000 more entries.", ["First page", "Next page", "Search further"], {}]],
+  ] as const)("on %s the foot says how far it searched, and Search further is the one way on in the direction it was read", (_what, query, page, more, [says, words, ways, place]) => {
     const foot = drawn(query, page, more);
-    const words = within(document.body).queryByText(/^(Searched the|Nothing in the) newest 5,000 entries\.$/);
+    const said = [...document.querySelectorAll<HTMLElement>("p, [data-slot='empty-title'], [data-slot='empty-description']")].map(getNodeText);
     const offered = buttons();
     fireEvent.click(within(document.body).getByRole("button", { name: "Search further" }));
 
-    expect([foot.says(), words !== null, offered, foot.asked]).toEqual([says, true, [...ways], [place]]);
+    expect([foot.says(), said.join(" "), offered, foot.asked]).toEqual([says, words, [...ways], [place]]);
+  });
+
+  // Drift: the address is ahead of the page while the next one is read, so the foot would say the search looked at entries nobody has read yet.
+  test("while the page a search went on to is on its way, the foot says how far the page shown looked", () => {
+    const foot = (query: string, page: Page, busy: boolean): ReactNode => (
+      <ActivityFoot query={new URLSearchParams(query)} page={page} size="50" onSize={() => undefined} onMove={() => undefined} busy={busy} />
+    );
+    const title = (): string | null => document.querySelector("[data-slot='empty-title']")?.textContent ?? null;
+    const { rerender } = render(foot("site=o", pageOf(0, "9", null, true), false));
+    const first = title();
+    rerender(foot("site=o&searched=5000&after=9&from=1", pageOf(0, "9", null, true), true));
+    const onItsWay = title();
+    rerender(foot("site=o&searched=5000&after=9&from=1", pageOf(0, "4", "8", true), false));
+
+    expect([first, onItsWay, title()]).toEqual(["Nothing in the newest 5,000 entries.", "Nothing in the newest 5,000 entries.", "Nothing in the newest 10,000 entries."]);
   });
 
   // Drift: a page gone back to that stopped short holds the entries just ahead of the page it came from; counted as a full page, its Next page would number that page's first entry too low.
