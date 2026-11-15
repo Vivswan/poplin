@@ -2,7 +2,7 @@
 
 import { showBytes } from "@poplin/core/src/records/settings";
 import { cn } from "cn";
-import { CopyIcon, EyeIcon, EyeOffIcon, GlobeIcon, LinkIcon, LockIcon } from "lucide-react";
+import { CopyIcon, ExternalLinkIcon, EyeIcon, EyeOffIcon, GlobeIcon, LinkIcon, LockIcon } from "lucide-react";
 import type { ReactNode } from "react";
 
 import { ACCESSES, type Access, addressParts, expiryOf, shortMoment, showCount, type Site, wholeMoment } from "@/lib/sites";
@@ -17,8 +17,8 @@ const ACCESS_ICONS = { private: LockIcon, unlisted: LinkIcon, public: GlobeIcon 
 /** The look of a button after a link in the table: quiet at rest, as a row's menu is, and whole when the row is pointed at or holds the focus. */
 const AFTER_LINK_LOOK = "size-6 shrink-0 opacity-60 group-hover/row:opacity-100 group-focus-within/row:opacity-100 pointer-coarse:opacity-100";
 
-/** The narrowest the Link column is drawn to stay in sight beside the columns before it, in pixels: the start of a site's name, its hidden id and what follows, and the two buttons. */
-const LINK_GIVES = 264;
+/** The narrowest the Link column is drawn to stay in sight beside the columns before it, in pixels: the start of a site's name, its hidden id and what follows, and the three buttons. */
+const LINK_GIVES = 284;
 
 /** Which sites show the id in their link, and the switch of one. */
 export interface Reveal {
@@ -134,7 +134,7 @@ function Moment({ moment }: { readonly moment: number }): ReactNode {
  * The columns of the Sites table.
  *
  * @param nameCell - draws the first column, which shows the site's title and opens the site
- * @param onCopy - copies a site's whole link; its button stands right after the link, however short the link is cut
+ * @param onCopy - copies a site's whole link; its button stays in sight however short the link is cut
  * @param reveal - which sites show the id in their link
  * @param logins - the name of each login that has one, by the login's id
  */
@@ -147,10 +147,15 @@ export function siteColumns(
   const linkCell = (site: Site): ReactNode => (
     <span className="flex min-w-0 items-center gap-1">
       <SiteLink site={site} whole={reveal.shows(site)} className="text-muted-foreground" />
-      <IconButton label="Copy the link" onClick={() => onCopy(site)} className={AFTER_LINK_LOOK}>
-        <CopyIcon />
-      </IconButton>
-      {addressParts(site.url, site.id).hidden === "" ? null : <RevealButton site={site} reveal={reveal} className={AFTER_LINK_LOOK} />}
+      <span className="flex shrink-0 items-center">
+        {addressParts(site.url, site.id).hidden === "" ? null : <RevealButton site={site} reveal={reveal} className={AFTER_LINK_LOOK} />}
+        <IconButton label="Copy the link" onClick={() => onCopy(site)} className={AFTER_LINK_LOOK}>
+          <CopyIcon />
+        </IconButton>
+        <IconButton label="Open the site" link={<a href={site.url} target="_blank" rel="noreferrer" />} className={AFTER_LINK_LOOK}>
+          <ExternalLinkIcon />
+        </IconButton>
+      </span>
     </span>
   );
 
@@ -162,7 +167,7 @@ export function siteColumns(
       sortable: SITE_ORDERS.first.access,
       cell: (site) => <AccessMark access={site.access} />,
     },
-    { id: "link", header: "Link", widest: 360, gives: LINK_GIVES, cell: linkCell },
+    { id: "link", header: "Link", widest: 380, gives: LINK_GIVES, cell: linkCell },
     { id: "updated", header: "Updated", sortable: SITE_ORDERS.first.updated, cell: (site) => <Moment moment={site.updated} /> },
     { id: "name", header: "Name", hidden: true, sortable: SITE_ORDERS.first.name, cell: (site) => <span className="text-muted-foreground">{site.name}</span> },
     { id: "by", header: "Published by", hidden: true, cell: (site) => <PublishedBy site={site} logins={logins} /> },

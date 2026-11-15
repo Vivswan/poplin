@@ -115,7 +115,7 @@ test("a sample site is served with every stylesheet it links", async ({ page }) 
   const [name = ""] = await arrive(page);
   await siteLink(page, name).click();
   // The panel's way to the site is a link drawn as a button, which opens a tab of its own: its address is followed in this one.
-  const served = new URL((await page.getByRole("button", { name: "Open the site", exact: true }).getAttribute("href")) ?? "", page.url()).href;
+  const served = new URL((await page.getByRole("dialog").getByRole("button", { name: "Open the site", exact: true }).getAttribute("href")) ?? "", page.url()).href;
   const answer = await page.goto(served);
   const linked = await page.locator('link[rel="stylesheet"]').count();
   const sheets = await page.evaluate(() => [...document.styleSheets].filter((sheet) => sheet.href !== null && sheet.cssRules.length > 0).length);
@@ -129,7 +129,7 @@ test("a sample site is served with every stylesheet it links", async ({ page }) 
 test("a sample site that holds no favicon.ico answers poplin's icon there, and the engine draws it", async ({ page }) => {
   const [name = ""] = await arrive(page);
   await siteLink(page, name).click();
-  const served = new URL((await page.getByRole("button", { name: "Open the site", exact: true }).getAttribute("href")) ?? "", page.url()).href;
+  const served = new URL((await page.getByRole("dialog").getByRole("button", { name: "Open the site", exact: true }).getAttribute("href")) ?? "", page.url()).href;
   await page.goto(served);
   const icon = new URL("favicon.ico", served).href;
   // The pixel sits on the front sheet's selvedge red alone, clear of both blue sheets.

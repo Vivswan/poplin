@@ -50,10 +50,10 @@ function LinkBlock({ site, actions, reveal }: { readonly site: Site; readonly ac
     <PanelBlock label="Link">
       <div className="flex items-center gap-1 rounded-md border bg-muted/40 py-1 pr-1 pl-2.5">
         <SiteLink site={site} whole={whole} />
+        {hides ? <RevealButton site={site} reveal={reveal} /> : null}
         <IconButton label="Copy the link" onClick={() => void actions.copyLink(site)}>
           <CopyIcon />
         </IconButton>
-        {hides ? <RevealButton site={site} reveal={reveal} /> : null}
         <IconButton label="Open the site" link={<a href={site.url} target="_blank" rel="noreferrer" />}>
           <ExternalLinkIcon />
         </IconButton>

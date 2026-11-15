@@ -3,7 +3,7 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { Link, linkOptions, useNavigate, useParams } from "@tanstack/react-router";
 import { cn } from "cn";
-import { CopyIcon, PlusIcon } from "lucide-react";
+import { CopyIcon, ExternalLinkIcon, PlusIcon } from "lucide-react";
 import { type ReactNode, useCallback, useMemo, useState } from "react";
 
 import { Button } from "@/components/ui/button";
@@ -157,6 +157,11 @@ function PhoneList({
                 <IconButton label="Copy the link" onClick={() => onCopy(site)} className="-my-2 shrink-0">
                   <CopyIcon />
                 </IconButton>
+                {site.state === "trash" ? null : (
+                  <IconButton label="Open the site" link={<a href={site.url} target="_blank" rel="noreferrer" />} className="-my-2 shrink-0">
+                    <ExternalLinkIcon />
+                  </IconButton>
+                )}
               </span>
             </div>
             {rowActions(site)}
