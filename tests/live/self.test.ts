@@ -1,9 +1,12 @@
 // The live checks run against a local fake, so their own logic is exercised with no deployed install: a check that passed on anything, or a skip that hid a fault, would otherwise go unseen until a real run.
 
-import { afterEach, describe, expect, test } from "bun:test";
+import { afterEach, describe, expect, spyOn, test } from "bun:test";
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 
+import type { Fetch } from "../../packages/cli/src/client/client";
+import { CEILINGS, meterBucket } from "../../packages/cloudflare/scripts/live/budget";
+import { MemoryStore } from "../../packages/core/src/storage/memory";
 import { openBench } from "./bench";
 import { probeMissing } from "./capabilities";
 import { CHECKS } from "./checks";
@@ -103,13 +106,27 @@ afterEach(() => {
 describe("the live checks, against a local fake", () => {
   test.each(CASES)("%s", async (_what, switches, known, notPassed) => {
     const fake = await openFake(switches);
+    const meter = meterBucket(fake.fetch, CEILINGS.checks);
+    using writes = spyOn(MemoryStore.prototype, "write");
+    using lists = spyOn(MemoryStore.prototype, "list");
+    const uncounted: string[] = [];
+
+    // A request the store wrote or listed for, which the meter let through as free.
+    const watched: Fetch = async (input, init) => {
+      const before = { store: writes.mock.calls.length + lists.mock.calls.length, spent: meter.spent() };
+      const response = await meter.fetch(input, init);
+      const free = meter.spent() === before.spent && writes.mock.calls.length + lists.mock.calls.length > before.store;
+      if (free) uncounted.push(`${init.method ?? "GET"} ${new URL(input).pathname}`);
+
+      return response;
+    };
     const missing: Missing = {};
     const { bench, settle, sweep, close } = openBench({
       domain: FAKE_DOMAIN,
       token: switches.noToken === true ? undefined : fake.token,
       run: "selftest",
       missing,
-      fetch: fake.fetch,
+      fetch: watched,
       pause: async () => undefined,
       manyFiles: MANY_FILES,
     });
@@ -131,5 +148,7 @@ describe("the live checks, against a local fake", () => {
 
     const left = await bench.cli("list");
     expect(switches.noToken === true ? [] : left.value.sites).toEqual([]);
+    // A check that grew into a loop of publishes would be held back on the real install alone, and a route the meter does not know would be billed uncounted.
+    expect({ stopped: meter.stopped(), uncounted }).toEqual({ stopped: undefined, uncounted: [] });
   });
 });

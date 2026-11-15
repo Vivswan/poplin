@@ -1,6 +1,7 @@
 // Make the standing test install match main: the bucket, the database, the login, the Worker, then every object of the zone as the Domain tab's own repair makes it.
 //
-//   the zone -> bucket, database -> the login application -> wrangler deploy of the built bundle -> the zone plug's repair -> wait for the install to answer
+//   the zone -> the account's plans, all free -> bucket, database -> the login application -> wrangler deploy of the built bundle
+//     -> the zone plug's repair -> wait for the install to answer -> the test install's caps
 //
 // It holds no state: every step reads what is there and changes what differs. A token that lacks a permission, or an account with a switch off, stops the piece it belongs to.
 // Every piece is printed as it is settled. A piece nothing answers without stops the run as an error, whether it failed or the token lacks its permission.
@@ -19,6 +20,9 @@ import { syncDatabase } from "../../src/zone/database/database";
 import { INSTALL_OBJECTS } from "../../src/zone/install-objects";
 import { privateSitesPattern } from "../../src/zone/layout";
 import { createDomainPlug } from "../../src/zone/zone-plug";
+import { capInstall } from "./caps";
+import { readFreePlans } from "./plan";
+import { removeTokens, seedToken } from "./tokens";
 import { type Found, findInstall, isStop, liveLogin, openRun, type Run, reportStop, type Stop, stopOf } from "./util";
 
 /** This package's folder. */
@@ -100,6 +104,23 @@ function note(run: Run, progress: Progress, piece: Piece): void {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+/** Stop a run on an account that pays for something, before anything is made. A token that cannot read the plans is told as a lack, and the run goes on. */
+async function checkPlans(run: Run, found: Found, progress: Progress): Promise<Stop | undefined> {
+  const plans = await readFreePlans(run, found.zone);
+  if (!isStop(plans)) {
+    note(run, progress, { piece: "Account plans", result: `free (${plans.subscriptions} subscriptions)` });
+
+    return undefined;
+  }
+
+  if (plans.kind === "failed") return plans;
+
+  note(run, progress, { piece: "Account plans", result: "not read", needs: plans.needs });
+  run.annotate("warning", `The account's plans were not read, so nothing checked that they are free: the run needs ${plans.needs}.`);
+
+  return undefined;
 }
 
 async function ensureBucket(run: Run): Promise<Stop | "created" | "present"> {
@@ -285,12 +306,26 @@ async function waitUntilReady(found: Found): Promise<Stop | undefined> {
   return { kind: "failed", what: `the install did not answer within ${READY.withinMs / 1000} seconds (last status ${status})` };
 }
 
+/** Give the install its caps with a token made for the one call, and remove the token's row. A row that stays stops the run as caps that were refused do. */
+async function capTestInstall(run: Run, found: Found, databaseId: string): Promise<Stop | undefined> {
+  const token = await seedToken(run, databaseId, Date.now());
+  if (typeof token !== "string") return token;
+
+  const uncapped = await capInstall({ server: `https://${found.layout.adminHostname}`, token, fetch: (input, init) => fetch(input, init) });
+  const kept = await removeTokens(run, databaseId, Date.now());
+
+  return uncapped ?? kept;
+}
+
 /** Every step in order; answers what stopped the run, or `undefined` once the install answers. */
 async function converge(run: Run, progress: Progress, env: Environment): Promise<Stop | undefined> {
   const found = await findInstall(run, env);
   if (isStop(found)) return found;
 
   note(run, progress, { piece: "Zone", result: "found" });
+
+  const paid = await checkPlans(run, found, progress);
+  if (paid !== undefined) return paid;
 
   const login = liveLogin(run, env) ?? NOBODY;
   const bucket = await ensureBucket(run);
@@ -314,7 +349,15 @@ async function converge(run: Run, progress: Progress, env: Environment): Promise
 
   note(run, progress, { piece: "Worker", result: "deployed" });
 
-  return (await repairZone(run, found, login, progress)) ?? (await waitUntilReady(found));
+  const unready = (await repairZone(run, found, login, progress)) ?? (await waitUntilReady(found));
+  if (unready !== undefined) return unready;
+
+  const uncapped = await capTestInstall(run, found, database.id);
+  if (uncapped !== undefined) return uncapped;
+
+  note(run, progress, { piece: "Storage and file caps", result: "set" });
+
+  return undefined;
 }
 
 /**

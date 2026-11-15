@@ -14,6 +14,7 @@
 import { afterAll, beforeAll, describe, test } from "bun:test";
 import { writeFileSync } from "node:fs";
 
+import { CEILINGS, meterBucket } from "../../packages/cloudflare/scripts/live/budget";
 import { openBench } from "./bench";
 import { probeMissing } from "./capabilities";
 import { CHECKS } from "./checks";
@@ -54,6 +55,8 @@ function knownMissing(): Missing {
 describe.skipIf(!LIVE)("a deployed install", () => {
   const missing: Missing = {};
   const outcomes: Outcome[] = [];
+  // A request past the ceiling of bucket writes and lists is held back, which fails its check, and the run says so in one line.
+  const meter = meterBucket((input, init) => fetch(input, init), setting("POPLIN_LIVE_MANY_FILES") === "1" ? CEILINGS.manyFiles : CEILINGS.checks);
   const opened = LIVE
     ? openBench({
         domain: setting("POPLIN_LIVE_DOMAIN") ?? "",
@@ -61,7 +64,7 @@ describe.skipIf(!LIVE)("a deployed install", () => {
         run: setting("POPLIN_LIVE_RUN") ?? "local",
         missing,
         login: setting("POPLIN_LIVE_LOGIN"),
-        fetch: (input, init) => fetch(input, init),
+        fetch: meter.fetch,
         pause: (ms) => Bun.sleep(ms),
         manyFiles: MANY_FILES,
       })
@@ -85,7 +88,14 @@ describe.skipIf(!LIVE)("a deployed install", () => {
       await opened?.sweep();
     } finally {
       opened?.close();
+      console.log(`Bucket writes and lists the checks asked for: ${meter.spent()}`);
     }
+
+    const stopped = meter.stopped();
+    if (stopped === undefined) return;
+
+    console.log(`::error::The live checks ${stopped}.`);
+    throw new Error(`The live checks ${stopped}.`);
   }, CHECK_TIMEOUT_MS);
 
   for (const check of CHECKS) {

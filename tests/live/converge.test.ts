@@ -32,9 +32,16 @@ const ACCOUNT = "0".repeat(32);
 /** The zone of a fake account that has one. */
 const ZONE = { id: "1".repeat(32), name: "example.com", account: { id: ACCOUNT }, plan: { name: "Free Website" } };
 
+/** What a run tells of an account whose token may not read the subscriptions. */
+const NOT_READ = "Account plans: not read: needs the token permission Billing: Read";
+
+/** The warning that goes with it. */
+const NOT_READ_WARNING = "::warning::The account's plans were not read, so nothing checked that they are free: the run needs the token permission Billing: Read.";
+
 /** What the fake account holds, and which lists its token may read. A list that is absent is refused. */
 interface FakeAccount {
-  readonly zones?: readonly (typeof ZONE)[];
+  readonly zones?: readonly (Omit<typeof ZONE, "plan"> & { readonly plan: { readonly name: string; readonly price?: number } })[];
+  readonly subscriptions?: readonly Record<string, unknown>[];
   readonly buckets?: readonly string[];
 }
 
@@ -58,10 +65,34 @@ const CASES: readonly Case[] = [
     "it needs exactly one zone in the account, or the zone's name in CLOUDFLARE_ZONE_NAME",
   ],
   [
-    "a run that stops at the database has told of the zone and the bucket before it",
+    "a run that stops at the database has told of the zone, the plans it could not read, and the bucket before it",
     { zones: [ZONE], buckets: ["poplin-live-sites"] },
-    ["Zone: found", "R2 bucket: present"],
+    ["Zone: found", NOT_READ, NOT_READ_WARNING, "R2 bucket: present"],
     "it needs the token permission D1: Edit",
+  ],
+  [
+    "an account whose subscriptions all cost nothing goes on, and an ended one with a price is no cost",
+    { zones: [ZONE], subscriptions: [{ price: 0, rate_plan: { id: "free" } }, { rate_plan: { id: "storage" } }, { price: 5, state: "Cancelled" }], buckets: ["poplin-live-sites"] },
+    ["Zone: found", "Account plans: free (3 subscriptions)", "R2 bucket: present"],
+    "it needs the token permission D1: Edit",
+  ],
+  [
+    "an account that pays for a subscription stops the run before anything is made",
+    { zones: [ZONE], subscriptions: [{ price: 0, rate_plan: { id: "free" } }, { price: 5, state: "Paid", rate_plan: { id: "a_paid_plan" } }], buckets: ["poplin-live-sites"] },
+    ["Zone: found"],
+    "the account pays for 1 of its 2 subscriptions (a_paid_plan), and the test account stays on the free plans",
+  ],
+  [
+    "a zone on a paid plan stops the run before anything is made",
+    { zones: [{ ...ZONE, plan: { name: "Pro Website" } }], subscriptions: [], buckets: ["poplin-live-sites"] },
+    ["Zone: found"],
+    "the zone is on the pro plan, not the Free plan",
+  ],
+  [
+    "a zone whose plan has a price and a name the run does not know stops the run all the same",
+    { zones: [{ ...ZONE, plan: { name: "A Plan Of Later", price: 20 } }], subscriptions: [], buckets: ["poplin-live-sites"] },
+    ["Zone: found"],
+    "the zone's plan has a price, so it is not the Free plan",
   ],
 ];
 
@@ -69,6 +100,10 @@ const CASES: readonly Case[] = [
 function answer(account: FakeAccount, asked: Asked): Response {
   const { pathname } = new URL(asked.path, "http://localhost");
   if (pathname === "/zones" && account.zones !== undefined) return page(asked, account.zones);
+
+  if (pathname === `/zones/${ZONE.id}` && account.zones?.[0] !== undefined) return reply(account.zones[0]);
+
+  if (pathname === `/accounts/${ACCOUNT}/subscriptions` && account.subscriptions !== undefined) return reply(account.subscriptions);
 
   if (pathname === `/accounts/${ACCOUNT}/r2/buckets` && asked.method === "GET" && account.buckets !== undefined) {
     return reply({ buckets: account.buckets.map((name) => ({ name })) });

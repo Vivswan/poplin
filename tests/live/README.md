@@ -13,7 +13,7 @@ Live Checks workflow
   the `paths` list of the workflow                the files of the push -> a run, or none
   gh run watch                                   the CI of the commit ended green, or the run stops red
   build the Worker bundle
-  packages/cloudflare/scripts/live/converge.ts   bucket, database, login, wrangler deploy, the Domain tab's repair
+  packages/cloudflare/scripts/live/converge.ts   the account's plans, bucket, database, login, wrangler deploy, the Domain tab's repair, the caps
   packages/cloudflare/scripts/live/suite.ts      a token for the run -> bun test tests/live/live.test.ts -> the token removed
   packages/cloudflare/scripts/live/reset.ts      a token for the reset -> the install put back -> every token removed
   step summary                                   one table of the install's pieces, one of the checks, one of the reset
@@ -78,6 +78,29 @@ The owner sets these; the environment is `cloudflare-live-tests`.
 | `POPLIN_LIVE_LOGIN`     | a secret of the environment  | the login the install lets in                                             |
 | `DEMO_URL`              | a variable of the repository | the demo's whole https address, for the website; absent, it shows no link |
 
+## What keeps the test account at no cost
+
+| Guard                                                                                  | Where                                         | At the limit                                                  |
+| -------------------------------------------------------------------------------------- | --------------------------------------------- | ------------------------------------------------------------- |
+| the zone's plan is Free, and no subscription of the account has a price                | `plan.ts`, before anything is made            | the run stops red                                             |
+| caps: 200MB stored, 20MB a site, 100 sites, 2,500 files a publish, 5,000 files a day   | `caps.ts`, on every run, once the install answers | the install refuses the publish                           |
+| bucket writes and lists: 150 by the checks, 2,300 with the many-files check, 150 by a reset | `budget.ts`, around every request to the install | the request is not sent, and the step stops red       |
+| every site the checks make is removed for good                                         | the checks' own sweep, then the reset         | the reset runs after failed checks too                        |
+| a site of a run that was killed                                                        | published with `--expires 1d`, trash of one day | the midnight reset removes it                               |
+| the samples and the demo: 40 files and 3 MB at most                                    | `caps.test.ts`, from the repository's files   | the self-test fails                                           |
+
+A token without Billing: Read cannot read the subscriptions: the run goes on, with a warning and a skipped row. The zone's plan is checked all the same.
+
+```text
+one run, at its ceilings         2 (the bucket found or made) + 150 (checks) + 150 (reset) = 302 bucket writes and lists
+a day of 40 such runs            40 x 302 + 150 (the midnight reset) = 12,230
+31 such days                     12,230 x 31 = 379,130 of the 1,000,000 R2 takes for free in a month
+a run with the many-files check  2 + 2,300 + 150 = 2,452, started by hand alone
+a usual run                      about 50 (checks) + 33 (reset)
+```
+
+A run starts after a green main that changed a file reaching the install, or by hand, so 40 a day is far above what happens. The count is the harness's own, one for each request that makes the install write or list; the install lists once more for every thousand files.
+
 ## What a run skips
 
 A check that cannot run is written to the step summary as skipped, with what it needs, and to the log as a warning. It never fails the run.
@@ -87,6 +110,7 @@ A run that cannot make the install answer, or cannot start the checks, fails: th
 | Skipped: needs                                                      | Checks                                                                   |
 | ------------------------------------------------------------------- | ------------------------------------------------------------------------ |
 | a token permission for a rule, the bot settings, or the login       | the piece of the install that permission makes, and the checks behind it |
+| the token permission Billing: Read                                  | the reading of the account's subscriptions, before anything is made      |
 | Access switched on for the account                                  | `L1`                                                                     |
 | an install that sends a private site's address to its letter p form | `L1`, `L4`, `L5`                                                         |
 | a Worker route for the public word's hostnames                      | `public-name`, `demo`                                                    |
@@ -112,6 +136,7 @@ A run that cannot make the install answer, or cannot start the checks, fails: th
 | D1: Edit                                                    | the account | the database, and the run's token row             |
 | Access: Apps and Policies: Edit                             | the account | the login                                         |
 | Access: Organizations, Identity Providers, and Groups: Read | the account | the team domain the Worker checks a login against |
+| Billing: Read                                               | the account | reading that no subscription has a price          |
 
 ## The checklist a person makes
 

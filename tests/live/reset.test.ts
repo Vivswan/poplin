@@ -4,8 +4,10 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
+import { CEILINGS } from "../../packages/cloudflare/scripts/live/budget";
 import { resetInstall, runReset } from "../../packages/cloudflare/scripts/live/reset";
 import { openRun } from "../../packages/cloudflare/scripts/live/util";
+import { readFiles } from "../../packages/cli/src/files/read";
 import { withFake } from "../../packages/cloudflare/tests/zone/support/fake-cloudflare";
 import { type Asked, page, refusal } from "../../packages/cloudflare/tests/zone/support/replies";
 import { openBench } from "./bench";
@@ -19,6 +21,12 @@ const SAMPLES = join(import.meta.dir, "..", "..", "demo", "samples");
 /** The names of the sample sites, as a reset publishes them. */
 const SAMPLE_NAMES = ["checkout-prototype", "launch-deck", "sales-report", "trip-summary"];
 
+/** How many files the publishes of the sample sites hold together, as the CLI lists them. */
+const SAMPLE_FILES = (await Promise.all(SAMPLE_NAMES.map((name) => readFiles(join(SAMPLES, name))))).reduce((sum, listed) => sum + (listed.ok ? listed.count : 0), 0);
+
+/** How many files the demo of these tests holds. */
+const DEMO_FILES = 2;
+
 /** The account of the fake Cloudflare. */
 const ACCOUNT = "0".repeat(32);
 
@@ -29,6 +37,9 @@ const ZONE = { id: "1".repeat(32), name: FAKE_DOMAIN, account: { id: ACCOUNT }, 
 const WAITING = `INSERT INTO logins (id, code, hash, scope, computer, visitor, state, decided_by, created_at, expires_at) VALUES
   ('login-one', 'CODEONE1', 'hash-one', 'publisher', 'a laptop', 'a visitor', 'pending', NULL, 1700000000000, 1700000600000),
   ('login-two', 'CODETWO2', 'hash-two', 'admin', 'a desktop', 'a visitor', 'allowed', 'ada@example.com', 1700000000000, 1700000600000)`;
+
+/** The bucket writes and lists of a reset that removes three sites and publishes the samples and a new demo: one a site removed, one a file stored, one a publish finished. */
+const FIRST_RESET = 3 + (SAMPLE_FILES + SAMPLE_NAMES.length) + (DEMO_FILES + 1);
 
 /** The benches a test opened, closed after it. */
 const OPENED: (() => void)[] = [];
@@ -41,6 +52,13 @@ interface Left {
   readonly sites: readonly Record<string, unknown>[];
   readonly tokens: unknown;
   readonly logins: unknown;
+}
+
+/** What stands in front of a reset in one test: who answers for the install, where its waits are kept, and its ceiling of bucket writes and lists. */
+interface Front {
+  readonly fetch?: Install["fetch"];
+  readonly pauses?: number[];
+  readonly ceiling?: number;
 }
 
 /** The demo as a test builds it: a first page and a worker, written by hand. */
@@ -71,8 +89,10 @@ async function fill(install: Install): Promise<void> {
   await install.sql(WAITING);
 }
 
-/** Run a reset with a token made for it; `fetch` stands in front of the install when a test answers for it. */
-function reset(install: Install, token: string, fetch = install.fetch, pauses: number[] = []): ReturnType<typeof resetInstall> {
+/** Run a reset with a token made for it. */
+function reset(install: Install, token: string, front: Front = {}): ReturnType<typeof resetInstall> {
+  const { fetch = install.fetch, pauses = [], ceiling = CEILINGS.reset } = front;
+
   return resetInstall({
     server: install.server,
     token,
@@ -87,6 +107,7 @@ function reset(install: Install, token: string, fetch = install.fetch, pauses: n
     },
     samples: SAMPLES,
     buildDemo,
+    ceiling,
   });
 }
 
@@ -123,7 +144,7 @@ describe("the reset of the test install, against a local fake", () => {
     const demo = await install.sql("SELECT id FROM sites WHERE public_name = 'demo'");
 
     expect({ ended: first, left: await left(install), settings: await install.settings() }).toEqual({
-      ended: { removed: 2, trashed: 1, published: SAMPLE_NAMES, demo: "published" },
+      ended: { removed: 2, trashed: 1, published: SAMPLE_NAMES, demo: "published", operations: FIRST_RESET },
       left: resetState(1),
       settings,
     });
@@ -133,7 +154,7 @@ describe("the reset of the test install, against a local fake", () => {
     const second = await reset(install, await install.addToken("the second reset"));
 
     expect({ ended: second, left: await left(install), demo: await install.sql("SELECT id FROM sites WHERE public_name = 'demo'") }).toEqual({
-      ended: { removed: 4, trashed: 0, published: SAMPLE_NAMES, demo: "updated" },
+      ended: { removed: 4, trashed: 0, published: SAMPLE_NAMES, demo: "updated", operations: FIRST_RESET + 1 },
       left: resetState(2),
       demo,
     });
@@ -145,10 +166,8 @@ describe("the reset of the test install, against a local fake", () => {
     const pauses: number[] = [];
     let refused = false;
 
-    const ended = await reset(
-      install,
-      await install.addToken("a reset"),
-      async (input, init) => {
+    const ended = await reset(install, await install.addToken("a reset"), {
+      fetch: async (input, init) => {
         if (init.method !== "DELETE" || refused) return install.fetch(input, init);
 
         refused = true;
@@ -156,16 +175,21 @@ describe("the reset of the test install, against a local fake", () => {
         return Response.json({ error: { code: "too_many_requests", message: "Too many requests." } }, { status: 429, headers: { "Retry-After": "7" } });
       },
       pauses,
-    );
+    });
 
-    expect({ ended, pauses, left: await left(install) }).toEqual({ ended: { removed: 2, trashed: 1, published: SAMPLE_NAMES, demo: "published" }, pauses: [7000], left: resetState(1) });
+    // The request that was told to wait is asked again, and both are counted.
+    expect({ ended, pauses, left: await left(install) }).toEqual({
+      ended: { removed: 2, trashed: 1, published: SAMPLE_NAMES, demo: "published", operations: FIRST_RESET + 1 },
+      pauses: [7000],
+      left: resetState(1),
+    });
   });
 
   test("a reset the install stops still removes every token and waiting login", async () => {
     const install = await openSqlInstall();
     await fill(install);
 
-    const ended = await reset(install, await install.addToken("a reset"), async () => Response.json({ error: { code: "internal", message: "It broke." } }, { status: 500 }));
+    const ended = await reset(install, await install.addToken("a reset"), { fetch: async () => Response.json({ error: { code: "internal", message: "It broke." } }, { status: 500 }) });
     const after = await left(install);
 
     expect({ ended, tokens: after.tokens, logins: after.logins, sites: after.sites.length }).toEqual({
@@ -173,6 +197,20 @@ describe("the reset of the test install, against a local fake", () => {
       tokens: 0,
       logins: 0,
       sites: 3,
+    });
+  });
+
+  test("a reset that would pass its ceiling of bucket writes and lists stops red with that as its reason, and still removes every token and waiting login", async () => {
+    const install = await openSqlInstall();
+    await fill(install);
+
+    const ended = await reset(install, await install.addToken("a reset"), { ceiling: 10 });
+    const after = await left(install);
+
+    expect({ ended, tokens: after.tokens, logins: after.logins }).toEqual({
+      ended: { kind: "failed", what: "the reset passed its ceiling of 10 bucket writes and lists" },
+      tokens: 0,
+      logins: 0,
     });
   });
 

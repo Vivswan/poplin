@@ -5,6 +5,7 @@
 //
 // The demo's site is updated where it stands, so its address always answers. The logins, the settings, and the install itself stay.
 // Every request is one site or one page of a listing, sent one after another, and an answer of "too many requests" is waited out as the CLI waits.
+// The bucket writes and lists it asks for are counted, and a reset that would pass their ceiling stops red.
 // The token is made in memory and never written to a file or a step output. Its row goes with every other token when the reset ends, however it ends.
 
 import { mkdtempDisposableSync, readdirSync } from "node:fs";
@@ -17,6 +18,7 @@ import type { Io } from "../../../cli/src/commands/records";
 import { run as runCli } from "../../../cli/src/commands/run";
 import { callUnhurried } from "../../../cli/src/commands/upload";
 import { buildDemo } from "../../../demo/scripts/build";
+import { CEILINGS, meterBucket } from "./budget";
 import { findDatabase, runSql, seedToken } from "./tokens";
 import { findInstall, isStop, openRun, type Run, reportStop, type Stop } from "./util";
 
@@ -60,14 +62,18 @@ interface ResetEnds {
 
   /** Writes the demo's static files into a new folder. */
   readonly buildDemo: (out: string) => Promise<void>;
+
+  /** The most bucket writes and lists the reset may ask the install for. */
+  readonly ceiling: number;
 }
 
-/** What a reset did: how many sites it removed outside the trash and inside it, the samples it published, and whether the demo's site was made or updated. */
+/** What a reset did: the sites it removed outside the trash and inside it, the samples it published, whether the demo's site was made or updated, and the bucket writes and lists it asked for. */
 interface Tally {
   readonly removed: number;
   readonly trashed: number;
   readonly published: readonly string[];
   readonly demo: "published" | "updated";
+  readonly operations: number;
 }
 
 /** One page of a listing. */
@@ -176,7 +182,7 @@ async function checkSites(client: Client, io: Io, samples: readonly string[]): P
 }
 
 /** Every step that needs the token, in order. */
-async function putBack(ends: ResetEnds, scratch: string): Promise<Tally | Stop> {
+async function putBack(ends: ResetEnds, scratch: string): Promise<Omit<Tally, "operations"> | Stop> {
   const io = ioOf(ends, scratch);
   const client = createClient({ server: ends.server, token: ends.token, fetch: ends.fetch });
 
@@ -206,20 +212,24 @@ async function forget(ends: ResetEnds): Promise<Stop | undefined> {
 /**
  * Put an install back to the sample sites and the demo.
  *
- * @returns what was removed and published, or the first thing that stopped the reset; the waiting logins and every token are removed either way
+ * @returns what was removed and published, or what stopped the reset, the ceiling before any other stop; the waiting logins and every token are removed either way
  */
 export async function resetInstall(ends: ResetEnds): Promise<Tally | Stop> {
   using scratch = mkdtempDisposableSync(join(tmpdir(), "poplin-live-reset-"));
+  const meter = meterBucket(ends.fetch, ends.ceiling);
   let ended: Tally | Stop = { kind: "failed", what: "the reset broke off" };
 
   try {
-    ended = await putBack(ends, scratch.path);
+    const put = await putBack({ ...ends, fetch: meter.fetch }, scratch.path);
+    ended = isStop(put) ? put : { ...put, operations: meter.spent() };
   } finally {
     const forgotten = await forget(ends);
     if (!isStop(ended) && forgotten !== undefined) ended = forgotten;
   }
 
-  return ended;
+  const stopped = meter.stopped();
+
+  return stopped === undefined ? ended : { kind: "failed", what: `the reset ${stopped}` };
 }
 
 /** Reset the owner's test install with a token made for the reset; answers `undefined` for an account that holds no install. */
@@ -243,6 +253,7 @@ async function resetTestInstall(run: Run): Promise<Tally | Stop | undefined> {
     buildDemo: async (out) => {
       await buildDemo({ out });
     },
+    ceiling: CEILINGS.reset,
   });
 }
 
@@ -262,6 +273,7 @@ function tell(run: Run, ended: Tally | Stop | undefined): number {
     ["Sites removed from the trash", String(ended.trashed)],
     ["Sample sites published", ended.published.join(", ")],
     ["The demo's site", ended.demo],
+    ["Bucket writes and lists", `${ended.operations} of at most ${CEILINGS.reset}`],
     ["Waiting logins and tokens", "removed"],
   ];
   for (const [what, result] of rows) run.say(`${what}: ${result}`);
