@@ -115,6 +115,7 @@ const ROWS: Readonly<Record<string, readonly [read: number, written: number]>> =
   "getSite, none": [0, 0],
   "getSiteWithSettings": [4, 0],
   "getSiteWithSettings, none": [1, 0],
+  "getShownSite, with the views and the publishers": [15, 0],
   "getSiteNames": [10, 0],
   "getSiteByPublicName": [2, 0],
   "getSiteByFolder": [3, 0],
@@ -660,6 +661,7 @@ describe("D1: the rows every operation of the database costs of a day's allowanc
     await cost("getSite, none", () => database.getSite(NOBODY));
     await cost("getSiteWithSettings", () => database.getSiteWithSettings(first.id));
     await cost("getSiteWithSettings, none", () => database.getSiteWithSettings(NOBODY));
+    await cost("getShownSite, with the views and the publishers", () => database.getShownSite(first.id, { day: DAY, publishers: true }));
     await cost("getSiteNames", () => database.getSiteNames(sites.slice(0, 5).map((made) => made.id)));
     await cost("getSiteByPublicName", () => database.getSiteByPublicName("open" as PublicName));
     await cost("getSiteByFolder", () => database.getSiteByFolder(first.folder));

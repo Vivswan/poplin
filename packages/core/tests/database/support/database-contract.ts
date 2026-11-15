@@ -447,6 +447,12 @@ function requestCounts(label: string, makeDatabase: DatabaseFactory): void {
         { today: 0, week: 0 },
         { today: 0, week: 0 },
       ]);
+      const [listedFirst] = plain.sites;
+      const one = listedFirst === undefined ? undefined : await database.getShownSite(listedFirst.id, { day, publishers: true });
+      expect<unknown>([one, await database.getShownSite(NO_SITE, { day, publishers: true })]).toEqual([
+        { settings: SETTINGS, site: listedFirst, views: { today: 7, week: 11 }, publishers: new Map([[named.id, "ci"]]) },
+        { settings: SETTINGS, site: undefined, views: { today: 0, week: 0 }, publishers: new Map() },
+      ]);
       expect<unknown>([bare.sites.map((site) => site.name), [...bare.views.values()], [...bare.publishers]]).toEqual([["site-3"], [{ today: 0, week: 0 }], []]);
       await expect(database.listShownSites(query, { day: "tomorrow", publishers: true })).rejects.toThrow(RangeError);
     });

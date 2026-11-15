@@ -177,6 +177,15 @@ export interface ShownSitesPage extends SitesPage {
   readonly publishers: ReadonlyMap<TokenId, string>;
 }
 
+/** One site with what a screen shows beside it. */
+export interface ShownSite extends SettingsAndSite {
+  /** The site's page views, zeros where nothing was counted or no site has the id. */
+  readonly views: SiteViews;
+
+  /** The note of each token that published a kept version of the site and has a note, removed or not; empty when none were asked for. */
+  readonly publishers: ReadonlyMap<TokenId, string>;
+}
+
 /** One page of every site, the trash included, in ascending order of id. `next` is the id to pass as `after`, absent on the last page. */
 export interface ExportPage {
   readonly sites: readonly Site[];
@@ -499,6 +508,14 @@ export interface Database {
 
   /** The settings and the site with this id, in the trash or not, read together in one step: what an action on one site starts from. */
   getSiteWithSettings(id: SiteId): Promise<SettingsAndSite>;
+
+  /**
+   * The settings and the site with this id, in the trash or not, with its views and who published its versions, all read in one step.
+   *
+   * @returns what `getSiteWithSettings` gives and, beside it, what `readViews` and `getTokenNames` give for the site
+   * @throws {RangeError} `day` is not a date
+   */
+  getShownSite(id: SiteId, shown: SitesShown): Promise<ShownSite>;
 
   /**
    * The name each of these ids' sites has now and the title it is listed under, in the trash or not, read in one step. An id that is no site's is left out.

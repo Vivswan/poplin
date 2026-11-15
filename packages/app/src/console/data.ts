@@ -1,6 +1,5 @@
 // What every data route of the console shares: who asks, how a refusal is answered, and how a request that fails its schema is refused.
 
-import { nameTokens } from "@poplin/core/src/actions/manage-tokens";
 import type { Install } from "@poplin/core/src/actions/records";
 import type { Rebuilding } from "@poplin/core/src/actions/start-update";
 import type { Actor } from "@poplin/core/src/auth/scopes";
@@ -101,19 +100,6 @@ export function refused(context: Context<Shared>, refusal: Refusal): Response & 
     { ok: false as const, code: refusal.code, about: refusal.about ?? null, sentence: refusalSentence(refusal.code, refusal.about), ...(each === undefined ? {} : { each }) },
     statusFor(refusal.code),
   );
-}
-
-/**
- * Read the name of each login a page shows that has one, by the login's id: what a screen writes where a login published or changed something.
- *
- * Only the logins among the holders are read, so a page costs what it names and not what the install holds. A login that was removed keeps its name here.
- *
- * @param holders - whoever the page names: the ids of logins, and emails, which are skipped
- */
-export async function loginNames({ install, actor }: Asker, holders: readonly string[]): Promise<Readonly<Record<string, string>>> {
-  const named = await nameTokens(install, actor, holders);
-
-  return named.ok ? named.names : {};
 }
 
 /**

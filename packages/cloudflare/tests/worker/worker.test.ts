@@ -814,9 +814,9 @@ describe("the admin hostname", () => {
       "the frame alone": [200, 2],
       "the sites, each with its views and who published it": [200, 2],
       "the sites through the API: the token, then the settings with the sites and their views": [200, 2],
-      "one site: the site, its views, and who published it": [200, 4],
+      "one site: the site, its views, and who published it": [200, 2],
       "a change to one site: the session, the settings with the site, the change": [200, 3],
-      "one site through the API: the token, the settings with the site, its views": [200, 3],
+      "one site through the API: the token, the settings with the site, its views": [200, 2],
     });
   });
 

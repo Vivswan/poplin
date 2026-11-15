@@ -58,6 +58,7 @@ import type {
   ServedLookup,
   SettingsAndKey,
   SettingsAndSite,
+  ShownSite,
   ShownSitesPage,
   Signed,
   SigningKey,
@@ -429,6 +430,17 @@ export class SqlDatabase implements Database {
     const [stored, found] = await this.#driver.batch([READ_SETTINGS, siteById(id)]);
 
     return { settings: settingsIn(stored), site: siteIn(found) };
+  }
+
+  async getShownSite(id: SiteId, shown: SitesShown): Promise<ShownSite> {
+    requireDay(shown.day);
+    const one = BUILD.select({ ...SITE_FIELDS, listed_by: fragment`${sites.id}`.as("listed_by") }).from(sites).where(eq(sites.id, id));
+    const [stored, found] = await this.#driver.batch([READ_SETTINGS, pageWithBeside(fragment`${one}`, shown, false)]);
+    const row = found?.rows[0];
+    const beside = row === undefined ? undefined : v.parse(SHOWN_BESIDE, row);
+    const publishers = new Map(Object.entries(beside?.publishers ?? {}) as [TokenId, string][]);
+
+    return { settings: settingsIn(stored), site: siteIn(found), views: beside?.views ?? { today: 0, week: 0 }, publishers };
   }
 
   async getSiteNames(ids: readonly SiteId[]): Promise<ReadonlyMap<SiteId, SiteNamed>> {
