@@ -7,23 +7,24 @@
 // The words are made here, so both screens say the same and the client draws what it is given.
 
 import type { DomainCheck } from "@poplin/core/src/records/domain-check";
+import { domainStateWords } from "@poplin/core/src/records/domain-states";
 
 import { refusalSentence } from "./notices";
 import type { DomainRun } from "./domain/domain-run";
 import type { DomainReading, DomainRow, DomainState, DomainStep } from "./domain/records";
 
-/** The label of each state and how it is read: `good` stands, `bad` needs work, `idle` was left as it is and is no failure. */
-const STATES: Readonly<Record<DomainState, Pick<ShownRow, "state" | "tone">>> = {
-  present: { state: "present", tone: "good" },
-  missing: { state: "missing", tone: "bad" },
-  differs: { state: "differs", tone: "bad" },
-  "left-out": { state: "left out", tone: "idle" },
-  optional: { state: "not set up: optional", tone: "idle" },
-  created: { state: "created", tone: "good" },
-  changed: { state: "changed", tone: "good" },
-  removed: { state: "removed", tone: "good" },
-  failed: { state: "failed", tone: "bad" },
-  "not-run": { state: "not run", tone: "idle" },
+/** How each state is read: `good` stands, `bad` needs work, `idle` was left as it is and is no failure. Its words are core's, the ones the setup command says. */
+const TONES: Readonly<Record<DomainState, ShownRow["tone"]>> = {
+  present: "good",
+  missing: "bad",
+  differs: "bad",
+  "left-out": "idle",
+  optional: "idle",
+  created: "good",
+  changed: "good",
+  removed: "good",
+  failed: "bad",
+  "not-run": "idle",
 };
 
 /** The states a repair would change. */
@@ -204,7 +205,7 @@ export function runRefusal(code: string): RunRefused {
  * @returns the rows in the run's order, the line that counts them, and the steps only a person can do
  */
 export function runDone(run: DomainRun, reading: Extract<DomainReading, { readonly ok: true }>): RunDone {
-  const rows = reading.rows.map((row) => ({ piece: row.object, ...STATES[row.state], detail: row.detail }));
+  const rows = reading.rows.map((row) => ({ piece: row.object, state: domainStateWords(row.state), tone: TONES[row.state], detail: row.detail }));
 
   return { ok: true, run, rows, steps: reading.steps, summary: summaryOf(run, reading.rows) };
 }

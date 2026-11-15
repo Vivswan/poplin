@@ -9,6 +9,7 @@
 // Every run is the setup page's own run of a program's call: it is counted against the sender's address, refused when the counter cannot answer, and reads nothing of the install before the token is proven.
 // The token is in the body of its one request and nowhere else. While the page is shut every path answers 404 and says nothing.
 
+import { mediaTypeOf } from "@poplin/core/src/api/media-type";
 import { type Context, Hono, type MiddlewareHandler } from "hono";
 import { secureHeaders } from "hono/secure-headers";
 
@@ -70,7 +71,7 @@ async function ran(context: Context<SetupShared>, run: DomainRun) {
   const answered = await context.get("runs")(new Request(new URL(`${SETUP_PATH}/api/${run}`, context.req.url), context.req.raw));
 
   // A page that is shut, or a failure, answers in plain words that say nothing: they go out as they are.
-  if (!(answered.headers.get("Content-Type") ?? "").startsWith("application/json")) return context.text(await answered.text(), answered.status === 404 ? 404 : 500);
+  if (mediaTypeOf(answered.headers.get("Content-Type")) !== "application/json") return context.text(await answered.text(), answered.status === 404 ? 404 : 500);
 
   const read = (await answered.json()) as Answered;
   if (read.ok) return context.json({ ...runDone(run, read), expects: read.expects ?? null }, 200);
