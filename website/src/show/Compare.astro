@@ -4,7 +4,7 @@ import Minus from "@lucide/astro/icons/minus";
 import X from "@lucide/astro/icons/x";
 import { ROWS, TOOLS } from "../lib/compare.ts";
 
-// Poplin beside the tools people reach for to put a page online. The facts live in one table of data; this draws it.
+// Poplin beside the tools people reach for to put a page online. The answers live in one table of data; this draws it.
 ---
 
 <div class="scroll">
@@ -19,28 +19,15 @@ import { ROWS, TOOLS } from "../lib/compare.ts";
       {
         ROWS.map((row) => (
           <tr>
-            <th scope="row" title={row.means}>
-              {row.ask}
-              <span class="vh">: {row.means}</span>
-            </th>
+            <th scope="row">{row.ask}</th>
             {TOOLS.map((tool, index) => {
-              const [answer, fact] = tool.answers[row.id] ?? ["not stated", "Its pages do not say"];
+              const answer = tool.answers[row.id] ?? "not stated";
               return (
-                <td class:list={[index === 0 && "ours", answer === "no" && "no"]} title={fact}>
-                  {answer === "yes" && (
-                    <Check role="img" aria-label={`yes: ${fact}`} />
-                  )}
-                  {answer === "no" && (
-                    <X role="img" aria-label={`no: ${fact}`} />
-                  )}
-                  {answer === "not stated" && (
-                    <Minus class="unsaid" role="img" aria-label={`not stated: ${fact}`} />
-                  )}
-                  {answer === "partly" && (
-                    <>
-                      partly<span class="vh">: {fact}</span>
-                    </>
-                  )}
+                <td class:list={[index === 0 && "ours", answer === "no" && "no"]}>
+                  {answer === "yes" && <Check role="img" aria-label="yes" />}
+                  {answer === "no" && <X role="img" aria-label="no" />}
+                  {answer === "not stated" && <Minus class="unsaid" role="img" aria-label="not stated" />}
+                  {answer === "partly" && "partly"}
                 </td>
               );
             })}
@@ -101,9 +88,7 @@ import { ROWS, TOOLS } from "../lib/compare.ts";
     border-top: 1px solid var(--rule);
   }
 
-  /* A cell holds its own hidden text, so a fact for a screen reader never widens the page. */
   tbody td {
-    position: relative;
     color: var(--fg);
     font-size: 0.875rem;
     vertical-align: middle;
