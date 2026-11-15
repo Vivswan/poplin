@@ -2,6 +2,7 @@
 //
 // sites        one row per site; `id` is the key and the link, `folder` is where its files are and never changes
 // versions     the publishes of a site that can still be gone back to
+// earlier_ids  the ids a site had before each new link, each with the folder of its site
 // tokens       the hashed record of every token
 // settings     one row for the whole install
 // secrets      what the install must keep and never show, such as the key that signs sessions
@@ -57,6 +58,13 @@ CREATE TABLE versions (
   missing_page INTEGER NOT NULL DEFAULT 0 CHECK (missing_page IN (0, 1)),
   bare_files TEXT,
   PRIMARY KEY (folder, number)
+) STRICT, WITHOUT ROWID`;
+
+/** The ids a site had before each new link, by the folder it keeps; they go when the site does. An id here opens nothing. */
+const EARLIER_IDS = `
+CREATE TABLE earlier_ids (
+  id TEXT NOT NULL PRIMARY KEY,
+  folder TEXT NOT NULL REFERENCES sites (folder) ON DELETE CASCADE
 ) STRICT, WITHOUT ROWID`;
 
 /** The hashed record of every token. Only an admin token expires. A removed token keeps its row, marked with when it was removed and by whom; `end_at` is when a token ended or will: its removal, else its expiry. */
@@ -295,10 +303,11 @@ BEGIN SELECT RAISE(ABORT, 'the audit log is append-only'); END`;
 /** Creates every table, index, and trigger of the first schema. */
 export const CREATE_SCHEMA: Step = {
   number: 1,
-  description: "create the sites, versions, tokens, settings, secrets, totals, audit, request_counts, declared_files, uploads, logins, leftovers, sweep_place, update_check, and domain_check tables",
+  description: "create the sites, versions, earlier_ids, tokens, settings, secrets, totals, audit, request_counts, declared_files, uploads, logins, leftovers, sweep_place, update_check, and domain_check tables",
   statements: [
     SITES,
     VERSIONS,
+    EARLIER_IDS,
     TOKENS,
     SETTINGS,
     SECRETS,
@@ -318,6 +327,7 @@ export const CREATE_SCHEMA: Step = {
     "CREATE INDEX sites_by_name ON sites (trashed, name, id)",
     "CREATE INDEX sites_by_access ON sites (trashed, access_rank, id)",
     "CREATE INDEX sites_by_title ON sites (trashed, title_key, id)",
+    "CREATE INDEX earlier_ids_by_folder ON earlier_ids (folder)",
     "CREATE INDEX audit_logins ON audit (action) WHERE action = 'login'",
     "CREATE INDEX tokens_by_creation ON tokens (created_at DESC, id DESC) WHERE removed_at IS NULL",
     "CREATE INDEX tokens_by_end ON tokens (end_at DESC, id DESC)",

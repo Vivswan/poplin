@@ -104,7 +104,8 @@ const ROWS: Readonly<Record<string, readonly [read: number, written: number]>> =
   "readTotals": [1, 0],
   "exportSites": [18, 0],
   "exportSites, after": [18, 0],
-  "giveNewId": [738, 9],
+  "giveNewId": [739, 11],
+  "getLaterSites": [9, 0],
   "reserveVersion": [5, 1],
   "addVersion": [24, 5],
   "addVersion, one dropped": [29, 7],
@@ -114,7 +115,7 @@ const ROWS: Readonly<Record<string, readonly [read: number, written: number]>> =
   "trashSite": [7, 9],
   "trashSite, in the trash": [6, 0],
   "restoreSite": [7, 9],
-  "deleteSite": [13, 7],
+  "deleteSite": [14, 7],
   "listLeftovers": [1, 0],
   "storedBack: addUpload, importUploadAsSite, abandonUpload, removeUpload": [29, 26],
   "forgetLeftover": [1, 1],
@@ -565,7 +566,7 @@ describe("D1: the rows every operation of the database costs of a day's allowanc
     await cost("readTotals", () => database.readTotals());
     await cost("exportSites", () => database.exportSites({ limit: 5 }));
     await cost("exportSites, after", () => database.exportSites({ limit: 5, after: first.id }));
-    await cost("giveNewId", () => database.giveNewId(second.id, BY_ADA));
+    const moved = done(await cost("giveNewId", () => database.giveNewId(second.id, BY_ADA)));
     await cost("reserveVersion", () => database.reserveVersion(first.id));
     await cost("addVersion", () => database.addVersion(first.id, publish(2, 2), BY_ADA));
     await database.reserveVersion(first.id);
@@ -707,6 +708,10 @@ describe("D1: the rows every operation of the database costs of a day's allowanc
     await cost("takeStorageWrite", () => database.takeStorageWrite(DAY, 0));
     await cost("takeStorageWrite, again", () => database.takeStorageWrite(DAY, 0));
     await cost("addStorageWrites", () => database.addStorageWrites(DAY, 3));
+
+    const again = done(await database.giveNewId(moved.site.id, BY_ADA));
+    // What a page of the log asks for the ids on it that are no site: here two a site gave up, one of them two new links ago, the id a site has now, and two no site ever had.
+    await cost("getLaterSites", () => database.getLaterSites([second.id, moved.site.id, again.site.id, NOBODY, "yyyyyyyyyyyy" as SiteId]));
 
     expect(costs).toEqual(ROWS);
   });

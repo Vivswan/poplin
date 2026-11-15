@@ -35,6 +35,12 @@ export interface SiteNamed {
   readonly title: string | null;
 }
 
+/** The site an id belonged to before a new link, as it is now. */
+export interface LaterSite extends SiteNamed {
+  /** The id it has now. */
+  readonly id: SiteId;
+}
+
 /** Who makes a change and when, in milliseconds since the epoch. */
 export interface Signed {
   readonly by: Holder;
@@ -413,6 +419,14 @@ export interface Database {
    */
   getSiteNames(ids: readonly SiteId[]): Promise<ReadonlyMap<SiteId, SiteNamed>>;
 
+  /**
+   * The site each of these ids belonged to before a new link, as it is now, in the trash or not, read in one step however many new links lie between. An id no site gave up, or one whose site is deleted, is left out.
+   *
+   * @param ids - the ids to look up, at most 100 different ones
+   * @throws {RangeError} more than 100 different ids are asked for
+   */
+  getLaterSites(ids: readonly SiteId[]): Promise<ReadonlyMap<SiteId, LaterSite>>;
+
   /** The site holding this public name, in the trash or not. */
   getSiteByPublicName(name: PublicName): Promise<Site | undefined>;
 
@@ -440,7 +454,7 @@ export interface Database {
    */
   changeDetails(id: SiteId, details: SiteDetails, signed: Signed): Promise<Done | Unchanged | Refused<"not_found" | "in_trash">>;
 
-  /** Give a site a new id. The old id names no site from then on; the public name, the folder, the request counts of the year up to `signed.at`, and everything else stay with the site. */
+  /** Give a site a new id. The old id names no site from then on, and is kept as an earlier id of the site; the public name, the folder, the request counts of the year up to `signed.at`, and everything else stay with the site. */
   giveNewId(id: SiteId, signed: Signed): Promise<Done | Refused<"not_found" | "in_trash">>;
 
   /** Move a site into the trash. It keeps its public name. */

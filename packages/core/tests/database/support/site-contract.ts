@@ -166,6 +166,62 @@ export function sites(label: string, makeDatabase: DatabaseFactory): void {
       await expect(database.getSiteNames([first.id, ...none, last.id])).rejects.toThrow(RangeError);
     });
 
+    // Drift: an entry of the log names the id its site had then; a lookup that lost an id at the second new link, or kept one of a deleted site, would show a site that still exists as gone, or a gone one as there.
+    test("an id a site gave up names the site as it is now, through every new link since and in the trash, and names none once the site is deleted for good", async () => {
+      const database = await opened(makeDatabase);
+      const site = await made(database, { ...draft(REPORT), title: "Typed" });
+      const other = await made(database, draft(DOCS));
+      const ids = [site.id];
+      for (let link = 0; link < 6; link += 1) {
+        const moved = await database.giveNewId(ids.at(-1) ?? site.id, BY_ADA);
+        if (moved.kind !== "done") throw new Error("no new id was given");
+
+        ids.push(moved.site.id);
+      }
+      const [now, ...earlier] = [...ids].reverse() as [SiteId, ...SiteId[]];
+      await database.changeDetails(now, { name: "notes" as SiteName }, BY_ADA);
+      const named = { id: now, name: "notes", title: "Typed" };
+
+      const later = await database.getLaterSites([...earlier, now, other.id, NO_SITE, site.id]);
+      await database.trashSite(now, BY_ADA);
+      const trashed = await database.getLaterSites([site.id]);
+      await database.deleteSite(now, BY_ADA);
+
+      expect<unknown>([[...later].sort(), [...trashed], [...(await database.getLaterSites(earlier))], [...(await database.getLaterSites([]))]]).toEqual([
+        earlier.map((id) => [id, named]).sort(),
+        [[site.id, named]],
+        [],
+        [],
+      ]);
+    });
+
+    // Drift: a drawn id is free once no site holds it, so a site can be given one another site gave up; a second keeping of that id that failed would refuse the new link, and one that kept the first would name the wrong site.
+    test("an id two sites gave up, one after the other, names the one that held it last", async () => {
+      const database = await opened(makeDatabase, mintFrom("aaaaaaaaaaaa", "bbbbbbbbbbbb", "aaaaaaaaaaaa", "cccccccccccc"));
+      const first = await made(database, draft(REPORT));
+      await database.giveNewId(first.id, BY_ADA);
+      const second = await made(database, draft(DOCS));
+      const moved = await database.giveNewId(second.id, BY_ADA);
+
+      expect<unknown>([first.id, second.id, moved.kind, [...(await database.getLaterSites([first.id]))]]).toEqual([
+        "aaaaaaaaaaaa",
+        "aaaaaaaaaaaa",
+        "done",
+        [["aaaaaaaaaaaa", { id: "cccccccccccc", name: DOCS, title: null }]],
+      ]);
+    });
+
+    // Drift: each id asked is a value bound to the statement, as the names of many sites are: one id more than a database binds would fail as an error of the engine, on a page of the log.
+    test("100 earlier ids are looked up at once, and one id more is refused by a throw", async () => {
+      const database = await opened(makeDatabase);
+      const site = await made(database, draft(REPORT));
+      await database.giveNewId(site.id, BY_ADA);
+      const none = Array.from({ length: 100 }, (_none, index) => String(index).padStart(12, "0") as SiteId);
+
+      expect([...(await database.getLaterSites([site.id, ...none.slice(1), site.id])).keys()]).toEqual([site.id]);
+      await expect(database.getLaterSites([site.id, ...none])).rejects.toThrow(RangeError);
+    });
+
     // Drift: the folder is where the files are and the owner is whose site it is; a change that rewrote either would strand the files or hand the site over.
     test("a site keeps its name, folder, owner, and creation time through every change another person makes", async () => {
       const database = await opened(makeDatabase);

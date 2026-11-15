@@ -11,7 +11,7 @@ import type { SiteId } from "../sites/ids";
 import type { UploadId } from "../records/upload";
 import type { Signed, SiteDetails, SitesQuery } from "./database";
 import type { Statement } from "./driver";
-import { sites, uploads, versions } from "./schema";
+import { earlierIds, sites, uploads, versions } from "./schema";
 import { BUILD, CHANGED, ONE, built, insertFrom, qualified } from "./statements";
 
 /** The columns a version is written with. */
@@ -54,6 +54,12 @@ export const NAMED_SITE = v.object({ id: SITE_ID, name: SITE_NAME, title: v.null
 
 /** What `getSiteNames` reads of a site: its title is the typed one, else its page's own. */
 export const NAMED_FIELDS = { id: sites.id, name: sites.name, title: fragment<string | null>`coalesce(${sites.title}, ${sites.page_title})`.as("title") };
+
+/** The site an earlier id belonged to, as `getLaterSites` reads it. */
+export const LATER_SITE = v.object({ earlier: SITE_ID, ...NAMED_SITE.entries });
+
+/** What `getLaterSites` reads: the id asked for, and the site that keeps its folder. */
+export const LATER_FIELDS = { earlier: fragment<string>`${qualified(earlierIds.id)}`.as("earlier"), ...NAMED_FIELDS };
 
 /** The place of each access in a listing sorted by access, as the `access_rank` column of a site holds it: from the most private to the most open. */
 const ACCESS_RANKS = { private: 0, unlisted: 1, public: 2 } as const;
@@ -124,6 +130,13 @@ export function setAccess(id: SiteId, access: SiteAccess["access"], publicName: 
   const live = and(eq(sites.id, id), eq(sites.trashed, 0), differs, publicName === null ? undefined : isFree(publicName));
 
   return built(BUILD.update(sites).set({ access, public_name: publicName }).where(live));
+}
+
+/** The id a site just gave up, kept with the folder of the site now at `next`; written only when the statement before it changed a row. An id kept once before goes to the site that held it last. */
+export function keepEarlierId(id: SiteId, next: SiteId): Statement {
+  const kept = BUILD.select({ id: fragment<string>`${id}`.as("id"), folder: sites.folder }).from(sites).where(and(eq(sites.id, next), CHANGED));
+
+  return built(BUILD.insert(earlierIds).select(kept).onConflictDoUpdate({ target: earlierIds.id, set: { folder: fragment`excluded.folder` } }));
 }
 
 /** The details given, as the columns of `sites` store them. */

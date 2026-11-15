@@ -432,6 +432,7 @@ function queryPlans(label: string, makeDriver: DriverFactory): void {
       await database.rotateSigningKey(SECOND_KEY, BY_ADA);
       const moved = await database.giveNewId(site.id, BY_ADA);
       const id = moved.kind === "done" ? moved.site.id : site.id;
+      await database.getLaterSites([site.id, NO_SITE]);
       await database.trashSite(id, BY_ADA);
       await database.restoreSite(id, BY_ADA);
       const deleted = await database.deleteSite(id, BY_ADA);

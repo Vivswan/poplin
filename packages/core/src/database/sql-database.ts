@@ -54,6 +54,7 @@ import type {
   Signed,
   SigningKey,
   SiteDetails,
+  LaterSite,
   SiteNamed,
   SitesPage,
   SitesQuery,
@@ -70,6 +71,7 @@ import { fileUnderKey, manifestFromText, manifestKey, manifestToText } from "./m
 import {
   audit,
   declaredFiles,
+  earlierIds,
   leftovers,
   logins,
   requestCounts,
@@ -97,6 +99,8 @@ import {
 import {
   A_KEPT_VERSION,
   DEFAULT_DIRECTIONS,
+  LATER_FIELDS,
+  LATER_SITE,
   LISTED_FIELDS,
   NAMED_FIELDS,
   NAMED_SITE,
@@ -110,6 +114,7 @@ import {
   isFirstPending,
   isFree,
   isServed,
+  keepEarlierId,
   moveLive,
   narrowing,
   publicNameIsFree,
@@ -368,6 +373,20 @@ export class SqlDatabase implements Database {
     return new Map(named.map(({ id, ...called }) => [id, called]));
   }
 
+  async getLaterSites(ids: readonly SiteId[]): Promise<ReadonlyMap<SiteId, LaterSite>> {
+    const asked = [...new Set(ids)];
+    if (asked.length > MOST_SITES_ASKED) throw new RangeError(`at most ${MOST_SITES_ASKED} earlier ids are looked up at once, not ${asked.length}`);
+
+    if (asked.length === 0) return new Map();
+
+    // Each id is found by its key, and its site by the folder it keeps: one step, however many new links the site has had since.
+    const later = BUILD.select(LATER_FIELDS).from(earlierIds).innerJoin(sites, eq(sites.folder, earlierIds.folder)).where(inArray(earlierIds.id, asked));
+    const [found] = await this.#driver.batch([built(later)]);
+    const sitesNow = (found?.rows ?? []).map((row) => v.parse(LATER_SITE, row));
+
+    return new Map(sitesNow.map(({ earlier, ...site }) => [earlier, site]));
+  }
+
   async getSiteByPublicName(name: PublicName): Promise<Site | undefined> {
     const [found] = await this.#driver.batch([sitesWhere(eq(sites.public_name, name))]);
 
@@ -451,9 +470,10 @@ export class SqlDatabase implements Database {
     for (let attempt = 0; attempt < MINT_ATTEMPTS; attempt += 1) {
       const next = this.#mintId();
       const days = JSON.stringify(daysUpTo(dayOf(signed.at), KEPT_DAYS));
-      const [updated, , after, before] = await this.#driver.batch([
+      const [updated, , , after, before] = await this.#driver.batch([
         built(BUILD.update(sites).set({ id: next }).where(and(eq(sites.id, id), eq(sites.trashed, 0), isFree(next)))),
         auditOfSite(signed, "new_id", next, { from: id }),
+        keepEarlierId(id, next),
         siteById(next),
         siteById(id),
         built(BUILD.update(requestCounts).set({ site: next }).where(and(eq(requestCounts.site, id), fragment`${requestCounts.day} IN (SELECT j.value FROM json_each(${days}) AS j)`, CHANGED))),

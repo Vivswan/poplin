@@ -71,6 +71,18 @@ export const versions = sqliteTable(
   ],
 );
 
+/** The ids a site had before each new link, by the folder it keeps: one row per id given up, gone when the site is. An id here opens nothing; it only says which site an older entry of the log was about. */
+export const earlierIds = sqliteTable(
+  "earlier_ids",
+  {
+    id: text().notNull().primaryKey(),
+    folder: text()
+      .notNull()
+      .references(() => sites.folder, { onDelete: "cascade" }),
+  },
+  (table) => [index("earlier_ids_by_folder").on(table.folder)],
+);
+
 /** The hashed record of every token. Only an admin token expires. A removed token keeps its row, marked with when it was removed and by whom; `end_at` is when a token ended or will: its removal, else its expiry. */
 export const tokens = sqliteTable(
   "tokens",
