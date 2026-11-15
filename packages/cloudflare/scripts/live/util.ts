@@ -8,6 +8,12 @@ import * as core from "@actions/core";
 import { type CloudflareFailure, type Connection, listZones, type Zone } from "../../src/zone/client";
 import { type DomainLayout, parseDomainLayout } from "../../src/zone/layout";
 
+/** The Worker's name on the test account. */
+export const SCRIPT = "poplin";
+
+/** The bucket that holds the test install's sites. No install of a person has a bucket of this name. */
+export const BUCKET = "poplin-live-sites";
+
 /** What stands where a hidden value would have been printed. */
 const HIDDEN = "[hidden]";
 

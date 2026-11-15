@@ -24,16 +24,10 @@ import { capInstall } from "./caps";
 import { readFreePlans } from "./plan";
 import { settleDatabase } from "./shape";
 import { removeTokens, seedToken } from "./tokens";
-import { type Found, findInstall, isStop, liveLogin, openRun, type Run, reportStop, type Stop, stopOf } from "./util";
+import { BUCKET, type Found, findInstall, isStop, liveLogin, openRun, type Run, reportStop, SCRIPT, type Stop, stopOf } from "./util";
 
 /** This package's folder. */
 const PACKAGE = join(import.meta.dir, "..", "..");
-
-/** The Worker's name on the test account. */
-const SCRIPT = "poplin";
-
-/** The bucket that holds the test install's sites. */
-const BUCKET = "poplin-live-sites";
 
 /** The login an install with no login of a person starts with: nobody can log in as it. */
 const NOBODY = "owner@example.com";

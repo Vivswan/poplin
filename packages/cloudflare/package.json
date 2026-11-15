@@ -13,6 +13,7 @@
     "build": "wrangler deploy --dry-run --outdir packages/cloudflare/dist --config ../../wrangler.jsonc",
     "deploy": "bun scripts/deploy.ts",
     "test": "bun run build && vitest run",
+    "live:start-over": "bun scripts/live/start-over.ts",
     "live:converge": "bun scripts/live/converge.ts",
     "live:suite": "bun scripts/live/suite.ts",
     "live:reset": "bun scripts/live/reset.ts"

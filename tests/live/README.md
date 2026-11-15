@@ -13,6 +13,7 @@ Live Checks workflow
   the `paths` list of the workflow                the files of the push -> a run, or none
   packages/cloudflare/scripts/live/gate.ts       the `all-green` check of the commit's CI: it ended green, or the run stops red; a job after it stops nothing
   build the Worker bundle
+  packages/cloudflare/scripts/live/start-over.ts a run by hand with `start_over` ticked: everything poplin made, removed
   packages/cloudflare/scripts/live/converge.ts   the account's plans, bucket, database, login, wrangler deploy, the Domain tab's repair, the caps
   packages/cloudflare/scripts/live/suite.ts      a token for the run -> bun test tests/live/live.test.ts -> the token removed
   packages/cloudflare/scripts/live/reset.ts      a token for the reset -> the install put back -> every token removed
@@ -37,6 +38,7 @@ The `paths` list of `.github/workflows/live-checks.yml` holds every row. The fil
 | Also                                                   | What happens                                                         |
 | ------------------------------------------------------ | -------------------------------------------------------------------- |
 | a run started by hand                                  | deploy and checks, with no wait for CI                               |
+| a run started by hand with `start_over` ticked         | first removes everything poplin made there, then the same            |
 | a push that starts no run                              | no row in the list of runs, and no tick on the commit                |
 | the commit's `all-green` check did not end green       | a red run: nothing deployed, no call to Cloudflare                   |
 | a run ended red                                        | it stays red until it is run again by hand, or a later push starts a run |
@@ -46,6 +48,12 @@ The `paths` list of `.github/workflows/live-checks.yml` holds every row. The fil
 The install is made from the commit of the push, the one whose `all-green` check ended green. Running a red run again makes the install from that same commit.
 
 One job touches the install at a time. The checks and the midnight reset wait in one lane that keeps every waiting job, so neither takes the other's place.
+
+## Start the test install over
+
+On GitHub: Actions, Live Checks, Run workflow, tick `start_over`, Run workflow.
+
+The run removes the Worker and its routes, poplin's DNS records, rules, Access application and policy, the database, and every file in the bucket. The bucket stays, and so does everything on the account that poplin did not make. A kind the token has no permission for stays too, and a warning names the permission. The run then makes the install from nothing and puts the samples and the demo back.
 
 ## The test install
 

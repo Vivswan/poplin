@@ -4,6 +4,7 @@
 #   a push that changed a file of the `paths` list -> wait for that commit's `all-green` check -> build the Worker bundle
 #     -> make the standing test install match the commit -> run tests/live against it -> put the install back
 #   a push that changed no such file -> GitHub starts no run
+#   a run by hand with `start_over` ticked -> everything poplin made on the test account removed -> the same steps, from nothing
 #
 #   put back: every site but the demo removed, the trash emptied, the samples of demo/samples and the demo published, waiting logins and every token removed
 #
@@ -56,6 +57,10 @@ on:
         description: Also publish two thousand small files (thousands of requests on the test account)
         type: boolean
         default: false
+      start_over:
+        description: First remove everything poplin made on the test account, then make the install from nothing
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -96,6 +101,15 @@ jobs:
         run: bun packages/cloudflare/scripts/live/gate.ts
       - name: Build the Worker bundle
         run: bun run --cwd packages/cloudflare build
+      # Only a run started by hand with the box ticked: a push and the midnight run have no such input.
+      - name: Start the test install over
+        if: inputs.start_over
+        timeout-minutes: 10
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          POPLIN_LIVE_START_OVER: ${{ inputs.start_over }}
+        run: bun run --silent --cwd packages/cloudflare live:start-over
       - name: Make the test install match the commit
         id: converge
         timeout-minutes: 12
