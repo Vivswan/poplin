@@ -76,8 +76,10 @@ Before part a, ask what the user has. Say which of these is missing, and stop un
 | a Cloudflare account                              | the Free plan is enough                   |
 | a domain on that account                          | Cloudflare's home page lists it as Active |
 | an email inbox they can read                      | the login's code goes there               |
-| a payment method on the account                   | part a asks for one                       |
+| a payment method on the account                   | part a asks for one, at a price of 0      |
 | a GitHub account, or git and bun on this computer | part b                                    |
+
+Say when the payment method can be charged, in the words of [What can cost money](https://github.com/Vivswan/poplin/blob/main/docs/run/limits-and-cost.md#what-can-cost-money).
 
 **Never take the Cloudflare API token in the chat.** The token of parts c and d changes the user's Cloudflare account. The user pastes it into the setup page in their own browser, where it goes to the install and nowhere else.
 
@@ -125,7 +127,7 @@ The last command opens Cloudflare in the user's browser to ask for access, then 
 
 ### c. Make a Cloudflare API token
 
-On the Setup page, the user clicks the link that starts with Make the token. Cloudflare's form opens with eight permissions already chosen.
+On the Setup page, under First, make a token, the user presses Open the token form. Cloudflare's form opens in a new tab with eight permissions already chosen.
 
 | On the form       | The user                                               |
 | ----------------- | ------------------------------------------------------ |
@@ -158,7 +160,7 @@ Ask the user to copy you the lines the page shows above its table. They hold no 
 
 For rows that need work, ask the user to copy each row whose State is failed, missing, differs, or not run, with its Detail, and any line with a link above the table. Look the words up in the table under step 4 of the [install guide](https://github.com/Vivswan/poplin/blob/main/docs/start/when-a-step-fails.md#step-4-the-page-shows-something-else).
 
-Repair is safe to repeat. The page empties its boxes after every run, so the user fills all three again before they press it.
+Repair is safe to repeat. The page empties the token's box after every run and keeps the other two, so the user pastes the token again before they press it.
 
 **The same from a terminal.** `poplin setup` does what the page does, and reads the token from `POPLIN_SETUP_TOKEN` in the environment alone. The user runs it in a terminal of their own, where you do not see the token:
 
@@ -184,7 +186,7 @@ The user opens the dashboard's address, `https://poplin.example.com` with their 
 | The user sees                       | Do                                                                                  |
 | ----------------------------------- | ----------------------------------------------------------------------------------- |
 | the browser cannot find the site    | a new address takes a few minutes: wait, then reload                                |
-| no code arrives                     | the email differs from part d: on the Setup page, Repair again with the right email |
+| no code arrives                     | the email differs from part d: on the Setup page, the right email, the token, Repair |
 | the dashboard, with `No sites yet.` | the install is ready: step 4                                                        |
 
 This first login closes the Setup page for good.
