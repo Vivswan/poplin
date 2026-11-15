@@ -1,0 +1,13 @@
+# The link check of the repository's own Markdown: every relative link, heading anchor, and image leads somewhere.
+# Run it from the root: bun run links
+
+# Links between the repository's own files alone; links that leave it are not requested.
+offline = true
+
+# A link to a heading that is gone fails like a link to a file that is gone.
+include_fragments = "anchor-only"
+
+# A dependency's pages are not this repository's, and a linked or nested checkout hides them from the ignore file.
+exclude_path = ["(^|/)node_modules/"]
+
+no_progress = true

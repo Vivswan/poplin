@@ -38,6 +38,7 @@ Poplin: Agents publish static sites to your own Cloudflare account: private by d
 Poplin publishes a static site to the user's own Cloudflare account with one call: one Worker serves every site from one R2 bucket.
 
 - Run every local check: `bun run check`
+- Check the links and images of every Markdown page, with lychee installed: `bun run links`
 - Turn the hooks on, once per clone: `git config core.hooksPath .githooks`
 - Click through the product on this machine, over sample data in memory: `bun run preview`, then open `http://127.0.0.1:4400/`
 - Stop it: `bun run preview:stop`; `--port` runs a second one beside it, `--watch` restarts it when its source changes, and `--gallery` lists every state at `/gallery`

@@ -76,6 +76,23 @@ jobs:
       - name: Test
         run: tofu -chdir=packages/cloudflare/tofu test
 
+  # Every link, heading anchor, and image of the repository's Markdown pages, as lychee.toml sets the check. No install:
+  # the pages link nothing a build makes. The lychee is the one the site's own link check runs.
+  links:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Check the links and images of every Markdown page
+        uses: lycheeverse/lychee-action@e7477775783ea5526144ba13e8db5eec57747ce8 # v2.9.0
+        with:
+          lycheeVersion: v0.24.2
+          args: "'**/*.md'"
+          # The check is offline, so the action gets no token to send.
+          token: ""
+
   # The published package as a user gets it: packed, installed from the tarball with npm, and run under plain Node.
   # bun installs the workspace; the Node of the matrix runs the bundler, npm, and the installed package.
   package:

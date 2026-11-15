@@ -1,8 +1,7 @@
-// Scope: the pages a person reads name only commands, flags, tools, tool inputs, refusal codes, settings, and module inputs that exist, and every link between them leads somewhere. What the prose says is out of scope.
+// Scope: the pages a person reads name only commands, flags, tools, tool inputs, refusal codes, settings, and module inputs that exist. What the prose says, and where its links lead, is out of scope.
 
 import { describe, expect, test } from "bun:test";
-import { existsSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { join } from "node:path";
 
 import { COMMANDS, type CommandSpec } from "../packages/cli/src/commands/command-table";
 import { SETTING_SAMPLES } from "../packages/cli/src/commands/install-settings";
@@ -10,34 +9,12 @@ import { parseCommand } from "../packages/cli/src/commands/parse-command";
 import { problem } from "../packages/cli/src/commands/problems";
 import { TOOLS } from "../packages/cli/src/mcp/tools";
 import { words } from "../packages/cli/tests/commands/support/command-line";
-import { plantedRepository, repositoryFiles } from "./support/repository-files";
 
 /** The repository this file sits in. */
 const ROOT = join(import.meta.dir, "..");
 
 /** The pages a person reads, as paths from the root. */
 const PAGES: readonly string[] = ["README.md", "docs/README.md", "docs/using.md", "docs/install.md", "docs/security.md", "packages/cli/README.md"];
-
-/** Every Markdown page of the repository, the ones a person reads among them. */
-const MARKDOWN = new Bun.Glob("**/*.md");
-
-/** The sources of the website, whose pages link into the rendered `docs/`. */
-const WEBSITE = new Bun.Glob("website/src/**/*.astro");
-
-/** A file in a folder whose name starts with a dot: a tool's own pages, which link from where the tool reads them. */
-const HIDDEN = /(?:^|\/)\.[^/]+\//;
-
-/** A link of the website into the rendered docs, with the path under the site as the first group. */
-const SITE_LINK = /sitePath\("(docs\/[^"]*)"\)/g;
-
-/** The ending the site gives a rendered page, where a link ends or its anchor starts. A folder's README is served as the folder alone, so its name never matches. */
-const RENDERED_PAGE = /(?<!\/README)\.html(?=#|$)/;
-
-/** The end of a link to a folder, where the link ends or its anchor starts. */
-const FOLDER_END = /\/(?=#|$)/;
-
-/** The page the site serves for a folder of the docs. */
-const FOLDER_PAGE = "README.md";
 
 /** The page that lists every command, tool, and refusal. */
 const USING_PAGE = "docs/using.md";
@@ -99,9 +76,6 @@ const MODULE_NAME = /^(?:variable|output) "([a-z_]+)"/gm;
 /** An input of the module, with its name as the first group. */
 const MODULE_INPUT = /^variable "([a-z_]+)"/gm;
 
-/** A link that leaves the repository. */
-const OUTSIDE_LINK = /^[a-z]+:/;
-
 /** A code of the CLI's table of problems. */
 type Code = Parameters<typeof problem>[0];
 
@@ -112,12 +86,6 @@ interface Page {
 
   /** The text of every fenced block. */
   readonly blocks: string[];
-
-  /** Where every link leads. */
-  readonly links: string[];
-
-  /** The anchor of every heading. */
-  readonly anchors: string[];
 }
 
 async function read(root: string, path: string): Promise<string> {
@@ -125,7 +93,7 @@ async function read(root: string, path: string): Promise<string> {
 }
 
 async function parse(root: string, path: string): Promise<Page> {
-  const page: Page = { spans: [], blocks: [], links: [], anchors: [] };
+  const page: Page = { spans: [], blocks: [] };
 
   Bun.markdown.render(
     await read(root, path),
@@ -140,18 +108,8 @@ async function parse(root: string, path: string): Promise<Page> {
 
         return "";
       },
-      link: (text, meta) => {
-        page.links.push(meta.href);
-
-        return text;
-      },
-      heading: (text, meta) => {
-        page.anchors.push(meta.id ?? "");
-
-        return text;
-      },
     },
-    { tables: true, headings: { ids: true } },
+    { tables: true },
   );
 
   return page;
@@ -193,49 +151,6 @@ function unknownInputs(tool: string, example: string): string[] {
   const taken: readonly string[] = Object.hasOwn(TOOLS, tool) ? Object.keys(TOOLS[tool as keyof typeof TOOLS].parameters) : [];
 
   return Object.keys(JSON.parse(example)).filter((input) => !taken.includes(input));
-}
-
-/** The Markdown page a link of the website leads to: the site serves `docs/using.md` as `docs/using.html`, and a folder as its README. */
-function sitePage(link: string): string {
-  return link.replace(RENDERED_PAGE, ".md").replace(FOLDER_END, `/${FOLDER_PAGE}`);
-}
-
-/** The repository's own files a pattern takes, as paths from the root. */
-function paths(root: string, glob: Bun.Glob): string[] {
-  return repositoryFiles(root).filter((path) => glob.match(path) && !HIDDEN.test(path));
-}
-
-/** What is wrong with one link of a file, or nothing when it leads to a file, and to a heading of it when it names one. The link is read from the file's folder unless another is given. */
-async function brokenLink(root: string, from: string, href: string, folder: string = dirname(from)): Promise<string | undefined> {
-  const [path = "", anchor] = href.split("#");
-  const target = path === "" ? from : join(folder, path).replaceAll("\\", "/");
-  if (!existsSync(join(root, target))) return `${from}: ${path} does not exist`;
-
-  if (anchor === undefined || (await parse(root, target)).anchors.includes(anchor)) return undefined;
-
-  return `${from}: ${target} has no heading #${anchor}`;
-}
-
-/** Every link between the Markdown pages of a repository: what is wrong with it, or nothing. */
-async function pageLinks(root: string): Promise<(string | undefined)[]> {
-  const checked: (string | undefined)[] = [];
-
-  for (const path of paths(root, MARKDOWN)) {
-    for (const href of (await parse(root, path)).links.filter((link) => !OUTSIDE_LINK.test(link))) checked.push(await brokenLink(root, path, href));
-  }
-
-  return checked;
-}
-
-/** Every link of a repository's website into its docs: what is wrong with it, or nothing. */
-async function siteLinks(root: string): Promise<(string | undefined)[]> {
-  const checked: (string | undefined)[] = [];
-
-  for (const path of paths(root, WEBSITE)) {
-    for (const link of groups(await read(root, path), SITE_LINK)) checked.push(await brokenLink(root, path, sitePage(link), ""));
-  }
-
-  return checked;
 }
 
 describe("the pages a person reads", () => {
@@ -316,46 +231,5 @@ describe("the pages a person reads", () => {
     expect(codes.length).toBeGreaterThan(0);
     expect(codes.filter((code) => code !== USAGE_CODE && !isCode(code))).toEqual([]);
     expect(["constructor", "no_such_code"].filter(isCode)).toEqual([]);
-  });
-
-  test("every link of every Markdown page leads to a file, and to a heading when it names one: without this a moved page or a reworded heading leaves a dead link", async () => {
-    const pages = paths(ROOT, MARKDOWN);
-    const broken = await pageLinks(ROOT);
-
-    expect(PAGES.filter((path) => !pages.includes(path))).toEqual([]);
-    expect(broken.length).toBeGreaterThan(0);
-    expect(broken.filter((found) => found !== undefined)).toEqual([]);
-    expect(await brokenLink(ROOT, "README.md", "docs/using.md#no-such-heading")).toBe("README.md: docs/using.md has no heading #no-such-heading");
-  });
-
-  test("every link of the website into the docs leads to a page, and to a heading when it names one: without this a section removed from the docs breaks the published site", async () => {
-    const broken = await siteLinks(ROOT);
-
-    expect(broken.length).toBeGreaterThan(0);
-    expect(broken.filter((found) => found !== undefined)).toEqual([]);
-    expect(["docs/", "docs/security.html#hardening", "docs/#install"].map(sitePage)).toEqual(["docs/README.md", "docs/security.md#hardening", "docs/README.md#install"]);
-    expect(await brokenLink(ROOT, "website/src/pages/index.astro", sitePage("docs/security.html#no-such-heading"), "")).toBe("website/src/pages/index.astro: docs/security.md has no heading #no-such-heading");
-    expect(await brokenLink(ROOT, "website/src/pages/index.astro", sitePage("docs/README.html"), "")).toBe("website/src/pages/index.astro: docs/README.html does not exist");
-  });
-
-  // Drift: a guard that lists the disk reads what is no part of the repository, and fails in the one checkout that holds it.
-  test("a dead link is named in a new page not yet added, and not in a page the repository is told to leave out or in a build folder", async () => {
-    const dead = "[the page that is gone](docs/gone.md)\n";
-    const deadOnSite = 'const href = sitePath("docs/gone.html");\n';
-    using tree = plantedRepository(
-      {
-        "README.md": `[using it](docs/using.md)\n${dead}`,
-        "docs/using.md": "# Using it\n",
-        "NOTES.md": dead,
-        "built/page.md": dead,
-        "website/src/pages/index.astro": deadOnSite,
-        "website/src/pages/scratch.astro": deadOnSite,
-        "website/src/built/page.astro": deadOnSite,
-      },
-      { excluded: ["/NOTES.md", "scratch.astro"], ignored: ["built/"] },
-    );
-
-    expect(await pageLinks(tree.path)).toEqual([undefined, "README.md: docs/gone.md does not exist"]);
-    expect(await siteLinks(tree.path)).toEqual(["website/src/pages/index.astro: docs/gone.md does not exist"]);
   });
 });

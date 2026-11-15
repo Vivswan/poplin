@@ -42,7 +42,7 @@ const TABLE: readonly Rule[] = [
   { files: "tests/{fuzz,release-pipeline,support}/**", verdict: "skip", holds: "tests CI runs with no install" },
   { files: "tests/*.test.ts", verdict: "skip", holds: "the guards of the tree" },
   {
-    files: "{.editorconfig,.gitignore,.gitleaks.toml,.repo-platform.yml,.typography-allow,.yamllint,biome.json,biome.local.jsonc,knip.json,.release-please-manifest.json,release-please-config.json}",
+    files: "{.editorconfig,.gitignore,.gitleaks.toml,.repo-platform.yml,.typography-allow,.yamllint,biome.json,biome.local.jsonc,knip.json,lychee.toml,.release-please-manifest.json,release-please-config.json}",
     verdict: "skip",
     holds: "the settings of lint, review, and release tools",
   },
