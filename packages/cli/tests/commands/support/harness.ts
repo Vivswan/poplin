@@ -1,9 +1,11 @@
 // A bench for the command tests: the real API of an install in memory, the command run in process against it, and everything the command printed.
 
+import { jest } from "bun:test";
 import { once } from "node:events";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
+import { setImmediate } from "node:timers/promises";
 
 import { type ApiInstall, ORIGIN, openApi } from "../../../../app/tests/api/support/install";
 import type { Io } from "../../../src/commands/records";
@@ -12,6 +14,9 @@ import { words } from "./command-line";
 
 /** The scratch folders the tests made, removed by `cleanUp`. */
 const SCRATCH: string[] = [];
+
+/** How far `runThroughPauses` moves the clock at a time, in milliseconds. */
+const CLOCK_STEP_MS = 250;
 
 /** What a test may answer a request with in the install's place; nothing lets the install answer. */
 type Hook = (request: Request) => Response | undefined | Promise<Response | undefined>;
@@ -101,6 +106,32 @@ export async function sendUnlessAborted(signal: AbortSignal | null | undefined, 
     return await Promise.race([send(), aborted]);
   } finally {
     answered.abort();
+  }
+}
+
+/**
+ * Run a command under timers that stand still, and move their clock on while `pausing` holds.
+ *
+ * @param pausing - whether a file that met a fault waits to be sent again and no call is on its way: a call on its way would time out as the clock moves
+ */
+export async function runThroughPauses(bench: Bench, line: string, pausing: () => boolean): Promise<Ran> {
+  jest.useFakeTimers();
+
+  try {
+    let over = false;
+    const running = bench.run(line).finally(() => {
+      over = true;
+    });
+
+    while (!over) {
+      await setImmediate();
+
+      if (pausing()) jest.advanceTimersByTime(CLOCK_STEP_MS);
+    }
+
+    return await running;
+  } finally {
+    jest.useRealTimers();
   }
 }
 

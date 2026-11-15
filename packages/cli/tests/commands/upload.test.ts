@@ -1,6 +1,13 @@
-import { afterEach, describe, expect, test } from "bun:test";
+import { afterEach, describe, expect, jest, test } from "bun:test";
+import { setImmediate } from "node:timers/promises";
 
-import { type Bench, cleanUp, folderOf, jsonOf, openBench, stateOf } from "./support/harness";
+import { type Bench, cleanUp, folderOf, jsonOf, openBench, runThroughPauses, stateOf } from "./support/harness";
+
+/** A site of one file, so that one lane sends and no call is on its way while that file waits to be sent again. */
+const ONE = { "index.html": "<h1>notes</h1>" };
+
+/** The shortest pause before each sending of a file again, in milliseconds: one second, doubled each time. */
+const SHORTEST_PAUSES = [1000, 2000, 4000];
 
 /** A site of six files: more than the four that are on their way at once. */
 const SIX = { "index.html": "<h1>notes</h1>", "a.css": "a{}", "b.css": "b{}", "c.css": "c{}", "d.css": "d{}", "e.css": "e{}" };
@@ -36,6 +43,14 @@ interface Start {
   readonly refusals: readonly Response[];
   readonly waits: readonly number[];
   readonly code: number;
+  readonly uploads: readonly string[];
+}
+
+/** A file that meets passing faults: what answers each sending in the install's place before the install answers itself, and what must have become of the publish. */
+interface Fault {
+  readonly faults: readonly (() => Response | Promise<Response>)[];
+  readonly code: number;
+  readonly puts: number;
   readonly uploads: readonly string[];
 }
 
@@ -75,6 +90,35 @@ function stopAt(bench: Bench, moment: Moment): void {
   };
 }
 
+/** The page of a proxy whose origin gave no answer. */
+function badGateway(): Response {
+  return new Response("<html>bad gateway</html>", { status: 502 });
+}
+
+/** A connection that drops before any answer. */
+function dropped(): Promise<Response> {
+  return Promise.reject(new TypeError("the socket closed"));
+}
+
+/**
+ * Answer each sending of a file with the next fault, and let the install answer once they ran out.
+ *
+ * @returns when each file was sent, by the clock of the timers
+ */
+function faulty(bench: Bench, faults: readonly (() => Response | Promise<Response>)[]): number[] {
+  const sentAt: number[] = [];
+
+  bench.hook = (request) => {
+    if (!isPut(request)) return undefined;
+
+    sentAt.push(Date.now());
+
+    return faults[sentAt.length - 1]?.();
+  };
+
+  return sentAt;
+}
+
 /** The uploads that are no site, as `kind state`, and their ids. */
 async function unfinished(bench: Bench): Promise<{ readonly said: string[]; readonly ids: string[] }> {
   const { uploads } = await bench.install.database.listUploads({ before: Number.MAX_SAFE_INTEGER, limit: 10 });
@@ -83,7 +127,10 @@ async function unfinished(bench: Bench): Promise<{ readonly said: string[]; read
   return { said: open.map((upload) => `${upload.plan.kind} ${upload.state}`), ids: open.map((upload) => upload.id) };
 }
 
-afterEach(cleanUp);
+afterEach(() => {
+  jest.useRealTimers();
+  cleanUp();
+});
 
 describe("upload", () => {
   // Drift: Ctrl-C outside a wait ended the process at once, and the upload it left held a place under max_sites, max_total_size, and the pending uploads for a day.
@@ -233,6 +280,52 @@ describe("upload", () => {
 
     expect([ran.code, ran.waits, refusals.length]).toEqual([row.code, [...row.waits], 0]);
     expect(uploads.map((upload) => `${upload.plan.kind} ${upload.state}`).sort()).toEqual([...row.uploads]);
+  });
+
+  // Drift: a file sent again at once meets the same fault, so a gateway that fails for a second fails the whole publish; one sent again after a refusal that stands, or without end, holds the person up for nothing.
+  test.each<[string, Fault]>([
+    ["meets one 502 is sent again after a pause, and the site is published", { faults: [badGateway], code: 0, puts: 2, uploads: ["create finished"] }],
+    ["meets three 502s in a row is sent a fourth time, after pauses of at least one, two, and four seconds", { faults: [badGateway, badGateway, badGateway], code: 0, puts: 4, uploads: ["create finished"] }],
+    ["meets a dropped connection and then a 502 is sent a third time", { faults: [dropped, badGateway], code: 0, puts: 3, uploads: ["create finished"] }],
+    ["meets four 502s in a row is given up", { faults: [badGateway, badGateway, badGateway, badGateway], code: 5, puts: 4, uploads: ["create abandoned"] }],
+    ["is refused with a 400 is not sent again", { faults: [() => refusal(400, "size_mismatch", "1")], code: 1, puts: 1, uploads: ["create abandoned"] }],
+    ["is refused with a page of status 403 is not sent again", { faults: [() => new Response("<html>no</html>", { status: 403 })], code: 5, puts: 1, uploads: ["create abandoned"] }],
+  ])("a file that %s", async (_name, row) => {
+    const bench = await openBench();
+    const sentAt = faulty(bench, row.faults);
+
+    const ran = await runThroughPauses(bench, folderOf("notes", ONE), () => sentAt.length > 0 && sentAt.length < row.puts);
+    const { uploads } = await bench.install.database.listUploads({ before: Number.MAX_SAFE_INTEGER, limit: 10 });
+    const pauses = sentAt.slice(1).map((at, index) => at - (sentAt[index] ?? 0));
+
+    expect([ran.code, sentAt.length, uploads.map((upload) => `${upload.plan.kind} ${upload.state}`)]).toEqual([row.code, row.puts, [...row.uploads]]);
+    expect(pauses.map((pause, index) => pause >= (SHORTEST_PAUSES[index] ?? 0))).toEqual(pauses.map(() => true));
+  });
+
+  // Drift: a pause that does not hear the stop keeps the person waiting out seconds after Ctrl-C, and then sends the file again; a stop told as another file's refusal says the folder changed when the person stopped the command.
+  test.each([
+    ["alone", ONE, 1],
+    ["beside a file the install refused", { ...ONE, "a.css": "a{}" }, 2],
+  ])("a stop while a file waits to be sent again, %s, ends the wait at once, and the file is not sent again", async (_name, pages, puts) => {
+    const bench = await openBench();
+    let sent = 0;
+    bench.hook = (request) => {
+      if (!isPut(request)) return undefined;
+
+      sent += 1;
+
+      return request.url.includes("a.css") ? refusal(400, "size_mismatch", "1") : badGateway();
+    };
+    jest.useFakeTimers();
+
+    const running = bench.run(folderOf("notes", pages));
+    while (sent < puts) await setImmediate();
+    for (let turn = 0; turn < 10; turn += 1) await setImmediate();
+    bench.stop();
+    const stopped = await running;
+
+    expect([stopped.code, stopped.err, sent]).toEqual([1, ["the command was stopped: the upload was given up and no site changed"], puts]);
+    expect((await unfinished(bench)).said).toEqual(["create abandoned"]);
   });
 
   // Drift: the line of a rest is written over by the upload's progress; a start that is refused after its rest has no progress, and its refusal would be printed onto the end of that line.

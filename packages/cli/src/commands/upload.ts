@@ -1,5 +1,8 @@
 // The steps a publish, an import, and a duplicate share once an upload is begun: send every file, finish, and give the upload up when it cannot be finished.
 
+import pMap, { pMapStop } from "p-map";
+import pRetry from "p-retry";
+
 import type { ROUTES } from "../../../core/src/api/routes";
 import type { Called, Client, Failure } from "../client/client";
 import { problem, problemOf } from "./problems";
@@ -8,8 +11,11 @@ import type { Io, Outcome, Session } from "./records";
 /** How many files are on their way at once. */
 const UPLOADS_AT_ONCE = 4;
 
-/** How often one file is sent before the upload is given up: once, and twice more. The route stores the same bytes again, so sending twice is safe. */
-const UPLOAD_ATTEMPTS = 3;
+/** How often one file is sent again before the upload is given up. The route stores the same bytes again, so sending twice is safe. */
+const UPLOAD_RETRIES = 3;
+
+/** The pause before a file is first sent again, in milliseconds. Each pause after it is twice as long, and each is stretched by a random share of up to its own length, so four lanes do not come back at one moment. */
+const FIRST_RETRY_PAUSE_MS = 1000;
 
 /** How often an upload is finished before it is given up: once, and twice more after sending the files the install said it lacks. */
 const FINISH_ATTEMPTS = 3;
@@ -41,6 +47,12 @@ export type Published = NonNullable<(typeof ROUTES)["finishPublish"]["types"]>["
 /** What a rest needs of the machine's ends. */
 type Resting = Pick<Io, "pause" | "status" | "terminal">;
 
+/** What the lanes of one upload share: where a rest is waited out, and the stop that ends the pause before a file is sent again. */
+interface Lanes {
+  readonly pace: Pace;
+  readonly stopped: AbortSignal;
+}
+
 /** One file to send: the name the upload declared it under, its length, and what opens its bytes anew from the first. */
 export interface UploadFile {
   readonly path: string;
@@ -53,8 +65,8 @@ export interface Sending<File> {
   /** Called once for each file the install took. */
   readonly arrived: (file: File) => void;
 
-  /** Where a rest is waited out, and shown on the progress line when there is one. */
-  readonly io: Resting;
+  /** Where a rest is waited out, and shown on the progress line when there is one; its stop ends the pause before a file is sent again. */
+  readonly io: Resting & Pick<Io, "stopped">;
 }
 
 /**
@@ -69,13 +81,13 @@ function isAskedTooOften(failure: Failure): boolean {
   return "status" in failure && failure.status === TOO_MANY_REQUESTS;
 }
 
-/** Whether sending a file again at once may go better: the install failed or gave no answer, and the command goes on. A refusal of what was sent, a rest asked for, and a database spent for the day answer the same again. */
+/** Whether sending a file again after a pause may go better: the install failed or gave no answer, and the command goes on. An answer under 500, whoever gave it, and a database spent for the day answer the same again. */
 function isWorthAnotherTry(failure: Failure): boolean {
-  if (isAskedTooOften(failure) || failure.kind === "stopped") return false;
+  if (failure.kind === "stopped") return false;
 
-  if (failure.kind !== "refused") return true;
+  if (!("status" in failure)) return true;
 
-  return failure.status >= SERVER_FAILURE && failure.code !== ALLOWANCE_SPENT;
+  return failure.status >= SERVER_FAILURE && !(failure.kind === "refused" && failure.code === ALLOWANCE_SPENT);
 }
 
 /** How long a call rests: as long as the answer asks, else two seconds doubled with each rest before it, and never over a minute. */
@@ -83,6 +95,16 @@ function restSeconds(failure: Failure, rests: number): number {
   const asked = "retryAfter" in failure ? failure.retryAfter : undefined;
 
   return Math.min(MAX_REST_SECONDS, Math.max(1, asked ?? FIRST_REST_SECONDS * 2 ** (rests - 1)));
+}
+
+/** A file that was not sent, as the error its next sending is decided on. */
+class Unsent extends Error {
+  readonly failure: Failure;
+
+  constructor(failure: Failure) {
+    super(failure.kind);
+    this.failure = failure;
+  }
 }
 
 /** The rests of one upload. Every call of it shares them, so one answer of "too many requests" holds all four lanes back and is told once. */
@@ -186,44 +208,62 @@ async function sendOnce(client: Client, upload: string, file: UploadFile): Promi
   return sent;
 }
 
-async function sendFile(client: Client, upload: string, file: UploadFile, pace: Pace): Promise<Failure | undefined> {
-  let failure: Failure | undefined;
+/** Send one file, and send it again after a pause while the install fails or gives no answer, up to three times more. A stop ends the pause at once. */
+async function sendFile(client: Client, upload: string, file: UploadFile, lanes: Lanes): Promise<Failure | undefined> {
+  const attempt = async (): Promise<void> => {
+    const sent = await unhurried(lanes.pace, () => sendOnce(client, upload, file));
 
-  for (let attempt = 1; attempt <= UPLOAD_ATTEMPTS; attempt += 1) {
-    const sent = await unhurried(pace, () => sendOnce(client, upload, file));
-    if (sent.ok) return undefined;
+    if (!sent.ok) throw new Unsent(sent.failure);
+  };
 
-    failure = sent.failure;
+  try {
+    await pRetry(attempt, {
+      retries: UPLOAD_RETRIES,
+      minTimeout: FIRST_RETRY_PAUSE_MS,
+      randomize: true,
+      signal: lanes.stopped,
+      shouldRetry: ({ error }) => error instanceof Unsent && isWorthAnotherTry(error.failure),
+    });
+  } catch (error) {
+    if (lanes.stopped.aborted) return { kind: "stopped" };
 
-    if (!isWorthAnotherTry(failure)) return failure;
+    if (error instanceof Unsent) return error.failure;
+
+    throw error;
   }
 
-  return failure;
+  return undefined;
 }
 
 /** Send files, four at a time. The first file that cannot be sent stops the rest from starting; the answer is that file's failure, or `stopped` when the person stopped the command. */
-async function sendFiles<File extends UploadFile>(client: Client, upload: string, files: readonly File[], sending: { readonly arrived: (file: File) => void; readonly pace: Pace }): Promise<Failure | undefined> {
-  const waiting = [...files];
+async function sendFiles<File extends UploadFile>(client: Client, upload: string, files: readonly File[], sending: Lanes & { readonly arrived: (file: File) => void }): Promise<Failure | undefined> {
   let failure: Failure | undefined;
 
-  const lane = async (): Promise<void> => {
-    for (let file = waiting.shift(); file !== undefined && failure === undefined; file = waiting.shift()) {
-      const failed = await sendFile(client, upload, file, sending.pace);
+  const send = async (file: File): Promise<typeof pMapStop | undefined> => {
+    if (failure !== undefined) return pMapStop;
 
-      if (failed === undefined) {
-        // A file that arrives during a rest is told after it, so the line that says why nothing moves stays.
-        await sending.pace.ready();
-        sending.arrived(file);
-      } else {
-        failure ??= failed;
-      }
+    const failed = await sendFile(client, upload, file, sending);
+
+    if (failed !== undefined) {
+      failure ??= failed;
+
+      return undefined;
     }
+
+    // A file that arrives during a rest is told after it, so the line that says why nothing moves stays.
+    await sending.pace.ready();
+    sending.arrived(file);
+
+    return undefined;
   };
 
-  await Promise.all(Array.from({ length: Math.min(UPLOADS_AT_ONCE, files.length) }, lane));
+  await pMap(files, send, { concurrency: UPLOADS_AT_ONCE });
 
   // A stop ends the upload whatever else a lane met, so it is the failure told.
-  return (await sending.pace.ready()) ?? failure;
+  const stopped = await sending.pace.ready();
+  if (stopped !== undefined || sending.stopped.aborted) return { kind: "stopped" };
+
+  return failure;
 }
 
 function lacksFiles(finished: Called<Published>): boolean {
@@ -273,7 +313,7 @@ export async function giveUpUpload(session: Pick<Session, "client" | "afterStop"
 /**
  * Send the files of a begun upload and finish it.
  *
- * Four files are sent at once, each up to three times. While the install says it lacks files, it is asked which, sent those, and finished again, up to three finishes in all.
+ * Four files are sent at once; one the install fails on or gives no answer to is sent again after a pause, up to three times more. While the install says it lacks files, it is asked which, sent those, and finished again, up to three finishes in all.
  *
  * An answer of "too many requests" to any call here counts as none of those: the upload rests as long as the answer asks, says so on the progress line, and makes the call again, up to six rests a call.
  * The answer after the sixth rest is the failure. Once the person stops the command, during a rest or a call, the failure is `stopped` and no call is made after it.
@@ -281,7 +321,7 @@ export async function giveUpUpload(session: Pick<Session, "client" | "afterStop"
  * @returns the install's answer to the finish, or the first failure; the upload is then still there to be given up
  */
 export async function sendUpload<File extends UploadFile>(client: Client, upload: string, files: readonly File[], on: Sending<File>): Promise<Called<Published>> {
-  const sending = { arrived: on.arrived, pace: new Pace(on.io) };
+  const sending = { arrived: on.arrived, pace: new Pace(on.io), stopped: on.io.stopped };
   const finish = (): Promise<Called<Published>> => unhurried(sending.pace, () => client.call("finishPublish", { upload }));
 
   const unsent = await sendFiles(client, upload, files, sending);

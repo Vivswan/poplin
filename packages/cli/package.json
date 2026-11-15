@@ -61,6 +61,8 @@
     "@valibot/to-json-schema": "1.8.0",
     "htmlparser2": "12.0.0",
     "mime": "4.1.2",
+    "p-map": "7.1.1",
+    "p-retry": "9.0.0",
     "publint": "0.3.25",
     "tsdown": "0.23.7",
     "valibot": "1.5.0",

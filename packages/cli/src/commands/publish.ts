@@ -129,7 +129,7 @@ export function previewPublish(plan: PublishPlan): Outcome {
 /**
  * Send a planned publish to the install.
  *
- * Four files are sent at once, each up to three times. A publish the install says lacks files is sent those and finished again, up to three finishes in all.
+ * Four files are sent at once, and one the install fails on is sent again after a pause, up to three times more. A publish the install says lacks files is sent those and finished again, up to three finishes in all.
  * A first step answered "too many requests" began nothing, and is made again after the rest the answer asks for, as every later step is.
  *
  * @returns the site as the install answered it. After any failure past the first step, a stop by the person included, the upload is given up, and the problem says what became of it
