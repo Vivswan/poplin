@@ -8,25 +8,10 @@ import { BunSqliteDriver } from "../packages/core/tests/database/support/bun-sql
 import { createPreview } from "../packages/demo/src/preview/preview";
 import { HOST, PID_PATH, pidFile, stopRunning } from "../packages/demo/scripts/running";
 import { readSamples } from "../packages/demo/scripts/samples";
-import { plantedRepository, repositoryFiles } from "./support/repository-files";
+import { plantedLint } from "./support/planted-lint";
 
 /** The version the demo's installs are told they run. */
 const VERSION = "1.0.0";
-
-/** The repository this file sits in. */
-const ROOT = join(import.meta.dir, "..");
-
-/** The source of the demo: the module every host runs, and the host that runs it in a browser with no server. */
-const DEMO_SOURCE = new Bun.Glob("packages/demo/src/*/*.ts");
-
-/** What only one runtime has: its own modules and globals. */
-const RUNTIME_NAME = /\bBun\.|["'](?:bun|node):|\bprocess\.|import\.meta\.(?:dir|path|main)|\bBuffer\b/g;
-
-/** An import: the first group is what it names. */
-const IMPORT = /from "([^"]+)"/g;
-
-/** Where the demo may import from: its own two folders, the portable source of the app and of core, and the libraries a browser runs, SQLite built for one among them. */
-const PORTABLE_IMPORT = /^(?:\.\/|\.\.\/(?:preview|browser)\/|\.\.\/\.\.\/\.\.\/(?:app|core)\/src\/|(?:sql\.js(?:\/dist\/sql-wasm-browser\.js)?|idb-keyval|cookie|hono\/html|htmlparser2)$)/;
 
 /** The command that starts a preview. */
 const SERVE = join(import.meta.dir, "..", "packages", "demo", "scripts", "serve.ts");
@@ -57,19 +42,6 @@ const FORM_TOKEN = /name="csrf" value="([^"]+)"/;
 
 /** The headers a browser puts on a form it sends to the page's own origin. */
 const FORM_HEADERS = { Origin: ORIGIN, "Sec-Fetch-Site": "same-origin", "Content-Type": "application/x-www-form-urlencoded" };
-
-/** What the demo's source in a repository names of one runtime, and what it imports from outside the places it may, each as `[file, what]`; `files` counts the files read. */
-async function demoReach(root: string): Promise<{ files: number; runtime: string[][]; imports: string[][] }> {
-  const files = repositoryFiles(root).filter((path) => DEMO_SOURCE.match(path));
-  const texts = await Promise.all(files.map(async (file) => [file, await Bun.file(join(root, file)).text()] as const));
-  const imports = texts.flatMap(([file, text]) => Array.from(text.matchAll(IMPORT), ([, path = ""]) => [file, path]));
-
-  return {
-    files: files.length,
-    runtime: texts.flatMap(([file, text]) => (text.match(RUNTIME_NAME) ?? []).map((found) => [file, found])),
-    imports: imports.filter(([, path = ""]) => !PORTABLE_IMPORT.test(path)),
-  };
-}
 
 /** Follow a path through its redirects, as a browser would. */
 async function open(preview: Awaited<ReturnType<typeof createPreview>>, path: string): Promise<Response> {
@@ -197,31 +169,43 @@ describe("the local preview", () => {
     expect(seen.size).toBeLessThan(MAX_PAGES);
   });
 
-  test("the demo names no runtime and imports only portable source, its own files, and SQLite: without this it stops running in a browser or a Worker the day someone reaches for a file or a process", async () => {
-    const { files, runtime, imports } = await demoReach(ROOT);
-
-    expect(files).toBeGreaterThan(5);
-    expect(runtime).toEqual([]);
-    expect(imports).toEqual([]);
-  });
-
-  // Drift: a guard that lists the disk reads what is no part of the repository, and fails in the one checkout that holds it.
-  test("a runtime's name and an import from outside are named in a new file not yet added, and not in a file the repository is told to leave out or in a build folder", async () => {
-    const reach = 'import { readFileSync } from "node:fs";\n';
-    using tree = plantedRepository(
-      {
-        "packages/demo/src/preview/added.ts": reach,
-        "packages/demo/src/preview/scratch.ts": reach,
-        "packages/demo/src/built/bundle.ts": reach,
-      },
-      { excluded: ["scratch.ts"], ignored: ["built/"] },
-    );
-
-    expect(await demoReach(tree.path)).toEqual({
-      files: 1,
-      runtime: [["packages/demo/src/preview/added.ts", '"node:']],
-      imports: [["packages/demo/src/preview/added.ts", "node:fs"]],
+  test("the demo names no runtime and imports only portable source, its own files, and SQLite: without this it stops running in a browser or a Worker the day someone reaches for a file or a process", () => {
+    const reach = [
+      'import { readFileSync } from "node:fs";',
+      'import { serve } from "bun";',
+      'import { run } from "../../../cli/src/commands/run";',
+      'import "../../../cli/src/commands/run";',
+      "import { HOST } from '../../scripts/running';",
+      'import { Hono } from "hono";',
+      'import other from "sql.js/dist/sql-asm.js";',
+      'export const loaded = await import("../../../app/tests/dashboard/support/markup");',
+      "export const home = process.env.HOME;",
+      "export const file = Bun.file(home);",
+      "export const bytes = Buffer.from(home);",
+    ];
+    const portable = [
+      "// A Buffer, a process, and Bun are named in a comment alone.",
+      'import { base } from "./base";',
+      'import { seed } from "../preview/seed";',
+      'import { keptStore } from "../browser/kept-store";',
+      'import { listSites } from "../../../app/src/sites/list";',
+      'import { open } from "../../../core/src/database/open";',
+      'import initSqlJs from "sql.js";',
+      'import browserSqlJs from "sql.js/dist/sql-wasm-browser.js";',
+    ];
+    const refused = plantedLint({
+      "packages/demo/src/preview/added.ts": `${reach.join("\n")}\n`,
+      "packages/demo/src/preview/kept.ts": `${portable.join("\n")}\n`,
+      "packages/demo/scripts/added.ts": `${reach.join("\n")}\n`,
     });
+
+    expect(refused).toEqual([
+      "noNodejsModules: packages/demo/src/preview/added.ts:1",
+      "noRestrictedGlobals: packages/demo/src/preview/added.ts:10",
+      "noRestrictedGlobals: packages/demo/src/preview/added.ts:11",
+      "noRestrictedGlobals: packages/demo/src/preview/added.ts:9",
+      ...reach.slice(0, 8).map((_, line) => `noRestrictedImports: packages/demo/src/preview/added.ts:${line + 1}`),
+    ]);
   });
 
   // Drift: the dashboard leaves an unlisted site's id out of the link it shows; a rewrite that knew only whole hostnames wrote the name before the preview's host.

@@ -177,6 +177,54 @@
         }
       }
     },
+    // The demo runs in a browser too, so its source imports only its own files, the portable source of the app and of core, and the libraries a browser runs, SQLite built for one among them.
+    {
+      "includes": ["packages/demo/src/**"],
+      "linter": {
+        "rules": {
+          "correctness": { "noNodejsModules": "error" },
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "patterns": [
+                  {
+                    "group": [
+                      "**",
+                      "!./**",
+                      "!../preview/**",
+                      "!../browser/**",
+                      "!../../../app/src/**",
+                      "!../../../core/src/**",
+                      "!sql.js",
+                      "!sql.js/dist/sql-wasm-browser.js",
+                      "!idb-keyval",
+                      "!cookie",
+                      "!hono/html",
+                      "!htmlparser2"
+                    ],
+                    "message": "The demo imports its own files, the source of the app and of core, and the libraries a browser runs."
+                  }
+                ]
+              }
+            },
+            "noRestrictedGlobals": {
+              "level": "error",
+              "options": {
+                "deniedGlobals": {
+                  "Buffer": "The demo names no runtime global: it runs in a browser.",
+                  "Bun": "The demo names no runtime global: it runs in a browser.",
+                  "FixedLengthStream": "Portable code names no provider global: packages/cloudflare owns it.",
+                  "HTMLRewriter": "Portable code names no provider global: packages/cloudflare owns it.",
+                  "WebSocketPair": "Portable code names no provider global: packages/cloudflare owns it.",
+                  "process": "The demo names no runtime global: it runs in a browser."
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     // The test runner's own HTML parser reads a page in the dashboard's tests; no page of the product is built with it. The other globals stay refused.
     {
       "includes": ["packages/app/tests/dashboard/support/markup.ts"],
