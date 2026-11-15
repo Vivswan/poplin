@@ -40,6 +40,25 @@
   "html": { "experimentalFullSupportEnabled": true },
   // A later entry replaces an earlier entry's options for the same rule, so a narrower place repeats what it keeps.
   "overrides": [
+    // Source outside a migrations folder imports none: a step outlives its release only where code reaches for it. tests/no-old-shapes.test.ts plants each leak.
+    // The path names no package, so it holds under a package's own settings file too, which counts an entry's paths from its own folder.
+    {
+      "includes": ["**/src/**", "!**/migrations/**"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "patterns": [
+                  { "group": ["**/migrations", "**/migrations/**"], "message": "Only a migrations folder and the doorway that runs its steps import one." }
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
     // The portable packages hold no provider: its modules, types, and globals stay in packages/cloudflare. tests/portable.test.ts plants each leak.
     {
       "includes": ["packages/core/**", "packages/app/**", "packages/cli/**", "packages/demo/**", "packages/dashboard/**"],
@@ -97,12 +116,82 @@
         }
       }
     },
+    // The source of the app and of the CLI is under the portable rule and the one on migrations folders.
+    {
+      "includes": ["packages/app/src/**", "packages/cli/src/**", "!**/migrations/**"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "paths": {
+                  "node:module": { "importNames": ["createRequire"], "message": "Portable code loads a module by an import, which the rules here read." },
+                  "module": { "importNames": ["createRequire"], "message": "Portable code loads a module by an import, which the rules here read." }
+                },
+                "patterns": [
+                  {
+                    "group": [
+                      "cloudflare",
+                      "cloudflare:*",
+                      "@cloudflare/**",
+                      "wrangler",
+                      "wrangler/**",
+                      "miniflare",
+                      "miniflare/**",
+                      "@poplin/cloudflare",
+                      "**/cloudflare/**"
+                    ],
+                    "message": "Portable code has no provider module: packages/cloudflare owns it."
+                  },
+                  { "group": ["**/migrations", "**/migrations/**"], "message": "Only a migrations folder and the doorway that runs its steps import one." }
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
     // Core is the logic every surface shares, so it imports no HTTP framework, provider, or runtime module.
     {
       "includes": ["packages/core/src/**"],
       "linter": {
         "rules": {
           "correctness": { "noNodejsModules": "error" },
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "patterns": [
+                  {
+                    "group": [
+                      "cloudflare",
+                      "cloudflare:*",
+                      "@cloudflare/**",
+                      "wrangler",
+                      "wrangler/**",
+                      "miniflare",
+                      "miniflare/**",
+                      "@poplin/cloudflare",
+                      "**/cloudflare/**"
+                    ],
+                    "message": "Portable code has no provider module: packages/cloudflare owns it."
+                  },
+                  { "group": ["hono", "hono/**"], "message": "Core has no HTTP framework: the app package owns it." },
+                  { "group": ["bun", "bun:*"], "message": "Core has no runtime module: it runs in a Worker." },
+                  { "group": ["**/migrations", "**/migrations/**"], "message": "Only a migrations folder and the doorway that runs its steps import one." }
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    // Core's migrations folders, and the one doorway that runs their steps, are under core's rules less the one on migrations.
+    {
+      "includes": ["packages/core/src/**/migrations/**", "packages/core/src/database/open.ts"],
+      "linter": {
+        "rules": {
           "style": {
             "noRestrictedImports": {
               "level": "error",
@@ -156,7 +245,8 @@
                     ],
                     "message": "Portable code has no provider module: packages/cloudflare owns it."
                   },
-                  { "group": ["bun", "bun:*"], "message": "The dashboard has no runtime module: it runs in a browser." }
+                  { "group": ["bun", "bun:*"], "message": "The dashboard has no runtime module: it runs in a browser." },
+                  { "group": ["**/migrations", "**/migrations/**"], "message": "Only a migrations folder and the doorway that runs its steps import one." }
                 ]
               }
             },
@@ -201,9 +291,11 @@
                       "!idb-keyval",
                       "!cookie",
                       "!hono/html",
-                      "!htmlparser2"
+                      "!htmlparser2",
+                      "**/migrations",
+                      "**/migrations/**"
                     ],
-                    "message": "The demo imports its own files, the source of the app and of core, and the libraries a browser runs."
+                    "message": "The demo imports its own files, the source of the app and of core but for a migrations folder, and the libraries a browser runs."
                   }
                 ]
               }

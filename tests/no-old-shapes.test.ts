@@ -1,23 +1,22 @@
-// Scope: this catches accidental handling of an old stored shape, and import leaks, in source under `packages/*/src` outside any `migrations/` folder, and a retired name written anywhere in the repository; deliberate hiding is out of scope.
+// Scope: this catches accidental handling of an old stored shape in source under `packages/*/src` outside any `migrations/` folder, and a retired name written anywhere in the repository; deliberate hiding is out of scope.
+// An import of a `migrations/` folder is refused by the lint settings, which `bun run lint` applies to the tree; this file plants each such import. A path written as a template is out of scope: no rule reads it.
 
 import { describe, expect, test } from "bun:test";
 import { mkdtempDisposableSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
+import { plantedLint } from "./support/planted-lint";
 import { plantedRepository, repositoryFiles } from "./support/repository-files";
 
 /** The repository this file sits in. */
 const ROOT = join(import.meta.dir, "..");
 
-/** The only files outside a `migrations/` folder that may import from one and may branch on a stored version. */
+/** The only files outside a `migrations/` folder that may branch on a stored version; the lint settings name the same files as the only ones that may import from one. */
 const DOORWAYS: readonly string[] = ["packages/core/src/database/open.ts"];
 
 /** The files that count as source. */
 const SOURCE_FILES = new Bun.Glob("packages/*/src/**/*.{ts,tsx,mts,cts,js,jsx,mjs,cjs}");
-
-/** Rule (a): an import, a dynamic import, or a require whose path has a `migrations` segment. */
-const MIGRATIONS_IMPORT = /(?:\bfrom|\bimport|\brequire)\s*\(?\s*(?:\/\*[^*]*\*\/\s*)?["'](?:[^"'\n]*\/)?migrations(?:\/[^"'\n]*)?["']/;
 
 /** The names stored data is stamped under: `shape`, and the version words a stamp could be called instead. */
 const STAMP = String.raw`\b(?:shape|(?:schema|data|record|storage|format|layout)_?[vV]ersion|(?:SCHEMA|DATA|RECORD|STORAGE|FORMAT|LAYOUT)_VERSION)\b`;
@@ -111,7 +110,7 @@ function rulesFor(path: string): readonly (readonly [rule: string, patterns: rea
   const words = ["retired-shape word", RETIRED_WORDS] as const;
   if (DOORWAYS.includes(path)) return [words];
 
-  return [["imports migrations", [MIGRATIONS_IMPORT]], ["branches on a stamp", STAMP_BRANCHES], words];
+  return [["branches on a stamp", STAMP_BRANCHES], words];
 }
 
 /** Every place that breaks a rule, as `<rule>: <path>:<line>`, the line being where the match starts. A file is matched whole, so a statement broken over lines is seen. */
@@ -140,11 +139,6 @@ describe("no old shapes outside migrations/", () => {
 
   // Drift: a guard that matches nothing passes forever; each row is a violation planted in a throwaway tree that the guard must name.
   test.each([
-    ["a static import of a step", 'import { REGISTRY } from "../migrations/registry";', "imports migrations"],
-    ["an import of the folder itself", 'import "./migrations";', "imports migrations"],
-    ["a dynamic import", 'const steps = await import("../../core/src/migrations/upgrade");', "imports migrations"],
-    ["a dynamic import behind a comment", 'const steps = await import(/* only here */ "../migrations/upgrade");', "imports migrations"],
-    ["a require", 'const steps = require("./migrations/registry");', "imports migrations"],
     ["a shape compared", "if (record.shape === 1) return rename(record);", "branches on a stamp"],
     ["a shape compared from the right", "const old = 2 > site.shape;", "branches on a stamp"],
     ["a shape read by key and compared", 'const old = fields["shape"] !== SITE_SHAPE;', "branches on a stamp"],
@@ -178,13 +172,49 @@ describe("no old shapes outside migrations/", () => {
     ["the gallery's hostname in a layout's picture", "//   gallery-<public word>.<domain>          the gallery", "retired name"],
     ["the cache time of HTML as a setting", "const seconds = settings.cache_html.count;", "retired name"],
     ["the cache time of other files as a setting", 'const kept = settings.cache_files === "off";', "retired name"],
-    ["an import broken over lines", 'import { REGISTRY } from\n  "../migrations/registry";', "imports migrations"],
     ["a comparison broken over lines", "const title = record.shape\n  === 1 ? record.text : record.title;", "branches on a stamp"],
     ["a condition broken over lines", "if (\n  isOld(record.shape)\n) record = step(record);", "branches on a stamp"],
   ])("names %s", (_, line, rule) => {
     using tree = plantedRepository({ "packages/demo/src/sites/planted.ts": `// A planted file.\n${line}\n` });
 
     expect(violations(tree.path)).toEqual([`${rule}: packages/demo/src/sites/planted.ts:2`]);
+  });
+
+  test("drift: an import of a migrations folder from outside one keeps a step alive after its release; every package's source is refused it, and a comment, a migrations folder, the doorway, and a test are not", () => {
+    const leaks: readonly (readonly [leak: string, line: string, rule: string, what: string, file: string])[] = [
+      ["a static import of a step", 'import { REGISTRY } from "../migrations/registry";', "noRestrictedImports", "../migrations", "packages/app/src/sites/planted.ts"],
+      ["an import of the folder itself", 'import "./migrations";', "noRestrictedImports", "./migrations", "packages/cli/src/commands/planted.ts"],
+      ["a dynamic import", 'const steps = await import("../../core/src/migrations/upgrade");', "noRestrictedImports", "../../core", "packages/cloudflare/src/worker/planted.ts"],
+      ["a dynamic import behind a comment", 'const steps = await import(/* only here */ "../migrations/upgrade");', "noRestrictedImports", "../migrations", "packages/core/src/sites/planted.ts"],
+      ["an import in single quotes", "import { REGISTRY } from '../migrations/registry';", "noRestrictedImports", "../migrations", "packages/dashboard/src/pages/planted.tsx"],
+      ["an import by the package's name", 'import { REGISTRY } from "@poplin/core/src/migrations/registry";', "noRestrictedImports", "@poplin/core", "packages/app/src/api/planted.ts"],
+      ["an import from the demo", 'import { REGISTRY } from "../../../core/src/migrations/registry";', "noRestrictedImports", "../../../core", "packages/demo/src/preview/planted.ts"],
+      ["an import broken over lines", 'import { REGISTRY } from\n  "../migrations/registry";', "noRestrictedImports", "../migrations", "packages/app/src/login/planted.ts"],
+      ["a require", 'const steps = require("./migrations/registry");', "noCommonJs", "require", "packages/cli/src/files/planted.ts"],
+      ["an import from a package the settings do not name", 'import { REGISTRY } from "../migrations/registry";', "noRestrictedImports", "../migrations", "packages/other/src/sites/planted.ts"],
+    ];
+    const allowed = 'import { REGISTRY } from "../migrations/registry";\n// import { upgrade } from "./migrations/upgrade";\n';
+    const core = `${allowed}import { Hono } from "hono";\n`;
+    const refused = plantedLint({
+      ...Object.fromEntries(leaks.map(([, line, , , file]) => [file, `// A planted file.\n${line}\n`])),
+      "packages/app/src/sites/commented.ts": '// import { REGISTRY } from "../migrations/registry";\nexport const steps = "./migrations";\n',
+      "packages/app/src/sites/migrations/helper.ts": allowed,
+      "packages/cloudflare/src/database/migrations/helper.ts": allowed,
+      "packages/app/tests/sites/planted.test.ts": allowed,
+      "packages/core/tests/migrations/planted.test.ts": allowed,
+      "packages/core/src/migrations/0001-rename-text.ts": core,
+      "packages/core/src/sites/migrations/helper.ts": core,
+      "packages/core/src/database/open.ts": core,
+    });
+
+    expect(refused).toEqual(
+      [
+        ...leaks.map(([, line, rule, what, file]) => `${rule}: ${file}:${1 + line.slice(0, line.indexOf(what)).split("\n").length}`),
+        "noRestrictedImports: packages/core/src/database/open.ts:3",
+        "noRestrictedImports: packages/core/src/migrations/0001-rename-text.ts:3",
+        "noRestrictedImports: packages/core/src/sites/migrations/helper.ts:3",
+      ].sort(),
+    );
   });
 
   // Drift: a retired name lives on longest where no compiler reads it: a test that still passes, a page of the skill, a variable of the module.
