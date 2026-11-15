@@ -726,14 +726,15 @@ describe("the admin hostname", () => {
     const tally = { calls: 0 };
     const worker = instance(w);
     await ask(worker, `${ADMIN}/api/whoami`, {}, countedBindings(tally));
-    const site = await publish(worker, await tokenOf(w, "admin"), { name: "report" }, [page("<h1>report</h1>")]);
+    const token = await tokenOf(w, "admin");
+    const site = await publish(worker, token, { name: "report" }, [page("<h1>report</h1>")]);
     const session = { Cookie: cookieOf(await logIn(worker, w)) };
-    const asked = async (path: string): Promise<readonly [status: number, queries: number]> => {
+    const counted = async (answer: () => Promise<Response>): Promise<readonly [status: number, queries: number]> => {
       tally.calls = 0;
-      const answer = await ask(worker, `${ADMIN}${path}`, { headers: session });
 
-      return [answer.status, tally.calls];
+      return [(await answer()).status, tally.calls];
     };
+    const asked = (path: string): Promise<readonly [status: number, queries: number]> => counted(() => ask(worker, `${ADMIN}${path}`, { headers: session }));
 
     expect({
       "an address that asks nothing but who is there": await asked("/data/public-address?name=docs"),
@@ -741,12 +742,16 @@ describe("the admin hostname", () => {
       "a page of the dashboard: the session, then all its frame shows": await asked("/"),
       "the frame alone": await asked("/data/frame"),
       "one site: the site, its views, and who published it": await asked(`/data/sites/${site.label}`),
+      "a change to one site: the session, the settings with the site, the change": await counted(() => send(worker, `${ADMIN}/data/sites/${site.label}/naming`, { title: "Report" }, session)),
+      "one site through the API: the token, the settings with the site, its views": await counted(() => ask(worker, `${ADMIN}/api/sites/${site.id}`, { headers: { Authorization: `Bearer ${token}` } })),
     }).toEqual({
       "an address that asks nothing but who is there": [200, 1],
       "the people, who are in the settings the session read": [200, 1],
       "a page of the dashboard: the session, then all its frame shows": [200, 2],
       "the frame alone": [200, 2],
       "one site: the site, its views, and who published it": [200, 4],
+      "a change to one site: the session, the settings with the site, the change": [200, 3],
+      "one site through the API: the token, the settings with the site, its views": [200, 3],
     });
   });
 
@@ -849,8 +854,8 @@ describe("the audit log as a file", () => {
 describe("a copy of a site", () => {
   // Drift: the Free plan ends a request past 50 queries of the database, 4 of them made by a request that starts an instance, and bounds the bucket apart. A copy that counts its own calls alone passes 50 on a new instance.
   test.each([
-    [130, 2, { database: [10, 14], bucket: [225, 225] }],
-    [1_001, 10, { database: [10, 14], bucket: [228, 228] }],
+    [130, 2, { database: [9, 13], bucket: [225, 225] }],
+    [1_001, 10, { database: [9, 13], bucket: [228, 228] }],
   ])(
     "of %i files takes %i requests through the API, and the request that makes the most calls stays under 44 to the database and 250 to the bucket, on an instance that runs and on one each request starts",
     async (count, requests, most) => {

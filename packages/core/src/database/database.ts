@@ -171,6 +171,12 @@ export interface SettingsAndKey {
   readonly key: Uint8Array<ArrayBuffer> | undefined;
 }
 
+/** The settings and one site as one read gave them: the settings are `undefined` before setup stored them, the site when no site has the id. */
+export interface SettingsAndSite {
+  readonly settings: SettingValues | undefined;
+  readonly site: Site | undefined;
+}
+
 /** What the frame around every screen of the dashboard is drawn from, as one read gave it; each is `undefined` where its own read gives that. */
 export interface FrameRecords {
   readonly settings: SettingValues | undefined;
@@ -448,6 +454,9 @@ export interface Database {
 
   /** The site with this id, in the trash or not. */
   getSite(id: SiteId): Promise<Site | undefined>;
+
+  /** The settings and the site with this id, in the trash or not, read together in one step: what an action on one site starts from. */
+  getSiteWithSettings(id: SiteId): Promise<SettingsAndSite>;
 
   /**
    * The name each of these ids' sites has now and the title it is listed under, in the trash or not, read in one step. An id that is no site's is left out.

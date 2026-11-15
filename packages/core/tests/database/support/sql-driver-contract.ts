@@ -413,6 +413,7 @@ function queryPlans(label: string, makeDriver: DriverFactory): void {
       const site = await made(database, draft(REPORT, "public", DOCS));
       const token = (await mintToken({ scope: "publisher", note: "ci", now: NOW })).record;
       await database.getSite(site.id);
+      await database.getSiteWithSettings(site.id);
       await database.getSiteByPublicName(DOCS);
       await database.findServed({ id: site.id }, NOW);
       await database.findServed({ public_name: DOCS }, NOW);

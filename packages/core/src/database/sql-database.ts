@@ -55,6 +55,7 @@ import type {
   Reserved,
   ServedSite,
   SettingsAndKey,
+  SettingsAndSite,
   Signed,
   SigningKey,
   SiteDetails,
@@ -380,6 +381,12 @@ export class SqlDatabase implements Database {
     const [found] = await this.#driver.batch([siteById(id)]);
 
     return siteIn(found);
+  }
+
+  async getSiteWithSettings(id: SiteId): Promise<SettingsAndSite> {
+    const [stored, found] = await this.#driver.batch([READ_SETTINGS, siteById(id)]);
+
+    return { settings: settingsIn(stored), site: siteIn(found) };
   }
 
   async getSiteNames(ids: readonly SiteId[]): Promise<ReadonlyMap<SiteId, SiteNamed>> {
