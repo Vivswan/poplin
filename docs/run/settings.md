@@ -42,7 +42,6 @@ The settings `poplin config` takes:
 | `default_expires`, `default_search_engines`                                             | what a new site starts with                              |
 | `versions_kept`, `trash_days`                                                           | how much is kept, and for how long                       |
 | `logins`                                                                                | the emails that may log in                               |
-| `dashboard_title`                                                                       | the dashboard's title                                    |
 | `outside_pages`, `search_engines_allowed`, `block_bots`                                 | what the install lets in                                 |
 | `max_total_size`, `max_site_size`, `max_sites`                                          | size limits                                              |
 | `max_files_per_publish`, `max_files_per_day`                                            | how many files one publish holds, and all publishes begun in one UTC day |

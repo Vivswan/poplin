@@ -64,7 +64,7 @@ export async function openOwned(): Promise<Owned> {
     publicAddressOf: ADDRESSES.publicAddressOf,
     reservedNames: ADDRESSES.reservedNames,
   };
-  await base.database.initSettings(defaultSettings({ installer: base.owner, hostname: "poplin.example.com" }), { by: base.owner, at: NOW });
+  await base.database.initSettings(defaultSettings({ installer: base.owner }), { by: base.owner, at: NOW });
 
   const signing = await base.database.ensureSigningKey(new Uint8Array(32).fill(5), NOW);
   const setCookie = await mintSessionCookie({ email: base.owner, key: await importSessionKey(signing.key), now: NOW });

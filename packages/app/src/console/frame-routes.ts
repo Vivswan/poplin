@@ -1,6 +1,6 @@
-// The data routes of the frame around every screen: the install's title, the newer release it knows of, what its domain needs, and the start of an update.
+// The data routes of the frame around every screen: the newer release the install knows of, what its domain needs, and the start of an update.
 //
-//   GET  /frame    the title, the newer release or `null`, whether an update can be started from here, and the note on the domain or `null`
+//   GET  /frame    the newer release or `null`, whether an update can be started from here, and the note on the domain or `null`
 //   POST /update   start the update: one request to the saved address
 
 import { vValidator } from "@hono/valibot-validator";
@@ -14,9 +14,6 @@ import type { Actor } from "@poplin/core/src/auth/scopes";
 import { Hono } from "hono";
 
 import { NOTHING, refused, refuseInvalid, type Shared } from "./data";
-
-/** The title of a frame whose settings cannot be read. */
-const PLAIN_TITLE = "poplin";
 
 /** What the side says in a few words when a piece of the domain needs work, and when the last check is only old. */
 const [NEEDS_FIXING, CHECK_IS_OLD] = ["Domain needs fixing", "Domain check is old"];
@@ -35,9 +32,6 @@ interface DomainNote {
 
 /** What the frame shows of the install. */
 interface Frame {
-  /** The install's title. */
-  readonly title: string;
-
   /** The newer release the install knows of, or `null`. */
   readonly update: Update | null;
 
@@ -70,16 +64,16 @@ async function domainNoteOf(install: Install, actor: Actor): Promise<DomainNote 
 /**
  * Read what the frame shows.
  *
- * @returns the frame of an install whose settings cannot be read has the plain title, no release, no start, and no note
+ * @returns the frame of an install whose settings cannot be read has no release, no start, and no note
  */
 export async function frameOf(install: Install, actor: Actor, asked: Asked): Promise<Frame> {
   const config = await readConfig(install, actor);
-  if (!config.ok) return { title: PLAIN_TITLE, update: null, starts: false, domainNote: null };
+  if (!config.ok) return { update: null, starts: false, domainNote: null };
 
   const address = await updateAddressState(install, actor);
   const domainNote = asked.domain ? await domainNoteOf(install, actor) : null;
 
-  return { title: config.values.dashboard_title, update: (await updateOf(install, asked.version, config.values)) ?? null, starts: address.ok && address.set, domainNote };
+  return { update: (await updateOf(install, asked.version, config.values)) ?? null, starts: address.ok && address.set, domainNote };
 }
 
 /** The frame's data routes. */

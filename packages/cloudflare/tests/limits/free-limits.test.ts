@@ -8,7 +8,7 @@ import { expect, test } from "vitest";
 
 import { FREE_LIMITS } from "../../src/limits/free-limits";
 
-const settings = defaultSettings({ installer: "owner@example.com" as Login, hostname: "poplin.example.com" });
+const settings = defaultSettings({ installer: "owner@example.com" as Login });
 const warned = (changed: Partial<typeof settings>): string[] => [...freeLimitWarnings({ ...settings, ...changed }, FREE_LIMITS).keys()];
 
 // Drift: the defaults are core's and the free plan's numbers are this package's. A default raised past one of them would put a new install outside the free plan, warning and all, on its first day.

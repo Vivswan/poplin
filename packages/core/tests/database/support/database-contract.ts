@@ -73,7 +73,7 @@ const ROOMY = { own: 100, folderBytes: 1_000_000, staying: 0, totalBytes: 1_000_
 const BY_BO_LATER: Signed = { by: BO, at: NOW + 5 };
 
 /** The settings of a new install. */
-export const SETTINGS = defaultSettings({ installer: "ada@example.com" as Login, hostname: "poplin.example.com" });
+export const SETTINGS = defaultSettings({ installer: "ada@example.com" as Login });
 
 /** The admin who decides the fixture logins. */
 export const ADMIN = "ada@example.com" as Login;

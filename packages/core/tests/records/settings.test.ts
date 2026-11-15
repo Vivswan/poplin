@@ -6,14 +6,13 @@ import * as v from "valibot";
 import type { Login } from "../../src/auth/logins";
 import { defaultSettings, SETTING_VALUES, type SettingValues, settingsFromText, settingsToText, showBytes, sizeBytes } from "../../src/records/settings";
 
-const INSTALL = { installer: "ada@example.com" as Login, hostname: "poplin.example.com" };
+const INSTALL = { installer: "ada@example.com" as Login };
 const PUBLISHED_DEFAULTS = {
   default_expires: "never",
   default_search_engines: "off",
   versions_kept: "3",
   trash_days: "7",
   logins: "ada@example.com",
-  dashboard_title: "poplin.example.com",
   outside_pages: "blocked",
   search_engines_allowed: "off",
   block_bots: "auto",
@@ -35,7 +34,6 @@ const CHANGED = {
   versions_kept: "10",
   trash_days: "30",
   logins: "ada@example.com,bo@example.com",
-  dashboard_title: "Team pages",
   outside_pages: "allowed",
   search_engines_allowed: "on",
   block_bots: "off",
@@ -57,7 +55,6 @@ const CHANGED_VALUES = {
   versions_kept: 10,
   trash_days: 30,
   logins: ["ada@example.com", "bo@example.com"],
-  dashboard_title: "Team pages",
   outside_pages: "allowed",
   search_engines_allowed: true,
   block_bots: "off",
@@ -146,7 +143,6 @@ describe("settingsFromText and settingsToText", () => {
     ["search_engines_allowed", "allowed", "bad-form"],
     ["block_bots", "blocked", "bad-form"],
     ["block_bots", "Auto", "bad-form"],
-    ["dashboard_title", "", "out-of-range"],
     ["logins", "", "bad-form"],
     ["logins", "ada@example.com,", "bad-form"],
     ["logins", "ada@example.com,ADA@example.com", "out-of-range"],

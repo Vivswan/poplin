@@ -157,7 +157,7 @@ export async function openInstall(): Promise<Install> {
   const serving: Serving = {
     database,
     store,
-    settings: defaultSettings({ installer: owner, hostname: "poplin.example.com" }),
+    settings: defaultSettings({ installer: owner }),
     addresses: ADDRESSES,
     identify: async (headers) => ({ ok: headers.get(PROOF_HEADER) === owner }),
     now: () => NOW,

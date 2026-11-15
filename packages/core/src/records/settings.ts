@@ -44,7 +44,6 @@ const VALUES = {
     v.minLength(1),
     v.check((logins) => new Set(logins).size === logins.length, "each login is listed once"),
   ),
-  dashboard_title: v.pipe(v.string(), v.minLength(1)),
   outside_pages: v.picklist(OUTSIDE_PAGES),
   search_engines_allowed: v.boolean(),
   block_bots: v.picklist(BLOCK_BOTS),
@@ -77,7 +76,6 @@ const FORMS: { readonly [Key in SettingKey]: TextForm<SettingValues[Key]> } = {
   versions_kept: whole(),
   trash_days: whole(),
   logins: loginList(),
-  dashboard_title: { read: (text) => text, print: (title) => title },
   outside_pages: oneOf(OUTSIDE_PAGES),
   search_engines_allowed: onOff(),
   block_bots: oneOf(BLOCK_BOTS),
@@ -118,9 +116,6 @@ type SettingKey = keyof SettingValues;
 interface Install {
   /** The email of whoever sets the install up; the first login. */
   readonly installer: Login;
-
-  /** The hostname the dashboard answers at; the dashboard's first title. */
-  readonly hostname: string;
 }
 
 /** Why settings text was refused: a key that is no setting, a setting left out, text not in the key's form, or a value outside its range. */
@@ -249,7 +244,7 @@ export function spanSeconds(span: Exclude<SettingValues["default_expires"], "nev
 /**
  * Build the settings a new install starts with.
  *
- * @returns the values of the published defaults table; the two that depend on the install come from `install`
+ * @returns the values of the published defaults table; the one that depends on the install comes from `install`
  */
 export function defaultSettings(install: Install): SettingValues {
   return {
@@ -258,7 +253,6 @@ export function defaultSettings(install: Install): SettingValues {
     versions_kept: 3,
     trash_days: 7,
     logins: [install.installer],
-    dashboard_title: install.hostname,
     outside_pages: "blocked",
     search_engines_allowed: false,
     block_bots: "auto",

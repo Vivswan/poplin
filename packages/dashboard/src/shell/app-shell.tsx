@@ -17,7 +17,7 @@ import {
   SunIcon,
   TriangleAlertIcon,
 } from "lucide-react";
-import { type ReactNode, useEffect, useState } from "react";
+import { type ReactNode, useState } from "react";
 
 import { useTheme } from "@/components/theme-provider";
 import { Badge } from "@/components/ui/badge";
@@ -70,6 +70,9 @@ const SECTIONS = [
       : [],
   },
 ] as const;
+
+/** The name at the top of the side, the same on every install. */
+const NAME = "poplin";
 
 /** The looks a person can choose. */
 const THEMES = [
@@ -318,7 +321,7 @@ function SectionTabs({ section }: { readonly section: (typeof SECTIONS)[number] 
 }
 
 /** The sections on a phone: behind a button at the top, in a sheet that closes once a place is chosen. */
-function PhoneSections({ current, title }: { readonly current: Section; readonly title: string }): ReactNode {
+function PhoneSections({ current }: { readonly current: Section }): ReactNode {
   const [open, setOpen] = useState(false);
 
   return (
@@ -329,7 +332,7 @@ function PhoneSections({ current, title }: { readonly current: Section; readonly
       <SheetContent side="left" className="gap-4 bg-sidebar px-3 pt-3 pb-3 data-[side=left]:w-72">
         <SheetTitle className="flex h-10 items-center gap-2 px-2.5">
           <BrandMark />
-          <span className="truncate font-bold tracking-tight">{title}</span>
+          <span className="truncate font-bold tracking-tight">{NAME}</span>
         </SheetTitle>
         <SheetDescription className="sr-only">The sections of this dashboard.</SheetDescription>
         {/* biome-ignore lint/a11y/useKeyWithClickEvents: the press is a link's own, which a key presses too; the sheet only closes after it. */}
@@ -366,19 +369,14 @@ export function AppShell({
   readonly children: ReactNode;
 }): ReactNode {
   const section = SECTIONS.find((entry) => entry.key === current) ?? SECTIONS[0];
-  const { title } = useFrame().data;
   const { offer, started, question } = useOffer();
-  // The tab of the browser carries the install's title, which a saved setting changes without a reload.
-  useEffect(() => {
-    document.title = title;
-  }, [title]);
 
   return (
     <div className="grid h-svh grid-cols-[232px_minmax(0,1fr)] max-md:grid-cols-1">
       <aside className="flex min-h-0 flex-col gap-4 border-r bg-sidebar px-3 pt-4 pb-3 max-md:hidden">
         <Link to="/" {...NO_OWN_MARK} className="flex h-8 items-center gap-2 rounded-md px-2.5 outline-none focus-visible:ring-2 focus-visible:ring-ring">
           <BrandMark />
-          <span className="truncate text-base font-bold tracking-tight">{title}</span>
+          <span className="truncate text-base font-bold tracking-tight">{NAME}</span>
         </Link>
         <nav aria-label="Sections" className="flex flex-col gap-0.5">
           {SECTIONS.map((section) => (
@@ -393,7 +391,7 @@ export function AppShell({
       </aside>
       <main className="flex min-h-0 min-w-0 flex-col">
         <header className="flex h-14 shrink-0 items-center gap-3 px-6 max-md:gap-2 max-md:px-4">
-          <PhoneSections current={current} title={title} />
+          <PhoneSections current={current} />
           {/* Where tabs name the screens, they stand in the title's place: the title stays for a screen reader. */}
           <h1 className={section.screens.length === 0 ? "min-w-0 truncate text-base font-bold" : "sr-only"}>{heading}</h1>
           <SectionTabs section={section} />

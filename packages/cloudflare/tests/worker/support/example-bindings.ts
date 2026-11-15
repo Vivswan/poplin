@@ -14,7 +14,6 @@ export const EXAMPLE_BINDINGS = {
     versions_kept: "3",
     trash_days: "7",
     logins: "owner@example.com",
-    dashboard_title: "poplin.example.com",
     outside_pages: "blocked",
     search_engines_allowed: "off",
     block_bots: "auto",

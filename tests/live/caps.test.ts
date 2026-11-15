@@ -24,7 +24,7 @@ const STANDING = { files: 40, bytes: 3_000_000 };
 const BUILD_MS = 60_000;
 
 /** How many versions of a site an install keeps by default: the demo's site is published anew at every reset. */
-const VERSIONS_KEPT = defaultSettings({ installer: "ada@example.com" as Login, hostname: "poplin.example.com" }).versions_kept;
+const VERSIONS_KEPT = defaultSettings({ installer: "ada@example.com" as Login }).versions_kept;
 
 /** One site the test install keeps, as its files weigh. */
 interface Kept {

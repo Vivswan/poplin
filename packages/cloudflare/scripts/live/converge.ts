@@ -36,7 +36,7 @@ const NOBODY = "owner@example.com";
 const NO_ACCESS = { team_domain: "access-off.invalid", audience: "0".repeat(64) };
 
 /** The settings a live install starts with, where they differ from the defaults: a short trash, and room for the suite's own requests. */
-const LIVE_SETTINGS = { dashboard_title: "poplin live checks", trash_days: "1", visitor_requests_per_minute: "120" };
+const LIVE_SETTINGS = { trash_days: "1", visitor_requests_per_minute: "120" };
 
 /** How long the install has to answer after a deploy, and how often it is asked, in milliseconds. */
 const READY = { withinMs: 300_000, everyMs: 5_000 };

@@ -136,7 +136,7 @@ async function runOnce(parts: SetupParts, run: DomainRun, sent: Sent): Promise<D
   const plug = domain.plugFor({ domain: typedDomain(sent), login: login.value });
   if (plug === undefined) return { ok: false, refusal: "bad_domain" };
 
-  const settings = async (): Promise<ReturnType<typeof defaultSettings>> => defaultSettings({ installer: login.value, hostname: typedDomain(sent) });
+  const settings = async (): Promise<ReturnType<typeof defaultSettings>> => defaultSettings({ installer: login.value });
 
   return runDomain(plug, install, { run, token: sent.token, settings, from: "setup", unrecorded: true });
 }

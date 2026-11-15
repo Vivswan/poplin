@@ -5,7 +5,7 @@ import { defaultSettings, type SettingValues } from "@poplin/core/src/records/se
 import { freeLimitWarnings } from "../../../src/console/settings/free-limits";
 import { FREE_LIMITS } from "../support/install";
 
-const DEFAULTS = defaultSettings({ installer: "owner@example.com" as SettingValues["logins"][number], hostname: "poplin.example.com" });
+const DEFAULTS = defaultSettings({ installer: "owner@example.com" as SettingValues["logins"][number] });
 
 function logins(count: number): SettingValues["logins"] {
   return Array.from(Array(count).keys(), (index) => `user${index}@example.com`) as SettingValues["logins"];

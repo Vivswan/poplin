@@ -1,4 +1,4 @@
-// The frame's data routes: the title, the newer release, and the note on the domain the side shows, and the start of an update from there.
+// The frame's data routes: the newer release and the note on the domain the side shows, and the start of an update from there.
 
 import { describe, expect, test } from "bun:test";
 
@@ -23,18 +23,16 @@ async function learnRelease(opened: Opened): Promise<void> {
 }
 
 describe("the frame", () => {
-  // Drift: a title saved on the Settings screen would show in the side only after a reload, and the side would offer a start with no address to send it to.
-  test("answers the saved title, the newer release, and whether an update can be started", async () => {
+  // Drift: a release the install learned of would show in the side only after a reload, and the side would offer a start with no address to send it to.
+  test("answers the newer release, and whether an update can be started", async () => {
     const opened = await openConsole();
     const before = await (await opened.get("/data/frame")).json();
     await learnRelease(opened);
-    await opened.change("/data/settings", { texts: { dashboard_title: "Field notes" } });
     await opened.change("/data/settings/update-address", { address: ADDRESS });
 
-    expect(before).toEqual({ ok: true, title: "poplin.example.com", update: null, starts: false, domainNote: null });
+    expect(before).toEqual({ ok: true, update: null, starts: false, domainNote: null });
     expect(await (await opened.get("/data/frame")).json()).toEqual({
       ok: true,
-      title: "Field notes",
       update: { current: "1.0.0", newest: "1.1.0", released: NEWER.released, notes: NEWER.notes, database: false },
       starts: true,
       domainNote: null,

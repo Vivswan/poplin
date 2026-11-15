@@ -21,9 +21,6 @@ export const DOMAIN = "example.com";
 /** The invented person every demo page is shown to. */
 const ADMIN_EMAIL = "mira@example.com";
 
-/** The title of the demo's dashboards, where a real install starts with the hostname of its dashboard. */
-const DASHBOARD_TITLE = "poplin";
-
 /** The bytes of a signing key. */
 const KEY_BYTES = 32;
 
@@ -85,7 +82,7 @@ export async function openWorld(driver: SqlDriver, kept: Kept = {}): Promise<Wor
   if (holder === undefined) throw new Error("the demo's login was refused");
 
   const { database } = opened;
-  await database.initSettings(defaultSettings({ installer: holder, hostname: DASHBOARD_TITLE }), { by: holder, at: kept.since ?? now() });
+  await database.initSettings(defaultSettings({ installer: holder }), { by: holder, at: kept.since ?? now() });
   await database.ensureSigningKey(crypto.getRandomValues(new Uint8Array(KEY_BYTES)), now());
 
   return {

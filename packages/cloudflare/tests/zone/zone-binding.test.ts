@@ -90,7 +90,7 @@ describe("the bindings the module gives the Worker", () => {
   test("the first settings the module's test pins are read by the reader the Worker stores them with", () => {
     const read = settingsFromText(literalAfter("tests/zone.tftest.hcl", "bindings[4].json) == {"));
 
-    expect(read).toMatchObject({ ok: true, values: { search_engines_allowed: true, block_bots: "auto", dashboard_title: "poplin.example.com" } });
+    expect(read).toMatchObject({ ok: true, values: { search_engines_allowed: true, block_bots: "auto" } });
   });
 
   test.each(wholeNumberSettings())("$key: the module refuses a number above $most, the most the Worker's reader takes; one more would leave every first setting unread", ({ key, most }) => {

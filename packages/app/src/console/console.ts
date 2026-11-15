@@ -26,6 +26,9 @@ import { dataRoutes } from "./routes";
 import { type ClientFiles, KEPT_FOR_GOOD, shellPage } from "./shell";
 import { isSpent, spentAnswer } from "./spent";
 
+/** The title of every page of the dashboard, the same on every install. */
+const TITLE = "poplin";
+
 /** What a request whose session cannot be read is taken to carry. */
 const NO_SESSION = { ok: false } as const;
 
@@ -152,7 +155,7 @@ export function createConsole(parts: ConsoleParts): Console {
     const { install, actor } = context.get("asker");
     const frame = await frameOf(install, actor, { version: parts.version, domain: parts.domain !== undefined });
 
-    const boot = { ...frame, base: parts.base, email: context.get("email"), version: parts.version, demo: parts.demo ?? null, domain: parts.domain !== undefined };
+    const boot = { ...frame, title: TITLE, base: parts.base, email: context.get("email"), version: parts.version, demo: parts.demo ?? null, domain: parts.domain !== undefined };
 
     return context.html(shellPage(boot, await parts.client.entry()));
   });

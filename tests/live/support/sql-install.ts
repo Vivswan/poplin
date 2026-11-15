@@ -59,7 +59,7 @@ export async function openSqlInstall(): Promise<SqlInstall> {
   if (opened.kind !== "open") throw new Error(`the fake's database did not open: ${opened.kind}`);
 
   const { database } = opened;
-  await database.initSettings(defaultSettings({ installer: INSTALLER, hostname: ADMIN_HOST }), { by: INSTALLER, at: NOW });
+  await database.initSettings(defaultSettings({ installer: INSTALLER }), { by: INSTALLER, at: NOW });
 
   const counters = new MemoryCounters();
   const api = createApi({

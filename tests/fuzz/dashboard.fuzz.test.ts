@@ -48,7 +48,7 @@ const cookies = fc.constantFrom(base.cookie, base.cookie, base.cookie, base.cook
 const words = fc.constantFrom("private", "unlisted", "public", "previous", "1", "2", "yes", "on", "off", "never", "7d", "2030-01-01", "9GB", "50GB", "docs", "gallery", "<script>alert(1)</script>", "next@example.com", ...LABELS);
 const values = fc.oneof({ arbitrary: words, weight: 3 }, { arbitrary: hostile(words), weight: 1 }, { arbitrary: fc.string(), weight: 1 }, { arbitrary: fc.constantFrom(true, false, 1, null), weight: 1 });
 const fields = fc.dictionary(
-  fc.constantFrom("access", "public_name", "title", "search_engines", "embeddable", "expires", "version", "name", "login", "trash_days", "logins", "max_total_size", "dashboard_title", "values", "other"),
+  fc.constantFrom("access", "public_name", "title", "search_engines", "embeddable", "expires", "version", "name", "login", "trash_days", "logins", "max_total_size", "values", "other"),
   values,
   { maxKeys: 6 },
 );

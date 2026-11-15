@@ -257,7 +257,7 @@ async function asRoute<Answer>(install: Install, step: (counted: Install) => Pro
 /** Publish a new site of `files` pages of four bytes each through the three steps, each as its route runs it; answers the rows the whole of it read and wrote. */
 async function publishCost(files: number): Promise<RowCounts> {
   const { install, rows } = await meteredInstall();
-  await install.database.initSettings(defaultSettings({ installer: "ada@example.com" as Login, hostname: "poplin.example.com" }), { by: PUBLISHER.holder, at: NOW });
+  await install.database.initSettings(defaultSettings({ installer: "ada@example.com" as Login }), { by: PUBLISHER.holder, at: NOW });
   const paths = ["index.html", ...Array.from(Array(files - 1).keys(), (index) => `pages/${index}.html`)];
   rows.read = 0;
   rows.written = 0;
@@ -419,7 +419,7 @@ describe("D1: the rows a scheduled sweep costs of a day's allowance", () => {
         return Response.json({ version: "0.2.0", released: "2026-12-01", notes: "https://example.com/changelog/", database: false });
       },
     };
-    await install.database.initSettings(defaultSettings({ installer: "ada@example.com" as Login, hostname: "poplin.example.com" }), { by: PUBLISHER.holder, at: NOW });
+    await install.database.initSettings(defaultSettings({ installer: "ada@example.com" as Login }), { by: PUBLISHER.holder, at: NOW });
     rows.read = 0;
     rows.written = 0;
     await runSweep(install, latest);
@@ -477,11 +477,11 @@ describe("D1: the rows every operation of the database costs of a day's allowanc
       return answer as Extract<Answer, { kind: "done" }>;
     };
 
-    await cost("initSettings", () => database.initSettings(defaultSettings({ installer: ADMIN, hostname: "poplin.example.com" }), BY_ADA));
+    await cost("initSettings", () => database.initSettings(defaultSettings({ installer: ADMIN }), BY_ADA));
     await cost("readSettings", () => database.readSettings());
     await cost("changeSettings", () => database.changeSettings({ versions_kept: 4 }, BY_ADA));
     await cost("changeSettings, the same", () => database.changeSettings({ versions_kept: 4 }, BY_ADA));
-    await cost("initSettings, already set", () => database.initSettings(defaultSettings({ installer: ADMIN, hostname: "poplin.example.com" }), BY_ADA));
+    await cost("initSettings, already set", () => database.initSettings(defaultSettings({ installer: ADMIN }), BY_ADA));
     await cost("ensureSigningKey, the first", () => database.ensureSigningKey(new Uint8Array(32).fill(1), NOW));
     await cost("ensureSigningKey, kept", () => database.ensureSigningKey(new Uint8Array(32).fill(2), NOW));
     await cost("readSigningKey", () => database.readSigningKey());

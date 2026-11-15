@@ -83,7 +83,6 @@ const ABOUT_REFUSALS: Readonly<Record<string, Readonly<Record<string, string>>>>
     trash_days: "Use a whole number, 1 or more.",
     logins: "Use whole email addresses, each one once.",
     login: "That is not an email address. Type one, such as name@example.com.",
-    dashboard_title: "Type a title.",
     max_total_size: "Use a size such as 200MB or 9GB.",
     max_site_size: "Use a size such as 200MB or 9GB.",
     max_sites: "Use none, or a whole number, 1 or more.",

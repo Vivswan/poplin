@@ -152,7 +152,7 @@ export async function openApi(overrides: Partial<ReturnType<typeof defaultSettin
 
   const { database } = opened;
   const signed = { by: INSTALLER, at: NOW };
-  await database.initSettings({ ...defaultSettings({ installer: INSTALLER, hostname: "poplin.example.com" }), ...overrides }, signed);
+  await database.initSettings({ ...defaultSettings({ installer: INSTALLER }), ...overrides }, signed);
 
   const minted = await Promise.all((["admin", "publisher", "publisher"] as const).map((scope) => mintToken({ scope, note: "a test", now: NOW })));
   for (const { record } of minted) await database.addToken(record, signed);

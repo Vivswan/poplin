@@ -215,7 +215,7 @@ describe("an export imported into another install", () => {
   // Drift: the two halves are written apart, an export that reads and an import that stores; a field one of them dropped would lose it on every restore with no test of either failing.
   test("an empty install that imports every site with all versions holds the same sites, files, and settings, and answers at every address", async () => {
     const first = await source();
-    const second = await openApi({ trash_days: 30, dashboard_title: "second" });
+    const second = await openApi({ trash_days: 30 });
     const backup = await exportAll(first, true);
 
     const finishes = [];
@@ -262,15 +262,17 @@ describe("an export imported into another install", () => {
   });
 
   // Drift: a setting is changed one request at a time and exported all at once; an import held to the cap of one change would refuse the settings of an install whose changes each passed it.
-  test("settings whose title is as long as one change may make it are exported and imported whole", async () => {
+  test("settings whose logins are as many as one change may name are exported and imported whole", async () => {
     const [first, second] = [await openApi(), await openApi()];
-    const title = "x".repeat(65_490);
-    const changed = await first.routes.config.$patch({ json: { dashboard_title: title }, query: {} });
+    const reader = (at: number, labels: readonly number[]): string => `${String(at).padStart(60, "r")}@${labels.map((length) => "d".repeat(length)).join(".")}.example.com`;
+    const logins = ["ada@example.com", ...Array.from({ length: 254 }, (_, at) => reader(at, [60, 60, 59])), reader(254, [60, 60, 30])] as Login[];
+    const changed = await first.routes.config.$patch({ json: { logins }, query: {} });
     const exported = await answered(first.routes.export.settings.$get({ query: {} }));
 
-    const imported = await answered(second.routes.import.settings.$post({ json: { format: exported.body.format, settings: exported.body.settings } as never, query: {} }));
+    const imported = await answered(second.routes.import.settings.$post({ json: { format: exported.body.format, settings: exported.body.settings, logins: true } as never, query: {} }));
 
-    expect<unknown>([changed.status, exported.status, imported.status, part(imported, "values").dashboard_title === title]).toEqual([200, 200, 200, true]);
+    // The body of the change is the 65,536 bytes a request may hold, and the import that carries it is longer.
+    expect<unknown>([JSON.stringify({ logins }).length, changed.status, exported.status, imported.status, JSON.stringify(part(imported, "values").logins) === JSON.stringify(logins)]).toEqual([65_536, 200, 200, 200, true]);
   });
 
   // Drift: `--all-versions` is a flag of the client; an export that sent every version without it, or an import that needed them all, would make every backup as large as the bucket.

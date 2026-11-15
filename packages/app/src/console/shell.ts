@@ -32,7 +32,7 @@ export interface Boot {
   /** Who is logged in. */
   readonly email: string;
 
-  /** The install's title. */
+  /** The page's title. */
   readonly title: string;
 
   /** The version the install runs. */

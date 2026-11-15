@@ -46,7 +46,6 @@ describe("the control of a setting", () => {
     ["logins", { kind: "lines" }],
     ["max_sites", { kind: "text" }],
     ["max_total_size", { kind: "text" }],
-    ["dashboard_title", { kind: "text" }],
   ] as const)("%s is changed with its own control", (key, control) => {
     expect(controlOf(SETTING_VALUES.entries[key])).toEqual(control);
   });

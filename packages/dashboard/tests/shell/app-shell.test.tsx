@@ -14,7 +14,7 @@ import { AppShell } from "@/shell/app-shell";
 import { drawAt } from "../lib/support/router";
 
 /** What the frame holds besides the note on the domain. */
-const FRAME = { ok: true, title: "poplin", update: null, starts: false } as const;
+const FRAME = { ok: true, update: null, starts: false } as const;
 
 /** Draw the frame around an empty screen, over a frame that holds the note given. */
 async function drawWith(domainNote: { readonly label: string; readonly sentence: string; readonly quiet: boolean } | null): Promise<void> {

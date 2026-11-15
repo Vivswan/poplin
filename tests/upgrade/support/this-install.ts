@@ -110,7 +110,7 @@ export async function newInstall(): Promise<Running & { readonly token: string }
 
   const { install } = opened.running;
   const holder = admin();
-  await install.database.initSettings(defaultSettings({ installer: holder, hostname: "poplin" }), { by: holder, at: install.now() });
+  await install.database.initSettings(defaultSettings({ installer: holder }), { by: holder, at: install.now() });
   await install.database.ensureSigningKey(crypto.getRandomValues(new Uint8Array(KEY_BYTES)), install.now());
   const issued = await issueToken(install, { scope: "admin", holder }, { note: "upgrade check", scope: "admin" });
   if (!issued.ok) throw new Error(`the new install issued no token: ${issued.code}`);

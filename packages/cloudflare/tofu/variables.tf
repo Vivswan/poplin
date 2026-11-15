@@ -223,17 +223,6 @@ variable "trash_days" {
   }
 }
 
-variable "dashboard_title" {
-  description = "The title of the dashboard. Null means the dashboard's hostname."
-  type        = string
-  default     = null
-
-  validation {
-    condition     = var.dashboard_title == null || try(length(var.dashboard_title) > 0, false)
-    error_message = "dashboard_title must be null or a text of at least one character."
-  }
-}
-
 variable "max_total_size" {
   description = "The size limit of all sites together, such as `9GB`."
   type        = string

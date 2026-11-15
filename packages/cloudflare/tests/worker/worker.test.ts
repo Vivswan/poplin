@@ -223,7 +223,7 @@ describe("an instance's first request", () => {
   });
 
   // Drift: the person who installs sets this variable by hand; one that had to carry every setting would be eighteen chances to mistype the install into not starting.
-  test("FIRST_SETTINGS that names the logins alone starts the install with every other setting at its default, titled with its own address", async () => {
+  test("FIRST_SETTINGS that names the logins alone starts the install with every other setting at its default", async () => {
     const answer = await ask(instance(w), `${ADMIN}/api/whoami`, {}, withBindings({ FIRST_SETTINGS: { logins: " owner@example.com , second@example.com " } }));
     const stored = await (await installOf(w)).database.readSettings();
     const usual = settingsFromText(FIRST);

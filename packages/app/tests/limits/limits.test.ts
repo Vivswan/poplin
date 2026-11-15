@@ -89,7 +89,7 @@ describe("checkLimits", () => {
     { name: "one visitor opening a page of 100 files", visitors: 1, files: 100 },
     { name: "two visitors opening a page of 40 files each", visitors: 2, files: 40 },
   ])("under the settings of a new install no file is refused: $name", async ({ visitors, files }) => {
-    const settings = defaultSettings({ installer: "owner@example.com" as SettingValues["logins"][number], hostname: "poplin.example.com" });
+    const settings = defaultSettings({ installer: "owner@example.com" as SettingValues["logins"][number] });
     const requests = Array.from({ length: visitors }, (_unused, at) => arrivals(files, { site: REPORT, visitor: `visitor-${at}`, after: at * SECOND })).flat();
 
     expect(await answers(new MemoryCounters(), settings, requests)).toEqual(repeated("ok", visitors * files));

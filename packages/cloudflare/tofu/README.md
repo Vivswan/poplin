@@ -180,7 +180,6 @@ The first settings. The names and text forms are those of `poplin config`:
 | `default_search_engines` | bool | `false` | whether a new public site is open to search engines |
 | `versions_kept` | number | `3` | versions kept per site, the live one included |
 | `trash_days` | number | `7` | days a deleted site waits in the trash |
-| `dashboard_title` | string | `null` | the title of the dashboard; null means the dashboard's hostname |
 | `max_total_size` | string | `9GB` | limit: all sites together |
 | `max_site_size` | string | `200MB` | limit: one site |
 | `max_sites` | number | `null` | limit: how many sites; null means none |

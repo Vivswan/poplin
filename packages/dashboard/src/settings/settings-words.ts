@@ -19,7 +19,6 @@ const WORDS: Readonly<Record<string, Words>> = {
   default_search_engines: { group: "sites", label: "Let search engines list new sites", meaning: "What a new site starts with. Each site has its own switch." },
   versions_kept: { group: "sites", label: "Versions kept", meaning: "How many versions each site keeps, the live one included.", unit: "versions" },
   trash_days: { group: "sites", label: "Days in the trash", meaning: "How long a deleted site waits before it is gone for good.", unit: "days" },
-  dashboard_title: { group: "dashboard", label: "Title", meaning: "The name at the top of this dashboard." },
   logins: { group: "dashboard", label: "People who can log in", meaning: "One email on a line. A new email gets in after a Repair of the domain." },
   update_check: {
     group: "updates",

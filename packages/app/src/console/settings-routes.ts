@@ -55,10 +55,10 @@ interface Row {
   readonly elsewhere: boolean;
 }
 
-function rowsOf(values: SettingValues, hostname: string, freeLimits: FreeLimits): readonly Row[] {
+function rowsOf(values: SettingValues, freeLimits: FreeLimits): readonly Row[] {
   const texts = settingsToText(values);
   const [installer] = values.logins;
-  const defaults = installer === undefined ? texts : settingsToText(defaultSettings({ installer, hostname }));
+  const defaults = installer === undefined ? texts : settingsToText(defaultSettings({ installer }));
   const warnings = freeLimitWarnings(values, freeLimits);
 
   return (Object.keys(texts) as Key[]).map((key) => {
@@ -87,7 +87,7 @@ export const settingsRoutes = new Hono<Shared>()
     const address = await updateAddressState(install, actor);
     if (!address.ok) return refused(context, address);
 
-    const rows = rowsOf(config.values, new URL(context.req.url).hostname, context.get("host").freeLimits);
+    const rows = rowsOf(config.values, context.get("host").freeLimits);
 
     return context.json({ ok: true as const, rows, updateAddress: { set: address.set, since: address.since } });
   })

@@ -8,7 +8,7 @@ const SAMPLE_INSTALLER = parseLogin("installer@example.com");
 
 /** One accepted text for every key, in core's order. Core reads all the settings at once, so one typed value is read among these. */
 export const SETTING_SAMPLES: Readonly<Record<string, string>> = SAMPLE_INSTALLER.ok
-  ? settingsToText(defaultSettings({ installer: SAMPLE_INSTALLER.value, hostname: "example.com" }))
+  ? settingsToText(defaultSettings({ installer: SAMPLE_INSTALLER.value }))
   : {};
 
 /** The key of one install setting. */

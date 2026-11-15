@@ -154,7 +154,7 @@ function badBinding(binding: RefusedBinding["binding"], refusal: string): Starte
  *
  * The binding must name the logins; every setting it leaves out starts at its default.
  */
-async function ensureSettings(database: Database, binding: unknown, at: { readonly now: number; readonly hostname: string }): Promise<Started | undefined> {
+async function ensureSettings(database: Database, binding: unknown, now: number): Promise<Started | undefined> {
   if (binding === undefined) return badBinding("FIRST_SETTINGS", "absent");
 
   const texts = v.safeParse(SETTING_TEXTS, binding);
@@ -165,7 +165,7 @@ async function ensureSettings(database: Database, binding: unknown, at: { readon
   const [firstLogin] = stated.ok ? stated.value : [];
   if (firstLogin === undefined) return badBinding("FIRST_SETTINGS", stated.ok || stated.refusal === "no-logins" ? "missing at logins" : "bad-form at logins");
 
-  const first = settingsFromText({ ...settingsToText(defaultSettings({ installer: firstLogin, hostname: at.hostname })), ...texts.output });
+  const first = settingsFromText({ ...settingsToText(defaultSettings({ installer: firstLogin })), ...texts.output });
   // A key that is no setting is text of the binding's own, so it is not repeated.
   if (!first.ok && first.refusal === "unknown-key") return badBinding("FIRST_SETTINGS", first.refusal);
 
@@ -174,7 +174,7 @@ async function ensureSettings(database: Database, binding: unknown, at: { readon
   const [installer] = first.values.logins;
   if (installer === undefined) return badBinding("FIRST_SETTINGS", "missing at logins");
 
-  await database.initSettings(first.values, { by: installer, at: at.now });
+  await database.initSettings(first.values, { by: installer, at: now });
 
   return undefined;
 }
@@ -277,7 +277,7 @@ export async function startInstance(env: Bindings, outside: Outside, visitorOf: 
 
   if (!zone.ok || !own.ok) return startUnset({ database, env, outside, refused, script: own.ok ? own.value.script : own.script, settled });
 
-  const unset = settled ? undefined : await ensureSettings(database, env.FIRST_SETTINGS, { now, hostname: zone.value.adminHostname });
+  const unset = settled ? undefined : await ensureSettings(database, env.FIRST_SETTINGS, now);
   if (unset !== undefined) return unset;
 
   await database.ensureSigningKey(crypto.getRandomValues(new Uint8Array(KEY_BYTES)), now);
