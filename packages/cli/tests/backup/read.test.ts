@@ -1,5 +1,5 @@
-import { afterEach, describe, expect, test } from "bun:test";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { describe, expect, test } from "bun:test";
+import { mkdtempDisposableSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { text } from "node:stream/consumers";
@@ -13,18 +13,14 @@ const FOLDER = `sites/${SITE.label}`;
 /** The folder of its one version's files. */
 const VERSION_FILES = `${FOLDER}/versions/1/files`;
 
-/** The scratch folders the tests made. */
-const SCRATCH: string[] = [];
+/** The start of the name of the folder a test's zip is written into. */
+const SCRATCH = join(tmpdir(), "poplin-backup-");
+
+/** How long the test of a record nested too deep may take, in milliseconds: the refusal comes only once the engine runs out of stack writing the record again, half a second alone and past the five seconds a test gets on a loaded machine. */
+const DEEP_MS = 60_000;
 
 /** Builds one zip that is no backup, at the path given. */
 type Build = (path: string) => Promise<unknown> | unknown;
-
-function scratchZip(): string {
-  const folder = mkdtempSync(join(tmpdir(), "poplin-backup-"));
-  SCRATCH.push(folder);
-
-  return join(folder, "backup.zip");
-}
 
 /** The small backup with one entry taken out, put in, or replaced. */
 function entriesWith(change: (entries: ZipEntry[]) => ZipEntry[]): Build {
@@ -61,6 +57,15 @@ function lying(field: "size" | "checksum", value: number, stream: string = FILES
     );
     declare(path, `${VERSION_FILES}/index.html`, field, value);
   };
+}
+
+/** What opening the zip a build makes comes to. */
+async function outcome(build: Build): Promise<Awaited<ReturnType<typeof openBackup>>> {
+  using folder = mkdtempDisposableSync(SCRATCH);
+  const path = join(folder.path, "backup.zip");
+  await build(path);
+
+  return await openBackup(path);
 }
 
 /** The small backup whose site record has one more key, nested 50,000 arrays deep: JSON that is read and cannot be written again. */
@@ -103,7 +108,6 @@ const REFUSED: readonly (readonly [what: string, build: Build, reason: RegExp])[
   ["a record that counts other files", (path) => writeZip(path, backupEntries({ record: { versions: [{ number: 1, files: 2, bytes: 33 }] } })), /^version 1 of "notes--k3f9x2ab71qz" does not hold the files its record counts/],
   ["a version the record names and the zip lacks", (path) => writeZip(path, backupEntries({ record: { versions: [{ number: 1, files: 2, bytes: 32 }, { number: 2, files: 0, bytes: 0 }] } })), /is there without every version its record names/],
   ["a version the record does not name", (path) => writeZip(path, backupEntries({ record: { live_version: 2, versions: [{ number: 2, files: 2, bytes: 32 }] } })), /is out of place: the versions of a site come in its record's order/],
-  ["a record nested too deep to send", nested(), /is not JSON that can be read and written again/],
   ["a record that does not keep its live version", (path) => writeZip(path, backupEntries({ record: { live_version: 2 } })), /names a version twice, or does not keep its live version/],
   ["a record in the folder of another site", (path) => writeZip(path, backupEntries({ record: { id: "zzzzzzzzzzzz" } })), /does not sit in the folder of its site's label/],
   ["a site that is there twice", before("manifest.json", ...SECOND_SITE), /^the site "notes--k3f9x2ab71qz" is there twice/],
@@ -116,13 +120,10 @@ const REFUSED: readonly (readonly [what: string, build: Build, reason: RegExp])[
   ["a file whose bytes are not the ones written", lying("checksum", 7), /is damaged: its bytes are not the ones it was written with/],
 ];
 
-afterEach(() => {
-  for (const folder of SCRATCH.splice(0)) rmSync(folder, { recursive: true, force: true });
-});
-
 describe("openBackup", () => {
   test("a backup that passes every check is read a site at a time, with its settings, and each file opens from its first byte as often as asked: without this the checks would pass a zip the import cannot read", async () => {
-    const path = await writeZip(scratchZip(), backupEntries({ settings: { trash_days: "9" } }));
+    using folder = mkdtempDisposableSync(SCRATCH);
+    const path = await writeZip(join(folder.path, "backup.zip"), backupEntries({ settings: { trash_days: "9" } }));
 
     const opened = await openBackup(path);
     if (!opened.ok) throw new Error(opened.reason);
@@ -140,11 +141,15 @@ describe("openBackup", () => {
   });
 
   test.each(REFUSED)("%s is refused with its reason: without this check a zip could name a path outside its site, hide a longer stream, or leave a site half described", async (_what, build, reason) => {
-    const path = scratchZip();
-    await build(path);
-
-    const opened = await openBackup(path);
-
-    expect(opened).toEqual({ ok: false, reason: expect.stringMatching(reason) });
+    expect(await outcome(build)).toEqual({ ok: false, reason: expect.stringMatching(reason) });
   });
+
+  // Drift: a record that is read and cannot be written again passes every check, and the import fails on it only once it is sent to the install.
+  test(
+    "a record nested too deep to send is refused with its reason",
+    async () => {
+      expect(await outcome(nested())).toEqual({ ok: false, reason: expect.stringMatching(/is not JSON that can be read and written again/) });
+    },
+    DEEP_MS,
+  );
 });
