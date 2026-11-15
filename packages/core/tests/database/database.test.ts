@@ -71,9 +71,6 @@ type Fields = Omit<Site, "access" | "state">;
 /** Whether a site is served or sits in the trash. */
 type Place = { readonly state: "live" } | { readonly state: "trash"; readonly trashed_at: number };
 
-/** What places a site in a listing, which is also what a page's cursor holds. */
-type Listed = Pick<Fields, "updated_at" | "id">;
-
 /** A site as the map keeps it, with the next version number to hand out, which no read of a site shows. */
 interface Kept {
   readonly fields: Fields;
@@ -84,6 +81,11 @@ interface Kept {
 
 function requirePage(limit: number): void {
   if (!Number.isSafeInteger(limit) || limit < 1 || limit > MAX_PAGE) throw new RangeError(`a page holds 1 to ${MAX_PAGE} entries, not ${limit}`);
+}
+
+function requireCursor(query: SitesQuery): void {
+  const { after, sort } = query;
+  if (after !== undefined && (sort === "name" || sort === "access") && after[sort] === undefined) throw new RangeError(`a cursor of a listing by ${sort} holds no ${sort}`);
 }
 
 function requireCount(what: string, count: number): void {
@@ -140,16 +142,23 @@ function unreachable(kept: Kept | undefined): Refused<"not_found" | "in_trash"> 
   return undefined;
 }
 
-/** What a site is listed by: when its content last changed, or for one in the trash when it went there. */
-function listedBy(kept: Kept): Listed {
-  return { updated_at: kept.place.state === "trash" ? kept.place.trashed_at : kept.fields.updated_at, id: kept.fields.id };
+/** The place of each access in a listing sorted by access. */
+const RANKS = { private: 0, unlisted: 1, public: 2 } as const;
+
+/** Everything a listing may go by, of one site: when its content last changed, or for one in the trash when it went there; its id, its name, and its access. */
+function cursorOf(kept: Kept): Required<NonNullable<SitesQuery["after"]>> {
+  const updated_at = kept.place.state === "trash" ? kept.place.trashed_at : kept.fields.updated_at;
+
+  return { updated_at, id: kept.fields.id, name: kept.fields.name, access: kept.access.access };
 }
 
-/** Whether the first site comes before the second in a listing: the one changed last first, and of two changed at one moment the one with the greater id. */
-function listedBefore(left: Listed, right: Listed): boolean {
-  if (left.updated_at !== right.updated_at) return left.updated_at > right.updated_at;
+/** Whether the first place comes before the second in the listing a query asks for. Sites alike in what the listing goes by follow their ids, in the same direction. */
+function comesBefore(left: NonNullable<SitesQuery["after"]>, right: NonNullable<SitesQuery["after"]>, query: SitesQuery): boolean {
+  const sort = query.sort ?? "updated";
+  const keyOf = (place: NonNullable<SitesQuery["after"]>): number | string => ({ updated: place.updated_at, name: place.name ?? "", access: RANKS[place.access ?? "private"] })[sort];
+  const [first, second] = (query.dir ?? (sort === "updated" ? "desc" : "asc")) === "desc" ? [right, left] : [left, right];
 
-  return left.id > right.id;
+  return keyOf(first) === keyOf(second) ? first.id < second.id : keyOf(first) < keyOf(second);
 }
 
 class MemoryDatabase implements Database {
@@ -248,18 +257,24 @@ class MemoryDatabase implements Database {
 
   async listSites(query: SitesQuery): Promise<SitesPage> {
     requirePage(query.limit);
+    requireCursor(query);
 
     const { after, owner } = query;
     const listed = [...this.#sites.values()]
       .filter((kept) => (kept.place.state === "trash") === query.trash)
       .filter((kept) => owner === undefined || kept.fields.owner === owner)
-      .filter((kept) => after === undefined || listedBefore(after, listedBy(kept)))
-      .sort((left, right) => (listedBefore(listedBy(left), listedBy(right)) ? -1 : 1));
+      .filter((kept) => query.named === undefined || kept.fields.name.includes(query.named))
+      .filter((kept) => query.access === undefined || kept.access.access === query.access)
+      .filter((kept) => query.expires === undefined || (kept.fields.expires === "never") === (query.expires === "never"))
+      .filter((kept) => after === undefined || comesBefore(after, cursorOf(kept), query))
+      .sort((left, right) => (comesBefore(cursorOf(left), cursorOf(right), query) ? -1 : 1));
     const last = listed.at(query.limit - 1);
     const sites = listed.slice(0, query.limit).map(siteOf);
     if (last === undefined || listed.length <= query.limit) return { sites };
 
-    return { sites, next: listedBy(last) };
+    const { updated_at, id, name, access } = cursorOf(last);
+
+    return { sites, next: { updated_at, id, ...(query.sort === "name" ? { name } : {}), ...(query.sort === "access" ? { access } : {}) } };
   }
 
   async changeAccess(id: SiteId, access: SiteAccess, signed: Signed): Promise<Done | Unchanged | Refused<"not_found" | "in_trash" | "name_taken">> {

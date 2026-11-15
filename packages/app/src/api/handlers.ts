@@ -37,7 +37,10 @@ import type { Result } from "./respond";
 
 /** The query each route takes; a route missing here takes none. */
 export const QUERIES: { readonly [Name in RouteName]?: QueryShape } = {
-  listSites: { trash: "switch", limit: "number", after_updated_at: "number", after_id: "text", named: "text", access: "text" },
+  listSites: {
+    ...{ trash: "switch", limit: "number", after_updated_at: "number", after_id: "text", after_name: "text", after_access: "text" },
+    ...{ named: "text", access: "text", expires: "text", sort: "text", dir: "text" },
+  },
   deleteSite: { forever: "switch" },
   uploadFile: { path: "text" },
   exportSites: { limit: "number", after: "text", all_versions: "switch" },
@@ -120,12 +123,12 @@ async function checked<Schema extends v.GenericSchema, Answer>(
   return run(asked.output);
 }
 
-/** The listing a query asks for: the two halves of the cursor become one `after`. */
+/** The listing a query asks for: the parts of the cursor become one `after`. */
 function listingOf(query: Call["query"]): unknown {
-  const { after_updated_at: updated_at, after_id: id, ...rest } = query;
-  if (updated_at === undefined && id === undefined) return rest;
+  const { after_updated_at: updated_at, after_id: id, after_name: name, after_access: access, ...rest } = query;
+  const after = { updated_at, id, ...(name === undefined ? {} : { name }), ...(access === undefined ? {} : { access }) };
 
-  return { ...rest, after: { updated_at, id } };
+  return Object.values(after).every((part) => part === undefined) ? rest : { ...rest, after };
 }
 
 /** Store the body of a request as one file, reading no more of it than one request may carry. */

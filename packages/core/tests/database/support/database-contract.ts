@@ -735,6 +735,16 @@ function sites(label: string, makeDatabase: DatabaseFactory): void {
       expect(page(await database.listSites({ trash: true, limit: 100 }))).toEqual(["dddddddddddd"]);
       expect(page(await database.listSites({ trash: false, owner: BO, limit: 100 }))).toEqual(["bbbbbbbbbbbb"]);
 
+      // Drift: a page's cursor holds what the listing goes by; one that held the change time alone would start the next page of a listing by name at the wrong site, or at none.
+      const byName = await database.listSites({ trash: false, limit: 3, sort: "name" });
+      const rest = await database.listSites({ trash: false, limit: 3, sort: "name", ...(byName.next === undefined ? {} : { after: byName.next }) });
+      const live = ["aaaaaaaaaaaa", "bbbbbbbbbbbb", "cccccccccccc", "eeeeeeeeeeee"];
+
+      expect<unknown>([page(byName), byName.next, page(rest), rest.next]).toEqual([live.slice(0, 3), { updated_at: NOW + 1, id: "cccccccccccc", name: REPORT }, live.slice(3), undefined]);
+      expect(page(await database.listSites({ trash: false, limit: 100, sort: "updated", dir: "asc" }))).toEqual(live);
+      expect(page(await database.listSites({ trash: false, limit: 100, sort: "access", dir: "desc" }))).toEqual([...live].reverse());
+      expect([page(await database.listSites({ trash: false, limit: 100, expires: "never" })), page(await database.listSites({ trash: false, limit: 100, expires: "set" }))]).toEqual([[...live].reverse(), []]);
+
       // The trash shows what was deleted last first, whenever its content changed: the oldest site, deleted last, leads.
       await database.trashSite("aaaaaaaaaaaa" as SiteId, { by: ADA, at: NOW + 10 });
       const trash = await database.listSites({ trash: true, limit: 1 });
@@ -745,6 +755,9 @@ function sites(label: string, makeDatabase: DatabaseFactory): void {
       expect(ids).toHaveLength(5);
       await expect(database.listSites({ trash: false, limit: 0 })).rejects.toThrow(RangeError);
       await expect(database.listSites({ trash: false, limit: 101 })).rejects.toThrow(RangeError);
+      // Drift: a cursor that lacks what its order goes by has no place in that order; started from the top instead, the page would repeat its sites.
+      await expect(database.listSites({ trash: false, limit: 1, sort: "name", after: { updated_at: NOW, id: "aaaaaaaaaaaa" as SiteId } })).rejects.toThrow(RangeError);
+      await expect(database.listSites({ trash: false, limit: 1, sort: "access", after: { updated_at: NOW, id: "aaaaaaaaaaaa" as SiteId, name: REPORT } })).rejects.toThrow(RangeError);
     });
   });
 }

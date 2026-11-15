@@ -347,6 +347,11 @@ describe("createApi", () => {
     const actions = async (query: { kind: "access" | "sites"; site?: string }): Promise<string[]> => ((await install.call("listAudit", query)).body.entries as { action: string }[]).map((entry) => entry.action);
 
     expect([new Set(await actions({ kind: "access" })), await actions({ kind: "sites", site: "three" })]).toEqual([new Set(["token_added"]), ["create"]]);
+
+    const byName = await install.call("listSites", { sort: "name", limit: 2, expires: "never" });
+    const lastByName = await install.call("listSites", { sort: "name", limit: 2, after: byName.body.next as never });
+
+    expect([names(byName), names(lastByName), names(await install.call("listSites", { sort: "name", dir: "desc", limit: 1 }))]).toEqual([["one", "three"], ["two"], ["two"]]);
     expect((older.body.entries as { seq: number }[]).map((entry) => entry.seq)).toEqual([(entries[0]?.seq ?? 0) - 2, (entries[0]?.seq ?? 0) - 3]);
   });
 

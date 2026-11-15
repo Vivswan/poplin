@@ -111,6 +111,42 @@ const SIZE_FIRST_VERSION = "UPDATE versions SET bytes = ?2, files = ?3 WHERE fol
 /** Whether a site has `?1` as its public name or its id. */
 const NAME_IS_HELD = "SELECT (EXISTS (SELECT 1 FROM sites WHERE public_name = ?1) OR EXISTS (SELECT 1 FROM sites WHERE id = ?1)) AS held";
 
+/** The place of each access in a listing sorted by access: from the most private to the most open. */
+const ACCESS_RANKS = { private: 0, unlisted: 1, public: 2 } as const;
+
+/** The same places, as the listing's statement computes them. */
+const ACCESS_RANK = `CASE s.access ${Object.entries(ACCESS_RANKS)
+  .map(([access, rank]) => `WHEN '${access}' THEN ${rank}`)
+  .join(" ")} END`;
+
+/** The direction a listing takes when none is asked: the last change first, a name and an access from the start. */
+const DEFAULT_DIRECTIONS = { updated: "desc", name: "asc", access: "asc" } as const;
+
+/** The conditions that narrow a listing to what its query asks for, the trash or not as `?1`; each value they compare with is added to `params`. */
+function narrowing(query: SitesQuery, params: SqlValue[]): string[] {
+  const conditions = ["s.trashed = ?1"];
+
+  if (query.owner !== undefined) {
+    params.push(query.owner);
+    conditions.push(`s.owner = ?${params.length}`);
+  }
+
+  if (query.named !== undefined) {
+    // The text is matched as it stands: the three signs LIKE reads as its own are escaped.
+    params.push(`%${query.named.replace(/[\\%_]/g, "\\$&")}%`);
+    conditions.push(`s.name LIKE ?${params.length} ESCAPE '\\'`);
+  }
+
+  if (query.access !== undefined) {
+    params.push(query.access);
+    conditions.push(`s.access = ?${params.length}`);
+  }
+
+  if (query.expires !== undefined) conditions.push(query.expires === "set" ? "s.expires_at IS NOT NULL" : "s.expires_at IS NULL");
+
+  return conditions;
+}
+
 /** A new access for a live site, only when it differs and the public name asked for is free. */
 const SET_ACCESS = `
 UPDATE sites SET access = ?2, public_name = ?3
@@ -541,6 +577,14 @@ function requirePage(limit: number): void {
   if (!Number.isSafeInteger(limit) || limit < 1 || limit > MAX_PAGE) throw new RangeError(`a page holds 1 to ${MAX_PAGE} rows, not ${limit}`);
 }
 
+/** A cursor carries what its listing goes by: a listing by name the last site's name, one by access its access. */
+function requireCursor(query: SitesQuery): void {
+  const { after, sort } = query;
+  if (after === undefined || (sort !== "name" && sort !== "access")) return;
+
+  if (after[sort] === undefined) throw new RangeError(`a page after another of a listing by ${sort} names the ${sort} of that page's last site`);
+}
+
 function requireCount(what: string, count: number): void {
   if (!Number.isSafeInteger(count) || count < 0) throw new RangeError(`${what} is a whole number from 0 up, not ${count}`);
 }
@@ -809,42 +853,33 @@ export class SqlDatabase implements Database {
 
   async listSites(query: SitesQuery): Promise<SitesPage> {
     requirePage(query.limit);
+    requireCursor(query);
 
     // The trash is listed by when each site went there, the sites by when their content last changed.
     const moment = query.trash ? "s.trashed_at" : "s.updated_at";
-    const conditions = ["s.trashed = ?1"];
+    const sort = query.sort ?? "updated";
+    const [direction, beyond] = (query.dir ?? DEFAULT_DIRECTIONS[sort]) === "desc" ? ["DESC", "<"] : ["ASC", ">"];
+    const column = { updated: moment, name: "s.name", access: ACCESS_RANK }[sort];
     const params: SqlValue[] = [query.trash ? 1 : 0];
-
-    if (query.owner !== undefined) {
-      params.push(query.owner);
-      conditions.push(`s.owner = ?${params.length}`);
-    }
+    const conditions = narrowing(query, params);
 
     if (query.after !== undefined) {
-      params.push(query.after.updated_at, query.after.id);
-      conditions.push(`(${moment}, s.id) < (?${params.length - 1}, ?${params.length})`);
-    }
-
-    if (query.named !== undefined) {
-      // The text is matched as it stands: the three signs LIKE reads as its own are escaped.
-      params.push(`%${query.named.replace(/[\\%_]/g, "\\$&")}%`);
-      conditions.push(`s.name LIKE ?${params.length} ESCAPE '\\'`);
-    }
-
-    if (query.access !== undefined) {
-      params.push(query.access);
-      conditions.push(`s.access = ?${params.length}`);
+      const { after } = query;
+      params.push({ updated: after.updated_at, name: after.name ?? "", access: ACCESS_RANKS[after.access ?? "private"] }[sort], after.id);
+      conditions.push(`(${column}, s.id) ${beyond} (?${params.length - 1}, ?${params.length})`);
     }
 
     // One row more than the page shows whether another page follows.
     params.push(query.limit + 1);
-    const text = `${SELECT_SITE} WHERE ${conditions.join(" AND ")} ORDER BY ${moment} DESC, s.id DESC LIMIT ?${params.length}`;
+    const text = `${SELECT_SITE} WHERE ${conditions.join(" AND ")} ORDER BY ${column} ${direction}, s.id ${direction} LIMIT ?${params.length}`;
     const [listed] = await this.#driver.batch([sql(text, ...params)]);
     const sites = (listed?.rows ?? []).slice(0, query.limit).map(siteFromRow);
     const last = sites.at(-1);
     if (last === undefined || (listed?.rows.length ?? 0) <= query.limit) return { sites };
 
-    return { sites, next: { updated_at: last.state === "trash" ? last.trashed_at : last.updated_at, id: last.id } };
+    const listedBy = { updated: {}, name: { name: last.name }, access: { access: last.access } }[sort];
+
+    return { sites, next: { updated_at: last.state === "trash" ? last.trashed_at : last.updated_at, id: last.id, ...listedBy } };
   }
 
   async changeAccess(id: SiteId, access: SiteAccess, signed: Signed): Promise<Done | Unchanged | Refused<"not_found" | "in_trash" | "name_taken">> {

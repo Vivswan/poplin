@@ -81,6 +81,48 @@ describe("listSites", () => {
     expect("next" in second).toBe(false);
   });
 
+  // Drift: a table's header sorts and its filters narrow through these keys; a cursor that did not follow the order asked would skip or repeat sites from the second page on.
+  test("`sort` and `dir` order every page of a listing, and `expires` narrows it", async () => {
+    const world = await makeWorld();
+    const drafts = [
+      ["delta", OWNER, { expires: "1d" }],
+      ["alpha", OWNER, { access: "public" }],
+      ["charlie", OWNER, { access: "unlisted" }],
+      ["bravo", OWNER, {}],
+      ["echo", ADMIN, {}],
+    ] as const;
+    const ids: string[] = [];
+    for (const [at, [name, actor, settings]] of drafts.entries()) {
+      world.clock.now = NOW + at;
+      ids.push(await made(world, actor, name, settings));
+    }
+
+    const walked = async (query: Parameters<typeof listSites>[2]): Promise<{ name: string; access: string }[]> => {
+      const all = [];
+      let after: Parameters<typeof listSites>[2] = {};
+      do {
+        const page = await listSites(world.install, ADMIN, { ...query, limit: 2, ...after });
+        if (!page.ok) throw new Error(`the listing was refused: ${page.code}`);
+
+        all.push(...page.sites.map(({ name, access }) => ({ name, access })));
+        after = page.next === undefined ? {} : { after: page.next };
+      } while (after.after !== undefined);
+
+      return all;
+    };
+    const named = async (query: Parameters<typeof listSites>[2]): Promise<string[]> => (await walked(query)).map((site) => site.name);
+    const byAccess = await walked({ sort: "access" });
+
+    expect(await named({ sort: "name" })).toEqual(["alpha", "bravo", "charlie", "delta", "echo"]);
+    expect(await named({ sort: "name", dir: "desc" })).toEqual(["echo", "delta", "charlie", "bravo", "alpha"]);
+    expect(await named({ sort: "updated", dir: "asc" })).toEqual(["delta", "alpha", "charlie", "bravo", "echo"]);
+    expect([byAccess.map((site) => site.access), new Set(byAccess.map((site) => site.name)).size]).toEqual([["private", "private", "private", "unlisted", "public"], 5]);
+    expect([await named({ expires: "set" }), await named({ expires: "never", sort: "name" })]).toEqual([["delta"], ["alpha", "bravo", "charlie", "echo"]]);
+    expect(await names(world, OWNER, { sort: "name", dir: "desc" })).toEqual(["delta", "charlie", "bravo", "alpha"]);
+    expect(await names(world, ADMIN, { sort: "name", after: { updated_at: NOW, id: ids[0] as never } })).toMatchObject({ ok: false, code: "bad_argument", about: "after" });
+    expect(await names(world, ADMIN, { sort: "size" as "name" })).toMatchObject({ ok: false, code: "bad_argument", about: "sort" });
+  });
+
   // Drift: the dashboard's search box and its filter hand these two keys over; one read as a pattern, or dropped, would list sites nobody asked for.
   test("`named` keeps the sites whose name holds the text as typed, and `access` those of one access", async () => {
     const world = await makeWorld();
