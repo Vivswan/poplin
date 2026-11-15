@@ -2,6 +2,7 @@
 //
 // JSON is the whole guard of a change: a page of another origin cannot make a browser send JSON with the session unless this origin lets it, which it never does. So the property holds whatever `Origin` a request names.
 // The paths that would do a change name their site by its public name: that stays a reference through a new link, so they keep working for the whole run.
+// A published answer is a page, a redirect to the login, the answer of a session that ended, or a refusal under a status the console's own table gives: never a failure of the server, 500 and up.
 
 import { expect, test } from "bun:test";
 import fc from "fast-check";
@@ -13,7 +14,6 @@ import { ORIGIN } from "../../packages/app/tests/console/support/install";
 import { fuzzTarget } from "./config";
 import { hostile } from "./hostile";
 
-// A published answer is a page, a redirect to the login, the answer of a session that ended, or a refusal with a status the console's own table can give. A failure of the server (500 and up) is never one, whatever the table holds.
 const ANSWERS = [200, 302, 401, ...CONSOLE_REFUSAL_STATUSES.filter((status) => status < 500)];
 const METHODS = ["GET", "HEAD", "POST", "POST", "POST", "POST", "POST", "PUT", "DELETE", "OPTIONS"];
 const JSON_TYPE = "application/json";
