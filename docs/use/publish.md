@@ -22,15 +22,17 @@ That is the label. Every command and tool takes it to name one site. The bare id
 
 | Example                                        | Does                                                |
 | ---------------------------------------------- | --------------------------------------------------- |
-| `poplin ./report`                              | makes a new site, private, from a folder            |
+| `npx poplin ./report`                          | makes a new site, private, from a folder            |
 | `poplin ./report.html`                         | makes a new site from one HTML file                 |
 | `poplin ./report --site report--k3f9x2ab71qz`  | puts new content on that site; the address stays    |
 | `poplin ./report --name q3-report`             | makes a new site with that name                     |
 | `poplin ./demo --unlisted --expires 7d`        | makes a new site with [settings](manage-sites.md#other-settings-of-a-site)     |
 | `poplin ./report --dry-run`                    | lists the files and the name, and uploads nothing   |
 
+Every other example runs the same way, with `npx` before `poplin`.
+
 ```text
-$ poplin ./report
+$ npx poplin ./report
 uploaded 3 files, 48 kB
 made  report--k3f9x2ab71qz  private
 https://report--k3f9x2ab71qz-p-poplin.example.com
@@ -39,5 +41,5 @@ https://report--k3f9x2ab71qz-p-poplin.example.com
 - **No `--site` means a new site, every time.** Keep the label and pass it to update.
 - **A folder needs an `index.html` at its top.**
 - **Not uploaded:** hidden files (a name that starts with a dot) and anything named `node_modules`.
-- **A name** is 3 to 40 lowercase letters, digits, and single dashes.
+- **A name** is 3 to 40 lowercase letters, digits, and single dashes, with no dash first or last.
 - **Ctrl-C** stops a publish, an import, or a copy: the upload on its way is given up, so its site is not made or changed, and the command exits 1. A second Ctrl-C ends it at once.

@@ -17,7 +17,7 @@ https://report--k3f9x2ab71qz-u-poplin.example.com
         |       |            | the marker: always -poplin
         |       |            the letter: u for an unlisted or a public site, p for a private one
         |       the id: 12 random characters, about 62 bits; it is the link
-        the name: a label; several sites may share it, and it is not checked
+        the name: several sites may share it, and it is not checked
 ```
 
 The id alone finds the site. The letter never opens anything: the stored site decides who may read it, and a private site's files are not served at a `-u-` address.

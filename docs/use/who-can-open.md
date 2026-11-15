@@ -11,7 +11,7 @@ The three kinds of access, the address each gives a site, and what a visitor see
 
 | Access                | Who can open it            | Address                                                               | Set it with                                  |
 | --------------------- | -------------------------- | --------------------------------------------------------------------- | -------------------------------------------- |
-| private (the default) | only you, after a login    | `report--k3f9x2ab71qz-p-poplin.example.com`                           | `poplin set report--k3f9x2ab71qz --private`  |
+| private (the default) | only you, after a login    | `report--k3f9x2ab71qz-p-poplin.example.com`                           | `npx poplin set report--k3f9x2ab71qz --private` |
 | unlisted              | anyone who has the address | `report--k3f9x2ab71qz-u-poplin.example.com`                           | `poplin set report--k3f9x2ab71qz --unlisted` |
 | public                | everyone                   | the unlisted one, and a name the site claims: `docs-page.example.com` | `poplin set report--k3f9x2ab71qz --public`   |
 
@@ -20,10 +20,25 @@ The three kinds of access, the address each gives a site, and what a visitor see
 | `poplin set report--k3f9x2ab71qz --public`              | public at its own name: `report-page.example.com`      |
 | `poplin set report--k3f9x2ab71qz --public --public-name docs` | public at another name: `docs-page.example.com`  |
 
+Every other example runs the same way, with `npx` before `poplin`. A change of access prints the site's address, and the old one when it changed:
+
+```text
+$ npx poplin set report--k3f9x2ab71qz --unlisted
+unlisted  report--k3f9x2ab71qz
+https://report--k3f9x2ab71qz-u-poplin.example.com
+address changed: https://report--k3f9x2ab71qz-p-poplin.example.com is now https://report--k3f9x2ab71qz-u-poplin.example.com
+
+$ npx poplin set report--k3f9x2ab71qz --public --public-name docs
+public  report--k3f9x2ab71qz  public name "docs"
+https://docs-page.example.com
+```
+
 - **You** is every login of the install: yourself, and anyone [Add a login](../run/settings.md#add-a-login) adds.
 - **To or from private changes the address:** the letter before `-poplin` turns from `p` to `u`, or back. The old address sends visitors on.
 - **A public site keeps its unlisted address too.**
 - **Leaving public gives the public name up.** That address stops working.
+- **A public name** follows [the rules of a name](publish.md#publish). One that another site holds is refused with `name_taken`.
+- **Every public name's address ends in the install's public word**, `-page` here. No command changes it: [Security](../about/security.md#the-three-access-states) says where it comes from.
 
 **The address:**
 
@@ -33,7 +48,7 @@ report--k3f9x2ab71qz-p-poplin.example.com
 |       |            | the marker: always -poplin
 |       |            the letter: p for a private site, u for an unlisted or a public one
 |       the id: 12 random characters, hard to guess; it is the link
-the name: a label of 3 to 40 characters; several sites may share it
+the name: 3 to 40 characters; several sites may share it
 
 docs-page.example.com
 |    |
@@ -45,6 +60,7 @@ the public name: a name one public site claims
 | -------------------------------------- | ----------------------------------------------------- |
 | private to unlisted or public, or back | the letter changes; the old address sends visitors on |
 | unlisted to public, or back            | nothing; a public site also answers at its public name |
+| a rename                               | the `-poplin` address carries the new name; every older address still opens the site, and a public name stays |
 | new content, a rollback                | nothing                                               |
 
 Only the id finds a site. Any name before it, or none, opens the same site: `k3f9x2ab71qz-u-poplin.example.com` works too. Commands take the label without the letter: `report--k3f9x2ab71qz`.

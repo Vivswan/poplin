@@ -13,13 +13,15 @@ A publish takes these flags too.
 
 | Example                                                 | Does                                              |
 | ------------------------------------------------------- | ------------------------------------------------- |
-| `poplin set report--k3f9x2ab71qz --name q3-report`      | renames it; its id and every address stay         |
+| `npx poplin set report--k3f9x2ab71qz --name q3-report`  | renames it; its id stays, and [every older address still opens it](who-can-open.md) |
 | `poplin set report--k3f9x2ab71qz --title "Q3 sales"`    | sets the title your dashboard shows               |
 | `poplin set report--k3f9x2ab71qz --expires 7d`          | moves it to the trash in 7 days                   |
 | `poplin set report--k3f9x2ab71qz --expires 2026-12-01`  | moves it to the trash on that day                 |
 | `poplin set report--k3f9x2ab71qz --expires never`       | keeps it                                          |
 | `poplin set report--k3f9x2ab71qz --search-engines on`   | lets search engines list it, once it is public    |
 | `poplin set report--k3f9x2ab71qz --embeddable off`      | stops other pages from showing it in a frame      |
+
+Every other example runs the same way, with `npx` before `poplin`.
 
 ## Look, go back, re-link, delete
 

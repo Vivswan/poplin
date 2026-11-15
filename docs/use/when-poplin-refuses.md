@@ -7,13 +7,13 @@ order: 60
 
 Every code poplin refuses with, what it means, and what to do; a failure of an install's steps is in [When a step fails](../start/when-a-step-fails.md).
 
-A refused command prints one sentence and often a hint. With `--json` it prints an object with a `code`. A tool answers with the same object.
+A refused command prints one sentence and often a hint. With `--json` it prints an object with a `code`. A tool answers with the same object. Every example runs as the first does, with `npx` before `poplin`.
 
 **Logging in, and reaching the install**
 
 | Code                                           | Means                                              | What to do                                                    |
 | ---------------------------------------------- | -------------------------------------------------- | ------------------------------------------------------------- |
-| `no_login`, `no_server`                        | this computer has no login                         | `poplin login --server https://poplin.example.com`            |
+| `no_login`, `no_server`                        | this computer has no login                         | `npx poplin login --server https://poplin.example.com`        |
 | `not_logged_in`                                | the login ran out                                  | `poplin login`                                                |
 | `login_denied`, `login_expired`, `interrupted` | the login was not allowed; nothing was saved       | `poplin login` again, and allow it in the browser             |
 | `bad_login`                                    | the saved login cannot be used                     | `poplin login` again                                          |
