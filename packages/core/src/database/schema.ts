@@ -130,7 +130,7 @@ export const totals = sqliteTable(
   ],
 );
 
-/** What was done, by whom, and when; rows are only ever added. */
+/** What was done, by whom, and when; rows are only ever added. The logins among them are indexed, so whether anyone has logged in is read from one entry. */
 export const audit = sqliteTable(
   "audit",
   {
@@ -142,7 +142,11 @@ export const audit = sqliteTable(
     site_name: text(),
     detail: text().notNull(),
   },
-  (table) => [check("audit_detail", sql`json_valid(${table.detail})`), check("audit_names_its_site", sql`(${table.site_id} IS NULL) = (${table.site_name} IS NULL)`)],
+  (table) => [
+    check("audit_detail", sql`json_valid(${table.detail})`),
+    check("audit_names_its_site", sql`(${table.site_id} IS NULL) = (${table.site_name} IS NULL)`),
+    index("audit_logins").on(table.action).where(sql`action = 'login'`),
+  ],
 );
 
 /** A day's requests, and how many of them opened a page: one row per UTC day and site, and one more per day under the empty site for all sites together. */

@@ -140,8 +140,9 @@ const ROWS: Readonly<Record<string, readonly [read: number, written: number]>> =
   "decideComputerLogin": [5, 4],
   "redeemComputerLogin": [5, 6],
   "sweepComputerLogins": [1, 1],
-  "appendAudit": [1, 2],
-  "hasLoggedIn": [43, 0],
+  "appendAudit, a login": [1, 3],
+  "hasLoggedIn, nobody yet": [0, 0],
+  "hasLoggedIn": [1, 0],
   "addRequests": [3, 2],
   "addRequests, again": [3, 2],
   "readRequests": [2, 0],
@@ -568,7 +569,8 @@ describe("D1: the rows every operation of the database costs of a day's allowanc
     await cost("redeemComputerLogin", () => database.redeemComputerLogin(login.id, redeemed));
     await cost("sweepComputerLogins", () => database.sweepComputerLogins(NOW + 86_400_000));
 
-    await cost("appendAudit", () => database.appendAudit({ action: "login", detail: {} }, BY_ADA));
+    await cost("hasLoggedIn, nobody yet", () => database.hasLoggedIn());
+    await cost("appendAudit, a login", () => database.appendAudit({ action: "login", detail: {} }, BY_ADA));
     await cost("hasLoggedIn", () => database.hasLoggedIn());
     await cost("addRequests", () => database.addRequests({ day: DAY, site: first.id, requests: 3, views: 1 }));
     await cost("addRequests, again", () => database.addRequests({ day: DAY, site: first.id, requests: 3, views: 1 }));
@@ -630,7 +632,7 @@ describe("D1: the rows every operation of the database costs of a day's allowanc
     await cost("keepDomainCheck, 200 pieces over the run before", () => database.keepDomainCheck({ ran_at: NOW + 1, by: BY_ADA.by, run: "repair", pieces }, { run: "repair" }));
     await cost("readDomainCheck", () => database.readDomainCheck());
 
-    // The logins change after every read of the log: an entry they wrote earlier would sit before the first login, which the read above walks to.
+    // The logins change after every read of the log, so that the entries they write are read by no page of it above.
     const person = "bo@example.com" as Login;
     await cost("addLogin", () => database.addLogin(person, BY_ADA));
     await cost("addLogin, already one", () => database.addLogin(person, BY_ADA));

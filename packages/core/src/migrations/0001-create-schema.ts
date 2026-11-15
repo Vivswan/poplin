@@ -309,6 +309,7 @@ export const CREATE_SCHEMA: Step = {
     "CREATE INDEX sites_by_owner ON sites (owner, trashed, updated_at DESC, id DESC)",
     "CREATE INDEX sites_by_name ON sites (trashed, name, id)",
     "CREATE INDEX sites_by_access ON sites (trashed, access_rank, id)",
+    "CREATE INDEX audit_logins ON audit (action) WHERE action = 'login'",
     "CREATE INDEX tokens_by_creation ON tokens (created_at DESC, id DESC)",
     "CREATE INDEX uploads_by_age ON uploads (created_at, id)",
     "CREATE INDEX uploads_by_state ON uploads (state, owner, number, bytes)",

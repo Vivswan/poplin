@@ -1357,7 +1357,7 @@ export class SqlDatabase implements Database {
   }
 
   async hasLoggedIn(): Promise<boolean> {
-    // The scan runs from the oldest entry and stops at the first login, which sits near the start of every log that has one.
+    // The kind stands in the statement itself: the engine reads the index of the logins only for a kind it can see there.
     const [read] = await this.#driver.batch([written(fragment`SELECT EXISTS (SELECT 1 FROM ${audit} WHERE ${audit.action} = 'login') AS found`)]);
 
     return read?.rows[0]?.found === 1;
