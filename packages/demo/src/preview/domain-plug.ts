@@ -30,18 +30,10 @@ const RIGHTS = ["Records: Edit", "Routes: Edit", "Login: Edit"];
 
 /** What the preview says of its token and of the form that makes one. */
 const TOKEN_FORM = {
-  tokenLabel: "Provider token",
   tokenRights: RIGHTS,
   tokenLink: "https://provider.example/tokens/new",
   tokenOptional: [{ right: "Rules: Edit", adds: "The provider stops floods before they reach a site." }],
   tokenNote: "On the form, choose the account and the domain the token is for.",
-};
-
-/** What the preview says each setting does at its provider. */
-const NOTES: DomainPlug["guardNotes"] = {
-  outside_pages: "Pages of other domains framing a site or loading its files.",
-  search_engines_allowed: "Search engines reach public sites.",
-  block_bots: "auto blocks AI bots unless the domain has other hostnames.",
 };
 
 /** The one thing a person does by hand in the `access-off` state. */
@@ -141,7 +133,7 @@ export function changingPlug(): DomainPlug {
       return changing(Object.fromEntries(left.map((piece) => [piece.place, lacked(piece.place) ? "failed" : piece.mended])));
     };
 
-  return { ...TOKEN_FORM, guardNotes: NOTES, check: answer("check"), repair: answer("repair") };
+  return { ...TOKEN_FORM, check: answer("check"), repair: answer("repair") };
 }
 
 /**
@@ -170,5 +162,5 @@ export function previewPlug(state: PlugState): DomainPlug {
       return read(state);
     };
 
-  return { ...TOKEN_FORM, guardNotes: NOTES, check: answer(checked), repair: answer(repaired) };
+  return { ...TOKEN_FORM, check: answer(checked), repair: answer(repaired) };
 }

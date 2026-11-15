@@ -35,13 +35,6 @@ const NO_DOMAIN: DomainReading = { ok: false, refusal: "no_domain" };
 /** The reading when Cloudflare did not answer, or asked to wait. */
 const UNREACHABLE: DomainReading = { ok: false, refusal: "unreachable" };
 
-/** What each setting the Domain tab changes does on Cloudflare. */
-const GUARD_NOTES: DomainPlug["guardNotes"] = {
-  outside_pages: "Pages of other domains framing a site or loading its files. While it is blocked poplin refuses them itself; with Zone WAF: Edit on the token, Cloudflare also stops them first.",
-  search_engines_allowed: "Search engines reach public sites. While it is off poplin marks every site noindex; with Zone WAF: Edit on the token, Cloudflare also stops their crawlers.",
-  block_bots: "auto blocks AI bots unless your domain has other hostnames. on adds Bot Fight Mode, which can block the command line from cloud hosts. Applied only with Bot Management: Edit on the token.",
-};
-
 /** What the WAF rule that stops verified bots also stops on a site hostname, as its row says. */
 const ALWAYS_STOPPED = "also stops every method but GET and HEAD, and the paths *.php, /.env, /.env.*, /.git/, /wp-admin/, /cgi-bin/, /phpmyadmin";
 
@@ -470,7 +463,7 @@ function tokenLink(rights: readonly Extract<Right, { readonly key: string }>[]):
 /**
  * Say what Cloudflare's form for a new token is and asks for.
  *
- * @returns the token's name, every permission an install needs, the link that opens the form with all of them chosen, and the optional ones with what each adds
+ * @returns every permission an install needs, the link that opens the form with all of them chosen, and the optional ones with what each adds
  */
 export function tokenFacts(): TokenFacts {
   const used: readonly Right[] = [...new Set(Object.values(RIGHTS).flat())];
@@ -478,7 +471,6 @@ export function tokenFacts(): TokenFacts {
   const optional = used.flatMap((right) => ("adds" in right ? [{ right: right.name, adds: right.adds }] : []));
 
   return {
-    tokenLabel: "Cloudflare API token",
     tokenRights: needed.map((right) => right.name),
     tokenLink: tokenLink(needed),
     tokenOptional: optional,
@@ -495,7 +487,6 @@ export function tokenFacts(): TokenFacts {
 export function createDomainPlug(parts: PlugParts): DomainPlug {
   return {
     ...tokenFacts(),
-    guardNotes: GUARD_NOTES,
     check: (token, settings) => read(parts, "plan", token, settings),
     repair: (token, settings) => read(parts, "apply", token, settings),
   };

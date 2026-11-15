@@ -498,12 +498,6 @@ test("Access refused as not switched on after the policy was already made is a s
   });
 });
 
-test("the bots setting's note names the switch that can lock the owner's own tools out, in Cloudflare's words: the page has no other place that warns of it", () => {
-  const plug = createDomainPlug({ accountId: ACCOUNT, script: "poplin", layout: LAYOUT });
-
-  expect(plug.guardNotes.block_bots).toContain("Bot Fight Mode, which can block the command line from cloud hosts");
-});
-
 // Drift: the install remembers each row by what its object is for, and raises "private sites may be locked" for the login's alone. An Access row filed under the rest would turn that alarm into "a piece is missing".
 test("every row says what its object is for, and a row refused for a missing right carries the right's name beside its sentence", async () => {
   const account = emptyAccount();

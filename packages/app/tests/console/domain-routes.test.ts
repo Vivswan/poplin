@@ -53,7 +53,6 @@ describe("what the screen opens with", () => {
     expect(await answer.json()).toEqual({
       ok: true,
       form: {
-        tokenLabel: "Provider token",
         tokenRights: ["Records: Edit", "Routes: Edit"],
         tokenLink: "https://provider.example/tokens/new",
         tokenOptional: [{ right: "Rules: Edit", adds: "The provider stops floods first." }],

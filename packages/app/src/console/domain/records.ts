@@ -15,9 +15,6 @@ export type DomainSettings = Pick<SettingValues, "logins" | "outside_pages" | "s
 /** Reads the settings the provider's side is made to match: an install has them before it answers any request. A plug calls it only after the token has proven itself, so a refused token learns nothing of the install. */
 export type ReadSettings = () => Promise<DomainSettings>;
 
-/** A setting the Domain tab changes and a repair carries to the provider. */
-export type GuardKey = Exclude<keyof DomainSettings, "logins">;
-
 /** How one object stands. The first five are what a check finds; a repair also says what it did, where it failed, and what it never reached. `optional` is one the token has no right for and the install works without: no failure, and nothing to repair. */
 export type DomainState = "present" | "missing" | "differs" | "left-out" | "optional" | "created" | "changed" | "removed" | "failed" | "not-run";
 
@@ -53,9 +50,6 @@ export type DomainReading =
 
 /** The provider's side of an install. Neither method keeps the token past its own call, and neither throws for anything the provider answers. */
 export interface DomainPlug {
-  /** What the token field is called, such as the provider's own name for the key. */
-  readonly tokenLabel: string;
-
   /** Every right a token needs for an install to work, each in the provider's own name for it. */
   readonly tokenRights: readonly string[];
 
@@ -68,9 +62,6 @@ export interface DomainPlug {
   /** What else the provider's form asks of the person, in one sentence, such as which account the token is for. */
   readonly tokenNote: string;
 
-  /** What each of the three settings does at this provider, in the provider's own words. */
-  readonly guardNotes: Readonly<Record<GuardKey, string>>;
-
   /** Read every object and say what a repair would do. It changes nothing at the provider, and reads the settings only once the token is proven. */
   check(token: string, settings: ReadSettings): Promise<DomainReading>;
 
@@ -79,7 +70,7 @@ export interface DomainPlug {
 }
 
 /** What the provider's form for a new token is and asks for, as both pages show it. */
-export type TokenFacts = Pick<DomainPlug, "tokenLabel" | "tokenRights" | "tokenLink" | "tokenOptional" | "tokenNote">;
+export type TokenFacts = Pick<DomainPlug, "tokenRights" | "tokenLink" | "tokenOptional" | "tokenNote">;
 
 /** The provider's side of an install with nothing set yet: no plug exists before a person names the domain and the first login. */
 export interface FirstRun extends TokenFacts {

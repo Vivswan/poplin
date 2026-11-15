@@ -123,7 +123,6 @@ describe("the page", () => {
       setup: {
         boxes,
         form: {
-          tokenLabel: "Provider token",
           tokenRights: ["Records: Edit", "Routes: Edit"],
           tokenLink: "https://provider.example/tokens/new",
           tokenOptional: [{ right: "Rules: Edit", adds: "The provider stops floods first." }],

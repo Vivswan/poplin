@@ -51,9 +51,9 @@ export const domainRoutes = new Hono<Shared>()
     const kept = await domainState(install, actor);
     if (!kept.ok) return refused(context, kept);
 
-    const { tokenLabel, tokenRights, tokenLink, tokenOptional, tokenNote } = plug;
+    const { tokenRights, tokenLink, tokenOptional, tokenNote } = plug;
 
-    return context.json({ ok: true as const, form: { tokenLabel, tokenRights, tokenLink, tokenOptional, tokenNote }, last: keptAnswer(kept) });
+    return context.json({ ok: true as const, form: { tokenRights, tokenLink, tokenOptional, tokenNote }, last: keptAnswer(kept) });
   })
   .post("/domain/check", vValidator("json", RUN, refuseInvalid), (context) => ran(context, "check"))
   .post("/domain/repair", vValidator("json", RUN, refuseInvalid), (context) => ran(context, "repair"));
