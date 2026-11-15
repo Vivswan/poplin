@@ -11,7 +11,7 @@ import { sayDone } from "@/lib/notify";
 import type { Site } from "@/lib/sites";
 import { momentIn } from "@/lib/timezone";
 import { PanelFact } from "@/shared/side-panel";
-import { afterDays, backTo, expiryMoment, SPANS, sentFor, spanOf } from "@/sites/expiry";
+import { afterDays, backTo, expiryMoment, SPANS, sentFor } from "@/sites/expiry";
 import { SITES_KEY } from "@/sites/site-queries";
 
 /** The dialog that asks for a day, read from the server when a day is first asked for: it holds the calendar. */
@@ -32,7 +32,7 @@ function afterIt(expires: Site["expires"], now: number): string | undefined {
 export function ExpiryRow({ site }: { readonly site: Site }): ReactNode {
   const client = useQueryClient();
   const opener = useRef<HTMLButtonElement>(null);
-  // The moment the menu opened: each span is written as the moment it ends when counted from then.
+  // The moment the menu opened: each span is written as the moment it ends when counted from then, and a choice saves the moment that was written.
   const [opened, setOpened] = useState(() => Date.now());
   // Whether a day is asked for now, and whether one ever was: the dialog is read only then.
   const [picking, setPicking] = useState(false);
@@ -55,8 +55,8 @@ export function ExpiryRow({ site }: { readonly site: Site }): ReactNode {
     }
 
     void client.invalidateQueries({ queryKey: SITES_KEY });
-    // What puts the moment back is counted when Undo is pressed: the seconds left to it are fewer by then. A moment that has passed is not offered again.
-    const undo = (): void => void send(backTo(before, Date.now()), false).then(setRefusal);
+    // A moment that has passed is not offered again.
+    const undo = (): void => void send(backTo(before), false).then(setRefusal);
     if (chosen && (before === "never" || before > Date.now())) sayDone("Saved.", { run: undo });
     else sayDone(chosen ? "Saved." : "Put back.");
 
@@ -65,7 +65,7 @@ export function ExpiryRow({ site }: { readonly site: Site }): ReactNode {
   const choose = async (expires: string): Promise<void> => setRefusal(await send(expires, true));
   // A day that was saved takes an older refusal away from under the fact; one that was refused is said in its dialog.
   const saveDay = async (moment: number): Promise<string | undefined> => {
-    const refused = await send(sentFor(moment, Date.now()), true);
+    const refused = await send(sentFor(moment), true);
     if (refused === undefined) setRefusal(undefined);
 
     return refused;
@@ -89,7 +89,7 @@ export function ExpiryRow({ site }: { readonly site: Site }): ReactNode {
             </DropdownMenuTrigger>
             <DropdownMenuContent align="start" className="w-64">
               {SPANS.map((days) => (
-                <DropdownMenuItem key={days} onClick={() => void choose(spanOf(days))}>
+                <DropdownMenuItem key={days} onClick={() => void choose(sentFor(afterDays(days, opened)))}>
                   <span>{days === 1 ? "1 day" : `${days} days`}</span>
                   <span className="ml-auto text-muted-foreground">{momentIn(afterDays(days, opened))}</span>
                 </DropdownMenuItem>

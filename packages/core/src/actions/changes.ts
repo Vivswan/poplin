@@ -48,7 +48,7 @@ export const SITE_CHANGES = v.strictObject({
  *
  * A `title` is the typed title: `null` or `""` takes it away, and the site then shows its page's own title. A title holds no control character and no line break.
  *
- * `expires` is `"never"`, a span from now such as `"7d"` (units `s`, `m`, `h`, `d`), or a day such as `"2026-12-01"`, which is that day's start in UTC.
+ * `expires` is `"never"`, a span from now such as `"7d"` (units `s`, `m`, `h`, `d`), a day such as `"2026-12-01"`, which is that day's start in UTC, or a moment such as `"2026-12-01T08:30:00.000Z"`.
  */
 export type SiteChanges = v.InferInput<typeof SITE_CHANGES>;
 
@@ -93,9 +93,17 @@ export function dayStart(text: string): number | undefined {
   return moment;
 }
 
+/** The moment a text names when it is written the one way a date writes itself: in UTC, to the millisecond. */
+function writtenMoment(text: string): number | undefined {
+  const moment = Date.parse(text);
+  if (Number.isNaN(moment) || new Date(moment).toISOString() !== text) return undefined;
+
+  return moment;
+}
+
 function momentOf(text: string, now: number): number | undefined {
   const [, count, unit] = SPAN_PATTERN.exec(text) ?? [];
-  if (count === undefined) return dayStart(text);
+  if (count === undefined) return dayStart(text) ?? writtenMoment(text);
 
   return now + spanSeconds({ count: Number(count), unit: unit as Span["unit"] }) * 1000;
 }
@@ -103,7 +111,7 @@ function momentOf(text: string, now: number): number | undefined {
 /**
  * Read an expiry as a caller types it. This is the one place the bound of an expiry is decided.
  *
- * @param text - `never`, a span from `now` such as `7d`, or a day such as `2026-12-01`
+ * @param text - `never`, a span from `now` such as `7d`, a day such as `2026-12-01`, or a moment such as `2026-12-01T08:30:00.000Z`
  * @param now - the moment a span is counted from, in milliseconds since the epoch
  * @returns `"never"`, the moment in whole milliseconds, or `undefined` for text in no such form, for a moment that is not after `now`, and for one past the last moment a date holds
  */
