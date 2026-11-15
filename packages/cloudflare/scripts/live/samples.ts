@@ -5,7 +5,7 @@
 //   a site of the table        one publish, with its name, who may open it, its title, and its other settings
 //   the site published most    three publishes: its list of versions holds three, as the demo's does
 //   a site that ends trashed   moved to the trash
-//   a site of the seed alone   left out, and so is the row that stands for the demo itself, which the reset publishes
+//   the demo's own row         left out: the reset publishes the built demo there
 //
 // Every version of the demo's history of thirty days is far past what a reset may ask of the bucket, so one site alone gets more than one.
 
@@ -118,7 +118,7 @@ async function publishRow(cli: Cli, row: Standing, folder: string, versions: num
  * @returns what the install holds of the table afterwards, or the first step that failed, in words that quote nothing the install said
  */
 export async function publishSamples(cli: Cli, from: Folders): Promise<Put | Stop> {
-  const rows = standingSites().filter((row) => row.only === undefined && row.sample !== THE_DEMO);
+  const rows = standingSites().filter((row) => row.sample !== THE_DEMO);
   const most = Math.max(...rows.map((row) => row.publishes));
   const longest = rows.find((row) => row.publishes === most);
   const versioned = { name: longest?.name ?? "", versions: Math.min(most, MOST_PUBLISHES) };

@@ -15,10 +15,10 @@ import { openSqlInstall } from "./support/sql-install";
 const SAMPLES = join(import.meta.dir, "..", "..", "demo", "samples");
 
 /** The most the sample sites and the demo hold together, every version a reset gives them: what the test install keeps between runs. */
-const STANDING = { sites: 12, files: 110, bytes: 4_000_000 };
+const STANDING = { sites: 12, files: 120, bytes: 4_000_000 };
 
 /** The most bucket writes and lists a reset with the real demo asks for, the removal of what the reset before it left included. It is under the ceiling by the room for requests that are asked twice. */
-const USUAL_RESET = 125;
+const USUAL_RESET = 135;
 
 /** How long a test that builds the demo may take, in milliseconds: the build holds the dashboard's client, which is built first. */
 const BUILD_MS = 60_000;

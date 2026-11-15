@@ -74,15 +74,15 @@ One install on the Cloudflare test account, called staging. It stays up between 
 | every token, its own among them      | the sample sites below, published anew                                       |
 | every login of a computer that waits | the demo: a public site with the public name `demo`, updated where it stands |
 
-| The sample sites a reset leaves | How many                              |
-| ------------------------------- | ------------------------------------- |
-| public                          | 2, and the demo                       |
-| unlisted                        | 3, one of them runs out after 7 days  |
-| private                         | 4, one of them runs out after 2 days  |
-| in the trash                    | 1                                     |
-| with three versions             | 1; every other has one                |
+| The sample sites a reset leaves | How many                                   |
+| ------------------------------- | ------------------------------------------ |
+| public                          | 2, and the demo                            |
+| unlisted                        | 4: one runs out after 7 days, one after 30 |
+| private                         | 4, one of them runs out after 2 days       |
+| in the trash                    | 1                                          |
+| with three versions             | 1; every other has one                     |
 
-Each site, its title, and who opens it come from one table, `packages/demo/src/preview/sample-sites.ts`. The demo's seed plays its whole history, and the reset publishes what it ends in, so the install's Sites screen and the demo's list the same sites. The install holds no site that already ran out.
+Each site, its title, and who opens it come from one table, `packages/demo/src/preview/sample-sites.ts`. The demo's seed plays its whole history, and the reset publishes what it ends in, so the install's Sites screen and the demo's list the same sites.
 
 The demo is what `bun run demo:build` writes, at `demo-<public word>.<domain>`. The install serves its files, and the demo's worker answers every address inside it.
 
@@ -108,7 +108,7 @@ The owner sets these; the environment is `cloudflare-live-tests`.
 | bucket writes and lists: 150 by the checks, 2,300 with the many-files check, 150 by a reset | `budget.ts`, around every request to the install | the request is not sent, and the step stops red       |
 | every site the checks make is removed for good                                         | the checks' own sweep, then the reset         | the reset runs after failed checks too                        |
 | a site of a run that was killed                                                        | published with `--expires 1d`, trash of one day | the midnight reset removes it                               |
-| the sample sites and the demo: 12 sites, 110 files, and 4 MB at most                   | `caps.test.ts`, from a reset of a local fake  | the self-test fails                                           |
+| the sample sites and the demo: 12 sites, 120 files, and 4 MB at most                   | `caps.test.ts`, from a reset of a local fake  | the self-test fails                                           |
 
 A token without Billing: Read cannot read the subscriptions: the run goes on, with a warning and a skipped row. The zone's plan is checked all the same.
 
@@ -117,7 +117,7 @@ one run, at its ceilings         2 (the bucket found or made) + 150 (checks) + 1
 a day of 40 such runs            40 x 302 + 150 (the midnight reset) = 12,230
 31 such days                     12,230 x 31 = 379,130 of the 1,000,000 R2 takes for free in a month
 a run with the many-files check  2 + 2,300 + 150 = 2,452, started by hand alone
-a usual run                      about 50 (checks) + 112 (reset)
+a usual run                      about 50 (checks) + 131 (reset)
 ```
 
 A run starts after a green main that changed a file reaching the install, or by hand, so 40 a day is far above what happens. The count is the harness's own, one for each request that makes the install write or list; the install lists once more for every thousand files.
