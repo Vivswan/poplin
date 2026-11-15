@@ -50,19 +50,27 @@ const pieces = command.split(/(https?:\/\/[^\s,]+)/);
 </div>
 
 <style>
+  /* One rule places every button: the box's padding is the same on both sides and the same above and below, and each
+     part is centred on the first line of text, so a button sits mid-row beside one line and on the first line of several. */
   .copy {
+    --button: 28px;
     display: inline-flex;
-    align-items: center;
+    align-items: start;
     max-width: 100%;
-    min-height: 42px;
-    padding: 5px 5px 5px 14px;
+    padding: 7px 14px;
     gap: 12px;
     border-radius: 9px;
     background: var(--fill);
   }
 
   .wrap {
-    padding-block: 12px;
+    padding-block: 9px;
+  }
+
+  .label,
+  code,
+  p {
+    padding-block: calc((var(--button) - 1lh) / 2);
   }
 
   .label {
@@ -85,6 +93,7 @@ const pieces = command.split(/(https?:\/\/[^\s,]+)/);
   }
 
   p code {
+    padding-block: 0;
     white-space: normal;
     overflow-wrap: anywhere;
   }
@@ -93,7 +102,8 @@ const pieces = command.split(/(https?:\/\/[^\s,]+)/);
     flex: none;
     display: inline-grid;
     place-items: center;
-    padding: 6px 8px;
+    height: var(--button);
+    padding: 0 8px;
     border: 0;
     border-radius: 6px;
     background: var(--surface);
