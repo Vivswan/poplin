@@ -2,7 +2,7 @@
 
 import { describe, expect, test } from "bun:test";
 
-import { FILE_WRITERS, type FileEntry } from "../../src/console/activity-file";
+import { FILE_WRITERS, type FileEntry } from "../../src/console/activity-formats";
 
 /** An entry with one field set, the rest plain. */
 function entryWith(field: Partial<FileEntry>): FileEntry {
@@ -26,6 +26,6 @@ describe("the comma-separated file", () => {
     ["a sign inside", "a=b-c", "a=b-c"],
     ["nothing", "", ""],
   ])("writes a field with %s so it is read back as it was", (_what, text, written) => {
-    expect(FILE_WRITERS.csv.line(entryWith({ what: text }))).toBe(`2026-11-14T09:30:00.000Z,mira@example.com,${written},,,login\r\n`);
+    expect(FILE_WRITERS.csv.lines([entryWith({ what: text })])).toBe(`2026-11-14T09:30:00.000Z,mira@example.com,${written},,,login\r\n`);
   });
 });
