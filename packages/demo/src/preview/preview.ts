@@ -26,7 +26,7 @@ import { PLUG_STATES, type PlugState, previewPlug } from "./domain-plug";
 import { type Entry, galleryOf, STAGES } from "./gallery";
 import { rebased, unbased } from "./base";
 import { ADMIN_ORIGIN, askMount, type Mount, previewValue, SERVED_PREFIX, siteOrigin } from "./mount";
-import { galleryPage, loginPage, plainPage, shell } from "./own-pages";
+import { galleryPage, loginPage, missingPage, plainPage } from "./own-pages";
 import { type Samples, seedWorld } from "./seed";
 import { ADDRESSES, openWorld, type World } from "./world";
 
@@ -142,7 +142,7 @@ function sessionOf(world: World): Parameters<typeof createDashboard>[0]["readSes
 async function answerLogin(request: Request, world: World): Promise<Response> {
   const url = new URL(request.url);
   const choice = previewValue(request.headers, "preview-login");
-  if (choice === undefined) return new Response(loginPage(`${url.pathname}${url.search}`), { headers: OWN_HEADERS });
+  if (choice === undefined) return new Response(await loginPage(`${url.pathname}${url.search}`), { headers: OWN_HEADERS });
 
   const { database, now } = world.install;
   const logins = parseLogins((await database.readSettings())?.logins ?? []);
@@ -295,13 +295,13 @@ export async function createPreview(host: Host): Promise<Preview> {
     const mount = mountOf(scene, url.pathname);
     if (mount !== undefined) return askMount(request, mount, { origin: url.origin, framed: plainPage });
 
-    if (url.pathname === "/gallery" && host.gallery === true) return own(galleryPage({ entries: await entries(), token: scene.token, origin: url.origin }));
+    if (url.pathname === "/gallery" && host.gallery === true) return own(await galleryPage({ entries: await entries(), token: scene.token, origin: url.origin }));
 
     const redirect = redirectOf(url);
     if (redirect !== undefined) return redirect;
 
     const stage = stageAt(url.pathname);
-    if (stage === undefined) return own(shell("Not found", "<h1>Not found</h1><p>The preview has no such page.</p>"), 404);
+    if (stage === undefined) return own(await missingPage(), 404);
 
     // A stage asks the preview itself, as the browser that opened it: with its cookie.
     const carried = { Cookie: request.headers.get("Cookie") ?? "" };

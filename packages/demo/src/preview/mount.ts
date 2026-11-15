@@ -71,7 +71,7 @@ interface Look {
   readonly origin: string;
 
   /** Draws a page of the preview around a refusal the app answers as plain text, which leads back to the dashboard. */
-  readonly framed: (text: string, status: number) => string;
+  readonly framed: (text: string, status: number) => Promise<string>;
 }
 
 function mountedPath(mount: Pick<Mount, "prefix" | "base">, path: string): string {
@@ -132,7 +132,7 @@ function localText(text: string, origin: string): string {
   return written.replaceAll(ADMIN_ORIGIN, origin).replaceAll(ADMIN_HOSTNAME, host);
 }
 
-function rewriteBody(text: string, kind: Kind, here: Mount, look: Look, status: number): string {
+async function rewriteBody(text: string, kind: Kind, here: Mount, look: Look, status: number): Promise<string> {
   if (kind === "json") return localText(text, look.origin);
 
   if (kind === "plain") return look.framed(text, status);
@@ -211,5 +211,5 @@ export async function askMount(request: Request, here: Mount, look: Look): Promi
 
   if (kind === "plain") headers.set("Content-Type", "text/html; charset=utf-8");
 
-  return new Response(rewriteBody(await response.text(), kind, here, look, response.status), { status: response.status, headers });
+  return new Response(await rewriteBody(await response.text(), kind, here, look, response.status), { status: response.status, headers });
 }

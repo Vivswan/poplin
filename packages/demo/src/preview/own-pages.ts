@@ -1,5 +1,7 @@
 // The preview's own markup: the gallery of every state, the page around a refusal in plain text, and the page that stands where the provider's login would be. None of it is a page of the product.
 
+import { html, raw } from "hono/html";
+
 import { type Entry, GROUPS } from "./gallery";
 
 /** The look of the preview's own pages. It follows the system's scheme. */
@@ -24,9 +26,6 @@ li { padding: 0.15rem 0; overflow-wrap: anywhere; }
 .status { margin-left: 0.35rem; padding: 0 0.35rem; border: 1px solid var(--line); border-radius: 999px; color: var(--soft); font-size: 12px; }
 `;
 
-/** The characters markup reads as its own, each with what stands for it. */
-const ESCAPES: Readonly<Record<string, string>> = { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" };
-
 /** What the gallery is drawn from. */
 interface Gallery {
   /** Every link, in the order of its group. */
@@ -39,38 +38,38 @@ interface Gallery {
   readonly origin: string;
 }
 
-function escaped(text: string): string {
-  return text.replace(/[&<>"']/g, (character) => ESCAPES[character] ?? character);
+/** Markup the `html` helper built: every value put into it was escaped. */
+type Markup = ReturnType<typeof html>;
+
+function entryItem(entry: Entry): Markup {
+  const status = entry.status === undefined ? "" : html`<span class="status">${entry.status}</span>`;
+
+  return html`<li><a href="${entry.path}">${entry.name}</a>${status}</li>`;
 }
 
-function entryItem(entry: Entry): string {
-  const status = entry.status === undefined ? "" : `<span class="status">${entry.status}</span>`;
-
-  return `<li><a href="${escaped(entry.path)}">${escaped(entry.name)}</a>${status}</li>`;
-}
-
-function groupSection(group: string, entries: readonly Entry[]): string {
-  return `<section><h2>${escaped(group)}</h2><ul>${entries.map(entryItem).join("")}</ul></section>`;
+function groupSection(group: string, entries: readonly Entry[]): Markup {
+  return html`<section><h2>${group}</h2><ul>${entries.map(entryItem)}</ul></section>`;
 }
 
 /**
  * Put the preview's frame around a page of its own.
  *
- * @param body - markup, already escaped
  * @returns the whole document, with the way to the dashboard above the page; it loads nothing from anywhere
  */
-export function shell(title: string, body: string): string {
-  return `<!doctype html>
+async function shell(title: string, body: Markup): Promise<string> {
+  const page = await html`<!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex">
-<title>${escaped(title)} - poplin demo</title>
-<style>${STYLE}</style>
+<title>${title} - poplin demo</title>
+<style>${raw(STYLE)}</style>
 </head>
 <body><main><p class="home"><a href="/">Dashboard</a></p>${body}</main></body>
 </html>`;
+
+  return String(page);
 }
 
 /**
@@ -78,24 +77,23 @@ export function shell(title: string, body: string): string {
  *
  * @returns the document; a link whose answer is no 200 carries the status it answers with
  */
-export function galleryPage(gallery: Gallery): string {
+export function galleryPage(gallery: Gallery): Promise<string> {
   const groups = GROUPS.map((group) => groupSection(group, gallery.entries.filter((entry) => entry.group === group)));
-  const login = `POPLIN_SERVER=${escaped(gallery.origin)} POPLIN_TOKEN=${escaped(gallery.token)}`;
 
   return shell(
     "Gallery",
-    `<h1>Every page and every state</h1>
+    html`<h1>Every page and every state</h1>
 <p class="banner">Sample data, held in memory. Nothing leaves this machine. A restart, or a reset, starts it over. Every page is shown to the sample admin; a link marked "as a stranger" is not.</p>
 <section><h2>The command line, the MCP server, and the API, as the sample admin</h2>
 <pre># from the repository's folder; the token is the sample admin's
-export ${login}
+export POPLIN_SERVER=${gallery.origin} POPLIN_TOKEN=${gallery.token}
 bun packages/cli/src/bin.ts list          # any command
 bun packages/cli/src/bin.ts mcp           # the MCP server, over stdio
 curl -H "Authorization: Bearer $POPLIN_TOKEN" $POPLIN_SERVER/api/sites
 
 # or log a computer in, and allow it on the Tokens tab
-bun packages/cli/src/bin.ts login --server ${escaped(gallery.origin)}</pre></section>
-<div class="groups">${groups.join("")}</div>`,
+bun packages/cli/src/bin.ts login --server ${gallery.origin}</pre></section>
+<div class="groups">${groups}</div>`,
   );
 }
 
@@ -105,8 +103,17 @@ bun packages/cli/src/bin.ts login --server ${escaped(gallery.origin)}</pre></sec
  * @param text - the product's whole answer
  * @returns a page that says what the product answered and with which status
  */
-export function plainPage(text: string, status: number): string {
-  return shell(String(status), `<h1>${status}</h1><p class="banner">Demo. The product answers this request with the status ${status} and these words alone, as plain text:</p><pre>${escaped(text)}</pre>`);
+export function plainPage(text: string, status: number): Promise<string> {
+  return shell(String(status), html`<h1>${status}</h1><p class="banner">Demo. The product answers this request with the status ${status} and these words alone, as plain text:</p><pre>${text}</pre>`);
+}
+
+/**
+ * Build the page the preview answers a path of its own with that names nothing.
+ *
+ * @returns a page that says so
+ */
+export function missingPage(): Promise<string> {
+  return shell("Not found", html`<h1>Not found</h1><p>The preview has no such page.</p>`);
 }
 
 /**
@@ -115,12 +122,12 @@ export function plainPage(text: string, status: number): string {
  * @param address - the path and query of the login address that was asked, at the admin origin
  * @returns a page with the two outcomes of a login as links: in as the sample admin, or refused
  */
-export function loginPage(address: string): string {
-  const choice = (login: string): string => escaped(`${address}${address.includes("?") ? "&" : "?"}preview-login=${login}`);
+export function loginPage(address: string): Promise<string> {
+  const choice = (login: string): string => `${address}${address.includes("?") ? "&" : "?"}preview-login=${login}`;
 
   return shell(
     "Login",
-    `<h1>The login would be here</h1>
+    html`<h1>The login would be here</h1>
 <p class="banner">Demo. On a real install the provider's login page asks who you are at this point. The demo has none, so choose the outcome.</p>
 <ul><li><a href="${choice("admin")}">Log in as the sample admin</a></li><li><a href="${choice("refused")}">Be refused</a><span class="status">403</span></li></ul>`,
   );
