@@ -3,6 +3,8 @@
 import { existsSync, statSync } from "node:fs";
 import { join, normalize, sep } from "node:path";
 
+import { tryDecodeURI } from "hono/utils/url";
+
 import { notFoundPage } from "./deep-links";
 import { HOST, PID_PATH } from "./running";
 
@@ -48,7 +50,7 @@ export function serveStatic(hosted: Hosted): ReturnType<typeof Bun.serve> {
 
       if ((pathname === "/" && hosted.at !== "/") || `${pathname}/` === hosted.at) return new Response(null, { status: 302, headers: { Location: hosted.at } });
 
-      const file = pathname.startsWith(hosted.at) ? fileAt(folder, decodeURIComponent(pathname.slice(hosted.at.length))) : undefined;
+      const file = pathname.startsWith(hosted.at) ? fileAt(folder, tryDecodeURI(pathname.slice(hosted.at.length))) : undefined;
       if (file !== undefined) return new Response(Bun.file(file), { headers: { "Cache-Control": CACHE } });
 
       return new Response(notFoundPage(hosted.at), { status: 404, headers: { "Content-Type": "text/html; charset=utf-8" } });
