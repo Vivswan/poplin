@@ -133,7 +133,8 @@ describe("when a site deletes itself, in its panel", () => {
 
   // Drift: Undo after a second change would put back what the panel last read, not what the change before it stored: a site set to 7 days and then to 30 would end with no expiry.
   test("Undo puts back what the change before stored, also while the panel has not read it yet", async () => {
-    const sent = drawn("never", false, Date.now() + 7 * DAY_MS);
+    const stored = Date.now() + 7 * DAY_MS;
+    const sent = drawn("never", false, stored);
     await openMenu();
     await press("menuitem", /^7 days/);
     await said("Saved.");
@@ -144,7 +145,7 @@ describe("when a site deletes itself, in its panel", () => {
     await press("button", "Undo");
     await said("Put back.");
 
-    expect(sent.map((change) => String((change.body as { readonly expires?: string }).expires).replace(/^\d+s$/, "<seconds>"))).toEqual(["7d", "30d", "<seconds>"]);
+    expect(sent.map((change) => (change.body as { readonly expires?: string }).expires)).toEqual(["7d", "30d", new Date(stored).toISOString()]);
   });
 
   // Drift: a refused change would be said in a line that leaves, or as done, with nothing at the control it was chosen at.
@@ -171,7 +172,7 @@ describe("when a site deletes itself, in its panel", () => {
     await waitFor(() => expect(dialog.queryAllByRole("alert").map((alert) => alert.textContent)).toEqual([REFUSAL]));
 
     expect([before, /^Deletes itself \d{2} [A-Z][a-z]{2} \d{4}, 00:00$/.test(picked ?? "")]).toEqual([["No day picked.", true], true]);
-    // What was sent is read as the server reads it, a moment after it was sent: within its first minute, the midnight the dialog wrote, in the browser's own time zone.
+    // What was sent is read as the server reads it: the midnight the dialog wrote, in the browser's own time zone.
     const set = new Date(Number(readExpires(String((sent[0]?.body as { readonly expires?: string } | undefined)?.expires), Date.now())));
     const kept = document.querySelectorAll("[data-selected-single='true']").length;
 

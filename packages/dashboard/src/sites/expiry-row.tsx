@@ -55,8 +55,8 @@ export function ExpiryRow({ site }: { readonly site: Site }): ReactNode {
     }
 
     void client.invalidateQueries({ queryKey: SITES_KEY });
-    // What puts the moment back is counted when Undo is pressed: the seconds left to it are fewer by then. A moment that has passed is not offered again.
-    const undo = (): void => void send(backTo(before, Date.now()), false).then(setRefusal);
+    // A moment that has passed is not offered again.
+    const undo = (): void => void send(backTo(before), false).then(setRefusal);
     if (chosen && (before === "never" || before > Date.now())) sayDone("Saved.", { run: undo });
     else sayDone(chosen ? "Saved." : "Put back.");
 
@@ -65,7 +65,7 @@ export function ExpiryRow({ site }: { readonly site: Site }): ReactNode {
   const choose = async (expires: string): Promise<void> => setRefusal(await send(expires, true));
   // A day that was saved takes an older refusal away from under the fact; one that was refused is said in its dialog.
   const saveDay = async (moment: number): Promise<string | undefined> => {
-    const refused = await send(sentFor(moment, Date.now()), true);
+    const refused = await send(sentFor(moment), true);
     if (refused === undefined) setRefusal(undefined);
 
     return refused;
