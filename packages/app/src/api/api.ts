@@ -51,6 +51,9 @@ const SETTINGS_BYTES = 4 * JSON_BYTES;
 /** What a route that takes no query is checked by: any key is one too many. */
 const NO_QUERY = v.strictObject({});
 
+/** The calls to the database a request with a token makes before its route runs: the one that reads the token's record. */
+const TOKEN_CALLS = 1;
+
 /** What one request can carry: a file's bytes, a publish's file count, and the JSON that declares a publish's files. */
 export interface ApiLimits extends UploadLimits {
   /** The most bytes the JSON body that begins a publish or an import may hold. */
@@ -116,7 +119,9 @@ function routesOf(deps: Omit<ApiDeps, "store">, install: ReturnType<typeof meter
     })
     .post("/sites/:site/restore", token, install, noQuery, site, async (context) => respond(await restoreSite(context.var.install, context.var.actor, context.req.param("site"))))
     .post("/sites/:site/duplicate", token, install, json, noQuery, site, sent<v.InferInput<typeof DUPLICATE_REQUEST>>(JSON_BYTES), async (context) => {
-      return respond(await checked(DUPLICATE_REQUEST, context.req.valid("json"), (asked) => duplicateSite(context.var.install, context.var.actor, { ...asked, site: context.req.param("site") })), deps.now());
+      const copy = (asked: v.InferOutput<typeof DUPLICATE_REQUEST>): ReturnType<typeof duplicateSite> => duplicateSite(context.var.install, context.var.actor, { ...asked, site: context.req.param("site") }, TOKEN_CALLS);
+
+      return respond(await checked(DUPLICATE_REQUEST, context.req.valid("json"), copy), deps.now());
     })
 
     .post("/uploads", token, install, json, noQuery, sent<v.InferInput<typeof PUBLISH_REQUEST>>(deps.limits.manifestBytes), async (context) => {

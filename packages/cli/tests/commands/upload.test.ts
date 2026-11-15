@@ -18,8 +18,8 @@ const PIPED = { asks: false, progress: false };
 /** A site of six files: more than the four that are on their way at once. */
 const SIX = { "index.html": "<h1>notes</h1>", "a.css": "a{}", "b.css": "b{}", "c.css": "c{}", "d.css": "d{}", "e.css": "e{}" };
 
-/** A site of twenty files, which the install copies over two calls: fifteen, then the last five. */
-const TWENTY = { "index.html": "<title>Report</title>", ...Object.fromEntries(Array.from({ length: 19 }, (_page, at) => [`pages/${at}.html`, `<p>${at}</p>`])) };
+/** A site of eighteen files, which the install copies over two calls: nine, then the last nine. */
+const EIGHTEEN = { "index.html": "<title>Report</title>", ...Object.fromEntries(Array.from({ length: 17 }, (_page, at) => [`pages/${at}.html`, `<p>${at}</p>`])) };
 
 /** The id of an upload, as a path names it. */
 const UPLOAD_ID = /\/api\/uploads\/([0-9a-z]{16})/;
@@ -224,7 +224,7 @@ describe("upload", () => {
     ],
   ])("a stop of %s", async (_name, stop) => {
     const bench = await openBench();
-    const label = stop.command === "duplicate" ? (jsonOf(await bench.run(`${folderOf("report", TWENTY)} --json`)).site as { label: string }).label : "";
+    const label = stop.command === "duplicate" ? (jsonOf(await bench.run(`${folderOf("report", EIGHTEEN)} --json`)).site as { label: string }).label : "";
     const before = await stateOf(bench);
     bench.sent.length = 0;
     stopAt(bench, stop.moment);
@@ -288,7 +288,7 @@ describe("upload", () => {
     ],
   ])("the start of %s is waited out and made again only when its answer is 429", async (_name, row) => {
     const bench = await openBench();
-    const label = row.command === "duplicate" ? (jsonOf(await bench.run(`${folderOf("report", TWENTY)} --json`)).site as { label: string }).label : "";
+    const label = row.command === "duplicate" ? (jsonOf(await bench.run(`${folderOf("report", EIGHTEEN)} --json`)).site as { label: string }).label : "";
     const refusals = [...row.refusals];
     const starts = pathEnds(row.start);
     let seen = 0;
@@ -430,11 +430,11 @@ describe("upload", () => {
   // Drift: a copy's progress line that is never cleared has "copied ..." printed onto its end, and a pipe is sent a line no one watches.
   test("a duplicate clears its progress line before it says the copy is done, and writes none where no progress is shown", async () => {
     const bench = await openBench();
-    const { label } = jsonOf(await bench.run(`${folderOf("report", TWENTY)} --json`)).site as { label: string };
+    const { label } = jsonOf(await bench.run(`${folderOf("report", EIGHTEEN)} --json`)).site as { label: string };
 
     const watched = await bench.run(`duplicate ${label}`, { terminal: { asks: false, progress: true } });
     const piped = await bench.run(`duplicate ${label}`);
 
-    expect([watched.code, watched.status, piped.code, piped.status]).toEqual([0, ["copying 15 of 20 files", ""], 0, []]);
+    expect([watched.code, watched.status, piped.code, piped.status]).toEqual([0, ["copying 9 of 18 files", ""], 0, []]);
   });
 });

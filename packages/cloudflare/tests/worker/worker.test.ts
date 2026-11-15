@@ -3,6 +3,7 @@
 
 import { reset } from "cloudflare:test";
 import type { Api } from "@poplin/app/src/api/api";
+import { publishSite } from "@poplin/core/src/actions/publish";
 import { settingsFromText } from "@poplin/core/src/records/settings";
 import { parse } from "es-module-lexer/js";
 import type { ExtractSchema } from "hono/types";
@@ -761,6 +762,47 @@ describe("the audit log as a file", () => {
       { calls: 4, read: FILE_ENTRIES + 4 },
     ]);
   });
+});
+
+describe("a copy of a site", () => {
+  // Drift: the Free plan ends a request past 50 calls to the database and the bucket, and a request that starts an instance makes 4 before its route runs. A copy that counted its own calls alone passed 50 on a new instance.
+  test.each([
+    [10, 2, [24, 28]],
+    [1_001, 73, [36, 40]],
+  ])(
+    "of %i files takes %i requests through the API, and the request that makes the most calls to the database and the bucket stays under 44, on an instance that runs and on one each request starts",
+    async (count, requests, most) => {
+      // The first request of an install stores its settings, which a publish reads.
+      await ask(instance(w), `${ADMIN}/api/whoami`);
+      const token = await tokenOf(w, "admin");
+      const files = Array.from({ length: count }, (_page, at) => ({ path: at === 0 ? "index.html" : `pages/${at}.html`, size: 1, contentType: "text/html", open: () => new Blob(["x"]).stream() }));
+      const source = await publishSite(await installOf(w), { scope: "admin", holder: OWNER }, { name: "report", files });
+      if (!source.ok) throw new Error(`the source was refused: ${source.code}`);
+
+      /** The calls of each request of one copy; `fresh` starts a new instance for every request. */
+      const costs = async (fresh: boolean): Promise<number[]> => {
+        const tally = { calls: 0 };
+        const spent: number[] = [];
+        let [worker, bindings] = [instance(w), countedBindings(tally)];
+        // An instance keeps the bindings of its first request, so the one that runs is started on the counted ones.
+        if (!fresh) await ask(worker, `${ADMIN}/api/whoami`, {}, bindings);
+
+        for (let round: { site: unknown; copy?: { upload: string } } = { site: null }; round.site === null; ) {
+          if (fresh) [worker, bindings] = [instance(w), countedBindings(tally)];
+
+          const before = tally.calls;
+          round = await done(await send(worker, `${ADMIN}/api/sites/${source.site.id}/duplicate`, round.copy === undefined ? {} : { upload: round.copy.upload }, { Authorization: `Bearer ${token}` }, bindings));
+          spent.push(tally.calls - before);
+        }
+
+        return spent;
+      };
+      const measured = [await costs(false), await costs(true)];
+
+      expect([measured.map((spent) => spent.length), measured.map((spent) => Math.max(...spent))]).toEqual([[requests, requests], most]);
+    },
+    120_000,
+  );
 });
 
 describe("a database that takes no more writes for the day", () => {
