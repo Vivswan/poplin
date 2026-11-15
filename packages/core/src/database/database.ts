@@ -239,6 +239,21 @@ export interface LoginDecision {
   readonly at: number;
 }
 
+/** Which entries of the audit log one page holds. */
+export interface AuditQuery {
+  /** The most entries one page holds, from 1 to 100. */
+  readonly limit: number;
+
+  /** The `seq` of the entry the page before ended on; absent for the first page. */
+  readonly before?: number;
+
+  /** Only the entries of these actions; every entry when absent. */
+  readonly actions?: readonly AuditAction[];
+
+  /** Only the entries about a site whose name then held this text; every entry when absent. */
+  readonly site?: string;
+}
+
 /** An entry for the audit log that goes with no change, such as a login. */
 export interface AuditNote {
   readonly action: AuditAction;
@@ -586,9 +601,10 @@ export interface Database {
    * The newest audit entries, the newest first.
    *
    * @param query - how many entries, from 1 to 100, and `before`, the `seq` of the entry the page before ended on: only entries written before that one are answered. A `seq` is a cursor taken from an entry, never a count
+   * @returns the page; narrowed by `actions` or `site`, it reads every entry from the newest down to the page's last
    * @throws {RangeError} `limit` is not a whole number from 1 to 100
    */
-  listAudit(query: { readonly limit: number; readonly before?: number }): Promise<readonly AuditEntry[]>;
+  listAudit(query: AuditQuery): Promise<readonly AuditEntry[]>;
 
   /**
    * Add requests, and the page views among them, to a day's count of one site and of all sites together, and drop the counts of every day before the six ahead of it. No audit entry is written.

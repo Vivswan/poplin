@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 
 import { listAudit } from "../../src/actions/audit-log";
 import { changeConfig, readConfig } from "../../src/actions/config";
+import { updateSite } from "../../src/actions/set";
 import { ADMIN, made, makeWorld, NOW, OWNER } from "./support/actions-fixture";
 
 describe("changeConfig", () => {
@@ -46,6 +47,32 @@ describe("changeConfig", () => {
       { ok: false, code: "not_allowed" },
     ]);
     expect(await world.audit()).toEqual([]);
+  });
+
+  // Drift: a kind is a list of actions the log keeps; an action left out of its kind would be missing from the Activity page under that filter and nowhere else.
+  test("the log is read by kind and by a site's name, and a kind or a name it does not take is refused by its key", async () => {
+    const world = await makeWorld();
+    const site = await made(world, ADMIN, "report");
+    await changeConfig(world.install, ADMIN, { versions_kept: 10 });
+    await updateSite(world.install, ADMIN, { site, access: "unlisted" });
+    const told = async (query: Parameters<typeof listAudit>[2]): Promise<unknown> => {
+      const listed = await listAudit(world.install, ADMIN, query);
+
+      return listed.ok ? listed.entries.map((entry) => entry.action) : listed;
+    };
+
+    expect([await told({ kind: "sites" }), await told({ kind: "settings" }), await told({ kind: "access" }), await told({ site: "epo" }), await told({ site: "none" })]).toEqual([
+      ["access", "create"],
+      ["settings_changed", "settings_set"],
+      [],
+      ["access", "create"],
+      [],
+    ]);
+    expect([await told({ kind: "all" as never }), await told({ site: "" }), await told({ site: "a".repeat(41) })]).toEqual([
+      { ok: false, code: "bad_argument", about: "kind" },
+      { ok: false, code: "bad_argument", about: "site" },
+      { ok: false, code: "bad_argument", about: "site" },
+    ]);
   });
 });
 

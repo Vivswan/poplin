@@ -44,7 +44,7 @@ export const QUERIES: { readonly [Name in RouteName]?: QueryShape } = {
   exportSite: { all_versions: "switch" },
   exportFiles: { version: "number", limit: "number", cursor: "text" },
   exportFile: { version: "number", path: "text" },
-  listAudit: { limit: "number", before: "number" },
+  listAudit: { limit: "number", before: "number", kind: "text", site: "text" },
   startUpdate: { anyway: "switch" },
 };
 

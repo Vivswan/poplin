@@ -344,6 +344,9 @@ describe("createApi", () => {
     expect([names(first), names(rest), rest.body.next]).toEqual([["three", "two"], ["one"], undefined]);
     // Drift: the client checks a listing's query against the same shape the action takes; a key the address did not carry would be dropped without a word.
     expect([names(await install.call("listSites", { named: "t" })), names(await install.call("listSites", { named: "t", access: "public" }))]).toEqual([["three", "two"], []]);
+    const actions = async (query: { kind: "access" | "sites"; site?: string }): Promise<string[]> => ((await install.call("listAudit", query)).body.entries as { action: string }[]).map((entry) => entry.action);
+
+    expect([new Set(await actions({ kind: "access" })), await actions({ kind: "sites", site: "three" })]).toEqual([new Set(["token_added"]), ["create"]]);
     expect((older.body.entries as { seq: number }[]).map((entry) => entry.seq)).toEqual([(entries[0]?.seq ?? 0) - 2, (entries[0]?.seq ?? 0) - 3]);
   });
 

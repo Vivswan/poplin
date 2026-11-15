@@ -180,7 +180,7 @@ export const ROUTES = {
   readConfig: ask<void, Answer<typeof readConfig>>("GET", "/config", () => `${BASE}/config`),
   changeConfig: send<void, Partial<SettingValues>, Answer<typeof changeConfig>>("PATCH", "/config", () => `${BASE}/config`),
   signEveryoneOut: ask<void, Answer<typeof signEveryoneOut>>("DELETE", "/sessions", () => `${BASE}/sessions`),
-  listAudit: ask<v.InferInput<typeof AUDIT_QUERY>, Answer<typeof listAudit>>("GET", "/audit", ({ limit, before }) => `${BASE}/audit${queryOf({ limit, before })}`),
+  listAudit: ask<v.InferInput<typeof AUDIT_QUERY>, Answer<typeof listAudit>>("GET", "/audit", ({ limit, before, kind, site }) => `${BASE}/audit${queryOf({ limit, before, kind, site })}`),
 
   startUpdate: ask<v.InferInput<typeof START_OPTIONS>, Answer<typeof startUpdate>>("POST", "/update", ({ anyway }) => `${BASE}/update${queryOf({ anyway })}`),
   updateAddress: ask<void, Answer<typeof updateAddressState>>("GET", "/update/address", () => `${BASE}/update/address`),

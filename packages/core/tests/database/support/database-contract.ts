@@ -1210,6 +1210,53 @@ function auditLog(label: string, makeDatabase: DatabaseFactory): void {
       ]);
       await expect(database.listAudit({ limit: 0 })).rejects.toThrow(RangeError);
     });
+
+    // Drift: the Activity page's filters are these conditions; one that matched a name's LIKE signs, or was dropped on the second page, would show entries the filter says are left out.
+    test("a page is narrowed to some actions and to the sites whose name then held a text, and the next page stays narrowed", async () => {
+      const database = await opened(makeDatabase);
+      await made(database, draft("abc" as SiteName));
+      const report = await made(database, draft(REPORT));
+      await database.appendAudit({ action: "login", detail: {} }, { by: BO, at: NOW });
+      const docs = await made(database, draft(DOCS));
+      await database.trashSite(report.id, { by: BO, at: NOW + 1 });
+      await database.appendAudit({ action: "login", detail: {} }, { by: BO, at: NOW + 2 });
+      await database.trashSite(docs.id, { by: BO, at: NOW + 3 });
+      const told = (entries: readonly AuditEntry[]): unknown[] => entries.map((entry) => [entry.action, entry.site?.name ?? null]);
+      const narrowed = { actions: ["trash", "create"], site: "o" } as const;
+      const first = await database.listAudit({ limit: 2, ...narrowed });
+
+      expect([
+        told(await database.listAudit({ limit: 100, actions: ["trash", "login"] })),
+        told(await database.listAudit({ limit: 100, site: REPORT })),
+        told(first),
+        told(await database.listAudit({ limit: 3, ...narrowed, before: first.at(-1)?.seq })),
+        told(await database.listAudit({ limit: 100, site: "%" })),
+        told(await database.listAudit({ limit: 100, site: "\0" })),
+        told(await database.listAudit({ limit: 100, actions: [] })),
+      ]).toEqual([
+        [
+          ["trash", DOCS],
+          ["login", null],
+          ["trash", REPORT],
+          ["login", null],
+        ],
+        [
+          ["trash", REPORT],
+          ["create", REPORT],
+        ],
+        [
+          ["trash", DOCS],
+          ["trash", REPORT],
+        ],
+        [
+          ["create", DOCS],
+          ["create", REPORT],
+        ],
+        [],
+        [],
+        [],
+      ]);
+    });
   });
 }
 

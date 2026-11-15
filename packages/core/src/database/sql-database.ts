@@ -22,6 +22,7 @@ import { tokenFromRow } from "../records/token";
 import { type ManifestFile, type Upload, type UploadId, uploadFromRow } from "../records/upload";
 import { dayOf, type SiteViews, viewDays } from "../records/views";
 import type {
+  AuditQuery,
   Address,
   AuditNote,
   CountedRequests,
@@ -463,8 +464,8 @@ const FORGET_UPDATE_ADDRESS = "DELETE FROM secrets WHERE name = 'update_address'
 /** Whether any audit entry is a login. The scan runs from the oldest entry and stops at the first, which sits near the start of every log that has one. */
 const HAS_LOGIN = "SELECT EXISTS (SELECT 1 FROM audit WHERE action = 'login') AS found";
 
-/** The audit entries below `?1`, the newest first. */
-const LIST_AUDIT = "SELECT seq, at, actor, action, site_id, site_name, detail FROM audit WHERE seq < ?1 ORDER BY seq DESC LIMIT ?2";
+/** The columns of an audit entry. The page's conditions and its order are added where it is read. */
+const LIST_AUDIT = "SELECT seq, at, actor, action, site_id, site_name, detail FROM audit";
 
 /** The form of a day: a date such as `2026-11-13`, which sorts as text in the order of time. */
 const DAY_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
@@ -1339,9 +1340,23 @@ export class SqlDatabase implements Database {
     return read?.rows[0]?.found === 1;
   }
 
-  async listAudit(query: { readonly limit: number; readonly before?: number }): Promise<readonly AuditEntry[]> {
+  async listAudit(query: AuditQuery): Promise<readonly AuditEntry[]> {
     requirePage(query.limit);
-    const [listed] = await this.#driver.batch([sql(LIST_AUDIT, query.before ?? NEWEST, query.limit)]);
+    const conditions = ["seq < ?1"];
+    const params: SqlValue[] = [query.before ?? NEWEST];
+
+    if (query.actions !== undefined) {
+      params.push(JSON.stringify(query.actions));
+      conditions.push(`action IN (SELECT value FROM json_each(?${params.length}))`);
+    }
+
+    if (query.site !== undefined) {
+      params.push(query.site);
+      conditions.push(`instr(site_name, ?${params.length}) > 0`);
+    }
+
+    params.push(query.limit);
+    const [listed] = await this.#driver.batch([sql(`${LIST_AUDIT} WHERE ${conditions.join(" AND ")} ORDER BY seq DESC LIMIT ?${params.length}`, ...params)]);
 
     return (listed?.rows ?? []).map(auditFromRow);
   }

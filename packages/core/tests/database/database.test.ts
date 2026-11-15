@@ -10,6 +10,7 @@ import type { TokenId, TokenRecord } from "../../src/auth/tokens";
 import type {
   Address,
   AuditNote,
+  AuditQuery,
   CountedRequests,
   Database,
   Done,
@@ -609,11 +610,12 @@ class MemoryDatabase implements Database {
     return this.#audit.some((entry) => entry.action === "login");
   }
 
-  async listAudit(query: { readonly limit: number; readonly before?: number }): Promise<readonly AuditEntry[]> {
+  async listAudit(query: AuditQuery): Promise<readonly AuditEntry[]> {
     requirePage(query.limit);
 
-    const { before } = query;
-    const older = this.#audit.filter((entry) => before === undefined || entry.seq < before);
+    const { before, actions, site } = query;
+    const kept = this.#audit.filter((entry) => (actions === undefined || actions.includes(entry.action)) && (site === undefined || entry.site?.name.includes(site) === true));
+    const older = kept.filter((entry) => before === undefined || entry.seq < before);
 
     return older.reverse().slice(0, query.limit);
   }
