@@ -177,6 +177,25 @@ describe("the address of one setting", () => {
   });
 });
 
+describe("the update link", () => {
+  // Drift: Escape would do nothing in the field the link is pasted into, where it closes every other thing that was opened, or it would leave the focus on the page itself.
+  test.each([
+    ["Escape in the field", (page: ReturnType<typeof within>) => fireEvent.keyDown(page.getByPlaceholderText("Paste the update link"), { key: "Escape" })],
+    ["Cancel", (page: ReturnType<typeof within>) => fireEvent.click(page.getByRole("button", { name: "Cancel" }))],
+  ] as const)("%s drops what was pasted, closes the field, and gives the focus back to the button that opened it", async (_way, leave) => {
+    const page = await drawn();
+    await press(page.getByRole("button", { name: "Add" }));
+    fireEvent.change(page.getByPlaceholderText("Paste the update link"), { target: { value: "https://poplin.example.com/update/abc" } });
+    const counted = bar(page);
+    await act(async () => {
+      leave(page);
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+
+    expect([counted, page.queryByPlaceholderText("Paste the update link"), bar(page), document.activeElement?.textContent]).toEqual(["1 unsaved change", null, null, "Add"]);
+  });
+});
+
 describe("the one Save", () => {
   // Drift: a switch would be saved the moment it is flipped again, so the screen would have two ways to save; or the changes would be sent one request a setting, and a refusal of the second would leave the first stored.
   test("holds a flipped switch and a typed number until Save, counts them, and sends them in one request", async () => {

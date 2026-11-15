@@ -1,7 +1,7 @@
 // The block of the update link, the address that starts an update of the install. It is a credential: it is pasted into a field that hides it and waits for the screen's Save like a setting. Once saved, the block says only that one is set, and since when.
 
 import { useQueryClient } from "@tanstack/react-query";
-import { type ReactNode, useState } from "react";
+import { type KeyboardEvent, type ReactNode, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { FieldError } from "@/components/ui/field";
@@ -40,6 +40,13 @@ export function UpdateAddressRow({ state, draft }: { readonly state: UpdateAddre
   const [asking, setAsking] = useState(false);
   const since = state.set ? state.since : null;
   const pasting = draft.open || draft.typed !== "";
+  // Escape leaves the field as Cancel does, and nothing around the field takes the same press.
+  const leaveAtEscape = (event: KeyboardEvent): void => {
+    if (event.key !== "Escape") return;
+
+    event.stopPropagation();
+    draft.discard();
+  };
 
   const remove = async (yes: boolean): Promise<void> => {
     setAsking(false);
@@ -67,6 +74,7 @@ export function UpdateAddressRow({ state, draft }: { readonly state: UpdateAddre
             aria-labelledby={`${ADDRESS_FIELD}-label`}
             value={draft.typed}
             onChange={(event) => draft.type(event.target.value)}
+            onKeyDown={leaveAtEscape}
             placeholder="Paste the update link"
             autoComplete="off"
             spellCheck={false}
