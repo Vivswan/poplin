@@ -75,7 +75,16 @@ const STOPS: readonly Stop[] = [
   {
     name: "Domain, from the side",
     open: (page) => toSection(page, "Domain"),
-    shows: (page) => [screenHeading(page, "Domain"), page.getByRole("heading", { name: "First, make a token", exact: true })],
+    shows: (page) => [screenHeading(page, "Domain"), page.getByRole("status").filter({ hasText: "Nothing to repair" })],
+  },
+  {
+    name: "the token a repair asks for",
+    open: (page) => page.getByRole("button", { name: "Repair", exact: true }).click(),
+    shows: (page) => [
+      page.getByRole("dialog", { name: "Repair the domain", exact: true }).getByRole("button", { name: "Open the token form", exact: true }),
+      page.getByRole("dialog", { name: "Repair the domain", exact: true }).getByLabel("Token", { exact: true }),
+    ],
+    close: (page) => page.getByRole("dialog", { name: "Repair the domain", exact: true }).getByRole("button", { name: "Cancel", exact: true }).click(),
   },
   {
     name: "the trash, from the filter of Sites",

@@ -16,7 +16,7 @@ const SCREENS = [
   { path: "activity", heading: "Activity", holds: { role: "table", name: "Activity" } },
   { path: "usage", heading: "Usage", holds: { role: "table", name: "Usage" } },
   { path: "settings", heading: "Settings", holds: { role: "form", name: "Settings" } },
-  { path: "domain", heading: "Domain", holds: { role: "heading", name: "First, make a token" } },
+  { path: "domain", heading: "Domain", holds: { role: "button", name: "Repair" } },
   { path: "?view=trash", heading: "Sites", holds: { role: "table", name: "Sites in the trash" } },
 ] as const;
 

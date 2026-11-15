@@ -1,30 +1,38 @@
-// The Domain screen: the token block that checks and repairs, one row per piece the install needs on the domain, and the three settings of what the domain lets in.
+// The Domain screen: one line that says how the domain stands, the two runs beside it, and one row per piece the install needs on the domain.
 //
-// It opens on the last run the install remembers. A run made here is shown in its place until the screen is left: its token is sent once and held nowhere.
+// It opens on the last run the install remembers. A run is made from a dialog that asks for the token, which is sent once and held nowhere; its pieces are shown until the screen is left.
 
+import { Dialog as DialogParts } from "@base-ui/react/dialog";
 import { useQueryClient } from "@tanstack/react-query";
-import { type ReactNode, type Ref, useEffect, useRef, useState } from "react";
+import { type ReactNode, useMemo, useState } from "react";
 
 import { Button } from "@/components/ui/button";
-import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from "@/components/ui/empty";
+import { DialogTrigger } from "@/components/ui/dialog";
+import { Empty, EmptyHeader, EmptyTitle } from "@/components/ui/empty";
 import { Skeleton } from "@/components/ui/skeleton";
 import { DOMAIN_KEY, type Domain, type Ran, useDomain } from "@/domain/domain-queries";
-import { Guards } from "@/domain/guards";
+import { PersonSteps } from "@/domain/person-steps";
 import { Pieces } from "@/domain/pieces";
-import { type Sent, TokenForm } from "@/domain/token-form";
+import { RunDialog } from "@/domain/run-dialog";
+import { StatusLine } from "@/domain/status-line";
+import type { Sent } from "@/domain/token-run";
 import { answerOf, api, Refused } from "@/lib/api";
 import { FRAME_KEY } from "@/lib/frame";
+import { sayDone, sayRefused } from "@/lib/notify";
 import { shortMoment, wholeMoment } from "@/lib/sites";
 import { AppShell } from "@/shell/app-shell";
 
-/** What stands where the rows would on an install that remembers no run. */
-const NEVER = {
-  title: "Not checked yet",
-  says: "This install keeps records, routes, a login, and rules on your domain. A token shows every piece, and repairs one that is missing or changed.",
-} as const;
+/** What an install that remembers no run says in place of a count, and where the rows would be. */
+const NEVER = { line: "Not checked yet", says: "Press Check to see every piece." } as const;
 
 /** The run the install remembers. */
 type Last = NonNullable<Domain["last"]>;
+
+/** A run made here, and when the run the install remembered before it was: the remembered run is said beside the count only once it is this one. */
+interface Made {
+  readonly ran: Ran;
+  readonly before: number | undefined;
+}
 
 /** When the remembered run was and who ran it; a run too old to go by says so. */
 function LastRun({ last }: { readonly last: Last }): ReactNode {
@@ -35,7 +43,7 @@ function LastRun({ last }: { readonly last: Last }): ReactNode {
         {shortMoment(last.ran_at)}
       </time>{" "}
       by {last.by}
-      {last.stale ? ". Over 30 days old: press Check." : null}
+      {last.stale ? ". Check again." : null}
     </>
   );
 }
@@ -45,7 +53,7 @@ function Waiting({ failure, onAgain }: { readonly failure: string | undefined; r
   if (failure === undefined) {
     return (
       <div className="flex flex-col gap-3 px-6 max-md:px-4">
-        <Skeleton className="h-40 w-full" />
+        <Skeleton className="h-8 w-full" />
         <Skeleton className="h-11 w-full" />
         <Skeleton className="h-11 w-full" />
       </div>
@@ -64,37 +72,33 @@ function Waiting({ failure, onAgain }: { readonly failure: string | undefined; r
   );
 }
 
-/** The pieces as the screen knows them: after the run made here, else as the install remembers its last run, else the words of an install that was never checked. */
-function Result({ ran, last, head }: { readonly ran: Ran | undefined; readonly last: Domain["last"]; readonly head: Ref<HTMLDivElement> }): ReactNode {
-  if (ran !== undefined) return <Pieces head={head} summary={ran.summary} rows={ran.rows} steps={ran.steps} />;
+/** What the screen shows of the domain: the run made here, else the last run the install remembers, else that there was none. */
+function shownOf(ran: Ran | undefined, last: Domain["last"]): { readonly line: string; readonly tone: "good" | "bad" | "idle"; readonly rows?: Ran["rows"] } {
+  const known = ran ?? last;
+  if (known === null) return { line: NEVER.line, tone: "idle" };
 
-  if (last !== null) return <Pieces summary={last.summary} rows={last.rows} steps={[]} beside={<LastRun last={last} />} />;
+  return { line: known.summary.line, tone: known.summary.tone, rows: known.rows };
+}
 
-  return (
-    <Empty className="flex-none rounded-none border-y border-solid py-10">
-      <EmptyHeader className="max-w-lg">
-        <EmptyTitle>{NEVER.title}</EmptyTitle>
-        <EmptyDescription>{NEVER.says}</EmptyDescription>
-      </EmptyHeader>
-    </Empty>
-  );
+/** Say what a run found, in the words of its count. */
+function sayRan(summary: Ran["summary"]): void {
+  if (summary.tone === "good") sayDone(`${summary.line}.`);
+  else sayRefused(`${summary.line}.`);
 }
 
 /** Draw the Domain screen. */
 export function DomainScreen(): ReactNode {
   const client = useQueryClient();
   const { data, error, refetch } = useDomain();
-  const [ran, setRan] = useState<Ran>();
-  const head = useRef<HTMLDivElement>(null);
-
-  // The count's line takes the focus after each run, so the result is where a keyboard and a screen reader are.
-  useEffect(() => {
-    if (ran !== undefined) head.current?.focus();
-  }, [ran]);
+  const [made, setMade] = useState<Made>();
+  const asks = useMemo(() => DialogParts.createHandle<Ran["run"]>(), []);
 
   const run = async (kind: Ran["run"], sent: Sent): Promise<Refused | undefined> => {
     try {
-      setRan(await answerOf(api.domain[kind].$post({ json: { token: sent.token } })));
+      const done = await answerOf(api.domain[kind].$post({ json: { token: sent.token } }));
+      setMade({ ran: done, before: data?.last?.ran_at });
+      asks.close();
+      sayRan(done.summary);
       void client.invalidateQueries({ queryKey: DOMAIN_KEY });
       // The side says what the domain needs, which a run changes.
       void client.invalidateQueries({ queryKey: FRAME_KEY });
@@ -115,15 +119,40 @@ export function DomainScreen(): ReactNode {
     );
   }
 
+  const ran = made?.ran;
+  const { line, tone, rows } = shownOf(ran, data.last);
+  const read = data.last !== null && (made === undefined || data.last.ran_at !== made.before) ? data.last : undefined;
+
   return (
     <AppShell current="domain" heading="Domain">
-      <div className="flex min-h-0 flex-1 flex-col gap-8 overflow-y-auto pb-10">
-        <div className="px-6 pt-1 max-md:px-4">
-          <TokenForm form={data.form} onRun={run} />
+      <section aria-label="Domain" className="flex min-h-0 flex-1 flex-col">
+        <div className="flex shrink-0 flex-wrap items-center gap-x-4 gap-y-2 px-6 pb-3 max-md:px-4">
+          <StatusLine line={line} tone={tone} beside={read === undefined ? undefined : <LastRun last={read} />} />
+          <div className="ml-auto flex items-center gap-2">
+            <DialogTrigger handle={asks} payload="check" render={<Button variant="outline" />}>
+              Check
+            </DialogTrigger>
+            <DialogTrigger handle={asks} payload="repair" render={<Button />}>
+              Repair
+            </DialogTrigger>
+          </div>
         </div>
-        <Result ran={ran} last={data.last} head={head} />
-        <Guards guards={data.guards} />
-      </div>
+        {ran === undefined || ran.steps.length === 0 ? null : (
+          <div className="shrink-0 px-6 pb-3 max-md:px-4">
+            <PersonSteps steps={ran.steps} />
+          </div>
+        )}
+        {rows === undefined ? (
+          <Empty className="flex-none rounded-none border-t border-solid py-16">
+            <EmptyHeader>
+              <EmptyTitle>{NEVER.says}</EmptyTitle>
+            </EmptyHeader>
+          </Empty>
+        ) : (
+          <Pieces rows={rows} />
+        )}
+      </section>
+      <RunDialog handle={asks} form={data.form} onRun={run} />
     </AppShell>
   );
 }

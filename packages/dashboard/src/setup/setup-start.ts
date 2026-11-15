@@ -1,4 +1,4 @@
-// What the setup page hands the client to start from, and how the setup screen sends its two runs.
+// What the setup page hands the client to start from, and how the setup screen sends its run.
 
 import type { SetupRoutes } from "@poplin/app/src/console/setup-console";
 import { hc, type InferResponseType } from "hono/client";
@@ -18,8 +18,8 @@ interface Start {
 /** The start values of the setup screen, out of the ones the page carries; `null` on every page but the setup page. */
 export const SETUP: Start | null = (BOOT as typeof BOOT & { readonly setup?: Start }).setup ?? null;
 
-/** The setup screen's two runs, called as `setupApi.repair.$post({ json })`. */
+/** The setup screen's runs, called as `setupApi.repair.$post({ json })`. */
 export const setupApi = hc<SetupRoutes>(`${BOOT.base}/data`);
 
 /** A run of the setup screen that read its pieces, as the server answers it. */
-export type SetupRan = InferResponseType<typeof setupApi.check.$post, 200>;
+export type SetupRan = InferResponseType<typeof setupApi.repair.$post, 200>;
