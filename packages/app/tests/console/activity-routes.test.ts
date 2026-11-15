@@ -4,6 +4,7 @@ import { describe, expect, test } from "bun:test";
 
 import { deleteSite } from "@poplin/core/src/actions/delete";
 import { issueToken } from "@poplin/core/src/actions/manage-tokens";
+import { newLink } from "@poplin/core/src/actions/new-link";
 import { updateSite } from "@poplin/core/src/actions/set";
 import { AUDIT_WINDOW } from "@poplin/core/src/database/database";
 import { siteLabel } from "@poplin/core/src/sites/labels";
@@ -80,6 +81,29 @@ describe("a page of the log", () => {
       { name: "trip-notes", label: keptLabel, title: "Trip notes" },
       { name: "trip-notes", label: keptLabel, title: "Trip notes" },
       { name: "field-notes", label: keptLabel, title: "Trip notes" },
+    ]);
+  });
+
+  // Drift: every entry from before a new link would show its site as gone, with no link to it, though the site is there under its new id.
+  test("names a site by what it is now in the entries from before each of its new links", async () => {
+    const { opened } = await openWithHistory();
+    const { install, owner } = opened.base;
+    const actor = { scope: "admin", holder: owner } as const;
+    const [kept] = (await install.database.listSites({ trash: false, limit: 10 })).sites;
+    const first = await newLink(install, actor, kept?.id ?? "");
+    const second = await newLink(install, actor, first.ok ? first.site.id : "");
+    const label = second.ok ? second.site.label : "";
+
+    const page = await pageOf(opened, "?site=notes");
+
+    expect([label === "", page.entries.map((entry) => [entry.action, entry.site?.label])]).toEqual([
+      false,
+      [
+        ["new_id", label],
+        ["new_id", label],
+        ["details", label],
+        ["create", label],
+      ],
     ]);
   });
 

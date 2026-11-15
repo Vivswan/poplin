@@ -90,12 +90,20 @@ type Asker = Shared["Variables"]["asker"];
 /** Which entries of the log a file is narrowed to. */
 type Narrowing = Pick<v.InferOutput<typeof FILE_QUERY>, "kind" | "site">;
 
-/** What each site the entries name is now, by its id, read in one query however many sites a page names: its label, and the title it is listed under, `null` for a site with none. A site that is gone is left out. */
+/**
+ * What each site the entries name is now, by the id an entry holds: its label, and the title it is listed under, `null` for a site with none. A site that is gone is left out.
+ * An entry from before a new link holds an id the site gave up: it is named as the site is now. The ids are read in one query however many sites a page names, and those that are no site's in one more.
+ */
 async function sitesNow(install: Install, entries: readonly Entry[]): Promise<ReadonlyMap<string, { readonly label: string; readonly title: string | null }>> {
-  const ids = new Set(entries.flatMap((entry) => (entry.site === null ? [] : [entry.site.id])));
-  const names = await install.database.getSiteNames([...ids]);
+  const ids = [...new Set(entries.flatMap((entry) => (entry.site === null ? [] : [entry.site.id])))];
+  const names = await install.database.getSiteNames(ids);
+  const now = new Map(Array.from(names, ([id, { name, title }]) => [id as string, { label: siteLabel(name, id), title }]));
+  const given = ids.filter((id) => !names.has(id));
+  if (given.length === 0) return now;
 
-  return new Map(Array.from(names, ([id, { name, title }]) => [id, { label: siteLabel(name, id), title }]));
+  for (const [earlier, site] of await install.database.getLaterSites(given)) now.set(earlier, { label: siteLabel(site.name, site.id), title: site.title });
+
+  return now;
 }
 
 /** A place beside the one a page was asked with; none where that would be before the first place an address can name. */
