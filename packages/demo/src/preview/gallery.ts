@@ -4,6 +4,7 @@
 
 import { beginLogin } from "../../../core/src/actions/computer-logins";
 import { listSites } from "../../../core/src/actions/list";
+import type { SiteObject } from "../../../core/src/actions/site-object";
 import { AUDIT_WINDOW } from "../../../core/src/database/database";
 import { PLUG_STATES, type PlugState } from "./domain-plug";
 import { ADMIN_ORIGIN, localAddress } from "./mount";
@@ -33,6 +34,9 @@ const SETUP_WORDS: Readonly<Record<PlugState, string>> = {
 
 /** How many logins a stage adds to the log: more than a narrowed page of the log looks at before it stops. */
 const MANY_LOGINS = AUDIT_WINDOW + 200;
+
+/** The sample site a stage lets run out, and how long before now it then ended, in milliseconds. The table gives it a month, so every list of the samples holds it. */
+const [RUN_OUT, HOUR_MS] = ["winter-offer", 3_600_000] as const;
 
 /** The screens of the dashboard, each by the path that shows it. */
 const SCREENS = [
@@ -80,20 +84,44 @@ async function longLog({ world }: Stage): Promise<Response> {
   return new Response(null, { status: 303, headers: { Location: "/activity?kind=sites" } });
 }
 
+/** Every seeded site as the install lists it now, the trash included. */
+async function seededSites(world: World): Promise<readonly SiteObject[]> {
+  const lists = await Promise.all([false, true].map((trash) => listSites(world.install, world.admin, { trash })));
+
+  return lists.flatMap((listed) => (listed.ok ? listed.sites : []));
+}
+
+/** Where one site is in the preview. */
+function placeOf(site: SiteObject): Place {
+  const local = (address: string): string => localAddress(address, HOME);
+
+  return { page: `/sites/${site.label}`, served: local(site.addresses.site), open: local(site.addresses.public ?? site.addresses.site) };
+}
+
+/** Where each seeded site is now, by its name: its panel in the dashboard, and the preview paths it is served at. A site that was deleted since is absent. */
+async function placesOf(world: World): Promise<ReadonlyMap<string, Place>> {
+  return new Map((await seededSites(world)).map((site) => [site.name, placeOf(site)]));
+}
+
+/** A stage that ends a sample site an hour ago, as no call of the product can, and leads to one page of it. A reset gives the site its month back. */
+function runOut(to: (place: Place) => string): (stage: Stage) => Promise<Response> {
+  return async ({ world }) => {
+    const site = (await seededSites(world)).find((each) => each.name === RUN_OUT);
+    const at = world.install.now();
+    if (site !== undefined) await world.install.database.changeDetails(site.id, { expires: at - HOUR_MS }, { by: world.admin.holder, at });
+
+    return new Response(null, { status: 303, headers: { Location: to(site === undefined ? NO_PLACE : placeOf(site)) } });
+  };
+}
+
 /** Every stage, by its address. */
 export const STAGES: Readonly<Record<string, (stage: Stage) => Promise<Response>>> = {
   "/state/allow/waiting": waitingLogin,
   "/state/activity/long": longLog,
+  "/state/expired/panel": runOut((place) => place.page),
+  "/state/expired/admin": runOut((place) => place.served),
+  "/state/expired/stranger": runOut((place) => `${place.served}?as=visitor`),
 };
-
-/** Where each seeded site is now, by its name: its panel in the dashboard, and the preview paths it is served at. A site that was deleted since is absent. */
-async function placesOf(world: World): Promise<ReadonlyMap<string, Place>> {
-  const lists = await Promise.all([false, true].map((trash) => listSites(world.install, world.admin, { trash })));
-  const sites = lists.flatMap((listed) => (listed.ok ? listed.sites : []));
-  const local = (address: string): string => localAddress(address, HOME);
-
-  return new Map(sites.map((site) => [site.name, { page: `/sites/${site.label}`, served: local(site.addresses.site), open: local(site.addresses.public ?? site.addresses.site) }]));
-}
 
 function dashboardEntries(): Entry[] {
   return [
@@ -133,7 +161,7 @@ function siteEntries(places: ReadonlyMap<string, Place>): Entry[] {
     { group, name: "Public, under a public name", path: page("lisbon-trip") },
     { group, name: "Unlisted, no frames, renamed since it was made", path: page("pricing") },
     { group, name: "Expires in two days", path: page("checkout") },
-    { group, name: "Expired", path: page("winter-offer") },
+    { group, name: "Expired", path: "/state/expired/panel" },
     { group, name: "No such site", path: NO_PLACE.page },
     { group: visitors, name: "Sales report, private, as the admin", path: served("sales-report") },
     { group: visitors, name: "Sales report, private, as a stranger who came around the login", path: `${served("sales-report")}?as=visitor`, status: 404 },
@@ -146,8 +174,8 @@ function siteEntries(places: ReadonlyMap<string, Place>): Entry[] {
     { group: visitors, name: "A file the site does not have", path: `${served("launch-deck")}nothing.html`, status: 404 },
     { group: visitors, name: "A site in the trash, as the admin", path: served("old-notes"), status: 404 },
     { group: visitors, name: "A site in the trash, as a stranger", path: `${served("old-notes")}?as=visitor`, status: 404 },
-    { group: visitors, name: "An expired site, as the admin", path: served("winter-offer"), status: 404 },
-    { group: visitors, name: "An expired site, as a stranger", path: `${served("winter-offer")}?as=visitor`, status: 404 },
+    { group: visitors, name: "An expired site, as the admin", path: "/state/expired/admin", status: 404 },
+    { group: visitors, name: "An expired site, as a stranger", path: "/state/expired/stranger", status: 404 },
     { group: visitors, name: "A public name no site holds, as a stranger", path: `${NO_PLACE.served}?as=visitor`, status: 404 },
   ];
 }

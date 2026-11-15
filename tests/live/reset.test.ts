@@ -33,13 +33,11 @@ const LEFT_SITES: readonly (readonly [name: string, access: string, publicName: 
   ["spring-offer", "unlisted", null, 0, 1, 1],
   ["status-board", "private", null, 0, 1, 0],
   ["team-site", "private", null, 0, 1, 0],
+  ["winter-offer", "unlisted", null, 0, 1, 1],
 ];
 
 /** The sample sites a reset leaves outside the trash, and the ones it leaves inside it. */
 const [PUBLISHED = [], BINNED = []] = [0, 1].map((trashed) => LEFT_SITES.filter((site) => site[3] === trashed).map(([name]) => name));
-
-/** The site of the demo's seed alone: one that ran out, which an install that is put back does not hold. */
-const SEED_ALONE = "winter-offer";
 
 /** The path of the demo's file of real addresses, as an upload names it. */
 const REAL_SITES_PATH = "path=sites.json";
@@ -61,12 +59,12 @@ const WAITING = `INSERT INTO logins (id, code, hash, scope, computer, visitor, s
   ('login-one', 'CODEONE1', 'hash-one', 'publisher', 'a laptop', 'a visitor', 'pending', NULL, 1700000000000, 1700000600000),
   ('login-two', 'CODETWO2', 'hash-two', 'admin', 'a desktop', 'a visitor', 'allowed', 'ada@example.com', 1700000000000, 1700000600000)`;
 
-/** The bucket writes and lists of a reset that removes three sites and publishes the samples and a new demo of three files: 3 removals, 76 for ten sites and their 66 files, 12 for two more versions of one, 1 move to the trash, 4 for the demo. */
-const FIRST_RESET = 96;
+/** The bucket writes and lists of a reset that removes three sites and publishes the samples and a new demo of three files: 3 removals, 85 for eleven sites and their 74 files, 12 for two more versions of one, 1 move to the trash, 4 for the demo. */
+const FIRST_RESET = 105;
 
 /** What every reset says it published: the samples in the table's order, the ones in the trash, the one site with three versions, and how many the demo links to. */
 const PUT = {
-  published: ["handbook", "sales-report", "launch-deck", "team-site", "lisbon-trip", "pricing", "spring-offer", "status-board", "checkout"],
+  published: ["handbook", "sales-report", "launch-deck", "team-site", "lisbon-trip", "winter-offer", "pricing", "spring-offer", "status-board", "checkout"],
   binned: BINNED,
   versioned: { name: "sales-report", versions: 3 },
   linked: PUBLISHED.length,
@@ -219,7 +217,7 @@ describe("the reset of the test install, against a local fake", () => {
     const read = async (answer: Response | Promise<Response>): Promise<readonly Listed[]> => ((await (await answer).json()) as { sites: readonly Listed[] }).sites;
     const lists = ["false", "true"].map(async (trash) => ({
       install: shown(await read(install.fetch(`${install.server}/api/sites?trash=${trash}&limit=100`, { headers: { Authorization: `Bearer ${token}` } }))),
-      demo: shown((await read(preview.fetch(new Request(`http://127.0.0.1:4400/api/sites?trash=${trash}&limit=100`, { headers: { Authorization: `Bearer ${preview.token()}` } })))).filter((site) => site.name !== SEED_ALONE)),
+      demo: shown(await read(preview.fetch(new Request(`http://127.0.0.1:4400/api/sites?trash=${trash}&limit=100`, { headers: { Authorization: `Bearer ${preview.token()}` } })))),
     }));
     const [live, trash] = await Promise.all(lists);
 
