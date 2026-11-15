@@ -347,6 +347,8 @@ export const CREATE_SCHEMA: Step = {
     "CREATE INDEX sites_by_name ON sites (trashed, name, id)",
     "CREATE INDEX sites_by_access ON sites (trashed, access_rank, id)",
     "CREATE INDEX sites_by_title ON sites (trashed, title_key, id)",
+    "CREATE INDEX sites_by_expiry ON sites (expires_at, id) WHERE expires_at IS NOT NULL AND trashed_at IS NULL",
+    "CREATE INDEX sites_by_trashing ON sites (trashed_at, id) WHERE trashed_at IS NOT NULL",
     "CREATE INDEX earlier_ids_by_folder ON earlier_ids (folder)",
     "CREATE INDEX audit_logins ON audit (action) WHERE action = 'login'",
     "CREATE INDEX tokens_by_creation ON tokens (created_at DESC, id DESC) WHERE removed_at IS NULL",

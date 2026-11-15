@@ -6,7 +6,7 @@ import { SWEEP_SPARE_WRITES } from "@poplin/core/src/actions/sweep";
 import { parseUserCode } from "@poplin/core/src/auth/computer-logins";
 import { dayOf } from "@poplin/core/src/records/views";
 import { beforeEach, describe, expect, test, vi } from "vitest";
-import { ADMIN, api, ask, BINDINGS, done, freePlanBindings, installOf, instance, OWNER, page, problemsOf, publish, refusingDatabase, sendFile, shortPages, sweep, tokenOf, type World, wait, world } from "./support/install";
+import { ADMIN, api, ask, BINDINGS, countedBindings, done, freePlanBindings, installOf, instance, OWNER, page, problemsOf, publish, refusingDatabase, sendFile, shortPages, sweep, tokenOf, type World, wait, world } from "./support/install";
 
 /** The most database and bucket calls one scheduled invocation may make, the start of its instance included: 50 to the database, which is all D1 answers on the Free plan, and 250 to the bucket. */
 const INVOCATION_CALLS = 300;
@@ -17,8 +17,8 @@ const DAY_MS = 86_400_000;
 /** The files one removal takes from a folder whose list pages hold one object each. */
 const WHOLE_REMOVAL = 15;
 
-/** What a step over five sat-out sites costs when each takes a whole removal: the settings, the listing, the day's count of writes to the bucket, and per site a read, a change, 30 bucket calls, and the leftover forgotten. */
-const MOST_STEP_CALLS = 168;
+/** What a step over five sat-out sites costs when each takes a whole removal: the listing of the due ones, the day's count of writes to the bucket, and per site a change, 30 bucket calls, and the leftover forgotten. */
+const MOST_STEP_CALLS = 162;
 
 /** The one file of a site made only to be swept. */
 const HTML = new TextEncoder().encode("<p>short-lived</p>");
@@ -70,6 +70,31 @@ describe("the scheduled run", () => {
     expect((await ask(worker, `${ADMIN}/api/sites/${kept.label}`, { headers: { Authorization: `Bearer ${token}` } })).status).toBe(200);
     expect(activity.map((entry) => `${entry.action} ${entry.site?.id === brief.id} by ${entry.by}`)).toEqual(["delete true by sweep@poplin.invalid", "trash true by sweep@poplin.invalid"]);
     expect(await database.listUploads({ before: w.clock.now, limit: 100 })).toEqual({ uploads: [] });
+  });
+
+  // Drift: the run comes 96 times a day whether anything is due or not. One that walked every site to find the due ones, and read the settings at each step, asked more of the database the more sites an install held, for nothing.
+  test("a run with nothing due asks the database six questions on an instance that runs, and one more on a day's first run to keep what the website said, however many sites the install holds", async () => {
+    const tally = { calls: 0 };
+    const worker = instance(w);
+    await ask(worker, `${ADMIN}/api/whoami`, {}, countedBindings(tally));
+    const install = await installOf(w);
+    const file = { path: "index.html", size: HTML.byteLength, contentType: "text/html", open: () => new Blob([HTML]).stream() };
+    for (let made = 0; made < 12; made += 1) await publishSite(install, { scope: "admin", holder: OWNER }, { name: `lasting-${made}`, files: [file] });
+    w.clock.now = Math.ceil(w.clock.now / DAY_MS) * DAY_MS;
+    const run = async (): Promise<number> => {
+      tally.calls = 0;
+      await sweep(worker, w);
+
+      return tally.calls;
+    };
+
+    const first = await run();
+    wait(w, 0.25);
+    const later = [await run()];
+    wait(w, 0.25);
+    later.push(await run());
+
+    expect([first, later, await states()]).toEqual([7, [6, 6], { live: 12, trash: 0 }]);
   });
 
   // Drift: R2 bills every listing past a month's free million writes, and the sweep lists a folder to empty it. A run that listed uncounted would have no bound; one that shared the day's bound with every publish could be kept from removing files for good.
@@ -140,7 +165,7 @@ describe("the scheduled run", () => {
 
   // Drift: nothing but the scheduled run starts an update with nobody asking. A handler that did not hand it the version or the build's fetch would leave the switch dead.
   // A start that cost more queries than counted here could pass what D1 answers one invocation.
-  test("with auto_update on, the run three days after a release was first seen starts one build inside a Free invocation, six database calls above a day's first run, and no later run starts another", async () => {
+  test("with auto_update on, the run three days after a release was first seen starts one build inside a Free invocation, five database calls above a day's first run, and no later run starts another", async () => {
     const built: string[] = [];
     const tally = { calls: 0 };
     const hook = "https://api.cloudflare.com/client/v4/workers/builds/deploy_hooks/a1b2c3d4-e5f6-7890-abcd-ef1234567890";
@@ -174,7 +199,7 @@ describe("the scheduled run", () => {
     const dayAfter = await run();
     const started = (await database.listAudit({ limit: 100 })).filter((entry) => entry.action === "update_started").map(({ by, detail }) => ({ by, detail }));
 
-    expect([early, built, starting - dayAfter]).toEqual([0, [hook], 6]);
+    expect([early, built, starting - dayAfter]).toEqual([0, [hook], 5]);
     expect(started).toEqual([{ by: "sweep@poplin.invalid", detail: { from: "0.0.0", to: "999.0.0", automatic: true } }]);
   });
 
@@ -247,15 +272,15 @@ describe("the scheduled run", () => {
     expect(tally.calls).toBeLessThanOrEqual(INVOCATION_CALLS);
   });
 
-  // Drift: Cloudflare may start a new instance for every cron run, and the listing is newest first. A place kept in the instance's memory starts every run at the newest site, so an expired site behind more live ones than a run looks at is never reached.
-  // D1 answers a Free invocation 50 queries: a run that asks more is cut off before it keeps its place, and the next one starts at the newest site again.
-  test("an expired site behind ninety newer live ones reaches the trash in the second run, each run a new instance that D1 refuses a fifty-first query", async () => {
+  // Drift: Cloudflare may start a new instance for every cron run, and D1 answers a Free invocation 50 queries. A run that walked the sites to find the due ones spent them on the rest, and an expired site waited a run for every fifty live ones before it.
+  // A run takes as many due sites as its calls allow, and the next one, whatever instance makes it, finds the rest as the first ones still due.
+  test("thirty expired sites behind sixty newer live ones reach the trash in two runs, twenty-five in the first, each run a new instance that D1 refuses a fifty-first query", async () => {
     const tally = { calls: 0 };
     await ask(instance(w), `${ADMIN}/api/whoami`);
     const install = await installOf(w);
     const file = { path: "index.html", size: HTML.byteLength, contentType: "text/html", open: () => new Blob([HTML]).stream() };
 
-    for (const [count, name, expires] of [[1, "brief", "1h"], [90, "lasting", "never"]] as const) {
+    for (const [count, name, expires] of [[30, "brief", "1h"], [60, "lasting", "never"]] as const) {
       for (let made = 0; made < count; made += 1) {
         const site = await publishSite(install, { scope: "admin", holder: OWNER }, { name: `${name}-${made}`, expires, files: [file] });
         if (!site.ok) throw new Error(`the test's site was refused: ${site.code}`);
@@ -272,7 +297,7 @@ describe("the scheduled run", () => {
       runs.push({ calls: tally.calls, trash: (await states()).trash });
     }
 
-    expect(runs.map((run) => run.trash)).toEqual([0, 1, 1]);
+    expect(runs.map((run) => run.trash)).toEqual([25, 30, 30]);
     expect(Math.max(...runs.map((run) => run.calls))).toBeLessThanOrEqual(INVOCATION_CALLS);
   });
 

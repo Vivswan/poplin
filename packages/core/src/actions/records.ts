@@ -27,7 +27,7 @@ export interface Install {
   /** The public names the address layout keeps for itself: no site may hold one. */
   readonly reservedNames: ReservedNames;
 
-  /** The settings one request read on its way in, given only to a request that changes nothing: its actions take them as read. Absent, an action reads the database. */
+  /** The settings one request or one scheduled run read on its way in, given only where nothing changes them before it ends: its actions take them as read. Absent, an action reads the database. */
   readonly knownSettings?: SettingValues;
 }
 

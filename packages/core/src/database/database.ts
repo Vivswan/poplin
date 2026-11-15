@@ -188,6 +188,16 @@ export interface ShownSite extends SettingsAndSite {
   readonly publishers: ReadonlyMap<TokenId, string>;
 }
 
+/** Which sites a sweep is due to act on: the live ones whose expiry is at or before a moment, or the ones that went to the trash at or before a moment. */
+export type DueSites = { readonly expiredBy: number } | { readonly trashedBy: number };
+
+/** What a scheduled run starts from, as one read gave it; each is `undefined` where its own read gives that. */
+export interface SweepStart {
+  readonly updateCheck: UpdateCheck | undefined;
+  readonly settings: SettingValues | undefined;
+  readonly place: SweepPlace | undefined;
+}
+
 /** One page of every site, the trash included, in ascending order of id. `next` is the id to pass as `after`, absent on the last page. */
 export interface ExportPage {
   readonly sites: readonly Site[];
@@ -599,6 +609,20 @@ export interface Database {
   /** Move a site into the trash. It keeps its public name. */
   trashSite(id: SiteId, signed: Signed): Promise<Done | Refused<"not_found" | "in_trash">>;
 
+  /**
+   * The ids of the sites a sweep is due to act on, the one due longest first, each found through an index: a site that is not due costs nothing.
+   *
+   * @throws {RangeError} `limit` is not a whole number from 1 to 100
+   */
+  listDueSites(due: DueSites, limit: number): Promise<readonly SiteId[]>;
+
+  /**
+   * Move a site into the trash only while it is live and its expiry is at or before `signed.at`: the check and the move are one step.
+   *
+   * @returns `not_due` for a site that is gone, in the trash already, or given a later expiry or none
+   */
+  trashExpiredSite(id: SiteId, signed: Signed): Promise<Done | Refused<"not_due">>;
+
   /** Take a site out of the trash. An expiry that is not after `signed.at` becomes `"never"` in the same step, so the site is served again and no sweep trashes it for that expiry. */
   restoreSite(id: SiteId, signed: Signed): Promise<Done | Refused<"not_found" | "not_in_trash">>;
 
@@ -608,6 +632,13 @@ export interface Database {
    * @returns `site` is the site as it was, whose folder the caller empties and then forgets
    */
   deleteSite(id: SiteId, signed: Signed): Promise<Done | Refused<"not_found">>;
+
+  /**
+   * Remove a site for good, as `deleteSite` does, only while it sits in the trash since `trashedBy` or before: the check and the removal are one step.
+   *
+   * @returns `not_due` for a site that is gone, was restored, or went to the trash later
+   */
+  deleteSatOutSite(id: SiteId, signed: Signed, trashedBy: number): Promise<Done | Refused<"not_due">>;
 
   /**
    * One page of the leftovers: the folders of removed sites that are not known to be empty. A folder a site is stored into again is no leftover.
@@ -824,6 +855,9 @@ export interface Database {
 
   /** Where the scheduled sweep's walk stopped: `undefined` before a run kept a place, once a walk ended, and for a kept place no walk can go on from. */
   readSweepPlace(): Promise<SweepPlace | undefined>;
+
+  /** Read what a scheduled run starts from, in one step: the last asking for a newer version, the settings, and where the walk stopped. */
+  readSweepStart(): Promise<SweepStart>;
 
   /** Keep where the scheduled sweep's walk stopped, in place of what was kept; `undefined` forgets it, for a walk that ended. */
   keepSweepPlace(place: SweepPlace | undefined): Promise<void>;

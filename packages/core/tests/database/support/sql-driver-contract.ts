@@ -441,7 +441,11 @@ function queryPlans(label: string, makeDriver: DriverFactory): void {
       const id = moved.kind === "done" ? moved.site.id : site.id;
       await database.getLaterSites([site.id, NO_SITE]);
       await database.trashSite(id, BY_ADA);
+      await database.listDueSites({ trashedBy: NOW }, 10);
+      await database.deleteSatOutSite(id, BY_ADA, NOW - 1);
       await database.restoreSite(id, BY_ADA);
+      await database.listDueSites({ expiredBy: NOW }, 10);
+      await database.trashExpiredSite(id, { by: ADA, at: NOW - 1 });
       const deleted = await database.deleteSite(id, BY_ADA);
       const imported = deleted.kind === "done" ? await storedBack(database, deleted.site) : deleted;
       await database.addToken(token, BY_ADA);

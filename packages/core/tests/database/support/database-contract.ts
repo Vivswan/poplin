@@ -8,6 +8,7 @@ import { mintToken, type TokenRecord } from "../../../src/auth/tokens";
 import type { ProblemNote } from "../../../src/database/problems";
 import type { DomainCheck } from "../../../src/records/domain-check";
 import { dayOf } from "../../../src/records/views";
+import { mintSiteFolder } from "../../../src/records/site";
 import type { SiteId } from "../../../src/sites/ids";
 import { auditLog, everLoggedIn } from "./audit-contract";
 import {
@@ -107,16 +108,29 @@ function sweepPlace(label: string, makeDatabase: DatabaseFactory): void {
     // Drift: a new instance may make every scheduled run, so the kept place is all that carries a walk from one run to the next. One that read back changed would skip sites, and one never forgotten would keep a new walk from starting.
     test("the place reads back as it was kept, the last one kept is the one read, and a forgotten one is gone", async () => {
       const database = await opened(makeDatabase);
-      const inTrash = { trash: true, after: { updated_at: NOW, id: OTHER_SITE } } as const;
+      const inTrash = { trash: true } as const;
+      const inLeftovers = { leftovers: true, after: mintSiteFolder() } as const;
       const before = await database.readSweepPlace();
 
       await database.keepSweepPlace(inTrash);
       const first = await database.readSweepPlace();
-      await database.keepSweepPlace({ leftovers: true });
+      await database.keepSweepPlace(inLeftovers);
       const second = await database.readSweepPlace();
       await database.keepSweepPlace(undefined);
 
-      expect([before, first, second, await database.readSweepPlace()]).toEqual([undefined, inTrash, { leftovers: true }, undefined]);
+      expect([before, first, second, await database.readSweepPlace()]).toEqual([undefined, inTrash, inLeftovers, undefined]);
+    });
+
+    // Drift: a scheduled run starts from one read of three records. One that gave the place, the settings, or the last asking differently from its own read would start a walk anew every run, or ask the website 96 times a day.
+    test("a run's start reads the last asking, the settings, and the walk's place together, each as its own read gives it: nothing on an empty install, then each once it is kept", async () => {
+      const database = await opened(makeDatabase);
+      const empty = await database.readSweepStart();
+      await database.initSettings(SETTINGS, BY_ADA);
+      await database.keepUpdateCheck({ checked_at: NOW, news: null });
+      await database.keepSweepPlace({ uploads: true });
+      const each = { updateCheck: await database.readUpdateCheck(), settings: await database.readSettings(), place: await database.readSweepPlace() };
+
+      expect([empty, Object.values(each).includes(undefined), await database.readSweepStart()]).toEqual([{ updateCheck: undefined, settings: undefined, place: undefined }, false, each]);
     });
   });
 }
