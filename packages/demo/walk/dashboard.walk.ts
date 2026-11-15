@@ -373,6 +373,20 @@ function rows(page: Page, wide: boolean, name: string): Locator {
   return page.getByRole(wide ? "table" : "list", { name, exact: true });
 }
 
+/** Check that the Sites table is as wide as its room, with the end of its last column where the rows' actions begin. */
+async function sitesFit(page: Page): Promise<void> {
+  // The table is measured again once the page's fonts are in, so its widths are read until they have come to rest.
+  await expect(async () => {
+    const widths = await page.getByRole("table", { name: "Sites", exact: true }).evaluate((table) => {
+      const [last, actions] = [...(table.querySelector("tbody tr")?.children ?? [])].slice(-2).map((cell) => cell.getBoundingClientRect());
+
+      return { table: table.scrollWidth, room: table.closest('[data-slot="scroll-area"]')?.clientWidth, underActions: (last?.right ?? Number.NaN) - (actions?.left ?? Number.NaN) };
+    });
+
+    expect(widths).toEqual({ table: widths.room, room: widths.room, underActions: 0 });
+  }).toPass();
+}
+
 /** The lines that say a result, each as the whole box it is drawn in. */
 function lines(page: Page): Locator {
   return page.getByRole("region", { name: /^Notifications/ }).getByRole("listitem");
@@ -516,17 +530,29 @@ test.describe("on a screen 1024 px wide", () => {
   // Drift: the table would be a few pixels wider than its room again, so it would scroll sideways with the end of its last column under the rows' actions.
   test("the sites fit their room with no panel open: a link gives the end of its name, and no cell lies under the rows' actions", async ({ page }) => {
     await arrive(page);
+    await sitesFit(page);
+  });
+});
 
-    // The table is measured again once the page's fonts are in, so its widths are read until they have come to rest.
-    await expect(async () => {
-      const widths = await page.getByRole("table", { name: "Sites", exact: true }).evaluate((table) => {
-        const [last, actions] = [...(table.querySelector("tbody tr")?.children ?? [])].slice(-2).map((cell) => cell.getBoundingClientRect());
+test.describe("on a screen 1440 px wide, beside a site's panel", () => {
+  test.use({ viewport: VIEWPORTS[0] });
 
-        return { table: table.scrollWidth, room: table.closest('[data-slot="scroll-area"]')?.clientWidth, underActions: (last?.right ?? Number.NaN) - (actions?.left ?? Number.NaN) };
-      });
+  // Drift: the panel takes the room of a column, and the table would scroll sideways again with the end of its last column under the rows' actions; or the name in a link would be cut while dots still stand for more than a few letters of its id.
+  test("the sites fit their room: the dots of a hidden id give, each name stays whole, and no cell lies under the rows' actions", async ({ page }) => {
+    await arrive(page);
+    await openPanel(page, SAMPLE.site);
+    await expect(panel(page).getByRole("heading", { name: SAMPLE.site, exact: true })).toBeVisible();
+    await sitesFit(page);
 
-      expect(widths).toEqual({ table: widths.room, room: widths.room, underActions: 0 });
-    }).toPass();
+    const links = await page.getByRole("table", { name: "Sites", exact: true }).evaluate((table) => {
+      const parts = [...table.querySelectorAll<HTMLElement>("[data-gives]")];
+      const names = parts.filter((part) => part.matches(".truncate"));
+      // The dots that find no room stand in a line under the first, which is not shown.
+      const dots = parts.filter((part) => !part.matches(".truncate")).map((part) => part.firstElementChild);
+
+      return { cutNames: names.filter((name) => name.scrollWidth > name.clientWidth).length, fewerDots: dots.some((row) => (row?.scrollHeight ?? 0) > (row?.clientHeight ?? 0)) };
+    });
+    expect(links).toEqual({ cutNames: 0, fewerDots: true });
   });
 });
 

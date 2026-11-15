@@ -20,6 +20,12 @@ const AFTER_LINK_LOOK = "size-6 shrink-0 opacity-60 group-hover/row:opacity-100 
 /** The fewest letters of a site's name its link is cut to for a table's sake, where the name has as many. */
 const LEAST_NAME_LETTERS = 8;
 
+/** The fewest dots that stand for a hidden id in a table short of room. */
+const LEAST_DOTS = 3;
+
+/** How much sooner the dots of a hidden id give than the name before them, as the weight a row of boxes shares its lack of room by. */
+const DOTS_GIVE_FIRST = 1_000_000;
+
 /** Which sites show the id in their link, and the switch of one. */
 export interface Reveal {
   /** Whether the site's id is shown. */
@@ -45,12 +51,13 @@ export function AccessMark({ access, className }: { readonly access: Access; rea
  * What stands where a site's id is left out: one dot for each character, each as wide as a character, so nothing moves when the id is shown.
  *
  * The dots are drawn, not typed: a typed dot is taken from another font in some browsers, and comes out heavier there.
+ * Where their box is narrower than they are, the dots that find no room go to a line that is not shown: each dot left is a whole one.
  */
 function HiddenId({ length }: { readonly length: number }): ReactNode {
   return (
-    <span aria-hidden="true" className="inline-flex h-[1em] align-middle text-faint">
+    <span aria-hidden="true" className="inline-flex h-[1em] max-w-full flex-wrap overflow-hidden align-middle text-faint">
       {Array.from({ length }, (_, at) => at).map((at) => (
-        <span key={at} className="flex w-[1ch] items-center justify-center">
+        <span key={at} className="flex h-[1em] w-[1ch] shrink-0 items-center justify-center">
           <span className="size-[3px] rounded-full bg-current" />
         </span>
       ))}
@@ -66,7 +73,7 @@ function HiddenId({ length }: { readonly length: number }): ReactNode {
  * @param address - the address to write; the site's link when left out
  * @param whole - `true` shows the id too; otherwise as many dots stand where it is, and Copy still gives the whole address
  * @param wraps - `true` goes on in the next line where the text is too long, and cuts nothing
- * @param gives - `true` tells a table that the end of the name may be cut for the room's sake, down to the name's first letters and the mark that it is cut
+ * @param gives - `true` tells a table what may give for the room's sake: the dots of a hidden id, down to a few, and then the end of the name, down to its first letters and the mark that it is cut
  */
 export function SiteLink({
   site,
@@ -96,9 +103,16 @@ export function SiteLink({
       <span className={wraps ? undefined : "truncate"} {...giving}>
         {before}
       </span>
+      {masked && gives ? (
+        // The least is as wide as the dots that stay. The dots give long before the name does: the name is cut only once they are at their fewest.
+        <span data-gives className="overflow-hidden" style={{ minWidth: `${Math.min(hidden.length, LEAST_DOTS)}ch`, flexShrink: DOTS_GIVE_FIRST }}>
+          <HiddenId length={hidden.length} />
+        </span>
+      ) : null}
       {hidden === "" ? null : (
         <span className={wraps ? undefined : "shrink-0"}>
-          {masked ? <HiddenId length={hidden.length} /> : hidden}
+          {masked && !gives ? <HiddenId length={hidden.length} /> : null}
+          {masked ? null : hidden}
           {after}
         </span>
       )}
