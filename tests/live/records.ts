@@ -56,6 +56,9 @@ export interface Bench {
   /** Runs one command line of the CLI, with `--json`, as the token holder. */
   readonly cli: (...words: readonly string[]) => Promise<Ran>;
 
+  /** How many requests the token holder's commands and tools have sent so far. */
+  readonly asked: () => number;
+
   /** Calls one tool of the MCP server as the token holder and answers its structured content. */
   readonly mcp: (tool: string, input: Record<string, unknown>) => Promise<Record<string, unknown>>;
 

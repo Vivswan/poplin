@@ -6,6 +6,7 @@
 //   DELETE /api/sites/:site                to the trash 6, for good 13
 //   PATCH  /api/sites/:site                who may open it 3, any other setting 2, both 5, and 1 where it is told an expiry
 //   POST   /api/sites/:site/new-link 9     POST /api/sites/:site/restore 6    POST /api/sites/:site/rollback 2
+//   POST   /api/sites/:site/duplicate      the request that begins a copy 21, each one that goes on with it 16
 //   PATCH  /api/config 3                   POST /api/logins 3                 DELETE /api/uploads/:upload 3
 //   GET    /api/uploads/:upload 1          GET /api/export/sites/:site/files 1
 //   GET    a page or a file of a site      2, once it is answered 200 or 304
@@ -38,6 +39,9 @@ const IMPORTED_VERSION = 2;
 
 /** The row a site's entry in the index of expiries is: written when a site is told an expiry, and again when one that runs out leaves the trash. */
 const EXPIRY = 1;
+
+/** The rows of a copy of a site: the request that begins it is counted as one that makes the copy whole, and each request that goes on with it as the one that finishes it. */
+const COPIED = { begun: 21, goneOn: 16 } as const;
 
 /** The rows of a site moved to the trash, and of one removed for good with the three versions an install keeps and a day's count of its own. */
 const REMOVED = { trash: 6, forever: 13 } as const;
@@ -79,6 +83,7 @@ const PRICES = [
   { method: "POST", path: "/api/sites/:site/restore", rows: () => 5 + EXPIRY },
   { method: "POST", path: "/api/sites/:site/new-link", rows: () => 9 },
   { method: "POST", path: "/api/sites/:site/rollback", rows: () => 2 },
+  { method: "POST", path: "/api/sites/:site/duplicate", rows: (asked) => (asked.body.upload === undefined ? COPIED.begun : COPIED.goneOn) },
   { method: "PATCH", path: "/api/config", rows: () => 3 },
   { method: "POST", path: "/api/logins", rows: () => 3 },
   { method: "GET", path: "/api/export/sites/:site/files", rows: () => 1 },

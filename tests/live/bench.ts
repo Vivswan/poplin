@@ -102,12 +102,18 @@ export function openBench(parts: BenchParts): OpenBench {
   const scratch = mkdtempSync(join(tmpdir(), "poplin-live-"));
   const prefix = `${SWEPT_PREFIX}${parts.run}`;
   let made = 0;
+  let asked = 0;
+  const counted: Fetch = (input, init) => {
+    asked += 1;
+
+    return parts.fetch(input, init);
+  };
 
   const io = (out: (line: string) => void): Io => ({
     out,
     err: () => undefined,
     status: () => undefined,
-    fetch: parts.fetch,
+    fetch: counted,
     machine: {
       env: { POPLIN_CONFIG_DIR: join(scratch, "config"), POPLIN_SERVER: admin, POPLIN_TOKEN: parts.token },
       platform: process.platform,
@@ -233,6 +239,7 @@ export function openBench(parts: BenchParts): OpenBench {
       missing: parts.missing,
       visit: (address, init = {}) => parts.fetch(address, { redirect: "manual", signal: AbortSignal.timeout(VISIT_TIMEOUT_MS), ...init }),
       cli,
+      asked: () => asked,
       mcp,
       folder,
       manyFiles,

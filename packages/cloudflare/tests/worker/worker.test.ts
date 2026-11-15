@@ -1121,6 +1121,15 @@ describe("the rows the live checks count", () => {
 
     const made = await step("a new site", async () => finish(await calls.uploads.$post({ query: {}, json: { name: "docs", access: "unlisted", files: [declared] } })));
     const site = { site: made.id };
+    await step("a copy of a site, whole in one request", async () => done(await calls.sites[":site"].duplicate.$post({ param: site, query: {}, json: { name: "docs-copy" } })));
+    // A site of more files than one request copies, published beside the harness: its copy takes two requests.
+    const pages = Array.from({ length: 113 }, (_page, at) => ({ path: at === 0 ? "index.html" : `pages/${at}.html`, size: 1, contentType: "text/html", open: () => new Blob(["x"]).stream() }));
+    const large = await publishSite(await installOf(w), { scope: "admin", holder: OWNER }, { name: "large", files: pages });
+    if (!large.ok) throw new Error(`the large site was refused: ${large.code}`);
+
+    const copied = { site: large.site.id };
+    const begun = await step("a copy of 113 files begun", async () => done<{ copy: { upload: string } }>(await calls.sites[":site"].duplicate.$post({ param: copied, query: {}, json: {} })));
+    await step("that copy gone on with, and finished", async () => done(await calls.sites[":site"].duplicate.$post({ param: copied, query: {}, json: { upload: begun.copy.upload } })));
     const again = async (): Promise<Published> => finish(await calls.uploads.$post({ query: {}, json: { ...site, files: [declared] } }));
     await step("a second version", again);
     await again();
@@ -1178,6 +1187,10 @@ describe("the rows the live checks count", () => {
     expect({ pairs, stopped: meter.stopped() }).toEqual({
       pairs: {
         "a new site": [19, 19],
+        "a copy of a site, whole in one request": [21, 21],
+        // A copy that takes more requests is counted as whole at its first, which writes the upload alone.
+        "a copy of 113 files begun": [6, 21],
+        "that copy gone on with, and finished": [16, 16],
         "a second version": [13, 13],
         "a fourth version, which drops the first": [17, 17],
         "a page opened": [2, 2],
