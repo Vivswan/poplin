@@ -6,6 +6,7 @@ import { useDebounce } from "use-debounce";
 import { ACCESSES, type Access, LONGEST_NAME, plainAddress, type Site, shownName } from "@/lib/sites";
 import { AskDialog } from "@/shared/ask-dialog";
 import { Confirm, type Question } from "@/shared/confirm";
+import { DeleteForGoodQuestion } from "@/sites/delete-for-good-question";
 import { EditSiteDialog } from "@/sites/edit-site-dialog";
 import type { SiteActions } from "@/sites/site-actions";
 import { usePublicAddress } from "@/sites/site-queries";
@@ -108,6 +109,7 @@ export function SiteQuestions({
     <>
       <EditSiteDialog site={named} onClose={onClose} onSave={actions.name} returnTo={returnTo} />
       <Confirm question={asked === undefined ? undefined : questionOf(asked)} onAnswer={answer} />
+      <DeleteForGoodQuestion />
       <AskDialog
         open={opening !== undefined}
         onOpenChange={(open) => (open ? undefined : onClose())}

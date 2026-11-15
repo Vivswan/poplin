@@ -4,7 +4,7 @@ import { readFile } from "node:fs/promises";
 
 import { expect, type Locator, type Page } from "@playwright/test";
 
-import { arrive, openPanel, reset, said, screenHeading, siteName, test } from "./visit";
+import { arrive, openPanel, reset, said, screenHeading, siteName, TRASH, test } from "./visit";
 
 /** The screens the walk is taken on. A wide one shows tables and the side navigation; a narrow one shows lists, and the sections behind a button. */
 const VIEWPORTS = [
@@ -23,6 +23,9 @@ const SCHEMES = ["light", "dark"] as const;
 
 /** What the sample data holds that the walk opens: an unlisted site by its title, a site by its title for the graph, a person who is not the visitor, a token, and a login that waits. */
 const SAMPLE = { site: "Pricing", graphed: "Team handbook", person: "jonas@example.com", token: "design-laptop", login: "build-server" } as const;
+
+/** The sample site that is in the trash: what the list calls it, which is its title, and its name, which its link holds. */
+const TRASHED = { title: "Notes from the offsite", name: "old-notes" } as const;
 
 /** How a moment is written: the day with two figures, and the time to the minute. */
 const MOMENT = String.raw`\d{2} [A-Z][a-z]{2} \d{4}, \d{2}:\d{2}`;
@@ -991,4 +994,27 @@ test("in a site's panel, a span is shown as the moment it ends before it is save
   await expect(day).toBeHidden();
   await expect(change).toBeFocused();
   await expect(fact).toHaveText("NeverChange");
+});
+
+// Drift: a site in the trash could be removed for good from a terminal alone, or one press would remove it, with its title where its name is asked for.
+test("a site in the trash is deleted for good only once its name is typed, with the focus on Cancel first; it then leaves the list with no Undo, and Activity says so", async ({ page }) => {
+  const asks = question(page, `Delete ${TRASHED.title} for good?`);
+  const remove = asks.getByRole("button", { name: "Delete for good", exact: true });
+  await arrive(page);
+  await page.goto(TRASH);
+  await fromRowMenu(page, TRASHED.title, "Delete for good");
+  await expect(asks.getByRole("button", { name: "Cancel", exact: true })).toBeFocused();
+  await expect(remove).toBeDisabled();
+
+  await asks.getByRole("textbox", { name: "Site's name", exact: true }).fill(TRASHED.title);
+  await expect(remove).toBeDisabled();
+  await asks.getByRole("textbox", { name: "Site's name", exact: true }).fill(TRASHED.name);
+  await remove.click();
+  await expect(said(page, `${TRASHED.title} deleted for good.`)).toBeVisible();
+  await expect(siteName(page, TRASHED.title)).toHaveCount(0);
+  await expect(lines(page).getByRole("button")).toHaveCount(0);
+  await expect(page.getByLabel("Find a site", { exact: true }).filter({ visible: true })).toBeFocused();
+
+  await toSection(page, "Activity");
+  await expect(page.locator(':text-is("Deleted for good"):visible').first()).toBeVisible();
 });

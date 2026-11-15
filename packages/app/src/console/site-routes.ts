@@ -4,7 +4,7 @@
 //   GET  /sites/<label>            one site, and whether the install lets search engines in
 //                                  both with the names of the logins there are, for whoever published a version
 //   GET  /public-address?name=     the address a site made public under that name answers at
-//   POST /sites/<label>/<change>   naming, access, settings, expiry, delete, restore, new-link, make-live
+//   POST /sites/<label>/<change>   naming, access, settings, expiry, delete, restore, delete-for-good, new-link, make-live
 
 import { vValidator } from "@hono/valibot-validator";
 import { SITE_CHANGES } from "@poplin/core/src/actions/changes";
@@ -180,4 +180,17 @@ export const siteRoutes = new Hono<Shared>()
     const changed = await restoreSite(install, actor, context.req.valid("param").site);
 
     return changed.ok ? context.json({ ok: true as const, site: changed.site }) : refused(context, changed);
+  })
+  .post("/sites/:site/delete-for-good", vValidator("param", ONE_SITE, refuseInvalid), vValidator("json", NOTHING, refuseInvalid), async (context) => {
+    const { install, actor } = context.get("asker");
+    const { site } = context.req.valid("param");
+    // The console removes for good only what is in the trash: a live site goes there first, where one press brings it back.
+    const shown = await getSite(install, actor, site);
+    if (!shown.ok) return refused(context, shown);
+
+    if (shown.site.state !== "trash") return refused(context, { code: "not_in_trash" });
+
+    const removed = await deleteSite(install, actor, { site, forever: true });
+
+    return removed.ok ? context.json({ ok: true as const, site: removed.site }) : refused(context, removed);
   });

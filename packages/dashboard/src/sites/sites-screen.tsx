@@ -37,8 +37,8 @@ const MAX_SEARCH = 40;
 /** How a site's name looks in its row. */
 const NAME_LOOK = "rounded-sm py-0.5 font-medium outline-none hover:underline focus-visible:ring-2 focus-visible:ring-ring";
 
-/** The width of the last column of the trash, whose rows end with a worded button. */
-const RESTORE_WIDTH = 104;
+/** The width of the last column of the trash, whose rows end with a worded button and a menu. */
+const RESTORE_WIDTH = 140;
 
 /** The names of the logins while the page is being read. */
 const NO_LOGINS: LoginNames = {};

@@ -1,4 +1,4 @@
-// What sits at the end of a site's row: the menu of what is done to a site without opening it. A site in the trash has Restore there.
+// What sits at the end of a site's row: the menu of what is done to a site without opening it. A site in the trash has Restore there, and a menu that deletes it for good.
 
 import { MoreHorizontalIcon } from "lucide-react";
 import type { ReactNode } from "react";
@@ -6,6 +6,7 @@ import type { ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { type Site, shownName } from "@/lib/sites";
+import { DeleteForGood } from "@/sites/delete-for-good";
 import type { SiteActions } from "@/sites/site-actions";
 import type { Ask } from "@/sites/site-questions";
 
@@ -20,7 +21,7 @@ interface SiteRowActionsProps {
   /** Asks a question about the site before a change: the screen draws it, and the table stays as it is. */
   readonly onAsk: (site: Site, ask: Ask) => void;
 
-  /** Called after the site went to the trash. */
+  /** Called after the site went to the trash, or from the trash for good. */
   readonly onRemoved: (site: Site) => void;
 }
 
@@ -28,9 +29,12 @@ interface SiteRowActionsProps {
 export function SiteRowActions({ site, actions, onAsk, onRemoved }: SiteRowActionsProps): ReactNode {
   if (site.state === "trash") {
     return (
-      <Button variant="outline" size="sm" onClick={() => void actions.restore(site)}>
-        Restore
-      </Button>
+      <span className="inline-flex items-center gap-0.5">
+        <Button variant="outline" size="sm" onClick={() => void actions.restore(site)}>
+          Restore
+        </Button>
+        <DeleteForGood site={site} look="menu" onGone={() => onRemoved(site)} />
+      </span>
     );
   }
 

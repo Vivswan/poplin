@@ -14,6 +14,7 @@ import { settingAddress } from "@/settings/setting-address";
 import { IconButton } from "@/shared/icon-button";
 import { PanelBlock, PanelFact, PanelFacts, PanelLoading, PanelSwitch, SidePanel } from "@/shared/side-panel";
 import { Who } from "@/shared/who";
+import { DeleteForGood } from "@/sites/delete-for-good";
 import { ExpiryRow } from "@/sites/expiry-row";
 import type { SiteActions } from "@/sites/site-actions";
 import { type Reveal, RevealButton, SiteLink } from "@/sites/site-columns";
@@ -164,16 +165,19 @@ function SearchNote({ open, allowed }: { readonly open: boolean; readonly allowe
   );
 }
 
-/** A site in the trash: when it leaves for good, and the way back. */
-function TrashBlock({ site, onRestore }: { readonly site: Site; readonly onRestore: () => void }): ReactNode {
+/** A site in the trash: when it leaves for good, the way back, and the way out at once. */
+function TrashBlock({ site, onRestore, onGone }: { readonly site: Site; readonly onRestore: () => void; readonly onGone: () => void }): ReactNode {
   const leaves = site.gone_on === undefined ? "" : ` It leaves the trash for good on ${wholeMoment(site.gone_on)}.`;
 
   return (
     <PanelBlock label="In the trash">
       <p className="text-muted-foreground">The site comes back with its link and its settings.{leaves}</p>
-      <Button className="w-fit" onClick={onRestore}>
-        Restore
-      </Button>
+      <div className="flex items-center gap-2">
+        <Button onClick={onRestore}>Restore</Button>
+        <span className="ml-auto">
+          <DeleteForGood site={site} look="button" onGone={onGone} />
+        </span>
+      </div>
     </PanelBlock>
   );
 }
@@ -210,7 +214,7 @@ export function SitePanel({ label, actions, reveal, onAsk, closeLink, onClose, o
     return (
       <SidePanel title={shownName(site)} {...frame}>
         <FactsBlock site={site} />
-        <TrashBlock site={site} onRestore={() => void actions.restore(site)} />
+        <TrashBlock site={site} onRestore={() => void actions.restore(site)} onGone={onClose} />
       </SidePanel>
     );
   }

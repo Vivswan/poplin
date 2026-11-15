@@ -2,6 +2,8 @@
 
 import { expect, test } from "bun:test";
 
+import { fileKey, sitePrefix } from "@poplin/core/src/actions/files";
+
 import { NOW } from "../sites/support/install";
 import { openConsole } from "./support/console";
 
@@ -78,13 +80,53 @@ test.each([
   expect(refusal.sentence?.length).toBeGreaterThan(10);
 });
 
+// Drift: a site in the trash would stay with its files after it was deleted for good, or the log would not say who did it.
+test("a site in the trash is deleted for good with its files, signed by the session's admin", async () => {
+  const opened = await openConsole();
+  const site = await opened.base.publish("guide", "private");
+  const label = `${site.name}--${site.id}`;
+  const { store } = opened.base.install;
+  const key = fileKey(site.folder, 1, "index.html");
+  if (!key.ok) throw new Error("the test's own file has no key");
+
+  await store.write(key.key, new TextEncoder().encode("<p>guide</p>"), { contentType: "text/html" });
+  const held = (await store.list({ prefix: sitePrefix(site.folder), limit: 10 })).objects.length;
+  await opened.change(`/data/sites/${label}/delete`, {});
+
+  const response = await opened.change(`/data/sites/${label}/delete-for-good`, {});
+  const [last] = await opened.base.audit();
+  const kept = await store.list({ prefix: sitePrefix(site.folder), limit: 10 });
+
+  expect([response.status, await response.json(), (await opened.get(`/data/sites/${label}`)).status]).toEqual([200, { ok: true, site: null }, 404]);
+  expect([last?.action, last?.by, String(last?.site?.name), held, kept.objects.length]).toEqual(["delete", opened.base.owner, "guide", 1, 0]);
+});
+
+// Drift: one press on a live site would remove it with no way back: only a site that went to the trash first may go for good from the dashboard.
+test.each([
+  ["a site that is live", "guide", 409, "not_in_trash"],
+  ["a site that is not there", "no-site--abcdefghijkl", 404, "not_found"],
+  ["what is no label", "Not A Label!", 400, "bad_argument"],
+])("deleting %s for good is refused, and the site stays", async (_case, reference, status, code) => {
+  const opened = await openConsole();
+  const site = await opened.base.publish("guide", "private");
+  const label = reference === "guide" ? `${site.name}--${site.id}` : reference;
+
+  const response = await opened.change(`/data/sites/${encodeURIComponent(label)}/delete-for-good`, {});
+  const refusal = (await response.json()) as Changed;
+
+  expect([response.status, refusal.code, (await opened.get(`/data/sites/${site.name}--${site.id}`)).status]).toEqual([status, code, 200]);
+  expect(refusal.sentence?.length).toBeGreaterThan(10);
+});
+
 // Drift: either change would be done for a request with no session, or for a body a page of another origin sends with the owner's session.
 test.each([
   ["expiry", { expires: "7d" }],
+  ["delete-for-good", {}],
 ])("%s is refused without a session and from another origin, and changes nothing", async (change, body) => {
   const opened = await openConsole();
   const site = await opened.base.publish("guide", "private");
   const label = `${site.name}--${site.id}`;
+  if (change === "delete-for-good") await opened.change(`/data/sites/${label}/delete`, {});
   const entries = (await opened.base.audit()).length;
 
   const loggedOut = await opened.change(`/data/sites/${label}/${change}`, body, { Cookie: "" });
