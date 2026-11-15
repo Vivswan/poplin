@@ -8,7 +8,7 @@ import { Confirm } from "@/shared/confirm";
 /** The question a held move waits behind. */
 const LEAVE = {
   title: "Leave without saving?",
-  says: "What you typed on this screen is not saved. Leaving drops it.",
+  says: "You have unsaved changes.",
   yes: "Leave",
   no: "Stay",
   rather: true,
@@ -24,7 +24,7 @@ function leaves({ current, next }: { readonly current: { readonly pathname: stri
  *
  * After Stay the address is the screen's own again, also where Back had changed it already.
  *
- * @param unsaved - whether the screen holds typing that leaving would drop; while `false` nothing is asked
+ * @param unsaved - whether the screen holds changes that leaving would drop; while `false` nothing is asked
  */
 export function LeaveGuard({ unsaved }: { readonly unsaved: boolean }): ReactNode {
   const held = useBlocker({ shouldBlockFn: leaves, disabled: !unsaved, withResolver: true });
