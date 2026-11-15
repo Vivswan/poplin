@@ -22,6 +22,9 @@ const SERVE = join(import.meta.dir, "..", "packages", "demo", "scripts", "serve.
 /** How long a started preview is given to answer, in milliseconds: the command builds the dashboard's client first. */
 const START_MS = 20_000;
 
+/** How long a test that seeds an install twice may take, in milliseconds: a seed is work of the processor alone, and two of them on a busy machine pass the five seconds a test gets. */
+const SEED_MS = 30_000;
+
 /** The origin the test asks the preview at. */
 const ORIGIN = "http://127.0.0.1:4400";
 
@@ -227,7 +230,7 @@ describe("the local preview", () => {
       [200, "check", 7, { code: "login_broken", about: "Login policy" }],
       [200, "check", 7, "none"],
     ]);
-  });
+  }, SEED_MS);
 
   // Drift: the client shows and copies the addresses its data holds. One that named a hostname of the install would send a browser to a domain that does not exist.
   test("no page and no data of the dashboard names a hostname of the install, and every site's address is a path of the preview that serves the site", async () => {
@@ -342,7 +345,7 @@ describe("the local preview", () => {
     expect((await shellOf(await (await open(preview, dashboard)).text())).boot.demo).toEqual({ reset });
     expect([started.status, started.headers.get("Location")]).toEqual([303, "/"]);
     expect([await names("?q=sales-report"), (await names("?view=trash")).includes("sales-report")]).toEqual([["sales-report"], false]);
-  });
+  }, SEED_MS);
 
   // Drift: the session cookie is made for the install's own domain. Handed to a browser at this origin it would be kept for a domain it never asks.
   test("a login on a preview page hands the browser no cookie", async () => {
