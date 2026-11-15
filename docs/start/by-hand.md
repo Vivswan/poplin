@@ -160,7 +160,15 @@ Two words the steps use: a **Worker** is the program Cloudflare runs for you, an
    npx poplin doctor
    ```
 
-   The first line prints a short code and opens your dashboard on a question that starts with Allow and names your computer. It shows a code too. Only when the two are the same, tick The codes match and press Allow. When they differ, press Deny.
+   The first line prints a short code and opens your dashboard on the question `Allow this login?`
+
+   | On the page | Do |
+   | --- | --- |
+   | Can change | choose Everything: this computer is yours, and the checks below read the settings |
+   | Last 4 letters of the code in your terminal | type them |
+   | Allow | press it |
+
+   The page takes only the letters of the code your terminal printed. If it refuses them, or you did not start a login, press Deny.
 
    Every check `poplin doctor` prints starts with `ok`, and its last line says `nothing was changed`:
 

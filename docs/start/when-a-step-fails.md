@@ -78,7 +78,8 @@ No code arrives when the email differs from the one in step 4. Go back to the se
 | ---------------------------------------------------------- | ---------------------------------------------------- | --------------------------------------------------------- |
 | the terminal does not know `npx`                           | Node.js is not installed                             | run the installer of step 6, then open a new terminal     |
 | `node --version` prints a number below `v24`               | poplin runs on Node.js 24 or higher                  | run the installer of step 6                               |
-| the page's code is not the terminal's                      | that approval would go to some other login           | press Deny, and run the first line again                  |
+| the page refuses the letters you typed                     | that login is not the one your terminal began        | press Deny, and run the first line again                  |
+| `poplin doctor` says `publisher token`                     | the page was left at Own sites only                  | run the first line again, and choose Everything           |
 | `the login was denied on the dashboard`                    | Deny was pressed; nothing was saved                  | run the first line again                                  |
 | `nobody allowed the login before it ran out`               | the code ran out before Allow; nothing was saved     | run the first line again                                  |
 | `not logged in`                                            | the first line did not finish                        | run the first line again                                  |
