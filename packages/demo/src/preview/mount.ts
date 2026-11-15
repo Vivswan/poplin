@@ -12,6 +12,7 @@
 
 import { THEME_COOKIE } from "../../../app/src/dashboard/page/theme";
 import { ADMIN_LABEL } from "../../../core/src/names/hostname";
+import { withAddresses } from "./addresses";
 import { ADDRESSES, DOMAIN } from "./world";
 
 /** The origin the dashboard, the login, and the API are asked at. */
@@ -25,9 +26,6 @@ export const SERVED_PREFIX = "/served";
 
 /** The end of every hostname of the install. */
 const DOMAIN_ENDING = `.${DOMAIN}`;
-
-/** The attributes of the app's pages that hold an address. */
-const ADDRESS_ATTRIBUTE = /\b(href|action|formaction)="([^"]*)"/g;
 
 /** A hostname one label under the install's domain, with the scheme before it and the slash after it when a text writes them. */
 const HOST_ADDRESS = new RegExp(`(https://)?(?<![%\\w.-])([a-z0-9-]+)${DOMAIN_ENDING.replaceAll(".", "\\.")}/?`, "g");
@@ -137,7 +135,7 @@ async function rewriteBody(text: string, kind: Kind, here: Mount, look: Look, st
 
   if (kind === "plain") return look.framed(text, status);
 
-  const linked = text.replace(ADDRESS_ATTRIBUTE, (...[, name, address]: string[]) => `${name}="${localAddress(address ?? "", here)}"`);
+  const linked = withAddresses(text, (address) => localAddress(address, here));
 
   return localText(linked, look.origin);
 }

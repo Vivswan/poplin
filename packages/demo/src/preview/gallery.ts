@@ -2,6 +2,8 @@
 //
 // A state that an address can carry (a notice, a refusal, a view) is a plain link. A page that only a form reaches is a stage: an address under `/state/` that sends the form itself and shows the answer.
 
+import { Parser } from "htmlparser2";
+
 import { beginLogin } from "../../../core/src/actions/computer-logins";
 import { listSites } from "../../../core/src/actions/list";
 import { PLUG_STATES, type PlugState } from "./domain-plug";
@@ -37,8 +39,8 @@ const NO_CODE = "WDJB-MJHT";
 /** The token a stage pastes into the domain form: the preview's plug takes any. */
 const SAMPLE_TOKEN = "sample-token";
 
-/** The hidden field of a form that holds its token. */
-const CSRF_FIELD = /name="csrf" value="([^"]+)"/;
+/** The name of the hidden field of a form that holds its token. */
+const CSRF_FIELD = "csrf";
 
 /** The status a check answers with in each state of the plug that reads no table. */
 const SETUP_STATUS: Partial<Record<PlugState, number>> = { "token-refused": 403, unreachable: 502 };
@@ -93,9 +95,22 @@ function seeOther(location: string): Response {
   return new Response(null, { status: 303, headers: { Location: location } });
 }
 
+/** The token the first form of a page carries in its hidden field; empty for a page with no such field. */
+function formToken(page: string): string {
+  let token: string | undefined;
+  const parser = new Parser({
+    onopentag: (name, attributes) => {
+      if (name === "input" && attributes.name === CSRF_FIELD) token ??= attributes.value;
+    },
+  });
+  parser.end(page);
+
+  return token ?? "";
+}
+
 /** Send a form as a page of the preview would: the token of `page`, then the fields, to `action`. Each is sent as a visitor of its own, so a stage never fills the minute of the one before. */
 async function submit(stage: Stage, page: string, action: string, fields: Readonly<Record<string, string>>): Promise<Response> {
-  const [, csrf = ""] = CSRF_FIELD.exec(await (await stage.ask(page)).text()) ?? [];
+  const csrf = formToken(await (await stage.ask(page)).text());
   const visitor = action.includes("?") ? "" : `?preview-visitor=${crypto.randomUUID()}`;
 
   return stage.ask(`${action}${visitor}`, {

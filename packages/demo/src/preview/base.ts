@@ -5,8 +5,7 @@
 //
 // Everything inside the demo writes paths from the root. This is the one place that knows the base: it is taken off on the way in and put on on the way out.
 
-/** An attribute of a page that holds a path from the root; the path's own first slash follows. */
-const ROOT_PATH_ATTRIBUTE = /\b(href|action|formaction|src)="\/(?!\/)/g;
+import { withAddresses } from "./addresses";
 
 /** An origin that stands for the demo's own wherever only a path is at hand; no answer ever names it. */
 const ANY_ORIGIN = "https://demo.invalid";
@@ -70,9 +69,7 @@ export async function rebased(response: Response, base: string, origin: string):
 
   const host = origin.replace(/^https?:\/\//, "");
   const text = (await response.text()).replaceAll(`${host}/`, () => `${host}${base}/`);
-
-  // Functions, so a base that holds a `$` is written as it is.
-  const based = isPage ? text.replace(ROOT_PATH_ATTRIBUTE, (...[, name]: string[]) => `${name}="${base}/`) : text;
+  const based = isPage ? withAddresses(text, (address) => (address.startsWith("/") && !address.startsWith("//") ? `${base}${address}` : address)) : text;
 
   return new Response(based, { status: response.status, headers });
 }
