@@ -1,4 +1,4 @@
-// The frame every screen sits in: the sections at the side, what the domain needs and the account at its foot, and the working area. On a phone the sections are behind a button at the top.
+// The frame every screen sits in: the sections at the side, each marked where its screen holds a problem, the version and the account at its foot, and the working area. On a phone the sections are behind a button at the top.
 
 import { useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate, useParams } from "@tanstack/react-router";
@@ -42,6 +42,8 @@ import { useFrame, useStarted } from "@/lib/frame";
 import { useMedia } from "@/lib/media";
 import { sayDone, sayRefused, send } from "@/lib/notify";
 import { useChosenTimeZone } from "@/lib/timezone";
+import { problemCount } from "@/problems/problem-words";
+import { MarkedSection, useMarkedCount } from "@/problems/section-mark";
 import { Confirm, type Question } from "@/shared/confirm";
 import { IconButton } from "@/shared/icon-button";
 import { siteKey } from "@/sites/site-queries";
@@ -97,10 +99,10 @@ function SectionLink({ section, current }: { readonly section: (typeof SECTIONS)
 
   // The section's mark comes from the screen drawn. The router adds its own only at the link's exact address, where the two agree.
   return (
-    <Link to={section.inside} {...NO_OWN_MARK} aria-current={here ? "page" : undefined} className={look}>
+    <MarkedSection section={section.key} link={<Link to={section.inside} {...NO_OWN_MARK} aria-current={here ? "page" : undefined} className={look} />}>
       <Icon className="size-4 shrink-0" />
       {section.label}
-    </Link>
+    </MarkedSection>
   );
 }
 
@@ -185,20 +187,17 @@ function AccountMenu({ compact, offer }: { readonly compact?: boolean; readonly 
   );
 }
 
-/** What the domain needs, where the install remembers a check that left work: a link to the Domain screen, with the whole sentence behind it. A check that is only old is said quietly. */
+/** The reminder that the last check of the domain is old: a quiet link to the Domain screen, with the whole sentence behind it. A domain that needs work is marked at its section, as every problem is. */
 function DomainNote({ onGo }: { readonly onGo?: () => void }): ReactNode {
   const { domainNote } = useFrame().data;
-  if (domainNote === null) return null;
+  if (domainNote === null || !domainNote.quiet) return null;
 
-  const look = cn(
-    "flex min-h-8 items-center gap-2 rounded-md px-2.5 text-xs leading-5 outline-none hover:bg-sidebar-accent/60 focus-visible:ring-2 focus-visible:ring-ring max-md:min-h-10",
-    domainNote.quiet ? "text-faint" : "font-medium text-destructive",
-  );
+  const look =
+    "flex min-h-8 items-center gap-2 rounded-md px-2.5 text-xs leading-5 text-faint outline-none hover:bg-sidebar-accent/60 focus-visible:ring-2 focus-visible:ring-ring max-md:min-h-10";
 
   return (
     <Tooltip>
       <TooltipTrigger render={<Link to="/domain" {...NO_OWN_MARK} className={look} onClick={onGo} />}>
-        {domainNote.quiet ? null : <TriangleAlertIcon className="size-3.5 shrink-0" />}
         {domainNote.label}
       </TooltipTrigger>
       <TooltipContent side="right" className="max-w-64">
@@ -318,11 +317,14 @@ function PhoneSections({ current, offer, started }: { readonly current: Section;
     setOpen(false);
     offer?.ask();
   };
+  const marked = useMarkedCount();
+  const name = marked === 0 ? "Sections" : `Sections, ${problemCount(marked)}`;
 
   return (
     <Sheet open={open} onOpenChange={setOpen}>
-      <SheetTrigger render={<Button variant="ghost" size="icon-sm" aria-label="Sections" className="-ml-2 md:hidden" />}>
+      <SheetTrigger render={<Button variant="ghost" size="icon-sm" aria-label={name} className="relative -ml-2 md:hidden" />}>
         <MenuIcon />
+        {marked === 0 ? null : <TriangleAlertIcon aria-hidden="true" className="absolute -top-0.5 -right-0.5 size-3 text-destructive" />}
       </SheetTrigger>
       {/* A phone lying on its side is shorter than what the sheet holds: the sheet scrolls. */}
       <SheetContent side="left" className="gap-4 overflow-y-auto bg-sidebar px-3 pt-3 pb-3 data-[side=left]:w-72">

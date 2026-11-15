@@ -6,6 +6,7 @@ import { type FormEvent, type ReactNode, useEffect, useRef, useState } from "rea
 import { Skeleton } from "@/components/ui/skeleton";
 import { useFocusHome } from "@/lib/focus";
 import { useChosenTimeZone } from "@/lib/timezone";
+import { HomeProblems } from "@/problems/home-problems";
 import { LeaveGuard } from "@/shared/leave-guard";
 import { MiddleColumn } from "@/shared/middle-column";
 import { SaveBar } from "@/shared/save-bar";
@@ -64,6 +65,7 @@ function Groups({
         <section key={block.id} aria-label={block.heading} className={GROUP}>
           <h2 className={HEADING}>{block.heading}</h2>
           {block.rows.some((row) => row.repair) ? <RepairNote /> : null}
+          {block.id === UPDATES ? <HomeProblems home="settings" className="flex flex-col gap-2 pb-2" /> : null}
           {block.rows.map((row) => (
             <SettingRow
               key={row.key}
