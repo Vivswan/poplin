@@ -6,7 +6,7 @@ import * as v from "valibot";
 import { DOMAIN_CHECK, type DomainCheck, type RememberedCheck } from "../records/domain-check";
 import { MOMENT } from "../records/fields";
 import type { Statement, StatementResult } from "./driver";
-import { domainCheck } from "./schema";
+import { domainCheck, settings } from "./schema";
 import { BUILD, built, CHANGED } from "./statements";
 
 /** The columns a new run replaces in the kept row. */
@@ -48,6 +48,23 @@ export function domainCheckKept(check: DomainCheck, settled?: number): Statement
  */
 export function usersChanged(at: number): Statement {
   return built(BUILD.update(domainCheck).set({ users_changed_at: at }).where(and(eq(domainCheck.id, 1), CHANGED)));
+}
+
+/**
+ * Build the statement that remembers the users changed when the stored logins are replaced by a list, for a batch where it comes before that replacement: it compares the list with the logins still stored.
+ * It writes only for a list that adds or drops a login, and only on an install that keeps a run. The same logins in another order are no change.
+ *
+ * @param logins - the logins that replace the stored ones
+ * @param at - the moment of the change
+ */
+export function usersReplaced(logins: readonly string[], at: number): Statement {
+  const stored = fragment`json_each(${settings.value}, '$.logins')`;
+  const given = fragment`json_each(${JSON.stringify(logins)})`;
+  const dropped = fragment`EXISTS (SELECT 1 FROM ${stored} AS was WHERE was.value NOT IN (SELECT value FROM ${given}))`;
+  const added = fragment`EXISTS (SELECT 1 FROM ${given} AS now WHERE now.value NOT IN (SELECT value FROM ${stored}))`;
+  const differs = fragment`EXISTS (SELECT 1 FROM ${settings} WHERE ${settings.id} = 1 AND (${dropped} OR ${added}))`;
+
+  return built(BUILD.update(domainCheck).set({ users_changed_at: at }).where(and(eq(domainCheck.id, 1), differs)));
 }
 
 /**

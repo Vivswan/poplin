@@ -64,7 +64,7 @@ import type {
   UploadRoom,
   UploadsPage,
 } from "./database";
-import { domainCheckAsked, domainCheckIn, domainCheckKept, usersChanged } from "./domain-check";
+import { domainCheckAsked, domainCheckIn, domainCheckKept, usersChanged, usersReplaced } from "./domain-check";
 import type { SqlDriver, Statement, StatementResult } from "./driver";
 import { contentsValues, servedIn, versionsWithContents } from "./served";
 import { fileUnderKey, manifestFromText, manifestKey, manifestToText } from "./manifest";
@@ -1045,11 +1045,11 @@ export class SqlDatabase implements Database {
     const checked = v.parse(SETTING_CHANGES, changes);
     // A merge patch: each key it names is replaced and every other key stays, only when a value differs.
     const patched = fragment<string>`json_patch(${settings.value}, ${JSON.stringify(checked)})`;
-    const [updated, , read] = await this.#driver.batch([
-      built(BUILD.update(settings).set({ value: patched, updated_at: signed.at }).where(and(eq(settings.id, 1), fragment`json(${patched}) <> json(${settings.value})`))),
-      auditPlain(signed, "settings_changed", checked),
-      READ_SETTINGS,
-    ]);
+    const update = built(BUILD.update(settings).set({ value: patched, updated_at: signed.at }).where(and(eq(settings.id, 1), fragment`json(${patched}) <> json(${settings.value})`)));
+    // The mark of changed users reads the logins as they still are, so it runs before they are replaced.
+    const marks = checked.logins === undefined ? [] : [usersReplaced(checked.logins, signed.at)];
+    const answers = await this.#driver.batch([...marks, update, auditPlain(signed, "settings_changed", checked), READ_SETTINGS]);
+    const [updated, , read] = answers.slice(marks.length);
     const values = settingsIn(read);
     if (values === undefined) return { kind: "not_set_up" };
 

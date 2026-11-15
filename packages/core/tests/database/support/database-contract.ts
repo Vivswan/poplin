@@ -219,6 +219,32 @@ function domainCheck(label: string, makeDatabase: DatabaseFactory): void {
 
       expect([beforeAnyRun, afterFirstRun, afterAdd, afterRunsThatSettleNothing, afterRepair, await waits()]).toEqual([undefined, null, NOW + 1, NOW + 1, null, NOW + 3]);
     });
+
+    // Drift: the logins are also replaced as a setting, by `poplin config logins` and by an import with its users. A list that marked nothing would let Domain say all is well while the user it added cannot log in.
+    test("the logins replaced as a setting wait for a repair when the list adds or drops a user, and not when it holds the same users or names no logins", async () => {
+      const database = await opened(makeDatabase);
+      const [bo, cy] = ["bo@example.com" as Login, "cy@example.com" as Login];
+      const waits = async (): Promise<number | null | undefined> => (await database.readDomainCheck())?.users_changed_at;
+      const replaced = async (logins: Login[], at: number): Promise<number | null | undefined> => {
+        await database.changeSettings({ logins, trash_days: at }, { by: ADMIN, at: NOW + at });
+
+        return waits();
+      };
+      await database.initSettings({ ...SETTINGS, logins: [ADMIN, bo] }, BY_ADA);
+
+      const beforeAnyRun = await replaced([ADMIN], 1);
+      await database.keepDomainCheck({ ran_at: NOW + 1, by: ADMIN, run: "repair", pieces: [] }, {});
+      await database.changeSettings({ trash_days: 30 }, { by: ADMIN, at: NOW + 2 });
+      const otherSetting = await waits();
+      const sameUser = await replaced([ADMIN], 3);
+      const added = await replaced([ADMIN, bo], 4);
+      const otherOrder = await replaced([bo, ADMIN], 5);
+      const dropped = await replaced([bo], 6);
+      const swapped = await replaced([cy], 7);
+
+      expect([beforeAnyRun, otherSetting, sameUser, added, otherOrder, dropped, swapped]).toEqual([undefined, null, null, NOW + 4, NOW + 4, NOW + 6, NOW + 7]);
+      expect((await database.readSettings())?.logins).toEqual([cy]);
+    });
   });
 }
 

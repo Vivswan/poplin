@@ -84,6 +84,8 @@ const ROWS: Readonly<Record<string, readonly [read: number, written: number]>> =
   "removeLogin": [9, 4],
   "removeLogin, not one": [6, 0],
   "removeLogin, the last": [6, 0],
+  "changeSettings, a login more": [14, 4],
+  "changeSettings, the same logins": [19, 3],
   "ensureSigningKey, the first": [2, 1],
   "ensureSigningKey, kept": [1, 0],
   "readSigningKey": [1, 0],
@@ -750,6 +752,8 @@ describe("D1: the rows every operation of the database costs of a day's allowanc
     await cost("removeLogin", () => database.removeLogin(person, BY_ADA));
     await cost("removeLogin, not one", () => database.removeLogin(person, BY_ADA));
     await cost("removeLogin, the last", () => database.removeLogin(ADMIN, BY_ADA));
+    await cost("changeSettings, a login more", () => database.changeSettings({ logins: [ADMIN, person] }, BY_ADA));
+    await cost("changeSettings, the same logins", () => database.changeSettings({ logins: [person, ADMIN] }, BY_ADA));
 
     await cost("readStorageWrites", () => database.readStorageWrites(DAY));
     await cost("takeStorageWrite", () => database.takeStorageWrite(DAY, 0));

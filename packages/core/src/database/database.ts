@@ -710,6 +710,8 @@ export interface Database {
   /**
    * Change some settings. Each given key is replaced; every other key stays as it is, even when another change lands at the same moment. A change that leaves every value as it is writes nothing.
    *
+   * Logins that add or drop a user are remembered, in the same step, as changed users by an install that keeps a check of its domain. The same users in another order are not.
+   *
    * @throws {Error} a value breaks its rule
    */
   changeSettings(

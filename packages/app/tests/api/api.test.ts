@@ -110,7 +110,7 @@ const BUDGET: Readonly<Record<RouteKey, number>> = {
   "POST /api/import/settings": 2,
   "POST /api/import/sites": 7,
   "GET /api/config": 2,
-  "PATCH /api/config": 2,
+  "PATCH /api/config": 3,
   "DELETE /api/sessions": 2,
   "GET /api/audit": 2,
   "GET /api/domain": 2,
@@ -334,6 +334,10 @@ describe("createApi", () => {
       waits: false,
       note: { code: "login_broken", about: "Login" },
     });
+    // Drift: `poplin config logins` replaces the users through this route. A change that left no mark would have the domain say nobody waits while the added user cannot log in.
+    const users = [ada, "bo@example.com" as Login];
+    expect(part(await done((api) => api.config.$patch({ json: { logins: users }, query: {} })), "values").logins).toEqual(users);
+    expect([(await done((api) => api.domain.$get({ query: {} }))).body.waits, (await install.database.readDomainCheck())?.users_changed_at]).toEqual([true, NOW]);
     expect(part(await done((api) => api.sites[":site"].$delete({ param: { site: moved }, query: { forever: "true" } })), "before").id).toBe(moved);
     expect(part(await done((api) => api.import.settings.$post({ json: { format: 1, settings }, query: {} })), "values").trash_days).toBe(7);
     const files = manifest(PAGES).map((file) => ({ ...file, path: `v1/${file.path}` }));
