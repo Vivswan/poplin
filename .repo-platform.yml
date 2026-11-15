@@ -1,7 +1,9 @@
-modules: [bun, release-please, pr-title, site, nightly, fuzzer]
+modules: [bun, release-please, npm, pr-title, site, nightly, fuzzer]
 project:
   name: Poplin
   slug: poplin
   description: "Agents publish static sites to your own Cloudflare account: private by default, shareable by secret link, or public."
+npm:
+  path: packages/cli
 site:
   vars: [DEMO_URL]
