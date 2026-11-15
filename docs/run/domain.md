@@ -13,7 +13,7 @@ After the first login, Domain does what the setup page did.
 | ------------------- | ---------------------------------------------------------------------------------------------- |
 | the line at the top | how the domain stands, such as `Nothing to repair` or `2 to repair`, then the last run and who made it; `Not checked yet` before any run |
 | Check               | lists every piece and changes nothing                                                          |
-| Repair              | makes every piece match again                                                                  |
+| Repair              | fixes every piece that needs it                                                                |
 | the table           | one row per piece, in the columns Piece, State, and Detail                                     |
 
 Check and Repair each open a dialog that asks for a token:
