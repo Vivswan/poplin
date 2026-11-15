@@ -6,7 +6,7 @@ import { momentIn, type TimeZoneChoice } from "@/lib/timezone";
 /** How many milliseconds a day holds. */
 const DAY_MS = 86_400_000;
 
-/** The spans a person chooses between, in days from the moment of the save. */
+/** The spans a person chooses between, in days from the moment the menu opened. */
 export const SPANS = [1, 7, 30] as const;
 
 /** Write when a site deletes itself: the day and the time, in the time zone a person chose. */
@@ -14,14 +14,9 @@ export function expiryMoment(expires: Site["expires"]): string {
   return expires === "never" ? "Never" : momentIn(expires);
 }
 
-/** The moment a span of days ends when it is counted from `now`: what a choice shows before it is saved. */
+/** The moment a span of days ends when it is counted from `now`: what a choice shows, and what it saves. */
 export function afterDays(days: number, now: number): number {
   return now + days * DAY_MS;
-}
-
-/** A span of days as it is sent. */
-export function spanOf(days: number): string {
-  return `${days}d`;
 }
 
 /**

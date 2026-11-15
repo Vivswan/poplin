@@ -11,7 +11,7 @@ import { sayDone } from "@/lib/notify";
 import type { Site } from "@/lib/sites";
 import { momentIn } from "@/lib/timezone";
 import { PanelFact } from "@/shared/side-panel";
-import { afterDays, backTo, expiryMoment, SPANS, sentFor, spanOf } from "@/sites/expiry";
+import { afterDays, backTo, expiryMoment, SPANS, sentFor } from "@/sites/expiry";
 import { SITES_KEY } from "@/sites/site-queries";
 
 /** The dialog that asks for a day, read from the server when a day is first asked for: it holds the calendar. */
@@ -32,7 +32,7 @@ function afterIt(expires: Site["expires"], now: number): string | undefined {
 export function ExpiryRow({ site }: { readonly site: Site }): ReactNode {
   const client = useQueryClient();
   const opener = useRef<HTMLButtonElement>(null);
-  // The moment the menu opened: each span is written as the moment it ends when counted from then.
+  // The moment the menu opened: each span is written as the moment it ends when counted from then, and a choice saves the moment that was written.
   const [opened, setOpened] = useState(() => Date.now());
   // Whether a day is asked for now, and whether one ever was: the dialog is read only then.
   const [picking, setPicking] = useState(false);
@@ -89,7 +89,7 @@ export function ExpiryRow({ site }: { readonly site: Site }): ReactNode {
             </DropdownMenuTrigger>
             <DropdownMenuContent align="start" className="w-64">
               {SPANS.map((days) => (
-                <DropdownMenuItem key={days} onClick={() => void choose(spanOf(days))}>
+                <DropdownMenuItem key={days} onClick={() => void choose(sentFor(afterDays(days, opened)))}>
                   <span>{days === 1 ? "1 day" : `${days} days`}</span>
                   <span className="ml-auto text-muted-foreground">{momentIn(afterDays(days, opened))}</span>
                 </DropdownMenuItem>

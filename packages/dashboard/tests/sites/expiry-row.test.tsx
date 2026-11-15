@@ -2,7 +2,7 @@
 
 import { clearPage } from "../lib/support/page";
 
-import { afterAll, afterEach, describe, expect, test } from "bun:test";
+import { afterAll, afterEach, describe, expect, setSystemTime, test } from "bun:test";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act, cleanup, fireEvent, render, waitFor, within } from "@testing-library/react";
 import { readExpires } from "@poplin/core/src/actions/changes";
@@ -12,7 +12,7 @@ import { ThemeProvider } from "@/components/theme-provider";
 import { Toaster } from "@/components/ui/sonner";
 import { BOOT } from "@/lib/boot";
 import type { Site } from "@/lib/sites";
-import { dayIn } from "@/lib/timezone";
+import { dayIn, momentIn } from "@/lib/timezone";
 import { PanelFacts } from "@/shared/side-panel";
 import { ExpiryRow } from "@/sites/expiry-row";
 
@@ -22,8 +22,17 @@ const OWN_FETCH = globalThis.fetch;
 /** How a moment is written: the day with two figures, and the time to the minute. */
 const MOMENT = String.raw`\d{2} [A-Z][a-z]{2} \d{4}, \d{2}:\d{2}`;
 
+/** A moment as it is sent: in UTC, to the millisecond. */
+const ISO_MOMENT = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/;
+
 /** A day in milliseconds. */
 const DAY_MS = 86_400_000;
+
+/** A minute in milliseconds. */
+const MINUTE_MS = 60_000;
+
+/** The moment a menu opens at, in the test that moves the clock. */
+const OPENED = Date.UTC(2031, 4, 6, 12, 0, 0);
 
 /** What the server refuses a change with. */
 const REFUSAL = "Pick a day that is still ahead.";
@@ -69,7 +78,7 @@ function drawn(expires: Site["expires"], refuses = false, stores: Site["expires"
 /** Open the menu and wait for its entries. */
 async function openMenu(): Promise<void> {
   await act(async () => fireEvent.click(within(document.body).getByRole("button", { name: "Change when it deletes itself" })));
-  await within(document.body).findByRole("menuitem", { name: "Never" });
+  await waitFor(() => expect(within(document.body).queryAllByRole("menuitem", { name: "Never" }).length).toBe(1));
 }
 
 /** Press an entry of the open menu, or a button, and let the row take in what the server answers. */
@@ -83,7 +92,7 @@ async function press(role: "menuitem" | "button", name: string | RegExp): Promis
 
 /** Wait for a line at the top that says the words. */
 async function said(words: string): Promise<void> {
-  await within(document.body).findAllByText((_text, node) => node?.textContent === words);
+  await waitFor(() => expect(within(document.body).queryAllByText(words).length).toBeGreaterThan(0));
 }
 
 /** What the fact says, without its button. */
@@ -95,6 +104,7 @@ afterEach(() => {
   toast.dismiss();
   cleanup();
   globalThis.fetch = OWN_FETCH;
+  setSystemTime();
 });
 afterAll(clearPage);
 
@@ -113,7 +123,7 @@ describe("when a site deletes itself, in its panel", () => {
   });
 
   // Drift: a span would be shown as a span alone, so the day it ends on is known only after the save; or Undo would not send what the site had before.
-  test("each span is written with the moment it ends; a choice is sent as the span and said with Undo, which sends what the site had", async () => {
+  test("each span is written with the moment it ends; a choice is said with Undo, which sends what the site had", async () => {
     const sent = drawn("never");
     await openMenu();
     const entries = within(document.body)
@@ -125,10 +135,23 @@ describe("when a site deletes itself, in its panel", () => {
     await said("Put back.");
 
     expect(entries.map((entry) => entry.replace(new RegExp(MOMENT), " <moment>"))).toEqual(["1 day <moment>", "7 days <moment>", "30 days <moment>", "On a day...", "Never"]);
-    expect(sent).toEqual([
-      { path: `/data/sites/${SITE.label}/expiry`, body: { expires: "7d" } },
-      { path: `/data/sites/${SITE.label}/expiry`, body: { expires: "never" } },
+    expect(sent.map((change) => [change.path, String((change.body as { readonly expires?: string }).expires).replace(ISO_MOMENT, "<moment>")])).toEqual([
+      [`/data/sites/${SITE.label}/expiry`, "<moment>"],
+      [`/data/sites/${SITE.label}/expiry`, "never"],
     ]);
+  });
+
+  // Drift: a choice would save a span counted from the press, so a menu that stood open for ten minutes would store a moment ten minutes after the one it wrote.
+  test("a choice pressed ten minutes after the menu opened saves the moment the menu wrote", async () => {
+    setSystemTime(new Date(OPENED));
+    const sent = drawn("never");
+    await openMenu();
+    const written = within(document.body).getByRole("menuitem", { name: /^7 days/ }).textContent;
+    setSystemTime(new Date(OPENED + 10 * MINUTE_MS));
+    await press("menuitem", /^7 days/);
+    await said("Saved.");
+
+    expect([written, sent.map((change) => change.body)]).toEqual([`7 days${momentIn(OPENED + 7 * DAY_MS)}`, [{ expires: new Date(OPENED + 7 * DAY_MS).toISOString() }]]);
   });
 
   // Drift: Undo after a second change would put back what the panel last read, not what the change before it stored: a site set to 7 days and then to 30 would end with no expiry.
@@ -145,7 +168,7 @@ describe("when a site deletes itself, in its panel", () => {
     await press("button", "Undo");
     await said("Put back.");
 
-    expect(sent.map((change) => (change.body as { readonly expires?: string }).expires)).toEqual(["7d", "30d", new Date(stored).toISOString()]);
+    expect(sent.map((change) => String((change.body as { readonly expires?: string }).expires).replace(ISO_MOMENT, (moment) => (moment === new Date(stored).toISOString() ? "<stored>" : "<moment>")))).toEqual(["<moment>", "<moment>", "<stored>"]);
   });
 
   // Drift: a refused change would be said in a line that leaves, or as done, with nothing at the control it was chosen at.
