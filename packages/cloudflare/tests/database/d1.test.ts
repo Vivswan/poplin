@@ -10,15 +10,16 @@ import type { Install } from "@poplin/core/src/actions/records";
 import { uploadFile } from "@poplin/core/src/actions/upload-file";
 import type { Login } from "@poplin/core/src/auth/logins";
 import type { Actor } from "@poplin/core/src/auth/scopes";
-import type { TokenId } from "@poplin/core/src/auth/tokens";
+import { mintToken, type TokenId } from "@poplin/core/src/auth/tokens";
 import { openDatabase } from "@poplin/core/src/database/open";
 import { SqlDatabase } from "@poplin/core/src/database/sql-database";
 import { defaultSettings } from "@poplin/core/src/records/settings";
 import { MemoryStore } from "@poplin/core/src/storage/memory";
 import type { PublicName, SiteName } from "@poplin/core/src/names/names";
-import type { SiteFolder } from "@poplin/core/src/records/site";
+import type { Site, SiteFolder } from "@poplin/core/src/records/site";
+import type { UploadId } from "@poplin/core/src/records/upload";
 import type { SiteId } from "@poplin/core/src/sites/ids";
-import { BY_ADA, begunFiles, describeDatabase, draft, numberedFiles } from "@poplin/core/tests/database/support/database-contract";
+import { BY_ADA, begunFiles, begunSite, begunVersion, describeDatabase, draft, numberedFiles, pendingLogin, publish, storedBack } from "@poplin/core/tests/database/support/database-contract";
 import { describeSqlDriver, sqlDatabaseOver } from "@poplin/core/tests/database/support/sql-driver-contract";
 
 import type { Bindings } from "../../src/worker/bindings";
@@ -42,6 +43,137 @@ const VISITORS = 17;
 
 /** The sites the listing is read from. */
 const LISTED = 30;
+
+/** The day the fixture requests are counted on. */
+const DAY = "2026-11-13";
+
+/** The sites the walk starts with. */
+const SITES = 12;
+
+/** The admin who decides the fixture login. */
+const ADMIN = "ada@example.com" as Login;
+
+/** An id no site has. */
+const NOBODY = "zzzzzzzzzzzz" as SiteId;
+
+/** A room no fixture fills. */
+const ROOM = { perVisitor: 100, all: 100 };
+
+/** The rows each call of the walk read and wrote, by the call's name. */
+const ROWS: Readonly<Record<string, readonly [read: number, written: number]>> = {
+  "initSettings": [5, 3],
+  "readSettings": [1, 0],
+  "changeSettings": [3, 3],
+  "changeSettings, the same": [3, 0],
+  "initSettings, already set": [4, 0],
+  "ensureSigningKey, the first": [2, 1],
+  "ensureSigningKey, kept": [1, 0],
+  "readSigningKey": [1, 0],
+  "rotateSigningKey": [1, 3],
+  "keepUpdateAddress": [1, 3],
+  "readUpdateAddress": [1, 0],
+  "forgetUpdateAddress": [2, 3],
+  "forgetUpdateAddress, none kept": [1, 0],
+  "keepUpdateCheck": [1, 1],
+  "readUpdateCheck": [1, 0],
+  "keepSweepPlace": [1, 1],
+  "readSweepPlace": [1, 0],
+  "keepSweepPlace, forgotten": [0, 1],
+  "createSite": [10, 13],
+  "createSite, public": [11, 13],
+  "createSite, name taken": [4, 0],
+  "getSite": [3, 0],
+  "getSite, none": [0, 0],
+  "getSiteNames": [15, 0],
+  "getSiteByPublicName": [2, 0],
+  "getSiteByFolder": [3, 0],
+  "findServed, by id": [3, 0],
+  "findServed, by public name": [2, 0],
+  "readTotals": [1, 0],
+  "exportSites": [18, 0],
+  "exportSites, after": [18, 0],
+  "giveNewId": [22, 6],
+  "reserveVersion": [5, 1],
+  "addVersion": [24, 5],
+  "addVersion, one dropped": [29, 7],
+  "setLiveVersion, a number": [10, 3],
+  "setLiveVersion, the same": [7, 0],
+  "setLiveVersion, previous": [11, 3],
+  "trashSite": [7, 6],
+  "trashSite, in the trash": [6, 0],
+  "restoreSite": [7, 6],
+  "deleteSite": [13, 7],
+  "listLeftovers": [1, 0],
+  "storedBack: addUpload, importUploadAsSite, abandonUpload, removeUpload": [29, 23],
+  "forgetLeftover": [1, 1],
+  "addUpload, a new site": [9, 6],
+  "getUpload": [1, 0],
+  "getUploadFile": [1, 0],
+  "getUploadFile, no such file": [1, 0],
+  "listUploads": [1, 0],
+  "publishUploadAsSite": [15, 15],
+  "publishUploadAsSite, not pending": [6, 0],
+  "setUploadDropped": [1, 1],
+  "removeUpload": [1, 1],
+  "reserveVersion and addUpload, a version": [15, 7],
+  "publishUploadAsVersion, with access and details": [67, 16],
+  "publishUploadAsVersion, plain": [45, 9],
+  "addUpload, 500 files": [9, 6],
+  "abandonUpload": [2, 2],
+  "addToken": [2, 5],
+  "getToken": [1, 0],
+  "listTokens": [2, 0],
+  "revokeToken": [4, 3],
+  "addComputerLogin": [6, 3],
+  "getComputerLogin": [1, 0],
+  "findComputerLogin": [1, 0],
+  "listWaitingComputerLogins": [4, 0],
+  "decideComputerLogin": [5, 4],
+  "redeemComputerLogin": [5, 6],
+  "sweepComputerLogins": [1, 1],
+  "appendAudit": [1, 2],
+  "hasLoggedIn": [43, 0],
+  "addRequests": [3, 2],
+  "addRequests, again": [3, 2],
+  "readRequests": [2, 0],
+  "readRequests, all sites": [1, 0],
+  "readViews": [42, 0],
+  "listSites": [18, 0],
+  "listSites, the next page": [18, 0],
+  "listSites, by name, one holder, a text, an access": [28, 0],
+  "listSites, by access": [49, 0],
+  "changeAccess": [8, 4],
+  "changeAccess, the same": [7, 0],
+  "changeAccess, name taken": [7, 0],
+  "changeDetails": [6, 3],
+  "changeDetails, the same": [6, 0],
+  "listAudit": [20, 0],
+  "listAudit, one kind, the sites named with a text": [46, 0],
+  "no site: getSiteByPublicName": [0, 0],
+  "no site: giveNewId": [16, 0],
+  "no site: reserveVersion": [0, 0],
+  "no site: addVersion": [3, 0],
+  "no site: setLiveVersion": [1, 0],
+  "no site: trashSite": [1, 0],
+  "no site: restoreSite": [1, 0],
+  "no site: deleteSite": [1, 0],
+  "in the trash: findServed": [1, 0],
+  "in the trash: giveNewId": [20, 0],
+  "in the trash: reserveVersion": [5, 0],
+  "in the trash: changeAccess": [6, 0],
+  "in the trash: changeDetails": [6, 0],
+  "refused: restoreSite, a live site": [7, 0],
+  "refused: addVersion, a number not set aside": [18, 0],
+  "refused: setLiveVersion, no such version": [7, 0],
+  "refused: publishUploadAsVersion, not pending": [20, 0],
+  "refused: removeUpload, none": [0, 0],
+  "refused: abandonUpload, not pending": [1, 0],
+  "refused: addUpload, its holder's room is full": [5, 0],
+  "refused: addToken, the id is taken": [3, 0],
+  "refused: revokeToken, none": [1, 0],
+  "refused: decideComputerLogin, none waits": [1, 0],
+  "refused: redeemComputerLogin, none allowed": [2, 0],
+};
 
 /** The rows the batches of a database read and wrote, as the provider counts them toward a day's allowance. */
 interface RowCounts {
@@ -284,5 +416,186 @@ describe("D1: the rows a scheduled sweep costs of a day's allowance", () => {
       { read: 12, written: 0 },
       1,
     ]);
+  });
+});
+
+describe("D1: the rows every operation of the database costs of a day's allowance", () => {
+  // Drift: the provider counts rows by how the engine runs a statement, not by what it answers, and a day allows 5,000,000 read and 100,000 written.
+  // A statement written another way can answer the same and cost more; nothing but this count shows it.
+  test("one walk through the interface, each call metered, reads and writes the rows it did before", async () => {
+    const { driver, rows } = await meteredDatabase();
+    const opened = await openDatabase(driver, NOW);
+    if (opened.kind !== "open") throw new Error(`the database did not open: ${opened.kind}`);
+
+    const minted = { count: 0 };
+    const database = new SqlDatabase(driver, () => {
+      minted.count += 1;
+
+      return `site${String(minted.count).padStart(8, "0")}` as SiteId;
+    });
+    const folder = (index: number): SiteFolder => `fold${String(index).padStart(12, "0")}` as SiteFolder;
+    const site = (index: number): ReturnType<typeof draft> => ({ ...draft(`site-${index}` as SiteName), folder: folder(index) });
+    const costs: Record<string, readonly [number, number]> = {};
+    const cost = async <Answer>(name: string, run: () => Promise<Answer>): Promise<Answer> => {
+      rows.read = 0;
+      rows.written = 0;
+      const answer = await run();
+      costs[name] = [rows.read, rows.written];
+
+      return answer;
+    };
+    const done = <Answer extends { readonly kind: string }>(answer: Answer): Extract<Answer, { kind: "done" }> => {
+      if (answer.kind !== "done") throw new Error(`the walk was refused: ${answer.kind}`);
+
+      return answer as Extract<Answer, { kind: "done" }>;
+    };
+
+    await cost("initSettings", () => database.initSettings(defaultSettings({ installer: ADMIN, hostname: "poplin.example.com" }), BY_ADA));
+    await cost("readSettings", () => database.readSettings());
+    await cost("changeSettings", () => database.changeSettings({ versions_kept: 4 }, BY_ADA));
+    await cost("changeSettings, the same", () => database.changeSettings({ versions_kept: 4 }, BY_ADA));
+    await cost("initSettings, already set", () => database.initSettings(defaultSettings({ installer: ADMIN, hostname: "poplin.example.com" }), BY_ADA));
+    await cost("ensureSigningKey, the first", () => database.ensureSigningKey(new Uint8Array(32).fill(1), NOW));
+    await cost("ensureSigningKey, kept", () => database.ensureSigningKey(new Uint8Array(32).fill(2), NOW));
+    await cost("readSigningKey", () => database.readSigningKey());
+    await cost("rotateSigningKey", () => database.rotateSigningKey(new Uint8Array(32).fill(3), BY_ADA));
+    await cost("keepUpdateAddress", () => database.keepUpdateAddress("https://example.com/hook", BY_ADA));
+    await cost("readUpdateAddress", () => database.readUpdateAddress());
+    await cost("forgetUpdateAddress", () => database.forgetUpdateAddress(BY_ADA));
+    await cost("forgetUpdateAddress, none kept", () => database.forgetUpdateAddress(BY_ADA));
+    await cost("keepUpdateCheck", () => database.keepUpdateCheck({ checked_at: NOW, news: null }));
+    await cost("readUpdateCheck", () => database.readUpdateCheck());
+    await cost("keepSweepPlace", () => database.keepSweepPlace({ trash: false }));
+    await cost("readSweepPlace", () => database.readSweepPlace());
+    await cost("keepSweepPlace, forgotten", () => database.keepSweepPlace(undefined));
+
+    const sites: Site[] = [];
+    for (let index = 0; index < SITES; index += 1) sites.push(done(await database.createSite(site(index), { ...BY_ADA, at: NOW + index })).site);
+    const [first, second, third, fourth, fifth, sixth] = sites as [Site, Site, Site, Site, Site, Site];
+
+    await cost("createSite", () => database.createSite(site(SITES), BY_ADA));
+    await cost("createSite, public", () => database.createSite({ ...draft("open" as SiteName, "public", "open" as PublicName), folder: folder(SITES + 1) }, BY_ADA));
+    await cost("createSite, name taken", () => database.createSite({ ...draft("open" as SiteName, "public", "open" as PublicName), folder: folder(SITES + 2) }, BY_ADA));
+    await cost("getSite", () => database.getSite(first.id));
+    await cost("getSite, none", () => database.getSite(NOBODY));
+    await cost("getSiteNames", () => database.getSiteNames(sites.slice(0, 5).map((made) => made.id)));
+    await cost("getSiteByPublicName", () => database.getSiteByPublicName("open" as PublicName));
+    await cost("getSiteByFolder", () => database.getSiteByFolder(first.folder));
+    await cost("findServed, by id", () => database.findServed({ id: first.id }, NOW));
+    await cost("findServed, by public name", () => database.findServed({ public_name: "open" as PublicName }, NOW));
+    await cost("readTotals", () => database.readTotals());
+    await cost("exportSites", () => database.exportSites({ limit: 5 }));
+    await cost("exportSites, after", () => database.exportSites({ limit: 5, after: first.id }));
+    await cost("giveNewId", () => database.giveNewId(second.id, BY_ADA));
+    await cost("reserveVersion", () => database.reserveVersion(first.id));
+    await cost("addVersion", () => database.addVersion(first.id, publish(2, 2), BY_ADA));
+    await database.reserveVersion(first.id);
+    await cost("addVersion, one dropped", () => database.addVersion(first.id, publish(3, 2), BY_ADA));
+    await cost("setLiveVersion, a number", () => database.setLiveVersion(first.id, 2, BY_ADA));
+    await cost("setLiveVersion, the same", () => database.setLiveVersion(first.id, 2, BY_ADA));
+    await database.setLiveVersion(first.id, 3, BY_ADA);
+    await cost("setLiveVersion, previous", () => database.setLiveVersion(first.id, "previous", BY_ADA));
+    await cost("trashSite", () => database.trashSite(third.id, BY_ADA));
+    await cost("trashSite, in the trash", () => database.trashSite(third.id, BY_ADA));
+    await cost("restoreSite", () => database.restoreSite(third.id, BY_ADA));
+    await database.trashSite(third.id, BY_ADA);
+    const removed = done(await cost("deleteSite", () => database.deleteSite(third.id, BY_ADA)));
+    await cost("listLeftovers", () => database.listLeftovers({ limit: 10 }));
+    await cost("storedBack: addUpload, importUploadAsSite, abandonUpload, removeUpload", () => storedBack(database, removed.site));
+    await database.trashSite(fourth.id, BY_ADA);
+    await database.deleteSite(fourth.id, BY_ADA);
+    await cost("forgetLeftover", () => database.forgetLeftover(fourth.folder));
+
+    const begun = await cost("addUpload, a new site", () => begunSite(database, site(SITES + 3)));
+    await cost("getUpload", () => database.getUpload(begun.id));
+    await cost("getUploadFile", () => database.getUploadFile(begun.id, "index.html"));
+    await cost("getUploadFile, no such file", () => database.getUploadFile(begun.id, "nowhere.html"));
+    await cost("listUploads", () => database.listUploads({ before: NOW + 1, limit: 10 }));
+    await cost("publishUploadAsSite", () => database.publishUploadAsSite(begun.id, { ...begun.site, bytes: 1000, files: 2 }, BY_ADA));
+    await cost("publishUploadAsSite, not pending", () => database.publishUploadAsSite(begun.id, { ...begun.site, bytes: 1000, files: 2 }, BY_ADA));
+    await cost("setUploadDropped", () => database.setUploadDropped(begun.id, []));
+    await cost("removeUpload", () => database.removeUpload(begun.id));
+    const next = await cost("reserveVersion and addUpload, a version", () => begunVersion(database, first));
+    await cost("publishUploadAsVersion, with access and details", () =>
+      database.publishUploadAsVersion(next, { keep: 2, access: { access: "unlisted" }, details: { title: "Report" }, page_title: "Report" }, BY_ADA),
+    );
+    const plain = await begunVersion(database, first);
+    await cost("publishUploadAsVersion, plain", () => database.publishUploadAsVersion(plain, { keep: 2, details: {} }, BY_ADA));
+    const given = await cost("addUpload, 500 files", () => begunFiles(database, numberedFiles(500)));
+    await cost("abandonUpload", () => database.abandonUpload(given));
+
+    const admin = (await mintToken({ scope: "admin", note: "laptop", now: NOW })).record;
+    const publisher = (await mintToken({ scope: "publisher", note: "ci", now: NOW })).record;
+    await cost("addToken", () => database.addToken(admin, BY_ADA));
+    await database.addToken(publisher, BY_ADA);
+    await cost("getToken", () => database.getToken(admin.id));
+    await cost("listTokens", () => database.listTokens());
+    await cost("revokeToken", () => database.revokeToken(admin.id, BY_ADA));
+    const login = await pendingLogin(NOW, "one-visitor");
+    await cost("addComputerLogin", () => database.addComputerLogin(login, ROOM));
+    await database.addComputerLogin(await pendingLogin(NOW + 1, "another-visitor"), ROOM);
+    await cost("getComputerLogin", () => database.getComputerLogin(login.id));
+    await cost("findComputerLogin", () => database.findComputerLogin(login.code));
+    await cost("listWaitingComputerLogins", () => database.listWaitingComputerLogins(NOW + 2));
+    await cost("decideComputerLogin", () => database.decideComputerLogin(login.code, { state: "allowed", by: ADMIN, at: NOW + 2 }));
+    const redeemed = (await mintToken({ scope: "publisher", note: "laptop", now: NOW + 3 })).record;
+    await cost("redeemComputerLogin", () => database.redeemComputerLogin(login.id, redeemed));
+    await cost("sweepComputerLogins", () => database.sweepComputerLogins(NOW + 86_400_000));
+
+    await cost("appendAudit", () => database.appendAudit({ action: "login", detail: {} }, BY_ADA));
+    await cost("hasLoggedIn", () => database.hasLoggedIn());
+    await cost("addRequests", () => database.addRequests({ day: DAY, site: first.id, requests: 3, views: 1 }));
+    await cost("addRequests, again", () => database.addRequests({ day: DAY, site: first.id, requests: 3, views: 1 }));
+    await cost("readRequests", () => database.readRequests(DAY, first.id));
+    await cost("readRequests, all sites", () => database.readRequests(DAY));
+    await cost("readViews", () => database.readViews(sites.slice(0, 5).map((made) => made.id), DAY));
+
+    const page = await cost("listSites", () => database.listSites({ trash: false, limit: 5 }));
+    await cost("listSites, the next page", () => database.listSites({ trash: false, limit: 5, ...(page.next === undefined ? {} : { after: page.next }) }));
+    await cost("listSites, by name, one holder, a text, an access", () =>
+      database.listSites({ trash: false, limit: 5, sort: "name", owner: BY_ADA.by, named: "site-1", access: "private", expires: "never" }),
+    );
+    await cost("listSites, by access", () => database.listSites({ trash: false, limit: 5, sort: "access", dir: "desc" }));
+    await cost("changeAccess", () => database.changeAccess(fifth.id, { access: "public", public_name: "blog" as PublicName }, BY_ADA));
+    await cost("changeAccess, the same", () => database.changeAccess(fifth.id, { access: "public", public_name: "blog" as PublicName }, BY_ADA));
+    await cost("changeAccess, name taken", () => database.changeAccess(sixth.id, { access: "public", public_name: "blog" as PublicName }, BY_ADA));
+    await cost("changeDetails", () => database.changeDetails(sixth.id, { title: "Report", search_engines: true }, BY_ADA));
+    await cost("changeDetails, the same", () => database.changeDetails(sixth.id, { title: "Report", search_engines: true }, BY_ADA));
+    await cost("listAudit", () => database.listAudit({ limit: 20 }));
+    await cost("listAudit, one kind, the sites named with a text", () => database.listAudit({ limit: 20, actions: ["create"], site: "site-1" }));
+
+    await database.trashSite(sixth.id, BY_ADA);
+    const version: Parameters<typeof database.publishUploadAsVersion>[1] = { keep: 2, details: {} };
+    await cost("no site: getSiteByPublicName", () => database.getSiteByPublicName("nobody" as PublicName));
+    await cost("no site: giveNewId", () => database.giveNewId(NOBODY, BY_ADA));
+    await cost("no site: reserveVersion", () => database.reserveVersion(NOBODY));
+    await cost("no site: addVersion", () => database.addVersion(NOBODY, publish(2, 2), BY_ADA));
+    await cost("no site: setLiveVersion", () => database.setLiveVersion(NOBODY, 1, BY_ADA));
+    await cost("no site: trashSite", () => database.trashSite(NOBODY, BY_ADA));
+    await cost("no site: restoreSite", () => database.restoreSite(NOBODY, BY_ADA));
+    await cost("no site: deleteSite", () => database.deleteSite(NOBODY, BY_ADA));
+    await cost("in the trash: findServed", () => database.findServed({ id: sixth.id }, NOW));
+    await cost("in the trash: giveNewId", () => database.giveNewId(sixth.id, BY_ADA));
+    await cost("in the trash: reserveVersion", () => database.reserveVersion(sixth.id));
+    await cost("in the trash: changeAccess", () => database.changeAccess(sixth.id, { access: "unlisted" }, BY_ADA));
+    await cost("in the trash: changeDetails", () => database.changeDetails(sixth.id, { title: "Notes" }, BY_ADA));
+    await cost("refused: restoreSite, a live site", () => database.restoreSite(first.id, BY_ADA));
+    await cost("refused: addVersion, a number not set aside", () => database.addVersion(first.id, publish(99, 2), BY_ADA));
+    await cost("refused: setLiveVersion, no such version", () => database.setLiveVersion(first.id, 99, BY_ADA));
+    await cost("refused: publishUploadAsVersion, not pending", () => database.publishUploadAsVersion(plain, version, BY_ADA));
+    await cost("refused: removeUpload, none", () => database.removeUpload(begun.id));
+    await cost("refused: abandonUpload, not pending", () => database.abandonUpload(given));
+    await cost("refused: addUpload, its holder's room is full", () =>
+      database.addUpload(
+        { id: "0000000000000000" as UploadId, folder: folder(SITES + 9), number: 1, owner: BY_ADA.by, plan: { kind: "import", site: {} }, manifest: numberedFiles(2), created_at: NOW },
+        { own: 0, folderBytes: 1_000_000, staying: 0, totalBytes: 1_000_000, sites: null, day: DAY, dayFiles: 1_000_000 },
+      ),
+    );
+    await cost("refused: addToken, the id is taken", () => database.addToken(publisher, BY_ADA));
+    await cost("refused: revokeToken, none", () => database.revokeToken(admin.id, BY_ADA));
+    await cost("refused: decideComputerLogin, none waits", () => database.decideComputerLogin(login.code, { state: "denied", by: ADMIN, at: NOW + 4 }));
+    await cost("refused: redeemComputerLogin, none allowed", () => database.redeemComputerLogin(login.id, redeemed));
+
+    expect(costs).toEqual(ROWS);
   });
 });
