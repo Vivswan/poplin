@@ -31,8 +31,10 @@ jobs:
   fuzz:
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    # Sharding multiplies coverage: uncomment the matrix and suffix the
-    # artifact name below with the shard (docs/modules/fuzzer.md).
+    outputs:
+      attempt: ${{ github.run_attempt }}
+    # Sharding multiplies coverage: uncomment the matrix, suffix the artifact name below with the shard, and
+    # end the report job's download pattern and artifact-name with `-*` (docs/modules/fuzzer.md).
     # strategy:
     #   fail-fast: false
     #   matrix:
@@ -92,7 +94,7 @@ jobs:
         if: needs.fuzz.result == 'failure' || needs.fuzz.result == 'cancelled'
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
-          pattern: fuzz-failures-*
+          pattern: fuzz-failures-${{ needs.fuzz.outputs.attempt || github.run_attempt }}
           path: .fuzz-failures
           merge-multiple: true
 
@@ -106,7 +108,7 @@ jobs:
           label: "fuzz-nightly"
           title: Nightly fuzz failures
           artifacts-dir: .fuzz-failures
-          artifact-name: fuzz-failures-${{ github.run_attempt }}
+          artifact-name: fuzz-failures-${{ needs.fuzz.outputs.attempt || github.run_attempt }}
           label-color: "B60205"
           label-description: "Automated nightly fuzz failure"
           stream: fuzz
