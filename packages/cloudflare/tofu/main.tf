@@ -19,6 +19,11 @@ data "cloudflare_zone" "this" {
       condition     = self.account.id == var.account_id
       error_message = "zone_id must name a zone of the account in account_id: a route finds its Worker in the zone's own account."
     }
+
+    postcondition {
+      condition     = var.paid_plan_allowed || self.plan.legacy_id == "free"
+      error_message = "The zone is on a plan Cloudflare bills for, not the Free plan. Move the zone to the Free plan, or set paid_plan_allowed to true."
+    }
   }
 }
 

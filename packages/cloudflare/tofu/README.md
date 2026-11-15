@@ -30,6 +30,8 @@ bun run --cwd packages/cloudflare build   # writes packages/cloudflare/dist/work
 | Resource | Purpose |
 | --- | --- |
 | R2 bucket | holds every site's files; its public access is off |
+| R2 bucket lifecycle | ends an upload in parts nobody finished after a day. It deletes no stored file, unless `test_install_file_days` is set |
+| Usage alerts | none by default. With `usage_alert_percents` set, one notification policy per R2 meter and share: Cloudflare emails the `logins` when the account's R2 bytes stored, write operations, or read operations pass that share of the free monthly allowance |
 | D1 database | holds every record: the sites, the tokens, the settings, the audit log. The module applies no schema: the Worker does when it opens the database |
 | Worker script | serves the sites, the dashboard, the login, and the API; uploaded from the bundle with the bucket, the database, the minute limiter, the zone values, the first settings, the Access application, the account's id, and the Worker's own name bound to it |
 | Worker cron trigger | runs the Worker's sweep every 15 minutes: expired sites go to the trash, and sites past `trash_days` in the trash and uploads nobody finished are removed with their files |
@@ -66,7 +68,7 @@ DNS has no partial wildcard, so the wildcard record covers every name under the 
 
 ## The same objects as the setup page
 
-The setup page's Repair and this module make the same objects with the same values. A test holds both to one list, `src/zone/install-pieces.ts`, and a second to one table of values, `src/zone/install-objects.ts`.
+The setup page's Repair and this module make the same objects with the same values, but for the last three rows, which only this module has. A test holds both to one list, `src/zone/install-pieces.ts`, and a second to one table of values, `src/zone/install-objects.ts`.
 
 | Object | The setup page | This module | Where they differ |
 | --- | --- | --- | --- |
@@ -81,6 +83,9 @@ The setup page's Repair and this module make the same objects with the same valu
 | D1 database | Repair, or the deploy | `cloudflare_d1_database.records` | nowhere |
 | R2 bucket, public access off | the deploy; a new bucket has no public address | `cloudflare_r2_bucket.sites`, `cloudflare_r2_managed_domain.sites` | Repair does not read the bucket |
 | Worker and its sweep trigger | the deploy | `cloudflare_workers_script.poplin`, `cloudflare_workers_cron_trigger.sweep` | nowhere |
+| R2 bucket lifecycle | not made: its token has no R2 permission. A new bucket has Cloudflare's own rule, which ends an unfinished upload after seven days | `cloudflare_r2_bucket_lifecycle.sites` | one day here, seven there |
+| Usage alerts | not made: its token has no Notifications permission | `cloudflare_notification_policy.usage` | only this module makes them, and only with `usage_alert_percents` set |
+| the Free plan check | Repair reads the plan and changes nothing for it | a postcondition of `data.cloudflare_zone.this` | here an apply on a paid plan stops unless `paid_plan_allowed` is true |
 
 ## Names and marks
 
@@ -153,6 +158,9 @@ Bot Fight Mode is a switch of the Free plan: on a paid plan `on` blocks AI bots 
 | `outside_pages` | string | `blocked` | whether a page of another domain may frame a site or load its files: `blocked` or `allowed` |
 | `search_engines_allowed` | bool | `false` | whether the crawlers of search engines pass the bots rule |
 | `block_bots` | string | `auto` | the zone's bot settings: `auto`, `on`, or `off` |
+| `paid_plan_allowed` | bool | `false` | whether the zone may be on a plan Cloudflare bills for. While false, an apply on a zone that is not on the Free plan stops |
+| `usage_alert_percents` | list of numbers | `[]` | set it to turn the usage alerts on: the shares of R2's free monthly allowance at which Cloudflare emails the logins, whole numbers from 1 to 100, such as `[50, 90]`. It needs the Notifications permission, and applies on accounts where Cloudflare offers usage alerts |
+| `test_install_file_days` | number | `null` | days after which the bucket deletes every file, a live site's included: for an install that only tests. Null creates no such rule |
 | `worker_name` | string | `poplin` | the name of the Worker script |
 | `bucket_name` | string | `poplin-sites` | the name of the R2 bucket |
 
@@ -203,7 +211,8 @@ The Worker stores the first settings once, while it has none. After that the das
 
 | Permission | Scope | For |
 | --- | --- | --- |
-| Workers R2 Storage: Edit | the account | the bucket |
+| Workers R2 Storage: Edit | the account | the bucket and its lifecycle |
+| Notifications: Edit | the account | the usage alerts; not needed while `usage_alert_percents` is empty, its default |
 | D1: Edit | the account | the database |
 | Workers Scripts: Edit | the account | the Worker and its cron trigger |
 | Access: Apps and Policies: Edit | the account | the login |
@@ -220,6 +229,10 @@ The Domain tab's check and repair take two permissions more. Zone Settings: Read
 
 | It does not | Instead |
 | --- | --- |
+| stop a write once R2's free allowance is used | Cloudflare has no spending cap on R2. The limits the Worker enforces, `max_total_size` and `max_files_per_day` among them, bound what a publish stores and declares, and the usage alerts, once `usage_alert_percents` is set, tell the logins at the shares it names |
+| delete the files of a dropped version or of a site past its days in the trash | the Worker's sweep does. Every site keeps its files under a folder of random letters, live or dropped alike, so no bucket rule can tell the two apart |
+| read the zone's plan without a warning | the provider marks the zone's `plan` as deprecated, so every plan and apply prints one warning that names `data.cloudflare_zone.this.plan`. The module reads it for the Free plan check, the rate rule, and Bot Fight Mode |
+| check the account's Workers plan | the provider reads the zone's plan, which the module checks, and not the account's Workers plan |
 | build the Worker | build the bundle with `bun run --cwd packages/cloudflare build` and pass its path in `worker_bundle_path` |
 | read the Zero Trust team domain | pass it in `access_team_domain` |
 | apply the database's schema | the Worker brings the database up to its own schema when it opens it |

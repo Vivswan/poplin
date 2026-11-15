@@ -82,6 +82,39 @@ variable "block_bots" {
   }
 }
 
+variable "paid_plan_allowed" {
+  description = "Whether the zone may be on a plan Cloudflare bills for. While false, an apply on a zone that is not on the Free plan stops with an error."
+  type        = bool
+  default     = false
+}
+
+variable "usage_alert_percents" {
+  description = "The shares of R2's free monthly allowance at which Cloudflare emails the logins: one alert per share for the bytes stored, for the write operations, and for the read operations. An empty list, the default, creates no alert. An alert takes the Notifications permission, and an account where Cloudflare offers usage alerts."
+  type        = list(number)
+  default     = []
+
+  validation {
+    condition     = alltrue([for percent in var.usage_alert_percents : percent >= 1 && percent <= 100 && floor(percent) == percent])
+    error_message = "usage_alert_percents must hold whole numbers from 1 to 100."
+  }
+
+  validation {
+    condition     = length(distinct(var.usage_alert_percents)) == length(var.usage_alert_percents)
+    error_message = "usage_alert_percents must list each share once."
+  }
+}
+
+variable "test_install_file_days" {
+  description = "Days after which the bucket deletes every file, a live site's included. For an install that only tests: null, the default, creates no such rule."
+  type        = number
+  default     = null
+
+  validation {
+    condition     = var.test_install_file_days == null || try(var.test_install_file_days >= 1 && var.test_install_file_days <= 365 && floor(var.test_install_file_days) == var.test_install_file_days, false)
+    error_message = "test_install_file_days must be null or a whole number from 1 to 365."
+  }
+}
+
 # The Worker and the bucket.
 
 variable "worker_bundle_path" {

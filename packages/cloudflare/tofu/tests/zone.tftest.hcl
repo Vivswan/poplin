@@ -95,6 +95,7 @@ run "domain_too_long_for_the_login" {
     values = {
       name    = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.com"
       account = { id = "0123456789abcdef0123456789abcdef", name = "example account" }
+      plan    = { legacy_id = "free", name = "Free Website", id = "0", price = 0, currency = "USD", frequency = "", can_subscribe = false, is_subscribed = false, legacy_discount = false, externally_managed = false }
     }
   }
 
@@ -108,6 +109,8 @@ run "public_word_of_the_installs_own" {
   variables {
     public_word = "wiki"
     rate_rule   = "hostnames"
+
+    paid_plan_allowed = true
   }
 
   override_data {
@@ -554,7 +557,8 @@ run "rate_rule_on_the_hostnames" {
   command = plan
 
   variables {
-    rate_rule = "hostnames"
+    rate_rule         = "hostnames"
+    paid_plan_allowed = true
   }
 
   override_data {
@@ -721,8 +725,9 @@ run "block_bots_forced_on_a_paid_plan" {
   command = plan
 
   variables {
-    block_bots = "on"
-    rate_rule  = "hostnames"
+    block_bots        = "on"
+    rate_rule         = "hostnames"
+    paid_plan_allowed = true
   }
 
   override_data {
@@ -738,4 +743,96 @@ run "block_bots_forced_on_a_paid_plan" {
     condition     = cloudflare_bot_management.zone[0].ai_bots_protection == "block" && cloudflare_bot_management.zone[0].fight_mode == false
     error_message = "On a paid plan the AI bot block is set and Bot Fight Mode is never switched on."
   }
+}
+
+# R2 has no spending cap, so the alerts are what tells the logins before the free allowance ends.
+run "usage_alerts_at_two_shares" {
+  command = plan
+
+  variables {
+    logins               = ["owner@example.com", "editor@example.com"]
+    usage_alert_percents = [50, 90]
+  }
+
+  assert {
+    condition = tomap({ for key, policy in cloudflare_notification_policy.usage : key => policy.filters.limit[0] }) == tomap({
+      r2_storage_50            = "5000000000"
+      r2_storage_90            = "9000000000"
+      r2_class_a_operations_50 = "500000"
+      r2_class_a_operations_90 = "900000"
+      r2_class_b_operations_50 = "5000000"
+      r2_class_b_operations_90 = "9000000"
+    })
+    error_message = "Each of R2's three meters has an alert at half and at nine tenths of its free monthly allowance, written as a whole number."
+  }
+
+  assert {
+    condition     = alltrue([for key, policy in cloudflare_notification_policy.usage : policy.alert_type == "billing_usage_alert" && policy.enabled && startswith(key, policy.filters.product[0])])
+    error_message = "Every alert is a usage alert, switched on, for the one product its key names."
+  }
+
+  assert {
+    condition     = alltrue([for policy in cloudflare_notification_policy.usage : toset([for email in policy.mechanisms.email : email.id]) == toset(["editor@example.com", "owner@example.com"])])
+    error_message = "Every alert goes to exactly the logins."
+  }
+}
+
+# The default, an empty list, hands the merge three empty maps, which must still plan to no alert.
+run "usage_alerts_off_by_default" {
+  command = plan
+
+  assert {
+    condition     = length(cloudflare_notification_policy.usage) == 0
+    error_message = "By default no alert is made, so a token without the Notifications permission still applies."
+  }
+}
+
+# A site's live files and its dropped ones sit under the same random folder, so by default the bucket deletes no file at all.
+run "bucket_cleanup_by_default" {
+  command = plan
+
+  assert {
+    condition     = [for rule in cloudflare_r2_bucket_lifecycle.sites.rules : rule.id] == ["poplin-unfinished-uploads"]
+    error_message = "By default the bucket has the one rule for uploads nobody finished."
+  }
+
+  assert {
+    condition     = cloudflare_r2_bucket_lifecycle.sites.rules[0].abort_multipart_uploads_transition.condition.max_age == 86400 && cloudflare_r2_bucket_lifecycle.sites.rules[0].delete_objects_transition == null
+    error_message = "The rule ends an unfinished upload after a day and deletes no stored file, so no live site loses one."
+  }
+}
+
+# The two rules carry different transitions, and must still make one list the provider takes.
+run "bucket_cleanup_of_a_test_install" {
+  command = plan
+
+  variables {
+    test_install_file_days = 2
+  }
+
+  assert {
+    condition     = [for rule in cloudflare_r2_bucket_lifecycle.sites.rules : rule.id] == ["poplin-unfinished-uploads", "poplin-test-install-files"]
+    error_message = "A test install keeps the first rule and gains the one that deletes every file."
+  }
+
+  assert {
+    condition     = cloudflare_r2_bucket_lifecycle.sites.rules[1].delete_objects_transition.condition.max_age == 172800 && cloudflare_r2_bucket_lifecycle.sites.rules[1].conditions.prefix == ""
+    error_message = "The test rule deletes every file of the bucket at the age given, in seconds."
+  }
+}
+
+# A paid plan is a bill: the apply stops unless the caller says the plan is meant.
+run "paid_plan_without_the_callers_word" {
+  command = plan
+
+  override_data {
+    target = data.cloudflare_zone.this
+    values = {
+      name    = "example.com"
+      account = { id = "0123456789abcdef0123456789abcdef", name = "example account" }
+      plan    = { legacy_id = "pro", name = "Pro Website", id = "0", price = 25, currency = "USD", frequency = "", can_subscribe = false, is_subscribed = false, legacy_discount = false, externally_managed = false }
+    }
+  }
+
+  expect_failures = [data.cloudflare_zone.this]
 }

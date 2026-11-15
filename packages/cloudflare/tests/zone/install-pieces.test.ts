@@ -6,6 +6,7 @@ import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { INSTALL_PIECES } from "../../src/zone/install-pieces";
 
+/** The folder of the OpenTofu module. */
 const MODULE = join(import.meta.dir, "..", "..", "tofu");
 
 /** The first line of a block that declares a resource or reads one: its kind, its type, and its name. */
