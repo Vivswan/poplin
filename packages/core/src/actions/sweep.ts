@@ -1,4 +1,5 @@
-// The sweep a scheduled job runs: expired sites go to the trash, sites whose time in the trash has passed go for good, uploads past their time go with their files, the files removed sites left behind go, and logins that ran out go last.
+// The sweep a scheduled job runs: expired sites go to the trash, sites whose time in the trash has passed go for good, uploads past their time go with their files, and the files removed sites left behind go.
+// What ran out goes last: the logins of computers, and the problems noted over 30 days ago.
 
 import * as v from "valibot";
 
@@ -155,13 +156,13 @@ async function sweepUploads(install: Install, from: Extract<SweepPlace, { readon
   return { ...NOTHING_SWEPT, ...removed, next: old.next === undefined ? { leftovers: true } : { uploads: true, after: old.next } };
 }
 
-/** One step over the leftovers. The one that has looked at the last of them ends the walk by removing the logins that ran out. */
+/** One step over the leftovers. The one that has looked at the last of them ends the walk by removing the logins that ran out and the problems past the days kept. */
 async function sweepLeftovers(install: Install, from: Extract<SweepPlace, { readonly leftovers: true }>, rule: { readonly limit: number; readonly signed: Signed }): Promise<Swept> {
   const page = await install.database.listLeftovers({ limit: rule.limit, after: from.after });
   const swept = { ...NOTHING_SWEPT, ...(await emptyLeftovers(install, page.folders)) };
   if (page.next !== undefined) return { ...swept, next: { leftovers: true, after: page.next } };
 
-  return { ...swept, logins: await install.database.sweepComputerLogins(rule.signed.at) };
+  return { ...swept, logins: await install.database.sweepRunOut(rule.signed.at) };
 }
 
 /**
