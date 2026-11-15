@@ -135,7 +135,7 @@ export function DomainScreen(): ReactNode {
             <DialogTrigger handle={asks} payload="check" render={<Button variant="outline" />}>
               Check
             </DialogTrigger>
-            <DialogTrigger handle={asks} payload="repair" render={<Button />}>
+            <DialogTrigger handle={asks} payload="repair" render={<Button variant={tone === "bad" ? "default" : "outline"} />}>
               Repair
             </DialogTrigger>
           </div>

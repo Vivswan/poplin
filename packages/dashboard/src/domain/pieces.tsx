@@ -17,12 +17,12 @@ const AS_RUN = { key: "", descending: false } as const;
 /** One piece as the server answers it. */
 type Piece = Ran["rows"][number];
 
-/** A state as a small mark and its words. In the table it keeps the row's height when its words wrap. */
+/** A state as a small mark and its words, the first with a capital. In the table it keeps the row's height when its words wrap. */
 function StateMark({ piece }: { readonly piece: Piece }): ReactNode {
   return (
     <span className={cn("inline-flex items-start gap-1.5 py-3 leading-5 whitespace-normal max-md:py-0", WORDS[piece.tone])}>
       <ToneMark tone={piece.tone} className="mt-0.5" />
-      {piece.state}
+      <span className="first-letter:uppercase">{piece.state}</span>
     </span>
   );
 }

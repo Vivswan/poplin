@@ -51,7 +51,7 @@ const ACCESS_STEP = "Open Zero Trust and pick a plan (Free works): that switches
 const BAD_LOGINS = "the stored logins are not a list of emails";
 
 /** What the Access policy's row says when Cloudflare lets other emails through than the settings list. */
-const OTHER_LOGINS = "not the logins of the settings";
+const OTHER_LOGINS = "emails that are not your users";
 
 /** What the variable's row says before the application it is read from exists. */
 const NO_APPLICATION = "written once the Access application exists";

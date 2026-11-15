@@ -21,7 +21,7 @@ const OBJECTS: readonly (readonly [object: string, detail: string, part: DomainR
   ["Route", "every site", "reach"],
   ["Route", "the dashboard", "reach"],
   ["Login application", "the dashboard's login", "login"],
-  ["Login policy", "the logins of the settings", "login"],
+  ["Login policy", "your users only", "login"],
   ["Rate rule", "sample-rate-rule", "rest"],
 ];
 
@@ -55,7 +55,7 @@ const BROKEN = [
 const LACKING_TOKEN = "lacking";
 
 /** The piece the lacking token cannot change, and the right it lacks. */
-const LACKED = { place: 5, right: "Login: Edit", detail: "the logins of the settings: the token lacks a right. Add this right to the token: Login: Edit" } as const;
+const LACKED = { place: 5, right: "Login: Edit", detail: "your users only: the token lacks a right. Add this right to the token: Login: Edit" } as const;
 
 /** The place of the optional piece among the objects, and what its row says while the token lacks its right. */
 const OPTIONAL_ROW = { place: 6, detail: "sample-rate-rule: add this right to the token and press Repair: Rules: Edit" } as const;

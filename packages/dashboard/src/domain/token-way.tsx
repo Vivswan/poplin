@@ -71,7 +71,7 @@ export function TokenWay({ form }: { readonly form: Domain["form"] }): ReactNode
             Open the token form
             <ExternalLinkIcon data-icon="inline-end" />
           </Button>
-          <p className="text-muted-foreground">It opens with the rights chosen. Create the token, then copy it.</p>
+          <p className="text-muted-foreground">The rights are already ticked. Create the token, then copy it.</p>
         </>
       )}
       <FormHelp form={form} />

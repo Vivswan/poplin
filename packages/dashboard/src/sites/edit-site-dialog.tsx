@@ -14,7 +14,7 @@ const LONGEST_NAME = 40;
 /** What is said under each field while nothing is refused there. */
 const HINTS = {
   title: "Leave it empty to use the page's own title.",
-  name: "The site's own link is written with it. Old links keep working.",
+  name: "The link uses this name. Old links keep working.",
 } as const;
 
 /** A field of the dialog. */

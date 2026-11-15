@@ -136,7 +136,7 @@ test("a login added to the settings: the check says the Access policy lets other
   await withAccount(account, async (plug, asked) => {
     await plug.repair(TOKEN, SETTINGS);
     const sent = asked.length;
-    const differs = table({}).map((row) => row.replace("Access policy | present | poplin logins", "Access policy | differs | poplin logins: not the logins of the settings"));
+    const differs = table({}).map((row) => row.replace("Access policy | present | poplin logins", "Access policy | differs | poplin logins: emails that are not your users"));
 
     expect(shown(await plug.check(TOKEN, async () => added))).toEqual(differs);
     expect(writes(asked.slice(sent))).toEqual([]);
