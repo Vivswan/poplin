@@ -11,7 +11,7 @@ The checks of a deployed install: a stranger's requests over HTTPS, and a token 
 ```text
 Live Checks workflow
   the `paths` list of the workflow                the files of the push -> a run, or none
-  gh run watch                                   the CI of the commit ended green, or the run stops red
+  the `all-green` check of the commit's CI       it ended green, or the run stops red; a job after it stops nothing
   build the Worker bundle
   packages/cloudflare/scripts/live/converge.ts   the account's plans, bucket, database, login, wrangler deploy, the Domain tab's repair, the caps
   packages/cloudflare/scripts/live/suite.ts      a token for the run -> bun test tests/live/live.test.ts -> the token removed
@@ -38,12 +38,12 @@ The `paths` list of `.github/workflows/live-checks.yml` holds every row. The fil
 | ------------------------------------------------------ | -------------------------------------------------------------------- |
 | a run started by hand                                  | deploy and checks, with no wait for CI                               |
 | a push that starts no run                              | no row in the list of runs, and no tick on the commit                |
-| the commit's CI did not end green                      | a red run: nothing deployed, no call to Cloudflare                   |
+| the commit's `all-green` check did not end green       | a red run: nothing deployed, no call to Cloudflare                   |
 | a run ended red                                        | it stays red until it is run again by hand, or a later push starts a run |
 | a newer push while an older push's run has not started | the older run is cancelled, the newer one deploys both               |
 | 00:00 UTC                                              | the reset alone, every day; it waits its turn and replaces no run    |
 
-The install is made from the commit of the push, the one whose CI ended green. Running a red run again makes the install from that same commit.
+The install is made from the commit of the push, the one whose `all-green` check ended green. Running a red run again makes the install from that same commit.
 
 One job touches the install at a time. The checks and the midnight reset wait in one lane that keeps every waiting job, so neither takes the other's place.
 
