@@ -21,11 +21,25 @@ export function isPlainVersion(text: string): boolean {
   return valid(text) === text && prerelease(text) === null;
 }
 
+/**
+ * Whether a text is the address of a release's notes: an `https` address written exactly as a URL writes it, with no user name or password before its host.
+ *
+ * Such a text holds no line break, space, or control character: a URL drops or escapes each of those, so a text with one differs from what the URL writes. It is shown as it is, in a terminal and as a link.
+ */
+function isNotesAddress(text: string): boolean {
+  if (!URL.canParse(text)) return false;
+
+  const address = new URL(text);
+  if (address.href !== text) return false;
+
+  return address.protocol === "https:" && address.username === "" && address.password === "";
+}
+
 /** A release: its version, the UTC date it came out, the address of its notes, and whether updating to it changes the database. */
 export const UPDATE_NEWS = v.strictObject({
   version: v.pipe(v.string(), v.check(isPlainVersion)),
   released: v.pipe(v.string(), v.isoDate()),
-  notes: v.pipe(v.string(), v.maxLength(MOST_NOTES_LENGTH), v.startsWith("https://"), v.url()),
+  notes: v.pipe(v.string(), v.maxLength(MOST_NOTES_LENGTH), v.check(isNotesAddress)),
   database: v.boolean(),
 });
 
