@@ -69,6 +69,9 @@ describe("checkForUpdate and updateOf", () => {
     { current: "1.10.0", newest: "1.9.9", newer: false },
     { current: "2.0.0", newest: "1.9.9", newer: false },
     { current: "0.1.0-dev", newest: "0.2.0", newer: false },
+    { current: "v0.1.0", newest: "0.2.0", newer: false },
+    { current: "0.1.0+build.5", newest: "0.2.0", newer: false },
+    { current: "0.1", newest: "0.2.0", newer: false },
     { current: "", newest: "0.2.0", newer: false },
   ])("an install on $current hears of $newest: $newer", async ({ current, newest, newer }) => {
     const world = await makeWorld();

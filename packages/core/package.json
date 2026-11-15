@@ -72,9 +72,11 @@
   "dependencies": {
     "drizzle-orm": "0.45.4",
     "jose": "6.2.17",
+    "semver": "7.8.6",
     "valibot": "1.5.0"
   },
   "devDependencies": {
+    "@types/semver": "7.8.0",
     "drizzle-kit": "0.31.11"
   }
 }

@@ -8,8 +8,10 @@
         "@actions/core": "3.0.1",
         "@biomejs/biome": "2.6.4",
         "@types/bun": "1.4.4",
+        "@types/semver": "7.8.0",
         "fast-check": "4.10.2",
         "knip": "6.35.1",
+        "semver": "7.8.6",
         "typescript": "7.0.2",
       },
     },
@@ -70,9 +72,11 @@
       "dependencies": {
         "drizzle-orm": "0.45.4",
         "jose": "6.2.17",
+        "semver": "7.8.6",
         "valibot": "1.5.0",
       },
       "devDependencies": {
+        "@types/semver": "7.8.0",
         "drizzle-kit": "0.31.11",
       },
     },
@@ -528,6 +532,8 @@
     "@types/nlcst": ["@types/nlcst@2.0.3", "", { "dependencies": { "@types/unist": "*" } }, "sha512-vSYNSDe6Ix3q+6Z7ri9lyWqgGhJTmzRjZRqyq15N0Z/1/UnVsno9G/N40NBijoYx2seFDIl0+B2mgAb9mezUCA=="],
 
     "@types/node": ["@types/node@26.6.6", "", { "dependencies": { "undici-types": "~8.9.0" } }, "sha512-MzQj+8Kx3XI40OmUAE6Qoh58ZMNstNNMwn2nfd3qWsfe7nDNSqJNzes4njhz6AHwrSHOffSLwXU6yb474Q4aog=="],
+
+    "@types/semver": ["@types/semver@7.8.0", "", {}, "sha512-1mAINjtQCXXeLkJ9ehXkwOcBpqtLxiVtKhpUf83DdRNdQKV0iXZpaHYqRr7nj+wvxuJzoAmAwXI+sCNMv1CzLQ=="],
 
     "@types/sql.js": ["@types/sql.js@1.4.11", "", { "dependencies": { "@types/emscripten": "*", "@types/node": "*" } }, "sha512-QXIx38p2ZThJaK9vP5ZdqdlRe1FG9I8SmCZOS7FHfB/2qPAjZwkL7/vlfPg6N/oWHuuOaGg/P/IRwfP2W0kWVQ=="],
 

@@ -14,6 +14,8 @@ describe("parseAskedVersion", () => {
     { name: "a version written as its tag", raw: "v0.2.0", asked: undefined },
     { name: "a version of two numbers", raw: "0.2", asked: undefined },
     { name: "a version before its release", raw: "1.0.0-rc.1", asked: undefined },
+    { name: "a version with build words", raw: "0.2.0+build.5", asked: undefined },
+    { name: "a version with a zero in front of a number, which no release carries", raw: "0.02.0", asked: undefined },
     { name: "a branch", raw: "main", asked: undefined },
     { name: "`latest` in capitals", raw: "LATEST", asked: undefined },
     { name: "a version with a command after it", raw: "0.2.0; echo", asked: undefined },

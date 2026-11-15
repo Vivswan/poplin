@@ -1,15 +1,12 @@
 /** The version strings the pipeline mints and reads: a wrong one publishes under a name that sorts in the wrong place, or names no commit. */
 
 import { describe, expect, test } from "bun:test";
+import valid from "semver/functions/valid";
 import { mintedVersion } from "../../.github/scripts/release-pipeline/minted-version.js";
 import { atFloor } from "../../.github/scripts/release-pipeline/npm-floor.js";
 import { prereleaseVersion } from "../../.github/scripts/release-pipeline/prerelease-version.js";
 import type { MainPosition } from "../../.github/scripts/release-pipeline/records.js";
 import { releaseVersion } from "../../.github/scripts/release-pipeline/release-version.js";
-
-/** The version grammar as semver.org states it: what npm holds a version to before it normalizes one. */
-const SEMVER =
-  /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-((?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*)(?:\.(?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*))*))?(?:\+([0-9a-zA-Z-]+(?:\.[0-9a-zA-Z-]+)*))?$/;
 
 /** A sha whose first seven characters hold a letter: npm keeps such an identifier as written. */
 const SHA = "b8df084c1d2e3f4a5b6c7d8e9f0a1b2c3d4e5f6a";
@@ -30,7 +27,7 @@ describe("prereleaseVersion", () => {
     const version = prereleaseVersion(manifest, position, source);
 
     expect(version).toBe(expected);
-    expect(version).toMatch(SEMVER);
+    expect(valid(version)).toBe(version);
   });
 
   test("npm's order puts a pre-release above its release, below the next one, and along main by count", () => {

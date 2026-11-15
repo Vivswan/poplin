@@ -1,11 +1,10 @@
 // What an install knows of the newest released poplin: the release it last learned of, and when it last asked. And the form of the address that starts its own rebuild.
 
+import prerelease from "semver/functions/prerelease";
+import valid from "semver/functions/valid";
 import * as v from "valibot";
 
 import { MOMENT } from "./fields";
-
-/** A released version: three whole numbers with dots between them, such as `0.2.0`. A version of any other form is compared with nothing. */
-export const PLAIN_VERSION = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/;
 
 /** The longest address of release notes that is kept. */
 const MOST_NOTES_LENGTH = 300;
@@ -13,9 +12,18 @@ const MOST_NOTES_LENGTH = 300;
 /** The longest address that starts a rebuild. */
 const MOST_ADDRESS_LENGTH = 2048;
 
+/**
+ * Whether a text is a released version as it is written: three whole numbers with dots between them, such as `0.2.0`.
+ *
+ * A version before its release, one with build words, a `v` in front, or spaces around it is not: such a version is compared with nothing.
+ */
+export function isPlainVersion(text: string): boolean {
+  return valid(text) === text && prerelease(text) === null;
+}
+
 /** A release: its version, the UTC date it came out, the address of its notes, and whether updating to it changes the database. */
 export const UPDATE_NEWS = v.strictObject({
-  version: v.pipe(v.string(), v.regex(PLAIN_VERSION)),
+  version: v.pipe(v.string(), v.check(isPlainVersion)),
   released: v.pipe(v.string(), v.isoDate()),
   notes: v.pipe(v.string(), v.maxLength(MOST_NOTES_LENGTH), v.startsWith("https://"), v.url()),
   database: v.boolean(),
