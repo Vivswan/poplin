@@ -22,6 +22,7 @@
       "trailingCommas": "all"
     }
   },
+  // noCommonJs: the tree is ES modules whole, and the patterns of noRestrictedImports read no `require` call.
   "linter": {
     "rules": {
       "preset": "recommended",
@@ -30,14 +31,73 @@
         "noUnusedVariables": "error"
       },
       "style": {
+        "noCommonJs": "error",
         "noNonNullAssertion": "error"
       }
     }
   },
   // Reads an .astro file whole, so a name its template uses counts as used.
   "html": { "experimentalFullSupportEnabled": true },
+  // A later entry replaces an earlier entry's options for the same rule, so a narrower place repeats what it keeps.
   "overrides": [
-    // Core is the logic every surface shares, so it imports no HTTP framework, platform, or runtime module.
+    // The portable packages hold no provider: its modules, types, and globals stay in packages/cloudflare. tests/portable.test.ts plants each leak.
+    {
+      "includes": ["packages/core/**", "packages/app/**", "packages/cli/**", "packages/demo/**", "packages/dashboard/**"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "paths": {
+                  "node:module": { "importNames": ["createRequire"], "message": "Portable code loads a module by an import, which the rules here read." },
+                  "module": { "importNames": ["createRequire"], "message": "Portable code loads a module by an import, which the rules here read." }
+                },
+                "patterns": [
+                  {
+                    "group": [
+                      "cloudflare",
+                      "cloudflare:*",
+                      "@cloudflare/**",
+                      "wrangler",
+                      "wrangler/**",
+                      "miniflare",
+                      "miniflare/**",
+                      "@poplin/cloudflare",
+                      "**/cloudflare/**"
+                    ],
+                    "message": "Portable code has no provider module: packages/cloudflare owns it."
+                  }
+                ]
+              }
+            },
+            "noRestrictedTypes": {
+              "level": "error",
+              "options": {
+                "types": {
+                  "Bindings": "Portable code has no provider type: packages/cloudflare owns it.",
+                  "CloudflareBindings": "Portable code has no provider type: packages/cloudflare owns it.",
+                  "Env": "Portable code has no provider type: packages/cloudflare owns it.",
+                  "ExecutionContext": "Portable code has no provider type: packages/cloudflare owns it.",
+                  "ExportedHandler": "Portable code has no provider type: packages/cloudflare owns it."
+                }
+              }
+            },
+            "noRestrictedGlobals": {
+              "level": "error",
+              "options": {
+                "deniedGlobals": {
+                  "FixedLengthStream": "Portable code names no provider global: packages/cloudflare owns it.",
+                  "HTMLRewriter": "Portable code names no provider global: packages/cloudflare owns it.",
+                  "WebSocketPair": "Portable code names no provider global: packages/cloudflare owns it."
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    // Core is the logic every surface shares, so it imports no HTTP framework, provider, or runtime module.
     {
       "includes": ["packages/core/src/**"],
       "linter": {
@@ -47,17 +107,23 @@
             "noRestrictedImports": {
               "level": "error",
               "options": {
-                "paths": {
-                  "hono": "Core has no HTTP framework: the Worker package owns it.",
-                  "bun": "Core has no runtime module: it runs in a Worker.",
-                  "cloudflare": "Core has no provider module: the provider folders own it.",
-                  "wrangler": "Core has no provider module: the provider folders own it."
-                },
                 "patterns": [
                   {
-                    "group": ["hono/**", "@cloudflare/**", "cloudflare:*", "cloudflare/**", "wrangler/**", "@poplin/cloudflare/**", "**/cloudflare/**", "bun:*"],
-                    "message": "Core has no HTTP framework, Cloudflare, or runtime module: the package that needs one owns it."
-                  }
+                    "group": [
+                      "cloudflare",
+                      "cloudflare:*",
+                      "@cloudflare/**",
+                      "wrangler",
+                      "wrangler/**",
+                      "miniflare",
+                      "miniflare/**",
+                      "@poplin/cloudflare",
+                      "**/cloudflare/**"
+                    ],
+                    "message": "Portable code has no provider module: packages/cloudflare owns it."
+                  },
+                  { "group": ["hono", "hono/**"], "message": "Core has no HTTP framework: the app package owns it." },
+                  { "group": ["bun", "bun:*"], "message": "Core has no runtime module: it runs in a Worker." }
                 ]
               }
             }
@@ -65,25 +131,65 @@
         }
       }
     },
-    // The other portable places import no provider module either; tests/portable.test.ts is the authority, and also reads type names and headers.
+    // The dashboard runs in a browser, so it imports no provider or runtime module and names no runtime global.
     {
-      "includes": ["packages/core/tests/**", "packages/cli/**", "packages/app/src/limits/**", "packages/app/src/sites/**", "packages/app/src/login/**"],
+      "includes": ["packages/dashboard/src/**"],
       "linter": {
         "rules": {
+          "correctness": { "noNodejsModules": "error" },
           "style": {
             "noRestrictedImports": {
               "level": "error",
               "options": {
-                "paths": {
-                  "cloudflare": "Portable code has no provider module: the provider folders own it.",
-                  "wrangler": "Portable code has no provider module: the provider folders own it."
-                },
                 "patterns": [
                   {
-                    "group": ["@cloudflare/**", "cloudflare:*", "cloudflare/**", "wrangler/**", "@poplin/cloudflare/**", "**/cloudflare/**"],
-                    "message": "Portable code has no provider module: the provider folders own it."
-                  }
+                    "group": [
+                      "cloudflare",
+                      "cloudflare:*",
+                      "@cloudflare/**",
+                      "wrangler",
+                      "wrangler/**",
+                      "miniflare",
+                      "miniflare/**",
+                      "@poplin/cloudflare",
+                      "**/cloudflare/**"
+                    ],
+                    "message": "Portable code has no provider module: packages/cloudflare owns it."
+                  },
+                  { "group": ["bun", "bun:*"], "message": "The dashboard has no runtime module: it runs in a browser." }
                 ]
+              }
+            },
+            "noRestrictedGlobals": {
+              "level": "error",
+              "options": {
+                "deniedGlobals": {
+                  "Buffer": "The dashboard names no runtime global: it runs in a browser.",
+                  "Bun": "The dashboard names no runtime global: it runs in a browser.",
+                  "FixedLengthStream": "Portable code names no provider global: packages/cloudflare owns it.",
+                  "HTMLRewriter": "Portable code names no provider global: packages/cloudflare owns it.",
+                  "WebSocketPair": "Portable code names no provider global: packages/cloudflare owns it.",
+                  "process": "The dashboard names no runtime global: it runs in a browser."
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    // The test runner's own HTML parser reads a page in the dashboard's tests; no page of the product is built with it. The other globals stay refused.
+    {
+      "includes": ["packages/app/tests/dashboard/support/markup.ts"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedGlobals": {
+              "level": "error",
+              "options": {
+                "deniedGlobals": {
+                  "FixedLengthStream": "Portable code names no provider global: packages/cloudflare owns it.",
+                  "WebSocketPair": "Portable code names no provider global: packages/cloudflare owns it."
+                }
               }
             }
           }
