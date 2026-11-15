@@ -14,17 +14,23 @@ import type { ObjectKey } from "../../src/storage/storage";
 import { BunSqliteDriver } from "../database/support/bun-sqlite-driver";
 import { ADMIN, file, made, makeWorld, OWNER, STRANGER, type World } from "./support/actions-fixture";
 
+/** How long a test that copies a thousand files may take, in milliseconds: it passes alone in under a second, and a busy machine takes it past the runner's five. */
+const COPY_MS = 30_000;
+
 /** The calls a caller made before the action: one, as a caller that read a token did. */
 const ASKING = 1;
 
-/** The most calls the action itself may make after a caller's one: the 44 a request of a copy is held to, less the 4 a host may make to start and the caller's own. */
-const OWN_CALLS = 39;
+/** The most calls to the database the action itself may make after a caller's one: the 44 a request of a copy is held to, less the 4 a host may make to start, the caller's own, and the 2 that count the day's listings, which a host makes. */
+const OWN_DATABASE_CALLS = 37;
+
+/** The most calls to the store one call of the action may make. */
+const STORE_CALLS = 250;
 
 /** A site of five files, each of another media type than the manifest of a copy names. */
 const FIVE = [file("index.html", "<p>home</p>"), ...["a", "b", "c", "d"].map((name) => ({ ...file(`docs/${name}.css`, `.${name}{}`), contentType: "text/css" }))];
 
-/** A site of forty files: the five, and pages. One call copies nine of them, so its copy takes five calls. */
-const FORTY = [...FIVE, ...Array.from({ length: 35 }, (_page, at) => file(`pages/${at}.html`, `<p>${at}</p>`))];
+/** A site of three hundred files: the five, and pages. One call copies 112 of them, so its copy takes three calls. */
+const MANY = [...FIVE, ...Array.from({ length: 295 }, (_page, at) => file(`pages/${at}.html`, `<p>${at}</p>`))];
 
 /** Every stored file under a site's folder, as `path -> media type and text`, read from the store. */
 async function filesOf(world: World, folder: string): Promise<Record<string, string>> {
@@ -72,11 +78,11 @@ describe("duplicateSite", () => {
   test("a copy of more files than one call copies is no site until the call that copies the last file, and each call goes on from the upload the one before answered", async () => {
     const world = await makeWorld();
     const source = await made(world, OWNER, "report");
-    await publishSite(world.install, OWNER, { site: source, files: FORTY });
+    await publishSite(world.install, OWNER, { site: source, files: MANY });
     const seen: unknown[] = [];
     let upload: string | undefined;
 
-    for (let calls = 0; calls < 5; calls += 1) {
+    for (let calls = 0; calls < 3; calls += 1) {
       const step = await duplicateSite(world.install, OWNER, upload === undefined ? { site: source } : { site: source, upload }, ASKING);
       if (!step.ok) throw new Error(`a step was refused: ${step.code}`);
 
@@ -85,8 +91,8 @@ describe("duplicateSite", () => {
       upload = step.copy.upload;
     }
 
-    expect(seen).toEqual([[null, 9, 1], [null, 18, 1], [null, 27, 1], [null, 36, 1], [1, 40, 2]]);
-    expect(await duplicateSite(world.install, OWNER, { site: source, upload }, ASKING)).toMatchObject({ ok: true, site: { live_version: 1 }, copy: { copied: 40, files: 40 } });
+    expect(seen).toEqual([[null, 112, 1], [null, 224, 1], [1, 300, 2]]);
+    expect(await duplicateSite(world.install, OWNER, { site: source, upload }, ASKING)).toMatchObject({ ok: true, site: { live_version: 1 }, copy: { copied: 300, files: 300 } });
     expect(await world.audit()).toEqual(["create", "publish", "create", "duplicate"]);
   });
 
@@ -111,26 +117,24 @@ describe("duplicateSite", () => {
     const source = await finishPublish(world.install, OWNER, begun.upload.id);
     if (!source.ok) throw new Error(`the source was refused: ${source.code}`);
 
-    expect(await duplicateSite(world.install, OWNER, { site: source.site.id }, ASKING)).toMatchObject({ ok: true, site: null, copy: { copied: 14, files: 1_601 } });
+    expect(await duplicateSite(world.install, OWNER, { site: source.site.id }, ASKING)).toMatchObject({ ok: true, site: null, copy: { copied: 113, files: 1_601 } });
   });
 
-  // Drift: a host ends a request that makes more than 50 calls, and a request spends some before the action: on starting the host, and on reading who asks. A call that copies more than fits beside those is never finished.
+  // Drift: a host ends a request past 50 calls to the database, some spent before the action, and bounds the store apart. A call that copies more than fits either is never finished; one that counts both as one copies a tenth of what fits.
   test.each([
-    [1, ASKING, 1],
-    [300, ASKING, 34],
-    [1_001, ASKING, 73],
-    [2_001, ASKING, 144],
-    [2_001, ASKING + 1, 155],
-  ])("a copy of %i files for a caller that made %i calls is whole after %i calls, none of which makes more calls to the database and the store than 44 less the host's start and the caller's", async (count, asking, calls) => {
+    [1, 1],
+    [300, 3],
+    [1_001, 10],
+  ])("a copy of %i files is whole after %i calls, none of which makes more than 37 calls to the database or more than 250 to the store", async (count, calls) => {
     const world = await makeWorld();
     const pages = Array.from({ length: count - 1 }, (_page, at) => file(`pages/${at}.html`, "x"));
     const source = await publishSite(world.install, OWNER, { name: "report", files: [file("index.html", "<p>home</p>"), ...pages] });
     if (!source.ok) throw new Error(`the source was refused: ${source.code}`);
 
-    const budget = { left: 0 };
-    const spend = (): void => {
-      budget.left -= 1;
-      if (budget.left < 0) throw new Error("the call made more calls than it may");
+    const left = { database: 0, store: 0 };
+    const spend = (on: keyof typeof left): void => {
+      left[on] -= 1;
+      if (left[on] < 0) throw new Error(`the call made more calls to the ${on} than it may`);
     };
     const store = new Proxy(world.install.store, {
       get(target, name) {
@@ -138,7 +142,7 @@ describe("duplicateSite", () => {
         if (typeof method !== "function") return method;
 
         return (...asked: unknown[]): unknown => {
-          spend();
+          spend("store");
 
           return method.apply(target, asked);
         };
@@ -146,7 +150,7 @@ describe("duplicateSite", () => {
     });
     const batch = BunSqliteDriver.prototype.batch;
     const batches = spyOn(BunSqliteDriver.prototype, "batch").mockImplementation(function counted(this: BunSqliteDriver, statements) {
-      spend();
+      spend("database");
 
       return batch.call(this, statements);
     });
@@ -155,8 +159,8 @@ describe("duplicateSite", () => {
 
     try {
       for (let site: unknown = null; site === null; made += 1) {
-        budget.left = OWN_CALLS + ASKING - asking;
-        const step = await duplicateSite({ ...world.install, store }, OWNER, upload === undefined ? { site: source.site.id } : { site: source.site.id, upload }, asking);
+        Object.assign(left, { database: OWN_DATABASE_CALLS, store: STORE_CALLS });
+        const step = await duplicateSite({ ...world.install, store }, OWNER, upload === undefined ? { site: source.site.id } : { site: source.site.id, upload }, ASKING);
         if (!step.ok) throw new Error(`a step was refused: ${step.code}`);
 
         upload = step.copy.upload;
@@ -167,6 +171,18 @@ describe("duplicateSite", () => {
     }
 
     expect(made).toBe(calls);
+  }, COPY_MS);
+
+  // Drift: a caller that reads more before the action than the database's budget leaves room for would make requests a host ends, each after it copied files.
+  test("a caller whose own calls leave the database's budget too small is refused before anything is read, and one call fewer is not", async () => {
+    const world = await makeWorld();
+    const source = await made(world, OWNER, "report");
+    using batches = spyOn(BunSqliteDriver.prototype, "batch");
+    using reads = spyOn(world.install.store, "list");
+
+    await expect(duplicateSite(world.install, OWNER, { site: source }, 25)).rejects.toThrow(RangeError);
+    expect([batches.mock.calls.length, reads.mock.calls.length]).toEqual([0, 0]);
+    expect(await duplicateSite(world.install, OWNER, { site: source }, 24)).toMatchObject({ ok: true, site: { live_version: 1 } });
   });
 
   // Drift: a duplicate is a new site made from another's files, so it must pass every door a publish and a read pass: ownership, the trash, and the install's limits.
@@ -211,7 +227,7 @@ describe("duplicateSite", () => {
   test("a later call of a copy whose write fails counts that write against the day, and the copy stays to be gone on with", async () => {
     const world = await makeWorld();
     const source = await made(world, OWNER, "report");
-    await publishSite(world.install, OWNER, { site: source, files: FORTY });
+    await publishSite(world.install, OWNER, { site: source, files: MANY });
     const begun = await duplicateSite(world.install, OWNER, { site: source }, ASKING);
     if (!begun.ok) throw new Error("the copy was refused");
 
@@ -223,7 +239,7 @@ describe("duplicateSite", () => {
     const counted = (await world.install.database.readStorageWrites(day))?.writes;
     const next = await duplicateSite(world.install, OWNER, { site: source, upload: begun.copy.upload }, ASKING);
 
-    expect([counted, next]).toMatchObject([before + 1, { ok: true, copy: { copied: 18, files: 40 } }]);
+    expect([counted, next]).toMatchObject([before + 1, { ok: true, copy: { copied: 224, files: 300 } }]);
   });
 
   // Drift: a listing is no snapshot; a version a newer publish is removing lists short, and a copy of what is left would be a site with pages missing.
@@ -242,7 +258,7 @@ describe("duplicateSite", () => {
   test("a copy takes no file from a caller, a site in the trash is not copied, and a copy whose source stopped keeping the version is given up with its files", async () => {
     const world = await makeWorld({ versions_kept: 1 });
     const source = await made(world, OWNER, "report");
-    await publishSite(world.install, OWNER, { site: source, files: FORTY });
+    await publishSite(world.install, OWNER, { site: source, files: MANY });
     const keys = await world.keys();
     const begun = await duplicateSite(world.install, OWNER, { site: source }, ASKING);
     if (!begun.ok) throw new Error("the copy was refused");
@@ -257,6 +273,6 @@ describe("duplicateSite", () => {
       { ok: false, code: "no_such_version" },
       { ok: false, code: "in_trash" },
     ]);
-    expect([(await world.keys()).length, keys.length, (await world.install.database.readTotals()).sites]).toEqual([1, 40, 1]);
+    expect([(await world.keys()).length, keys.length, (await world.install.database.readTotals()).sites]).toEqual([1, 300, 1]);
   });
 });

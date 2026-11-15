@@ -1,4 +1,4 @@
-// Duplicate: a new private site that holds a copy of another site's live version. The install copies the files itself, a few a call, and the copy is a site only once every file is there.
+// Duplicate: a new private site that holds a copy of another site's live version. The install copies the files itself, some a call, and the copy is a site only once every file is there.
 //
 //   first call         the source is reached, its live version listed, an upload recorded for the copy, and the first files copied
 //   each later call    names that upload: the files the copy still lacks are found, and the next ones copied
@@ -22,10 +22,13 @@ import { fileKey, versionPrefix } from "./files";
 import { finishPublish, PUBLISHED_SITE } from "./finish-publish";
 import { reachSite } from "./reach";
 import { type Install, type Refused, refuse } from "./records";
-import { discardUpload, isWithinReach, missingFiles, uploadKey } from "./uploads";
+import { CLEANUP_CALLS, discardUpload, isWithinReach, missingFiles, uploadKey } from "./uploads";
 
-/** The most calls to the database and the store one request that copies makes, whoever asks: six under the 50 past which the smallest plan of a host ends a request, so a count that is off by a few still fits. */
-const CALL_BUDGET = 44;
+/** The most calls to the database one request that copies makes, whoever asks: six under the 50 past which the smallest plan of a host ends a request, so a count that is off by a few still fits. */
+const DATABASE_BUDGET = 44;
+
+/** The most calls to the store one request that copies makes: a quarter of the 1,000 the smallest plan of a host gives a request. */
+const STORE_BUDGET = 250;
 
 /** The most calls to the database a host makes of its own in a request that starts it, which any request of a copy may be. */
 const START_CALLS = 4;
@@ -38,6 +41,9 @@ const COUNT_CALLS = 2;
 
 /** The most calls to the database that finishing a copy makes: four, and one for each of the four site ids it may draw again. */
 const FINISH_CALLS = 8;
+
+/** The calls to the database that giving up a copy which failed makes. */
+const GIVE_UP_CALLS = 2;
 
 /** The calls to the store one copied file costs: a read and a write. Both are counted against the day's writes, when the copy begins. */
 export const COPY_CALLS = 2;
@@ -95,19 +101,23 @@ interface Staged {
 type StagedNow = Staged & { readonly fresh: boolean };
 
 /**
- * How many files one call copies: as many as the call budget leaves beside the host's start, the caller's own calls, the database's calls, the count of the day's listings, and the listings, at a read and a write each.
+ * How many files one call copies: as many as the store's budget leaves beside the listings and the removal of a copy that fails, at a read and a write each. The calls to the database do not grow with the files.
  *
  * A copy of up to one list page of files is finished, and so listed again, in the call that copies its last file; a longer one is finished in a call of its own.
  *
  * @param files - how many files the copy holds
- * @param asking - the calls to the database the request made before this action, to learn who asks
- * @returns for a caller that made one call: 9 up to a thousand files, 14 up to three thousand, and one fewer for every two thousand more: 10 for ten thousand
+ * @returns 112 up to a thousand files, 113 up to two thousand, and one fewer for every two thousand more: 109 for ten thousand
  */
-function copiesPerCall(files: number, asking: number): number {
+function copiesPerCall(files: number): number {
   const pages = Math.ceil(files / MAX_LIST_LIMIT) + SPARE_PAGES;
-  const finishing = files > MAX_LIST_LIMIT ? 0 : FINISH_CALLS + pages;
+  const finishing = files > MAX_LIST_LIMIT ? 0 : pages;
 
-  return Math.floor((CALL_BUDGET - START_CALLS - asking - STAGE_CALLS - COUNT_CALLS - pages - finishing) / COPY_CALLS);
+  return Math.floor((STORE_BUDGET - CLEANUP_CALLS - pages - finishing) / COPY_CALLS);
+}
+
+/** The most calls to the database one request of a copy makes: the host's start, the caller's own, and the action's, which at most finishes the copy in the same call and gives it up when that fails. */
+function databaseCalls(asking: number): number {
+  return START_CALLS + asking + STAGE_CALLS + COUNT_CALLS + FINISH_CALLS + GIVE_UP_CALLS;
 }
 
 /**
@@ -253,9 +263,9 @@ async function stageCopy(
  *
  * A copy whose source no longer holds a file is given up and its files removed. So is one this call began that finishing refused.
  */
-async function advanceCopy(install: Install, actor: Actor, staged: StagedNow, asking: number): Promise<Copying | Duplicated | Refused<DuplicateCode>> {
+async function advanceCopy(install: Install, actor: Actor, staged: StagedNow): Promise<Copying | Duplicated | Refused<DuplicateCode>> {
   const { upload, missing } = staged;
-  const batch = missing.slice(0, copiesPerCall(upload.files, asking));
+  const batch = missing.slice(0, copiesPerCall(upload.files));
 
   if (!(await copyFiles(install, upload, batch))) {
     await discardUpload(install, upload);
@@ -283,9 +293,9 @@ async function advanceCopy(install: Install, actor: Actor, staged: StagedNow, as
  * It takes the source's typed title, its page's own title, and its search-engine and frame settings. Its expiry is a new site's, from `default_expires`: the source's is not copied.
  * The install's limits bound it as they bound a publish.
  * @param request - `site` is a reference to the source; `name` goes with the first call alone, and `upload` with every later one
- * @param asking - the calls to the database the caller's request made before this action, to learn who asks: they are taken off the calls one request may make
+ * @param asking - the calls to the database the caller's request made before this action, to learn who asks: they count against the calls to the database one request may make
  * @returns the copy's progress, and the new site once every file is copied; `no_such_version` when the source stopped keeping the version meanwhile. Every refusal left no site behind
- * @throws {Error} the store or the database failed; a copy just begun is given up, and one named by `upload` stays to be gone on with
+ * @throws {Error} the store or the database failed: a copy just begun is given up, and one named by `upload` stays to be gone on with. A `RangeError` before anything is read: `asking` leaves the action too few calls to the database
  */
 export async function duplicateSite(
   install: Install,
@@ -293,11 +303,13 @@ export async function duplicateSite(
   request: v.InferInput<typeof DUPLICATE_REQUEST> & { readonly site: string },
   asking: number,
 ): Promise<Copying | Duplicated | Refused<DuplicateCode>> {
+  if (databaseCalls(asking) > DATABASE_BUDGET) throw new RangeError(`a request that made ${asking} calls to the database leaves a copy too few`);
+
   const staged = await stageCopy(install, actor, request);
   if (!staged.ok) return staged;
 
   try {
-    return await advanceCopy(install, actor, staged, asking);
+    return await advanceCopy(install, actor, staged);
   } catch (error) {
     // An upload that became a site meanwhile is left as it is.
     if (staged.fresh) await discardUpload(install, staged.upload);

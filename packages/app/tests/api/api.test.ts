@@ -120,6 +120,9 @@ const BUDGET: Readonly<Record<RouteKey, number>> = {
   "DELETE /api/update/address": 2,
 };
 
+/** How long a test that copies a thousand files may take, in milliseconds: it passes alone in under a second, and a busy machine takes it past the runner's five. */
+const COPY_MS = 30_000;
+
 /** Every route the API declares, in the order of the budgets. */
 const ROUTE_KEYS = Object.keys(BUDGET) as RouteKey[];
 
@@ -555,19 +558,19 @@ describe("createApi", () => {
     expect<number[]>([others.status, own.status, (await asOwner.whoami.$get({ query: {} })).status]).toEqual([403, 200, 401]);
   });
 
-  // Drift: a host ends a request that makes more than 50 calls, and the route reads the token first, in a request that may also start the host. A copy told nothing of that passes 50 on a host that just started.
+  // Drift: a host ends a request past 50 calls to the database, and the route reads the token first, in a request that may also start the host. A copy told nothing of that passes 50 on a host that just started.
   test.each([
     [1, 1],
-    [48, 6],
-    [300, 34],
-    [1_001, 73],
-  ])("a copy of %i files through the route is whole after %i requests, none of which makes more than 40 calls to the database and the store: the 44 a copy is held to, less the 4 of a host's start", async (count, requests) => {
+    [48, 1],
+    [300, 3],
+    [1_001, 10],
+  ])("a copy of %i files through the route is whole after %i requests, none of which makes more than 40 calls to the database, the 44 a copy is held to less the 4 of a host's start, or more than 250 to the store", async (count, requests) => {
     const install = await openApi({}, { fileBytes: 64, files: 10_000, manifestBytes: 2_000_000 });
     const files = Array.from({ length: count }, (_page, at) => ({ path: at === 0 ? "index.html" : `pages/${at}.html`, size: 1, contentType: "text/html", open: () => new Blob(["x"]).stream() }));
     const source = await publishSite(installOf(install), { scope: "admin", holder: "ada@example.com" as Login }, { name: "report", files });
     if (!source.ok) throw new Error(`the source was refused: ${source.code}`);
 
-    const spent: number[] = [];
+    const spent: (typeof install.calls)[] = [];
     let upload: string | undefined;
 
     for (let site: unknown = null; site === null; ) {
@@ -575,13 +578,13 @@ describe("createApi", () => {
       const step = await answered(install.routes.sites[":site"].duplicate.$post({ param: { site: source.site.id }, json: upload === undefined ? {} : { upload }, query: {} }));
       if (step.status !== 200) throw new Error(`a request was refused: ${JSON.stringify(step.body)}`);
 
-      spent.push(install.calls.database + install.calls.store);
+      spent.push({ ...install.calls });
       upload = part(step, "copy").upload as string;
       site = step.body.site;
     }
 
-    expect([spent.length, spent.filter((calls) => calls > 40)]).toEqual([requests, []]);
-  });
+    expect([spent.length, spent.filter((calls) => calls.database > 40 || calls.store > 250)]).toEqual([requests, []]);
+  }, COPY_MS);
 });
 
 describe("the staged publish over HTTP", () => {

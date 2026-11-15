@@ -17,8 +17,11 @@ const UPLOAD_LIFETIME_MS = DAY_MS;
 /** How long after its lifetime an upload is left alone, so that no request begun inside the lifetime is still writing when the sweep removes its files. */
 const SWEEP_GRACE_MS = 3_600_000;
 
-/** The list pages one step spends on removing an upload's files or a finished upload's dropped versions: 20 store calls. */
+/** The list pages one step spends on removing an upload's files or a finished upload's dropped versions. */
 const CLEANUP_PAGES = 10;
+
+/** The most calls to the store one such removal makes: a listing and a removal a page. */
+export const CLEANUP_CALLS = 2 * CLEANUP_PAGES;
 
 /** The list pages spared beyond the count a manifest needs, for a store that hands out short pages. */
 const SPARE_PAGES = 2;
