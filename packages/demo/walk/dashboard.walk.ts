@@ -716,6 +716,16 @@ test.describe("on a phone, after a site's panel", () => {
   });
 });
 
+// Drift: a group of the settings would take its name from its heading by an id again: Firefox ends the page when such a name is read once by the walk's own scripts and once among the page's.
+test("a group of the settings is found by its name twice, by a count and among the page's own scripts, and the page stays", async ({ page }) => {
+  await arrive(page);
+  await toSection(page, "Settings");
+  const group = page.getByRole("region", { name: "New sites", exact: true });
+
+  await expect(group).toHaveCount(1);
+  expect(await group.evaluateAll((all) => all.length)).toBe(1);
+});
+
 test.describe("on a phone, on Usage", () => {
   test.use({ viewport: PHONE });
 
