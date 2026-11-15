@@ -313,7 +313,7 @@ describe("logIn", () => {
     expect([ran.code, ran.waits, questions]).toEqual([0, [5000, 90_000, 5000], 3]);
   });
 
-  // Drift: an install begins five logins a minute for everybody together, so a login can be asked to wait through no fault of its own. One that gave up at the first 429 would fail in a busy minute, and one that asked on for ever would tell nobody.
+  // Drift: an install begins eight logins a minute for everybody together, so a login can be asked to wait through no fault of its own. One that gave up at the first 429 would fail in a busy minute, and one that asked on for ever would tell nobody.
   test.each([
     ["twice", 2, 0, [39_000, 60_000, 5000]],
     ["six times", 6, 1, [39_000, 60_000, 60_000, 60_000, 60_000]],
@@ -338,7 +338,7 @@ describe("logIn", () => {
 
     const ran = await desk.bench.run(`login --server ${ORIGIN}`, { env: {} });
 
-    expect([ran.code, ran.waits, begun, ran.err[0]]).toEqual([code, waits, Math.min(refusals, 5) + 1, code === 0 ? undefined : "the install is asked too often from this address"]);
+    expect([ran.code, ran.waits, begun, ran.err[0]]).toEqual([code, waits, Math.min(refusals, 5) + 1, code === 0 ? undefined : "the install is asked too often"]);
   });
 
   // Drift: the browser goes where the install says; an install, or whatever answers in its place, that named another site would send the admin there with the dashboard's trust.
@@ -376,6 +376,8 @@ describe("logIn", () => {
       return undefined;
     });
     const kept = desk.saved();
+    // One address begins two logins a minute: the third is begun in the next.
+    desk.bench.install.clock.now += 60_000;
     const again = await desk.login("login", (address) => allow(desk, address));
 
     expect([denied.code, kept, again.code, desk.saved()?.server]).toEqual([1, before, 0, ORIGIN]);

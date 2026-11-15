@@ -1050,8 +1050,8 @@ describe("a computer's login", () => {
     expect(await state.text()).not.toContain("a1b2c3d4");
   });
 
-  // Drift: questions are counted by the address Cloudflare saw, and logins begun by all addresses together. One key for everyone would let one computer silence every terminal, and no count of the install would let a few addresses spend a day's writes.
-  test("the sixth login begun in a minute is refused whichever address begins it, and the twenty-sixth question of one address is refused while another address is answered", async () => {
+  // Drift: one key for everyone would let one computer silence every terminal, a share as large as the whole would let one address refuse every login, and no count of the install would let a few addresses spend a day's writes.
+  test("one address's third login of a minute is refused while others begin theirs, the ninth of all is refused, and one address's twenty-sixth question is refused while another's is answered", async () => {
     const worker = instance(w);
     const question = (address: string): Promise<Response> => {
       const headers = { "Content-Type": "application/json", "CF-Connecting-IP": address };
@@ -1063,13 +1063,13 @@ describe("a computer's login", () => {
 
     await awayFromMinuteEnd();
 
-    for (let sent = 0; sent < 5; sent += 1) begun.push((await begin(worker, "192.0.2.1")).status);
-    begun.push((await begin(worker, "192.0.2.2")).status);
+    for (let sent = 0; sent < 3; sent += 1) begun.push((await begin(worker, "192.0.2.1")).status);
+    for (const address of ["192.0.2.2", "192.0.2.2", "192.0.2.3", "192.0.2.3", "192.0.2.4", "192.0.2.4", "192.0.2.5"]) begun.push((await begin(worker, address)).status);
     for (let sent = 0; sent < 26; sent += 1) asked.push((await question("192.0.2.1")).status);
     asked.push((await question("192.0.2.2")).status);
 
     expect([begun, asked]).toEqual([
-      [200, 200, 200, 200, 200, 429],
+      [200, 200, 429, 200, 200, 200, 200, 200, 200, 429],
       [...Array.from({ length: 25 }, () => 200), 429, 200],
     ]);
   });

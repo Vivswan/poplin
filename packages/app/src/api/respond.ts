@@ -72,7 +72,7 @@ const MESSAGES: Readonly<Record<Code, string>> = {
   no_update_address: "the install has no update link: save one first",
   no_update: "no newer version is known to the install",
   too_large: "a size limit is passed",
-  too_many_requests: "too many requests came from this address: wait, then ask again",
+  too_many_requests: "the install is asked too often: wait, then ask again",
   internal: "the install failed to do that",
   update_refused: "the install's provider refused to start the update, with this status",
   allowance_spent: "a day's allowance of the install is used up: ask again after midnight UTC",
