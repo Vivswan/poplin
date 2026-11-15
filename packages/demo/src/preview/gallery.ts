@@ -4,6 +4,7 @@
 
 import { beginLogin } from "../../../core/src/actions/computer-logins";
 import { listSites } from "../../../core/src/actions/list";
+import { AUDIT_WINDOW } from "../../../core/src/database/database";
 import { PLUG_STATES, type PlugState } from "./domain-plug";
 import { ADMIN_ORIGIN, localAddress } from "./mount";
 import type { World } from "./world";
@@ -29,6 +30,9 @@ const SETUP_WORDS: Readonly<Record<PlugState, string>> = {
   "token-refused": "the token is refused",
   unreachable: "the provider does not answer",
 };
+
+/** How many logins a stage adds to the log: more than a narrowed page of the log looks at before it stops. */
+const MANY_LOGINS = AUDIT_WINDOW + 200;
 
 /** The screens of the dashboard, each by the path that shows it. */
 const SCREENS = [
@@ -68,9 +72,18 @@ async function waitingLogin(stage: Stage): Promise<Response> {
   return new Response(null, { status: 303, headers: { Location: `/tokens/allow?${new URLSearchParams({ code: begun.code })}` } });
 }
 
+/** Add more logins to the log than a narrowed page looks at, and lead to the page of what happened to sites: it stops before it finds an entry, and says so. A reset takes the logins away. */
+async function longLog({ world }: Stage): Promise<Response> {
+  const signed = { by: world.admin.holder, at: world.install.now() };
+  for (let added = 0; added < MANY_LOGINS; added += 1) await world.install.database.appendAudit({ action: "login", detail: {} }, signed);
+
+  return new Response(null, { status: 303, headers: { Location: "/activity?kind=sites" } });
+}
+
 /** Every stage, by its address. */
 export const STAGES: Readonly<Record<string, (stage: Stage) => Promise<Response>>> = {
   "/state/allow/waiting": waitingLogin,
+  "/state/activity/long": longLog,
 };
 
 /** Where each seeded site is now, by its name: its panel in the dashboard, and the preview paths it is served at. A site that was deleted since is absent. */
@@ -88,6 +101,7 @@ function dashboardEntries(): Entry[] {
     ...SCREENS.map(([name, path]) => ({ group: "Dashboard of an install that holds nothing" as const, name, path: `/empty${path}` })),
     { group: "Dashboard", name: "Sites: the public ones, by name", path: "/?access=public&sort=name&dir=asc" },
     { group: "Dashboard", name: "Activity: what happened to sites", path: "/activity?kind=sites" },
+    { group: "Dashboard", name: "Activity: a long log, searched in parts", path: "/state/activity/long" },
     { group: "Dashboard", name: "No such screen", path: "/nothing" },
     { group: "Access: allow this computer", name: "Waiting for a decision", path: "/state/allow/waiting" },
     { group: "Access: allow this computer", name: "Code not found, decided, or run out", path: `/tokens/allow?code=${NO_CODE}` },
