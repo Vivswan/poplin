@@ -17,6 +17,7 @@ import { DOMAIN_KEY } from "@/domain/domain-queries";
 import { searchOf, useAddressQuery } from "@/lib/address";
 import { FRAME_KEY } from "@/lib/frame";
 import { useChosenTimeZone } from "@/lib/timezone";
+import { MiddleColumn } from "@/shared/middle-column";
 import { ScreenTabs } from "@/shared/screen-tabs";
 import { AppShell } from "@/shell/app-shell";
 
@@ -76,32 +77,34 @@ export function AccessScreen(): ReactNode {
 
   return (
     <AppShell current="access" heading="Access">
-      <div {...keptFocus} className="flex min-h-0 flex-1 flex-col">
-        <ScreenTabs label="Who has access" tabs={TABS} active={tab} onChoose={(chosen) => void navigate({ to: TAB_PATHS[chosen] })} />
-        {asked !== undefined && review.error !== null ? (
-          <div className="px-6 pt-3 max-md:px-4">
-            <Alert role="status">
-              <AlertDescription>{review.error.message}</AlertDescription>
-            </Alert>
-          </div>
-        ) : null}
-        {tab === "people" ? (
-          <PeopleTab people={people.data} failure={people.error?.message} actions={actions} onRetry={() => void people.refetch()} />
-        ) : (
-          <TokensTab
-            tokens={tokens.data}
-            ended={ended.data}
-            waiting={listed ? waiting.data : undefined}
-            failure={tokens.error?.message}
-            waitingFailure={listed ? waiting.error?.message : undefined}
-            sort={sort}
-            onSort={(next) => void navigate({ to: TOKENS_PATH, search: searchOf(tokenSortQuery(next)) })}
-            onReview={(login) => openReview(login.id)}
-            actions={actions}
-            onRetry={() => void tokens.refetch()}
-          />
-        )}
-      </div>
+      <MiddleColumn gutters className="flex min-h-0 flex-1 flex-col">
+        <div {...keptFocus} className="flex min-h-0 flex-1 flex-col">
+          <ScreenTabs label="Who has access" tabs={TABS} active={tab} onChoose={(chosen) => void navigate({ to: TAB_PATHS[chosen] })} />
+          {asked !== undefined && review.error !== null ? (
+            <div className="px-6 pt-3 max-md:px-4">
+              <Alert role="status">
+                <AlertDescription>{review.error.message}</AlertDescription>
+              </Alert>
+            </div>
+          ) : null}
+          {tab === "people" ? (
+            <PeopleTab people={people.data} failure={people.error?.message} actions={actions} onRetry={() => void people.refetch()} />
+          ) : (
+            <TokensTab
+              tokens={tokens.data}
+              ended={ended.data}
+              waiting={listed ? waiting.data : undefined}
+              failure={tokens.error?.message}
+              waitingFailure={listed ? waiting.error?.message : undefined}
+              sort={sort}
+              onSort={(next) => void navigate({ to: TOKENS_PATH, search: searchOf(tokenSortQuery(next)) })}
+              onReview={(login) => openReview(login.id)}
+              actions={actions}
+              onRetry={() => void tokens.refetch()}
+            />
+          )}
+        </div>
+      </MiddleColumn>
       <ReviewDialog
         login={asked === undefined ? undefined : review.data}
         actions={actions}

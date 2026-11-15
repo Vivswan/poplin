@@ -7,6 +7,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useFocusHome } from "@/lib/focus";
 import { useChosenTimeZone } from "@/lib/timezone";
 import { LeaveGuard } from "@/shared/leave-guard";
+import { MiddleColumn } from "@/shared/middle-column";
 import { SaveBar } from "@/shared/save-bar";
 import { type AddressDraft, useAddressDraft } from "@/settings/address-draft";
 import { settingAnchor, settingOfAnchor } from "@/settings/setting-address";
@@ -16,9 +17,6 @@ import { type Settings, useSettings } from "@/settings/settings-queries";
 import { blocksOf, UPDATES } from "@/settings/settings-words";
 import { ADDRESS_FIELD, UpdateAddressRow } from "@/settings/update-address";
 import { AppShell } from "@/shell/app-shell";
-
-/** The column the page is read in: no wider than this, so a name and its control are never a whole screen apart, and in the middle of a wider screen. The rows ask how wide it is. */
-const COLUMN = "@container mx-auto w-full max-w-[1100px]";
 
 /** A group: its heading over its rows, and a line between it and the group before. */
 const GROUP = "mt-5 border-t pt-5 first-of-type:mt-0 first-of-type:border-t-0 first-of-type:pt-0";
@@ -163,16 +161,16 @@ export function SettingsScreen(): ReactNode {
           onFocusCapture={(event) => {
             last.current = event.target;
           }}
-          className="line-room min-h-0 flex-1 overflow-y-auto px-6 pt-2 pb-12 max-md:px-4"
+          className="line-room min-h-0 flex-1 overflow-y-auto px-6 pt-2 pb-12 [scrollbar-gutter:stable] max-md:px-4"
         >
-          <div className={COLUMN}>
+          <MiddleColumn>
             <p className="mb-5 text-muted-foreground">How this install treats new sites, visitors, limits, and updates.</p>
             {error === null ? null : <p className="py-8 text-muted-foreground">{error.message}</p>}
             {settings === undefined && error === null ? <Waiting /> : null}
             {settings === undefined ? null : <Groups settings={settings} draft={draft} address={address} marked={marked} />}
-          </div>
+          </MiddleColumn>
         </div>
-        <SaveBar count={count} busy={busy} onDiscard={discard} column={COLUMN} />
+        <SaveBar count={count} busy={busy} onDiscard={discard} />
       </form>
       <LeaveGuard unsaved={count > 0} />
     </AppShell>
