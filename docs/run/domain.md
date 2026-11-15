@@ -61,6 +61,6 @@ Three settings save without these permissions. The dashboard has them in Setting
 
 | Setting                  | In the dashboard     |
 | ------------------------ | -------------------- |
-| `search_engines_allowed` | Allow search engines |
+| `search_engines_allowed` | Let search engines in |
 | `outside_pages`          | Allow embedding      |
 | `block_bots`             | Block bots           |
