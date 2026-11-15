@@ -7,3 +7,5 @@ paths:
     ignore:
       # actionlint's permission-scope list lacks `vulnerability-alerts` (rhysd/actionlint#666); drop when it knows the scope.
       - 'unknown permission scope "vulnerability-alerts"'
+      # actionlint's syntax check lacks the `queue` key of `concurrency` (rhysd/actionlint#654); drop when it knows the key.
+      - 'unexpected key "queue" for "concurrency" section'

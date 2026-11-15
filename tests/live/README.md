@@ -6,51 +6,46 @@ The checks of a deployed install: a stranger's requests over HTTPS, and a token 
 | ------------------------------------------------- | ------------------------------------------------------------------------- | ------------------------------------------------------------------------- |
 | check the checks themselves, against a local fake | `bun test ./tests/live`                                                   | nothing                                                                   |
 | check an install of your own                      | `bun run live`                                                            | `POPLIN_LIVE_DOMAIN`, and `POPLIN_LIVE_TOKEN` for the checks that publish |
-| check the test install                            | the `Live Checks` workflow: after a green main that reaches it, or by hand | the `cloudflare-live-tests` environment                                   |
+| check the test install                            | the `Live Checks` workflow: after a push to main that reaches it, or by hand | the `cloudflare-live-tests` environment                                   |
 
 ```text
 Live Checks workflow
-  packages/cloudflare/scripts/live/decide.ts     the files of every commit since the last green deploy -> run, or skip
+  the `paths` list of the workflow                the files of the push -> a run, or none
+  gh run watch                                   the CI of the commit ended green, or the run stops red
   build the Worker bundle
   packages/cloudflare/scripts/live/converge.ts   bucket, database, login, wrangler deploy, the Domain tab's repair
   packages/cloudflare/scripts/live/suite.ts      a token for the run -> bun test tests/live/live.test.ts -> the token removed
   packages/cloudflare/scripts/live/reset.ts      a token for the reset -> the install put back -> every token removed
-  step summary                                   one line of the decision, one table of the install's pieces, one of the checks, one of the reset
+  step summary                                   one table of the install's pieces, one of the checks, one of the reset
 ```
 
 ## What starts a run
 
-| A green main that changed                                                                    | Deploy and checks |
+| A push to main that changed                                                                  | Deploy and checks |
 | -------------------------------------------------------------------------------------------- | ----------------- |
-| `packages/{core,app,cloudflare,demo,cli}/**`, tests included                                 | run               |
+| `packages/**`, tests included                                                                | run               |
 | `demo/**`, `tests/live/**`                                                                   | run               |
 | `wrangler.jsonc`, the root `package.json`, `bun.lock`, `.bun-version`, `tsconfig*`           | run               |
 | `.github/workflows/live-checks.yml`, `.github/actions/setup/**`, `.gitattributes`            | run               |
-| a file in no row of the table in `decide.ts`                                                 | run               |
-| only `website/**`, `docs/**`, `brand/**`, `skills/**`, `*.md` at the root                    | skip              |
-| only the rest of `.github/**`, `.githooks/**`, the root test guards, the other folders of `tests/` | skip              |
-| only the settings of lint, review, and release tools at the root                             | skip              |
+| a file no `!` line of the workflow's `paths` list names                                       | run               |
+| only `website/**`, `docs/**`, `brand/**`, `skills/**`, `*.md` at the root                    | no run            |
+| only the rest of `.github/**`, `.githooks/**`, the root test guards, `tests/{fuzz,release-pipeline,support}/**` | no run |
+| only the settings of lint, review, and release tools at the root                             | no run            |
 
-The table in `decide.ts` holds every row. A test fails when a file of the repository is in none.
+The `paths` list of `.github/workflows/live-checks.yml` holds every row. The files are those of the one push, first commit to last. GitHub reads the first 3,000 changed files of a push, and a push of more than 1,000 commits always starts a run.
 
-| Also                                                             | Deploy and checks                        |
-| ---------------------------------------------------------------- | ---------------------------------------- |
-| a run started by hand                                            | run                                      |
-| the last run that touched the install did not end green          | run                                      |
-| a midnight reset after the last deploy ended red                 | run                                      |
-| no earlier deploy is found, or its commit is not in main         | run                                      |
-| GitHub does not answer the decision                              | run                                      |
-| 00:00 UTC                                                        | neither: the reset alone, every day      |
+| Also                                                   | What happens                                                         |
+| ------------------------------------------------------ | -------------------------------------------------------------------- |
+| a run started by hand                                  | deploy and checks, with no wait for CI                               |
+| a push that starts no run                              | no row in the list of runs, and no tick on the commit                |
+| the commit's CI did not end green                      | a red run: nothing deployed, no call to Cloudflare                   |
+| a run ended red                                        | it stays red until it is run again by hand, or a later push starts a run |
+| a newer push while an older push's run has not started | the older run is cancelled, the newer one deploys both               |
+| 00:00 UTC                                              | the reset alone, every day; it waits its turn and replaces no run    |
 
-The files are those of every commit after the last run that deployed and ended green. A change one run skipped still counts for the next, and so does a file changed and put back.
+The install is made from the commit of the push, the one whose CI ended green. Running a red run again makes the install from that same commit.
 
-A skip ends green, with a notice and one line of the step summary. It makes no call to Cloudflare.
-
-```text
-Live checks skipped: no file that reaches the test install changed since 0a1b2c3 (2 files, e.g. docs/using.md)
-```
-
-The midnight reset first waits, in `lane.ts`, until no run of the checks is queued or running. The lane holds one waiting job, and a reset that joined it then would take the place of the checks that wait. A lane busy for an hour ends that run red, with no reset.
+One job touches the install at a time. The checks and the midnight reset wait in one lane that keeps every waiting job, so neither takes the other's place.
 
 ## The test install
 

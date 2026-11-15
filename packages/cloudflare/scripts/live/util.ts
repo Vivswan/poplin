@@ -1,10 +1,9 @@
-// What the live scripts share: the account a run acts on, the one way a line leaves the process, the zone the install lives on, and the runs of the workflow as GitHub lists them.
+// What the live scripts share: the account a run acts on, the one way a line leaves the process, and the zone the install lives on.
 //
 // Every value that names the account, the zone, or a login is hidden before anything is printed: the runner masks it, and each line is rewritten here as well.
 
 import { appendFileSync } from "node:fs";
 import * as core from "@actions/core";
-import * as v from "valibot";
 
 import { type CloudflareFailure, type Connection, listZones, type Zone } from "../../src/zone/client";
 import { type DomainLayout, parseDomainLayout } from "../../src/zone/layout";
@@ -17,20 +16,6 @@ const ANNOTATE = { error: core.error, warning: core.warning, notice: core.notice
 
 /** The statuses Cloudflare refuses a token with that lacks a permission. */
 const NOT_PERMITTED: ReadonlySet<number> = new Set([401, 403]);
-
-/** The workflow's file, as the GitHub API names it. */
-const WORKFLOW = "live-checks.yml";
-
-/** How many of the workflow's newest runs are read. */
-const RUNS_READ = 100;
-
-/** The runs of the workflow, as the API lists them. */
-const Runs = v.object({
-  workflow_runs: v.array(v.object({ id: v.number(), head_sha: v.string(), event: v.string(), status: v.nullable(v.string()), conclusion: v.nullable(v.string()) })),
-});
-
-/** One GET of the GitHub API, parsed; it rejects when GitHub refuses or does not answer. */
-export type Ask = (path: string) => Promise<unknown>;
 
 /** One run of a live script: the account, the token for the one call, and the ways out of the process. */
 export interface Run {
@@ -74,29 +59,6 @@ export interface Found {
 /** Tell a stop from what a step answers when it went on. */
 export function isStop(value: object): value is Stop {
   return "kind" in value && (value.kind === "skipped" || value.kind === "failed");
-}
-
-/**
- * Ask the GitHub API through `gh`, with the token of its environment.
- *
- * @throws {Error} what `gh` said, when GitHub refuses or does not answer
- */
-export async function askGitHub(path: string): Promise<unknown> {
-  const child = Bun.spawn(["gh", "api", path], { stdout: "pipe", stderr: "pipe" });
-  const [code, out, problem] = await Promise.all([child.exited, new Response(child.stdout).text(), new Response(child.stderr).text()]);
-  if (code !== 0) throw new Error(problem.trim());
-
-  return JSON.parse(out);
-}
-
-/**
- * List the newest runs of the live workflow on main.
- *
- * @param env - names the repository, in `GITHUB_REPOSITORY`
- * @returns each run's id, commit, event, status, and conclusion; the run that asks is among them
- */
-export async function liveRuns(env: Readonly<Record<string, string | undefined>>, ask: Ask): Promise<v.InferOutput<typeof Runs>["workflow_runs"]> {
-  return v.parse(Runs, await ask(`repos/${env.GITHUB_REPOSITORY}/actions/workflows/${WORKFLOW}/runs?branch=main&per_page=${RUNS_READ}`)).workflow_runs;
 }
 
 function required(env: Readonly<Record<string, string | undefined>>, name: string): string {
