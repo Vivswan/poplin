@@ -23,7 +23,7 @@ describe("a time of the dashboard", () => {
 
   // Drift: a day near midnight would be told as the UTC day under the browser's own time zone, or the other way round.
   test.each([
-    ["own", "\u20071 Jan 2027"],
+    ["own", "01 Jan 2027"],
     ["utc", "31 Dec 2026"],
   ] as const)("names the day of a moment in the timeZone chosen: %s", (choice, day) => {
     expect(dayIn(Date.UTC(2026, 11, 31, 23, 30), choice, OWN)).toBe(day);

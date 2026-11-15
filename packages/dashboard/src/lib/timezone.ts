@@ -6,12 +6,6 @@ import useLocalStorageState from "use-local-storage-state";
 /** The key the choice is kept under in the browser. */
 const KEY = "poplin.timezone";
 
-/** A space as wide as a figure. */
-const FIGURE_SPACE = "\u2007";
-
-/** A written day that starts with one figure. */
-const ONE_FIGURE_DAY = /^\d\D/;
-
 /** The time zones a person chooses between: the browser's own, and UTC. */
 export const TIMEZONES = ["own", "utc"] as const;
 
@@ -61,16 +55,14 @@ export function momentIn(moment: number, choice: TimeZoneChoice = shown, own?: s
 }
 
 /**
- * Write the day of a moment in the chosen time zone: 14 Nov 2026. A day of one figure has a space as wide as a figure before it, so the days of a column stand under each other, and the times after them too.
+ * Write the day of a moment in the chosen time zone: 14 Nov 2026, 06 Nov 2026. The day always has two figures, so the days of a column stand under each other from its left edge.
  *
  * @param moment - milliseconds since the epoch
  * @param choice - the time zone to write in; left out, the one a person chose
  * @param own - the name of the browser's own time zone; left out, the browser's
  */
 export function dayIn(moment: number, choice: TimeZoneChoice = shown, own?: string): string {
-  const written = new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short", year: "numeric", timeZone: timeZoneOf(choice, own) }).format(moment);
-
-  return ONE_FIGURE_DAY.test(written) ? `${FIGURE_SPACE}${written}` : written;
+  return new Intl.DateTimeFormat("en-GB", { day: "2-digit", month: "short", year: "numeric", timeZone: timeZoneOf(choice, own) }).format(moment);
 }
 
 /**
