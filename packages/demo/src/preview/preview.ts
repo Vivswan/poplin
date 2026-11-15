@@ -47,8 +47,8 @@ const FREE_LIMITS = {
   logins: { most: 50, warning: "above the 50 users the sample host takes for free; a real host bills users past its own" },
 } as const;
 
-/** When the sample release the seeded install knows of came out, and where its notes are. No such release exists. */
-const SAMPLE_RELEASE = { released: "2026-12-01", notes: "https://example.com/changelog/", database: false } as const;
+/** When the sample release the seeded install knows of came out, and where its notes are: the page of the project's releases. No such release exists. */
+const SAMPLE_RELEASE = { released: "2026-12-01", notes: "https://github.com/Vivswan/poplin/releases", database: false } as const;
 
 /** The address the seeded install keeps as the one that starts its rebuild. Nothing is there, and nothing is ever sent to it. */
 const SAMPLE_REBUILD = "https://provider.example/rebuilds/sample";

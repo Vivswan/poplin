@@ -45,8 +45,8 @@ const CLIENT: Parameters<typeof createPreview>[0]["client"] = {
 /** Every screen of the dashboard, by the path that shows it. */
 const SCREENS = ["/", "/tokens", "/activity", "/usage", "/settings", "/domain"];
 
-/** Any address at the install's own domain, which no answer may send a browser to. The notes of the sample release are the one address there on purpose. */
-const INSTALL_ADDRESS = /https?:\/\/[a-z0-9.-]*example\.com(?!\/changelog\/)[^"]*/g;
+/** Any address at the install's own domain, which no answer may send a browser to. */
+const INSTALL_ADDRESS = /https?:\/\/[a-z0-9.-]*example\.com[^"]*/g;
 
 /** A running preview. */
 type Preview = Awaited<ReturnType<typeof createPreview>>;
@@ -335,6 +335,6 @@ describe("the local preview", () => {
     const preview = await openPreview(false);
     const who = await preview.fetch(new Request(`${ORIGIN}/api/whoami`, { headers: { Authorization: `Bearer ${preview.token()}` } }));
 
-    expect(((await who.json()) as { update?: unknown }).update).toEqual({ current: VERSION, newest: "1.1.0", released: "2026-12-01", notes: "https://example.com/changelog/", database: false });
+    expect(((await who.json()) as { update?: unknown }).update).toEqual({ current: VERSION, newest: "1.1.0", released: "2026-12-01", notes: "https://github.com/Vivswan/poplin/releases", database: false });
   });
 });

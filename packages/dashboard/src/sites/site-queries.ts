@@ -44,11 +44,16 @@ export function useSitesPage(query: URLSearchParams): UseQueryResult<Page> {
   return useQuery({ queryKey: [...SITES_KEY, "page", asked], queryFn: () => answerOf(api.sites.$get({ query: asked })), placeholderData: keepPreviousData });
 }
 
+/** The key one site's data is kept under, by the site's label. */
+export function siteKey(label: string): readonly unknown[] {
+  return [...SITES_KEY, "one", label];
+}
+
 /**
  * Read one site.
  *
  * @param label - the site's label, from the address
  */
 export function useSite(label: string): UseQueryResult<Shown> {
-  return useQuery({ queryKey: [...SITES_KEY, "one", label], queryFn: () => answerOf(api.sites[":site"].$get({ param: { site: label } })) });
+  return useQuery({ queryKey: siteKey(label), queryFn: () => answerOf(api.sites[":site"].$get({ param: { site: label } })) });
 }

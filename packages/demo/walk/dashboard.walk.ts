@@ -1,8 +1,8 @@
-// The link walk: every place the dashboard's own controls lead to, on a wide screen and on a phone, in the light scheme and in the dark one. Nothing is changed: a question is opened and left.
+// The link walk: every place the dashboard's own controls lead to, on a wide screen and on a phone, in the light scheme and in the dark one. A question is opened and left, so nothing is changed until the last stop, which starts the sample data over.
 
 import { expect, type Locator, type Page } from "@playwright/test";
 
-import { arrive, screenHeading, siteLink, test } from "./visit";
+import { arrive, said, screenHeading, siteLink, test } from "./visit";
 
 /** The screens the walk is taken on. A wide one shows tables and the side navigation; a narrow one shows lists, and the sections behind a button. */
 const VIEWPORTS = [
@@ -15,6 +15,9 @@ const SCHEMES = ["light", "dark"] as const;
 
 /** What the sample data holds that the walk opens: an unlisted site, a person who is not the visitor, a token, and a login that waits. */
 const SAMPLE = { site: "pricing", person: "jonas@example.com", token: "design-laptop", login: "build-server" } as const;
+
+/** Where the notes of a newer version are read: the page of the project's releases. */
+const RELEASES = "https://github.com/Vivswan/poplin/releases";
 
 /** An email typed into the field that adds a person, and never sent. */
 const TYPED_EMAIL = "walk@example.com";
@@ -31,6 +34,12 @@ const STOPS: readonly Stop[] = [
     name: "Sites, from the side",
     open: (page) => toSection(page, "Sites"),
     shows: (page) => [screenHeading(page, "Sites"), siteLink(page, SAMPLE.site)],
+  },
+  {
+    name: "the notes of the newer version, at the side",
+    only: "wide",
+    open: async () => {},
+    shows: (page) => [page.locator(`a[href="${RELEASES}"][target="_blank"][rel="noreferrer"]`, { hasText: "What changed" })],
   },
   {
     name: "Access, from the side",
@@ -196,6 +205,11 @@ const STOPS: readonly Stop[] = [
         .getByRole("dialog", { name: `Allow ${SAMPLE.login}?`, exact: true })
         .getByRole("button", { name: "Close", exact: true })
         .click(),
+  },
+  {
+    name: "a reset of the sample data, which keeps the screen it was pressed on",
+    open: (page) => page.getByRole("button", { name: "Reset", exact: true }).click(),
+    shows: (page) => [said(page, "Sample data reset."), screenHeading(page, "Access")],
   },
 ];
 

@@ -1,7 +1,7 @@
 // The frame every screen sits in: the sections at the side, what the domain needs and the account at its foot, and the working area. On a phone the sections are behind a button at the top.
 
 import { useQueryClient } from "@tanstack/react-query";
-import { Link, useLocation, useNavigate } from "@tanstack/react-router";
+import { Link, useLocation, useNavigate, useParams } from "@tanstack/react-router";
 import { cn } from "cn";
 import {
   ActivityIcon,
@@ -41,6 +41,7 @@ import { BOOT } from "@/lib/boot";
 import { useFrame, useStarted } from "@/lib/frame";
 import { sayDone, sayRefused, send } from "@/lib/notify";
 import { Confirm, type Question } from "@/shared/confirm";
+import { siteKey } from "@/sites/site-queries";
 
 /** The sections, in the order shown, each with the path of its first screen. A section that holds more screens names them all, the first one included. */
 const SECTIONS = [
@@ -205,6 +206,7 @@ function DomainNote({ onGo }: { readonly onGo?: () => void }): ReactNode {
 function DemoTag(): ReactNode {
   const client = useQueryClient();
   const navigate = useNavigate();
+  const { label: opened } = useParams({ strict: false });
   if (BOOT.demo === null) return null;
 
   const { reset } = BOOT.demo;
@@ -213,8 +215,10 @@ function DemoTag(): ReactNode {
     // The reset answers with a redirect, which is not followed here: any other answer but a done one is a failure.
     if (answered === undefined || (answered.type !== "opaqueredirect" && !answered.ok)) return sayRefused("The sample data was not reset. Try again.");
 
-    void navigate({ to: "/" });
+    // The screen stays where it is and reads its data again. Only the panel of a site the sample data no longer holds is closed.
     await client.invalidateQueries();
+    if (opened !== undefined && client.getQueryState(siteKey(opened))?.status === "error") void navigate({ to: "/", search: true });
+
     sayDone("Sample data reset.");
   };
 
