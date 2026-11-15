@@ -85,6 +85,7 @@
     "packages/demo": {
       "name": "@poplin/demo",
       "dependencies": {
+        "cookie": "2.0.2",
         "hono": "4.13.18",
         "idb-keyval": "6.3.0",
         "sql.js": "1.16.0",

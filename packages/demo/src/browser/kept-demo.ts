@@ -4,6 +4,7 @@
 //
 // It also stands where a server would between the browser and the demo. A browser hides `Cookie` and `Origin` from a worker and takes no `Set-Cookie` from one, so the cookies live here.
 
+import { parseSetCookie, stringifyCookie } from "cookie";
 import type { SqlJsStatic } from "sql.js";
 
 import { insidePath } from "../preview/base";
@@ -26,6 +27,9 @@ const REASON_AT = "The console of this page's service worker, in the browser's d
 
 /** The bytes of a secret that signs one install's forms. */
 const SECRET_BYTES = 32;
+
+/** A cookie's value is kept and sent back as it was written, as a browser does. */
+const AS_WRITTEN = { decode: (value: string): string => value, encode: (value: string): string => value };
 
 /** Everything a demo holds, in the order its installs were opened. Structured cloning carries it whole. */
 export interface SavedDemo {
@@ -91,11 +95,10 @@ function held<Item>(list: Item[], item: Item): Item {
 /** Keep what an answer sets as cookies: the name and the value of each, without its attributes. */
 function keepCookies(response: Response, cookies: Record<string, string>): void {
   for (const line of response.headers.getSetCookie()) {
-    const [pair = ""] = line.split(";");
-    const cut = pair.indexOf("=");
-    if (cut < 1) continue;
+    const { name, value } = parseSetCookie(line, AS_WRITTEN);
+    if (name === "" || value === undefined) continue;
 
-    cookies[pair.slice(0, cut).trim()] = pair.slice(cut + 1).trim();
+    cookies[name] = value;
   }
 }
 
@@ -112,8 +115,7 @@ function deepLink(request: Request, base: string): string | undefined {
 /** The request with the headers a browser sends a server and hides from a worker. */
 async function serverRequest(request: Request, cookies: Readonly<Record<string, string>>): Promise<Request> {
   const headers = new Headers(request.headers);
-  const cookie = Object.entries(cookies).map(([name, value]) => `${name}=${value}`);
-  if (cookie.length > 0) headers.set("Cookie", cookie.join("; "));
+  if (Object.keys(cookies).length > 0) headers.set("Cookie", stringifyCookie(cookies, AS_WRITTEN));
 
   if (request.method === "GET" || request.method === "HEAD") return new Request(request.url, { method: request.method, headers });
 
