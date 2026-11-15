@@ -14,7 +14,7 @@ npx poplin config
 npx poplin config trash_days 30
 ```
 
-The dashboard's Settings screen changes the same settings, all but `logins`: change them, then press Save in the bar at the foot.
+The dashboard's Settings screen changes the same settings, all but `logins`: change them, then press Save in the bar at the foot. Each setting is a row that shows its default, as `(Default: 9,000 MB)`. Reset, beside a default the row differs from, puts it back.
 
 | Heading    | Settings                                                                                           |
 | ---------- | -------------------------------------------------------------------------------------------------- |
@@ -100,6 +100,18 @@ An install begins five logins a minute for all computers together. In a minute t
 A computer keeps one saved login: a new `poplin login` replaces it. An agent on the computer uses that login and does not log in itself. `POPLIN_SERVER` and `POPLIN_TOKEN` in the environment stand in for a saved login.
 
 `POPLIN_CONFIG_DIR` in the environment names another folder for the saved login, read when the two names above are not set. Set for an agent's tools alone, it gives the agent a login of its own, which shows under its own name: [the skill's page](../../skills/poplin/references/mcp-server.md#optional-a-login-of-your-own) has the step.
+
+## Tokens
+
+A computer's login is a token. The dashboard lists them under Access, Tokens.
+
+| In the list                    | Shows                                                                      |
+| ------------------------------ | -------------------------------------------------------------------------- |
+| a token that works             | its name, what it can change, when it was allowed, when it runs out        |
+| Remove, in the menu of its row | ends it at once                                                            |
+| Removed tokens, folded         | the 50 that ended last, each with `Removed by` and who did it, `Logged out`, or `Ran out` |
+
+A removed token never logs in again, and nothing brings it back: `poplin login` makes a new one. `Logged out` is a token that `poplin logout` gave back. [Security](../about/security.md#hardening) says what the install stores of a token.
 
 `--publisher` is for a computer or a script that should only publish, such as a build server or a shared machine.
 

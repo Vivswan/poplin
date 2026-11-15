@@ -139,7 +139,7 @@ Poplin's icon is answered only for a site the address may open. Every address ab
 | the login of a private site | Cloudflare Access's cookie, HttpOnly and SameSite Lax, one per site hostname, 30 days |
 | a removed login | the Worker checks the email against the allowed logins on every request: the dashboard stops at once, a private site within one minute, whatever session Access still holds |
 | writes to the dashboard | the Origin header must be the dashboard itself; the CLI and `poplin mcp` use bearer tokens, never the cookie |
-| tokens at rest | stored hashed; an admin token expires after 30 days, a publisher token lives until revoked. A removed token can never be used again; Access lists the 50 tokens that ended last, each with who removed it |
+| tokens at rest | a token itself is never stored: the database keeps its SHA-256 hash. An admin token runs out after 30 days, a publisher token lives until it is removed. A removed token's row is kept, and it never logs in again; [Removed tokens](../run/settings.md#tokens) lists the 50 that ended last |
 | the signing key | kept in the database, where the Worker can rotate it; Sign everyone out, under Access, rotates it and ends every dashboard session. A private site's login is Access's own: removing the login ends it. A computer's token is revoked on its own |
 | the bucket and the database | R2 public access stays off; the database is reached only through the Worker's binding |
 | site headers | `X-Content-Type-Options: nosniff`, `Referrer-Policy: no-referrer`, correct content types |
