@@ -13,60 +13,57 @@ const VERSION = "1.0.0";
 /** The address a visitor's browser shows the demo at. */
 const HOME = "https://example.com/poplin/demo";
 
-/** The hidden field of a form that holds its signed token. */
-const FORM_TOKEN = /name="csrf" value="([^"]+)"/;
-
-/** What a dashboard page carries once its browser chose the dark scheme. */
-const SHOWN_DARK = 'data-theme="dark"';
+/** A stand-in for the dashboard's built client, which a browser's host serves as files. */
+const CLIENT: Parameters<typeof openKeptDemo>[0]["client"] = {
+  entry: async () => ({ script: "app-test.js", style: "app-test.css" }),
+  file: async (name) => (name === "app-test.js" ? { body: "// the client", type: "text/javascript; charset=utf-8" } : undefined),
+};
 
 type Demo = Awaited<ReturnType<typeof openKeptDemo>>;
 
 async function open(saved?: ReturnType<Demo["save"]>): Promise<Demo> {
-  return openKeptDemo({ sqlite: SQLITE, samples: await readSamples(), version: VERSION, base: "/poplin/demo", saved });
+  return openKeptDemo({ sqlite: SQLITE, samples: await readSamples(), version: VERSION, base: "/poplin/demo", client: CLIENT, saved });
 }
 
-async function page(demo: Demo, path: string): Promise<string> {
-  return (await demo.fetch(new Request(`${HOME}${path}`))).text();
+/** The labels of the sites a list of the dashboard holds, by their names. */
+async function labels(demo: Demo, query = ""): Promise<Readonly<Record<string, string>>> {
+  const { sites } = (await (await demo.fetch(new Request(`${HOME}/data/sites${query}`))).json()) as { sites: readonly { readonly name: string; readonly label: string }[] };
+
+  return Object.fromEntries(sites.map((site) => [site.name, site.label]));
 }
 
-/** The dashboard page of a site, as the home page links it. */
-async function sitePage(demo: Demo, name: string): Promise<string> {
-  const [, path = ""] = new RegExp(`href="/poplin/demo(/sites/${name}--[^"]*)"`).exec(await page(demo, "/")) ?? [];
-
-  return path;
+/** Send a change as a browser hands it to a worker: the client's JSON, with no `Origin` and no `Cookie`. */
+function send(demo: Demo, path: string): Promise<Response> {
+  return demo.fetch(new Request(`${HOME}${path}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" }));
 }
 
-/** Send a form as a browser hands it to a worker: with no `Origin` and no `Cookie`. */
-function send(demo: Demo, path: string, token: string, fields: Readonly<Record<string, string>> = {}): Promise<Response> {
-  const body = new URLSearchParams({ ...fields, csrf: token }).toString();
-
-  return demo.fetch(new Request(`${HOME}${path}`, { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body }));
-}
-
-test("a demo opened from a save goes on where the first was, and one saved after a reset starts over: without this a worker the browser stopped comes back with other data, and a page open since before refuses its own form", async () => {
+test("a demo opened from a save goes on where the first was, takes a change from a page open since before, and one saved after a reset starts over: without this a worker the browser stopped comes back with other data", async () => {
   const first = await open();
-  const trashed = await sitePage(first, "checkout");
-  const kept = await sitePage(first, "handbook");
-  const [, token = ""] = FORM_TOKEN.exec(await page(first, kept)) ?? [];
-  const sent = await send(first, `${trashed}/delete`, FORM_TOKEN.exec(await page(first, trashed))?.[1] ?? "");
-  const switched = await send(first, "/theme", token, { theme: "dark", back: "/" });
+  const seeded = await labels(first);
+  const sent = await send(first, `/data/sites/${seeded.checkout}/delete`);
 
   const second = await open(first.save());
-  const later = await send(second, `${kept}/delete`, token);
-  const trash = await page(second, "/?view=trash");
-  const dark = await page(second, "/");
+  const later = await send(second, `/data/sites/${seeded.handbook}/delete`);
+  const trash = await labels(second, "?view=trash");
 
   await second.fetch(new Request(`${HOME}/reset`, { method: "POST" }));
   const third = await open(second.save());
+  const again = await labels(third);
 
-  expect([sent.status, sent.headers.get("Location")]).toEqual([303, `/poplin/demo/?done=trashed&site=${trashed.slice("/sites/".length)}`]);
-  expect([switched.status, switched.headers.get("Location")]).toEqual([303, "/poplin/demo/"]);
-  expect([later.status, later.headers.get("Location")]).toEqual([303, `/poplin/demo/?done=trashed&site=${kept.slice("/sites/".length)}`]);
-  expect([trash.includes(trashed), trash.includes(kept)]).toEqual([true, true]);
-  expect([(await page(first, "/")).includes(SHOWN_DARK), dark.includes(SHOWN_DARK)]).toEqual([true, true]);
-  expect(await sitePage(third, "checkout")).not.toBe("");
-  expect(await page(third, "/?view=trash")).not.toContain("/sites/checkout--");
-  expect(new Set((await page(third, "/")).match(/\/sites\/handbook--[a-z0-9]+/g)).size).toBe(1);
+  expect([sent.status, later.status]).toEqual([200, 200]);
+  expect([trash.checkout, trash.handbook]).toEqual([seeded.checkout, seeded.handbook]);
+  expect([again.checkout === undefined, again.checkout === seeded.checkout, Object.keys(await labels(third, "?view=trash")).includes("checkout")]).toEqual([false, false, false]);
+});
+
+// Drift: the page the worker answers names the client's files under the demo's own folder, and the worker hands each out from its host. A page that named them at the origin's root would load no script on a host that keeps the demo under a path.
+test("the dashboard's page links the client's files under the demo's folder, and the demo answers them from what its host hands it", async () => {
+  const demo = await open();
+  const page = await (await demo.fetch(new Request(`${HOME}/empty/`))).text();
+  const script = await demo.fetch(new Request(`${HOME}/empty/assets/app-test.js`));
+
+  expect(page).toContain('<script type="module" src="/poplin/demo/empty/assets/app-test.js"></script>');
+  expect(page).toContain('"base":"/poplin/demo/empty"');
+  expect([script.status, await script.text(), (await demo.fetch(new Request(`${HOME}/assets/other.js`))).status]).toEqual([200, "// the client", 404]);
 });
 
 test("a deep link that comes back as `?to=` is sent on to its page inside the demo: without this a forced reload of a page inside the demo ends on the home page", async () => {
@@ -90,7 +87,7 @@ test.each([
   ["at the root of its origin", ""],
   ["under a base path", "/poplin/demo"],
 ])("whatever `to` an address names, the demo %s redirects only to a place of its own folder", async (_, base) => {
-  const demo = await openKeptDemo({ sqlite: SQLITE, samples: await readSamples(), version: VERSION, base });
+  const demo = await openKeptDemo({ sqlite: SQLITE, samples: await readSamples(), version: VERSION, base, client: CLIENT });
   const origin = "https://example.com";
   const inside = (location: string, asked: string): boolean => {
     const target = new URL(location, asked);
@@ -120,7 +117,7 @@ test.each([
 
 test("a served page's `Clear-Site-Data` stays inside the demo: without this the demo tells a browser to drop the cache of the whole origin, which holds the website's own pages", async () => {
   const stale = { "If-None-Match": '"v9-stale"' };
-  const control = await createPreview({ openDriver: () => new SqlJsDriver(SQLITE), samples: await readSamples(), version: VERSION });
+  const control = await createPreview({ openDriver: () => new SqlJsDriver(SQLITE), samples: await readSamples(), version: VERSION, client: CLIENT });
   const demo = await open();
 
   expect((await control.fetch(new Request("https://example.com/served/lisbon-page/", { headers: stale }))).headers.get("Clear-Site-Data")).toBe('"cache"');

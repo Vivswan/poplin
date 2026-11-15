@@ -11,10 +11,16 @@ import { codeCounts, FREE_LIMITS, ORIGIN, openDashboard, VERSION } from "../../d
 /** The one host the test console's provider starts rebuilds at. */
 export const REBUILD_HOST = "rebuilds.example.com";
 
-/** The files the test console answers as its client's build. */
+/** The files the test console answers as its client's build, under names that hold a hash as a build's do. */
 const ASSETS: Readonly<Record<string, { readonly body: string; readonly type: string }>> = {
-  "app.js": { body: "// the client", type: "text/javascript; charset=utf-8" },
-  "app.css": { body: "/* the look */", type: "text/css; charset=utf-8" },
+  "app-4f1c.js": { body: "// the client", type: "text/javascript; charset=utf-8" },
+  "app-9d2e.css": { body: "/* the look */", type: "text/css; charset=utf-8" },
+};
+
+/** The test client as a host hands it out. */
+export const CLIENT: Parameters<typeof createConsole>[0]["client"] = {
+  entry: async () => ({ script: "app-4f1c.js", style: "app-9d2e.css" }),
+  file: async (name) => (Object.hasOwn(ASSETS, name) ? ASSETS[name] : undefined),
 };
 
 /** A test console and what the tests reach it through. */
@@ -24,6 +30,9 @@ interface Opened {
 
   /** Every address the provider was asked to start a rebuild at, in order. */
   readonly rebuilds: readonly string[];
+
+  /** Ask anything at all, as it is: no session, origin, or type is added. */
+  readonly fetch: (request: Request) => Promise<Response>;
 
   /** Ask as the owner. */
   readonly get: (path: string) => Promise<Response>;
@@ -65,7 +74,7 @@ export async function openConsole(base = "", domain?: DomainPlug): Promise<Opene
     readSession: sessionOf,
     loginPath: "/login",
     base,
-    asset: async (name) => (Object.hasOwn(ASSETS, name) ? ASSETS[name] : undefined),
+    client: CLIENT,
     freeLimits: FREE_LIMITS,
     rebuild: { accepts: (address) => address.hostname === REBUILD_HOST, fetch: startRebuild },
     demo: { reset: "/reset" },
@@ -77,6 +86,7 @@ export async function openConsole(base = "", domain?: DomainPlug): Promise<Opene
   return {
     base: opened,
     rebuilds,
+    fetch: (request) => built.fetch(request),
     get: (path) => built.fetch(new Request(`${ORIGIN}${base}${path}`, { headers: { Cookie: opened.cookie } })),
     getLoggedOut: (path) => built.fetch(new Request(`${ORIGIN}${base}${path}`)),
     change: (path, body, headers = {}) =>

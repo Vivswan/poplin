@@ -15,6 +15,9 @@ const SEAMS = {
 /** The version every install of the check is told it runs, so that no answer differs by it. */
 export const VERSION = "1.0.0";
 
+/** A stand-in for the dashboard's built client: this check asks no file of it. A tree whose preview takes no client leaves it unread. */
+const CLIENT = { entry: async () => ({ script: "app.js", style: "app.css" }), file: async () => undefined };
+
 /** The object store of a tree, as far as this check asks it. */
 interface TreeStore {
   list(options: {
@@ -30,6 +33,7 @@ type CreatePreview = (host: {
   readonly openStore: () => TreeStore;
   readonly samples: unknown;
   readonly version: string;
+  readonly client: typeof CLIENT;
 }) => Promise<{ readonly fetch: (request: Request) => Promise<Response>; readonly token: () => string }>;
 
 /** One object as a store keeps it. */
@@ -101,6 +105,7 @@ export async function seedInstall(tree: Tree): Promise<Seeded> {
     openStore: () => take(first, "store") ?? new Store(),
     samples: await readSamples(),
     version: VERSION,
+    client: CLIENT,
   });
 
   return { driver, token: preview.token(), fetch: preview.fetch, objects: () => objectsOf(store) };

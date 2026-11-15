@@ -3,6 +3,7 @@
 import { describe, expect, test } from "bun:test";
 
 import { openConsole } from "./support/console";
+import { readShell } from "./support/shell";
 
 /** What a site's data route answers. */
 interface Listed {
@@ -19,15 +20,15 @@ interface Refusal {
 }
 
 describe("the shell page", () => {
-  // Drift: a path the client draws would answer 404 from the server, or the page would link its files outside the console's base path.
-  test.each(["/", "/sites/some-site--abcdefghijkl", "/anything/else"])("answers %s with the page that loads the client under the base path", async (path) => {
+  // Drift: a path the client draws would answer 404 from the server, the page would link its files outside the console's base path or under a name the build did not write, or a browser would keep the page itself.
+  test.each(["/", "/sites/some-site--abcdefghijkl", "/anything/else"])("answers %s with the page that loads the client's files, by the names the build gave them, under the base path", async (path) => {
     const opened = await openConsole("/next");
     const response = await opened.get(path);
     const page = await response.text();
 
     expect(response.status).toBe(200);
-    expect(page).toContain('<link rel="stylesheet" href="/next/assets/app.css">');
-    expect(page).toContain('<script type="module" src="/next/assets/app.js"></script>');
+    expect(page).toContain('<link rel="stylesheet" href="/next/assets/app-9d2e.css">');
+    expect(page).toContain('<script type="module" src="/next/assets/app-4f1c.js"></script>');
     expect(response.headers.get("Cache-Control")).toBe("no-store");
   });
 
@@ -35,9 +36,8 @@ describe("the shell page", () => {
   test("hands the client its start values in a data block the browser does not run", async () => {
     const opened = await openConsole("/next");
     const page = await (await opened.get("/")).text();
-    const block = /<script type="application\/json" id="boot">(.*)<\/script>/.exec(page)?.[1] ?? "";
 
-    expect(JSON.parse(block)).toMatchObject({ base: "/next", email: opened.base.owner, version: "1.0.0", demo: { reset: "/reset" } });
+    expect((await readShell(page)).boot).toMatchObject({ base: "/next", email: opened.base.owner, version: "1.0.0", demo: { reset: "/reset" } });
   });
 
   // Drift: a page asked for without a session would be drawn, or the login would lose the address to come back to.
@@ -51,12 +51,13 @@ describe("the shell page", () => {
 });
 
 describe("the client's files", () => {
-  // Drift: the login page's visitor could not load the files, or a name the build did not write would answer something.
-  test("are answered without a session, and a file that is not there is 404", async () => {
+  // Drift: the login page's visitor could not load the files, a name the build did not write would answer something, or every page load would ask the host for the whole script again.
+  test("are answered without a session for a browser to keep for good, and a file that is not there is 404", async () => {
     const opened = await openConsole("/next");
-    const script = await opened.getLoggedOut("/assets/app.js");
+    const script = await opened.getLoggedOut("/assets/app-4f1c.js");
 
     expect([script.status, script.headers.get("Content-Type"), await script.text()]).toEqual([200, "text/javascript; charset=utf-8", "// the client"]);
+    expect(script.headers.get("Cache-Control")).toBe("public, max-age=31536000, immutable");
     expect((await opened.getLoggedOut("/assets/other.js")).status).toBe(404);
   });
 });

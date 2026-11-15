@@ -4,15 +4,19 @@
 //   sw.js           the worker: the demo, the product's own code, and the sample sites, minified
 //   sql-wasm.wasm   SQLite
 //   404.html        sends an address inside the demo through the first page, on a host that answers a missing path with it
+//   assets/         the dashboard's client: its script, its stylesheet, and its fonts, which the worker reads from the host as a browser asks for each
 //
 //   bun scripts/build.ts --out <folder>   another folder
 
+import { mkdtempDisposableSync } from "node:fs";
 import { mkdir, rm } from "node:fs/promises";
-import { join } from "node:path";
+import { tmpdir } from "node:os";
+import { dirname, join } from "node:path";
 import { parseArgs } from "node:util";
 import { gzipSync } from "node:zlib";
 
 import manifest from "../../cli/package.json" with { type: "json" };
+import { buildClient, readClient } from "./client";
 import { notFoundPage } from "./deep-links";
 import { readSamples } from "./samples";
 
@@ -28,10 +32,28 @@ const WASM = Bun.fileURLToPath(import.meta.resolve("sql.js/dist/sql-wasm-browser
 /** The characters of a build's tag. */
 const TAG_LENGTH = 12;
 
+/** The folder of the built demo that holds the dashboard's client. The worker reads the same name. */
+const CLIENT_FOLDER = "assets";
+
 /** Where a build goes. */
 interface Target {
   /** The folder to write; whatever it held is removed first. */
   readonly out: string;
+
+  /** A folder that holds a build of the dashboard's client; left out, the client is built anew into a folder that is removed afterwards. */
+  readonly client?: string;
+}
+
+/** What the worker's bundle is given in place of its names. */
+interface Defined {
+  /** Every sample site, packed. */
+  readonly samples: string;
+
+  /** The client's files, as JSON: the names of its script and stylesheet, and of every file. */
+  readonly client: string;
+
+  /** The build's tag. */
+  readonly tag: string;
 }
 
 /** One written file and what it weighs. */
@@ -52,13 +74,13 @@ async function packedSamples(): Promise<string> {
 }
 
 /** Bundle the worker with a tag in place of `BUILD`. */
-async function bundle(samples: string, tag: string): Promise<string> {
+async function bundle(defined: Defined): Promise<string> {
   const built = await Bun.build({
     entrypoints: [join(BROWSER, "worker.ts")],
     target: "browser",
     format: "iife",
     minify: true,
-    define: { BUILD: JSON.stringify(tag), PACKED_SAMPLES: samples, VERSION: JSON.stringify(manifest.version) },
+    define: { BUILD: JSON.stringify(defined.tag), CLIENT: defined.client, PACKED_SAMPLES: defined.samples, VERSION: JSON.stringify(manifest.version) },
   });
   const [script] = built.outputs;
   if (!built.success || script === undefined) throw new AggregateError(built.logs, "the demo's worker did not bundle");
@@ -73,21 +95,28 @@ async function bundle(samples: string, tag: string): Promise<string> {
  * @throws {Error} the worker did not bundle, or a sample could not be read
  */
 export async function buildDemo(target: Target): Promise<readonly Built[]> {
+  using scratch = mkdtempDisposableSync(join(tmpdir(), "poplin-client-"));
+  if (target.client === undefined) await buildClient(scratch.path);
+
+  const folder = target.client ?? scratch.path;
+  const client = await readClient(folder);
   const samples = await packedSamples();
   const wasm = new Uint8Array(await Bun.file(WASM).arrayBuffer());
 
   // The tag names the worker's own content and SQLite's file: a build of other content gets another cache and drops what an older one saved.
-  const untagged = await bundle(samples, "");
+  // The worker names the client's script and stylesheet by the hash of each, so another client is another tag too.
+  const untagged = await bundle({ samples, client: JSON.stringify(client), tag: "" });
   const tag = new Bun.CryptoHasher("sha256").update(untagged).update(wasm).digest("hex").slice(0, TAG_LENGTH);
   const files: Record<string, string | Uint8Array> = {
     "index.html": await Bun.file(join(BROWSER, "index.html")).text(),
-    "sw.js": await bundle(samples, tag),
+    "sw.js": await bundle({ samples, client: JSON.stringify(client), tag }),
     "sql-wasm.wasm": wasm,
     "404.html": notFoundPage("/"),
   };
+  for (const name of client.names) files[`${CLIENT_FOLDER}/${name}`] = new Uint8Array(await Bun.file(join(folder, name)).arrayBuffer());
 
   await rm(target.out, { recursive: true, force: true });
-  await mkdir(target.out, { recursive: true });
+  await Promise.all(Object.keys(files).map((name) => mkdir(dirname(join(target.out, name)), { recursive: true })));
   await Promise.all(Object.entries(files).map(([name, content]) => Bun.write(join(target.out, name), content)));
 
   return Object.entries(files).map(([name, content]) => {

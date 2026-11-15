@@ -7,9 +7,10 @@
 // The page answers on the admin hostname and on the Worker's own workers.dev address, which is the only one that resolves before setup made the records.
 // A Worker with nothing set answers the page on every hostname: it has no domain yet to tell one from another.
 
-import { createSetup } from "@poplin/app/src/dashboard/domain/setup";
+import { createSetupConsole } from "@poplin/app/src/console/setup-console";
 import { visitorKey } from "@poplin/app/src/limits/visitor-key";
 import { clientAddress } from "../limits/client-address";
+import { CLIENT_FILES } from "./client-files";
 import type { Held } from "./held";
 import type { Instance, Unset } from "./start";
 
@@ -34,7 +35,8 @@ export function isSetupPath(pathname: string): boolean {
 export function answerFirstSetup(request: Request, unset: Unset, now: () => number): Promise<Response> {
   if (!isSetupPath(new URL(request.url).pathname)) return Promise.resolve(new Response(null, { status: 302, headers: { "Cache-Control": "no-store", Location: SETUP_PATH } }));
 
-  const setup = createSetup({
+  const setup = createSetupConsole({
+    client: CLIENT_FILES,
     install: { database: unset.database, now },
     domain: unset.first,
     open: async () => !(await unset.database.hasLoggedIn()),
@@ -53,7 +55,8 @@ export function answerFirstSetup(request: Request, unset: Unset, now: () => numb
  * @returns the page's own answer: a 404 that says nothing once the page is shut
  */
 export function answerSetup(request: Request, instance: Instance, held: Held, open: () => Promise<boolean>): Promise<Response> {
-  const setup = createSetup({
+  const setup = createSetupConsole({
+    client: CLIENT_FILES,
     install: instance.install,
     domain: instance.domain,
     open,

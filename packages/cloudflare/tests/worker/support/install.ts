@@ -224,6 +224,17 @@ export function under(site: Pick<Published, "label">, letter: "p" | "u"): string
   return `https://${site.label}-${letter}-poplin.example.com`;
 }
 
+/**
+ * Send a change as the dashboard's client and the setup page's client send it: a POST of JSON from a page of the same origin.
+ *
+ * @param headers - laid over the client's own, such as a session's `Cookie`
+ */
+export function send(worker: Worker, url: string, body: unknown, headers: Record<string, string> = {}, bindings: Bindings = BINDINGS): Promise<Response> {
+  const client = { "Content-Type": "application/json", Origin: new URL(url).origin, "Sec-Fetch-Site": "same-origin" };
+
+  return ask(worker, url, { method: "POST", headers: { ...client, ...headers }, body: JSON.stringify(body) }, bindings);
+}
+
 /** The `Cookie` header a browser sends after a login's `Set-Cookie`. */
 export function cookieOf(login: Response): string {
   const set = login.headers.get("Set-Cookie") ?? "";

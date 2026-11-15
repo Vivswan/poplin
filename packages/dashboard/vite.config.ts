@@ -1,4 +1,4 @@
-// Build the dashboard's client into `dist/`: one script, one stylesheet, and the font files, under names the server's shell page links.
+// Build the dashboard's client into `dist/`: one script, one stylesheet, and the font files, each under a name that holds a hash of its content, and a manifest that says which is which.
 //
 // Under `bun run preview --dev` the same config runs the dev server: it serves the client's own source, hot, and sends every other request to the preview server.
 
@@ -24,9 +24,11 @@ export default defineConfig({
     outDir: "dist",
     emptyOutDir: true,
     cssCodeSplit: false,
+    // The host reads the names of the script and the stylesheet from it: `.vite/manifest.json`.
+    manifest: true,
     rollupOptions: {
       input: resolve(import.meta.dirname, "src/main.tsx"),
-      output: { entryFileNames: "app.js", assetFileNames: (asset) => (asset.names.some((name) => name.endsWith(".css")) ? "app.css" : "[name][extname]") },
+      output: { entryFileNames: "app-[hash].js", assetFileNames: (asset) => (asset.names.some((name) => name.endsWith(".css")) ? "app-[hash].css" : "[name]-[hash][extname]") },
     },
   },
 });

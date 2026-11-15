@@ -3,6 +3,8 @@
   "name": "poplin",
   "main": "packages/cloudflare/src/worker/worker.ts",
   "compatibility_date": "2026-11-01",
+  // Before the Worker is bundled: the dashboard's client is built and written into the Worker's sources as one module, which no commit holds.
+  "build": { "command": "bun run --filter @poplin/cloudflare built-client" },
   // The install's own values are written onto the Worker itself, by setup. A deploy leaves them as they are.
   "keep_vars": true,
   // The sweep: expired sites to the trash, old trash and abandoned uploads away.

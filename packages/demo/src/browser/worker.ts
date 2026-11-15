@@ -4,9 +4,11 @@
 //   any other request, the demo not running     the browser stopped the worker: the demo goes on from what was saved
 //
 // A browser stops an idle worker after about half a minute, so after every answer the whole demo is written to IndexedDB.
+// The dashboard's client is no part of this script: its files sit beside it on the host, and each is read from there the first time a page asks for it.
 
 import { createStore, del, get, set } from "idb-keyval";
 
+import type { ClientFiles } from "../../../app/src/console/shell";
 import type { Samples } from "../preview/seed";
 // The first module of the bundle to run: every other one builds its requests and responses with the classes this one puts in place.
 import { plainResponse } from "./free-headers";
@@ -24,16 +26,25 @@ declare const VERSION: string;
 /** What the build puts in place of this name: every sample site, each file as its path, its media type, and its bytes in base64. */
 declare const PACKED_SAMPLES: Readonly<Record<string, readonly (readonly [path: string, contentType: string, base64: string])[]>>;
 
+/** What the build puts in place of this name: the names of the client's script and stylesheet, and of every file of the client. */
+declare const CLIENT: { readonly entry: { readonly script: string; readonly style: string }; readonly names: readonly string[] };
+
 /** The path the demo sits under, without its last slash: empty at the root of an origin. */
 const BASE = new URL(self.registration.scope).pathname.replace(/\/$/, "");
 
 /** Where SQLite's WebAssembly file is: beside this script. */
 const WASM = new URL(`sql-wasm.wasm?v=${BUILD}`, self.registration.scope).href;
 
+/** Where the dashboard's client is: in a folder beside this script. */
+const CLIENT_FOLDER = new URL("assets/", self.registration.scope).href;
+
+/** The media type of a file whose host names none. */
+const NO_TYPE = "application/octet-stream";
+
 /** What the name of every cache of the demo starts with. */
 const CACHE_PREFIX = "poplin-demo-";
 
-/** The cache that holds SQLite's file, so a start after the first needs no network. */
+/** The cache that holds SQLite's file and the client's, so a start after the first needs no network. */
 const CACHE = `${CACHE_PREFIX}${BUILD}`;
 
 /** The demo's one object store in IndexedDB. */
@@ -100,18 +111,33 @@ function save(demo: Awaited<NonNullable<typeof running>>): Promise<unknown> {
   return written;
 }
 
-/** SQLite's file: from the cache, or from the host once. */
-async function wasmBytes(): Promise<ArrayBuffer> {
+/** A file the host serves beside this script: from the cache, or from the host once. `undefined` for a file the host does not have. */
+async function hosted(address: string): Promise<Response | undefined> {
   const cache = await caches.open(CACHE);
-  const cached = await cache.match(WASM);
-  if (cached !== undefined) return cached.arrayBuffer();
+  const cached = await cache.match(address);
+  if (cached !== undefined) return cached;
 
-  const fetched = await fetch(WASM);
-  if (!fetched.ok) throw new Error(`SQLite's file did not load: ${fetched.status}`);
+  const fetched = await fetch(address);
+  if (!fetched.ok) return undefined;
 
-  await cache.put(WASM, fetched.clone());
+  await cache.put(address, fetched.clone());
 
-  return fetched.arrayBuffer();
+  return fetched;
+}
+
+async function wasmBytes(): Promise<ArrayBuffer> {
+  const file = await hosted(WASM);
+  if (file === undefined) throw new Error("SQLite's file did not load");
+
+  return file.arrayBuffer();
+}
+
+/** One file of the dashboard's client, as the host serves it. A name the build did not write is never asked of the host. */
+async function clientFile(name: string): ReturnType<ClientFiles["file"]> {
+  const file = CLIENT.names.includes(name) ? await hosted(new URL(name, CLIENT_FOLDER).href) : undefined;
+  if (file === undefined) return undefined;
+
+  return { body: new Uint8Array(await file.arrayBuffer()), type: file.headers.get("Content-Type") ?? NO_TYPE };
 }
 
 function samples(): Samples {
@@ -130,7 +156,8 @@ function samples(): Samples {
 
 /** Start the demo, and save one that started from the seed: its pages name sites a second seed would name otherwise. */
 async function start(saved: SavedDemo | undefined): ReturnType<typeof openKeptDemo> {
-  const demo = await openKeptDemo({ sqlite: await loadSqlite(await wasmBytes()), samples: samples(), version: VERSION, base: BASE, saved });
+  const client: ClientFiles = { entry: async () => CLIENT.entry, file: clientFile };
+  const demo = await openKeptDemo({ sqlite: await loadSqlite(await wasmBytes()), samples: samples(), version: VERSION, base: BASE, client, saved });
   if (saved === undefined) await save(demo);
 
   return demo;

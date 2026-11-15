@@ -3,10 +3,10 @@
 //   a site's hostname            the small page of a paused site, which a cache may keep for a minute
 //   /setup/api/...               the setup's JSON refusal to a program's run, on whichever hostname
 //   <admin hostname>/api/...     the API's JSON refusal, code `allowance_spent`
-//   <admin hostname>/...         the dashboard's notice, which names what ran out
+//   <admin hostname>/...         the dashboard's own answer, which names what ran out: JSON to its client, plain words for a page
 
 import { spentRefusal } from "@poplin/app/src/api/respond";
-import { spentNotice } from "@poplin/app/src/dashboard/dashboard";
+import { spentAnswer } from "@poplin/app/src/console/spent";
 import { spentRun } from "@poplin/app/src/dashboard/domain/setup";
 import { pausedResponse } from "@poplin/app/src/sites/paused";
 import type { AllowanceSpent } from "@poplin/core/src/database/driver";
@@ -27,7 +27,7 @@ function answerOf(url: URL, env: Bindings, spent: AllowanceSpent, now: number): 
 
   if (url.pathname === API_PATH || url.pathname.startsWith(`${API_PATH}/`)) return spentRefusal(spent, now);
 
-  return spentNotice(spent, now);
+  return spentAnswer(spent, { path: url.pathname, base: "", now });
 }
 
 /**

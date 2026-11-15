@@ -1,7 +1,7 @@
 // The setup screen: the first-run page in the console's look, shown before anyone has logged in. One page loads the client, and the client sends each run as JSON.
 //
 //   GET  <at>                the page that loads the client; it carries which boxes the form has and what a token must hold, and nothing of the install
-//   GET  <at>/assets/<file>  the client's script, stylesheet, and fonts
+//   GET  <at>/assets/<file>  the client's script, stylesheet, and fonts, which a browser keeps for good
 //   POST <at>/data/check     read every piece with the token in the body
 //   POST <at>/data/repair    make every piece match; on an install with nothing set it also gives the install its domain and first login
 //   anything else            the setup page's own handler, which answers the two paths a program calls
@@ -17,7 +17,7 @@ import type { DomainReading } from "../dashboard/domain/records";
 import type { DomainRun } from "../dashboard/domain/domain-run";
 import { POLICY } from "./console";
 import { runDone, runRefusal } from "./domain-answers";
-import { shellPage } from "./shell";
+import { type ClientFiles, KEPT_FOR_GOOD, shellPage } from "./shell";
 
 /** The page's title: it says nothing of the install. */
 const TITLE = "Setup - poplin";
@@ -33,8 +33,8 @@ type SetupParts = Parameters<typeof createSetup>[0];
 
 /** What the setup screen is built from: the setup page's own parts, and the client's files. */
 interface SetupConsoleParts extends SetupParts {
-  /** Reads one built file of the client by its name, such as `app.js`; `undefined` for a name the build did not write. */
-  readonly asset: (name: string) => Promise<{ readonly body: string | Uint8Array<ArrayBuffer>; readonly type: string } | undefined>;
+  /** The client's built files. */
+  readonly client: ClientFiles;
 
   /** The path the page answers at; `/setup` when left out. */
   readonly at?: string;
@@ -109,17 +109,20 @@ export function createSetupConsole(parts: SetupConsoleParts): { readonly fetch: 
 
     context.set("runs", setup.fetch);
     await next();
-    context.res.headers.set("Cache-Control", "no-store");
+    // A file of the client says itself how long a browser keeps it; nothing else is kept.
+    if (!context.res.headers.has("Cache-Control")) context.res.headers.set("Cache-Control", "no-store");
   };
 
   app.use(secureHeaders({ contentSecurityPolicy: POLICY, xFrameOptions: "DENY", referrerPolicy: "same-origin" }), gate);
 
-  app.get(at, (context) => context.html(shellPage({ base: at, email: "", title: TITLE, version: "", update: null, starts: false, demo: null, domain: false, domainNote: null, setup: start })));
+  app.get(at, async (context) =>
+    context.html(shellPage({ base: at, email: "", title: TITLE, version: "", update: null, starts: false, demo: null, domain: false, domainNote: null, setup: start }, await parts.client.entry())),
+  );
   app.get(`${at}/assets/:name`, async (context) => {
-    const asset = await parts.asset(context.req.param("name"));
+    const asset = await parts.client.file(context.req.param("name"));
     if (asset === undefined) return notFound();
 
-    return context.body(asset.body, 200, { "Content-Type": asset.type });
+    return context.body(asset.body, 200, { "Content-Type": asset.type, "Cache-Control": KEPT_FOR_GOOD });
   });
   app.route(`${at}/data`, setupRoutes);
   app.all("*", (context) => setup.fetch(context.req.raw));

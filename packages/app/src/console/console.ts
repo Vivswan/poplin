@@ -1,6 +1,6 @@
 // The console: the dashboard as an application in the browser. One shell page loads the client's script and stylesheet, and the client reads and changes the install through JSON routes under the same session.
 //
-//   GET  <base>/assets/<file>   the client's script, stylesheet, and fonts; no session
+//   GET  <base>/assets/<file>   the client's script, stylesheet, and fonts, each under a name that holds a hash of its content; no session, and a browser keeps them for good
 //   GET  <base>/data/...        what a screen shows, as JSON; each screen's routes are in its own `*-routes.ts`, chained on in `routes.ts`
 //   POST <base>/data/...        one change, as JSON
 //   GET  <base>/...             the shell page, whatever the path: the client draws the screen the path names
@@ -13,6 +13,7 @@ import type { Login } from "@poplin/core/src/auth/logins";
 import { Hono, type MiddlewareHandler } from "hono";
 import { bodyLimit } from "hono/body-limit";
 import { csrf } from "hono/csrf";
+import { HTTPException } from "hono/http-exception";
 import { secureHeaders } from "hono/secure-headers";
 
 import type { DomainPlug } from "../dashboard/domain/records";
@@ -21,7 +22,8 @@ import { type CodeTries, takesCode } from "../limits/code-tries";
 import { refused, type Shared } from "./data";
 import { frameOf } from "./frame-routes";
 import { dataRoutes } from "./routes";
-import { shellPage } from "./shell";
+import { type ClientFiles, KEPT_FOR_GOOD, shellPage } from "./shell";
+import { isSpent, spentAnswer } from "./spent";
 
 /** What a request whose session cannot be read is taken to carry. */
 const NO_SESSION = { ok: false } as const;
@@ -42,12 +44,6 @@ export const POLICY = {
   baseUri: ["'none'"],
 };
 
-/** One file of the client as a host hands it out. */
-interface Asset {
-  readonly body: string | Uint8Array<ArrayBuffer>;
-  readonly type: string;
-}
-
 /** What a console is built from. */
 interface ConsoleParts extends CodeTries {
   /** The install the actions work on. */
@@ -65,8 +61,8 @@ interface ConsoleParts extends CodeTries {
   /** The path every route of the console starts with; empty for the root. */
   readonly base: string;
 
-  /** Reads one built file of the client by its name, such as `app.js`; `undefined` for a name the build did not write. */
-  readonly asset: (name: string) => Promise<Asset | undefined>;
+  /** The client's built files. */
+  readonly client: ClientFiles;
 
   /** The free plan's limits of whoever hosts the install: a setting above one is shown with its warning. */
   readonly freeLimits: FreeLimits;
@@ -125,7 +121,8 @@ const jsonOnly: MiddlewareHandler<Shared> = async (context, next) => {
 /**
  * Build the console.
  *
- * @returns a handler for every request under the console's base path. A page without a session is sent to the login, and a data route without one answers 401
+ * @returns a handler for every request under the console's base path. A page without a session is sent to the login, and a data route without one answers 401.
+ * Its `fetch` rejects with whatever a request failed with, but for a day's allowance used up, which it answers
  */
 export function createConsole(parts: ConsoleParts): Console {
   const app = new Hono<Shared>().basePath(parts.base === "" ? "/" : parts.base);
@@ -139,10 +136,10 @@ export function createConsole(parts: ConsoleParts): Console {
 
   // The client's files hold nothing of the install, so they are answered before the session is asked for.
   app.get("/assets/:name", async (context) => {
-    const asset = await parts.asset(context.req.param("name"));
+    const asset = await parts.client.file(context.req.param("name"));
     if (asset === undefined) return context.notFound();
 
-    return context.body(asset.body, 200, { "Content-Type": asset.type, "Cache-Control": "no-cache" });
+    return context.body(asset.body, 200, { "Content-Type": asset.type, "Cache-Control": KEPT_FOR_GOOD });
   });
 
   app.use(noStore, sessionCheck(parts));
@@ -155,16 +152,18 @@ export function createConsole(parts: ConsoleParts): Console {
     const { install, actor } = context.get("asker");
     const frame = await frameOf(install, actor, { version: parts.version, domain: parts.domain !== undefined });
 
-    return context.html(
-      shellPage({
-        ...frame,
-        base: parts.base,
-        email: context.get("email"),
-        version: parts.version,
-        demo: parts.demo ?? null,
-        domain: parts.domain !== undefined,
-      }),
-    );
+    const boot = { ...frame, base: parts.base, email: context.get("email"), version: parts.version, demo: parts.demo ?? null, domain: parts.domain !== undefined };
+
+    return context.html(shellPage(boot, await parts.client.entry()));
+  });
+
+  // A day's allowance that is used up is answered here, in the console's words, and a refusal of the framework is its own answer. Any other failure is the host's to answer and to write down.
+  app.onError((error, context) => {
+    if (error instanceof HTTPException) return error.getResponse();
+
+    if (!isSpent(error)) throw error;
+
+    return spentAnswer(error, { path: new URL(context.req.url).pathname, base: parts.base, now: parts.install.now() });
   });
 
   return { fetch: async (request) => app.fetch(request) };

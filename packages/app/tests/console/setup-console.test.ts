@@ -8,14 +8,11 @@ import type { Counters } from "../../src/limits/limits";
 import { MemoryCounters } from "../../src/limits/memory-counters";
 import { type FakePlug, fakePlug, firstRunOf, TOKEN } from "../dashboard/domain/support/fake-plug";
 import { CSRF_SECRET, ORIGIN, openDashboard } from "../dashboard/support/install";
+import { CLIENT } from "./support/console";
+import { readShell } from "./support/shell";
 
 /** A token that is valid for another account. */
 const FOREIGN = "token-of-another-account-0123456789";
-
-/** The files the test screen answers as its client's build. */
-const ASSETS: Readonly<Record<string, { readonly body: string; readonly type: string }>> = {
-  "app.js": { body: "// the client", type: "text/javascript; charset=utf-8" },
-};
 
 /** How a test's setup screen differs from the usual one. */
 interface Options {
@@ -73,7 +70,7 @@ async function openSetup(options: Options = {}) {
     counters: options.counters ?? new MemoryCounters(),
     visitorOf: async () => "203.0.113.7",
     csrfSecret: CSRF_SECRET,
-    asset: async (name) => (Object.hasOwn(ASSETS, name) ? ASSETS[name] : undefined),
+    client: CLIENT,
     at: options.at,
   });
   const get = (path: string): Promise<Response> => setup.fetch(new Request(`${ORIGIN}${path}`));
@@ -81,11 +78,6 @@ async function openSetup(options: Options = {}) {
     setup.fetch(new Request(`${ORIGIN}${at}/data/${kind}`, { method: "POST", headers: { "Content-Type": type }, body: JSON.stringify(body) }));
 
   return { opened, plug, reads, get, run, fetch: setup.fetch };
-}
-
-/** The start values a page carries. */
-function bootOf(page: string): unknown {
-  return JSON.parse(/<script type="application\/json" id="boot">(.*)<\/script>/.exec(page)?.[1] ?? "null");
 }
 
 describe("the page", () => {
@@ -118,8 +110,8 @@ describe("the page", () => {
       "default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self'; connect-src 'self'; img-src 'self' data:; form-action 'self'; frame-ancestors 'none'; base-uri 'none'",
     );
     expect(page).toContain("<title>Setup - poplin</title>");
-    expect(page).toContain('<script type="module" src="/setup/assets/app.js"></script>');
-    expect(bootOf(page)).toEqual({
+    expect(page).toContain('<script type="module" src="/setup/assets/app-4f1c.js"></script>');
+    expect((await readShell(page)).boot).toEqual({
       base: "/setup",
       email: "",
       title: "Setup - poplin",
@@ -145,13 +137,14 @@ describe("the page", () => {
     expect([page.includes(opened.owner), page.includes(host), reads.count, plug.calls]).toEqual([false, false, 0, []]);
   });
 
-  // Drift: a host that mounts the screen under a path of its own would link the client's files and send its runs to the wrong place.
-  test("links its files and takes its runs under the path it is given", async () => {
+  // Drift: a host that mounts the screen under a path of its own would link the client's files and send its runs to the wrong place, or the page before a login would load the whole script again at every visit.
+  test("links its files by the names the build gave them, for a browser to keep for good, and takes its runs under the path it is given", async () => {
     const { get, run } = await openSetup({ at: "/next/setup/first" });
     const page = await (await get("/next/setup/first")).text();
+    const script = await get("/next/setup/first/assets/app-4f1c.js");
 
-    expect(page).toContain('<link rel="stylesheet" href="/next/setup/first/assets/app.css">');
-    expect((await get("/next/setup/first/assets/app.js")).status).toBe(200);
+    expect(page).toContain('<link rel="stylesheet" href="/next/setup/first/assets/app-9d2e.css">');
+    expect([script.status, script.headers.get("Cache-Control")]).toEqual([200, "public, max-age=31536000, immutable"]);
     expect((await run("check", { token: TOKEN })).status).toBe(200);
   });
 
@@ -161,7 +154,7 @@ describe("the page", () => {
     ["fails to say", async (): Promise<boolean> => Promise.reject(new Error("the database is away"))],
   ] as const)("is shut on every path when the question %s", async (_name, open) => {
     const { get, run, plug } = await openSetup({ open });
-    const answers = [await get("/setup"), await get("/setup/assets/app.js"), await run("check", { token: TOKEN }), await run("repair", { token: TOKEN })];
+    const answers = [await get("/setup"), await get("/setup/assets/app-4f1c.js"), await run("check", { token: TOKEN }), await run("repair", { token: TOKEN })];
 
     expect(await Promise.all(answers.map(async (answer) => [answer.status, await answer.text()]))).toEqual(answers.map(() => [404, "Not found."]));
     expect(plug.calls).toEqual([]);

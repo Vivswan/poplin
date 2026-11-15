@@ -9,6 +9,7 @@
     "./src/console/routes": "./src/console/routes.ts",
     "./src/console/setup-console": "./src/console/setup-console.ts",
     "./src/console/shell": "./src/console/shell.ts",
+    "./src/console/spent": "./src/console/spent.ts",
     "./src/dashboard/dashboard": "./src/dashboard/dashboard.ts",
     "./src/dashboard/settings/free-limits": "./src/dashboard/settings/free-limits.ts",
     "./src/dashboard/domain/records": "./src/dashboard/domain/records.ts",
@@ -30,5 +31,8 @@
     "ipaddr.js": "2.5.0",
     "uint8array-extras": "1.6.0",
     "valibot": "1.5.0"
+  },
+  "devDependencies": {
+    "htmlparser2": "12.0.0"
   }
 }

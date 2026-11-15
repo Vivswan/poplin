@@ -10,6 +10,7 @@ import { keptAnswer, runDone } from "../../src/console/domain-answers";
 import type { DomainReading, DomainRow, DomainState } from "../../src/dashboard/domain/records";
 import { fakePlug, TOKEN, usualPlug } from "../dashboard/domain/support/fake-plug";
 import { openConsole } from "./support/console";
+import { readShell } from "./support/shell";
 
 /** What a run that read its pieces answers. */
 interface Ran {
@@ -109,9 +110,9 @@ describe("what the screen opens with", () => {
     [false, undefined],
   ])("tells the client whether it has the screen: %p", async (has, plug) => {
     const opened = await openConsole("", plug);
-    const block = /<script type="application\/json" id="boot">(.*)<\/script>/.exec(await (await opened.get("/")).text())?.[1] ?? "";
+    const shell = await readShell(await (await opened.get("/")).text());
 
-    expect(JSON.parse(block)).toMatchObject({ domain: has });
+    expect(shell.boot).toMatchObject({ domain: has });
   });
 });
 

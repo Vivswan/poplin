@@ -2,9 +2,10 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
-import { createDashboard } from "../../../app/src/dashboard/dashboard";
+import { createConsole } from "../../../app/src/console/console";
 import { MemoryCounters } from "../../../app/src/limits/memory-counters";
 import { answered, NOW, ORIGIN } from "../../../app/tests/api/support/install";
+import { CLIENT } from "../../../app/tests/console/support/console";
 import { FREE_LIMITS } from "../../../app/tests/dashboard/support/install";
 import { ADDRESSES } from "../../../app/tests/sites/support/layout";
 import type { Login as Email } from "../../../core/src/auth/logins";
@@ -19,16 +20,30 @@ const SESSION = "session=ada";
 /** The form of a login's secret and of a token, wherever one sits in a text. */
 const CREDENTIAL = /poplin_login_[0-9a-f]{16}_[0-9a-f]{64}|poplin_[0-9a-f]{16}_[0-9a-f]{64}/g;
 
-/** The code a terminal shows, as the address and the page write it. */
+/** The code a terminal shows, as the address and the dashboard write it. */
 const CODE = /[BCDFGHJKLMNPQRSTVWXZ]{4}-[BCDFGHJKLMNPQRSTVWXZ]{4}/;
 
-/** How one form post differs from the one a dashboard page sends. */
-interface PostOptions {
-  /** Whether the post carries the page's token; it does unless said. */
-  readonly csrf?: boolean;
+/** How one decision differs from the one the dashboard's client sends. */
+interface SendOptions {
+  /** Whether the decision goes as a form, which a page of any origin can send; it goes as JSON unless said. */
+  readonly form?: boolean;
 
-  /** Whether the post carries the admin's session; it does unless said. */
+  /** Whether the decision carries the admin's session; it does unless said. */
   readonly session?: boolean;
+}
+
+/** A decision on the login under a code, as the dashboard's client sends it. */
+interface Decision {
+  readonly code: string;
+  readonly allow: boolean;
+
+  /** The admin's word that the code on the screen is the terminal's. */
+  readonly confirm?: boolean;
+}
+
+/** A login that waits, as the dashboard shows it for review. */
+interface Waiting {
+  readonly login: { readonly code: string; readonly scope: string; readonly computer: string };
 }
 
 /** A command bench with the install's dashboard beside it, and everything either one let out. */
@@ -36,17 +51,17 @@ interface Desk {
   /** The command bench, whose install the dashboard is built over. */
   readonly bench: Bench;
 
-  /** Every page the dashboard answered, as text. */
+  /** Everything the dashboard answered, page or data, as text. */
   readonly pages: string[];
 
   /** Every secret and token the API answered with. */
   readonly credentials: Set<string>;
 
-  /** Open a dashboard page, with the admin's session unless said. */
+  /** Ask the dashboard for a page or for data, with the admin's session unless said. */
   readonly get: (path: string, session?: boolean) => Promise<Response>;
 
-  /** Post a form as a dashboard page would, token included. */
-  readonly post: (path: string, fields: Readonly<Record<string, string>>, options?: PostOptions) => Promise<Response>;
+  /** Send a decision on a login as the dashboard's client does. */
+  readonly decide: (decision: Decision, options?: SendOptions) => Promise<Response>;
 
   /** Run `poplin login`, and at its first wait do what the person at the dashboard does with the address it printed. */
   readonly login: (line: string, atDashboard?: (address: string, ran: Ran) => Promise<"interrupted" | undefined>) => Promise<Ran>;
@@ -64,13 +79,15 @@ async function openDesk(): Promise<Desk> {
   const pages: string[] = [];
   const credentials = new Set<string>();
 
-  const dashboard = createDashboard({
+  const dashboard = createConsole({
     install: { database, store, now: () => clock.now, addressOf: ADDRESSES.addressOf, publicAddressOf: ADDRESSES.publicAddressOf, reservedNames: ADDRESSES.reservedNames },
     version: "1.0.0",
     readSession: async (headers) => (headers.get("Cookie") === SESSION ? { ok: true, value: ADA } : { ok: false }),
     loginPath: "/login",
-    csrfSecret: new Uint8Array(32).fill(9),
+    base: "",
+    client: CLIENT,
     freeLimits: FREE_LIMITS,
+    rebuild: { accepts: () => false, fetch: async () => new Response(null, { status: 204 }) },
     counters: new MemoryCounters(),
     visitorOf: async () => "the-admin",
   });
@@ -90,11 +107,11 @@ async function openDesk(): Promise<Desk> {
     return answer;
   };
 
-  const post: Desk["post"] = async (path, fields, options = {}) => {
-    const [, csrf = ""] = /name="csrf" value="([^"]+)"/.exec(await (await get("/tokens")).text()) ?? [];
-    const body = new URLSearchParams(options.csrf === false ? fields : { ...fields, csrf });
-    const headers = { Origin: ORIGIN, "Sec-Fetch-Site": "same-origin", "Content-Type": "application/x-www-form-urlencoded", ...(options.session === false ? {} : { Cookie: SESSION }) };
-    const answer = await dashboard.fetch(new Request(new URL(path, ORIGIN), { method: "POST", headers, body: body.toString() }));
+  const decide: Desk["decide"] = async (decision, options = {}) => {
+    const body = options.form === true ? new URLSearchParams(Object.entries(decision).map(([key, value]) => [key, String(value)])).toString() : JSON.stringify(decision);
+    const type = options.form === true ? "application/x-www-form-urlencoded" : "application/json";
+    const headers = { Origin: ORIGIN, "Sec-Fetch-Site": "same-origin", "Content-Type": type, ...(options.session === false ? {} : { Cookie: SESSION }) };
+    const answer = await dashboard.fetch(new Request(new URL("/data/logins/decide", ORIGIN), { method: "POST", headers, body }));
     pages.push(await answer.clone().text());
 
     return answer;
@@ -121,7 +138,7 @@ async function openDesk(): Promise<Desk> {
     pages,
     credentials,
     get,
-    post,
+    decide,
     login,
     audit: async () => (await database.listAudit({ limit: 100 })).filter((entry) => entry.at > NOW).map((entry) => [entry.by, entry.action, entry.detail]),
     saved: () => (existsSync(file) ? JSON.parse(readFileSync(file, "utf8")) : undefined),
@@ -133,10 +150,15 @@ function codeIn(address: string): string {
   return new URL(address).searchParams.get("code") ?? "";
 }
 
-/** Allow the login at an address as a person does: open the page, tick the box, press Allow. */
+/** The login under the code of an address, as the dashboard shows it for review. */
+async function waitingAt(desk: Desk, address: string): Promise<Waiting["login"]> {
+  return ((await (await desk.get(`/data/logins/find?code=${codeIn(address)}`)).json()) as Waiting).login;
+}
+
+/** Allow the login at an address as a person does: open the address, tick the box, press Allow. */
 async function allow(desk: Desk, address: string): Promise<undefined> {
   await desk.get(address);
-  await desk.post("/tokens/allow", { code: codeIn(address), confirm: "yes" });
+  await desk.decide({ code: codeIn(address), allow: true, confirm: true });
 }
 
 afterEach(cleanUp);
@@ -145,11 +167,13 @@ describe("logIn", () => {
   // Drift: the login is the first thing every person and every agent does; any step that drifted between the terminal, the API, and the dashboard would leave no way to a token but by hand.
   test("a login the admin allows saves a token that works, prints the address and the code first, and tells the audit log who allowed which computer", async () => {
     const desk = await openDesk();
-    let page = "";
+    let opened = 0;
+    let shown: Waiting["login"] | undefined;
 
     const ran = await desk.login(`login --server ${ORIGIN}`, async (address) => {
-      page = await (await desk.get(address)).text();
-      await desk.post("/tokens/allow", { code: codeIn(address), confirm: "yes" });
+      opened = (await desk.get(address)).status;
+      shown = await waitingAt(desk, address);
+      await desk.decide({ code: codeIn(address), allow: true, confirm: true });
 
       return undefined;
     });
@@ -165,7 +189,8 @@ describe("logIn", () => {
     ]);
     expect(ran.out.slice(5).map((line) => line.split(/ {2,}/)[0])).toEqual(["logged in: the token is saved on this machine", "install", "role", "token", "expires"]);
     expect([ran.opened, ran.waits, desk.bench.sent]).toEqual([[`${ORIGIN}/tokens/allow?code=${code}`], [5000], ["POST /api/logins", "POST /api/logins/token"]]);
-    expect([page.includes(`<p class="code" aria-label="The code">${code}</p>`), page.includes("An admin: this computer may do everything you may."), page.includes("<dd>test-computer</dd>")]).toEqual([true, true, true]);
+    // Drift: the address is frozen in every poplin that was ever installed; a dashboard that answered it no more would leave their logins nowhere to go.
+    expect([opened, shown]).toMatchObject([200, { code, scope: "admin", computer: "test-computer" }]);
     expect([saved?.server, who.status, who.body.token]).toMatchObject([ORIGIN, 200, { scope: "admin", note: "test-computer" }]);
     expect(await desk.audit()).toEqual([
       [ADA, "token_added", { token: (who.body.token as { id: string }).id, scope: "admin", note: "test-computer" }],
@@ -178,8 +203,8 @@ describe("logIn", () => {
     const desk = await openDesk();
 
     const ran = await desk.login(`login --server ${ORIGIN} --name laptop`, (address) => allow(desk, address));
-    await desk.get("/tokens");
-    await desk.get("/activity");
+    await desk.get("/data/tokens");
+    await desk.get("/data/activity");
     const everything = [...desk.pages, JSON.stringify(await desk.bench.install.database.listAudit({ limit: 100 })), ...ran.out, ...ran.err, ...ran.status, JSON.stringify(desk.bench.install.reported)].join("\n");
     const stored = JSON.stringify(await desk.bench.install.database.listTokens());
 
@@ -198,7 +223,7 @@ describe("logIn", () => {
     const desk = await openDesk();
 
     const ran = await desk.login(`login --server ${ORIGIN}`, async (address) => {
-      if (how.startsWith("denied")) await desk.post("/tokens/deny", { code: codeIn(address) });
+      if (how.startsWith("denied")) await desk.decide({ code: codeIn(address), allow: false });
 
       return how.startsWith("stopped") ? "interrupted" : undefined;
     });
@@ -210,37 +235,36 @@ describe("logIn", () => {
 
   // Drift: a link an attacker sent the admin, or a page of another origin posting for them, must not let a computer in; each row is one way to press Allow that is not the admin choosing to.
   test.each([
-    ["with no session", { session: false }, { confirm: "yes" }, 303, `${ORIGIN}/login?return=%2F`],
-    ["without the page's token", { csrf: false }, { confirm: "yes" }, 403, null],
-    ["without the box ticked", {}, {}, 303, "not_confirmed"],
-  ] as const)("an Allow pressed %s lets no computer in: the login stays pending and runs out", async (_how, options, fields, status, location) => {
+    ["with no session", { session: false }, { confirm: true }, 401, "no_session"],
+    ["as a form, which a page of any origin can send", { form: true }, { confirm: true }, 415, "not_a_form"],
+    ["without the box ticked", {}, {}, 400, "not_confirmed"],
+  ] as const)("an Allow pressed %s lets no computer in: the login stays pending and runs out", async (_how, options, ticked, status, refusal) => {
     const desk = await openDesk();
     let answered: Response | undefined;
 
     const ran = await desk.login(`login --server ${ORIGIN}`, async (address) => {
-      answered = await desk.post("/tokens/allow", { code: codeIn(address), ...fields }, options);
+      answered = await desk.decide({ code: codeIn(address), allow: true, ...ticked }, options);
 
       return undefined;
     });
-    const went = answered?.headers.get("Location") ?? null;
 
-    expect([answered?.status, location === null ? went : went?.includes(location)]).toEqual([status, location === null ? null : true]);
+    expect([answered?.status, ((await answered?.json()) as { code?: string } | undefined)?.code]).toEqual([status, refusal]);
     expect([ran.code, ran.err[0], desk.saved(), await desk.audit(), (await desk.bench.install.database.listTokens()).length]).toEqual([1, "nobody allowed the login before it ran out", undefined, [], 3]);
   });
 
   // Drift: an agent's shell holds a publisher token so it can touch its own sites alone; a login that ignored the flag would hand every agent the whole install.
-  test("--publisher saves a publisher's token, which the page said it would be, and --no-browser opens none", async () => {
+  test("--publisher saves a publisher's token, which the dashboard said it would be, and --no-browser opens none", async () => {
     const desk = await openDesk();
-    let page = "";
+    let asked = "";
 
     const ran = await desk.login(`login --server ${ORIGIN} --publisher --no-browser`, async (address) => {
-      page = await (await desk.get(address)).text();
+      asked = (await waitingAt(desk, address)).scope;
 
       return allow(desk, address);
     });
     const saved = desk.bench.install.as(desk.saved()?.token ?? null);
 
-    expect([ran.code, ran.opened, page.includes("A publisher: this computer may publish, and manage only the sites it published.")]).toEqual([0, [], true]);
+    expect([ran.code, ran.opened, asked]).toEqual([0, [], "publisher"]);
     expect((await answered(saved.whoami.$get())).body.token).toMatchObject({ scope: "publisher", expires: "never" });
     expect((await answered(saved.tokens.$get())).status).toBe(403);
   });
@@ -348,7 +372,7 @@ describe("logIn", () => {
     const before = desk.saved();
 
     const denied = await desk.login("login", async (address) => {
-      await desk.post("/tokens/deny", { code: codeIn(address) });
+      await desk.decide({ code: codeIn(address), allow: false });
 
       return undefined;
     });

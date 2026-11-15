@@ -82,7 +82,7 @@ export function galleryPage(gallery: Gallery): Promise<string> {
 
   return shell(
     "Gallery",
-    html`<h1>Every page and every state</h1>
+    html`<h1>Every screen and every state</h1>
 <p class="banner">Sample data, held in memory. Nothing leaves this machine. A restart, or a reset, starts it over. Every page is shown to the sample admin; a link marked "as a stranger" is not.</p>
 <section><h2>The command line, the MCP server, and the API, as the sample admin</h2>
 <pre># from the repository's folder; the token is the sample admin's
@@ -91,7 +91,7 @@ bun packages/cli/src/bin.ts list          # any command
 bun packages/cli/src/bin.ts mcp           # the MCP server, over stdio
 curl -H "Authorization: Bearer $POPLIN_TOKEN" $POPLIN_SERVER/api/sites
 
-# or log a computer in, and allow it on the Tokens tab
+# or log a computer in, and allow it under Access
 bun packages/cli/src/bin.ts login --server ${gallery.origin}</pre></section>
 <div class="groups">${groups}</div>`,
   );

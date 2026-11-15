@@ -10,15 +10,31 @@ import { beforeEach, describe, expect, test, vi } from "vitest";
 import manifest from "../../../cli/package.json?raw";
 import built from "../../dist/worker.js";
 import bundle from "../../dist/worker.js?raw";
+import { readShell } from "../../../app/tests/console/support/shell";
 import type { Bindings } from "../../src/worker/bindings";
 import { signer } from "../login/support/access";
 import {
   ADMIN, type Answer, type ApiCalls, accessHeaders, ask, api, BINDINGS, cookieOf, countedBindings, done, installOf, instance, logIn, OWNER,
-  PATHS, type Published, page, publish, spentDatabase, tokenOf, type World, under, wait, world,
+  PATHS, type Published, page, publish, send, spentDatabase, tokenOf, type World, under, wait, world,
 } from "./support/install";
 
-/** The largest bundle that passes, so a library pulled in whole fails here. The bundle is about 1,015,000 bytes; Cloudflare takes 3 MB after gzip on the free Workers plan. */
-const MOST_BUNDLE_BYTES = 1_200_000;
+/** The largest bundle that passes, so a library pulled in whole fails here. The bundle is about 2,106,000 bytes: the dashboard's built client rides in it as strings. */
+const MOST_BUNDLE_BYTES = 2_300_000;
+
+/** The largest bundle that passes once it is gzipped, which is how Cloudflare measures it: 3 MB on the free Workers plan. The bundle, client and all, is about 619,000 bytes then. */
+const MOST_BUNDLE_GZIP_BYTES = 800_000;
+
+/** The policy the dashboard goes out under: it runs its own script alone and reads this origin alone. */
+const POLICY = "default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self'; connect-src 'self'; img-src 'self' data:; form-action 'self'; frame-ancestors 'none'; base-uri 'none'";
+
+/** How long a browser may keep a file of the dashboard's client: for good, as its name holds a hash of its content. */
+const KEPT_FOR_GOOD = "public, max-age=31536000, immutable";
+
+/** What the dashboard's data answers a request with no session. */
+const NO_SESSION = { ok: false, code: "no_session", about: null, sentence: "Log in again." };
+
+/** What the dashboard says while the database's free reading is used up for the day. */
+const NO_READING = "The dashboard is paused: the free allowance of the database for reading is used up for today. It is back after midnight UTC.";
 
 /** A file large enough that it cannot pass through in one piece: 5 MiB. */
 const LARGE_BYTES = 5 * 1024 * 1024;
@@ -98,9 +114,6 @@ interface Begun {
   readonly verify_url: string;
 }
 
-/** The headers a dashboard form is posted with. */
-const FORM = { "Content-Type": "application/x-www-form-urlencoded", Origin: ADMIN };
-
 let w: World;
 
 function withBindings(changed: Partial<Record<keyof Bindings, unknown>>): Bindings {
@@ -161,6 +174,13 @@ function meteredBucket(read: { bytes: number }): R2Bucket {
       };
     },
   });
+}
+
+/** The bytes a text is once it is gzipped. */
+async function gzippedBytes(text: string): Promise<number> {
+  const gzipped = new Blob([text]).stream().pipeThrough(new CompressionStream("gzip"));
+
+  return (await new Response(gzipped).arrayBuffer()).byteLength;
 }
 
 async function sha256(bytes: Uint8Array<ArrayBuffer>): Promise<string> {
@@ -595,35 +615,55 @@ describe("the admin hostname", () => {
   });
 
   // Drift: the dashboard would be mounted without a session reader, or with one that trusts a key the install no longer has; or its session would open, or its sign-out would close, a private site.
-  test("the dashboard shows the sites to a session and sends anyone else to the login; signing everyone out ends the dashboard's sessions at once and leaves a private site to Access", async () => {
+  // A change taken as a form would let a page of another origin send one with the owner's session.
+  test("the dashboard answers its page and its data to a session and sends anyone else to the login; a change is JSON alone; signing everyone out ends the dashboard's sessions at once and leaves a private site to Access", async () => {
     const worker = instance(w);
     const token = await tokenOf(w, "admin");
     const site = await publish(worker, token, { name: "report" }, [page("<h1>report</h1>")]);
     const session = { Cookie: cookieOf(await logIn(worker, w)) };
     const owner = await accessHeaders(w);
+    const remove = `${ADMIN}/data/sites/${site.label}/delete`;
+    const form = { ...session, "Content-Type": "application/x-www-form-urlencoded" };
 
-    const stranger = await ask(worker, `${ADMIN}/`);
-    const sites = await ask(worker, `${ADMIN}/`, { headers: session });
-    const unmarked = await ask(worker, `${ADMIN}/sites/${site.label}/delete`, { method: "POST", headers: { ...session, ...FORM }, body: "" });
+    const strangers = [await ask(worker, `${ADMIN}/`), await ask(worker, `${ADMIN}/data/sites`), await send(worker, remove, {})];
+    const shell = await ask(worker, `${ADMIN}/sites/${site.label}`, { headers: session });
+    const sites = await ask(worker, `${ADMIN}/data/sites`, { headers: session });
+    const forms = [await send(worker, remove, {}, { ...form, Origin: "https://elsewhere.example.net", "Sec-Fetch-Site": "cross-site" }), await send(worker, remove, {}, form)];
     const after = await done<{ site: Published }>(await api(worker, token).sites[":site"].$get({ param: { site: site.label }, query: {} }));
-    const unknown = await ask(worker, `${ADMIN}/no-such-page`, { headers: session });
+    const unknown = await ask(worker, `${ADMIN}/data/no-such-data`, { headers: session });
 
-    await done(await api(worker, token).sessions.$delete({ query: {} }));
-    const signedOut = await ask(worker, `${ADMIN}/`, { headers: session });
+    const out = await send(worker, `${ADMIN}/data/settings/sign-everyone-out`, {}, session);
+    const signedOut = [await ask(worker, `${ADMIN}/`, { headers: session }), await ask(worker, `${ADMIN}/data/sites`, { headers: session })];
     wait(w, 1 / 60);
     const privately = await ask(worker, `${under(site, "p")}/`, { headers: owner });
 
-    expect({ status: stranger.status, to: stranger.headers.get("Location") }).toEqual({ status: 302, to: `${ADMIN}/login?return=${encodeURIComponent("/")}` });
-    expect({ status: sites.status, page: (await sites.text()).includes(site.label), policy: sites.headers.get("Content-Security-Policy") }).toMatchObject({ status: 200, page: true });
-    expect(sites.headers.get("Content-Security-Policy")).toContain("default-src 'none'");
-    expect([unmarked.status, after.site.state, unknown.status]).toEqual([403, "live", 404]);
-    expect([signedOut.status, privately.status]).toEqual([302, 200]);
+    expect(strangers.map((answer) => [answer.status, answer.headers.get("Location")])).toEqual([[302, `${ADMIN}/login?return=${encodeURIComponent("/")}`], [401, null], [401, null]]);
+    expect(await strangers[1]?.json()).toEqual(NO_SESSION);
+    expect([shell.status, shell.headers.get("Content-Security-Policy"), shell.headers.get("Cache-Control"), ((await readShell(await shell.text())).boot as { email: string }).email]).toEqual([200, POLICY, "no-store", OWNER]);
+    expect([sites.status, (await sites.json<{ sites: Published[] }>()).sites.map((listed) => listed.label)]).toEqual([200, [site.label]]);
+    expect([forms.map((answer) => answer.status), after.site.state, unknown.status]).toEqual([[403, 415], "live", 404]);
+    expect([out.status, signedOut.map((answer) => answer.status), privately.status]).toEqual([200, [302, 401], 200]);
+  });
+
+  // Drift: the dashboard's client rides inside the Worker's one file. Built without it, or handed out behind the session, the page would load and draw nothing; without the header a browser would fetch two megabytes again at every visit.
+  test("the dashboard's page names a script and a stylesheet under /assets/, and each is answered to anyone by its media type, for a browser to keep for good; a name the build did not write is not found", async () => {
+    const worker = instance(w);
+    const shell = await readShell(await (await ask(worker, `${ADMIN}/`, { headers: { Cookie: cookieOf(await logIn(worker, w)) } })).text());
+    const files = await Promise.all([...shell.scripts, ...shell.styles, "/assets/app-00000000.js"].map((path) => ask(worker, `${ADMIN}${path}`)));
+    const sizes = await Promise.all(files.map(async (file) => (await file.arrayBuffer()).byteLength > 1000));
+
+    expect([shell.scripts, shell.styles].map((names) => names.map((name) => name.startsWith("/assets/")))).toEqual([[true], [true]]);
+    expect(files.map((file, at) => [file.status, file.headers.get("Content-Type"), file.headers.get("Cache-Control"), sizes[at]])).toEqual([
+      [200, "text/javascript;charset=utf-8", KEPT_FOR_GOOD, true],
+      [200, "text/css;charset=utf-8", KEPT_FOR_GOOD, true],
+      [404, "text/plain; charset=UTF-8", null, false],
+    ]);
   });
 });
 
 describe("a database that takes no more writes for the day", () => {
   // Drift: an instance wrote on every start and the login wrote before its redirect, so a set-up install answered nobody once its writes were spent. Letting a first login through the same way would leave the setup page open behind a person who is in.
-  test("a new instance of a set-up install starts, serves a page and a file, logs a person in without the audit entry, which the log notes, and shows the dashboard; the first login of an install is refused and its setup stays open", async () => {
+  test("a new instance of a set-up install starts, serves a page and a file, logs a person in without the audit entry, which the log notes, and answers the dashboard; the first login of an install is refused and its setup stays open", async () => {
     using warned = vi.spyOn(console, "warn").mockImplementation(() => undefined);
     using failed = vi.spyOn(console, "error").mockImplementation(() => undefined);
     const spent = withBindings({ DB: spentDatabase("write") });
@@ -638,12 +678,12 @@ describe("a database that takes no more writes for the day", () => {
     const later = await ask(worker, `${ADMIN}/login`, signed, spent);
     const session = { headers: { Cookie: cookieOf(later) } };
     const answers = [await ask(worker, `${site.addresses.public}/`, {}, spent), await ask(worker, `${site.addresses.public}/notes.txt`, {}, spent)];
-    for (const path of ["/", `/sites/${site.label}`, "/activity", "/usage", "/tokens", "/settings"]) answers.push(await ask(worker, `${ADMIN}${path}`, session, spent));
+    for (const path of ["/", "/data/frame", "/data/sites", `/data/sites/${site.label}`, "/data/activity", "/data/usage", "/data/tokens", "/data/people", "/data/settings"]) answers.push(await ask(worker, `${ADMIN}${path}`, session, spent));
     const logins = (await database.listAudit({ limit: 100 })).filter((entry) => entry.action === "login");
 
     expect([first.status, first.headers.get("Set-Cookie"), open]).toEqual([503, null, true]);
     expect([later.status, later.headers.get("Location"), logins.length]).toEqual([302, "/", 1]);
-    expect(answers.map((answer) => answer.status)).toEqual([200, 200, 200, 200, 200, 200, 200, 200]);
+    expect(answers.map((answer) => answer.status)).toEqual(answers.map(() => 200));
     expect(warned.mock.calls.map(([line]) => line)).toEqual(["poplin: a login was not written to the audit log"]);
     expect(failed.mock.calls.map(([line]) => line)).toEqual(["poplin: a request failed"]);
   });
@@ -651,7 +691,7 @@ describe("a database that takes no more writes for the day", () => {
 
 describe("a database whose allowance for the day is used up", () => {
   // Drift: D1 says so only in the words of an error, and every address answered a bare 503 or 500 that named nothing. A visitor, a caller of the API, and the owner each need it in their own form, with the wait to midnight UTC, or they ask again all day.
-  test("a site's address answers the paused page, the API the code with what ran out, the dashboard its notice, and a program's setup run its refusal: each a 503 with the seconds to midnight UTC", async () => {
+  test("a site's address answers the paused page, the API the code with what ran out, the dashboard's page its sentence and the dashboard's data its refusal, and a program's setup run its refusal: each a 503 with the seconds to midnight UTC", async () => {
     using failed = vi.spyOn(console, "error").mockImplementation(() => undefined);
     const token = await tokenOf(w, "admin");
     const site = await publish(instance(w), token, { name: "report", access: "public" }, [page("<h1>report</h1>")]);
@@ -667,8 +707,10 @@ describe("a database whose allowance for the day is used up", () => {
       await ask(paused, `${site.addresses.public}/`, { method: "HEAD" }, noReading),
       await ask(paused, `${ADMIN}${PATHS.whoami.$path()}`, { headers: bearer }, noReading),
       await ask(paused, `${ADMIN}/`, { headers: session }, noReading),
+      await ask(paused, `${ADMIN}/data/sites`, { headers: session }, noReading),
       await ask(paused, `${ADMIN}/setup/api/check`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ token: "a-token-0123456789-abcdefgh" }) }, noReading),
       await ask(reading, `${ADMIN}${PATHS.tokens.$path()}`, { method: "POST", headers: { ...bearer, "Content-Type": "application/json" }, body: JSON.stringify({ scope: "publisher", note: "a test" }) }, noWriting),
+      await send(reading, `${ADMIN}/data/settings/sign-everyone-out`, {}, session, noWriting),
     ];
     const told = await Promise.all(answers.map(async (answer) => [answer.status, answer.headers.get("Retry-After"), answer.headers.get("Cache-Control"), await answer.text()]));
 
@@ -677,11 +719,14 @@ describe("a database whose allowance for the day is used up", () => {
       [503, "6400", "public, max-age=60", "This site is paused until midnight UTC.\n"],
       [503, "6400", "public, max-age=60", ""],
       [503, "6400", "no-store", JSON.stringify({ error: { code: "allowance_spent", message: "a day's allowance of the install is used up: ask again after midnight UTC", about: "reading" } })],
-      [503, "6400", "no-store", "The dashboard is paused: the free allowance of the database for reading is used up for today. It is back after midnight UTC.\n"],
+      [503, "6400", "no-store", `${NO_READING}\n`],
+      [503, "6400", "no-store", JSON.stringify({ ok: false, code: "no_more_reading", about: null, sentence: NO_READING })],
       [503, "6400", "no-store", JSON.stringify({ ok: false, refusal: "allowance_spent" })],
       [503, "6400", "no-store", JSON.stringify({ error: { code: "allowance_spent", message: "a day's allowance of the install is used up: ask again after midnight UTC", about: "writing" } })],
+      [503, "6400", "no-store", JSON.stringify({ ok: false, code: "no_more_writing", about: null, sentence: "The database takes no more changes today: its free allowance for writing is used up. Changes work again after midnight UTC." })],
     ]);
-    expect(failed).toHaveBeenCalledTimes(6);
+    // The entry writes down each failure it answers itself. The dashboard answers the change it could not write, so the entry never sees that one.
+    expect(failed).toHaveBeenCalledTimes(7);
   });
 });
 
@@ -698,7 +743,7 @@ describe("a computer's login", () => {
   }
 
   // Drift: the pieces each hold their own rule, and the entry joins them: a route not mounted, a return path dropped at the login, or a dashboard built without its counters would leave no way to a first token.
-  test("a computer with no token begins a login, the owner allows it on the dashboard after the login brings them back to its page, and the computer collects one token", async () => {
+  test("a computer with no token begins a login, the owner allows it through the dashboard after the login brings them back to the address the terminal printed, and the computer collects one token", async () => {
     const worker = instance(w);
     const begun = await done<Begun>(await begin(worker, "192.0.2.1"));
     const waiting = await done<{ state: string }>(await collect(worker, begun.secret));
@@ -706,14 +751,14 @@ describe("a computer's login", () => {
     const stranger = await ask(worker, begun.verify_url);
     const login = await logIn(worker, w, stranger.headers.get("Location") ?? "");
     const session = { Cookie: cookieOf(login) };
-    const page = await (await ask(worker, `${ADMIN}${login.headers.get("Location")}`, { headers: session })).text();
-    const [, csrf = ""] = /name="csrf" value="([^"]+)"/.exec(page) ?? [];
-    const form = new URLSearchParams({ code: begun.code, confirm: "yes", csrf }).toString();
+    const opened = await ask(worker, `${ADMIN}${login.headers.get("Location")}`, { headers: session });
+    const found = await ask(worker, `${ADMIN}/data/logins/find?code=${begun.code}`, { headers: session });
+    const decision = { code: begun.code, allow: true, confirm: true };
 
-    const unsigned = await ask(worker, `${ADMIN}/tokens/allow`, { method: "POST", headers: FORM, body: form });
+    const unsigned = await send(worker, `${ADMIN}/data/logins/decide`, decision);
     w.clock.now += 5000;
     const untouched = await done<{ state: string }>(await collect(worker, begun.secret));
-    const allowed = await ask(worker, `${ADMIN}/tokens/allow`, { method: "POST", headers: { ...session, ...FORM }, body: form });
+    const allowed = await send(worker, `${ADMIN}/data/logins/decide`, decision, session);
     w.clock.now += 5000;
     const collected = await done<{ state: string; token: string }>(await collect(worker, begun.secret));
     const again = await done<{ state: string }>(await collect(worker, begun.secret));
@@ -721,9 +766,10 @@ describe("a computer's login", () => {
 
     expect([begun.verify_url, waiting.state]).toEqual([`${ADMIN}/tokens/allow?code=${begun.code}`, "pending"]);
     expect([stranger.status, stranger.headers.get("Location")]).toEqual([302, `${ADMIN}/login?return=${encodeURIComponent(`/tokens/allow?code=${begun.code}`)}`]);
-    expect([login.status, login.headers.get("Location"), page.includes(`>${begun.code}</p>`)]).toEqual([302, `/tokens/allow?code=${begun.code}`, true]);
-    expect([unsigned.status, untouched.state]).toEqual([303, "pending"]);
-    expect([allowed.status, allowed.headers.get("Location")]).toEqual([303, "/tokens?done=allowed"]);
+    expect([login.status, login.headers.get("Location"), opened.status, ((await readShell(await opened.text())).boot as { email: string }).email]).toEqual([302, `/tokens/allow?code=${begun.code}`, 200, OWNER]);
+    expect([found.status, await found.json()]).toMatchObject([200, { ok: true, login: { code: begun.code, computer: "laptop", scope: "publisher" } }]);
+    expect([unsigned.status, untouched.state]).toEqual([401, "pending"]);
+    expect([allowed.status, await allowed.json()]).toEqual([200, { ok: true, allowed: true, scope: "publisher" }]);
     expect([collected.state, again.state, who.token]).toMatchObject(["allowed", "expired", { scope: "publisher", note: "laptop" }]);
   });
 
@@ -800,11 +846,12 @@ describe("the built bundle", () => {
   const modules = [...bundle.matchAll(/^\/\/ (\S+\.[cm]?[jt]s)$/gm)].map(([, path = ""]) => path);
 
   // Drift: the file the OpenTofu module uploads is built from the entry's imports, so one import of a test helper or a whole library would ship to every install.
-  test("is one module of the entry and what it imports, under the size cap, with no test or fixture file in it", () => {
+  test("is one module of the entry and what it imports, under the size caps as it is and gzipped, with no test or fixture file in it", async () => {
     expect(modules).toContain("packages/cloudflare/src/worker/worker.ts");
     expect(modules.filter((path) => /(^|\/)tests\/|\.test\.|\/support\/|vitest|fixtures/.test(path))).toEqual([]);
     expect([...bundle.matchAll(/^import .*$/gm)].map(([line]) => line)).toEqual([]);
     expect(new TextEncoder().encode(bundle).byteLength).toBeLessThan(MOST_BUNDLE_BYTES);
+    expect(await gzippedBytes(bundle)).toBeLessThan(MOST_BUNDLE_GZIP_BYTES);
   });
 
   // Drift: a release writes its number into the package's manifest alone, so a bundle that held a number of its own would name an old release on every install.

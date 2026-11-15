@@ -7,6 +7,7 @@
 import { parseSetCookie, stringifyCookie } from "cookie";
 import type { SqlJsStatic } from "sql.js";
 
+import type { ClientFiles } from "../../../app/src/console/shell";
 import { insidePath } from "../preview/base";
 import { createPreview } from "../preview/preview";
 import type { Samples } from "../preview/seed";
@@ -59,6 +60,9 @@ interface KeptHost {
 
   /** The path the demo sits under at its origin, such as `/poplin/demo`; empty at the root. */
   readonly base: string;
+
+  /** The dashboard's client, as the host hands its files out. */
+  readonly client: ClientFiles;
 
   /** What an earlier demo's `save` handed out; left out, the demo starts from the seed. */
   readonly saved?: SavedDemo;
@@ -157,6 +161,7 @@ export async function openKeptDemo(host: KeptHost): Promise<KeptDemo> {
     samples: host.samples,
     version: host.version,
     base: host.base,
+    client: host.client,
     reasonAt: REASON_AT,
     resumed: saved !== undefined,
     openDriver,

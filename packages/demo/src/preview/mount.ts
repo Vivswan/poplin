@@ -1,16 +1,15 @@
 // The preview answers on one local origin, and the app expects each piece at the root of a hostname. A mount stands between the two.
 //
-//   the browser asks   http://127.0.0.1:4400/settings
-//   the app is asked   https://poplin.example.com/settings
-//   the app answers    href="/activity"    Location: https://<a site's host label>.example.com/
-//   the browser gets   href="/activity"    Location: /served/<a site's host label>/
+//   the browser asks   http://127.0.0.1:4400/data/sites
+//   the app is asked   https://poplin.example.com/data/sites
+//   the app answers    "url": "https://<a site's host label>.example.com/"    Location: https://<a site's host label>.example.com/
+//   the browser gets   "url": "http://127.0.0.1:4400/served/<a site's host label>/"    Location: /served/<a site's host label>/
 //
 // A site's place is its whole first host label, so the mount knows nothing of how a label is built.
 //
 // Only addresses are rewritten: in an HTML page, in the `Location` header, and the install's own origins in a JSON answer.
 // A refusal in plain text is shown inside a page of the preview that says so.
 
-import { THEME_COOKIE } from "../../../app/src/dashboard/page/theme";
 import { ADMIN_LABEL } from "../../../core/src/names/hostname";
 import { withAddresses } from "./addresses";
 import { ADDRESSES, DOMAIN } from "./world";
@@ -30,14 +29,14 @@ const DOMAIN_ENDING = `.${DOMAIN}`;
 /** A hostname one label under the install's domain, with the scheme before it and the slash after it when a text writes them. */
 const HOST_ADDRESS = new RegExp(`(https://)?(?<![%\\w.-])([a-z0-9-]+)${DOMAIN_ENDING.replaceAll(".", "\\.")}/?`, "g");
 
-/** A site's hostname as the dashboard shows it with the id left out: the name and its two dashes, the stand-in for the id, then the rest of the label and the domain. */
-const MASKED_ADDRESS = new RegExp(`([a-z0-9-]+--)((?:<span[^>]*>)?\\*+(?:</span>)?)(-[a-z0-9-]+)${DOMAIN_ENDING.replaceAll(".", "\\.")}/?`, "g");
-
 /** The query keys that speak to the preview and never reach the app, each with the request header that carries its value on. */
 const PREVIEW_KEYS = { as: "Preview-As", "preview-visitor": "Preview-Visitor", "preview-login": "Preview-Login" } as const;
 
 /** The query key of a login address that names where to go back to. */
 const RETURN_KEY = "return";
+
+/** That key and its value in the query of a path, as a page or a header writes them. */
+const RETURN_VALUE = /([?&;]return=)([^&#]*)/;
 
 /** The headers a rewritten body no longer matches. */
 const BODY_HEADERS = ["Content-Length", "ETag", "Accept-Ranges"];
@@ -91,13 +90,28 @@ export function siteOrigin(label: string): string {
 }
 
 /**
+ * Write the path in the preview of a path the piece wrote. The place a login goes back to, where the path's query names one, is a path of the piece too.
+ *
+ * Only that one value is written anew: the rest of the path is the page's own text, entities and all.
+ */
+function localPath(path: string, here: Pick<Mount, "prefix" | "origin" | "base">): string {
+  const moved = mountedPath(here, path);
+  const back = RETURN_VALUE.exec(moved);
+  if (back === null) return moved;
+
+  const [whole, key = "", value = ""] = back;
+
+  return moved.replace(whole, () => `${key}${encodeURIComponent(localAddress(new URLSearchParams(`${RETURN_KEY}=${value}`).get(RETURN_KEY) ?? "", here))}`);
+}
+
+/**
  * Write the address in the preview of one the app wrote.
  *
  * @param here - the mount whose page holds the address, which a path without a host belongs to
  * @returns a path of the preview; an address of neither the install nor the mount stays as it is
  */
 export function localAddress(address: string, here: Pick<Mount, "prefix" | "origin" | "base">): string {
-  if (address.startsWith("/") && !address.startsWith("//")) return mountedPath(here, address);
+  if (address.startsWith("/") && !address.startsWith("//")) return localPath(address, here);
 
   const url = URL.parse(address);
   if (url === null) return address;
@@ -119,9 +133,7 @@ export function localAddress(address: string, here: Pick<Mount, "prefix" | "orig
 /** Every address of the install a text holds outside an attribute, written as the preview's own: what a person reads and copies is what works here. */
 function localText(text: string, origin: string): string {
   const host = origin.replace(/^https?:\/\//, "");
-  // An address with its id left out is no hostname the next step would know: it is written as the preview's path first, with the stand-in kept where the id was.
-  const masked = text.replace(MASKED_ADDRESS, (...[, name = "", mask = "", rest = ""]: string[]) => `${host}${SERVED_PREFIX}/${name}${mask}${rest}/`);
-  const written = masked.replace(HOST_ADDRESS, (...[whole = "", scheme, label = ""]: string[]) => {
+  const written = text.replace(HOST_ADDRESS, (...[whole = "", scheme, label = ""]: string[]) => {
     if (!ADDRESSES.isSiteHost(`${label}${DOMAIN_ENDING}`)) return whole;
 
     return `${scheme === undefined ? host : origin}${SERVED_PREFIX}/${label}/`;
@@ -164,6 +176,10 @@ async function appRequest(request: Request, here: Mount): Promise<Request> {
   headers.delete("Host");
   if (headers.get("Origin") === asked.origin) headers.set("Origin", here.origin);
 
+  // The place a login goes back to came out as an address of the preview; the piece is told its own again.
+  const back = url.searchParams.get(RETURN_KEY);
+  if (back !== null && (back === here.prefix || back.startsWith(`${here.prefix}/`))) url.searchParams.set(RETURN_KEY, `${here.base}${back.slice(here.prefix.length)}`);
+
   for (const [key, header] of Object.entries(PREVIEW_KEYS)) {
     const value = url.searchParams.get(key);
     url.searchParams.delete(key);
@@ -198,9 +214,8 @@ export async function askMount(request: Request, here: Mount, look: Look): Promi
   const location = headers.get("Location");
   if (location !== null) headers.set("Location", localAddress(location, here));
 
-  // The session cookie is made for the install's own domain, which no local origin is. The choice of scheme names no domain, and is kept.
+  // The session cookie is made for the install's own domain, which no local origin is.
   headers.delete("Set-Cookie");
-  for (const cookie of response.headers.getSetCookie().filter((one) => one.startsWith(`${THEME_COOKIE}=`))) headers.append("Set-Cookie", cookie);
 
   const kind = rewrittenKind(response, here);
   if (kind === undefined) return new Response(response.body, { status: response.status, headers });

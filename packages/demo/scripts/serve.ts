@@ -11,8 +11,10 @@
 import { basename, join } from "node:path";
 
 import manifest from "../../cli/package.json" with { type: "json" };
+import type { ClientFiles } from "../../app/src/console/shell";
 import { BunSqliteDriver } from "../../core/tests/database/support/bun-sqlite-driver";
 import { createPreview } from "../src/preview/preview";
+import { buildClient, CLIENT as CONSOLE, readClient } from "./client";
 import { readSamples } from "./samples";
 import { DEFAULT_PORT, HOST, markRunning, PID_PATH, pidFile, readFlags, stopRunning, unmarkRunning } from "./running";
 
@@ -21,9 +23,6 @@ const WATCH_FLAG = "--watch";
 
 /** The signals that end the preview. */
 const END_SIGNALS = ["SIGINT", "SIGTERM"] as const;
-
-/** The folder of the console's client. */
-const CONSOLE = join(import.meta.dir, "..", "..", "dashboard");
 
 /** The folder the client's build is written into. */
 const CONSOLE_DIST = join(CONSOLE, "dist");
@@ -40,28 +39,29 @@ const MOST_PORT = 65_535;
 /** The environment variable that tells the dev server which preview it stands in front of. */
 const PREVIEW_ORIGIN = "POPLIN_PREVIEW_ORIGIN";
 
-/** What the shell page loads as the client's script and stylesheet under the dev server: the dev server's own client, then the client's dev entry, which brings its styles. */
+/** What the shell page loads as the client's script and stylesheet under the dev server: the dev server's own client, then the client's dev entry, which brings its styles. Neither ever changes, so a browser may keep both. */
 const DEV_FILES: Readonly<Record<string, { readonly body: string; readonly type: string }>> = {
   "app.js": { body: 'import "/@vite/client";\nimport "/src/dev.ts";\n', type: "text/javascript;charset=utf-8" },
   "app.css": { body: "", type: "text/css;charset=utf-8" },
 };
 
-/** Read one built file of the console's client from disk at every request, so a new build shows without a restart. */
-async function consoleAsset(name: string): Promise<{ readonly body: Uint8Array<ArrayBuffer>; readonly type: string } | undefined> {
-  const dev = process.env[CLIENT_DEV] === undefined ? undefined : DEV_FILES[name];
-  if (dev !== undefined) return { body: new TextEncoder().encode(dev.body), type: dev.type };
+/** The client under the dev server: the two files above, by their own names. */
+const DEV_CLIENT: ClientFiles = {
+  entry: async () => ({ script: "app.js", style: "app.css" }),
+  file: async (name) => (Object.hasOwn(DEV_FILES, name) ? DEV_FILES[name] : undefined),
+};
 
-  const file = Bun.file(join(CONSOLE_DIST, basename(name)));
-  if (!(await file.exists())) return undefined;
+/** The built client, read from disk at every request, so a new build shows without a restart: its names from the build's manifest, and each file by its name. */
+const BUILT_CLIENT: ClientFiles = {
+  entry: async () => (await readClient(CONSOLE_DIST)).entry,
 
-  return { body: new Uint8Array(await file.arrayBuffer()), type: file.type };
-}
+  file: async (name) => {
+    const file = Bun.file(join(CONSOLE_DIST, basename(name)));
+    if (!(await file.exists())) return undefined;
 
-/** Build the console's client once. */
-async function buildClient(): Promise<void> {
-  const built = Bun.spawn([process.execPath, "run", "build"], { cwd: CONSOLE, stdio: ["ignore", "ignore", "inherit"] });
-  if ((await built.exited) !== 0) throw new Error("the console's client did not build");
-}
+    return { body: new Uint8Array(await file.arrayBuffer()), type: file.type };
+  },
+};
 
 /** Wait for the first of two processes that run as one to end, end the other, and answer the code of the one that ended. A signal that ends this process ends both. */
 async function together(client: Bun.Subprocess, watched: Bun.Subprocess): Promise<number> {
@@ -117,14 +117,14 @@ async function develop(port: number, args: readonly string[]): Promise<number> {
 
 async function serve(port: number, gallery: boolean): Promise<void> {
   await stopRunning(port);
-  if (process.env[CLIENT_WATCHED] === undefined && process.env[CLIENT_DEV] === undefined) await buildClient();
+  if (process.env[CLIENT_WATCHED] === undefined && process.env[CLIENT_DEV] === undefined) await buildClient(CONSOLE_DIST);
 
   const preview = await createPreview({
     openDriver: () => new BunSqliteDriver(),
     samples: await readSamples(),
     version: manifest.version,
     gallery,
-    consoleAsset,
+    client: process.env[CLIENT_DEV] === undefined ? BUILT_CLIENT : DEV_CLIENT,
   });
   const server = Bun.serve({
     hostname: HOST,

@@ -1,11 +1,12 @@
-// Anyone can begin a login, ask for its token, and send the dashboard any form.
-// Across any order of those steps, a token must come out only for a login the admin allowed from their own page, once, to the holder of its secret, and no secret or token may show up anywhere else.
+// Anyone can begin a login, ask for its token, and send the dashboard any decision, as JSON or as a form, from any origin.
+// Across any order of those steps, a token must come out only for a login the admin allowed in a JSON request under their session, once, to the holder of its secret, and no secret or token may show up anywhere else.
 
 import { expect } from "bun:test";
 import fc from "fast-check";
 
-import { createDashboard } from "../../packages/app/src/dashboard/dashboard";
+import { createConsole } from "../../packages/app/src/console/console";
 import { type ApiInstall, ORIGIN, openApi, VISITOR_HEADER } from "../../packages/app/tests/api/support/install";
+import { CLIENT } from "../../packages/app/tests/console/support/console";
 import { FREE_LIMITS } from "../../packages/app/tests/dashboard/support/install";
 import { ADDRESSES } from "../../packages/app/tests/sites/support/layout";
 import { holdsSecret, mintComputerLogin, parseLoginSecret, parseUserCode, showUserCode } from "../../packages/core/src/auth/computer-logins";
@@ -15,6 +16,7 @@ import { hostile } from "./hostile";
 
 const ADA = "ada@example.com" as Login;
 const SESSION = "session=ada";
+const JSON_TYPE = "application/json";
 const FORM = "application/x-www-form-urlencoded";
 const INTERVAL_MS = 5000;
 const MINUTE_MS = 60_000;
@@ -27,7 +29,7 @@ type Step =
   | { readonly kind: "begin"; readonly scope: "admin" | "publisher"; readonly computer: string }
   | { readonly kind: "ask"; readonly login: number; readonly secret: string | undefined }
   | { readonly kind: "look"; readonly login: number; readonly code: string | undefined }
-  | { readonly kind: "decide"; readonly login: number; readonly allow: boolean; readonly ticked: boolean; readonly session: boolean; readonly csrf: boolean; readonly origin: string }
+  | { readonly kind: "decide"; readonly login: number; readonly allow: boolean; readonly ticked: boolean; readonly session: boolean; readonly json: boolean; readonly origin: string }
   | { readonly kind: "wait"; readonly seconds: number };
 
 /** What the test itself knows of a login, kept apart from anything the install answers. */
@@ -42,11 +44,10 @@ interface Known {
 /** An install with its dashboard, and every text either one let out. */
 interface Desk {
   readonly install: ApiInstall;
-  readonly dashboard: ReturnType<typeof createDashboard>;
+  readonly dashboard: ReturnType<typeof createConsole>;
   readonly known: Known[];
   readonly texts: string[];
   readonly credentials: Set<string>;
-  csrf: string;
   visitors: number;
   starts: Starts;
 }
@@ -96,7 +97,7 @@ const steps: fc.Arbitrary<Step> = fc.oneof(
       allow: fc.boolean(),
       ticked: fc.oneof({ arbitrary: fc.constant(true), weight: 3 }, { arbitrary: fc.constant(false), weight: 1 }),
       session: fc.oneof({ arbitrary: fc.constant(true), weight: 4 }, { arbitrary: fc.constant(false), weight: 1 }),
-      csrf: fc.oneof({ arbitrary: fc.constant(true), weight: 4 }, { arbitrary: fc.constant(false), weight: 1 }),
+      json: fc.oneof({ arbitrary: fc.constant(true), weight: 4 }, { arbitrary: fc.constant(false), weight: 1 }),
       origin: fc.constantFrom(ORIGIN, ORIGIN, ORIGIN, ORIGIN, "https://evil.example.com", "null"),
     }),
     weight: 4,
@@ -115,13 +116,15 @@ async function openDesk(): Promise<Desk> {
   const { database, store, clock } = install;
   const desk: Desk = {
     install,
-    dashboard: createDashboard({
+    dashboard: createConsole({
       install: { database, store, now: () => clock.now, addressOf: ADDRESSES.addressOf, publicAddressOf: ADDRESSES.publicAddressOf, reservedNames: ADDRESSES.reservedNames },
       version: "1.0.0",
       readSession: async (headers) => (headers.get("Cookie") === SESSION ? { ok: true, value: ADA } : { ok: false }),
       loginPath: "/login",
-      csrfSecret: new Uint8Array(32).fill(9),
+      base: "",
+      client: CLIENT,
       freeLimits: FREE_LIMITS,
+      rebuild: { accepts: () => false, fetch: async () => new Response(null, { status: 204 }) },
       counters: install.counters,
       // Every request is its own visitor: the counts by address have their own test, and here they would only hide steps.
       visitorOf: async () => nextVisitor(desk),
@@ -129,12 +132,9 @@ async function openDesk(): Promise<Desk> {
     known: [],
     texts: [],
     credentials: new Set(),
-    csrf: "",
     visitors: 0,
     starts: new Starts(),
   };
-  const tokens = await (await desk.dashboard.fetch(new Request(`${ORIGIN}/tokens`, { headers: { Cookie: SESSION } }))).text();
-  desk.csrf = /name="csrf" value="([^"]+)"/.exec(tokens)?.[1] ?? "";
 
   return desk;
 }
@@ -184,32 +184,47 @@ async function ask(desk: Desk, login: Known, presented: string | undefined): Pro
   expect(answered.body.record).toMatchObject({ scope: login.scope });
 }
 
-async function decide(desk: Desk, login: Known, step: Extract<Step, { kind: "decide" }>): Promise<void> {
-  const fields = new URLSearchParams({ code: login.code });
-  if (step.ticked) fields.set("confirm", "yes");
-  if (step.csrf) fields.set("csrf", desk.csrf);
+/** The status the dashboard's guard refuses a decision with before it is read, `undefined` for one it lets through: no session, then a form of another origin, then any form. */
+function guarded(step: Extract<Step, { kind: "decide" }>): number | undefined {
+  if (!step.session) return 401;
 
-  const headers = new Headers({ Origin: step.origin, "Sec-Fetch-Site": step.origin === ORIGIN ? "same-origin" : "cross-site", "Content-Type": FORM });
+  if (step.json) return undefined;
+
+  return step.origin === ORIGIN ? 415 : 403;
+}
+
+async function decide(desk: Desk, login: Known, step: Extract<Step, { kind: "decide" }>): Promise<void> {
+  const decision = { code: login.code, allow: step.allow, ...(step.ticked ? { confirm: true } : {}) };
+  const body = step.json ? JSON.stringify(decision) : new URLSearchParams(Object.entries(decision).map(([key, value]) => [key, String(value)])).toString();
+
+  const headers = new Headers({ Origin: step.origin, "Sec-Fetch-Site": step.origin === ORIGIN ? "same-origin" : "cross-site", "Content-Type": step.json ? JSON_TYPE : FORM });
   if (step.session) headers.set("Cookie", SESSION);
 
-  const answer = await desk.dashboard.fetch(new Request(`${ORIGIN}/tokens/${step.allow ? "allow" : "deny"}`, { method: "POST", headers, body: fields.toString() }));
-  desk.texts.push(await answer.text(), answer.headers.get("Location") ?? "");
+  const answer = await desk.dashboard.fetch(new Request(`${ORIGIN}/data/logins/decide`, { method: "POST", headers, body }));
+  desk.texts.push(await answer.text());
 
-  const fromOwnPage = step.session && step.csrf && step.origin === ORIGIN && (step.ticked || !step.allow);
-  if (fromOwnPage && login.state === "pending" && desk.install.clock.now < login.expiresAt) login.state = step.allow ? "allowed" : "denied";
+  const refusal = guarded(step);
+  if (refusal !== undefined) expect(answer.status).toBe(refusal);
+
+  // A page of another origin cannot send JSON with the session, as this origin never lets it: the session and the media type are the whole guard, and the box is the admin's word that the codes match.
+  const taken = refusal === undefined && (step.ticked || !step.allow);
+  if (taken && login.state === "pending" && desk.install.clock.now < login.expiresAt) login.state = step.allow ? "allowed" : "denied";
 }
 
 async function look(desk: Desk, login: Known, code: string | undefined): Promise<void> {
-  const answer = await desk.dashboard.fetch(new Request(`${ORIGIN}/tokens/allow?${new URLSearchParams({ code: code ?? login.code })}`, { headers: { Cookie: SESSION } }));
-  const page = await answer.text();
-  desk.texts.push(page);
+  const asked = new URLSearchParams({ code: code ?? login.code });
+  const page = await desk.dashboard.fetch(new Request(`${ORIGIN}/tokens/allow?${asked}`, { headers: { Cookie: SESSION } }));
+  const answer = await desk.dashboard.fetch(new Request(`${ORIGIN}/data/logins/find?${asked}`, { headers: { Cookie: SESSION } }));
+  const found = await answer.text();
+  desk.texts.push(await page.text(), found);
 
   // A lone surrogate does not survive an address, so the code is read as the address carries it.
   const typed = parseUserCode((code ?? login.code).toWellFormed());
   const shown = desk.known.find((other) => parseUserCode(other.code) === typed && other.state === "pending" && desk.install.clock.now < other.expiresAt);
 
-  expect([answer.status, page.includes('<p class="code"')]).toEqual([200, shown !== undefined]);
-  if (shown !== undefined) expect(page).toContain(`>${shown.code}</p>`);
+  // The address a terminal prints answers the dashboard's one page, and the login under its code is read as data.
+  expect(page.status).toBe(200);
+  expect([answer.status, JSON.parse(found)]).toMatchObject(shown === undefined ? [400, { ok: false, code: "no_such_login" }] : [200, { ok: true, login: { code: shown.code, scope: shown.scope } }]);
 }
 
 async function take(desk: Desk, step: Step): Promise<void> {
@@ -242,7 +257,7 @@ async function take(desk: Desk, step: Step): Promise<void> {
 }
 
 property(
-  "over any order of steps a token comes out only for a login the admin allowed from their own page, once, and no secret or token is in any other answer, page, or audit entry",
+  "over any order of steps a token comes out only for a login the admin allowed in a JSON request under their session, once, and no secret or token is in any other answer, page, or audit entry",
   fc.asyncProperty(fc.array(steps, { minLength: 1, maxLength: 40 }), async (taken) => {
     const desk = await openDesk();
     const tokensBefore = (await desk.install.database.listTokens()).length;

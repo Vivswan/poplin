@@ -1,10 +1,12 @@
-// Scope: the pages are asked in process, as a browser would ask them. One test starts the real command on free ports; watch mode is not started here.
+// Scope: the preview is asked in process, as a browser and the dashboard's client would ask it. One test starts the real command on free ports; watch mode is not started here.
 
 import { describe, expect, test } from "bun:test";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 
+import { readShell } from "../packages/app/tests/console/support/shell";
 import { BunSqliteDriver } from "../packages/core/tests/database/support/bun-sqlite-driver";
+import { withAddresses } from "../packages/demo/src/preview/addresses";
 import { createPreview } from "../packages/demo/src/preview/preview";
 import { HOST, PID_PATH, pidFile, stopRunning } from "../packages/demo/scripts/running";
 import { readSamples } from "../packages/demo/scripts/samples";
@@ -16,8 +18,8 @@ const VERSION = "1.0.0";
 /** The command that starts a preview. */
 const SERVE = join(import.meta.dir, "..", "packages", "demo", "scripts", "serve.ts");
 
-/** How long a started preview is given to answer, in milliseconds. */
-const START_MS = 10_000;
+/** How long a started preview is given to answer, in milliseconds: the command builds the dashboard's client first. */
+const START_MS = 20_000;
 
 /** The origin the test asks the preview at. */
 const ORIGIN = "http://127.0.0.1:4400";
@@ -25,26 +27,43 @@ const ORIGIN = "http://127.0.0.1:4400";
 /** The most redirects one link is followed through. */
 const MAX_HOPS = 4;
 
-/** More pages than a click-through from the home page reaches. */
-const MAX_PAGES = 600;
+/** The headers the dashboard's client puts on a change it sends to the page's own origin. */
+const CHANGE_HEADERS = { Origin: ORIGIN, "Sec-Fetch-Site": "same-origin", "Content-Type": "application/json" };
 
-/** A link of a page: the value of an `href` that is a path of the preview. */
-const LOCAL_LINK = /href="(\/[^"]*)"/g;
+/** A stand-in for the dashboard's built client: two files under names of its own, so no test waits for a build. */
+const CLIENT_FILES: Readonly<Record<string, { readonly body: string; readonly type: string }>> = {
+  "app-test.js": { body: "// the client", type: "text/javascript; charset=utf-8" },
+  "app-test.css": { body: "/* the look */", type: "text/css; charset=utf-8" },
+};
 
-/** Any address of the install's own domain, which no local page may send a browser to. */
-const INSTALL_ADDRESS = /(?:href|action|formaction)="[^"]*example\.com[^"]*"/g;
+/** That client as a host hands it out. */
+const CLIENT: Parameters<typeof createPreview>[0]["client"] = {
+  entry: async () => ({ script: "app-test.js", style: "app-test.css" }),
+  file: async (name) => (Object.hasOwn(CLIENT_FILES, name) ? CLIENT_FILES[name] : undefined),
+};
 
-/** The one link of a dashboard page that leaves the preview on purpose: the notes of the newer release its side names, opened beside the page with no referrer. */
-const NOTES_LINK = /<a href="https:\/\/example\.com\/changelog\/" target="_blank" rel="noreferrer">/g;
+/** Every screen of the dashboard, by the path that shows it. */
+const SCREENS = ["/", "/tokens", "/activity", "/usage", "/settings", "/domain"];
 
-/** The hidden field of a form that holds its signed token. */
-const FORM_TOKEN = /name="csrf" value="([^"]+)"/;
+/** Any address at the install's own domain, which no answer may send a browser to. The notes of the sample release are the one address there on purpose. */
+const INSTALL_ADDRESS = /https?:\/\/[a-z0-9.-]*example\.com(?!\/changelog\/)[^"]*/g;
 
-/** The headers a browser puts on a form it sends to the page's own origin. */
-const FORM_HEADERS = { Origin: ORIGIN, "Sec-Fetch-Site": "same-origin", "Content-Type": "application/x-www-form-urlencoded" };
+/** A running preview. */
+type Preview = Awaited<ReturnType<typeof createPreview>>;
+
+/** What a page hands its client to start from. */
+interface Boot {
+  readonly base: string;
+  readonly demo: { readonly reset: string } | null;
+}
+
+/** A site as the Sites screen is told it. */
+interface Listed {
+  readonly sites: readonly { readonly name: string; readonly label: string; readonly url: string }[];
+}
 
 /** Follow a path through its redirects, as a browser would. */
-async function open(preview: Awaited<ReturnType<typeof createPreview>>, path: string): Promise<Response> {
+async function open(preview: Preview, path: string): Promise<Response> {
   let response = await preview.fetch(new Request(`${ORIGIN}${path}`));
 
   for (let hop = 0; hop < MAX_HOPS && response.status >= 300 && response.status < 400; hop += 1) {
@@ -52,6 +71,23 @@ async function open(preview: Awaited<ReturnType<typeof createPreview>>, path: st
   }
 
   return response;
+}
+
+/** Read one data route as the client does. */
+async function data<Answer>(preview: Preview, path: string): Promise<Answer> {
+  return (await (await preview.fetch(new Request(`${ORIGIN}${path}`))).json()) as Answer;
+}
+
+/** Send one change as the client does: JSON, from a page of the preview's own origin. */
+function change(preview: Preview, path: string, body: unknown = {}): Promise<Response> {
+  return preview.fetch(new Request(`${ORIGIN}${path}`, { method: "POST", headers: CHANGE_HEADERS, body: JSON.stringify(body) }));
+}
+
+/** The start values a page carries, and the files it loads: its stylesheets, then its scripts. */
+async function shellOf(page: string): Promise<{ readonly boot: Boot; readonly files: readonly string[] }> {
+  const shell = await readShell(page);
+
+  return { boot: shell.boot as Boot, files: [...shell.styles, ...shell.scripts] };
 }
 
 /** A port nothing listens on now. */
@@ -76,29 +112,26 @@ async function start(port: number, before?: number): Promise<number> {
   throw new Error(`no preview answered on port ${port}`);
 }
 
-/** Whether a page that is no 200 is the product's own answer: a refused login, or serving's one 404 for a site that is expired or in the trash, which the Sites table links all the same. */
-function isHonest(path: string, status: number): boolean {
-  if (path.includes("preview-login=refused")) return status === 403;
-
-  return status === 404 && (path.startsWith("/served/") || path.startsWith("/login?return=%2Fserved%2F"));
-}
-
 /** Open the demo as the command does: over bun's SQLite and the real sample sites. */
-async function openPreview(gallery: boolean): Promise<Awaited<ReturnType<typeof createPreview>>> {
-  return createPreview({ openDriver: () => new BunSqliteDriver(), samples: await readSamples(), version: VERSION, gallery });
+async function openPreview(gallery: boolean): Promise<Preview> {
+  return createPreview({ openDriver: () => new BunSqliteDriver(), samples: await readSamples(), version: VERSION, gallery, client: CLIENT });
 }
 
 describe("the local preview", () => {
-  test("two previews run side by side on two ports, a second start on a port replaces the first, and a stop leaves no server and no pid file: without this a restart leaves a stray server behind", async () => {
+  // Drift: a restart leaves a stray server behind, or the command serves a page with no script.
+  test("two previews run side by side on two ports, each serves the dashboard's built client, a second start on a port replaces the first, and a stop leaves no server and no pid file", async () => {
     const [one, other] = [freePort(), freePort()];
 
     try {
       const first = await start(one);
       const beside = await start(other);
       const second = await start(one, first);
+      const home = await fetch(`http://${HOST}:${other}/`);
+      const [script = ""] = (await shellOf(await home.text())).files.filter((file) => file.endsWith(".js"));
+      const built = await fetch(`http://${HOST}:${other}${script}`);
 
       expect(new Set([first, beside, second]).size).toBe(3);
-      expect((await fetch(`http://${HOST}:${other}/`)).status).toBe(200);
+      expect([home.status, built.status, built.headers.get("Cache-Control")]).toEqual([200, 200, "public, max-age=31536000, immutable"]);
       expect(await stopRunning(one)).toBe(second);
       expect(await fetch(`http://${HOST}:${one}/`).catch(() => "gone")).toBe("gone");
       expect(await stopRunning(other)).toBe(beside);
@@ -107,7 +140,7 @@ describe("the local preview", () => {
     }
 
     expect([one, other].map((port) => existsSync(pidFile(port)))).toEqual([false, false]);
-  }, 30_000);
+  }, 90_000);
 
   test("the seed runs and every link of the gallery answers the status the gallery states: without this a change to the app leaves the preview with dead pages", async () => {
     const preview = await openPreview(true);
@@ -115,36 +148,66 @@ describe("the local preview", () => {
     const gallery = await (await open(preview, "/gallery")).text();
     const answered = await Promise.all(entries.map(async (entry) => [entry.path, (await open(preview, entry.path)).status] as const));
 
-    expect(entries.length).toBeGreaterThan(80);
+    expect(entries.length).toBeGreaterThan(40);
     expect(entries.filter((entry) => !gallery.includes(`href="${Bun.escapeHTML(entry.path)}"`))).toEqual([]);
     expect(answered.filter(([path, status]) => status !== (entries.find((entry) => entry.path === path)?.status ?? 200))).toEqual([]);
+    expect((await open(await openPreview(false), "/gallery")).status).toBe(404);
   });
 
-  test("under a base path every link, form, redirect, and written address carries the base, and a demo its host already holds is not seeded again: without this a host that cannot give the demo its root shows links that leave it", async () => {
+  // Drift: the client asks its data and its files where the page says the dashboard sits. A page that named another place, at any of the preview's mounts, would draw an empty screen.
+  test.each([
+    ["the seeded install", "", SCREENS],
+    ["the install that holds nothing", "/empty", SCREENS],
+    ["the setup screen", "/setup/fresh", [""]],
+  ] as const)("every screen of %s answers the page that loads the client under its own place, and its files and its data answer there", async (_, place, screens) => {
+    const preview = await openPreview(false);
+    const pages = await Promise.all(screens.map(async (screen) => shellOf(await (await open(preview, `${place}${screen}`)).text())));
+    const files = await Promise.all((pages[0]?.files ?? []).map(async (file) => [file, (await open(preview, file)).status] as const));
+    const asked = place.startsWith("/setup") ? await change(preview, `${place}/data/check`, { token: "sample-token" }) : await preview.fetch(new Request(`${ORIGIN}${place}/data/sites`));
+
+    expect(pages.map((page) => page.boot.base)).toEqual(screens.map(() => place));
+    expect(files).toEqual([
+      [`${place}/assets/app-test.css`, 200],
+      [`${place}/assets/app-test.js`, 200],
+    ]);
+    expect([asked.status, asked.headers.get("Content-Type")]).toEqual([200, "application/json"]);
+  });
+
+  // Drift: a host that cannot give the demo its root shows a dashboard that asks its data outside the demo.
+  test("under a base path the page, its files, its data, every redirect, and every written address carry the base, and a demo its host already holds is not seeded again", async () => {
     const base = "/poplin/demo";
     const drivers = [new BunSqliteDriver(), new BunSqliteDriver()];
     const [seeded] = drivers;
-    const host = { samples: await readSamples(), version: VERSION, gallery: false, base };
+    const host = { samples: await readSamples(), version: VERSION, gallery: false, base, client: CLIENT };
     const first = await createPreview({ ...host, openDriver: () => drivers.shift() ?? new BunSqliteDriver() });
     const resumed = await createPreview({ ...host, resumed: true, openDriver: () => seeded ?? new BunSqliteDriver() });
-    const home = await (await first.fetch(new Request(`${ORIGIN}${base}/`))).text();
-    const paths = Array.from(home.replace(NOTES_LINK, "").matchAll(/(?:href|action)="([^"#]*)"/g), ([, path = ""]) => path);
-    const [, page = ""] = /href="([^"]*\/sites\/sales-report--[^"]*)"/.exec(home) ?? [];
-    const again = await (await resumed.fetch(new Request(`${ORIGIN}${base}/`))).text();
-    const stranger = await first.fetch(new Request(`${ORIGIN}${base}/settings?as=visitor`));
+    const ask = (preview: Preview, path: string): Promise<Response> => preview.fetch(new Request(`${ORIGIN}${path}`));
+    const home = await shellOf(await (await ask(first, `${base}/`)).text());
+    const empty = await shellOf(await (await ask(first, `${base}/empty/`)).text());
+    const listed = (await (await ask(first, `${base}/data/sites?access=public&sort=name&dir=asc`)).json()) as Listed;
+    const again = (await (await ask(resumed, `${base}/data/sites?access=public&sort=name&dir=asc`)).json()) as Listed;
+    const stranger = await ask(first, `${base}/empty/settings?as=visitor`);
+    const back = await ask(first, `${stranger.headers.get("Location")}&preview-login=admin`);
+    const bare = await ask(first, `${(await ask(first, `${base}/empty?as=visitor`)).headers.get("Location")}&preview-login=admin`);
+    const links: string[] = [];
+    withAddresses(await (await ask(first, (await ask(first, `${base}/settings?as=visitor`)).headers.get("Location") ?? "")).text(), (link) => `${links.push(link)}`);
+    const chosen = await ask(first, links.find((link) => link.includes("preview-login=admin"))?.replaceAll("&amp;", "&") ?? "");
 
-    expect(paths.length).toBeGreaterThan(20);
-    expect(paths.filter((path) => !path.startsWith(`${base}/`))).toEqual([]);
-    expect(home).toContain(`127.0.0.1:4400${base}/served/lisbon-page/`);
-    expect((await first.fetch(new Request(`${ORIGIN}${page}`))).status).toBe(200);
-    expect([stranger.status, stranger.headers.get("Location")]).toEqual([302, `${base}/login?return=%2Fsettings`]);
-    expect((await first.fetch(new Request(`${ORIGIN}${base}/setup`))).headers.get("Location")).toBe(`${base}/setup/fresh`);
-    expect((await first.fetch(new Request(`${ORIGIN}/settings`))).status).toBe(404);
-    expect(again).toContain(page);
+    expect([home.boot.base, home.boot.demo?.reset, empty.boot.base, empty.boot.demo?.reset]).toEqual([base, `${base}/reset`, `${base}/empty`, `${base}/empty/reset`]);
+    expect(home.files).toEqual([`${base}/assets/app-test.css`, `${base}/assets/app-test.js`]);
+    expect((await ask(first, `${base}/assets/app-test.js`)).status).toBe(200);
+    expect(listed.sites.map((site) => site.url)).toContain(`${ORIGIN}${base}/served/lisbon-page/`);
+    expect([stranger.status, stranger.headers.get("Location")]).toEqual([302, `${base}/empty/login?return=%2Fempty%2Fsettings`]);
+    expect([back.status, back.headers.get("Location")]).toEqual([302, `${base}/empty/settings`]);
+    expect([bare.status, bare.headers.get("Location")]).toEqual([302, `${base}/empty`]);
+    expect([chosen.status, chosen.headers.get("Location")]).toEqual([302, `${base}/settings`]);
+    expect((await ask(first, `${base}/setup`)).headers.get("Location")).toBe(`${base}/setup/fresh`);
+    expect((await ask(first, "/settings")).status).toBe(404);
+    expect(again.sites.map((site) => site.label)).toEqual(listed.sites.map((site) => site.label));
   });
 
   // Drift: the note of the last check of the domain can only be looked at where an install remembers one. A seed with none, or one a Check could not change, would leave the healthy and the broken state unseen.
-  test("the seeded install remembers a healthy domain, a Check on the Domain tab leaves a broken login to act on, and a reset brings the healthy one back", async () => {
+  test("the seeded install remembers a healthy domain, a Check on the Domain screen leaves a broken login to act on, and a reset brings the healthy one back", async () => {
     const preview = await openPreview(false);
     const note = async (): Promise<unknown> => {
       const answer = await preview.fetch(new Request(`${ORIGIN}/api/domain`, { headers: { Authorization: `Bearer ${preview.token()}` } }));
@@ -153,10 +216,11 @@ describe("the local preview", () => {
       return [answer.status, check?.run, check?.pieces.length, raised];
     };
     const seeded = await note();
-    await open(preview, "/state/domain/check");
+    const run = await change(preview, "/data/domain/check", { token: "sample-token" });
     const checked = await note();
     await preview.fetch(new Request(`${ORIGIN}/reset`, { method: "POST" }));
 
+    expect(run.status).toBe(200);
     expect([seeded, checked, await note()]).toEqual([
       [200, "check", 7, "none"],
       [200, "check", 7, { code: "login_broken", about: "Login policy" }],
@@ -164,30 +228,31 @@ describe("the local preview", () => {
     ]);
   });
 
-  test("clicking on from the home page reaches only pages that answer and name no hostname of the install: without this a click leaves for a hostname that does not exist", async () => {
+  // Drift: the client shows and copies the addresses its data holds. One that named a hostname of the install would send a browser to a domain that does not exist.
+  test("no page and no data of the dashboard names a hostname of the install, and every site's address is a path of the preview that serves the site", async () => {
     const preview = await openPreview(false);
-    const stated = new Map((await preview.entries()).map((entry) => [entry.path, entry.status ?? 200]));
-    const seen = new Map<string, { readonly status: number; readonly text: string; readonly type: string }>();
-    const waiting = ["/"];
+    const { sites } = await data<Listed>(preview, "/data/sites");
+    const answers = await Promise.all(
+      [...SCREENS, "/data/sites", "/data/sites?view=trash", "/data/activity", "/data/usage", "/data/settings", "/data/domain", "/data/frame", ...sites.map((site) => `/data/sites/${site.label}`)].map(
+        async (path) => [path, await (await open(preview, path)).text()] as const,
+      ),
+    );
+    const served = await Promise.all(sites.map(async (site) => [site.name, site.url.startsWith(`${ORIGIN}/served/`), (await open(preview, new URL(site.url).pathname)).status] as const));
 
-    for (let path = waiting.pop(); path !== undefined && seen.size < MAX_PAGES; path = waiting.pop()) {
-      const response = await open(preview, path);
-      const page = { status: response.status, type: response.headers.get("Content-Type") ?? "", text: await response.text() };
-      const links = Array.from(page.text.matchAll(LOCAL_LINK), ([, link = ""]) => link.replaceAll("&amp;", "&"));
-      seen.set(path, page);
-      waiting.push(...links.filter((link) => !seen.has(link) && !waiting.includes(link)));
-    }
+    expect(sites.length).toBeGreaterThan(8);
+    expect(answers.flatMap(([path, text]) => (text.match(INSTALL_ADDRESS) ?? []).map((found) => [path, found]))).toEqual([]);
+    expect(served.filter(([, local]) => !local)).toEqual([]);
+    expect(served.filter(([, , status]) => status === 200).length).toBeGreaterThan(5);
+  });
 
-    const pages = [...seen];
-    const html = pages.filter(([, page]) => page.type.startsWith("text/html"));
+  // Drift: the Activity screen shows the log as it is stored, newest first. A seed that wrote its history out of order would show days that jump back and forth.
+  test("the seeded activity never rises in time down the list", async () => {
+    const preview = await openPreview(false);
+    const { entries } = await data<{ entries: readonly { readonly at: number }[] }>(preview, "/data/activity");
+    const rising = entries.filter((entry, index) => index > 0 && entry.at > (entries[index - 1]?.at ?? 0));
 
-    expect(pages.filter(([path, page]) => page.status !== (stated.get(path) ?? 200) && !isHonest(path, page.status)).map(([path, page]) => [path, page.status])).toEqual([]);
-    expect(html.flatMap(([path, page]) => (page.text.replace(NOTES_LINK, "").match(INSTALL_ADDRESS) ?? []).map((found) => [path, found]))).toEqual([]);
-    expect(["/", "/tokens", "/settings", "/activity", "/usage", "/domain", "/?view=trash"].filter((path) => !seen.has(path))).toEqual([]);
-    expect([...seen.keys()].filter((path) => path.startsWith("/gallery"))).toEqual([]);
-    expect((await open(preview, "/gallery")).status).toBe(404);
-    expect(pages.filter(([path]) => path.startsWith("/served/")).length).toBeGreaterThan(8);
-    expect(seen.size).toBeLessThan(MAX_PAGES);
+    expect(entries.length).toBeGreaterThan(20);
+    expect(rising).toEqual([]);
   });
 
   test("the demo names no runtime and imports only portable source, its own files, and SQLite: without this it stops running in a browser or a Worker the day someone reaches for a file or a process", () => {
@@ -199,7 +264,7 @@ describe("the local preview", () => {
       "import { HOST } from '../../scripts/running';",
       'import { Hono } from "hono";',
       'import other from "sql.js/dist/sql-asm.js";',
-      'export const loaded = await import("../../../app/tests/dashboard/support/markup");',
+      'export const loaded = await import("../../../app/tests/console/support/console");',
       "export const home = process.env.HOME;",
       "export const file = Bun.file(home);",
       "export const bytes = Buffer.from(home);",
@@ -229,48 +294,30 @@ describe("the local preview", () => {
     ]);
   });
 
-  // Drift: the dashboard leaves an unlisted site's id out of the link it shows; a rewrite that knew only whole hostnames wrote the name before the preview's host.
-  test("an unlisted site's link, shown with its id left out, reads as the preview's own path with the stand-in where the id was", async () => {
-    const preview = await openPreview(false);
-    const page = await (await open(preview, "/?access=unlisted")).text();
-    const shown = page.match(/<span class="lk">[^<]*<span class="mask"[^>]*>[^<]*<\/span>[^<]*<\/span>/g) ?? [];
-
-    expect(shown.length).toBeGreaterThan(0);
-    expect(shown.every((link) => /^<span class="lk">[a-z0-9.:-]+\/served\/[a-z0-9-]+--<span class="mask"[^>]*>\*+<\/span>-u-poplin\/<\/span>$/.test(link))).toBe(true);
-  });
-
   test.each([
     ["the seeded install", "/", "/reset"],
     ["the install that holds nothing", "/empty/", "/empty/reset"],
-  ])("a form sent from a preview page changes the install, and the Reset at the top of the dashboard of %s brings the sample data back: without this the forms are pictures", async (_, dashboard, reset) => {
+  ])("a change sent from a preview page changes the install, and the Reset the dashboard of %s names brings the sample data back: without this the controls are pictures", async (_, dashboard, reset) => {
     const preview = await openPreview(false);
-    const page = (await preview.entries()).find((entry) => entry.name.startsWith("Private, three versions"))?.path ?? "";
-    const [, csrf = ""] = FORM_TOKEN.exec(await (await open(preview, page)).text()) ?? [];
-    const sent = await preview.fetch(new Request(`${ORIGIN}${page}/delete`, { method: "POST", headers: FORM_HEADERS, body: new URLSearchParams({ csrf }).toString() }));
-    const [, shown = ""] = /<div class="demo">.*?<form method="post" action="([^"]*)"/.exec(await (await open(preview, dashboard)).text()) ?? [];
+    const names = async (query: string): Promise<string[]> => (await data<Listed>(preview, `/data/sites${query}`)).sites.map((site) => site.name);
+    const { sites } = await data<Listed>(preview, "/data/sites?q=sales-report");
+    const sent = await change(preview, `/data/sites/${sites[0]?.label}/delete`);
+    const trashed = [await names("?q=sales-report"), await names("?view=trash")];
+    const started = await preview.fetch(new Request(`${ORIGIN}${reset}`, { method: "POST", headers: { Origin: ORIGIN } }));
 
-    expect([sent.status, sent.headers.get("Location")]).toEqual([303, `/?done=trashed&site=${page.slice("/sites/".length)}`]);
-    expect(await (await open(preview, "/?view=trash")).text()).toContain("sales-report");
-    expect(shown).toBe(reset);
-
-    const started = await preview.fetch(new Request(`${ORIGIN}${reset}`, { method: "POST", headers: FORM_HEADERS }));
-
+    expect([sent.status, ((await sent.json()) as { site: { state: string } }).site.state]).toEqual([200, "trash"]);
+    expect([trashed[0], trashed[1]?.includes("sales-report")]).toEqual([[], true]);
+    expect((await shellOf(await (await open(preview, dashboard)).text())).boot.demo).toEqual({ reset });
     expect([started.status, started.headers.get("Location")]).toEqual([303, "/"]);
-    expect(await (await open(preview, "/?view=trash")).text()).not.toContain("sales-report");
+    expect([await names("?q=sales-report"), (await names("?view=trash")).includes("sales-report")]).toEqual([["sales-report"], false]);
   });
 
-  test("a choice of scheme made on a preview page is kept by the browser, and the session cookie of a login is not: without this the Theme buttons of the dashboard do nothing here", async () => {
+  // Drift: the session cookie is made for the install's own domain. Handed to a browser at this origin it would be kept for a domain it never asks.
+  test("a login on a preview page hands the browser no cookie", async () => {
     const preview = await openPreview(false);
-    const [, csrf = ""] = FORM_TOKEN.exec(await (await open(preview, "/settings")).text()) ?? [];
-    const body = new URLSearchParams({ csrf, theme: "dark", back: "/settings" }).toString();
-    const chosen = await preview.fetch(new Request(`${ORIGIN}/theme`, { method: "POST", headers: FORM_HEADERS, body }));
-    const kept = chosen.headers.getSetCookie().map((cookie) => cookie.slice(0, cookie.indexOf(";")));
     const login = await preview.fetch(new Request(`${ORIGIN}/login?preview-login=admin`));
-    const shown = async (cookie: string): Promise<boolean> => (await (await preview.fetch(new Request(`${ORIGIN}/settings`, { headers: { Cookie: cookie } }))).text()).includes('<html lang="en" data-theme="dark">');
 
-    expect([chosen.status, chosen.headers.get("Location"), kept]).toEqual([303, "/settings", ["theme=dark"]]);
     expect([login.status, login.headers.getSetCookie()]).toEqual([302, []]);
-    expect([await shown(kept.join("; ")), await shown("")]).toEqual([true, false]);
   });
 
   test("the API takes the seeded admin token and writes addresses of the preview: without this the printed token and the listed addresses are of no use", async () => {

@@ -4,6 +4,7 @@ import { describe, expect, test } from "bun:test";
 
 import { TOKEN, usualPlug } from "../dashboard/domain/support/fake-plug";
 import { openConsole, REBUILD_HOST } from "./support/console";
+import { readShell } from "./support/shell";
 
 /** A release newer than the test console's version. */
 const NEWER = { version: "1.1.0", released: "2026-12-01", notes: "https://example.com/changelog/", database: false };
@@ -79,11 +80,10 @@ describe("the frame", () => {
     await learnRelease(opened);
     await opened.change("/data/settings/update-address", { address: ADDRESS });
     const page = await (await opened.get("/")).text();
-    const block = /<script type="application\/json" id="boot">(.*)<\/script>/.exec(page)?.[1] ?? "";
     const { ok, ...frame } = (await (await opened.get("/data/frame")).json()) as Record<string, unknown>;
 
     expect(ok).toBe(true);
-    expect(JSON.parse(block)).toMatchObject(frame);
+    expect((await readShell(page)).boot).toMatchObject(frame);
   });
 });
 

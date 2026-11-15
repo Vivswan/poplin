@@ -14,7 +14,7 @@
 // so a removed login loses the dashboard at once and the private sites within the minute.
 // The session cookie is the dashboard's alone: "sign everyone out" ends the dashboard's sessions, and a private site's login is Access's own.
 
-import { createDashboard } from "@poplin/app/src/dashboard/dashboard";
+import { createConsole } from "@poplin/app/src/console/console";
 import { visitorKey } from "@poplin/app/src/limits/visitor-key";
 import { readSession } from "@poplin/app/src/login/session";
 import { toHttps } from "@poplin/app/src/transport/to-https";
@@ -25,6 +25,7 @@ import { clientAddress } from "../limits/client-address";
 import { FREE_LIMITS } from "../limits/free-limits";
 import { INSTALL_OBJECTS } from "../zone/install-objects";
 import type { Bindings } from "./bindings";
+import { CLIENT_FILES } from "./client-files";
 import { type Held, readHeld } from "./held";
 import { answerLogin } from "./login";
 import { answerSite } from "./site";
@@ -91,14 +92,16 @@ async function answerDashboard(request: Request, instance: Instance, held: Held)
   const now = instance.install.now();
   // As the API does: every listing of the bucket this request makes is counted against the day, and written down once.
   const meter = meterStore(instance.install.store, { database: instance.install.database, now: instance.install.now });
-  const dashboard = createDashboard({
+  const dashboard = createConsole({
     install: { ...instance.install, store: meter.store },
     version: instance.version,
     readSession: (headers) => readSession(headers, { key: held.sessionKey, logins: held.logins, now }),
     loginPath: INSTALL_OBJECTS.loginPath,
-    csrfSecret: held.formsSecret,
+    base: "",
+    client: CLIENT_FILES,
     domain: instance.domain,
     freeLimits: FREE_LIMITS,
+    rebuild: instance.rebuilding,
     counters: instance.counters,
     visitorOf: (asked) => visitorKey(clientAddress(asked.headers), held.visitorSecret, now),
   });
