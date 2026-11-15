@@ -2,18 +2,18 @@
 //
 // It binds an email, its issue time, and its end time under the install's signing key, and nothing else: no address, no browser, no Access token.
 // It names no domain, so a browser sends it to the hostname that set it and to no other: the dashboard's.
+// Its name starts with `__Host-`, which a browser takes only from the hostname itself: no site of the same domain can set or replace it.
 // A new signing key ends every session at once.
 
 import { buildSession, verifySession } from "@poplin/core/src/auth/cookie";
 import { isLogin, type Login, type Logins } from "@poplin/core/src/auth/logins";
 import { serialize } from "hono/utils/cookie";
 
-const COOKIE_NAME = "__Secure-poplin-session";
+const COOKIE_NAME = "__Host-poplin-session";
 const MAX_AGE_SECONDS = 30 * 24 * 60 * 60;
-const MAX_CANDIDATES = 8;
 
-/** Why a request carries no session. `not-a-login` is a genuine cookie whose email has left the logins. */
-type SessionRefusal = "missing" | "malformed" | "bad-signature" | "expired" | "not-a-login";
+/** Why a request carries no session. `several` is more than one cookie of the name; `not-a-login` is a genuine cookie whose email has left the logins. */
+type SessionRefusal = "missing" | "several" | "malformed" | "bad-signature" | "expired" | "not-a-login";
 
 /** The request's headers; `get` answers `null` for an absent one, as `Headers` does. */
 export interface RequestHeaders {
@@ -46,30 +46,21 @@ interface SessionCheck {
   readonly now: number;
 }
 
-function candidates(header: string): string[] {
+/** Every value the header holds under the cookie's name. Only a space or a tab around a pair is dropped: any other character before the name makes it another name, which a site of the same domain can set. */
+function valuesOf(header: string): string[] {
   const prefix = `${COOKIE_NAME}=`;
 
   return header
     .split(";")
-    .map((pair) => pair.trim())
+    .map((pair) => pair.replace(/^[ \t]+|[ \t]+$/g, ""))
     .filter((pair) => pair.startsWith(prefix))
-    .map((pair) => pair.slice(prefix.length))
-    .slice(0, MAX_CANDIDATES);
-}
-
-async function checkValue(value: string, check: SessionCheck): Promise<CheckedSession> {
-  const session = await verifySession(value, { key: check.key, now: check.now });
-  if (!session.ok) return session;
-
-  if (!isLogin(check.logins, session.value)) return { ok: false, refusal: "not-a-login" };
-
-  return session;
+    .map((pair) => pair.slice(prefix.length));
 }
 
 /**
  * Build the `Set-Cookie` value that starts a session of 30 days.
  *
- * @returns the cookie with `Secure; HttpOnly; SameSite=Lax; Path=/` and no `Domain`
+ * @returns the cookie with `Secure; HttpOnly; SameSite=Lax; Path=/` and no `Domain`, as its `__Host-` name needs
  */
 export async function mintSessionCookie(session: NewSession): Promise<string> {
   const value = await buildSession({ email: session.email, issuedAt: session.now, maxAgeMs: MAX_AGE_SECONDS * 1000, key: session.key });
@@ -80,18 +71,19 @@ export async function mintSessionCookie(session: NewSession): Promise<string> {
 /**
  * Decide who a request's session cookie names.
  *
- * @returns the email, when a cookie is signed under the key, under 30 days old, and still in the logins; otherwise why the first cookie failed
+ * @returns the email, when the one cookie is signed under the key, under 30 days old, and still in the logins; otherwise why it failed. A request with two cookies of the name is refused whole
  */
 export async function readSession(headers: RequestHeaders, check: SessionCheck): Promise<CheckedSession> {
-  let first: CheckedSession | undefined;
+  const [value, ...others] = valuesOf(headers.get("Cookie") ?? "");
+  if (value === undefined) return { ok: false, refusal: "missing" };
 
-  // Another site of the domain can plant a cookie of this name ahead of the real one, so each is tried.
-  for (const value of candidates(headers.get("Cookie") ?? "")) {
-    const session = await checkValue(value, check);
-    if (session.ok) return session;
+  // A browser holds one cookie of this name for the dashboard, so a second one is not the browser's own.
+  if (others.length > 0) return { ok: false, refusal: "several" };
 
-    first ??= session;
-  }
+  const session = await verifySession(value, { key: check.key, now: check.now });
+  if (!session.ok) return session;
 
-  return first ?? { ok: false, refusal: "missing" };
+  if (!isLogin(check.logins, session.value)) return { ok: false, refusal: "not-a-login" };
+
+  return session;
 }
