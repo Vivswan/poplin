@@ -1429,6 +1429,34 @@ function computerLogins(label: string, makeDatabase: DatabaseFactory): void {
       expect(await database.getComputerLogin(stale.id)).toEqual(stale);
     });
 
+    // Drift: an admin may let a computer in for less than it asked. A lowered login that kept its scope would hand out an admin's token after the admin chose a publisher's, and the audit log would name the wrong one.
+    test("a login allowed as a publisher is stored, audited, and redeemed as a publisher's, and a denied one keeps what it asked", async () => {
+      const database = await opened(makeDatabase);
+      const asks = async (): Promise<PendingLogin> => ({ ...(await pendingLogin()), scope: "admin" });
+      const [lowered, kept, denied] = [await asks(), await asks(), await asks()];
+      for (const login of [lowered, kept, denied]) await database.addComputerLogin(login, ROOM);
+      const by = { by: ADMIN, at: NOW + 1 } as const;
+
+      const decided = [
+        await database.decideComputerLogin(lowered.code, { state: "allowed", asPublisher: true, ...by }),
+        await database.decideComputerLogin(kept.code, { state: "allowed", asPublisher: false, ...by }),
+        await database.decideComputerLogin(denied.code, { state: "denied", asPublisher: true, ...by }),
+      ];
+      const tokens = { admin: (await mintToken({ scope: "admin", note: "laptop", now: NOW + 2 })).record, publisher: (await mintToken({ scope: "publisher", note: "laptop", now: NOW + 2 })).record };
+
+      expect(decided.map((answer) => (answer.kind === "done" ? [answer.login.scope, answer.login.state] : answer.kind))).toEqual([
+        ["publisher", "allowed"],
+        ["admin", "allowed"],
+        ["admin", "denied"],
+      ]);
+      expect((await auditTrail(database)).map((entry) => [entry.action, entry.detail])).toEqual([
+        ["login_allowed", { scope: "publisher", computer: "laptop" }],
+        ["login_allowed", { scope: "admin", computer: "laptop" }],
+        ["login_denied", { scope: "admin", computer: "laptop" }],
+      ]);
+      expect([await database.redeemComputerLogin(lowered.id, tokens.admin), await database.redeemComputerLogin(lowered.id, tokens.publisher)]).toEqual([{ kind: "not_allowed" }, { kind: "done" }]);
+    });
+
     // Drift: two admins, or one who presses twice, decide at the same moment; both heard would leave a login allowed in the audit log and denied in its row.
     test("of an Allow and a Deny made at the same moment one is done, with its one audit entry", async () => {
       const database = await opened(makeDatabase);

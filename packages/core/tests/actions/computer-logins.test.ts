@@ -172,6 +172,31 @@ describe("decideLogin", () => {
     expect([await redeemLogin(world.install, { secret }), await world.audit()]).toEqual([{ ok: true, state: "pending" }, []]);
   });
 
+  // Drift: the admin's choice at Allow is the last word on what a computer may do. A choice that could raise a publisher's request, or one that was dropped on the way, would hand out an admin's token nobody meant to give.
+  test.each([
+    ["an admin's request lowered to a publisher's", "admin", "publisher", "publisher"],
+    ["an admin's request allowed as asked", "admin", "admin", "admin"],
+    ["an admin's request allowed with no scope named", "admin", undefined, "admin"],
+    ["a publisher's request allowed as asked", "publisher", "publisher", "publisher"],
+    ["a publisher's request raised to an admin's", "publisher", "admin", undefined],
+  ] as const)("%s", async (_what, asks, scope, becomes) => {
+    const world = await makeWorld();
+    const { code, secret } = await begun(world, asks);
+
+    const decided = await decideLogin(world.install, ADMIN, { code, allow: true, ...(scope === undefined ? {} : { scope }) });
+    const redeemed = await redeemLogin(world.install, { secret });
+
+    if (becomes === undefined) {
+      expect([decided, redeemed, await world.audit()]).toEqual([{ ok: false, code: "bad_argument", about: "scope" }, { ok: true, state: "pending" }, []]);
+
+      return;
+    }
+
+    expect(decided).toMatchObject({ ok: true, login: { scope: becomes } });
+    expect(redeemed).toMatchObject({ ok: true, state: "allowed", record: { scope: becomes } });
+    expect(await world.audit()).toEqual(["login_allowed", "token_added"]);
+  });
+
   // Drift: the code is typed by a person and travels in an address; one spelling refused would turn a correct code into "no such login".
   test("a code is found however it is typed, shows what it asks for, and is decided once", async () => {
     const world = await makeWorld();

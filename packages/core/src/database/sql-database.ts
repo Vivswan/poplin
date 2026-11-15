@@ -388,8 +388,10 @@ const INSERT_LOGIN = `
 INSERT INTO logins (id, code, hash, scope, computer, visitor, created_at, expires_at)
 SELECT ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8 WHERE ${LOGIN_IS_NEW}`;
 
-/** The login under code `?1` allowed or denied by `?3`, only while it is pending and has not run out at `?4`. */
-const DECIDE_LOGIN = "UPDATE logins SET state = ?2, decided_by = ?3 WHERE code = ?1 AND state = 'pending' AND expires_at > ?4";
+/** The login under code `?1` allowed or denied by `?3`, only while it is pending and has not run out at `?4`. With `?5` an allowed one becomes a publisher's. */
+const DECIDE_LOGIN = `
+UPDATE logins SET state = ?2, decided_by = ?3, scope = CASE WHEN ?5 = 1 AND ?2 = 'allowed' THEN 'publisher' ELSE scope END
+WHERE code = ?1 AND state = 'pending' AND expires_at > ?4`;
 
 /** The audit entry of a decided login, written only when the statement before it changed a row. It names the scope and the computer, and nothing of the secret. */
 const AUDIT_LOGIN = `
@@ -1201,7 +1203,7 @@ export class SqlDatabase implements Database {
 
   async decideComputerLogin(code: UserCode, decision: LoginDecision): Promise<{ readonly kind: "done"; readonly login: ComputerLogin } | Refused<"not_pending">> {
     const [updated, , after] = await this.#driver.batch([
-      sql(DECIDE_LOGIN, code, decision.state, decision.by, decision.at),
+      sql(DECIDE_LOGIN, code, decision.state, decision.by, decision.at, decision.asPublisher === true ? 1 : 0),
       sql(AUDIT_LOGIN, decision.at, decision.by, decision.state === "allowed" ? "login_allowed" : "login_denied", code),
       sql(`${SELECT_LOGIN} WHERE code = ?1`, code),
     ]);

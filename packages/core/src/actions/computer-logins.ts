@@ -49,8 +49,8 @@ export const LOGIN_REQUEST = v.strictObject({
 /** What a terminal asks for its token with. */
 export const LOGIN_SECRET = v.strictObject({ secret: v.pipe(v.string(), v.maxLength(MAX_SECRET_LENGTH)) });
 
-/** What an admin decides about the login under a code. */
-const LOGIN_DECISION = v.strictObject({ code: v.string(), allow: v.boolean() });
+/** What an admin decides about the login under a code. `scope` is what an allowed computer becomes; left out, what it asked to be. */
+const LOGIN_DECISION = v.strictObject({ code: v.string(), allow: v.boolean(), scope: v.optional(v.picklist(["publisher", "admin"])) });
 
 /**
  * A pending login as an admin sees it: never its secret, nor the secret's hash. Times are milliseconds since the epoch.
@@ -151,8 +151,10 @@ export async function showLogin(install: Install, actor: Actor, code: string): P
 /**
  * Allow or deny the pending login under a code. The decision is made once and writes one audit entry; an allowed login gives its token to the terminal that holds its secret.
  *
- * @param decision - the code as typed, and whether the computer is let in; anything is taken and checked
- * @returns the login as it was asked, `not_allowed` for anyone but an admin behind a session, or `no_such_login` as in `showLogin`
+ * An admin may allow a computer for less than it asked, never for more: a login that asked to be an admin may be allowed as a publisher.
+ *
+ * @param decision - the code as typed, whether the computer is let in, and the scope it is let in with; anything is taken and checked
+ * @returns the login as it was decided, `not_allowed` for anyone but an admin behind a session, `bad_argument` about `scope` for an admin's scope on a login that asked for a publisher's, or `no_such_login` as in `showLogin`
  * @throws {Error} the database failed
  */
 export async function decideLogin(
@@ -166,10 +168,18 @@ export async function decideLogin(
   const asked = v.safeParse(LOGIN_DECISION, decision);
   if (!asked.success) return refuse("bad_argument", v.getDotPath(asked.issues[0])?.split(".")[0] ?? "decision");
 
+  const { allow, scope } = asked.output;
   const code = parseUserCode(asked.output.code);
   if (code === undefined) return refuse("no_such_login");
 
-  const decided = await install.database.decideComputerLogin(code, { state: asked.output.allow ? "allowed" : "denied", by: admin, at: install.now() });
+  if (allow && scope === "admin") {
+    const login = await waitingLogin(install, code);
+    if (login === undefined) return refuse("no_such_login");
+
+    if (login.scope !== "admin") return refuse("bad_argument", "scope");
+  }
+
+  const decided = await install.database.decideComputerLogin(code, { state: allow ? "allowed" : "denied", asPublisher: scope === "publisher", by: admin, at: install.now() });
   if (decided.kind !== "done") return refuse("no_such_login");
 
   return { ok: true, login: loginObject(decided.login) };

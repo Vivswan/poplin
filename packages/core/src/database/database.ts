@@ -229,6 +229,9 @@ export interface LoginDecision {
   /** Whether the computer is let in. */
   readonly state: "allowed" | "denied";
 
+  /** Whether an allowed computer becomes a publisher whatever it asked to be. Left out, it becomes what it asked: a decision never gives more. */
+  readonly asPublisher?: boolean;
+
   /** The admin who decides, whose email signs the audit entry. */
   readonly by: Login;
 
@@ -479,6 +482,8 @@ export interface Database {
 
   /**
    * Allow or deny the login under a code, only while it is pending and has not run out. It writes one `login_allowed` or `login_denied` audit entry, which holds the scope and the computer's name and nothing of the secret.
+   *
+   * A login allowed as a publisher is stored with that scope, so its token and its audit entry are a publisher's.
    *
    * @returns the login after the decision, or `not_pending` for a code of no login and for a login that was decided or ran out
    */

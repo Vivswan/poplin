@@ -489,7 +489,8 @@ class MemoryDatabase implements Database {
     const pending = this.#loginUnder(code);
     if (pending?.state !== "pending" || pending.expiresAt <= decision.at) return { kind: "not_pending" };
 
-    const login: ComputerLogin = { ...pending, state: decision.state, decidedBy: decision.by };
+    const scope = decision.state === "allowed" && decision.asPublisher === true ? "publisher" : pending.scope;
+    const login: ComputerLogin = { ...pending, scope, state: decision.state, decidedBy: decision.by };
     this.#logins.set(login.id, login);
     this.#log(decision, decision.state === "allowed" ? "login_allowed" : "login_denied", null, { scope: login.scope, computer: login.computer });
 
