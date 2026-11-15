@@ -44,7 +44,7 @@ The limits and alerts below are the protection, and none of them is a cap on wha
 | the day's requests for sites, counted from a sample: about 100000 | the setting `requests_per_day` | a site's visitors get status 429 until the next UTC day |
 | one site's and one visitor's requests in a minute | the settings `site_requests_per_minute` and `visitor_requests_per_minute` | status 429, with the seconds to wait |
 | the versions a publish leaves a site, and the days in the trash | the settings `versions_kept` and `trash_days` | a publish that goes live deletes the versions past the count, and the Worker's sweep deletes a site past its days in the trash, each with its files |
-| one address at one Cloudflare location: 300 requests in 10 seconds | Repair: Rate rule, skipped on a Free plan domain with other hostnames and where the plan has no room for it. Module: `cloudflare_ruleset.rate`, unless `rate_rule` is `off` | Cloudflare blocks the address for 10 seconds, before the Worker runs |
+| one address at one Cloudflare location: 300 requests in 10 seconds, [counted in each data center](#where-a-limit-is-counted) | Repair: Rate rule, skipped on a Free plan domain with other hostnames and where the plan has no room for it. Module: `cloudflare_ruleset.rate`, unless `rate_rule` is `off` | Cloudflare blocks the address for 10 seconds, before the Worker runs |
 | verified bots, methods other than GET and HEAD, and scanner paths, on site addresses. Search engines pass while `search_engines_allowed` is on | Repair: WAF rule, skipped where the plan has no room for it. Module: `cloudflare_ruleset.guards`, unless `guard_rules` is false | Cloudflare blocks the request before the Worker runs |
 | AI crawlers: while `block_bots` is `auto`, on a domain with no other hostnames; while it is `on`, on any domain | Repair: Bot settings. Module: `cloudflare_bot_management.zone` | Cloudflare blocks them on the whole domain |
 | plain http | Repair: Redirect rule. Module: `cloudflare_ruleset.https`. The Worker does the same | the request is sent to https |
@@ -56,6 +56,14 @@ The limits and alerts below are the protection, and none of them is a cap on wha
 | the domain's plan | Module alone: `paid_plan_allowed` | an apply on a plan other than Free stops with an error, unless the input is true |
 
 Repair is the button on the setup page and the Domain screen. Module is [the OpenTofu module](with-opentofu.md). The rows marked Module alone, and the one-day rule, exist only on an install the module made: the setup page's token holds no permission for R2 or for notifications.
+
+## Where a limit is counted
+
+| Limit | Counted | For a visitor whose requests reach several Cloudflare data centers |
+| --- | --- | --- |
+| the rate rule: 300 requests in 10 seconds | in each data center, with a count of its own. The data centers at one geographical location share a count | more than 300 in 10 seconds can pass before the rule blocks |
+| `site_requests_per_minute` and `visitor_requests_per_minute` | in each location, with a count of its own | more than the setting can pass in a minute |
+| `requests_per_day` | in one place, the database, from a sample | one count takes the requests of every data center. It is an estimate, and each instance of the Worker keeps what it last read for up to half a minute, so more than the setting can pass |
 
 ## What a day counts
 

@@ -39,7 +39,7 @@ bun run --cwd packages/cloudflare build   # writes packages/cloudflare/dist/work
 | DNS records | proxied, each with a comment starting `poplin: ` |
 | Access policy and application | one login, allowing exactly `logins`, in front of `/login` of the dashboard's hostname and of every private site's address, `*-p-poplin.example.com`; a login lasts 30 days |
 | Redirect rule | sends a request over `http` to one of the install's hostnames to `https`, with a 301, before the Worker runs |
-| Rate rule | blocks an address for 10 seconds after 300 requests in 10 seconds |
+| Rate rule | blocks an address for 10 seconds after 300 requests in 10 seconds, [counted in each data center](../../../docs/run/limits-and-cost.md#where-a-limit-is-counted) |
 | Guard rules | two custom rules that block a request to a site hostname before the Worker runs: one from a page of another domain; one from a verified bot, with a method other than GET and HEAD, or for a scanner path |
 | Bot settings | the zone's AI bot block, on a zone with no hostnames of its own |
 
