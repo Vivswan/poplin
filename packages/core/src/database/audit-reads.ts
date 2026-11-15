@@ -1,14 +1,16 @@
 // The statements that search the audit log, count it and find where a part of it ends, and what each answers. Each reads no further than it is told, since the provider charges every row a statement reads.
 
-import { and, asc, count, desc, eq, inArray, lt, min, type SQL, sql as fragment, sum } from "drizzle-orm";
+import { and, asc, count, desc, eq, getTableColumns, gt, inArray, isNull, lt, min, type SQL, sql as fragment, sum } from "drizzle-orm";
+import { alias } from "drizzle-orm/sqlite-core";
 import * as v from "valibot";
 
-import type { AuditAction } from "../records/audit";
-import { COUNT, POSITIVE } from "../records/fields";
+import { type AuditAction, auditFromRow } from "../records/audit";
+import { COUNT, POSITIVE, SITE_ID, SITE_NAME } from "../records/fields";
+import { TITLE } from "../records/site";
 import type { SiteId } from "../sites/ids";
-import { AUDIT_WINDOW, type AuditCount, type AuditCountQuery, type AuditPartQuery, type AuditSearch } from "./database";
+import { AUDIT_WINDOW, type AuditCount, type AuditCountQuery, type AuditPartQuery, type AuditQuery, type AuditSearch, type NamedAuditEntry } from "./database";
 import type { Statement, StatementResult } from "./driver";
-import { audit, earlierIds, sites } from "./schema";
+import { audit, earlierIds, sites, tokens } from "./schema";
 import { holding } from "./site-statements";
 import { BUILD, built, written } from "./statements";
 
@@ -17,6 +19,58 @@ const AUDIT_COUNT_ROW = v.object({ whole: v.picklist([0, 1]), found: COUNT });
 
 /** The oldest and the newest `seq` of the log, as the statement of its ends answers them: both `null` for an empty log. */
 const AUDIT_ENDS_ROW = v.object({ oldest: v.nullable(POSITIVE), newest: v.nullable(POSITIVE) });
+
+/** The `sites` table as `held`: the site that has the id an entry holds. */
+const HELD = alias(sites, "held");
+
+/** The `sites` table as `moved`: the site that gave that id up at a new link, found by the folder it keeps. It is looked for only where no site has the id. */
+const MOVED = alias(sites, "moved");
+
+/** An entry's own columns, and what it names as it is now: the site's id, name and listed title, each from the one of the two sites that was found, and the note of the token that did it. */
+const NAMED_COLUMNS = {
+  ...getTableColumns(audit),
+  now_id: fragment<string | null>`coalesce(${HELD.id}, ${MOVED.id})`.as("now_id"),
+  now_name: fragment<string | null>`coalesce(${HELD.name}, ${MOVED.name})`.as("now_name"),
+  now_title: fragment<string | null>`coalesce(${HELD.title}, ${HELD.page_title}, ${MOVED.title}, ${MOVED.page_title})`.as("now_title"),
+  token_note: fragment<string | null>`${tokens.note}`.as("token_note"),
+};
+
+/** What a named entry's row holds beside the entry. */
+const NAMED_ROW = v.object({ now_id: v.nullable(SITE_ID), now_name: v.nullable(SITE_NAME), now_title: v.nullable(TITLE), token_note: v.nullable(v.string()) });
+
+/** How a page of the log is read. */
+interface Page {
+  /** The condition its entries meet. */
+  readonly kept: SQL | undefined;
+
+  /** Whether the newest entry is first. */
+  readonly newestFirst: boolean;
+
+  /** The most entries it holds. */
+  readonly limit: number;
+
+  /** Whether each entry is read with what it names as it is now. */
+  readonly named: boolean;
+}
+
+/**
+ * Build the statement that reads a page of the log.
+ *
+ * A named page joins each entry to the site that has its id, else to the site that gave the id up, and to the token that did it: each by a key. A site may hold an id another gave up, and the holder is the one named.
+ */
+function pageAsked({ kept, newestFirst, limit, named }: Page): Statement {
+  const order = newestFirst ? desc(audit.seq) : asc(audit.seq);
+  if (!named) return built(BUILD.select().from(audit).where(kept).orderBy(order).limit(limit));
+
+  const entries = BUILD.select(NAMED_COLUMNS)
+    .from(audit)
+    .leftJoin(HELD, eq(HELD.id, audit.site_id))
+    .leftJoin(earlierIds, and(eq(earlierIds.id, audit.site_id), isNull(HELD.id)))
+    .leftJoin(MOVED, eq(MOVED.folder, earlierIds.folder))
+    .leftJoin(tokens, and(eq(tokens.id, audit.actor), fragment`${tokens.note} <> ''`));
+
+  return built(entries.where(kept).orderBy(order).limit(limit));
+}
 
 /** The condition an entry of the audit log meets to be of some actions; `undefined` when none is asked. The actions are named one by one: a list read from JSON is charged as rows of its own. */
 function auditAmong(actions: readonly AuditAction[] | undefined): SQL | undefined {
@@ -60,11 +114,26 @@ export function auditEndsAsked(): Statement {
 }
 
 /**
+ * Build the statement that reads one page of the log, any entry.
+ *
+ * @param start - where a page with no page before it starts: before the oldest entry or past the newest
+ * @param named - whether each entry is read with what it names as it is now
+ */
+export function auditListAsked(query: AuditQuery, start: number, named: boolean): Statement {
+  const newestFirst = query.dir !== "asc";
+  const from = query.after ?? start;
+
+  return pageAsked({ kept: newestFirst ? lt(audit.seq, from) : gt(audit.seq, from), newestFirst, limit: query.limit, named });
+}
+
+/**
  * Build the statement that reads one page of the entries a narrowing keeps, among the `AUDIT_WINDOW` entries behind the place it starts from.
  *
  * A reading with no page before it starts from the log's own end, which the statement asks the log for.
+ *
+ * @param named - whether each entry is read with what it names as it is now
  */
-export function auditSearchAsked(query: AuditSearch): Statement {
+export function auditSearchAsked(query: AuditSearch, named: boolean): Statement {
   const newestFirst = query.dir !== "asc";
   const end = newestFirst ? fragment`(SELECT max(${audit.seq}) + 1 FROM ${audit})` : fragment`(SELECT min(${audit.seq}) - 1 FROM ${audit})`;
   const start = query.after === undefined ? end : fragment`${query.after}`;
@@ -73,7 +142,16 @@ export function auditSearchAsked(query: AuditSearch): Statement {
     : fragment`${audit.seq} > ${start} AND ${audit.seq} <= ${start} + ${AUDIT_WINDOW}`;
   const kept = and(within, auditAmong(query.actions), auditAbout(query.site), auditOf(query.of));
 
-  return built(BUILD.select().from(audit).where(kept).orderBy(newestFirst ? desc(audit.seq) : asc(audit.seq)).limit(query.limit));
+  return pageAsked({ kept, newestFirst, limit: query.limit, named });
+}
+
+/** Read what a statement of a named page answered: each entry, and what it names as it is now. */
+export function namedAuditIn(result: StatementResult | undefined): readonly NamedAuditEntry[] {
+  return (result?.rows ?? []).map((row) => {
+    const { now_id: id, now_name: name, now_title: title, token_note: tokenNote } = v.parse(NAMED_ROW, row);
+
+    return { entry: auditFromRow(row), site: id === null || name === null ? null : { id, name, title }, tokenNote };
+  });
 }
 
 /**

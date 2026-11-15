@@ -3,7 +3,7 @@
 import * as v from "valibot";
 
 import type { Actor } from "../auth/scopes";
-import { AUDIT_WINDOW, type AuditFound, type AuditSearch } from "../database/database";
+import { AUDIT_WINDOW, type AuditFound, type AuditSearch, type NamedAuditEntry, type NamedAuditFound } from "../database/database";
 import { AUDIT_KINDS, type AuditEntry, actionsOf } from "../records/audit";
 import { POSITIVE, SITE_ID } from "../records/fields";
 import { type Install, type Refused, refuse } from "./records";
@@ -66,22 +66,37 @@ type Asked = Pick<AuditSearch, "limit" | "after" | "dir" | "site" | "of"> & { re
  */
 type Reading = { readonly ok: true; readonly entries: readonly AuditEntry[]; readonly stopped_at?: number };
 
+/** What a reading of the log for the screen or a file answers: what a reading answers, each entry with what it names as it is now. */
+type NamedReading = Omit<Reading, "entries"> & { readonly entries: readonly NamedAuditEntry[] };
+
 /** Whether a question narrows the log to a site in one way at the most: to the sites a text finds, or to the one site of an id. */
 function narrowsOnce(asked: OneNarrowing): boolean {
   return asked.site === undefined || asked.of === undefined;
 }
 
-/** Read entries of the log: any entry by a listing, and those a narrowing keeps by a search, which looks at no more than its window. */
-async function found(install: Install, { kind, ...asked }: Asked): Promise<AuditFound> {
-  if (kind === undefined && asked.site === undefined && asked.of === undefined) return { entries: await install.database.listAudit(asked), stoppedAt: undefined };
+/** The search a narrowed reading makes; `undefined` for a reading of any entry, which a listing answers. */
+function searchOf({ kind, ...asked }: Asked): AuditSearch | undefined {
+  if (kind === undefined && asked.site === undefined && asked.of === undefined) return undefined;
 
-  return install.database.searchAudit({ ...asked, actions: kind === undefined ? undefined : actionsOf(kind) });
+  return { ...asked, actions: kind === undefined ? undefined : actionsOf(kind) };
 }
 
-/** What was read, as a reading answers it. */
-async function reading(install: Install, asked: Asked): Promise<Reading> {
-  const { entries, stoppedAt } = await found(install, asked);
+/** Read entries of the log: any entry by a listing, and those a narrowing keeps by a search, which looks at no more than its window. */
+async function found(install: Install, asked: Asked): Promise<AuditFound> {
+  const search = searchOf(asked);
 
+  return search === undefined ? { entries: await install.database.listAudit(asked), stoppedAt: undefined } : install.database.searchAudit(search);
+}
+
+/** Read entries of the log as `found` reads them, each with what it names as it is now, in the same one query. */
+async function foundNamed(install: Install, asked: Asked): Promise<NamedAuditFound> {
+  const search = searchOf(asked);
+
+  return search === undefined ? { entries: await install.database.listNamedAudit(asked), stoppedAt: undefined } : install.database.searchNamedAudit(search);
+}
+
+/** What was read, as a reading answers it: `stopped_at` is there only where the reading stopped short. */
+function answered<Entry>({ entries, stoppedAt }: { readonly entries: readonly Entry[]; readonly stoppedAt: number | undefined }): { readonly ok: true; readonly entries: readonly Entry[]; readonly stopped_at?: number } {
   return { ok: true, entries, ...(stoppedAt === undefined ? {} : { stopped_at: stoppedAt }) };
 }
 
@@ -99,22 +114,22 @@ export async function listAudit(install: Install, actor: Actor, query: v.InferIn
   const asked = v.safeParse(AUDIT_QUERY, query);
   if (!asked.success) return refuse("bad_argument", v.getDotPath(asked.issues[0]) ?? "query");
 
-  return reading(install, asked.output);
+  return answered(await found(install, asked.output));
 }
 
 /**
- * Read one page of the audit log for the screen: the reading of a page with room for the screen's largest, in one query. No route of the API hands it out.
+ * Read one page of the audit log for the screen: the reading of a page with room for the screen's largest, each entry with the site it is about and the token that did it as they are now, in one query. No route of the API hands it out.
  *
  * @param query - what `listAudit` takes, with a `limit` of 1 to 201
- * @returns what `listAudit` answers
+ * @returns what `listAudit` answers, each entry with what it names
  */
-export async function listAuditForScreen(install: Install, actor: Actor, query: v.InferInput<typeof AUDIT_SCREEN_QUERY>): Promise<Reading | Refused<"not_allowed" | "bad_argument">> {
+export async function listAuditForScreen(install: Install, actor: Actor, query: v.InferInput<typeof AUDIT_SCREEN_QUERY>): Promise<NamedReading | Refused<"not_allowed" | "bad_argument">> {
   if (actor.scope !== "admin") return refuse("not_allowed");
 
   const asked = v.safeParse(AUDIT_SCREEN_QUERY, query);
   if (!asked.success) return refuse("bad_argument", v.getDotPath(asked.issues[0]) ?? "query");
 
-  return reading(install, asked.output);
+  return answered(await foundNamed(install, asked.output));
 }
 
 /**
@@ -146,15 +161,15 @@ export async function countAudit(
  * It is the reading of a page with a larger page, and no route of the API hands it out.
  *
  * @param query - `kind` and `site` narrow the entries as they narrow a page; `after` is the `seq` of the last entry of the reading before
- * @returns up to 1,000 entries: fewer when the log ends with them, or when a narrowed reading stopped short, which `stopped_at` says; `not_allowed` for anyone but an admin, or `bad_argument` naming the key that was refused
+ * @returns up to 1,000 entries, each with what it names now: fewer when the log ends with them, or when a narrowed reading stopped short, which `stopped_at` says; `not_allowed` for anyone but an admin, or `bad_argument` naming the key that was refused
  */
-export async function listAuditForFile(install: Install, actor: Actor, query: v.InferInput<typeof AUDIT_FILE_QUERY> = {}): Promise<Reading | Refused<"not_allowed" | "bad_argument">> {
+export async function listAuditForFile(install: Install, actor: Actor, query: v.InferInput<typeof AUDIT_FILE_QUERY> = {}): Promise<NamedReading | Refused<"not_allowed" | "bad_argument">> {
   if (actor.scope !== "admin") return refuse("not_allowed");
 
   const asked = v.safeParse(AUDIT_FILE_QUERY, query);
   if (!asked.success) return refuse("bad_argument", v.getDotPath(asked.issues[0]) ?? "query");
 
-  return reading(install, { ...asked.output, limit: AUDIT_FILE_PAGE });
+  return answered(await foundNamed(install, { ...asked.output, limit: AUDIT_FILE_PAGE }));
 }
 
 /**

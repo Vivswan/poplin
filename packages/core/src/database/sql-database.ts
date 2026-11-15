@@ -26,7 +26,7 @@ import { endedTokenFromRow, tokenFromRow } from "../records/token";
 import { type ManifestFile, type Upload, type UploadId, uploadFromRow } from "../records/upload";
 import type { VersionContents } from "../records/version-contents";
 import { type DailyViews, dayOf, daysUpTo, KEPT_DAYS, MOST_SITES_COMPARED, type SiteViews, viewDays } from "../records/views";
-import { auditCountAsked, auditCountIn, auditEndsAsked, auditPartEndAsked, auditPartEndIn, auditSearchAsked, auditStopIn } from "./audit-reads";
+import { auditCountAsked, auditCountIn, auditEndsAsked, auditListAsked, auditPartEndAsked, auditPartEndIn, auditSearchAsked, auditStopIn, namedAuditIn } from "./audit-reads";
 import type {
   AuditCount,
   AuditCountQuery,
@@ -34,6 +34,8 @@ import type {
   AuditPartQuery,
   AuditQuery,
   AuditSearch,
+  NamedAuditEntry,
+  NamedAuditFound,
   Address,
   AuditNote,
   CountedRequests,
@@ -54,7 +56,7 @@ import type {
   Signed,
   SigningKey,
   SiteDetails,
-  LaterSite,
+  SiteNow,
   SiteNamed,
   SitesPage,
   SitesQuery,
@@ -378,7 +380,7 @@ export class SqlDatabase implements Database {
     return new Map(named.map(({ id, ...called }) => [id, called]));
   }
 
-  async getLaterSites(ids: readonly SiteId[]): Promise<ReadonlyMap<SiteId, LaterSite>> {
+  async getLaterSites(ids: readonly SiteId[]): Promise<ReadonlyMap<SiteId, SiteNow>> {
     const asked = [...new Set(ids)];
     if (asked.length > MOST_SITES_ASKED) throw new RangeError(`at most ${MOST_SITES_ASKED} earlier ids are looked up at once, not ${asked.length}`);
 
@@ -1156,11 +1158,7 @@ export class SqlDatabase implements Database {
   async listAudit(query: AuditQuery): Promise<readonly AuditEntry[]> {
     requireAuditPage(query.limit);
 
-    const dir = query.dir ?? "desc";
-    const start = query.after ?? AUDIT_START[dir];
-    const behind = dir === "desc" ? lt(audit.seq, start) : gt(audit.seq, start);
-    const page = BUILD.select().from(audit).where(behind).orderBy(dir === "desc" ? desc(audit.seq) : asc(audit.seq)).limit(query.limit);
-    const [listed] = await this.#driver.batch([built(page)]);
+    const [listed] = await this.#driver.batch([auditListAsked(query, AUDIT_START[query.dir ?? "desc"], false)]);
 
     return (listed?.rows ?? []).map(auditFromRow);
   }
@@ -1168,8 +1166,25 @@ export class SqlDatabase implements Database {
   async searchAudit(query: AuditSearch): Promise<AuditFound> {
     requireAuditPage(query.limit);
 
-    const [ends, found] = await this.#driver.batch([auditEndsAsked(), auditSearchAsked(query)]);
+    const [ends, found] = await this.#driver.batch([auditEndsAsked(), auditSearchAsked(query, false)]);
     const entries = (found?.rows ?? []).map(auditFromRow);
+
+    return { entries, stoppedAt: entries.length < query.limit ? auditStopIn(ends, query) : undefined };
+  }
+
+  async listNamedAudit(query: AuditQuery): Promise<readonly NamedAuditEntry[]> {
+    requireAuditPage(query.limit);
+
+    const [listed] = await this.#driver.batch([auditListAsked(query, AUDIT_START[query.dir ?? "desc"], true)]);
+
+    return namedAuditIn(listed);
+  }
+
+  async searchNamedAudit(query: AuditSearch): Promise<NamedAuditFound> {
+    requireAuditPage(query.limit);
+
+    const [ends, found] = await this.#driver.batch([auditEndsAsked(), auditSearchAsked(query, true)]);
+    const entries = namedAuditIn(found);
 
     return { entries, stoppedAt: entries.length < query.limit ? auditStopIn(ends, query) : undefined };
   }

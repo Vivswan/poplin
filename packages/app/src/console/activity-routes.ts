@@ -20,13 +20,10 @@ import * as v from "valibot";
 import { MOST_IN_FILE } from "./activity-file";
 import { FILE_WRITERS, type FileEntry } from "./activity-formats";
 import { whatOf } from "./activity-what";
-import { loginNames, refused, refuseInvalid, type Shared } from "./data";
+import { refused, refuseInvalid, type Shared } from "./data";
 
 /** How many entries one page of the log may hold, as the address names them; the first when it names none. */
 const PAGE_SIZES = ["50", "100", "200"] as const;
-
-/** How many ids the database names in one reading; a page of the log may name more sites than that. */
-const IDS_AT_ONCE = 100;
 
 /** How many characters of an ISO moment are its day. */
 const DAY_LENGTH = 10;
@@ -62,7 +59,7 @@ const PAGE_QUERY = v.strictObject({
 /** What a reading of the log answers. */
 type Listed = Awaited<ReturnType<typeof listAuditForScreen>>;
 
-/** One entry of the log. */
+/** One entry of the log, with the site it is about and the token that did it as they are now. */
 type Entry = Extract<Listed, { ok: true }>["entries"][number];
 
 /** One reading of the log: its entries, and where it stopped when it is a narrowed one that came back short with the log going on. */
@@ -89,63 +86,24 @@ interface Turn {
   readonly stopped: number | undefined;
 }
 
-/** What a site is now: its name, its label, and the title it is listed under. */
-interface SiteNow {
-  readonly name: string;
-  readonly label: string;
-  readonly title: string | null;
-}
-
-/** What the entries of one reading name, as it is now: each login's name by its id, and each site by the id an entry holds. */
-interface Named {
-  readonly logins: Readonly<Record<string, string>>;
-  readonly sites: ReadonlyMap<string, SiteNow>;
-}
-
 /** Who asks, and of which install. */
 type Asker = Shared["Variables"]["asker"];
 
 /** Which entries of the log a file is narrowed to. */
 type Narrowing = Pick<v.InferOutput<typeof FILE_QUERY>, "kind" | "site" | "of">;
 
-/** Read what the database knows of some ids, as many at a time as one reading takes. */
-async function ofAll<Found>(ids: readonly SiteId[], read: (some: readonly SiteId[]) => Promise<ReadonlyMap<SiteId, Found>>): Promise<Map<SiteId, Found>> {
-  const found = new Map<SiteId, Found>();
-  for (let from = 0; from < ids.length; from += IDS_AT_ONCE) {
-    for (const [id, one] of await read(ids.slice(from, from + IDS_AT_ONCE))) found.set(id, one);
-  }
-
-  return found;
-}
-
-/**
- * What each site the entries name is now, by the id an entry holds: its name, its label, and the title it is listed under, `null` for a site with none. A site that is gone is left out.
- * An entry from before a new link holds an id the site gave up: it is named as the site is now. The ids are read 100 to a query, and those that are no site's the same way.
- *
- * @param of - the id the page is narrowed to, named with the entries' own
- */
-async function sitesNow(install: Install, entries: readonly Entry[], of: SiteId | undefined): Promise<ReadonlyMap<string, SiteNow>> {
-  const ids = [...new Set([...(of === undefined ? [] : [of]), ...entries.flatMap((entry) => (entry.site === null ? [] : [entry.site.id]))])];
-  const names = await ofAll(ids, (some) => install.database.getSiteNames(some));
-  const now = new Map(Array.from(names, ([id, { name, title }]) => [id as string, { name, label: siteLabel(name, id), title }]));
-  const given = ids.filter((id) => !names.has(id));
-  const later = await ofAll(given, (some) => install.database.getLaterSites(some));
-  for (const [earlier, site] of later) now.set(earlier, { name: site.name, label: siteLabel(site.name, site.id), title: site.title });
-
-  return now;
-}
-
 /**
  * What the one site a page is narrowed to is called: by the title and the name it has now, and once it is gone by the name the page's first entry holds, `null` on a page with none.
+ * The site is read by the id itself: the one that has it, else the one that gave it up at a new link. A page's entries do not say it, since a site may hold an id another gave up.
  *
  * @returns `null` for a page that is narrowed to no one site
  */
-function siteOf(of: SiteId | undefined, now: ReadonlyMap<string, SiteNow>, first: Entry | undefined): { readonly title: string | null; readonly name: string | null } | null {
+async function siteOf({ database }: Install, of: SiteId | undefined, first: Entry | undefined): Promise<{ readonly title: string | null; readonly name: string | null } | null> {
   if (of === undefined) return null;
 
-  const site = now.get(of);
+  const site = (await database.getSiteNames([of])).get(of) ?? (await database.getLaterSites([of])).get(of);
 
-  return site === undefined ? { title: null, name: first?.site?.name ?? null } : { title: site.title, name: site.name };
+  return site === undefined ? { title: null, name: first?.entry.site?.name ?? null } : { title: site.title, name: site.name };
 }
 
 /** A place beside the one a page was asked with; none where that would be before the first place an address can name. */
@@ -160,22 +118,22 @@ function beside(place: number): number | undefined {
  * A page with no entry is reached from a place still: the one beside the place it was asked with, unless that is before the first place an address can name.
  */
 function placesAround({ after, back, along, ends: [first, last], beyond, stopped }: Turn): { readonly previous: number | undefined; readonly next: number | undefined } {
-  if (back !== undefined) return { previous: beyond ? first?.seq : stopped, next: last?.seq ?? beside(back - along) };
+  if (back !== undefined) return { previous: beyond ? first?.entry.seq : stopped, next: last?.entry.seq ?? beside(back - along) };
 
-  const next = beyond ? last?.seq : stopped;
+  const next = beyond ? last?.entry.seq : stopped;
   if (after === undefined) return { previous: undefined, next };
 
-  return { previous: first?.seq ?? beside(after + along), next };
+  return { previous: first?.entry.seq ?? beside(after + along), next };
 }
 
 /** One entry as a file holds it: the moment in UTC, the name of a login that has one, the sentence the screen shows, and the site by the name it had then and the title it has now. */
-function fileEntryOf(entry: Entry, { logins, sites }: Named): FileEntry {
+function fileEntryOf({ entry, site, tokenNote }: Entry): FileEntry {
   return {
     when: new Date(entry.at).toISOString(),
-    who: logins[entry.by] ?? entry.by,
+    who: tokenNote ?? entry.by,
     what: whatOf(entry),
     site: entry.site?.name ?? "",
-    title: (entry.site === null ? undefined : sites.get(entry.site.id)?.title) ?? "",
+    title: site?.title ?? "",
     action: entry.action,
     detail: entry.detail,
   };
@@ -202,11 +160,11 @@ async function endingOf(asker: Asker, narrowing: Narrowing, file: { readonly rea
 
   if (file.written < MOST_IN_FILE) return undefined;
 
-  return (await goesOn(asker, narrowing, last.seq)) ? notes.cut : "";
+  return (await goesOn(asker, narrowing, last.entry.seq)) ? notes.cut : "";
 }
 
 /**
- * Stream a file of the log: each reading of the log is written and handed on before the next is made, so no more than one reading is held at a time.
+ * Stream a file of the log: each reading of the log is written and handed on before the next is made, so no more than one reading is held at a time. A reading is one query: its entries come with what they name.
  *
  * @param first - the first reading, made before the answer began so that its refusal could still be answered
  * @param writer - writes the file's start, the entries of each reading as lines, and the last line of a file that holds fewer entries than the log: `cut` after a full file, `stopped` after a reading that stopped short
@@ -218,7 +176,7 @@ function fileOf(
   asker: Asker,
   narrowing: Narrowing,
   first: Read,
-  writer: { readonly head: string; readonly linesOf: (entries: readonly Entry[], named: Named) => string; readonly cut: string; readonly stopped: string },
+  writer: { readonly head: string; readonly linesOf: (entries: readonly Entry[]) => string; readonly cut: string; readonly stopped: string },
 ): ReadableStream<Uint8Array> {
   const encoder = new TextEncoder();
   const state = { reading: first, written: 0 };
@@ -229,9 +187,7 @@ function fileOf(
     },
     async pull(controller) {
       const { entries: reading } = state.reading;
-      // Each reading names its own logins and sites, so a file reads those it writes and no others.
-      const [logins, sites] = await Promise.all([loginNames(asker, reading.map((entry) => entry.by)), sitesNow(asker.install, reading, undefined)]);
-      if (reading.length > 0) controller.enqueue(encoder.encode(writer.linesOf(reading, { logins, sites })));
+      if (reading.length > 0) controller.enqueue(encoder.encode(writer.linesOf(reading)));
 
       state.written += reading.length;
       const ending = await endingOf(asker, narrowing, state, writer);
@@ -243,7 +199,7 @@ function fileOf(
         return;
       }
 
-      const next = await listAuditForFile(asker.install, asker.actor, { ...narrowing, after: reading.at(-1)?.seq });
+      const next = await listAuditForFile(asker.install, asker.actor, { ...narrowing, after: reading.at(-1)?.entry.seq });
       if (next.ok) state.reading = next;
       else controller.error(new Error(`the log refused a reading: ${next.code}`));
     },
@@ -266,19 +222,19 @@ export const activityRoutes = new Hono<Shared>()
 
     const page = back === undefined ? read.entries.slice(0, size) : read.entries.slice(0, size).reverse();
     const beyond = read.entries.length > size;
-    const [now, logins] = await Promise.all([sitesNow(asker.install, page, narrowing.of), loginNames(asker, page.map((entry) => entry.by))]);
-    const entries = page.map(({ site, ...entry }) => ({
+    const entries = page.map(({ entry: { site, ...entry }, site: now }) => ({
       ...entry,
       // The id is the one the entry holds and the name the one the site had then; the label and the title are the ones it has now, each `null` once it is no site.
-      site: site === null ? null : { id: site.id, name: site.name, label: now.get(site.id)?.label ?? null, title: now.get(site.id)?.title ?? null },
+      site: site === null ? null : { id: site.id, name: site.name, label: now === null ? null : siteLabel(now.name, now.id), title: now?.title ?? null },
     }));
     const { previous, next } = placesAround({ after, back, along: narrowing.dir === "asc" ? 1 : -1, ends: [page.at(0), page.at(-1)], beyond, stopped: read.stopped_at });
 
     return context.json({
       ok: true as const,
       entries,
-      logins,
-      of: siteOf(narrowing.of, now, page.at(0)),
+      // Each token the page shows by the note it has, as the other screens name a login.
+      logins: Object.fromEntries(page.flatMap(({ entry, tokenNote }) => (tokenNote === null ? [] : [[entry.by, tokenNote]]))),
+      of: await siteOf(asker.install, narrowing.of, page.at(0)),
       next: next === undefined ? null : String(next),
       previous: previous === undefined ? null : String(previous),
       // A narrowed page that stopped short with the log going on: its place in the direction it was read goes on from where it stopped.
@@ -301,7 +257,7 @@ export const activityRoutes = new Hono<Shared>()
 
     const writer = FILE_WRITERS[format];
     const day = new Date(asker.install.now()).toISOString().slice(0, DAY_LENGTH);
-    const linesOf = (entries: readonly Entry[], named: Named): string => writer.lines(entries.map((entry) => fileEntryOf(entry, named)));
+    const linesOf = (entries: readonly Entry[]): string => writer.lines(entries.map(fileEntryOf));
     const body = fileOf(asker, narrowing, first, { head: writer.head, linesOf, cut: writer.cut(CUT_NOTE), stopped: writer.cut(STOPPED_NOTE) });
 
     const name = part === undefined ? day : `${day}-${part}`;
