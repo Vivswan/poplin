@@ -93,7 +93,7 @@ const ROWS: Readonly<Record<string, readonly [read: number, written: number]>> =
   "createSite, name taken": [4, 0],
   "getSite": [3, 0],
   "getSite, none": [0, 0],
-  "getSiteNames": [15, 0],
+  "getSiteNames": [10, 0],
   "getSiteByPublicName": [2, 0],
   "getSiteByFolder": [3, 0],
   "findServed, by id": [3, 0],

@@ -421,6 +421,23 @@ function sites(label: string, makeDatabase: DatabaseFactory): void {
       ]);
     });
 
+    // Drift: each id asked is a value bound to the statement, and a database binds only so many to one: the provider's takes 100. A read that let more through would fail there as an error of the engine, on a page of the log.
+    test("the names of 100 ids are read at once, the sites among them named, and one id more is refused by a throw", async () => {
+      const database = await opened(makeDatabase);
+      const first = await made(database, draft(REPORT));
+      const last = await made(database, draft(REPORT));
+      const none = Array.from({ length: 99 }, (_none, index) => String(index).padStart(12, "0") as SiteId);
+      const named = await database.getSiteNames([first.id, ...none.slice(1), last.id, first.id]);
+
+      expect<unknown>([...named].sort()).toEqual(
+        [
+          [first.id, REPORT],
+          [last.id, REPORT],
+        ].sort(),
+      );
+      await expect(database.getSiteNames([first.id, ...none, last.id])).rejects.toThrow(RangeError);
+    });
+
     // Drift: the folder is where the files are and the owner is whose site it is; a change that rewrote either would strand the files or hand the site over.
     test("a site keeps its name, folder, owner, and creation time through every change another person makes", async () => {
       const database = await opened(makeDatabase);

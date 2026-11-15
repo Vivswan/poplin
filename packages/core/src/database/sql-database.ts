@@ -3,7 +3,7 @@
 // A change is one batch: the statement that changes a row carries its own condition, and each statement after it runs only when the one before it changed a row.
 // So a change and its audit entry are kept together or not at all, and nothing is decided from an earlier read.
 
-import { and, asc, desc, eq, exists, getTableName, gt, isNotNull, isNull, lt, lte, ne, notExists, or, type SQL, sql as fragment } from "drizzle-orm";
+import { and, asc, desc, eq, exists, getTableName, gt, inArray, isNotNull, isNull, lt, lte, ne, notExists, or, type SQL, sql as fragment } from "drizzle-orm";
 import { alias, type SQLiteColumn, type SQLiteTable } from "drizzle-orm/sqlite-core";
 import { drizzle } from "drizzle-orm/sqlite-proxy";
 import * as v from "valibot";
@@ -190,8 +190,8 @@ const DAY_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 /** The site column of the row that counts all sites together; no site id is empty. */
 const ALL_SITES = "";
 
-/** The most sites one read of views takes: a page of a listing. */
-const MOST_VIEWED_SITES = 100;
+/** The most sites one read of names or of views takes: a page of a listing or of the log. */
+const MOST_SITES_ASKED = 100;
 
 /** What the builder gives for one statement. */
 interface BuiltQuery {
@@ -636,7 +636,13 @@ export class SqlDatabase implements Database {
   }
 
   async getSiteNames(ids: readonly SiteId[]): Promise<ReadonlyMap<SiteId, SiteName>> {
-    const names = BUILD.select({ id: sites.id, name: sites.name }).from(sites).where(fragment`${sites.id} IN (SELECT value FROM json_each(${JSON.stringify(ids)}))`);
+    const asked = [...new Set(ids)];
+    if (asked.length > MOST_SITES_ASKED) throw new RangeError(`the names of at most ${MOST_SITES_ASKED} sites are read at once, not of ${asked.length}`);
+
+    if (asked.length === 0) return new Map();
+
+    // Each id is a value bound to the statement, which the engine finds by its key. A database binds only so many, hence the bound above.
+    const names = BUILD.select({ id: sites.id, name: sites.name }).from(sites).where(inArray(sites.id, asked));
     const [found] = await this.#driver.batch([built(names)]);
     const named = (found?.rows ?? []).map((row) => v.parse(NAMED_SITE, row));
 
@@ -1397,7 +1403,7 @@ export class SqlDatabase implements Database {
 
   async readViews(sites: readonly SiteId[], day: string): Promise<ReadonlyMap<SiteId, SiteViews>> {
     requireDay(day);
-    if (sites.length > MOST_VIEWED_SITES) throw new RangeError(`the views of at most ${MOST_VIEWED_SITES} sites are read at once, not of ${sites.length}`);
+    if (sites.length > MOST_SITES_ASKED) throw new RangeError(`the views of at most ${MOST_SITES_ASKED} sites are read at once, not of ${sites.length}`);
 
     const views = new Map<SiteId, SiteViews>(sites.map((site) => [site, { today: 0, week: 0 }]));
     if (sites.length === 0) return views;
