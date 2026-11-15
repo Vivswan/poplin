@@ -234,6 +234,18 @@ const STOPS: readonly Stop[] = [
     close: leaveBy("Cancel"),
   },
   {
+    name: "the notes of the newer version in the sections of a phone, and from there the question before an update",
+    only: "narrow",
+    open: async (page) => {
+      await page.getByRole("button", { name: "Sections", exact: true }).click();
+      const sections = page.getByRole("dialog");
+      await expect(sections.locator(`a[href="${RELEASES}"][target="_blank"][rel="noreferrer"]`, { hasText: "What changed" })).toBeVisible();
+      await sections.getByRole("button", { name: "Update now", exact: true }).click();
+    },
+    shows: (page) => [question(page, /^Update to /)],
+    close: leaveBy("Cancel"),
+  },
+  {
     name: "the dialog that adds a user, with an email typed",
     open: async (page) => {
       await toSection(page, "Access");
