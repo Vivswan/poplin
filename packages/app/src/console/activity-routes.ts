@@ -11,6 +11,7 @@ import { vValidator } from "@hono/valibot-validator";
 import { AUDIT_COUNT_QUERY, AUDIT_FILE_PAGE, AUDIT_QUERY, countAudit, listAudit, listAuditForFile, listAuditForScreen, nextAuditFile } from "@poplin/core/src/actions/audit-log";
 import type { Install } from "@poplin/core/src/actions/records";
 import { AUDIT_WINDOW } from "@poplin/core/src/database/database";
+import type { SiteId } from "@poplin/core/src/sites/ids";
 import { siteLabel } from "@poplin/core/src/sites/labels";
 import { Hono } from "hono";
 import * as v from "valibot";
@@ -21,6 +22,9 @@ import { loginNames, refused, refuseInvalid, type Shared } from "./data";
 
 /** How many entries one page of the log may hold, as the address names them; the first when it names none. */
 const PAGE_SIZES = ["50", "100", "200"] as const;
+
+/** How many ids the database names in one reading; a page of the log may name more sites than that. */
+const IDS_AT_ONCE = 100;
 
 /** How many characters of an ISO moment are its day. */
 const DAY_LENGTH = 10;
@@ -90,18 +94,27 @@ type Asker = Shared["Variables"]["asker"];
 /** Which entries of the log a file is narrowed to. */
 type Narrowing = Pick<v.InferOutput<typeof FILE_QUERY>, "kind" | "site">;
 
+/** Read what the database knows of some ids, as many at a time as one reading takes. */
+async function ofAll<Found>(ids: readonly SiteId[], read: (some: readonly SiteId[]) => Promise<ReadonlyMap<SiteId, Found>>): Promise<Map<SiteId, Found>> {
+  const found = new Map<SiteId, Found>();
+  for (let from = 0; from < ids.length; from += IDS_AT_ONCE) {
+    for (const [id, one] of await read(ids.slice(from, from + IDS_AT_ONCE))) found.set(id, one);
+  }
+
+  return found;
+}
+
 /**
  * What each site the entries name is now, by the id an entry holds: its label, and the title it is listed under, `null` for a site with none. A site that is gone is left out.
- * An entry from before a new link holds an id the site gave up: it is named as the site is now. The ids are read in one query however many sites a page names, and those that are no site's in one more.
+ * An entry from before a new link holds an id the site gave up: it is named as the site is now. The ids are read 100 to a query, and those that are no site's the same way.
  */
 async function sitesNow(install: Install, entries: readonly Entry[]): Promise<ReadonlyMap<string, { readonly label: string; readonly title: string | null }>> {
   const ids = [...new Set(entries.flatMap((entry) => (entry.site === null ? [] : [entry.site.id])))];
-  const names = await install.database.getSiteNames(ids);
+  const names = await ofAll(ids, (some) => install.database.getSiteNames(some));
   const now = new Map(Array.from(names, ([id, { name, title }]) => [id as string, { label: siteLabel(name, id), title }]));
   const given = ids.filter((id) => !names.has(id));
-  if (given.length === 0) return now;
-
-  for (const [earlier, site] of await install.database.getLaterSites(given)) now.set(earlier, { label: siteLabel(site.name, site.id), title: site.title });
+  const later = await ofAll(given, (some) => install.database.getLaterSites(some));
+  for (const [earlier, site] of later) now.set(earlier, { label: siteLabel(site.name, site.id), title: site.title });
 
   return now;
 }

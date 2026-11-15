@@ -107,6 +107,16 @@ describe("a page of the log", () => {
     ]);
   });
 
+  // Drift: the database names 100 sites in one reading, and a page of 200 entries can name more: the page would fail whole.
+  test("a page that names more than 100 sites names every one of them", async () => {
+    const opened = await openConsole();
+    for (let made = 0; made < 101; made += 1) await opened.base.publish(`site-${made}`);
+
+    const page = await pageOf(opened, "?kind=sites&size=200");
+
+    expect([page.entries.length, page.entries.filter((entry) => entry.site?.label === null).length]).toEqual([101, 0]);
+  });
+
   // Drift: one screen would write a login by its name and another by its id: the log, the Sites table, and a site's panel answer the same names.
   test("gives the name of each login that has one, by the login's id, as the Sites table and a site do", async () => {
     const { opened, keptLabel, token } = await openWithHistory();
