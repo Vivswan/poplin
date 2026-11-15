@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button";
 import { DialogTrigger } from "@/components/ui/dialog";
 import { Empty, EmptyHeader, EmptyTitle } from "@/components/ui/empty";
 import { Skeleton } from "@/components/ui/skeleton";
-import { DOMAIN_KEY, type Domain, type Ran, useDomain } from "@/domain/domain-queries";
+import { DOMAIN_KEY, type Domain, type DomainRun, type Ran, useDomain } from "@/domain/domain-queries";
 import { PersonSteps } from "@/domain/person-steps";
 import { Pieces } from "@/domain/pieces";
 import { RunDialog } from "@/domain/run-dialog";
@@ -93,9 +93,9 @@ export function DomainScreen(): ReactNode {
   const client = useQueryClient();
   const { data, error, refetch } = useDomain();
   const [made, setMade] = useState<Made>();
-  const asks = useMemo(() => DialogParts.createHandle<Ran["run"]>(), []);
+  const asks = useMemo(() => DialogParts.createHandle<DomainRun>(), []);
 
-  const run = async (kind: Ran["run"], sent: Sent): Promise<Refused | undefined> => {
+  const run = async (kind: DomainRun, sent: Sent): Promise<Refused | undefined> => {
     try {
       const done = await answerOf(api.domain[kind].$post({ json: { token: sent.token } }));
       setMade({ ran: done, before: data?.last?.ran_at });

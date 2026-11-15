@@ -13,7 +13,6 @@ import { Refused } from "@/lib/api";
 
 /** What a token must hold, in an invented provider's words. */
 const FORM = {
-  tokenLabel: "Provider token",
   tokenRights: ["Records: Edit", "Routes: Edit"],
   tokenLink: "https://provider.example/tokens/new",
   tokenOptional: [],
@@ -71,7 +70,7 @@ describe("the token's box", () => {
   // Drift: the token would show as typed, be offered by the browser again, or stay in the page after its run, where a glance or a later script finds it.
   test.each([
     ["a run that read its pieces", undefined],
-    ["a refused token", new Refused({ code: "token", about: "token", sentence: "Token refused." })],
+    ["a refused token", new Refused({ code: "token", about: "token", sentence: "Token refused: paste the whole token, made for this account and this domain." })],
     ["a provider that did not answer", new Refused({ code: "unreachable", about: null, sentence: "No answer from the provider. Try again." })],
   ])("is a password box the browser does not fill, sent once and emptied after %s", async (_name, refusal) => {
     const page = await opened("check", async () => refusal);
@@ -113,13 +112,13 @@ describe("the dialog", () => {
 
   // Drift: a refused token would be said away from its box, the box to correct would not hold the focus, or the dialog would close on a refusal.
   test("says a refused token at its box, which takes the focus, and stays open", async () => {
-    const page = await opened("repair", async () => new Refused({ code: "token", about: "token", sentence: "Token refused." }));
+    const page = await opened("repair", async () => new Refused({ code: "token", about: "token", sentence: "Token refused: paste the whole token, made for this account and this domain." }));
     fireEvent.change(tokenBox(page), { target: { value: TOKEN } });
     await press(page, "Repair");
     const token = tokenBox(page);
 
     expect([token.getAttribute("aria-invalid"), document.activeElement === token]).toEqual(["true", true]);
-    expect(token.closest('[data-slot="field"]')?.textContent).toContain("Token refused.");
+    expect(token.closest('[data-slot="field"]')?.textContent).toContain("Token refused: paste the whole token, made for this account and this domain.");
   });
 
   // Drift: a refusal about no box, such as a provider that did not answer, would not be said at all.

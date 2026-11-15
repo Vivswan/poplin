@@ -81,7 +81,6 @@ interface Summary {
 /** A run that read its table, as a screen draws it. */
 interface RunDone {
   readonly ok: true;
-  readonly run: DomainRun;
   readonly rows: readonly ShownRow[];
   readonly steps: readonly DomainStep[];
   readonly summary: Summary;
@@ -183,5 +182,5 @@ export function runRefusal(code: string): RunRefused {
 export function runDone(run: DomainRun, reading: Extract<DomainReading, { readonly ok: true }>): RunDone {
   const rows = reading.rows.map((row) => ({ piece: row.object, state: domainStateWords(row.state), tone: TONES[row.state], detail: row.detail }));
 
-  return { ok: true, run, rows, steps: reading.steps, summary: summaryOf(run, reading.rows) };
+  return { ok: true, rows, steps: reading.steps, summary: summaryOf(run, reading.rows) };
 }

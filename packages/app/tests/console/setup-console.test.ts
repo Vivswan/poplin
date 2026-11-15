@@ -196,7 +196,6 @@ describe("a run", () => {
     expect(answer.status).toBe(200);
     expect(JSON.parse(body)).toEqual({
       ok: true,
-      run: "repair",
       rows: [{ piece: "DNS record", state: "created", tone: "good", detail: "poplin.example.com" }],
       steps: [],
       summary: { line: "1 repaired", tone: "good" },

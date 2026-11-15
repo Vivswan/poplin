@@ -20,7 +20,7 @@ const NO_PLACE: Place = { page: "/sites/nothing--000000000000", served: "/served
 /** A code no login waits under. */
 const NO_CODE = "WDJB-MJHT";
 
-/** What each state of the plug shows once Check is pressed, in the index's words. */
+/** What the install holds in each state of the plug before Repair is pressed, in the index's words. */
 const SETUP_WORDS: Readonly<Record<PlugState, string>> = {
   fresh: "nothing exists yet",
   partial: "some pieces missing or changed",
@@ -100,7 +100,7 @@ function setupEntries(): Entry[] {
   const group = "Setup page" as const;
 
   return [
-    ...PLUG_STATES.map((state) => ({ group, name: `Press Check or Repair: ${SETUP_WORDS[state]}`, path: `/setup/${state}` })),
+    ...PLUG_STATES.map((state) => ({ group, name: `Before Repair: ${SETUP_WORDS[state]}`, path: `/setup/${state}` })),
     { group, name: "An install with nothing set: its domain and first login", path: "/setup/first" },
     { group, name: "Shut: the install is set up", path: "/setup/shut", status: 404 },
   ];

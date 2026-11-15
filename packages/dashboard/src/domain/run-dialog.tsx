@@ -7,7 +7,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogClose, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Spinner } from "@/components/ui/spinner";
-import type { Domain, Ran } from "@/domain/domain-queries";
+import type { Domain, DomainRun } from "@/domain/domain-queries";
 import { Step } from "@/domain/step";
 import { TokenBox } from "@/domain/token-box";
 import { type Sent, useTokenRun } from "@/domain/token-run";
@@ -26,13 +26,13 @@ const NO_BOXES = [] as const;
 /** What the dialog is drawn from. */
 interface RunDialogProps {
   /** The dialog's hold: a button opens it with the run it sends, and the caller closes it by it. */
-  readonly handle: DialogParts.Handle<Ran["run"]>;
+  readonly handle: DialogParts.Handle<DomainRun>;
 
   /** What a token must hold and where one is made, in the provider's words. */
   readonly form: Domain["form"];
 
   /** Sends the run. It answers the refusal, or nothing when the run read its pieces: the caller then closes the dialog. */
-  readonly onRun: (run: Ran["run"], sent: Sent) => Promise<Refused | undefined>;
+  readonly onRun: (run: DomainRun, sent: Sent) => Promise<Refused | undefined>;
 }
 
 /** Draw the dialog of the run its opening button names. Cancel, Escape, and a press outside close it, but not while a run is on its way. */

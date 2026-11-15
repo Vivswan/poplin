@@ -2,7 +2,7 @@
 
 import { type RefObject, useRef, useState } from "react";
 
-import type { Ran } from "@/domain/domain-queries";
+import type { DomainRun } from "@/domain/domain-queries";
 import type { Refused } from "@/lib/api";
 
 /** The name of the token's box, and what it says when a run is asked with nothing in it. */
@@ -33,7 +33,7 @@ interface TokenRun {
   readonly sheet: RefObject<HTMLFormElement | null>;
 
   /** The run on its way. */
-  readonly busy: Ran["run"] | undefined;
+  readonly busy: DomainRun | undefined;
 
   /** The sentence to show at a box, by the box's name. */
   readonly saidAt: (name: string) => string | undefined;
@@ -42,7 +42,7 @@ interface TokenRun {
   readonly saidElsewhere: string | undefined;
 
   /** Send one run. A box that must be filled and is empty says so, takes the focus, and nothing is sent. */
-  readonly send: (run: Ran["run"]) => Promise<void>;
+  readonly send: (run: DomainRun) => Promise<void>;
 
   /** Forget what was said, as a form that is opened again does. */
   readonly forget: () => void;
@@ -54,13 +54,13 @@ interface TokenRun {
  * @param boxes - the boxes beside the token's, which every form has
  * @param onRun - sends one run; it answers the refusal, or nothing when the run read its pieces
  */
-export function useTokenRun(boxes: readonly Box[], onRun: (run: Ran["run"], sent: Sent) => Promise<Refused | undefined>): TokenRun {
+export function useTokenRun(boxes: readonly Box[], onRun: (run: DomainRun, sent: Sent) => Promise<Refused | undefined>): TokenRun {
   const sheet = useRef<HTMLFormElement>(null);
   const [said, setSaid] = useState<Said>();
-  const [busy, setBusy] = useState<Ran["run"]>();
+  const [busy, setBusy] = useState<DomainRun>();
   const names: readonly string[] = [TOKEN.name, ...boxes.map((box) => box.name)];
 
-  const send = async (run: Ran["run"]): Promise<void> => {
+  const send = async (run: DomainRun): Promise<void> => {
     const form = sheet.current;
     if (form === null || busy !== undefined) return;
 

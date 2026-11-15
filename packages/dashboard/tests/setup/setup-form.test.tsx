@@ -11,7 +11,6 @@ import { SetupForm } from "@/setup/setup-form";
 
 /** What a token must hold, in an invented provider's words. */
 const FORM = {
-  tokenLabel: "Provider token",
   tokenRights: ["Records: Edit", "Routes: Edit"],
   tokenLink: "https://provider.example/tokens/new",
   tokenOptional: [],
@@ -74,9 +73,9 @@ describe("the boxes", () => {
 describe("a refusal", () => {
   // Drift: a refusal would be said away from the box it is about, or the box to correct would not hold the focus.
   test.each([
-    ["token", "Token", "Token refused."],
-    ["domain", "Domain", "The domain is no domain."],
-    ["login", "Your email", "The email is no email address."],
+    ["token", "Token", "Token refused: paste the whole token, made for this account and this domain."],
+    ["domain", "Domain", "Type a domain alone, such as example.com."],
+    ["login", "Your email", "Type an email address, such as name@example.com."],
   ])("about %s is said at its box, which takes the focus", async (about, label, sentence) => {
     const page = drawn("first", new Refused({ code: "refused", about, sentence }));
     await repairFilled(page);

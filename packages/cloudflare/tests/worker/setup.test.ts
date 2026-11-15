@@ -21,7 +21,6 @@ const UNFINISHED = { ...BINDINGS, ACCESS: undefined } as Bindings;
 /** A run that read its table, as the setup page's client and the Domain screen are answered it. */
 interface Ran {
   readonly ok: true;
-  readonly run: string;
   readonly rows: readonly { readonly piece: string; readonly state: string; readonly tone: string; readonly detail: string }[];
   readonly steps: readonly { readonly text: string; readonly address?: string }[];
   readonly summary: { readonly line: string; readonly tone: string };
@@ -154,7 +153,7 @@ describe("the setup page", () => {
     const again = await ask(worker, `${OWN}/setup`, {}, UNFINISHED);
     const everything = [text, await again.text(), await stored(), JSON.stringify(logged.map((spy) => spy.mock.calls)), JSON.stringify([...repaired.headers, ...again.headers])];
 
-    expect([repaired.status, ran.run, ran.summary.tone, ran.steps, ran.expects]).toEqual([200, "repair", "good", [{ text: "The login is ready. Open your dashboard and log in:", address: ADMIN }], OWNER]);
+    expect([repaired.status, ran.summary.tone, ran.steps, ran.expects]).toEqual([200, "good", [{ text: "The login is ready. Open your dashboard and log in:", address: ADMIN }], OWNER]);
     expect(account.bindings.find((binding) => binding.name === "ACCESS")).toEqual({ name: "ACCESS", type: "json", json: { team_domain: TEAM, audience: account.applications[0]?.aud } });
     expect(account.routes.map((route) => [route.pattern, route.script])).toContainEqual(["poplin.example.com/*", "poplin"]);
     expect(everything.map((place) => place.includes(TOKEN))).toEqual([false, false, false, false, false]);
@@ -329,6 +328,6 @@ describe("the Domain screen", () => {
     expect([form.tokenRights.includes("Workers Scripts: Edit"), form.tokenRights.includes("Zone Settings: Read")]).toEqual([true, true]);
     // Drift: the link carries eight rights, so a right the plug holds optional that the page listed among the needed ones sends a person back to adding it by hand.
     expect([form.tokenRights.includes("Zone WAF: Edit"), form.tokenOptional.find((optional) => optional.right === "Zone WAF: Edit")?.adds.startsWith("Cloudflare stops"), text.includes("by hand")]).toEqual([false, true, false]);
-    expect([checked.status, (await checked.json<Ran>()).run, none, repaired.status, (await repaired.json<Ran>()).summary.tone, account.applications.length, (await stored()).includes(TOKEN)]).toEqual([200, "check", [], 200, "good", 1, false]);
+    expect([checked.status, (await checked.json<Ran>()).ok, none, repaired.status, (await repaired.json<Ran>()).summary.tone, account.applications.length, (await stored()).includes(TOKEN)]).toEqual([200, true, [], 200, "good", 1, false]);
   });
 });
