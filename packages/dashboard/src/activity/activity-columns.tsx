@@ -9,7 +9,7 @@ import { wholeMoment } from "@/lib/sites";
 import { type LoginNames, Who } from "@/shared/who";
 import type { ColumnSpec } from "@/table/data-table";
 
-/** When an entry was written, to the minute, in UTC. */
+/** When an entry was written, to the minute, in the zone a person chose. */
 export function When({ entry }: { readonly entry: Entry }): ReactNode {
   return (
     <time dateTime={new Date(entry.at).toISOString()} title={wholeMoment(entry.at)} className="text-muted-foreground tabular-nums">

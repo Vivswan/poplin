@@ -12,6 +12,7 @@ import { Popover, PopoverContent, PopoverDescription, PopoverHeader, PopoverTitl
 import { Select, SelectContent, SelectGroup, SelectItem, SelectSeparator, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { searchOf, useAddressQuery } from "@/lib/address";
 import { type Site, shownName } from "@/lib/sites";
+import { useChosenZone } from "@/lib/time-zone";
 import { IconButton } from "@/shared/icon-button";
 import { Pages, queryWith } from "@/shared/pages";
 import { SearchBox } from "@/shared/search-box";
@@ -363,6 +364,7 @@ function useShownTable(filter: Filter, { nameCell, onCopy, reveal, logins }: Col
 
 /** Draw the Sites screen for the address: the table, and the panel of the site the path names. */
 export function SitesScreen(): ReactNode {
+  useChosenZone();
   const navigate = useNavigate();
   const query = useAddressQuery();
   const { label: opened } = useParams({ strict: false });

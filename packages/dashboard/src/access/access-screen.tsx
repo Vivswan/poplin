@@ -13,6 +13,7 @@ import { ReviewDialog } from "@/access/review-dialog";
 import { TokensTab } from "@/access/tokens-tab";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { searchOf, useAddressQuery } from "@/lib/address";
+import { useChosenZone } from "@/lib/time-zone";
 import { ScreenTabs } from "@/shared/screen-tabs";
 import { AppShell } from "@/shell/app-shell";
 
@@ -35,6 +36,7 @@ function listQuery(query: URLSearchParams): URLSearchParams {
 
 /** Draw the Access screen for the address: the tab the path names, and the review the path or a terminal's code names, over the tokens. */
 export function AccessScreen(): ReactNode {
+  useChosenZone();
   const navigate = useNavigate();
   const query = useAddressQuery();
   const paths = useMatches({ select: (matches) => matches.map((match) => match.fullPath as string) });

@@ -3,6 +3,7 @@
 import type { InferResponseType } from "hono/client";
 
 import type { api } from "@/lib/api";
+import { dayIn, momentIn } from "@/lib/time-zone";
 
 /** A site as the data routes answer it. Times are milliseconds since the epoch. */
 export type Site = InferResponseType<(typeof api.sites)[":site"]["$get"], 200>["site"];
@@ -20,39 +21,25 @@ export const ACCESSES: readonly { readonly access: Access; readonly label: strin
 /** How many milliseconds a day holds. */
 const DAY_MS = 86_400_000;
 
-/** How a day is written: 14 Nov 2026. */
-const DAY_FORMAT = new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" });
-
-/** How a moment is written whole: the day and the time to the minute, in UTC. */
-const MOMENT_FORMAT = new Intl.DateTimeFormat("en-GB", {
-  day: "numeric",
-  month: "short",
-  year: "numeric",
-  hour: "2-digit",
-  minute: "2-digit",
-  timeZone: "UTC",
-  timeZoneName: "short",
-});
-
-/** What a site is called on a screen: its title, or its name where it has none. Its name is read in its link. */
-export function shownName(site: Pick<Site, "name" | "title">): string {
-  return site.title ?? site.name;
-}
-
 /** How a count is written: with its thousands set apart. */
 const COUNT_FORMAT = new Intl.NumberFormat("en");
 
 /** How a moment within a week is written: 2 days ago. */
 const RELATIVE_FORMAT = new Intl.RelativeTimeFormat("en", { numeric: "auto" });
 
+/** What a site is called on a screen: its title, or its name where it has none. Its name is read in its link. */
+export function shownName(site: Pick<Site, "name" | "title">): string {
+  return site.title ?? site.name;
+}
+
 /**
- * Write a moment briefly: how long ago within a week, the day otherwise.
+ * Write a moment briefly: how long ago within a week, the day in the zone a person chose otherwise.
  *
  * @param now - the moment it is read at
  */
 export function shortMoment(moment: number, now: number = Date.now()): string {
   const days = Math.round((moment - now) / DAY_MS);
-  if (Math.abs(days) >= 7) return DAY_FORMAT.format(moment);
+  if (Math.abs(days) >= 7) return dayIn(moment);
 
   if (days !== 0) return RELATIVE_FORMAT.format(days, "day");
 
@@ -66,14 +53,14 @@ export function showCount(count: number): string {
   return COUNT_FORMAT.format(count);
 }
 
-/** Write a moment whole, to the minute, in UTC. */
+/** Write a moment whole, to the minute, in the zone a person chose. */
 export function wholeMoment(moment: number): string {
-  return MOMENT_FORMAT.format(moment);
+  return momentIn(moment);
 }
 
 /** Write when a site deletes itself. */
 export function expiryOf(expires: Site["expires"]): string {
-  return expires === "never" ? "Never" : DAY_FORMAT.format(expires);
+  return expires === "never" ? "Never" : dayIn(expires);
 }
 
 /** An address of a site as a screen writes it. */

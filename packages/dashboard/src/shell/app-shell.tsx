@@ -41,6 +41,7 @@ import { api } from "@/lib/api";
 import { BOOT } from "@/lib/boot";
 import { useFrame, useStarted } from "@/lib/frame";
 import { sayDone, sayRefused, send } from "@/lib/notify";
+import { useChosenZone } from "@/lib/time-zone";
 import { Confirm, type Question } from "@/shared/confirm";
 import { siteKey } from "@/sites/site-queries";
 
@@ -335,6 +336,8 @@ export function AppShell({
   readonly children: ReactNode;
 }): ReactNode {
   const { offer, started, question } = useOffer();
+  // The frame is drawn before the screen inside it, so every time of the screen is written in the zone a person chose.
+  useChosenZone();
 
   return (
     <div className="grid h-svh grid-cols-[232px_minmax(0,1fr)] max-md:grid-cols-1">

@@ -11,13 +11,15 @@ import { Button } from "@/components/ui/button";
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyTitle } from "@/components/ui/empty";
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { searchOf, useAddressQuery } from "@/lib/address";
+import { ownZoneName, useZoneChoice, ZONES, type ZoneChoice } from "@/lib/time-zone";
 import { IconButton } from "@/shared/icon-button";
 import { Pages, queryWith } from "@/shared/pages";
 import { SearchBox } from "@/shared/search-box";
 import { Who } from "@/shared/who";
 import { AppShell } from "@/shell/app-shell";
-import { ColumnsMenu, DataTable } from "@/table/data-table";
+import { DataTable } from "@/table/data-table";
 import { useTableLayout } from "@/table/layout";
 
 /** The screen's path. */
@@ -28,8 +30,8 @@ const MAX_SEARCH = 40;
 
 /** The two orders of the log, as a phone's list names them. */
 const ORDERS = [
-  { value: "desc", label: "Newest first" },
-  { value: "asc", label: "Oldest first" },
+  { value: "desc", label: "Newest" },
+  { value: "asc", label: "Oldest" },
 ] as const;
 
 /** One page of the log as the server answered it. */
@@ -38,7 +40,7 @@ type Page = NonNullable<ReturnType<typeof useActivityPage>["data"]>;
 function KindSelect({ kind, onChoose }: { readonly kind: Kind; readonly onChoose: (kind: Kind) => void }): ReactNode {
   return (
     <Select items={KINDS} value={kind} onValueChange={(value) => onChoose(value as Kind)}>
-      <SelectTrigger aria-label="Which activity" className="w-36">
+      <SelectTrigger aria-label="Which activity" className="w-36 max-md:w-auto max-md:min-w-0 max-md:flex-1">
         <SelectValue />
       </SelectTrigger>
       <SelectContent alignItemWithTrigger={false} align="start">
@@ -54,11 +56,45 @@ function KindSelect({ kind, onChoose }: { readonly kind: Kind; readonly onChoose
   );
 }
 
+/** The words of the browser's own zone: "Your time" with the zone's short name. A phone shows the short name alone, unless that is UTC itself, which the other choice is called. */
+function OwnZoneLabel({ name }: { readonly name: string }): ReactNode {
+  if (name === "UTC") return "Your time";
+
+  return (
+    <span>
+      <span className="max-md:hidden">Your time (</span>
+      {name}
+      <span className="max-md:hidden">)</span>
+    </span>
+  );
+}
+
+/** The zone the times are written in: the browser's own, named, or UTC. The choice holds on every screen. */
+function ZoneToggle({ choice, onChoose: choose }: { readonly choice: ZoneChoice; readonly onChoose: (choice: ZoneChoice) => void }): ReactNode {
+  const own = ownZoneName();
+
+  return (
+    <ToggleGroup
+      aria-label="Time zone"
+      value={[choice]}
+      onValueChange={(value) => (value[0] === undefined ? undefined : choose(value[0] as ZoneChoice))}
+      variant="outline"
+      spacing={0}
+    >
+      {ZONES.map((zone) => (
+        <ToggleGroupItem key={zone} value={zone} className="px-3 aria-pressed:bg-chosen aria-pressed:font-bold">
+          {zone === "utc" ? "UTC" : <OwnZoneLabel name={own} />}
+        </ToggleGroupItem>
+      ))}
+    </ToggleGroup>
+  );
+}
+
 /** The order of the list on a phone, where no heading can be pressed. */
 function OrderSelect({ descending, onChoose }: { readonly descending: boolean; readonly onChoose: (descending: boolean) => void }): ReactNode {
   return (
     <Select items={ORDERS} value={descending ? "desc" : "asc"} onValueChange={(value) => onChoose(value === "desc")}>
-      <SelectTrigger aria-label="Order" className="w-36 md:hidden">
+      <SelectTrigger aria-label="Order" className="min-w-0 flex-1 md:hidden">
         <SelectValue />
       </SelectTrigger>
       <SelectContent alignItemWithTrigger={false} align="end">
@@ -148,7 +184,10 @@ export function ActivityScreen(): ReactNode {
   const site = query.get("site") ?? "";
   const { data: page, error, isPlaceholderData } = useActivityPage(query);
   const logins = page?.logins;
-  const columns = useMemo(() => activityColumns(logins ?? {}), [logins]);
+  // The screen reads the choice of zone itself: its columns are made anew with it, so the rows are drawn, and measured, in the new zone.
+  const [zone, chooseZone] = useZoneChoice();
+  // biome-ignore lint/correctness/useExhaustiveDependencies: a When cell writes its time in the zone chosen, which it reads as it is drawn.
+  const columns = useMemo(() => activityColumns(logins ?? {}), [logins, zone]);
   const layout = useTableLayout("activity", columns);
   const instead = insteadOfRows(error?.message, page, kind, site, () => void navigate({ to: PATH }));
   const move = (changes: Readonly<Record<string, string>>, replace = false): void =>
@@ -183,14 +222,12 @@ export function ActivityScreen(): ReactNode {
             />
           </div>
           <KindSelect kind={kind} onChoose={(chosen) => move({ kind: chosen === "all" ? "" : chosen })} />
-          <div className="ml-auto flex items-center gap-2">
+          <div className="ml-auto flex items-center gap-2 max-md:ml-0 max-md:min-w-0 max-md:flex-[2]">
             <OrderSelect
               descending={sortOf(query).descending}
               onChoose={(descending) => void navigate({ to: PATH, search: searchOf(sortedQuery(query, { key: "when", descending })) })}
             />
-            <span className="max-md:hidden">
-              <ColumnsMenu columns={columns} layout={layout} />
-            </span>
+            <ZoneToggle choice={zone} onChoose={chooseZone} />
           </div>
         </div>
         {instead ?? (
