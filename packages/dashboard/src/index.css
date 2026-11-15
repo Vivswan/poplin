@@ -165,14 +165,13 @@
   }
 }
 
-/* Where a line that says a result begins, from the top of the screen: inside the header's band on a wide screen, over no control of a list or a panel. A phone's header is controls from edge to edge, so there the line lies under it. */
+/* How far from the screen's edge a line that says a result lies. A wide screen says it at the top, inside the header's band. A phone says it at the bottom, and over the bar of unsaved changes while that is shown. */
 :root {
   --line-top: 6px;
+  --line-bottom: 12px;
 }
-@media (max-width: 767.98px) {
-  :root {
-    --line-top: calc(3.5rem + 6px);
-  }
+:root:has([data-slot="save-bar"]) {
+  --line-bottom: calc(3.5rem + 13px);
 }
 
 /* On a phone every control is tall enough for a finger. The rule sits outside the layers, so it holds whatever size a screen gave the control. */

@@ -466,17 +466,18 @@ test.describe("on a screen 1024 px wide", () => {
 test.describe("on a phone, while a line says a result", () => {
   test.use({ viewport: PHONE });
 
-  // Drift: a line would lie over the header again, where a pointer that rests on it keeps it there, and no control under it could be pressed.
-  test("the whole line lies under the header, and the button of the sections opens them", async ({ page }) => {
+  // Drift: a line would lie over the header or the screen's own controls under it again, where a pointer that rests on it keeps it there, and no control under it could be pressed.
+  test("the whole line lies under the header and the controls of the screen, and the button of the sections opens them", async ({ page }) => {
     await arrive(page);
     await page.getByRole("button", { name: "Reset", exact: true }).click();
     await expect(said(page, "Sample data reset.")).toBeVisible({ timeout: RESET_MS });
 
-    // The line slides down into its place, so its place is read until it has come to rest.
+    // The line slides up into its place, so its place is read until it has come to rest.
     await expect(async () => {
-      const [header, line] = await Promise.all([page.locator("main > header").boundingBox(), lines(page).filter({ hasText: "Sample data reset." }).boundingBox()]);
+      const [filter, line] = await Promise.all([page.getByRole("combobox", { name: "Which sites", exact: true }).boundingBox(), lines(page).filter({ hasText: "Sample data reset." }).boundingBox()]);
 
-      expect(line?.y).toBeGreaterThanOrEqual((header?.y ?? Number.NaN) + (header?.height ?? Number.NaN));
+      expect(line?.y).toBeGreaterThanOrEqual((filter?.y ?? Number.NaN) + (filter?.height ?? Number.NaN));
+      expect((line?.y ?? Number.NaN) + (line?.height ?? Number.NaN)).toBeLessThanOrEqual(PHONE.height);
     }).toPass();
 
     await page.getByRole("button", { name: "Sections", exact: true }).click();

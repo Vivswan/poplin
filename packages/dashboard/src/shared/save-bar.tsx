@@ -23,6 +23,7 @@ export function SaveBar({ count, busy, onDiscard }: SaveBarProps): ReactNode {
   return (
     <section
       aria-label="Unsaved changes"
+      data-slot="save-bar"
       className="flex shrink-0 items-center justify-end gap-2 border-t bg-background px-6 py-2 max-md:px-4"
     >
       <p aria-live="polite" className="mr-2 min-w-0 truncate font-medium">

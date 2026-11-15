@@ -20,6 +20,7 @@ import {
   TriangleAlertIcon,
 } from "lucide-react";
 import { type ReactNode, useState } from "react";
+import { toast } from "sonner";
 
 import { useTheme } from "@/components/theme-provider";
 import { Badge } from "@/components/ui/badge";
@@ -220,6 +221,8 @@ function DemoTag(): ReactNode {
     // The reset answers with a redirect, which is not followed here: any other answer but a done one is a failure.
     if (answered === undefined || (answered.type !== "opaqueredirect" && !answered.ok)) return sayRefused("The sample data was not reset. Try again.");
 
+    // A line said before the reset speaks of data that is gone, and its Undo would act on it.
+    toast.dismiss();
     // The screen stays where it is and reads its data again. Only the panel of a site the sample data no longer holds is closed.
     await client.invalidateQueries();
     if (opened !== undefined && client.getQueryState(siteKey(opened))?.status === "error") void navigate({ to: "/", search: true });
