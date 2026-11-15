@@ -84,21 +84,21 @@ Two words the steps use: a **Worker** is the program Cloudflare runs for you, an
 
    **If the form opens empty**, [When a step fails](when-a-step-fails.md#step-3-the-form-opens-empty) has the rows to add by hand.
 
-4. **Finish on the setup page.** Open the Worker's address from step 2, the one ending in `workers.dev`: it shows the setup page. Fill its three boxes and press Repair (the first time it also makes everything).
+4. **Finish on the setup page.** Open the Worker's address from step 2, the one ending in `workers.dev`: it shows the setup page. Under Fill in three boxes, fill each box and press Repair (the first time it also makes everything).
 
-   | Box                  | Put in                                                            |
-   | -------------------- | ----------------------------------------------------------------- |
-   | Domain               | your domain alone, with no `https://` and no `www`: `example.com` |
-   | Your email           | an email whose inbox you can read: the first login                |
-   | Cloudflare API token | the token of step 3                                               |
+   | Box        | Put in                                                            |
+   | ---------- | ----------------------------------------------------------------- |
+   | Domain     | your domain alone, with no `https://` and no `www`: `example.com` |
+   | Your email | an email whose inbox you can read: the first login                |
+   | Token      | the token of step 3                                               |
 
    The page lists what it made:
 
    ```text
    11 repaired
-   4 optional, not set up. The install works without them. Each such row names the right that switches it on.
    The login is ready. Open your dashboard and log in: https://poplin.example.com
 
+   Piece                State                  Detail
    DNS record           created                poplin.example.com
    Worker route         created                poplin.example.com/*
    Access application   created                poplin: poplin.example.com/login, *-p-poplin.example.com
@@ -139,7 +139,7 @@ Two words the steps use: a **Worker** is the program Cloudflare runs for you, an
    npx poplin doctor
    ```
 
-   The first line prints a short code and opens your dashboard on the page Allow this computer?, which shows a code too. Only when the two are the same, tick the box and press Allow. When they differ, press Deny.
+   The first line prints a short code and opens your dashboard on a question that starts with Allow and names your computer. It shows a code too. Only when the two are the same, tick The codes match and press Allow. When they differ, press Deny.
 
    Every check `poplin doctor` prints starts with `ok`, and its last line says `nothing was changed`:
 

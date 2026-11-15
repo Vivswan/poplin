@@ -14,7 +14,18 @@ npx poplin config
 npx poplin config trash_days 30
 ```
 
-The dashboard's Settings tab changes the same settings.
+The dashboard's Settings screen changes the same settings, all but `logins`: change them, then press Save in the bar at the foot.
+
+| Heading    | Settings                                                                                           |
+| ---------- | -------------------------------------------------------------------------------------------------- |
+| New sites  | `default_expires`, `default_search_engines`, `versions_kept`, `trash_days`                         |
+| Visitors   | `search_engines_allowed`, `outside_pages`, `block_bots`                                            |
+| Storage    | `max_total_size`, `max_site_size`, `max_sites`                                                     |
+| Publishing | `max_files_per_publish`, `max_files_per_day`, `max_storage_writes_per_day`                         |
+| Traffic    | `requests_per_day`, `site_share_of_day`, `site_requests_per_minute`, `visitor_requests_per_minute` |
+| Updates    | `update_check`, `auto_update`, and the update link                                                 |
+
+`logins` is the list under Access, People: [Add a login](#add-a-login).
 
 ## The install
 
@@ -56,12 +67,14 @@ Every command that talks to the install also takes `--json`, for the answer as J
 
 A second person needs two steps, because Cloudflare's login page keeps its own list.
 
-| Step | Where                   | Do                                           |
-| ---- | ----------------------- | -------------------------------------------- |
-| 1    | the dashboard, Settings | add the email to `logins`, and save          |
-| 2    | the dashboard, Domain   | paste a token as in [step 3](../start/by-hand.md#the-steps), and press Repair |
+| Step | Where                         | Do                                                               |
+| ---- | ----------------------------- | ---------------------------------------------------------------- |
+| 1    | the dashboard, Access, People | press Add a person, type the email, and press Add a person again |
+| 2    | the dashboard, Domain         | press Repair, paste a token as in [step 3](../start/by-hand.md#the-steps), and press Repair again |
 
-A new login works after step 2, not before. Removing another person's login needs step 1 alone: that person is out of the dashboard at once, and out of private sites within a minute. Your own email cannot be the one you remove.
+A new login works after step 2, not before. `poplin config logins` shows the same list.
+
+Removing another person's login needs no Repair: choose Remove in the menu at the end of that person's row, and press Remove when asked. That person is out of the dashboard at once, and out of private sites within a minute. Your own email cannot be the one you remove.
 
 ## This computer
 

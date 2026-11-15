@@ -81,7 +81,7 @@ A public site is without `noindex` only when both are on. The bots rule is one o
 | the CLI, or an agent through `poplin mcp` | a token the Worker issues | the person runs `poplin login` once and allows that computer in a browser; an agent on that computer acts with the same token, as the person; the token is listed on the dashboard and can be revoked there |
 | a machine with no browser | the same kind of token | `poplin login` prints an address and a short code to open on another device, where the person allows that computer |
 | the Worker, to the bucket and the database | its bindings inside Cloudflare | no bucket key and no database key exists outside Cloudflare |
-| the person who sets the install up | a Cloudflare API token, pasted into the setup page or the Domain tab | the person makes it at Cloudflare; the Worker uses it for that one request and never stores, logs, or shows it |
+| the person who sets the install up | a Cloudflare API token, pasted into the setup page or the Domain screen | the person makes it at Cloudflare; the Worker uses it for that one request and never stores, logs, or shows it |
 | the Worker, to start its own update | an update link, saved once by an admin with `poplin update --save-address` | an admin makes it at Cloudflare, which calls it a Deploy Hook. It is no API token: Cloudflare's documentation says it triggers a build for one branch, and that anyone who has it can. The Worker keeps it in its database, sends it one empty POST when an admin starts an update, and never shows, logs, or exports it. Deleting it at Cloudflare ends it |
 
 A token the Worker issues is never a Cloudflare API key. It has one of two scopes:
@@ -138,7 +138,7 @@ A `-p-` address is answered by Cloudflare's login before the Worker sees it. A r
 | a removed login | the Worker checks the email against the allowed logins on every request: the dashboard stops at once, a private site within one minute, whatever session Access still holds |
 | writes to the dashboard | the Origin header must be the dashboard itself; the CLI and `poplin mcp` use bearer tokens, never the cookie |
 | tokens at rest | stored hashed; an admin token expires after 30 days, a publisher token lives until revoked |
-| the signing key | kept in the database, where the Worker can rotate it; "sign everyone out" rotates it and ends every dashboard session. A private site's login is Access's own: removing the login ends it. A computer's token is revoked on its own |
+| the signing key | kept in the database, where the Worker can rotate it; Sign everyone out, under Access, rotates it and ends every dashboard session. A private site's login is Access's own: removing the login ends it. A computer's token is revoked on its own |
 | the bucket and the database | R2 public access stays off; the database is reached only through the Worker's binding |
 | site headers | `X-Content-Type-Options: nosniff`, `Referrer-Policy: no-referrer`, correct content types |
 | page views | a site shows about how often its pages were opened, from a sampled count per site and UTC day kept seven days; it counts opens, not people: no address, cookie, or browser name of a visitor is stored |
@@ -151,7 +151,7 @@ A `-p-` address is answered by Cloudflare's login before the Worker sees it. A r
 
 ## Optional edge rules
 
-The install's setup token needs eight permissions. Three more are optional, and each switches on rules at Cloudflare's edge. [The Domain tab](../run/domain.md#optional-block-junk-traffic-and-crawlers) says how to add them.
+The install's setup token needs eight permissions. Three more are optional, and each switches on rules at Cloudflare's edge. [Domain](../run/domain.md#optional-block-junk-traffic-and-crawlers) says how to add them.
 
 | Permission | Switches on | Without it |
 | --- | --- | --- |

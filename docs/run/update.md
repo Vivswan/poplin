@@ -75,6 +75,8 @@ $env:POPLIN_UPDATE_ADDRESS = "paste the update link here"
 | `poplin update --check`        | says which version is out and whether an update link is saved; starts nothing                |
 | `poplin update --forget-address` | removes the saved update link                                                              |
 
+The dashboard does the same in Settings, under Updates: beside Update link, press Add, paste it, and press Save. Remove takes it out.
+
 The install takes an update link of this form alone, and only an admin's login saves it or starts an update. One update a minute can be started. [Security](../about/security.md#who-holds-which-credential) says what the link can do.
 
 ```text
@@ -109,7 +111,7 @@ npx poplin config auto_update on
 | A start with no answer from Cloudflare | not started again by itself, since it may have been taken: run `poplin update`           |
 | A build that failed after it started | not started again by itself: build again, or run `poplin update`                           |
 | Which version is built   | the newest release at the moment the build runs, as every build of the install: [Choose the version](#choose-the-version) |
-| Where it shows           | under Activity in the dashboard: an update started by `sweep@poplin.invalid`, whose entry holds `automatic` |
+| Where it shows           | under Activity in the dashboard: `Started an update to 0.2.0 by itself`, by `sweep@poplin.invalid`    |
 | Switching it off         | `poplin config auto_update off`                                                                        |
 
 ## Choose the version

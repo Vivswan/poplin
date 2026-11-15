@@ -5,7 +5,7 @@ order: 30
 
 # What the install is made of
 
-What an install puts in your Cloudflare account; the steps it names are those of [By hand](../start/by-hand.md#the-steps), and the optional part is [on the Domain tab](../run/domain.md#optional-block-junk-traffic-and-crawlers).
+What an install puts in your Cloudflare account; the steps it names are those of [By hand](../start/by-hand.md#the-steps), and the optional part is in [Domain](../run/domain.md#optional-block-junk-traffic-and-crawlers).
 
 | In your Cloudflare account | Does                                                           | Made by           |
 | -------------------------- | -------------------------------------------------------------- | ----------------- |

@@ -55,7 +55,7 @@ The limits and alerts below are the protection, and none of them is a cap on wha
 | R2's bytes stored, write operations, and read operations | Module alone, and off until `usage_alert_percents` is set: `cloudflare_notification_policy.usage`. It needs the Notifications permission, and applies on accounts where Cloudflare offers usage alerts | Cloudflare emails the logins at each share of the free allowance the list names. Nothing is stopped |
 | the domain's plan | Module alone: `paid_plan_allowed` | an apply on a plan other than Free stops with an error, unless the input is true |
 
-Repair is the button on the setup page and the Domain tab. Module is [the OpenTofu module](with-opentofu.md). The rows marked Module alone, and the one-day rule, exist only on an install the module made: the setup page's token holds no permission for R2 or for notifications.
+Repair is the button on the setup page and the Domain screen. Module is [the OpenTofu module](with-opentofu.md). The rows marked Module alone, and the one-day rule, exist only on an install the module made: the setup page's token holds no permission for R2 or for notifications.
 
 ## What a day counts
 

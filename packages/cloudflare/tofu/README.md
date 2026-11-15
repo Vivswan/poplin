@@ -224,7 +224,7 @@ The Worker stores the first settings once, while it has none. After that the das
 | Single Redirect: Edit | the zone | the redirect rule |
 | Bot Management: Edit | the zone | the bot settings |
 
-The Domain tab's check and repair take two permissions more. Zone Settings: Read on the zone: they read whether the zone's own Always Use HTTPS is on, and write no redirect rule where it is. Access: Organizations, Identity Providers, and Groups: Read on the account: they read the team domain, and compare it and the application's audience tag with the Worker's `ACCESS` binding.
+The Domain screen's Check and Repair take two permissions more. Zone Settings: Read on the zone: they read whether the zone's own Always Use HTTPS is on, and write no redirect rule where it is. Access: Organizations, Identity Providers, and Groups: Read on the account: they read the team domain, and compare it and the application's audience tag with the Worker's `ACCESS` binding.
 
 ## Update the install
 
