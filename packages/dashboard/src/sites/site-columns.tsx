@@ -155,7 +155,7 @@ export function siteColumns(
   );
 
   return [
-    { id: "site", header: "Site", fixed: true, cell: nameCell },
+    { id: "title", header: "Site", sortable: SITE_ORDERS.first.title, fixed: true, cell: nameCell },
     {
       id: "access",
       header: "Who can open it",
@@ -207,7 +207,7 @@ export function trashColumns(nameCell: (site: Site) => ReactNode, logins: LoginN
     {
       id: "gone",
       header: "Leaves the trash",
-      cell: (site) => (site.gone_on === undefined ? null : <Moment moment={site.gone_on} />),
+      cell: (site) => (site.gone_on === undefined ? null : <span className="text-muted-foreground">{expiryOf(site.gone_on)}</span>),
     },
     { id: "by", header: "Published by", hidden: true, cell: (site) => <PublishedBy site={site} logins={logins} /> },
     { id: "size", header: "Size", numeric: true, cell: (site) => <span className="text-muted-foreground">{showBytes(site.bytes)}</span> },

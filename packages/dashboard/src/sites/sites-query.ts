@@ -16,6 +16,7 @@ export const FILTERS = [
 /** The columns the server orders by, with the words of each and the direction a first press asks for. */
 export const SORTS = [
   { key: "updated", label: "Updated", first: "desc" },
+  { key: "title", label: "Title", first: "asc" },
   { key: "name", label: "Name", first: "asc" },
   { key: "access", label: "Access", first: "asc" },
 ] as const;

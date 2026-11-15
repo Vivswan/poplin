@@ -28,7 +28,7 @@ function pageQueryOf(query: URLSearchParams): NonNullable<Parameters<typeof api.
     ...(search === "" ? {} : { q: search }),
     ...(sort.key === "updated" && sort.descending
       ? {}
-      : { sort: sort.key as "updated" | "name" | "access", dir: sort.descending ? ("desc" as const) : ("asc" as const) }),
+      : { sort: sort.key as "updated" | "title" | "name" | "access", dir: sort.descending ? ("desc" as const) : ("asc" as const) }),
     ...(after === null ? {} : { after }),
   };
 }
