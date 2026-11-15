@@ -12,9 +12,6 @@ import { choiceLabel, isOn, isSwitch, partsOf, switchText, textOf } from "@/sett
 import type { Row } from "@/settings/settings-queries";
 import { unitWord, wordsOf } from "@/settings/settings-words";
 
-/** How a count is written in its field: whole, with separators between its thousands. */
-const WHOLE = { maximumFractionDigits: 0 } as const;
-
 /** The two values of the choice before a number that can also be a word. */
 const WORD_CHOICE = { word: "word", number: "number" } as const;
 
@@ -102,7 +99,7 @@ function ChoiceControl(props: ControlProps): ReactNode {
   return <Choice id={id} labelledBy={`${id}-label`} items={items} value={text} onChoose={onChange} refused={refused} className="w-44" />;
 }
 
-/** The field of a number, with its unit fixed at its right. Only digits are typed in it. */
+/** The field of a number, with its unit fixed at its right. Only a number is typed in it; whether it is one the setting takes is the server's to say. */
 function CountField({ row, id, text, onChange, refused, className }: ControlProps & { readonly className: string }): ReactNode {
   const parts = partsOf(row, text);
   const unit = unitWord(row.key, parts.unit);
@@ -112,9 +109,6 @@ function CountField({ row, id, text, onChange, refused, className }: ControlProp
       id={id}
       value={parts.count}
       onValueChange={(count) => onChange(textOf(row, { count, unit: parts.unit }))}
-      min={0}
-      allowOutOfRange
-      format={WHOLE}
       locale="en-US"
       className={className}
     >

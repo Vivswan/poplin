@@ -42,9 +42,6 @@ interface Row {
   /** Its default, in the form of `text`. */
   readonly fallback: string;
 
-  /** Whether its value is another than the default. */
-  readonly changed: boolean;
-
   /** The host's sentences for a value above limits of its free plan, one for each limit; empty for a value within them. */
   readonly warnings: readonly string[];
 
@@ -81,7 +78,6 @@ function rowsOf(values: SettingValues, facts: { readonly freeLimits: FreeLimits;
       text: texts[key],
       unit: control.kind === "number" ? unitOf(SETTING_VALUES.entries[key], texts[key]) : "",
       fallback: defaults[key],
-      changed: texts[key] !== defaults[key],
       warnings: warnings.get(key) ?? [],
       repair: facts.domain && DOMAIN_SETTINGS.includes(key),
     };

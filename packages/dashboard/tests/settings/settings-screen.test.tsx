@@ -34,11 +34,14 @@ const stored: Record<string, string> = {};
 /** The texts of every save the screen sent. */
 const saves: unknown[] = [];
 
+/** Where every save was sent: its method and its path under the console. */
+const sentTo: string[] = [];
+
 /** The saves the server holds back until a test lets them through. */
 const held: (() => void)[] = [];
 
 function rowOf(key: string, control: Row["control"], unit = ""): Row {
-  return { key: key as Row["key"], control, text: stored[key] ?? "", unit, fallback: stored[key] ?? "", changed: false, warnings: [], repair: false };
+  return { key: key as Row["key"], control, text: stored[key] ?? "", unit, fallback: stored[key] ?? "", warnings: [], repair: false };
 }
 
 /**
@@ -65,6 +68,7 @@ function serve({ refusedKey, holds = false }: { readonly refusedKey?: string; re
 
     const { texts } = JSON.parse(String(init.body)) as { readonly texts: Record<string, string> };
     saves.push(texts);
+    sentTo.push(`${init.method} ${pathname.slice(BOOT.base.length)}`);
     if (holds) await new Promise<void>((resolve) => held.push(resolve));
 
     if (refusedKey !== undefined) return Response.json({ ok: false, code: "bad_argument", about: refusedKey, sentence: RULE }, { status: 400 });
@@ -128,6 +132,7 @@ afterEach(() => {
   globalThis.fetch = OWN_FETCH;
   window.localStorage.clear();
   saves.length = 0;
+  sentTo.length = 0;
   held.length = 0;
 });
 afterAll(async () => {
@@ -148,7 +153,7 @@ describe("the tabs", () => {
     expect({ sites, limits, updates: names(), raw: document.body.textContent?.includes("update_channel") }).toEqual({
       sites: ["Show new sites in search engines", "Keep deleted sites in the trash for"],
       limits: ["Storage for all sites together"],
-      updates: ["Check for a newer version", "Update channel", "Rebuild address"],
+      updates: ["Check daily for a newer version", "Update channel", "Rebuild address"],
       raw: false,
     });
   });
@@ -203,11 +208,12 @@ describe("the one Save", () => {
     await waitFor(() => expect(saves).toHaveLength(2));
     await waitFor(() => expect(stored.trash_days).toBe("7"));
 
-    expect([saves, page.getByRole("switch").getAttribute("aria-checked"), bar(page)]).toEqual([
+    expect([saves, sentTo, page.getByRole("switch").getAttribute("aria-checked"), bar(page)]).toEqual([
       [
         { default_search_engines: "on", trash_days: "30" },
         { default_search_engines: "off", trash_days: "7" },
       ],
+      ["POST /data/settings", "POST /data/settings"],
       "false",
       null,
     ]);

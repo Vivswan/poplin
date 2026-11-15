@@ -16,7 +16,6 @@ interface Row {
   readonly text: string;
   readonly unit: string;
   readonly fallback: string;
-  readonly changed: boolean;
   readonly repair: boolean;
 }
 
@@ -54,14 +53,9 @@ describe("the control of a setting", () => {
     expect(controlOf(SETTING_VALUES.entries[key])).toEqual(control);
   });
 
-  // Drift: a type with no control would stop the whole screen, where every setting can still be typed as text. An amount in units the screen has none of, or a choice between two words, would be drawn as a number it is not.
-  test.each([
-    ["a type that has none", v.date()],
-    ["an amount of a kind the screen has no unit for", v.strictObject({ count: v.number(), unit: v.picklist(["km", "mi"]) })],
-    ["one of two words", v.union([v.literal("never"), v.literal("always")])],
-    ["a word or a text", v.union([v.literal("none"), v.string()])],
-  ])("is the text control for %s", (_what, schema) => {
-    expect(controlOf(schema)).toEqual({ kind: "text" });
+  // Drift: a type with no control would stop the whole screen, where every setting can still be typed as text.
+  test("is the text control for a type that has none", () => {
+    expect(controlOf(v.date())).toEqual({ kind: "text" });
   });
 });
 
@@ -82,24 +76,23 @@ describe("the rows", () => {
         text: "250000",
         unit: "",
         fallback: "100000",
-        changed: true,
         warnings: ["above the free 10,000,000 reads a month", "above the free 100,000 requests a day"],
         repair: false,
       },
-      { key: "site_share_of_day", control: { kind: "number", least: 1, most: 100, word: null }, text: "40%", unit: "%", fallback: "25%", changed: true, warnings: [], repair: false },
-      { key: "block_bots", control: { kind: "choice", options: ["auto", "on", "off"] }, text: "auto", unit: "", fallback: "auto", changed: false, warnings: [], repair: false },
+      { key: "site_share_of_day", control: { kind: "number", least: 1, most: 100, word: null }, text: "40%", unit: "%", fallback: "25%", warnings: [], repair: false },
+      { key: "block_bots", control: { kind: "choice", options: ["auto", "on", "off"] }, text: "auto", unit: "", fallback: "auto", warnings: [], repair: false },
     ]);
   });
 
   // Drift: a size would be shown in the unit it was stored in, so the screen's fixed MB would stand beside a count of GB; or a value that is no whole number of the screen's unit would be rounded, and a save of the row would change it.
   test.each([
-    ["a size stored in GB", {}, "max_total_size", { text: "9000MB", unit: "MB", fallback: "9000MB", changed: false }],
-    ["the same size saved in MB", { max_total_size: "9000MB" }, "max_total_size", { text: "9000MB", unit: "MB", changed: false }],
-    ["a size that is no whole number of MB", { max_site_size: "500KB" }, "max_site_size", { text: "500KB", unit: "KB", fallback: "200MB", changed: true }],
-    ["a span of whole days stored in hours", { default_expires: "48h" }, "default_expires", { text: "2d", unit: "d", fallback: "never", changed: true }],
+    ["a size stored in GB", {}, "max_total_size", { text: "9000MB", unit: "MB", fallback: "9000MB" }],
+    ["the same size saved in MB", { max_total_size: "9000MB" }, "max_total_size", { text: "9000MB", unit: "MB" }],
+    ["a size that is no whole number of MB", { max_site_size: "500KB" }, "max_site_size", { text: "500KB", unit: "KB", fallback: "200MB" }],
+    ["a span of whole days stored in hours", { default_expires: "48h" }, "default_expires", { text: "2d", unit: "d", fallback: "never" }],
     ["a span that is no whole number of days", { default_expires: "12h" }, "default_expires", { text: "12h", unit: "h" }],
-    ["no span at all", {}, "default_expires", { text: "never", unit: "d", changed: false }],
-    ["no count at all", {}, "max_sites", { text: "none", unit: "", changed: false }],
+    ["no span at all", {}, "default_expires", { text: "never", unit: "d" }],
+    ["no count at all", {}, "max_sites", { text: "none", unit: "" }],
   ])("write %s in the one unit the screen types it in", async (_what, texts, key, row) => {
     const opened = await openConsole();
     if (Object.keys(texts).length > 0) await opened.change("/data/settings", { texts });

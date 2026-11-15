@@ -84,7 +84,7 @@ const STOPS: readonly Stop[] = [
   {
     name: "Updates, the last tab of the settings",
     open: (page) => page.getByRole("tab", { name: "Updates", exact: true }).click(),
-    shows: (page) => [page.getByRole("tab", { name: "Updates", selected: true }), page.getByRole("switch", { name: "Check for a newer version", exact: true })],
+    shows: (page) => [page.getByRole("tab", { name: "Updates", selected: true }), page.getByRole("switch", { name: "Check daily for a newer version", exact: true })],
   },
   {
     name: "the question before everyone is signed out",

@@ -18,7 +18,6 @@ const SIZE: Row = {
   text: "12000MB",
   unit: "MB",
   fallback: "9000MB",
-  changed: true,
   warnings: WARNINGS,
   repair: false,
 };

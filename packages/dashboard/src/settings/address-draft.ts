@@ -1,6 +1,6 @@
 // The rebuild address while it is typed: it waits for the screen's one Save like a setting, but is saved by a request of its own, and is never read back.
 
-import { useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 
 import { answerOf, api, Refused } from "@/lib/api";
@@ -21,7 +21,7 @@ export interface AddressDraft {
   /** The sentence the last save was refused with, until the field is typed in again. */
   readonly refusal: string | undefined;
 
-  /** Whether the field holds an address that is not saved. */
+  /** Whether the field holds an address that is not saved, nor on its way to be. */
   readonly unsaved: boolean;
 
   /** Whether a save is on its way. */
@@ -46,8 +46,6 @@ export function useAddressDraft(): AddressDraft {
   const [typed, setTyped] = useState("");
   const [replacing, setReplacing] = useState(false);
   const [refusal, setRefusal] = useState<string>();
-  const [busy, setBusy] = useState(false);
-  const unsaved = typed.trim() !== "";
 
   const discard = (): void => {
     setTyped("");
@@ -55,26 +53,29 @@ export function useAddressDraft(): AddressDraft {
     setRefusal(undefined);
   };
 
+  const saving = useMutation({
+    mutationFn: (address: string) => answerOf(api.settings["update-address"].$post({ json: { address } })),
+    onSuccess: async (_done, address) => {
+      // The field lets go of the address the moment it is saved; one typed while the save was on its way stays.
+      setTyped((kept) => (kept.trim() === address ? "" : kept));
+      setReplacing((kept) => kept && typed.trim() !== address);
+      await client.invalidateQueries({ queryKey: SETTINGS_KEY });
+      sayDone("Rebuild address saved. It is not shown again.");
+    },
+    onError: (error) => {
+      if (error instanceof Refused && error.about === "address") setRefusal(error.message);
+      else sayRefused(error instanceof Refused ? error.message : FAULT);
+    },
+  });
+  const unsaved = typed.trim() !== "" && typed.trim() !== (saving.isPending ? saving.variables : undefined);
+
   const save = async (): Promise<boolean> => {
     if (!unsaved) return true;
 
-    setBusy(true);
-    try {
-      await answerOf(api.settings["update-address"].$post({ json: { address: typed.trim() } }));
-      // The field lets go of the address the moment it is saved, whatever becomes of the read that follows.
-      discard();
-      await client.invalidateQueries({ queryKey: SETTINGS_KEY });
-      sayDone("Rebuild address saved. It is not shown again.");
-
-      return true;
-    } catch (error) {
-      if (error instanceof Refused && error.about === "address") setRefusal(error.message);
-      else sayRefused(error instanceof Refused ? error.message : FAULT);
-
-      return false;
-    } finally {
-      setBusy(false);
-    }
+    return saving.mutateAsync(typed.trim()).then(
+      () => true,
+      () => false,
+    );
   };
 
   const type = (next: string): void => {
@@ -82,5 +83,5 @@ export function useAddressDraft(): AddressDraft {
     setRefusal(undefined);
   };
 
-  return { typed, replacing, refusal, unsaved, busy, type, replace: () => setReplacing(true), discard, save };
+  return { typed, replacing, refusal, unsaved, busy: saving.isPending, type, replace: () => setReplacing(true), discard, save };
 }

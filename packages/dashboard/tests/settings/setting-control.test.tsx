@@ -20,7 +20,7 @@ const BY_KIND: Readonly<Record<string, { readonly row: Row; readonly role: strin
 };
 
 function rowOf(key: string, control: Row["control"], text: string, unit = ""): Row {
-  return { key: key as Row["key"], control, text, unit, fallback: text, changed: false, warnings: [], repair: false };
+  return { key: key as Row["key"], control, text, unit, fallback: text, warnings: [], repair: false };
 }
 
 /** Draw the control of a row over a text, and collect every text it sends. */

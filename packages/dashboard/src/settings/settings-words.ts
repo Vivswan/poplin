@@ -73,17 +73,17 @@ const WORDS: Readonly<Record<string, Words>> = {
   max_files_per_day: { block: "publishing", label: "Files published per day, all sites", about: "All publishes, imports, and copies begun in one UTC day, together.", unit: "files" },
   max_storage_writes_per_day: {
     block: "publishing",
-    label: "Storage writes and listings per day",
+    label: "Storage write operations per day",
     about: "How often the storage is written to or listed in one UTC day. A published file is one, a copied file two, a listing one.",
     unit: "operations",
   },
   requests_per_day: { block: "traffic", label: "Requests per day, all sites", about: "The most requests all sites answer in one UTC day, together.", unit: "requests" },
-  site_share_of_day: { block: "traffic", label: "Share of the day's requests, one site", about: "The share of the day's requests one site may take." },
+  site_share_of_day: { block: "traffic", label: "Daily requests one site may use", about: "The share of the requests per day that one site may take. Past it the site waits for the next UTC day." },
   site_requests_per_minute: { block: "traffic", label: "Requests per minute, one site", about: "The most requests one site answers in a minute.", unit: "requests" },
   visitor_requests_per_minute: { block: "traffic", label: "Requests per minute, one visitor", about: "The most requests one visitor is answered in a minute.", unit: "requests" },
   update_check: {
     block: "updates",
-    label: "Check for a newer version",
+    label: "Check daily for a newer version",
     about: "Once a day the install asks the project's website which version is the newest. Nothing is installed by it.",
   },
   auto_update: {
