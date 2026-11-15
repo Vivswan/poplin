@@ -40,7 +40,7 @@ type Listed = { readonly ok: true } & Readonly<v.InferOutput<typeof LISTED_SITES
  * List the sites an actor may see, each with about how often its pages were opened: every site for an admin, its own for a publisher.
  *
  * @param query - `trash` lists the trash instead; `limit` is 1 to 100; `after` is the `next` of the page before, asked under the same `sort`.
- *   `named` keeps the sites whose name or title holds that text, the letters A to Z in either case and no sign read as a pattern; the title is the one a site is listed with.
+ *   `named` keeps the sites whose name, title, or public name holds that text, the letters A to Z in either case and no sign read as a pattern; the title is the one a site is listed with.
  *   `access` keeps those of that access, and `expires` those that delete themselves on a set day (`set`) or never do (`never`).
  *   `sort` orders by the last change (`updated`, the newest first), by `name`, by `access` from private to public,
  *   or by `title`: what a site is listed with, its title or else its name, by the first 40 characters and with A to Z in either case alike. `dir` turns the order around

@@ -567,8 +567,8 @@ export function sites(label: string, makeDatabase: DatabaseFactory): void {
       await expect(database.listSites({ trash: false, limit: 1, sort: "access", after: { updated_at: NOW, id: "aaaaaaaaaaaa" as SiteId, name: REPORT } })).rejects.toThrow(RangeError);
     });
 
-    // Drift: a listed site shows its title above its name. A search of the name alone would miss the site a person reads, and one of a title the listing hides would list a site with no hit to see.
-    describe("a text finds a site by its name or by the title it is listed with", () => {
+    // Drift: a listed site shows its title above its name, and a public one its public name in its link. A search of the name alone would miss the site a person reads, and one of a title the listing hides would list a site with no hit to see.
+    describe("a text finds a site by its name, by the title it is listed with, or by its public name", () => {
       const stocked = async (): Promise<Database> => {
         const database = await opened(makeDatabase, mintFrom("aaaaaaaaaaaa", "bbbbbbbbbbbb", "cccccccccccc", "dddddddddddd", "eeeeeeeeeeee", "ffffffffffff"));
         const drafts: readonly (readonly [name: string, title: string | null, pageTitle?: string])[] = [
@@ -580,7 +580,9 @@ export function sites(label: string, makeDatabase: DatabaseFactory): void {
           ["old", "Report archive"],
         ];
         for (const [index, [name, title, pageTitle]] of drafts.entries()) {
-          const site = { ...draft(name as SiteName), title, ...(pageTitle === undefined ? {} : { page_title: pageTitle }) };
+          // One site is public, under a public name that is not its name: the link a listing shows for it holds that name.
+          const open = name === "misc" ? draft(name as SiteName, "public", "open-shelf" as PublicName) : draft(name as SiteName);
+          const site = { ...open, title, ...(pageTitle === undefined ? {} : { page_title: pageTitle }) };
           await made(database, site, { by: ADA, at: NOW + index });
         }
         await database.trashSite("ffffffffffff" as SiteId, { by: ADA, at: NOW + 9 });
@@ -603,6 +605,7 @@ export function sites(label: string, makeDatabase: DatabaseFactory): void {
         ["a single quote", { named: "done's" }, [["draft"]]],
         ["double quotes", { named: '"final"' }, [["draft"]]],
         ["a site with neither title, by its name", { named: "misc" }, [["misc"]]],
+        ["a public name, with capitals typed", { named: "Open-Shelf" }, [["misc"]]],
         ["a text in no name and no title", { named: "ledger" }, [[]]],
         ["a title of the trash, looked for outside it", { named: "archive" }, [[]]],
         ["a title of the trash", { named: "archive", trash: true }, [["old"]]],

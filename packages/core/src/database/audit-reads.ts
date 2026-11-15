@@ -25,7 +25,7 @@ function auditAmong(actions: readonly AuditAction[] | undefined): SQL | undefine
 /**
  * The condition an entry of the audit log meets to be about a site a text finds; `undefined` when no text is asked.
  *
- * The text finds a site whose name then held it, and a site that holds it now in its name or its listed title, as a listing of the sites finds one: the entries of such a site from before a new link are among them.
+ * The text finds a site whose name then held it, and a site that holds it now in its name, its listed title, or its public name, as a listing of the sites finds one: the entries of such a site from before a new link are among them.
  * The sites that hold the text now are read once for the statement, not once an entry.
  */
 function auditAbout(site: string | undefined): SQL | undefined {
