@@ -1250,9 +1250,7 @@ export class SqlDatabase implements Database {
 
   async ensureSigningKey(fresh: Uint8Array, at: number): Promise<SigningKey> {
     const text = signingKeyToText(fresh);
-    const stored = await this.readSigningKey();
-    if (stored !== undefined) return { kind: "kept", key: stored };
-
+    // One step whether a key is stored or not: the insert does nothing where one is, and the read after it gives the stored one.
     const noneStored = fragment`NOT EXISTS (SELECT 1 FROM ${secrets} WHERE ${secrets.name} = 'session_key')`;
     const first = insertFrom(secrets, [secrets.name, secrets.value, secrets.created_at], fragment`SELECT 'session_key', ${text}, ${at} WHERE ${noneStored}`);
     const [inserted, read] = await this.#driver.batch([first, READ_SIGNING_KEY]);

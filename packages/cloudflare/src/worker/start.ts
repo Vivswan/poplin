@@ -19,7 +19,7 @@ import type { Asking } from "@poplin/core/src/actions/check-update";
 import type { Install } from "@poplin/core/src/actions/records";
 import type { Rebuilding } from "@poplin/core/src/actions/start-update";
 import { parseLogins } from "@poplin/core/src/auth/logins";
-import type { Database } from "@poplin/core/src/database/database";
+import type { Database, SettingsAndKey } from "@poplin/core/src/database/database";
 import type { PublicName } from "@poplin/core/src/names/names";
 import { openDatabase } from "@poplin/core/src/database/open";
 import { defaultSettings, SETTING_VALUES, settingsFromText, settingsToText } from "@poplin/core/src/records/settings";
@@ -198,14 +198,14 @@ async function ensureSettings(database: Database, binding: unknown, now: number)
 }
 
 /**
- * Say whether the install holds settings, so that settings another build wrote stop the start with their own reason.
+ * Read the settings and the signing key the install holds, in one question, so that settings another build wrote stop the start with their own reason.
  *
- * @returns whether settings are stored; or the failure, logged by the key that is wrong and never by a value
+ * @returns the two, each `undefined` before it was stored; or the failure, logged by the key that is wrong and never by a value
  * @throws whatever the database rejects with
  */
-async function hasSettings(database: Database): Promise<boolean | Started> {
+async function readStored(database: Database): Promise<SettingsAndKey | Extract<Started, { readonly ok: false }>> {
   try {
-    return (await database.readSettings()) !== undefined;
+    return await database.readSettingsAndKey();
   } catch (error) {
     if (!v.isValiError(error)) throw error;
 
@@ -292,15 +292,17 @@ export async function startInstance(env: Bindings, outside: Outside, visitorOf: 
   }
 
   const { database } = opened;
-  const settled = await hasSettings(database);
-  if (typeof settled !== "boolean") return settled;
+  const stored = await readStored(database);
+  if ("ok" in stored) return stored;
 
+  const settled = stored.settings !== undefined;
   if (!zone.ok || !own.ok) return startUnset({ database, driver, env, outside, refused, script: own.ok ? own.value.script : own.script, settled });
 
   const unset = settled ? undefined : await ensureSettings(database, env.FIRST_SETTINGS, now);
   if (unset !== undefined) return unset;
 
-  await database.ensureSigningKey(crypto.getRandomValues(new Uint8Array(KEY_BYTES)), now);
+  // An install that holds its key is asked for it no more: only the first start of an install makes one.
+  if (stored.key === undefined) await database.ensureSigningKey(crypto.getRandomValues(new Uint8Array(KEY_BYTES)), now);
 
   const layout = zone.value;
   const addresses = hostnameAddresses(layout);

@@ -95,7 +95,7 @@ const ROWS: Readonly<Record<string, readonly [read: number, written: number]>> =
   "changeSettings, a login more": [14, 4],
   "changeSettings, another first login": [5, 4],
   "ensureSigningKey, the first": [2, 1],
-  "ensureSigningKey, kept": [1, 0],
+  "ensureSigningKey, kept": [3, 0],
   "readSigningKey": [1, 0],
   "readSettingsAndKey": [2, 0],
   "rotateSigningKey": [1, 3],
@@ -607,6 +607,22 @@ describe("D1: the rows a scheduled sweep costs of a day's allowance", () => {
       { read: 8, written: 0 },
       1,
     ]);
+  });
+});
+
+describe("D1: the rows a database costs to open", () => {
+  // Drift: every instance opens the database when it starts, hundreds of times a day. A check that walked the schema to see whether the ledger is there read a row for every table, index, and trigger at each start.
+  test("a database that is up to date is opened for the one row of its step; only one no step ran on is asked about its schema", async () => {
+    const { driver, rows } = await meteredDatabase();
+    const first = await openDatabase(driver, NOW);
+    const made = { ...rows };
+    rows.read = 0;
+    rows.written = 0;
+
+    const again = await openDatabase(driver, NOW);
+
+    expect([first.kind, again.kind, again.kind === "open" ? again.applied : undefined, rows]).toEqual(["open", "open", [], { read: 1, written: 0 }]);
+    expect(made.read).toBeGreaterThan(rows.read);
   });
 });
 
