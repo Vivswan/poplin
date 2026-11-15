@@ -1,6 +1,7 @@
 // One site, beside the table: its link, who can open it, its facts and versions, the settings it is seldom given, and what is done to the whole of it.
 
 import { showBytes } from "@poplin/core/src/records/settings";
+import { Link } from "@tanstack/react-router";
 import { CopyIcon, ExternalLinkIcon, PencilIcon } from "lucide-react";
 import { type ReactElement, type ReactNode, useEffect } from "react";
 
@@ -9,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { FieldDescription } from "@/components/ui/field";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { ACCESSES, type Access, addressParts, expiryOf, type Site, shortMoment, showCount, shownName, wholeMoment } from "@/lib/sites";
+import { settingAddress } from "@/settings/setting-address";
 import { IconButton } from "@/shared/icon-button";
 import { PanelBlock, PanelFact, PanelFacts, PanelLoading, PanelSwitch, SidePanel } from "@/shared/side-panel";
 import { Who } from "@/shared/who";
@@ -140,6 +142,27 @@ function VersionsBlock({ shown, onMakeLive }: { readonly shown: Shown; readonly 
   );
 }
 
+/** What stands under the switch for search engines while it changes nothing: the site is not public, or the install keeps search engines out of every site, which is said with the way to that setting. */
+function SearchNote({ open, allowed }: { readonly open: boolean; readonly allowed: boolean }): ReactNode {
+  if (open && allowed) return null;
+
+  return (
+    <FieldDescription className="-mt-1 text-[13px] leading-5">
+      {open ? (
+        <>
+          Off for every site in{" "}
+          <Link {...settingAddress("search_engines_allowed")} className="text-link underline-offset-2 hover:underline">
+            Settings
+          </Link>
+          .
+        </>
+      ) : (
+        "Only a public site is listed."
+      )}
+    </FieldDescription>
+  );
+}
+
 /** A site in the trash: when it leaves for good, and the way back. */
 function TrashBlock({ site, onRestore }: { readonly site: Site; readonly onRestore: () => void }): ReactNode {
   const leaves = site.gone_on === undefined ? "" : ` It leaves the trash for good on ${wholeMoment(site.gone_on)}.`;
@@ -212,7 +235,7 @@ export function SitePanel({ label, actions, reveal, onAsk, closeLink, onClose, o
           on={site.search_engines}
           onChange={(on) => actions.setSetting(site, "search_engines", on)}
         />
-        {site.access === "public" ? null : <FieldDescription className="-mt-1 text-[13px] leading-5">Only a public site is listed.</FieldDescription>}
+        <SearchNote open={site.access === "public"} allowed={data.search_engines_allowed} />
         <PanelSwitch id="site-embeddable" label="Allow embedding" on={site.embeddable} onChange={(on) => actions.setSetting(site, "embeddable", on)} />
       </PanelBlock>
       <PanelBlock>

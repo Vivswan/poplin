@@ -33,6 +33,9 @@ interface AskDialogProps {
   /** The most characters the field takes. */
   readonly maxLength?: number;
 
+  /** `true` where the value the field opens with is itself an answer: the button is then on for it. */
+  readonly takesInitial?: boolean;
+
   /** The words of the button that sends the value. */
   readonly submit: string;
 
@@ -40,8 +43,8 @@ interface AskDialogProps {
   readonly onSubmit: (value: string) => Promise<string | undefined>;
 }
 
-/** Ask for one value in a dialog. The button stays off while the value is empty or unchanged. */
-export function AskDialog({ open, onOpenChange, title, says, label, hint, initial, maxLength, submit, onSubmit }: AskDialogProps): ReactNode {
+/** Ask for one value in a dialog. The button stays off while the value is empty, and while it is unchanged unless the value it opened with is an answer. */
+export function AskDialog({ open, onOpenChange, title, says, label, hint, initial, maxLength, takesInitial = false, submit, onSubmit }: AskDialogProps): ReactNode {
   const id = useId();
   const [value, setValue] = useState(initial);
   const [refusal, setRefusal] = useState<string>();
@@ -89,7 +92,7 @@ export function AskDialog({ open, onOpenChange, title, says, label, hint, initia
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
               Cancel
             </Button>
-            <Button type="submit" disabled={busy || value.trim() === "" || value.trim() === initial}>
+            <Button type="submit" disabled={busy || value.trim() === "" || (!takesInitial && value.trim() === initial)}>
               {submit}
             </Button>
           </DialogFooter>

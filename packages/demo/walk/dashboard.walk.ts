@@ -179,8 +179,8 @@ const STOPS: readonly Stop[] = [
   {
     name: "the question before a site is opened wider",
     open: (page) => panel(page).getByRole("button", { name: "Public", exact: true }).click(),
-    shows: (page) => [question(page, `Make ${SAMPLE.site} public?`)],
-    close: leaveBy("Cancel"),
+    shows: (page) => [asksPublicName(page).getByRole("textbox", { name: "Public name", exact: true })],
+    close: (page) => asksPublicName(page).getByRole("button", { name: "Cancel", exact: true }).click(),
   },
   {
     name: "the way back from the panel to the sites",
@@ -233,7 +233,7 @@ const STOPS: readonly Stop[] = [
     name: "the question before a user is removed",
     open: (page) => fromRowMenu(page, SAMPLE.person, "Remove"),
     shows: (page) => [question(page, `Remove ${SAMPLE.person}?`)],
-    close: leaveBy("Keep"),
+    close: leaveBy("Cancel"),
   },
   {
     name: "how a token is added, from the tokens",
@@ -248,7 +248,7 @@ const STOPS: readonly Stop[] = [
     name: "the question before a token is removed",
     open: (page) => fromRowMenu(page, SAMPLE.token, "Remove"),
     shows: (page) => [question(page, `Remove ${SAMPLE.token}?`)],
-    close: leaveBy("Keep"),
+    close: leaveBy("Cancel"),
   },
   {
     name: "a removed token, which then stands under Removed tokens",
@@ -361,6 +361,11 @@ function panel(page: Page): Locator {
 /** A question that asks before a change. */
 function question(page: Page, title: string | RegExp): Locator {
   return page.getByRole("alertdialog", { name: title, exact: true });
+}
+
+/** The question before the sample site is made public: it asks for the public name in a field. */
+function asksPublicName(page: Page): Locator {
+  return page.getByRole("dialog", { name: `Make ${SAMPLE.site} public?`, exact: true });
 }
 
 /** Leave a question by one of its buttons. */

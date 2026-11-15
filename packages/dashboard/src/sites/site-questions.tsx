@@ -1,8 +1,9 @@
 // The questions the Sites screen asks before a change of a site: its title and name, a new link, and opening the site wider. They are asked from a row's menu and from the panel alike, and drawn once, beside both.
 
-import type { ReactNode } from "react";
+import { type ReactNode, useRef } from "react";
 
-import { ACCESSES, type Access, type Site, shownName } from "@/lib/sites";
+import { ACCESSES, type Access, LONGEST_NAME, type Site, shownName } from "@/lib/sites";
+import { AskDialog } from "@/shared/ask-dialog";
 import { Confirm, type Question } from "@/shared/confirm";
 import { EditSiteDialog } from "@/sites/edit-site-dialog";
 import type { SiteActions } from "@/sites/site-actions";
@@ -24,12 +25,17 @@ function questionOf({ site, ask }: Asked): Question | undefined {
     return { title: "Make a new link?", says: `The site gets a new link. The link in use now stops working at once.${kept}`, yes: "Make a new link" };
   }
 
-  if (ask.kind !== "access") return undefined;
+  // A site is made public by a question of its own, which asks for the public name.
+  if (ask.kind !== "access" || ask.access === "public") return undefined;
 
   const word = ACCESSES.find((entry) => entry.access === ask.access)?.label.toLowerCase() ?? "";
-  const says = ask.access === "public" ? "Everyone can open it, at a public link. No login." : "Anyone with the link can open it. No login.";
 
-  return { title: `Make ${shownName(site)} ${word}?`, says, yes: `Make it ${word}` };
+  return { title: `Make ${shownName(site)} ${word}?`, says: "Anyone with the link can open it. No login.", yes: `Make it ${word}` };
+}
+
+/** The site a person is asked to make public, or `undefined` while that is not asked. */
+function publicAsked(asked: Asked | undefined): Site | undefined {
+  return asked?.ask.kind === "access" && asked.ask.access === "public" ? asked.site : undefined;
 }
 
 /**
@@ -48,6 +54,12 @@ export function SiteQuestions({
   readonly onClose: () => void;
 }): ReactNode {
   const named = asked?.ask.kind === "naming" ? asked.site : undefined;
+  // The site stays while its question closes, so the dialog does not empty as it fades.
+  const opening = publicAsked(asked);
+  const last = useRef(opening);
+  if (opening !== undefined) last.current = opening;
+
+  const shown = opening ?? last.current;
 
   const answer = (yes: boolean): void => {
     onClose();
@@ -61,6 +73,19 @@ export function SiteQuestions({
     <>
       <EditSiteDialog site={named} onClose={onClose} onSave={actions.name} />
       <Confirm question={asked === undefined ? undefined : questionOf(asked)} onAnswer={answer} />
+      <AskDialog
+        open={opening !== undefined}
+        onOpenChange={(open) => (open ? undefined : onClose())}
+        title={shown === undefined ? "" : `Make ${shownName(shown)} public?`}
+        says="Everyone can open it, at a public link. No login."
+        label="Public name"
+        hint="The public link uses this name."
+        initial={shown?.name ?? ""}
+        maxLength={LONGEST_NAME}
+        takesInitial
+        submit="Make it public"
+        onSubmit={async (publicName) => (shown === undefined ? undefined : actions.makePublic(shown, publicName))}
+      />
     </>
   );
 }

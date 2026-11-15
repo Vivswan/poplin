@@ -5,13 +5,19 @@ import { copy, sayDone, send } from "@/lib/notify";
 import { ACCESSES, type Access, type Site, shownName } from "@/lib/sites";
 import type { NamingRefusal, SiteNaming } from "@/sites/edit-site-dialog";
 
-/** The changes of a site. Each but `name` and `remove` answers the site after the change, or `undefined` when it was refused and the refusal was shown. */
+/** What a site that was made public says. */
+const PUBLIC_NOW = ACCESSES.find((entry) => entry.access === "public")?.now ?? "Saved.";
+
+/** The changes of a site. Each but `name`, `makePublic`, and `remove` answers the site after the change, or `undefined` when it was refused and the refusal was shown. */
 export interface SiteActions {
   /** Copies the site's whole link, and says so. */
   readonly copyLink: (site: Site) => Promise<void>;
 
   /** Sets who can open the site. */
   readonly setAccess: (site: Site, access: Access) => Promise<Site | undefined>;
+
+  /** Makes the site public under a public name. Answers nothing when it is done, or the sentence of the refusal, which the one who asked shows at the name's field. */
+  readonly makePublic: (site: Site, publicName: string) => Promise<string | undefined>;
 
   /** Gives the site another title, another name, or both. Answers nothing when it is done, or the refusal, which the one who asked shows at its field. */
   readonly name: (site: Site, naming: SiteNaming) => Promise<NamingRefusal | undefined>;
@@ -69,6 +75,19 @@ export function siteActions(onChanged: (before: Site, after: Site | null) => voi
     copyLink: (site) => copy(site.url, { done: "Link copied.", failed: "Not copied. Open the site and copy its address." }),
     setAccess: (site, access) =>
       run(site, send(routes.access.$post({ param: at(site), json: { access } })), ACCESSES.find((entry) => entry.access === access)?.now ?? "Saved."),
+    makePublic: async (site, publicName) => {
+      try {
+        const opened = await answerOf(routes.access.$post({ param: at(site), json: { access: "public", public_name: publicName } }));
+        onChanged(site, opened.site);
+        sayDone(PUBLIC_NOW);
+
+        return undefined;
+      } catch (error) {
+        if (error instanceof Refused) return error.message;
+
+        throw error;
+      }
+    },
     setSetting: (site, setting, on) => {
       // Undo stores what the switch showed before, and says so: as a switch of the Settings screen does.
       const back = (): void => void run(site, send(routes.settings.$post({ param: at(site), json: { [setting]: !on } })), "Put back.");

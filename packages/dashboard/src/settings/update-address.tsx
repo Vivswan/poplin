@@ -23,7 +23,7 @@ const SAYS = "Lets poplin update itself.";
 /** The question before the link is removed: it cannot be read back, so nothing puts it back. */
 const REMOVE = {
   title: "Remove the update link?",
-  says: "Poplin can no longer update itself until a link is saved again. The link cannot be read back from here.",
+  says: "Until a link is saved again, poplin cannot update itself. The link cannot be read back from here.",
   yes: "Remove",
   removes: true,
 } as const;

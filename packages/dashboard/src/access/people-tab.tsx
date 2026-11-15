@@ -60,7 +60,7 @@ interface PeopleTabProps {
 function leavingQuestion(person: Person | undefined): Question | undefined {
   if (person === undefined) return undefined;
 
-  return { title: `Remove ${person.email}?`, says: "This user can no longer log in.", yes: "Remove", no: "Keep", removes: true };
+  return { title: `Remove ${person.email}?`, says: "This user can no longer log in.", yes: "Remove", removes: true };
 }
 
 /** Draw the Users tab. */

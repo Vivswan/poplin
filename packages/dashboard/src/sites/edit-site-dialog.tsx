@@ -6,10 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Field, FieldDescription, FieldError, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
-import type { Site } from "@/lib/sites";
-
-/** The most characters a site's name holds. */
-const LONGEST_NAME = 40;
+import { LONGEST_NAME, type Site } from "@/lib/sites";
 
 /** What is said under each field while nothing is refused there. */
 const HINTS = {

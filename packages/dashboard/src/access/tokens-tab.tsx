@@ -209,7 +209,7 @@ function namesOf(tokens: readonly Token[], ended: Ended | undefined): Record<str
 function leavingQuestion(token: Token | undefined): Question | undefined {
   if (token === undefined) return undefined;
 
-  return { title: `Remove ${computerName(token.note).shown}?`, says: "Its token stops working at once.", yes: "Remove", no: "Keep", removes: true };
+  return { title: `Remove ${computerName(token.note).shown}?`, says: "Its token stops working at once.", yes: "Remove", removes: true };
 }
 
 /** Draw the Tokens tab. */

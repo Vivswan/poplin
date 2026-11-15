@@ -1,12 +1,13 @@
 // The data of the Sites screen: one page of the table, one site, and each change of a site.
 //
 //   GET  /sites                    one page; ?view=trash, ?q=, ?access=, ?sort= with ?dir=, ?after=
-//   GET  /sites/<label>            one site
+//   GET  /sites/<label>            one site, and whether the install lets search engines in
 //                                  both with the names of the logins there are, for whoever published a version
 //   POST /sites/<label>/<change>   naming, access, settings, delete, restore, new-link, make-live
 
 import { vValidator } from "@hono/valibot-validator";
 import { SITE_CHANGES } from "@poplin/core/src/actions/changes";
+import { readConfig } from "@poplin/core/src/actions/config";
 import { deleteSite } from "@poplin/core/src/actions/delete";
 import { listSites } from "@poplin/core/src/actions/list";
 import { newLink } from "@poplin/core/src/actions/new-link";
@@ -105,7 +106,11 @@ export const siteRoutes = new Hono<Shared>()
     // An address that names no site in a form a site's label can have is told as a site that is not there: both are an old or mistyped link.
     if (!shown.ok) return refused(context, shown.code === "bad_argument" && shown.about === "site" ? { code: "not_found" } : shown);
 
-    return context.json({ ok: true as const, site: shown.site, logins: await loginNames(context.get("asker")) });
+    // A site's own switch for search engines does nothing while the install keeps them out, which the panel says at the switch.
+    const config = await readConfig(install, actor);
+    if (!config.ok) return refused(context, config);
+
+    return context.json({ ok: true as const, site: shown.site, logins: await loginNames(context.get("asker")), search_engines_allowed: config.values.search_engines_allowed });
   })
   .post("/sites/:site/naming", vValidator("param", ONE_SITE, refuseInvalid), vValidator("json", CHANGES.naming, refuseInvalid), async (context) => {
     const { install, actor } = context.get("asker");
