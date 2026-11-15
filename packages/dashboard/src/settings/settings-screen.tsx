@@ -61,10 +61,8 @@ function Groups({
   return (
     <>
       {blocksOf(settings.rows).map((block) => (
-        <section key={block.id} aria-labelledby={`block-${block.id}`} className={GROUP}>
-          <h2 id={`block-${block.id}`} className={HEADING}>
-            {block.heading}
-          </h2>
+        <section key={block.id} aria-label={block.heading} className={GROUP}>
+          <h2 className={HEADING}>{block.heading}</h2>
           {block.rows.some((row) => row.repair) ? <RepairNote /> : null}
           {block.rows.map((row) => (
             <SettingRow
