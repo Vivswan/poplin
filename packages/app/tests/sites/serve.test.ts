@@ -568,9 +568,12 @@ describe("the icon of a site that holds none", () => {
     return { ...(await whole(response)), calls: icons.install.keys.slice(calls).map((key) => key.replace(prefixOf(site), "")), opened: icons.install.bodies.length - opened };
   }
 
-  /** What poplin's icon goes out with: the headers of the drawing the site holds at the same address, with the icon's own tag and length, and no offer of a part. */
+  /** What poplin's icon goes out with: the headers of the drawing the site holds at the same address, with the icon's own tag and length, no offer of a part, and an hour where the drawing has a day. */
   async function iconHeaders(drawing: Request): Promise<Record<string, unknown>> {
-    return { ...fixedHeaders(await serveSite(drawing, icons.install.serving)), "accept-ranges": "none", "content-length": ICON_LENGTH, etag: ICON_TAG };
+    const ofDrawing = fixedHeaders(await serveSite(drawing, icons.install.serving));
+    const kept = String(ofDrawing["cache-control"]).replace("max-age=86400", "max-age=3600");
+
+    return { ...ofDrawing, "accept-ranges": "none", "cache-control": kept, "content-length": ICON_LENGTH, etag: ICON_TAG };
   }
 
   beforeAll(async () => {
@@ -591,12 +594,12 @@ describe("the icon of a site that holds none", () => {
     icons = { install, bare, lost, own, blank, open, vault, gone, lapsed };
   });
 
-  // Drift: the icon would lose a header every file of a site carries, or would be kept longer or shorter than a file.
-  test("goes out as a drawing with exactly the headers of a file of an unlisted site, kept for a day", async () => {
+  // Drift: the icon would lose a header every file of a site carries, or would be kept a day as a file is, so a site published with its own icon would show poplin's for a day more.
+  test("goes out as a drawing with exactly the headers of a file of an unlisted site, but kept for an hour", async () => {
     expect(await whole(await serveSite(ask(labelHost(icons.bare), "/favicon.ico"), icons.install.serving))).toEqual({
       status: 200,
       body: DEFAULT_ICON,
-      headers: { ...SITE_HEADERS, "accept-ranges": "none", "cache-control": "public, max-age=86400", "content-length": ICON_LENGTH, "content-type": DRAWING, etag: ICON_TAG },
+      headers: { ...SITE_HEADERS, "accept-ranges": "none", "cache-control": "public, max-age=3600", "content-length": ICON_LENGTH, "content-type": DRAWING, etag: ICON_TAG },
     });
   });
 

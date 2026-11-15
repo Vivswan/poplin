@@ -480,10 +480,10 @@ describe("the product, from a token to an opened site", () => {
 
   // Drift: a site without an icon would show a blank tab, the icon would cost a second bucket read where the site has a 404 page, a person's own icon would be replaced, or the icon would count as a page opened.
   test.each([
-    { holds: "no icon of its own", files: [page("<p>docs</p>")], type: "image/svg+xml", text: DEFAULT_ICON },
-    { holds: "no icon of its own and a 404 page", files: [page("<p>docs</p>"), lostPage], type: "image/svg+xml", text: DEFAULT_ICON },
-    { holds: "an icon of its own", files: [page("<p>docs</p>"), lostPage, ownIcon], type: "image/x-icon", text: "own icon" },
-  ])("/favicon.ico of a site that holds $holds costs one site query, one request count, and one bucket read, and is no page view", async ({ files, type, text }) => {
+    { holds: "no icon of its own", files: [page("<p>docs</p>")], type: "image/svg+xml", text: DEFAULT_ICON, cache: "public, max-age=3600" },
+    { holds: "no icon of its own and a 404 page", files: [page("<p>docs</p>"), lostPage], type: "image/svg+xml", text: DEFAULT_ICON, cache: "public, max-age=3600" },
+    { holds: "an icon of its own", files: [page("<p>docs</p>"), lostPage, ownIcon], type: "image/x-icon", text: "own icon", cache: "public, max-age=86400" },
+  ])("/favicon.ico of a site that holds $holds costs one site query, one request count, and one bucket read, and is no page view", async ({ files, type, text, cache }) => {
     const tally = { calls: 0 };
     const worker = instance(w);
     await ask(worker, `${ADMIN}/api/whoami`, {}, countedBindings(tally));
@@ -502,7 +502,7 @@ describe("the product, from a token to an opened site", () => {
       status: 200,
       type,
       sniff: "nosniff",
-      cache: "public, max-age=86400",
+      cache,
       text,
       calls: 3,
       views: [{ today: 1, week: 1 }],

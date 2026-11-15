@@ -9,7 +9,7 @@
 //   the file's own tag         the request holds the file as it is         304, and the store opens no body: it is asked with the tag
 //   several tags, or `*`       the store compares one tag                  the file is looked at first, and read after that when the request holds another
 //   the store's tag of a page  no page goes out with it                    the page is read a second time, as if no tag was sent
-//   no key holds a file        the path is the site's `/favicon.ico`      poplin's own icon with status 200, kept as a file is, at no further read
+//   no key holds a file        the path is the site's `/favicon.ico`      poplin's own icon with status 200, kept an hour, at no further read
 //                              the version holds a `404.html`              one more read, of that page, sent with status 404; the plain 404 for a version without one, at no read
 //                              a page for a request that holds another version carries `Clear-Site-Data`, so the browser drops that version's files
 // A request asks the store three times at most: the live version's record says whether it holds a `404.html` and which files without an extension, so no key is tried that cannot hold a file.
@@ -70,6 +70,9 @@ const ICON_PATH = "/favicon.ico";
 
 /** Poplin's own icon as it goes out. */
 const ICON_BYTES = new TextEncoder().encode(DEFAULT_ICON);
+
+/** How many seconds a browser keeps poplin's own icon: an hour, so the icon a site is published with later shows within it. */
+const ICON_SECONDS = 3600;
 
 /** The most calls one request makes to the store, whatever it asks for. What a day of requests can cost the store is counted from this. */
 export const MOST_STORE_CALLS = 3;
@@ -258,7 +261,7 @@ function asksForIcon(keys: readonly ObjectKey[], served: Served): boolean {
 }
 
 /**
- * Answer poplin's own icon for a served site that holds none, at no call to the store. It goes out whole, under the headers a drawing of the site would carry.
+ * Answer poplin's own icon for a served site that holds none, at no call to the store. It goes out whole, under the headers a drawing of the site would carry, and is kept an hour where a drawing is kept a day.
  *
  * @returns 304 for a request that holds the icon, by its tag or the one for any file
  */
@@ -267,6 +270,7 @@ async function defaultIcon(request: Request, served: Served): Promise<Response> 
   const tag = `"${uint8ArrayToHex(await crypto.subtle.digest("SHA-256", ICON_BYTES))}"`;
   headers.set("ETag", tag);
   headers.set("Accept-Ranges", NO_RANGES);
+  headers.set("Cache-Control", `${served.site.access === "private" ? "private" : "public"}, max-age=${ICON_SECONDS}`);
 
   const sent = sentTags(request.headers.get("If-None-Match"));
   if (sent.includes(ANY_FILE) || sent.includes(tag)) return new Response(null, { status: 304, headers });
