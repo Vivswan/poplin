@@ -163,7 +163,7 @@ export function SettingsScreen(): ReactNode {
           onFocusCapture={(event) => {
             last.current = event.target;
           }}
-          className="min-h-0 flex-1 overflow-y-auto px-6 pt-5 pb-12 max-md:px-4"
+          className="line-room min-h-0 flex-1 overflow-y-auto px-6 pt-5 pb-12 max-md:px-4"
         >
           <div className={COLUMN}>
             <p className="mb-5 text-muted-foreground">How this install treats new sites, visitors, limits, and updates.</p>

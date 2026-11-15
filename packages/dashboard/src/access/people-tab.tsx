@@ -122,7 +122,7 @@ export function PeopleTab({ people, failure, actions, onRetry }: PeopleTabProps)
               loading={people === undefined}
             />
           </div>
-          <div className="min-h-0 flex-1 overflow-y-auto md:hidden">
+          <div className="line-room min-h-0 flex-1 overflow-y-auto md:hidden">
             <ul aria-label="Users" className="border-t">
               {rows.map((person) => (
                 <li key={person.email} className="group/row flex h-11 items-center gap-2 border-b px-4">

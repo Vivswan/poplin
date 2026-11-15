@@ -148,7 +148,7 @@ function PhoneList({
   const list = useTopOfPlace(place);
 
   return (
-    <div ref={list} className="min-h-0 flex-1 overflow-y-auto md:hidden">
+    <div ref={list} className="line-room min-h-0 flex-1 overflow-y-auto md:hidden">
       <ul aria-label="Sites" className="border-t">
         {sites.map((site) => (
           <li

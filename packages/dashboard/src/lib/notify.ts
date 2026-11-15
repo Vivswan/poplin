@@ -3,6 +3,7 @@
 import { toast } from "sonner";
 
 import { type Answering, answerOf, type Done, Refused } from "@/lib/api";
+import { PHONE } from "@/lib/media";
 
 /** What goes wrong that is no refusal: a fault of the client itself. */
 const FAULT = "That did not work. Try again.";
@@ -17,19 +18,50 @@ interface Undo {
 }
 
 /**
+ * Make room for a line: a phone shows one line at a time, the newest, since each lies over the screen's last controls.
+ *
+ * @param id - the id of the line that is said next; one shown under it is said again in its place, and stays
+ */
+function makeRoom(id?: string): void {
+  if (!window.matchMedia(PHONE).matches) return;
+
+  for (const shown of toast.getToasts()) if (shown.id !== id) toast.dismiss(shown.id);
+}
+
+/** Leave of the lines that are shown the newest alone: for a screen that became as narrow as a phone while several were shown. */
+export function leaveNewest(): void {
+  for (const older of toast.getToasts().slice(0, -1)) toast.dismiss(older.id);
+}
+
+/**
+ * Take a line away at a press on it. A line with a button stays: the press was for the button, or missed it.
+ *
+ * A line is found by its own words, which it carries as its mark.
+ */
+export function leaveAtPress(event: MouseEvent): void {
+  const line = event.target instanceof Element ? event.target.closest<HTMLElement>("[data-sonner-toast]") : null;
+  const words = line?.dataset.testid;
+  if (line === null || words === undefined || line.querySelector("button") !== null) return;
+
+  toast.dismiss(words);
+}
+
+/**
  * Say that a change was done.
  *
  * @param undo - shown as a button on the line: Undo for a change one press can take back, or under its own label the step that comes next. Such a line stays longer and can be closed
  */
 export function sayDone(text: string, undo?: Undo): void {
   // The same words said twice in a row are one line, not two; a line with Undo stays its own, since each takes back another change.
-  if (undo === undefined) toast.success(text, { id: text });
+  makeRoom(undo === undefined ? text : undefined);
+  if (undo === undefined) toast.success(text, { id: text, testId: text });
   else toast.success(text, { action: { label: undo.label ?? "Undo", onClick: undo.run }, duration: BUTTON_STAYS_MS, closeButton: true });
 }
 
 /** Say that a change was refused, in the sentence the server gave. */
 export function sayRefused(sentence: string): void {
-  toast.error(sentence);
+  makeRoom(sentence);
+  toast.error(sentence, { id: sentence, testId: sentence });
 }
 
 /**

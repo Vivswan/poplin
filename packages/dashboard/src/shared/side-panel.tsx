@@ -175,7 +175,7 @@ export function SidePanel({ title, closeLink, onClose, back, beside, children }:
               initialFocus={heading}
               {...kept}
               onKeyDownCapture={closesAtEscape(onClose)}
-              className="flex min-h-0 flex-1 flex-col overflow-y-auto outline-none"
+              className="line-room flex min-h-0 flex-1 flex-col overflow-y-auto outline-none"
             >
               {/* Beside its list the heading stands on the line of the list's tools, and the first hairline under it where the list's tools end. */}
               <header className={cn("flex shrink-0 items-center gap-1 px-6 max-md:px-4", standsBeside ? "h-11 pb-3" : "h-14")}>

@@ -575,6 +575,27 @@ test.describe("on a phone, while a line says a result", () => {
     await page.getByRole("button", { name: "Sections", exact: true }).click();
     await expect(page.getByRole("navigation", { name: "Sections", exact: true })).toBeVisible();
   });
+
+  // Drift: a result with Undo would lie over the last controls of a site's panel for as long as it stays, where no press reaches New link or Delete, and a second result would lie over more of them.
+  test("the last control of a site's panel is pressed after one move of the panel while a result is said, a newer result takes the older one's place, and a result with no button leaves at a press", async ({ page }) => {
+    await arrive(page);
+    await openPanel(page, SAMPLE.site);
+    await panel(page).getByRole("switch", { name: "Allow embedding", exact: true }).click();
+    await expect(lines(page).filter({ hasText: "Saved." })).toBeVisible();
+
+    await panel(page).evaluate((scrolls) => scrolls.scrollTo(0, scrolls.scrollHeight));
+    await panel(page).getByRole("button", { name: "New link", exact: true }).click({ timeout: 2000 });
+    await leaveBy("Cancel")(page);
+
+    await panel(page).getByRole("button", { name: "Make live", exact: true }).first().click();
+    await expect(lines(page).filter({ hasText: /is live now/ })).toBeVisible();
+    await expect(lines(page)).toHaveCount(1);
+
+    await toSection(page, "Sites");
+    await reset(page);
+    await lines(page).filter({ hasText: "Sample data reset." }).click();
+    await expect(lines(page)).toHaveCount(0);
+  });
 });
 
 test.describe("on a phone, in a question", () => {

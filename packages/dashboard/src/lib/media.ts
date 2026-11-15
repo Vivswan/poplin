@@ -2,6 +2,9 @@
 
 import { useCallback, useSyncExternalStore } from "react";
 
+/** The widths of a phone, where a screen's own controls begin right under the header and a result is said at the bottom. */
+export const PHONE = "(max-width: 767.98px)";
+
 /**
  * Follow a media query.
  *

@@ -63,7 +63,7 @@ export function Pieces({ rows }: { readonly rows: Ran["rows"] }): ReactNode {
       <div className="flex min-h-0 flex-1 flex-col max-md:hidden">
         <DataTable label="Pieces" columns={columns} rows={placed} rowId={(piece) => String(piece.place)} layout={layout} sort={AS_RUN} />
       </div>
-      <ul aria-label="Pieces" className="min-h-0 flex-1 overflow-y-auto border-t md:hidden">
+      <ul aria-label="Pieces" className="line-room min-h-0 flex-1 overflow-y-auto border-t md:hidden">
         {placed.map((piece) => (
           <li key={piece.place} className="flex min-h-16 flex-col justify-center gap-0.5 border-b px-4 py-2">
             <span className={cn("leading-5", piece.tone === "bad" && "font-medium")}>{piece.piece}</span>

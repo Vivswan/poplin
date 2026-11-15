@@ -118,7 +118,7 @@ function PhoneList({ page, place, after }: { readonly page: Page; readonly place
   const list = useTopOfPlace(place);
 
   return (
-    <div ref={list} className="min-h-0 flex-1 overflow-y-auto md:hidden">
+    <div ref={list} className="line-room min-h-0 flex-1 overflow-y-auto md:hidden">
       <ul aria-label="Activity" className="border-t">
         {page.entries.map((entry) => (
           <li key={entry.seq} className="flex min-h-16 flex-col justify-center gap-0.5 border-b px-4 py-2">

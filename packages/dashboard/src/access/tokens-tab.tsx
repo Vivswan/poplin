@@ -251,7 +251,7 @@ export function TokensTab({ tokens, ended, waiting, failure, waitingFailure, sor
 
     if (tokens !== undefined && rows.length === 0) {
       return (
-        <div className="min-h-0 flex-1 overflow-y-auto">
+        <div className="line-room min-h-0 flex-1 overflow-y-auto">
           <Empty className="flex-none py-16">
             <EmptyHeader>
               <EmptyTitle>{removed === undefined ? "No tokens yet" : "No tokens"}</EmptyTitle>
@@ -284,7 +284,7 @@ export function TokensTab({ tokens, ended, waiting, failure, waitingFailure, sor
             after={afterAll}
           />
         </div>
-        <div className="min-h-0 flex-1 overflow-y-auto md:hidden">
+        <div className="line-room min-h-0 flex-1 overflow-y-auto md:hidden">
           <ul aria-label="Tokens" className="border-t">
             {rows.map((row) => (
               <li key={row.key} className="group/row flex min-h-16 items-center gap-2 border-b px-4 py-2">
