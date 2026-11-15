@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { mkdirSync, mkdtempDisposableSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, relative, sep } from "node:path";
 
 import { type Deploy, deployWorker } from "../../src/deploy/deploy";
 import type { Latest, ReleaseSource } from "../../src/deploy/release-source";
@@ -14,16 +14,16 @@ const COPY_CONFIG = '{ "name": "poplin", "compatibility_date": "2026-11-01", "d1
 
 /** The one command of a deploy that deploys the tree it sits in, as it is. */
 const OWN_FILES: Ran = {
-  command: ["wrangler", "deploy", "--config", "<root>/wrangler.jsonc"],
-  cwd: "<root>/packages/cloudflare",
+  command: ["wrangler", "deploy", "--config", join("<root>", "wrangler.jsonc")],
+  cwd: join("<root>", "packages", "cloudflare"),
   handed: undefined,
   config: { name: "poplin", compatibility_date: "2027-03-01", d1_databases: [{ binding: "DB", database_name: "poplin" }] },
 };
 
 /** The two commands that follow a fetched release: its install, then its own deploy with the copy's configuration handed over. */
 const RELEASE_COMMANDS: readonly Ran[] = [
-  { command: ["bun", "install", "--frozen-lockfile"], cwd: "<scratch>/poplin", handed: undefined, config: undefined },
-  { command: ["bun", "run", "deploy"], cwd: "<scratch>/poplin", handed: "<root>/wrangler.jsonc", config: undefined },
+  { command: ["bun", "install", "--frozen-lockfile"], cwd: join("<scratch>", "poplin"), handed: undefined, config: undefined },
+  { command: ["bun", "run", "deploy"], cwd: join("<scratch>", "poplin"), handed: join("<root>", "wrangler.jsonc"), config: undefined },
 ];
 
 /** One command a deploy ran: its words, where, the copy's configuration it was handed, and what its `--config` file held at that moment. */
@@ -51,9 +51,11 @@ interface Scene {
   readonly failing?: string;
 }
 
-/** A path with the scene's own folders named, so an outcome reads the same on every machine. */
+/** A path with the scene's own folders named, so an outcome holds no folder of the machine. Its separators stay the system's own, as the expected paths are joined. */
 function named(path: string, root: string, scratch: string): string {
-  return path.replace(root, "<root>").replace(new RegExp(`^${scratch}/poplin-release-[^/]+`), "<scratch>");
+  const [first, ...rest] = relative(scratch, path).split(sep);
+
+  return /^poplin-release-.+$/.test(first ?? "") ? join("<scratch>", ...rest) : path.replace(root, "<root>");
 }
 
 /** Run one deploy in a new tree with a fake release source and a recorder for its commands. Nothing reaches the network or starts a process. */
@@ -229,7 +231,7 @@ describe("deployWorker", () => {
   // Drift: a release that fetched again when handed a copy's configuration would fetch itself without end; one that deployed its own configuration would make a new empty database.
   test.each(handed)("a release handed a copy's configuration, with $name, fetches nothing: it deploys its own files under the copy's database id, and leaves no merged file behind", async ({ env }) => {
     const merged = { name: "poplin", compatibility_date: "2027-03-01", d1_databases: [{ binding: "DB", database_name: "poplin", database_id: "11111111-2222-3333-4444-555555555555" }] };
-    const ran: Ran = { command: ["wrangler", "deploy", "--config", "<root>/wrangler.deploy.json"], cwd: "<root>/packages/cloudflare", handed: "<folder>/copy.jsonc", config: merged };
+    const ran: Ran = { command: ["wrangler", "deploy", "--config", join("<root>", "wrangler.deploy.json")], cwd: join("<root>", "packages", "cloudflare"), handed: "<folder>/copy.jsonc", config: merged };
 
     expect(await play({ env: { WORKERS_CI: "1", POPLIN_COPY_CONFIG: "<folder>/copy.jsonc", ...env }, latest: { kind: "release", version: "0.3.1" } })).toEqual({ code: 0, said: [], ran: [ran], asked: [], left: ["wrangler.jsonc"] });
   });
