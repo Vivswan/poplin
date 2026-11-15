@@ -4,7 +4,7 @@ import { dirname, join } from "node:path";
 
 import { type ApiInstall, answered, bytes } from "../../../app/tests/api/support/install";
 import { backupEntries, readZip, writeZip, type ZipEntry } from "../backup/support/zips";
-import { type Bench, cleanUp, folderOf, jsonOf, openBench, runThroughPauses, scratch } from "./support/harness";
+import { type Bench, cleanUp, folderOf, jsonOf, openBench, scratch } from "./support/harness";
 
 /** A site as an install stores it, as far as these tests read it. */
 interface Stored {
@@ -160,7 +160,7 @@ describe("import", () => {
 
     // Every file after the first finished site meets a dead connection.
     into.hook = (request) => (request.method === "PUT" && into.sent.some((sent) => sent.endsWith("/finish")) ? Promise.reject(new Error("reset")) : undefined);
-    const broken = jsonOf(await runThroughPauses(into, `import ${zip} --json`, () => into.sent.at(-1)?.startsWith("PUT") === true && into.sent.some((sent) => sent.endsWith("/finish"))));
+    const broken = jsonOf(await into.run(`import ${zip} --json`));
     into.hook = undefined;
     const made = (await answered(into.install.routes.export.sites.$get())).body.sites;
     const again = await into.run(`import ${zip} --json`);

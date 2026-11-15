@@ -1,11 +1,9 @@
 // A bench for the command tests: the real API of an install in memory, the command run in process against it, and everything the command printed.
 
-import { jest } from "bun:test";
 import { once } from "node:events";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import { setImmediate } from "node:timers/promises";
 
 import { type ApiInstall, answered, ORIGIN, openApi } from "../../../../app/tests/api/support/install";
 import type { Io } from "../../../src/commands/records";
@@ -14,9 +12,6 @@ import { words } from "./command-line";
 
 /** The scratch folders the tests made, removed by `cleanUp`. */
 const SCRATCH: string[] = [];
-
-/** How far `runThroughPauses` moves the clock at a time, in milliseconds. */
-const CLOCK_STEP_MS = 250;
 
 /** What a test may answer a request with in the install's place; nothing lets the install answer. */
 type Hook = (request: Request) => Response | undefined | Promise<Response | undefined>;
@@ -107,46 +102,6 @@ export async function sendUnlessAborted(signal: AbortSignal | null | undefined, 
   } finally {
     answered.abort();
   }
-}
-
-/**
- * Do something under timers that stand still, and move their clock on while `pausing` holds, so a pause before a file is sent again costs no time.
- *
- * @param doing - what is done; its timers are made once the clock stands still
- * @param pausing - whether the clock may move: a call on its way would time out as it does
- * @throws what `doing` rejects with, once the timers are real again
- */
-export async function throughPauses<Done>(doing: () => Promise<Done>, pausing: () => boolean): Promise<Done> {
-  jest.useFakeTimers();
-
-  try {
-    const done: { settled?: PromiseSettledResult<Done> } = {};
-    const watched = Promise.allSettled([doing()]).then(([settled]) => {
-      done.settled = settled;
-    });
-
-    while (done.settled === undefined) {
-      await setImmediate();
-
-      if (pausing()) jest.advanceTimersByTime(CLOCK_STEP_MS);
-    }
-
-    await watched;
-    if (done.settled.status === "rejected") throw done.settled.reason;
-
-    return done.settled.value;
-  } finally {
-    jest.useRealTimers();
-  }
-}
-
-/**
- * Run a command under timers that stand still, and move their clock on while `pausing` holds.
- *
- * @param pausing - whether a file that met a fault waits to be sent again and no call is on its way: a call on its way would time out as the clock moves
- */
-export function runThroughPauses(bench: Bench, line: string, pausing: () => boolean): Promise<Ran> {
-  return throughPauses(() => bench.run(line), pausing);
 }
 
 /** What an install holds that only a finished upload may change: the sites, and the keys of the store. */

@@ -9,7 +9,6 @@ import fc from "fast-check";
 import { type Called, type Client, createClient } from "../../packages/cli/src/client/client";
 import type { Io } from "../../packages/cli/src/commands/records";
 import { run } from "../../packages/cli/src/commands/run";
-import { throughPauses } from "../../packages/cli/tests/commands/support/harness";
 import { ABANDONED_UPLOAD } from "../../packages/core/src/actions/abandon-publish";
 import { BEGUN_LOGIN_ANSWER, REDEEMED_LOGIN } from "../../packages/core/src/actions/computer-logins";
 import { DELETED_SITE } from "../../packages/core/src/actions/delete";
@@ -211,11 +210,7 @@ property(
       stopped: new AbortController().signal,
     };
 
-    // A file the address fails on is sent again after pauses of seconds. Every answer here comes at once, so no call is on its way while the clock moves.
-    const code = await throughPauses(
-      () => run(line, io),
-      () => true,
-    );
+    const code = await run(line, io);
     const text = printed.join("\n");
 
     expect(EXIT_CODES).toContain(code);

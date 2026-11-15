@@ -2,7 +2,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 
-import { type Bench, cleanUp, folderOf, jsonOf, openBench, runThroughPauses, stateOf } from "./support/harness";
+import { type Bench, cleanUp, folderOf, jsonOf, openBench, stateOf } from "./support/harness";
 
 /** The pages of the fixture site. The test install takes files of at most 64 bytes. */
 const PAGES = { "index.html": "<title>Field notes</title><h1>notes</h1>", "css/site.css": "body{}", ".env": "KEY=1" };
@@ -154,10 +154,10 @@ describe("publish", () => {
   });
 
   test.each([
-    ["a file that is never stored", (request: Request) => (request.method === "PUT" ? answer(500, { error: { code: "internal", message: "no" } }) : undefined), "the install failed to do that", 1, true],
-    ["a file the install refuses", (request: Request) => (request.method === "PUT" ? answer(400, { error: { code: "size_mismatch", message: "no", about: "index.html" } }) : undefined), "a file changed while it was sent: index.html", 1, false],
-    ["a finish that is never answered", (request: Request) => (request.url.endsWith("/finish") ? new Response("<html>bad gateway</html>", { status: 502 }) : undefined), "the answer is not the install's: status 502", 5, false],
-  ])("%s gives the upload up, changes no site, and says so: without this a failed publish leaves files and a pending upload behind", async (_name, hook, sentence, code, sentAgain) => {
+    ["a file that is never stored", (request: Request) => (request.method === "PUT" ? answer(500, { error: { code: "internal", message: "no" } }) : undefined), "the install failed to do that", 1],
+    ["a file the install refuses", (request: Request) => (request.method === "PUT" ? answer(400, { error: { code: "size_mismatch", message: "no", about: "index.html" } }) : undefined), "a file changed while it was sent: index.html", 1],
+    ["a finish that is never answered", (request: Request) => (request.url.endsWith("/finish") ? new Response("<html>bad gateway</html>", { status: 502 }) : undefined), "the answer is not the install's: status 502", 5],
+  ])("%s gives the upload up, changes no site, and says so: without this a failed publish leaves files and a pending upload behind", async (_name, hook, sentence, code) => {
     const bench = await openBench();
     const folder = folderOf("notes", PAGES);
     const label = await publishedLabel(bench, folder);
@@ -165,7 +165,7 @@ describe("publish", () => {
     bench.sent.length = 0;
     bench.hook = hook;
 
-    const failed = await runThroughPauses(bench, `${folder} --site ${label} --public --json`, () => sentAgain && bench.sent.at(-1)?.startsWith("PUT") === true);
+    const failed = await bench.run(`${folder} --site ${label} --public --json`);
 
     expect(failed.code).toBe(code);
     expect(failed.err[0]).toBe(sentence);
