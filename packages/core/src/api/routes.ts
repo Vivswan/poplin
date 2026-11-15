@@ -131,8 +131,8 @@ export const ROUTES = {
   beginLogin: send<void, v.InferInput<typeof LOGIN_REQUEST>, Answer<typeof beginLogin> & { readonly verify_url: string }>("POST", "/logins", () => `${BASE}/logins`),
   redeemLogin: send<void, v.InferInput<typeof LOGIN_SECRET>, Redeemed>("POST", "/logins/token", () => `${BASE}/logins/token`),
 
-  listSites: ask<v.InferInput<typeof LIST_QUERY>, Answer<typeof listSites>>("GET", "/sites", ({ trash, limit, after }) => {
-    return `${BASE}/sites${queryOf({ trash, limit, after_updated_at: after?.updated_at, after_id: after?.id })}`;
+  listSites: ask<v.InferInput<typeof LIST_QUERY>, Answer<typeof listSites>>("GET", "/sites", ({ trash, limit, after, named, access }) => {
+    return `${BASE}/sites${queryOf({ trash, limit, after_updated_at: after?.updated_at, after_id: after?.id, named, access })}`;
   }),
   getSite: ask<OneSite, SiteBody>("GET", "/sites/:site", ({ site }) => sitePath(site)),
   updateSite: send<OneSite, SiteChanges, SiteBody>("PATCH", "/sites/:site", ({ site }) => sitePath(site)),

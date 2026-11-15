@@ -12,11 +12,16 @@ import { type SiteObject, siteObject } from "./site-object";
 /** The most sites one page holds, and how many a page holds when no limit is asked. */
 const MAX_PAGE = 100;
 
+/** The most characters a listing matches names against: no site name is longer. */
+const MAX_NAMED = 40;
+
 /** What a listing may ask for. */
 export const LIST_QUERY = v.strictObject({
   trash: v.optional(v.boolean(), false),
   limit: v.optional(v.pipe(POSITIVE, v.maxValue(MAX_PAGE)), MAX_PAGE),
   after: v.optional(v.strictObject({ updated_at: MOMENT, id: SITE_ID })),
+  named: v.optional(v.pipe(v.string(), v.minLength(1), v.maxLength(MAX_NAMED))),
+  access: v.optional(v.picklist(["private", "unlisted", "public"])),
 });
 
 /** One page of sites, the one changed last first. `next` is what `after` takes to get the following page, and is absent on the last. */
@@ -29,7 +34,7 @@ interface Listed {
 /**
  * List the sites an actor may see, each with about how often its pages were opened: every site for an admin, its own for a publisher.
  *
- * @param query - `trash` lists the trash instead; `limit` is 1 to 100; `after` is the `next` of the page before
+ * @param query - `trash` lists the trash instead; `limit` is 1 to 100; `after` is the `next` of the page before; `named` keeps the sites whose name holds that text, and `access` those of that access
  * @returns the page, or `bad_argument` naming the key that was refused
  */
 export async function listSites(install: Install, actor: Actor, query: v.InferInput<typeof LIST_QUERY> = {}): Promise<Listed | Refused<"not_set_up" | "bad_argument">> {

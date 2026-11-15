@@ -35,7 +35,7 @@ import type { Result } from "./respond";
 
 /** The query each route takes; a route missing here takes none. */
 export const QUERIES: { readonly [Name in RouteName]?: QueryShape } = {
-  listSites: { trash: "switch", limit: "number", after_updated_at: "number", after_id: "text" },
+  listSites: { trash: "switch", limit: "number", after_updated_at: "number", after_id: "text", named: "text", access: "text" },
   deleteSite: { forever: "switch" },
   uploadFile: { path: "text" },
   exportSites: { limit: "number", after: "text", all_versions: "switch" },

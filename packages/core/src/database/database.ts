@@ -77,6 +77,12 @@ export interface SitesQuery {
 
   /** The `next` of the page before; absent for the first page. */
   readonly after?: SitesCursor;
+
+  /** Only the sites whose name holds this text; every site when absent. */
+  readonly named?: string;
+
+  /** Only the sites of this access; every site when absent. */
+  readonly access?: SiteAccess["access"];
 }
 
 /** One page of a listing, the site changed last first, and of sites changed at one moment the one with the greater id. `next` is absent on the last page. */

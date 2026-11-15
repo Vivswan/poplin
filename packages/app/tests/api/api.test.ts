@@ -286,6 +286,8 @@ describe("createApi", () => {
     const names = (answered: Answered): unknown[] => (answered.body.sites as { name: string }[]).map((site) => site.name);
 
     expect([names(first), names(rest), rest.body.next]).toEqual([["three", "two"], ["one"], undefined]);
+    // Drift: the client checks a listing's query against the same shape the action takes; a key the address did not carry would be dropped without a word.
+    expect([names(await install.call("listSites", { named: "t" })), names(await install.call("listSites", { named: "t", access: "public" }))]).toEqual([["three", "two"], []]);
     expect((older.body.entries as { seq: number }[]).map((entry) => entry.seq)).toEqual([(entries[0]?.seq ?? 0) - 2, (entries[0]?.seq ?? 0) - 3]);
   });
 

@@ -806,6 +806,17 @@ export class SqlDatabase implements Database {
       conditions.push(`(s.updated_at, s.id) < (?${params.length - 1}, ?${params.length})`);
     }
 
+    if (query.named !== undefined) {
+      // The text is matched as it stands: the three signs LIKE reads as its own are escaped.
+      params.push(`%${query.named.replace(/[\\%_]/g, "\\$&")}%`);
+      conditions.push(`s.name LIKE ?${params.length} ESCAPE '\\'`);
+    }
+
+    if (query.access !== undefined) {
+      params.push(query.access);
+      conditions.push(`s.access = ?${params.length}`);
+    }
+
     // One row more than the page shows whether another page follows.
     params.push(query.limit + 1);
     const text = `${SELECT_SITE} WHERE ${conditions.join(" AND ")} ORDER BY s.updated_at DESC, s.id DESC LIMIT ?${params.length}`;

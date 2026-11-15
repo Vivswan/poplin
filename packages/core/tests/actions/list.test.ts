@@ -81,6 +81,23 @@ describe("listSites", () => {
     expect("next" in second).toBe(false);
   });
 
+  // Drift: the dashboard's search box and its filter hand these two keys over; one read as a pattern, or dropped, would list sites nobody asked for.
+  test("`named` keeps the sites whose name holds the text as typed, and `access` those of one access", async () => {
+    const world = await makeWorld();
+    for (const [at, name] of ["sales-report", "report-2026", "notes"].entries()) {
+      world.clock.now = NOW + at;
+      await made(world, OWNER, name);
+    }
+
+    expect(await names(world, OWNER, { named: "report" })).toEqual(["report-2026", "sales-report"]);
+    expect(await names(world, OWNER, { named: "%" })).toEqual([]);
+    expect(await names(world, OWNER, { named: "o_e" })).toEqual([]);
+    expect(await names(world, OWNER, { access: "private" })).toEqual(["notes", "report-2026", "sales-report"]);
+    expect(await names(world, OWNER, { access: "public" })).toEqual([]);
+    expect(await names(world, OWNER, { named: "" })).toMatchObject({ ok: false, code: "bad_argument", about: "named" });
+    expect(await names(world, OWNER, { access: "open" as "public" })).toMatchObject({ ok: false, code: "bad_argument", about: "access" });
+  });
+
   // Drift: the query comes from a request as sent; one passed on unchecked would reach the database as a thrown error instead of an answer.
   test.each([
     [{ limit: 0 }, "limit"],
