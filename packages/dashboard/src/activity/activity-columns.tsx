@@ -5,7 +5,7 @@ import { Link } from "@tanstack/react-router";
 import type { ReactNode } from "react";
 
 import type { Entry } from "@/activity/activity-queries";
-import { wholeMoment } from "@/lib/sites";
+import { shownName, wholeMoment } from "@/lib/sites";
 import { type LoginNames, Who } from "@/shared/who";
 import type { ColumnSpec } from "@/table/data-table";
 
@@ -18,7 +18,11 @@ export function When({ entry }: { readonly entry: Entry }): ReactNode {
   );
 }
 
-/** The site an entry is about, by the name it had then: a link to the site while it is one, plain words once it is gone. */
+/**
+ * The site an entry is about: a link to the site while it is one, plain words once it is gone.
+ *
+ * It is called as the Sites list calls it, by the title it has now, and by the name it had then where it has none or is gone. The name it had then is what a pointer resting on it reads.
+ */
 export function SiteThen({ entry }: { readonly entry: Entry }): ReactNode {
   if (entry.site === null) return null;
 
@@ -37,7 +41,7 @@ export function SiteThen({ entry }: { readonly entry: Entry }): ReactNode {
       title={entry.site.name}
       className="-mx-1 rounded-sm px-1 py-0.5 text-link underline-offset-2 outline-none hover:underline focus-visible:ring-2 focus-visible:ring-ring"
     >
-      {entry.site.name}
+      {shownName(entry.site)}
     </Link>
   );
 }
