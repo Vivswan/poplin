@@ -34,7 +34,7 @@ Cloudflare's changelog of 2026-11-13 describes spend limits for Workers and Dura
 
 ## What is capped or protected
 
-Cloudflare has no hard spending cap on R2, the storage for your sites' files. Each month 10 GB stored, 1 million write operations, and 10 million read operations are free, and Cloudflare bills what goes past them. The limits and alerts below are the protection, and none of them is a cap on what Cloudflare bills.
+The limits and alerts below are the protection, and none of them is a cap on what Cloudflare bills.
 
 | What is capped or protected | Where it is declared | What happens at the cap |
 | --- | --- | --- |
