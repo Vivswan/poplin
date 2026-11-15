@@ -7,7 +7,7 @@
 
 import type { ComputerLogin, LoginId, PendingLogin, UserCode } from "../auth/computer-logins";
 import type { Login } from "../auth/logins";
-import type { TokenId, TokenRecord } from "../auth/tokens";
+import type { EndedToken, TokenId, TokenRecord } from "../auth/tokens";
 import type { PublicName, SiteName } from "../names/names";
 import type { AuditAction, AuditEntry } from "../records/audit";
 import type { DomainCheck } from "../records/domain-check";
@@ -361,6 +361,18 @@ export interface CountedRequests {
   readonly views?: number;
 }
 
+/** The tokens at a moment: the ones that work, and the newest that ended. */
+export interface TokenStates {
+  /** Every token that works, the newest first, and of tokens made at one moment the one with the greater id. */
+  readonly live: readonly TokenRecord[];
+
+  /** The tokens that were removed or ran out, the one that ended last first. */
+  readonly ended: readonly EndedToken[];
+
+  /** Whether more tokens ended than `ended` holds. */
+  readonly more: boolean;
+}
+
 /** The one doorway to stored sites, tokens, pending logins, settings, the signing key, the audit log, and the request counts of the last year. */
 export interface Database {
   /**
@@ -551,13 +563,22 @@ export interface Database {
   /** Store the record of a new token. */
   addToken(token: TokenRecord, signed: Signed): Promise<{ readonly kind: "done" } | Refused<"id_taken">>;
 
-  /** The record of the token with this id. */
+  /** The record of the token with this id. A removed token has none, so it proves nothing. */
   getToken(id: TokenId): Promise<TokenRecord | undefined>;
 
-  /** Every token record, the newest first, and of tokens made at one moment the one with the greater id. */
+  /** The record of every token that was not removed, the newest first, and of tokens made at one moment the one with the greater id. */
   listTokens(): Promise<readonly TokenRecord[]>;
 
-  /** Remove a token's record, so the token proves nothing from then on. */
+  /**
+   * The tokens that work at a moment and the newest that ended, in one read. Every token is in exactly one of the two, or among the ended ones left out.
+   *
+   * @param now - a token that runs out at this moment has ended
+   * @param mostEnded - how many ended tokens are told, from 1 to 100; one row more is read
+   * @throws {RangeError} `mostEnded` is not a whole number from 1 to 100
+   */
+  listTokenStates(now: number, mostEnded: number): Promise<TokenStates>;
+
+  /** Mark a token as removed at `signed.at` by `signed.by`, so it proves nothing from then on. Its row is kept. `not_found` for one that was removed already. */
   revokeToken(id: TokenId, signed: Signed): Promise<{ readonly kind: "done"; readonly token: TokenRecord } | Refused<"not_found">>;
 
   /**

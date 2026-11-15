@@ -59,7 +59,7 @@ CREATE TABLE versions (
   PRIMARY KEY (folder, number)
 ) STRICT, WITHOUT ROWID`;
 
-/** The hashed record of every token. Only an admin token expires. */
+/** The hashed record of every token. Only an admin token expires. A removed token keeps its row, marked with when it was removed and by whom; `end_at` is when a token ended or will: its removal, else its expiry. */
 const TOKENS = `
 CREATE TABLE tokens (
   id TEXT NOT NULL PRIMARY KEY,
@@ -68,7 +68,11 @@ CREATE TABLE tokens (
   note TEXT NOT NULL,
   created_at INTEGER NOT NULL,
   expires_at INTEGER,
-  CHECK ((scope = 'admin') = (expires_at IS NOT NULL))
+  removed_at INTEGER,
+  removed_by TEXT,
+  end_at INTEGER GENERATED ALWAYS AS (coalesce(removed_at, expires_at)) VIRTUAL,
+  CHECK ((scope = 'admin') = (expires_at IS NOT NULL)),
+  CHECK ((removed_at IS NULL) = (removed_by IS NULL))
 ) STRICT`;
 
 /** The settings of the whole install, in one row. */
@@ -315,7 +319,8 @@ export const CREATE_SCHEMA: Step = {
     "CREATE INDEX sites_by_access ON sites (trashed, access_rank, id)",
     "CREATE INDEX sites_by_title ON sites (trashed, title_key, id)",
     "CREATE INDEX audit_logins ON audit (action) WHERE action = 'login'",
-    "CREATE INDEX tokens_by_creation ON tokens (created_at DESC, id DESC)",
+    "CREATE INDEX tokens_by_creation ON tokens (created_at DESC, id DESC) WHERE removed_at IS NULL",
+    "CREATE INDEX tokens_by_end ON tokens (end_at DESC, id DESC)",
     "CREATE INDEX uploads_by_age ON uploads (created_at, id)",
     "CREATE INDEX uploads_by_state ON uploads (state, owner, number, bytes)",
     "CREATE INDEX logins_by_visitor ON logins (state, visitor, created_at, expires_at)",

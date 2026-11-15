@@ -71,7 +71,7 @@ export const versions = sqliteTable(
   ],
 );
 
-/** The hashed record of every token. Only an admin token expires. */
+/** The hashed record of every token. Only an admin token expires. A removed token keeps its row, marked with when it was removed and by whom; `end_at` is when a token ended or will: its removal, else its expiry. */
 export const tokens = sqliteTable(
   "tokens",
   {
@@ -81,11 +81,18 @@ export const tokens = sqliteTable(
     note: text().notNull(),
     created_at: integer().notNull(),
     expires_at: integer(),
+    removed_at: integer(),
+    removed_by: text(),
+    end_at: integer().generatedAlwaysAs(sql`(coalesce(removed_at, expires_at))`, { mode: "virtual" }),
   },
   (table) => [
     check("tokens_scope", sql`${table.scope} IN ('admin', 'publisher')`),
     check("tokens_admin_expires", sql`(${table.scope} = 'admin') = (${table.expires_at} IS NOT NULL)`),
-    index("tokens_by_creation").on(sql`${table.created_at} DESC`, sql`${table.id} DESC`),
+    check("tokens_removed_names_who", sql`(${table.removed_at} IS NULL) = (${table.removed_by} IS NULL)`),
+    index("tokens_by_creation")
+      .on(sql`${table.created_at} DESC`, sql`${table.id} DESC`)
+      .where(sql`removed_at IS NULL`),
+    index("tokens_by_end").on(sql`${table.end_at} DESC`, sql`${table.id} DESC`),
   ],
 );
 

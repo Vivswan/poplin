@@ -1,5 +1,6 @@
 // Bearer tokens for agents and the CLI: minting one, the hashed record kept of it, and checking a presented one.
 
+import type { Holder } from "../records/fields";
 import type { Scope } from "./scopes";
 import { randomHex, sameText, sha256Hex } from "./util";
 
@@ -24,6 +25,16 @@ export type CheckedToken<Value> = { readonly ok: true; readonly value: Value } |
 export type TokenRecord = { readonly id: TokenId; readonly hash: string; readonly note: string; readonly createdAt: number } & (
   | { readonly scope: "admin"; readonly expiresAt: number }
   | { readonly scope: "publisher" }
+);
+
+/**
+ * What is told of a token that ended: never its hash. `endedAt` is when it was removed, or when it ran out.
+ *
+ * A token removed after it ran out counts as removed, at its removal.
+ */
+export type EndedToken = { readonly id: TokenId; readonly note: string; readonly createdAt: number; readonly endedAt: number } & (
+  | { readonly how: "removed"; readonly scope: Scope; readonly by: Holder }
+  | { readonly how: "ran_out"; readonly scope: "admin" }
 );
 
 /** What a new token is for. `note` is stored as given, such as a workspace's name. */
@@ -52,7 +63,7 @@ export function parseToken(presented: string): CheckedToken<TokenId> {
  * Decide whether a record's token has run out.
  *
  * @param now - the clock, in milliseconds since the epoch; a clock that is not a number counts as run out
- * @returns `false` for every publisher token, which lives until its record is deleted
+ * @returns `false` for every publisher token, which lives until it is removed
  */
 export function isExpired(record: TokenRecord, now: number): boolean {
   if (record.scope === "publisher") return false;

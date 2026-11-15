@@ -23,7 +23,7 @@ import { SWEEP_PLACE, type SweepPlace } from "../records/sweep-place";
 import { AUTO_START, type AutoStart, UPDATE_CHECK, type UpdateCheck } from "../records/update";
 import { type Totals, totalsFromRow } from "../records/sizes";
 import { mintSiteId, type SiteId } from "../sites/ids";
-import { tokenFromRow } from "../records/token";
+import { endedTokenFromRow, tokenFromRow } from "../records/token";
 import { type ManifestFile, type Upload, type UploadId, uploadFromRow } from "../records/upload";
 import type { VersionContents } from "../records/version-contents";
 import { type DailyViews, dayOf, daysUpTo, KEPT_DAYS, MOST_SITES_COMPARED, type SiteViews, viewDays } from "../records/views";
@@ -55,6 +55,7 @@ import type {
   SiteDetails,
   SitesPage,
   SitesQuery,
+  TokenStates,
   Unchanged,
   UploadedVersion,
   UploadRoom,
@@ -95,6 +96,15 @@ const PLAIN_AUDIT_COLUMNS = [audit.at, audit.actor, audit.action, audit.detail];
 
 /** The columns a token is written with. */
 const TOKEN_COLUMNS = [tokens.id, tokens.hash, tokens.scope, tokens.note, tokens.created_at, tokens.expires_at];
+
+/** What is read of a token that can still prove something: the columns it was written with. */
+const TOKEN_FIELDS = { id: tokens.id, hash: tokens.hash, scope: tokens.scope, note: tokens.note, created_at: tokens.created_at, expires_at: tokens.expires_at };
+
+/** What is read of a token that ended: never its hash. */
+const ENDED_TOKEN_FIELDS = { id: tokens.id, scope: tokens.scope, note: tokens.note, created_at: tokens.created_at, expires_at: tokens.expires_at, removed_at: tokens.removed_at, removed_by: tokens.removed_by };
+
+/** True of a token that was not removed. Every read of a token that may prove something holds it. */
+const NOT_REMOVED = isNull(tokens.removed_at);
 
 /** The columns a version is written with. */
 const VERSION_COLUMNS = [versions.folder, versions.number, versions.published_at, versions.published_by, versions.bytes, versions.files, versions.missing_page, versions.bare_files];
@@ -492,9 +502,9 @@ function requestsOf(day: string, site: string): Statement {
   return built(BUILD.select({ requests: requestCounts.requests }).from(requestCounts).where(and(eq(requestCounts.day, day), eq(requestCounts.site, site))));
 }
 
-/** The token with the given id. */
+/** The token with the given id, unless it was removed. */
 function tokenById(id: TokenId): Statement {
-  return built(BUILD.select().from(tokens).where(eq(tokens.id, id)));
+  return built(BUILD.select(TOKEN_FIELDS).from(tokens).where(and(eq(tokens.id, id), NOT_REMOVED)));
 }
 
 /** The logins a condition holds for. */
@@ -1117,19 +1127,32 @@ export class SqlDatabase implements Database {
   }
 
   async listTokens(): Promise<readonly TokenRecord[]> {
-    const [listed] = await this.#driver.batch([built(BUILD.select().from(tokens).orderBy(desc(tokens.created_at), desc(tokens.id)))]);
+    const [listed] = await this.#driver.batch([built(BUILD.select(TOKEN_FIELDS).from(tokens).where(NOT_REMOVED).orderBy(desc(tokens.created_at), desc(tokens.id)))]);
 
     return (listed?.rows ?? []).map(tokenFromRow);
   }
 
+  async listTokenStates(now: number, mostEnded: number): Promise<TokenStates> {
+    requirePage(mostEnded);
+
+    const works = and(NOT_REMOVED, or(isNull(tokens.expires_at), gt(tokens.expires_at, now)));
+    const live = BUILD.select(TOKEN_FIELDS).from(tokens).where(works).orderBy(desc(tokens.created_at), desc(tokens.id));
+    // A removal is never ahead of the clock, so `end_at` up to now holds every removed token and every one that ran out.
+    const ended = BUILD.select(ENDED_TOKEN_FIELDS).from(tokens).where(lte(tokens.end_at, now)).orderBy(desc(tokens.end_at), desc(tokens.id));
+    const [lived, over] = await this.#driver.batch([built(live), built(ended.limit(mostEnded + 1))]);
+    const rows = over?.rows ?? [];
+
+    return { live: (lived?.rows ?? []).map(tokenFromRow), ended: rows.slice(0, mostEnded).map(endedTokenFromRow), more: rows.length > mostEnded };
+  }
+
   async revokeToken(id: TokenId, signed: Signed): Promise<{ readonly kind: "done"; readonly token: TokenRecord } | Refused<"not_found">> {
-    // The audit entry is written while the token is still there to name, and the removal only when it was.
+    // The audit entry is written only for a token that was not removed before, and the mark only when the entry was.
     const named = fragment`json_object('token', ${tokens.id}, 'scope', ${tokens.scope}, 'note', ${tokens.note})`;
-    const entry = fragment`SELECT ${signed.at}, ${signed.by}, 'token_revoked', ${named} FROM ${tokens} WHERE ${tokens.id} = ${id}`;
-    const remove = BUILD.delete(tokens).where(and(eq(tokens.id, id), CHANGED));
-    const [before, , deleted] = await this.#driver.batch([tokenById(id), insertFrom(audit, PLAIN_AUDIT_COLUMNS, entry), built(remove)]);
+    const entry = fragment`SELECT ${signed.at}, ${signed.by}, 'token_revoked', ${named} FROM ${tokens} WHERE ${tokens.id} = ${id} AND ${NOT_REMOVED}`;
+    const mark = BUILD.update(tokens).set({ removed_at: signed.at, removed_by: signed.by }).where(and(eq(tokens.id, id), CHANGED));
+    const [before, , marked] = await this.#driver.batch([tokenById(id), insertFrom(audit, PLAIN_AUDIT_COLUMNS, entry), built(mark)]);
     const row = before?.rows[0];
-    if (!changed(deleted) || row === undefined) return { kind: "not_found" };
+    if (!changed(marked) || row === undefined) return { kind: "not_found" };
 
     return { kind: "done", token: tokenFromRow(row) };
   }

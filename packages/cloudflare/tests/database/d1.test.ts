@@ -130,16 +130,17 @@ const ROWS: Readonly<Record<string, readonly [read: number, written: number]>> =
   "publishUploadAsVersion, plain": [45, 9],
   "addUpload, 500 files": [9, 6],
   "abandonUpload": [2, 2],
-  "addToken": [2, 5],
+  "addToken": [2, 6],
   "getToken": [1, 0],
   "listTokens": [2, 0],
-  "revokeToken": [4, 3],
+  "revokeToken": [4, 4],
+  "listTokenStates": [3, 0],
   "addComputerLogin": [6, 3],
   "getComputerLogin": [1, 0],
   "findComputerLogin": [1, 0],
   "listWaitingComputerLogins": [4, 0],
   "decideComputerLogin": [5, 4],
-  "redeemComputerLogin": [5, 6],
+  "redeemComputerLogin": [5, 7],
   "sweepComputerLogins": [1, 1],
   "appendAudit, a login": [1, 3],
   "hasLoggedIn, nobody yet": [0, 0],
@@ -192,7 +193,7 @@ const ROWS: Readonly<Record<string, readonly [read: number, written: number]>> =
   "refused: abandonUpload, not pending": [1, 0],
   "refused: addUpload, its holder's room is full": [5, 0],
   "refused: addToken, the id is taken": [3, 0],
-  "refused: revokeToken, none": [1, 0],
+  "refused: revokeToken, none": [4, 0],
   "refused: decideComputerLogin, none waits": [1, 0],
   "refused: redeemComputerLogin, none allowed": [2, 0],
   "readStorageWrites": [2, 0],
@@ -576,6 +577,7 @@ describe("D1: the rows every operation of the database costs of a day's allowanc
     await cost("getToken", () => database.getToken(admin.id));
     await cost("listTokens", () => database.listTokens());
     await cost("revokeToken", () => database.revokeToken(admin.id, BY_ADA));
+    await cost("listTokenStates", () => database.listTokenStates(NOW + 1, 50));
     const login = await pendingLogin(NOW, "one-visitor");
     await cost("addComputerLogin", () => database.addComputerLogin(login, ROOM));
     await database.addComputerLogin(await pendingLogin(NOW + 1, "another-visitor"), ROOM);

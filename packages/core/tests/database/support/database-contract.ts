@@ -1538,7 +1538,7 @@ function everLoggedIn(label: string, makeDatabase: DatabaseFactory): void {
 function tokensAndSettings(label: string, makeDatabase: DatabaseFactory): void {
   describe(`${label}: tokens and settings`, () => {
     // Drift: the record `mintToken` makes is what a presented token is checked against; a field lost on the way through a row would refuse every token.
-    test("a minted token's record reads back as minted, lists newest first, and is gone once revoked", async () => {
+    test("a minted token's record reads back as minted, lists newest first, and has no record once revoked", async () => {
       const database = await opened(makeDatabase);
       const admin = (await mintToken({ scope: "admin", note: "laptop", now: NOW })).record;
       const publisher = (await mintToken({ scope: "publisher", note: "", now: NOW + 1 })).record;
@@ -1556,12 +1556,54 @@ function tokensAndSettings(label: string, makeDatabase: DatabaseFactory): void {
         { kind: "done", token: admin },
         { kind: "not_found" },
       ]);
-      expect(await database.listTokens()).toEqual([publisher]);
+      expect([await database.listTokens(), await database.getToken(admin.id)]).toEqual([[publisher], undefined]);
       expect((await auditTrail(database)).map((entry) => [entry.action, entry.detail])).toEqual([
         ["token_added", { token: admin.id, scope: "admin", note: "laptop" }],
         ["token_added", { token: publisher.id, scope: "publisher", note: "" }],
         ["token_revoked", { token: admin.id, scope: "admin", note: "laptop" }],
       ]);
+    });
+
+    // Drift: a removed token keeps its row, which still holds its hash. A read that found that row again would let a removed token publish, and a new token could take its id and its name in the list.
+    test("a removed token stays listed as ended with who removed it and when, never proves anything again, and keeps its id taken", async () => {
+      const database = await opened(makeDatabase);
+      const runsOut = (await mintToken({ scope: "admin", note: "laptop", now: NOW })).record;
+      const [kept, removed] = [(await mintToken({ scope: "publisher", note: "ci", now: NOW + 1 })).record, (await mintToken({ scope: "publisher", note: "agent", now: NOW + 2 })).record];
+      for (const token of [runsOut, kept, removed]) await database.addToken(token, BY_ADA);
+      await database.revokeToken(removed.id, { by: ADMIN, at: NOW + 5 });
+      const ranOutAt = runsOut.scope === "admin" ? runsOut.expiresAt : 0;
+      const gone = { id: removed.id, scope: "publisher", note: "agent", createdAt: NOW + 2, endedAt: NOW + 5, how: "removed", by: ADMIN };
+      const ranOut = { id: runsOut.id, scope: "admin", note: "laptop", createdAt: NOW, endedAt: ranOutAt, how: "ran_out" };
+
+      expect<unknown>([
+        await database.getToken(removed.id),
+        await database.addToken({ ...kept, id: removed.id }, BY_ADA),
+        await database.revokeToken(removed.id, BY_ADA),
+        await database.listTokens(),
+        await database.listTokenStates(ranOutAt - 1, 50),
+        await database.listTokenStates(ranOutAt, 50),
+        await database.listTokenStates(ranOutAt, 1),
+      ]).toEqual([
+        undefined,
+        { kind: "id_taken" },
+        { kind: "not_found" },
+        [kept, runsOut],
+        { live: [kept, runsOut], ended: [gone], more: false },
+        { live: [kept], ended: [ranOut, gone], more: false },
+        { live: [kept], ended: [ranOut], more: true },
+      ]);
+    });
+
+    // Drift: a token that ran out can still be removed; the list must then name the removal once, not the token twice.
+    test("a token removed after it ran out is listed once, as removed", async () => {
+      const database = await opened(makeDatabase);
+      const admin = (await mintToken({ scope: "admin", note: "laptop", now: NOW })).record;
+      const ranOutAt = admin.scope === "admin" ? admin.expiresAt : 0;
+      await database.addToken(admin, BY_ADA);
+      await database.revokeToken(admin.id, { by: ADA, at: ranOutAt + 7 });
+      const removed = { id: admin.id, scope: "admin", note: "laptop", createdAt: NOW, endedAt: ranOutAt + 7, how: "removed", by: ADA };
+
+      expect<unknown>(await database.listTokenStates(ranOutAt + 9, 50)).toEqual({ live: [], ended: [removed], more: false });
     });
 
     // Drift: the token page shows this list; an order that changed between two reads would shuffle tokens made in the same millisecond.

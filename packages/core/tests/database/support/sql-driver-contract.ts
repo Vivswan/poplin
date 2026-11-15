@@ -425,6 +425,7 @@ function queryPlans(label: string, makeDriver: DriverFactory): void {
       await database.addToken(token, BY_ADA);
       await database.getToken(token.id);
       await database.listTokens();
+      await database.listTokenStates(NOW, 50);
       await database.revokeToken(token.id, BY_ADA);
       await database.readSettings();
       await database.changeSettings({ trash_days: 30 }, BY_ADA);
@@ -476,12 +477,15 @@ function queryPlans(label: string, makeDriver: DriverFactory): void {
         );
       }
 
-      // The token list hands back every row it walks, and the sweep walks the logins, which the room keeps few. An import walks the list of versions it was given, and a new login the visitors its own count gave: neither is a table.
+      // The two token lists walk the tokens that were not removed, and the sweep walks the logins, which the room keeps few. An import walks the list of versions it was given, and a new login the visitors its own count gave: neither is a table.
       // The ledger holds one row a step. A count of the log walks its newest entries, as many as it is told, and then what it read of them.
+      const tokenScan = 'SCAN tokens USING INDEX tokens_by_creation <- select "id", "hash", "scope", "note", "created_at", "expires_at" from "tokens"';
+      const newestFirst = 'order by "tokens"."created_at" desc, "tokens"."id" desc';
       expect([exported.sites, imported.kind, again.kind, redeemed.kind, swept]).toEqual([[], "done", "done", "done", 1]);
       expect(driver.statements.length).toBeGreaterThan(105);
       expect(scans).toEqual([
-        'SCAN tokens USING INDEX tokens_by_creation <- select "id", "hash", "scope", "note", "created_at", "expires_at" from "tokens" order by "tokens"."created_at" desc, "tokens"."id" desc',
+        `${tokenScan} where "tokens"."removed_at" is null ${newestFirst}`,
+        `${tokenScan} where ("tokens"."removed_at" is null and ("tokens"."expires_at" is null or "tokens"."expires_at" > ?)) ${newestFirst}`,
         'SCAN audit <- select count(*) as "seen", coalesce(sum("kept"), 0) as "found" from (select ("audit"."action" in (?) and instr("audit"."site_name", ?) > 0) as "kept" from "audit" order by "audit"."seq" desc limit ?) "newest"',
         'SCAN newest <- select count(*) as "seen", coalesce(sum("kept"), 0) as "found" from (select ("audit"."action" in (?) and instr("audit"."site_name", ?) > 0) as "kept" from "audit" order by "audit"."seq" desc limit ?) "newest"',
         'SCAN logins USING INDEX logins_by_visitor <- delete from "logins" where "logins"."expires_at" <= ?',

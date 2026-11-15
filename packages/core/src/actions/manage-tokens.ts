@@ -1,15 +1,18 @@
-// The tokens of an install: issued, listed, and revoked by an admin, and a token's own to give back.
+// The tokens of an install: issued, listed, and revoked by an admin, and a token's own to give back. A revoked token stays listed among the ended ones and works nowhere.
 
 import * as v from "valibot";
 
 import type { Actor } from "../auth/scopes";
-import { mintToken, type TokenRecord } from "../auth/tokens";
-import { MOMENT, TOKEN_ID } from "../records/fields";
+import { type EndedToken, mintToken, type TokenId, type TokenRecord } from "../auth/tokens";
+import { type Holder, MOMENT, TOKEN_ID } from "../records/fields";
 import { type Install, type Refused, refuse } from "./records";
 import { UPDATE_NOTICE } from "./update";
 
 /** The longest note a token carries, in characters. */
 const MAX_NOTE_LENGTH = 200;
+
+/** How many ended tokens a listing tells of: the ones that ended last. */
+const MOST_ENDED = 50;
 
 /** What a new token is asked with: its scope, and a note that says what it is for, such as a workspace's name. */
 export const TOKEN_REQUEST = v.strictObject({ scope: v.picklist(["publisher", "admin"]), note: v.pipe(v.string(), v.maxLength(MAX_NOTE_LENGTH)) });
@@ -35,6 +38,23 @@ export const WHOAMI_ANSWER = v.object({ token: TOKEN_OBJECT, version: v.string()
  * `expires` is `"never"` for a publisher token, which lives until it is revoked.
  */
 export type TokenObject = Readonly<v.InferOutput<typeof TOKEN_OBJECT>>;
+
+/**
+ * A token that ended as a caller sees it: when it was allowed, when it ended, and how. Times are milliseconds since the epoch.
+ *
+ * `by` is who removed it; a token that ran out has none.
+ */
+type EndedTokenObject = { readonly id: TokenId; readonly note: string; readonly created: number; readonly ended: number } & (
+  | { readonly how: "removed"; readonly scope: "publisher" | "admin"; readonly by: Holder }
+  | { readonly how: "ran_out"; readonly scope: "admin" }
+);
+
+/** The object of a token that ended. */
+function endedTokenObject(token: EndedToken): EndedTokenObject {
+  const facts = { id: token.id, note: token.note, created: token.createdAt, ended: token.endedAt };
+
+  return token.how === "removed" ? { ...facts, how: "removed", scope: token.scope, by: token.by } : { ...facts, how: "ran_out", scope: "admin" };
+}
 
 /** Build the token object of a stored record. */
 export function tokenObject(record: TokenRecord): TokenObject {
@@ -73,7 +93,7 @@ export async function issueToken(
 }
 
 /**
- * List every token, the newest first.
+ * List every token that was not removed, the newest first. One that ran out is among them, with its expiry.
  *
  * @returns the tokens, or `not_allowed` for anyone but an admin
  */
@@ -84,7 +104,23 @@ export async function listTokens(install: Install, actor: Actor): Promise<{ read
 }
 
 /**
- * Revoke a token, so it proves nothing from then on.
+ * List the tokens that work, the newest first, and apart from them the 50 that ended last: the removed ones and the ones that ran out.
+ *
+ * @returns `more` says that more than 50 ended. `not_allowed` for anyone but an admin
+ */
+export async function listTokenStates(
+  install: Install,
+  actor: Actor,
+): Promise<{ readonly ok: true; readonly tokens: readonly TokenObject[]; readonly ended: readonly EndedTokenObject[]; readonly more: boolean } | Refused<"not_allowed">> {
+  if (actor.scope !== "admin") return refuse("not_allowed");
+
+  const { live, ended, more } = await install.database.listTokenStates(install.now(), MOST_ENDED);
+
+  return { ok: true, tokens: live.map(tokenObject), ended: ended.map(endedTokenObject), more };
+}
+
+/**
+ * Revoke a token, so it proves nothing from then on. It stays listed among the ended ones.
  *
  * @param id - the token's id as sent, never the token itself
  * @returns the token as it was. An admin revokes any token; every actor revokes its own. `not_allowed` for a publisher naming another token
