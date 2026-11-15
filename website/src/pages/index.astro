@@ -14,10 +14,9 @@ import Sites from "../show/Sites.astro";
 import Start from "../show/Start.astro";
 import Who from "../show/Who.astro";
 import { AGENTS } from "../lib/agents.ts";
+import { demoAddress } from "../lib/demo.ts";
 
-// The running demo gets a link only when the build is given its https address.
-const demoUrl = URL.parse(process.env.DEMO_URL ?? "");
-const demo = demoUrl?.protocol === "https:" ? demoUrl.href : undefined;
+const demo = demoAddress();
 
 // The Start block carries the picked agent, and one rule puts that agent's line on the page.
 const pickerRules = `${AGENTS.map((agent) => `.start[data-picked="${agent.id}"] [data-agent="${agent.id}"]`).join(",")}{display:revert}`;

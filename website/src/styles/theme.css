@@ -175,6 +175,7 @@ main {
 }
 
 .top {
+  flex-wrap: wrap;
   padding-block: 22px;
 }
 

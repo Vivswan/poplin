@@ -15,6 +15,8 @@ const BUILD_SETTINGS = ["DEMO_URL", "POPLIN_CHANGELOG", "PAGES_ORIGIN", "PAGES_B
 
 const DEMO = "https://demo-page.example.com/";
 
+const PAGES = ["index.html", "404.html"];
+
 const BUILDS: readonly (readonly [what: string, value: string | undefined, links: readonly string[]])[] = [
   ["no value", undefined, []],
   ["an https address", DEMO, [DEMO]],
@@ -69,10 +71,10 @@ function build(outDir: string, settings: Record<string, string | undefined>): vo
   }
 }
 
-/** The addresses a page links to that name the demo, in the order of the page. */
-function demoLinks(html: string): string[] {
+/** The addresses that name the demo among the links one part of a page holds, in the order of the page. */
+function demoLinks(html: string, part: "header nav" | "main"): string[] {
   const links: string[] = [];
-  const anchors = new HTMLRewriter().on("a[href]", { element: (anchor) => void links.push(anchor.getAttribute("href") ?? "") });
+  const anchors = new HTMLRewriter().on(`${part} a[href]`, { element: (anchor) => void links.push(anchor.getAttribute("href") ?? "") });
   anchors.transform(html);
 
   return links.filter((link) => link.includes("demo-page"));
@@ -93,14 +95,15 @@ function footLine(html: string): string {
 
 describe("the built website", () => {
   test.each(BUILDS)(
-    "holds no copy of the demo, and links to the running one only at an https address it was given (%s): without this a build puts the demo back on the site, or the home page gets a dead link",
+    "holds no copy of the demo, and links to the running one, from the top of every page and from the home page, only at an https address it was given (%s): without this a build puts the demo back on the site, or a page gets a dead link",
     (what, value, links) => {
       using site = mkdtempDisposableSync(join(tmpdir(), "poplin-website-"));
       build(site.path, { DEMO_URL: value });
-      const home = readFileSync(join(site.path, "index.html"), "utf8");
+      const pages = PAGES.map((page) => readFileSync(join(site.path, page), "utf8"));
 
       expect(existsSync(join(site.path, "demo")), what).toBe(false);
-      expect(demoLinks(home)).toEqual([...links]);
+      expect(pages.map((page) => demoLinks(page, "header nav"))).toEqual(PAGES.map(() => [...links]));
+      expect(demoLinks(pages[0] ?? "", "main")).toEqual([...links]);
     },
     120_000,
   );
