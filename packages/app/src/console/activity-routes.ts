@@ -17,7 +17,8 @@ import { siteLabel } from "@poplin/core/src/sites/labels";
 import { Hono } from "hono";
 import * as v from "valibot";
 
-import { FILE_WRITERS, type FileEntry, MOST_IN_FILE } from "./activity-file";
+import { MOST_IN_FILE } from "./activity-file";
+import { FILE_WRITERS, type FileEntry } from "./activity-formats";
 import { whatOf } from "./activity-what";
 import { loginNames, refused, refuseInvalid, type Shared } from "./data";
 
@@ -208,7 +209,7 @@ async function endingOf(asker: Asker, narrowing: Narrowing, file: { readonly rea
  * Stream a file of the log: each reading of the log is written and handed on before the next is made, so no more than one reading is held at a time.
  *
  * @param first - the first reading, made before the answer began so that its refusal could still be answered
- * @param writer - writes the file's start, each entry as a line, and the last line of a file that holds fewer entries than the log: `cut` after a full file, `stopped` after a reading that stopped short
+ * @param writer - writes the file's start, the entries of each reading as lines, and the last line of a file that holds fewer entries than the log: `cut` after a full file, `stopped` after a reading that stopped short
  * It is the platform's own stream, not the framework's streaming helper: that one closes a failed answer as if it were whole, and a cut file must not look complete.
  *
  * @returns the file's bytes; a reading that fails after the first ends the stream with an error, which a browser reports as a failed download
@@ -217,7 +218,7 @@ function fileOf(
   asker: Asker,
   narrowing: Narrowing,
   first: Read,
-  writer: { readonly head: string; readonly lineOf: (entry: Entry, named: Named) => string; readonly cut: string; readonly stopped: string },
+  writer: { readonly head: string; readonly linesOf: (entries: readonly Entry[], named: Named) => string; readonly cut: string; readonly stopped: string },
 ): ReadableStream<Uint8Array> {
   const encoder = new TextEncoder();
   const state = { reading: first, written: 0 };
@@ -230,7 +231,7 @@ function fileOf(
       const { entries: reading } = state.reading;
       // Each reading names its own logins and sites, so a file reads those it writes and no others.
       const [logins, sites] = await Promise.all([loginNames(asker, reading.map((entry) => entry.by)), sitesNow(asker.install, reading, undefined)]);
-      if (reading.length > 0) controller.enqueue(encoder.encode(reading.map((entry) => writer.lineOf(entry, { logins, sites })).join("")));
+      if (reading.length > 0) controller.enqueue(encoder.encode(writer.linesOf(reading, { logins, sites })));
 
       state.written += reading.length;
       const ending = await endingOf(asker, narrowing, state, writer);
@@ -300,8 +301,8 @@ export const activityRoutes = new Hono<Shared>()
 
     const writer = FILE_WRITERS[format];
     const day = new Date(asker.install.now()).toISOString().slice(0, DAY_LENGTH);
-    const lineOf = (entry: Entry, named: Named): string => writer.line(fileEntryOf(entry, named));
-    const body = fileOf(asker, narrowing, first, { head: writer.head, lineOf, cut: writer.cut(CUT_NOTE), stopped: writer.cut(STOPPED_NOTE) });
+    const linesOf = (entries: readonly Entry[], named: Named): string => writer.lines(entries.map((entry) => fileEntryOf(entry, named)));
+    const body = fileOf(asker, narrowing, first, { head: writer.head, linesOf, cut: writer.cut(CUT_NOTE), stopped: writer.cut(STOPPED_NOTE) });
 
     const name = part === undefined ? day : `${day}-${part}`;
 
