@@ -1,13 +1,12 @@
-// The Settings screen: one page that reads from top to bottom, every setting a row under the heading of its group, and one Save for everything that was changed, in a bar that floats over the foot of the screen while a change waits.
+// The Settings screen: one page that reads from top to bottom, every setting a row under the heading of its group, and one Save for everything that was changed, in a bar under the page while a change waits.
 
 import { Link, useLocation } from "@tanstack/react-router";
-import { cn } from "cn";
 import { type FormEvent, type ReactNode, useEffect, useState } from "react";
 
 import { Skeleton } from "@/components/ui/skeleton";
 import { useChosenTimeZone } from "@/lib/timezone";
 import { LeaveGuard } from "@/shared/leave-guard";
-import { SAVE_BAR_ROOM, SaveBar } from "@/shared/save-bar";
+import { SaveBar } from "@/shared/save-bar";
 import { type AddressDraft, useAddressDraft } from "@/settings/address-draft";
 import { settingAnchor, settingOfAnchor } from "@/settings/setting-address";
 import { controlId, SettingRow } from "@/settings/setting-row";
@@ -17,8 +16,8 @@ import { blocksOf, UPDATES } from "@/settings/settings-words";
 import { ADDRESS_FIELD, UpdateAddressRow } from "@/settings/update-address";
 import { AppShell } from "@/shell/app-shell";
 
-/** The column the page is read in: in the middle of a very wide window, so a name and its control are never a whole screen apart. The rows ask how wide it is. */
-const COLUMN = "@container mx-auto w-full max-w-[1100px]";
+/** The column the page is read in: no wider than this, so a name and its control are never a whole screen apart. The rows ask how wide it is. */
+const COLUMN = "@container w-full max-w-[1100px]";
 
 /** A group: its heading over its rows, and a line between it and the group before. */
 const GROUP = "mt-5 border-t pt-5 first-of-type:mt-0 first-of-type:border-t-0 first-of-type:pt-0";
@@ -151,8 +150,8 @@ export function SettingsScreen(): ReactNode {
 
   return (
     <AppShell current="settings" heading="Settings">
-      <form onSubmit={(event) => void save(event)} noValidate aria-label="Settings" className="relative flex min-h-0 flex-1 flex-col border-t">
-        <div className={cn("min-h-0 flex-1 overflow-y-auto px-6 pt-5 pb-12 max-md:px-4", count > 0 && SAVE_BAR_ROOM)}>
+      <form onSubmit={(event) => void save(event)} noValidate aria-label="Settings" className="flex min-h-0 flex-1 flex-col border-t">
+        <div className="min-h-0 flex-1 overflow-y-auto px-6 pt-5 pb-12 max-md:px-4">
           <div className={COLUMN}>
             <p className="mb-5 text-muted-foreground">How this install treats new sites, visitors, limits, and updates.</p>
             {error === null ? null : <p className="py-8 text-muted-foreground">{error.message}</p>}

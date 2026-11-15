@@ -1,5 +1,5 @@
 // One setting of the Settings screen as a row. A wide column has the name at the left, with one short sentence and the default under it, and the control at the right.
-// A narrow column keeps the sentence and the default behind a "?" beside the name; the control stands at the row's right, or under the name where it does not fit.
+// A narrow column keeps the sentence and the default behind a "?" beside the name. The narrowest one, a phone's, has a field under its name and a switch beside it.
 
 import { cn } from "cn";
 import { CircleHelpIcon, TriangleAlertIcon } from "lucide-react";
@@ -9,10 +9,10 @@ import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverDescription, PopoverTitle, PopoverTrigger } from "@/components/ui/popover";
 
 /** What is shown only in a wide column: the column is the container the screen names. */
-const WIDE_ONLY = "hidden @[900px]:block";
+const WIDE_ONLY = "hidden @[600px]:block";
 
 /** What is shown only in a narrow column. */
-const NARROW_ONLY = "@[900px]:hidden";
+const NARROW_ONLY = "@[600px]:hidden";
 
 /** What a row is drawn from. */
 interface SettingFrameProps {
@@ -45,12 +45,21 @@ interface SettingFrameProps {
 
   /** The line under the control, drawn only while it has something to say: a refusal. */
   readonly under?: ReactNode;
+
+  /** `true` for a switch: on a phone it stays beside its name, where a field goes under it. */
+  readonly beside?: boolean;
 }
 
 /** The way back to the default. */
 function Reset({ onReset }: { readonly onReset: () => void }): ReactNode {
   return (
-    <Button type="button" variant="link" size="xs" className="h-auto p-0 text-[13px] text-link" onClick={onReset}>
+    <Button
+      type="button"
+      variant="link"
+      size="xs"
+      className="h-auto min-h-0! border-0 p-0 align-baseline text-[13px] leading-[inherit] font-normal text-muted-foreground underline hover:text-foreground"
+      onClick={onReset}
+    >
       Reset
     </Button>
   );
@@ -60,7 +69,9 @@ function Reset({ onReset }: { readonly onReset: () => void }): ReactNode {
 function About({ name, says, fallback, onReset }: Pick<SettingFrameProps, "name" | "says" | "fallback" | "onReset">): ReactNode {
   return (
     <Popover>
-      <PopoverTrigger render={<Button type="button" variant="ghost" size="icon-xs" aria-label={`About ${name}`} className={cn("text-muted-foreground", NARROW_ONLY)} />}>
+      <PopoverTrigger
+        render={<Button type="button" variant="ghost" size="icon-xs" aria-label={`About ${name}`} className={cn("text-muted-foreground", NARROW_ONLY)} />}
+      >
         <CircleHelpIcon />
       </PopoverTrigger>
       <PopoverContent align="start" className="gap-1.5">
@@ -81,11 +92,14 @@ function About({ name, says, fallback, onReset }: Pick<SettingFrameProps, "name"
   );
 }
 
-/** The mark after a control the host warns about: it opens what the host says. */
+/** The mark after a control the host warns about: pointing at it or pressing it opens what the host says. */
 function Warnings({ warnings }: { readonly warnings: readonly string[] }): ReactNode {
   return (
     <Popover>
-      <PopoverTrigger render={<Button type="button" variant="ghost" size="icon-sm" aria-label="Warning" className="shrink-0 text-warn hover:text-warn" />}>
+      <PopoverTrigger
+        openOnHover
+        render={<Button type="button" variant="ghost" size="icon-sm" aria-label="Warning" className="shrink-0 text-warn hover:text-warn" />}
+      >
         <TriangleAlertIcon />
       </PopoverTrigger>
       <PopoverContent align="end" className="gap-1.5">
@@ -101,15 +115,28 @@ function Warnings({ warnings }: { readonly warnings: readonly string[] }): React
 }
 
 /** Draw one row. */
-export function SettingFrame({ name, controlId, anchor, marked = false, says, fallback, onReset, warnings = [], children, under }: SettingFrameProps): ReactNode {
+export function SettingFrame({
+  name,
+  controlId,
+  anchor,
+  marked = false,
+  says,
+  fallback,
+  onReset,
+  warnings = [],
+  children,
+  under,
+  beside = false,
+}: SettingFrameProps): ReactNode {
   const sentences = says.filter((sentence) => sentence !== "");
 
   return (
     <div
       id={anchor}
       className={cn(
-        "-mx-3 flex flex-wrap items-center justify-between gap-x-6 gap-y-2 rounded-lg px-3 py-2.5 motion-safe:transition-colors",
-        "@[900px]:grid @[900px]:grid-cols-[minmax(0,3fr)_minmax(0,2fr)] @[900px]:items-start",
+        "-mx-3 flex gap-x-6 gap-y-2 rounded-lg px-3 py-2.5 motion-safe:transition-colors",
+        beside ? "items-center justify-between" : "flex-col",
+        "@[480px]:grid @[480px]:grid-cols-[minmax(0,1fr)_16.5rem] @[480px]:items-center @[600px]:grid-cols-[minmax(0,1fr)_19rem] @[600px]:items-start",
         marked && "bg-muted/60",
       )}
     >

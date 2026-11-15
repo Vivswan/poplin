@@ -6,7 +6,7 @@ import { FieldError } from "@/components/ui/field";
 import { settingAnchor } from "@/settings/setting-address";
 import { SettingControl } from "@/settings/setting-control";
 import { SettingFrame } from "@/settings/setting-frame";
-import { readOf } from "@/settings/setting-values";
+import { isSwitch, readOf } from "@/settings/setting-values";
 import type { Row } from "@/settings/settings-queries";
 import { wordsOf } from "@/settings/settings-words";
 
@@ -52,6 +52,7 @@ export function SettingRow({ row, text, refusal, onChange, marked }: SettingRowP
       fallback={readOf(row, row.fallback)}
       onReset={text === row.fallback ? undefined : () => onChange(row.fallback)}
       warnings={row.warnings}
+      beside={isSwitch(row)}
       under={refusal === undefined ? undefined : <FieldError className="text-[13px]">{refusal}</FieldError>}
     >
       <SettingControl row={row} id={id} text={text} onChange={onChange} refused={refusal !== undefined} />
