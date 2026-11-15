@@ -1,7 +1,7 @@
 // The script that makes the test install runs against a local fake of the Cloudflare API, and the workflow is read beside it.
 // A run that stopped before it made anything once ended green with an empty log.
 
-import { describe, expect, spyOn, test } from "bun:test";
+import { describe, expect, test } from "bun:test";
 import { mkdtempDisposableSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -10,6 +10,7 @@ import { convergeInstall } from "../../packages/cloudflare/scripts/live/converge
 import { openRun } from "../../packages/cloudflare/scripts/live/util";
 import { withFake } from "../../packages/cloudflare/tests/zone/support/fake-cloudflare";
 import { type Asked, page, refusal, reply } from "../../packages/cloudflare/tests/zone/support/replies";
+import { catchStep } from "./support/step";
 
 /** The workflow that runs the live scripts. */
 const WORKFLOW = join(import.meta.dir, "..", "..", ".github", "workflows", "live-checks.yml");
@@ -74,13 +75,13 @@ function answer(account: FakeAccount, asked: Asked): Response {
 /** Run the script on a fake account, with the log, the step summary, and the step's outputs caught. */
 async function converge(account: FakeAccount): Promise<Told> {
   using folder = mkdtempDisposableSync(join(tmpdir(), "poplin-live-selftest-"));
-  using log = spyOn(console, "log").mockImplementation(() => undefined);
   const env = {
     CLOUDFLARE_API_TOKEN: "a-made-up-token",
     CLOUDFLARE_ACCOUNT_ID: ACCOUNT,
     GITHUB_STEP_SUMMARY: join(folder.path, "summary.md"),
     GITHUB_OUTPUT: join(folder.path, "output"),
   };
+  using step = catchStep(env.GITHUB_OUTPUT);
   let code = 0;
 
   await withFake(
@@ -90,12 +91,9 @@ async function converge(account: FakeAccount): Promise<Told> {
     },
   );
 
-  const lines = log.mock.calls.map(([line]) => String(line)).filter((line) => !line.startsWith("::add-mask::"));
-  const outputs = readFileSync(env.GITHUB_OUTPUT, "utf8")
-    .split("\n")
-    .flatMap((line) => (line === "" ? [] : [line.slice(0, line.indexOf("="))]));
+  const lines = step.lines.filter((line) => !line.startsWith("::add-mask::"));
 
-  return { code, lines, summary: readFileSync(env.GITHUB_STEP_SUMMARY, "utf8"), outputs };
+  return { code, lines, summary: readFileSync(env.GITHUB_STEP_SUMMARY, "utf8"), outputs: Object.keys(step.outputs()) };
 }
 
 /** Every string a parsed document holds, at any depth. */

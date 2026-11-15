@@ -3,6 +3,7 @@
 // Every value that names the account, the zone, or a login is hidden before anything is printed: the runner masks it, and each line is rewritten here as well.
 
 import { appendFileSync } from "node:fs";
+import * as core from "@actions/core";
 import * as v from "valibot";
 
 import { type CloudflareFailure, type Connection, listZones, type Zone } from "../../src/zone/client";
@@ -10,6 +11,9 @@ import { type DomainLayout, parseDomainLayout } from "../../src/zone/layout";
 
 /** What stands where a hidden value would have been printed. */
 const HIDDEN = "[hidden]";
+
+/** The toolkit's annotation of each level. */
+const ANNOTATE = { error: core.error, warning: core.warning, notice: core.notice };
 
 /** The statuses Cloudflare refuses a token with that lacks a permission. */
 const NOT_PERMITTED: ReadonlySet<number> = new Set([401, 403]);
@@ -47,6 +51,9 @@ export interface Run {
 
   /** Prints one line. */
   readonly say: (line: string) => void;
+
+  /** Marks the step with an error, a warning, or a notice. */
+  readonly annotate: (level: keyof typeof ANNOTATE, text: string) => void;
 
   /** Adds Markdown to the step summary. */
   readonly summarize: (markdown: string) => void;
@@ -107,9 +114,7 @@ function required(env: Readonly<Record<string, string | undefined>>, name: strin
 export function openRun(env: Readonly<Record<string, string | undefined>> = process.env): Run {
   const hidden: string[] = [];
   const redact = (text: string): string => hidden.reduce((safe, value) => safe.replaceAll(value, HIDDEN), text);
-  const append = (file: string | undefined, text: string): void => {
-    if (file !== undefined && file !== "") appendFileSync(file, text);
-  };
+  const isSet = (file: string | undefined): file is string => file !== undefined && file !== "";
 
   // Longest first, so a value that holds another is taken out whole. Answers whether the value is new.
   const remember = (value: string): boolean => {
@@ -126,12 +131,17 @@ export function openRun(env: Readonly<Record<string, string | undefined>> = proc
     accountId: required(env, "CLOUDFLARE_ACCOUNT_ID"),
     id: `${env.GITHUB_RUN_ID ?? "local"}-${env.GITHUB_RUN_ATTEMPT ?? "1"}`,
     hide: (value) => {
-      if (remember(value)) console.log(`::add-mask::${value}`);
+      if (remember(value)) core.setSecret(value);
     },
     redact,
     say: (line) => console.log(redact(line)),
-    summarize: (markdown) => append(env.GITHUB_STEP_SUMMARY, `${redact(markdown)}\n`),
-    output: (name, value) => append(env.GITHUB_OUTPUT, `${name}=${redact(value)}\n`),
+    annotate: (level, text) => ANNOTATE[level](redact(text)),
+    summarize: (markdown) => {
+      if (isSet(env.GITHUB_STEP_SUMMARY)) appendFileSync(env.GITHUB_STEP_SUMMARY, `${redact(markdown)}\n`);
+    },
+    output: (name, value) => {
+      if (isSet(env.GITHUB_OUTPUT)) core.setOutput(name, redact(value));
+    },
   };
   // The two secrets are masked by the runner already, so no mask line prints them.
   remember(run.connection.key);
@@ -179,7 +189,7 @@ export function stopOf(failure: CloudflareFailure, permission: string): Stop {
 export function reportStop(run: Run, stop: Stop, what: string): number {
   const reason = stop.kind === "skipped" ? `it needs ${stop.needs}` : stop.what;
   run.summarize(`**${what}: ${reason}.**\n`);
-  run.say(`::error::${what}: ${reason}.`);
+  run.annotate("error", `${what}: ${reason}.`);
 
   return 1;
 }

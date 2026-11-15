@@ -3,6 +3,8 @@
 // The lane holds one waiting job: a job that joins it while another waits takes that one's place. A reset that joined then would cancel the checks of the newest commit.
 // It calls GitHub, and never Cloudflare. A lane that stays busy, or one GitHub does not tell of, ends the run red.
 
+import * as core from "@actions/core";
+
 import { type Ask, askGitHub, liveRuns } from "./util";
 
 /** How long the lane has to come free, and how often GitHub is asked, in milliseconds. */
@@ -46,12 +48,12 @@ export async function awaitLane(env: Readonly<Record<string, string | undefined>
       if (waited < WAIT.withinMs) await tools.pause(WAIT.everyMs);
     }
   } catch (error) {
-    console.log(`::error::The reset did not run: the runs of the live workflow could not be read (${String(error).replace(/\p{Cc}/gu, " ")}).`);
+    core.error(`The reset did not run: the runs of the live workflow could not be read (${String(error)}).`);
 
     return 1;
   }
 
-  console.log(`::error::The reset did not run: another run of the live workflow was queued or running for ${WAIT.withinMs / 60_000} minutes.`);
+  core.error(`The reset did not run: another run of the live workflow was queued or running for ${WAIT.withinMs / 60_000} minutes.`);
 
   return 1;
 }

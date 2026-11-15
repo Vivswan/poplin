@@ -27,6 +27,7 @@
     "demo:stop": "bun run --cwd packages/demo demo:stop"
   },
   "devDependencies": {
+    "@actions/core": "3.0.1",
     "@biomejs/biome": "2.6.4",
     "@types/bun": "1.4.4",
     "fast-check": "4.10.2",

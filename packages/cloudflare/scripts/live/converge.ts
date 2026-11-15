@@ -325,7 +325,7 @@ export async function convergeInstall(run: Run, env: Environment): Promise<numbe
   run.summarize(["### The test install", "", "| Piece | Result | Skipped: needs |", "| --- | --- | --- |", ...rows, ""].join("\n"));
   run.output("missing", JSON.stringify(progress.missing));
 
-  for (const [lacking, needs] of Object.entries(progress.missing)) run.say(`::warning::The checks of ${lacking} are skipped: the install needs ${needs}.`);
+  for (const [lacking, needs] of Object.entries(progress.missing)) run.annotate("warning", `The checks of ${lacking} are skipped: the install needs ${needs}.`);
 
   if (stopped !== undefined) return reportStop(run, stopped, "The test install could not be made ready");
 

@@ -249,7 +249,7 @@ async function resetTestInstall(run: Run): Promise<Tally | Stop | undefined> {
 /** Tell the log and the step summary what came of a reset, and answer the exit code: 0 for a reset that ran to its end, and for an account with no install. */
 function tell(run: Run, ended: Tally | Stop | undefined): number {
   if (ended === undefined) {
-    run.say(`::notice::${NO_INSTALL}`);
+    run.annotate("notice", NO_INSTALL);
     run.summarize(`### The reset\n\n${NO_INSTALL}\n`);
 
     return 0;

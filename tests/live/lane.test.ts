@@ -1,11 +1,12 @@
 // The wait before the midnight reset runs against a fake of GitHub, and the workflow is read beside it.
 // A reset that joined the lane while the checks of the newest commit waited there once took their place, and that commit was never checked.
 
-import { describe, expect, spyOn, test } from "bun:test";
+import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { awaitLane } from "../../packages/cloudflare/scripts/live/lane";
+import { catchStep } from "./support/step";
 
 /** The workflow that runs the wait. */
 const WORKFLOW = Bun.YAML.parse(readFileSync(join(import.meta.dir, "..", "..", ".github", "workflows", "live-checks.yml"), "utf8")) as Workflow;
@@ -53,7 +54,7 @@ const CASES: readonly Case[] = [
 
 describe("the wait before the midnight reset", () => {
   test.each(CASES)("%s", async (_what, answers, code, pauses, last) => {
-    using log = spyOn(console, "log").mockImplementation(() => undefined);
+    using step = catchStep();
     let asked = 0;
     let paused = 0;
 
@@ -73,7 +74,7 @@ describe("the wait before the midnight reset", () => {
     };
     const ended = await awaitLane({ GITHUB_REPOSITORY: "ada/poplin" }, { ask, pause });
 
-    expect({ code: ended, pauses: paused, last: log.mock.calls.map(([line]) => String(line)).at(-1) }).toEqual({ code, pauses, last });
+    expect({ code: ended, pauses: paused, last: step.lines.at(-1) }).toEqual({ code, pauses, last });
   });
 
   test("in the workflow the wait is in no lane, where it would take a waiting run's place itself, and the reset in the lane comes after it", () => {

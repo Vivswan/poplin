@@ -1,6 +1,6 @@
 // The reset of the test install runs against a local fake: the SQL it sends has no other reader, and a reset that left a token, a second demo site, or an emptied setting behind would show on the real install alone.
 
-import { afterEach, describe, expect, spyOn, test } from "bun:test";
+import { afterEach, describe, expect, test } from "bun:test";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
@@ -11,6 +11,7 @@ import { type Asked, page, refusal } from "../../packages/cloudflare/tests/zone/
 import { openBench } from "./bench";
 import { FAKE_DOMAIN } from "./support/fake-install";
 import { openSqlInstall } from "./support/sql-install";
+import { catchStep } from "./support/step";
 
 /** The repository's sample sites. */
 const SAMPLES = join(import.meta.dir, "..", "..", "demo", "samples");
@@ -176,7 +177,7 @@ describe("the reset of the test install, against a local fake", () => {
   });
 
   test("on an account that holds no test install the script says so as a notice and ends green", async () => {
-    using log = spyOn(console, "log").mockImplementation(() => undefined);
+    using step = catchStep();
     const env = { CLOUDFLARE_API_TOKEN: "a-made-up-token", CLOUDFLARE_ACCOUNT_ID: ACCOUNT };
     let code = -1;
 
@@ -192,7 +193,7 @@ describe("the reset of the test install, against a local fake", () => {
       },
     );
 
-    const lines = log.mock.calls.map(([line]) => String(line)).filter((line) => !line.startsWith("::add-mask::"));
+    const lines = step.lines.filter((line) => !line.startsWith("::add-mask::"));
     expect({ code, lines }).toEqual({ code: 0, lines: ["::notice::There is no test install yet: nothing was put back."] });
   });
 });

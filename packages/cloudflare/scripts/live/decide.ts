@@ -7,6 +7,7 @@
 
 import { appendFileSync } from "node:fs";
 import { join } from "node:path";
+import * as core from "@actions/core";
 import * as v from "valibot";
 
 import { type Ask, askGitHub, liveRuns } from "./util";
@@ -206,10 +207,12 @@ export async function decideLive(env: Environment, tools: Tools = { ask: askGitH
   const words = decision.verdict === "skip" ? "Live checks skipped" : "Live checks run";
   const line = `${words}: ${decision.reason}`.replace(CONTROL, " ");
 
-  console.log(decision.verdict === "skip" ? `::notice::${line}` : line);
+  if (decision.verdict === "skip") core.notice(line);
+  else console.log(line);
+
   if (env.GITHUB_STEP_SUMMARY !== undefined) appendFileSync(env.GITHUB_STEP_SUMMARY, `${line}\n`);
 
-  if (env.GITHUB_OUTPUT !== undefined) appendFileSync(env.GITHUB_OUTPUT, `verdict=${decision.verdict}\n`);
+  if (env.GITHUB_OUTPUT !== undefined) core.setOutput("verdict", decision.verdict);
 
   return 0;
 }

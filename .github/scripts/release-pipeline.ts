@@ -10,6 +10,8 @@
  * Publishing is npm trusted publishing (OIDC) alone; no npm token is read.
  */
 
+import * as core from "@actions/core";
+
 import { CONFIRM_PAUSE_MS, CONFIRM_READS, DEFAULT_REGISTRY, MANIFEST_FILE, NPM_FLOOR, OIDC_REQUEST_URL } from "./release-pipeline/constants.js";
 import { assertCheckoutAt, git, mainPosition } from "./release-pipeline/git.js";
 import { manifestVersion } from "./release-pipeline/manifest-version.js";
@@ -55,18 +57,20 @@ function publishOptions(channel: Channel): NpmPublishOptions {
 /** The confirmation as a workflow annotation; 1 when next sits behind a descendant's pre-release. */
 function reportConfirmed(channel: Channel, confirmed: ConfirmVerdict): number {
   if (confirmed.outcome === "behind") {
-    console.log(`::error::${confirmed.reason}`);
+    core.error(confirmed.reason);
+
     return 1;
   }
 
   if (confirmed.outcome === "unsettled") {
-    console.log(`::warning::${confirmed.reason}`);
+    core.warning(confirmed.reason);
+
     return 0;
   }
 
   const reads = confirmed.reads === 1 ? "1 read" : `${confirmed.reads} reads`;
   const standing = channel === "next" ? "; next is not behind a descendant's pre-release" : "";
-  console.log(`::notice::${confirmed.version} is on the registry after ${reads}${standing}`);
+  core.notice(`${confirmed.version} is on the registry after ${reads}${standing}`);
 
   return 0;
 }
@@ -83,7 +87,8 @@ async function npmPublishCommand([channel]: readonly string[]): Promise<number> 
   }
 
   // A skipped pre-release is routine (a stale retry); a skipped release is a rerun worth a look.
-  console.log(`::${channel === "next" ? "notice" : "warning"}::${result.reason}`);
+  const annotate = channel === "next" ? core.notice : core.warning;
+  annotate(result.reason);
 
   return 0;
 }
@@ -95,9 +100,7 @@ function npmFloorCommand(): number {
     return 0;
   }
 
-  console.log(
-    `::error::npm ${result.version} cannot publish through OIDC; trusted publishing needs npm ${NPM_FLOOR} or newer. Install one in the workflow before this step.`,
-  );
+  core.error(`npm ${result.version} cannot publish through OIDC; trusted publishing needs npm ${NPM_FLOOR} or newer. Install one in the workflow before this step.`);
 
   return 1;
 }

@@ -1,7 +1,7 @@
 // The decision that holds a run of the live checks back is read beside the workflow and the tree.
 // A file in no row of its table, a step that ran after a skip, or a skip worded as a failure would show on a real run alone.
 
-import { describe, expect, spyOn, test } from "bun:test";
+import { describe, expect, test } from "bun:test";
 import { mkdirSync, mkdtempDisposableSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
@@ -9,6 +9,7 @@ import { dirname, join } from "node:path";
 import { decide, decideLive, ruleFor } from "../../packages/cloudflare/scripts/live/decide";
 import { openRun, reportStop } from "../../packages/cloudflare/scripts/live/util";
 import { plantedRepository, repositoryFiles } from "../support/repository-files";
+import { catchStep } from "./support/step";
 
 /** The repository's folder. */
 const ROOT = join(import.meta.dir, "..", "..");
@@ -87,7 +88,7 @@ interface Told {
   readonly code: number;
   readonly lines: readonly string[];
   readonly summary: string;
-  readonly output: string;
+  readonly output: Record<string, string>;
   readonly asked: readonly string[];
 }
 
@@ -294,7 +295,6 @@ async function decideIn(
 ): Promise<Told & { readonly shas: readonly string[] }> {
   using tree = plantedRepository({});
   using folder = mkdtempDisposableSync(join(tmpdir(), "poplin-live-decide-"));
-  using log = spyOn(console, "log").mockImplementation(() => undefined);
   const shas = commits.map((files) => commit(tree.path, files));
   const earlier = runs.flatMap(([of, ...attempts], index) => (of === "this" ? [] : [{ id: index + 1, sha: of === "nowhere" ? NOWHERE : (shas[of] ?? NOWHERE), attempts: attempts as readonly (Earlier | "deciding")[] }]));
   const own = [...runs.flatMap(([of, ...attempts]) => (of === "this" ? attempts : [])), "deciding" as const];
@@ -309,6 +309,7 @@ async function decideIn(
     GITHUB_STEP_SUMMARY: join(folder.path, "summary.md"),
     GITHUB_OUTPUT: join(folder.path, "output"),
   };
+  using step = catchStep(env.GITHUB_OUTPUT);
 
   const ask = async (path: string): Promise<unknown> => {
     asked.push(path);
@@ -336,7 +337,7 @@ async function decideIn(
   const code = await decideLive(env, { ask, git: (args) => git(tree.path, args) });
   const read = (file: string): string => readFileSync(file, "utf8");
 
-  return { code, lines: log.mock.calls.map(([line]) => String(line)), summary: read(env.GITHUB_STEP_SUMMARY), output: read(env.GITHUB_OUTPUT), asked, shas };
+  return { code, lines: step.lines, summary: read(env.GITHUB_STEP_SUMMARY), output: step.outputs(), asked, shas };
 }
 
 describe("the table of files that reach the test install", () => {
@@ -360,7 +361,7 @@ describe("the decision of one run, in a planted history of main", () => {
     const told = await decideIn(commits, runs);
     const expected = line.replace(/<(\d)>/, (_all, index: string) => told.shas[Number(index)]?.slice(0, 7) ?? "");
 
-    expect({ code: told.code, output: told.output, said: told.lines.length }).toEqual({ code: 0, output: `verdict=${verdict}\n`, said: 1 });
+    expect({ code: told.code, output: told.output, said: told.lines.length }).toEqual({ code: 0, output: { verdict }, said: 1 });
     expect(told.lines[0]).toStartWith(expected);
     if (verdict === "skip") expect(told.lines[0]).toBe(expected);
 
@@ -373,14 +374,14 @@ describe("the decision of one run, in a planted history of main", () => {
   ])("%s, and the checks run", async (_what, answer, line) => {
     const told = await decideIn([{ "docs/a.md": "1" }, { "docs/a.md": "2" }], [[0, "green"]], { answer });
 
-    expect({ code: told.code, output: told.output }).toEqual({ code: 0, output: "verdict=run\n" });
+    expect({ code: told.code, output: told.output }).toEqual({ code: 0, output: { verdict: "run" } });
     expect(told.lines[0]).toStartWith(line);
   });
 
   test("a run started by hand runs whatever changed, and asks GitHub nothing", async () => {
     const told = await decideIn([{ "docs/a.md": "1" }, { "docs/a.md": "2" }], [[0, "green"]], { event: "workflow_dispatch" });
 
-    expect(told).toMatchObject({ code: 0, output: "verdict=run\n", lines: ["Live checks run: the run was started by hand"], asked: [] });
+    expect(told).toMatchObject({ code: 0, output: { verdict: "run" }, lines: ["Live checks run: the run was started by hand"], asked: [] });
   });
 });
 
@@ -388,11 +389,11 @@ describe("a skip, beside a run that did nothing", () => {
   test("a skip is a green notice with its own words, and a run that could not start is a red error with none of them", async () => {
     const skip = await decideIn([{ "packages/core/a.ts": "1" }, { "docs/a.md": "1" }], [[0, "green"]]);
     using folder = mkdtempDisposableSync(join(tmpdir(), "poplin-live-decide-"));
-    using log = spyOn(console, "log").mockImplementation(() => undefined);
+    using step = catchStep();
     const summary = join(folder.path, "summary.md");
     const run = openRun({ CLOUDFLARE_API_TOKEN: "a-made-up-token", CLOUDFLARE_ACCOUNT_ID: "0".repeat(32), GITHUB_STEP_SUMMARY: summary });
     const code = reportStop(run, { kind: "skipped", needs: "the token permission Zone: Read" }, "The live checks could not start");
-    const stopped = [...log.mock.calls.map(([line]) => String(line)), readFileSync(summary, "utf8")];
+    const stopped = [...step.lines, readFileSync(summary, "utf8")];
 
     expect({ code: skip.code, notices: skip.lines.filter((line) => line.startsWith("::notice::")).length, errors: skip.lines.filter((line) => line.includes("::error::")).length }).toEqual({
       code: 0,
@@ -414,7 +415,7 @@ describe("a skip, beside a run that did nothing", () => {
     const after = LIVE_STEPS.slice(at + 1);
 
     expect(at).toBeGreaterThan(-1);
-    expect(HELD_BACK).toBe(`steps.decide.outputs.${skip.output.trim().replace("=", " != '")}'`);
+    expect(Object.entries(skip.output).map(([name, value]) => `steps.decide.outputs.${name} != '${value}'`)).toEqual([HELD_BACK]);
     expect(LIVE_STEPS.slice(0, at + 1).flatMap(secrets)).toEqual([]);
     expect(after.flatMap(secrets).length).toBeGreaterThan(0);
     expect(after.filter((step) => step.if !== HELD_BACK && step.if !== `always() && ${AFTER_DEPLOY}`).map((step) => step.name)).toEqual([]);
