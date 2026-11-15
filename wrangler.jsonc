@@ -5,6 +5,8 @@
   "compatibility_date": "2026-11-01",
   // The Worker's own code and its libraries are bundled minified. Functions and classes keep their names.
   "minify": true,
+  // Every upload carries the bundle's source map, so an error in Cloudflare's log names a source file and its line. An upload whose map is missing stops.
+  "upload_source_maps": true,
   // Before the Worker is bundled: the dashboard's client is built and written into the Worker's sources as one module, which no commit holds.
   "build": { "command": "bun run --filter @poplin/cloudflare built-client" },
   // The install's own values are written onto the Worker itself, by setup. A deploy leaves them as they are.

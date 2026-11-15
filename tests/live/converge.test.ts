@@ -2,9 +2,9 @@
 // A run that stopped before it made anything once ended green with an empty log.
 
 import { describe, expect, test } from "bun:test";
-import { mkdtempDisposableSync, readFileSync } from "node:fs";
+import { mkdtempDisposableSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 
 import type { DomainRow } from "../../packages/app/src/console/domain/records";
 import type { Login } from "../../packages/core/src/auth/logins";
@@ -38,6 +38,27 @@ const NOT_READ = "Account plans: not read: needs the token permission Billing: R
 /** The warning that goes with it. */
 const NOT_READ_WARNING = "::warning::The account's plans were not read, so nothing checked that they are free: the run needs the token permission Billing: Read.";
 
+/** The package wrangler is installed in. */
+const CLOUDFLARE = join(import.meta.dir, "..", "..", "packages", "cloudflare");
+
+/** The repository's own configuration of the Worker. */
+const OWN_CONFIG = join(CLOUDFLARE, "..", "..", "wrangler.jsonc");
+
+/** A Worker small enough to bundle in a moment, as source. */
+const SOURCE = { "worker.ts": 'export default { fetch: (): Response => new Response("ok") };\n' };
+
+/** The same Worker as a file that is built already and names the map beside it. */
+const BUILT = { "worker.js": 'export default { fetch: () => new Response("ok") };\n//# sourceMappingURL=worker.js.map\n' };
+
+/** The map of that built file. */
+const BUILT_MAP = { "worker.js.map": '{"version":3,"sources":["../src/worker.ts"],"sourcesContent":[""],"mappings":"AAAA","names":[]}' };
+
+/** How an upload starts the part that is the Worker's map: its name, then its type, which is not that of a module or of a file for visitors. */
+const MAP_PART = 'Content-Disposition: form-data; name="worker.js.map"; filename="worker.js.map"\r\nContent-Type: application/source-map\r\n';
+
+/** An upload that carries the Worker's map, names no folder of the machine, and publishes no file to visitors. */
+const WITH_MAP: Upload = { made: true, map: true, folder: false, assets: false };
+
 /** A sentence a Worker that cannot start answers. */
 const REASON = "This install's database is newer than its code: update poplin.";
 
@@ -50,6 +71,14 @@ interface FakeAccount {
 
 /** One fake account, and what a run on it tells: the lines of the log in order, and the reason the summary and the error line give. */
 type Case = readonly [what: string, account: FakeAccount, lines: readonly string[], reason: string];
+
+/** What wrangler made of a configuration: whether it made an upload, and whether the upload holds the map as a part of its own, the name of the folder the Worker was read from, and files for visitors. */
+interface Upload {
+  readonly made: boolean;
+  readonly map: boolean;
+  readonly folder: boolean;
+  readonly assets: boolean;
+}
 
 /** What one run of the script left behind. */
 interface Told {
@@ -139,6 +168,38 @@ async function converge(account: FakeAccount): Promise<Told> {
   return { code, lines, summary: readFileSync(env.GITHUB_STEP_SUMMARY, "utf8"), outputs: Object.keys(step.outputs()) };
 }
 
+/** The test install's configuration, for a fake account. */
+function installConfig(): Promise<Record<string, unknown>> {
+  return workerConfig({ accountId: ACCOUNT }, { layout: LAYOUT }, { databaseId: "2".repeat(32), access: { team_domain: "team.example.com", audience: "3".repeat(64) }, login: "owner@example.com" });
+}
+
+/**
+ * Have wrangler make the upload of a configuration and write it to a file, with nothing sent: no token is handed over.
+ * The Worker is the given files in a scratch folder, in place of the real entry, and the step that builds the dashboard is left out.
+ */
+async function uploadOf(config: Record<string, unknown>, files: Readonly<Record<string, string>>): Promise<Upload> {
+  // The scratch folder is named as the disk holds it: through a link, wrangler writes the way from one name of it to the other into the map.
+  using folder = mkdtempDisposableSync(join(realpathSync(tmpdir()), "poplin-live-upload-"));
+  const [main = ""] = Object.keys(files);
+  const body = join(folder.path, "upload.form");
+
+  for (const [name, text] of Object.entries(files)) writeFileSync(join(folder.path, name), text);
+
+  writeFileSync(join(folder.path, "wrangler.json"), JSON.stringify({ ...config, $schema: undefined, main: join(folder.path, main), build: undefined }));
+  const wrangler = Bun.spawn([join(CLOUDFLARE, "node_modules", ".bin", "wrangler"), "deploy", "--dry-run", "--config", join(folder.path, "wrangler.json"), "--outfile", body], {
+    cwd: CLOUDFLARE,
+    env: { ...process.env, CLOUDFLARE_API_TOKEN: undefined, CLOUDFLARE_ACCOUNT_ID: undefined, WRANGLER_SEND_METRICS: "false", WRANGLER_WRITE_LOGS: "false", CI: "true" },
+    stdout: "ignore",
+    stderr: "ignore",
+  });
+  const made = (await wrangler.exited) === 0;
+  if (!made) return { made, map: false, folder: false, assets: false };
+
+  const text = readFileSync(body, "utf8");
+
+  return { made, map: text.includes(MAP_PART), folder: text.includes(basename(folder.path)), assets: text.includes('"assets"') };
+}
+
 /** Every string a parsed document holds, at any depth. */
 function stringsOf(value: unknown): string[] {
   if (typeof value === "string") return [value];
@@ -175,11 +236,27 @@ describe("the script that makes the test install, against a local fake account",
 describe("the configuration the built bundle is uploaded by", () => {
   // Drift: the repository's own configuration says how wrangler bundles the Worker, and the upload hands wrangler a file that is bundled already. Wrangler warns of `minify` beside `no_bundle`, on a deploy that runs against the real account alone.
   test("as wrangler reads it, the file is uploaded as it is and nothing says to minify it", async () => {
-    const config = await workerConfig({ accountId: ACCOUNT }, { layout: LAYOUT }, { databaseId: "2".repeat(32), access: { team_domain: "team.example.com", audience: "3".repeat(64) }, login: "owner@example.com" });
+    const config = await installConfig();
     const read = JSON.parse(JSON.stringify(config)) as Record<string, unknown>;
 
     expect({ asItIs: read.no_bundle, minify: "minify" in read }).toEqual({ asItIs: true, minify: false });
   });
+});
+
+describe("the upload wrangler makes, with nothing sent", () => {
+  // Drift: an error in Cloudflare's log names a source file and its line only while every upload carries the map. A map that went missing would be left out with no word, on a deploy against the real account alone.
+  // The map is a part of the upload with a type of its own, beside the Worker and not among files for visitors: the upload names none. A map that named the scratch folder would name any machine it is built on.
+  test.each([
+    ["a deploy of the repository's own configuration bundles the Worker and sends its map", async () => Bun.JSONC.parse(readFileSync(OWN_CONFIG, "utf8")) as Record<string, unknown>, SOURCE, WITH_MAP],
+    ["the test install's upload of a built file sends the map beside it", installConfig, { ...BUILT, ...BUILT_MAP }, WITH_MAP],
+    ["the test install's upload of a built file whose map is missing stops", installConfig, BUILT, { made: false, map: false, folder: false, assets: false }],
+  ])(
+    "%s",
+    async (_what, config, files, upload) => {
+      expect(await uploadOf(await config(), files)).toEqual(upload);
+    },
+    60_000,
+  );
 });
 
 describe("what a failed wait for the install repeats of its answer", () => {
