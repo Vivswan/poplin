@@ -37,10 +37,11 @@ function drawn(query: string, page: Page, more: { readonly total?: Total; readon
   return { asked, says: () => document.querySelector("nav > span")?.textContent ?? null };
 }
 
+/** The ways of the foot that a press can take, in their order. */
 function buttons(): readonly string[] {
   return within(document.body)
     .queryAllByRole("button")
-    .map((button) => button.textContent ?? "");
+    .flatMap((way) => ((way as HTMLButtonElement).disabled ? [] : [way.textContent ?? ""]));
 }
 
 afterEach(cleanup);
@@ -54,14 +55,14 @@ describe("the foot of the log", () => {
     ["a log longer than was counted", "", pageOf(50, "951", null), { total: { ok: true, total: 10_000, whole: false } }, ["1 to 50 of 10,000+", ["Next page"], true]],
     ["a narrowed log longer than was counted", "kind=sites", pageOf(50, "951", null), { total: { ok: true, total: 73, whole: false } }, ["1 to 50 of 73+", ["Next page"], true]],
     ["a count older than the page", "after=900&from=101", pageOf(50, "851", "900"), { total: { ok: true, total: 120, whole: true } }, ["101 to 150", ["First page", "Previous page", "Next page"], true]],
-    ["the second page", "after=951&from=51", pageOf(50, "901", "950"), { total: { ok: true, total: 1240, whole: true } }, ["51 to 100 of 1,240", ["Previous page", "Next page"], true]],
+    ["the second page", "after=951&from=51", pageOf(50, "901", "950"), { total: { ok: true, total: 1240, whole: true } }, ["51 to 100 of 1,240", ["First page", "Previous page", "Next page"], true]],
     ["the third page", "after=901&from=101", pageOf(50, "851", "900"), { total: { ok: true, total: 1240, whole: true } }, ["101 to 150 of 1,240", ["First page", "Previous page", "Next page"], true]],
     ["the last page, which tells the total itself", "after=901&from=101", pageOf(7, null, "900"), {}, ["101 to 107 of 107", ["First page", "Previous page"], true]],
     ["a later page whose address names no first entry", "after=901", pageOf(50, "851", "900"), { total: { ok: true, total: 1240, whole: true } }, [null, ["First page", "Previous page", "Next page"], true]],
     ["a page gone back to that reached the start", "back=951&from=51", pageOf(20, "981", null), { total: { ok: true, total: 70, whole: true } }, ["1 to 20 of 70", ["Next page"], true]],
     ["a list of one short page", "", pageOf(12, null, null), {}, ["1 to 12 of 12", [], false]],
     ["a list of one page above the smallest size", "", pageOf(120, null, null), { size: "200" as const }, ["1 to 120 of 120", [], true]],
-    ["a page being replaced", "after=951&from=51", pageOf(50, "901", "950"), { busy: true, total: { ok: true, total: 1240, whole: true } }, [null, ["Previous page", "Next page"], true]],
+    ["a page being replaced", "after=951&from=51", pageOf(50, "901", "950"), { busy: true, total: { ok: true, total: 1240, whole: true } }, [null, [], true]],
   ] as const)("on %s", (_what, query, page, more, [says, ways, sized]) => {
     const foot = drawn(query, page, more);
 

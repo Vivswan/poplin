@@ -1,4 +1,4 @@
-// The foot of the Activity list: which entries the page shows of how many, how many a page holds, and the ways to the pages around it.
+// The foot of the Activity list: the ways to the pages around the one shown, how many entries a page holds, and which entries the page shows of how many.
 
 import type { ReactNode } from "react";
 
@@ -61,7 +61,7 @@ function placeOf(key: "after" | "back", entry: string | null, first: number | un
   return place;
 }
 
-/** Draw where the page is in the log and of how many entries, the choice of a page's size, and the ways to the pages around it. A list that fits the smallest page shows the first alone. */
+/** Draw the foot. The three ways stand first and keep their places on every page, so a pointer that rests on one stays on it; a way that leads nowhere is dimmed. */
 export function ActivityFoot({ query, page, total, size, onSize, onMove, busy = false }: ActivityFootProps): ReactNode {
   const rows = page.entries.length;
   if (rows === 0) return null;
@@ -71,8 +71,6 @@ export function ActivityFoot({ query, page, total, size, onSize, onMove, busy = 
   const to = from === undefined ? undefined : from + rows - 1;
   const of = to === undefined ? undefined : totalWords(page, to, total);
   const paged = page.previous !== null || page.next !== null;
-  // The page ahead is the first page for a page that starts within one page of the list's start: one way there is enough.
-  const farther = page.previous !== null && (from === undefined || from > step + 1);
   const back = (): void => {
     const first = from === undefined ? undefined : from - step;
     // A page that would start at the list's first entry is the first page itself, read whole.
@@ -82,12 +80,24 @@ export function ActivityFoot({ query, page, total, size, onSize, onMove, busy = 
 
   return (
     <nav aria-label="Pages" className="flex flex-wrap items-center gap-x-2 gap-y-2 px-6 py-3 max-md:px-4">
-      {from === undefined || to === undefined || busy ? null : (
-        <span className="mr-1 text-muted-foreground tabular-nums">
-          {showCount(from)} to {showCount(to)}
-          {of === undefined ? null : ` of ${of}`}
-        </span>
-      )}
+      {paged ? (
+        <>
+          <Button variant="outline" size="sm" disabled={busy || page.previous === null} onClick={() => onMove({})}>
+            First page
+          </Button>
+          <Button variant="outline" size="sm" disabled={busy || page.previous === null} onClick={back}>
+            Previous page
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={busy || page.next === null}
+            onClick={() => onMove(placeOf("after", page.next, to === undefined ? undefined : to + 1))}
+          >
+            Next page
+          </Button>
+        </>
+      ) : null}
       {paged || rows > Number(PAGE_SIZES[0]) ? (
         <Select items={SIZES} value={size} onValueChange={(value) => onSize(value as PageSize)}>
           <SelectTrigger size="sm" aria-label="Entries per page">
@@ -104,20 +114,11 @@ export function ActivityFoot({ query, page, total, size, onSize, onMove, busy = 
           </SelectContent>
         </Select>
       ) : null}
-      {farther ? (
-        <Button variant="outline" size="sm" disabled={busy} onClick={() => onMove({})}>
-          First page
-        </Button>
-      ) : null}
-      {page.previous === null ? null : (
-        <Button variant="outline" size="sm" disabled={busy} onClick={back}>
-          Previous page
-        </Button>
-      )}
-      {page.next === null ? null : (
-        <Button variant="outline" size="sm" disabled={busy} onClick={() => onMove(placeOf("after", page.next, to === undefined ? undefined : to + 1))}>
-          Next page
-        </Button>
+      {from === undefined || to === undefined || busy ? null : (
+        <span className="ml-1 text-muted-foreground tabular-nums">
+          {showCount(from)} to {showCount(to)}
+          {of === undefined ? null : ` of ${of}`}
+        </span>
       )}
     </nav>
   );

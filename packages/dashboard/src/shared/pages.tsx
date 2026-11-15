@@ -53,7 +53,7 @@ export function queryWith(query: URLSearchParams, changes: Readonly<Record<strin
   return next;
 }
 
-/** Draw where the page is in its list, and the ways to the first and the following page. Nothing is drawn for a list that fits one page. */
+/** Draw the ways to the first and the following page, then where the page is in its list. Both ways keep their places on every page, and one that leads nowhere is dimmed. Nothing is drawn for a list that fits one page. */
 export function Pages({ query, rows, next, onMove, busy = false }: PagesProps): ReactNode {
   const later = query.get("after") !== null;
   if (!later && next == null) return null;
@@ -64,21 +64,17 @@ export function Pages({ query, rows, next, onMove, busy = false }: PagesProps): 
 
   return (
     <nav aria-label="Pages" className="flex items-center gap-2 px-6 py-3 max-md:px-4">
+      <Button variant="outline" size="sm" disabled={!later} onClick={() => onMove({})}>
+        First page
+      </Button>
+      <Button variant="outline" size="sm" disabled={busy || next == null} onClick={() => onMove({ after: next ?? "", ...onward })}>
+        Next page
+      </Button>
       {from === undefined || to === undefined || busy ? null : (
-        <span className="mr-1 text-muted-foreground">
+        <span className="ml-1 text-muted-foreground">
           {showCount(from)} to {showCount(to)}
           {next == null ? ` of ${showCount(to)}` : null}
         </span>
-      )}
-      {later ? (
-        <Button variant="outline" size="sm" onClick={() => onMove({})}>
-          First page
-        </Button>
-      ) : null}
-      {next == null ? null : (
-        <Button variant="outline" size="sm" disabled={busy} onClick={() => onMove({ after: next, ...onward })}>
-          Next page
-        </Button>
       )}
     </nav>
   );
