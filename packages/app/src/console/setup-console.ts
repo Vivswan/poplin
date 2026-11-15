@@ -16,6 +16,7 @@ import { createSetup } from "./domain/setup";
 import type { DomainReading } from "./domain/records";
 import { POLICY } from "./console";
 import { runDone, runRefusal } from "./domain-answers";
+import { NOTHING_MARKED } from "./problems-routes";
 import { assetOf, type ClientFiles, KEPT_FOR_GOOD, shellPage } from "./shell";
 
 /** The page's title: it says nothing of the install. */
@@ -114,7 +115,7 @@ export function createSetupConsole(parts: SetupConsoleParts): { readonly fetch: 
   app.use(secureHeaders({ contentSecurityPolicy: POLICY, xFrameOptions: "DENY", referrerPolicy: "same-origin" }), gate);
 
   app.get(at, async (context) =>
-    context.html(shellPage({ base: at, email: "", title: TITLE, version: "", update: null, starts: false, demo: null, domain: false, domainNote: null, setup: start }, await parts.client.entry())),
+    context.html(shellPage({ base: at, email: "", title: TITLE, version: "", update: null, starts: false, demo: null, domain: false, domainNote: null, ...NOTHING_MARKED, setup: start }, await parts.client.entry())),
   );
   app.get(`${at}/assets/:name`, async (context) => {
     const asset = await assetOf(parts.client, context.req.param("name"));
