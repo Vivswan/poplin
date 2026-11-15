@@ -6,7 +6,7 @@ The checks of a deployed install: a stranger's requests over HTTPS, and a token 
 | ------------------------------------------------- | ------------------------------------------------------------------------- | ------------------------------------------------------------------------- |
 | check the checks themselves, against a local fake | `bun test ./tests/live`                                                   | nothing                                                                   |
 | check an install of your own                      | `bun run live`                                                            | `POPLIN_LIVE_DOMAIN`, and `POPLIN_LIVE_TOKEN` for the checks that publish |
-| check the test install                            | the `Live Checks` workflow: after a push to main that reaches it, or by hand | the `cloudflare-live-tests` environment                                   |
+| check the test install                            | the `Live Checks` workflow: after a push to main that reaches it, or by hand | the `with-domain-ci-tests` environment                                    |
 
 ```text
 Live Checks workflow
@@ -88,7 +88,14 @@ The demo is what `bun run demo:build` writes, at `demo-<public word>.<domain>`. 
 
 The reset writes `sites.json` beside the demo's files: the address of each sample site outside the trash. The demo's links to those sites then lead to the install's own: a public or unlisted one opens, a private one shows the login. No line of a run names an address.
 
-The owner sets these; the environment is `cloudflare-live-tests`.
+The owner sets these. Each test account has its own environment, and the secrets carry the same names in both.
+
+| Environment               | Its secrets are of                    | Read by                    |
+| ------------------------- | ------------------------------------- | -------------------------- |
+| `with-domain-ci-tests`    | the test account that holds a domain  | the `Live Checks` workflow |
+| `without-domain-ci-tests` | the test account that holds no domain | no workflow                |
+
+For the account the workflow reads:
 
 | Set                     | Where                        | For                                                                       |
 | ----------------------- | ---------------------------- | ------------------------------------------------------------------------- |
