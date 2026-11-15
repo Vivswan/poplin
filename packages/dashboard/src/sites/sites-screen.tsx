@@ -4,21 +4,20 @@ import { useQueryClient } from "@tanstack/react-query";
 import { Link, linkOptions, useNavigate, useParams } from "@tanstack/react-router";
 import { cn } from "cn";
 import { CopyIcon, ExternalLinkIcon, PlusIcon } from "lucide-react";
-import { type ReactNode, type RefObject, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { type ReactNode, type RefObject, useCallback, useMemo, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyTitle } from "@/components/ui/empty";
 import { Popover, PopoverContent, PopoverDescription, PopoverHeader, PopoverTitle, PopoverTrigger } from "@/components/ui/popover";
 import { Select, SelectContent, SelectGroup, SelectItem, SelectSeparator, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { searchOf, useAddressQuery } from "@/lib/address";
-import { useFocusHome } from "@/lib/focus";
 import { copy } from "@/lib/notify";
 import { addressParts, type Site, shownName } from "@/lib/sites";
 import { useChosenTimeZone } from "@/lib/timezone";
 import { IconButton } from "@/shared/icon-button";
 import { PAGE_WAY, Pages, queryWith, useFirstRowFocus, useShownPlace, useTopOfPlace } from "@/shared/pages";
 import { SearchBox } from "@/shared/search-box";
-import { useLiesOver } from "@/shared/side-panel";
+import { openerOf, useKeptFocus, useLiesOver } from "@/shared/side-panel";
 import type { LoginNames } from "@/shared/who";
 import { AppShell } from "@/shell/app-shell";
 import { siteActions } from "@/sites/site-actions";
@@ -420,28 +419,6 @@ function useQuestion(): {
 /** The name of the button that opens a site's panel. */
 function detailsOf(site: Site): string {
   return `Details of ${shownName(site)}`;
-}
-
-/** The button that opens the panel of the site with a label: the one of the table's row or of the phone's, whichever is in sight. */
-function openerOf(label: string): HTMLElement | undefined {
-  return [...document.querySelectorAll<HTMLElement>(`[data-opens="${CSS.escape(label)}"]`)].find((opener) => opener.getClientRects().length > 0);
-}
-
-/**
- * Keep the focus on the screen. A panel that closed with the focus in it leaves the focus on nothing: the row of its site takes it. A site that left the list, or a panel that closed over a row that is gone, leaves it to the search.
- *
- * @param opened - the label of the site whose panel is open
- * @returns the handlers of the screen's region
- */
-function useKeptFocus(opened: string | undefined): ReturnType<typeof useFocusHome> {
-  const before = useRef(opened);
-  const kept = useFocusHome(() => (opened === undefined && before.current !== undefined ? openerOf(before.current) : undefined));
-  // The look for a lost focus comes first, in the hook above: it still reads the label of the panel that has just closed.
-  useEffect(() => {
-    before.current = opened;
-  }, [opened]);
-
-  return kept;
 }
 
 /** Draw the Sites screen for the address: the table, and the panel of the site the path names. */

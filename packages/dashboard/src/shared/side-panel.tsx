@@ -234,3 +234,25 @@ export function SidePanel({ title, closeLink, onClose, opener, back, beside, chi
     </aside>
   );
 }
+
+/** The button that opens the panel of the site with a label: the one of the table's row or of the phone's, whichever is in sight. */
+export function openerOf(label: string): HTMLElement | undefined {
+  return [...document.querySelectorAll<HTMLElement>(`[data-opens="${CSS.escape(label)}"]`)].find((opener) => opener.getClientRects().length > 0);
+}
+
+/**
+ * Keep the focus on the screen. A panel that closed with the focus in it leaves the focus on nothing: the row of its site takes it. A site that left the list, or a panel that closed over a row that is gone, leaves it to the search.
+ *
+ * @param opened - the label of the site whose panel is open
+ * @returns the handlers of the screen's region
+ */
+export function useKeptFocus(opened: string | undefined): ReturnType<typeof useFocusHome> {
+  const before = useRef(opened);
+  const kept = useFocusHome(() => (opened === undefined && before.current !== undefined ? openerOf(before.current) : undefined));
+  // The look for a lost focus comes first, in the hook above: it still reads the label of the panel that has just closed.
+  useEffect(() => {
+    before.current = opened;
+  }, [opened]);
+
+  return kept;
+}
