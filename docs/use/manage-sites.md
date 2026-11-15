@@ -53,6 +53,21 @@ Every other example runs the same way, with `npx` before `poplin`.
 | Copy the link                 | copies the whole link, a hidden id included                |
 | Open the site                 | opens the site in a new tab                                |
 
-For a site that is not in the trash, the panel has the link, who can open it, the versions, and two switches under Settings: Show in search engines, and Allow embedding. On a site that is not public the first has the note `Only a public site is listed.`
+Find a site, over the list, keeps the sites whose title, name, or public name holds the text anywhere in it. The letters A to Z match in either case.
+
+In a window a little too narrow for the table, the name in a site's link is cut short. The dots of the id and the three buttons after it stay.
+
+For a site that is not in the trash, the panel has the link, who can open it, the versions, and two switches under Settings: Show in search engines, and Allow embedding.
+
+| In the panel                  | Does, or says                                                                    |
+| ----------------------------- | -------------------------------------------------------------------------------- |
+| Private                       | changes the site at once                                                         |
+| Unlisted, on a private site   | asks first: `Anyone with the link can open it. No login.`                        |
+| Public                        | asks for a Public name, filled with the site's name, then Make it public         |
+| a Public name that is refused | says why at the field, and keeps what was typed                                  |
+| Show in search engines        | on a site that is not public: `Only a public site is listed.`                    |
+| Show in search engines        | on a public site, while Let search engines in is off: `Off for every site in Settings.` |
+
+[Who can open a site](who-can-open.md) says what a public name is. Let search engines in is in [Settings](../run/settings.md#change-a-setting), under Visitors.
 
 The sun or moon in the header switches between the light and the dark look, and the browser keeps the choice.
