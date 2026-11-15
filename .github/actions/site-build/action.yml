@@ -16,6 +16,10 @@ inputs:
   origin:
     description: The site's origin, https://<owner>.github.io
     required: true
+  demo-url:
+    description: The https address of the running demo the home page links to, or empty for no link
+    required: false
+    default: ""
 
 outputs:
   dist:
@@ -31,6 +35,7 @@ runs:
       env:
         PAGES_BASE_PATH: ${{ inputs.base-path }}
         PAGES_ORIGIN: ${{ inputs.origin }}
+        DEMO_URL: ${{ inputs.demo-url }}
       run: |
         bun run --cwd website build
         echo "dist=website/dist" >> "$GITHUB_OUTPUT"

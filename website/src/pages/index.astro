@@ -7,6 +7,10 @@ const SITE = "report--k3f9x2ab71qz";
 const ADDRESS = `${SITE}-page.example.com`;
 const PUBLIC_ADDRESS = "report-page.example.com";
 
+// The running demo gets a link only when the build is given its https address.
+const demoUrl = URL.parse(process.env.DEMO_URL ?? "");
+const demo = demoUrl?.protocol === "https:" ? demoUrl.href : undefined;
+
 // One example folder plays the published site: in the access panel, and behind the action beside the transcript.
 const example = samples[0];
 const exampleAddress = example === undefined ? undefined : sitePath(`sample/${encodeURIComponent(example.name)}/`);
@@ -132,6 +136,7 @@ https://{ADDRESS}</code></pre>
     <div class="say">
       <h2 id="dashboard">Every site, on one page.</h2>
       <p>Your dashboard lists each site, who can open it, and its versions. Only you can open the dashboard.</p>
+      {demo !== undefined && <p><a class="more" href={demo}>See the dashboard</a></p>}
     </div>
     <table class="panel dashboard" data-ui>
       <caption>Your dashboard</caption>
