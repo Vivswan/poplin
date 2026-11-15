@@ -3,7 +3,7 @@
 //   POST /setup/api/check    read every piece with the token in a JSON body, and answer the reading as JSON
 //   POST /setup/api/repair   make every piece match; on an install with nothing set it also gives the install its domain and first login
 //
-// The setup screen sends its runs through the same two paths, so a person's press and a program's call are one run.
+// The setup screen sends its repair through the second path, so a person's press and a program's call are one run.
 // The token is the only proof of ownership: the plug refuses one that does not act on the install's own account. Until one passes nothing of the install is read, so no answer can say anything of it.
 // A run on an install with nothing set writes nothing to the install's own database: what it changes is at the provider, under the token's own account.
 // The setup is open until somebody has logged in. Until then the first login may have been mistyped, with nobody able to log in to mend it: an email sent here, with a proven token, replaces it.

@@ -15,9 +15,6 @@ const OWN = "https://poplin.example-account.workers.dev";
 /** The policy the setup page goes out under: it runs its own script alone and reads this origin alone. */
 const POLICY = "default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self'; connect-src 'self'; img-src 'self' data:; form-action 'self'; frame-ancestors 'none'; base-uri 'none'";
 
-/** What a run with a token of another account is answered. */
-const TOKEN_REFUSED = { ok: false, code: "token", about: "token", sentence: "Token refused. Paste the whole token, made for this account and this domain." };
-
 /** The bindings of an install whose setup has not written `ACCESS` yet. */
 const UNFINISHED = { ...BINDINGS, ACCESS: undefined } as Bindings;
 
@@ -29,6 +26,11 @@ interface Ran {
   readonly steps: readonly { readonly text: string; readonly address?: string }[];
   readonly summary: { readonly line: string; readonly tone: string };
   readonly expects?: string | null;
+}
+
+/** What a program's check is answered: every object as the plug read it. */
+interface Checked {
+  readonly rows: readonly { readonly object: string; readonly state: string; readonly detail: string }[];
 }
 
 /** What the setup page starts its client from. */
@@ -47,9 +49,14 @@ function writes(): string[] {
   return asked.filter((entry) => entry.method !== "GET").map((entry) => `${entry.method} ${entry.path.split("?")[0]}`);
 }
 
-/** Send one run of a setup page with a token, as the page's client does. */
-function run(worker: ReturnType<typeof instance>, setup: string, change: string, sent: Record<string, string>, headers: Record<string, string> = {}, bindings: Bindings = BINDINGS): Promise<Response> {
-  return send(worker, `${setup}/data/${change}`, sent, headers, bindings);
+/** Send the repair of a setup page with a token, as the page's client does. */
+function repair(worker: ReturnType<typeof instance>, setup: string, sent: Record<string, string>, headers: Record<string, string> = {}, bindings: Bindings = BINDINGS): Promise<Response> {
+  return send(worker, `${setup}/data/repair`, sent, headers, bindings);
+}
+
+/** Send a check to a setup page with a token, as `poplin setup --check` does. */
+function check(worker: ReturnType<typeof instance>, setup: string, sent: Record<string, string>): Promise<Response> {
+  return send(worker, `${setup}/api/check`, sent);
 }
 
 /** Every row of every table of the database, as one text. */
@@ -82,7 +89,7 @@ describe("the setup page", () => {
     const file = await ask(worker, `${OWN}${script}`);
     const login = await logIn(worker, w);
     const after = [await ask(worker, `${ADMIN}/setup`), await ask(worker, `${OWN}/setup`), await ask(instance(w), `${ADMIN}/setup`), await ask(worker, `${OWN}/`), await ask(worker, `${OWN}${script}`)];
-    const posted = await run(worker, `${ADMIN}/setup`, "repair", { token: TOKEN });
+    const posted = await repair(worker, `${ADMIN}/setup`, { token: TOKEN });
 
     expect(before.map((answer) => [answer.status, answer.headers.get("Location")])).toEqual([[200, null], [200, null], [302, "/setup"]]);
     // Drift: the page is the one place a token of the whole account is typed into; under a looser policy a script of another origin could read it.
@@ -129,19 +136,19 @@ describe("the setup page", () => {
   // Drift: a check that wrote would repair behind the owner's back, and a token of another account that passed would set up somebody else's zone from this page.
   test("a check with the account's token answers the rows and sends Cloudflare no change; a token of another account is refused and reads nothing of the install", async () => {
     const worker = instance(w, cloudflareOf(account, asked));
-    const checked = await run(worker, `${ADMIN}/setup`, "check", { token: TOKEN });
-    const ran = await checked.json<Ran>();
+    const checked = await check(worker, `${ADMIN}/setup`, { token: TOKEN });
+    const ran = await checked.json<Checked>();
     const calls = asked.length;
-    const other = await run(worker, `${OWN}/setup`, "check", { token: OTHER_TOKEN });
+    const other = await check(worker, `${OWN}/setup`, { token: OTHER_TOKEN });
 
-    expect([checked.status, ran.run, ran.rows.some((row) => row.piece === "DNS record" && row.state === "missing"), ran.summary.tone, writes()]).toEqual([200, "check", true, "bad", []]);
-    expect([other.status, await other.json(), [...new Set(asked.slice(calls).map((entry) => entry.path.split("?")[0]))]]).toEqual([403, TOKEN_REFUSED, ["/zones"]]);
+    expect([checked.status, ran.rows.some((row) => row.object === "DNS record" && row.state === "missing"), writes()]).toEqual([200, true, []]);
+    expect([other.status, await other.json(), [...new Set(asked.slice(calls).map((entry) => entry.path.split("?")[0]))]]).toEqual([403, { ok: false, refusal: "token" }, ["/zones"]]);
   });
 
   // Drift: the token opens the whole account. Kept anywhere, it outlives the one request it was pasted for.
   test("a repair makes the install's objects and writes ACCESS onto the Worker, and the token is in no answer, no stored row, and no log line", async () => {
     const worker = instance(w, cloudflareOf(account, asked));
-    const repaired = await run(worker, `${OWN}/setup`, "repair", { token: TOKEN }, {}, UNFINISHED);
+    const repaired = await repair(worker, `${OWN}/setup`, { token: TOKEN }, {}, UNFINISHED);
     const text = await repaired.text();
     const ran = JSON.parse(text) as Ran;
     const again = await ask(worker, `${OWN}/setup`, {}, UNFINISHED);
@@ -158,14 +165,14 @@ describe("the setup page", () => {
   test("a check that Cloudflare refuses one piece of is kept as the last check of the domain, with the right that piece lacked and nothing of the token", async () => {
     const worker = instance(w, cloudflareOf(account, asked));
     account.refuse = "GET /zones/zone-1/workers/routes";
-    const checked = await run(worker, `${ADMIN}/setup`, "check", { token: TOKEN });
-    const ran = await checked.json<Ran>();
+    const checked = await check(worker, `${ADMIN}/setup`, { token: TOKEN });
+    const ran = await checked.json<Checked>();
     const kept = await (await installOf(w)).database.readDomainCheck();
     const row = await BINDINGS.DB.prepare("SELECT ran_by, run, pieces FROM domain_check").all<{ ran_by: string; run: string; pieces: string }>();
 
-    const failed = { piece: "Worker route", state: "failed", tone: "bad", detail: "refused with status 403: 10000 Authentication error for Bearer [token]. Add this right to the token: Workers Routes: Edit" };
+    const failed = ["Worker route", "refused with status 403: 10000 Authentication error for Bearer [token]. Add this right to the token: Workers Routes: Edit"];
 
-    expect([checked.status, ran.rows.filter((shown) => shown.state === "failed"), writes()]).toEqual([200, [failed], []]);
+    expect([checked.status, ran.rows.filter((row) => row.state === "failed").map((row) => [row.object, row.detail]), writes()]).toEqual([200, [failed], []]);
     expect([kept?.by, kept?.run, kept?.pieces.filter((piece) => piece.state === "unread")]).toEqual([
       OWNER,
       "check",
@@ -200,10 +207,10 @@ describe("the setup page", () => {
     const worker = instance(w, cloudflareOf(account, asked));
     const from = { "CF-Connecting-IP": "192.0.2.7" };
     const statuses: number[] = [];
-    for (let post = 0; post < 5; post += 1) statuses.push((await run(worker, `${ADMIN}/setup`, "check", { token: OTHER_TOKEN }, from)).status);
+    for (let post = 0; post < 5; post += 1) statuses.push((await repair(worker, `${ADMIN}/setup`, { token: OTHER_TOKEN }, from)).status);
 
     const calls = asked.length;
-    const sixth = await run(worker, `${ADMIN}/setup`, "check", { token: TOKEN }, from);
+    const sixth = await repair(worker, `${ADMIN}/setup`, { token: TOKEN }, from);
 
     expect([statuses, sixth.status, await sixth.json()]).toEqual([[403, 403, 403, 403, 403], 429, { ok: false, code: "too_many_tries", about: null, sentence: "Too many tries. Wait a minute." }]);
     expect([calls > 0, asked.length]).toEqual([true, calls]);
@@ -236,9 +243,9 @@ describe("a Worker with nothing set", () => {
   /** What a person types into the two boxes. */
   const TYPED = { domain: "example.com", login: OWNER };
 
-  /** Send one run of the setup page with the two boxes and a token, as the page's client does. */
-  function first(worker: ReturnType<typeof instance>, change: string, token: string, bindings: Bindings = DEPLOYED, from: Record<string, string> = {}): Promise<Response> {
-    return run(worker, `${OWN}/setup`, change, { token, ...TYPED }, from, bindings);
+  /** Send the repair of the setup page with the two boxes and a token, as the page's client does. */
+  function first(worker: ReturnType<typeof instance>, token: string, bindings: Bindings = DEPLOYED, from: Record<string, string> = {}): Promise<Response> {
+    return repair(worker, `${OWN}/setup`, { token, ...TYPED }, from, bindings);
   }
 
   beforeEach(() => {
@@ -266,11 +273,11 @@ describe("a Worker with nothing set", () => {
     await ask(worker, `${OWN}/setup`, {}, DEPLOYED);
     const before = [await stored(), (await BINDINGS.SITES.list()).objects.length];
 
-    const stranger = await first(worker, "repair", OTHER_TOKEN);
+    const stranger = await first(worker, OTHER_TOKEN);
     const strangers = asked.length;
     tally.calls = 0;
     await ask(worker, `${OWN}/setup`, {}, counted);
-    const repaired = await first(worker, "repair", TOKEN, counted);
+    const repaired = await first(worker, TOKEN, counted);
     const text = await repaired.text();
     const ran = JSON.parse(text) as Ran;
 
@@ -286,10 +293,10 @@ describe("a Worker with nothing set", () => {
     const worker = instance(w, cloudflareOf(account, asked));
     const from = { "CF-Connecting-IP": "192.0.2.9" };
     const statuses: number[] = [];
-    for (let post = 0; post < 5; post += 1) statuses.push((await first(worker, "check", "no-such-token-0123456789", DEPLOYED, from)).status);
+    for (let post = 0; post < 5; post += 1) statuses.push((await first(worker, "no-such-token-0123456789", DEPLOYED, from)).status);
 
     const calls = asked.length;
-    statuses.push((await first(worker, "check", TOKEN, DEPLOYED, from)).status);
+    statuses.push((await first(worker, TOKEN, DEPLOYED, from)).status);
     await ask(instance(w), `${ADMIN}/setup`);
     const lost = await ask(instance(w), `${OWN}/setup`, {}, DEPLOYED);
 

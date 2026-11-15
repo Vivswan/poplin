@@ -1,4 +1,4 @@
-// The setup's own handler: the two runs a program calls, and the setup screen sends through, on an install nobody can log in to yet.
+// The setup's own handler: the two runs a program calls, the repair of which the setup screen sends too, on an install nobody can log in to yet.
 // What it must keep: nothing of the install before a proven token, tries counted before the plug is asked, a shut setup that says nothing, a token in no answer and no stored row, and a first login only its owner can correct.
 
 import { expect, test } from "bun:test";

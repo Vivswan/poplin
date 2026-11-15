@@ -27,8 +27,11 @@ const PLAIN = { domain: "example.com", login: "owner@example.com", token: TOKEN 
 /** Text past the most the setup reads of one request, which is 16 KiB. */
 const TOO_LONG = "a".repeat(20_000);
 
-/** The two ways a run is sent, each with the path under `/setup` that takes it: the screen's own, and a program's. */
-const WAYS = { screen: "data", call: "api" } as const;
+/** Every run the setup takes, each with the path under `/setup` that takes it: the screen's one, and a program's two. */
+const PATHS = { "screen repair": "data/repair", "call check": "api/check", "call repair": "api/repair" } as const;
+
+/** The names of those runs. */
+const SENT = Object.keys(PATHS) as readonly (keyof typeof PATHS)[];
 
 /** The plain values that reach each answer the setup gives of its own accord, whatever the plug would say; a new answer of its own gets a row here. The first two are refused on an install with nothing set alone. */
 const OWN_ANSWERS: Readonly<Record<string, Run["typed"]>> = {
@@ -46,11 +49,10 @@ const SPENT_DATABASE = new Proxy({}, { get: () => () => Promise.reject(new Allow
 /** A run the plug takes: one piece, as the plug names it. */
 const TAKEN: DomainReading = { ok: true, rows: [{ object: "DNS record", state: "present", detail: "poplin.example.com", part: "reach" }], steps: [] };
 
-/** One run: what is typed into the three boxes, how it is sent, whether it reads or changes, on which kind of install, and what the plug answers a run that reaches it. */
+/** One run: what is typed into the three boxes, which run it is sent as, on which kind of install, and what the plug answers a run that reaches it. */
 interface Run {
   readonly typed: { readonly domain: string; readonly login: string; readonly token: string };
-  readonly by: keyof typeof WAYS;
-  readonly run: "check" | "repair";
+  readonly sent: keyof typeof PATHS;
   readonly nothingSet: boolean;
   readonly refusal: (typeof REFUSALS)[number];
 }
@@ -65,11 +67,10 @@ const box = fc.oneof(
   hostile(fc.constantFrom(TOKEN, "example.com", "owner@example.com")),
 );
 
-/** Any run: any text in each box, sent either way, on either kind of install. */
+/** Any run: any text in each box, sent as any of the runs, on either kind of install. */
 const runs: fc.Arbitrary<Run> = fc.record({
   typed: fc.record({ domain: box, login: box, token: box }),
-  by: fc.constantFrom("screen", "call"),
-  run: fc.constantFrom("check", "repair"),
+  sent: fc.constantFrom(...SENT),
   nothingSet: fc.boolean(),
   refusal: fc.constantFrom(...REFUSALS),
 });
@@ -85,21 +86,19 @@ async function answerOf(run: Run, answer: DomainReading = { ok: false, refusal: 
     visitorOf: async () => "203.0.113.7",
     client: CLIENT,
   });
-  const answered = await setup.fetch(new Request(`${ORIGIN}/setup/${WAYS[run.by]}/${run.run}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(run.typed) }));
+  const answered = await setup.fetch(new Request(`${ORIGIN}/setup/${PATHS[run.sent]}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(run.typed) }));
 
   return JSON.stringify([answered.status, [...answered.headers], await answered.text()]);
 }
 
-/** Every answer a refused run may get: the answers to the plain values, for each way to send, each kind of run, each kind of install, and each refusal, and the same for each answer of the setup's own. */
+/** Every answer a refused run may get: the answers to the plain values, for each run, each kind of install, and each refusal, and the same for each answer of the setup's own. */
 async function plainAnswers(): Promise<ReadonlySet<string>> {
   const answers = new Set<string>();
 
   for (const typed of [PLAIN, ...Object.values(OWN_ANSWERS)]) {
-    for (const by of ["screen", "call"] as const) {
-      for (const run of ["check", "repair"] as const) {
-        for (const nothingSet of [true, false]) {
-          for (const refusal of REFUSALS) answers.add(await answerOf({ typed, by, run, nothingSet, refusal }));
-        }
+    for (const sent of SENT) {
+      for (const nothingSet of [true, false]) {
+        for (const refusal of REFUSALS) answers.add(await answerOf({ typed, sent, nothingSet, refusal }));
       }
     }
   }
@@ -120,7 +119,7 @@ property(
 // Drift: a database that is spent for the day once answered "Something went wrong.", which named nothing. Its refusal is one more answer of the setup, and it must be the one a plug's own refusal of the kind gets, with nothing typed in it.
 test("a run whose token is taken while the database takes no more for the day is answered the spent allowance and when to come back, as any other typed values would be", async () => {
   const typed = { ...PLAIN, token: `${TOKEN}-of-another-shape` };
-  const answers = await Promise.all((["screen", "call"] as const).map((by) => answerOf({ typed, by, run: "repair", nothingSet: false, refusal: "token" }, TAKEN, SPENT_DATABASE)));
+  const answers = await Promise.all((["screen repair", "call repair"] as const).map((sent) => answerOf({ typed, sent, nothingSet: false, refusal: "token" }, TAKEN, SPENT_DATABASE)));
 
   // The setup's clock stands at 22:13:20 UTC: 6,400 seconds before midnight.
   expect(answers.map((answer) => [answer.startsWith("[503,"), answer.includes('["retry-after","6400"]'), PLAIN_ANSWERS.has(answer)])).toEqual([
@@ -131,7 +130,7 @@ test("a run whose token is taken while the database takes no more for the day is
 
 // Control: the property would hold of a setup that refused everything.
 test("a run the plug takes still answers its pieces, to the screen and to a program's call", async () => {
-  const [screen, call] = [await answerOf({ typed: PLAIN, by: "screen", run: "check", nothingSet: true, refusal: "token" }, TAKEN), await answerOf({ typed: PLAIN, by: "call", run: "check", nothingSet: true, refusal: "token" }, TAKEN)];
+  const [screen, call] = [await answerOf({ typed: PLAIN, sent: "screen repair", nothingSet: true, refusal: "token" }, TAKEN), await answerOf({ typed: PLAIN, sent: "call check", nothingSet: true, refusal: "token" }, TAKEN)];
 
   expect([screen.startsWith("[200,"), screen.includes('\\"piece\\":\\"DNS record\\"'), call.startsWith("[200,"), call.includes('\\"object\\":\\"DNS record\\"')]).toEqual([true, true, true, true]);
   expect([PLAIN_ANSWERS.has(screen), PLAIN_ANSWERS.has(call)]).toEqual([false, false]);

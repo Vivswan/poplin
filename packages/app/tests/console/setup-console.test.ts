@@ -1,4 +1,4 @@
-// The setup screen's server side: the page that loads the client, the client's files, and the two runs, over the setup page's own handler.
+// The setup screen's server side: the page that loads the client, the client's files, and the repair, over the setup page's own handler.
 // What it must keep: nothing of the install before a proven token, tries counted and refused when the counter fails, a shut page that says nothing, and a token that is in no answer.
 
 import { describe, expect, test } from "bun:test";
@@ -73,8 +73,8 @@ async function openSetup(options: Options = {}) {
     at: options.at,
   });
   const get = (path: string): Promise<Response> => setup.fetch(new Request(`${ORIGIN}${path}`));
-  const run = (kind: string, body: unknown, type = "application/json"): Promise<Response> =>
-    setup.fetch(new Request(`${ORIGIN}${at}/data/${kind}`, { method: "POST", headers: { "Content-Type": type }, body: JSON.stringify(body) }));
+  const run = (body: unknown, type = "application/json"): Promise<Response> =>
+    setup.fetch(new Request(`${ORIGIN}${at}/data/repair`, { method: "POST", headers: { "Content-Type": type }, body: JSON.stringify(body) }));
 
   return { opened, plug, reads, get, run, fetch: setup.fetch };
 }
@@ -135,15 +135,15 @@ describe("the page", () => {
     expect([page.includes(opened.owner), page.includes(host), reads.count, plug.calls]).toEqual([false, false, 0, []]);
   });
 
-  // Drift: a host that mounts the screen under a path of its own would link the client's files and send its runs to the wrong place, or the page before a login would load the whole script again at every visit.
-  test("links its files by the names the build gave them, for a browser to keep for good, and takes its runs under the path it is given", async () => {
+  // Drift: a host that mounts the screen under a path of its own would link the client's files and send its run to the wrong place, or the page before a login would load the whole script again at every visit.
+  test("links its files by the names the build gave them, for a browser to keep for good, and takes its run under the path it is given", async () => {
     const { get, run } = await openSetup({ at: "/next/setup/first" });
     const page = await (await get("/next/setup/first")).text();
     const script = await get("/next/setup/first/assets/app-4f1c.js");
 
     expect(page).toContain('<link rel="stylesheet" href="/next/setup/first/assets/app-9d2e.css">');
     expect([script.status, script.headers.get("Cache-Control")]).toEqual([200, "public, max-age=31536000, immutable"]);
-    expect((await run("check", { token: TOKEN })).status).toBe(200);
+    expect((await run({ token: TOKEN })).status).toBe(200);
   });
 
   // Drift: once somebody has logged in, or when the question fails, the page would still answer, and tell a stranger that an install is here.
@@ -152,7 +152,7 @@ describe("the page", () => {
     ["fails to say", async (): Promise<boolean> => Promise.reject(new Error("the database is away"))],
   ] as const)("is shut on every path when the question %s", async (_name, open) => {
     const { get, run, plug } = await openSetup({ open });
-    const answers = [await get("/setup"), await get("/setup/assets/app-4f1c.js"), await run("check", { token: TOKEN }), await run("repair", { token: TOKEN })];
+    const answers = [await get("/setup"), await get("/setup/assets/app-4f1c.js"), await run({ token: TOKEN })];
 
     expect(await Promise.all(answers.map(async (answer) => [answer.status, await answer.text()]))).toEqual(answers.map(() => [404, "Not found."]));
     expect(plug.calls).toEqual([]);
@@ -174,7 +174,7 @@ describe("a run", () => {
   test("with a token of another account is refused at the token's box, reads no setting, and writes nothing", async () => {
     const { opened, run, reads } = await openSetup();
     const before = (await opened.audit()).length;
-    const answer = await run("repair", { token: FOREIGN, login: "other@example.com" });
+    const answer = await run({ token: FOREIGN, login: "other@example.com" });
     const body = await answer.text();
 
     expect(answer.status).toBe(403);
@@ -190,7 +190,7 @@ describe("a run", () => {
   // Drift: a proven token's run would lose its rows, its count, or the line that says which logins the install expects.
   test("with the install's own token answers the rows, the count, and the logins it expects", async () => {
     const { opened, run } = await openSetup();
-    const answer = await run("repair", { token: TOKEN });
+    const answer = await run({ token: TOKEN });
     const body = await answer.text();
 
     expect(answer.status).toBe(200);
@@ -212,7 +212,7 @@ describe("a run", () => {
     [{ token: TOKEN, domain: "example.com", login: `${TOKEN}@example.com` }, 400, "bad_login", "login"],
   ])("on an install with nothing set refuses %p at its box", async (sent, status, code, about) => {
     const { run, plug, reads } = await openSetup({ first: true });
-    const answer = await run("repair", sent);
+    const answer = await run(sent);
     const refusal = (await answer.json()) as Refusal;
 
     expect([answer.status, refusal.code, refusal.about, plug.calls, reads.count]).toEqual([status, code, about, [], 0]);
@@ -222,7 +222,7 @@ describe("a run", () => {
   test("refuses an email that holds the pasted token before the plug is asked, and stores nothing", async () => {
     const { opened, run, plug } = await openSetup();
     const before = JSON.stringify((await opened.install.database.readSettings())?.logins);
-    const answer = await run("repair", { token: TOKEN, login: `${TOKEN.toUpperCase()}@example.com` });
+    const answer = await run({ token: TOKEN, login: `${TOKEN.toUpperCase()}@example.com` });
     const body = await answer.text();
 
     expect([answer.status, (JSON.parse(body) as Refusal).code, plug.calls]).toEqual([400, "bad_login", []]);
@@ -234,7 +234,7 @@ describe("a run", () => {
   test("on an install with nothing set makes every piece and stores nothing in the install", async () => {
     const { opened, run, reads } = await openSetup({ first: true });
     const before = (await opened.audit()).length;
-    const answer = await run("repair", { token: TOKEN, domain: " Example.COM ", login: "mira@example.com" });
+    const answer = await run({ token: TOKEN, domain: " Example.COM ", login: "mira@example.com" });
 
     expect([answer.status, ((await answer.json()) as { readonly expects: string | null }).expects]).toEqual([200, null]);
     expect([reads.count, (await opened.audit()).length - before]).toEqual([0, 0]);
@@ -244,11 +244,11 @@ describe("a run", () => {
   test("is refused after five tries in a minute, and at once when the counter cannot answer", async () => {
     const { run, plug } = await openSetup();
     const statuses: number[] = [];
-    for (let tries = 0; tries < 6; tries += 1) statuses.push((await run("check", { token: FOREIGN })).status);
+    for (let tries = 0; tries < 6; tries += 1) statuses.push((await run({ token: FOREIGN })).status);
 
-    const sixth = await run("check", { token: TOKEN });
+    const sixth = await run({ token: TOKEN });
     const broken = await openSetup({ counters: { takeMinute: async () => Promise.reject(new Error("the counter is away")) } });
-    const closed = await broken.run("check", { token: TOKEN });
+    const closed = await broken.run({ token: TOKEN });
 
     expect(statuses).toEqual([403, 403, 403, 403, 403, 429]);
     expect([sixth.status, await sixth.json()]).toEqual([429, { ok: false, code: "too_many_tries", about: null, sentence: "Too many tries. Wait a minute." }]);
@@ -259,8 +259,8 @@ describe("a run", () => {
   test("that is not sent as JSON is refused uncounted", async () => {
     const { run, plug } = await openSetup();
     const statuses: number[] = [];
-    for (let tries = 0; tries < 7; tries += 1) statuses.push((await run("check", { token: TOKEN }, "text/plain")).status);
+    for (let tries = 0; tries < 7; tries += 1) statuses.push((await run({ token: TOKEN }, "text/plain")).status);
 
-    expect([statuses, plug.calls.length, (await run("check", { token: TOKEN })).status]).toEqual([[415, 415, 415, 415, 415, 415, 415], 0, 200]);
+    expect([statuses, plug.calls.length, (await run({ token: TOKEN })).status]).toEqual([[415, 415, 415, 415, 415, 415, 415], 0, 200]);
   });
 });

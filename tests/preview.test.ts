@@ -164,7 +164,7 @@ describe("the local preview", () => {
     const preview = await openPreview(false);
     const pages = await Promise.all(screens.map(async (screen) => shellOf(await (await open(preview, `${place}${screen}`)).text())));
     const files = await Promise.all((pages[0]?.files ?? []).map(async (file) => [file, (await open(preview, file)).status] as const));
-    const asked = place.startsWith("/setup") ? await change(preview, `${place}/data/check`, { token: "sample-token" }) : await preview.fetch(new Request(`${ORIGIN}${place}/data/sites`));
+    const asked = place.startsWith("/setup") ? await change(preview, `${place}/data/repair`, { token: "sample-token" }) : await preview.fetch(new Request(`${ORIGIN}${place}/data/sites`));
 
     expect(pages.map((page) => page.boot.base)).toEqual(screens.map(() => place));
     expect(files).toEqual([
