@@ -5,8 +5,10 @@ import { ListFilterIcon } from "lucide-react";
 import { type ReactNode, useMemo } from "react";
 
 import { activityColumns, SiteThen, When } from "@/activity/activity-columns";
-import { type Entry, useActivityPage } from "@/activity/activity-queries";
-import { emptyWords, KINDS, type Kind, kindOf, sortedQuery, sortOf, whatOf } from "@/activity/activity-words";
+import { ActivityFoot } from "@/activity/activity-foot";
+import { type Entry, type Page, useActivityPage, useActivityTotal } from "@/activity/activity-queries";
+import { emptyWords, KINDS, type Kind, kindOf, logQuery, sortedQuery, sortOf, whatOf } from "@/activity/activity-words";
+import { usePageSize } from "@/activity/page-size";
 import { Button } from "@/components/ui/button";
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyTitle } from "@/components/ui/empty";
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -15,7 +17,6 @@ import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { searchOf, useAddressQuery } from "@/lib/address";
 import { ownTimeZoneName, useTimeZoneChoice, TIMEZONES, type TimeZoneChoice } from "@/lib/timezone";
 import { IconButton } from "@/shared/icon-button";
-import { Pages, queryWith } from "@/shared/pages";
 import { SearchBox } from "@/shared/search-box";
 import { Who } from "@/shared/who";
 import { AppShell } from "@/shell/app-shell";
@@ -33,9 +34,6 @@ const ORDERS = [
   { value: "desc", label: "Newest" },
   { value: "asc", label: "Oldest" },
 ] as const;
-
-/** One page of the log as the server answered it. */
-type Page = NonNullable<ReturnType<typeof useActivityPage>["data"]>;
 
 function KindSelect({ kind, onChoose }: { readonly kind: Kind; readonly onChoose: (kind: Kind) => void }): ReactNode {
   return (
@@ -182,7 +180,10 @@ export function ActivityScreen(): ReactNode {
   const query = useAddressQuery();
   const kind = kindOf(query);
   const site = query.get("site") ?? "";
-  const { data: page, error, isPlaceholderData } = useActivityPage(query);
+  const [size, keepSize] = usePageSize();
+  const { data: page, error, isPlaceholderData } = useActivityPage(query, size);
+  // The last page tells the total by itself; before it, the total is read.
+  const { data: total } = useActivityTotal(query, page !== undefined && page.next !== null);
   const logins = page?.logins;
   // The screen reads the choice of time zone itself, so its rows are drawn again, in the new time zone, when the choice changes.
   const [timeZone, chooseTimeZone] = useTimeZoneChoice();
@@ -190,9 +191,15 @@ export function ActivityScreen(): ReactNode {
   const layout = useTableLayout("activity", columns);
   const instead = insteadOfRows(error?.message, page, kind, site, () => void navigate({ to: PATH }));
   const move = (changes: Readonly<Record<string, string>>, replace = false): void =>
-    void navigate({ to: PATH, search: searchOf(queryWith(query, changes)), replace });
+    void navigate({ to: PATH, search: searchOf(logQuery(query, changes)), replace });
+  // A page of another size is read from the list's start: the place of the page before is a place among pages of the old size.
+  const chooseSize = (chosen: typeof size): void => {
+    keepSize(chosen);
+    move({});
+  };
 
-  const pages = <Pages query={query} rows={page?.entries.length ?? 0} next={page?.next} onMove={move} busy={isPlaceholderData} />;
+  const pages =
+    page === undefined ? null : <ActivityFoot query={query} page={page} total={total} size={size} onSize={chooseSize} onMove={move} busy={isPlaceholderData} />;
 
   const rowActions = (entry: Entry): ReactNode => {
     const name = entry.site?.name;

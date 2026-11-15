@@ -1,4 +1,4 @@
-// The Activity screen's route: which entries a page holds under each narrowing, what each entry says of its site and its token, and how a page goes on in either order.
+// The Activity screen's routes: which entries a page holds under each narrowing, what each entry says of its site and its token, how a page goes on and back in either order, and how many entries the log is said to hold.
 
 import { describe, expect, test } from "bun:test";
 
@@ -19,6 +19,7 @@ interface Page {
   }[];
   readonly logins: Readonly<Record<string, string>>;
   readonly next: string | null;
+  readonly previous: string | null;
 }
 
 /** An install with a renamed site, a site deleted for good, and a named token: one entry of each kind of site, and one of access. */
@@ -112,6 +113,10 @@ describe("a page of the log", () => {
   test.each([
     ["?after=soon", "after"],
     ["?after=0", "after"],
+    ["?back=soon", "back"],
+    ["?after=3&back=9", "back"],
+    ["?size=500", "size"],
+    ["?size=51", "size"],
     ["?dir=up", "dir"],
     ["?kind=everything", "kind"],
     [`?site=${"a".repeat(41)}`, "site"],
@@ -123,5 +128,66 @@ describe("a page of the log", () => {
       400,
       { ok: false, code: "bad_argument", about, sentence: `The value of ${about} is not one it takes.` },
     ]);
+  });
+});
+
+describe("the pages around a page of the log", () => {
+  // Drift: a page gone back to would repeat or skip entries, come out against the order of the list, or offer a page ahead of the first; a larger page would be cut at what one reading of the log answers.
+  test.each([
+    ["", 50, (left: number, right: number) => right - left],
+    ["dir=asc", 50, (left: number, right: number) => left - right],
+    ["size=100", 100, (left: number, right: number) => right - left],
+    ["size=200", 200, (left: number, right: number) => right - left],
+  ])("under %p, %d entries a page: going on and then back shows the same pages, and only the first has none ahead of it", async (query, size, inOrder) => {
+    const opened = await openConsole();
+    const { install, owner, clock } = opened.base;
+    for (let count = 0; count < size * 2 + 9; count += 1) await install.database.appendAudit({ action: "login", detail: {} }, { by: owner, at: clock.now });
+
+    const first = await pageOf(opened, `?${query}`);
+    const second = await pageOf(opened, `?${query}&after=${first.next}`);
+    const third = await pageOf(opened, `?${query}&after=${second.next}`);
+    const secondAgain = await pageOf(opened, `?${query}&back=${third.previous}`);
+    const firstAgain = await pageOf(opened, `?${query}&back=${secondAgain.previous}`);
+    const seqs = [first, second, third].flatMap((page) => page.entries.map((entry) => entry.seq));
+
+    expect([first, second, third].map((page) => page.entries.length)).toEqual([size, size, 10]);
+    expect(seqs).toEqual([...seqs].sort(inOrder));
+    expect(new Set(seqs).size).toBe(size * 2 + 10);
+    expect([first.previous, third.next, firstAgain.previous]).toEqual([null, null, null]);
+    expect([secondAgain, firstAgain]).toEqual([second, { ...first, next: first.next }]);
+  });
+
+  // Drift: a page gone back to under a filter would count the entries the filter leaves out, and show a short page or one from another kind.
+  test("going back keeps the narrowing", async () => {
+    const { opened } = await openWithHistory();
+    const all = await pageOf(opened, "?kind=sites");
+    const last = all.entries.at(-1);
+    const back = await pageOf(opened, `?kind=sites&back=${last?.seq}`);
+
+    expect([back.entries.map((entry) => entry.action), back.next, back.previous]).toEqual([["delete", "details", "create"], String(all.entries.at(-2)?.seq), null]);
+  });
+});
+
+describe("the total of the log", () => {
+  // Drift: the foot would say a total of the whole log over a narrowed list, or the route would take a key the count does not know.
+  test.each([
+    ["", { ok: true, total: 6, whole: true }, 200],
+    ["?kind=sites", { ok: true, total: 4, whole: true }, 200],
+    ["?site=notes", { ok: true, total: 2, whole: true }, 200],
+    ["?kind=access&site=notes", { ok: true, total: 0, whole: true }, 200],
+    ["?kind=everything", { ok: false, code: "bad_argument", about: "kind", sentence: "The value of kind is not one it takes." }, 400],
+    ["?after=3", { ok: false, code: "bad_argument", about: "after", sentence: "The value of after is not one it takes." }, 400],
+  ])("under %p is %j", async (query, answer, status) => {
+    const { opened } = await openWithHistory();
+    const response = await opened.get(`/data/activity/total${query}`);
+
+    expect([response.status, await response.json()]).toEqual([status, answer]);
+  });
+
+  // Drift: the count is of the install's whole history; without a session it would tell a stranger how busy the install is.
+  test("is answered to nobody without a session", async () => {
+    const opened = await openConsole();
+
+    expect((await opened.getLoggedOut("/data/activity/total")).status).toBe(401);
   });
 });

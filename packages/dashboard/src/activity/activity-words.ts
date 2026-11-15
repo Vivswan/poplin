@@ -13,6 +13,9 @@ export const KINDS = [
   { value: "settings", label: "Settings" },
 ] as const;
 
+/** The key of the address that holds the number of a page's first entry. */
+export const FROM_KEY = "from";
+
 /** The orders of the log: by when an entry was written, the newest first in a table nobody sorted. */
 const ACTIVITY_ORDERS: Orders = { first: { when: "desc" }, unsorted: { key: "when", descending: true } };
 
@@ -91,12 +94,22 @@ export function whatOf(entry: Pick<Entry, "action" | "detail">): string {
 }
 
 /**
+ * Write the log's query with some of it changed. A change that names no place of a page starts at the first one, and a page is reached from the one ahead of it or the one after it, never both.
+ *
+ * @param changes - the keys to set; an empty value takes a key away
+ * @returns a new query
+ */
+export function logQuery(query: URLSearchParams, changes: Readonly<Record<string, string>>): URLSearchParams {
+  return queryWith(query, "back" in changes ? changes : { back: "", ...changes });
+}
+
+/**
  * Write the query of the log from its first page, in another order.
  *
  * @param next - the order a press on a heading leads to; `undefined` for none, which is the newest first
  */
 export function sortedQuery(query: URLSearchParams, next: Sort | undefined): URLSearchParams {
-  return queryWith(query, sortKeys(next, ACTIVITY_ORDERS));
+  return logQuery(query, sortKeys(next, ACTIVITY_ORDERS));
 }
 
 /** The words of a page that holds no entry. */
