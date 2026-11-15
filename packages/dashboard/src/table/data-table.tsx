@@ -436,9 +436,11 @@ function announcementsOf<Row>(specs: ReadonlyMap<string, ColumnSpec<Row>>): Anno
  * The menu that chooses a table's columns.
  *
  * It lists the fixed column as always shown, the others in the order they stand, and the way back to the layout the table starts with.
+ * A table that shows every column it has from the start draws no menu: there is nothing to choose.
  */
 export function ColumnsMenu<Row>({ columns, layout }: { readonly columns: readonly ColumnSpec<Row>[]; readonly layout: TableLayout }): ReactNode {
   const ordered = layout.order.flatMap((id) => columns.filter((column) => column.id === id));
+  if (!columns.some((column) => column.hidden === true)) return null;
 
   return (
     <DropdownMenu>
