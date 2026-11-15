@@ -52,6 +52,7 @@ async function draw(access: string, allowed: boolean): Promise<void> {
           onAsk={() => undefined}
           closeLink={<a href="/">Close</a>}
           onClose={() => undefined}
+          opener={() => undefined}
           onMoved={() => undefined}
         />
       </TooltipProvider>

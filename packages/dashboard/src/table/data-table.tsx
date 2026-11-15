@@ -284,6 +284,7 @@ function HeadCell<Row>({
 }
 
 function BodyRow<Row>({
+  id,
   row,
   cells,
   spare,
@@ -291,6 +292,7 @@ function BodyRow<Row>({
   onOpen,
   actions,
 }: {
+  readonly id: string;
   readonly row: Row;
   readonly cells: readonly ColumnSpec<Row>[];
   readonly spare: boolean;
@@ -312,6 +314,7 @@ function BodyRow<Row>({
   return (
     <tr
       data-state={selected ? "selected" : undefined}
+      data-opens={onOpen === undefined ? undefined : id}
       tabIndex={onOpen === undefined ? -1 : 0}
       onClick={onClick}
       onKeyDown={onKeyDown}
@@ -489,7 +492,7 @@ export function ColumnsMenu<Row>({ columns, layout }: { readonly columns: readon
     <DropdownMenu>
       <DropdownMenuTrigger render={<Button variant="outline" />}>
         <Columns3Icon data-icon="inline-start" />
-        {/* Beside an open panel the list is narrow: the button keeps its mark and gives its room to the search. */}
+        {/* In a narrow list the button keeps its mark and gives its room to the search. */}
         <span className="@max-xl:sr-only">Columns</span>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-52">
@@ -621,6 +624,7 @@ export function DataTable<Row>({
                       row={row}
                       cells={shown}
                       spare={spare > 0}
+                      id={rowId(row)}
                       selected={rowId(row) === selected}
                       onOpen={onOpen}
                       actions={actions?.(row)}

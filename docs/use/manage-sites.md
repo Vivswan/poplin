@@ -48,7 +48,7 @@ Every other example runs the same way, with `npx` before `poplin`.
 | Press                         | Does                                                       |
 | ----------------------------- | ---------------------------------------------------------- |
 | a site's title                | opens the site in a new tab; not for a site in the trash   |
-| the rest of its row           | opens its panel; a second press closes it                  |
+| the rest of its row           | opens its panel; a second press, or one beside it, closes  |
 | the eye after the link        | shows the id, which is hidden as dots, and hides it again  |
 | Copy the link                 | copies the whole link, a hidden id included                |
 | Open the site                 | opens the site in a new tab                                |

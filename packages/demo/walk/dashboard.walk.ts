@@ -467,7 +467,7 @@ async function tickSite(page: Page): Promise<void> {
   await page.keyboard.press("Escape");
 }
 
-/** The panel of the sample site: beside the table on a wide screen, over the list on a narrow one. */
+/** The panel of the sample site: over the end of the table on a wide screen, in the list's place on a narrow one. */
 function panel(page: Page): Locator {
   return page.getByRole("dialog", { name: SAMPLE.site, exact: true });
 }
@@ -628,25 +628,56 @@ test.describe("on a screen 1920 px wide", () => {
   });
 });
 
-test.describe("on a screen 1440 px wide, beside a site's panel", () => {
+test.describe("on a screen 1440 px wide, under a site's panel", () => {
   test.use({ viewport: VIEWPORTS[0] });
 
-  // Drift: the panel takes the room of a column, and the table would scroll sideways again with the end of its last column under the rows' actions; or the name in a link would be cut while dots still stand for more than a few letters of its id.
-  test("the sites fit their room: the dots of a hidden id give, each name stays whole, and no cell lies under the rows' actions", async ({ page }) => {
+  // Drift: an open panel would take a column's room from the table again, which was then laid out anew at every open and close; or a press beside the panel would leave it open; or a press on another row would only close it.
+  test("the table keeps its width under the panel, a press on another row moves the panel to that site, and a press beside the panel closes it", async ({ page }) => {
     await arrive(page);
+    const table = page.getByRole("table", { name: "Sites", exact: true });
+    const width = async (): Promise<number> => Math.round((await table.boundingBox())?.width ?? Number.NaN);
+    const without = await width();
+
     await openPanel(page, SAMPLE.site);
     await expect(panel(page).getByRole("heading", { name: SAMPLE.site, exact: true })).toBeVisible();
-    await sitesFit(page);
+    expect(await width()).toBe(without);
 
-    const links = await page.getByRole("table", { name: "Sites", exact: true }).evaluate((table) => {
-      const parts = [...table.querySelectorAll<HTMLElement>("[data-gives]")];
-      const names = parts.filter((part) => part.matches(".truncate"));
-      // The dots that find no room stand in a line under the first, which is not shown.
-      const dots = parts.filter((part) => !part.matches(".truncate")).map((part) => part.firstElementChild);
+    await openPanel(page, SAMPLE.graphed);
+    await expect(page.getByRole("dialog", { name: SAMPLE.graphed, exact: true })).toBeVisible();
+    await expect(panel(page)).toHaveCount(0);
 
-      return { cutNames: names.filter((name) => name.scrollWidth > name.clientWidth).length, fewerDots: dots.some((row) => (row?.scrollHeight ?? 0) > (row?.clientHeight ?? 0)) };
-    });
-    expect(links).toEqual({ cutNames: 0, fewerDots: true });
+    await page.getByRole("searchbox", { name: "Find a site", exact: true }).click();
+    await expect(page.getByRole("dialog")).toHaveCount(0);
+    expect(await width()).toBe(without);
+  });
+
+  // Drift: Escape would leave the focus in the search again after the panel was told to stay once, at a press on another row or on a result's button: the library gives no focus back after a close it was refused.
+  test("the focus is back on the row of the site whose panel Escape closed, after the panel moved from another row, came back by the browser's Back, and after Undo was pressed", async ({ page }) => {
+    await arrive(page);
+    const row = (name: string): Locator => page.getByRole("row").filter({ has: page.locator(`[data-slot="site-name"][title=${JSON.stringify(name)}]`) });
+    const moved = page.getByRole("dialog", { name: SAMPLE.graphed, exact: true });
+
+    await openPanel(page, SAMPLE.site);
+    await openPanel(page, SAMPLE.graphed);
+    await moved.getByRole("heading", { name: SAMPLE.graphed, exact: true }).click();
+    await pressEscape(page);
+    await expect(row(SAMPLE.graphed)).toBeFocused();
+
+    // The panel that Back brings up again was opened by no press: its site's row still takes the focus, not the row pressed last.
+    await openPanel(page, SAMPLE.site);
+    await openPanel(page, SAMPLE.graphed);
+    await page.goBack();
+    await panel(page).getByRole("heading", { name: SAMPLE.site, exact: true }).click();
+    await pressEscape(page);
+    await expect(row(SAMPLE.site)).toBeFocused();
+
+    await openPanel(page, SAMPLE.site);
+    await panel(page).getByRole("switch", { name: "Allow embedding", exact: true }).click();
+    await lines(page).getByRole("button", { name: "Undo", exact: true }).click();
+    await expect(lines(page).filter({ hasText: "Put back." })).toBeVisible();
+    await panel(page).getByRole("heading", { name: SAMPLE.site, exact: true }).click();
+    await pressEscape(page);
+    await expect(row(SAMPLE.site)).toBeFocused();
   });
 });
 
