@@ -7,6 +7,7 @@
 //   token-refused, unreachable                       no table, only the refusal
 //
 // The console's plug is one that changes: its first check finds pieces to repair, a repair mends them, and every run after finds them in place.
+// A repair with the token `lacking` mends one piece and fails at the other for a right the token lacks; that piece stays to repair until a token that has the right.
 
 import type { DomainPlug, DomainReading, DomainRow, DomainState, FirstRun } from "../../../app/src/console/domain/records";
 
@@ -52,6 +53,18 @@ const REFUSALS: Partial<Record<PlugState, Extract<DomainReading, { ok: false }>[
 /** The tokens the changing plug answers with a refusal, so that each refusal can be seen: it takes any other. */
 const REFUSED_TOKENS: Readonly<Record<string, Extract<DomainReading, { ok: false }>["refusal"]>> = { wrong: "token", offline: "unreachable" };
 
+/** The pieces of the changing plug that start broken. */
+const BROKEN = [
+  { place: 1, found: "missing", mended: "created" },
+  { place: 5, found: "differs", mended: "changed" },
+] as const;
+
+/** The token that lacks a right one piece needs: a repair with it goes on past that piece, whose row names the right. */
+const LACKING_TOKEN = "lacking";
+
+/** The piece the lacking token cannot change, and the right it lacks. */
+const LACKED = { place: 5, right: "Login: Edit", detail: "the logins of the settings: the token lacks a right. Add this right to the token: Login: Edit" } as const;
+
 /** The place of the optional piece among the objects, and what its row says while the token lacks its right. */
 const OPTIONAL_ROW = { place: 6, detail: "sample-rate-rule: add this right to the token and press Repair: Rules: Edit" } as const;
 
@@ -94,20 +107,24 @@ function repaired(state: PlugState): DomainReading {
   return table(rows("present"));
 }
 
-/** The rows of the changing plug: the optional piece waits for its right, and two pieces are as `broken` says. */
-function changing(broken: readonly [DomainState, DomainState] | undefined): DomainReading {
-  const found = rows("present", broken === undefined ? {} : { 1: broken[0], 5: broken[1] });
+/** The rows of the changing plug, with the pieces `others` names in its states. */
+function changing(others: Readonly<Record<number, DomainState>>): DomainReading {
+  return table(
+    rows("present", others).map((row, place) => {
+      if (place === OPTIONAL_ROW.place) return { ...row, state: "optional", detail: OPTIONAL_ROW.detail };
 
-  return table(found.map((row, place) => (place === OPTIONAL_ROW.place ? { ...row, state: "optional", detail: OPTIONAL_ROW.detail } : row)));
+      return row.state === "failed" ? { ...row, detail: LACKED.detail, right: LACKED.right } : row;
+    }),
+  );
 }
 
 /**
- * Build a plug whose install a repair mends: a check before it finds two pieces to repair, the repair says what it did, and every run after finds each piece in place.
+ * Build a plug whose install a repair mends: a check finds the pieces still broken, a repair says what it did to each, and every run after finds a mended piece in place.
  *
- * @returns a plug that refuses the token `wrong`, does not answer for the token `offline`, and takes any other
+ * @returns a plug that refuses the token `wrong`, does not answer for the token `offline`, fails one piece of a repair for the token `lacking`, and takes any other
  */
 export function changingPlug(): DomainPlug {
-  let mended = false;
+  const broken = new Set<number>(BROKEN.map((piece) => piece.place));
   const answer =
     (run: "check" | "repair"): DomainPlug["check"] =>
     async (token, settings) => {
@@ -115,13 +132,13 @@ export function changingPlug(): DomainPlug {
       if (refusal !== undefined) return { ok: false, refusal };
 
       await settings();
-      if (mended) return changing(undefined);
+      const left = BROKEN.filter((piece) => broken.has(piece.place));
+      if (run === "check") return changing(Object.fromEntries(left.map((piece) => [piece.place, piece.found])));
 
-      if (run === "check") return changing(["missing", "differs"]);
+      const lacked = (place: number): boolean => token === LACKING_TOKEN && place === LACKED.place;
+      for (const piece of left.filter((one) => !lacked(one.place))) broken.delete(piece.place);
 
-      mended = true;
-
-      return changing(["created", "changed"]);
+      return changing(Object.fromEntries(left.map((piece) => [piece.place, lacked(piece.place) ? "failed" : piece.mended])));
     };
 
   return { ...TOKEN_FORM, guardNotes: NOTES, check: answer("check"), repair: answer("repair") };
