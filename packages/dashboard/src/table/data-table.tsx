@@ -71,11 +71,11 @@ const TABLE_LOOK = "mb-2.5 table-fixed border-separate border-spacing-0 text-sm"
 /** The look of the last column, which stays in place: it has a hairline at its left edge only while the table is wider than its room, where a cell scrolls under it. The scroll area says when that is. */
 const PINNED_LOOK = "sticky right-0 in-data-[has-overflow-x]:border-l";
 
-/** The look of a row that holds the focus after a key: a ring drawn by its cells, so the cells that stay in place carry it too, where they would lie over a ring of the row's own. */
+/** The look of a row that holds the focus after a key, or whose own button does, which is out of sight: a ring drawn by its cells, so the cells that stay in place carry it too, where they would lie over a ring of the row's own. */
 const FOCUSED_ROW_LOOK = cn(
-  "outline-none focus-visible:[&>td]:shadow-[inset_0_2px_0_var(--ring),inset_0_-2px_0_var(--ring)]",
-  "focus-visible:[&>td:first-child]:shadow-[inset_2px_0_0_var(--ring),inset_0_2px_0_var(--ring),inset_0_-2px_0_var(--ring)]",
-  "focus-visible:[&>td:last-child]:shadow-[inset_-2px_0_0_var(--ring),inset_0_2px_0_var(--ring),inset_0_-2px_0_var(--ring)]",
+  "outline-none [&:is(:focus-visible,:has([data-opens]:focus-visible))>td]:shadow-[inset_0_2px_0_var(--ring),inset_0_-2px_0_var(--ring)]",
+  "[&:is(:focus-visible,:has([data-opens]:focus-visible))>td:first-child]:shadow-[inset_2px_0_0_var(--ring),inset_0_2px_0_var(--ring),inset_0_-2px_0_var(--ring)]",
+  "[&:is(:focus-visible,:has([data-opens]:focus-visible))>td:last-child]:shadow-[inset_-2px_0_0_var(--ring),inset_0_2px_0_var(--ring),inset_0_-2px_0_var(--ring)]",
 );
 
 /** The look of a heading while it is dragged to another place. */
@@ -111,6 +111,15 @@ export interface Sort {
   readonly descending: boolean;
 }
 
+/** What a row opens, and the name of the button that opens it. */
+interface Opens<Row> {
+  /** The button's name for a row, such as "Details of Notes". */
+  readonly name: (row: Row) => string;
+
+  /** Opens what the row leads to. */
+  readonly open: (row: Row) => void;
+}
+
 /** What a table is drawn from. */
 interface DataTableProps<Row> {
   /** What the table lists, for a screen reader. */
@@ -137,8 +146,8 @@ interface DataTableProps<Row> {
   /** The id of the row whose detail is open. */
   readonly selected?: string;
 
-  /** Called when a row is pressed anywhere but on its own controls. Left out, a row opens nothing. */
-  readonly onOpen?: (row: Row) => void;
+  /** What a row opens: `open` is called when a row is pressed anywhere but on its own controls, and by the button each row then starts with, which `name` names for the row, such as "Details of Notes". Left out, a row opens nothing. */
+  readonly opens?: Opens<Row>;
 
   /** What sits at a row's end: its menu and its quick actions. Left out, the table has no such column. */
   readonly actions?: (row: Row) => ReactNode;
@@ -289,7 +298,7 @@ function BodyRow<Row>({
   cells,
   spare,
   selected,
-  onOpen,
+  opens,
   actions,
 }: {
   readonly id: string;
@@ -297,37 +306,31 @@ function BodyRow<Row>({
   readonly cells: readonly ColumnSpec<Row>[];
   readonly spare: boolean;
   readonly selected: boolean;
-  readonly onOpen?: (row: Row) => void;
+  readonly opens?: Opens<Row>;
   readonly actions?: ReactNode;
 }): ReactNode {
   const onClick = (event: MouseEvent): void => {
-    if (!(event.target as Element).closest(OWN_CONTROLS)) onOpen?.(row);
-  };
-  // Enter or Space opens the row while the row itself holds the focus, not one of its controls.
-  const onKeyDown = (event: KeyboardEvent): void => {
-    if (onOpen === undefined || event.target !== event.currentTarget || (event.key !== "Enter" && event.key !== " ")) return;
-
-    event.preventDefault();
-    onOpen(row);
+    if (!(event.target as Element).closest(OWN_CONTROLS)) opens?.open(row);
   };
 
   return (
     <tr
       data-state={selected ? "selected" : undefined}
-      data-opens={onOpen === undefined ? undefined : id}
-      tabIndex={onOpen === undefined ? -1 : 0}
+      data-opens={opens === undefined ? undefined : ""}
+      tabIndex={opens === undefined ? -1 : undefined}
       onClick={onClick}
-      onKeyDown={onKeyDown}
       onMouseOver={hintWhenCut}
       onFocus={hintWhenCut}
       className={cn(
         "group/row bg-background hover:bg-muted has-[:focus-visible]:bg-muted data-[state=selected]:bg-chosen data-[state=selected]:has-[:focus-visible]:bg-chosen [&>td]:border-b",
         FOCUSED_ROW_LOOK,
-        onOpen !== undefined && "cursor-pointer focus-visible:bg-muted",
+        opens !== undefined && "cursor-pointer",
       )}
     >
-      {cells.map((spec) => (
+      {cells.map((spec, at) => (
         <td key={spec.id} className={cn("h-11 bg-inherit px-3 py-0", spec.fixed === true && "sticky left-0 z-10 pl-6", spec.numeric === true && "text-right")}>
+          {/* The row's own button is its first control and is out of sight: a press anywhere on the row does the same, and the row draws the ring while the button holds the focus. */}
+          {at === 0 && opens !== undefined ? <Button variant="ghost" data-opens={id} aria-label={opens.name(row)} className="sr-only" onClick={() => opens.open(row)} /> : null}
           <div className="truncate">{spec.cell(row)}</div>
         </td>
       ))}
@@ -531,7 +534,7 @@ export function DataTable<Row>({
   sort,
   onSort,
   selected,
-  onOpen,
+  opens,
   actions,
   actionsWidth = ICON_ACTIONS_WIDTH,
   loading = false,
@@ -626,7 +629,7 @@ export function DataTable<Row>({
                       spare={spare > 0}
                       id={rowId(row)}
                       selected={rowId(row) === selected}
-                      onOpen={onOpen}
+                      opens={opens}
                       actions={actions?.(row)}
                     />
                   ))}

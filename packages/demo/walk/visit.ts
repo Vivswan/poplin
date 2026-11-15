@@ -58,15 +58,11 @@ export function siteName(page: Page, name: string): Locator {
 /** Open a site's panel: a press on its row beside the title. A wide screen's row says there who can open the site; a narrow screen's row has a button of its own under its words. */
 export async function openPanel(page: Page, name: string): Promise<void> {
   const list = page.getByRole("region", { name: "Sites", exact: true });
-  const details = list.getByRole("button", { name: `Details of ${name}`, exact: true });
-  // The button lies under the row's words and controls: the press lands in the row's own corner, where nothing lies over it.
-  if (await details.isVisible()) return details.click({ position: { x: 6, y: 6 } });
+  const row = list.getByRole("row").filter({ has: page.locator(`[data-slot="site-name"][title=${JSON.stringify(name)}]`) });
+  if (await row.isVisible()) return row.getByText(/^(Private|Unlisted|Public)$/).click();
 
-  await list
-    .getByRole("row")
-    .filter({ has: page.locator(`[data-slot="site-name"][title=${JSON.stringify(name)}]`) })
-    .getByText(/^(Private|Unlisted|Public)$/)
-    .click();
+  // On a phone the button lies under the row's words and controls: the press lands in the row's own corner, where nothing lies over it.
+  await list.getByRole("listitem").getByRole("button", { name: `Details of ${name}`, exact: true }).click({ position: { x: 6, y: 6 } });
 }
 
 /** The line that says a change was done or refused, by its words. */

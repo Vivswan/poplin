@@ -710,7 +710,7 @@ test.describe("on a screen 1440 px wide, under a site's panel", () => {
   // Drift: Escape would leave the focus in the search again after the panel was told to stay once, at a press on another row or on a result's button: the library gives no focus back after a close it was refused.
   test("the focus is back on the row of the site whose panel Escape closed, after the panel moved from another row, came back by the browser's Back, and after Undo was pressed", async ({ page }) => {
     await arrive(page);
-    const row = (name: string): Locator => page.getByRole("row").filter({ has: page.locator(`[data-slot="site-name"][title=${JSON.stringify(name)}]`) });
+    const row = (name: string): Locator => page.getByRole("row").getByRole("button", { name: `Details of ${name}`, exact: true });
     const moved = page.getByRole("dialog", { name: SAMPLE.graphed, exact: true });
 
     await openPanel(page, SAMPLE.site);
@@ -734,6 +734,32 @@ test.describe("on a screen 1440 px wide, under a site's panel", () => {
     await panel(page).getByRole("heading", { name: SAMPLE.site, exact: true }).click();
     await pressEscape(page);
     await expect(row(SAMPLE.site)).toBeFocused();
+  });
+
+  // Drift: a site's panel would open from the table at a press on the row alone again, with no control a key or a reader finds: a row with the focus has no role and no name.
+  test("each site's row starts with a button named for the site, which opens the panel at Enter and takes the focus back", async ({ page }) => {
+    await arrive(page);
+    const details = page.getByRole("row").getByRole("button", { name: `Details of ${SAMPLE.site}`, exact: true });
+
+    await details.press("Enter");
+    await expect(panel(page).getByRole("heading", { name: SAMPLE.site, exact: true })).toBeFocused();
+    await pressEscape(page);
+    await expect(details).toBeFocused();
+  });
+
+  // Drift: the focus would go under the panel and out of sight again: the end of each row lies under the panel, and a row's controls keep the panel open.
+  test("a focus that reaches a row's control under the panel closes the panel and stays there; one on a row's control beside the panel keeps it open", async ({ page }) => {
+    await arrive(page);
+    const beside = page.getByRole("row").getByRole("button", { name: `Details of ${SAMPLE.graphed}`, exact: true });
+    const under = page.getByRole("row").getByRole("button", { name: `More for ${SAMPLE.graphed}`, exact: true });
+
+    await openPanel(page, SAMPLE.site);
+    await beside.focus();
+    await expect(panel(page)).toBeVisible();
+
+    await under.focus();
+    await expect(page.getByRole("dialog")).toHaveCount(0);
+    await expect(under).toBeFocused();
   });
 });
 
@@ -1024,9 +1050,9 @@ test("after a change the focus is where the next key is of use: the panel's head
 test("a site's row that takes the focus from a key draws a ring on all four sides, by its cells", async ({ page }) => {
   await arrive(page);
   const row = page.getByRole("table", { name: "Sites", exact: true }).locator("tbody > tr").first();
-  // A key before the focus is what tells the engine to show it.
+  // A key before the focus is what tells the engine to show it. The row's own button takes the focus, and the row draws the ring for it.
   await page.keyboard.press("Tab");
-  await row.focus();
+  await row.getByRole("button", { name: /^Details of /u }).focus();
 
   const edges = await row.evaluate((focused) => [...focused.children].map((cell) => getComputedStyle(cell).boxShadow.split("inset").length - 1));
   expect({ first: edges.at(0), between: [...new Set(edges.slice(1, -1))], last: edges.at(-1) }).toEqual({ first: 3, between: [2], last: 3 });
