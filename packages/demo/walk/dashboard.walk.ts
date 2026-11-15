@@ -650,6 +650,35 @@ test.describe("on a screen 1440 px wide, under a site's panel", () => {
     await expect(page.getByRole("dialog")).toHaveCount(0);
     expect(await width()).toBe(without);
   });
+
+  // Drift: Escape would leave the focus in the search again after the panel was told to stay once, at a press on another row or on a result's button: the library gives no focus back after a close it was refused.
+  test("the focus is back on the row of the site whose panel Escape closed, after the panel moved from another row, came back by the browser's Back, and after Undo was pressed", async ({ page }) => {
+    await arrive(page);
+    const row = (name: string): Locator => page.getByRole("row").filter({ has: page.locator(`[data-slot="site-name"][title=${JSON.stringify(name)}]`) });
+    const moved = page.getByRole("dialog", { name: SAMPLE.graphed, exact: true });
+
+    await openPanel(page, SAMPLE.site);
+    await openPanel(page, SAMPLE.graphed);
+    await moved.getByRole("heading", { name: SAMPLE.graphed, exact: true }).click();
+    await pressEscape(page);
+    await expect(row(SAMPLE.graphed)).toBeFocused();
+
+    // The panel that Back brings up again was opened by no press: its site's row still takes the focus, not the row pressed last.
+    await openPanel(page, SAMPLE.site);
+    await openPanel(page, SAMPLE.graphed);
+    await page.goBack();
+    await panel(page).getByRole("heading", { name: SAMPLE.site, exact: true }).click();
+    await pressEscape(page);
+    await expect(row(SAMPLE.site)).toBeFocused();
+
+    await openPanel(page, SAMPLE.site);
+    await panel(page).getByRole("switch", { name: "Allow embedding", exact: true }).click();
+    await lines(page).getByRole("button", { name: "Undo", exact: true }).click();
+    await expect(lines(page).filter({ hasText: "Put back." })).toBeVisible();
+    await panel(page).getByRole("heading", { name: SAMPLE.site, exact: true }).click();
+    await pressEscape(page);
+    await expect(row(SAMPLE.site)).toBeFocused();
+  });
 });
 
 test.describe("on a phone, while a line says a result", () => {

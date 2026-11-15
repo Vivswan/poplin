@@ -284,6 +284,7 @@ function HeadCell<Row>({
 }
 
 function BodyRow<Row>({
+  id,
   row,
   cells,
   spare,
@@ -291,6 +292,7 @@ function BodyRow<Row>({
   onOpen,
   actions,
 }: {
+  readonly id: string;
   readonly row: Row;
   readonly cells: readonly ColumnSpec<Row>[];
   readonly spare: boolean;
@@ -312,7 +314,7 @@ function BodyRow<Row>({
   return (
     <tr
       data-state={selected ? "selected" : undefined}
-      data-opens={onOpen === undefined ? undefined : ""}
+      data-opens={onOpen === undefined ? undefined : id}
       tabIndex={onOpen === undefined ? -1 : 0}
       onClick={onClick}
       onKeyDown={onKeyDown}
@@ -622,6 +624,7 @@ export function DataTable<Row>({
                       row={row}
                       cells={shown}
                       spare={spare > 0}
+                      id={rowId(row)}
                       selected={rowId(row) === selected}
                       onOpen={onOpen}
                       actions={actions?.(row)}

@@ -4,7 +4,7 @@
 import { Dialog } from "@base-ui/react/dialog";
 import { cn } from "cn";
 import { XIcon } from "lucide-react";
-import { type KeyboardEvent, type ReactElement, type ReactNode, useRef, useState } from "react";
+import { type ReactElement, type ReactNode, useRef, useState } from "react";
 
 import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
@@ -28,6 +28,9 @@ interface SidePanelProps {
 
   /** What Escape does: the move back to the list. */
   readonly onClose: () => void;
+
+  /** Finds what opens this panel in the list, such as the row of its thing: it takes the focus when the panel closes. Where it finds nothing the screen gives the focus a place. */
+  readonly opener: () => HTMLElement | undefined;
 
   /** The words of the way back to the list, such as "Back to sites": what a screen reader is told Close does. */
   readonly back: string;
@@ -132,24 +135,14 @@ export function PanelLoading(): ReactNode {
   );
 }
 
-/**
- * Close a panel at the first Escape pressed on anything inside it: a hint that is open on the control in focus would take the press for itself otherwise.
- *
- * A press inside something the panel opened over the page, such as a menu, is that thing's own.
- */
-function closesAtEscape(onClose: () => void): (event: KeyboardEvent<HTMLElement> & { preventBaseUIHandler?: () => void }) => void {
-  return (event) => {
-    if (event.key !== "Escape" || !event.currentTarget.contains(event.target as Node)) return;
-
-    event.preventBaseUIHandler?.();
-    event.stopPropagation();
-    onClose();
-  };
-}
-
 /** Whether something lies over the page that takes every key for itself, such as a question: the library hides the rest of the page from assistive technology for as long. */
 function liesUnder(place: HTMLElement): boolean {
   return place.closest('[aria-hidden="true"]') !== null;
+}
+
+/** Whether a panel that closes leaves the focus on nothing: it was in the panel, or on the page itself. A focus a person moved elsewhere stays there. */
+function leftBy(place: HTMLElement): boolean {
+  return document.activeElement === document.body || place.contains(document.activeElement);
 }
 
 /**
@@ -166,11 +159,12 @@ function closes({ reason, event }: Dialog.Root.ChangeEventDetails): boolean {
 }
 
 /**
- * Draw a panel: the library's dialog without its modal layer, drawn into its own place in the page and never over it, so nothing is dimmed and the rest of the page stays in use.
+ * Draw a panel: the library's dialog without its modal layer, drawn into its own place in the page, so nothing is dimmed and the rest of the page stays in use.
  *
- * It moves the focus to the heading, closes on Escape, and gives the focus back. Over the end of its list it is set off by a hairline and a soft shadow, and a press beside it closes it; where it has the row to itself it lies in the list's place.
+ * It moves the focus to the heading, closes on Escape, and gives the focus back to its opener, though not after a close it was refused: the screen then finds the focus its place.
+ * Over the end of its list it is set off by a hairline and a soft shadow, and a press beside it closes it; where it has the row to itself it lies in the list's place.
  */
-export function SidePanel({ title, closeLink, onClose, back, beside, children }: SidePanelProps): ReactNode {
+export function SidePanel({ title, closeLink, onClose, opener, back, beside, children }: SidePanelProps): ReactNode {
   const [place, setPlace] = useState<HTMLElement | null>(null);
   const heading = useRef<HTMLHeadingElement>(null);
   const liesOver = useLiesOver();
@@ -189,8 +183,8 @@ export function SidePanel({ title, closeLink, onClose, back, beside, children }:
           <Dialog.Portal container={place} className="flex min-h-0 flex-1 flex-col">
             <Dialog.Popup
               initialFocus={heading}
+              finalFocus={() => (leftBy(place) && opener()) || false}
               {...kept}
-              onKeyDownCapture={closesAtEscape(onClose)}
               className="line-room flex min-h-0 flex-1 flex-col overflow-y-auto outline-none"
             >
               {/* Over its list the heading stands on the line of the list's tools, and the first hairline under it where the list's tools end. */}
