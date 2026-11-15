@@ -9,6 +9,7 @@ import { parseCommand } from "../packages/cli/src/commands/parse-command";
 import { problem } from "../packages/cli/src/commands/problems";
 import { TOOLS } from "../packages/cli/src/mcp/tools";
 import { words } from "../packages/cli/tests/commands/support/command-line";
+import { readPage } from "./support/markdown-page";
 
 /** The repository this file sits in. */
 const ROOT = join(import.meta.dir, "..");
@@ -20,7 +21,7 @@ const PAGES: readonly string[] = ["README.md", "docs/README.md", "docs/using.md"
 const USING_PAGE = "docs/using.md";
 
 /** The heading the tables of refusals follow on that page. */
-const REFUSALS_HEADING = "## When poplin refuses";
+const REFUSALS_HEADING = "When poplin refuses";
 
 /** The files of the OpenTofu module that declare its inputs and outputs. */
 const MODULE_FILES: readonly string[] = ["packages/cloudflare/tofu/variables.tf", "packages/cloudflare/tofu/outputs.tf"];
@@ -36,9 +37,6 @@ const USAGE_CODE = "usage-error";
 
 /** A moment before every day an example names, so `--expires 2026-12-01` is read the same on any day the test runs. */
 const NOW = Date.UTC(2026, 0, 1);
-
-/** A code span, with its text as the first group. */
-const SPAN = /`([^`\n]+)`/g;
 
 /** A command line of the CLI at the start of a line or a span, after a prompt and `npx` when they are there; the command is the first group. */
 const COMMAND_LINE = /^\s*(?:\$ )?(?:npx )?(poplin [^\n]*)$/;
@@ -67,8 +65,8 @@ const MODULE_VALUE = /^\s*([a-z_]+)\s*=/gm;
 /** What a module block sets that is no input of the module. */
 const MODULE_SOURCE = "source";
 
-/** The first cell of a table row that holds code spans alone: one, or several with commas between. */
-const CODE_CELL = /^\| *(`[a-z_-]+`(?:, *`[a-z_-]+`)*) *\|/gm;
+/** What a table cell holds beside its codes when it holds codes alone: the commas between them. */
+const BETWEEN_CODES = /^[\s,]*$/;
 
 /** An input or an output of the module, with its name as the first group. */
 const MODULE_NAME = /^(?:variable|output) "([a-z_]+)"/gm;
@@ -79,13 +77,13 @@ const MODULE_INPUT = /^variable "([a-z_]+)"/gm;
 /** A code of the CLI's table of problems. */
 type Code = Parameters<typeof problem>[0];
 
-/** What a page holds, as Bun's Markdown parser reads it. */
+/** What a page holds of code, as Bun's Markdown parser reads it. */
 interface Page {
   /** The text of every code span, table cells included. */
-  readonly spans: string[];
+  readonly spans: readonly string[];
 
   /** The text of every fenced block. */
-  readonly blocks: string[];
+  readonly blocks: readonly string[];
 }
 
 async function read(root: string, path: string): Promise<string> {
@@ -93,26 +91,9 @@ async function read(root: string, path: string): Promise<string> {
 }
 
 async function parse(root: string, path: string): Promise<Page> {
-  const page: Page = { spans: [], blocks: [] };
+  const { spans, blocks } = readPage(await read(root, path));
 
-  Bun.markdown.render(
-    await read(root, path),
-    {
-      codespan: (text) => {
-        page.spans.push(text);
-
-        return "";
-      },
-      code: (text) => {
-        page.blocks.push(text);
-
-        return "";
-      },
-    },
-    { tables: true },
-  );
-
-  return page;
+  return { spans, blocks: blocks.map((block) => block.text) };
 }
 
 function groups(text: string, pattern: RegExp): string[] {
@@ -225,8 +206,10 @@ describe("the pages a person reads", () => {
   });
 
   test("every code in the tables of refusals is one the CLI answers with: without this a renamed code stays in the table a person looks a refusal up in", async () => {
-    const [, tables = ""] = (await read(ROOT, USING_PAGE)).split(REFUSALS_HEADING);
-    const codes = groups(tables, CODE_CELL).flatMap((cell) => groups(cell, SPAN));
+    const { headings, rows } = readPage(await read(ROOT, USING_PAGE));
+    const above = 1 + headings.findIndex((heading) => heading.text === REFUSALS_HEADING);
+    const cells = rows.flatMap((row) => (above > 0 && row.below >= above ? (row.cells[0] ?? []) : []));
+    const codes = cells.flatMap((cell) => (BETWEEN_CODES.test(cell.rest) ? cell.spans : []));
 
     expect(codes.length).toBeGreaterThan(0);
     expect(codes.filter((code) => code !== USAGE_CODE && !isCode(code))).toEqual([]);
