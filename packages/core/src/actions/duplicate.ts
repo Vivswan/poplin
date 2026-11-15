@@ -24,8 +24,11 @@ import { reachSite } from "./reach";
 import { type Install, type Refused, refuse } from "./records";
 import { discardUpload, isWithinReach, missingFiles, uploadKey } from "./uploads";
 
-/** The most calls to the database and the store one call makes: the smallest plan of a host ends a request that makes more. */
-const CALL_BUDGET = 50;
+/** The most calls to the database and the store one request that copies makes, whoever asks: six under the 50 past which the smallest plan of a host ends a request, so a count that is off by a few still fits. */
+const CALL_BUDGET = 44;
+
+/** The most calls to the database a host makes of its own in a request that starts it, which any request of a copy may be. */
+const START_CALLS = 4;
 
 /** The most calls to the database before any file is copied: three to reach the source, and one to record the upload or to read it. */
 const STAGE_CALLS = 4;
@@ -92,18 +95,19 @@ interface Staged {
 type StagedNow = Staged & { readonly fresh: boolean };
 
 /**
- * How many files one call copies: as many as the call budget leaves beside the database's calls, the count of the day's listings, and the listings, at a read and a write each.
+ * How many files one call copies: as many as the call budget leaves beside the host's start, the caller's own calls, the database's calls, the count of the day's listings, and the listings, at a read and a write each.
  *
  * A copy of up to one list page of files is finished, and so listed again, in the call that copies its last file; a longer one is finished in a call of its own.
  *
  * @param files - how many files the copy holds
- * @returns 15 up to a thousand files, 20 up to two thousand, and one fewer for every two thousand more: 16 for ten thousand
+ * @param asking - the calls to the database the request made before this action, to learn who asks
+ * @returns for a caller that made one call: 9 up to a thousand files, 14 up to three thousand, and one fewer for every two thousand more: 10 for ten thousand
  */
-function copiesPerCall(files: number): number {
+function copiesPerCall(files: number, asking: number): number {
   const pages = Math.ceil(files / MAX_LIST_LIMIT) + SPARE_PAGES;
   const finishing = files > MAX_LIST_LIMIT ? 0 : FINISH_CALLS + pages;
 
-  return Math.floor((CALL_BUDGET - STAGE_CALLS - COUNT_CALLS - pages - finishing) / COPY_CALLS);
+  return Math.floor((CALL_BUDGET - START_CALLS - asking - STAGE_CALLS - COUNT_CALLS - pages - finishing) / COPY_CALLS);
 }
 
 /**
@@ -249,9 +253,9 @@ async function stageCopy(
  *
  * A copy whose source no longer holds a file is given up and its files removed. So is one this call began that finishing refused.
  */
-async function advanceCopy(install: Install, actor: Actor, staged: StagedNow): Promise<Copying | Duplicated | Refused<DuplicateCode>> {
+async function advanceCopy(install: Install, actor: Actor, staged: StagedNow, asking: number): Promise<Copying | Duplicated | Refused<DuplicateCode>> {
   const { upload, missing } = staged;
-  const batch = missing.slice(0, copiesPerCall(upload.files));
+  const batch = missing.slice(0, copiesPerCall(upload.files, asking));
 
   if (!(await copyFiles(install, upload, batch))) {
     await discardUpload(install, upload);
@@ -279,6 +283,7 @@ async function advanceCopy(install: Install, actor: Actor, staged: StagedNow): P
  * It takes the source's typed title, its page's own title, and its search-engine and frame settings. Its expiry is a new site's, from `default_expires`: the source's is not copied.
  * The install's limits bound it as they bound a publish.
  * @param request - `site` is a reference to the source; `name` goes with the first call alone, and `upload` with every later one
+ * @param asking - the calls to the database the caller's request made before this action, to learn who asks: they are taken off the calls one request may make
  * @returns the copy's progress, and the new site once every file is copied; `no_such_version` when the source stopped keeping the version meanwhile. Every refusal left no site behind
  * @throws {Error} the store or the database failed; a copy just begun is given up, and one named by `upload` stays to be gone on with
  */
@@ -286,12 +291,13 @@ export async function duplicateSite(
   install: Install,
   actor: Actor,
   request: v.InferInput<typeof DUPLICATE_REQUEST> & { readonly site: string },
+  asking: number,
 ): Promise<Copying | Duplicated | Refused<DuplicateCode>> {
   const staged = await stageCopy(install, actor, request);
   if (!staged.ok) return staged;
 
   try {
-    return await advanceCopy(install, actor, staged);
+    return await advanceCopy(install, actor, staged, asking);
   } catch (error) {
     // An upload that became a site meanwhile is left as it is.
     if (staged.fresh) await discardUpload(install, staged.upload);

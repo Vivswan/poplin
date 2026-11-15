@@ -123,10 +123,10 @@ describe("finishPublish", () => {
     const report = await finishPublish(world.install, OWNER, await staged(world, { name: "report" }, ["index.html", "about.html"]));
     if (!report.ok) throw new Error(`the fixture publish was refused: ${report.code}`);
 
-    const copied = await duplicateSite(world.install, OWNER, { site: report.site.id });
+    const copied = await duplicateSite(world.install, OWNER, { site: report.site.id }, 1);
     const over = await beginPublish(world.install, OWNER, { name: "two", files: pages(["index.html", "about.html"]) });
     const last = await beginPublish(world.install, OWNER, { name: "two", files: [PAGE] });
-    const copy = await duplicateSite(world.install, OWNER, { site: report.site.id });
+    const copy = await duplicateSite(world.install, OWNER, { site: report.site.id }, 1);
     world.clock.now += DAY;
     const tomorrow = await beginPublish(world.install, OWNER, { name: "three", files: pages(["index.html", "about.html"]) });
 
@@ -146,9 +146,9 @@ describe("finishPublish", () => {
     const report = await finishPublish(world.install, OWNER, await staged(world, { name: "report" }, ["index.html", "about.html"]));
     if (!report.ok) throw new Error(`the fixture publish was refused: ${report.code}`);
 
-    const copied = await duplicateSite(world.install, OWNER, { site: report.site.id });
+    const copied = await duplicateSite(world.install, OWNER, { site: report.site.id }, 1);
     const four = await beginPublish(world.install, OWNER, { name: "four", files: pages(4) });
-    const copy = await duplicateSite(world.install, OWNER, { site: report.site.id });
+    const copy = await duplicateSite(world.install, OWNER, { site: report.site.id }, 1);
     const three = await beginPublish(world.install, OWNER, { name: "three", files: pages(3) });
     const one = await beginPublish(world.install, OWNER, { name: "one", files: pages(1) });
     const counted = await world.install.database.readStorageWrites(day);

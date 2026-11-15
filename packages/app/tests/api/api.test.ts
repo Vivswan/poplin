@@ -555,13 +555,13 @@ describe("createApi", () => {
     expect<number[]>([others.status, own.status, (await asOwner.whoami.$get({ query: {} })).status]).toEqual([403, 200, 401]);
   });
 
-  // Drift: a host ends a request that makes more than 50 calls to the database and the store, and the route reads the token before the action runs. A fixed count handed to the action copied fewer files than fit.
+  // Drift: a host ends a request that makes more than 50 calls, and the route reads the token first, in a request that may also start the host. A copy told nothing of that passes 50 on a host that just started.
   test.each([
     [1, 1],
-    [48, 4],
-    [300, 20],
-    [1_001, 52],
-  ])("a copy of %i files through the route is whole after %i requests, none of which makes more than 50 calls to the database and the store", async (count, requests) => {
+    [48, 6],
+    [300, 34],
+    [1_001, 73],
+  ])("a copy of %i files through the route is whole after %i requests, none of which makes more than 40 calls to the database and the store: the 44 a copy is held to, less the 4 of a host's start", async (count, requests) => {
     const install = await openApi({}, { fileBytes: 64, files: 10_000, manifestBytes: 2_000_000 });
     const files = Array.from({ length: count }, (_page, at) => ({ path: at === 0 ? "index.html" : `pages/${at}.html`, size: 1, contentType: "text/html", open: () => new Blob(["x"]).stream() }));
     const source = await publishSite(installOf(install), { scope: "admin", holder: "ada@example.com" as Login }, { name: "report", files });
@@ -580,7 +580,7 @@ describe("createApi", () => {
       site = step.body.site;
     }
 
-    expect([spent.length, spent.filter((calls) => calls > 50)]).toEqual([requests, []]);
+    expect([spent.length, spent.filter((calls) => calls > 40)]).toEqual([requests, []]);
   });
 });
 
