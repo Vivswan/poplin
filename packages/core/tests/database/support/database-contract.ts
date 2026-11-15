@@ -1441,6 +1441,38 @@ function auditLog(label: string, makeDatabase: DatabaseFactory): void {
       ]);
     });
 
+    // Drift: the total the Activity screen shows is this count; one that counted past its bound would read a long log whole, and one that called a cut count exact would show a wrong total.
+    test("a count keeps the narrowing of a page and reads no further back than it is told, saying when the log goes on", async () => {
+      const database = await opened(makeDatabase);
+      const report = await made(database, draft(REPORT));
+      await database.appendAudit({ action: "login", detail: {} }, { by: BO, at: NOW });
+      await made(database, draft(DOCS));
+      await database.trashSite(report.id, { by: BO, at: NOW + 1 });
+
+      expect([
+        await database.countAudit({ most: 5 }),
+        await database.countAudit({ most: 100, actions: ["create"] }),
+        await database.countAudit({ most: 100, site: "o" }),
+        await database.countAudit({ most: 100, actions: ["login"], site: "o" }),
+        await database.countAudit({ most: 100, actions: [] }),
+        await database.countAudit({ most: 4 }),
+        await database.countAudit({ most: 3 }),
+        await database.countAudit({ most: 2, actions: ["create"] }),
+        await database.countAudit({ most: 1, actions: ["create"] }),
+      ]).toEqual([
+        { count: 4, whole: true },
+        { count: 2, whole: true },
+        { count: 3, whole: true },
+        { count: 0, whole: true },
+        { count: 0, whole: true },
+        { count: 4, whole: false },
+        { count: 3, whole: false },
+        { count: 1, whole: false },
+        { count: 0, whole: false },
+      ]);
+      await expect(database.countAudit({ most: 0 })).rejects.toThrow(RangeError);
+    });
+
     // Drift: a listing oldest first pages by the same cursor as one newest first; a cursor read the wrong way round, or a filter dropped in one direction, would repeat a page or skip the entries between two pages.
     test.each([
       ["every entry", {}, "desc", [["trash docs", "login"], ["trash report", "create docs"], ["login", "create report"], ["create abc"]]],

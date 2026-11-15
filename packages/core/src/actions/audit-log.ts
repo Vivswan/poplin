@@ -13,6 +13,9 @@ const MAX_PAGE = 100;
 /** The most characters a site's name holds: a longer text is in no name. */
 const MAX_NAME = 40;
 
+/** How far back a count of the log reads: a log of more entries is counted as this many and more. */
+const MOST_COUNTED = 10_000;
+
 /** What a reading of the log may ask for. */
 export const AUDIT_QUERY = v.strictObject({
   limit: v.optional(v.pipe(POSITIVE, v.maxValue(MAX_PAGE)), MAX_PAGE),
@@ -21,6 +24,9 @@ export const AUDIT_QUERY = v.strictObject({
   kind: v.optional(v.picklist(AUDIT_KINDS)),
   site: v.optional(v.pipe(v.string(), v.minLength(1), v.maxLength(MAX_NAME))),
 });
+
+/** What a count of the log may ask for: the narrowing of a reading. */
+export const AUDIT_COUNT_QUERY = v.strictObject({ kind: AUDIT_QUERY.entries.kind, site: AUDIT_QUERY.entries.site });
 
 /**
  * Read one page of the audit log, the newest entry first, or the oldest first when asked.
@@ -44,4 +50,26 @@ export async function listAudit(
   const actions = kind === undefined ? undefined : actionsOf(kind);
 
   return { ok: true, entries: await install.database.listAudit({ limit, after, dir, actions, site }) };
+}
+
+/**
+ * Count the entries of the audit log, or those a narrowing keeps, reading at most the newest 10,000 entries.
+ *
+ * @param query - `kind` and `site` narrow the count as they narrow a reading
+ * @returns `count`, exact when `whole` and otherwise the least it can be, since the log holds as many entries as were read, or more; `not_allowed` for anyone but an admin, or `bad_argument` naming the key that was refused
+ */
+export async function countAudit(
+  install: Install,
+  actor: Actor,
+  query: v.InferInput<typeof AUDIT_COUNT_QUERY> = {},
+): Promise<{ readonly ok: true; readonly count: number; readonly whole: boolean } | Refused<"not_allowed" | "bad_argument">> {
+  if (actor.scope !== "admin") return refuse("not_allowed");
+
+  const asked = v.safeParse(AUDIT_COUNT_QUERY, query);
+  if (!asked.success) return refuse("bad_argument", v.getDotPath(asked.issues[0]) ?? "query");
+
+  const { kind, site } = asked.output;
+  const actions = kind === undefined ? undefined : actionsOf(kind);
+
+  return { ok: true, ...(await install.database.countAudit({ most: MOST_COUNTED, actions, site })) };
 }

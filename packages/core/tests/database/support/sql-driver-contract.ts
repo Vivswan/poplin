@@ -390,7 +390,7 @@ function storedRows(label: string, makeDriver: DriverFactory): void {
 function queryPlans(label: string, makeDriver: DriverFactory): void {
   describe(`${label}: how the engine runs each statement`, () => {
     // Drift: D1 bills and limits by rows read; one statement that walks a whole table costs a row per site on every request.
-    test("no statement of any operation walks the sites table, or any table but the token list and the logins: every lookup and every page goes through a key or an index", async () => {
+    test("no statement of any operation walks the sites table, or any table but the token list, the logins, and the newest entries a count of the log is held to: every lookup and every page goes through a key or an index", async () => {
       const inner = await migrated(makeDriver);
       const driver = new RecordingDriver(inner);
       const database = new SqlDatabase(driver);
@@ -434,6 +434,7 @@ function queryPlans(label: string, makeDriver: DriverFactory): void {
       await database.listAudit({ limit: 10 });
       await database.listAudit({ limit: 10, dir: "asc" });
       await database.listAudit({ limit: 10, dir: "asc", after: 1 });
+      await database.countAudit({ most: 10, actions: ["login"], site: "report" });
       const created = await begunSite(database, draft(REPORT));
       const updated = await begunVersion(database, imported.kind === "done" ? imported.site : site);
       await database.getUpload(created.id);
@@ -475,11 +476,13 @@ function queryPlans(label: string, makeDriver: DriverFactory): void {
       }
 
       // The token list hands back every row it walks, and the sweep walks the logins, which the room keeps few. An import walks the list of versions it was given, and a new login the visitors its own count gave: neither is a table.
-      // The ledger holds one row a step.
+      // The ledger holds one row a step. A count of the log walks its newest entries, as many as it is told, and then what it read of them.
       expect([exported.sites, imported.kind, again.kind, redeemed.kind, swept]).toEqual([[], "done", "done", "done", 1]);
       expect(driver.statements.length).toBeGreaterThan(105);
       expect(scans).toEqual([
         'SCAN tokens USING INDEX tokens_by_creation <- select "id", "hash", "scope", "note", "created_at", "expires_at" from "tokens" order by "tokens"."created_at" desc, "tokens"."id" desc',
+        'SCAN audit <- select count(*) as "seen", coalesce(sum("kept"), 0) as "found" from (select ("audit"."action" in (?) and instr("audit"."site_name", ?) > 0) as "kept" from "audit" order by "audit"."seq" desc limit ?) "newest"',
+        'SCAN newest <- select count(*) as "seen", coalesce(sum("kept"), 0) as "found" from (select ("audit"."action" in (?) and instr("audit"."site_name", ?) > 0) as "kept" from "audit" order by "audit"."seq" desc limit ?) "newest"',
         'SCAN logins USING INDEX logins_by_visitor <- delete from "logins" where "logins"."expires_at" <= ?',
         "SCAN schema_steps <- SELECT * FROM schema_steps ORDER BY step",
       ]);

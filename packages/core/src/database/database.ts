@@ -294,6 +294,27 @@ export interface AuditQuery {
   readonly site?: string;
 }
 
+/** Which entries of the audit log a count is of, and how far into the log it reads. */
+export interface AuditCountQuery {
+  /** How many entries the count reads at the most, from the newest back; at least 1. */
+  readonly most: number;
+
+  /** Only the entries of these actions; every entry when absent. */
+  readonly actions?: readonly AuditAction[];
+
+  /** Only the entries about a site whose name then held this text; every entry when absent. */
+  readonly site?: string;
+}
+
+/** How many entries of the audit log a count found. */
+export interface AuditCount {
+  /** The entries found among those read. */
+  readonly count: number;
+
+  /** Whether the log ended before the count had read its most: `count` is then exact, and otherwise the least it can be, since the log may go on. */
+  readonly whole: boolean;
+}
+
 /** An entry for the audit log that goes with no change, such as a login. */
 export interface AuditNote {
   readonly action: AuditAction;
@@ -692,6 +713,14 @@ export interface Database {
    * @throws {RangeError} `limit` is not a whole number from 1 to 100
    */
   listAudit(query: AuditQuery): Promise<readonly AuditEntry[]>;
+
+  /**
+   * Count the entries of the audit log a narrowing keeps, reading no further back than the newest `most` entries, so a long log costs no more than `most` rows.
+   *
+   * @returns the count, and whether the whole log was read
+   * @throws {RangeError} `most` is not a whole number of at least 1
+   */
+  countAudit(query: AuditCountQuery): Promise<AuditCount>;
 
   /**
    * Add requests, and the page views among them, to a day's count of one site and of all sites together, and drop the counts of every day more than a year before it. No audit entry is written.

@@ -3,7 +3,7 @@
 // A change is one batch: the statement that changes a row carries its own condition, and each statement after it runs only when the one before it changed a row.
 // So a change and its audit entry are kept together or not at all, and nothing is decided from an earlier read.
 
-import { and, asc, desc, eq, exists, getTableName, gt, inArray, isNotNull, isNull, lt, lte, ne, notExists, or, type SQL, sql as fragment } from "drizzle-orm";
+import { and, asc, count, desc, eq, exists, getTableName, gt, inArray, isNotNull, isNull, lt, lte, ne, notExists, or, type SQL, sql as fragment, sum } from "drizzle-orm";
 import { alias, type SQLiteColumn, type SQLiteTable } from "drizzle-orm/sqlite-core";
 import { drizzle } from "drizzle-orm/sqlite-proxy";
 import * as v from "valibot";
@@ -15,7 +15,7 @@ import type { PublicName, SiteName } from "../names/names";
 import { type AuditAction, type AuditEntry, auditFromRow } from "../records/audit";
 import type { DomainCheck } from "../records/domain-check";
 import { computerLoginFromRow } from "../records/computer-login";
-import { LOGIN, SITE_ID, SITE_NAME } from "../records/fields";
+import { COUNT, LOGIN, SITE_ID, SITE_NAME } from "../records/fields";
 import { SETTING_CHANGES, SETTING_VALUES, type SettingValues } from "../records/settings";
 import { signingKeyFromRow, signingKeyToText, type UpdateAddress, updateAddressFromRow } from "../records/secret";
 import { NEW_SITE, SITE_DETAILS, SITE_FOLDER, type Site, type SiteAccess, type SiteFolder, siteFromRow, siteToRow } from "../records/site";
@@ -28,6 +28,8 @@ import { type ManifestFile, type Upload, type UploadId, uploadFromRow } from "..
 import type { VersionContents } from "../records/version-contents";
 import { type DailyViews, dayOf, daysUpTo, KEPT_DAYS, MOST_SITES_COMPARED, type SiteViews, viewDays } from "../records/views";
 import type {
+  AuditCount,
+  AuditCountQuery,
   AuditQuery,
   Address,
   AuditNote,
@@ -70,6 +72,9 @@ const MAX_PAGE = 100;
 
 /** Where a page of the audit log starts when no page came before it: past the newest entry, and ahead of the oldest. */
 const AUDIT_START = { desc: Number.MAX_SAFE_INTEGER, asc: 0 } as const;
+
+/** What a count of the audit log answers: the entries it read, and those among them the narrowing keeps. */
+const AUDIT_COUNT_ROW = v.object({ seen: COUNT, found: COUNT });
 
 /** Where statements are built from the declared schema. None is run here: each goes to the driver, in a batch. */
 const BUILD = drizzle(() => Promise.reject(new Error("a statement is run by the driver, in a batch")));
@@ -301,6 +306,11 @@ function storedDetails(given: SiteDetails): Partial<Pick<typeof sites.$inferInse
     ...(given.embeddable === undefined ? {} : { embeddable: given.embeddable ? 1 : 0 }),
     ...(given.expires === undefined ? {} : { expires_at: given.expires === "never" ? null : given.expires }),
   };
+}
+
+/** The condition an entry of the audit log meets to be about a site whose name then held a text; `undefined` when no text is asked. */
+function auditAbout(site: string | undefined): SQL | undefined {
+  return site === undefined ? undefined : fragment`instr(${audit.site_name}, ${site}) > 0`;
 }
 
 /** A statement written with the template, for what the builder has no word for. */
@@ -1409,12 +1419,26 @@ export class SqlDatabase implements Database {
     const conditions = [
       dir === "desc" ? lt(audit.seq, start) : gt(audit.seq, start),
       query.actions === undefined ? undefined : fragment`${audit.action} IN (SELECT value FROM json_each(${JSON.stringify(query.actions)}))`,
-      query.site === undefined ? undefined : fragment`instr(${audit.site_name}, ${query.site}) > 0`,
+      auditAbout(query.site),
     ];
     const page = BUILD.select().from(audit).where(and(...conditions)).orderBy(dir === "desc" ? desc(audit.seq) : asc(audit.seq)).limit(query.limit);
     const [listed] = await this.#driver.batch([built(page)]);
 
     return (listed?.rows ?? []).map(auditFromRow);
+  }
+
+  async countAudit(query: AuditCountQuery): Promise<AuditCount> {
+    if (!Number.isSafeInteger(query.most) || query.most < 1) throw new RangeError(`a count reads at least 1 entry, not ${query.most}`);
+
+    // The actions are named one by one: a list read from JSON would be charged as a row for every entry it is held against.
+    const kept = and(query.actions === undefined ? undefined : inArray(audit.action, [...query.actions]), auditAbout(query.site)) ?? fragment`1`;
+    const newest = BUILD.select({ kept: fragment<number>`${kept}`.as("kept") }).from(audit).orderBy(desc(audit.seq)).limit(query.most).as("newest");
+    const tally = BUILD.select({ seen: count().as("seen"), found: fragment`coalesce(${sum(newest.kept)}, 0)`.as("found") }).from(newest);
+    const [counted] = await this.#driver.batch([built(tally)]);
+    const { seen, found } = v.parse(AUDIT_COUNT_ROW, counted?.rows[0]);
+
+    // A log of as many entries as were read may go on behind them.
+    return { count: found, whole: seen < query.most };
   }
 
   async addRequests(counted: CountedRequests): Promise<RequestCounts> {
