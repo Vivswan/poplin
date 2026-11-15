@@ -98,11 +98,11 @@ Two words the steps use: a **Worker** is the program Cloudflare runs for you, an
    11 repaired
    The login is ready. Open your dashboard and log in: https://poplin.example.com
 
-   Piece                State                  Detail
-   DNS record           created                poplin.example.com
-   Worker route         created                poplin.example.com/*
-   Access application   created                poplin: poplin.example.com/login, *-p-poplin.example.com
-   WAF rule             not set up: optional   ... add this right to the token and press Repair: Zone WAF: Edit
+   Piece                State      Detail
+   DNS record           created    poplin.example.com
+   Worker route         created    poplin.example.com/*
+   Access application   created    poplin: poplin.example.com/login, *-p-poplin.example.com
+   WAF rule             optional   ... add this right to the token and press Repair: Zone WAF: Edit
    ```
 
    **It worked when** the page says `The login is ready.` The sample shows a few of the rows, and your counts may differ. `repaired` counts the rows Repair made. The page calls a permission a right. The token is used for that one request and kept nowhere. Repair is safe to repeat.

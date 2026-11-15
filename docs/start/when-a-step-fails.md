@@ -47,15 +47,15 @@ after every run:   the token's box is empty    paste the token again
 
 | The page says                                                            | Means                                                               | Do                                                                         |
 | ------------------------------------------------------------------------ | ------------------------------------------------------------------- | -------------------------------------------------------------------------- |
-| `Token refused.`                                                         | Cloudflare does not take the token, or it does not reach the domain | paste the whole text of step 3; check its Account and Zone Resources       |
+| `Token refused`, and what to paste                                       | Cloudflare does not take the token, or it does not reach the domain | paste the whole text of step 3; check its Account and Zone Resources       |
 | `The token shows no domain of that name.`                                | the domain is mistyped, not Active, or not the token's zone         | correct the Domain box, or edit the token's Zone Resources                 |
-| `The domain is no domain. Type it alone, such as example.com.`           | the box holds more than a domain, or one over 50 characters long    | type the domain alone; a longer domain cannot hold an install              |
-| `The email is no email address.`                                         | the email is mistyped                                               | type it again                                                              |
+| `Type a domain alone, such as example.com.`                              | the box holds more than a domain, or one over 50 characters long    | type the domain alone; a longer domain cannot hold an install              |
+| `Type an email address, such as name@example.com.`                       | the email is mistyped                                               | type it again                                                              |
 | `No answer from the provider. Try again.`                                | Cloudflare gave no answer, or asked to wait                         | press Repair again in a minute                                             |
 | `Too many tries. Wait a minute.`                                         | the page takes five tries a minute                                  | wait a minute                                                              |
 | `The database takes no more today`, and when to try again                | the day's free allowance of the database is used up                 | try again after midnight UTC                                               |
 | `Open Zero Trust and pick a plan (Free works): that switches Access on.` | Zero Trust is not switched on: the first row of step 1              | open the link beside that line, pick the Free plan, then press Repair      |
-| a row `not set up: optional`                                             | nothing is wrong: an optional permission is not on the token        | nothing, or [the optional part](../run/domain.md#optional-block-junk-traffic-and-crawlers) |
+| a row `optional`                                                         | nothing is wrong: an optional permission is not on the token        | nothing, or [the optional part](../run/domain.md#optional-block-junk-traffic-and-crawlers) |
 | a row `failed` that ends with `Add this right to the token` and a name   | the token lacks the permission of that name                         | add it to the token: the table below                                       |
 | a row `failed` with other words, and rows `not run`                      | that one step failed, and the row says why                          | do what the row asks, then press Repair again; a row that asks nothing: Repair again |
 

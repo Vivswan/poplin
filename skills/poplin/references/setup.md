@@ -155,7 +155,7 @@ Ask the user to copy you the lines the page shows above its table. They hold no 
 | --------------------------------------------------- | ------------------- | ------------------------------------------ |
 | a count that is repaired, or `Nothing to repair`    | the install is made | part e                                     |
 | a count that is not done, or that is to repair      | a row needs work    | ask for those rows, then the install guide |
-| one sentence and no table, such as `Token refused.` | the run was refused | the install guide                          |
+| one sentence and no table, such as `Token refused`  | the run was refused | the install guide                          |
 
 For rows that need work, ask the user to copy each row whose State is failed, missing, differs, or not run, with its Detail, and any line with a link above the table. Look the words up in the table under step 4 of the [install guide](https://github.com/Vivswan/poplin/blob/main/docs/start/when-a-step-fails.md#step-4-the-page-shows-something-else).
 

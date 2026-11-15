@@ -182,7 +182,7 @@ describe("a run", () => {
       ok: false,
       code: "token",
       about: "token",
-      sentence: "Token refused. Paste the whole token, made for this account and this domain.",
+      sentence: "Token refused: paste the whole token, made for this account and this domain.",
     });
     expect([reads.count, (await opened.audit()).length - before, body.includes(FOREIGN), body.includes("other@example.com")]).toEqual([0, 0, false, false]);
   });

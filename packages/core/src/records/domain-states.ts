@@ -6,7 +6,7 @@ const DOMAIN_STATE_WORDS: Readonly<Record<string, string>> = {
   missing: "missing",
   differs: "differs",
   "left-out": "left out",
-  optional: "not set up: optional",
+  optional: "optional",
   created: "created",
   changed: "changed",
   removed: "removed",

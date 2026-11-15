@@ -67,9 +67,9 @@ describe("poplin setup", () => {
     expect([json.code, jsonOf(json)]).toEqual([1, { run: "repair", rows: [{ object: "Login", state: "missing", detail: "the login is off for the account" }], steps: reading.steps, expects: "ada@example.com" }]);
   });
 
-  // Drift: a state is a word of the wire, and a terminal that printed it raw would say `optional` where the Domain screen says the object is not set up and need not be.
+  // Drift: a state is a word of the wire, and a terminal that printed it raw would say `left-out` where the Domain screen says `left out`.
   test.each([
-    ["optional", "not set up: optional"],
+    ["optional", "optional"],
     ["left-out", "left out"],
     ["not-run", "not run"],
     ["present", "present"],

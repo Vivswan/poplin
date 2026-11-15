@@ -55,7 +55,7 @@ The install works without this part. Three more permissions on the token let Clo
 | 2    | the token's form                   | for each row above, press Add more and choose in its three boxes; then save |
 | 3    | the dashboard, Domain              | press Repair, paste the token, and press Repair in the dialog               |
 
-A row that said `not set up: optional` now says what Repair did, such as `created`.
+A row that said `optional` now says what Repair did, such as `created`.
 
 Three settings save without these permissions. The dashboard has them in Settings, under Visitors. What Cloudflare does for each starts once you press Repair, in step 3 of this table.
 

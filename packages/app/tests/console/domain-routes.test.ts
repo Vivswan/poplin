@@ -146,7 +146,7 @@ describe("a run", () => {
 
   // Drift: a refusal would lose its status, its sentence, or the box it belongs at, or would write an audit entry for a run that read nothing.
   test.each([
-    ["token", 403, "token", "Token refused. Paste the whole token, made for this account and this domain."],
+    ["token", 403, "token", "Token refused: paste the whole token, made for this account and this domain."],
     ["unreachable", 502, null, "No answer from the provider. Try again."],
     ["allowance_spent", 503, null, "The database takes no more today: its free allowance for the day is used up. Try again after midnight UTC."],
   ] as const)("that reads no table is the refusal %s: status %i, about %p", async (refusal, status, about, sentence) => {
@@ -203,7 +203,7 @@ describe("the line that counts a run's rows", () => {
   // Drift: an optional piece that is not set up would read as a failure.
   test("draws an optional piece as idle, in the words the install guide quotes", () => {
     expect(runDone("check", { ok: true, rows: rowsIn("optional"), steps: [] }).rows).toEqual([
-      { piece: "Piece 0", state: "not set up: optional", tone: "idle", detail: "detail 0" },
+      { piece: "Piece 0", state: "optional", tone: "idle", detail: "detail 0" },
     ]);
   });
 });
