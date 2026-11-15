@@ -199,7 +199,7 @@ export function ActivityScreen(): ReactNode {
     if (name === undefined || name === site) return null;
 
     return (
-      <span className="inline-flex opacity-0 group-focus-within/row:opacity-100 group-hover/row:opacity-100 pointer-coarse:opacity-100">
+      <span className="inline-flex opacity-60 group-focus-within/row:opacity-100 group-hover/row:opacity-100 pointer-coarse:opacity-100">
         <IconButton label="Only this site" onClick={() => move({ site: name })}>
           <ListFilterIcon />
         </IconButton>
