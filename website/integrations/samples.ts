@@ -1,19 +1,9 @@
-import { cpSync, existsSync, readFileSync, statSync } from "node:fs";
-import { join, normalize, sep } from "node:path";
+import { cpSync, existsSync, readFileSync } from "node:fs";
+import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { AstroIntegration } from "astro";
 import { Parser } from "htmlparser2";
-import mime from "mime";
-
-/** The file a request path names inside `folder`, or undefined when it names none or points outside it. */
-function fileFor(folder: string, urlPath: string): string | undefined {
-  const inside = normalize(join(folder, decodeURIComponent(urlPath.split("?")[0] ?? "")));
-  if (inside !== folder && !inside.startsWith(folder + sep)) {
-    return undefined;
-  }
-  const file = existsSync(inside) && statSync(inside).isDirectory() ? join(inside, "index.html") : inside;
-  return existsSync(file) ? file : undefined;
-}
+import sirv from "sirv";
 
 /** The stylesheets, scripts, and images a page loads from its own folder, as the paths it names. */
 function localFiles(html: string): string[] {
@@ -36,24 +26,13 @@ function localFiles(html: string): string[] {
  * stops the build.
  */
 export function samplesIntegration(samplesDir: string, only: string): AstroIntegration {
-  const folder = normalize(join(samplesDir, only));
-  let mount = `/sample/${only}`;
+  const folder = join(samplesDir, only);
   return {
     name: "poplin-samples",
     hooks: {
-      "astro:config:done": ({ config }) => {
-        mount = `${config.base.replace(/\/$/, "")}/sample/${only}`;
-      },
       "astro:server:setup": ({ server }) => {
-        server.middlewares.use(mount, (request, response, next) => {
-          const file = fileFor(folder, request.url ?? "/");
-          if (file === undefined) {
-            next();
-            return;
-          }
-          response.setHeader("Content-Type", mime.getType(file) ?? "application/octet-stream");
-          response.end(readFileSync(file));
-        });
+        const base = server.config.base.replace(/\/$/, "");
+        server.middlewares.use(`${base}/sample/${only}`, sirv(folder, { dev: true }));
       },
       "astro:build:done": ({ dir }) => {
         if (!existsSync(join(folder, "index.html"))) {
