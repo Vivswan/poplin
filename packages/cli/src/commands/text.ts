@@ -1,5 +1,7 @@
 // How the commands word a count, a day, a table, and a site, so every command prints them alike.
 
+import stringWidth from "string-width";
+
 import type { ROUTES } from "../../../core/src/api/routes";
 
 /** How many characters of an ISO moment are its day. */
@@ -29,7 +31,7 @@ export function countText(count: number, noun: string): string {
 }
 
 /**
- * Lay rows out in columns, each as wide as its longest cell.
+ * Lay rows out in columns, each as wide as its widest cell, measured in the cells of a terminal: a letter of Chinese takes two.
  *
  * @returns one line per row, with no trailing space
  */
@@ -38,13 +40,13 @@ export function columns(rows: readonly (readonly string[])[]): string[] {
 
   for (const row of rows) {
     row.forEach((cell, at) => {
-      widths[at] = Math.max(widths[at] ?? 0, cell.length);
+      widths[at] = Math.max(widths[at] ?? 0, stringWidth(cell));
     });
   }
 
   return rows.map((row) =>
     row
-      .map((cell, at) => cell.padEnd(widths[at] ?? 0))
+      .map((cell, at) => cell + " ".repeat((widths[at] ?? 0) - stringWidth(cell)))
       .join(GAP)
       .trimEnd(),
   );
