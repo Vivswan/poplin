@@ -1,4 +1,4 @@
-// Scope: the pages a person reads name only commands, flags, tools, tool inputs, refusal codes, settings, and module inputs that exist, and every link into the guide leads to a page and a heading of it. What the prose says is out of scope.
+// Scope: the pages a person reads name only commands, flags, tools, tool inputs, refusal codes, settings, and module inputs that exist; every link into the guide leads to a page and a heading of it; the guide's folders are ranked. Not the prose.
 
 import { describe, expect, test } from "bun:test";
 import { dirname, join, normalize } from "node:path";
@@ -28,6 +28,17 @@ const LINKING_PAGES: readonly string[] = ["README.md", "packages/cloudflare/READ
 
 /** How a page that is read outside the repository writes the address of a guide page: the page on GitHub. */
 const GUIDE_ON_GITHUB = "https://github.com/Vivswan/poplin/blob/main/";
+
+/** The folders of the guide in the order a reader meets them, each with the rank its own page carries. */
+const FOLDER_RANKS: readonly (readonly [folder: string, order: number])[] = [
+  ["start", 1],
+  ["use", 2],
+  ["run", 3],
+  ["about", 4],
+];
+
+/** The front matter of a page: the YAML between the two rules the file opens with. */
+const FRONT_MATTER = /^---\n([\s\S]*?)\n---\n/;
 
 /** The page that lists every tool. */
 const TOOLS_PAGE = "docs/use/agent-tools.md";
@@ -170,6 +181,16 @@ function unknownInputs(tool: string, example: string): string[] {
   return Object.keys(JSON.parse(example)).filter((input) => !taken.includes(input));
 }
 
+/** The rank a folder's own page carries in its front matter; nothing for a folder with no page, or a page with no rank. */
+async function folderRank(root: string, folder: string): Promise<unknown> {
+  const file = Bun.file(join(root, GUIDE_PLACE, folder, "README.md"));
+  if (!(await file.exists())) return undefined;
+
+  const front: unknown = Bun.YAML.parse(FRONT_MATTER.exec(await file.text())?.[1] ?? "");
+
+  return typeof front === "object" && front !== null && "order" in front ? front.order : undefined;
+}
+
 describe("the pages a person reads", () => {
   test("every command line in the pages is one the CLI takes: without this a renamed command or flag stays in an example a person copies", async () => {
     const refusals: string[] = [];
@@ -269,5 +290,13 @@ describe("the pages a person reads", () => {
     expect(await deadLink(ROOT, "docs/start/by-hand.md", "install.md")).toEqual(["no file docs/start/install.md"]);
     expect(await deadLink(ROOT, "skills/poplin/references/setup.md", `${GUIDE_ON_GITHUB}docs/install.md`)).toEqual(["no file docs/install.md"]);
     expect(await deadLink(ROOT, "docs/README.md", "https://example.com/docs/install.md")).toEqual([]);
+  });
+
+  test("every folder of the guide carries its rank, Start, Use, Run, About: without this a new folder lands in the sidebar by its letter, ahead of the page a reader starts on", async () => {
+    const folders = unique(GUIDE_PAGES.flatMap((path) => path.slice(GUIDE_PLACE.length).split("/").slice(0, -1).slice(0, 1)));
+    const ranks = await Promise.all(folders.map(async (folder) => [folder, await folderRank(ROOT, folder)] as const));
+
+    expect(ranks.sort(([, a], [, b]) => Number(a) - Number(b))).toEqual([...FOLDER_RANKS]);
+    expect(await folderRank(ROOT, "no-such-folder")).toBeUndefined();
   });
 });
