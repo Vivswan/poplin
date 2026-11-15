@@ -12,6 +12,9 @@ const VIEWPORTS = [
   { width: 390, height: 844, wide: false },
 ] as const;
 
+/** The narrow one of them alone: a phone. */
+const PHONE = { width: VIEWPORTS[1].width, height: VIEWPORTS[1].height };
+
 /** The schemes a browser asks for. The dashboard follows the browser until a theme is chosen with the switch at the top. */
 const SCHEMES = ["light", "dark"] as const;
 
@@ -318,6 +321,11 @@ function rows(page: Page, wide: boolean, name: string): Locator {
   return page.getByRole(wide ? "table" : "list", { name, exact: true });
 }
 
+/** The lines that say a result, each as the whole box it is drawn in. */
+function lines(page: Page): Locator {
+  return page.getByRole("region", { name: /^Notifications/ }).getByRole("listitem");
+}
+
 /** Choose what the Sites screen is narrowed to. */
 async function narrowSites(page: Page, filter: string): Promise<void> {
   await page.getByRole("combobox", { name: "Which sites", exact: true }).click();
@@ -431,6 +439,27 @@ for (const { width, height, wide } of VIEWPORTS) {
     });
   }
 }
+
+test.describe("on a phone, while a line says a result", () => {
+  test.use({ viewport: PHONE });
+
+  // Drift: a line would lie over the header again, where a pointer that rests on it keeps it there, and no control under it could be pressed.
+  test("the whole line lies under the header, and the button of the sections opens them", async ({ page }) => {
+    await arrive(page);
+    await page.getByRole("button", { name: "Reset", exact: true }).click();
+    await expect(said(page, "Sample data reset.")).toBeVisible({ timeout: RESET_MS });
+
+    // The line slides down into its place, so its place is read until it has come to rest.
+    await expect(async () => {
+      const [header, line] = await Promise.all([page.locator("main > header").boundingBox(), lines(page).filter({ hasText: "Sample data reset." }).boundingBox()]);
+
+      expect(line?.y).toBeGreaterThanOrEqual((header?.y ?? Number.NaN) + (header?.height ?? Number.NaN));
+    }).toPass();
+
+    await page.getByRole("button", { name: "Sections", exact: true }).click();
+    await expect(page.getByRole("navigation", { name: "Sections", exact: true })).toBeVisible();
+  });
+});
 
 // Drift: the figures of a column would be as wide as their shapes again, or come from whatever the visitor's machine has, so its times and numbers would end at different places row by row.
 test("two times of the same length take the same room in the face the dashboard carries, where its own face alone gives each its own", async ({ page }) => {

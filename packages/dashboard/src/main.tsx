@@ -14,8 +14,8 @@ import { Screens } from "@/screens";
 /** How long a pointer rests on a control before its hint shows, in milliseconds. */
 const HINT_AFTER_MS = 400;
 
-/** How far under the top of the screen a line is said, in pixels, on every screen: a line of one row then lies inside the header's band, over no control of a list or a panel. */
-const LINE_TOP = 6;
+/** How far under the top of the screen a line is said: a length the stylesheet sets by the screen's width, so that a line never lies over a control of the header. */
+const LINE_TOP = "var(--line-top)";
 
 /** The look of a line, laid over the library's own: less room above and below its words, so one row is lower than the header. */
 const LINE_LOOK = "cn-toast py-2.5!";

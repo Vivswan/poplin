@@ -165,6 +165,16 @@
   }
 }
 
+/* Where a line that says a result begins, from the top of the screen: inside the header's band on a wide screen, over no control of a list or a panel. A phone's header is controls from edge to edge, so there the line lies under it. */
+:root {
+  --line-top: 6px;
+}
+@media (max-width: 767.98px) {
+  :root {
+    --line-top: calc(3.5rem + 6px);
+  }
+}
+
 /* On a phone every control is tall enough for a finger. The rule sits outside the layers, so it holds whatever size a screen gave the control. */
 @media (max-width: 767.98px) {
   [data-slot="button"],
