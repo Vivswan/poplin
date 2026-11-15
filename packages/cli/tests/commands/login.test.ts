@@ -290,7 +290,9 @@ describe("logIn", () => {
     const [announced = "", result = ""] = ran.out;
 
     expect([ran.code, ran.out.length, JSON.parse(announced)]).toEqual([0, 2, first]);
-    expect(first).toEqual({ verify_url: expect.stringMatching(new RegExp(`^${ORIGIN}/tokens/review/[0-9a-f]{16}$`)), code: expect.stringMatching(new RegExp(`^${CODE.source}$`)), expires_in: 600 });
+    const id = idIn(String(first.verify_url));
+    expect(id).toMatch(/^[0-9a-f]{16}$/);
+    expect(first).toEqual({ verify_url: `${ORIGIN}/tokens/review/${id}`, code: expect.stringMatching(new RegExp(`^${CODE.source}$`)), expires_in: 600 });
     expect(JSON.parse(result)).toMatchObject({ server: ORIGIN, token: { scope: "admin", note: "test-computer" } });
     expect(ran.out.join("\n").match(CREDENTIAL)).toBeNull();
   });
