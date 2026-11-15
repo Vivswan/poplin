@@ -31,7 +31,7 @@ bun run --cwd packages/cloudflare build   # writes packages/cloudflare/dist/work
 | --- | --- |
 | R2 bucket | holds every site's files; its public access is off |
 | R2 bucket lifecycle | ends an upload in parts nobody finished after a day. It deletes no stored file, unless `test_install_file_days` is set |
-| Usage alerts | none by default. With `usage_alert_percents` set, one notification policy per R2 meter and share: Cloudflare emails the `logins` when the account's R2 bytes stored, write operations, or read operations pass that share of the free monthly allowance |
+| Usage alerts | none by default. With `usage_alert_percents` set, one notification policy per R2 meter and share: Cloudflare emails the `logins` when the account's R2 bytes stored, write operations, or read operations pass that share of the free monthly allowance. The product names are unconfirmed |
 | D1 database | holds every record: the sites, the tokens, the settings, the audit log. The module applies no schema: the Worker does when it opens the database |
 | Worker script | serves the sites, the dashboard, the login, and the API; uploaded from the bundle with the bucket, the database, the minute limiter, the zone values, the first settings, the Access application, the account's id, and the Worker's own name bound to it |
 | Worker cron trigger | runs the Worker's sweep every 15 minutes: expired sites go to the trash, and sites past `trash_days` in the trash and uploads nobody finished are removed with their files |
@@ -68,7 +68,7 @@ DNS has no partial wildcard, so the wildcard record covers every name under the 
 
 ## The same objects as the setup page
 
-The setup page's Repair and this module make the same objects with the same values, but for the last three rows, which only this module has. A test holds both to one list, `src/zone/install-pieces.ts`, and a second to one table of values, `src/zone/install-objects.ts`.
+The setup page's Repair and this module make the same objects with the same values, but for the budget alert, which only Repair makes, and the last three rows, which only this module has. A test holds both to one list, `src/zone/install-pieces.ts`, and a second to one table of values, `src/zone/install-objects.ts`.
 
 | Object | The setup page | This module | Where they differ |
 | --- | --- | --- | --- |
@@ -83,8 +83,9 @@ The setup page's Repair and this module make the same objects with the same valu
 | D1 database | Repair, or the deploy | `cloudflare_d1_database.records` | nowhere |
 | R2 bucket, public access off | the deploy; a new bucket has no public address | `cloudflare_r2_bucket.sites`, `cloudflare_r2_managed_domain.sites` | Repair does not read the bucket |
 | Worker and its sweep trigger | the deploy | `cloudflare_workers_script.poplin`, `cloudflare_workers_cron_trigger.sweep` | nowhere |
+| Budget alert | Repair, with the right Notifications: Edit | not made: the provider's `cloudflare_notification_policy` takes neither the alert type `billing_budget_alert` nor its filter `total_spend_dollars` | only Repair makes it. On an install this module made, add the right to an account token and press Repair on the Domain screen |
 | R2 bucket lifecycle | not made: its token has no R2 permission. A new bucket has Cloudflare's own rule, which ends an unfinished upload after seven days | `cloudflare_r2_bucket_lifecycle.sites` | one day here, seven there |
-| Usage alerts | not made: its token has no Notifications permission | `cloudflare_notification_policy.usage` | only this module makes them, and only with `usage_alert_percents` set |
+| Usage alerts | not made | `cloudflare_notification_policy.usage` | only this module makes them, and only with `usage_alert_percents` set |
 | the Free plan check | Repair reads the plan and changes nothing for it | a postcondition of `data.cloudflare_zone.this` | here an apply on a paid plan stops unless `paid_plan_allowed` is true |
 
 ## Names and marks
@@ -224,7 +225,7 @@ The Worker stores the first settings once, while it has none. After that the das
 | Single Redirect: Edit | the zone | the redirect rule |
 | Bot Management: Edit | the zone | the bot settings |
 
-The Domain screen's Check and Repair take two permissions more. Zone Settings: Read on the zone: they read whether the zone's own Always Use HTTPS is on, and write no redirect rule where it is. Access: Organizations, Identity Providers, and Groups: Read on the account: they read the team domain, and compare it and the application's audience tag with the Worker's `ACCESS` binding.
+The Domain screen's Check and Repair take two permissions more, and a third for the budget alert, Notifications: Edit on the account. Zone Settings: Read on the zone: they read whether the zone's own Always Use HTTPS is on, and write no redirect rule where it is. Access: Organizations, Identity Providers, and Groups: Read on the account: they read the team domain, and compare it and the application's audience tag with the Worker's `ACCESS` binding.
 
 ## Update the install
 
@@ -255,6 +256,7 @@ tofu apply
 
 | It does not | Instead |
 | --- | --- |
+| warn when the account's charges reach 1 US dollar | the dashboard's Repair makes that budget alert, with an account token that holds Notifications: Edit: [Domain](../../../docs/run/domain.md#optional-an-email-when-charges-reach-1-dollar). The provider's resource does not take the alert type |
 | stop a write once R2's free allowance is used | Cloudflare has no spending cap on R2. The limits the Worker enforces, `max_total_size` and `max_files_per_day` among them, bound what a publish stores and declares, and the usage alerts, once `usage_alert_percents` is set, tell the logins at the shares it names |
 | delete the files of a dropped version or of a site past its days in the trash | the Worker's sweep does. Every site keeps its files under a folder of random letters, live or dropped alike, so no bucket rule can tell the two apart |
 | read the zone's plan without a warning | the provider marks the zone's `plan` as deprecated, so every plan and apply prints one warning that names `data.cloudflare_zone.this.plan`. The module reads it for the Free plan check, the rate rule, and Bot Fight Mode. The provider's other source of the plan, `cloudflare_zone_subscription`, takes Billing: Read on the account, a permission the module does not ask for |

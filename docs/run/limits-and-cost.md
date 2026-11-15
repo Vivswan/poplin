@@ -30,7 +30,20 @@ On the free Workers plan, a month at the settings a new install starts with stay
 
 Cloudflare's changelog of 2026-11-13 describes spend limits for Workers and Durable Objects. It does not name R2, and it says recorded spend can exceed a limit.
 
-**Your own safety net** is Cloudflare's budget alert: Manage Account, then Billing, then Billable Usage, then Create budget alert. It sends an email when the account's usage-based charges pass the amount you name. It pauses nothing.
+**The warning** is a budget alert in your Cloudflare account. It pauses nothing.
+
+```text
+when     the account's usage charges for the billing period reach 1 US dollar
+who      Cloudflare emails your first user
+made by  Repair, with an account token that also holds Notifications: Edit
+```
+
+| Install | Gets the alert |
+| --- | --- |
+| by the Deploy button or by hand | once you add the permission to the account token and press Repair: [Domain](domain.md#optional-an-email-when-charges-reach-1-dollar) |
+| by the OpenTofu module | the same way. The module makes no budget alert |
+
+Without the permission, Repair makes no alert and fails nothing. You can also make one by hand: Manage Account, then Billing, then Billable Usage, then Create budget alert.
 
 ## What is capped or protected
 
@@ -52,10 +65,11 @@ The limits and alerts below are the protection, and none of them is a cap on wha
 | the bucket's public address | Module: `cloudflare_r2_managed_domain.sites`. A bucket [step 2](../start/by-hand.md#the-steps) made has none | it stays off: files are read through the Worker alone |
 | uploads in parts that nobody finished | Module: `cloudflare_r2_bucket_lifecycle.sites`, after one day. A bucket step 2 made has Cloudflare's own rule, after seven days | Cloudflare removes them. No bucket rule deletes a stored file: a site's live files and its dropped ones sit under the same folder of random letters, so only the Worker removes dropped files |
 | every file of an install that only tests | Module alone: `test_install_file_days`, not set by default | the bucket deletes every file at that age, a live site's included |
-| R2's bytes stored, write operations, and read operations | Module alone, and off until `usage_alert_percents` is set: `cloudflare_notification_policy.usage`. It needs the Notifications permission, and applies on accounts where Cloudflare offers usage alerts | Cloudflare emails the logins at each share of the free allowance the list names. Nothing is stopped |
+| the account's usage charges of a billing period: 1 US dollar | Repair: Budget alert, with the optional permission Notifications: Edit. The module makes none | Cloudflare emails the first user. Nothing is stopped |
+| R2's bytes stored, write operations, and read operations | Module alone, and off until `usage_alert_percents` is set: `cloudflare_notification_policy.usage`. It needs the Notifications permission. Cloudflare's API does not list the product names the alerts are made with, so they are unconfirmed | Cloudflare emails the logins at each share of the free allowance the list names. Nothing is stopped |
 | the domain's plan | Module alone: `paid_plan_allowed` | an apply on a plan other than Free stops with an error, unless the input is true |
 
-Repair is the button on the setup page and the Domain screen. Module is [the OpenTofu module](with-opentofu.md). The rows marked Module alone, and the one-day rule, exist only on an install the module made: the setup page's token holds no permission for R2 or for notifications.
+Repair is the button on the setup page and the Domain screen. Module is [the OpenTofu module](with-opentofu.md). The rows marked Module alone, and the one-day rule, exist only on an install the module made. The budget alert exists only where Repair made it.
 
 ## Where a limit is counted
 

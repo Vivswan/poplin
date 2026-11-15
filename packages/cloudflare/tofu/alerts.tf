@@ -1,4 +1,5 @@
 # The emails Cloudflare sends as R2 uses up its free monthly allowance. R2 has no spending cap, and nothing here stops a write: an alert only tells the logins.
+# The budget alert, at 1 US dollar of usage charges, is not here: the provider's resource takes neither its alert type nor its filter. The dashboard's Repair makes it.
 
 locals {
   # What R2 gives free in a month: the bytes stored, the operations that write or list (class A), and the ones that read (class B).

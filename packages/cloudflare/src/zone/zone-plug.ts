@@ -1,14 +1,15 @@
 // The dashboard's zone plug for Cloudflare: every object of an install read, or made to match, with a token that lives for the one call.
 //
-//   token -> the account's zones -> the zone of the install's domain -> records, routes, Access, the Worker's own variables, https redirect, guard rules, rate rule, bot switches, database
+//   token -> the account's zones -> the zone of the install's domain -> records, routes, Access, the Worker's own variables, https redirect, guard rules, rate rule, bot switches, database, budget alert
 //
 // A token proves itself by showing the install's own zone inside the install's own account; any other token is refused before anything is read.
 // A check is the repair's own code with the changes left unsent, so the two cannot disagree on what a repair would do.
 // The link to the token form carries every permission an install needs. A piece that needs one of the others is no failure without it: its row says which to add.
 
-import type { DomainPlug, DomainReading, DomainRow, DomainSettings, DomainState, DomainStep, ReadSettings, TokenFacts } from "@poplin/app/src/console/domain/records";
-import { type Login, parseLogins } from "@poplin/core/src/auth/logins";
+import type { DomainPlug, DomainReading, DomainRow, DomainState, DomainStep, ReadSettings, TokenFacts } from "@poplin/app/src/console/domain/records";
+import { type Login, type Logins, parseLogins } from "@poplin/core/src/auth/logins";
 import { ACCESS_NOT_ENABLED, isAccessOff, readLoginFacts, syncAccess } from "./access/access";
+import { syncBudgetAlert } from "./alerts/budget-alert";
 import { syncZoneBots } from "./bots/bots";
 import { type Connection, findZones, listZones, type Zone } from "./client";
 import { syncDatabase } from "./database/database";
@@ -84,6 +85,7 @@ const RIGHT = {
   waf: { name: "Zone WAF: Edit", adds: "Cloudflare stops verified bots, scanner paths, pages of other domains, and floods before they reach poplin." },
   bots: { name: "Bot Management: Edit", adds: "Cloudflare blocks AI crawlers on the whole domain, as the block_bots setting says." },
   database: { name: "D1: Edit", key: "d1", type: "edit" },
+  notifications: { name: "Notifications: Edit", adds: "Cloudflare emails your first user when the account's usage charges for the billing period reach 1 US dollar." },
 } as const satisfies Readonly<Record<string, Right>>;
 
 /** The permissions the calls of each object use, the one its changes use first. A piece with no row here, or with none in the list the OpenTofu module is held to, does not compile. */
@@ -99,7 +101,8 @@ const RIGHTS = {
   "Rate rule": [RIGHT.waf],
   "Bot settings": [RIGHT.bots],
   "D1 database": [RIGHT.database],
-} as const satisfies Readonly<Record<keyof typeof INSTALL_PIECES.repair, readonly Right[]>>;
+  "Budget alert": [RIGHT.notifications],
+} as const satisfies Readonly<Record<keyof typeof INSTALL_PIECES.repair | keyof typeof INSTALL_PIECES.repairAlone, readonly Right[]>>;
 
 /** What each object is for: the login guards private sites, a record or a route makes a site answer at its address. A piece with no row here does not compile. */
 const PART: Readonly<Record<Piece | "Public word", DomainRow["part"]>> = {
@@ -114,6 +117,7 @@ const PART: Readonly<Record<Piece | "Public word", DomainRow["part"]>> = {
   "Rate rule": "rest",
   "Bot settings": "rest",
   "D1 database": "rest",
+  "Budget alert": "rest",
   "Public word": "rest",
 };
 
@@ -304,9 +308,8 @@ function accessDetail(row: Found, covered: string): Found {
  *
  * @returns whether the application can be read from: `false` for Access that is off, and `undefined` for an application that was not made, by a run that stopped or a token with no permission for it
  */
-async function accessPiece(progress: Progress, mode: Mode, parts: Placed, connection: Connection, settings: DomainSettings): Promise<boolean | undefined> {
-  const logins = parseLogins(settings.logins);
-  if (progress.stopped || !logins.ok) {
+async function accessPiece(progress: Progress, mode: Mode, parts: Placed, connection: Connection, logins: Logins | undefined): Promise<boolean | undefined> {
+  if (progress.stopped || logins === undefined) {
     progress.rows.push({ object: "Access application", state: progress.stopped ? "not-run" : "failed", detail: progress.stopped ? "" : BAD_LOGINS });
     progress.stopped = true;
 
@@ -314,7 +317,7 @@ async function accessPiece(progress: Progress, mode: Mode, parts: Placed, connec
   }
 
   const privateSites = privateSitesPattern(parts.layout);
-  const synced = await syncAccess(connection, parts.accountId, { hostname: parts.layout.adminHostname, logins: logins.value, privateSites }, mode);
+  const synced = await syncAccess(connection, parts.accountId, { hostname: parts.layout.adminHostname, logins, privateSites }, mode);
   // A refusal after a step was done is a failure of the run: its rows keep what was made.
   if (synced.ok || synced.failed !== undefined || !isAccessOff(synced)) {
     const before = progress.rows.length;
@@ -371,6 +374,19 @@ async function variablesPiece(progress: Progress, mode: Mode, placed: Placed, co
   if (ready) progress.steps.push({ text: LOGIN_READY, address: `https://${placed.layout.adminHostname}` });
 }
 
+// The alert goes to the first user alone: the one who holds the Cloudflare account an install is made in.
+async function alertPiece(progress: Progress, mode: Mode, placed: Placed, connection: Connection, logins: Logins | undefined): Promise<void> {
+  const [first] = logins ?? [];
+  const object = (): Piece => "Budget alert";
+  if (progress.stopped || first === undefined) {
+    progress.rows.push({ object: object(), state: "not-run", detail: "" });
+
+    return;
+  }
+
+  await piece(progress, mode, object, () => syncBudgetAlert(connection, placed.accountId, first, mode));
+}
+
 /** Find the zone of the install's domain: in the install's own account, or for an install with nothing set in whichever account the token shows it in. */
 async function findZone(parts: PlugParts, connection: Connection): Promise<Zone | DomainReading> {
   const zones = parts.accountId === undefined ? await findZones(connection, parts.layout.domain) : await listZones(connection, parts.accountId);
@@ -393,6 +409,8 @@ async function read(parts: PlugParts, mode: Mode, token: string, readSettings: R
 
   // The token is proven: only now is anything of the install read.
   const settings = await readSettings();
+  const parsed = parseLogins(settings.logins);
+  const logins = parsed.ok ? parsed.value : undefined;
 
   const { layout } = parts;
   const { plan } = zone;
@@ -416,7 +434,7 @@ async function read(parts: PlugParts, mode: Mode, token: string, readSettings: R
     () => "Worker route",
     () => syncRoutes(connection, zone.id, { layout, script: parts.script }, mode),
   );
-  await variablesPiece(progress, mode, placed, connection, await accessPiece(progress, mode, placed, connection, settings));
+  await variablesPiece(progress, mode, placed, connection, await accessPiece(progress, mode, placed, connection, logins));
   await piece(
     progress,
     mode,
@@ -449,6 +467,7 @@ async function read(parts: PlugParts, mode: Mode, token: string, readSettings: R
     () => "D1 database",
     () => syncDatabase(connection, placed.accountId, mode),
   );
+  await alertPiece(progress, mode, placed, connection, logins);
 
   return { ok: true, rows: progress.rows.map((row) => ({ ...row, part: PART[row.object] })), steps: progress.steps };
 }
