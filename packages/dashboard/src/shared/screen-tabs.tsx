@@ -11,9 +11,6 @@ export interface ScreenTab<Id extends string> {
 
   /** The tab's words. */
   readonly label: string;
-
-  /** What a dot beside the label says to a screen reader, such as "unsaved changes"; left out, no dot is drawn. */
-  readonly mark?: string;
 }
 
 /** What a strip is drawn from. */
@@ -45,7 +42,6 @@ export function ScreenTabs<Id extends string>({ label, tabs, active, onChoose }:
           {tabs.map((tab) => (
             <TabsTrigger key={tab.id} value={tab.id} className="px-3">
               {tab.label}
-              {tab.mark === undefined ? null : <span role="img" aria-label={tab.mark} className="size-1.5 rounded-full bg-primary" />}
             </TabsTrigger>
           ))}
         </TabsList>
