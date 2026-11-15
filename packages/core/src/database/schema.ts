@@ -42,7 +42,7 @@ export const sites = sqliteTable(
   ],
 );
 
-/** The publishes of a site that can still be gone back to; they go when the site does. */
+/** The publishes of a site that can still be gone back to; they go when the site does. Each says whether it holds a `404.html` at its top, and lists its files without an extension, NULL when they are not kept. */
 export const versions = sqliteTable(
   "versions",
   {
@@ -54,12 +54,15 @@ export const versions = sqliteTable(
     published_by: text().notNull(),
     bytes: integer().notNull(),
     files: integer().notNull(),
+    missing_page: integer().notNull().default(0),
+    bare_files: text(),
   },
   (table) => [
     primaryKey({ columns: [table.folder, table.number] }),
     check("versions_number", sql`${table.number} >= 1`),
     check("versions_bytes", sql`${table.bytes} >= 0`),
     check("versions_files", sql`${table.files} >= 0`),
+    check("versions_missing_page", sql`${table.missing_page} IN (0, 1)`),
   ],
 );
 
@@ -156,14 +159,19 @@ export const requestCounts = sqliteTable(
   ],
 );
 
-/** The files the uploads begun on one UTC day declared, all holders together. */
+/** The files the uploads begun on one UTC day declared, all holders together, and the times the store was written to or listed on that day. */
 export const declaredFiles = sqliteTable(
   "declared_files",
   {
     day: text().notNull().primaryKey(),
     files: integer().notNull(),
+    writes: integer().notNull().default(0),
   },
-  (table) => [check("declared_files_day", sql`${table.day} GLOB ${sql.raw(`'${DAY_FORM}'`)}`), check("declared_files_files", sql`${table.files} >= 1`)],
+  (table) => [
+    check("declared_files_day", sql`${table.day} GLOB ${sql.raw(`'${DAY_FORM}'`)}`),
+    check("declared_files_files", sql`${table.files} >= 0`),
+    check("declared_files_writes", sql`${table.writes} >= 0`),
+  ],
 );
 
 /** A staged publish from its first request on: begun, taking files, then live or given up. */

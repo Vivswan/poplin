@@ -38,7 +38,7 @@ function lineRow(line: Line): Html {
 /**
  * Show the stored totals and the day's requests.
  *
- * @returns the bytes against `max_total_size`, the sites against `max_sites`, the sites in the trash, the files, and today's requests against `requests_per_day`
+ * @returns the bytes against `max_total_size`, the sites against `max_sites`, the sites in the trash, the files, today's writes to the storage against `max_storage_writes_per_day`, and today's requests against `requests_per_day`
  */
 export async function showUsage(visit: Visit): Promise<Page> {
   const place = { tab: "usage", heading: "Usage" } as const;
@@ -47,12 +47,14 @@ export async function showUsage(visit: Visit): Promise<Page> {
 
   const { values } = config;
   const day = new Date(visit.install.now()).toISOString().slice(0, DAY_LENGTH);
-  const [totals, requests] = await Promise.all([visit.install.database.readTotals(), visit.install.database.readRequests(day)]);
+  const { database } = visit.install;
+  const [totals, requests, written] = await Promise.all([database.readTotals(), database.readRequests(day), database.readStorageWrites(day)]);
   const lines: readonly Line[] = [
     { what: "Stored", used: totals.bytes, limit: sizeBytes(values.max_total_size), show: showBytes },
     { what: "Sites, the trash included", used: totals.sites, limit: values.max_sites === "none" ? undefined : values.max_sites, show: count },
     { what: "Sites in the trash", used: totals.trashed_sites, show: count },
     { what: "Files", used: totals.files, show: count },
+    { what: "Writes to the storage today", used: written?.writes ?? 0, limit: values.max_storage_writes_per_day, show: count },
     { what: "Requests today", used: requests.all, limit: values.requests_per_day, show: count },
   ];
 

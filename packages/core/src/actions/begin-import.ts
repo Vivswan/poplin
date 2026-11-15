@@ -63,6 +63,7 @@ type ImportCode =
   | "no_index"
   | "too_large"
   | "too_many_sites"
+  | "allowance_spent"
   | "id_taken"
   | "name_taken";
 
@@ -166,7 +167,7 @@ export async function beginImport(
   if (conflict !== undefined) return conflict;
 
   const upload = { ...placed, id: mintUploadId(), owner: actor.holder, manifest: files, created_at: entered.signed.at };
-  const added = await install.database.addUpload(upload, roomUnder(entered.settings, true, entered.signed.at));
+  const added = await install.database.addUpload(upload, roomUnder(entered.settings, { makesSite: true, writes: files.length }, entered.signed.at));
   if (added.kind !== "done") return FULL[added.kind];
 
   const bytes = files.reduce((sum, file) => sum + file.size, 0);

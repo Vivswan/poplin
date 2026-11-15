@@ -14,7 +14,7 @@ import { fuzzTarget } from "./config";
 
 const NOW = 1_700_000_000_000;
 const OWNER = "00000000000000aa" as TokenId;
-const ROOM = { own: 1_000_000, folderBytes: Number.MAX_SAFE_INTEGER, staying: 0, totalBytes: Number.MAX_SAFE_INTEGER, sites: null, day: "2026-11-13", dayFiles: Number.MAX_SAFE_INTEGER };
+const ROOM = { own: 1_000_000, folderBytes: Number.MAX_SAFE_INTEGER, staying: 0, totalBytes: Number.MAX_SAFE_INTEGER, sites: null, day: "2026-11-13", dayFiles: Number.MAX_SAFE_INTEGER, writes: 1, dayWrites: Number.MAX_SAFE_INTEGER };
 
 const property = fuzzTarget(import.meta.file);
 

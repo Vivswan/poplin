@@ -9,6 +9,7 @@ import { publishSite } from "../../src/actions/publish";
 import { getSite } from "../../src/actions/show";
 import { uploadFile } from "../../src/actions/upload-file";
 import { uploadKey } from "../../src/actions/uploads";
+import { dayOf } from "../../src/records/views";
 import type { ObjectKey } from "../../src/storage/storage";
 import { BunSqliteDriver } from "../database/support/bun-sqlite-driver";
 import { ADMIN, file, made, makeWorld, OWNER, STRANGER, type World } from "./support/actions-fixture";
@@ -16,7 +17,7 @@ import { ADMIN, file, made, makeWorld, OWNER, STRANGER, type World } from "./sup
 /** A site of five files, each of another media type than the manifest of a copy names. */
 const FIVE = [file("index.html", "<p>home</p>"), ...["a", "b", "c", "d"].map((name) => ({ ...file(`docs/${name}.css`, `.${name}{}`), contentType: "text/css" }))];
 
-/** A site of forty files: the five, and pages. One call copies sixteen of them, so its copy takes three calls. */
+/** A site of forty files: the five, and pages. One call copies fifteen of them, so its copy takes three calls. */
 const FORTY = [...FIVE, ...Array.from({ length: 35 }, (_page, at) => file(`pages/${at}.html`, `<p>${at}</p>`))];
 
 /** Every stored file under a site's folder, as `path -> media type and text`, read from the store. */
@@ -78,7 +79,7 @@ describe("duplicateSite", () => {
       upload = step.copy.upload;
     }
 
-    expect(seen).toEqual([[null, 16, 1], [null, 32, 1], [1, 40, 2]]);
+    expect(seen).toEqual([[null, 15, 1], [null, 30, 1], [1, 40, 2]]);
     expect(await duplicateSite(world.install, OWNER, { site: source, upload })).toMatchObject({ ok: true, site: { live_version: 1 }, copy: { copied: 40, files: 40 } });
     expect(await world.audit()).toEqual(["create", "publish", "create", "duplicate"]);
   });
@@ -104,14 +105,14 @@ describe("duplicateSite", () => {
     const source = await finishPublish(world.install, OWNER, begun.upload.id);
     if (!source.ok) throw new Error(`the source was refused: ${source.code}`);
 
-    expect(await duplicateSite(world.install, OWNER, { site: source.site.id })).toMatchObject({ ok: true, site: null, copy: { copied: 21, files: 1_601 } });
+    expect(await duplicateSite(world.install, OWNER, { site: source.site.id })).toMatchObject({ ok: true, site: null, copy: { copied: 20, files: 1_601 } });
   });
 
   // Drift: a host ends a request that makes more than 50 calls to the database and the store; a call that copies more files than fit leaves a copy nobody can finish.
   test.each([
     [1, 1],
-    [300, 19],
-    [1_001, 49],
+    [300, 20],
+    [1_001, 52],
   ])("a copy of %i files is whole after %i calls, none of which makes more than 50 calls to the database and the store", async (count, calls) => {
     const world = await makeWorld();
     const pages = Array.from({ length: count - 1 }, (_page, at) => file(`pages/${at}.html`, "x"));
@@ -196,6 +197,25 @@ describe("duplicateSite", () => {
     await expect(duplicateSite(world.install, OWNER, { site: source })).rejects.toThrow("the store is down");
     expect(await world.keys()).toEqual(keys);
     expect(await duplicateSite(world.install, OWNER, { site: source })).toMatchObject({ ok: true, site: { live_version: 1 } });
+  });
+
+  // Drift: a host bills a write it did not keep, and a copy counts its writes once, when it begins. A later call whose write failed uncounted could be sent again without end, each time one more billed write the day's bound never saw.
+  test("a later call of a copy whose write fails counts that write against the day, and the copy stays to be gone on with", async () => {
+    const world = await makeWorld();
+    const source = await made(world, OWNER, "report");
+    await publishSite(world.install, OWNER, { site: source, files: FORTY });
+    const begun = await duplicateSite(world.install, OWNER, { site: source });
+    if (!begun.ok) throw new Error("the copy was refused");
+
+    const day = dayOf(world.clock.now);
+    const before = (await world.install.database.readStorageWrites(day))?.writes ?? 0;
+    spyOn(world.install.store, "write").mockRejectedValueOnce(new Error("the store is down"));
+
+    await expect(duplicateSite(world.install, OWNER, { site: source, upload: begun.copy.upload })).rejects.toThrow("the store is down");
+    const counted = (await world.install.database.readStorageWrites(day))?.writes;
+    const next = await duplicateSite(world.install, OWNER, { site: source, upload: begun.copy.upload });
+
+    expect([counted, next]).toMatchObject([before + 1, { ok: true, copy: { copied: 30, files: 40 } }]);
   });
 
   // Drift: a listing is no snapshot; a version a newer publish is removing lists short, and a copy of what is left would be a site with pages missing.

@@ -15,7 +15,7 @@ test("the defaults are inside every limit of the free plan, so a new install sho
   expect([...freeLimitWarnings(DEFAULTS, FREE_LIMITS)]).toEqual([]);
 });
 
-test("a value at a free limit earns no warning and a value above it earns that setting's one sentence", () => {
+test("a value at a free limit earns no warning and a value above it earns that setting's sentence, one for each limit it is above", () => {
   const cases: readonly [Partial<SettingValues>, readonly (readonly [string, string])[]][] = [
     [{ max_total_size: { count: 10, unit: "GB" } }, []],
     [{ max_total_size: { count: 10_000, unit: "MB" } }, []],
@@ -35,7 +35,7 @@ test("a value at a free limit earns no warning and a value above it earns that s
       { max_total_size: { count: 20, unit: "GB" }, requests_per_day: 250_000 },
       [
         ["max_total_size", "all sites are above the free 10 GB"],
-        ["requests_per_day", "above the free 100,000 requests a day"],
+        ["requests_per_day", "above the free 10,000,000 reads a month; above the free 100,000 requests a day"],
       ],
     ],
   ];

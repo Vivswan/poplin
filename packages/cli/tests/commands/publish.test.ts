@@ -149,7 +149,7 @@ describe("publish", () => {
     const failed = await bench.run(folder);
 
     expect(bench.sent.filter((line) => line.startsWith("PUT ")).length).toBe(1);
-    expect([failed.code, failed.err[0]]).toEqual([1, "the day's free allowance of the install's database is used up until 00:00 UTC: writing"]);
+    expect([failed.code, failed.err[0]]).toEqual([1, "a day's allowance of the install is used up until 00:00 UTC: writing"]);
     expect(failed.err[1]).toEndWith("wait until then: asking again sooner is refused the same way");
   });
 

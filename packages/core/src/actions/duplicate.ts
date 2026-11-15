@@ -14,6 +14,7 @@ import { COUNT, POSITIVE } from "../records/fields";
 import type { Site } from "../records/site";
 import { mintSiteFolder } from "../records/site";
 import { type ManifestFile, mintUploadId, parseUploadId, UPLOAD_ID, type Upload } from "../records/upload";
+import { dayOf } from "../records/views";
 import { MAX_LIST_LIMIT, type ObjectStore } from "../storage/storage";
 import { checkManifest, FULL, roomUnder, type UploadLimits } from "./begin-publish";
 import { defaultExpiry } from "./changes";
@@ -29,8 +30,14 @@ const CALL_BUDGET = 50;
 /** The most calls to the database before any file is copied: three to reach the source, and one to record the upload or to read it. */
 const STAGE_CALLS = 4;
 
+/** The calls to the database that counting a call's listings against the day costs whoever runs it: the first listing's place taken, and the later ones written after the last. */
+const COUNT_CALLS = 2;
+
 /** The most calls to the database that finishing a copy makes: four, and one for each of the four site ids it may draw again. */
 const FINISH_CALLS = 8;
+
+/** The calls to the store one copied file costs: a read and a write. Both are counted against the day's writes, when the copy begins. */
+export const COPY_CALLS = 2;
 
 /** The list pages spared beyond the count a version's files need, for a store that hands out short pages. */
 const SPARE_PAGES = 2;
@@ -57,7 +64,7 @@ const COPIED = v.object({ ...PUBLISHED_SITE.entries, copy: PROGRESS });
 export const DUPLICATED_SITE = v.union([COPYING, COPIED]);
 
 /** The codes a duplicate may be refused with. */
-type DuplicateCode = Extract<Awaited<ReturnType<typeof reachSite | typeof finishPublish>>, { readonly ok: false }>["code"] | "bad_name" | "bad_path" | "no_index" | "too_large" | "too_many_sites" | "no_such_version";
+type DuplicateCode = Extract<Awaited<ReturnType<typeof reachSite | typeof finishPublish>>, { readonly ok: false }>["code"] | "bad_name" | "bad_path" | "no_index" | "too_large" | "too_many_sites" | "allowance_spent" | "no_such_version";
 
 /** How far a copy is. */
 type Progress = Readonly<v.InferOutput<typeof PROGRESS>>;
@@ -85,18 +92,18 @@ interface Staged {
 type StagedNow = Staged & { readonly fresh: boolean };
 
 /**
- * How many files one call copies: as many as the call budget leaves beside the database's calls and the listings, at a read and a write each.
+ * How many files one call copies: as many as the call budget leaves beside the database's calls, the count of the day's listings, and the listings, at a read and a write each.
  *
  * A copy of up to one list page of files is finished, and so listed again, in the call that copies its last file; a longer one is finished in a call of its own.
  *
  * @param files - how many files the copy holds
- * @returns 16 up to a thousand files, 21 up to two thousand, and one fewer for every two thousand more: 17 for ten thousand
+ * @returns 15 up to a thousand files, 20 up to two thousand, and one fewer for every two thousand more: 16 for ten thousand
  */
 export function copiesPerCall(files: number): number {
   const pages = Math.ceil(files / MAX_LIST_LIMIT) + SPARE_PAGES;
   const finishing = files > MAX_LIST_LIMIT ? 0 : FINISH_CALLS + pages;
 
-  return Math.floor((CALL_BUDGET - STAGE_CALLS - pages - finishing) / 2);
+  return Math.floor((CALL_BUDGET - STAGE_CALLS - COUNT_CALLS - pages - finishing) / COPY_CALLS);
 }
 
 /**
@@ -125,7 +132,7 @@ async function beginCopy(
   install: Install,
   actor: Actor,
   asked: { readonly site: Site; readonly name: SiteName; readonly settings: Parameters<typeof roomUnder>[0]; readonly now: number },
-): Promise<Staged | Refused<"bad_path" | "no_index" | "too_large" | "too_many_sites" | "no_such_version">> {
+): Promise<Staged | Refused<"bad_path" | "no_index" | "too_large" | "too_many_sites" | "allowance_spent" | "no_such_version">> {
   const { site, settings } = asked;
   const live = site.versions.find((version) => version.number === site.live_version);
   const manifest = await listVersion(install.store, versionPrefix(site.folder, site.live_version), live?.files ?? 0);
@@ -156,7 +163,7 @@ async function beginCopy(
     from: { id: site.id, folder: site.folder, number: site.live_version },
   };
   const upload = { id: mintUploadId(), folder, number: 1, owner: actor.holder, plan, manifest, created_at: asked.now };
-  const added = await install.database.addUpload(upload, roomUnder(settings, true, asked.now));
+  const added = await install.database.addUpload(upload, roomUnder(settings, { makesSite: true, writes: manifest.length * COPY_CALLS }, asked.now));
   if (added.kind !== "done") return FULL[added.kind];
 
   return { ok: true, upload: { ...upload, state: "pending", bytes: listed.bytes, files: manifest.length, dropped: [] }, missing: manifest.map((file) => file.path) };
@@ -183,8 +190,10 @@ async function resumeCopy(install: Install, actor: Actor, asked: { readonly site
  * Copy files of the source's version to the copy's folder, each with the media type the source holds.
  *
  * @returns `false` when the source no longer holds one of them, which leaves the rest uncopied
+ * @throws {Error} the store failed. A write it did not keep is counted against the day first: a host bills it, and the call that goes on with the copy writes the file again
  */
-async function copyFiles(store: ObjectStore, upload: CopyUpload, paths: readonly string[]): Promise<boolean> {
+async function copyFiles(install: Install, upload: CopyUpload, paths: readonly string[]): Promise<boolean> {
+  const { store } = install;
   const { from: source } = upload.plan;
 
   for (const path of paths) {
@@ -195,7 +204,13 @@ async function copyFiles(store: ObjectStore, upload: CopyUpload, paths: readonly
     const read = await store.read(from.key);
     if (read.kind !== "found") return false;
 
-    await store.write(to.key, { stream: read.body, size: read.info.size }, { contentType: read.info.contentType });
+    try {
+      await store.write(to.key, { stream: read.body, size: read.info.size }, { contentType: read.info.contentType });
+    } catch (error) {
+      await install.database.addStorageWrites(dayOf(install.now()), 1);
+
+      throw error;
+    }
   }
 
   return true;
@@ -238,7 +253,7 @@ async function advanceCopy(install: Install, actor: Actor, staged: StagedNow): P
   const { upload, missing } = staged;
   const batch = missing.slice(0, copiesPerCall(upload.files));
 
-  if (!(await copyFiles(install.store, upload, batch))) {
+  if (!(await copyFiles(install, upload, batch))) {
     await discardUpload(install, upload);
 
     return refuse("no_such_version");

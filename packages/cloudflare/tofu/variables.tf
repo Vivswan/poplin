@@ -289,6 +289,17 @@ variable "max_files_per_day" {
   }
 }
 
+variable "max_storage_writes_per_day" {
+  description = "The limit on the times the bucket is written to or listed in one UTC day: a file of a publish once, a file of a copy twice, and every listing."
+  type        = number
+  default     = 30000
+
+  validation {
+    condition     = var.max_storage_writes_per_day >= 1 && var.max_storage_writes_per_day <= 9007199254740991 && floor(var.max_storage_writes_per_day) == var.max_storage_writes_per_day
+    error_message = "max_storage_writes_per_day must be a whole number from 1 to 9007199254740991."
+  }
+}
+
 variable "requests_per_day" {
   description = "The limit on the day's requests, all sites together."
   type        = number

@@ -4,14 +4,17 @@
 //   letter p                   no listed login behind the request        404, before anything is looked up
 //   one database query         the record and the letter decide          see below
 //   the page's version tag     the request holds the live version         304, with no read of the bucket
-//   path -> one to three keys  no file path                              404, which a browser may keep on an open site
+//   path -> one or two keys    no file path                              404, which a browser may keep on an open site
 //   the store, key by key      the first key that holds a file answers       the body goes out as the store gave it
 //   the file's own tag         the request holds the file as it is         304, and the store opens no body: it is asked with the tag
 //   several tags, or `*`       the store compares one tag                  the file is looked at first, and read after that when the request holds another
 //   the store's tag of a page  no page goes out with it                    the page is read a second time, as if no tag was sent
-//   no key holds a file        one more read, of the site's own `404.html`   that page with status 404; the plain 404 for a site without one
+//   no key holds a file        the version holds a `404.html`              one more read, of that page, sent with status 404; the plain 404 for a version without one, at no read
 //                              a page for a request that holds another version carries `Clear-Site-Data`, so the browser drops that version's files
-//
+// A request asks the store three times at most: the live version's record says whether it holds a `404.html` and which files without an extension, so no key is tried that cannot hold a file.
+//   a path, at most two keys         one miss, then a file at two calls at most; or two misses, then the `404.html`
+//   a version whose files without    a path without an extension has three keys there. The third is read once and whole: a `Range` is not followed,
+//   an extension are not kept        and a held file is found by its tag after the read. Three misses are the plain 404
 //   letter u, or none   the site is unlisted or public    the file
 //                       private, or no served site        302 to the same label under p
 //   letter p            the site is private               the file
@@ -20,11 +23,11 @@
 //   public name         the site is public                the file
 //
 // A label's name is never compared: the id alone names the site. Under u a private site, a site in the trash, an expired one, and no site at all answer alike, so an id cannot be probed.
-
 import type { Database } from "@poplin/core/src/database/database";
 import type { SettingValues } from "@poplin/core/src/records/settings";
 import type { Site } from "@poplin/core/src/records/site";
-import type { ByteRange, ObjectInfo, ObjectKey, ObjectStore, ReadResult } from "@poplin/core/src/storage/storage";
+import { MISSING_PAGE, type VersionContents } from "@poplin/core/src/records/version-contents";
+import { type ByteRange, type ObjectInfo, type ObjectKey, type ObjectStore, type ReadResult, resolveRange } from "@poplin/core/src/storage/storage";
 import type { Addressed, SiteAddresses } from "./addresses";
 import { fileKeys } from "./file-keys";
 import { clearHeldFiles, HTTPS_ALONE, heldVersion, isPage, missingFileCache, missingPageCache, siteHeaders, versionTag } from "./headers";
@@ -57,8 +60,17 @@ const PLAIN_BODIES = {
   416: "Range not satisfiable\n",
 } as const;
 
-/** The path of the page a site shows in place of a file it does not hold: the one at its root. */
-const MISSING_PAGE = "/404.html";
+/** The path of the page a site shows in place of a file it does not hold: the one at its top. */
+const MISSING_PAGE_PATH = `/${MISSING_PAGE}`;
+
+/** The most calls one request makes to the store, whatever it asks for. What a day of requests can cost the store is counted from this. */
+export const MOST_STORE_CALLS = 3;
+
+/** The most keys a request tries and still reads each as it was asked: a miss, and then a file at two calls. A third key is read once and whole. */
+const MOST_KEYS_AS_ASKED = MOST_STORE_CALLS - 1;
+
+/** What a file read whole goes out with in place of `bytes`: a part of it cannot be asked for. */
+const NO_RANGES = "none";
 
 /** What a weak tag starts with; it names the same file. */
 const WEAK = /^W\//;
@@ -68,6 +80,9 @@ const QUOTED = /^".*"$/;
 
 /** The tag that stands for whatever file an address holds. */
 const ANY_FILE = "*";
+
+/** A file the store held at one call and not at the next: its version stopped being kept in between. */
+const GONE = { kind: "gone" } as const;
 
 /** The verdict on an address that serves nothing. */
 const NOT_FOUND: Verdict = { kind: "none" };
@@ -97,12 +112,18 @@ interface Serving {
 type SiteAddress = Exclude<Addressed, { readonly kind: "none" }>;
 
 /** What a request for a site comes to, before any file is read. */
-type Verdict = { readonly kind: "serve"; readonly site: Site } | { readonly kind: "move"; readonly origin: string } | { readonly kind: "none" };
+type Verdict = { readonly kind: "serve"; readonly site: Site; readonly contents: VersionContents } | { readonly kind: "move"; readonly origin: string } | { readonly kind: "none" };
+
+/** What reading a file for a request gave: the store's answer, or `gone` for a file that went between two calls for it. */
+type Read = ReadResult | typeof GONE;
 
 /** A site with what its files are served under. */
 interface Served {
   /** The site the address and the record gave. */
   readonly site: Site;
+
+  /** What the site's live version is known to hold. */
+  readonly contents: VersionContents;
 
   /** What the request is answered from. */
   readonly serving: Serving;
@@ -150,22 +171,22 @@ function redirect(location: string): Response {
   return new Response(null, { status: 302, headers: { ...PLAIN_HEADERS, Location: location } });
 }
 
-function findSite(address: SiteAddress, serving: Serving): Promise<Site | undefined> {
+function findSite(address: SiteAddress, serving: Serving): ReturnType<Serving["database"]["findServed"]> {
   if (address.kind === "public-name") return serving.database.findServed({ public_name: address.name }, serving.now());
 
   return serving.database.findServed({ id: address.id }, serving.now());
 }
 
 /** What the address and the record give: the site to serve, the same label under the other letter, or nothing. */
-function verdictOf(address: SiteAddress, site: Site | undefined, addresses: SiteAddresses): Verdict {
-  if (address.kind === "public-name") return site?.access === "public" ? { kind: "serve", site } : NOT_FOUND;
+function verdictOf(address: SiteAddress, found: Awaited<ReturnType<typeof findSite>>, addresses: SiteAddresses): Verdict {
+  if (address.kind === "public-name") return found?.site.access === "public" ? { kind: "serve", ...found } : NOT_FOUND;
 
-  const isPrivate = site?.access === "private";
-  if (address.letter !== "p") return site === undefined || isPrivate ? { kind: "move", origin: addresses.letterFormOf(address, "p") } : { kind: "serve", site };
+  const isPrivate = found?.site.access === "private";
+  if (address.letter !== "p") return found === undefined || isPrivate ? { kind: "move", origin: addresses.letterFormOf(address, "p") } : { kind: "serve", ...found };
 
-  if (site === undefined) return NOT_FOUND;
+  if (found === undefined) return NOT_FOUND;
 
-  return isPrivate ? { kind: "serve", site } : { kind: "move", origin: addresses.letterFormOf(address, "u") };
+  return isPrivate ? { kind: "serve", ...found } : { kind: "move", origin: addresses.letterFormOf(address, "u") };
 }
 
 function requestedRange(headers: Headers): ByteRange | undefined {
@@ -224,8 +245,10 @@ function missingPageHeaders(info: ObjectInfo, served: Served): Headers {
 /** The 404 for a file a served site does not hold. It comes after the site was found and its letter matched, so it tells nothing a file of the site would not. */
 async function missingFile(request: Request, keys: readonly ObjectKey[], served: Served): Promise<Response> {
   const without = plain(request, 404, { "Cache-Control": missingFileCache(served.site) });
+  // A version without the page costs no read, and a request that tried three keys has none left.
+  if (!served.contents.missing_page || keys.length > MOST_KEYS_AS_ASKED) return without;
 
-  const [key] = fileKeys(served.site, MISSING_PAGE);
+  const [key] = fileKeys(served.site, MISSING_PAGE_PATH, served.contents);
   // A request for the page itself has already found it missing.
   if (key === undefined || keys.includes(key)) return without;
 
@@ -246,12 +269,21 @@ async function missingFile(request: Request, keys: readonly ObjectKey[], served:
   return new Response(result.body, { status: 404, headers });
 }
 
+/** Read a file the store was already asked about. A range that selects no byte of it is answered from what the store said, at no further call; a file that went since is `gone`. */
+async function readKnown(key: ObjectKey, range: ByteRange | undefined, info: ObjectInfo, served: Served): Promise<Read> {
+  if (range !== undefined && resolveRange(range, info.size) === "unsatisfiable") return { kind: "range-not-satisfiable", info };
+
+  const read = await served.serving.store.read(key, range === undefined ? {} : { range });
+
+  return read.kind === "missing" ? GONE : read;
+}
+
 /**
- * Read a file for a request, unless the request holds it: `not-modified` then, and the store opened no body.
+ * Read a file for a request, unless the request holds it: `not-modified` then, and the store opened no body. A file costs the store two calls at most.
  *
  * The store compares one tag. A request that holds several, or the one for any file, costs a look at the file first, and a read after it when it holds another.
  */
-async function readUnlessHeld(key: ObjectKey, range: ByteRange | undefined, sent: readonly string[], served: Served): Promise<ReadResult> {
+async function readUnlessHeld(key: ObjectKey, range: ByteRange | undefined, sent: readonly string[], served: Served): Promise<Read> {
   const { store } = served.serving;
   const asked = range === undefined ? {} : { range };
   const [only] = sent;
@@ -261,17 +293,38 @@ async function readUnlessHeld(key: ObjectKey, range: ByteRange | undefined, sent
     const looked = await store.head(key);
     if (looked.kind === "missing") return looked;
 
-    return holdsFile(sent, looked.info, served) ? { kind: "not-modified", info: looked.info } : store.read(key, asked);
+    return holdsFile(sent, looked.info, served) ? { kind: "not-modified", info: looked.info } : readKnown(key, range, looked.info, served);
   }
 
   const result = await store.read(key, { ...asked, ifNoneMatch: only.slice(1, -1) });
   if (result.kind !== "not-modified" || !isPage(result.info.contentType)) return result;
 
   // No page ever went out with the store's tag, so a request that sends it holds no page: it is read again as if it sent none.
-  return store.read(key, asked);
+  return readKnown(key, range, result.info, served);
 }
 
-function answerRead(request: Request, result: Exclude<ReadResult, { kind: "missing" }>, served: Served, ranged: boolean): Response {
+/**
+ * Answer from a third key, at the one call two misses left: the file whole, or 304 for one the request holds.
+ *
+ * A `Range` is not followed, which HTTP allows, and the file says so. The request's tags are compared once the file is read, so a 304 here opened a body and closed it.
+ *
+ * @returns `undefined` when the key holds no file
+ */
+async function answerWhole(request: Request, key: ObjectKey, served: Served): Promise<Response | undefined> {
+  const sent = sentTags(request.headers.get("If-None-Match"));
+  const result = await served.serving.store.read(key, {});
+  if (result.kind !== "found") return undefined;
+
+  const held = holdsFile(sent, result.info, served);
+  if (held) await result.body.cancel();
+
+  const response = answerRead(request, held ? { kind: "not-modified", info: result.info } : result, served, false);
+  response.headers.set("Accept-Ranges", NO_RANGES);
+
+  return response;
+}
+
+function answerRead(request: Request, result: Exclude<ReadResult, { readonly kind: "missing" }>, served: Served, ranged: boolean): Response {
   const headers = fileHeaders(result.info, served);
 
   if (result.kind === "not-modified") return new Response(null, { status: 304, headers });
@@ -295,14 +348,20 @@ async function answerGet(request: Request, keys: readonly ObjectKey[], served: S
   const range = requestedRange(request.headers);
   const sent = sentTags(request.headers.get("If-None-Match"));
 
-  for (const key of keys) {
+  for (const key of keys.slice(0, MOST_KEYS_AS_ASKED)) {
     const result = await readUnlessHeld(key, range, sent, served);
     if (result.kind === "missing") continue;
+
+    // A file that went between two calls for it took both: nothing more is asked of the store.
+    if (result.kind === "gone") return plain(request, 404, { "Cache-Control": missingFileCache(served.site) });
 
     return answerRead(request, result, served, range !== undefined);
   }
 
-  return missingFile(request, keys, served);
+  const [last] = keys.slice(MOST_KEYS_AS_ASKED);
+  const whole = last === undefined ? undefined : await answerWhole(request, last, served);
+
+  return whole ?? missingFile(request, keys, served);
 }
 
 async function answerHead(request: Request, keys: readonly ObjectKey[], served: Served): Promise<Response> {
@@ -322,7 +381,7 @@ async function answerHead(request: Request, keys: readonly ObjectKey[], served: 
 }
 
 /**
- * Answer a visitor's request for a site of an install. A 404 for a file a served site does not hold carries the site's own `404.html` when it has one.
+ * Answer a visitor's request for a site of an install, at three calls to the store at most. A 404 for a file a served site does not hold carries the site's own `404.html` when its live version has one.
  *
  * @returns the file with its headers, its body the store's own stream; else 304 for what the request holds, 206 or 416 for a range, 403 for a subrequest of a page that is no site of the install, 302 to the same label under the other letter, 405, or 404
  * @throws whatever the database, the store, or the identity check rejects with; nothing else throws
@@ -348,8 +407,8 @@ export async function serveSite(request: Request, serving: Serving): Promise<Res
   const held = heldVersion(request.headers.get("If-None-Match"), tag);
   if (held === "same") return unchangedPage(verdict.site, serving, tag);
 
-  const served = { site: verdict.site, serving, tag, held };
-  const keys = fileKeys(verdict.site, address.path);
+  const served = { site: verdict.site, contents: verdict.contents, serving, tag, held };
+  const keys = fileKeys(verdict.site, address.path, verdict.contents);
   if (request.method === "HEAD") return answerHead(request, keys, served);
 
   return answerGet(request, keys, served);

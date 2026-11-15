@@ -29,16 +29,17 @@ import { type Rebuilding, START_OPTIONS, startUpdate } from "@poplin/core/src/ac
 import { removeUpdateAddress, type UPDATE_ADDRESS_REQUEST, updateAddressState } from "@poplin/core/src/actions/update-address";
 import { AllowanceSpent } from "@poplin/core/src/database/driver";
 import type { SettingValues } from "@poplin/core/src/records/settings";
+import { WritesSpent } from "@poplin/core/src/storage/metered";
 import { Hono } from "hono";
 import { HTTPException } from "hono/http-exception";
 import { methodNotAllowed } from "hono/method-not-allowed";
 import * as v from "valibot";
 
-import { carries, counted, type Gate, namesSite, sent } from "./asked";
+import { carries, counted, type Gate, metered, namesSite, sent } from "./asked";
 import { authenticate, type ReadToken } from "./authenticate";
 import { answerWhoami, beginWithAddress, checked, FILE_QUERY, saveAddress, storeBody } from "./handlers";
 import { queried } from "./query";
-import { refusal, respond, respondFile, spentRefusal } from "./respond";
+import { refusal, respond, respondFile, spentRefusal, writesSpentRefusal } from "./respond";
 
 /** The most bytes the JSON body of a route may hold, unless it declares files or imports the settings. */
 const JSON_BYTES = 65_536;
@@ -73,9 +74,8 @@ export interface ApiDeps extends Install, Gate {
   readonly rebuild: Omit<Rebuilding, "counters">;
 }
 
-
 /** Declare every route of one install. The type of what it returns is what a client is typed from, so it is inferred, never written. */
-function routesOf(deps: ApiDeps) {
+function routesOf(deps: Omit<ApiDeps, "store">, install: ReturnType<typeof metered>) {
   const token = authenticate(deps.readToken, deps.now);
   const json = carries("json");
   const noQuery = queried(NO_QUERY);
@@ -84,81 +84,81 @@ function routesOf(deps: ApiDeps) {
 
   return new Hono()
     .basePath("/api")
-    .get("/whoami", token, noQuery, async (context) => respond(await answerWhoami(deps, context.var.token, deps.version)))
-    .delete("/token", token, noQuery, async (context) => respond(await revokeToken(deps, context.var.actor, context.var.token.id)))
-    .get("/tokens", token, noQuery, async (context) => respond(await listTokens(deps, context.var.actor)))
-    .post("/tokens", token, json, noQuery, sent<v.InferInput<typeof TOKEN_REQUEST>>(JSON_BYTES), async (context) => {
-      return respond(await checked(TOKEN_REQUEST, context.req.valid("json"), (request) => issueToken(deps, context.var.actor, request)));
+    .get("/whoami", token, install, noQuery, async (context) => respond(await answerWhoami(context.var.install, context.var.token, deps.version)))
+    .delete("/token", token, install, noQuery, async (context) => respond(await revokeToken(context.var.install, context.var.actor, context.var.token.id)))
+    .get("/tokens", token, install, noQuery, async (context) => respond(await listTokens(context.var.install, context.var.actor)))
+    .post("/tokens", token, install, json, noQuery, sent<v.InferInput<typeof TOKEN_REQUEST>>(JSON_BYTES), async (context) => {
+      return respond(await checked(TOKEN_REQUEST, context.req.valid("json"), (request) => issueToken(context.var.install, context.var.actor, request)));
     })
-    .delete("/tokens/:token", token, noQuery, async (context) => respond(await revokeToken(deps, context.var.actor, context.req.param("token"))))
-    .post("/logins", counted("beginLogin", deps), json, noQuery, sent<v.InferInput<typeof LOGIN_REQUEST>>(JSON_BYTES), async (context) => {
-      return respond(await beginWithAddress(deps, context.req.valid("json"), new URL(context.req.url).origin, context.var.visitor));
+    .delete("/tokens/:token", token, install, noQuery, async (context) => respond(await revokeToken(context.var.install, context.var.actor, context.req.param("token"))))
+    .post("/logins", counted("beginLogin", deps), install, json, noQuery, sent<v.InferInput<typeof LOGIN_REQUEST>>(JSON_BYTES), async (context) => {
+      return respond(await beginWithAddress(context.var.install, context.req.valid("json"), new URL(context.req.url).origin, context.var.visitor));
     })
-    .post("/logins/token", counted("redeemLogin", deps), json, noQuery, sent<v.InferInput<typeof LOGIN_SECRET>>(JSON_BYTES), async (context) => {
-      return respond(await checked(LOGIN_SECRET, context.req.valid("json"), (request) => redeemLogin(deps, request)));
-    })
-
-    .get("/sites", token, queried(LIST_QUERY), async (context) => respond(await listSites(deps, context.var.actor, context.req.valid("query"))))
-    .get("/sites/:site", token, noQuery, site, async (context) => respond(await getSite(deps, context.var.actor, context.req.param("site"))))
-    .patch("/sites/:site", token, json, noQuery, site, sent<SiteChanges>(JSON_BYTES), async (context) => {
-      return respond(await checked(SITE_CHANGES, context.req.valid("json"), (changes) => updateSite(deps, context.var.actor, { ...changes, site: context.req.param("site") })));
-    })
-    .post("/sites/:site/rollback", token, json, noQuery, site, sent<v.InferInput<typeof ROLLBACK_OPTIONS>>(JSON_BYTES), async (context) => {
-      return respond(await checked(ROLLBACK_OPTIONS, context.req.valid("json"), (options) => rollbackSite(deps, context.var.actor, { ...options, site: context.req.param("site") })));
-    })
-    .post("/sites/:site/new-link", token, noQuery, site, async (context) => respond(await newLink(deps, context.var.actor, context.req.param("site"))))
-    .delete("/sites/:site", token, queried(DELETE_OPTIONS), site, async (context) => {
-      return respond(await deleteSite(deps, context.var.actor, { ...context.req.valid("query"), site: context.req.param("site") }));
-    })
-    .post("/sites/:site/restore", token, noQuery, site, async (context) => respond(await restoreSite(deps, context.var.actor, context.req.param("site"))))
-    .post("/sites/:site/duplicate", token, json, noQuery, site, sent<v.InferInput<typeof DUPLICATE_REQUEST>>(JSON_BYTES), async (context) => {
-      return respond(await checked(DUPLICATE_REQUEST, context.req.valid("json"), (asked) => duplicateSite(deps, context.var.actor, { ...asked, site: context.req.param("site") })));
+    .post("/logins/token", counted("redeemLogin", deps), install, json, noQuery, sent<v.InferInput<typeof LOGIN_SECRET>>(JSON_BYTES), async (context) => {
+      return respond(await checked(LOGIN_SECRET, context.req.valid("json"), (request) => redeemLogin(context.var.install, request)));
     })
 
-    .post("/uploads", token, json, noQuery, sent<v.InferInput<typeof PUBLISH_REQUEST>>(deps.limits.manifestBytes), async (context) => {
-      return respond(await beginPublish(deps, context.var.actor, context.req.valid("json"), deps.limits));
+    .get("/sites", token, install, queried(LIST_QUERY), async (context) => respond(await listSites(context.var.install, context.var.actor, context.req.valid("query"))))
+    .get("/sites/:site", token, install, noQuery, site, async (context) => respond(await getSite(context.var.install, context.var.actor, context.req.param("site"))))
+    .patch("/sites/:site", token, install, json, noQuery, site, sent<SiteChanges>(JSON_BYTES), async (context) => {
+      return respond(await checked(SITE_CHANGES, context.req.valid("json"), (changes) => updateSite(context.var.install, context.var.actor, { ...changes, site: context.req.param("site") })));
     })
-    .get("/uploads/:upload", token, noQuery, async (context) => respond(await showUpload(deps, context.var.actor, context.req.param("upload"))))
-    .put("/uploads/:upload/file", token, carries("bytes"), queried(FILE_QUERY), async (context) => {
+    .post("/sites/:site/rollback", token, install, json, noQuery, site, sent<v.InferInput<typeof ROLLBACK_OPTIONS>>(JSON_BYTES), async (context) => {
+      return respond(await checked(ROLLBACK_OPTIONS, context.req.valid("json"), (options) => rollbackSite(context.var.install, context.var.actor, { ...options, site: context.req.param("site") })));
+    })
+    .post("/sites/:site/new-link", token, install, noQuery, site, async (context) => respond(await newLink(context.var.install, context.var.actor, context.req.param("site"))))
+    .delete("/sites/:site", token, install, queried(DELETE_OPTIONS), site, async (context) => {
+      return respond(await deleteSite(context.var.install, context.var.actor, { ...context.req.valid("query"), site: context.req.param("site") }));
+    })
+    .post("/sites/:site/restore", token, install, noQuery, site, async (context) => respond(await restoreSite(context.var.install, context.var.actor, context.req.param("site"))))
+    .post("/sites/:site/duplicate", token, install, json, noQuery, site, sent<v.InferInput<typeof DUPLICATE_REQUEST>>(JSON_BYTES), async (context) => {
+      return respond(await checked(DUPLICATE_REQUEST, context.req.valid("json"), (asked) => duplicateSite(context.var.install, context.var.actor, { ...asked, site: context.req.param("site") })), deps.now());
+    })
+
+    .post("/uploads", token, install, json, noQuery, sent<v.InferInput<typeof PUBLISH_REQUEST>>(deps.limits.manifestBytes), async (context) => {
+      return respond(await beginPublish(context.var.install, context.var.actor, context.req.valid("json"), deps.limits), deps.now());
+    })
+    .get("/uploads/:upload", token, install, noQuery, async (context) => respond(await showUpload(context.var.install, context.var.actor, context.req.param("upload"))))
+    .put("/uploads/:upload/file", token, install, carries("bytes"), queried(FILE_QUERY), async (context) => {
       const file = { upload: context.req.param("upload"), query: context.req.valid("query"), request: context.req.raw, limits: deps.limits };
 
-      return respond(await storeBody(deps, context.var.actor, file));
+      return respond(await storeBody(context.var.install, context.var.actor, file), deps.now());
     })
-    .post("/uploads/:upload/finish", token, noQuery, async (context) => respond(await finishPublish(deps, context.var.actor, context.req.param("upload"))))
-    .delete("/uploads/:upload", token, noQuery, async (context) => respond(await abandonPublish(deps, context.var.actor, context.req.param("upload"))))
+    .post("/uploads/:upload/finish", token, install, noQuery, async (context) => respond(await finishPublish(context.var.install, context.var.actor, context.req.param("upload"))))
+    .delete("/uploads/:upload", token, install, noQuery, async (context) => respond(await abandonPublish(context.var.install, context.var.actor, context.req.param("upload"))))
 
-    .get("/export/settings", token, noQuery, async (context) => respond(await exportSettings(deps, context.var.actor)))
-    .get("/export/sites", token, queried(EXPORT_QUERY), async (context) => respond(await exportSites(deps, context.var.actor, context.req.valid("query"))))
-    .get("/export/sites/:site", token, queried(EXPORT_SITE_QUERY), site, async (context) => {
-      return respond(await exportSite(deps, context.var.actor, { ...context.req.valid("query"), site: context.req.param("site") }));
+    .get("/export/settings", token, install, noQuery, async (context) => respond(await exportSettings(context.var.install, context.var.actor)))
+    .get("/export/sites", token, install, queried(EXPORT_QUERY), async (context) => respond(await exportSites(context.var.install, context.var.actor, context.req.valid("query"))))
+    .get("/export/sites/:site", token, install, queried(EXPORT_SITE_QUERY), site, async (context) => {
+      return respond(await exportSite(context.var.install, context.var.actor, { ...context.req.valid("query"), site: context.req.param("site") }));
     })
-    .get("/export/sites/:site/files", token, queried(EXPORT_FILES_QUERY), site, async (context) => {
-      return respond(await exportFiles(deps, context.var.actor, { ...context.req.valid("query"), site: context.req.param("site") }));
+    .get("/export/sites/:site/files", token, install, queried(EXPORT_FILES_QUERY), site, async (context) => {
+      return respond(await exportFiles(context.var.install, context.var.actor, { ...context.req.valid("query"), site: context.req.param("site") }));
     })
-    .get("/export/sites/:site/file", token, queried(EXPORT_FILE_QUERY), site, async (context) => {
-      return respondFile(await exportFile(deps, context.var.actor, { ...context.req.valid("query"), site: context.req.param("site") }));
+    .get("/export/sites/:site/file", token, install, queried(EXPORT_FILE_QUERY), site, async (context) => {
+      return respondFile(await exportFile(context.var.install, context.var.actor, { ...context.req.valid("query"), site: context.req.param("site") }));
     })
-    .post("/import/settings", token, json, noQuery, sent<v.InferInput<typeof SETTINGS_IMPORT>>(SETTINGS_BYTES), async (context) => {
-      return respond(await checked(SETTINGS_IMPORT, context.req.valid("json"), (request) => importSettings(deps, context.var.actor, request)));
+    .post("/import/settings", token, install, json, noQuery, sent<v.InferInput<typeof SETTINGS_IMPORT>>(SETTINGS_BYTES), async (context) => {
+      return respond(await checked(SETTINGS_IMPORT, context.req.valid("json"), (request) => importSettings(context.var.install, context.var.actor, request)));
     })
-    .post("/import/sites", token, json, noQuery, sent<ImportRequest>(deps.limits.manifestBytes), async (context) => {
-      return respond(await beginImport(deps, context.var.actor, context.req.valid("json"), deps.limits));
+    .post("/import/sites", token, install, json, noQuery, sent<ImportRequest>(deps.limits.manifestBytes), async (context) => {
+      return respond(await beginImport(context.var.install, context.var.actor, context.req.valid("json"), deps.limits), deps.now());
     })
 
-    .get("/config", token, noQuery, async (context) => respond(await readConfig(deps, context.var.actor)))
-    .patch("/config", token, json, noQuery, sent<Partial<SettingValues>>(JSON_BYTES), async (context) => respond(await changeConfig(deps, context.var.actor, context.req.valid("json"))))
-    .delete("/sessions", token, noQuery, async (context) => respond(await signEveryoneOut(deps, context.var.actor)))
-    .get("/audit", token, queried(AUDIT_QUERY), async (context) => respond(await listAudit(deps, context.var.actor, context.req.valid("query"))))
-    .get("/domain", token, noQuery, async (context) => respond(await domainState(deps, context.var.actor)))
+    .get("/config", token, install, noQuery, async (context) => respond(await readConfig(context.var.install, context.var.actor)))
+    .patch("/config", token, install, json, noQuery, sent<Partial<SettingValues>>(JSON_BYTES), async (context) => respond(await changeConfig(context.var.install, context.var.actor, context.req.valid("json"))))
+    .delete("/sessions", token, install, noQuery, async (context) => respond(await signEveryoneOut(context.var.install, context.var.actor)))
+    .get("/audit", token, install, queried(AUDIT_QUERY), async (context) => respond(await listAudit(context.var.install, context.var.actor, context.req.valid("query"))))
+    .get("/domain", token, install, noQuery, async (context) => respond(await domainState(context.var.install, context.var.actor)))
 
-    .post("/update", token, queried(START_OPTIONS), async (context) => {
-      return respond(await startUpdate(deps, context.var.actor, { ...context.req.valid("query"), version: deps.version }, rebuilding));
+    .post("/update", token, install, queried(START_OPTIONS), async (context) => {
+      return respond(await startUpdate(context.var.install, context.var.actor, { ...context.req.valid("query"), version: deps.version }, rebuilding));
     })
-    .get("/update/address", token, noQuery, async (context) => respond(await updateAddressState(deps, context.var.actor)))
-    .put("/update/address", token, json, noQuery, sent<v.InferInput<typeof UPDATE_ADDRESS_REQUEST>>(JSON_BYTES), async (context) => {
-      return respond(await saveAddress(deps, context.var.actor, context.req.valid("json"), deps.rebuild.accepts));
+    .get("/update/address", token, install, noQuery, async (context) => respond(await updateAddressState(context.var.install, context.var.actor)))
+    .put("/update/address", token, install, json, noQuery, sent<v.InferInput<typeof UPDATE_ADDRESS_REQUEST>>(JSON_BYTES), async (context) => {
+      return respond(await saveAddress(context.var.install, context.var.actor, context.req.valid("json"), deps.rebuild.accepts));
     })
-    .delete("/update/address", token, noQuery, async (context) => respond(await removeUpdateAddress(deps, context.var.actor)));
+    .delete("/update/address", token, install, noQuery, async (context) => respond(await removeUpdateAddress(context.var.install, context.var.actor)));
 }
 
 /** The API of one install, as a client is typed from it: every route's method, path, query, body, and answers. */
@@ -171,17 +171,20 @@ export type Api = ReturnType<typeof routesOf>;
  *
  * The two routes a computer logs in through take no token: they are counted by visitor, the logins begun by all visitors together too, and what they hand out is decided by an admin on the dashboard.
  *
- * @returns the handler of every request under `/api`, which never throws. It answers a path that is no route 404, a route under another method 405 with `Allow`, a database spent for the day 503 with `Retry-After`, and any other failure 500
+ * @returns the handler of every request under `/api`, which never throws. It answers a path that is no route 404, a route under another method 405 with `Allow`, a database or a store spent for the day 503 with `Retry-After`, and any other failure 500
  */
 export function createApi(deps: ApiDeps): { readonly fetch: (request: Request) => Promise<Response> } {
   const app = new Hono();
 
   app.use(methodNotAllowed({ app, onMethodNotAllowed: (_context, allowed) => refusal("method_not_allowed", undefined, { Allow: allowed.join(", ") }) }));
-  app.route("/", routesOf(deps));
+  app.route("/", routesOf(deps, metered(deps, deps.report)));
   app.notFound(() => refusal("not_found", "route"));
   app.onError((error) => {
     // The one such error is the refusal of a request with no live token: an answer, and no failure to report.
     if (error instanceof HTTPException) return error.getResponse();
+
+    // A listing the day has no room for is an answer too.
+    if (error instanceof WritesSpent) return writesSpentRefusal(deps.now());
 
     deps.report?.(error);
     if (error instanceof AllowanceSpent) return spentRefusal(error, deps.now());

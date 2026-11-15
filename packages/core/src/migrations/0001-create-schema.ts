@@ -8,7 +8,7 @@
 // totals       one row: how many sites there are and how much their kept versions hold
 // audit        what was done, by whom, and when; rows are only ever added
 // request_counts   one row per UTC day and site, and one more per day under the empty site for all sites together; seven days are kept
-// declared_files   one row per UTC day: the files the uploads begun on it declared; the newest day and the one before it are kept
+// declared_files   one row per UTC day: the files the uploads begun on it declared, and the times the store was written to or listed on it; the newest day and the one before it are kept
 // uploads      the staged publishes: begun, taking files, then live or given up
 // logins       the computers asking to be logged in: pending, then allowed or denied, and gone once used or ten minutes old
 // leftovers    the folders of removed sites, each until its files are gone from the bucket
@@ -43,7 +43,7 @@ CREATE TABLE sites (
   CHECK (next_version > live_version)
 ) STRICT`;
 
-/** The publishes of a site that can still be gone back to; they go when the site does. */
+/** The publishes of a site that can still be gone back to; they go when the site does. `missing_page` says whether the version holds a `404.html` at its top, and `bare_files` lists its files without an extension, NULL when they are not kept. */
 const VERSIONS = `
 CREATE TABLE versions (
   folder TEXT NOT NULL REFERENCES sites (folder) ON DELETE CASCADE,
@@ -52,6 +52,8 @@ CREATE TABLE versions (
   published_by TEXT NOT NULL,
   bytes INTEGER NOT NULL CHECK (bytes >= 0),
   files INTEGER NOT NULL CHECK (files >= 0),
+  missing_page INTEGER NOT NULL DEFAULT 0 CHECK (missing_page IN (0, 1)),
+  bare_files TEXT,
   PRIMARY KEY (folder, number)
 ) STRICT, WITHOUT ROWID`;
 
@@ -119,11 +121,12 @@ CREATE TABLE request_counts (
   PRIMARY KEY (day, site)
 ) STRICT, WITHOUT ROWID`;
 
-/** The files the uploads begun on one UTC day declared, all holders together. The newest day and the one before it are kept. */
+/** The files the uploads begun on one UTC day declared, all holders together, and `writes`: the times the store was written to or listed on that day, a declared file counted when its upload begins. The newest day and the one before it are kept. */
 const DECLARED_FILES = `
 CREATE TABLE declared_files (
   day TEXT NOT NULL PRIMARY KEY CHECK (day GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]'),
-  files INTEGER NOT NULL CHECK (files >= 1)
+  files INTEGER NOT NULL CHECK (files >= 0),
+  writes INTEGER NOT NULL DEFAULT 0 CHECK (writes >= 0)
 ) STRICT, WITHOUT ROWID`;
 
 /** A staged publish from its first request on. `number` is 1 exactly for a new site, whose folder no site has yet; `manifest` is one JSON object, the declared files under keys made from their paths, while the upload is pending and empty after. */

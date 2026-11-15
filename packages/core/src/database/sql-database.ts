@@ -25,6 +25,7 @@ import { type Totals, totalsFromRow } from "../records/sizes";
 import { mintSiteId, type SiteId } from "../sites/ids";
 import { tokenFromRow } from "../records/token";
 import { type ManifestFile, type Upload, type UploadId, uploadFromRow } from "../records/upload";
+import type { VersionContents } from "../records/version-contents";
 import { dayOf, type SiteViews, viewDays } from "../records/views";
 import type {
   AuditQuery,
@@ -44,6 +45,7 @@ import type {
   Refused,
   RequestCounts,
   Reserved,
+  ServedSite,
   Signed,
   SigningKey,
   SiteDetails,
@@ -56,6 +58,7 @@ import type {
 } from "./database";
 import { domainCheckAsked, domainCheckIn, domainCheckKept } from "./domain-check";
 import type { SqlDriver, SqlValue, Statement, StatementResult } from "./driver";
+import { contentsValues, servedIn, versionsWithContents } from "./served";
 import { fileUnderKey, manifestFromText, manifestKey, manifestToText } from "./manifest";
 import { audit, declaredFiles, leftovers, logins, requestCounts, secrets, settings, sites, sweepPlace, tokens, totals, updateCheck, uploads, versions } from "./schema";
 
@@ -87,7 +90,10 @@ const PLAIN_AUDIT_COLUMNS = [audit.at, audit.actor, audit.action, audit.detail];
 const TOKEN_COLUMNS = [tokens.id, tokens.hash, tokens.scope, tokens.note, tokens.created_at, tokens.expires_at];
 
 /** The columns a version is written with. */
-const VERSION_COLUMNS = [versions.folder, versions.number, versions.published_at, versions.published_by, versions.bytes, versions.files];
+const VERSION_COLUMNS = [versions.folder, versions.number, versions.published_at, versions.published_by, versions.bytes, versions.files, versions.missing_page, versions.bare_files];
+
+/** The largest whole number the engine counts with exactly: the bound of a day on an install that has stored no settings. */
+const NO_BOUND = Number.MAX_SAFE_INTEGER;
 
 /** Every column of an upload but its manifest. */
 const UPLOAD_FIELDS = {
@@ -213,10 +219,17 @@ function bare(column: SQLiteColumn): SQL {
   return fragment`${fragment.identifier(column.name)}`;
 }
 
-/** The kept versions of the site a statement selects, gathered into one JSON value. */
-function versionsOfSite(): SQL<string> {
+/**
+ * The kept versions of the site a statement selects, gathered into one JSON value.
+ *
+ * @param withContents - whether each carries what it holds, as serving reads it: whether it has a `404.html`, and of the live one its files without an extension. It costs no row more
+ */
+function versionsOfSite(withContents = false): SQL<string> {
   const kept = [versions.number, versions.published_at, versions.published_by, versions.bytes, versions.files];
   const pairs = kept.map((column) => fragment`${fragment.raw(`'${column.name}'`)}, ${qualified(column)}`);
+  const bareOfLive = fragment`CASE WHEN ${qualified(versions.number)} = ${qualified(sites.live_version)} THEN ${qualified(versions.bare_files)} END`;
+  if (withContents) pairs.push(fragment`'missing_page', ${qualified(versions.missing_page)}`, fragment`'bare_files', ${bareOfLive}`);
+
   const version = fragment`json_object(${fragment.join(pairs, fragment`, `)})`;
 
   return fragment<string>`(SELECT json_group_array(${version}) FROM ${versions} WHERE ${qualified(versions.folder)} = ${qualified(sites.folder)})`;
@@ -242,6 +255,24 @@ function siteById(id: SiteId): Statement {
 /** Added to a lookup by address: the site is outside the trash and not past its expiry at `now`. */
 function isServed(now: number): SQL | undefined {
   return and(eq(sites.trashed, 0), or(isNull(sites.expires_at), gt(sites.expires_at, now)));
+}
+
+/** How many times the store was written to or listed on a day. */
+function writesOf(day: string): SQL {
+  return fragment`(SELECT COALESCE(SUM(${declaredFiles.writes}), 0) FROM ${declaredFiles} WHERE ${declaredFiles.day} = ${day})`;
+}
+
+/** The counts of every day before the one before the given day, dropped. Yesterday's stay: an upload that began just before midnight is still counted against it. */
+function dropEarlierDays(day: string): Statement {
+  return built(BUILD.delete(declaredFiles).where(fragment`${declaredFiles.day} < date(${day}, '-1 day')`));
+}
+
+/** So many more writes on a day, on the row it shares with the day's declared files, only while the condition holds. */
+function addWrites(day: string, writes: number, condition: SQL): Statement {
+  const counted = bare(declaredFiles.writes);
+  const added = fragment`SELECT ${day}, 0, ${writes} WHERE ${condition} ON CONFLICT (${bare(declaredFiles.day)}) DO UPDATE SET ${counted} = ${counted} + excluded.${counted}`;
+
+  return insertFrom(declaredFiles, [declaredFiles.day, declaredFiles.files, declaredFiles.writes], added);
 }
 
 /** A new access for a live site, only when it differs and the public name asked for is free: no other site has it as its public name, and no site as its id. */
@@ -596,8 +627,8 @@ export class SqlDatabase implements Database {
     this.#mintId = mintId;
   }
 
-  async createSite(draft: NewSite, signed: Signed): Promise<Done | Refused<"name_taken">> {
-    const made = await this.#insertSite(draft, signed);
+  async createSite(draft: NewSite, signed: Signed, contents?: VersionContents): Promise<Done | Refused<"name_taken">> {
+    const made = await this.#insertSite(draft, signed, { contents });
     if (made.kind === "done") return made;
 
     if (made.kind === "not_pending") throw new Error("a site made from no upload waits for none");
@@ -631,11 +662,12 @@ export class SqlDatabase implements Database {
     return siteIn(found);
   }
 
-  async findServed(address: Address, now: number): Promise<Site | undefined> {
+  async findServed(address: Address, now: number): Promise<ServedSite | undefined> {
     const addressed = "id" in address ? eq(sites.id, address.id) : eq(sites.public_name, address.public_name);
-    const [found] = await this.#driver.batch([sitesWhere(and(addressed, isServed(now)))]);
+    const fields = { ...SITE_FIELDS, versions: versionsOfSite(true).as("versions") };
+    const [found] = await this.#driver.batch([built(BUILD.select(fields).from(sites).where(and(addressed, isServed(now))))]);
 
-    return siteIn(found);
+    return servedIn(found);
   }
 
   async listSites(query: SitesQuery): Promise<SitesPage> {
@@ -781,7 +813,9 @@ export class SqlDatabase implements Database {
 
     // A version is kept only when its number was set aside and is above every kept one, so a slower, older publish never replaces a newer one.
     const above = fragment`${version.number} < ${sites.next_version} AND ${version.number} > (SELECT MAX(${versions.number}) FROM ${versions} WHERE ${versions.folder} = ${sites.folder})`;
-    const entry = fragment`SELECT ${sites.folder}, ${version.number}, ${signed.at}, ${signed.by}, ${version.bytes}, ${version.files} FROM ${sites} WHERE ${sites.id} = ${id} AND ${sites.trashed} = 0 AND ${above}`;
+    const [missingPage, bareFiles] = contentsValues(version.contents);
+    const size = fragment`${version.bytes}, ${version.files}, ${missingPage}, ${bareFiles}`;
+    const entry = fragment`SELECT ${sites.folder}, ${version.number}, ${signed.at}, ${signed.by}, ${size} FROM ${sites} WHERE ${sites.id} = ${id} AND ${sites.trashed} = 0 AND ${above}`;
     const [before, , updated, , , after] = await this.#driver.batch([
       siteById(id),
       insertFrom(versions, VERSION_COLUMNS, entry),
@@ -838,7 +872,7 @@ export class SqlDatabase implements Database {
     return { sites: listedSites, next: last.id };
   }
 
-  async importUploadAsSite(id: UploadId, site: Site, signed: Signed): Promise<Done | Refused<"id_taken" | "folder_taken" | "name_taken" | "not_pending">> {
+  async importUploadAsSite(id: UploadId, site: Site, signed: Signed, contents: ReadonlyMap<number, VersionContents> = new Map()): Promise<Done | Refused<"id_taken" | "folder_taken" | "name_taken" | "not_pending">> {
     const row = siteToRow(site);
     const nextVersion = Math.max(...row.versions.map((version) => version.number)) + 1;
     const columns = [
@@ -863,11 +897,11 @@ export class SqlDatabase implements Database {
     const values = fragment`${identity}, ${row.live_version}, ${nextVersion}, ${row.owner}, ${row.created_at}, ${row.updated_at}, ${row.trashed_at}, ${row.page_title}`;
     const folderIsFree = notExists(BUILD.select(ONE).from(OTHER).where(eq(OTHER.folder, row.folder)));
     const free = and(isFree(row.id), folderIsFree, publicNameIsFree(row.public_name, row.id), isFirstPending(id, row.folder));
-    // The live version is there already, made with the site, and takes its exported values.
-    const exported = [versions.number, versions.published_at, versions.published_by, versions.bytes, versions.files];
+    // The live version is there already, made with the site, and takes its exported values and what it is said to hold.
+    const exported = VERSION_COLUMNS.slice(1);
     const listed = fragment.join(exported.map((column) => fragment`j.value ->> ${fragment.raw(`'${column.name}'`)}`), fragment`, `);
     const taken = fragment.join(exported.slice(1).map((column) => fragment`${bare(column)} = excluded.${bare(column)}`), fragment`, `);
-    const kept = fragment`SELECT ${row.folder}, ${listed} FROM json_each(${JSON.stringify(row.versions)}) j WHERE ${CHANGED} ON CONFLICT (${bare(versions.folder)}, ${bare(versions.number)}) DO UPDATE SET ${taken}`;
+    const kept = fragment`SELECT ${row.folder}, ${listed} FROM json_each(${versionsWithContents(row.versions, contents)}) j WHERE ${CHANGED} ON CONFLICT (${bare(versions.folder)}, ${bare(versions.number)}) DO UPDATE SET ${taken}`;
     const idIsHeld = fragment`(EXISTS (SELECT 1 FROM ${sites} WHERE ${sites.id} = ${row.id}) OR EXISTS (SELECT 1 FROM ${sites} WHERE ${sites.public_name} = ${row.id}))`;
     const isHeld = fragment`SELECT ${idIsHeld} AS id_held, EXISTS (SELECT 1 FROM ${sites} WHERE ${sites.folder} = ${row.folder}) AS folder_held`;
 
@@ -894,7 +928,7 @@ export class SqlDatabase implements Database {
     return { kind: "name_taken" };
   }
 
-  async addUpload(upload: NewUpload, room: UploadRoom): Promise<{ readonly kind: "done" } | Refused<"own_full" | "folder_full" | "total_full" | "sites_full" | "day_full">> {
+  async addUpload(upload: NewUpload, room: UploadRoom): Promise<{ readonly kind: "done" } | Refused<"own_full" | "folder_full" | "total_full" | "sites_full" | "day_full" | "writes_full">> {
     requireDay(room.day);
     const manifest = manifestToText(upload.manifest);
     const bytes = upload.manifest.reduce((sum, file) => sum + file.size, 0);
@@ -903,21 +937,24 @@ export class SqlDatabase implements Database {
     const own = pendingOf(checked.owner);
     const folderBytes = bytesIn(checked.folder, room.staying);
     const dayFiles = fragment`(SELECT COALESCE(SUM(${declaredFiles.files}), 0) FROM ${declaredFiles} WHERE ${declaredFiles.day} = ${room.day})`;
+    // The day's one row is read once for both of its bounds: the files declared on it, and the writes to the store counted on it.
+    const overDay = fragment`${declaredFiles.files} + ${checked.files} > ${room.dayFiles} OR ${declaredFiles.writes} + ${room.writes} > ${room.dayWrites}`;
+    const dayFits = fragment`NOT EXISTS (SELECT 1 FROM ${declaredFiles} WHERE ${declaredFiles.day} = ${room.day} AND (${overDay})) AND ${checked.files} <= ${room.dayFiles} AND ${room.writes} <= ${room.dayWrites}`;
     // What the upload is measured against is read before it is recorded, so a refusal can say which room is full.
     const held = fragment`SELECT ${checked.id} AS id, ${checked.number} AS number, ${own} AS own, ${folderBytes} AS folder_bytes, ${BYTES_HELD} AS total_bytes, ${SITES_HELD} AS sites`;
     const bytesFit = fragment`${folderBytes} + ${checked.bytes} <= ${room.folderBytes} AND ${BYTES_HELD} + ${checked.bytes} <= ${room.totalBytes}`;
-    const fits = fragment`${own} < ${room.own} AND ${bytesFit} AND (${room.sites} IS NULL OR ${SITES_HELD} < ${room.sites}) AND ${dayFiles} + ${checked.files} <= ${room.dayFiles}`;
+    const fits = fragment`${own} < ${room.own} AND ${bytesFit} AND (${room.sites} IS NULL OR ${SITES_HELD} < ${room.sites}) AND ${dayFits}`;
     const columns = [uploads.id, uploads.folder, uploads.number, uploads.owner, uploads.plan, uploads.manifest, uploads.bytes, uploads.files, uploads.created_at];
     const record = fragment`SELECT ${checked.id}, ${checked.folder}, ${checked.number}, ${checked.owner}, ${row.plan}, ${manifest}, ${checked.bytes}, ${checked.files}, ${checked.created_at} WHERE ${fits}`;
-    const files = bare(declaredFiles.files);
-    const counted = fragment`SELECT ${room.day}, ${checked.files} WHERE ${CHANGED} ON CONFLICT (${bare(declaredFiles.day)}) DO UPDATE SET ${files} = ${files} + excluded.${files}`;
+    const [files, writes] = [bare(declaredFiles.files), bare(declaredFiles.writes)];
+    const added = fragment`${files} = ${files} + excluded.${files}, ${writes} = ${writes} + excluded.${writes}`;
+    const counted = fragment`SELECT ${room.day}, ${checked.files}, ${room.writes} WHERE ${CHANGED} ON CONFLICT (${bare(declaredFiles.day)}) DO UPDATE SET ${added}`;
 
     const [before, , inserted] = await this.#driver.batch([
       written(held),
-      // Yesterday's count stays: an upload that began just before midnight is still counted against it.
-      built(BUILD.delete(declaredFiles).where(fragment`${declaredFiles.day} < date(${room.day}, '-1 day')`)),
+      dropEarlierDays(room.day),
       insertFrom(uploads, columns, record),
-      insertFrom(declaredFiles, [declaredFiles.day, declaredFiles.files], counted),
+      insertFrom(declaredFiles, [declaredFiles.day, declaredFiles.files, declaredFiles.writes], counted),
     ]);
     if (changed(inserted)) return { kind: "done" };
 
@@ -928,7 +965,12 @@ export class SqlDatabase implements Database {
 
     if (Number(measured?.total_bytes) + checked.bytes > room.totalBytes) return { kind: "total_full" };
 
-    return { kind: room.sites !== null && Number(measured?.sites) >= room.sites ? "sites_full" : "day_full" };
+    if (room.sites !== null && Number(measured?.sites) >= room.sites) return { kind: "sites_full" };
+
+    // Only a refused upload pays for the read that says which bound of the day it did not fit.
+    const [day] = await this.#driver.batch([written(fragment`SELECT ${dayFiles} AS files`)]);
+
+    return { kind: Number(day?.rows[0]?.files) + checked.files > room.dayFiles ? "day_full" : "writes_full" };
   }
 
   async getUpload(id: UploadId): Promise<{ readonly upload: Upload; readonly manifest: readonly ManifestFile[] } | undefined> {
@@ -952,8 +994,8 @@ export class SqlDatabase implements Database {
     return { upload, file: fileUnderKey(stored, path) };
   }
 
-  publishUploadAsSite(id: UploadId, draft: NewSite, signed: Signed): Promise<Done | Refused<"name_taken" | "not_pending">> {
-    return this.#insertSite(draft, signed, id);
+  publishUploadAsSite(id: UploadId, draft: NewSite, signed: Signed, contents?: VersionContents): Promise<Done | Refused<"name_taken" | "not_pending">> {
+    return this.#insertSite(draft, signed, { upload: id, contents });
   }
 
   async publishUploadAsVersion(
@@ -969,7 +1011,9 @@ export class SqlDatabase implements Database {
     const inFolder = fragment`${sites.folder} = ${folderOf(id)}`;
     // The version takes the size its upload declared, only while the upload can be published and its site has the access asked with it.
     const publishable = fragment`${AN_UPLOAD.id} = ${id} AND ${hasAccess(id, access, publicName)} AND ${canPublish(id)}`;
-    const uploaded = fragment`SELECT ${AN_UPLOAD.folder}, ${AN_UPLOAD.number}, ${signed.at}, ${signed.by}, ${AN_UPLOAD.bytes}, ${AN_UPLOAD.files} FROM ${uploads} ${AN_UPLOAD} WHERE ${publishable}`;
+    const [missingPage, bareFiles] = contentsValues(version.contents);
+    const size = fragment`${AN_UPLOAD.bytes}, ${AN_UPLOAD.files}, ${missingPage}, ${bareFiles}`;
+    const uploaded = fragment`SELECT ${AN_UPLOAD.folder}, ${AN_UPLOAD.number}, ${signed.at}, ${signed.by}, ${size} FROM ${uploads} ${AN_UPLOAD} WHERE ${publishable}`;
     const number = fragment<number>`(SELECT ${uploads.number} FROM ${uploads} WHERE ${uploads.id} = ${id})`;
     const entry = fragment`SELECT ${signed.at}, ${signed.by}, 'publish', ${sites.id}, ${sites.name}, json_object('version', ${sites.live_version}) FROM ${sites} WHERE ${inFolder} AND ${CHANGED}`;
     // The upload is finished with the versions beyond the highest kept, which the statement after it drops.
@@ -1183,6 +1227,32 @@ export class SqlDatabase implements Database {
     await this.#driver.batch([domainCheckKept(check), auditPlain({ by: check.by, at: check.ran_at }, "domain_synced", detail)]);
   }
 
+  async readStorageWrites(day: string): Promise<{ readonly writes: number; readonly most: number } | undefined> {
+    requireDay(day);
+    const [read] = await this.#driver.batch([written(fragment`SELECT (SELECT ${settings.value} FROM ${settings} WHERE ${settings.id} = 1) AS value, ${writesOf(day)} AS writes`)]);
+    const stored = settingsIn(read);
+    if (stored === undefined) return undefined;
+
+    return { writes: Number(read?.rows[0]?.writes), most: stored.max_storage_writes_per_day };
+  }
+
+  async takeStorageWrite(day: string, spare: number): Promise<boolean> {
+    requireDay(day);
+    requireCount("the writes a day takes beyond its bound", spare);
+    // The check and the count are one statement, so no two requests pass the bound together. An install that has stored no settings has no bound.
+    const most = fragment`COALESCE((SELECT ${settings.value} ->> 'max_storage_writes_per_day' FROM ${settings} WHERE ${settings.id} = 1), ${NO_BOUND})`;
+    const [, taken] = await this.#driver.batch([dropEarlierDays(day), addWrites(day, 1, fragment`${writesOf(day)} < ${most} + ${spare}`)]);
+
+    return changed(taken);
+  }
+
+  async addStorageWrites(day: string, writes: number): Promise<void> {
+    requireDay(day);
+    if (!Number.isSafeInteger(writes) || writes < 1) throw new RangeError(`a count of writes is a whole number of at least 1, not ${writes}`);
+
+    await this.#driver.batch([dropEarlierDays(day), addWrites(day, writes, fragment`true`)]);
+  }
+
   async readSettings(): Promise<SettingValues | undefined> {
     const [read] = await this.#driver.batch([READ_SETTINGS]);
 
@@ -1393,12 +1463,15 @@ export class SqlDatabase implements Database {
   }
 
   /** Make a site under a fresh id; with `upload`, only while that upload is pending, and marking it finished in the same step. */
-  async #insertSite(draft: NewSite, signed: Signed, upload?: UploadId): Promise<Done | Refused<"name_taken" | "not_pending">> {
+  async #insertSite(draft: NewSite, signed: Signed, from: { readonly upload?: UploadId; readonly contents?: VersionContents }): Promise<Done | Refused<"name_taken" | "not_pending">> {
+    const { upload } = from;
     const site = v.parse(NEW_SITE, draft);
+    const [missingPage, bareFiles] = contentsValues(from.contents);
+    const first = { bytes: site.bytes, files: site.files, missing_page: missingPage, bare_files: bareFiles };
     const publicName = publicNameOf(site);
     const detail = { access: site.access, public_name: publicName };
-    // The first version, which the schema made with the site, is given its size only when the site was made.
-    const size = BUILD.update(versions).set({ bytes: site.bytes, files: site.files }).where(and(eq(versions.folder, site.folder), eq(versions.number, 1), CHANGED));
+    // The first version, which the schema made with the site, is given its size and what it holds only when the site was made.
+    const size = BUILD.update(versions).set(first).where(and(eq(versions.folder, site.folder), eq(versions.number, 1), CHANGED));
     const held = fragment`SELECT (EXISTS (SELECT 1 FROM ${sites} WHERE ${sites.public_name} = ${publicName}) OR EXISTS (SELECT 1 FROM ${sites} WHERE ${sites.id} = ${publicName})) AS held`;
 
     for (let attempt = 0; attempt < MINT_ATTEMPTS; attempt += 1) {

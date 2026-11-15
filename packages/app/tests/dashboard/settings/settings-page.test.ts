@@ -54,6 +54,6 @@ test("a stored value above a free limit shows its warning beside its own field, 
 
   expect(page.match(/<p class="warning" id="[a-z_]+-warning"><strong>Warning:<\/strong> [^<]*<\/p>/g)).toEqual([
     '<p class="warning" id="max_total_size-warning"><strong>Warning:</strong> all sites are above the free 10 GB</p>',
-    '<p class="warning" id="requests_per_day-warning"><strong>Warning:</strong> above the free 100,000 requests a day</p>',
+    '<p class="warning" id="requests_per_day-warning"><strong>Warning:</strong> above the free 10,000,000 reads a month; above the free 100,000 requests a day</p>',
   ]);
 });

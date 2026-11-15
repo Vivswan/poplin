@@ -2,7 +2,9 @@
 
 import { reset } from "cloudflare:test";
 import { publishSite } from "@poplin/core/src/actions/publish";
+import { SWEEP_SPARE_WRITES } from "@poplin/core/src/actions/sweep";
 import { parseUserCode } from "@poplin/core/src/auth/computer-logins";
+import { dayOf } from "@poplin/core/src/records/views";
 import { beforeEach, describe, expect, test } from "vitest";
 import { ADMIN, api, ask, BINDINGS, done, freePlanBindings, installOf, instance, OWNER, page, publish, sendFile, sweep, tokenOf, type World, wait, world } from "./support/install";
 
@@ -15,8 +17,8 @@ const DAY_MS = 86_400_000;
 /** The files one removal takes from a folder whose list pages hold one object each. */
 const WHOLE_REMOVAL = 15;
 
-/** What a step over five sat-out sites costs when each takes a whole removal: the settings, the listing, and per site a read, a change, 30 bucket calls, and the leftover forgotten. */
-const MOST_STEP_CALLS = 167;
+/** What a step over five sat-out sites costs when each takes a whole removal: the settings, the listing, the day's count of writes to the bucket, and per site a read, a change, 30 bucket calls, and the leftover forgotten. */
+const MOST_STEP_CALLS = 168;
 
 /** The one file of a site made only to be swept. */
 const HTML = new TextEncoder().encode("<p>short-lived</p>");
@@ -79,6 +81,31 @@ describe("the scheduled run", () => {
     expect((await ask(worker, `${ADMIN}/api/sites/${kept.label}`, { headers: { Authorization: `Bearer ${token}` } })).status).toBe(200);
     expect(activity.map((entry) => `${entry.action} ${entry.site?.id === brief.id} by ${entry.by}`)).toEqual(["delete true by sweep@poplin.invalid", "trash true by sweep@poplin.invalid"]);
     expect(await database.listUploads({ before: w.clock.now, limit: 100 })).toEqual({ uploads: [] });
+  });
+
+  // Drift: R2 bills every listing past a month's free million writes, and the sweep lists a folder to empty it. A run that listed uncounted would have no bound; one that shared the day's bound with every publish could be kept from removing files for good.
+  test("a run's listings are counted against the day; a day used up to the sweep's own share keeps the files of a removed site, and a day used up by everything else still lets the sweep remove them", async () => {
+    const worker = instance(w);
+    const { database } = await installOf(w);
+    await publish(worker, await tokenOf(w, "publisher"), { name: "brief", expires: "1h" }, [page("<p>brief</p>")]);
+    const most = (await database.readSettings())?.max_storage_writes_per_day ?? 0;
+    const seen = async (): Promise<unknown> => [await states(), (await keysUnder("")).length, (await database.listLeftovers({ limit: 10 })).folders.length, (await database.readStorageWrites(dayOf(w.clock.now)))?.writes];
+
+    wait(w, 2);
+    await sweep(worker, w);
+    wait(w, 8 * 24);
+    await database.addStorageWrites(dayOf(w.clock.now), most + SWEEP_SPARE_WRITES);
+    await sweep(worker, w);
+    const usedUp = await seen();
+
+    wait(w, 24);
+    await database.addStorageWrites(dayOf(w.clock.now), most);
+    await sweep(worker, w);
+
+    expect([usedUp, await seen()]).toEqual([
+      [{ live: 0, trash: 0 }, 1, 1, most + SWEEP_SPARE_WRITES],
+      [{ live: 0, trash: 0 }, 0, 0, most + 1],
+    ]);
   });
 
   // Drift: nothing but the scheduled run ever asks which version is the newest. An entry that did not hand it the fetch, or a run that asked every time, would leave the install silent or have it ask the website 96 times a day.
@@ -182,13 +209,13 @@ describe("the scheduled run", () => {
 
   // Drift: Cloudflare may start a new instance for every cron run, and the listing is newest first. A place kept in the instance's memory starts every run at the newest site, so an expired site behind more live ones than a run looks at is never reached.
   // D1 answers a Free invocation 50 queries: a run that asks more is cut off before it keeps its place, and the next one starts at the newest site again.
-  test("an expired site behind ninety-six newer live ones reaches the trash in the second run, each run a new instance that D1 refuses a fifty-first query", async () => {
+  test("an expired site behind ninety newer live ones reaches the trash in the second run, each run a new instance that D1 refuses a fifty-first query", async () => {
     const tally = { calls: 0 };
     await ask(instance(w), `${ADMIN}/api/whoami`);
     const install = await installOf(w);
     const file = { path: "index.html", size: HTML.byteLength, contentType: "text/html", open: () => new Blob([HTML]).stream() };
 
-    for (const [count, name, expires] of [[1, "brief", "1h"], [96, "lasting", "never"]] as const) {
+    for (const [count, name, expires] of [[1, "brief", "1h"], [90, "lasting", "never"]] as const) {
       for (let made = 0; made < count; made += 1) {
         const site = await publishSite(install, { scope: "admin", holder: OWNER }, { name: `${name}-${made}`, expires, files: [file] });
         if (!site.ok) throw new Error(`the test's site was refused: ${site.code}`);

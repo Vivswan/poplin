@@ -31,6 +31,8 @@ export const FREE_LIMITS = {
   siteBytes: { most: 10_000_000_000, warning: "one site is above the free 10 GB" },
   filesPerPublish: { most: 5000, warning: "one publish is above the free 5,000 files" },
   filesPerDay: { most: 32_000, warning: "above the free 32,000 files a day" },
+  storageWritesPerDay: { most: 30_000, warning: "above the free 30,000 writes a day" },
+  storageReadsPerMonth: { most: 10_000_000, warning: "above the free 10,000,000 reads a month" },
   requestsPerDay: { most: 100_000, warning: "above the free 100,000 requests a day" },
   logins: { most: 50, warning: "above the free 50 users" },
 } as const;

@@ -7,10 +7,11 @@ import type { Signed } from "../database/database";
 import type { SettingValues } from "../records/settings";
 import { type Site, siteFromRow } from "../records/site";
 import { parseUploadId, type Upload, type UploadPlan } from "../records/upload";
+import type { VersionContents } from "../records/version-contents";
 import { enterInstall } from "./reach";
 import { type Install, type Refused, refuse } from "./records";
 import { SITE_OBJECT, siteAnswer } from "./site-object";
-import { discardUpload, isWithinReach, missingFiles, removeDropped } from "./uploads";
+import { discardUpload, isWithinReach, missingFiles, removeDropped, uploadContents } from "./uploads";
 
 /** What a publish answers: the site answer with `created` on the site, and the prefixes of dropped versions whose files are not all removed yet. */
 export const PUBLISHED_SITE = v.object({
@@ -36,16 +37,17 @@ interface Committed {
   readonly dropped: readonly number[];
 }
 
-/** What a commit is made with: the upload, the install's settings, and the signature of the change. */
+/** What a commit is made with: the upload, what each version its files make holds, the install's settings, and the signature of the change. */
 interface Commit {
   readonly upload: Upload;
+  readonly contents: ReadonlyMap<number, VersionContents>;
   readonly settings: SettingValues;
   readonly signed: Signed;
 }
 
 /** Make the upload's new site. A copy gets one more audit entry, which names the site it was copied from. */
 async function makeSite(install: Install, plan: Extract<UploadPlan, { kind: "create" | "duplicate" }>, commit: Commit): Promise<Committed | Refused<LostCode> | "not_pending"> {
-  const made = await install.database.publishUploadAsSite(commit.upload.id, plan.site, commit.signed);
+  const made = await install.database.publishUploadAsSite(commit.upload.id, plan.site, commit.signed, commit.contents.get(commit.upload.number));
   if (made.kind === "not_pending") return "not_pending";
 
   if (made.kind !== "done") return refuse(made.kind, "public_name");
@@ -57,7 +59,7 @@ async function makeSite(install: Install, plan: Extract<UploadPlan, { kind: "cre
 
 /** Store the site an import carries, as its backup held it, under the upload's folder: the database stores the site with every version, or nothing. */
 async function importSite(install: Install, plan: Extract<UploadPlan, { kind: "import" }>, commit: Commit): Promise<Committed | Refused<LostCode> | "not_pending"> {
-  const imported = await install.database.importUploadAsSite(commit.upload.id, siteFromRow(plan.site), commit.signed);
+  const imported = await install.database.importUploadAsSite(commit.upload.id, siteFromRow(plan.site), commit.signed, commit.contents);
   if (imported.kind === "done") return { ok: true, before: null, site: imported.site, dropped: [] };
 
   if (imported.kind === "not_pending") return "not_pending";
@@ -76,7 +78,7 @@ async function addVersion(install: Install, plan: Extract<UploadPlan, { kind: "u
   if (site === undefined) return refuse("not_found");
 
   const { access, details, page_title } = plan;
-  const version = { keep: commit.settings.versions_kept, access, details, page_title };
+  const version = { keep: commit.settings.versions_kept, access, details, page_title, contents: commit.contents.get(commit.upload.number) };
   const added = await install.database.publishUploadAsVersion(commit.upload.id, version, commit.signed);
   if (added.kind === "not_pending") return "not_pending";
 
@@ -144,7 +146,7 @@ export async function finishPublish(install: Install, actor: Actor, reference: s
   const [missing] = await missingFiles(install.store, upload, found.manifest);
   if (missing !== undefined) return refuse("missing_files", missing);
 
-  const committed = await commitUpload(install, { upload, settings, signed });
+  const committed = await commitUpload(install, { upload, contents: uploadContents(upload, found.manifest), settings, signed });
 
   // Another request finished the upload, or gave it up, while this one was at work.
   if (committed === "not_pending") {

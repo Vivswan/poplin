@@ -1,4 +1,5 @@
 // An install the serving tests ask requests of: a real database on bun's SQLite, a store in memory that records every key it is asked for, and a login that takes a test header as its proof.
+// A key is recorded once for every request the store's contract says a call costs: twice for a read of a range that selects no byte of the object.
 
 import { type Login, parseLogins } from "@poplin/core/src/auth/logins";
 import type { Database, NewSite } from "@poplin/core/src/database/database";
@@ -7,9 +8,10 @@ import type { AccessLetter } from "@poplin/core/src/names/marker";
 import { parsePublicName, parseSiteName } from "@poplin/core/src/names/names";
 import { defaultSettings } from "@poplin/core/src/records/settings";
 import { mintSiteFolder, type Site } from "@poplin/core/src/records/site";
+import { contentsOf } from "@poplin/core/src/records/version-contents";
 import { siteLabel } from "@poplin/core/src/sites/labels";
 import { MemoryStore } from "@poplin/core/src/storage/memory";
-import { type HeadResult, type ObjectKey, parseObjectKey, type ReadOptions, type ReadResult } from "@poplin/core/src/storage/storage";
+import { type HeadResult, type ObjectKey, parseObjectKey, type ReadOptions, type ReadResult, resolveRange } from "@poplin/core/src/storage/storage";
 import { BunSqliteDriver } from "@poplin/core/tests/database/support/bun-sqlite-driver";
 import type { serveSite } from "../../../src/sites/serve";
 import { ADDRESSES, } from "./layout";
@@ -34,7 +36,7 @@ const WRITTEN_TYPE = "application/octet-stream";
 /** A file to publish: its body and the content type the store answers for it. */
 type Files = Readonly<Record<string, readonly [body: string | Uint8Array, contentType: string]>>;
 
-/** What a test site is made from; the name doubles as the public name of a public site. */
+/** What a test site is made from; the name doubles as the public name of a public site. `unlisted_files` stores the site as one made from no list of files, so nothing is known of what its version holds. */
 interface Draft {
   readonly name: string;
   readonly access: "private" | "unlisted" | "public";
@@ -42,6 +44,7 @@ interface Draft {
   readonly search_engines?: boolean;
   readonly embeddable?: boolean;
   readonly expires?: "never" | number;
+  readonly unlisted_files?: boolean;
 }
 
 /** A test install. `keys` lists every key the store was asked for, and `bodies` every stream it handed out. */
@@ -130,12 +133,15 @@ export async function openInstall(): Promise<Install> {
       const result = typed(await memory.read(objectKey, options));
       if (result.kind === "found") bodies.push(result.body);
 
+      if (options?.range !== undefined && "info" in result && resolveRange(options.range, result.info.size) === "unsatisfiable") keys.push(objectKey);
+
       return result;
     },
   };
 
   const publish = async (draft: Draft): Promise<Site> => {
-    const made = await database.createSite(draftOf(draft), { by: owner, at: NOW });
+    const contents = draft.unlisted_files === true ? undefined : contentsOf(Object.keys(draft.files));
+    const made = await database.createSite(draftOf(draft), { by: owner, at: NOW }, contents);
     if (made.kind !== "done") throw new Error(`the test's site was refused: ${made.kind}`);
 
     for (const [path, [body, contentType]] of Object.entries(draft.files)) {

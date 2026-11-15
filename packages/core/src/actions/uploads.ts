@@ -5,6 +5,7 @@ import * as v from "valibot";
 import { type Actor, mayReachSite } from "../auth/scopes";
 import { COUNT, MOMENT, POSITIVE } from "../records/fields";
 import { type ManifestFile, UPLOAD_ID, UPLOAD_STATE, type Upload } from "../records/upload";
+import { contentsOf, type VersionContents } from "../records/version-contents";
 import { MAX_LIST_LIMIT, type ObjectStore } from "../storage/storage";
 import { fileKey, removeFiles, sitePrefix, versionPrefix } from "./files";
 import type { Install } from "./records";
@@ -90,6 +91,28 @@ export function uploadKey(upload: Placed, path: string): ReturnType<typeof fileK
   if (number === undefined || rest === undefined) return { ok: false, refusal: "empty" };
 
   return fileKey(upload.folder, Number(number), rest);
+}
+
+/**
+ * Work out what each version an upload's files make holds, from the paths its manifest names.
+ *
+ * @returns what each version holds by its number: the upload's own for a publish or a copy, and every version its paths name for an import
+ */
+export function uploadContents(upload: Placed, manifest: readonly ManifestFile[]): ReadonlyMap<number, VersionContents> {
+  if (upload.plan.kind !== "import") return new Map([[upload.number, contentsOf(manifest.map((file) => file.path))]]);
+
+  const paths = new Map<number, string[]>();
+
+  for (const file of manifest) {
+    const [, number, rest] = IMPORTED_PATH.exec(file.path) ?? [];
+    if (number === undefined || rest === undefined) continue;
+
+    const held = paths.get(Number(number));
+    if (held === undefined) paths.set(Number(number), [rest]);
+    else held.push(rest);
+  }
+
+  return new Map([...paths].map(([number, held]) => [number, contentsOf(held)]));
 }
 
 /**

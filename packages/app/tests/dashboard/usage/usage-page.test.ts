@@ -18,6 +18,7 @@ test("the stored totals and the day's requests are shown against the limits the 
   await opened.install.database.trashSite(trashed.id, { by: opened.owner, at: opened.clock.now });
   await opened.install.database.addRequests({ day: "2023-11-14", site: site.id, requests: 25_000 });
   await opened.install.database.addRequests({ day: "2023-11-14", site: trashed.id, requests: 5000 });
+  await opened.install.database.addStorageWrites("2023-11-14", 15_000);
 
   const page = await (await opened.get("/usage")).text();
 
@@ -26,6 +27,7 @@ test("the stored totals and the day's requests are shown against the limits the 
     ["Sites, the trash included", "2", "no limit", ""],
     ["Sites in the trash", "1", "no limit", ""],
     ["Files", "120", "no limit", ""],
+    ["Writes to the storage today", "15000", "30000", '<meter min="0" max="30000" value="15000">50%</meter> 50%'],
     ["Requests today", "30000", "100000", '<meter min="0" max="100000" value="30000">30%</meter> 30%'],
   ]);
   expect(page).toContain("Requests are counted from a sample, so today's number is approximate.");

@@ -32,6 +32,7 @@ export const FULL = {
   total_full: refuse("too_large", "max_total_size"),
   sites_full: refuse("too_many_sites", "max_sites"),
   day_full: refuse("too_large", "max_files_per_day"),
+  writes_full: refuse("allowance_spent", "max_storage_writes_per_day"),
 } as const;
 
 /** Measures a manifest as the database stores it. */
@@ -70,6 +71,7 @@ type BeginCode =
   | "no_index"
   | "too_large"
   | "too_many_sites"
+  | "allowance_spent"
   | "name_taken"
   | "not_found"
   | "not_allowed"
@@ -135,18 +137,22 @@ export function checkManifest(
 
 /**
  * The room a publish must fit in under the install's limits. The database checks it in the step that records the upload, so uploads begun at the same moment cannot pass a limit together.
- *
  * `max_site_size` bounds what the site keeps once this publish is live: the versions that stay under `versions_kept`, this publish, and every other pending upload to the site.
  * `max_total_size` bounds every kept version of every site, the trash included, and every pending upload, whose files are in the bucket already.
  * `max_sites` counts every site, the trash included, and every pending upload of a new site. One holder has at most 20 uploads pending.
  * `max_files_per_day` bounds the files every upload begun on the same UTC day declares; an upload that is given up or runs out gives none back.
- * @param makesSite - whether finishing the upload makes a site, which `max_sites` then bounds
+ * `max_storage_writes_per_day` bounds the times the store is written to or listed on one UTC day: the upload's `writes` are counted on the day it begins.
+ * @param upload - `makesSite` is whether finishing it makes a site, which `max_sites` then bounds; `writes` is how many times it writes to the store: once a file, twice a copied file
  * @param now - the clock, in milliseconds since the epoch: the day the upload's files are counted on
  */
-export function roomUnder(settings: SettingValues, makesSite: boolean, now: number): UploadRoom {
+export function roomUnder(settings: SettingValues, upload: { readonly makesSite: boolean; readonly writes: number }, now: number): UploadRoom {
+  const { makesSite } = upload;
+
   return {
     day: dayOf(now),
     dayFiles: settings.max_files_per_day,
+    writes: upload.writes,
+    dayWrites: settings.max_storage_writes_per_day,
     own: MAX_PENDING_UPLOADS,
     folderBytes: sizeBytes(settings.max_site_size),
     staying: settings.versions_kept - 1,
@@ -215,7 +221,7 @@ async function planSite(
 
   const site = draftOf(name.value, changes, { settings, now: signed.at, listed, files: asked.files.length, pageTitle: asked.pageTitle });
 
-  return { ok: true, folder: site.folder, number: 1, plan: { kind: "create", site }, room: roomUnder(settings, true, signed.at) };
+  return { ok: true, folder: site.folder, number: 1, plan: { kind: "create", site }, room: roomUnder(settings, { makesSite: true, writes: asked.files.length }, signed.at) };
 }
 
 async function planVersion(
@@ -243,17 +249,17 @@ async function planVersion(
   const asks = changes.access === undefined ? { details: changes.details } : { access: changes.access, details: changes.details };
   const plan: UploadPlan = { kind: "update", ...asks, ...pageTitleOf(asked.pageTitle) };
 
-  return { ok: true, folder: site.folder, number: reserved.number, plan, room: roomUnder(settings, false, signed.at) };
+  return { ok: true, folder: site.folder, number: reserved.number, plan, room: roomUnder(settings, { makesSite: false, writes: asked.files.length }, signed.at) };
 }
 
 /**
  * Begin a publish of a new site, or of the next version of a site, which a `name` sent with it renames.
- *
  * It checks the arguments, the actor's right to the site, the paths, and the limits against the declared sizes. A site needs an `index.html` at its top.
  * Then it mints the folder of a new site or sets aside the site's next version number, and records the upload. No file is stored, no site is made, and no site changes.
  * @param request - what the caller sent; anything is taken and checked
  * @param limits - what one request can carry; a file or a count beyond it is `too_large`, naming `max_file_size` or `max_files`. A count beyond the install's settings names `max_files_per_publish` or `max_files_per_day`
- * @returns the upload, whose id every later step names, or a refusal that left nothing behind but a version number that is skipped
+ * @returns the upload, whose id every later step names, or a refusal that left nothing behind but a version number that is skipped.
+ * `allowance_spent` about `max_storage_writes_per_day` when the day's writes to the store leave no room for its files, until the next midnight UTC
  * @throws {Error} the database failed
  */
 export async function beginPublish(

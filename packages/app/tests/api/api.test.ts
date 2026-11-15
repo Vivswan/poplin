@@ -5,6 +5,7 @@ import { publishSite } from "@poplin/core/src/actions/publish";
 import type { Install } from "@poplin/core/src/actions/records";
 import type { Login } from "@poplin/core/src/auth/logins";
 import { AllowanceSpent } from "@poplin/core/src/database/driver";
+import { dayOf } from "@poplin/core/src/records/views";
 import type { InferRequestType } from "hono/client";
 import type { ExtractSchema } from "hono/types";
 
@@ -104,7 +105,7 @@ const BUDGET: Readonly<Record<RouteKey, number>> = {
   "GET /api/export/settings": 2,
   "GET /api/export/sites": 2,
   "GET /api/export/sites/:site": 4,
-  "GET /api/export/sites/:site/files": 5,
+  "GET /api/export/sites/:site/files": 6,
   "GET /api/export/sites/:site/file": 5,
   "POST /api/import/settings": 2,
   "POST /api/import/sites": 7,
@@ -539,9 +540,9 @@ describe("createApi", () => {
   // Drift: a host ends a request that makes more than 50 calls to the database and the store, and the route reads the token before the action runs. A fixed count handed to the action copied fewer files than fit.
   test.each([
     [1, 1],
-    [48, 3],
-    [300, 19],
-    [1_001, 49],
+    [48, 4],
+    [300, 20],
+    [1_001, 52],
   ])("a copy of %i files through the route is whole after %i requests, none of which makes more than 50 calls to the database and the store", async (count, requests) => {
     const install = await openApi({}, { fileBytes: 64, files: 10_000, manifestBytes: 2_000_000 });
     const files = Array.from({ length: count }, (_page, at) => ({ path: at === 0 ? "index.html" : `pages/${at}.html`, size: 1, contentType: "text/html", open: () => new Blob(["x"]).stream() }));
@@ -609,6 +610,41 @@ describe("the staged publish over HTTP", () => {
 
     expect([created, (await listed(install)).body.sites]).toEqual([true, [{ ...site, views: { today: 0, week: 0 } }]]);
     expect([part(shown, "upload").state, shown.body.missing, shown.body.more]).toEqual(["finished", [], false]);
+  });
+
+  // Drift: a host bills every listing of its store past a month's free amount. A route that listed uncounted, or went on listing at the bound, would let a client's loop run up a bill; one that failed a delete there would keep a site its owner removed.
+  test("every listing a route makes is counted against the day; at the bound a route that lists is refused with when to come back, and a delete leaves its files to the sweep", async () => {
+    const install = await openApi({ max_storage_writes_per_day: 8 });
+    const counts: unknown[] = [];
+    const count = async (): Promise<void> => void counts.push((await install.database.readStorageWrites(dayOf(NOW)))?.writes);
+    const api = install.routes;
+    const files = (site: string): Promise<Answered> => answered(api.export.sites[":site"].files.$get({ param: { site }, query: { version: "1" } }));
+
+    const upload = await staged(install, { name: "report" });
+    await count();
+    for (let asked = 0; asked < 2; asked += 1) await api.uploads[":upload"].$get({ param: { upload }, query: {} });
+    await count();
+    const site = part(await answered(install.as(install.tokens.owner).uploads[":upload"].finish.$post({ param: { upload }, query: {} })), "site").id as string;
+    await count();
+    const listed = await files(site);
+    await count();
+    const copy = await answered(api.sites[":site"].duplicate.$post({ param: { site }, json: {}, query: {} }));
+    await count();
+    const last = await files(site);
+    await count();
+    const refused = await files(site);
+    const removed = await answered(api.sites[":site"].$delete({ param: { site }, query: { forever: "true" } }));
+    await count();
+    install.clock.now += DAY;
+    const tomorrow = await answered(api.uploads.$post({ json: { name: "report", files: manifest(PAGES) }, query: {} }));
+
+    const spent = { error: { code: "allowance_spent", message: "a day's allowance of the install is used up: ask again after midnight UTC", about: "max_storage_writes_per_day" } };
+    expect(counts).toEqual([2, 4, 5, 6, 7, 8, 8]);
+    expect([listed.status, last.status, tomorrow.status]).toEqual([200, 200, 200]);
+    // The fixtures' moment is 22:13:20 UTC: 6,400 seconds before midnight.
+    expect([copy.status, copy.body, copy.response.headers.get("Retry-After")]).toEqual([503, spent, "6400"]);
+    expect([refused.status, refused.body, refused.response.headers.get("Retry-After")]).toEqual([503, spent, "6400"]);
+    expect([removed.status, (removed.body.left as string[]).length, (await api.sites[":site"].$get({ param: { site }, query: {} })).status, (await install.keys()).length]).toEqual([200, 1, 404, 2]);
   });
 
   // Drift: each row is a way a publish ends without going live; files left in the bucket under no site would fill it unseen, and a half-sent file would be served.
@@ -917,7 +953,7 @@ describe("what the API refuses before any action runs", () => {
     expect([answer.status, answer.response.headers.get("Retry-After"), answer.body]).toEqual([
       503,
       "6400",
-      { error: { code: "allowance_spent", message: "the day's free allowance of the database is used up: ask again after midnight UTC", about: "writing" } },
+      { error: { code: "allowance_spent", message: "a day's allowance of the install is used up: ask again after midnight UTC", about: "writing" } },
     ]);
     expect(install.reported.length).toBe(1);
   });

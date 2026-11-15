@@ -95,25 +95,43 @@ describe("R2Store: input the store does not control", () => {
     expect<unknown>(await readText(store, key, { ifNoneMatch: sent(info.etag) })).toEqual({ kind: "found", info, span: { offset: 0, length: 10 }, text: DIGITS });
   });
 
-  // Drift: a ranged read is two R2 calls; a span worked out for the old object must never be cut from the new one.
-  test("a write landing between the two calls of a ranged read: the read answers for the new object", async () => {
-    await reset();
+  // Drift: R2 bills every get and every head past a month's free ten million, and serving counts three calls a request. A ranged read that looked at the object first would be a fourth.
+  test.each([
+    ["a part of a file", { range: { offset: 2, length: 3 } }, "found", { get: 1, head: 0 }],
+    ["the end of a file", { range: { suffix: 2 } }, "found", { get: 1, head: 0 }],
+    ["a part of a file, with a tag that is not its own", { range: { offset: 2 }, ifNoneMatch: "another" }, "found", { get: 1, head: 0 }],
+    ["a part of a file that holds no file", { range: { offset: 2 } }, "missing", { get: 1, head: 0 }],
+    ["a part past the end, which costs the look that says the size", { range: { offset: 99 } }, "range-not-satisfiable", { get: 1, head: 1 }],
+    ["an empty part", { range: { offset: 0, length: 0 } }, "range-not-satisfiable", { get: 1, head: 1 }],
+  ] as const)("a read of %s is %s at the bucket's calls %j", async (name, options, kind, calls) => {
+    const store = await emptyStore();
     const key = objectKey("blog/v1/data.txt");
-    const head = BUCKET.head.bind(BUCKET);
-    const heads = vi.spyOn(BUCKET, "head").mockImplementationOnce(async (name) => {
-      const before = await head(name);
-      await BUCKET.put(name, "abc", { httpMetadata: TEXT });
+    if (!name.includes("holds no file")) await store.write(key, bytesOf(DIGITS), TEXT);
 
-      return before;
-    });
-    await BUCKET.put(key, DIGITS, { httpMetadata: TEXT });
+    const gets = vi.spyOn(BUCKET, "get");
+    const heads = vi.spyOn(BUCKET, "head");
+    const read = await store.read(key, options);
+    if (read.kind === "found") await read.body.cancel();
 
-    const store = new R2Store(BUCKET);
-    const read = await readText(store, key, { range: { suffix: 2 } });
-    const calls = heads.mock.calls.length;
-    const current = await store.head(key);
+    expect([read.kind, { get: gets.mock.calls.length, head: heads.mock.calls.length }]).toEqual([kind, calls]);
+  });
 
-    expect<unknown>([calls, read]).toEqual([2, { kind: "found", info: current.kind === "found" ? current.info : undefined, span: { offset: 1, length: 2 }, text: "bc" }]);
+  // Drift: only a range that selects no byte is answered from a second look. Any other failure of the bucket must stay a failure, or a broken bucket would read as a file that is not there.
+  test("a ranged read the bucket fails for another reason than its range is thrown as it was", async () => {
+    const store = await emptyStore();
+    const key = objectKey("blog/v1/data.txt");
+    await store.write(key, bytesOf(DIGITS), TEXT);
+    vi.spyOn(BUCKET, "get").mockRejectedValueOnce(new Error("the bucket is down"));
+
+    await expect(store.read(key, { range: { offset: 2 } })).rejects.toThrow("the bucket is down");
+  });
+
+  // Drift: a key that holds nothing is answered by the bucket's get, never thrown. A failed get read as "no such file" would send serving on to the next key, past its three calls, and answer a broken bucket with a 404.
+  test("a ranged read the bucket fails, of a key the second look finds empty, is thrown as it was", async () => {
+    const store = await emptyStore();
+    vi.spyOn(BUCKET, "get").mockRejectedValueOnce(new Error("the bucket is down"));
+
+    await expect(store.read(objectKey("blog/v1/data.txt"), { range: { offset: 2 } })).rejects.toThrow("the bucket is down");
   });
 
   // Drift: the owner can put files in the bucket by other means; one the key rules refuse must stop a listing loudly, not ride along as a key.

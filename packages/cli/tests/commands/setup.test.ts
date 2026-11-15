@@ -105,7 +105,7 @@ describe("poplin setup", () => {
   const refused: readonly { readonly name: string; readonly reading?: DomainReading; readonly open?: boolean; readonly code: number; readonly says: string }[] = [
     { name: "a token the provider refuses", reading: { ok: false, refusal: "token" }, code: 1, says: "the token was refused, or it is not of the install's own account" },
     { name: "a provider that does not answer", reading: { ok: false, refusal: "unreachable" }, code: 5, says: "the install got no answer from its provider" },
-    { name: "a database that takes no more for the day", reading: { ok: false, refusal: "allowance_spent" }, code: 1, says: "the day's free allowance of the install's database is used up until 00:00 UTC" },
+    { name: "a database that takes no more for the day", reading: { ok: false, refusal: "allowance_spent" }, code: 1, says: "a day's allowance of the install is used up until 00:00 UTC" },
     { name: "a setup that is shut", open: false, code: 1, says: "nothing at that address takes a setup" },
   ];
 

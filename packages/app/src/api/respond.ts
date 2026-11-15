@@ -75,9 +75,12 @@ const MESSAGES: Readonly<Record<Code, string>> = {
   too_many_requests: "too many requests came from this address: wait, then ask again",
   internal: "the install failed to do that",
   update_refused: "the install's provider refused to start the rebuild, with this status",
-  allowance_spent: "the day's free allowance of the database is used up: ask again after midnight UTC",
+  allowance_spent: "a day's allowance of the install is used up: ask again after midnight UTC",
   update_unreachable: "the install's provider did not answer the request to rebuild",
 };
+
+/** The setting that bounds the times a day the store is written to or listed, which a refusal for it is about. */
+const WRITES_SETTING = "max_storage_writes_per_day";
 
 /** The form of a token, and of the secret of a computer's login, wherever one sits in a text. */
 const TOKEN_SHAPE = /poplin_(?:login_)?[0-9a-f]{16}_[0-9a-f]{64}/i;
@@ -99,6 +102,12 @@ type Body<Answer> = Answer extends { readonly ok: true } ? Omit<Answer, "ok"> : 
 
 /** The response of a refusal, typed for a client by its body. */
 export type Refusal = Response & TypedResponse<ApiError, (typeof STATUS)[Code], "json">;
+
+/** The codes an answer may refuse with. */
+type RefusedCode<Answer> = Answer extends { readonly ok: false; readonly code: infer Refusing } ? Refusing : never;
+
+/** The clock `respond` takes: asked for where the answer may be `allowance_spent`, and not taken anywhere else. */
+type Clock<Answer> = "allowance_spent" extends RefusedCode<Answer> ? [now: number] : [];
 
 /** The response of a handler's answer, typed for a client by its body: the done answer under 200, or a refusal. */
 export type Answered<Answer> = (Response & TypedResponse<Body<Answer>, 200, "json">) | Refusal;
@@ -131,6 +140,16 @@ export function spentRefusal(spent: AllowanceSpent, now: number): Refusal {
 }
 
 /**
+ * Build the response to a request refused because the store takes no more writes or listings today.
+ *
+ * @param now - the clock, in milliseconds since the epoch
+ * @returns status 503 with the code `allowance_spent`, about the setting that bounds them, and `Retry-After` up to the next midnight UTC
+ */
+export function writesSpentRefusal(now: number): Refusal {
+  return refusal("allowance_spent", WRITES_SETTING, { "Retry-After": String(secondsToNextDay(now)) });
+}
+
+/**
  * Build the response of a handler that answers one stored file.
  *
  * @returns 200 with the file's bytes, its length, and its stored media type in `STORED_TYPE_HEADER`, or the refusal's response
@@ -146,9 +165,12 @@ export function respondFile(result: Result<{ readonly size: number; readonly con
 /**
  * Build the response of a handler's answer.
  *
+ * @param now - the clock, in milliseconds since the epoch: asked for where the answer may be `allowance_spent`, whose `Retry-After` runs up to the next midnight UTC
  * @returns 200 with the answer less its `ok`, or the refusal's response
  */
-export function respond<Answer extends Result<object>>(result: Answer): Answered<Answer> {
+export function respond<Answer extends Result<object>>(result: Answer, ...[now]: Clock<Answer>): Answered<Answer> {
+  if (!result.ok && result.code === "allowance_spent" && now !== undefined) return refusal(result.code, result.about, { "Retry-After": String(secondsToNextDay(now)) });
+
   if (!result.ok) return refusal(result.code, result.about);
 
   return json(200, Object.fromEntries(Object.entries(result).filter(([key]) => key !== "ok"))) as Answered<Answer>;

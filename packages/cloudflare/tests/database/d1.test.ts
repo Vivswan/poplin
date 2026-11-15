@@ -15,6 +15,7 @@ import { openDatabase } from "@poplin/core/src/database/open";
 import { SqlDatabase } from "@poplin/core/src/database/sql-database";
 import { defaultSettings } from "@poplin/core/src/records/settings";
 import { MemoryStore } from "@poplin/core/src/storage/memory";
+import { meterStore } from "@poplin/core/src/storage/metered";
 import type { PublicName, SiteName } from "@poplin/core/src/names/names";
 import type { Site, SiteFolder } from "@poplin/core/src/records/site";
 import type { UploadId } from "@poplin/core/src/records/upload";
@@ -183,6 +184,10 @@ const ROWS: Readonly<Record<string, readonly [read: number, written: number]>> =
   "refused: revokeToken, none": [1, 0],
   "refused: decideComputerLogin, none waits": [1, 0],
   "refused: redeemComputerLogin, none allowed": [2, 0],
+  "readStorageWrites": [2, 0],
+  "takeStorageWrite": [4, 1],
+  "takeStorageWrite, again": [4, 1],
+  "addStorageWrites": [1, 1],
 };
 
 /** The rows the batches of a database read and wrote, as the provider counts them toward a day's allowance. */
@@ -237,7 +242,18 @@ async function meteredInstall(): Promise<{ readonly install: Install; readonly r
   return { install, rows };
 }
 
-/** Publish a new site of `files` pages of four bytes each through the three steps; answers the rows the whole of it read and wrote. */
+/** Run one step of a publish as its route does: the listings it makes are counted against the day, and the count is written when the step ends. */
+async function asRoute<Answer>(install: Install, step: (counted: Install) => Promise<Answer>): Promise<Answer> {
+  const meter = meterStore(install.store, { database: install.database, now: install.now });
+
+  try {
+    return await step({ ...install, store: meter.store });
+  } finally {
+    await meter.settle();
+  }
+}
+
+/** Publish a new site of `files` pages of four bytes each through the three steps, each as its route runs it; answers the rows the whole of it read and wrote. */
 async function publishCost(files: number): Promise<RowCounts> {
   const { install, rows } = await meteredInstall();
   await install.database.initSettings(defaultSettings({ installer: "ada@example.com" as Login, hostname: "poplin.example.com" }), { by: PUBLISHER.holder, at: NOW });
@@ -245,12 +261,12 @@ async function publishCost(files: number): Promise<RowCounts> {
   rows.read = 0;
   rows.written = 0;
 
-  const begun = await beginPublish(install, PUBLISHER, { name: "report", files: paths.map((path) => ({ path, size: 4, content_type: "text/html" })) });
+  const begun = await asRoute(install, (counted) => beginPublish(counted, PUBLISHER, { name: "report", files: paths.map((path) => ({ path, size: 4, content_type: "text/html" })) }));
   if (!begun.ok) throw new Error(`the publish was refused: ${begun.code}`);
 
-  for (const path of paths) await uploadFile(install, PUBLISHER, { upload: begun.upload.id, path, body: new Blob(["page"]).stream() });
+  for (const path of paths) await asRoute(install, (counted) => uploadFile(counted, PUBLISHER, { upload: begun.upload.id, path, body: new Blob(["page"]).stream() }));
 
-  const finished = await finishPublish(install, PUBLISHER, begun.upload.id);
+  const finished = await asRoute(install, (counted) => finishPublish(counted, PUBLISHER, begun.upload.id));
   if (!finished.ok) throw new Error(`the publish was not finished: ${finished.code}`);
 
   return { ...rows };
@@ -292,8 +308,8 @@ describe("D1: the rows a publish costs of a day's allowance", () => {
   });
 
   // Drift: a day allows 5,000,000 rows read and 100,000 written, and every query fails once either is spent; a publish whose cost grew faster than its files would spend a day in one go.
-  test.each([50, 200])("a whole publish of %d files reads one row a file and 26 more, and writes 21", async (files) => {
-    expect(await publishCost(files)).toEqual({ read: files + 26, written: 21 });
+  test.each([50, 200])("a whole publish of %d files reads one row a file and 30 more, and writes 22: four read and one written are the count of the listing that checks its files", async (files) => {
+    expect(await publishCost(files)).toEqual({ read: files + 30, written: 22 });
   });
 });
 
@@ -600,7 +616,7 @@ describe("D1: the rows every operation of the database costs of a day's allowanc
     await cost("refused: addUpload, its holder's room is full", () =>
       database.addUpload(
         { id: "0000000000000000" as UploadId, folder: folder(SITES + 9), number: 1, owner: BY_ADA.by, plan: { kind: "import", site: {} }, manifest: numberedFiles(2), created_at: NOW },
-        { own: 0, folderBytes: 1_000_000, staying: 0, totalBytes: 1_000_000, sites: null, day: DAY, dayFiles: 1_000_000 },
+        { own: 0, folderBytes: 1_000_000, staying: 0, totalBytes: 1_000_000, sites: null, day: DAY, dayFiles: 1_000_000, writes: 2, dayWrites: 1_000_000 },
       ),
     );
     await cost("refused: addToken, the id is taken", () => database.addToken(publisher, BY_ADA));
@@ -621,6 +637,11 @@ describe("D1: the rows every operation of the database costs of a day's allowanc
     await cost("removeLogin", () => database.removeLogin(person, BY_ADA));
     await cost("removeLogin, not one", () => database.removeLogin(person, BY_ADA));
     await cost("removeLogin, the last", () => database.removeLogin(ADMIN, BY_ADA));
+
+    await cost("readStorageWrites", () => database.readStorageWrites(DAY));
+    await cost("takeStorageWrite", () => database.takeStorageWrite(DAY, 0));
+    await cost("takeStorageWrite, again", () => database.takeStorageWrite(DAY, 0));
+    await cost("addStorageWrites", () => database.addStorageWrites(DAY, 3));
 
     expect(costs).toEqual(ROWS);
   });

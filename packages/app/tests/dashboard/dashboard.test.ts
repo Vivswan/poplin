@@ -1,6 +1,8 @@
 import { expect, test } from "bun:test";
 
+import { publishSite } from "@poplin/core/src/actions/publish";
 import { AllowanceSpent } from "@poplin/core/src/database/driver";
+import { WritesSpent } from "@poplin/core/src/storage/metered";
 
 import { createDashboard } from "../../src/dashboard/dashboard";
 import { importCsrfKey, mintCsrfToken } from "../../src/dashboard/security/csrf";
@@ -273,6 +275,20 @@ test("a dashboard built with no domain plug has no Domain tab and answers none o
   expect(await (await opened.get("/")).text()).not.toContain('href="/domain"');
 });
 
+
+// Drift: the store the dashboard is given refuses a listing once the day's writes are used up, by throwing. A copy begins with a listing, so the form that makes one would answer "Something went wrong." on the one day its owner most needs to be told why.
+test("a form whose listing of the store the day has no room for is told on the page with the setting that bounds it and when it is back", async () => {
+  const opened = await openDashboard();
+  const published = await publishSite(opened.install, { scope: "admin", holder: opened.owner }, { name: "report", files: [{ path: "index.html", size: 4, contentType: "text/html", open: () => new Blob(["home"]).stream() }] });
+  if (!published.ok) throw new Error(`the test's site was refused: ${published.code}`);
+
+  opened.install.store.list = () => Promise.reject(new WritesSpent());
+  const copied = await opened.post(`/sites/report--${published.site.id}/duplicate`, { name: "report-draft" });
+
+  // The fixtures' moment is 22:13:20 UTC: 6,400 seconds before midnight.
+  expect([copied.status, copied.headers.get("Retry-After")]).toEqual([503, "6400"]);
+  expect(await copied.text()).toContain("The storage takes no more writes today: max_storage_writes_per_day is reached. It works again after midnight UTC.");
+});
 
 // Drift: the owner saw "Something went wrong." and could not tell a spent day from a fault. With writing spent the pages still read, so the notice comes framed; with reading spent no page can be framed, and it must still come.
 test("a database whose day's allowance is used up is told on the page with what ran out and when it is back, framed while pages can still be read", async () => {

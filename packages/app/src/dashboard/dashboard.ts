@@ -23,6 +23,7 @@ import { updateOf } from "@poplin/core/src/actions/update";
 import { ALLOW_PAGE } from "@poplin/core/src/api/routes";
 import type { Login } from "@poplin/core/src/auth/logins";
 import { AllowanceSpent, secondsToNextDay } from "@poplin/core/src/database/driver";
+import { WritesSpent } from "@poplin/core/src/storage/metered";
 import { type Context, Hono, type MiddlewareHandler } from "hono";
 import { bodyLimit } from "hono/body-limit";
 import { NONCE, secureHeaders } from "hono/secure-headers";
@@ -133,9 +134,21 @@ interface Dashboard {
  * @returns status 503 in plain text that names what ran out, with `Retry-After` up to the next midnight UTC
  */
 export function spentNotice(spent: AllowanceSpent, now: number): Response {
+  return plainNotice(SPENT_NOTICES[spent.spent], now);
+}
+
+/** The notice of a day's allowance that is used up, in plain text, with `Retry-After` up to the next midnight UTC. */
+function plainNotice(code: string, now: number): Response {
   const headers = { "Retry-After": String(secondsToNextDay(now)), "Content-Type": "text/plain; charset=utf-8", "Cache-Control": "no-store" };
 
-  return new Response(`${refusalSentence(SPENT_NOTICES[spent.spent])}\n`, { status: 503, headers });
+  return new Response(`${refusalSentence(code)}\n`, { status: 503, headers });
+}
+
+/** The notice a failure is told with when it is a day's allowance used up: the database's, or the store's writes and listings. None for any other failure. */
+function spentCode(error: unknown): string | undefined {
+  if (error instanceof WritesSpent) return "allowance_spent";
+
+  return error instanceof AllowanceSpent ? SPENT_NOTICES[error.spent] : undefined;
 }
 
 function loginAddress(loginPath: string, url: URL, back: string): string {
@@ -171,13 +184,14 @@ function refuse(context: Context<Shared>, code: string, status: NonNullable<Page
   return respond(context, refusedPage({ tab: "sites", heading: "Not done", status }, { code }));
 }
 
-/** Answer a failure nothing above handled. A database whose allowance for the day is used up is told as a notice, and any other failure tells nothing of its cause. */
+/** Answer a failure nothing above handled. A database or a store whose allowance for the day is used up is told as a notice, and any other failure tells nothing of its cause. */
 async function answerFailure(error: unknown, context: Context<Shared>, now: number): Promise<Response> {
-  if (!(error instanceof AllowanceSpent)) return new Response(FAILURE, { status: 500, headers: { "Content-Type": "text/plain; charset=utf-8" } });
+  const code = spentCode(error);
+  if (code === undefined) return new Response(FAILURE, { status: 500, headers: { "Content-Type": "text/plain; charset=utf-8" } });
 
   // The frame reads the settings, which a database that gives no more reading cannot: the notice then goes out in plain text.
-  const framed = await refuse(context, SPENT_NOTICES[error.spent], 503).catch(() => undefined);
-  if (framed === undefined) return spentNotice(error, now);
+  const framed = await refuse(context, code, 503).catch(() => undefined);
+  if (framed === undefined) return plainNotice(code, now);
 
   framed.headers.set("Retry-After", String(secondsToNextDay(now)));
 

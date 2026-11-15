@@ -19,6 +19,7 @@ import type { Site, SiteAccess, SiteFolder } from "../records/site";
 import type { SweepPlace } from "../records/sweep-place";
 import type { Totals } from "../records/sizes";
 import type { UpdateCheck } from "../records/update";
+import type { VersionContents } from "../records/version-contents";
 import type { ManifestFile, Upload, UploadId, UploadPlan } from "../records/upload";
 import type { SiteViews } from "../records/views";
 
@@ -55,6 +56,12 @@ export interface SiteDetails {
   readonly search_engines?: boolean;
   readonly embeddable?: boolean;
   readonly expires?: "never" | number;
+}
+
+/** A site an address serves, with what its live version is known to hold. */
+export interface ServedSite {
+  readonly site: Site;
+  readonly contents: VersionContents;
 }
 
 /** Where a visitor's hostname points: a site's id, or a public name. */
@@ -127,6 +134,9 @@ export interface NewVersion {
 
   /** How many files the version holds. */
   readonly files: number;
+
+  /** What the version holds; nothing is known of it when left out. */
+  readonly contents?: VersionContents;
 }
 
 /** The signing key and whether this call stored it. `kept` is a key that was already there, which is the one to use. */
@@ -187,6 +197,9 @@ export interface UploadedVersion {
 
   /** The title of the version's entry page, which replaces the one of the version before; left out for a page with none. */
   readonly page_title?: string;
+
+  /** What the version holds, worked out from the upload's manifest; nothing is known of it when left out. */
+  readonly contents?: VersionContents;
 }
 
 /** The room a new upload must fit in. Each bound is checked with the upload itself counted, in the same step that records it. */
@@ -211,6 +224,12 @@ export interface UploadRoom {
 
   /** The most files every upload begun on that day may declare together. An upload that is given up gives none back. */
   readonly dayFiles: number;
+
+  /** How many times the upload writes to the store: once for each file it declares, and twice for each file of a copy, which is read and then written. They are counted on that day, when the upload begins. */
+  readonly writes: number;
+
+  /** The most times the store may be written to or listed on that day, the upload's own writes counted. */
+  readonly dayWrites: number;
 }
 
 /** Where a page of old uploads ended. */
@@ -310,9 +329,10 @@ export interface Database {
    * Make a site under a fresh id, with version 1 as its only version and its live one: published at `signed.at` by `signed.by`, of the draft's `bytes` and `files`.
    *
    * @returns the site, or `name_taken` when it is to be public and another site holds the public name or has it as its id, whatever its folder
+   * @param contents - what version 1 holds; nothing is known of it when left out
    * @throws {Error} the draft breaks a field rule, or its folder is a site's, in the trash or not; nothing is stored
    */
-  createSite(draft: NewSite, signed: Signed): Promise<Done | Refused<"name_taken">>;
+  createSite(draft: NewSite, signed: Signed, contents?: VersionContents): Promise<Done | Refused<"name_taken">>;
 
   /** The site with this id, in the trash or not. */
   getSite(id: SiteId): Promise<Site | undefined>;
@@ -326,9 +346,9 @@ export interface Database {
   /**
    * The site an address serves at `now`.
    *
-   * @returns `undefined` for an address of no site, of a site in the trash, or of a site past its expiry
+   * @returns the site and what its live version holds; `undefined` for an address of no site, of a site in the trash, or of a site past its expiry
    */
-  findServed(address: Address, now: number): Promise<Site | undefined>;
+  findServed(address: Address, now: number): Promise<ServedSite | undefined>;
 
   /**
    * One page of the sites, or of the trash.
@@ -408,12 +428,12 @@ export interface Database {
    *
    * The site and all its versions are stored together or not at all, with one `imported` audit entry. Version numbers go on from above its highest kept version.
    *
-   * @param site - the site, whose folder is the upload's
+   * @param site - the site, whose folder is the upload's; `contents` says what each of its versions holds, by the version's number, and nothing is known of a version left out
    * @returns the first of these that holds: `not_pending` when the upload is finished, abandoned, gone, or of another folder; `id_taken` when a site has the id as its id or its public name; `folder_taken` when a site has the folder;
    *   `name_taken` as in `createSite` or when the public name is the site's own id. Every refusal but `not_pending` leaves the upload pending
    * @throws {Error} the value is no site
    */
-  importUploadAsSite(id: UploadId, site: Site, signed: Signed): Promise<Done | Refused<"id_taken" | "folder_taken" | "name_taken" | "not_pending">>;
+  importUploadAsSite(id: UploadId, site: Site, signed: Signed, contents?: ReadonlyMap<number, VersionContents>): Promise<Done | Refused<"id_taken" | "folder_taken" | "name_taken" | "not_pending">>;
 
   /** The site whose files sit under this folder, in the trash or not. */
   getSiteByFolder(folder: SiteFolder): Promise<Site | undefined>;
@@ -421,12 +441,12 @@ export interface Database {
   /**
    * Record a staged publish as pending, only while it fits the room it is given. It writes no audit entry: nothing a reader of any site sees has changed.
    *
-   * The files it declares are added to the count of its day in the same step, and the counts of the days before the day before it are dropped.
+   * The files it declares and the writes it makes are added to the counts of its day in the same step, and the counts of the days before the day before it are dropped.
    *
-   * @returns the first bound the upload does not fit, in the order `own`, `folder`, `total`, `sites`, `day`; of uploads recorded at the same moment only those that fit together are kept
+   * @returns the first bound the upload does not fit, in the order `own`, `folder`, `total`, `sites`, `day`, `writes`; of uploads recorded at the same moment only those that fit together are kept
    * @throws {Error} a value breaks its field rule, the manifest is empty or names a path twice, or the id or the folder and number are already an upload's
    */
-  addUpload(upload: NewUpload, room: UploadRoom): Promise<{ readonly kind: "done" } | Refused<"own_full" | "folder_full" | "total_full" | "sites_full" | "day_full">>;
+  addUpload(upload: NewUpload, room: UploadRoom): Promise<{ readonly kind: "done" } | Refused<"own_full" | "folder_full" | "total_full" | "sites_full" | "day_full" | "writes_full">>;
 
   /** The upload with this id and its manifest, which is empty once the upload is finished or abandoned. */
   getUpload(id: UploadId): Promise<{ readonly upload: Upload; readonly manifest: readonly ManifestFile[] } | undefined>;
@@ -438,10 +458,11 @@ export interface Database {
    * Make a pending upload's site, at version 1 under a fresh id, and mark the upload finished, in one step. The site belongs to whoever began the upload, whoever finishes it.
    *
    * @param draft - the site, whose folder is the upload's
+   * @param contents - what version 1 holds, worked out from the upload's manifest; nothing is known of it when left out
    * @returns `not_pending` when the upload is finished, abandoned, gone, or of another folder; `name_taken` as in `createSite`
    * @throws {Error} the draft breaks a field rule, or its folder is already a site's
    */
-  publishUploadAsSite(id: UploadId, draft: NewSite, signed: Signed): Promise<Done | Refused<"name_taken" | "not_pending">>;
+  publishUploadAsSite(id: UploadId, draft: NewSite, signed: Signed, contents?: VersionContents): Promise<Done | Refused<"name_taken" | "not_pending">>;
 
   /**
    * Record a pending upload as the next version of the site in its folder and make it live, with the settings asked with it, and mark the upload finished with the versions dropped.
@@ -671,6 +692,33 @@ export interface Database {
    * @throws {RangeError} `day` is not such a date
    */
   readRequests(day: string, site?: SiteId): Promise<RequestCounts>;
+
+  /**
+   * How many times the store was written to or listed on a UTC day so far, a declared file counted when its upload began, and the most the settings allow a day. It is one query.
+   *
+   * @param day - a UTC date, such as `2026-11-13`
+   * @returns `undefined` before setup stored the settings
+   * @throws {RangeError} `day` is not such a date
+   */
+  readStorageWrites(day: string): Promise<{ readonly writes: number; readonly most: number } | undefined>;
+
+  /**
+   * Count one write to the store, or one listing of it, on a UTC day, only while the day's count is under the settings' bound and `spare` more.
+   * The check and the count are one step: of calls made at the same moment only as many are taken as the day has room for. The counts of the days before the day before it are dropped.
+   *
+   * @param spare - how many beyond the bound the day takes from this caller: a whole number from 0 up
+   * @returns whether it was counted; an install whose settings are not stored has no bound
+   * @throws {RangeError} `day` is not a date such as `2026-11-13`, or `spare` is not such a number
+   */
+  takeStorageWrite(day: string, spare: number): Promise<boolean>;
+
+  /**
+   * Add to a day's count of the times the store was written to or listed, and drop the counts of the days before the day before it. No audit entry is written.
+   *
+   * @param writes - how many: a whole number of at least 1
+   * @throws {RangeError} `day` is not a date such as `2026-11-13`, or `writes` is not such a number
+   */
+  addStorageWrites(day: string, writes: number): Promise<void>;
 
   /**
    * The page views counted for some sites: on one day, and over that day and the six before it.

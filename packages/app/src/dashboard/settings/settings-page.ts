@@ -25,6 +25,7 @@ const MEANINGS: { readonly [Key in keyof SettingValues]: string } = {
   max_sites: "The most sites, or none for no limit.",
   max_files_per_publish: "The most files one publish, import, or copy holds, up to 10000.",
   max_files_per_day: "The most files all publishes, imports, and copies begun in one UTC day hold together.",
+  max_storage_writes_per_day: "The most times the storage is written to or listed in one UTC day: a publish's files, a copy's files twice, and every listing.",
   requests_per_day: "The day's requests, all sites together.",
   site_share_of_day: "The share of the day's requests one site may take, such as 25%.",
   site_requests_per_minute: "The requests one site answers in a minute.",

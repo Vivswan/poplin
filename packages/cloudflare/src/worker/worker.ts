@@ -20,6 +20,7 @@ import { readSession } from "@poplin/app/src/login/session";
 import { toHttps } from "@poplin/app/src/transport/to-https";
 import type { Database } from "@poplin/core/src/database/database";
 import { AllowanceSpent } from "@poplin/core/src/database/driver";
+import { meterStore } from "@poplin/core/src/storage/metered";
 import { clientAddress } from "../limits/client-address";
 import { FREE_LIMITS } from "../limits/free-limits";
 import { INSTALL_OBJECTS } from "../zone/install-objects";
@@ -81,10 +82,12 @@ function failureAnswer(request: Request, failure: Stopped): Response {
 }
 
 /** Where the dashboard answers: every path of the admin hostname that is neither the API nor the login. */
-function answerDashboard(request: Request, instance: Instance, held: Held): Promise<Response> {
+async function answerDashboard(request: Request, instance: Instance, held: Held): Promise<Response> {
   const now = instance.install.now();
+  // As the API does: every listing of the bucket this request makes is counted against the day, and written down once.
+  const meter = meterStore(instance.install.store, { database: instance.install.database, now: instance.install.now });
   const dashboard = createDashboard({
-    install: instance.install,
+    install: { ...instance.install, store: meter.store },
     version: instance.version,
     readSession: (headers) => readSession(headers, { key: held.sessionKey, logins: held.logins, now }),
     loginPath: INSTALL_OBJECTS.loginPath,
@@ -95,7 +98,11 @@ function answerDashboard(request: Request, instance: Instance, held: Held): Prom
     visitorOf: (asked) => visitorKey(clientAddress(asked.headers), held.visitorSecret, now),
   });
 
-  return dashboard.fetch(request);
+  try {
+    return await dashboard.fetch(request);
+  } finally {
+    await meter.settle().catch((error: unknown) => console.error("poplin: the day's count of writes to the bucket was not written", error));
+  }
 }
 
 /** The Worker's own address answers setup alone: the page itself, the way to it from any other path while it is open, and nothing after. */

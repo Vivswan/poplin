@@ -1,8 +1,9 @@
-// What a route checks before its handler runs, beside who asks and the query: the count of a request that takes no token, the content type, the site its path names, and the JSON it carries.
+// What a route checks before its handler runs, beside who asks and the query: the count of a request that takes no token, the content type, the site its path names, and the JSON it carries. It also hands the handler the install whose listings are counted.
 
 import type { Install } from "@poplin/core/src/actions/records";
 import { AllowanceSpent } from "@poplin/core/src/database/driver";
 import { siteReference } from "@poplin/core/src/sites/labels";
+import { meterStore } from "@poplin/core/src/storage/metered";
 import type { Handler, MiddlewareHandler } from "hono";
 import type { BlankEnv } from "hono/types";
 
@@ -25,6 +26,11 @@ type OpenName = keyof typeof OPEN_PER_MINUTE;
 /** What a request to a route that takes no token holds once it is counted: the key its visitor is counted by. */
 interface Counted {
   readonly Variables: { readonly visitor: string };
+}
+
+/** What a request holds once its listings of the store are counted: the install its action runs on. */
+interface Metered {
+  readonly Variables: { readonly install: Install };
 }
 
 /** What counting a request needs: the clock, where a visitor's requests are counted, and what names a visitor. */
@@ -63,6 +69,25 @@ export function counted(name: OpenName, gate: Gate): MiddlewareHandler<Counted> 
     context.set("visitor", taken.visitor);
 
     return next();
+  };
+}
+
+/**
+ * Let a request on with an install whose every listing of the store is counted against the day. The count is written down once, whether the handler ends well or not.
+ *
+ * @param report - told of a count that could not be written down
+ * @returns the middleware, which keeps the install for the handler. A listing the day has no room for throws `WritesSpent`
+ */
+export function metered(install: Install, report?: (error: unknown) => void): MiddlewareHandler<Metered> {
+  return async (context, next) => {
+    const meter = meterStore(install.store, { database: install.database, now: install.now });
+    context.set("install", { ...install, store: meter.store });
+
+    try {
+      await next();
+    } finally {
+      await meter.settle().catch((error: unknown) => report?.(error));
+    }
   };
 }
 

@@ -90,7 +90,8 @@ export async function answerSite(request: Request, instance: Instance, held: Hel
   const proof = await proofOf(request, addressed, { instance, held, now });
   const cameAround = proof.kind === "refused" || proof.kind === "unchecked";
   const address = cameAround ? undefined : queryOf(addressed);
-  const site = address === undefined ? undefined : await database.findServed(address, now);
+  const found = address === undefined ? undefined : await database.findServed(address, now);
+  const site = found?.site;
 
   const visitor = await visitorKey(clientAddress(request.headers), held.visitorSecret, now);
   const served = site !== undefined && opensAt(addressed, site) ? site : undefined;
@@ -104,7 +105,7 @@ export async function answerSite(request: Request, instance: Instance, held: Hel
 
   const response = await serveSite(request, {
     // Serving asks for the site of the same address: it is answered from the query above, so a page view costs one.
-    database: { findServed: async (again, at) => (sameAddress(again, address) ? site : database.findServed(again, at)) },
+    database: { findServed: async (again, at) => (sameAddress(again, address) ? found : database.findServed(again, at)) },
     store,
     settings: held.settings,
     addresses: instance.addresses,

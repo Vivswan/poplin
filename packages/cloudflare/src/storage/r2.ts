@@ -90,23 +90,42 @@ export class R2Store implements ObjectStore {
     return { kind: "found", info, span: { offset: 0, length: info.size }, body: object.body };
   }
 
-  // R2 throws on an offset past the end, so the size is read first and the range decided here.
+  // One call for a range the object holds. R2 throws on a range that selects no byte, and its error does not say the size a 416 reports, so only then is the object looked at.
   async #readRange(key: ObjectKey, range: ByteRange, ifNoneMatch: string | undefined): Promise<ReadResult> {
-    const head = await this.#bucket.head(key);
-    if (head === null) return { kind: "missing" };
+    const options: R2GetOptions = { range };
+    if (ifNoneMatch !== undefined && R2_ETAG.test(ifNoneMatch)) options.onlyIf = { etagDoesNotMatch: ifNoneMatch };
 
-    const info = infoOf(key, head);
-    if (ifNoneMatch === info.etag) return { kind: "not-modified", info };
+    let object: R2Object | R2ObjectBody | null;
+    try {
+      object = await this.#bucket.get(key, options);
+    } catch (error) {
+      return this.#afterRefusedRange(key, { range, ifNoneMatch }, error);
+    }
+    if (object === null) return { kind: "missing" };
+
+    const info = infoOf(key, object);
+    if (!("body" in object)) return { kind: "not-modified", info };
 
     const span = resolveRange(range, info.size);
-    if (span === "unsatisfiable") return { kind: "range-not-satisfiable", info };
+    if (span !== "unsatisfiable") return { kind: "found", info, span, body: object.body };
 
-    const object = await this.#bucket.get(key, { range: span, onlyIf: { etagMatches: info.etag } });
+    await object.body.cancel();
 
-    // A write landed between the two calls, and the span was worked out for the object it replaced.
-    if (object === null || !("body" in object)) return this.#readRange(key, range, ifNoneMatch);
+    return { kind: "range-not-satisfiable", info };
+  }
 
-    return { kind: "found", info: infoOf(key, object), span, body: object.body };
+  /** Answer a ranged read the bucket threw on: by the object's size it is a range that selects no byte, or the failure it was thrown as. */
+  async #afterRefusedRange(key: ObjectKey, asked: { readonly range: ByteRange; readonly ifNoneMatch: string | undefined }, error: unknown): Promise<ReadResult> {
+    const head = await this.#bucket.head(key);
+    // A key that holds nothing is answered by the get itself, never thrown: this failure was another.
+    if (head === null) throw error;
+
+    const info = infoOf(key, head);
+    if (asked.ifNoneMatch === info.etag) return { kind: "not-modified", info };
+
+    if (resolveRange(asked.range, info.size) === "unsatisfiable") return { kind: "range-not-satisfiable", info };
+
+    throw error;
   }
 
   /** Read what the store keeps about an object, without its bytes. */
@@ -117,7 +136,7 @@ export class R2Store implements ObjectStore {
     return { kind: "found", info: infoOf(key, object) };
   }
 
-  /** Read an object or a range of it. A ranged read costs two R2 calls, a whole one a single call. */
+  /** Read an object or a range of it, in one R2 call; a range that selects no byte of the object costs a second. */
   async read(key: ObjectKey, options: ReadOptions = {}): Promise<ReadResult> {
     if (options.range === undefined) return this.#readWhole(key, options.ifNoneMatch);
 

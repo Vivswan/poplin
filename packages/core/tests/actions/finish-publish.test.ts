@@ -9,6 +9,7 @@ import { publishSite } from "../../src/actions/publish";
 import { getSite } from "../../src/actions/show";
 import { sweepExpired } from "../../src/actions/sweep";
 import { uploadFile } from "../../src/actions/upload-file";
+import { dayOf } from "../../src/records/views";
 import { ADMIN, DAY, file, made, makeWorld, OWNER, STRANGER, type World } from "./support/actions-fixture";
 
 /** The one page a fixture upload declares: four bytes. */
@@ -135,6 +136,45 @@ describe("finishPublish", () => {
       { ok: false, code: "too_large", about: "max_files_per_day" },
     ]);
     expect([copied.ok, last.ok, tomorrow.ok]).toEqual([true, true, true]);
+  });
+
+  // Drift: a host bills every write to its store past a month's free amount. A file counted when it is sent would cost the database a row a file; one never counted, or a copy counted once, would let a day pass the bound.
+  test("the day's writes to the store count every declared file as its upload begins, a copy's files twice, and an upload that does not fit is refused until the next UTC day", async () => {
+    const world = await makeWorld({ max_storage_writes_per_day: 9 });
+    const pages = (count: number): object[] => Array.from({ length: count }, (_page, at) => ({ ...PAGE, path: at === 0 ? "index.html" : `page-${at}.html` }));
+    const day = dayOf(world.clock.now);
+    const report = await finishPublish(world.install, OWNER, await staged(world, { name: "report" }, ["index.html", "about.html"]));
+    if (!report.ok) throw new Error(`the fixture publish was refused: ${report.code}`);
+
+    const copied = await duplicateSite(world.install, OWNER, { site: report.site.id });
+    const four = await beginPublish(world.install, OWNER, { name: "four", files: pages(4) });
+    const copy = await duplicateSite(world.install, OWNER, { site: report.site.id });
+    const three = await beginPublish(world.install, OWNER, { name: "three", files: pages(3) });
+    const one = await beginPublish(world.install, OWNER, { name: "one", files: pages(1) });
+    const counted = await world.install.database.readStorageWrites(day);
+    world.clock.now += DAY;
+    const tomorrow = await beginPublish(world.install, OWNER, { name: "four", files: pages(4) });
+
+    const spent = { ok: false, code: "allowance_spent", about: "max_storage_writes_per_day" };
+    expect<unknown>([copied.ok, four, copy, three.ok, one, tomorrow.ok]).toEqual([true, spent, spent, true, spent, true]);
+    expect(counted).toEqual({ writes: 9, most: 9 });
+  });
+
+  // Drift: serving reads the store for a `404.html`, and for a file without an extension, only when the live version's record says it holds one. A record made from another list than the files published would hide a file or cost every miss a read.
+  test("a version is recorded with what its own files say it holds: a new site's, the next version's, and the first one's again after a rollback", async () => {
+    const world = await makeWorld();
+    const first = await publishSite(world.install, OWNER, { name: "report", files: [file("index.html", "home"), file("404.html", "lost"), file("LICENSE", "terms"), file("docs/README", "read")] });
+    if (!first.ok) throw new Error(`the fixture publish was refused: ${first.code}`);
+
+    const holds = async (): Promise<unknown> => (await world.install.database.findServed({ id: first.site.id }, world.clock.now))?.contents;
+    const contents = [await holds()];
+    await publishSite(world.install, OWNER, { site: first.site.id, files: [file("index.html", "home again")] });
+    contents.push(await holds());
+    await world.install.database.setLiveVersion(first.site.id, 1, { by: ADMIN.holder, at: world.clock.now });
+    contents.push(await holds());
+
+    const held = { missing_page: true, bare_files: "\nLICENSE\ndocs/README\n" };
+    expect(contents).toEqual([held, { missing_page: false, bare_files: "" }, held]);
   });
 
   // Drift: a pending upload keeps its manifest in the database; a token that could begin uploads without end would fill it, a megabyte a request.

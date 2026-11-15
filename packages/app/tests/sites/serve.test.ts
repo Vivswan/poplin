@@ -1,7 +1,8 @@
 import { beforeAll, describe, expect, test } from "bun:test";
 import type { Site } from "@poplin/core/src/records/site";
+import { UNKNOWN_CONTENTS } from "@poplin/core/src/records/version-contents";
 import { parseObjectKey } from "@poplin/core/src/storage/storage";
-import { serveSite } from "../../src/sites/serve";
+import { MOST_STORE_CALLS, serveSite } from "../../src/sites/serve";
 import { type Install, labelHost, NOW, openInstall, typedHost } from "./support/install";
 
 const HTML = "text/html; charset=utf-8";
@@ -276,22 +277,22 @@ describe("paths", () => {
     ["/docs/", ["docs/index.html"], "docs folder"],
     ["/index.html", ["index.html"], "report home"],
     ["/app.js", ["app.js"], "let a = 1;"],
-    ["/about", ["about", "about.html"], "about page"],
+    ["/about", ["about.html"], "about page"],
     ["/about.html", ["about.html"], "about page"],
-    ["/notes", ["notes", "notes.html", "notes/index.html"], "notes folder"],
+    ["/notes", ["notes.html", "notes/index.html"], "notes folder"],
     ["/LICENSE", ["LICENSE"], "license terms"],
     ["/terms", ["terms"], "terms file"],
     ["/terms.html", ["terms.html"], "terms page"],
-    ["/blog", ["blog", "blog.html"], "blog page"],
+    ["/blog", ["blog.html"], "blog page"],
     ["/blog/", ["blog/index.html"], "blog folder"],
-    ["/docs/index", ["docs/index", "docs/index.html"], "docs folder"],
+    ["/docs/index", ["docs/index.html"], "docs folder"],
     ["/app.js?v=2", ["app.js"], "let a = 1;"],
-    ["/%61bout", ["about", "about.html"], "about page"],
+    ["/%61bout", ["about.html"], "about page"],
     ["/docs/%2e%2e/app.js", ["app.js"], "let a = 1;"],
-    [`/${LONGEST_NAME}`, [LONGEST_NAME, `${LONGEST_NAME}.html`], "longest page"],
+    [`/${LONGEST_NAME}`, [`${LONGEST_NAME}.html`], "longest page"],
   ];
 
-  // Drift: a clean URL would cost a redirect hop or a fourth bucket read, a file without an extension would be unreachable, or the order (the exact file, the page, the folder) would change.
+  // Drift: a clean URL would cost a redirect hop or a read of a file the version is known not to hold, a file without an extension would be unreachable, or the order (the exact file, the page, the folder) would change.
   test.each(found)("%s is answered at once from the keys %j", async (path, keys, body) => {
     const before = world.install.keys.length;
     const response = await serve(ask(labelHost(world.report), path));
@@ -304,13 +305,15 @@ describe("paths", () => {
   });
 
   const missing: readonly (readonly [string, readonly string[]])[] = [
-    ["/nothing", ["nothing", "nothing.html", "nothing/index.html", "404.html"]],
-    ["/nothing.txt", ["nothing.txt", "404.html"]],
-    ["/nothing/", ["nothing/index.html", "404.html"]],
+    ["/nothing", ["nothing.html", "nothing/index.html"]],
+    ["/nothing.txt", ["nothing.txt"]],
+    ["/nothing/", ["nothing/index.html"]],
     ["/404.html", ["404.html"]],
+    // The site holds a file named `terms`: a path that is only the start of that name is no file of it.
+    ["/term", ["term.html", "term/index.html"]],
   ];
 
-  // Drift: a miss would cost more reads than the published bound: three for a path without an extension and one otherwise, then one for the site's own 404 page.
+  // Drift: a miss would cost more reads than the published bound: two for a path without an extension and one otherwise, and none for a 404 page the version is known not to hold.
   test.each(missing)("%s is the 404 after reading only %j", async (path, keys) => {
     const before = world.install.keys.length;
     const response = await serve(ask(labelHost(world.report), path));
@@ -337,11 +340,11 @@ describe("paths", () => {
   ];
 
   // Drift: a path could name a key the store would refuse or resolve into another site's folder.
-  test.each(hostile)("%s is the 404 after no read but the one for the site's own 404 page", async (_why, path) => {
+  test.each(hostile)("%s is the 404 after no read at all", async (_why, path) => {
     const before = world.install.keys.length;
     const response = await serve(ask(labelHost(world.report), path(world)));
 
-    expect({ ...(await whole(response)), keys: world.install.keys.slice(before) }).toEqual({ ...NO_FILE, keys: [`${prefixOf(world.report)}404.html`] });
+    expect({ ...(await whole(response)), keys: world.install.keys.slice(before) }).toEqual({ ...NO_FILE, keys: [] });
   });
 
   const climbing: readonly (readonly [string, (w: World) => string])[] = [
@@ -357,7 +360,7 @@ describe("paths", () => {
     const response = await serve(ask(labelHost(world.report), path(world)));
     const keys = world.install.keys.slice(before);
 
-    expect({ ...(await whole(response)), outside: keys.filter((key) => !key.startsWith(prefixOf(world.report))), reads: keys.length }).toEqual({ ...NO_FILE, outside: [], reads: 2 });
+    expect({ ...(await whole(response)), outside: keys.filter((key) => !key.startsWith(prefixOf(world.report))), reads: keys.length }).toEqual({ ...NO_FILE, outside: [], reads: 1 });
   });
 });
 
@@ -465,8 +468,8 @@ describe("a site's own 404 page", () => {
 
   const real: readonly (readonly [string, string, string, readonly string[]])[] = [
     ["the 404 page asked for by its name", "/404.html", LOST, ["404.html"]],
-    ["the 404 page asked for without its ending", "/404", LOST, ["404", "404.html"]],
-    ["a page asked for without its ending", "/about", "about page", ["about", "about.html"]],
+    ["the 404 page asked for without its ending", "/404", LOST, ["404.html"]],
+    ["a page asked for without its ending", "/about", "about page", ["about.html"]],
   ];
 
   // Drift: the 404 page would stop being a file of its own, or would stand in for a file the clean address still finds.
@@ -483,14 +486,14 @@ describe("a site's own 404 page", () => {
   });
 
   const reads: readonly (readonly [string, (lost: Lost) => Site, string, string, readonly string[]])[] = [
-    ["a site with a 404 page", (l) => l.guide, "GET", "/nothing", ["nothing", "nothing.html", "nothing/index.html", "404.html"]],
+    ["a site with a 404 page", (l) => l.guide, "GET", "/nothing", ["nothing.html", "nothing/index.html", "404.html"]],
     ["a site with a 404 page, by HEAD", (l) => l.guide, "HEAD", "/nothing.txt", ["nothing.txt", "404.html"]],
     ["a site with a 404 page, at a path inside a folder",(l) => l.guide, "GET", "/docs/nothing.txt", ["docs/nothing.txt", "404.html"]],
-    ["a site without one, asked for a folder's 404 page", (l) => l.bare, "GET", "/docs/404.html", ["docs/404.html", "404.html"]],
+    ["a site without one, asked for a folder's 404 page", (l) => l.bare, "GET", "/docs/404.html", ["docs/404.html"]],
   ];
 
-  // Drift: a miss would cost more than one read past the file's own keys, or a folder's `404.html` would start to be looked for.
-  test.each(reads)("a miss on %s reads the file's keys and then the root 404.html once", async (_why, site, method, path, keys) => {
+  // Drift: a miss would cost more than one read past the file's own keys, a site without a 404 page would pay a read for it, or a folder's `404.html` would start to be looked for.
+  test.each(reads)("a miss on %s reads the file's keys, and then the root 404.html once where the site holds one", async (_why, site, method, path, keys) => {
     const before = lost.install.keys.length;
     const response = await answer(ask(labelHost(site(lost)), path, {}, method));
     await response.body?.cancel();
@@ -671,7 +674,7 @@ describe("a page and the version it was published in", () => {
     const [first] = world.report.versions;
     if (first === undefined) throw new Error("the test's site has no version");
 
-    const as = (changes: Partial<Site>): Partial<Serving> => ({ database: { findServed: async () => ({ ...world.report, ...changes }) as Site } });
+    const as = (changes: Partial<Site>): Partial<Serving> => ({ database: { findServed: async () => ({ site: { ...world.report, ...changes } as Site, contents: UNKNOWN_CONTENTS }) } });
     const records = [{}, { live_version: 2, versions: [first, { ...first, number: 2 }] }, { versions: [{ ...first, published_at: first.published_at + 1 }] }];
     const tags = await Promise.all(records.map(async (changes) => (await serve(holding('"none"', "HEAD"), as(changes))).headers.get("ETag")));
 
@@ -851,10 +854,12 @@ describe("If-None-Match on a file", () => {
     ["a version's tag, on a file that is no page", script(() => OLDER_VERSION), "as none sent", ["app.js"], 1],
     ["nothing but commas", script(() => ",,,"), "as none sent", ["app.js"], 1],
     ["a file's own tag and a part of it", script(own, PART), "held", ["app.js"], 0],
-    ["a file's own tag and a part past its end", script(own, PAST_THE_END), "held", ["app.js"], 0],
+    ["a file's own tag and a part past its end, which the store may look up the size for", script(own, PAST_THE_END), "held", ["app.js", "app.js"], 0],
     ["the wildcard and a part past its end", script(any, PAST_THE_END), "held", ["app.js"], 0],
     ["another tag and a part of it", script(other, PART), "as none sent", ["app.js"], 1],
-    ["another tag and a part past its end", script(other, PAST_THE_END), "as none sent", ["app.js"], 0],
+    ["another tag and a part past its end", script(other, PAST_THE_END), "as none sent", ["app.js", "app.js"], 0],
+    ["a list of other tags and a part past its end, which the look at the file already answers", script(others, PAST_THE_END), "as none sent", ["app.js"], 0],
+    ["a page, with the store's tag of it and a part past its end", { ...page(own), range: PAST_THE_END }, "as none sent", ["about.html", "about.html"], 0],
     ["a list of other tags and a part of it", script(others, PART), "as none sent", ["app.js", "app.js"], 1],
     ["a page, with the store's tag of it, which no page goes out with", page(own), "as none sent", ["about.html", "about.html"], 1],
     ["a page, with the wildcard", page(any), "held", ["about.html"], 0],
@@ -862,8 +867,8 @@ describe("If-None-Match on a file", () => {
     ["a missing file, with the tag of the site's 404 page", missing("guide", "404.html", own), "as none sent", ["nothing.txt", "404.html"], 1],
     ["a missing file, with the wildcard", missing("guide", "404.html", any), "as none sent", ["nothing.txt", "404.html"], 1],
     ["a missing file, with a list that holds the tag of the site's 404 page", missing("guide", "404.html", (tag) => `${OTHER}, ${tag}`), "as none sent", ["nothing.txt", "404.html"], 1],
-    ["a missing file of a site without a 404 page, with the wildcard", missing("bare", "index.html", any), "as none sent", ["nothing.txt", "404.html"], 0],
-    ["a missing file of a site without a 404 page, with another tag", missing("bare", "index.html", other), "as none sent", ["nothing.txt", "404.html"], 0],
+    ["a missing file of a site without a 404 page, with the wildcard", missing("bare", "index.html", any), "as none sent", ["nothing.txt"], 0],
+    ["a missing file of a site without a 404 page, with another tag", missing("bare", "index.html", other), "as none sent", ["nothing.txt"], 0],
   ];
 
   let install: Install;
@@ -925,5 +930,95 @@ describe("If-None-Match on a file", () => {
     const { "content-length": _length, ...kept } = plain.headers;
 
     expect(got).toEqual({ ...(outcome === "held" ? { ...plain, status: 304, headers: kept } : plain), opened: 0 });
+  });
+});
+
+// What a day of requests can cost the store is counted from this bound, so it holds for every request, and no file is harder to reach for it.
+describe("three calls to the store at most", () => {
+  const LOST = "<h1>lost</h1>";
+  const PAST_THE_END = "bytes=99-";
+  const PART = "bytes=0-1";
+  const FILES = {
+    "index.html": ["home", HTML],
+    "about.html": ["about page", HTML],
+    "notes/index.html": ["notes folder", HTML],
+    "app.js": ["let a = 1;", SCRIPT],
+    "404.html": [LOST, HTML],
+    LICENSE: ["license terms", "text/plain"],
+    "raw/index.html": ["raw text", "text/plain"],
+  } as const;
+
+  /** The same files three times: on a site whose version says what it holds, on one made from no list of files, and on one with more files without an extension than a version keeps. */
+  interface Bound {
+    readonly install: Install;
+    readonly known: Site;
+    readonly unlisted: Site;
+    readonly crowded: Site;
+  }
+
+  /** One request, and what it costs: the status, the body, and the keys the store was asked for, in order. */
+  type Row = readonly [why: string, asked: readonly [site: keyof Omit<Bound, "install">, method: string, path: string, headers: Record<string, string>], status: number, body: string, keys: readonly string[]];
+
+  let bound: Bound;
+
+  beforeAll(async () => {
+    const install = await openInstall();
+    const many = Object.fromEntries(Array.from({ length: 700 }, (_file, at) => [`objects/${String(at).padStart(4, "0")}-without-an-extension`, ["x", "text/plain"]] as const));
+
+    bound = {
+      install,
+      known: await install.publish({ name: "known", access: "unlisted", files: FILES }),
+      unlisted: await install.publish({ name: "unlisted", access: "unlisted", files: FILES, unlisted_files: true }),
+      crowded: await install.publish({ name: "crowded", access: "unlisted", files: { ...FILES, ...many } }),
+    };
+  });
+
+  const rows: readonly Row[] = [
+    ["a miss, then the site's own 404 page", ["known", "GET", "/nothing", {}], 404, LOST, ["nothing.html", "nothing/index.html", "404.html"]],
+    ["the same miss by HEAD", ["known", "HEAD", "/nothing", {}], 404, "", ["nothing.html", "nothing/index.html", "404.html"]],
+    ["a file without an extension, which its version names", ["known", "GET", "/LICENSE", {}], 200, "license terms", ["LICENSE"]],
+    ["a folder's page, a part past its end", ["known", "GET", "/notes", { Range: PAST_THE_END }], 416, "Range not satisfiable\n", ["notes.html", "notes/index.html", "notes/index.html"]],
+    ["a folder's page, a part of it, and two tags that are not its own", ["known", "GET", "/notes", { Range: PART, "If-None-Match": '"one", "two"' }], 206, "no", ["notes.html", "notes/index.html", "notes/index.html"]],
+    ["a folder's page, a part past its end, and two tags that are not its own", ["known", "GET", "/notes", { Range: PAST_THE_END, "If-None-Match": '"one", "two"' }], 416, "Range not satisfiable\n", ["notes.html", "notes/index.html"]],
+    ["a page of a site made from no list of files, read whole at its second key", ["unlisted", "GET", "/about", {}], 200, "about page", ["about", "about.html"]],
+    ["a part of that page", ["unlisted", "GET", "/about", { Range: PART }], 206, "ab", ["about", "about.html"]],
+    ["a folder's page there, at the third key, where a part is not followed", ["unlisted", "GET", "/notes", { Range: PAST_THE_END, "If-None-Match": '"one", "two"' }], 200, "notes folder", ["notes", "notes.html", "notes/index.html"]],
+    ["a miss there, which has no call left for a 404 page", ["unlisted", "GET", "/nothing", {}], 404, "Not found\n", ["nothing", "nothing.html", "nothing/index.html"]],
+    ["the same miss there by HEAD", ["unlisted", "HEAD", "/nothing", {}], 404, "", ["nothing", "nothing.html", "nothing/index.html"]],
+    ["a path with an extension there, a part of it", ["unlisted", "GET", "/app.js", { Range: PART }], 206, "le", ["app.js"]],
+    ["a miss on a site with too many files without an extension to keep", ["crowded", "GET", "/nothing", {}], 404, "Not found\n", ["nothing", "nothing.html", "nothing/index.html"]],
+    ["a miss there at a path with an extension, which its 404 page answers", ["crowded", "GET", "/nothing.txt", {}], 404, LOST, ["nothing.txt", "404.html"]],
+    ["a file without an extension there, a part of it", ["crowded", "GET", "/LICENSE", { Range: PART }], 206, "li", ["LICENSE"]],
+  ];
+
+  // Drift: a request that asked the store a fourth time would put a month of full days over what a host reads for free, and a site would pay for it by a file no address reaches.
+  test.each(rows)("%s", async (_why, [site, method, path, headers], status, body, keys) => {
+    const before = bound.install.keys.length;
+    const response = await serveSite(ask(labelHost(bound[site]), path, headers, method), bound.install.serving);
+    const asked = bound.install.keys.slice(before).map((key) => key.replace(prefixOf(bound[site]), ""));
+
+    expect({ status: response.status, body: await response.text(), asked, within: asked.length <= MOST_STORE_CALLS }).toEqual({ status, body, asked: [...keys], within: true });
+  });
+
+  // Drift: a publish that stops keeping a version removes its files while requests for it are under way. A file that went between the look at it and its read took two calls, and the site's 404 page after it would be a fourth.
+  test("a file that goes between the look at it and its read is the plain 404, and nothing more is asked of the store", async () => {
+    const { store } = bound.install.serving;
+    const gone: Pick<typeof store, "head" | "read"> = { head: (key) => store.head(key), read: async (key) => ((await store.read(key, {})).kind === "found" ? { kind: "missing" } : { kind: "missing" }) };
+    const before = bound.install.keys.length;
+    const response = await serveSite(ask(labelHost(bound.known), "/notes", { "If-None-Match": '"one", "two"' }), { ...bound.install.serving, store: gone });
+    const asked = bound.install.keys.slice(before).map((key) => key.replace(prefixOf(bound.known), ""));
+
+    expect({ ...(await whole(response)), asked }).toEqual({ ...NO_FILE, asked: ["notes.html", "notes/index.html", "notes/index.html"] });
+  });
+
+  // Drift: a file read whole says it takes no ranges, or a client would ask for parts and get the whole file each time; and a request that holds the file is still told so.
+  test("a file read whole at a third key says it takes no ranges, and one the request holds is answered 304 once it is read", async () => {
+    const whole = await serveSite(ask(labelHost(bound.unlisted), "/raw"), bound.install.serving);
+    const tag = whole.headers.get("ETag") ?? "";
+    await whole.body?.cancel();
+    const [calls, opened] = [bound.install.keys.length, bound.install.bodies.length];
+    const held = await serveSite(ask(labelHost(bound.unlisted), "/raw", { "If-None-Match": tag }), bound.install.serving);
+
+    expect([whole.status, whole.headers.get("Accept-Ranges"), held.status, held.headers.get("ETag"), await held.text(), bound.install.keys.length - calls, bound.install.bodies.length - opened]).toEqual([200, "none", 304, tag, "", 3, 1]);
   });
 });

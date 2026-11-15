@@ -174,10 +174,31 @@ The settings `poplin config` takes:
 | `outside_pages`, `search_engines_allowed`, `block_bots`                                 | what the install lets in                                 |
 | `max_total_size`, `max_site_size`, `max_sites`                                          | size limits                                              |
 | `max_files_per_publish`, `max_files_per_day`                                            | how many files one publish holds, and all publishes begun in one UTC day |
+| `max_storage_writes_per_day`                                                            | how many times a day the storage is written to or listed |
 | `requests_per_day`, `site_share_of_day`, `site_requests_per_minute`, `visitor_requests_per_minute` | request limits                                |
 | `update_check`                                                                          | whether the install asks which version is the newest     |
 
 An import and a copy count as a publish, with every version an import holds. A publish that is given up or runs out gives none of the day's files back.
+
+The day's writes to the storage are counted like this:
+
+| What                                              | Counts                          |
+| ------------------------------------------------- | ------------------------------- |
+| a publish or an import, when it begins            | 1 for each file it declares     |
+| a copy, when it begins                            | 2 for each file                 |
+| a listing of the storage, when it is made         | 1                               |
+| a file whose write fails                          | 1                               |
+| a file the storage already holds, sent again      | nothing                         |
+| a read, a delete                                  | nothing                         |
+
+On the free Workers plan, a month at the settings a new install starts with stays inside what R2 takes for free:
+
+| R2 operations         | Free a month | At most, in a month of 31 full days |
+| --------------------- | ------------ | ----------------------------------- |
+| writes and listings   | 1,000,000    | 991,000                             |
+| reads                 | 10,000,000   | 9,765,000                           |
+
+A finish, a look at an upload, a delete, a copy, and a backup's list of files each list the storage. At the limit they answer `allowance_spent` until 00:00 UTC; a delete still removes the site, and its files go later.
 
 Every command that talks to the install also takes `--json`, for the answer as JSON, and `--server`, to name the install.
 
@@ -256,6 +277,8 @@ ok  domain    The login for private sites is missing or changed, so private site
 | any site, too often in a minute                  | `Too many requests. Try again in 60 seconds.` |
 | any site, once the day's free allowance of the database for reading is used up | `This site is paused until midnight UTC.` |
 
+A site whose files without an extension have over 16,384 characters of names between them answers `Not found` for a missing page without an extension, even when it has a `404.html`.
+
 ## When poplin refuses
 
 A refused command prints one sentence and often a hint. With `--json` it prints an object with a `code`. A tool answers with the same object.
@@ -277,7 +300,7 @@ A refused command prints one sentence and often a hint. With `--json` it prints 
 | `not_json`, `unexpected_answer`                | the answer is not a poplin install's               | `poplin whoami` shows the address in use                      |
 | `method_not_allowed`, `unsupported_media_type` | the install and this poplin are of two versions    | update the older one                                          |
 | `too_many_requests`                            | asked too often                                    | wait a minute                                                 |
-| `allowance_spent`                              | the day's free allowance of the database is used up | wait until 00:00 UTC; asking sooner is refused the same way  |
+| `allowance_spent`                              | a day's allowance is used up: the database's, or `max_storage_writes_per_day` | wait until 00:00 UTC; asking sooner is refused the same way  |
 | `internal`, `crashed`                          | something failed                                   | try again; `poplin doctor` reports on the install             |
 
 **Updating an install**

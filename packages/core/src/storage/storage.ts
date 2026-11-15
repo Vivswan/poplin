@@ -160,6 +160,9 @@ export type ListPage = { readonly objects: readonly ObjectSummary[] } & (
  * An object store: a bucket behind a provider's adapter, or memory in tests.
  *
  * Every answer the product acts on is a result variant. A method rejects only when the store itself fails, or where its `@throws` says so.
+ *
+ * What a call costs: `head`, `read`, `write`, and `list` are one request to the store each, and a `read` of a range that selects no byte of the object may be two, the second to learn the size it answers with.
+ * Serving and the day's bound on writes are counted by this.
  */
 export interface ObjectStore {
   /** Read what the store keeps about an object, without its bytes. */

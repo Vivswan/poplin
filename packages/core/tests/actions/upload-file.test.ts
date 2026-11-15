@@ -1,9 +1,10 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, spyOn, test } from "bun:test";
 
 import { beginPublish } from "../../src/actions/begin-publish";
 import { finishPublish } from "../../src/actions/finish-publish";
 import type { Install } from "../../src/actions/records";
 import { uploadFile } from "../../src/actions/upload-file";
+import { dayOf } from "../../src/records/views";
 import { makeWorld, OWNER, STRANGER, type World } from "./support/actions-fixture";
 
 /** An upload id no upload has. */
@@ -52,6 +53,38 @@ describe("sending one file of an upload", () => {
 
     const each = ["getUploadFile", '{"ok":true,"path":"pages/1.html","size":4}'];
     expect(asked).toEqual({ "3 files": each, "5000 files": each });
+  });
+
+  // Drift: a host bills every write to its store, and an upload's writes are counted once, as it begins. A file stored again each time it is sent would be a write nothing counts, as many times as a client loops.
+  test("a file sent again is answered as the first time and is not written to the store again", async () => {
+    const world = await makeWorld();
+    const upload = await begun(world, 3);
+    const writes = spyOn(world.install.store, "write");
+    const send = (text: string): ReturnType<typeof uploadFile> => uploadFile(world.install, OWNER, { upload, path: "pages/1.html", body: new Blob([text]).stream() });
+
+    const answers = [await send("page"), await send("page"), await send("other"), await send("pag")];
+    const stored = { ok: true, path: "pages/1.html", size: 4 };
+
+    expect<unknown>([answers, writes.mock.calls.length]).toEqual([[stored, stored, stored, stored], 1]);
+  });
+
+  // Drift: a host bills a write it refused as one it kept. A file sent short again and again would be a write nothing counts each time, so each is counted, and once the day has no room the upload is given up.
+  test("a file whose bytes are too few is counted as a write each time it is sent, and at the day's bound its upload is given up and takes no more", async () => {
+    const world = await makeWorld({ max_storage_writes_per_day: 5 });
+    const upload = await begun(world, 3);
+    const writes = spyOn(world.install.store, "write");
+    const send = (text: string): ReturnType<typeof uploadFile> => uploadFile(world.install, OWNER, { upload, path: "pages/1.html", body: new Blob([text]).stream() });
+
+    const answers = [await send("pag"), await send("pag"), await send("pag"), await send("page")];
+    const counted = await world.install.database.readStorageWrites(dayOf(world.clock.now));
+
+    expect(answers.map((answer) => (answer.ok ? "stored" : `${answer.code} ${answer.about}`))).toEqual([
+      "size_mismatch pages/1.html",
+      "size_mismatch pages/1.html",
+      "allowance_spent max_storage_writes_per_day",
+      "not_found upload",
+    ]);
+    expect([writes.mock.calls.length, counted]).toEqual([3, { writes: 6, most: 5 }]);
   });
 
   // Drift: every refusal is decided from the one file and the upload the lookup answers; a lookup that lost either would store bytes nobody declared, or another publisher's.

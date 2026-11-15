@@ -12,7 +12,7 @@ const SHORTEST_PAUSES = [1000, 2000, 4000];
 /** A site of six files: more than the four that are on their way at once. */
 const SIX = { "index.html": "<h1>notes</h1>", "a.css": "a{}", "b.css": "b{}", "c.css": "c{}", "d.css": "d{}", "e.css": "e{}" };
 
-/** A site of twenty files, which the install copies over two calls: sixteen, then the last four. */
+/** A site of twenty files, which the install copies over two calls: fifteen, then the last five. */
 const TWENTY = { "index.html": "<title>Report</title>", ...Object.fromEntries(Array.from({ length: 19 }, (_page, at) => [`pages/${at}.html`, `<p>${at}</p>`])) };
 
 /** The id of an upload, as a path names it. */
@@ -347,6 +347,6 @@ describe("upload", () => {
     const watched = await bench.run(`duplicate ${label}`, { terminal: { asks: false, progress: true } });
     const piped = await bench.run(`duplicate ${label}`);
 
-    expect([watched.code, watched.status, piped.code, piped.status]).toEqual([0, ["copying 16 of 20 files", ""], 0, []]);
+    expect([watched.code, watched.status, piped.code, piped.status]).toEqual([0, ["copying 15 of 20 files", ""], 0, []]);
   });
 });

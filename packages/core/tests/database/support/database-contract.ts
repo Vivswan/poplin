@@ -67,7 +67,7 @@ const MANIFEST = [
 ];
 
 /** Room no fixture upload fills. */
-const ROOMY = { own: 100, folderBytes: 1_000_000, staying: 0, totalBytes: 1_000_000, sites: null, day: "2026-11-13", dayFiles: 1_000_000 };
+const ROOMY = { own: 100, folderBytes: 1_000_000, staying: 0, totalBytes: 1_000_000, sites: null, day: "2026-11-13", dayFiles: 1_000_000, writes: 2, dayWrites: 1_000_000 };
 
 /** A change made by the second person a moment later. */
 const BY_BO_LATER: Signed = { by: BO, at: NOW + 5 };
@@ -174,12 +174,12 @@ export async function begunVersion(database: Database, site: Site): Promise<Uplo
 }
 
 /** Store a site from a backup through an upload begun in its folder, and leave no record of the upload behind. */
-export async function storedBack(database: Database, site: Site, signed: Signed = BY_ADA): ReturnType<Database["importUploadAsSite"]> {
+export async function storedBack(database: Database, site: Site, signed: Signed = BY_ADA, contents?: Parameters<Database["importUploadAsSite"]>[3]): ReturnType<Database["importUploadAsSite"]> {
   const upload: NewUpload = { id: mintUploadId(), folder: site.folder, number: 1, owner: ADA, plan: { kind: "import", site: {} }, manifest: MANIFEST, created_at: NOW };
   await database.addUpload(upload, ROOMY);
 
   try {
-    return await database.importUploadAsSite(upload.id, site, signed);
+    return await database.importUploadAsSite(upload.id, site, signed, contents);
   } finally {
     await database.abandonUpload(upload.id);
     await database.removeUpload(upload.id);
@@ -580,7 +580,7 @@ function sites(label: string, makeDatabase: DatabaseFactory): void {
       expect(moved.site.id).not.toBe(site.id);
       expect((await auditTrail(database)).at(-1)).toMatchObject({ action: "new_id", site: { id: moved.site.id, name: REPORT }, detail: { from: site.id } });
       expect([await database.getSite(site.id), await database.findServed({ id: site.id }, NOW)]).toEqual([undefined, undefined]);
-      expect([await database.getSiteByPublicName(DOCS), await database.findServed({ public_name: DOCS }, NOW), await database.getSite(moved.site.id)]).toEqual([
+      expect([await database.getSiteByPublicName(DOCS), (await database.findServed({ public_name: DOCS }, NOW))?.site, await database.getSite(moved.site.id)]).toEqual([
         moved.site,
         moved.site,
         moved.site,
@@ -599,7 +599,7 @@ function sites(label: string, makeDatabase: DatabaseFactory): void {
       expect<unknown>([await database.getSite(site.id), await database.getSiteByPublicName(DOCS)]).toEqual([inTrash, inTrash]);
       expect(await database.createSite(draft(DOCS, "public"), BY_ADA)).toEqual({ kind: "name_taken" });
       expect(await database.restoreSite(site.id, { by: ADA, at: NOW + 2 })).toEqual({ kind: "done", site });
-      expect(await database.findServed({ public_name: DOCS }, NOW)).toEqual(site);
+      expect((await database.findServed({ public_name: DOCS }, NOW))?.site).toEqual(site);
     });
 
     // Drift: a site restored with an expiry already behind it would be live in the answer and served to nobody, and the sweep would trash it again.
@@ -614,7 +614,7 @@ function sites(label: string, makeDatabase: DatabaseFactory): void {
       const restored = { ...site, expires: kept };
 
       expect(await database.restoreSite(site.id, { by: ADA, at: NOW + 5 })).toEqual({ kind: "done", site: restored });
-      expect([await database.getSite(site.id), await database.findServed({ id: site.id }, NOW + 5)]).toEqual([restored, restored]);
+      expect([await database.getSite(site.id), (await database.findServed({ id: site.id }, NOW + 5))?.site]).toEqual([restored, restored]);
     });
 
     // Drift: a name held by a site that no longer exists could never be claimed again, and versions left behind would count against the install for good.
@@ -2104,6 +2104,7 @@ function uploads(label: string, makeDatabase: DatabaseFactory): void {
       ["the bytes of every site and every pending upload", { totalBytes: 4000 }, "version", 1, "total_full"],
       ["the sites there are and are being made", { sites: 3 }, "site", 1, "sites_full"],
       ["the files declared on its day", { dayFiles: 6 }, "version", 1, "day_full"],
+      ["the writes to the store counted on its day", { dayWrites: 6 }, "version", 1, "writes_full"],
     ] as const)("of three uploads recorded at the same moment only as many are kept as fit the room for %s", async (_bound, bound, kind, fit, refusal) => {
       const database = await opened(makeDatabase);
       const site = await made(database, draft(REPORT));
@@ -2169,6 +2170,90 @@ function declaredFiles(label: string, makeDatabase: DatabaseFactory): void {
   });
 }
 
+/** A day whose count's arrival drops the fixture's first day: three days after it. */
+const THREE_DAYS_ON = "2026-11-16";
+
+function storageWrites(label: string, makeDatabase: DatabaseFactory): void {
+  describe(`${label}: the writes to the store counted in a day`, () => {
+    // Drift: the count is what keeps a month of writes and listings inside what a host takes for free. One that forgot an upload's writes, or a listing's, would let a loop pass the bound unseen.
+    test("an upload's writes are counted when it begins, listings add to the same day, an upload that does not fit is refused, and the bound read back is the stored setting", async () => {
+      const database = await opened(makeDatabase);
+      const site = await made(database, draft(REPORT));
+      const begin = (number: number, room: Partial<typeof ROOMY>): ReturnType<Database["addUpload"]> =>
+        database.addUpload({ id: mintUploadId(), folder: site.folder, number, owner: ADA, plan: { kind: "update", details: {} }, manifest: MANIFEST, created_at: NOW }, { ...ROOMY, day: TODAY, ...room });
+      const most = SETTINGS.max_storage_writes_per_day;
+      await database.initSettings(SETTINGS, BY_ADA);
+
+      const kinds = [(await begin(2, { writes: 4, dayWrites: 9 })).kind];
+      await database.addStorageWrites(TODAY, 3);
+      kinds.push((await begin(3, { writes: 3, dayWrites: 9 })).kind, (await begin(4, { writes: 2, dayWrites: 9 })).kind, (await begin(5, { writes: 3, dayWrites: 9, day: TOMORROW })).kind);
+
+      expect(kinds).toEqual(["done", "writes_full", "done", "done"]);
+      expect([await database.readStorageWrites(TODAY), await database.readStorageWrites(TOMORROW)]).toEqual([{ writes: 9, most }, { writes: 3, most }]);
+    });
+
+    // Drift: the day's files and the day's writes share a row. A listing counted on a day no upload began would have no row to add to, and a count that outlived its day would refuse the next day's work.
+    test("writes are counted on a day no upload began, change no count of declared files, and a listing that takes its place drops the days before the day before", async () => {
+      const database = await opened(makeDatabase);
+      const site = await made(database, draft(REPORT));
+      await database.initSettings(SETTINGS, BY_ADA);
+      await database.addStorageWrites(TODAY, 5);
+      await database.addStorageWrites(TODAY, 1);
+      const fits = await database.addUpload({ id: mintUploadId(), folder: site.folder, number: 2, owner: ADA, plan: { kind: "update", details: {} }, manifest: MANIFEST, created_at: NOW }, { ...ROOMY, day: TODAY, dayFiles: 2 });
+      await database.takeStorageWrite(THREE_DAYS_ON, 0);
+
+      expect(fits).toEqual({ kind: "done" });
+      expect((await Promise.all([TODAY, TOMORROW, THREE_DAYS_ON].map((day) => database.readStorageWrites(day)))).map((read) => read?.writes)).toEqual([0, 0, 1]);
+    });
+
+    // Drift: a listing is checked and counted in one step. Checked first and counted after, the listings of requests that arrive together would each see the same room and pass the bound together.
+    test("of five listings that ask for a place at the same moment only as many are counted as the day has room for, and a caller's spare ones on top", async () => {
+      const database = await opened(makeDatabase);
+      await database.initSettings({ ...SETTINGS, max_storage_writes_per_day: 4 }, BY_ADA);
+      await database.addStorageWrites(TODAY, 2);
+
+      const together = await Promise.all(Array.from({ length: 5 }, () => database.takeStorageWrite(TODAY, 0)));
+      const spare = [await database.takeStorageWrite(TODAY, 1), await database.takeStorageWrite(TODAY, 1), await database.takeStorageWrite(TOMORROW, 0)];
+
+      expect([together.filter((taken) => taken).length, spare, (await database.readStorageWrites(TODAY))?.writes]).toEqual([2, [true, false, true], 5]);
+    });
+  });
+}
+
+function versionContents(label: string, makeDatabase: DatabaseFactory): void {
+  describe(`${label}: what a version is known to hold`, () => {
+    // Drift: serving reads the store for a `404.html` and for a file without an extension only when the live version is known to hold one. A record kept with the site, not the version, would send a rolled-back site's visitor to files that are not there.
+    test("a served site carries what its live version holds: the first one's, a publish's, and after a rollback the older one's again", async () => {
+      const database = await opened(makeDatabase);
+      const first = { missing_page: true, bare_files: "\nLICENSE\n" };
+      const second = { missing_page: false, bare_files: "" };
+      const upload = await begunSite(database, draft(REPORT));
+      const site = await database.publishUploadAsSite(upload.id, upload.site, BY_ADA, first);
+      if (site.kind !== "done") throw new Error(`the fixture site was refused: ${site.kind}`);
+
+      const contents = [(await database.findServed({ id: site.site.id }, NOW))?.contents];
+      await database.publishUploadAsVersion(await begunVersion(database, site.site), { keep: 2, details: {}, contents: second }, BY_ADA);
+      contents.push((await database.findServed({ id: site.site.id }, NOW))?.contents);
+      await database.setLiveVersion(site.site.id, 1, BY_ADA);
+      contents.push((await database.findServed({ id: site.site.id }, NOW))?.contents);
+
+      expect(contents).toEqual([first, second, first]);
+    });
+
+    // Drift: a version made from no list of files, as a test's or one stored without it, must be served as one nothing is known of, never as one known to hold nothing.
+    test("a version stored without it is one nothing is known of, and a site from a backup carries what is given for each of its versions", async () => {
+      const database = await opened(makeDatabase);
+      const plain = await made(database, draft(REPORT));
+      const gone = await made(database, draft("notes" as SiteName));
+      await database.deleteSite(gone.id, BY_ADA);
+      const held = { missing_page: true, bare_files: null };
+      await storedBack(database, { ...gone, folder: mintSiteFolder() }, BY_ADA, new Map([[1, held]]));
+
+      expect([(await database.findServed({ id: plain.id }, NOW))?.contents, (await database.findServed({ id: gone.id }, NOW))?.contents]).toEqual([{ missing_page: false, bare_files: null }, held]);
+    });
+  });
+}
+
 /**
  * Register the contract every `Database` keeps, whatever it stores its records in.
  *
@@ -2194,4 +2279,6 @@ export function describeDatabase(label: string, makeDatabase: DatabaseFactory): 
   uploads(label, makeDatabase);
   uploadFiles(label, makeDatabase);
   declaredFiles(label, makeDatabase);
+  storageWrites(label, makeDatabase);
+  versionContents(label, makeDatabase);
 }

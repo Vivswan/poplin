@@ -8,7 +8,7 @@ import { publishSite } from "../../src/actions/publish";
 import { getSite } from "../../src/actions/show";
 import { uploadFile } from "../../src/actions/upload-file";
 import type { SettingValues } from "../../src/records/settings";
-import { ADMIN, made, makeWorld, NOW, OWNER, pages, type World } from "./support/actions-fixture";
+import { ADMIN, file, made, makeWorld, NOW, OWNER, pages, type World } from "./support/actions-fixture";
 
 /** One site of a backup: what an import sends, and the bytes of each file it declares. */
 interface Entry {
@@ -199,6 +199,23 @@ describe("an import that is finished", () => {
     expect(finished).toMatchObject({ ok: true, before: null, site: { id, created: true, public_name: "handbook", live_version: 2, updated: NOW + 5 }, left: [] });
     expect([after, await world.audit(), again]).toEqual([before, ["imported"], { ok: false, code: "id_taken", about: "id" }]);
     expect((await backupOf(world, id)).request).toEqual(entry.request);
+  });
+
+  // Drift: a backup carries no record of what a version holds, so an import works it out from the files it declares, version by version. One record for the whole site would serve an older version's `404.html` that the live one never had.
+  test("each version of an imported site is recorded with what its own files say it holds", async () => {
+    const source = await makeWorld();
+    const first = await publishSite(source.install, OWNER, { name: "manual", files: [file("index.html", "home"), file("404.html", "lost"), file("LICENSE", "terms")] });
+    if (!first.ok) throw new Error(`the fixture publish was refused: ${first.code}`);
+
+    await publishSite(source.install, OWNER, { site: first.site.id, files: [file("index.html", "home again")] });
+    const world = await makeWorld();
+    await finishPublish(world.install, ADMIN, await staged(world, await backupOf(source, first.site.id)));
+    const holds = async (): Promise<unknown> => (await world.install.database.findServed({ id: first.site.id }, world.clock.now))?.contents;
+    const contents = [await holds()];
+    await world.install.database.setLiveVersion(first.site.id, 1, { by: ADMIN.holder, at: world.clock.now });
+    contents.push(await holds());
+
+    expect(contents).toEqual([{ missing_page: false, bare_files: "" }, { missing_page: true, bare_files: "\nLICENSE\n" }]);
   });
 
   // Drift: the check at the start is a courtesy; the id or the public name can be taken while the files are sent, and only the last step can refuse then without leaving a site half made.

@@ -4,12 +4,17 @@ import * as v from "valibot";
 
 import type { Actor } from "../auth/scopes";
 import { COUNT } from "../records/fields";
-import { parseUploadId } from "../records/upload";
+import { type ManifestFile, parseUploadId, type Upload } from "../records/upload";
+import { dayOf } from "../records/views";
+import type { ObjectKey } from "../storage/storage";
 import { type Install, type Refused, refuse } from "./records";
 import { isKeptVersion, isWithinReach, uploadKey, uploadObject } from "./uploads";
 
 /** What storing a file answers: its path as the manifest names it, and the bytes stored. */
 export const STORED_FILE = v.object({ path: v.string(), size: COUNT });
+
+/** The setting that bounds the day's writes to the store, which a refusal for it is about. */
+const WRITES_SETTING = "max_storage_writes_per_day";
 
 /** One file to store: the upload's id as sent, the file's path as the manifest names it, and its bytes, which are read once. */
 interface FileRequest {
@@ -44,20 +49,69 @@ async function unread<Code extends string>(body: ReadableStream<Uint8Array>, cod
 }
 
 /**
- * Store one file of a pending upload under `<folder>/v<number>/<path>`, replacing what an earlier request stored there.
- * An import names each file `v<number>/<path>`, which is its place under the folder.
- * The same file sent again is stored again. A site is live at these keys only once the upload is finished, so no visitor reads them before.
+ * Count a write the store did not keep, which a host bills as one it kept. Once the day has no room for it the upload is given up, so no file can be sent to fail without end.
+ *
+ * @returns whether the upload was given up
+ */
+async function countLostWrite(install: Install, upload: Upload): Promise<boolean> {
+  const day = dayOf(install.now());
+  await install.database.addStorageWrites(day, 1);
+  const counted = await install.database.readStorageWrites(day);
+  if (counted === undefined || counted.writes <= counted.most) return false;
+
+  await install.database.abandonUpload(upload.id);
+
+  return true;
+}
+
+/**
+ * Write a file's bytes at its key, unless the store holds the file already: an upload's writes are counted once, when it begins, so a file sent again costs no second one.
+ *
+ * @returns `stored`, or the refusal of bytes that are not the declared length or of a write the day has no room to count
+ * @throws {Error} the store failed, or the body broke off
+ */
+async function storeOnce(install: Install, placed: { readonly upload: Upload; readonly file: ManifestFile; readonly key: ObjectKey }, body: ReadableStream<Uint8Array>): Promise<"stored" | Refused<"size_mismatch" | "allowance_spent">> {
+  const { upload, file, key } = placed;
+  const held = await install.store.head(key);
+  if (held.kind === "found" && held.info.size === file.size) {
+    await body.cancel();
+
+    return "stored";
+  }
+
+  const meter = metered(body);
+
+  try {
+    const stored = await install.store.write(key, { stream: meter.stream, size: file.size }, { contentType: file.content_type });
+    if (stored.size === file.size) return "stored";
+
+    await install.store.delete(key);
+  } catch (error) {
+    if (await countLostWrite(install, upload)) return refuse("allowance_spent", WRITES_SETTING);
+
+    if (meter.differsFrom(file.size)) return refuse("size_mismatch", file.path);
+
+    throw error;
+  }
+
+  return (await countLostWrite(install, upload)) ? refuse("allowance_spent", WRITES_SETTING) : refuse("size_mismatch", file.path);
+}
+
+/**
+ * Store one file of a pending upload under `<folder>/v<number>/<path>`. An import names each file `v<number>/<path>`, which is its place under the folder.
+ * A file the store already holds at its declared size is not stored again: the store is asked first, and a file sent twice costs it no second write. A site is live at these keys only once the upload is finished, so no visitor reads them before.
  *
  * @returns the path and the size stored. `not_found` about `upload` for an upload that is gone, given up, run out, another publisher's, or the copy of a site, and about `path` for a path the manifest does not name.
  * A file whose upload is given up while its bytes come in is answered as stored, and goes with the upload's other files at the sweep.
- * `size_mismatch` when the body is not the declared length: nothing of it is stored, and what the key held stays
+ * `size_mismatch` when the body is not the declared length: nothing of it is stored, and what the key held stays.
+ * `allowance_spent` about `max_storage_writes_per_day` when a write failed and the day has no room to count it: the upload is given up
  * @throws {Error} the store or the database failed, or the body broke off
  */
 export async function uploadFile(
   install: Install,
   actor: Actor,
   request: FileRequest,
-): Promise<({ readonly ok: true } & Readonly<v.InferOutput<typeof STORED_FILE>>) | Refused<"bad_argument" | "not_found" | "upload_finished" | "size_mismatch">> {
+): Promise<({ readonly ok: true } & Readonly<v.InferOutput<typeof STORED_FILE>>) | Refused<"bad_argument" | "not_found" | "upload_finished" | "size_mismatch" | "allowance_spent">> {
   const id = parseUploadId(request.upload);
   if (id === undefined) return unread(request.body, "bad_argument", "upload");
 
@@ -76,20 +130,8 @@ export async function uploadFile(
   const key = uploadKey(upload, file.path);
   if (!key.ok) throw new Error(`${JSON.stringify(file.path)} is no key of upload ${upload.id}: ${key.refusal}`);
 
-  const meter = metered(request.body);
-
-  try {
-    const stored = await install.store.write(key.key, { stream: meter.stream, size: file.size }, { contentType: file.content_type });
-    if (stored.size !== file.size) {
-      await install.store.delete(key.key);
-
-      return refuse("size_mismatch", file.path);
-    }
-  } catch (error) {
-    if (meter.differsFrom(file.size)) return refuse("size_mismatch", file.path);
-
-    throw error;
-  }
+  const stored = await storeOnce(install, { upload, file, key: key.key }, request.body);
+  if (stored !== "stored") return stored;
 
   // Inside the lifetime the record is still there. If the upload was given up meanwhile, the sweep removes this file with the rest.
   if (install.now() < uploadObject(upload).expires) return { ok: true, path: file.path, size: file.size };

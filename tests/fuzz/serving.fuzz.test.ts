@@ -4,7 +4,8 @@
 import { expect } from "bun:test";
 import fc from "fast-check";
 
-import { serveSite } from "../../packages/app/src/sites/serve";
+import { parseRange } from "../../packages/app/src/sites/range";
+import { MOST_STORE_CALLS, serveSite } from "../../packages/app/src/sites/serve";
 import { NOW, openInstall, typedHost } from "../../packages/app/tests/sites/support/install";
 import { fuzzTarget } from "./config";
 import { hostile } from "./hostile";
@@ -13,7 +14,6 @@ const HTML = "text/html; charset=utf-8";
 const FILES = { LICENSE: ["terms", "text/plain"], "index.html": ["home", HTML], "about.html": ["about", HTML], "docs/index.html": ["docs", HTML], "app.js": ["let a = 1;", "text/javascript"] } as const;
 const ANSWERS = [200, 206, 302, 304, 403, 404, 405, 416];
 const SHOWN = [200, 206, 304, 416];
-const MAX_READS = 4;
 const AROUND_LOGIN = [404, 405];
 const MISSING_ID = "000000000000";
 const TYPED_NAMES = ["other", "abc", "a-b-c", "zzz9"];
@@ -37,10 +37,12 @@ const unlisted = await install.publish({ name: "report", access: "unlisted", fil
 const hidden = await install.publish({ name: "secret", access: "private", files: FILES });
 const shown = await install.publish({ name: "shop", access: "public", files: FILES });
 const trashed = await install.publish({ name: "trashed", access: "unlisted", files: FILES });
+const loose = await install.publish({ name: "loose", access: "unlisted", files: { ...FILES, "404.html": ["lost", HTML] }, unlisted_files: true });
+const guided = await install.publish({ name: "guided", access: "unlisted", files: { ...FILES, "404.html": ["lost", HTML] } });
 const expired = await install.publish({ name: "expired", access: "unlisted", expires: NOW - 1, files: FILES });
 await install.database.trashSite(trashed.id, { by: install.owner, at: NOW });
 
-const SITES = [unlisted, hidden, shown, trashed, expired];
+const SITES = [unlisted, hidden, shown, trashed, expired, loose, guided];
 const BY_ID = new Map(SITES.map((site) => [site.id as string, site] as const));
 const PREFIXES = SITES.map((site) => `${site.folder}/v${site.live_version}/`);
 const ALIKE_UNDER_U = [hidden.id, trashed.id, expired.id, MISSING_ID];
@@ -154,7 +156,10 @@ function accessFacts(asked: Asked, response: Response, keys: readonly string[]):
 
 // What a browser is told to keep or drop: each fact is true when the answer breaks the cache rule.
 function cacheFacts(asked: Asked, response: Response): Record<string, boolean> {
-  const pageShown = asked.method === "GET" && response.status === 200 && (response.headers.get("Content-Type") ?? "").startsWith("text/html");
+  // A site's own 404 page is a page too, and one sent to a request for a part of a file tells it to drop nothing.
+  const partAsked = !("If-Range" in asked.sent) && parseRange(asked.sent.Range ?? null) !== undefined;
+  const shown = response.status === 200 || (response.status === 404 && !partAsked);
+  const pageShown = asked.method === "GET" && shown && (response.headers.get("Content-Type") ?? "").startsWith("text/html");
   const signal = pageShown && holdsAnotherVersion(asked.site, asked.sent) ? '"cache"' : null;
   const tellsNothing = response.status === 302 || (response.status === 404 && (asked.site === undefined || asked.underLogin));
 
@@ -165,7 +170,7 @@ function cacheFacts(asked: Asked, response: Response): Record<string, boolean> {
 }
 
 property(
-  "any hostname, path, and headers get a published answer, read only the addressed site, open no file they do not send, show no private site without the login, and clear the cache only with a page for a request that holds another version",
+  "any hostname, path, and headers get a published answer, read only the addressed site in three calls, open no file they do not send, show no private site without the login, and clear the cache only with a page for a request that holds another version",
   fc.asyncProperty(hosts, paths, fc.constantFrom(...METHODS), headers, settings, async (host, path, method, sent, chosen) => {
     const address = `https://${host}${path}`;
     fc.pre(URL.canParse(address));
@@ -178,11 +183,13 @@ property(
     await response.body?.cancel();
 
     const keys = install.keys.slice(before);
+    // `loose` was made from no list of files, so nothing is known of what its version holds: a file at its third key is read before its tag is compared.
+    const readsBeforeItsTag = asked.site === loose && method === "GET" && keys.length === MOST_STORE_CALLS;
     const facts = {
       published: ANSWERS.includes(response.status),
       outside: keys.filter((key) => !key.startsWith(prefix)),
-      reads: keys.length <= MAX_READS,
-      openedUnsent: (response.status === 304 || method === "HEAD") && install.bodies.length > opened,
+      reads: keys.length <= MOST_STORE_CALLS,
+      openedUnsent: (response.status === 304 || method === "HEAD") && install.bodies.length > opened && !readsBeforeItsTag,
       blockedShown: chosen.outside_pages === "blocked" && isOutsideSubrequest(sent) && SHOWN.includes(response.status),
       crossOriginOpened: [...response.headers.keys()].some((name) => name.startsWith("access-control-")),
       broken: Object.entries({ ...accessFacts(asked, response, keys), ...cacheFacts(asked, response) }).filter(([, isBroken]) => isBroken).map(([fact]) => fact),

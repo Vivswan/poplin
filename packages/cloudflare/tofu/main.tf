@@ -158,6 +158,7 @@ locals {
     max_sites                   = var.max_sites == null ? "none" : tostring(var.max_sites)
     max_files_per_publish       = tostring(var.max_files_per_publish)
     max_files_per_day           = tostring(var.max_files_per_day)
+    max_storage_writes_per_day  = tostring(var.max_storage_writes_per_day)
     requests_per_day            = tostring(var.requests_per_day)
     site_share_of_day           = "${var.site_share_of_day}%"
     site_requests_per_minute    = tostring(var.site_requests_per_minute)

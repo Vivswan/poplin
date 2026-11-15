@@ -46,7 +46,7 @@ test("the settings form renames a site when its name field changes, lands on the
   expect((await opened.install.database.listAudit({ limit: 10 })).map((entry) => entry.action).filter((action) => action === "details")).toHaveLength(1);
 });
 
-// Drift: one request copies 16 files of a small site; a form that showed a half copy as a site, or lost the upload between requests, would leave a broken site or a copy nobody can finish.
+// Drift: one request copies 15 files of a small site; a form that showed a half copy as a site, or lost the upload between requests, would leave a broken site or a copy nobody can finish.
 test("the duplicate form makes a private copy and lands on it; a site of more files than one request copies comes back to its own page until the copy is whole", async () => {
   const opened = await openDashboard();
   const published = await publishSite(opened.install, { scope: "admin", holder: opened.owner }, { name: "report", access: "public", files: twentyPages() });
@@ -56,7 +56,7 @@ test("the duplicate form makes a private copy and lands on it; a site of more fi
   const path = `/sites/report--${site.id}`;
 
   const begun = await opened.post(`${path}/duplicate`, { name: "report-draft" });
-  const [, upload = ""] = new RegExp(`^${path}\\?done=copying&copy=([0-9a-z]{16})&copied=16&files=20$`).exec(begun.headers.get("Location") ?? "") ?? [];
+  const [, upload = ""] = new RegExp(`^${path}\\?done=copying&copy=([0-9a-z]{16})&copied=15&files=20$`).exec(begun.headers.get("Location") ?? "") ?? [];
   const waiting = await landing(opened, begun);
   const sitesMeanwhile = (await opened.install.database.readTotals()).sites;
   const finished = await opened.post(`${path}/duplicate`, { upload });
@@ -64,7 +64,7 @@ test("the duplicate form makes a private copy and lands on it; a site of more fi
 
   expect(upload).not.toBe("");
   expect([NOTICE.exec(waiting)?.[2], waiting.includes(`name="upload" value="${upload}"`), sitesMeanwhile]).toEqual(["The copy is not finished. Press Keep copying until it is.", true, 1]);
-  expect(waiting).toContain("<p>Copied 16 of 20 files: 4 are left. Keep copying copies up to 16 more. The new site appears when every file is copied.</p>");
+  expect(waiting).toContain("<p>Copied 15 of 20 files: 5 are left. Keep copying copies up to 15 more. The new site appears when every file is copied.</p>");
   expect(waiting).toContain(`cancel this copy and run <code>poplin duplicate report--${site.id}</code> in a terminal`);
   expect(NOTICE.exec(await landing(opened, finished))?.[2]).toBe("This is the copy: a new private site with its own link. The site it was copied from is unchanged.");
   expect([await shown(opened, label), await shown(opened, site.id)]).toMatchObject([

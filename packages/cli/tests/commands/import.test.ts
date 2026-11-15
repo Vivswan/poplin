@@ -183,7 +183,7 @@ describe("import", () => {
     const said = jsonOf(await into.run(`import ${zip} --json`));
 
     expect([said.imported, said.failed, said.stopped, into.sent.filter((line) => line === "POST /api/import/sites").length]).toEqual([0, 1, true, 1]);
-    expect(said.sites).toMatchObject([{ code: "allowance_spent", message: "the day's free allowance of the install's database is used up until 00:00 UTC (writing)" }]);
+    expect(said.sites).toMatchObject([{ code: "allowance_spent", message: "a day's allowance of the install is used up until 00:00 UTC (writing)" }]);
   });
 
   // A start answered 429 began nothing, so the start made again makes each site once.
