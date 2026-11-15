@@ -63,5 +63,5 @@ export const FREE_LIMITS: FreeLimits = {
     warning: "Past 10,000,000 reads a month, Cloudflare bills the rest.",
   },
   requestsPerDay: { most: 100_000, warning: "Past 100,000 requests a day you need Cloudflare's paid plan." },
-  logins: { most: 50, warning: "Past 50 people, Cloudflare bills each login." },
+  logins: { most: 50, warning: "Past 50 users, Cloudflare bills each login." },
 };

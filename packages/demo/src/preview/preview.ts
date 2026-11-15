@@ -45,7 +45,7 @@ const FREE_LIMITS = {
   storageWritesPerDay: { most: 30_281, warning: "Past 1,000,000 writes a month, a real host bills the rest." },
   storageReadsPerMonth: { most: 10_000_000, warning: "Past 10,000,000 reads a month, a real host bills the rest." },
   requestsPerDay: { most: 100_000, warning: "Past 100,000 requests a day you need a paid plan." },
-  logins: { most: 50, warning: "Past 50 people, a real host bills each login." },
+  logins: { most: 50, warning: "Past 50 users, a real host bills each login." },
 } as const;
 
 /** When the sample release the seeded install knows of came out, and where its notes are: the page of the project's releases. No such release exists. */
