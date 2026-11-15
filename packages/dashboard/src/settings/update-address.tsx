@@ -17,10 +17,10 @@ import { SETTINGS_KEY, type UpdateAddress } from "@/settings/settings-queries";
 export const ADDRESS_FIELD = "update-address";
 
 /** What the line says under its name: what the address does. */
-const USE = "The secret address that starts an update of poplin.";
+const USE = "Starts an update.";
 
-/** What the line's question mark says the address is for. */
-const MEANING = "A secret address your host gives you. Poplin calls it to rebuild itself with the newest version. Once saved it is never shown again.";
+/** What the line's question mark says of the address. */
+const MEANING = "Your host's secret address. It is never shown again.";
 
 /** The question before the address is removed: it cannot be read back, so nothing puts it back. */
 const REMOVE = {
@@ -80,7 +80,7 @@ export function UpdateAddressRow({ state, draft }: { readonly state: UpdateAddre
             autoComplete="off"
             spellCheck={false}
             aria-invalid={draft.refusal !== undefined}
-            className="min-w-0 flex-1"
+            className="w-64 min-w-0 max-md:w-auto max-md:flex-1"
           />
           {draft.replacing ? (
             <Button type="button" variant="ghost" onClick={draft.discard}>

@@ -37,14 +37,14 @@ const API_LIMITS = { fileBytes: 100_000_000, files: 10_000, manifestBytes: 2_000
 
 /** The free plan of the preview's invented host: the numbers are samples, and no real plan is behind them. */
 const FREE_LIMITS = {
-  totalBytes: { most: 10_000_000_000, warning: "The sample host stores 10 GB for free, and a real host bills storage past its own." },
-  siteBytes: { most: 10_000_000_000, warning: "The sample host stores 10 GB for free, and a real host bills storage past its own." },
-  filesPerPublish: { most: 5000, warning: "A publish of more than 5,000 files may not start on the sample host's free plan." },
-  filesPerDay: { most: 32_258, warning: "A month of such days passes the sample host's 1,000,000 free storage writes, and a real host bills the rest." },
-  storageWritesPerDay: { most: 30_281, warning: "A month of such days passes the sample host's 1,000,000 free storage writes, and a real host bills the rest." },
-  storageReadsPerMonth: { most: 10_000_000, warning: "A month of such days can pass the sample host's 10,000,000 free storage reads, and a real host bills the rest." },
-  requestsPerDay: { most: 100_000, warning: "The sample host's free plan serves 100,000 requests a day, so a higher value needs a paid plan." },
-  logins: { most: 50, warning: "The sample host lets 50 people log in for free, and a real host bills each one past its own." },
+  totalBytes: { most: 10_000_000_000, warning: "A real host bills storage past its free 10 GB." },
+  siteBytes: { most: 10_000_000_000, warning: "A real host bills storage past its free 10 GB." },
+  filesPerPublish: { most: 5000, warning: "A publish over 5,000 files may not start on a free plan." },
+  filesPerDay: { most: 32_258, warning: "Past 1,000,000 writes a month, a real host bills the rest." },
+  storageWritesPerDay: { most: 30_281, warning: "Past 1,000,000 writes a month, a real host bills the rest." },
+  storageReadsPerMonth: { most: 10_000_000, warning: "Past 10,000,000 reads a month, a real host bills the rest." },
+  requestsPerDay: { most: 100_000, warning: "Past 100,000 requests a day you need a paid plan." },
+  logins: { most: 50, warning: "Past 50 people, a real host bills each login." },
 } as const;
 
 /** When the sample release the seeded install knows of came out, and where its notes are: the page of the project's releases. No such release exists. */

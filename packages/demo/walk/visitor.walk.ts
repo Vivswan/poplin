@@ -20,7 +20,7 @@ const SCREENS = [
 ] as const;
 
 /** A setting that is typed and then saved with the screen's one Save, and the value a test gives it. */
-const SETTING = { label: "Published versions kept per site", value: "5" } as const;
+const SETTING = { label: "Versions kept", value: "5" } as const;
 
 /** A deep link with a query the screen reads and a fragment. */
 const DEEP_LINK = "activity?kind=sites#content";

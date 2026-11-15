@@ -1,4 +1,4 @@
-// The Settings screen: which tab holds a setting, the one Save for everything changed, the refusal that comes back at its field, Discard, and the Undo of a done save.
+// The Settings screen: the one page with every setting under its block's heading, the one Save for everything changed, the refusal that comes back at its field, Discard, and the Undo of a done save.
 
 import { clearPage } from "../lib/support/page";
 
@@ -79,10 +79,10 @@ function serve({ refusedKey, holds = false }: { readonly refusedKey?: string; re
   }) as typeof fetch;
 }
 
-/** Draw the screen at a tab and wait for its rows. */
-async function drawn(tab = ""): Promise<ReturnType<typeof within>> {
+/** Draw the screen and wait for its rows. */
+async function drawn(): Promise<ReturnType<typeof within>> {
   await drawAt(
-    `/settings${tab === "" ? "" : `?tab=${tab}`}`,
+    "/settings",
     <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
       <ThemeProvider storageKey="test.theme">
         <TooltipProvider>
@@ -106,13 +106,19 @@ async function press(target: HTMLElement): Promise<void> {
   });
 }
 
-async function showTab(page: ReturnType<typeof within>, name: RegExp): Promise<void> {
-  await press(page.getByRole("tab", { name }));
+/** The switch of the search engines of new sites. */
+function engines(page: ReturnType<typeof within>): HTMLElement {
+  return page.getByRole("switch", { name: "Show in search engines" });
 }
 
-/** Type a count into the one number field the shown tab has. */
-function type(page: ReturnType<typeof within>, text: string): void {
-  fireEvent.change(page.getByRole("textbox"), { target: { value: text } });
+/** The field of a count, by the name of its setting. */
+function field(page: ReturnType<typeof within>, name: string): HTMLInputElement {
+  return page.getByRole("textbox", { name }) as HTMLInputElement;
+}
+
+/** Type a count into a field. */
+function type(page: ReturnType<typeof within>, name: string, text: string): void {
+  fireEvent.change(field(page, name), { target: { value: text } });
 }
 
 /** What the bar says, or `null` while there is none. */
@@ -140,75 +146,72 @@ afterAll(async () => {
   await clearPage();
 });
 
-describe("the tabs", () => {
-  // Drift: a setting that arrives with no words would be shown under its raw key, or in a tab nobody looks for it in.
-  test("hold each setting once, a setting with no words in the tab its key reads like under a readable name", async () => {
-    const page = await drawn();
-    const names = (): (string | null)[] => [...document.querySelectorAll("label")].map((label) => label.textContent);
-    const sites = names();
-    await showTab(page, /Limits/);
-    const limits = names();
-    await showTab(page, /Updates/);
+describe("the one page", () => {
+  // Drift: a setting that arrives with no words would be shown under its raw key, or under a heading nobody looks for it under; or the settings would be split over tabs again.
+  test("holds every setting once under the heading of its block, a setting with no words under the heading its key reads like, with a readable name", async () => {
+    await drawn();
+    const blocks = [...document.querySelectorAll("form section")].map((block) => [block.querySelector("h2")?.textContent, ...[...block.querySelectorAll("label")].map((label) => label.textContent)]);
 
-    expect({ sites, limits, updates: names(), raw: document.body.textContent?.includes("update_channel") }).toEqual({
-      sites: ["Show new sites in search engines", "Keep deleted sites in the trash for"],
-      limits: ["Storage for all sites together"],
-      updates: ["Check daily for a newer version", "Update channel", "Rebuild address"],
-      raw: false,
-    });
+    expect([blocks, document.body.textContent?.includes("update_channel")]).toEqual([
+      [
+        ["New sites", "Show in search engines", "Keep deleted sites"],
+        ["Storage", "All sites together"],
+        ["Updates", "Check for new versions", "Update channel", "Rebuild address"],
+        ["Sessions"],
+      ],
+      false,
+    ]);
   });
 });
 
 describe("the one Save", () => {
   // Drift: a switch would be saved the moment it is flipped again, so the screen would have two ways to save; or the changes would be sent one request a setting, and a refusal of the second would leave the first stored.
-  test("holds a flipped switch and a typed number of two tabs until Save, counts them, and sends them in one request", async () => {
+  test("holds a flipped switch and a typed number until Save, counts them, and sends them in one request", async () => {
     const page = await drawn();
-    await press(page.getByRole("switch"));
-    await showTab(page, /Limits/);
-    type(page, "12000");
-    const waiting = [bar(page), saves.length, page.getByRole("tab", { name: /New sites/ }).textContent];
+    await press(engines(page));
+    type(page, "All sites together", "12000");
+    const waiting = [bar(page), saves.length];
     await press(page.getByRole("button", { name: "Save" }));
     await waitFor(() => expect(bar(page)).toBeNull());
 
-    expect([waiting, saves, stored.max_total_size]).toEqual([["2 unsaved changes", 0, "New sites"], [{ default_search_engines: "on", max_total_size: "12000MB" }], "12000MB"]);
+    expect([waiting, saves, stored.max_total_size]).toEqual([["2 unsaved changes", 0], [{ default_search_engines: "on", max_total_size: "12000MB" }], "12000MB"]);
   });
 
-  // Drift: a refusal about a setting of a tab that is not shown would be said nowhere, the typed value would be put back, or the bar would go though nothing was saved.
-  test("shows a refused setting's tab with the sentence at its field, keeps what was typed, and keeps the bar", async () => {
+  // Drift: a refused value would be put back, its sentence would be said away from its field, or the bar would go though nothing was saved.
+  test("says a refusal at the refused setting's field, keeps what was typed, and keeps the bar", async () => {
     serve({ refusedKey: "max_total_size" });
-    const page = await drawn("limits");
-    type(page, "0");
-    await showTab(page, /New sites/);
+    const page = await drawn();
+    type(page, "All sites together", "0");
     await press(page.getByRole("button", { name: "Save" }));
     await waitFor(() => expect(page.getByRole("alert").textContent).toBe(RULE));
 
-    expect([window.location.search, (page.getByRole("textbox") as HTMLInputElement).value, bar(page), stored.max_total_size]).toEqual(["?tab=limits", "0", "1 unsaved change", "9000MB"]);
+    expect([field(page, "All sites together").getAttribute("aria-invalid"), field(page, "All sites together").value, bar(page), stored.max_total_size]).toEqual(["true", "0", "1 unsaved change", "9000MB"]);
   });
 
   // Drift: Discard would leave a change counted that no control shows, so one flip of a switch after it would count as two changes, or it would send what it drops.
   test("drops every waiting change on Discard and sends nothing", async () => {
     const page = await drawn();
-    await press(page.getByRole("switch"));
-    type(page, "30");
+    await press(engines(page));
+    type(page, "Keep deleted sites", "30");
     await press(page.getByRole("button", { name: "Discard" }));
-    await press(page.getByRole("switch"));
+    await press(engines(page));
     const again = bar(page);
-    await press(page.getByRole("switch"));
+    await press(engines(page));
 
-    expect([again, bar(page), page.getByRole("switch").getAttribute("aria-checked"), saves]).toEqual(["1 unsaved change", null, "false", []]);
+    expect([again, bar(page), engines(page).getAttribute("aria-checked"), saves]).toEqual(["1 unsaved change", null, "false", []]);
   });
 
   // Drift: Undo would take back one setting of a save that changed two, or go another way than the save did.
   test("takes a done save back with Undo: the values from before, through the same route, in one request", async () => {
     const page = await drawn();
-    await press(page.getByRole("switch"));
-    type(page, "30");
+    await press(engines(page));
+    type(page, "Keep deleted sites", "30");
     await press(page.getByRole("button", { name: "Save" }));
     await press(await page.findByRole("button", { name: "Undo" }));
     await waitFor(() => expect(saves).toHaveLength(2));
     await waitFor(() => expect(stored.trash_days).toBe("7"));
 
-    expect([saves, sentTo, page.getByRole("switch").getAttribute("aria-checked"), bar(page)]).toEqual([
+    expect([saves, sentTo, engines(page).getAttribute("aria-checked"), bar(page)]).toEqual([
       [
         { default_search_engines: "on", trash_days: "30" },
         { default_search_engines: "off", trash_days: "7" },
@@ -223,14 +226,14 @@ describe("the one Save", () => {
   test("counts what is typed during a save against the value on its way", async () => {
     serve({ holds: true });
     const page = await drawn();
-    type(page, "8");
+    type(page, "Keep deleted sites", "8");
     await press(page.getByRole("button", { name: "Save" }));
-    type(page, "7");
+    type(page, "Keep deleted sites", "7");
     const during = bar(page);
     await act(async () => held.shift()?.());
     await waitFor(() => expect(stored.trash_days).toBe("8"));
     await waitFor(() => expect(page.getByRole("button", { name: "Save" }).hasAttribute("disabled")).toBe(false));
 
-    expect([during, bar(page), (page.getByRole("textbox") as HTMLInputElement).value]).toEqual(["1 unsaved change", "1 unsaved change", "7"]);
+    expect([during, bar(page), field(page, "Keep deleted sites").value]).toEqual(["1 unsaved change", "1 unsaved change", "7"]);
   });
 });

@@ -12,6 +12,9 @@ import { choiceLabel, isOn, isSwitch, partsOf, switchText, textOf } from "@/sett
 import type { Row } from "@/settings/settings-queries";
 import { unitWord, wordsOf } from "@/settings/settings-words";
 
+/** The width of a field or a choice: one for all on a wide screen, the whole line under the width of a tablet. */
+const WIDE = "w-44 max-md:w-full";
+
 /** The two values of the choice before a number that can also be a word. */
 const WORD_CHOICE = { word: "word", number: "number" } as const;
 
@@ -96,7 +99,7 @@ function ChoiceControl(props: ControlProps): ReactNode {
   const options = row.control.kind === "choice" ? row.control.options : [];
   const items = options.map((option) => ({ value: option, label: choiceLabel(row, option) }));
 
-  return <Choice id={id} labelledBy={`${id}-label`} items={items} value={text} onChoose={onChange} refused={refused} className="w-44" />;
+  return <Choice id={id} labelledBy={`${id}-label`} items={items} value={text} onChoose={onChange} refused={refused} className={WIDE} />;
 }
 
 /** The field of a number, with its unit fixed at its right. Only a number is typed in it; whether it is one the setting takes is the server's to say. */
@@ -131,7 +134,7 @@ function NumberControl(props: ControlProps): ReactNode {
   const { row, id, text, onChange } = props;
   const { wordLabels, start } = wordsOf(row.key);
   const word = row.control.kind === "number" ? row.control.word : null;
-  if (word === null || wordLabels === undefined) return <CountField {...props} className="w-44" />;
+  if (word === null || wordLabels === undefined) return <CountField {...props} className={WIDE} />;
 
   // A number that can also be a word is a choice between the two, and the field only while the number is chosen. The row's id is the field's while it is there, so a refusal's focus lands in it.
   const items = [
@@ -141,7 +144,7 @@ function NumberControl(props: ControlProps): ReactNode {
   const choose = (chosen: string): void => onChange(chosen === WORD_CHOICE.word ? word : `${start ?? ""}${row.unit}`);
 
   return (
-    <span className="flex items-center gap-2">
+    <span className="flex items-center gap-2 max-md:w-full">
       <Choice
         id={text === word ? id : `${id}-choice`}
         labelledBy={`${id}-label`}
@@ -149,9 +152,9 @@ function NumberControl(props: ControlProps): ReactNode {
         value={text === word ? WORD_CHOICE.word : WORD_CHOICE.number}
         onChoose={choose}
         refused={false}
-        className="w-28"
+        className="w-28 shrink-0"
       />
-      {text === word ? null : <CountField {...props} className="w-32" />}
+      {text === word ? null : <CountField {...props} className="w-32 max-md:min-w-0 max-md:flex-1" />}
     </span>
   );
 }

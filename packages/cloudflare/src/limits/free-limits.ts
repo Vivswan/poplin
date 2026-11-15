@@ -47,21 +47,21 @@ const FREE_FILES_PER_PUBLISH = 5000;
 
 /** The limits the dashboard of an install on Cloudflare warns against. */
 export const FREE_LIMITS: FreeLimits = {
-  totalBytes: { most: FREE_STORAGE_BYTES, warning: "Cloudflare stores 10 GB for free and bills storage past that." },
-  siteBytes: { most: FREE_STORAGE_BYTES, warning: "Cloudflare stores 10 GB for free and bills storage past that." },
-  filesPerPublish: { most: FREE_FILES_PER_PUBLISH, warning: "A publish of more than 5,000 files may not start on Cloudflare's free plan." },
+  totalBytes: { most: FREE_STORAGE_BYTES, warning: "Cloudflare bills storage past 10 GB." },
+  siteBytes: { most: FREE_STORAGE_BYTES, warning: "Cloudflare bills storage past 10 GB." },
+  filesPerPublish: { most: FREE_FILES_PER_PUBLISH, warning: "A publish over 5,000 files may not start on the free plan." },
   filesPerDay: {
     most: Math.floor(FREE_WRITES_A_MONTH / DAYS_A_MONTH),
-    warning: "A month of such days passes Cloudflare's 1,000,000 free storage writes, and Cloudflare bills the rest.",
+    warning: "Past 1,000,000 writes a month, Cloudflare bills the rest.",
   },
   storageWritesPerDay: {
     most: FREE_WRITES_A_DAY,
-    warning: "A month of such days passes Cloudflare's 1,000,000 free storage writes, and Cloudflare bills the rest.",
+    warning: "Past 1,000,000 writes a month, Cloudflare bills the rest.",
   },
   storageReadsPerMonth: {
     most: FREE_READS_A_MONTH,
-    warning: "A month of such days can pass Cloudflare's 10,000,000 free storage reads, and Cloudflare bills the rest.",
+    warning: "Past 10,000,000 reads a month, Cloudflare bills the rest.",
   },
-  requestsPerDay: { most: 100_000, warning: "Cloudflare's free plan serves 100,000 requests a day, so a higher value needs its paid plan." },
-  logins: { most: 50, warning: "Cloudflare lets 50 people log in for free and bills each one past that." },
+  requestsPerDay: { most: 100_000, warning: "Past 100,000 requests a day you need Cloudflare's paid plan." },
+  logins: { most: 50, warning: "Past 50 people, Cloudflare bills each login." },
 };

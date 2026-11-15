@@ -48,21 +48,21 @@ describe("the line of a setting", () => {
   test("shows at rest only its name, its control, and its unit", () => {
     drawn(SIZE);
 
-    expect(document.body.textContent).toBe("Storage for all sites togetherMB");
+    expect(document.body.textContent).toBe("All sites togetherMB");
   });
 
   // Drift: the question mark would lose the default, offer a reset where there is nothing to reset, or reset to something other than the default.
   test("holds the meaning, the default, and Reset to default behind the question mark, the reset only while the value differs", async () => {
     const { page, sent } = drawn(SIZE);
-    await press(page.getByRole("button", { name: "About: Storage for all sites together" }));
+    await press(page.getByRole("button", { name: "About: All sites together" }));
     const note = page.getByRole("dialog").textContent;
     await press(page.getByRole("button", { name: "Reset to default" }));
     cleanup();
     const same = drawn(SIZE, SIZE.fallback);
-    await press(same.page.getByRole("button", { name: "About: Storage for all sites together" }));
+    await press(same.page.getByRole("button", { name: "About: All sites together" }));
 
     expect([note, sent, same.page.queryByRole("button", { name: "Reset to default" })]).toEqual([
-      "The most all sites hold together, the trash included.Default: 9,000 MBReset to default",
+      "Counts every site and the trash.Default: 9,000 MBReset to default",
       ["9000MB"],
       null,
     ]);

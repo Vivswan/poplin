@@ -1,114 +1,73 @@
-// The words of the Settings screen: its tabs, the blocks of a tab, and for each setting its name, what it means, and the unit beside its number. A setting with no words here is still shown, under a name made from its key, in the tab its key reads like.
+// The words of the Settings screen: its blocks and their headings, and for each setting its name, what it means, and the unit beside its number. A setting with no words here is still shown, under a name made from its key, in the block its key reads like.
 
 import type { Row } from "@/settings/settings-queries";
 
-/** The tabs, in the order shown, each with its blocks. A block with a heading is drawn under it; the first block of a tab needs none where it is the only one. */
-export const TABS = [
-  { id: "sites", label: "New sites", blocks: [{ id: "sites", heading: "" }] },
-  { id: "visitors", label: "Visitors", blocks: [{ id: "visitors", heading: "" }] },
-  {
-    id: "limits",
-    label: "Limits",
-    blocks: [
-      { id: "storage", heading: "Storage" },
-      { id: "publishing", heading: "Publishing" },
-      { id: "traffic", heading: "Traffic" },
-      { id: "limits", heading: "Other" },
-    ],
-  },
-  { id: "updates", label: "Updates", blocks: [{ id: "updates", heading: "" }] },
+/** The blocks of the screen, in the order shown, each under its heading. */
+const BLOCKS = [
+  { id: "sites", heading: "New sites" },
+  { id: "visitors", heading: "Visitors" },
+  { id: "storage", heading: "Storage" },
+  { id: "publishing", heading: "Publishing" },
+  { id: "traffic", heading: "Traffic" },
+  { id: "limits", heading: "Other limits" },
+  { id: "updates", heading: "Updates" },
 ] as const;
+
+/** The block that is always drawn: it also holds the rebuild address. */
+export const UPDATES = "updates";
 
 /** What the units of a number's text are called beside its field. A unit missing here is shown as it is, such as `MB` or `%`. */
 const UNIT_WORDS: Readonly<Record<string, string>> = { d: "days", h: "hours", m: "minutes", s: "seconds", B: "bytes" };
 
-/** What each setting is called, what its question mark explains, and what its control needs, in the order the settings of a block are shown. */
+/** The most letters the note behind a question mark holds: one short sentence. Anything longer belongs in the docs. */
+export const MOST_ABOUT = 60;
+
+/** What each setting is called, the one short sentence its question mark holds, and what its control needs, in the order the settings of a block are shown. */
 const WORDS: Readonly<Record<string, Words>> = {
   default_expires: {
     block: "sites",
-    label: "Delete new sites automatically",
-    about: "A new site is deleted this long after it is published. Each site can be given its own date.",
+    label: "Delete new sites",
+    about: "A new site is deleted this long after publishing.",
     wordLabels: { word: "Never", number: "After" },
     start: "30",
   },
-  default_search_engines: {
-    block: "sites",
-    label: "Show new sites in search engines",
-    about: "What a new public site starts with. Each site has its own switch. Search engines must also be allowed under Visitors.",
-  },
-  versions_kept: {
-    block: "sites",
-    label: "Published versions kept per site",
-    about: "How many versions each site keeps, the live one included. Older ones are deleted.",
-    unit: "versions",
-  },
-  trash_days: {
-    block: "sites",
-    label: "Keep deleted sites in the trash for",
-    about: "A deleted site can be restored for this long. After that it is gone for good.",
-    unit: "days",
-  },
-  search_engines_allowed: {
-    block: "visitors",
-    label: "Allow search engines to list your sites",
-    about: "While off, no site is shown in search engines. While on, a public site is shown only if its own switch is on too.",
-  },
-  outside_pages: {
-    block: "visitors",
-    label: "Allow other websites to embed your sites",
-    about: "While off, a page of another website cannot show a site in a frame or load its files.",
-    on: "allowed",
-  },
+  default_search_engines: { block: "sites", label: "Show in search engines", about: "What a new public site starts with." },
+  versions_kept: { block: "sites", label: "Versions kept", about: "The live version counts as one.", unit: "versions" },
+  trash_days: { block: "sites", label: "Keep deleted sites", about: "After that, a deleted site is gone for good.", unit: "days" },
+  search_engines_allowed: { block: "visitors", label: "Allow search engines", about: "Each public site also has its own switch." },
+  outside_pages: { block: "visitors", label: "Allow embedding on other websites", about: "While off, other websites cannot frame your sites.", on: "allowed" },
   block_bots: {
     block: "visitors",
     label: "Block bots",
-    about:
-      "Automatic blocks AI crawlers unless your domain has other hostnames. Always also turns on the domain's bot protection, which can block the command line from cloud hosts. Never leaves the domain's bot rules as they are.",
+    about: "Automatic blocks AI crawlers on a poplin-only domain.",
     choices: { auto: "Automatic", on: "Always", off: "Never" },
   },
-  max_total_size: { block: "storage", label: "Storage for all sites together", about: "The most all sites hold together, the trash included." },
-  max_site_size: { block: "storage", label: "Storage for one site", about: "The most one site holds." },
-  max_sites: { block: "storage", label: "Maximum number of sites", about: "The most sites the install holds. Empty means no limit.", unit: "sites", empty: "No limit" },
-  max_files_per_publish: { block: "publishing", label: "Files per publish", about: "The most files one publish, import, or copy holds, up to 10,000.", unit: "files" },
-  max_files_per_day: { block: "publishing", label: "Files published per day, all sites", about: "All publishes, imports, and copies begun in one UTC day, together.", unit: "files" },
-  max_storage_writes_per_day: {
-    block: "publishing",
-    label: "Storage write operations per day",
-    about: "How often the storage is written to or listed in one UTC day. A published file is one, a copied file two, a listing one.",
-    unit: "operations",
-  },
-  requests_per_day: { block: "traffic", label: "Requests per day, all sites", about: "The most requests all sites answer in one UTC day, together.", unit: "requests" },
-  site_share_of_day: { block: "traffic", label: "Daily requests one site may use", about: "The share of the requests per day that one site may take. Past it the site waits for the next UTC day." },
-  site_requests_per_minute: { block: "traffic", label: "Requests per minute, one site", about: "The most requests one site answers in a minute.", unit: "requests" },
-  visitor_requests_per_minute: { block: "traffic", label: "Requests per minute, one visitor", about: "The most requests one visitor is answered in a minute.", unit: "requests" },
-  update_check: {
-    block: "updates",
-    label: "Check daily for a newer version",
-    about: "Once a day the install asks the project's website which version is the newest. Nothing is installed by it.",
-  },
-  auto_update: {
-    block: "updates",
-    label: "Update automatically",
-    about:
-      "Three days after a newer version is first seen, the install starts the update. It needs the check for a newer version on and a rebuild address saved. A version that changes the database always waits for you.",
-  },
+  max_total_size: { block: "storage", label: "All sites together", about: "Counts every site and the trash." },
+  max_site_size: { block: "storage", label: "One site", about: "" },
+  max_sites: { block: "storage", label: "Number of sites", about: "Empty means no limit.", unit: "sites", empty: "No limit" },
+  max_files_per_publish: { block: "publishing", label: "Files per publish", about: "At most 10,000.", unit: "files" },
+  max_files_per_day: { block: "publishing", label: "Files per day", about: "Counts every publish and copy in one UTC day.", unit: "files" },
+  max_storage_writes_per_day: { block: "publishing", label: "Storage writes per day", about: "A published file is 1 write, a copied file 2.", unit: "writes" },
+  requests_per_day: { block: "traffic", label: "Requests per day", about: "All sites together, in one UTC day.", unit: "requests" },
+  site_share_of_day: { block: "traffic", label: "One site's share", about: "The part of the requests per day one site may use." },
+  site_requests_per_minute: { block: "traffic", label: "One site per minute", about: "", unit: "requests" },
+  visitor_requests_per_minute: { block: "traffic", label: "One visitor per minute", about: "", unit: "requests" },
+  update_check: { block: "updates", label: "Check for new versions", about: "Asks the project's website once a day." },
+  auto_update: { block: "updates", label: "Update automatically", about: "Needs the check above and a rebuild address." },
 };
 
-/** A tab's id. */
-export type TabId = (typeof TABS)[number]["id"];
-
 /** A block's id. */
-type BlockId = (typeof TABS)[number]["blocks"][number]["id"];
+type BlockId = (typeof BLOCKS)[number]["id"];
 
 /** The words of one setting. */
 interface Words {
   /** The block it is shown in. */
   readonly block: BlockId;
 
-  /** Its name, which says alone what changing it does. */
+  /** Its name: two to five everyday words that start with the thing or the action. */
   readonly label: string;
 
-  /** What its question mark explains; empty for none. */
+  /** The one short sentence its question mark holds, of `MOST_ABOUT` letters at most; empty where the name says it all. */
   readonly about: string;
 
   /** What a plain count counts, such as `files`; left out for a number whose text carries its unit. */
@@ -172,26 +131,14 @@ export function unitWord(key: string, unit: string): string {
 }
 
 /**
- * Sort the rows of one tab into its blocks.
+ * Sort the rows into the blocks of the screen.
  *
- * @returns the blocks of the tab that hold a row, in the order shown
+ * @returns the blocks that hold a row, in the order shown, and the Updates block whether it holds one or not
  */
-export function blocksOf(tab: TabId, rows: readonly Row[]): readonly Block[] {
-  const blocks: readonly { readonly id: BlockId; readonly heading: string }[] = TABS.find((entry) => entry.id === tab)?.blocks ?? [];
+export function blocksOf(rows: readonly Row[]): readonly Block[] {
   const order = Object.keys(WORDS);
   const place = (row: Row): number => (order.includes(row.key) ? order.indexOf(row.key) : order.length);
   const shown = rows.toSorted((one, other) => place(one) - place(other));
 
-  return blocks.map((block) => ({ ...block, rows: shown.filter((row) => wordsOf(row.key).block === block.id) })).filter((block) => block.rows.length > 0);
-}
-
-/**
- * The tab a setting is shown in.
- *
- * @returns the tab that holds the setting's block
- */
-export function tabOf(key: string): TabId | undefined {
-  const { block } = wordsOf(key);
-
-  return TABS.find((tab) => tab.blocks.some((entry) => entry.id === block))?.id;
+  return BLOCKS.map((block) => ({ ...block, rows: shown.filter((row) => wordsOf(row.key).block === block.id) })).filter((block) => block.rows.length > 0 || block.id === UPDATES);
 }

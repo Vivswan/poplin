@@ -37,7 +37,7 @@ export function Hint({ label, icon, className, children }: HintProps): ReactNode
       >
         {icon}
       </PopoverTrigger>
-      <PopoverContent side="top" align="start" className="w-72 gap-2 p-3 text-[13px] leading-5">
+      <PopoverContent side="top" align="start" className="w-64 gap-2 p-3 text-[13px] leading-5">
         {children(() => setOpen(false))}
       </PopoverContent>
     </Popover>
