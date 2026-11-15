@@ -8,7 +8,7 @@ import { join } from "node:path";
 
 import type { DomainRow } from "../../packages/app/src/console/domain/records";
 import type { Login } from "../../packages/core/src/auth/logins";
-import { answerOf, convergeInstall, needOf } from "../../packages/cloudflare/scripts/live/converge";
+import { answerOf, convergeInstall, needOf, workerConfig } from "../../packages/cloudflare/scripts/live/converge";
 import { openRun } from "../../packages/cloudflare/scripts/live/util";
 import { createDomainPlug } from "../../packages/cloudflare/src/zone/zone-plug";
 import { withFake } from "../../packages/cloudflare/tests/zone/support/fake-cloudflare";
@@ -169,6 +169,16 @@ describe("the script that makes the test install, against a local fake account",
 
     expect(read.length).toBeGreaterThan(0);
     expect(read.filter((name) => !written.includes(name))).toEqual([]);
+  });
+});
+
+describe("the configuration the built bundle is uploaded by", () => {
+  // Drift: the repository's own configuration says how wrangler bundles the Worker, and the upload hands wrangler a file that is bundled already. Wrangler warns of `minify` beside `no_bundle`, on a deploy that runs against the real account alone.
+  test("as wrangler reads it, the file is uploaded as it is and nothing says to minify it", async () => {
+    const config = await workerConfig({ accountId: ACCOUNT }, { layout: LAYOUT }, { databaseId: "2".repeat(32), access: { team_domain: "team.example.com", audience: "3".repeat(64) }, login: "owner@example.com" });
+    const read = JSON.parse(JSON.stringify(config)) as Record<string, unknown>;
+
+    expect({ asItIs: read.no_bundle, minify: "minify" in read }).toEqual({ asItIs: true, minify: false });
   });
 });
 

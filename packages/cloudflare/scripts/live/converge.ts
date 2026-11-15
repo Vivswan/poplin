@@ -169,14 +169,23 @@ async function ensureAccess(run: Run, found: Found, login: string, progress: Pro
   return { team_domain: teamDomain, audience };
 }
 
-/** The Worker's configuration for the test install: the repository's own, with the test account's id, bucket, database, zone, and login. */
-async function workerConfig(run: Run, found: Found, bound: { readonly databaseId: string; readonly access: AccessBinding; readonly login: string }): Promise<Record<string, unknown>> {
+/**
+ * The Worker's configuration for the test install: the repository's own, with the test account's id, bucket, database, zone, and login.
+ *
+ * @returns what wrangler uploads the built bundle by: the file as it is, already minified, so `minify` is left out
+ */
+export async function workerConfig(
+  run: Pick<Run, "accountId">,
+  found: Pick<Found, "layout">,
+  bound: { readonly databaseId: string; readonly access: AccessBinding; readonly login: string },
+): Promise<Record<string, unknown>> {
   const base: unknown = Bun.JSONC.parse(await Bun.file(join(PACKAGE, "..", "..", "wrangler.jsonc")).text());
   if (!isRecord(base)) throw new Error("wrangler.jsonc holds no configuration");
 
   return {
     ...base,
     $schema: undefined,
+    minify: undefined,
     name: SCRIPT,
     main: join(PACKAGE, "dist", "worker.js"),
     no_bundle: true,
