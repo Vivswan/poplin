@@ -51,7 +51,7 @@ If you are the agent: the skill is [`skills/poplin/SKILL.md`](skills/poplin/SKIL
 | unlisted              | anyone who has the link  | `report--k3f9x2ab71qz-u-poplin.example.com`                       |
 | public                | everyone                 | a name you choose, `docs-page.example.com`, and its unlisted link |
 
-`example.com` stands for your own domain. "You" is every login of your install: yourself, and anyone you add. Your dashboard is a private page that lists every site you published: `poplin.example.com`.
+`example.com` stands for your own domain. "You" is every user of your install: yourself, and anyone you add. Your dashboard is a private page that lists every site you published: `poplin.example.com`.
 
 ## Use it from the command line
 

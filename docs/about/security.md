@@ -76,10 +76,10 @@ A public site is without `noindex` only when both are on. The bots rule is one o
 
 | Who | Credential | Where it comes from |
 | --- | --- | --- |
-| a person at the dashboard | the dashboard's cookie | one login through Cloudflare Access, by email code or Google; the Worker checks the email against the list of allowed logins, then sets a cookie for the dashboard's hostname alone |
-| a person at a private site | Cloudflare Access's own session, 30 days | the same login; Access puts a signed token on every request it lets through, and the Worker checks the token and the email against the list of allowed logins each time |
-| the CLI, or an agent through `poplin mcp` | a token the Worker issues | the person runs `poplin login` once and allows that computer in a browser; an agent on that computer acts with the same token, as the person; the token is listed on the dashboard and can be revoked there |
-| a machine with no browser | the same kind of token | `poplin login` prints an address and a short code to open on another device, where the person allows that computer |
+| a user at the dashboard | the dashboard's cookie | one login through Cloudflare Access, by email code or Google; the Worker checks the email against the list of allowed logins, then sets a cookie for the dashboard's hostname alone |
+| a user at a private site | Cloudflare Access's own session, 30 days | the same login; Access puts a signed token on every request it lets through, and the Worker checks the token and the email against the list of allowed logins each time |
+| the CLI, or an agent through `poplin mcp` | a token the Worker issues | a user runs `poplin login` once and allows that computer in a browser; an agent on that computer acts with the same token, as that user; the token is listed on the dashboard and can be revoked there |
+| a machine with no browser | the same kind of token | `poplin login` prints an address and a short code to open on another device, where a user allows that computer |
 | the Worker, to the bucket and the database | its bindings inside Cloudflare | no bucket key and no database key exists outside Cloudflare |
 | the person who sets the install up | a Cloudflare API token, pasted into the setup page or the Domain screen | the person makes it at Cloudflare; the Worker uses it for that one request and never stores, logs, or shows it |
 | the Worker, to start its own update | an update link, saved once by an admin with `poplin update --save-address` | an admin makes it at Cloudflare, which calls it a Deploy Hook. It is no API token: Cloudflare's documentation says it triggers a build for one branch, and that anyone who has it can. The Worker keeps it in its database, sends it one empty POST when an admin starts an update, and never shows, logs, or exports it. Deleting it at Cloudflare ends it |
@@ -88,8 +88,8 @@ A token the Worker issues is never a Cloudflare API key. It has one of two scope
 
 | Scope | Given to | May |
 | --- | --- | --- |
-| publisher | a computer or a script that should only publish, such as a build server or a shared machine: a person logs it in with `poplin login --publisher` and allows it in the dashboard, under Access | publish, and manage its own sites |
-| admin | a person on the list of allowed logins; the dashboard's cookie carries the same rights | everything: every site, the settings, the tokens |
+| publisher | a computer or a script that should only publish, such as a build server or a shared machine: a user logs it in with `poplin login --publisher` and allows it in the dashboard, under Access | publish, and manage its own sites |
+| admin | a user, whose email is on the list of allowed logins; the dashboard's cookie carries the same rights | everything: every site, the settings, the tokens |
 
 A site belongs to the token that created it, or to the admin's email when it was duplicated on the dashboard. A publisher token updates and manages only the sites it created.
 
@@ -97,7 +97,7 @@ What guards each address:
 
 | Address | Guarded by |
 | --- | --- |
-| the login and the dashboard | Cloudflare Access authenticates the person at the login path; the Worker checks the email, then sets the dashboard's cookie |
+| the login and the dashboard | Cloudflare Access authenticates the user at the login path; the Worker checks the email, then sets the dashboard's cookie |
 | the API, which the CLI and `poplin mcp` call | the token the Worker issued; no Access in front, so a machine needs no browser after its login |
 | a private site, `-p-poplin` | Cloudflare Access, before the Worker runs; then the Worker checks Access's token and the email |
 | an unlisted site; a public site | nothing |

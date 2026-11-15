@@ -5,7 +5,7 @@ order: 20
 
 # Settings
 
-The settings of an install, the people who can log in, and the login this computer keeps; a site's own settings are in [Manage sites](../use/manage-sites.md#other-settings-of-a-site).
+The settings of an install, the users who can log in, and the login this computer keeps; a site's own settings are in [Manage sites](../use/manage-sites.md#other-settings-of-a-site).
 
 ## Change a setting
 
@@ -25,7 +25,7 @@ The dashboard's Settings screen changes the same settings, all but `logins`: cha
 | Traffic    | `requests_per_day`, `site_share_of_day`, `site_requests_per_minute`, `visitor_requests_per_minute` |
 | Updates    | `update_check`, `auto_update`, and the update link                                                 |
 
-`logins` is the list under Access, People: [Add a login](#add-a-login).
+`logins` is the list under Access, Users: [Add a user](#add-a-user).
 
 ## The install
 
@@ -63,18 +63,18 @@ The settings `poplin config` takes:
 
 Every command that talks to the install also takes `--json`, for the answer as JSON, and `--server`, to name the install.
 
-## Add a login
+## Add a user
 
-A second person needs two steps, because Cloudflare's login page keeps its own list.
+A user is an email in `logins`, which can log in to the dashboard. A second user needs two steps, because Cloudflare's login page keeps its own list.
 
-| Step | Where                         | Do                                                               |
-| ---- | ----------------------------- | ---------------------------------------------------------------- |
-| 1    | the dashboard, Access, People | press Add a person, type the email, and press Add a person again |
+| Step | Where                        | Do                                                           |
+| ---- | ---------------------------- | ------------------------------------------------------------ |
+| 1    | the dashboard, Access, Users | press Add a user, type the email, and press Add a user again |
 | 2    | the dashboard, Domain         | press Repair, paste a token as in [step 3](../start/by-hand.md#the-steps), and press Repair again |
 
-A new login works after step 2, not before. `poplin config logins` shows the same list.
+A new user can log in after step 2, not before. `poplin config logins` shows the same list.
 
-Removing another person's login needs no Repair: choose Remove in the menu at the end of that person's row, and press Remove when asked. That person is out of the dashboard at once, and out of private sites within a minute. Your own email cannot be the one you remove.
+Removing another user needs no Repair: choose Remove in the menu at the end of that user's row, and press Remove when asked. That user is out of the dashboard at once, and out of private sites within a minute. Your own email cannot be the one you remove.
 
 ## This computer
 

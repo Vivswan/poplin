@@ -5,7 +5,7 @@ order: 40
 
 # Limits and cost
 
-What can cost money, what an install caps or protects, and what a day counts; none of the limits is a cap on what Cloudflare bills.
+What can cost money, what an install caps or protects, what a day counts, and the graph of visits; none of the limits is a cap on what Cloudflare bills.
 
 ## What can cost money
 
@@ -80,3 +80,18 @@ On the free Workers plan, a month at the settings a new install starts with stay
 | reads                 | 10,000,000   | 9,765,000                           |
 
 A finish, a look at an upload, a delete, a copy, and a backup's list of files each list the storage. At the limit they answer `allowance_spent` until 00:00 UTC; a delete still removes the site, and its files go later.
+
+## Visits by day
+
+The dashboard's Usage screen draws a graph under Visits: how often pages were opened, day by day.
+
+| Choice        | Offers                                                  |
+| ------------- | ------------------------------------------------------- |
+| Days shown    | 30 days, 60 days, 90 days, 180 days, 1 year             |
+| Compare sites | up to five sites, each drawn as a line beside All sites |
+
+- **A point** is one UTC day in a graph of up to 90 days, and one week in a longer one, where the first point may hold fewer days.
+- **A year is kept:** the counts of 365 UTC days, today included. A day with no count shows 0, and so does every day before the install was made.
+- **The numbers are estimates.** A count is exact while the install's day is under 2,000 requests. Past that the day is counted from a sample, and a count moves in steps of up to 50. A sum reads `about 1,200`, or `under 10`.
+
+[Manage sites](../use/manage-sites.md#look-go-back-re-link-delete) says which opens count, and where one site's count shows.

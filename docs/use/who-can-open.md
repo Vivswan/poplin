@@ -33,7 +33,7 @@ public  report--k3f9x2ab71qz  public name "docs"
 https://docs-page.example.com
 ```
 
-- **You** is every login of the install: yourself, and anyone [Add a login](../run/settings.md#add-a-login) adds.
+- **You** is every user of the install: yourself, and anyone [Add a user](../run/settings.md#add-a-user) adds.
 - **To or from private changes the address:** the letter before `-poplin` turns from `p` to `u`, or back. The old address sends visitors on.
 - **A public site keeps its unlisted address too.**
 - **Leaving public gives the public name up.** That address stops working.
