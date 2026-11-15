@@ -401,6 +401,8 @@ function queryPlans(label: string, makeDriver: DriverFactory): void {
       await database.changeSettings({ trash_days: 30 }, BY_ADA);
       await database.appendAudit({ action: "login", detail: {} }, BY_ADA);
       await database.listAudit({ limit: 10 });
+      await database.listAudit({ limit: 10, dir: "asc" });
+      await database.listAudit({ limit: 10, dir: "asc", after: 1 });
       const created = await begunSite(database, draft(REPORT));
       const updated = await begunVersion(database, imported.kind === "done" ? imported.site : site);
       await database.getUpload(created.id);

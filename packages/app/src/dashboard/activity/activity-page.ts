@@ -107,7 +107,7 @@ export async function showActivity(visit: Visit): Promise<Page> {
   const before = beforeIn(visit.url);
 
   // The action checks the place, so anything the address holds is handed over as it is.
-  const listed = await listAudit(visit.install, visit.actor, { limit: PAGE_SIZE, before } as Parameters<typeof listAudit>[2]);
+  const listed = await listAudit(visit.install, visit.actor, { limit: PAGE_SIZE, after: before } as Parameters<typeof listAudit>[2]);
   if (!listed.ok) return refusedPage(place, listed);
 
   const labels = await labelsOf(visit, listed.entries);

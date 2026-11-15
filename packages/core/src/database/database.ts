@@ -261,7 +261,10 @@ export interface AuditQuery {
   readonly limit: number;
 
   /** The `seq` of the entry the page before ended on; absent for the first page. */
-  readonly before?: number;
+  readonly after?: number;
+
+  /** The direction: `desc`, the newest first, when absent; `asc` is the oldest first. */
+  readonly dir?: "asc" | "desc";
 
   /** Only the entries of these actions; every entry when absent. */
   readonly actions?: readonly AuditAction[];
@@ -626,10 +629,10 @@ export interface Database {
   hasLoggedIn(): Promise<boolean>;
 
   /**
-   * The newest audit entries, the newest first.
+   * One page of the audit log, the newest entry first, or the oldest first when `dir` is `asc`.
    *
-   * @param query - how many entries, from 1 to 100, and `before`, the `seq` of the entry the page before ended on: only entries written before that one are answered. A `seq` is a cursor taken from an entry, never a count
-   * @returns the page; narrowed by `actions` or `site`, it reads every entry from the newest down to the page's last
+   * @param query - how many entries, from 1 to 100, and `after`, the `seq` of the entry the page before ended on: only entries behind that one in the direction asked are answered. A `seq` is a cursor taken from an entry, never a count
+   * @returns the page; narrowed by `actions` or `site`, it reads every entry from where it starts to the page's last
    * @throws {RangeError} `limit` is not a whole number from 1 to 100
    */
   listAudit(query: AuditQuery): Promise<readonly AuditEntry[]>;

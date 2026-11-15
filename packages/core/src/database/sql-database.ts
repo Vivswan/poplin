@@ -64,8 +64,8 @@ const MINT_ATTEMPTS = 5;
 /** The most rows one page of a listing holds. */
 const MAX_PAGE = 100;
 
-/** A `before` that every audit entry is below. */
-const NEWEST = Number.MAX_SAFE_INTEGER;
+/** Where a page of the audit log starts when no page came before it: past the newest entry, and ahead of the oldest. */
+const AUDIT_START = { desc: Number.MAX_SAFE_INTEGER, asc: 0 } as const;
 
 /** Where statements are built from the declared schema. None is run here: each goes to the driver, in a batch. */
 const BUILD = drizzle(() => Promise.reject(new Error("a statement is run by the driver, in a batch")));
@@ -1264,12 +1264,14 @@ export class SqlDatabase implements Database {
 
   async listAudit(query: AuditQuery): Promise<readonly AuditEntry[]> {
     requirePage(query.limit);
+    const dir = query.dir ?? "desc";
+    const start = query.after ?? AUDIT_START[dir];
     const conditions = [
-      lt(audit.seq, query.before ?? NEWEST),
+      dir === "desc" ? lt(audit.seq, start) : gt(audit.seq, start),
       query.actions === undefined ? undefined : fragment`${audit.action} IN (SELECT value FROM json_each(${JSON.stringify(query.actions)}))`,
       query.site === undefined ? undefined : fragment`instr(${audit.site_name}, ${query.site}) > 0`,
     ];
-    const page = BUILD.select().from(audit).where(and(...conditions)).orderBy(desc(audit.seq)).limit(query.limit);
+    const page = BUILD.select().from(audit).where(and(...conditions)).orderBy(dir === "desc" ? desc(audit.seq) : asc(audit.seq)).limit(query.limit);
     const [listed] = await this.#driver.batch([built(page)]);
 
     return (listed?.rows ?? []).map(auditFromRow);

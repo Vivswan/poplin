@@ -211,15 +211,15 @@ async function everySite(database: Database): Promise<Site[]> {
 /** Every audit entry, the oldest first, read a page at a time. */
 async function auditTrail(database: Database): Promise<AuditEntry[]> {
   const entries: AuditEntry[] = [];
-  let before: number | undefined;
+  let after: number | undefined;
 
   for (;;) {
-    const page = await database.listAudit(before === undefined ? { limit: 100 } : { limit: 100, before });
+    const page = await database.listAudit({ limit: 100, dir: "asc", after });
     const last = page.at(-1);
-    if (last === undefined) return entries.reverse();
+    if (last === undefined) return entries;
 
     entries.push(...page);
-    before = last.seq;
+    after = last.seq;
   }
 }
 
@@ -1230,7 +1230,7 @@ function auditLog(label: string, makeDatabase: DatabaseFactory): void {
         { seq: 4, at: NOW + 3, by: "ada@example.com" as Login, action: "login", site: null, detail: { from: "dashboard" } },
         { seq: 3, at: NOW + 2, by: BO, action: "delete", site: named, detail: {} },
       ]);
-      expect(await database.listAudit({ limit: 100, before: 3 })).toEqual([
+      expect(await database.listAudit({ limit: 100, after: 3 })).toEqual([
         { seq: 2, at: NOW + 1, by: BO, action: "trash", site: named, detail: {} },
         { seq: 1, at: NOW, by: ADA, action: "create", site: named, detail: { access: "private", public_name: null } },
       ]);
@@ -1255,7 +1255,7 @@ function auditLog(label: string, makeDatabase: DatabaseFactory): void {
         told(await database.listAudit({ limit: 100, actions: ["trash", "login"] })),
         told(await database.listAudit({ limit: 100, site: REPORT })),
         told(first),
-        told(await database.listAudit({ limit: 3, ...narrowed, before: first.at(-1)?.seq })),
+        told(await database.listAudit({ limit: 3, ...narrowed, after: first.at(-1)?.seq })),
         told(await database.listAudit({ limit: 100, site: "%" })),
         told(await database.listAudit({ limit: 100, site: "\0" })),
         told(await database.listAudit({ limit: 100, actions: [] })),
@@ -1282,6 +1282,37 @@ function auditLog(label: string, makeDatabase: DatabaseFactory): void {
         [],
         [],
       ]);
+    });
+
+    // Drift: a listing oldest first pages by the same cursor as one newest first; a cursor read the wrong way round, or a filter dropped in one direction, would repeat a page or skip the entries between two pages.
+    test.each([
+      ["every entry", {}, "desc", [["trash docs", "login"], ["trash report", "create docs"], ["login", "create report"], ["create abc"]]],
+      ["every entry", {}, "asc", [["create abc", "create report"], ["login", "create docs"], ["trash report", "login"], ["trash docs"]]],
+      ["some actions", { actions: ["trash", "create"] }, "desc", [["trash docs", "trash report"], ["create docs", "create report"], ["create abc"]]],
+      ["some actions", { actions: ["trash", "create"] }, "asc", [["create abc", "create report"], ["create docs", "trash report"], ["trash docs"]]],
+      ["the sites named with a text", { site: "o" }, "desc", [["trash docs", "trash report"], ["create docs", "create report"], []]],
+      ["the sites named with a text", { site: "o" }, "asc", [["create report", "create docs"], ["trash report", "trash docs"], []]],
+      ["one action of the sites named with a text", { actions: ["trash"], site: "o" }, "desc", [["trash docs", "trash report"], []]],
+      ["one action of the sites named with a text", { actions: ["trash"], site: "o" }, "asc", [["trash report", "trash docs"], []]],
+    ] as const)("%s, %s: each page of two starts behind the last entry of the page before, to the end of the log", async (_name, narrowed, dir, pages) => {
+      const database = await opened(makeDatabase);
+      await made(database, draft("abc" as SiteName));
+      const report = await made(database, draft(REPORT));
+      await database.appendAudit({ action: "login", detail: {} }, { by: BO, at: NOW });
+      const docs = await made(database, draft(DOCS));
+      await database.trashSite(report.id, { by: BO, at: NOW + 1 });
+      await database.appendAudit({ action: "login", detail: {} }, { by: BO, at: NOW + 2 });
+      await database.trashSite(docs.id, { by: BO, at: NOW + 3 });
+      const read: string[][] = [];
+      let after: number | undefined;
+
+      do {
+        const page = await database.listAudit({ limit: 2, dir, ...narrowed, after });
+        read.push(page.map((entry) => (entry.site === null ? entry.action : `${entry.action} ${entry.site.name}`)));
+        after = page.at(-1)?.seq;
+      } while (read.at(-1)?.length === 2);
+
+      expect<unknown>(read).toEqual(pages);
     });
   });
 }

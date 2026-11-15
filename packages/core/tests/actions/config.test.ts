@@ -77,14 +77,14 @@ describe("changeConfig", () => {
 });
 
 describe("listAudit", () => {
-  // Drift: the Activity tab pages through the log by `before`; an entry that lost its site or its actor here would be a line nobody can read.
-  test("an admin reads the log newest first, each entry with who, when, and which site, and pages it by `before`", async () => {
+  // Drift: the Activity tab pages through the log by `after`; an entry that lost its site or its actor here would be a line nobody can read.
+  test("an admin reads the log newest first, each entry with who, when, and which site, and pages it by `after`", async () => {
     const world = await makeWorld();
     const id = await made(world, OWNER, "report");
     await changeConfig(world.install, ADMIN, { versions_kept: 10 });
 
     const newest = await listAudit(world.install, ADMIN, { limit: 1 });
-    const older = await listAudit(world.install, ADMIN, { before: 3 });
+    const older = await listAudit(world.install, ADMIN, { after: 3 });
 
     expect(newest).toEqual({ ok: true, entries: [{ seq: 3, at: NOW, by: ADMIN.holder, action: "settings_changed", site: null, detail: { versions_kept: 10 } }] });
     expect(older).toEqual({
@@ -95,5 +95,36 @@ describe("listAudit", () => {
       ],
     } as never);
     expect(await listAudit(world.install, ADMIN, { limit: 101 })).toEqual({ ok: false, code: "bad_argument", about: "limit" });
+  });
+
+  // Drift: the direction and the cursor are one query; a direction the action dropped, or took for a filter alone, would show the first page again under "oldest first".
+  test.each([
+    ["the newest first when no direction is asked", {}, [["access"], ["settings_changed"], ["create"], ["settings_set"]]],
+    ["the newest first", { dir: "desc" }, [["access"], ["settings_changed"], ["create"], ["settings_set"]]],
+    ["the oldest first", { dir: "asc" }, [["settings_set"], ["create"], ["settings_changed"], ["access"]]],
+    ["one kind, the newest first", { dir: "desc", kind: "sites" }, [["access"], ["create"]]],
+    ["one kind, the oldest first", { dir: "asc", kind: "sites" }, [["create"], ["access"]]],
+    ["one site, the newest first", { dir: "desc", site: "epo" }, [["access"], ["create"]]],
+    ["one site, the oldest first", { dir: "asc", site: "epo" }, [["create"], ["access"]]],
+  ] as const)("the log is read %s, a page of one after another", async (_name, query, outcome) => {
+    const world = await makeWorld();
+    const site = await made(world, ADMIN, "report");
+    await changeConfig(world.install, ADMIN, { versions_kept: 10 });
+    await updateSite(world.install, ADMIN, { site, access: "unlisted" });
+    const pages: string[][] = [];
+    let after: number | undefined;
+
+    for (;;) {
+      const listed = await listAudit(world.install, ADMIN, { limit: 1, ...query, after });
+      if (!listed.ok) throw new Error(`the log was refused: ${listed.code}`);
+
+      const last = listed.entries.at(-1);
+      if (last === undefined) break;
+
+      pages.push(listed.entries.map((entry) => entry.action));
+      after = last.seq;
+    }
+
+    expect<unknown>(pages).toEqual(outcome);
   });
 });

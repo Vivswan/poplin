@@ -397,7 +397,7 @@ describe("createApi", () => {
     const first = await listed(install, { limit: "2" });
     const rest = await listed(install, { limit: "2", ...after(first.body.next) });
     const entries = (await answered(install.routes.audit.$get({ query: { limit: "2" } }))).body.entries as { seq: number }[];
-    const older = await answered(install.routes.audit.$get({ query: { limit: "2", before: String(entries.at(-1)?.seq) } }));
+    const older = await answered(install.routes.audit.$get({ query: { limit: "2", after: String(entries.at(-1)?.seq) } }));
     const names = (answer: Answered): unknown[] => (answer.body.sites as { name: string }[]).map((site) => site.name);
 
     expect([names(first), names(rest), rest.body.next]).toEqual([["three", "two"], ["one"], undefined]);
@@ -412,6 +412,13 @@ describe("createApi", () => {
 
     expect([names(byName), names(lastByName), names(await listed(install, { sort: "name", dir: "desc", limit: "1" }))]).toEqual([["one", "three"], ["two"], ["two"]]);
     expect((older.body.entries as { seq: number }[]).map((entry) => entry.seq)).toEqual([(entries[0]?.seq ?? 0) - 2, (entries[0]?.seq ?? 0) - 3]);
+
+    const oldest = await answered(install.routes.audit.$get({ query: { limit: "2", dir: "asc" } }));
+    const seqs = (answer: Answered): number[] => (answer.body.entries as { seq: number }[]).map((entry) => entry.seq);
+    const next = await answered(install.routes.audit.$get({ query: { limit: "2", dir: "asc", after: String(seqs(oldest).at(-1)) } }));
+    const wrong = await answered(install.routes.audit.$get({ query: { dir: "up" as never } }));
+
+    expect([seqs(oldest), seqs(next), wrong.status, part(wrong, "error")]).toEqual([[1, 2], [3, 4], 400, expect.objectContaining({ code: "bad_argument", about: "dir" })]);
   });
 
   // Drift: every route changes or shows something an install owns; one that ran before the token was checked would be open to anyone who can reach the address.

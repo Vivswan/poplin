@@ -152,6 +152,8 @@ const ROWS: Readonly<Record<string, readonly [read: number, written: number]>> =
   "changeDetails, the same": [6, 0],
   "listAudit": [20, 0],
   "listAudit, one kind, the sites named with a text": [46, 0],
+  "listAudit, the oldest first": [20, 0],
+  "listAudit, the oldest first, the next page of one kind": [26, 0],
   "no site: getSiteByPublicName": [0, 0],
   "no site: giveNewId": [16, 0],
   "no site: reserveVersion": [0, 0],
@@ -566,6 +568,8 @@ describe("D1: the rows every operation of the database costs of a day's allowanc
     await cost("changeDetails, the same", () => database.changeDetails(sixth.id, { title: "Report", search_engines: true }, BY_ADA));
     await cost("listAudit", () => database.listAudit({ limit: 20 }));
     await cost("listAudit, one kind, the sites named with a text", () => database.listAudit({ limit: 20, actions: ["create"], site: "site-1" }));
+    await cost("listAudit, the oldest first", () => database.listAudit({ limit: 20, dir: "asc" }));
+    await cost("listAudit, the oldest first, the next page of one kind", () => database.listAudit({ limit: 20, dir: "asc", after: 20, actions: ["create"] }));
 
     await database.trashSite(sixth.id, BY_ADA);
     const version: Parameters<typeof database.publishUploadAsVersion>[1] = { keep: 2, details: {} };

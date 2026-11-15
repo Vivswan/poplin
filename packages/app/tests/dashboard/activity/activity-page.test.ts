@@ -93,7 +93,7 @@ test("a place the audit action refuses shows the refusal's sentence and not the 
   const opened = await openDashboard();
   const page = await (await opened.get("/activity?before=%3Cscript%3E")).text();
 
-  expect(page).toContain('<p class="notice refused" role="status">The value of before is not one it takes.</p>');
+  expect(page).toContain('<p class="notice refused" role="status">The value of after is not one it takes.</p>');
   expect(page).not.toContain("<script>");
 });
 
