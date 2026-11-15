@@ -9,6 +9,7 @@ import { PAGE_SIZES, type PageSize } from "@/activity/page-size";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { showCount } from "@/lib/sites";
+import { PAGE_WAY } from "@/shared/pages";
 
 /** The sizes of a page, as the select names them. */
 const SIZES = PAGE_SIZES.map((value) => ({ value, label: `${value} per page` }));
@@ -92,7 +93,7 @@ function SearchedSoFar({ busy, onSearch }: { readonly busy: boolean; readonly on
   return (
     <p className="flex flex-wrap items-center gap-2 px-6 pb-3 text-muted-foreground max-md:px-4">
       {`Searched the newest ${SEARCHED} entries.`}
-      <Button variant="outline" size="sm" disabled={busy} onClick={onSearch}>
+      <Button variant="outline" size="sm" disabled={busy} onClick={onSearch} {...PAGE_WAY}>
         Search further
       </Button>
     </p>
@@ -103,13 +104,13 @@ function SearchedSoFar({ busy, onSearch }: { readonly busy: boolean; readonly on
 function Ways({ page, busy, stopped, onFirst, onBack, onOn }: WaysProps): ReactNode {
   return (
     <>
-      <Button variant="outline" size="sm" disabled={busy || page.previous === null} onClick={onFirst}>
+      <Button variant="outline" size="sm" disabled={busy || page.previous === null} onClick={onFirst} {...PAGE_WAY}>
         First page
       </Button>
-      <Button variant="outline" size="sm" disabled={busy || page.previous === null || stopped === "back"} onClick={onBack}>
+      <Button variant="outline" size="sm" disabled={busy || page.previous === null || stopped === "back"} onClick={onBack} {...PAGE_WAY}>
         Previous page
       </Button>
-      <Button variant="outline" size="sm" disabled={busy || page.next === null || stopped === "after"} onClick={onOn}>
+      <Button variant="outline" size="sm" disabled={busy || page.next === null || stopped === "after"} onClick={onOn} {...PAGE_WAY}>
         Next page
       </Button>
     </>

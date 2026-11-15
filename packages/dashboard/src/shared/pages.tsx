@@ -1,12 +1,18 @@
 // The ways to the first and the following page of a list, under its last row, with which rows of the list the page shows.
 
-import { type ReactNode, type RefObject, useLayoutEffect, useRef, useState } from "react";
+import { type MouseEventHandler, type ReactNode, type RefObject, useEffect, useLayoutEffect, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { showCount } from "@/lib/sites";
 
 /** The key of the address that holds the number of a page's first row. */
 const FROM_KEY = "from";
+
+/** The mark of a button that goes to another page of a list. */
+export const PAGE_WAY = { "data-page-way": "" } as const;
+
+/** A row of a list: of a table's body, and of the list a phone shows. */
+const ROWS = "tbody > tr, ul > li";
 
 /** What the ways are drawn from. */
 interface PagesProps {
@@ -82,6 +88,38 @@ export function useTopOfPlace(place: string): RefObject<HTMLDivElement | null> {
   return box;
 }
 
+/**
+ * Put the focus on a list's first row once a way to another page was pressed and that page is shown: reading goes on from its top.
+ *
+ * The way that was pressed is off while the page is read, off on the page it led to, or gone, and the focus would stay on nothing. A focus a person moved elsewhere meanwhile stays there. A page with no row gives the focus to a way that can be pressed.
+ *
+ * A screen that also gives a lost focus a home calls this first, so the row takes the focus before the home is looked for.
+ *
+ * @param place - the place of the page that is shown
+ * @returns what the region that holds the list and its ways is given
+ */
+export function useFirstRowFocus(place: string): { readonly ref: RefObject<HTMLElement | null>; readonly onClickCapture: MouseEventHandler } {
+  const region = useRef<HTMLElement>(null);
+  const pressed = useRef<HTMLElement | null>(null);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: the place is the reason to move the focus, not a value the move reads.
+  useEffect(() => {
+    const way = pressed.current;
+    pressed.current = null;
+    if (way === null || (document.activeElement !== document.body && document.activeElement !== way)) return;
+
+    // A page with no row is left by a way again: the last one that can be pressed, which is the one that looks further where a page stopped looking.
+    const inView = (found: string): HTMLElement[] => [...(region.current?.querySelectorAll<HTMLElement>(found) ?? [])].filter((item) => item.offsetParent !== null);
+    (inView(ROWS).at(0) ?? inView("[data-page-way]:not(:disabled)").at(-1))?.focus();
+  }, [place]);
+
+  return {
+    ref: region,
+    onClickCapture: (event) => {
+      if (event.target instanceof Element) pressed.current = event.target.closest<HTMLElement>("[data-page-way]");
+    },
+  };
+}
+
 /** Draw the ways to the first and the following page, then where the page is in its list. Both ways keep their places on every page, and one that leads nowhere is dimmed. Nothing is drawn for a list that fits one page. */
 export function Pages({ query, rows, next, onMove, busy = false }: PagesProps): ReactNode {
   const later = query.get("after") !== null;
@@ -93,10 +131,10 @@ export function Pages({ query, rows, next, onMove, busy = false }: PagesProps): 
 
   return (
     <nav aria-label="Pages" className="flex items-center gap-2 px-6 py-3 max-md:px-4">
-      <Button variant="outline" size="sm" disabled={!later} onClick={() => onMove({})}>
+      <Button variant="outline" size="sm" disabled={!later} onClick={() => onMove({})} {...PAGE_WAY}>
         First page
       </Button>
-      <Button variant="outline" size="sm" disabled={busy || next == null} onClick={() => onMove({ after: next ?? "", ...onward })}>
+      <Button variant="outline" size="sm" disabled={busy || next == null} onClick={() => onMove({ after: next ?? "", ...onward })} {...PAGE_WAY}>
         Next page
       </Button>
       {from === undefined || to === undefined || busy ? null : (

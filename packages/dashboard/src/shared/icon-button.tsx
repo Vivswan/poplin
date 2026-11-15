@@ -5,6 +5,7 @@ import type { ComponentProps, ReactElement, ReactNode } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { FOCUS_HOME } from "@/lib/focus";
 
 /** What an icon button is drawn from. With `link` it is a link that looks like the button. */
 interface IconButtonProps {
@@ -22,13 +23,16 @@ interface IconButtonProps {
 
   /** Classes laid over the button's own. */
   readonly className?: string;
+
+  /** `true` for a button that takes a focus its screen lost. */
+  readonly home?: boolean;
 }
 
 /** Draw an icon button, or a link that looks like one. */
-export function IconButton({ label, children, onClick, link, className }: IconButtonProps): ReactNode {
+export function IconButton({ label, children, onClick, link, className, home = false }: IconButtonProps): ReactNode {
   const button =
     link === undefined ? (
-      <Button variant="ghost" size="icon-sm" aria-label={label} className={cn("pointer-coarse:size-10", className)} onClick={onClick} />
+      <Button variant="ghost" size="icon-sm" aria-label={label} className={cn("pointer-coarse:size-10", className)} onClick={onClick} {...(home ? FOCUS_HOME : {})} />
     ) : (
       <Button variant="ghost" size="icon-sm" aria-label={label} className={cn("pointer-coarse:size-10", className)} nativeButton={false} render={link} />
     );

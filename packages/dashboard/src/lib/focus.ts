@@ -6,10 +6,21 @@ import { type FocusEventHandler, type RefObject, useEffect, useRef } from "react
 /** The mark of an element that takes a lost focus: a panel's heading, a list's search, the open tab of a screen. */
 export const FOCUS_HOME = { "data-focus-home": "" } as const;
 
+/** The place every result is said in, as the library that draws it marks it. */
+const LINES = "[data-sonner-toaster]";
+
+/** What held the focus last outside the place of the results: where the focus goes back to from a result's button. */
+const HELD: { last: HTMLElement | null } = { last: null };
+
 /** The two handlers a region is given, so the hook knows whether the focus is inside it. */
 interface Held {
   readonly onFocusCapture: FocusEventHandler;
   readonly onBlurCapture: FocusEventHandler;
+}
+
+/** What takes a focus: what was found for it while that is still on the page, and the last marked home in the page's order otherwise. */
+function homeOf(found: HTMLElement | null | undefined): HTMLElement | undefined {
+  return found?.isConnected === true ? found : [...document.querySelectorAll<HTMLElement>("[data-focus-home]")].at(-1);
 }
 
 /**
@@ -20,9 +31,21 @@ interface Held {
 function focusHome(find?: () => HTMLElement | null | undefined): void {
   if (document.activeElement !== document.body) return;
 
-  const found = find?.();
-  const home = found?.isConnected === true ? found : [...document.querySelectorAll<HTMLElement>("[data-focus-home]")].at(-1);
-  home?.focus();
+  homeOf(find?.())?.focus();
+}
+
+/**
+ * Note what takes the focus: the page hears every move of the focus with it.
+ *
+ * A result is no place to come back to, so a move into one is not noted.
+ */
+export function noteFocus(event: FocusEvent): void {
+  if (event.target instanceof HTMLElement && event.target.closest(LINES) === null) HELD.last = event.target;
+}
+
+/** Give the focus back from a result's button, which leaves with its result: to what held it before, or home where that is gone. */
+export function focusBack(): void {
+  homeOf(HELD.last)?.focus();
 }
 
 /**

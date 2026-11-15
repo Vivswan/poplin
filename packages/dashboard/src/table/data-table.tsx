@@ -293,15 +293,15 @@ function BodyRow<Row>({
   return (
     <tr
       data-state={selected ? "selected" : undefined}
-      tabIndex={onOpen === undefined ? undefined : 0}
+      tabIndex={onOpen === undefined ? -1 : 0}
       onClick={onClick}
       onKeyDown={onKeyDown}
       onMouseOver={hintWhenCut}
       onFocus={hintWhenCut}
       className={cn(
         "group/row bg-background hover:bg-muted has-[:focus-visible]:bg-muted data-[state=selected]:bg-chosen data-[state=selected]:has-[:focus-visible]:bg-chosen [&>td]:border-b",
-        onOpen !== undefined &&
-          "cursor-pointer outline-none focus-visible:bg-muted focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring",
+        "outline-none focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring",
+        onOpen !== undefined && "cursor-pointer focus-visible:bg-muted",
       )}
     >
       {cells.map((spec) => (

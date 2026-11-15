@@ -646,11 +646,16 @@ test("a public site is asked about before its public link ends, Cancel leaves it
 });
 
 // Drift: a change would leave the focus on the page itself again, where no key reaches anything: the control that held it is gone once the change is done.
-test("after a change the focus is where the next key is of use: on the panel's heading, in the refused field, on the button that adds a user", async ({ page }) => {
+test("after a change the focus is where the next key is of use: the panel's heading, also after Undo, the refused field, the button that adds a user, another page's first row, the button of one site's mark, a reset setting's field", async ({ page }) => {
   await arrive(page);
   await openPanel(page, SAMPLE.site);
   await panel(page).getByRole("button", { name: "Make live", exact: true }).first().click();
   await expect(page.getByText(/is live now/)).toBeVisible();
+  await expect(panel(page).getByRole("heading", { name: SAMPLE.site, exact: true })).toBeFocused();
+
+  // The button of a result leaves with its result.
+  await lines(page).filter({ hasText: /is live now/ }).getByRole("button", { name: "Undo", exact: true }).click();
+  await expect(lines(page).filter({ hasText: /is live now/ })).toHaveCount(1);
   await expect(panel(page).getByRole("heading", { name: SAMPLE.site, exact: true })).toBeFocused();
 
   await panel(page).getByRole("button", { name: "Edit", exact: true }).click();
@@ -667,6 +672,22 @@ test("after a change the focus is where the next key is of use: on the panel's h
   await addPerson(page).getByRole("button", { name: "Add a user", exact: true }).click();
   await expect(addPerson(page)).toBeHidden();
   await expect(page.getByRole("button", { name: "Add a user", exact: true })).toBeFocused();
+
+  // The way to another page is off on the page it led to, and the row's button that narrows the log leaves once it is narrowed.
+  const log = page.getByRole("region", { name: "Activity", exact: true });
+  await toSection(page, "Activity");
+  await log.getByRole("button", { name: "Next page", exact: true }).click();
+  await expect(log.getByRole("button", { name: "First page", exact: true })).toBeEnabled();
+  await expect(log.locator("tbody > tr").first()).toBeFocused();
+  await log.getByRole("button", { name: "Only this site", exact: true }).first().click();
+  await expect(log.getByRole("button", { name: "Show every site", exact: true })).toBeFocused();
+
+  // Reset leaves once the default is back.
+  const perDay = page.getByRole("textbox", { name: "Requests per day", exact: true });
+  await toSection(page, "Settings");
+  await perDay.fill("1234");
+  await page.locator("#setting-requests_per_day").getByRole("button", { name: "Reset", exact: true }).click();
+  await expect(perDay).toBeFocused();
 });
 
 // Drift: the filter at a row's end would search for a name again: the entries from before a new link or a rename would be gone, and those of another site of that name shown.

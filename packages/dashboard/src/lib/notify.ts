@@ -3,6 +3,7 @@
 import { toast } from "sonner";
 
 import { type Answering, answerOf, type Done, Refused } from "@/lib/api";
+import { focusBack } from "@/lib/focus";
 import { PHONE } from "@/lib/media";
 
 /** What goes wrong that is no refusal: a fault of the client itself. */
@@ -46,6 +47,12 @@ export function leaveAtPress(event: MouseEvent): void {
   toast.dismiss(words);
 }
 
+/** Do what a line's button stands for. The button leaves with its line, and the focus with it: it goes back to where it was. */
+function pressed(undo: Undo): void {
+  undo.run();
+  focusBack();
+}
+
 /**
  * Say that a change was done.
  *
@@ -55,7 +62,7 @@ export function sayDone(text: string, undo?: Undo): void {
   // The same words said twice in a row are one line, not two; a line with Undo stays its own, since each takes back another change.
   makeRoom(undo === undefined ? text : undefined);
   if (undo === undefined) toast.success(text, { id: text, testId: text });
-  else toast.success(text, { action: { label: undo.label ?? "Undo", onClick: undo.run }, duration: BUTTON_STAYS_MS, closeButton: true });
+  else toast.success(text, { action: { label: undo.label ?? "Undo", onClick: () => pressed(undo) }, duration: BUTTON_STAYS_MS, closeButton: true });
 }
 
 /** Say that a change was refused, in the sentence the server gave. */

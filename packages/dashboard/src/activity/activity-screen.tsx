@@ -19,9 +19,10 @@ import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectVa
 import { Skeleton } from "@/components/ui/skeleton";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { searchOf, useAddressQuery } from "@/lib/address";
+import { useFocusHome } from "@/lib/focus";
 import { ownTimeZoneName, useTimeZoneChoice, TIMEZONES, type TimeZoneChoice } from "@/lib/timezone";
 import { IconButton } from "@/shared/icon-button";
-import { useShownPlace, useTopOfPlace } from "@/shared/pages";
+import { useFirstRowFocus, useShownPlace, useTopOfPlace } from "@/shared/pages";
 import { SearchBox } from "@/shared/search-box";
 import { Who } from "@/shared/who";
 import { AppShell } from "@/shell/app-shell";
@@ -121,7 +122,7 @@ function PhoneList({ page, place, after }: { readonly page: Page; readonly place
     <div ref={list} className="line-room min-h-0 flex-1 overflow-y-auto md:hidden">
       <ul aria-label="Activity" className="border-t">
         {page.entries.map((entry) => (
-          <li key={entry.seq} className="flex min-h-16 flex-col justify-center gap-0.5 border-b px-4 py-2">
+          <li key={entry.seq} tabIndex={-1} className="flex min-h-16 flex-col justify-center gap-0.5 border-b px-4 py-2 outline-none focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring">
             <span className="flex min-w-0 items-baseline gap-2">
               <span className="truncate">{whatOf(entry)}</span>
               <span className="min-w-0 shrink-0 truncate">
@@ -229,9 +230,13 @@ export function ActivityScreen(): ReactNode {
     );
   };
 
+  // A row's button that narrowed the log to its site, and the mark's button that widened it again, leave with the press: the focus goes home, after the first row of another page had its turn.
+  const firstRow = useFirstRowFocus(place);
+  const kept = useFocusHome();
+
   return (
     <AppShell current="activity" heading="Activity">
-      <section aria-label="Activity" className="flex min-h-0 min-w-0 flex-1 flex-col">
+      <section aria-label="Activity" className="flex min-h-0 min-w-0 flex-1 flex-col" {...kept} {...firstRow}>
         <div className="flex shrink-0 flex-wrap items-center gap-2 px-6 pb-3 max-md:px-4">
           <div className="max-md:order-1 max-md:flex max-md:min-w-0 max-md:flex-1">
             <SearchBox

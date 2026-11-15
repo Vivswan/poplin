@@ -16,7 +16,7 @@ import { copy } from "@/lib/notify";
 import { addressParts, type Site, shownName } from "@/lib/sites";
 import { useChosenTimeZone } from "@/lib/timezone";
 import { IconButton } from "@/shared/icon-button";
-import { Pages, queryWith, useShownPlace, useTopOfPlace } from "@/shared/pages";
+import { PAGE_WAY, Pages, queryWith, useFirstRowFocus, useShownPlace, useTopOfPlace } from "@/shared/pages";
 import { SearchBox } from "@/shared/search-box";
 import { useStandsBeside } from "@/shared/side-panel";
 import type { LoginNames } from "@/shared/who";
@@ -153,8 +153,9 @@ function PhoneList({
         {sites.map((site) => (
           <li
             key={site.label}
+            tabIndex={-1}
             data-state={site.label === opened ? "selected" : undefined}
-            className="group/row relative flex min-h-16 items-center gap-2 border-b px-4 py-2 data-[state=selected]:bg-chosen"
+            className="group/row relative flex min-h-16 items-center gap-2 border-b px-4 py-2 outline-none focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring data-[state=selected]:bg-chosen"
           >
             {/* The row's own button lies under everything else in it: a press beside the title and the row's controls lands on it and opens the panel. */}
             <Button
@@ -244,7 +245,7 @@ function NoRows(props: NoRowsProps): ReactNode {
         {button === undefined ? (
           <PublishCommand />
         ) : (
-          <Button variant="outline" onClick={button[1]}>
+          <Button variant="outline" onClick={button[1]} {...PAGE_WAY}>
             {button[0]}
           </Button>
         )}
@@ -427,7 +428,7 @@ export function SitesScreen(): ReactNode {
     />
   );
   const nothing = error !== null || (!isPending && sites.length === 0);
-  const toFirst = (): void => void navigate({ to: "/", search: searchOf(queryWith(query, {})) });
+  const firstRow = useFirstRowFocus(place);
   // A site that left the list, or a panel that closed over a row that is gone, leaves the focus on nothing: the search takes it.
   const kept = useFocusHome();
 
@@ -438,6 +439,7 @@ export function SitesScreen(): ReactNode {
         <section
           aria-label="Sites"
           className={cn("@container col-start-1 row-start-1 flex min-h-0 min-w-0 flex-col", opened !== undefined && !beside && "invisible")}
+          {...firstRow}
         >
           <Toolbar query={query} filter={filter} search={search} columns={<ColumnsMenu columns={columns} layout={layout} />} onStay={stay} />
           {nothing ? (
@@ -448,7 +450,7 @@ export function SitesScreen(): ReactNode {
               later={query.get("after") !== null}
               onRetry={() => void refetch()}
               onShowAll={() => void navigate({ to: "/" })}
-              onFirst={toFirst}
+              onFirst={() => void navigate({ to: "/", search: searchOf(queryWith(query, {})) })}
             />
           ) : (
             <>

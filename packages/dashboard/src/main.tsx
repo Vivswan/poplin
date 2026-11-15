@@ -9,6 +9,7 @@ import { createRoot } from "react-dom/client";
 import { ThemeProvider } from "@/components/theme-provider";
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { noteFocus } from "@/lib/focus";
 import { PHONE, useMedia } from "@/lib/media";
 import { leaveAtPress, leaveNewest } from "@/lib/notify";
 import { Screens } from "@/screens";
@@ -33,8 +34,12 @@ function Lines(): ReactNode {
   }, [phone]);
   useEffect(() => {
     document.addEventListener("click", leaveAtPress);
+    document.addEventListener("focusin", noteFocus);
 
-    return () => document.removeEventListener("click", leaveAtPress);
+    return () => {
+      document.removeEventListener("click", leaveAtPress);
+      document.removeEventListener("focusin", noteFocus);
+    };
   }, []);
 
   return (
