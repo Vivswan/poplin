@@ -4,6 +4,7 @@ import { clearPage } from "../lib/support/page";
 
 import { afterAll, afterEach, describe, expect, test } from "bun:test";
 import { cleanup, fireEvent, render, within } from "@testing-library/react";
+import { type ReactNode, useState } from "react";
 
 import { SettingRow } from "@/settings/setting-row";
 import type { Row } from "@/settings/settings-queries";
@@ -32,10 +33,32 @@ const BOUNDED: Row = {
   ],
 };
 
+/** A setting whose default is a word, drawn by a choice alone, while a number is drawn by the choice and a field: it deletes new sites after 7 days. */
+const EXPIRY: Row = {
+  key: "default_expires",
+  control: { kind: "number", word: "never" },
+  text: "7d",
+  unit: "d",
+  fallback: "never",
+  limits: [],
+  repair: false,
+};
+
+/** The row over a text it holds itself, as the screen does: a text the row sends is collected and drawn. */
+function Held({ row, first, sent }: { readonly row: Row; readonly first: string; readonly sent: string[] }): ReactNode {
+  const [text, setText] = useState(first);
+  const take = (next: string): void => {
+    sent.push(next);
+    setText(next);
+  };
+
+  return <SettingRow row={row} text={text} refusal={undefined} onChange={take} marked={false} />;
+}
+
 /** Draw the row over a text, and collect every text it sends. */
 function drawn(row: Row, text = row.text): { readonly page: ReturnType<typeof within>; readonly sent: string[] } {
   const sent: string[] = [];
-  render(<SettingRow row={row} text={text} refusal={undefined} onChange={(next) => sent.push(next)} marked={false} />);
+  render(<Held row={row} first={text} sent={sent} />);
 
   return { page: within(document.body), sent };
 }
@@ -56,13 +79,21 @@ describe("the row of a setting", () => {
     expect(document.body.textContent).toBe("All sites togetherThe most all sites hold, the trash included. (Default: 9,000 MB)MB");
   });
 
-  // Drift: a changed value would have no way back, or Reset would put back something other than the default.
-  test("offers Reset beside the default of a value that differs from it, which puts the default back", () => {
+  // Drift: a changed value would have no way back, Reset would put back something other than the default, or the focus would leave with Reset for whatever the page gives it, far from the setting.
+  test("offers Reset beside the default of a value that differs from it, which puts the default back and leaves the focus in the setting's control", () => {
     const { page, sent } = drawn(SIZE, "12000MB");
     const line = page.getByText(/Default:/).textContent;
     fireEvent.click(page.getByRole("button", { name: "Reset" }));
 
-    expect([line, sent]).toEqual(["The most all sites hold, the trash included. (Default: 9,000 MB) Reset", ["9000MB"]]);
+    expect([line, sent, document.activeElement?.id]).toEqual(["The most all sites hold, the trash included. (Default: 9,000 MB) Reset", ["9000MB"], "setting-max_total_size-control"]);
+  });
+
+  // Drift: Reset would give the focus to the field of the number, which leaves once the default, a word, is drawn: the focus would be on nothing.
+  test("leaves the focus after Reset in the control that shows the default, where the value was shown by another", () => {
+    const { page, sent } = drawn(EXPIRY);
+    fireEvent.click(page.getByRole("button", { name: "Reset" }));
+
+    expect([sent, document.activeElement?.getAttribute("role"), document.activeElement?.id]).toEqual([["never"], "combobox", "setting-default_expires-control"]);
   });
 
   // Drift: a narrow column, which hides the sentence beside the name, would have no way to read it or the default, or no way back to the default.

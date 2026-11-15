@@ -1,6 +1,6 @@
 // The row of one setting: its name, what it does, its default with the way back to it while the value differs, the control, the host's warnings for the value it holds, and under the control a refusal, or a plain line.
 
-import type { ReactNode } from "react";
+import { type ReactNode, useEffect, useRef } from "react";
 
 import { FieldDescription, FieldError } from "@/components/ui/field";
 import { settingAnchor } from "@/settings/setting-address";
@@ -57,6 +57,18 @@ function underOf(said: string | undefined): ReactNode {
 export function SettingRow({ row, text, refusal, onChange, marked, note }: SettingRowProps): ReactNode {
   const words = wordsOf(row.key);
   const id = controlId(row.key);
+  // Reset leaves with the value it put back, and the focus with it. The setting's control takes it once the default is drawn: another control may show the default than showed the value.
+  const resetting = useRef(false);
+  useEffect(() => {
+    if (!resetting.current) return;
+
+    resetting.current = false;
+    document.getElementById(id)?.focus();
+  });
+  const reset = (): void => {
+    resetting.current = true;
+    onChange(row.fallback);
+  };
 
   return (
     <SettingFrame
@@ -66,7 +78,7 @@ export function SettingRow({ row, text, refusal, onChange, marked, note }: Setti
       marked={marked}
       says={[words.about, words.hint ?? ""]}
       fallback={readOf(row, row.fallback)}
-      onReset={text === row.fallback ? undefined : () => onChange(row.fallback)}
+      onReset={text === row.fallback ? undefined : reset}
       warnings={warningsOf(row, text)}
       beside={isSwitch(row)}
       under={refusal === undefined ? underOf(note) : <FieldError className="text-[13px]">{refusal}</FieldError>}
