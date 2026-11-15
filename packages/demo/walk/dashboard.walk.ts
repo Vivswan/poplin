@@ -666,6 +666,21 @@ test("after a change the focus is where the next key is of use: the panel's head
   await expect(name).toBeFocused();
   await cancelDialog(page);
 
+  // A question with a field gives the focus back to the control that asked it: on the row behind the panel, the next Escape would close the panel.
+  await expect(panel(page).getByRole("button", { name: "Edit", exact: true })).toBeFocused();
+  await panel(page).getByRole("button", { name: "Public", exact: true }).press("Enter");
+  await expect(asksPublicName(page)).toBeVisible();
+  await pressEscape(page);
+  await expect(panel(page).getByRole("button", { name: "Public", exact: true })).toBeFocused();
+
+  // A dialog opened by a key puts the focus on its Copy button, whose hint then shows: one Escape still closes the dialog.
+  await toSection(page, "Access");
+  await page.getByRole("tab", { name: "Tokens", exact: true }).click();
+  await page.getByRole("button", { name: "Add a token", exact: true }).press("Enter");
+  await expect(page.getByRole("button", { name: "Copy the command", exact: true })).toBeFocused();
+  await pressEscape(page);
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+
   await toSection(page, "Access");
   await page.getByRole("button", { name: "Add a user", exact: true }).click();
   await addPerson(page).getByRole("textbox", { name: "Email", exact: true }).fill(TYPED_EMAIL);

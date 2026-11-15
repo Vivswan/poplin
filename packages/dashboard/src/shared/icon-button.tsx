@@ -1,7 +1,8 @@
 // A button that is only an icon: its name is its label for a screen reader and the hint a pointer shows.
 
 import { cn } from "cn";
-import type { ComponentProps, ReactElement, ReactNode } from "react";
+import { type ComponentProps, type KeyboardEvent, type ReactElement, type ReactNode, useState } from "react";
+import { flushSync } from "react-dom";
 
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -30,15 +31,17 @@ interface IconButtonProps {
 
 /** Draw an icon button, or a link that looks like one. */
 export function IconButton({ label, children, onClick, link, className, home = false }: IconButtonProps): ReactNode {
+  const [hinting, setHinting] = useState(false);
+  // An open hint takes an Escape for itself, and the dialog or menu around the button would need a second one. The hint closes before the press goes on, so one Escape closes what is around it.
+  const onKeyDownCapture = (event: KeyboardEvent): void => {
+    if (event.key === "Escape" && hinting) flushSync(() => setHinting(false));
+  };
+  const shared = { variant: "ghost", size: "icon-sm", "aria-label": label, className: cn("pointer-coarse:size-10", className), onKeyDownCapture } as const;
   const button =
-    link === undefined ? (
-      <Button variant="ghost" size="icon-sm" aria-label={label} className={cn("pointer-coarse:size-10", className)} onClick={onClick} {...(home ? FOCUS_HOME : {})} />
-    ) : (
-      <Button variant="ghost" size="icon-sm" aria-label={label} className={cn("pointer-coarse:size-10", className)} nativeButton={false} render={link} />
-    );
+    link === undefined ? <Button {...shared} onClick={onClick} {...(home ? FOCUS_HOME : {})} /> : <Button {...shared} nativeButton={false} render={link} />;
 
   return (
-    <Tooltip>
+    <Tooltip open={hinting} onOpenChange={setHinting}>
       <TooltipTrigger render={button}>{children}</TooltipTrigger>
       <TooltipContent>{label}</TooltipContent>
     </Tooltip>

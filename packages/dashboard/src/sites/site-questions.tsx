@@ -1,6 +1,6 @@
 // The questions the Sites screen asks before a change of a site: its title and name, a new link, and who can open it. They are asked from a row's menu and from the panel alike, and drawn once, beside both.
 
-import { type ReactNode, useRef } from "react";
+import { type ReactNode, type RefObject, useRef } from "react";
 import { useDebounce } from "use-debounce";
 
 import { ACCESSES, type Access, LONGEST_NAME, plainAddress, type Site, shownName } from "@/lib/sites";
@@ -75,15 +75,18 @@ function publicAsked(asked: Asked | undefined): Site | undefined {
  *
  * @param asked - the open question; `undefined` shows none
  * @param onClose - called when the question is answered or left
+ * @param returnTo - the control that asked, which takes the focus back from a question with a field
  */
 export function SiteQuestions({
   asked,
   actions,
   onClose,
+  returnTo,
 }: {
   readonly asked: Asked | undefined;
   readonly actions: SiteActions;
   readonly onClose: () => void;
+  readonly returnTo: RefObject<HTMLElement | null>;
 }): ReactNode {
   const named = asked?.ask.kind === "naming" ? asked.site : undefined;
   // The site stays while its question closes, so the dialog does not empty as it fades.
@@ -103,7 +106,7 @@ export function SiteQuestions({
   };
   return (
     <>
-      <EditSiteDialog site={named} onClose={onClose} onSave={actions.name} />
+      <EditSiteDialog site={named} onClose={onClose} onSave={actions.name} returnTo={returnTo} />
       <Confirm question={asked === undefined ? undefined : questionOf(asked)} onAnswer={answer} />
       <AskDialog
         open={opening !== undefined}
@@ -115,6 +118,7 @@ export function SiteQuestions({
         initial={shown?.name ?? ""}
         maxLength={LONGEST_NAME}
         takesInitial
+        returnTo={returnTo}
         submit="Make it public"
         onSubmit={async (publicName) => (shown === undefined ? undefined : actions.makePublic(shown, publicName))}
       />

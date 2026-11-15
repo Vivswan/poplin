@@ -4,7 +4,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { Link, linkOptions, useNavigate, useParams } from "@tanstack/react-router";
 import { cn } from "cn";
 import { CopyIcon, ExternalLinkIcon, PlusIcon } from "lucide-react";
-import { type ReactNode, useCallback, useMemo, useState } from "react";
+import { type ReactNode, type RefObject, useCallback, useMemo, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyTitle } from "@/components/ui/empty";
@@ -393,6 +393,28 @@ function useShownSites(query: URLSearchParams) {
   return { ...read, place: useShownPlace(query.toString(), read.data !== undefined && !read.isPlaceholderData) };
 }
 
+/**
+ * Hold the question that is open about a site.
+ *
+ * A question is drawn anew at each asking and knows no control that opened it: the one with the focus at the asking is kept for it.
+ */
+function useQuestion(): {
+  readonly asked: Asked | undefined;
+  readonly asker: RefObject<HTMLElement | null>;
+  readonly ask: (site: Site, about: Ask) => void;
+  readonly leave: () => void;
+} {
+  const [asked, setAsked] = useState<Asked>();
+  const asker = useRef<HTMLElement | null>(null);
+  const ask = useCallback((site: Site, about: Ask): void => {
+    asker.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    setAsked({ site, ask: about });
+  }, []);
+  const leave = useCallback((): void => setAsked(undefined), []);
+
+  return { asked, asker, ask, leave };
+}
+
 /** Draw the Sites screen for the address: the table, and the panel of the site the path names. */
 export function SitesScreen(): ReactNode {
   useChosenTimeZone();
@@ -412,8 +434,7 @@ export function SitesScreen(): ReactNode {
   const reveal = useReveal(opened);
   const logins = page?.logins ?? NO_LOGINS;
   const { columns, layout, label, actionsWidth } = useShownTable(filter, { onCopy: copy, reveal, logins });
-  const [asked, setAsked] = useState<Asked>();
-  const ask = useCallback((site: Site, about: Ask): void => setAsked({ site, ask: about }), []);
+  const { asked, asker, ask, leave } = useQuestion();
   const rowActions = (site: Site): ReactNode => (
     <SiteRowActions site={site} actions={actions} onAsk={ask} onRemoved={(gone) => (gone.label === opened ? void navigate(toTable) : undefined)} />
   );
@@ -489,7 +510,7 @@ export function SitesScreen(): ReactNode {
         )}
       </div>
       {/* The questions stand outside the panel, so each dims the whole page as every other dialog does. */}
-      <SiteQuestions asked={asked} actions={actions} onClose={() => setAsked(undefined)} />
+      <SiteQuestions asked={asked} actions={actions} onClose={leave} returnTo={asker} />
     </AppShell>
   );
 }

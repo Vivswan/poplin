@@ -1,6 +1,6 @@
 // The dialog that changes how a site is named: its title, which the dashboard shows first, and its name, which its link is written with. Each field says its own refusal, with what was typed kept.
 
-import { type FormEvent, type ReactNode, type Ref, useId, useRef, useState } from "react";
+import { type FormEvent, type ReactNode, type Ref, type RefObject, useId, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -40,6 +40,9 @@ interface EditSiteDialogProps {
 
   /** Sends the change. It answers the refusal, which is shown at its field, or nothing when the change is done. */
   readonly onSave: (site: Site, changes: SiteNaming) => Promise<NamingRefusal | undefined>;
+
+  /** The control that opened the dialog, which takes the focus when it closes, while it is still on the page. */
+  readonly returnTo?: RefObject<HTMLElement | null>;
 }
 
 /** The title a person typed for a site: empty where the site shows its page's own. */
@@ -94,7 +97,7 @@ function NamingField({
 }
 
 /** Ask for a site's title and name together. Save stays off while nothing differs from what the site holds, and while the name is empty. */
-export function EditSiteDialog({ site, onClose, onSave }: EditSiteDialogProps): ReactNode {
+export function EditSiteDialog({ site, onClose, onSave, returnTo }: EditSiteDialogProps): ReactNode {
   // The dialog holds the site it was opened for, and what is typed, in one state: both stay while it closes, so it does not empty as it fades.
   const [shown, setShown] = useState(site);
   const [title, setTitle] = useState(typedTitle(site));
@@ -136,7 +139,7 @@ export function EditSiteDialog({ site, onClose, onSave }: EditSiteDialogProps): 
 
   return (
     <Dialog open={site !== undefined} onOpenChange={(open) => (open ? undefined : onClose())}>
-      <DialogContent className="sm:max-w-sm" finalFocus={thenHome()}>
+      <DialogContent className="sm:max-w-sm" finalFocus={thenHome(returnTo)}>
         <form onSubmit={(event) => void send(event)} className="flex flex-col gap-4">
           <DialogHeader>
             <DialogTitle>Edit the site</DialogTitle>
