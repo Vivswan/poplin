@@ -103,7 +103,8 @@ The owner sets these; the environment is `cloudflare-live-tests`.
 
 | Guard                                                                                  | Where                                         | At the limit                                                  |
 | -------------------------------------------------------------------------------------- | --------------------------------------------- | ------------------------------------------------------------- |
-| the zone's plan is Free, and no subscription of the account has a price                | `plan.ts`, before anything is made            | the run stops red                                             |
+| the zone's plan is Free, and every subscription of the account that has not ended is at a price of 0 | `plan.ts`, before anything is made | the run stops red |
+| a budget alert at 1 US dollar of usage charges, to the run's login | the repair, with the token permission Notifications: Edit | Cloudflare emails the login. Nothing is stopped |
 | caps: 200MB stored, 20MB a site, 100 sites, 2,500 files a publish, 5,000 files a day   | `caps.ts`, on every run, once the install answers | the install refuses the publish                           |
 | bucket writes and lists: 150 by the checks, 2,300 with the many-files check, 150 by a reset | `budget.ts`, around every request to the install | the request is not sent, and the step stops red       |
 | every site the checks make is removed for good                                         | the checks' own sweep, then the reset         | the reset runs after failed checks too                        |
@@ -111,6 +112,12 @@ The owner sets these; the environment is `cloudflare-live-tests`.
 | the sample sites and the demo: 12 sites, 110 files, and 4 MB at most                   | `caps.test.ts`, from a reset of a local fake  | the self-test fails                                           |
 
 A token without Billing: Read cannot read the subscriptions: the run goes on, with a warning and a skipped row. The zone's plan is checked all the same.
+
+No name of a plan is read. Cloudflare lists the storage as a paid plan at a price of 0, and leaves the Workers plan out while it is Free. A subscription with no price stops the run like one with a price. The log holds one line of counts:
+
+```text
+Account plans: free (2 subscriptions: 2 at a price of 0, 0 ended)
+```
 
 ```text
 one run, at its ceilings         2 (the bucket found or made) + 150 (checks) + 150 (reset) = 302 bucket writes and lists
@@ -211,7 +218,8 @@ A run that cannot make the install answer, or cannot start the checks, fails: th
 | D1: Edit                                                    | the account | the database, and the run's token row             |
 | Access: Apps and Policies: Edit                             | the account | the login                                         |
 | Access: Organizations, Identity Providers, and Groups: Read | the account | the team domain the Worker checks a login against |
-| Billing: Read                                               | the account | reading that no subscription has a price          |
+| Billing: Read                                               | the account | reading that every subscription is at a price of 0 |
+| Notifications: Edit                                         | the account | the budget alert                                  |
 
 ## The checklist a person makes
 
@@ -235,6 +243,6 @@ Before you start: Access is on for the test account, and the `POPLIN_LIVE_LOGIN`
 | `copy`  | After `setup`, open the copy on GitHub, and the Worker's build settings in Cloudflare. Read the log of the first build. | The deploy command runs the `deploy` script of `package.json`. The log holds one line that starts with `poplin:`. Note what the copy's `wrangler.jsonc` holds that the repository's does not. |
 | `update` | With a release of poplin published, follow "Update the install" in `docs/run/update.md` on the install of `setup`. Read the new build's log. | The log holds `poplin: deploying`, the release's version, and `(was asked for latest)`. The dashboard, its sites, and its settings are as before, and the account holds no second bucket or database. |
 | `pin`   | Set the build variable `POPLIN_VERSION` to an older release's version and build again. Then set it to `v1` and build again. | The first log names the older version. The second build fails with one line that starts with `poplin:` and holds `Nothing was deployed`, and the install still answers. |
-| `alerts` | With a token that also holds Notifications: Edit, apply the OpenTofu module once on the test account with `usage_alert_percents = [50, 90]`. Read the provider's list of available alerts for the account, at `/accounts/<account id>/alerting/v3/available_alerts`. | The apply makes six notification policies. The list names `billing_usage_alert`, with `r2_storage`, `r2_class_a_operations`, and `r2_class_b_operations` among its products. |
+| `alerts` | With a token that also holds Notifications: Edit, apply the OpenTofu module once on the test account with `usage_alert_percents = [50, 90]`. Then open Notifications in the Cloudflare dashboard. | The apply makes six notification policies, and Cloudflare refuses none for its product name. After a run of the workflow, the list also holds `poplin: usage charges reached 1 dollar`, sent to the login. |
 
 Delete the sites you published when you are done: `poplin delete <label> --forever`.
