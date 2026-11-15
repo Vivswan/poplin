@@ -7,6 +7,9 @@ description: |
   It runs as the site-build hook of ci.yml's `site` leg, on the judged commit, before the fleet
   renders docs/ and deploys.
 
+  The build reads `DEMO_URL` from the deploy job's environment: `site.vars` in .repo-platform.yml
+  names the repository variable the fleet exports there.
+
   The contract and examples are the fleet's docs/modules/site.md.
 
 inputs:
@@ -16,10 +19,6 @@ inputs:
   origin:
     description: The site's origin, https://<owner>.github.io
     required: true
-  demo-url:
-    description: The https address of the running demo the home page links to, or empty for no link
-    required: false
-    default: ""
 
 outputs:
   dist:
@@ -35,7 +34,6 @@ runs:
       env:
         PAGES_BASE_PATH: ${{ inputs.base-path }}
         PAGES_ORIGIN: ${{ inputs.origin }}
-        DEMO_URL: ${{ inputs.demo-url }}
       run: |
         bun run --cwd website build
         echo "dist=website/dist" >> "$GITHUB_OUTPUT"
