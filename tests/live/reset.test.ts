@@ -121,6 +121,8 @@ async function fill(install: Install): Promise<void> {
     missing: {},
     fetch: install.fetch,
     pause: async () => undefined,
+    now: () => 0,
+    say: () => undefined,
     manyFiles: 1,
   });
   OPENED.push(close);

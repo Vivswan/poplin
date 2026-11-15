@@ -52,6 +52,12 @@ interface BenchParts {
   /** Waits so many milliseconds. */
   readonly pause: (ms: number) => Promise<void>;
 
+  /** The time a pause moves on, in milliseconds. */
+  readonly now: () => number;
+
+  /** Prints one line of what a check that passed met. */
+  readonly say: (line: string) => void;
+
   /** How many files the folder of many small files holds. */
   readonly manyFiles: number;
 
@@ -220,6 +226,8 @@ export function openBench(parts: BenchParts): OpenBench {
       publish,
       scratchFile: (name) => join(scratch, name),
       pause: parts.pause,
+      now: parts.now,
+      say: parts.say,
     },
     settle,
     sweep,

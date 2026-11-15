@@ -66,6 +66,8 @@ describe.skipIf(!LIVE)("a deployed install", () => {
         login: setting("POPLIN_LIVE_LOGIN"),
         fetch: meter.fetch,
         pause: (ms) => Bun.sleep(ms),
+        now: () => Date.now(),
+        say: (line) => console.log(line),
         manyFiles: MANY_FILES,
       })
     : undefined;

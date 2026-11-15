@@ -54,6 +54,7 @@ type Case = readonly [
   notPassed: Readonly<Record<string, "skipped" | "failed">>,
 ];
 
+/** Every fake install the whole suite runs on. */
 const CASES: readonly Case[] = [
   ["an install with no login in front passes every check but the login's and a person's", {}, {}, { L1: "skipped" }],
   ["an install behind a login passes the login's check too", { access: true }, {}, {}],
@@ -98,6 +99,21 @@ const CASES: readonly Case[] = [
   ],
 ];
 
+/** How a line ends on the fake, whose edge sees one address: once in each lane of the burst and once at the end. */
+const ONE_ADDRESS = "the edge saw addresses x1 (IPv4) in samples x21";
+
+/** One fake install, what the check of the rate rule comes to on it, and the one line it says of the runner's path: printed on a pass, and the failure's own words otherwise. */
+type BurstCase = readonly [what: string, switches: FakeSwitches, result: Outcome["result"], answers: string, through: string];
+
+/** The check of the rate rule on a fake whose rule blocks, and on one whose visitor no data center counts past the rule's limit. */
+const BURST_CASES: readonly BurstCase[] = [
+  ["a burst the rate rule blocks says through which data center it went", {}, "passed", "320 requests in 0 ms were answered: 302 x120, 429 of the install x180, 429 of the rate rule x20", "AAA x320 (most in ten seconds x320)"],
+  ["a burst the rate rule does not block, spread over four data centers, says how few each one held", { spread: true }, "failed",
+    "1140 requests in 20000 ms were answered: 302 x120, 429 of the install x1020",
+    "AAA x285 (most in ten seconds x185), BBB x285 (most in ten seconds x184), CCC x285 (most in ten seconds x184), DDD x285 (most in ten seconds x184)",
+  ],
+];
+
 /** Publish the demo's site as the reset of the test install does: a first page, and beside it the worker, unless the case leaves it out. */
 async function publishDemoSite(bench: Bench, kind: "whole" | "no-worker"): Promise<void> {
   const folder = bench.folder("<title>a demo</title>");
@@ -135,6 +151,8 @@ describe("the live checks, against a local fake", () => {
       missing,
       fetch: watched,
       pause: fake.pause,
+      now: fake.now,
+      say: () => undefined,
       manyFiles: MANY_FILES,
     });
     OPENED.push(close);
@@ -157,5 +175,32 @@ describe("the live checks, against a local fake", () => {
     expect(switches.noToken === true ? [] : left.value.sites).toEqual([]);
     // A check that grew into a loop of publishes would be held back on the real install alone, and a route the meter does not know would be billed uncounted.
     expect({ stopped: meter.stopped(), uncounted }).toEqual({ stopped: undefined, uncounted: [] });
+  }, RUN_MS);
+
+  // A failure that said only the answers left it open whether the rule was gone or the requests never met in one count; a line that held the address the edge saw would put it in a public log.
+  test.each(BURST_CASES)("%s", async (_what, switches, result, answers, through) => {
+    const fake = await openFake(switches);
+    const said: string[] = [];
+    const { bench, close } = openBench({
+      domain: FAKE_DOMAIN,
+      token: fake.token,
+      run: "selftest",
+      missing: {},
+      fetch: fake.fetch,
+      pause: fake.pause,
+      now: fake.now,
+      say: (text) => said.push(text),
+      manyFiles: MANY_FILES,
+    });
+    OPENED.push(close);
+
+    const burst = CHECKS.find((check) => check.id === "burst-rate-rule");
+    if (burst === undefined) throw new Error("the checks hold no check of the rate rule");
+
+    // A failure's words are the line and then what was expected of it.
+    const outcome = await runCheck(bench, burst, (error) => said.push(...String(error).replace(/^Error: /, "").split("\n").slice(0, 1)));
+
+    expect({ result: outcome.result, said }).toEqual({ result, said: [`${answers}; through ${through}; ${ONE_ADDRESS}`] });
+    expect(said.join()).not.toMatch(/\d+\.\d+\.\d+|[0-9a-f]*:[0-9a-f]*:/);
   }, RUN_MS);
 });

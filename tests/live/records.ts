@@ -67,6 +67,12 @@ export interface Bench {
 
   /** Waits so many milliseconds, for a block in front of the install to lapse. */
   readonly pause: (ms: number) => Promise<void>;
+
+  /** The time a pause moves on, in milliseconds. */
+  readonly now: () => number;
+
+  /** Prints one line of what a check that passed met. The line holds nothing an install wrote and no address. */
+  readonly say: (line: string) => void;
 }
 
 /** One check. `needs` lists what it cannot run without; `run` throws when the install answers wrong. */
