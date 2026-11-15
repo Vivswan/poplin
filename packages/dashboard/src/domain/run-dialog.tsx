@@ -17,7 +17,7 @@ import type { Refused } from "@/lib/api";
 /** The words of each run: the dialog's title, what the run does, its button, and the button while the run is on its way. */
 const WORDS = {
   check: { title: "Check the domain", does: "Check changes nothing.", press: "Check", pressed: "Checking" },
-  repair: { title: "Repair the domain", does: "Repair makes every piece match.", press: "Repair", pressed: "Repairing" },
+  repair: { title: "Repair the domain", does: "Repair fixes every piece that needs it.", press: "Repair", pressed: "Repairing" },
 } as const;
 
 /** The dialog has the token's box alone. */

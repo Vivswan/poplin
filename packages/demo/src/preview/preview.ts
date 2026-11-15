@@ -38,14 +38,14 @@ const API_LIMITS = { fileBytes: 100_000_000, files: 10_000, manifestBytes: 2_000
 
 /** The free plan of the preview's invented host: the numbers are samples, and no real plan is behind them. */
 const FREE_LIMITS = {
-  totalBytes: { most: 10_000_000_000, warning: "A real host bills storage past its free 10 GB." },
-  siteBytes: { most: 10_000_000_000, warning: "A real host bills storage past its free 10 GB." },
+  totalBytes: { most: 10_000_000_000, warning: "The host bills storage past its free 10 GB." },
+  siteBytes: { most: 10_000_000_000, warning: "The host bills storage past its free 10 GB." },
   filesPerPublish: { most: 5000, warning: "A publish over 5,000 files may not start on a free plan." },
-  filesPerDay: { most: 32_258, warning: "Past 1,000,000 writes a month, a real host bills the rest." },
-  storageWritesPerDay: { most: 30_281, warning: "Past 1,000,000 writes a month, a real host bills the rest." },
-  storageReadsPerMonth: { most: 10_000_000, warning: "Past 10,000,000 reads a month, a real host bills the rest." },
+  filesPerDay: { most: 32_258, warning: "Past 1,000,000 writes a month, the host bills the rest." },
+  storageWritesPerDay: { most: 30_281, warning: "Past 1,000,000 writes a month, the host bills the rest." },
+  storageReadsPerMonth: { most: 10_000_000, warning: "Requests read the storage. Past 10,000,000 reads a month, the host bills the rest." },
   requestsPerDay: { most: 100_000, warning: "Past 100,000 requests a day you need a paid plan." },
-  logins: { most: 50, warning: "Past 50 users, a real host bills each login." },
+  logins: { most: 50, warning: "Past 50 users, the host bills each login." },
 } as const;
 
 /** When the sample release the seeded install knows of came out, and where its notes are: the page of the project's releases. No such release exists. */

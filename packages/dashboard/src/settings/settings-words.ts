@@ -37,7 +37,7 @@ const WORDS: Readonly<Record<string, Words>> = {
   search_engines_allowed: {
     block: "visitors",
     label: "Let search engines in",
-    about: "While off, no site shows up, whatever its own switch says.",
+    about: "While off, search engines find none of your sites.",
   },
   outside_pages: {
     block: "visitors",
@@ -56,8 +56,8 @@ const WORDS: Readonly<Record<string, Words>> = {
   max_site_size: { block: "storage", label: "One site", about: "The most one site holds." },
   max_sites: { block: "storage", label: "Number of sites", about: "The most sites this install holds.", unit: "sites", empty: "No limit", hint: "Empty means no limit." },
   max_files_per_publish: { block: "publishing", label: "Files per publish", about: "The most files in one publish, up to 10,000.", unit: "files" },
-  max_files_per_day: { block: "publishing", label: "Files per day", about: "Counts every publish and copy in one UTC day.", unit: "files" },
-  max_storage_writes_per_day: { block: "publishing", label: "Storage writes per day", about: "A published file is 1 write, a copied file 2.", unit: "writes" },
+  max_files_per_day: { block: "publishing", label: "Files per day", about: "The most files published or duplicated in one UTC day.", unit: "files" },
+  max_storage_writes_per_day: { block: "publishing", label: "Storage writes per day", about: "A published file counts as 1 write, a duplicated file as 2.", unit: "writes" },
   requests_per_day: { block: "traffic", label: "Requests per day", about: "All sites together, in one UTC day.", unit: "requests" },
   site_share_of_day: { block: "traffic", label: "One site's share", about: "The part of the requests per day one site may use." },
   site_requests_per_minute: { block: "traffic", label: "One site per minute", about: "The most requests one site answers in a minute.", unit: "requests" },
