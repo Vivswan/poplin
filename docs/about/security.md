@@ -121,6 +121,8 @@ A `-u-` address answers one redirect when its site is private, in the trash, exp
 
 A `-p-` address is answered by Cloudflare's login before the Worker sees it. A request that reaches the Worker without Access's token gets 404: no file, and no redirect.
 
+Poplin's icon is answered only for a site the address may open. Every address above answers `/favicon.ico` as it answers any other path.
+
 ## After an update
 
 | A visitor | Sees |
@@ -143,7 +145,7 @@ A `-p-` address is answered by Cloudflare's login before the Worker sees it. A r
 | site headers | `X-Content-Type-Options: nosniff`, `Referrer-Policy: no-referrer`, correct content types |
 | page views | a site shows about how often its pages were opened, from a sampled count per site and UTC day kept a year; it counts opens, not people: no address, cookie, or browser name of a visitor is stored |
 | the dashboard | a strict Content-Security-Policy; it may never be framed |
-| content | the Worker never reads, parses, or rewrites a site's files |
+| content | the Worker never reads, parses, or rewrites a site's files, and adds none to them. A site that holds no `favicon.ico` is answered poplin's own icon at `/favicon.ico`, from the Worker's code |
 | the activity log | the dashboard shows every action under Activity, 50 a page, with a Next page button: publish, state change, delete, login, token issued |
 | plain http | the Worker sends every request over `http` to the same address over `https`, with a 308, before it reads anything of the install; an optional rule at Cloudflare's edge does the same before the Worker runs. Every answer of a site and of the dashboard tells the browser to use `https` alone for 180 days. The zone's other hostnames are left as they are |
 | junk requests | the optional bots rule at Cloudflare's edge blocks, on the site hostnames, every method but GET and HEAD and the paths scanners ask for: `*.php`, `/.env`, `/.env.*`, `/.git/`, `/wp-admin/`, `/cgi-bin/`, `/phpmyadmin` |

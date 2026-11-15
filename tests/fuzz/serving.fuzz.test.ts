@@ -59,7 +59,7 @@ const otherHosts = fc.constantFrom("shop-page.example.com", "docs-page.example.c
 const knownHosts = fc.oneof({ arbitrary: typedHosts, weight: 4 }, { arbitrary: otherHosts, weight: 1 });
 const hosts = fc.oneof({ arbitrary: knownHosts, weight: 3 }, { arbitrary: hostile(knownHosts), weight: 2 });
 const climbs = fc.array(fc.constantFrom("..", "%2e%2e", ".%2E", "..%2f", "..%5c", "%252e%252e", ".", "", "docs"), { maxLength: 6 }).map((parts) => parts.join("/"));
-const targets = fc.constantFrom(...Object.keys(FILES), "about", "docs", "docs/", "", ...PREFIXES.map((prefix) => `${prefix}index.html`));
+const targets = fc.constantFrom(...Object.keys(FILES), "favicon.ico", "about", "docs", "docs/", "", ...PREFIXES.map((prefix) => `${prefix}index.html`));
 const plainPaths = fc.tuple(climbs, targets).map(([climb, target]) => `/${climb}/${target}`.replace("//", "/"));
 const paths = fc.oneof({ arbitrary: plainPaths, weight: 2 }, { arbitrary: targets.map((target) => `/${target}`), weight: 2 }, { arbitrary: hostile(plainPaths), weight: 3 });
 

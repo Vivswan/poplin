@@ -79,6 +79,7 @@ The owner's private page that lists every site is the dashboard, at `poplin.exam
 | a private site, logged in as you                 | the site                                     |
 | a private site, not logged in                    | the login                                    |
 | a page a site does not have                      | the `404.html` at the site's root; `Not found` for a site without one |
+| `/favicon.ico` of a site that has none           | poplin's icon, so the browser's tab shows it; publish an empty `favicon.ico` to show none |
 | the `-poplin` address of a deleted or expired site, or one from before a new link | the login; `Not found` once logged in |
 | a public name no site holds                      | `Not found`                                  |
 | any site, too often in a minute                  | `Too many requests. Try again in 60 seconds.` |

@@ -9,12 +9,12 @@
 //   the file's own tag         the request holds the file as it is         304, and the store opens no body: it is asked with the tag
 //   several tags, or `*`       the store compares one tag                  the file is looked at first, and read after that when the request holds another
 //   the store's tag of a page  no page goes out with it                    the page is read a second time, as if no tag was sent
-//   no key holds a file        the version holds a `404.html`              one more read, of that page, sent with status 404; the plain 404 for a version without one, at no read
+//   no key holds a file        the path is the site's `/favicon.ico`      poplin's own icon with status 200, kept as a file is, at no further read
+//                              the version holds a `404.html`              one more read, of that page, sent with status 404; the plain 404 for a version without one, at no read
 //                              a page for a request that holds another version carries `Clear-Site-Data`, so the browser drops that version's files
 // A request asks the store three times at most: the live version's record says whether it holds a `404.html` and which files without an extension, so no key is tried that cannot hold a file.
 //   a path, at most two keys         one miss, then a file at two calls at most; or two misses, then the `404.html`
-//   a version whose files without    a path without an extension has three keys there. The third is read once and whole: a `Range` is not followed,
-//   an extension are not kept        and a held file is found by its tag after the read. Three misses are the plain 404
+//   files with no extension unkept   such a path has three keys. The third is read once and whole: a `Range` is not followed, and a held file is found by its tag after the read. Three misses are the plain 404
 //   letter u, or none   the site is unlisted or public    the file
 //                       private, or no served site        302 to the same label under p
 //   letter p            the site is private               the file
@@ -28,7 +28,9 @@ import type { SettingValues } from "@poplin/core/src/records/settings";
 import type { Site } from "@poplin/core/src/records/site";
 import { MISSING_PAGE, type VersionContents } from "@poplin/core/src/records/version-contents";
 import { type ByteRange, type ObjectInfo, type ObjectKey, type ObjectStore, type ReadResult, resolveRange } from "@poplin/core/src/storage/storage";
+import { uint8ArrayToHex } from "uint8array-extras";
 import type { Addressed, SiteAddresses } from "./addresses";
+import { DEFAULT_ICON, DEFAULT_ICON_TYPE } from "./default-icon";
 import { fileKeys } from "./file-keys";
 import { clearHeldFiles, HTTPS_ALONE, heldVersion, isPage, missingFileCache, missingPageCache, siteHeaders, versionTag } from "./headers";
 import { parseRange } from "./range";
@@ -62,6 +64,12 @@ const PLAIN_BODIES = {
 
 /** The path of the page a site shows in place of a file it does not hold: the one at its top. */
 const MISSING_PAGE_PATH = `/${MISSING_PAGE}`;
+
+/** The one path a browser asks a site for an icon at when its page names none. */
+const ICON_PATH = "/favicon.ico";
+
+/** Poplin's own icon as it goes out. */
+const ICON_BYTES = new TextEncoder().encode(DEFAULT_ICON);
 
 /** The most calls one request makes to the store, whatever it asks for. What a day of requests can cost the store is counted from this. */
 export const MOST_STORE_CALLS = 3;
@@ -242,8 +250,37 @@ function missingPageHeaders(info: ObjectInfo, served: Served): Headers {
   return headers;
 }
 
+/** Decide whether the keys a request tried are the one the site's own icon would sit at, however the path spelled it. */
+function asksForIcon(keys: readonly ObjectKey[], served: Served): boolean {
+  const [icon] = fileKeys(served.site, ICON_PATH, served.contents);
+
+  return keys.length === 1 && keys[0] === icon;
+}
+
+/**
+ * Answer poplin's own icon for a served site that holds none, at no call to the store. It goes out whole, under the headers a drawing of the site would carry.
+ *
+ * @returns 304 for a request that holds the icon, by its tag or the one for any file
+ */
+async function defaultIcon(request: Request, served: Served): Promise<Response> {
+  const headers = siteHeaders({ site: served.site, contentType: DEFAULT_ICON_TYPE, settings: served.serving.settings, addresses: served.serving.addresses });
+  const tag = `"${uint8ArrayToHex(await crypto.subtle.digest("SHA-256", ICON_BYTES))}"`;
+  headers.set("ETag", tag);
+  headers.set("Accept-Ranges", NO_RANGES);
+
+  const sent = sentTags(request.headers.get("If-None-Match"));
+  if (sent.includes(ANY_FILE) || sent.includes(tag)) return new Response(null, { status: 304, headers });
+
+  headers.set("Content-Length", String(ICON_BYTES.length));
+
+  return new Response(request.method === "HEAD" ? null : ICON_BYTES, { status: 200, headers });
+}
+
 /** The 404 for a file a served site does not hold. It comes after the site was found and its letter matched, so it tells nothing a file of the site would not. */
 async function missingFile(request: Request, keys: readonly ObjectKey[], served: Served): Promise<Response> {
+  // The site was found and its letter matched before any key was tried, so the icon tells nothing a file of the site would not.
+  if (asksForIcon(keys, served)) return defaultIcon(request, served);
+
   const without = plain(request, 404, { "Cache-Control": missingFileCache(served.site) });
   // A version without the page costs no read, and a request that tried three keys has none left.
   if (!served.contents.missing_page || keys.length > MOST_KEYS_AS_ASKED) return without;
@@ -381,7 +418,8 @@ async function answerHead(request: Request, keys: readonly ObjectKey[], served: 
 }
 
 /**
- * Answer a visitor's request for a site of an install, at three calls to the store at most. A 404 for a file a served site does not hold carries the site's own `404.html` when its live version has one.
+ * Answer a visitor's request for a site of an install, at three calls to the store at most. A served site that holds no `favicon.ico` is answered poplin's own icon there.
+ * Any other 404 for a file a served site does not hold carries the site's own `404.html` when its live version has one.
  *
  * @returns the file with its headers, its body the store's own stream; else 304 for what the request holds, 206 or 416 for a range, 403 for a subrequest of a page that is no site of the install, 302 to the same label under the other letter, 405, or 404
  * @throws whatever the database, the store, or the identity check rejects with; nothing else throws

@@ -128,7 +128,7 @@ export function clearHeldFiles(headers: Headers): void {
 }
 
 /**
- * Write the cache rule of the 404 for a file a site does not hold, so a browser does not ask for a missing icon on every page view.
+ * Write the cache rule of the 404 for a file a site does not hold, so a browser does not ask for a missing file on every page view.
  *
  * @returns a day on an open site, so a file published later shows within it, and `no-store` on a private site
  */

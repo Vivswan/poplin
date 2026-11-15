@@ -2,6 +2,7 @@ import { beforeAll, describe, expect, test } from "bun:test";
 import type { Site } from "@poplin/core/src/records/site";
 import { UNKNOWN_CONTENTS } from "@poplin/core/src/records/version-contents";
 import { parseObjectKey } from "@poplin/core/src/storage/storage";
+import { DEFAULT_ICON } from "../../src/sites/default-icon";
 import { MOST_STORE_CALLS, serveSite } from "../../src/sites/serve";
 import { type Install, labelHost, NOW, openInstall, typedHost } from "./support/install";
 
@@ -170,13 +171,13 @@ describe("not found", () => {
 
 describe("a missing file", () => {
   const cases: readonly (readonly [string, Ask, string])[] = [
-    ["an unlisted site", (w) => ask(labelHost(w.report), "/favicon.ico"), "public, max-age=86400"],
+    ["an unlisted site", (w) => ask(labelHost(w.report), "/robots.txt"), "public, max-age=86400"],
     ["an unlisted site, as a page", (w) => ask(labelHost(w.report), "/nothing"), "public, max-age=86400"],
-    ["a public site at its public name", () => ask("shop-page.example.com", "/favicon.ico"), "public, max-age=86400"],
-    ["a private site, under p with the owner's proof", (w) => ask(labelHost(w.secret), "/favicon.ico", withProof(w)), "no-store"],
+    ["a public site at its public name", () => ask("shop-page.example.com", "/robots.txt"), "public, max-age=86400"],
+    ["a private site, under p with the owner's proof", (w) => ask(labelHost(w.secret), "/robots.txt", withProof(w)), "no-store"],
   ];
 
-  // Drift: a browser would ask the Worker for a missing icon on every page view, or would keep a 404 past the day a file was published in, or a 404 under p would be kept at all.
+  // Drift: a browser would ask the Worker for a missing file on every page view, or would keep a 404 past the day a file was published in, or a 404 under p would be kept at all.
   test.each(cases)("of %s is the 404 with the cache rule %3$s", async (_why, request, cache) => {
     expect(await whole(await serve(request(world)))).toEqual({ ...NOT_FOUND, headers: { ...NOT_FOUND.headers, "cache-control": cache } });
   });
@@ -522,6 +523,200 @@ describe("a site's own 404 page", () => {
     const response = await serveSite(ask(labelHost(site), "/nothing.txt", { "If-None-Match": OLDER_TAG }), install.serving);
 
     expect([response.status, response.headers.get("Content-Type"), response.headers.get("Clear-Site-Data"), await response.text()]).toEqual([404, "text/plain", null, "lost"]);
+  });
+});
+
+describe("the icon of a site that holds none", () => {
+  const DRAWING = "image/svg+xml";
+  const ICON_LENGTH = String(new TextEncoder().encode(DEFAULT_ICON).length);
+  const ICON_TAG = expect.stringMatching(/^"[0-9a-f]{64}"$/);
+
+  /** The sites of these cases: each holds a drawing beside its home page, two hold an icon of their own, and two are no longer served. */
+  interface Icons {
+    readonly install: Install;
+    readonly bare: Site;
+    readonly lost: Site;
+    readonly own: Site;
+    readonly blank: Site;
+    readonly open: Site;
+    readonly vault: Site;
+    readonly gone: Site;
+    readonly lapsed: Site;
+  }
+
+  type AskIcons = (icons: Icons) => Request;
+
+  /** An answer with what it cost the store: the keys it was asked for, without the site's folder, and the bodies it opened. */
+  interface Costed {
+    readonly status: number;
+    readonly body: string;
+    readonly headers: Record<string, string>;
+    readonly calls: readonly string[];
+    readonly opened: number;
+  }
+
+  let icons: Icons;
+
+  const proven = (extra: Record<string, string> = {}): Record<string, string> => ({ ...icons.install.ownerProof, ...extra });
+  const byHead = (request: Request): Request => new Request(request.url, { method: "HEAD", headers: request.headers });
+  const moved = (typed: Site, to: "p" | "u"): unknown => ({ status: 302, body: "", headers: { ...PLAIN_HEADERS, location: `https://${typedHost(typed, to)}/favicon.ico` } });
+
+  async function costed(site: Site, request: Request): Promise<Costed> {
+    const [calls, opened] = [icons.install.keys.length, icons.install.bodies.length];
+    const response = await serveSite(request, icons.install.serving);
+
+    return { ...(await whole(response)), calls: icons.install.keys.slice(calls).map((key) => key.replace(prefixOf(site), "")), opened: icons.install.bodies.length - opened };
+  }
+
+  /** What poplin's icon goes out with: the headers of the drawing the site holds at the same address, with the icon's own tag and length, and no offer of a part. */
+  async function iconHeaders(drawing: Request): Promise<Record<string, unknown>> {
+    return { ...fixedHeaders(await serveSite(drawing, icons.install.serving)), "accept-ranges": "none", "content-length": ICON_LENGTH, etag: ICON_TAG };
+  }
+
+  beforeAll(async () => {
+    const install = await openInstall();
+    const files = { "index.html": ["home", HTML], "mark.svg": ["<svg/>", DRAWING] } as const;
+    const lostPage = { "404.html": ["<h1>lost</h1>", HTML] } as const;
+
+    const bare = await install.publish({ name: "bare", access: "unlisted", files });
+    const lost = await install.publish({ name: "lost", access: "unlisted", files: { ...files, ...lostPage } });
+    const own = await install.publish({ name: "own", access: "unlisted", files: { ...files, ...lostPage, "favicon.ico": ["own icon", "image/x-icon"] } });
+    const blank = await install.publish({ name: "blank", access: "unlisted", files: { ...files, "favicon.ico": ["", "image/x-icon"] } });
+    const open = await install.publish({ name: "open", access: "public", search_engines: true, files });
+    const vault = await install.publish({ name: "vault", access: "private", files: { ...files, ...lostPage } });
+    const gone = await install.publish({ name: "gone", access: "unlisted", files });
+    const lapsed = await install.publish({ name: "lapsed", access: "unlisted", expires: NOW - 1, files });
+    await install.database.trashSite(gone.id, { by: install.owner, at: NOW });
+
+    icons = { install, bare, lost, own, blank, open, vault, gone, lapsed };
+  });
+
+  // Drift: the icon would lose a header every file of a site carries, or would be kept longer or shorter than a file.
+  test("goes out as a drawing with exactly the headers of a file of an unlisted site, kept for a day", async () => {
+    expect(await whole(await serveSite(ask(labelHost(icons.bare), "/favicon.ico"), icons.install.serving))).toEqual({
+      status: 200,
+      body: DEFAULT_ICON,
+      headers: { ...SITE_HEADERS, "accept-ranges": "none", "cache-control": "public, max-age=86400", "content-length": ICON_LENGTH, "content-type": DRAWING, etag: ICON_TAG },
+    });
+  });
+
+  const shown: readonly (readonly [string, (icons: Icons) => Site, (path: string) => AskIcons])[] = [
+    ["an unlisted site", (i) => i.bare, (path) => (i) => ask(labelHost(i.bare), path)],
+    ["an unlisted site with a 404 page, which is not read", (i) => i.lost, (path) => (i) => ask(labelHost(i.lost), path)],
+    ["a public site at its label", (i) => i.open, (path) => (i) => ask(labelHost(i.open), path)],
+    ["a public site at its public name", (i) => i.open, (path) => () => ask("open-page.example.com", path)],
+    ["a private site, under p with the owner's proof", (i) => i.vault, (path) => (i) => ask(labelHost(i.vault), path, proven())],
+    ["an unlisted site, by a request that holds other tags", (i) => i.bare, (path) => (i) => ask(labelHost(i.bare), path, { "If-None-Match": '"other", "more"' })],
+  ];
+
+  // Drift: a site without an icon would show a blank tab again, the icon would cost a second call to the store, or it would go out unlike a file of the same site.
+  test.each(shown)("%s gets poplin's icon whole, with the headers of a drawing of that site, at one call to the store", async (_why, site, at) => {
+    const headers = await iconHeaders(at("/mark.svg")(icons));
+
+    expect<unknown>(await costed(site(icons), at("/favicon.ico")(icons))).toEqual({ status: 200, body: DEFAULT_ICON, headers, calls: ["favicon.ico"], opened: 0 });
+  });
+
+  // Drift: a HEAD for the icon would answer unlike the GET it stands for.
+  test.each(shown)("%s: a HEAD is the same answer without its body", async (_why, site, at) => {
+    const headers = await iconHeaders(at("/mark.svg")(icons));
+
+    expect<unknown>(await costed(site(icons), byHead(at("/favicon.ico")(icons)))).toEqual({ status: 200, body: "", headers, calls: ["favicon.ico"], opened: 0 });
+  });
+
+  const others: readonly (readonly [string, string, Record<string, string>])[] = [
+    ["the same file under an escape", "/favicon%2Eico", {}],
+    ["the same file with a query", "/favicon.ico?v=2", {}],
+    ["a part of the icon, which is not followed", "/favicon.ico", { Range: "bytes=0-3" }],
+  ];
+
+  // Drift: the icon would depend on how the address of the one file is spelled, or a part of it would go out as if the store held it.
+  test.each(others)("a request for %s gets the icon whole", async (_what, path, headers) => {
+    const got = await costed(icons.bare, ask(labelHost(icons.bare), path, headers));
+
+    expect([got.status, got.body, got.headers["accept-ranges"], got.headers["content-range"], got.calls]).toEqual([200, DEFAULT_ICON, "none", undefined, ["favicon.ico"]]);
+  });
+
+  const kept: readonly (readonly [string, (icons: Icons) => Site, string, string])[] = [
+    ["a site with an icon of its own", (i) => i.own, "own icon", "8"],
+    ["a site whose own icon is an empty file", (i) => i.blank, "", "0"],
+  ];
+
+  // Drift: poplin's icon would replace one a person published, or a person could no longer publish an empty file to show none.
+  test.each(kept)("%s is answered its own file, as before", async (_why, site, body, length) => {
+    const got = await costed(site(icons), ask(labelHost(site(icons)), "/favicon.ico"));
+
+    expect([got.status, got.body, got.headers["content-type"], got.headers["content-length"], got.headers["accept-ranges"], got.calls]).toEqual([200, body, "image/x-icon", length, "bytes", ["favicon.ico"]]);
+  });
+
+  const plainMisses: readonly (readonly [string, readonly string[]])[] = [
+    ["/sub/favicon.ico", ["sub/favicon.ico"]],
+    ["/favicon.ico/", ["favicon.ico/index.html"]],
+    ["/FAVICON.ICO", ["FAVICON.ICO"]],
+    ["/favicon.png", ["favicon.png"]],
+    ["/favicon", ["favicon.html", "favicon/index.html"]],
+    ["/apple-touch-icon.png", ["apple-touch-icon.png"]],
+  ];
+
+  // Drift: poplin's icon would answer for a file a page names itself, in a folder or under another name, where a miss must stay a miss.
+  test.each(plainMisses)("%s is no address of the icon: the 404 after reading only %j", async (path, calls) => {
+    expect<unknown>(await costed(icons.bare, ask(labelHost(icons.bare), path))).toEqual({ ...NO_FILE, calls, opened: 0 });
+  });
+
+  // Drift: a folder's icon on a site with a 404 page would stop getting that page.
+  test("a missing icon inside a folder of a site with a 404 page gets that page", async () => {
+    const got = await costed(icons.lost, ask(labelHost(icons.lost), "/sub/favicon.ico"));
+
+    expect([got.status, got.body, got.calls]).toEqual([404, "<h1>lost</h1>", ["sub/favicon.ico", "404.html"]]);
+  });
+
+  const hidden: readonly (readonly [string, AskIcons, (icons: Icons) => unknown])[] = [
+    ["a private site under u", (i) => ask(typedHost(i.vault, "u"), "/favicon.ico"), (i) => moved(i.vault, "p")],
+    ["a private site under u, with the owner's proof", (i) => ask(typedHost(i.vault, "u"), "/favicon.ico", proven()), (i) => moved(i.vault, "p")],
+    ["a private site under p, without the proof", (i) => ask(labelHost(i.vault), "/favicon.ico"), () => NOT_FOUND],
+    ["an open site under p, without the proof", (i) => ask(typedHost(i.bare, "p"), "/favicon.ico"), () => NOT_FOUND],
+    ["an open site under p, with the owner's proof", (i) => ask(typedHost(i.bare, "p"), "/favicon.ico", proven()), (i) => moved(i.bare, "u")],
+    ["a site in the trash under u", (i) => ask(typedHost(i.gone, "u"), "/favicon.ico"), (i) => moved(i.gone, "p")],
+    ["a site in the trash under p, with the owner's proof", (i) => ask(typedHost(i.gone, "p"), "/favicon.ico", proven()), () => NOT_FOUND],
+    ["an expired site under u", (i) => ask(typedHost(i.lapsed, "u"), "/favicon.ico"), (i) => moved(i.lapsed, "p")],
+    ["an expired site under p, with the owner's proof", (i) => ask(typedHost(i.lapsed, "p"), "/favicon.ico", proven()), () => NOT_FOUND],
+    ["no site under u", () => ask(typedHost({ id: MISSING_ID }, "u"), "/favicon.ico"), () => moved({ id: MISSING_ID } as Site, "p")],
+    ["no site under p, with the owner's proof", () => ask(typedHost({ id: MISSING_ID }, "p"), "/favicon.ico", proven()), () => NOT_FOUND],
+    ["the public name of a site that is not public", () => ask("bare-page.example.com", "/favicon.ico"), () => NOT_FOUND],
+    ["a public name no site holds", () => ask("nobody-page.example.com", "/favicon.ico"), () => NOT_FOUND],
+    ["a hostname that is no site address", () => ask("example.com", "/favicon.ico"), () => NOT_FOUND],
+    ["a subrequest of a page that is no site of the install", (i) => ask(labelHost(i.bare), "/favicon.ico", CROSS_SITE_SUBREQUEST), () => ({ ...NOT_FOUND, status: 403, body: "Forbidden\n" })],
+  ];
+
+  // Drift: the icon would tell a visitor who may not open a site that it exists: a private, trashed, or expired site would answer unlike no site at all.
+  test.each(hidden)("%s answers as it does for any other path, by GET and by HEAD, and reads nothing", async (_why, request, expected) => {
+    const before = icons.install.keys.length;
+    const got = await whole(await serveSite(request(icons), icons.install.serving));
+    const head = await whole(await serveSite(byHead(request(icons)), icons.install.serving));
+
+    expect<unknown>({ got, head, reads: icons.install.keys.length - before }).toEqual({ got: expected(icons), head: { ...(expected(icons) as object), body: "" }, reads: 0 });
+  });
+
+  const validators: readonly (readonly [string, (tag: string) => string, number])[] = [
+    ["the icon's own tag", (tag) => tag, 304],
+    ["its weak form", (tag) => `W/${tag}`, 304],
+    ["the wildcard", () => "*", 304],
+    ["a list that ends with the icon's tag", (tag) => `"other", ${tag}`, 304],
+    ["another tag", () => '"other"', 200],
+    ["the tag without its quotes", (tag) => tag.slice(1, -1), 200],
+  ];
+
+  // Drift: a browser that holds the icon would be sent it again on every check, or a tag of another file would confirm it.
+  test.each(validators)("a request that holds %s is answered as a file's validator is, by GET and by HEAD, at one call to the store", async (_why, sent, status) => {
+    const address = labelHost(icons.bare);
+    const plain = await costed(icons.bare, ask(address, "/favicon.ico"));
+    const { "content-length": _length, ...unchanged } = plain.headers;
+    const held = { ...plain, status: 304, body: "", headers: unchanged };
+    const headers = { "If-None-Match": sent(plain.headers.etag ?? "") };
+
+    const got = await costed(icons.bare, ask(address, "/favicon.ico", headers));
+    const head = await costed(icons.bare, ask(address, "/favicon.ico", headers, "HEAD"));
+
+    expect([got, head]).toEqual(status === 304 ? [held, held] : [plain, { ...plain, body: "" }]);
   });
 });
 

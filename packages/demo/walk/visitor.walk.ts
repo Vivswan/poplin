@@ -125,6 +125,30 @@ test("a sample site is served with every stylesheet it links", async ({ page }) 
   expect(sheets).toBe(linked);
 });
 
+// The icon is a drawing sent at the address of an icon file, with the engine told not to guess the type: each engine must still draw it.
+test("a sample site that holds no favicon.ico answers poplin's icon there, and the engine draws it", async ({ page }) => {
+  const [name = ""] = await arrive(page);
+  await siteLink(page, name).click();
+  const served = new URL((await page.getByRole("button", { name: "Open the site", exact: true }).getAttribute("href")) ?? "", page.url()).href;
+  await page.goto(served);
+  const icon = new URL("favicon.ico", served).href;
+  // The pixel sits on the front sheet's selvedge red alone, clear of both blue sheets.
+  const drawn = await page.evaluate(async (address) => {
+    const answer = await fetch(address);
+    const image = new Image();
+    image.src = address;
+    await image.decode();
+    const canvas = document.createElement("canvas");
+    [canvas.width, canvas.height] = [16, 16];
+    const context = canvas.getContext("2d");
+    context?.drawImage(image, 0, 0, 16, 16);
+
+    return [answer.status, answer.headers.get("Content-Type"), answer.headers.get("X-Content-Type-Options"), [...(context?.getImageData(11, 4, 1, 1).data ?? [])]];
+  }, icon);
+
+  expect(drawn).toEqual([200, "image/svg+xml", "nosniff", [210, 60, 86, 255]]);
+});
+
 test("a page outside the demo's folder stays the host's own", async ({ page, context }) => {
   await arrive(page);
   // In a tab of its own: the demo's last tab leaving the demo would end the visit.

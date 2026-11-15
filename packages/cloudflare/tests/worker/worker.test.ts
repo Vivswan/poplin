@@ -10,6 +10,7 @@ import { beforeEach, describe, expect, test, vi } from "vitest";
 import manifest from "../../../cli/package.json?raw";
 import built from "../../dist/worker.js";
 import bundle from "../../dist/worker.js?raw";
+import { DEFAULT_ICON } from "../../../app/src/sites/default-icon";
 import { readShell } from "../../../app/tests/console/support/shell";
 import type { Bindings } from "../../src/worker/bindings";
 import { signer } from "../login/support/access";
@@ -452,6 +453,40 @@ describe("the product, from a token to an opened site", () => {
     const view = await ask(worker, "https://docs-page.example.com/");
 
     expect({ status: view.status, text: await view.text(), calls: tally.calls }).toEqual({ status: 200, text: "<p>docs</p>", calls: 3 });
+  });
+
+  const lostPage = { path: "404.html", body: new TextEncoder().encode("<h1>lost</h1>"), type: "text/html" };
+  const ownIcon = { path: "favicon.ico", body: new TextEncoder().encode("own icon"), type: "image/x-icon" };
+
+  // Drift: a site without an icon would show a blank tab, the icon would cost a second bucket read where the site has a 404 page, a person's own icon would be replaced, or the icon would count as a page opened.
+  test.each([
+    { holds: "no icon of its own", files: [page("<p>docs</p>")], type: "image/svg+xml", text: DEFAULT_ICON },
+    { holds: "no icon of its own and a 404 page", files: [page("<p>docs</p>"), lostPage], type: "image/svg+xml", text: DEFAULT_ICON },
+    { holds: "an icon of its own", files: [page("<p>docs</p>"), lostPage, ownIcon], type: "image/x-icon", text: "own icon" },
+  ])("/favicon.ico of a site that holds $holds costs one site query, one request count, and one bucket read, and is no page view", async ({ files, type, text }) => {
+    const tally = { calls: 0 };
+    const worker = instance(w);
+    await ask(worker, `${ADMIN}/api/whoami`, {}, countedBindings(tally));
+    const site = await publish(worker, await tokenOf(w, "publisher"), { name: "docs", access: "public" }, files);
+    await ask(worker, "https://docs-page.example.com/");
+
+    tally.calls = 0;
+    const icon = await ask(worker, "https://docs-page.example.com/favicon.ico");
+    const { calls } = tally;
+    const { database, now } = await installOf(w);
+    const views = await database.readViews([site.id] as never, new Date(now()).toISOString().slice(0, 10));
+
+    const headers = { type: icon.headers.get("Content-Type"), sniff: icon.headers.get("X-Content-Type-Options"), cache: icon.headers.get("Cache-Control") };
+
+    expect({ status: icon.status, ...headers, text: new TextDecoder().decode(await icon.arrayBuffer()), calls, views: [...views.values()] }).toEqual({
+      status: 200,
+      type,
+      sniff: "nosniff",
+      cache: "public, max-age=86400",
+      text,
+      calls: 3,
+      views: [{ today: 1, week: 1 }],
+    });
   });
 
   // Drift: a page a browser asks about again would cost a bucket call each time, or a visitor who holds an older version would keep its styles and scripts beside the new page for a day.
