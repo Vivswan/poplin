@@ -68,6 +68,9 @@ const GRIP_LOOK = "absolute top-1.5 cursor-grab bg-background text-faint opacity
 /** The look of the table: columns of the widths it is told, and hairlines drawn by the cells. */
 const TABLE_LOOK = "mb-2.5 table-fixed border-separate border-spacing-0 text-sm";
 
+/** The look of the last column, which stays in place: it has a hairline at its left edge only while the table is wider than its room, where a cell scrolls under it. The scroll area says when that is. */
+const PINNED_LOOK = "sticky right-0 in-data-[has-overflow-x]:border-l";
+
 /** The look of a heading while it is dragged to another place. */
 const DRAGGED_LOOK = "flex h-9 w-fit cursor-grabbing items-center rounded-md border bg-popover px-3 text-xs text-foreground shadow-md";
 
@@ -319,7 +322,7 @@ function BodyRow<Row>({
         </td>
       ))}
       {spare ? <td className="h-11 bg-inherit p-0" /> : null}
-      {actions === undefined ? null : <td className="sticky right-0 z-10 h-11 bg-inherit py-0 pr-6 pl-1 text-right whitespace-nowrap">{actions}</td>}
+      {actions === undefined ? null : <td className={cn(PINNED_LOOK, "z-10 h-11 bg-inherit py-0 pr-6 pl-1 text-right whitespace-nowrap")}>{actions}</td>}
     </tr>
   );
 }
@@ -355,7 +358,7 @@ function HeadRow<Row>({
       </SortableContext>
       {spare ? <td className="h-9 border-b bg-background p-0" /> : null}
       {withActions ? (
-        <th className="sticky right-0 h-9 border-b bg-background p-0">
+        <th className={cn(PINNED_LOOK, "h-9 border-b bg-background p-0")}>
           <span className="sr-only">Actions</span>
         </th>
       ) : null}
@@ -443,6 +446,15 @@ function keepSizes(layout: TableLayout, told: Readonly<Record<string, number>>, 
   layout.setSizes({ ...Object.fromEntries(Object.entries(layout.sizes).filter(([id]) => !reset.includes(id))), ...Object.fromEntries(changed) });
 }
 
+/** Tell the other table of a pair what this one measured, and that nothing is measured once this one is gone. */
+function useFittedTold(fitted: Fitted, onFitted: ((fitted: Fitted | undefined) => void) | undefined): void {
+  useEffect(() => {
+    onFitted?.(fitted);
+
+    return () => onFitted?.(undefined);
+  }, [fitted, onFitted]);
+}
+
 /** What a screen reader is told while a column is moved by keyboard, in the columns' own words. */
 function announcementsOf<Row>(specs: ReadonlyMap<string, ColumnSpec<Row>>): Announcements {
   const named = (id: string | number | undefined): string => specs.get(String(id))?.header ?? "";
@@ -527,11 +539,7 @@ export function DataTable<Row>({
   const sameList = list === undefined ? undefined : `${list} ${shown.map((spec) => spec.id).join(" ")}`;
   const [sized, fitted] = useFitted([rows, columns, layout.order, layout.hidden, sort.key, loading, room > 0], sameList);
   useTopOfPage(sized, page);
-  useEffect(() => {
-    onFitted?.(fitted);
-
-    return () => onFitted?.(undefined);
-  }, [fitted, onFitted]);
+  useFittedTold(fitted, onFitted);
   const [dragged, setDragged] = useState<string>();
   const endWidth = actions === undefined ? 0 : actionsWidth;
   const widths = widthsForRoom(shown, alongside === undefined ? fitted : widestOf(fitted, alongside), layout.sizes, room - endWidth);
