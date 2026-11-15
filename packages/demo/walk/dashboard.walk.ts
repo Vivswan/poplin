@@ -691,6 +691,24 @@ for (const viewport of VIEWPORTS) {
   });
 }
 
+test.describe("on a phone, on Activity", () => {
+  test.use({ viewport: PHONE });
+
+  // Drift: a phone's rows would end with no button again, and typing a site's title would be the one way to that site's entries.
+  test("a row about a site ends with Only this site, which keeps that site's entries under a mark that names it", async ({ page }) => {
+    await arrive(page);
+    await toSection(page, "Activity");
+    const entries = page.getByRole("list", { name: "Activity", exact: true }).getByRole("listitem");
+    const ofSite = page.getByRole("link", { name: SAMPLE.site, exact: true });
+
+    await entries.filter({ has: ofSite }).first().getByRole("button", { name: "Only this site", exact: true }).click();
+    await expect(page.getByText(`Only ${SAMPLE.site}`, { exact: true })).toBeVisible();
+    await expect(entries.filter({ hasNot: ofSite })).toHaveCount(0);
+    await expect(entries.filter({ has: ofSite })).not.toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Only this site", exact: true })).toHaveCount(0);
+  });
+});
+
 test.describe("on a phone, in a question", () => {
   test.use({ viewport: PHONE });
 
