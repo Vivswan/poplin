@@ -1,7 +1,7 @@
 // What is done to a site from the table or its panel: each change is sent, its result is said in one line, and a change that one press can take back offers Undo.
 
 import { answerOf, api, Refused } from "@/lib/api";
-import { copy, sayDone, send } from "@/lib/notify";
+import { copy, sayDone, send, unsay } from "@/lib/notify";
 import { ACCESSES, type Access, type Site, shownName } from "@/lib/sites";
 import type { NamingRefusal, SiteNaming } from "@/sites/edit-site-dialog";
 
@@ -38,6 +38,11 @@ export interface SiteActions {
   readonly restore: (site: Site) => Promise<Site | undefined>;
 }
 
+/** The name of the line that says a site went to the trash. */
+function trashLine(site: Site): string {
+  return `trash ${site.id}`;
+}
+
 /** A sent change of a site: what its route answered, or `undefined` after a refusal that was shown. */
 type Sent = Promise<{ readonly site: Site | null } | undefined>;
 
@@ -51,22 +56,28 @@ export function siteActions(onChanged: (before: Site, after: Site | null) => voi
   const at = (site: Site): { readonly site: string } => ({ site: site.label });
 
   /** Wait for a sent change, and say `said` when it is done. */
-  const run = async (site: Site, sent: Sent, said: string, undo?: () => void): Promise<Site | undefined> => {
+  const run = async (site: Site, sent: Sent, said: string, undo?: Parameters<typeof sayDone>[1]): Promise<Site | undefined> => {
     const done = await sent;
     if (done === undefined) return undefined;
 
     onChanged(site, done.site);
-    sayDone(said, undo === undefined ? undefined : { run: undo });
+    sayDone(said, undo);
 
     return done.site ?? site;
   };
 
-  const restore: SiteActions["restore"] = (site) => run(site, send(routes.restore.$post({ param: at(site), json: {} })), "Restored from the trash.");
+  // A site that is out of the trash again has nothing left to undo: the line that said it went there leaves.
+  const restore: SiteActions["restore"] = async (site) => {
+    const restored = await run(site, send(routes.restore.$post({ param: at(site), json: {} })), "Restored from the trash.");
+    if (restored !== undefined) unsay(trashLine(site));
+
+    return restored;
+  };
   const makeLive: SiteActions["makeLive"] = (site, version) => {
     // Undo makes the version that was live, live again; the Undo it offers in turn comes back to this one.
     const back = (): void => void makeLive({ ...site, live_version: version }, site.live_version);
 
-    return run(site, send(routes["make-live"].$post({ param: at(site), json: { version } })), `Version ${version} is live now.`, back);
+    return run(site, send(routes["make-live"].$post({ param: at(site), json: { version } })), `Version ${version} is live now.`, { run: back });
   };
 
   return {
@@ -92,13 +103,15 @@ export function siteActions(onChanged: (before: Site, after: Site | null) => voi
       // Undo stores what the switch showed before, and says so: as a switch of the Settings screen does.
       const back = (): void => void run(site, send(routes.settings.$post({ param: at(site), json: { [setting]: !on } })), "Put back.");
 
-      return run(site, send(routes.settings.$post({ param: at(site), json: { [setting]: on } })), "Saved.", back);
+      return run(site, send(routes.settings.$post({ param: at(site), json: { [setting]: on } })), "Saved.", { run: back });
     },
     newLink: (site) => run(site, send(routes["new-link"].$post({ param: at(site), json: {} })), "The site has a new link. The old link stopped working."),
     remove: async (site) => {
       const back = (): void => void restore(site);
 
-      return (await run(site, send(routes.delete.$post({ param: at(site), json: {} })), `${shownName(site)} moved to the trash.`, back)) !== undefined;
+      const said = `${shownName(site)} moved to the trash.`;
+
+      return (await run(site, send(routes.delete.$post({ param: at(site), json: {} })), said, { run: back, id: trashLine(site) })) !== undefined;
     },
     name: async (site, naming) => {
       // A refused value is said at its field, where it is corrected, so the refusal goes back to the one who asked.

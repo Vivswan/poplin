@@ -51,11 +51,11 @@ export function AccessMark({ access, className }: { readonly access: Access; rea
  * What stands where a site's id is left out: one dot for each character, each as wide as a character, so nothing moves when the id is shown.
  *
  * The dots are drawn, not typed: a typed dot is taken from another font in some browsers, and comes out heavier there.
- * Where their box is narrower than they are, the dots that find no room go to a line that is not shown: each dot left is a whole one.
+ * Where their box is narrower than they are, the dots that find no room go to a line that is not shown: each dot left is a whole one, and the dots left stand apart evenly, so no gap is left after the last.
  */
 function HiddenId({ length }: { readonly length: number }): ReactNode {
   return (
-    <span aria-hidden="true" className="inline-flex h-[1em] max-w-full flex-wrap overflow-hidden align-middle text-faint">
+    <span aria-hidden="true" className="inline-flex h-[1em] max-w-full flex-wrap justify-between overflow-hidden align-middle text-faint">
       {Array.from({ length }, (_, at) => at).map((at) => (
         <span key={at} className="flex h-[1em] w-[1ch] shrink-0 items-center justify-center">
           <span className="size-[3px] rounded-full bg-current" />

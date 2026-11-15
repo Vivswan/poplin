@@ -18,6 +18,9 @@ import { SETTINGS_KEY, type UpdateAddress } from "@/settings/settings-queries";
 /** The id of the field the link is pasted into. */
 export const ADDRESS_FIELD = "update-address";
 
+/** The id of the sentence a pasted link was refused with, which the field names as what describes it. */
+const REFUSAL = `${ADDRESS_FIELD}-refusal`;
+
 /** What the block says the link does. */
 const SAYS = "Lets poplin update itself.";
 
@@ -57,7 +60,13 @@ export function UpdateAddressRow({ state, draft }: { readonly state: UpdateAddre
       name="Update link"
       controlId={ADDRESS_FIELD}
       says={[SAYS]}
-      under={draft.refusal === undefined ? undefined : <FieldError className="text-[13px]">{draft.refusal}</FieldError>}
+      under={
+        draft.refusal === undefined ? undefined : (
+          <FieldError id={REFUSAL} className="text-[13px]">
+            {draft.refusal}
+          </FieldError>
+        )
+      }
     >
       {pasting ? (
         <>
@@ -71,6 +80,7 @@ export function UpdateAddressRow({ state, draft }: { readonly state: UpdateAddre
             autoComplete="off"
             spellCheck={false}
             aria-invalid={draft.refusal !== undefined}
+            aria-describedby={draft.refusal === undefined ? undefined : REFUSAL}
             autoFocus
             className="w-72 max-w-full min-w-0"
           />

@@ -14,8 +14,14 @@ const BUTTON_STAYS_MS = 8000;
 
 /** The button of a line: a way to take a done change back with one press, or under a label of its own the step that comes next. */
 interface Undo {
+  /** The words of the button; "Undo" when left out. */
   readonly label?: string;
+
+  /** What a press does. */
   readonly run: () => void;
+
+  /** A name the line is found under, to take it away once its button no longer applies. */
+  readonly id?: string;
 }
 
 /**
@@ -62,7 +68,12 @@ export function sayDone(text: string, undo?: Undo): void {
   // The same words said twice in a row are one line, not two; a line with Undo stays its own, since each takes back another change.
   makeRoom(undo === undefined ? text : undefined);
   if (undo === undefined) toast.success(text, { id: text, testId: text });
-  else toast.success(text, { action: { label: undo.label ?? "Undo", onClick: () => pressed(undo) }, duration: BUTTON_STAYS_MS, closeButton: true });
+  else toast.success(text, { action: { label: undo.label ?? "Undo", onClick: () => pressed(undo) }, duration: BUTTON_STAYS_MS, closeButton: true, id: undo.id });
+}
+
+/** Take away the line said under a name, if it is still shown: its button no longer applies. */
+export function unsay(id: string): void {
+  toast.dismiss(id);
 }
 
 /** Say that a change was refused, in the sentence the server gave. */
