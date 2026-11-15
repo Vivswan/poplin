@@ -445,8 +445,8 @@ function queryPlans(label: string, makeDriver: DriverFactory): void {
       expect([exported.sites, imported.kind, again.kind, redeemed.kind, swept]).toEqual([[], "done", "done", "done", 1]);
       expect(driver.statements.length).toBeGreaterThan(105);
       expect(scans).toEqual([
-        "SCAN tokens USING INDEX tokens_by_creation <- SELECT id, hash, scope, note, created_at, expires_at FROM tokens ORDER BY created_at DESC, id DESC",
-        "SCAN logins USING INDEX logins_by_visitor <- DELETE FROM logins WHERE expires_at <= ?1",
+        'SCAN tokens USING INDEX tokens_by_creation <- select "id", "hash", "scope", "note", "created_at", "expires_at" from "tokens" order by "tokens"."created_at" desc, "tokens"."id" desc',
+        'SCAN logins USING INDEX logins_by_visitor <- delete from "logins" where "logins"."expires_at" <= ?',
       ]);
     });
   });

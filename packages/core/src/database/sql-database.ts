@@ -3,7 +3,7 @@
 // A change is one batch: the statement that changes a row carries its own condition, and each statement after it runs only when the one before it changed a row.
 // So a change and its audit entry are kept together or not at all, and nothing is decided from an earlier read.
 
-import { and, asc, desc, eq, exists, getTableName, gt, isNotNull, isNull, lt, ne, notExists, or, type SQL, sql as fragment } from "drizzle-orm";
+import { and, asc, desc, eq, exists, getTableName, gt, isNotNull, isNull, lt, lte, ne, notExists, or, type SQL, sql as fragment } from "drizzle-orm";
 import { alias, type SQLiteColumn, type SQLiteTable } from "drizzle-orm/sqlite-core";
 import { drizzle } from "drizzle-orm/sqlite-proxy";
 import * as v from "valibot";
@@ -54,7 +54,7 @@ import type {
 } from "./database";
 import type { SqlDriver, SqlValue, Statement, StatementResult } from "./driver";
 import { fileUnderKey, manifestFromText, manifestKey, manifestToText } from "./manifest";
-import { audit, declaredFiles, leftovers, requestCounts, sites, totals, uploads, versions } from "./schema";
+import { audit, declaredFiles, leftovers, logins, requestCounts, sites, tokens, totals, uploads, versions } from "./schema";
 
 /** How many ids are tried for one site before giving up; an id is about 62 random bits, so a second try is already a rare event. */
 const MINT_ATTEMPTS = 5;
@@ -76,6 +76,12 @@ const ONE = { one: fragment`1` };
 
 /** The columns an audit entry is written with; `seq` is the engine's to give. */
 const AUDIT_COLUMNS = [audit.at, audit.actor, audit.action, audit.site_id, audit.site_name, audit.detail];
+
+/** The columns an audit entry of a change to no site is written with. */
+const PLAIN_AUDIT_COLUMNS = [audit.at, audit.actor, audit.action, audit.detail];
+
+/** The columns a token is written with. */
+const TOKEN_COLUMNS = [tokens.id, tokens.hash, tokens.scope, tokens.note, tokens.created_at, tokens.expires_at];
 
 /** The columns a version is written with. */
 const VERSION_COLUMNS = [versions.folder, versions.number, versions.published_at, versions.published_by, versions.bytes, versions.files];
@@ -138,9 +144,6 @@ const SITE_FIELDS = {
 /** The id and the name of a site, as `getSiteNames` reads them. */
 const NAMED_SITE = v.object({ id: SITE_ID, name: SITE_NAME });
 
-/** The audit entry of a change to no site, written only when the statement before it changed a row. */
-const AUDIT_PLAIN = "INSERT INTO audit (at, actor, action, detail) SELECT ?1, ?2, ?3, ?4 WHERE changes() = 1";
-
 /** An audit entry that goes with no change. */
 const AUDIT_NOTE = "INSERT INTO audit (at, actor, action, site_id, site_name, detail) VALUES (?1, ?2, ?3, ?4, ?5, ?6)";
 
@@ -172,73 +175,6 @@ function narrowing(query: SitesQuery): SQL[] {
 
   return conditions;
 }
-
-/** Every column of a token. */
-const SELECT_TOKEN = "SELECT id, hash, scope, note, created_at, expires_at FROM tokens";
-
-/** A new token, only while its id is free. */
-const INSERT_TOKEN =
-  "INSERT INTO tokens (id, hash, scope, note, created_at, expires_at) SELECT ?1, ?2, ?3, ?4, ?5, ?6 WHERE NOT EXISTS (SELECT 1 FROM tokens WHERE id = ?1)";
-
-/** The audit entry of a revoked token, written while the token is still there to name. */
-const AUDIT_REVOKE = `
-INSERT INTO audit (at, actor, action, detail)
-SELECT ?1, ?2, 'token_revoked', json_object('token', id, 'scope', scope, 'note', note) FROM tokens WHERE id = ?3`;
-
-/** The removal itself, only when its audit entry was written. */
-const DELETE_TOKEN = "DELETE FROM tokens WHERE id = ?1 AND changes() = 1";
-
-/** Every column of a login. */
-const SELECT_LOGIN = "SELECT id, code, hash, scope, computer, visitor, state, decided_by, created_at, expires_at FROM logins";
-
-/** Every login that waits at `?1`, pending and not run out, the newest first. */
-const SELECT_WAITING_LOGINS = `${SELECT_LOGIN} WHERE state = 'pending' AND expires_at > ?1 ORDER BY created_at DESC, id DESC`;
-
-/** Whether id `?1` and code `?2` are both free, so the login that brings them will be stored. */
-const LOGIN_IS_NEW = "NOT EXISTS (SELECT 1 FROM logins WHERE id = ?1 OR code = ?2)";
-
-/** Room for a new login of visitor `?4`: of that visitor's logins that wait at `?3`, pending and not run out, all but the newest `?5` are removed. */
-const MAKE_ROOM_OF_VISITOR = `
-DELETE FROM logins
-WHERE id IN (SELECT id FROM logins WHERE visitor = ?4 AND state = 'pending' AND expires_at > ?3 ORDER BY created_at DESC, id DESC LIMIT -1 OFFSET ?5) AND ${LOGIN_IS_NEW}`;
-
-/** The logins that wait at `?3`, one row a visitor: how many, and the oldest as its `created_at` in sixteen digits then its id, a text that sorts as the pair does. */
-const WAITING_BY_VISITOR = "SELECT COUNT(*) AS held, MIN(printf('%016d', created_at) || id) AS oldest FROM logins WHERE state = 'pending' AND expires_at > ?3 GROUP BY visitor";
-
-/** Room for a new login among all: once `?4` logins wait at `?3`, the oldest one of the visitor with the most is removed. One pass finds it: `9999 - held` in four digits puts the visitor with the most first. */
-const MAKE_ROOM_OF_ALL = `
-DELETE FROM logins
-WHERE id = (SELECT CASE WHEN SUM(held) >= ?4 THEN substr(MIN(printf('%04d', 9999 - held) || oldest), 21) END FROM (${WAITING_BY_VISITOR})) AND ${LOGIN_IS_NEW}`;
-
-/** A new login, pending, only while its id and its code are free. */
-const INSERT_LOGIN = `
-INSERT INTO logins (id, code, hash, scope, computer, visitor, created_at, expires_at)
-SELECT ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8 WHERE ${LOGIN_IS_NEW}`;
-
-/** The login under code `?1` allowed or denied by `?3`, only while it is pending and has not run out at `?4`. With `?5` an allowed one becomes a publisher's. */
-const DECIDE_LOGIN = `
-UPDATE logins SET state = ?2, decided_by = ?3, scope = CASE WHEN ?5 = 1 AND ?2 = 'allowed' THEN 'publisher' ELSE scope END
-WHERE code = ?1 AND state = 'pending' AND expires_at > ?4`;
-
-/** The audit entry of a decided login, written only when the statement before it changed a row. It names the scope and the computer, and nothing of the secret. */
-const AUDIT_LOGIN = `
-INSERT INTO audit (at, actor, action, detail)
-SELECT ?1, ?2, ?3, json_object('scope', scope, 'computer', computer) FROM logins WHERE code = ?4 AND changes() = 1`;
-
-/** A token for login `?1`, only while the login is allowed, has not run out at `?5`, and is of the token's scope `?7`. */
-const INSERT_TOKEN_OF_LOGIN = `
-INSERT INTO tokens (id, hash, scope, note, created_at, expires_at)
-SELECT ?2, ?3, l.scope, ?4, ?5, ?6 FROM logins l
-WHERE l.id = ?1 AND l.state = 'allowed' AND l.expires_at > ?5 AND l.scope = ?7 AND NOT EXISTS (SELECT 1 FROM tokens WHERE id = ?2)`;
-
-/** The audit entry of that token, signed by whoever allowed login `?2`, written only when the token was stored. */
-const AUDIT_TOKEN_OF_LOGIN = "INSERT INTO audit (at, actor, action, detail) SELECT ?1, decided_by, 'token_added', ?3 FROM logins WHERE id = ?2 AND changes() = 1";
-
-/** The login removed, only when its token's audit entry was written. */
-const DELETE_REDEEMED_LOGIN = "DELETE FROM logins WHERE id = ?1 AND changes() = 1";
-
-/** Every login that ran out at or before `?1`, removed. */
-const DELETE_OLD_LOGINS = "DELETE FROM logins WHERE expires_at <= ?1";
 
 /** Where the sweep's walk stopped, as JSON text. */
 const READ_SWEEP_PLACE = "SELECT place FROM sweep_place WHERE id = 1";
@@ -536,8 +472,44 @@ function dropOldVersions(folder: SQL, keep: number): Statement {
   return built(BUILD.delete(versions).where(fragment`${CHANGED} AND ${versions.folder} = ${folder} AND ${versions.number} NOT IN ${highest}`));
 }
 
+/** The audit entry of a change to no site, written only when the statement before it changed a row. */
 function auditPlain(signed: Signed, action: AuditAction, detail: Readonly<Record<string, unknown>>): Statement {
-  return sql(AUDIT_PLAIN, signed.at, signed.by, action, JSON.stringify(detail));
+  return insertFrom(audit, PLAIN_AUDIT_COLUMNS, fragment`SELECT ${signed.at}, ${signed.by}, ${action}, ${JSON.stringify(detail)} WHERE ${CHANGED}`);
+}
+
+/** The token with the given id. */
+function tokenById(id: TokenId): Statement {
+  return built(BUILD.select().from(tokens).where(eq(tokens.id, id)));
+}
+
+/** The logins a condition holds for. */
+function loginsWhere(condition: SQL | undefined): Statement {
+  return built(BUILD.select().from(logins).where(condition));
+}
+
+/** Whether a login's id and its code are both free, so the login that brings them will be stored. */
+function isNewLogin(login: PendingLogin): SQL {
+  return fragment`NOT EXISTS (SELECT 1 FROM ${logins} WHERE ${logins.id} = ${login.id} OR ${logins.code} = ${login.code})`;
+}
+
+/** Room for a new login of its visitor: of that visitor's logins that wait, pending and not run out, all but the newest `keep` are removed. */
+function makeRoomOfVisitor(login: PendingLogin, keep: number): Statement {
+  const waiting = fragment`${logins.visitor} = ${login.visitor} AND ${logins.state} = 'pending' AND ${logins.expires_at} > ${login.createdAt}`;
+  const beyond = fragment`(SELECT ${logins.id} FROM ${logins} WHERE ${waiting} ORDER BY ${logins.created_at} DESC, ${logins.id} DESC LIMIT -1 OFFSET ${keep})`;
+
+  return built(BUILD.delete(logins).where(fragment`${logins.id} IN ${beyond} AND ${isNewLogin(login)}`));
+}
+
+/**
+ * Room for a new login among all: once `all` logins wait, the oldest one of the visitor with the most is removed.
+ * One pass finds it: each visitor's oldest is its `created_at` in sixteen digits then its id, and `9999 - held` in four digits puts the visitor with the most first.
+ */
+function makeRoomOfAll(login: PendingLogin, all: number): Statement {
+  const oldest = fragment`MIN(printf('%016d', ${logins.created_at}) || ${logins.id})`;
+  const byVisitor = fragment`SELECT COUNT(*) AS held, ${oldest} AS oldest FROM ${logins} WHERE ${logins.state} = 'pending' AND ${logins.expires_at} > ${login.createdAt} GROUP BY ${logins.visitor}`;
+  const evicted = fragment`(SELECT CASE WHEN SUM(held) >= ${all} THEN substr(MIN(printf('%04d', 9999 - held) || oldest), 21) END FROM (${byVisitor}))`;
+
+  return built(BUILD.delete(logins).where(fragment`${logins.id} = ${evicted} AND ${isNewLogin(login)}`));
 }
 
 function requirePage(limit: number): void {
@@ -1090,8 +1062,9 @@ export class SqlDatabase implements Database {
 
   async addToken(token: TokenRecord, signed: Signed): Promise<{ readonly kind: "done" } | Refused<"id_taken">> {
     const expires = token.scope === "admin" ? token.expiresAt : null;
+    const idIsFree = fragment`NOT EXISTS (SELECT 1 FROM ${tokens} WHERE ${tokens.id} = ${token.id})`;
     const [inserted] = await this.#driver.batch([
-      sql(INSERT_TOKEN, token.id, token.hash, token.scope, token.note, token.createdAt, expires),
+      insertFrom(tokens, TOKEN_COLUMNS, fragment`SELECT ${token.id}, ${token.hash}, ${token.scope}, ${token.note}, ${token.createdAt}, ${expires} WHERE ${idIsFree}`),
       auditPlain(signed, "token_added", { token: token.id, scope: token.scope, note: token.note }),
     ]);
 
@@ -1099,24 +1072,24 @@ export class SqlDatabase implements Database {
   }
 
   async getToken(id: TokenId): Promise<TokenRecord | undefined> {
-    const [found] = await this.#driver.batch([sql(`${SELECT_TOKEN} WHERE id = ?1`, id)]);
+    const [found] = await this.#driver.batch([tokenById(id)]);
     const row = found?.rows[0];
 
     return row === undefined ? undefined : tokenFromRow(row);
   }
 
   async listTokens(): Promise<readonly TokenRecord[]> {
-    const [listed] = await this.#driver.batch([sql(`${SELECT_TOKEN} ORDER BY created_at DESC, id DESC`)]);
+    const [listed] = await this.#driver.batch([built(BUILD.select().from(tokens).orderBy(desc(tokens.created_at), desc(tokens.id)))]);
 
     return (listed?.rows ?? []).map(tokenFromRow);
   }
 
   async revokeToken(id: TokenId, signed: Signed): Promise<{ readonly kind: "done"; readonly token: TokenRecord } | Refused<"not_found">> {
-    const [before, , deleted] = await this.#driver.batch([
-      sql(`${SELECT_TOKEN} WHERE id = ?1`, id),
-      sql(AUDIT_REVOKE, signed.at, signed.by, id),
-      sql(DELETE_TOKEN, id),
-    ]);
+    // The audit entry is written while the token is still there to name, and the removal only when it was.
+    const named = fragment`json_object('token', ${tokens.id}, 'scope', ${tokens.scope}, 'note', ${tokens.note})`;
+    const entry = fragment`SELECT ${signed.at}, ${signed.by}, 'token_revoked', ${named} FROM ${tokens} WHERE ${tokens.id} = ${id}`;
+    const remove = BUILD.delete(tokens).where(and(eq(tokens.id, id), CHANGED));
+    const [before, , deleted] = await this.#driver.batch([tokenById(id), insertFrom(audit, PLAIN_AUDIT_COLUMNS, entry), built(remove)]);
     const row = before?.rows[0];
     if (!changed(deleted) || row === undefined) return { kind: "not_found" };
 
@@ -1124,38 +1097,47 @@ export class SqlDatabase implements Database {
   }
 
   async addComputerLogin(login: PendingLogin, room: LoginRoom): Promise<{ readonly kind: "done" } | Refused<"taken">> {
+    const columns = [logins.id, logins.code, logins.hash, logins.scope, logins.computer, logins.visitor, logins.created_at, logins.expires_at];
+    const values = fragment`${login.id}, ${login.code}, ${login.hash}, ${login.scope}, ${login.computer}, ${login.visitor}, ${login.createdAt}, ${login.expiresAt}`;
     const [, , inserted] = await this.#driver.batch([
-      sql(MAKE_ROOM_OF_VISITOR, login.id, login.code, login.createdAt, login.visitor, room.perVisitor - 1),
-      sql(MAKE_ROOM_OF_ALL, login.id, login.code, login.createdAt, room.all),
-      sql(INSERT_LOGIN, login.id, login.code, login.hash, login.scope, login.computer, login.visitor, login.createdAt, login.expiresAt),
+      makeRoomOfVisitor(login, room.perVisitor - 1),
+      makeRoomOfAll(login, room.all),
+      insertFrom(logins, columns, fragment`SELECT ${values} WHERE ${isNewLogin(login)}`),
     ]);
 
     return { kind: changed(inserted) ? "done" : "taken" };
   }
 
   async getComputerLogin(id: LoginId): Promise<ComputerLogin | undefined> {
-    const [found] = await this.#driver.batch([sql(`${SELECT_LOGIN} WHERE id = ?1`, id)]);
+    const [found] = await this.#driver.batch([loginsWhere(eq(logins.id, id))]);
 
     return loginIn(found);
   }
 
   async findComputerLogin(code: UserCode): Promise<ComputerLogin | undefined> {
-    const [found] = await this.#driver.batch([sql(`${SELECT_LOGIN} WHERE code = ?1`, code)]);
+    const [found] = await this.#driver.batch([loginsWhere(eq(logins.code, code))]);
 
     return loginIn(found);
   }
 
   async listWaitingComputerLogins(now: number): Promise<readonly PendingLogin[]> {
-    const [listed] = await this.#driver.batch([sql(SELECT_WAITING_LOGINS, now)]);
+    const waiting = BUILD.select().from(logins).where(and(eq(logins.state, "pending"), gt(logins.expires_at, now))).orderBy(desc(logins.created_at), desc(logins.id));
+    const [listed] = await this.#driver.batch([built(waiting)]);
 
     return (listed?.rows ?? []).map(computerLoginFromRow).filter((login) => login.state === "pending");
   }
 
   async decideComputerLogin(code: UserCode, decision: LoginDecision): Promise<{ readonly kind: "done"; readonly login: ComputerLogin } | Refused<"not_pending">> {
+    // An allowed login becomes a publisher's when its decider asks so.
+    const scope = fragment<"admin" | "publisher">`CASE WHEN ${decision.asPublisher === true ? 1 : 0} = 1 AND ${decision.state} = 'allowed' THEN 'publisher' ELSE ${logins.scope} END`;
+    const waits = and(eq(logins.code, code), eq(logins.state, "pending"), gt(logins.expires_at, decision.at));
+    const action = decision.state === "allowed" ? "login_allowed" : "login_denied";
+    // The entry names the scope and the computer, and nothing of the secret.
+    const entry = fragment`SELECT ${decision.at}, ${decision.by}, ${action}, json_object('scope', ${logins.scope}, 'computer', ${logins.computer}) FROM ${logins} WHERE ${logins.code} = ${code} AND ${CHANGED}`;
     const [updated, , after] = await this.#driver.batch([
-      sql(DECIDE_LOGIN, code, decision.state, decision.by, decision.at, decision.asPublisher === true ? 1 : 0),
-      sql(AUDIT_LOGIN, decision.at, decision.by, decision.state === "allowed" ? "login_allowed" : "login_denied", code),
-      sql(`${SELECT_LOGIN} WHERE code = ?1`, code),
+      built(BUILD.update(logins).set({ state: decision.state, decided_by: decision.by, scope }).where(waits)),
+      insertFrom(audit, PLAIN_AUDIT_COLUMNS, entry),
+      loginsWhere(eq(logins.code, code)),
     ]);
     const login = loginIn(after);
     if (!changed(updated) || login === undefined) return { kind: "not_pending" };
@@ -1166,17 +1148,23 @@ export class SqlDatabase implements Database {
   async redeemComputerLogin(id: LoginId, token: TokenRecord): Promise<{ readonly kind: "done" } | Refused<"not_allowed">> {
     const expires = token.scope === "admin" ? token.expiresAt : null;
     const detail = JSON.stringify({ token: token.id, scope: token.scope, note: token.note });
+    // A token is stored only while the login is allowed, has not run out, and is of the token's scope.
+    const allowed = fragment`${logins.id} = ${id} AND ${logins.state} = 'allowed' AND ${logins.expires_at} > ${token.createdAt} AND ${logins.scope} = ${token.scope}`;
+    const idIsFree = fragment`NOT EXISTS (SELECT 1 FROM ${tokens} WHERE ${tokens.id} = ${token.id})`;
+    const stored = fragment`SELECT ${token.id}, ${token.hash}, ${logins.scope}, ${token.note}, ${token.createdAt}, ${expires} FROM ${logins} WHERE ${allowed} AND ${idIsFree}`;
+    // The entry is signed by whoever allowed the login, and the login goes only when the entry was written.
+    const entry = fragment`SELECT ${token.createdAt}, ${logins.decided_by}, 'token_added', ${detail} FROM ${logins} WHERE ${logins.id} = ${id} AND ${CHANGED}`;
     const [inserted] = await this.#driver.batch([
-      sql(INSERT_TOKEN_OF_LOGIN, id, token.id, token.hash, token.note, token.createdAt, expires, token.scope),
-      sql(AUDIT_TOKEN_OF_LOGIN, token.createdAt, id, detail),
-      sql(DELETE_REDEEMED_LOGIN, id),
+      insertFrom(tokens, TOKEN_COLUMNS, stored),
+      insertFrom(audit, PLAIN_AUDIT_COLUMNS, entry),
+      built(BUILD.delete(logins).where(and(eq(logins.id, id), CHANGED))),
     ]);
 
     return { kind: changed(inserted) ? "done" : "not_allowed" };
   }
 
   async sweepComputerLogins(now: number): Promise<number> {
-    const [removed] = await this.#driver.batch([sql(DELETE_OLD_LOGINS, now)]);
+    const [removed] = await this.#driver.batch([built(BUILD.delete(logins).where(lte(logins.expires_at, now)))]);
 
     return removed?.changes ?? 0;
   }
