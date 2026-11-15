@@ -25,21 +25,21 @@ describe("when a site deletes itself", () => {
     expect([starts > NOW, starts - NOW <= DAY_MS + 3_600_000]).toEqual([true, true]);
   });
 
-  // Drift: what the client sends would be read by the server as another moment than the one a person saw: a day's start a second off, a moment set early, or a passed one set a second from now.
+  // Drift: what the client sends would be read by the server as another moment than the one a person saw: a day's start a second off, a moment set late by the time its request took, or a passed one set a second from now.
   test.each([
-    ["a day's start in UTC", Date.UTC(2026, 11, 1), 0],
-    ["a moment between two seconds", NOW + 90_500, 500],
-    ["a moment a millisecond ahead", NOW + 1, 999],
-    ["a moment that has passed", NOW - 1, undefined],
-    ["this moment", NOW, undefined],
-  ])("the server sets %s to that moment, no earlier and under a second later, and refuses one that is not ahead", (_what, moment, late) => {
-    const set = readExpires(sentFor(moment, NOW), NOW);
-
-    expect(set).toBe(late === undefined ? undefined : moment + late);
+    ["a day's start in UTC", Date.UTC(2026, 11, 1), 0, true],
+    ["a moment between two seconds", NOW + 90_500, 0, true],
+    ["a moment a millisecond ahead", NOW + 1, 0, true],
+    ["a moment whose request took a minute", NOW + 90_500, 60_000, true],
+    ["a moment that has passed", NOW - 1, 0, false],
+    ["this moment", NOW, 0, false],
+    ["a moment that passed while its request was on its way", NOW + 1, 60_000, false],
+  ])("the server sets %s to that very moment, and refuses one that is not ahead when it comes in", (_what, moment, took, taken) => {
+    expect(readExpires(sentFor(moment), NOW + took)).toBe(taken ? moment : undefined);
   });
 
-  // Drift: Undo would leave an expiry on a site that had none, or put a moment back early.
+  // Drift: Undo would leave an expiry on a site that had none, or put a moment back early or late.
   test("what a site had before is put back: never, or the same moment as the server reads it", () => {
-    expect([readExpires(backTo("never", NOW), NOW), readExpires(backTo(NOW + 30_000, NOW), NOW)]).toEqual(["never", NOW + 30_000]);
+    expect([readExpires(backTo("never"), NOW), readExpires(backTo(NOW + 30_500), NOW + 20_000)]).toEqual(["never", NOW + 30_500]);
   });
 });

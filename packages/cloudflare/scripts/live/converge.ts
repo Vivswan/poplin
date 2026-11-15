@@ -108,7 +108,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 async function checkPlans(run: Run, found: Found, progress: Progress): Promise<Stop | undefined> {
   const plans = await readFreePlans(run, found.zone);
   if (!isStop(plans)) {
-    note(run, progress, { piece: "Account plans", result: `free (${plans.subscriptions} subscriptions)` });
+    note(run, progress, { piece: "Account plans", result: `free (${plans.subscriptions} subscriptions: ${plans.free} at a price of 0, ${plans.ended} ended)` });
 
     return undefined;
   }

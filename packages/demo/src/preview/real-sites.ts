@@ -44,6 +44,7 @@ export function readRealSites(data: unknown): RealSites {
  * Find where the link to each sample site leads instead of to the demo's own serving of it.
  *
  * A site counts while it is the one site outside the trash under its name, with the access and the title the sample table ends in: one a visitor renamed, retitled, moved to the trash, or opened to other people is the demo's own again.
+ * So is one that has run out here.
  *
  * @param real - what the host's file holds; `undefined` for a host without one
  * @returns the address of each such site, by the hostname the demo's install gives it; none for a host without a file. The row that stands for the demo itself leads to the demo's dashboard
@@ -56,12 +57,15 @@ export async function realAddresses(world: World, real: RealSites | undefined): 
   const listed = await listSites(world.install, world.admin);
 
   const sites = listed.ok ? listed.sites : [];
+  const now = world.install.now();
 
   for (const site of sites) {
     const row = rows.get(site.name);
     const typed = site.title_typed ? site.title : null;
     const isRow = row?.reach.access === site.access && (row.settings.title ?? null) === typed && sites.filter((other) => other.name === site.name).length === 1;
-    if (row === undefined || !isRow) continue;
+    // The real install still serves a site that ran out here alone.
+    const ended = site.expires !== "never" && site.expires <= now;
+    if (row === undefined || !isRow || ended) continue;
 
     const address = row.sample === THE_DEMO ? `${ADMIN_ORIGIN}/` : real[site.name];
     if (address !== undefined) found.set(new URL(site.url).hostname, address);

@@ -153,7 +153,7 @@ Poplin's icon is answered only for a site the address may open. Every address ab
 
 ## Optional edge rules
 
-The install's setup token needs eight permissions. Three more are optional, and each switches on rules at Cloudflare's edge. [Domain](../run/domain.md#optional-block-junk-traffic-and-crawlers) says how to add them.
+The install's setup token needs eight permissions. Four more are optional: three switch on rules at Cloudflare's edge, and one makes a budget alert. [Domain](../run/domain.md#optional-block-junk-traffic-and-crawlers) says how to add them.
 
 | Permission | Switches on | Without it |
 | --- | --- | --- |

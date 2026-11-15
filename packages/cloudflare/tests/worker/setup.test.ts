@@ -284,8 +284,9 @@ describe("a Worker with nothing set", () => {
     expect([stranger.status, repaired.status, ran.summary.tone, text.includes(TOKEN)]).toEqual([200, 200, "good", false]);
     expect(account.bindings.map((binding) => binding.name)).toEqual(["SITES", "DB", "ZONE", "FIRST_SETTINGS", "ACCOUNT_ID", "ACCESS"]);
     expect([await stored(), (await BINDINGS.SITES.list()).objects.length]).toEqual(before);
-    // The page and the run together: 30 calls to Cloudflare of the 50 a request of the Free plan may send, and 10 to the database of its 50.
-    expect([asked.length - strangers, tally.calls]).toEqual([30, 10]);
+    // The page and the run together: 32 calls to Cloudflare of the 50 a request of the Free plan may send, and 10 to the database of its 50.
+    // Two of the 32 are the budget alert: Cloudflare has no create-or-update by name, so its policies are listed and then one is made.
+    expect([asked.length - strangers, tally.calls]).toEqual([32, 10]);
   });
 
   // Drift: the page takes a secret from anyone who finds the address, before the install has a domain or a login to tell them apart by.

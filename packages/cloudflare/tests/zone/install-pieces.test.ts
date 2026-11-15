@@ -31,3 +31,12 @@ test("the module declares every object of the list and no other: a piece added t
   expect(declared().length).toBeGreaterThan(0);
   expect(declared()).toEqual(listed());
 });
+
+// Drift: a piece of both ways with its addresses forgotten would pass the list above as one the module need not declare.
+test("only an object the repair alone makes has no address in the module, and the module's page says of each that the module does not make it", () => {
+  const bare = Object.entries(INSTALL_PIECES).flatMap(([who, pieces]) => Object.entries<readonly string[]>(pieces).flatMap(([piece, addresses]) => (addresses.length === 0 ? [[who, piece]] : [])));
+  const page = readFileSync(join(MODULE, "README.md"), "utf8");
+
+  expect(bare).toEqual(Object.keys(INSTALL_PIECES.repairAlone).map((piece) => ["repairAlone", piece]));
+  expect(bare.filter(([, piece]) => !new RegExp(`^\\| ${piece} \\| Repair, with the right [^|]+ \\| not made: `, "m").test(page))).toEqual([]);
+});

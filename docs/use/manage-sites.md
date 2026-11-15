@@ -69,7 +69,7 @@ For a site that is not in the trash, the panel has the link, who can open it, th
 
 | In the menu           | The site deletes itself                                                              |
 | --------------------- | ------------------------------------------------------------------------------------ |
-| 1 day, 7 days, 30 days | that long after the save; the menu shows the day and time before you choose          |
+| 1 day, 7 days, 30 days | at the day and time the menu shows beside it: that long after the menu opened        |
 | On a day...           | when the day you pick starts, in the time zone the dashboard shows; shown before Save |
 | Never                 | never                                                                                |
 

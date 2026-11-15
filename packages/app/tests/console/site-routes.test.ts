@@ -43,10 +43,11 @@ test("a public name is answered with the address the install gives it, which a s
   expect([((await made.json()) as { readonly site: { readonly url: string } }).site.url, refusals]).toEqual([told.address, ["bad_name", "bad_name"]]);
 });
 
-// Drift: a span would be counted from some other moment than the save, a day would not start in UTC, or "never" would leave the old moment in place; and the log would not say who set it.
+// Drift: a span would be counted from some other moment than the save, a day would not start in UTC, a moment would be set late by the time its request took, or "never" would leave the old moment in place; and the log would not say who set it.
 test.each([
   ["7d", NOW + 7 * DAY_MS],
   ["2023-12-01", Date.UTC(2023, 11, 1)],
+  ["2023-12-01T08:30:00.250Z", Date.UTC(2023, 11, 1, 8, 30, 0, 250)],
   ["never", "never"],
 ])("a site's expiry set to %p is answered as the moment it ends, signed by the session's admin", async (expires, moment) => {
   const opened = await openConsole();

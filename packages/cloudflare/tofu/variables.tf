@@ -89,7 +89,7 @@ variable "paid_plan_allowed" {
 }
 
 variable "usage_alert_percents" {
-  description = "The shares of R2's free monthly allowance at which Cloudflare emails the logins: one alert per share for the bytes stored, for the write operations, and for the read operations. An empty list, the default, creates no alert. An alert takes the Notifications permission, and an account where Cloudflare offers usage alerts."
+  description = "The shares of R2's free monthly allowance at which Cloudflare emails the logins: one alert per share for the bytes stored, for the write operations, and for the read operations. An empty list, the default, creates no alert. An alert takes the Notifications permission. Unconfirmed: the alerts name the products r2_storage, r2_class_a_operations, and r2_class_b_operations, and Cloudflare's API does not list the product names a usage alert takes."
   type        = list(number)
   default     = []
 

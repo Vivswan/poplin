@@ -29,6 +29,9 @@ const DASHES = ["1 4 1 4 9 4", "7 5", "1 5", "12 5 1 5", "3 4"] as const;
 /** From this many lines on the legend scrolls in a room of its own height, so the table under it stays where it is. */
 const LEGEND_SCROLLS_FROM = 9;
 
+/** How tall that room is: three rows of names on a wide screen and six on a phone, where a row is a switch as tall as a phone's controls. A gap lies between two rows. */
+const LEGEND_ROOM = "h-[calc(3*1.75rem+2*0.25rem)] max-md:h-[calc(6*2.5rem+5*0.25rem)]";
+
 /** Below this a sum says too little to name a number. */
 const FEWEST_NAMED = 10;
 
@@ -96,7 +99,7 @@ function Legend({ lines, shown, onSwitch }: LegendProps): ReactNode {
   if (lines.length < LEGEND_SCROLLS_FROM) return names;
 
   return (
-    <ScrollArea className="h-[92px] max-md:h-[240px]">
+    <ScrollArea className={LEGEND_ROOM}>
       <ScrollAreaParts.Content>{names}</ScrollAreaParts.Content>
     </ScrollArea>
   );

@@ -32,6 +32,12 @@ const ACCOUNT = "0".repeat(32);
 /** The zone of a fake account that has one. */
 const ZONE = { id: "1".repeat(32), name: "example.com", account: { id: ACCOUNT }, plan: { name: "Free Website" } };
 
+/** The storage's subscription as Cloudflare lists it before anything is billed: a paid plan by its name, at a price of 0. */
+const R2_AT_ZERO = { price: 0, currency: "USD", state: "Paid", rate_plan: { id: "r2_paid", public_name: "R2 Paid" } };
+
+/** The login's subscription on its free plan. */
+const LOGIN_AT_ZERO = { price: 0, currency: "USD", frequency: "monthly", state: "Paid", rate_plan: { id: "teams_free", public_name: "Teams Free Base" } };
+
 /** What a run tells of an account whose token may not read the subscriptions. */
 const NOT_READ = "Account plans: not read: needs the token permission Billing: Read";
 
@@ -103,16 +109,28 @@ const CASES: readonly Case[] = [
     "it needs the token permission D1: Edit",
   ],
   [
-    "an account whose subscriptions all cost nothing goes on, and an ended one with a price is no cost",
-    { zones: [ZONE], subscriptions: [{ price: 0, rate_plan: { id: "free" } }, { rate_plan: { id: "storage" } }, { price: 5, state: "Cancelled" }], buckets: ["poplin-live-sites"] },
-    ["Zone: found", "Account plans: free (3 subscriptions)", "R2 bucket: present"],
+    "the list of an account on the free plans goes on: the storage is named as a paid plan at a price of 0, the login stands at 0 a month, and the Workers plan is not listed",
+    { zones: [ZONE], subscriptions: [R2_AT_ZERO, LOGIN_AT_ZERO], buckets: ["poplin-live-sites"] },
+    ["Zone: found", "Account plans: free (2 subscriptions: 2 at a price of 0, 0 ended)", "R2 bucket: present"],
     "it needs the token permission D1: Edit",
   ],
   [
-    "an account that pays for a subscription stops the run before anything is made",
-    { zones: [ZONE], subscriptions: [{ price: 0, rate_plan: { id: "free" } }, { price: 5, state: "Paid", rate_plan: { id: "a_paid_plan" } }], buckets: ["poplin-live-sites"] },
+    "an ended subscription with a price is no cost, and is counted apart",
+    { zones: [ZONE], subscriptions: [R2_AT_ZERO, LOGIN_AT_ZERO, { price: 5, state: "Cancelled", rate_plan: { id: "a_paid_plan" } }], buckets: ["poplin-live-sites"] },
+    ["Zone: found", "Account plans: free (3 subscriptions: 2 at a price of 0, 1 ended)", "R2 bucket: present"],
+    "it needs the token permission D1: Edit",
+  ],
+  [
+    "the same list with one subscription at a price stops the run before anything is made, whatever its name",
+    { zones: [ZONE], subscriptions: [R2_AT_ZERO, LOGIN_AT_ZERO, { ...R2_AT_ZERO, price: 5, rate_plan: { id: "a_plan_of_later", public_name: "Free Extras" } }], buckets: ["poplin-live-sites"] },
     ["Zone: found"],
-    "the account pays for 1 of its 2 subscriptions (a_paid_plan), and the test account stays on the free plans",
+    "the account's subscriptions are not all at a price of 0: 1 of 3 (a_plan_of_later at 5), and the test account stays on the free plans",
+  ],
+  [
+    "a subscription with no price is not known to be free, and stops the run",
+    { zones: [ZONE], subscriptions: [R2_AT_ZERO, { state: "Paid", rate_plan: { id: "storage" } }], buckets: ["poplin-live-sites"] },
+    ["Zone: found"],
+    "the account's subscriptions are not all at a price of 0: 1 of 2 (storage at no price), and the test account stays on the free plans",
   ],
   [
     "a zone on a paid plan stops the run before anything is made",
@@ -275,12 +293,13 @@ describe("what a failed wait for the install repeats of its answer", () => {
   });
 });
 
-/** The calls Cloudflare refuses a token made from the link on the setup page, which carries eight rights and none of the three optional ones. */
+/** The calls Cloudflare refuses a token made from the link on the setup page, which carries eight rights and none of the four optional ones. */
 const REFUSED_WITH_EIGHT_RIGHTS = [
   "GET /zones/zone-1/rulesets/phases/http_request_dynamic_redirect/entrypoint",
   "GET /zones/zone-1/rulesets/phases/http_request_firewall_custom/entrypoint",
   "GET /zones/zone-1/rulesets/phases/http_ratelimit/entrypoint",
   "GET /zones/zone-1/bot_management",
+  `GET /accounts/${INSTALL_ACCOUNT}/alerting/v3/policies`,
 ];
 
 describe("the zone's repair with the eight rights of the token link alone, against a local fake account", () => {
@@ -305,6 +324,7 @@ describe("the zone's repair with the eight rights of the token link alone, again
       ["WAF rule", "optional", "the token permission for the WAF rule"],
       ["Rate rule", "optional", "the token permission for the Rate rule"],
       ["Bot settings", "optional", "the token permission for the Bot settings"],
+      ["Budget alert", "optional", "the token permission for the Budget alert"],
     ]);
     expect([...new Set(rows.filter((row) => row.state === "created").map((row) => row.object))]).toEqual([
       "DNS record",

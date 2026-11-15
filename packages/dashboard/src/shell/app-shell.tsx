@@ -324,7 +324,8 @@ function PhoneSections({ current, offer, started }: { readonly current: Section;
       <SheetTrigger render={<Button variant="ghost" size="icon-sm" aria-label="Sections" className="-ml-2 md:hidden" />}>
         <MenuIcon />
       </SheetTrigger>
-      <SheetContent side="left" className="gap-4 bg-sidebar px-3 pt-3 pb-3 data-[side=left]:w-72">
+      {/* A phone lying on its side is shorter than what the sheet holds: the sheet scrolls. */}
+      <SheetContent side="left" className="gap-4 overflow-y-auto bg-sidebar px-3 pt-3 pb-3 data-[side=left]:w-72">
         <SheetTitle className="flex h-10 items-center gap-2 px-2.5">
           <BrandMark />
           <span className="truncate font-bold tracking-tight">{NAME}</span>
