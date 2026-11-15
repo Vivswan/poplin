@@ -27,7 +27,7 @@ Two words the steps use: a **Worker** is the program Cloudflare runs for you, an
 | a Cloudflare account            | the Free plan is enough                                                                                  |
 | a domain on that account        | every site gets an address under it. It is on the account when Cloudflare's home page lists it as Active |
 | an email inbox you can read     | Cloudflare's login sends its code there in step 5                                                        |
-| a payment method on the account | step 1 asks for one, and charges nothing                                                                 |
+| a payment method on the account | step 1 asks for one. [What can cost money](security.md#what-can-cost-money) says when it is charged      |
 | a GitHub account                | free. Step 2 puts a copy of poplin's code there                                                          |
 | Node.js, on your own computer   | for step 6 alone                                                                                         |
 | an agent, to publish by asking  | one that can run commands on your computer, such as Claude Code or Codex. A chat in a browser cannot     |
@@ -36,7 +36,7 @@ Two words the steps use: a **Worker** is the program Cloudflare runs for you, an
 
 ## The steps
 
-1. **Switch on two things in Cloudflare.** Open the address below and log in. Each asks for a payment method, and each shows a price of 0: Zero Trust's Free plan costs nothing, and R2 bills nothing under 10 GB, which poplin stays under.
+1. **Switch on two things in Cloudflare.** Open the address below and log in. Each asks for a payment method, and each shows a price of 0: Zero Trust's Free plan, and R2, which bills by use past its free allowance. [What can cost money](security.md#what-can-cost-money) says what poplin does to stay inside it, and what it cannot do.
 
    ```text
    https://dash.cloudflare.com
@@ -370,7 +370,8 @@ Cloudflare has no hard spending cap on R2, the storage for your sites' files. Ea
 | What is capped or protected | Where it is declared | What happens at the cap |
 | --- | --- | --- |
 | the bytes of every kept version, the trash, and every upload under way: 9 GB | the setting `max_total_size` | a publish that would pass it is refused with `too_large`. The files of an upload that was given up are not counted while they wait for the sweep |
-| the files that the publishes begun in one UTC day declare: 25000 | the setting `max_files_per_day` | a publish that would pass it is refused with `too_large`. A file sent a second time is one more write operation, and is not counted |
+| the files that the publishes begun in one UTC day declare: 25000 | the setting `max_files_per_day` | a publish that would pass it is refused with `too_large` |
+| the writes and listings of the storage that poplin counts in one UTC day: 30000. An upload's files are counted on the day it begins, and the sweep has 1000 listings a day of its own | the setting `max_storage_writes_per_day` | what would pass it is refused with `allowance_spent` until the next UTC day. A file of an upload that is sent again is not written a second time |
 | the day's requests for sites, counted from a sample: about 100000 | the setting `requests_per_day` | a site's visitors get status 429 until the next UTC day |
 | one site's and one visitor's requests in a minute | the settings `site_requests_per_minute` and `visitor_requests_per_minute` | status 429, with the seconds to wait |
 | the versions a publish leaves a site, and the days in the trash | the settings `versions_kept` and `trash_days` | a publish that goes live deletes the versions past the count, and the Worker's sweep deletes a site past its days in the trash, each with its files |
