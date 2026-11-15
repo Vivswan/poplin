@@ -10,7 +10,7 @@ import * as v from "valibot";
 import type { ComputerLogin, LoginId, PendingLogin, UserCode } from "../auth/computer-logins";
 import type { Login } from "../auth/logins";
 import type { TokenId, TokenRecord } from "../auth/tokens";
-import type { PublicName, SiteName } from "../names/names";
+import type { PublicName } from "../names/names";
 import { type AuditAction, type AuditEntry, auditFromRow } from "../records/audit";
 import type { DomainCheck } from "../records/domain-check";
 import { computerLoginFromRow } from "../records/computer-login";
@@ -54,6 +54,7 @@ import type {
   Signed,
   SigningKey,
   SiteDetails,
+  SiteNamed,
   SitesPage,
   SitesQuery,
   TokenStates,
@@ -97,6 +98,7 @@ import {
   A_KEPT_VERSION,
   DEFAULT_DIRECTIONS,
   LISTED_FIELDS,
+  NAMED_FIELDS,
   NAMED_SITE,
   OTHER,
   SITE_FIELDS,
@@ -352,18 +354,18 @@ export class SqlDatabase implements Database {
     return siteIn(found);
   }
 
-  async getSiteNames(ids: readonly SiteId[]): Promise<ReadonlyMap<SiteId, SiteName>> {
+  async getSiteNames(ids: readonly SiteId[]): Promise<ReadonlyMap<SiteId, SiteNamed>> {
     const asked = [...new Set(ids)];
     if (asked.length > MOST_SITES_ASKED) throw new RangeError(`the names of at most ${MOST_SITES_ASKED} sites are read at once, not of ${asked.length}`);
 
     if (asked.length === 0) return new Map();
 
     // Each id is a value bound to the statement, which the engine finds by its key. A database binds only so many, hence the bound above.
-    const names = BUILD.select({ id: sites.id, name: sites.name }).from(sites).where(inArray(sites.id, asked));
+    const names = BUILD.select(NAMED_FIELDS).from(sites).where(inArray(sites.id, asked));
     const [found] = await this.#driver.batch([built(names)]);
     const named = (found?.rows ?? []).map((row) => v.parse(NAMED_SITE, row));
 
-    return new Map(named.map(({ id, name }) => [id, name]));
+    return new Map(named.map(({ id, ...called }) => [id, called]));
   }
 
   async getSiteByPublicName(name: PublicName): Promise<Site | undefined> {

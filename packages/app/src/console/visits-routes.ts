@@ -68,9 +68,9 @@ export const visitsRoutes = new Hono<Shared>().get("/usage/visits", vValidator("
   const [views, names] = await Promise.all([install.database.readDailyViews(asked, dayOf(install.now()), range), install.database.getSiteNames(asked)]);
   const steps = stepsOf(views.days.length);
   const sites = asked.flatMap((id) => {
-    const name = names.get(id);
+    const named = names.get(id);
 
-    return name === undefined ? [] : [{ id, name, ...lineOf(views.sites.get(id) ?? [], steps) }];
+    return named === undefined ? [] : [{ id, name: named.name, ...lineOf(views.sites.get(id) ?? [], steps) }];
   });
   const by = range > MOST_DAILY ? ("week" as const) : ("day" as const);
 

@@ -16,7 +16,7 @@ interface Page {
     readonly seq: number;
     readonly by: string;
     readonly action: string;
-    readonly site: { readonly name: string; readonly label: string | null } | null;
+    readonly site: { readonly name: string; readonly label: string | null; readonly title: string | null } | null;
   }[];
   readonly logins: Readonly<Record<string, string>>;
   readonly next: string | null;
@@ -60,16 +60,26 @@ describe("a page of the log", () => {
     expect(page.entries.map((entry) => entry.action)).toEqual(actions);
   });
 
-  // Drift: a site that is gone would be linked to a page that answers 404, or a renamed one to the label it no longer has.
-  test("names each site as it was then, with the label it has now, and none for a site that is gone", async () => {
+  // Drift: a site that is gone would be linked to a page that answers 404, a renamed one to the label it no longer has, or an entry would show a title the site has since lost.
+  test("names each site as it was then, with the label and the title it has now, and neither for a site that is gone", async () => {
     const { opened, keptLabel } = await openWithHistory();
-    const page = await pageOf(opened, "?kind=sites");
+    const { install, owner } = opened.base;
+    const before = await pageOf(opened, "?kind=sites");
+    // The one site left is the renamed one.
+    const [kept] = (await install.database.listSites({ trash: false, limit: 10 })).sites;
+    await updateSite(install, { scope: "admin", holder: owner }, { site: kept?.id ?? "", title: "Trip notes" });
+    const after = await pageOf(opened, "?kind=sites&site=notes");
 
-    expect(page.entries.map((entry) => entry.site)).toEqual([
-      { name: "old-draft", label: null },
-      { name: "trip-notes", label: keptLabel },
-      { name: "old-draft", label: null },
-      { name: "field-notes", label: keptLabel },
+    expect(before.entries.map((entry) => entry.site)).toEqual([
+      { name: "old-draft", label: null, title: null },
+      { name: "trip-notes", label: keptLabel, title: null },
+      { name: "old-draft", label: null, title: null },
+      { name: "field-notes", label: keptLabel, title: null },
+    ]);
+    expect(after.entries.map((entry) => entry.site)).toEqual([
+      { name: "trip-notes", label: keptLabel, title: "Trip notes" },
+      { name: "trip-notes", label: keptLabel, title: "Trip notes" },
+      { name: "field-notes", label: keptLabel, title: "Trip notes" },
     ]);
   });
 

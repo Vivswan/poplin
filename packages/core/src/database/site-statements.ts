@@ -6,7 +6,7 @@ import * as v from "valibot";
 
 import type { PublicName } from "../names/names";
 import { SITE_ID, SITE_NAME } from "../records/fields";
-import type { NEW_SITE, SiteAccess, SiteFolder } from "../records/site";
+import { type NEW_SITE, type SiteAccess, type SiteFolder, TITLE } from "../records/site";
 import type { SiteId } from "../sites/ids";
 import type { UploadId } from "../records/upload";
 import type { Signed, SiteDetails, SitesQuery } from "./database";
@@ -49,8 +49,11 @@ export const LISTED_FIELDS = { ...SITE_FIELDS, title_key: sites.title_key };
 /** What a listing by title goes by, as the `title_key` column of a row holds it. */
 export const TITLE_KEY = v.object({ title_key: v.string() });
 
-/** The id and the name of a site, as `getSiteNames` reads them. */
-export const NAMED_SITE = v.object({ id: SITE_ID, name: SITE_NAME });
+/** The id, the name and the listed title of a site, as `getSiteNames` reads them. */
+export const NAMED_SITE = v.object({ id: SITE_ID, name: SITE_NAME, title: v.nullable(TITLE) });
+
+/** What `getSiteNames` reads of a site: its title is the typed one, else its page's own. */
+export const NAMED_FIELDS = { id: sites.id, name: sites.name, title: fragment<string | null>`coalesce(${sites.title}, ${sites.page_title})`.as("title") };
 
 /** The place of each access in a listing sorted by access, as the `access_rank` column of a site holds it: from the most private to the most open. */
 const ACCESS_RANKS = { private: 0, unlisted: 1, public: 2 } as const;

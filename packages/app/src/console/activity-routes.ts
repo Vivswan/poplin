@@ -90,12 +90,12 @@ type Asker = Shared["Variables"]["asker"];
 /** Which entries of the log a file is narrowed to. */
 type Narrowing = Pick<v.InferOutput<typeof FILE_QUERY>, "kind" | "site">;
 
-/** The label each site the entries name has now, by its id, read in one query however many sites a page names. A site that is gone has none. */
-async function labelsOf(install: Install, entries: readonly Entry[]): Promise<ReadonlyMap<string, string>> {
+/** What each site the entries name is now, by its id, read in one query however many sites a page names: its label, and the title it is listed under, `null` for a site with none. A site that is gone is left out. */
+async function sitesNow(install: Install, entries: readonly Entry[]): Promise<ReadonlyMap<string, { readonly label: string; readonly title: string | null }>> {
   const ids = new Set(entries.flatMap((entry) => (entry.site === null ? [] : [entry.site.id])));
   const names = await install.database.getSiteNames([...ids]);
 
-  return new Map(Array.from(names, ([id, name]) => [id, siteLabel(name, id)]));
+  return new Map(Array.from(names, ([id, { name, title }]) => [id, { label: siteLabel(name, id), title }]));
 }
 
 /** A place beside the one a page was asked with; none where that would be before the first place an address can name. */
@@ -213,11 +213,11 @@ export const activityRoutes = new Hono<Shared>()
 
     const page = back === undefined ? read.entries.slice(0, size) : read.entries.slice(0, size).reverse();
     const beyond = read.entries.length > size;
-    const [labels, logins] = await Promise.all([labelsOf(asker.install, page), loginNames(asker)]);
+    const [now, logins] = await Promise.all([sitesNow(asker.install, page), loginNames(asker)]);
     const entries = page.map(({ site, ...entry }) => ({
       ...entry,
-      // The name is the one the site had then; the label is the one it has now, and `null` once it is no site.
-      site: site === null ? null : { name: site.name, label: labels.get(site.id) ?? null },
+      // The name is the one the site had then; the label and the title are the ones it has now, each `null` once it is no site.
+      site: site === null ? null : { name: site.name, label: now.get(site.id)?.label ?? null, title: now.get(site.id)?.title ?? null },
     }));
     const { previous, next } = placesAround({ after, back, along: narrowing.dir === "asc" ? 1 : -1, ends: [page.at(0), page.at(-1)], beyond, stopped: read.stopped_at });
 

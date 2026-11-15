@@ -127,11 +127,11 @@ export function sites(label: string, makeDatabase: DatabaseFactory): void {
     });
 
     // Drift: a page that names many sites asks for all of them at once, and one invocation has a fixed count of queries; a lookup that dropped the trash, kept an old name, or made up a deleted site would mislabel the log.
-    test("the names of many sites are read at once: the name each has now, the trash included, and nothing for an id that is no site's", async () => {
+    test("the names of many sites are read at once: the name each has now and the title it is listed under, the typed one before its page's own, the trash included, and nothing for an id that is no site's", async () => {
       const database = await opened(makeDatabase);
-      const kept = await made(database, draft(REPORT));
+      const kept = await made(database, { ...draft(REPORT), page_title: "The page's own" });
       const renamed = await made(database, draft(REPORT));
-      const trashed = await made(database, draft(REPORT));
+      const trashed = await made(database, { ...draft(REPORT), title: "Typed", page_title: "The page's own" });
       const deleted = await made(database, draft(REPORT));
       await database.changeDetails(renamed.id, { name: "notes" as SiteName }, BY_ADA);
       await database.trashSite(trashed.id, BY_ADA);
@@ -141,9 +141,9 @@ export function sites(label: string, makeDatabase: DatabaseFactory): void {
 
       expect<unknown>([[...names].sort(), [...(await database.getSiteNames([]))]]).toEqual([
         [
-          [kept.id, REPORT],
-          [renamed.id, "notes"],
-          [trashed.id, REPORT],
+          [kept.id, { name: REPORT, title: "The page's own" }],
+          [renamed.id, { name: "notes", title: null }],
+          [trashed.id, { name: REPORT, title: "Typed" }],
         ].sort(),
         [],
       ]);
@@ -159,8 +159,8 @@ export function sites(label: string, makeDatabase: DatabaseFactory): void {
 
       expect<unknown>([...named].sort()).toEqual(
         [
-          [first.id, REPORT],
-          [last.id, REPORT],
+          [first.id, { name: REPORT, title: null }],
+          [last.id, { name: REPORT, title: null }],
         ].sort(),
       );
       await expect(database.getSiteNames([first.id, ...none, last.id])).rejects.toThrow(RangeError);

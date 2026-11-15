@@ -26,6 +26,15 @@ import type { DailyViews, SiteViews } from "../records/views";
 /** How many entries of the audit log, counted by `seq`, one narrowed reading looks at before it stops. */
 export const AUDIT_WINDOW = 5000;
 
+/** What a site is called now. */
+export interface SiteNamed {
+  /** Its name. */
+  readonly name: SiteName;
+
+  /** The title a listing shows it under: the typed one, else its page's own; `null` for a site with neither. */
+  readonly title: string | null;
+}
+
 /** Who makes a change and when, in milliseconds since the epoch. */
 export interface Signed {
   readonly by: Holder;
@@ -397,12 +406,12 @@ export interface Database {
   getSite(id: SiteId): Promise<Site | undefined>;
 
   /**
-   * The name each of these ids' sites has now, in the trash or not, read in one step. An id that is no site's is left out.
+   * The name each of these ids' sites has now and the title it is listed under, in the trash or not, read in one step. An id that is no site's is left out.
    *
    * @param ids - the sites to name, at most 100 different ones
    * @throws {RangeError} more than 100 different ids are asked for
    */
-  getSiteNames(ids: readonly SiteId[]): Promise<ReadonlyMap<SiteId, SiteName>>;
+  getSiteNames(ids: readonly SiteId[]): Promise<ReadonlyMap<SiteId, SiteNamed>>;
 
   /** The site holding this public name, in the trash or not. */
   getSiteByPublicName(name: PublicName): Promise<Site | undefined>;
