@@ -175,6 +175,8 @@ class MemoryDatabase implements Database {
 
   #signingKey: Uint8Array<ArrayBuffer> | undefined;
 
+  #updateAddress: { readonly address: string; readonly since: number } | undefined;
+
   constructor(mintId: () => SiteId = mintSiteId) {
     this.#mintId = mintId;
   }
@@ -572,6 +574,24 @@ class MemoryDatabase implements Database {
     requireKey(fresh);
     this.#signingKey = Uint8Array.from(fresh);
     this.#log(signed, "signed_everyone_out", null, {});
+  }
+
+  async readUpdateAddress(): Promise<{ readonly address: string; readonly since: number } | undefined> {
+    return this.#updateAddress;
+  }
+
+  async keepUpdateAddress(address: string, signed: Signed): Promise<void> {
+    this.#updateAddress = { address, since: signed.at };
+    this.#log(signed, "update_address_set", null, {});
+  }
+
+  async forgetUpdateAddress(signed: Signed): Promise<{ readonly kind: "done" | "unchanged" }> {
+    if (this.#updateAddress === undefined) return { kind: "unchanged" };
+
+    this.#updateAddress = undefined;
+    this.#log(signed, "update_address_removed", null, {});
+
+    return { kind: "done" };
   }
 
   async appendAudit(note: AuditNote, signed: Signed): Promise<void> {

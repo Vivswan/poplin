@@ -1041,6 +1041,43 @@ function signingKey(label: string, makeDatabase: DatabaseFactory): void {
   });
 }
 
+function updateAddress(label: string, makeDatabase: DatabaseFactory): void {
+  describe(`${label}: the address that starts a rebuild`, () => {
+    // Drift: the address is a credential kept beside the signing key. A listing, an export, or an audit entry that carried it would hand whoever reads a backup the power to start builds.
+    test("one address is kept, replaced, and removed, each audited once, and nothing but its own read holds it", async () => {
+      const database = await opened(makeDatabase);
+      await database.initSettings(SETTINGS, BY_ADA);
+      await made(database, draft(REPORT));
+      const none = await database.readUpdateAddress();
+      await database.keepUpdateAddress("https://builds.provider.example/hooks/first-3f9c", BY_ADA);
+      await database.keepUpdateAddress("https://builds.provider.example/hooks/second-7a1e", BY_BO_LATER);
+      const kept = await database.readUpdateAddress();
+      const shown = JSON.stringify([
+        await database.exportSites({ limit: 100 }),
+        await database.listSites({ trash: false, limit: 100 }),
+        await database.readSettings(),
+        await database.listTokens(),
+        await database.listAudit({ limit: 100 }),
+      ]);
+      const removals = [await database.forgetUpdateAddress(BY_ADA), await database.forgetUpdateAddress(BY_ADA)];
+
+      expect([none, kept, await database.readUpdateAddress(), removals]).toEqual([
+        undefined,
+        { address: "https://builds.provider.example/hooks/second-7a1e", since: BY_BO_LATER.at },
+        undefined,
+        [{ kind: "done" }, { kind: "unchanged" }],
+      ]);
+      expect(["builds.provider", "first-3f9c", "second-7a1e"].filter((needle) => shown.includes(needle))).toEqual([]);
+      expect((await auditTrail(database)).map((entry) => [entry.by, entry.action, entry.detail]).slice(-3)).toEqual([
+        [ADA, "update_address_set", {}],
+        [BO, "update_address_set", {}],
+        [ADA, "update_address_removed", {}],
+      ]);
+      expect(await database.readSigningKey()).toBeUndefined();
+    });
+  });
+}
+
 function auditLog(label: string, makeDatabase: DatabaseFactory): void {
   describe(`${label}: the audit log`, () => {
     const signed: Signed = { by: BO, at: NOW + 1 };
@@ -1931,6 +1968,7 @@ export function describeDatabase(label: string, makeDatabase: DatabaseFactory): 
   sizes(label, makeDatabase);
   backups(label, makeDatabase);
   signingKey(label, makeDatabase);
+  updateAddress(label, makeDatabase);
   auditLog(label, makeDatabase);
   everLoggedIn(label, makeDatabase);
   tokensAndSettings(label, makeDatabase);

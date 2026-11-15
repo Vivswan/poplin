@@ -19,6 +19,7 @@ import { runSetup } from "./setup";
 import type { Io, Outcome, RequestOf, Session } from "./records";
 import type { Request } from "./requests";
 import { runSiteCommand } from "./site-commands";
+import { runUpdate } from "./update";
 
 /** How long each call may take that a stopped command gives its upload up with, in milliseconds: 4 seconds. */
 export const AFTER_STOP_TIMEOUT_MS = 4000;
@@ -33,7 +34,7 @@ const INSTALL_COMMANDS = ["whoami", "logout", "config", "doctor"] as const;
 const SITE_COMMANDS = ["set", "show", "list", "rollback", "new-link", "duplicate", "delete", "restore"] as const;
 
 /** A command that talks to an install. */
-type OnlineRequest = RequestOf<"publish" | "export" | "import" | (typeof INSTALL_COMMANDS)[number] | (typeof SITE_COMMANDS)[number]>;
+type OnlineRequest = RequestOf<"publish" | "export" | "import" | "update" | (typeof INSTALL_COMMANDS)[number] | (typeof SITE_COMMANDS)[number]>;
 
 function refused(said: Problem): Outcome {
   return { ok: false, problem: said };
@@ -61,13 +62,13 @@ function guarded(io: Io, tokens: ReadonlySet<string>): Io {
 }
 
 /**
- * The tokens this machine holds: the two the environment may hold, the login's and the one `poplin setup` sends, and the one of the saved login, whichever the command uses.
+ * The tokens this machine holds: the three the environment may hold, the login's, the one `poplin setup` sends, and the address `poplin update` saves, and the one of the saved login, whichever the command uses.
  *
  * A login that cannot be read gives no token here, and is refused where the command looks for it.
  */
 async function knownTokens(io: Io): Promise<ReadonlySet<string>> {
   const tokens = new Set<string>();
-  for (const variable of ["POPLIN_TOKEN", "POPLIN_SETUP_TOKEN"]) {
+  for (const variable of ["POPLIN_TOKEN", "POPLIN_SETUP_TOKEN", "POPLIN_UPDATE_ADDRESS"]) {
     const inEnvironment = io.machine.env[variable];
     if (inEnvironment !== undefined && inEnvironment !== "") tokens.add(inEnvironment);
   }
@@ -147,6 +148,8 @@ async function execute(request: Exclude<Request, { readonly kind: "mcp" }>, io: 
   if (asks(request, SITE_COMMANDS)) return online(request, io, (session) => runSiteCommand(request, session));
 
   if (asks(request, ["export"])) return online(request, io, (session) => runExport(request, session));
+
+  if (asks(request, ["update"])) return online(request, io, (session) => runUpdate(request, session));
 
   return runImport(request, (send) => online(request, io, send));
 }

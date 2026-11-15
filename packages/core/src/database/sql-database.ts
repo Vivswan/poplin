@@ -12,7 +12,7 @@ import { type AuditAction, type AuditEntry, auditFromRow } from "../records/audi
 import { computerLoginFromRow } from "../records/computer-login";
 import { SITE_ID, SITE_NAME } from "../records/fields";
 import { SETTING_CHANGES, SETTING_VALUES, type SettingValues } from "../records/settings";
-import { signingKeyFromRow, signingKeyToText } from "../records/secret";
+import { signingKeyFromRow, signingKeyToText, type UpdateAddress, updateAddressFromRow } from "../records/secret";
 import { NEW_SITE, SITE_DETAILS, SITE_FOLDER, type Site, type SiteAccess, type SiteFolder, siteFromRow, siteToRow } from "../records/site";
 import { SWEEP_PLACE, type SweepPlace } from "../records/sweep-place";
 import { UPDATE_CHECK, type UpdateCheck } from "../records/update";
@@ -443,6 +443,17 @@ const INSERT_SIGNING_KEY =
 const REPLACE_SIGNING_KEY = `
 INSERT INTO secrets (name, value, created_at) VALUES ('session_key', ?1, ?2)
 ON CONFLICT (name) DO UPDATE SET value = excluded.value, created_at = excluded.created_at`;
+
+/** The address that starts a rebuild, with the moment it was saved. */
+const READ_UPDATE_ADDRESS = "SELECT value, created_at FROM secrets WHERE name = 'update_address'";
+
+/** An address that starts a rebuild in place of the stored one, or as the first. */
+const KEEP_UPDATE_ADDRESS = `
+INSERT INTO secrets (name, value, created_at) VALUES ('update_address', ?1, ?2)
+ON CONFLICT (name) DO UPDATE SET value = excluded.value, created_at = excluded.created_at`;
+
+/** No address that starts a rebuild. */
+const FORGET_UPDATE_ADDRESS = "DELETE FROM secrets WHERE name = 'update_address'";
 
 /** Whether any audit entry is a login. The scan runs from the oldest entry and stops at the first, which sits near the start of every log that has one. */
 const HAS_LOGIN = "SELECT EXISTS (SELECT 1 FROM audit WHERE action = 'login') AS found";
@@ -1288,6 +1299,23 @@ export class SqlDatabase implements Database {
 
   async rotateSigningKey(fresh: Uint8Array, signed: Signed): Promise<void> {
     await this.#driver.batch([sql(REPLACE_SIGNING_KEY, signingKeyToText(fresh), signed.at), auditPlain(signed, "signed_everyone_out", {})]);
+  }
+
+  async readUpdateAddress(): Promise<UpdateAddress | undefined> {
+    const [read] = await this.#driver.batch([sql(READ_UPDATE_ADDRESS)]);
+    const row = read?.rows[0];
+
+    return row === undefined ? undefined : updateAddressFromRow(row);
+  }
+
+  async keepUpdateAddress(address: string, signed: Signed): Promise<void> {
+    await this.#driver.batch([sql(KEEP_UPDATE_ADDRESS, address, signed.at), auditPlain(signed, "update_address_set", {})]);
+  }
+
+  async forgetUpdateAddress(signed: Signed): Promise<{ readonly kind: "done" | "unchanged" }> {
+    const [removed] = await this.#driver.batch([sql(FORGET_UPDATE_ADDRESS), auditPlain(signed, "update_address_removed", {})]);
+
+    return { kind: changed(removed) ? "done" : "unchanged" };
   }
 
   async appendAudit(note: AuditNote, signed: Signed): Promise<void> {

@@ -12,6 +12,7 @@ import fc from "fast-check";
 import { run } from "../../packages/cli/src/commands/run";
 import { protocolMessages } from "../../packages/cli/tests/mcp/support/bench";
 import { TOOL_INPUTS } from "../../packages/core/src/actions/tool-inputs";
+import { ROUTES } from "../../packages/core/src/api/routes";
 import { fuzzTarget } from "./config";
 import { hostile } from "./hostile";
 
@@ -21,6 +22,7 @@ const CRASHED = "poplin failed in a way it has no word for";
 const SCRATCH = mkdtempSync(join(tmpdir(), "poplin-fuzz-"));
 const FOLDER = join(SCRATCH, "report");
 const TOOL_NAMES = Object.keys(TOOL_INPUTS);
+const UPDATE_PATHS: readonly string[] = [ROUTES.startUpdate.pattern, ROUTES.updateAddress.pattern];
 const ARGUMENT_NAMES = [...new Set(Object.values(TOOL_INPUTS).flatMap((schema) => Object.keys(schema.entries)))];
 const METHODS = [
   "initialize",
@@ -56,6 +58,7 @@ interface Session {
   readonly code: number;
   readonly written: readonly string[];
   readonly logged: readonly string[];
+  readonly asked: readonly string[];
 }
 
 const property = fuzzTarget(import.meta.file);
@@ -123,6 +126,7 @@ async function serve(input: readonly string[], answer: Response | undefined, don
   const stdin = new PassThrough();
   const stdout = new PassThrough();
   const logged: string[] = [];
+  const asked: string[] = [];
   let text = "";
   const written = (): string[] => text.split("\n").filter((line) => line !== "");
 
@@ -139,7 +143,8 @@ async function serve(input: readonly string[], answer: Response | undefined, don
       out: (line) => logged.push(`on stdout: ${line}`),
       err: (line) => logged.push(line),
       status: (line) => logged.push(`a progress line: ${line}`),
-      fetch: async () => {
+      fetch: async (address) => {
+        asked.push(new URL(address).pathname);
         if (answer === undefined) throw new Error(`no route to ${TOKEN}`);
 
         return answer.clone();
@@ -161,7 +166,7 @@ async function serve(input: readonly string[], answer: Response | undefined, don
   await settled;
   stdin.end();
 
-  return { code: await exited, written: written(), logged };
+  return { code: await exited, written: written(), logged, asked };
 }
 
 function answered(written: readonly string[], id: unknown): boolean {
@@ -176,6 +181,8 @@ function assertOnlyProtocol(session: Session): void {
   expect(said).not.toContain(CRASHED);
   expect(said).not.toContain(TOKEN);
   expect(session.logged.filter((line) => !line.startsWith("poplin mcp: "))).toEqual([]);
+  // An agent replaces no code of the install: whatever it sends, no request goes to the routes that update it.
+  expect(session.asked.filter((path) => UPDATE_PATHS.some((update) => path.startsWith(update)))).toEqual([]);
 }
 
 mkdirSync(FOLDER);

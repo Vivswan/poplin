@@ -17,6 +17,7 @@ import { createSetup } from "../../../app/src/dashboard/domain/setup";
 import { logIn } from "../../../app/src/login/login";
 import { serveSite } from "../../../app/src/sites/serve";
 import { type Asking, checkForUpdate } from "../../../core/src/actions/check-update";
+import type { Rebuilding } from "../../../core/src/actions/start-update";
 import { importSessionKey } from "../../../core/src/auth/cookie";
 import { parseLogins } from "../../../core/src/auth/logins";
 import type { SqlDriver } from "../../../core/src/database/driver";
@@ -44,6 +45,12 @@ const FREE_LIMITS = {
 
 /** When the sample release the seeded install knows of came out, and where its notes are. No such release exists. */
 const SAMPLE_RELEASE = { released: "2026-12-01", notes: "https://example.com/changelog/", database: false } as const;
+
+/** The address the seeded install keeps as the one that starts its rebuild. Nothing is there, and nothing is ever sent to it. */
+const SAMPLE_REBUILD = "https://provider.example/rebuilds/sample";
+
+/** The stand-in for the provider's rebuild: it takes the sample address alone and answers every start as taken, without a request. */
+const REBUILD: Omit<Rebuilding, "counters"> = { accepts: (address) => address.href === SAMPLE_REBUILD, fetch: async () => new Response(null, { status: 204 }) };
 
 /** Where the dashboard of the install that holds nothing is mounted. */
 const EMPTY_PREFIX = "/empty";
@@ -176,7 +183,7 @@ function dashboardMount(world: World, prefix: string, version: string): Mount {
 
 function apiMount(world: World, version: string): Mount {
   const { database } = world.install;
-  const api = createApi({ ...world.install, readToken: (id) => database.getToken(id), limits: API_LIMITS, version, report: (error) => console.error("preview: an API request failed", error), ...countsOf(world) });
+  const api = createApi({ ...world.install, readToken: (id) => database.getToken(id), limits: API_LIMITS, version, report: (error) => console.error("preview: an API request failed", error), rebuild: REBUILD, ...countsOf(world) });
 
   return { prefix: "/api", origin: ADMIN_ORIGIN, base: "/api", holds: "json", answer: api.fetch };
 }
@@ -219,8 +226,9 @@ async function openScene(host: Host, resumed: boolean): Promise<Scene> {
   const seeded = await openWorld(host.openDriver(), kept());
   const empty = await openWorld(host.openDriver(), kept());
   const { token } = resumed ? { token: "" } : await seedWorld(seeded, host.samples);
-  // The seeded install alone learns of a newer version: the empty one shows a dashboard with no notice.
+  // The seeded install alone learns of a newer version and keeps an address to update at: the empty one shows a dashboard with no notice.
   if (!resumed) await checkForUpdate(seeded.install, { fetch: sampleLatest(host.version) });
+  if (!resumed) await seeded.install.database.keepUpdateAddress(SAMPLE_REBUILD, { by: seeded.admin.holder, at: seeded.install.now() });
   const setups = ([...PLUG_STATES, SHUT] as const).map((state) => setupMount(seeded, state));
 
   return { seeded, token, dashboard: dashboardMount(seeded, "", host.version), mounts: [dashboardMount(empty, EMPTY_PREFIX, host.version), apiMount(seeded, host.version), ...setups] };

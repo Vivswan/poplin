@@ -67,6 +67,9 @@ const STORED_SITE = v.looseObject({
 /** The install's settings as an answer holds them. */
 const CONFIG_ANSWER = v.looseObject({ values: SETTING_VALUES });
 
+/** Whether the install keeps an address that starts its rebuild, as an answer holds it: never the address. */
+const ADDRESS_STATE = v.looseObject({ set: v.boolean(), since: v.nullable(v.number()) });
+
 /** The form of the answer to a done request, for every route this client calls. An answer of another form is a failure, so no command reads a key that is not there. */
 const ANSWERS = {
   whoami: v.looseObject({ token: TOKEN, version: v.string(), update: v.optional(UPDATE) }),
@@ -101,6 +104,10 @@ const ANSWERS = {
   beginImport: v.looseObject({ upload: UPLOAD }),
   readConfig: CONFIG_ANSWER,
   changeConfig: CONFIG_ANSWER,
+  startUpdate: v.looseObject({ started: v.literal(true), from: v.string(), to: v.nullable(v.string()) }),
+  updateAddress: ADDRESS_STATE,
+  saveUpdateAddress: ADDRESS_STATE,
+  removeUpdateAddress: ADDRESS_STATE,
 } as const;
 
 /** The route that answers one stored file's bytes, which no JSON form describes. */

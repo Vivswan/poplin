@@ -36,6 +36,9 @@ const WORDS: Readonly<Record<Exclude<AuditAction, "domain_synced">, string>> = {
   login: "logged in",
   login_allowed: "allowed a computer to log in",
   login_denied: "denied a computer's login",
+  update_address_set: "saved the rebuild address",
+  update_address_removed: "removed the rebuild address",
+  update_started: "started an update",
 };
 
 /** One entry of the log. */

@@ -74,10 +74,10 @@ CREATE TABLE settings (
   updated_at INTEGER NOT NULL
 ) STRICT`;
 
-/** What the install keeps and no listing, export, or audit entry shows. `value` is lowercase hex. */
+/** What the install keeps and no listing, export, or audit entry shows: the key that signs sessions as lowercase hex, and the address that starts a rebuild of the install. */
 const SECRETS = `
 CREATE TABLE secrets (
-  name TEXT NOT NULL PRIMARY KEY CHECK (name IN ('session_key')),
+  name TEXT NOT NULL PRIMARY KEY CHECK (name IN ('session_key', 'update_address')),
   value TEXT NOT NULL,
   created_at INTEGER NOT NULL
 ) STRICT, WITHOUT ROWID`;

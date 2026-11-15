@@ -29,10 +29,14 @@ const STATUS = {
   too_many_sites: 409,
   not_set_up: 409,
   no_working_login: 409,
+  no_update_address: 409,
+  no_update: 409,
   too_large: 413,
   too_many_requests: 429,
   internal: 500,
+  update_refused: 502,
   allowance_spent: 503,
+  update_unreachable: 504,
 } as const;
 
 /** What each code means, for a person. No message quotes anything a request sent. */
@@ -60,10 +64,14 @@ const MESSAGES: Readonly<Record<Code, string>> = {
   too_many_sites: "the install holds as many sites as it may",
   not_set_up: "the install is not set up",
   no_working_login: "the change would leave no login that works",
+  no_update_address: "the install has no address that starts its rebuild: save one first",
+  no_update: "no newer version is known to the install",
   too_large: "a size limit is passed",
   too_many_requests: "too many requests came from this address: wait, then ask again",
   internal: "the install failed to do that",
+  update_refused: "the install's provider refused to start the rebuild, with this status",
   allowance_spent: "the day's free allowance of the database is used up: ask again after midnight UTC",
+  update_unreachable: "the install's provider did not answer the request to rebuild",
 };
 
 /** The form of a token, and of the secret of a computer's login, wherever one sits in a text. */

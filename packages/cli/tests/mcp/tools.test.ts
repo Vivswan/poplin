@@ -13,6 +13,7 @@ const CLI_ONLY_COMMANDS: Readonly<Record<string, string>> = {
   setup: "a person finishes an install, once, with the provider's token",
   config: "the install's settings are an admin's to change",
   doctor: "a report on the install, for the person who runs it",
+  update: "a new version of the install is the admin's to start; no agent replaces the code it runs on",
   export: "a backup of the install, for the person who runs it",
   import: "a backup put back, by the person who runs the install",
   mcp: "it is the server the tools are called through",

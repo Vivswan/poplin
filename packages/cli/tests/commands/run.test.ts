@@ -3,7 +3,7 @@ import { existsSync } from "node:fs";
 import { join } from "node:path";
 
 import type { Code } from "../../../app/src/api/respond";
-import { INSTALL_VERSION, ORIGIN } from "../../../app/tests/api/support/install";
+import { INSTALL_VERSION, NOW, ORIGIN, REBUILD_ADDRESS } from "../../../app/tests/api/support/install";
 import { saveLogin } from "../../src/local/login-file";
 import type { Login } from "../../src/local/login";
 import { VERSION } from "../../src/poplin";
@@ -34,6 +34,10 @@ const CODES: Readonly<Record<Code, true>> = {
   too_many_sites: true,
   not_set_up: true,
   no_working_login: true,
+  no_update_address: true,
+  no_update: true,
+  update_refused: true,
+  update_unreachable: true,
   too_large: true,
   too_many_requests: true,
   internal: true,
@@ -234,6 +238,40 @@ describe("run", () => {
     const replaced = await bench.run("config logins third@example.com");
 
     expect([replaced.code, replaced.err[0], (await bench.run("config logins")).out]).toEqual([1, "the change would leave no login that works: logins", ["ada@example.com,second@example.com"]]);
+  });
+
+  // Drift: the rebuild address is a credential a person pastes once. Each row is one `poplin update` line, what it prints, what the install then keeps, and what reached the provider: the address is in no line, even when the install hands it back.
+  test("update saves the address from the environment alone, says only that one is saved, starts one rebuild, and never prints the address", async () => {
+    const bench = await openBench();
+    const login = { POPLIN_SERVER: ORIGIN, POPLIN_TOKEN: bench.install.tokens.admin };
+    const withAddress = { env: { ...login, POPLIN_UPDATE_ADDRESS: REBUILD_ADDRESS } };
+    await bench.install.database.keepUpdateCheck({ checked_at: NOW, news: { version: "7.9.0", released: "2026-12-01", notes: "https://example.com/changelog/#v7-9-0", database: false } });
+
+    const none = await bench.run("update");
+    const empty = await bench.run("update --save-address");
+    const other = await bench.run("update --save-address", { env: { ...login, POPLIN_UPDATE_ADDRESS: "https://example.com/hooks/elsewhere" } });
+    const saved = await bench.run("update --save-address", withAddress);
+    const checked = await bench.run("update --check", withAddress);
+    const started = await bench.run("update", withAddress);
+    const again = await bench.run("update --json", withAddress);
+    bench.hook = (request) => (request.url.endsWith("/update/address") ? answer(200, { set: true, since: NOW, address: REBUILD_ADDRESS.replace(".example", ".example:443") }) : undefined);
+    const echoed = await bench.run("update --check --json", withAddress);
+    bench.hook = undefined;
+    const forgotten = await bench.run("update --forget-address", withAddress);
+    const printed = [none, empty, other, saved, checked, started, again, echoed, forgotten].flatMap((ran) => [...ran.out, ...ran.err]);
+
+    expect([none.code, none.err]).toEqual([1, ["the install has no rebuild address", "put the provider's address in POPLIN_UPDATE_ADDRESS, then: poplin update --save-address"]]);
+    expect([empty.code, empty.err[0], other.code, other.err[0]]).toEqual([1, "POPLIN_UPDATE_ADDRESS holds no address", 1, "an argument is missing, unknown, or of the wrong form: POPLIN_UPDATE_ADDRESS"]);
+    expect([saved.out, checked.out, started.out]).toEqual([
+      ["the rebuild address is saved; to update: poplin update"],
+      [`7.9.0 is out; the install runs ${INSTALL_VERSION}`, "a rebuild address is saved, since 2023-11-14", "nothing was started"],
+      [`a build of the install has started; 7.9.0 is the newest version, and the install runs ${INSTALL_VERSION} until the build is done`],
+    ]);
+    expect([again.code, jsonOf(again)]).toEqual([1, { error: { code: "too_many_requests", message: "the install is asked too often from this address", about: "update", hint: "wait a minute, then try again" } }]);
+    expect(jsonOf(echoed).address).toEqual({ set: true, since: NOW });
+    expect([forgotten.out, await bench.install.database.readUpdateAddress()]).toEqual([["the rebuild address is removed"], undefined]);
+    expect(bench.install.provider.sent).toEqual([["POST", "manual", "no body", REBUILD_ADDRESS]]);
+    expect(printed.filter((line) => line.includes("3f9c2a7e5b") || line.includes("elsewhere") || line.includes("builds.provider"))).toEqual([]);
   });
 
   test.each(Object.keys(CODES))("the code %s has a sentence of its own in the one table, exits 1, and is the error object under --json", async (code) => {

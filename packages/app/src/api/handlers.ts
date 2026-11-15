@@ -23,7 +23,9 @@ import { updateSite } from "@poplin/core/src/actions/set";
 import { getSite } from "@poplin/core/src/actions/show";
 import { signEveryoneOut } from "@poplin/core/src/actions/sign-out";
 import { showUpload } from "@poplin/core/src/actions/show-upload";
+import { type Rebuilding, START_OPTIONS, startUpdate } from "@poplin/core/src/actions/start-update";
 import { updateOf } from "@poplin/core/src/actions/update";
+import { removeUpdateAddress, saveUpdateAddress, UPDATE_ADDRESS_REQUEST, updateAddressState } from "@poplin/core/src/actions/update-address";
 import { uploadFile } from "@poplin/core/src/actions/upload-file";
 import { ALLOW_PAGE, CODE_KEY, type OPEN_ROUTES, type ROUTES } from "@poplin/core/src/api/routes";
 import type { Actor } from "@poplin/core/src/auth/scopes";
@@ -43,6 +45,7 @@ export const QUERIES: { readonly [Name in RouteName]?: QueryShape } = {
   exportFiles: { version: "number", limit: "number", cursor: "text" },
   exportFile: { version: "number", path: "text" },
   listAudit: { limit: "number", before: "number" },
+  startUpdate: { anyway: "switch" },
 };
 
 /** The name of a route in the table. */
@@ -82,6 +85,9 @@ export interface Call {
 
   /** The version of poplin the install runs. */
   readonly version: string;
+
+  /** What starts a rebuild of the install at its provider. */
+  readonly rebuilding: Rebuilding;
 }
 
 /** One request to a route that takes no token: nobody asks, so there is no actor. */
@@ -146,6 +152,14 @@ async function beginWithAddress({ install, body, origin, visitor }: OpenCall): R
   return { ...begun, verify_url: `${origin}${ALLOW_PAGE}?${new URLSearchParams({ [CODE_KEY]: begun.code })}` };
 }
 
+/** Save the address that starts a rebuild. A body of any other form is refused about `address`, never about a key it holds: the address may have been typed where a key goes. */
+async function saveAddress({ install, actor, body, rebuilding }: Call): ReturnType<Handler<"saveUpdateAddress">> {
+  const sent = v.safeParse(UPDATE_ADDRESS_REQUEST, body);
+  if (!sent.success) return refuse("bad_argument", "address");
+
+  return saveUpdateAddress(install, actor, sent.output.address, rebuilding.accepts);
+}
+
 /** Say who the token is and which version the install runs, with the newer release when one is out. */
 async function answerWhoami({ install, token, version }: Call): ReturnType<Handler<"whoami">> {
   const update = await updateOf(install, version);
@@ -195,4 +209,9 @@ export const HANDLERS: { readonly [Name in Exclude<RouteName, OpenName>]: Handle
   changeConfig: ({ install, actor, body }) => changeConfig(install, actor, body),
   signEveryoneOut: ({ install, actor }) => signEveryoneOut(install, actor),
   listAudit: ({ install, actor, query }) => checked(AUDIT_QUERY, query, (asked) => listAudit(install, actor, asked)),
+
+  startUpdate: ({ install, actor, query, version, rebuilding }) => checked(START_OPTIONS, query, (asked) => startUpdate(install, actor, { ...asked, version }, rebuilding)),
+  updateAddress: ({ install, actor }) => updateAddressState(install, actor),
+  saveUpdateAddress: saveAddress,
+  removeUpdateAddress: ({ install, actor }) => removeUpdateAddress(install, actor),
 };

@@ -127,14 +127,25 @@ async function sweep(started: Started, latest: Outside["latest"]): Promise<void>
   if (failure.kind !== "unset") throw new Error(`the sweep did not run. ${failureText(failure)}`);
 }
 
+/** What the instance is given, with the runtime's own clock and `fetch` wherever a part is left out. */
+function outsideOf(given: Partial<Outside>): Outside {
+  return {
+    now: given.now ?? Date.now,
+    fetch: given.fetch ?? ((url, init) => fetch(url, init)),
+    cloudflare: given.cloudflare,
+    latest: given.latest ?? { fetch: (address, init) => fetch(address, init) },
+    rebuild: given.rebuild ?? ((address, init) => fetch(address, init)),
+  };
+}
+
 /**
  * Make the handlers of one Worker instance.
  *
- * @param given - the clock, the fetch of the Access keys, the fetch of setup's calls to Cloudflare, and the asking for the newest version; the runtime's own when absent
+ * @param given - the clock, the fetch of the Access keys, the fetch of setup's calls to Cloudflare, the asking for the newest version, and the fetch that starts a build; the runtime's own when absent
  * @returns `fetch`, which never throws, and `scheduled`, which throws when the sweep could not run
  */
 export function createWorker(given: Partial<Outside> = {}): Required<Pick<ExportedHandler<Bindings>, "fetch" | "scheduled">> {
-  const outside: Outside = { now: given.now ?? Date.now, fetch: given.fetch ?? ((url, init) => fetch(url, init)), cloudflare: given.cloudflare, latest: given.latest ?? { fetch: (address, init) => fetch(address, init) } };
+  const outside = outsideOf(given);
   let starting: Promise<Started> | undefined;
   let holding: { readonly at: number; readonly value: Promise<Held> } | undefined;
   let loggedInOnce = false;

@@ -12,6 +12,7 @@ import type { PublicName, SiteName } from "../names/names";
 import type { AuditAction, AuditEntry } from "../records/audit";
 import type { Holder } from "../records/fields";
 import type { SiteId } from "../sites/ids";
+import type { UpdateAddress } from "../records/secret";
 import type { SettingValues } from "../records/settings";
 import type { Site, SiteAccess, SiteFolder } from "../records/site";
 import type { SweepPlace } from "../records/sweep-place";
@@ -553,6 +554,19 @@ export interface Database {
    * @throws {RangeError} `fresh` is under 32 bytes
    */
   rotateSigningKey(fresh: Uint8Array, signed: Signed): Promise<void>;
+
+  /** The address that starts a rebuild of the install and when it was saved, `undefined` while none is. No other operation returns the address. */
+  readUpdateAddress(): Promise<UpdateAddress | undefined>;
+
+  /**
+   * Keep the address that starts a rebuild, in place of one kept before. It writes one `update_address_set` audit entry, which holds nothing of the address.
+   *
+   * @param address - an `https` address the caller has checked
+   */
+  keepUpdateAddress(address: string, signed: Signed): Promise<void>;
+
+  /** Remove the address that starts a rebuild. It writes one `update_address_removed` audit entry, only when an address was kept. */
+  forgetUpdateAddress(signed: Signed): Promise<{ readonly kind: "done" | "unchanged" }>;
 
   /** Add an entry that goes with no change of a site, a token, or the settings. */
   appendAudit(note: AuditNote, signed: Signed): Promise<void>;

@@ -1,7 +1,8 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { dirname, join } from "node:path";
 
-import { LIMITS, ORIGIN } from "../../../app/tests/api/support/install";
+import { LIMITS, NOW, ORIGIN, REBUILD_ADDRESS } from "../../../app/tests/api/support/install";
+import { ROUTES } from "../../../core/src/api/routes";
 import { TOOL_INPUTS } from "../../../core/src/actions/tool-inputs";
 import { cleanUp, folderOf } from "../commands/support/harness";
 import { type Answer, type McpBench, openMcp } from "./support/bench";
@@ -327,6 +328,37 @@ describe("the MCP server", () => {
       expect(bench.logged).toHaveLength(1);
     },
   );
+
+  // Drift: an agent that could start an update, or change where one is started, would replace the code of the install it publishes to. No tool is one, and no tool's call goes near those routes.
+  test("no tool starts an update or touches the rebuild address: each one, called so that it reaches the install, asks only for sites", async () => {
+    const { bench, site } = await withSite();
+    await bench.install.database.keepUpdateAddress(REBUILD_ADDRESS, { by: "ada@example.com" as never, at: NOW });
+    const path = folderOf("again", { "index.html": "<title>Again</title>" });
+    // A tool the server gains does not compile until it is called here.
+    const inputs: Readonly<Record<keyof typeof TOOL_INPUTS, Record<string, unknown>>> = {
+      get_site: { site: site.id },
+      list_sites: {},
+      update_site: { site: site.id, title: "Again" },
+      publish_site: { path, site: site.id },
+      rollback_site: { site: site.id },
+      duplicate_site: { site: site.id },
+      new_link: { site: site.id },
+      delete_site: { site: site.id },
+      restore_site: { site: site.id },
+    };
+    const silent: string[] = [];
+    for (const [tool, input] of Object.entries(inputs)) {
+      const before = bench.sent.length;
+      await bench.call(tool, input);
+      if (bench.sent.length === before) silent.push(tool);
+    }
+
+    const paths: readonly string[] = [ROUTES.startUpdate.pattern, ROUTES.updateAddress.pattern];
+
+    expect(silent).toEqual([]);
+    expect(bench.sent.filter((line) => paths.some((update) => line.includes(update)))).toEqual([]);
+    expect([bench.install.provider.sent, (await bench.install.database.readUpdateAddress())?.address]).toEqual([[], REBUILD_ADDRESS]);
+  });
 
   test("a token never leaves the server, whoever puts it into a message: the install's answer, the agent's own arguments, or a tool name", async () => {
     const { bench, site } = await withSite();

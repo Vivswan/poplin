@@ -30,6 +30,9 @@ export const INSTALL_VERSION = "7.8.9";
 /** The request header a test names its visitor in; every request without it comes from one visitor. */
 export const VISITOR_HEADER = "Test-Visitor";
 
+/** An address the test install's provider starts rebuilds at. Nothing answers there: every request to it is recorded by the install and answered by the test. */
+export const REBUILD_ADDRESS = "https://builds.provider.example/hooks/3f9c2a7e5b";
+
 /** The admin whose settings the install starts with. */
 const INSTALLER = "ada@example.com" as Login;
 
@@ -59,6 +62,8 @@ export interface Answered {
  * `calls` counts every batch sent to the database and every call made to the store, since the test last set it to zero.
  *
  * `counters` count the requests to the routes that take no token; a test breaks them by replacing `takeMinute`.
+ *
+ * `provider` stands in for the install's provider: `sent` holds the method, the redirect mode, the body, and the address of every request to start a rebuild, and `status` is what the next one is answered with.
  */
 export interface ApiInstall {
   readonly api: ReturnType<typeof createApi>;
@@ -67,6 +72,7 @@ export interface ApiInstall {
   readonly calls: { database: number; store: number };
   readonly counters: MemoryCounters;
   readonly clock: { now: number };
+  readonly provider: { status: number; readonly sent: unknown[][] };
   readonly tokens: { readonly admin: string; readonly owner: string; readonly stranger: string };
   readonly reported: unknown[];
   readonly keys: () => Promise<string[]>;
@@ -160,6 +166,7 @@ export async function openApi(overrides: Partial<ReturnType<typeof defaultSettin
   const clock = { now: NOW };
   const reported: unknown[] = [];
   const counters = new MemoryCounters();
+  const provider: ApiInstall["provider"] = { status: 200, sent: [] };
   const api = createApi({
     database,
     store: counted(store, calls),
@@ -174,6 +181,14 @@ export async function openApi(overrides: Partial<ReturnType<typeof defaultSettin
     // Found anew on every request, so a test that swaps the method in is heard.
     counters: { takeMinute: (window, now) => counters.takeMinute(window, now) },
     visitorOf: async (request) => request.headers.get(VISITOR_HEADER) ?? "one-visitor",
+    rebuild: {
+      accepts: (address) => address.href === REBUILD_ADDRESS,
+      fetch: async (address, init) => {
+        provider.sent.push([init.method, init.redirect, "body" in init ? init.body : "no body", address]);
+
+        return new Response(null, { status: provider.status, headers: { Location: "https://example.com/elsewhere" } });
+      },
+    },
   });
 
   const ask = async (request: Request): Promise<Answered> => {
@@ -193,6 +208,7 @@ export async function openApi(overrides: Partial<ReturnType<typeof defaultSettin
     calls,
     counters,
     clock,
+    provider,
     tokens: { admin, owner, stranger },
     reported,
     keys: async () => (await store.list({ prefix: "" })).objects.map((object) => object.key),

@@ -14,6 +14,7 @@ import type { Identify } from "@poplin/app/src/login/login";
 import { hostnameAddresses } from "@poplin/app/src/sites/hostname-addresses";
 import type { Asking } from "@poplin/core/src/actions/check-update";
 import type { Install } from "@poplin/core/src/actions/records";
+import type { Rebuilding } from "@poplin/core/src/actions/start-update";
 import { parseLogins } from "@poplin/core/src/auth/logins";
 import type { Database } from "@poplin/core/src/database/database";
 import { openDatabase } from "@poplin/core/src/database/open";
@@ -27,6 +28,7 @@ import { accessKeys } from "../login/keys";
 import { R2Store } from "../storage/r2";
 import { readAccessBinding } from "../zone/access-binding";
 import type { Connection } from "../zone/client";
+import { isDeployHook } from "../zone/deploy-hook";
 import { INSTALL_OBJECTS } from "../zone/install-objects";
 import type { DomainLayout } from "../zone/layout";
 import { readZoneBinding } from "../zone/zone-binding";
@@ -70,6 +72,9 @@ export interface Outside {
 
   /** What asks the project's website, once a day, which version of poplin is the newest. */
   readonly latest: Asking;
+
+  /** Sends the one request that starts a build of the Worker, to the Deploy Hook an admin saved. */
+  readonly rebuild: Rebuilding["fetch"];
 }
 
 /** The key one visitor's requests are counted by, from the address Cloudflare saw and the secret the instance holds for the database. */
@@ -100,6 +105,9 @@ export interface Instance {
 
   /** The version of poplin the install runs. */
   readonly version: string;
+
+  /** What starts a build of the Worker: only a Deploy Hook is taken as its address, and the starts are counted in `counters`. */
+  readonly rebuilding: Rebuilding;
 }
 
 /** A variable of the Worker that cannot be used. `refusal` says what is wrong with it and never quotes its value. */
@@ -251,6 +259,7 @@ export async function startInstance(env: Bindings, outside: Outside, visitorOf: 
     reservedNames: addresses.reservedNames,
   };
   const counters = new CloudflareCounters({ limiter: env.MINUTE_LIMITS, database });
+  const rebuild = { accepts: isDeployHook, fetch: outside.rebuild };
   const api = createApi({
     ...install,
     readToken: (id) => database.getToken(id),
@@ -259,6 +268,7 @@ export async function startInstance(env: Bindings, outside: Outside, visitorOf: 
     report: (error) => console.error("poplin: an API request failed", error),
     counters,
     visitorOf: (request) => visitorOf(request, database),
+    rebuild,
   });
 
   const instance: Instance = {
@@ -270,6 +280,7 @@ export async function startInstance(env: Bindings, outside: Outside, visitorOf: 
     identify: access.ok ? accessIdentity({ keys: accessKeys({ teamDomain: access.value.teamDomain, fetch: outside.fetch }), audience: access.value.audience }) : NOBODY,
     domain: createDomainPlug({ ...own.value, layout, fetch: outside.cloudflare }),
     version: VERSION,
+    rebuilding: { ...rebuild, counters },
   };
 
   return { ok: true, instance };

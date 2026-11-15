@@ -8,7 +8,7 @@ import type { Login } from "@poplin/core/src/auth/logins";
 import { AllowanceSpent } from "@poplin/core/src/database/driver";
 
 import { ADDRESSES } from "../sites/support/layout";
-import { type Answered, type ApiInstall, INSTALL_VERSION, LIMITS, NOW, ORIGIN, openApi, requestOf, VISITOR_HEADER } from "./support/install";
+import { type Answered, type ApiInstall, INSTALL_VERSION, LIMITS, NOW, ORIGIN, openApi, REBUILD_ADDRESS, requestOf, VISITOR_HEADER } from "./support/install";
 
 type RouteName = keyof typeof ROUTES;
 
@@ -88,6 +88,10 @@ const BUDGET: Readonly<Record<RouteName, number>> = {
   changeConfig: 2,
   signEveryoneOut: 2,
   listAudit: 2,
+  startUpdate: 5,
+  updateAddress: 2,
+  saveUpdateAddress: 2,
+  removeUpdateAddress: 2,
 };
 
 /** A request to every route that takes a token, each well formed, about a site and an upload that the fixture names. A route missing here does not compile. */
@@ -122,6 +126,10 @@ function samples(site: string, upload: string): Readonly<Record<TokenRoute, Samp
     changeConfig: { args: undefined, body: { trash_days: 9 } },
     signEveryoneOut: { args: undefined },
     listAudit: { args: {} },
+    startUpdate: { args: { anyway: true } },
+    updateAddress: { args: undefined },
+    saveUpdateAddress: { args: undefined, body: { address: REBUILD_ADDRESS } },
+    removeUpdateAddress: { args: undefined },
   };
 }
 
@@ -265,10 +273,58 @@ describe("createApi", () => {
     const restored = part(await done("beginImport", undefined, { body: { format: 1, site: backup as never, files } }), "upload").id as string;
     for (const [path, text] of Object.entries(PAGES)) await done("uploadFile", { upload: restored, path: `v1/${path}` }, { body: text });
     expect(part(await done("finishPublish", { upload: restored }), "site")).toMatchObject({ id: first.id, label, created: true, live_version: 1 });
+    expect((await done("saveUpdateAddress", undefined, { body: { address: REBUILD_ADDRESS } })).body).toEqual({ set: true, since: NOW });
+    expect((await done("startUpdate", { anyway: true })).body).toEqual({ started: true, from: INSTALL_VERSION, to: null });
+    expect([(await done("updateAddress", undefined)).body, install.provider.sent]).toEqual([{ set: true, since: NOW }, [["POST", "manual", "no body", REBUILD_ADDRESS]]]);
+    expect((await done("removeUpdateAddress", undefined)).body).toEqual({ set: false, since: null });
     await done("logout", undefined, { token: install.tokens.stranger });
 
     expect((await install.call("whoami", undefined, { token: install.tokens.stranger })).status).toBe(401);
     expect([[...walked].sort(), over]).toEqual([Object.keys(ROUTES).sort(), []]);
+  });
+
+  // Drift: the rebuild address is typed once and is a credential from then on. A route that echoed it, in an answer, a refusal, a header, the log, or a backup, would hand it to every admin token and every reader of a backup.
+  test("no route hands a typed rebuild address back, kept or refused", async () => {
+    const install = await openApi();
+    const site = await published(install, { name: "report" });
+    const upload = await staged(install, { site });
+    const refused = await install.call("saveUpdateAddress", undefined, { body: { address: "https://example.com/hooks/typed-and-refused" } });
+    const asKey = await install.call("saveUpdateAddress", undefined, { body: { address: REBUILD_ADDRESS, [`${REBUILD_ADDRESS}/typed-as-a-key`]: true } });
+    const said: string[] = [JSON.stringify(refused.body), JSON.stringify(asKey.body)];
+    await install.call("saveUpdateAddress", undefined, { body: { address: REBUILD_ADDRESS } });
+    const routes = Object.entries(samples(site, upload)) as [RouteName, Sample][];
+    for (const [name, sample] of routes.filter(([name]) => name !== "logout" && name !== "removeUpdateAddress" && name !== "signEveryoneOut")) {
+      const { response } = await send(install, name, sample, install.tokens.admin);
+      said.push(name, await response.text(), JSON.stringify([...response.headers]));
+    }
+
+    expect(said.filter((text) => text.includes("3f9c2a7e5b") || text.includes("builds.provider.example") || text.includes("typed-and-refused"))).toEqual([]);
+    expect([asKey.status, refused.status, refused.body, (await install.database.readUpdateAddress())?.address, install.provider.sent.length]).toEqual([
+      400,
+      400,
+      { error: { code: "bad_argument", message: "an argument is missing, unknown, or of the wrong form", about: "address" } },
+      REBUILD_ADDRESS,
+      1,
+    ]);
+  });
+
+  // Drift: the CLI and the dashboard word a failed start by its code and status. Each row is a press of the button and what the API must answer, with what reached the provider.
+  test.each([
+    { name: "no address is saved", saved: false, answer: [409, "no_update_address", undefined], sent: 0 },
+    { name: "no newer version is known", saved: true, answer: [409, "no_update", undefined], sent: 0 },
+    { name: "the provider refuses", saved: true, anyway: true, provider: 403, answer: [502, "update_refused", "403"], sent: 1 },
+    { name: "the provider redirects", saved: true, anyway: true, provider: 307, answer: [502, "update_refused", "307"], sent: 1 },
+    { name: "a second press inside the minute", saved: true, anyway: true, pressed: true, answer: [429, "too_many_requests", "update"], sent: 1 },
+  ])("a start is refused by its code: $name", async ({ saved, anyway, provider, pressed, answer, sent }) => {
+    const install = await openApi();
+    if (saved) await install.call("saveUpdateAddress", undefined, { body: { address: REBUILD_ADDRESS } });
+    if (pressed === true) await install.call("startUpdate", { anyway });
+
+    install.provider.status = provider ?? 200;
+    const started = await install.call("startUpdate", anyway === undefined ? {} : { anyway });
+    const error = part(started, "error");
+
+    expect<unknown>([[started.status, error.code, error.about], install.provider.sent.length]).toEqual([answer, sent]);
   });
 
   // Drift: the cursor of a listing crosses the wire as two query keys; a key renamed on one side alone would hand every page the first sites again.
@@ -366,6 +422,10 @@ describe("createApi", () => {
       ["changeConfig", 403, "not_allowed"],
       ["signEveryoneOut", 403, "not_allowed"],
       ["listAudit", 403, "not_allowed"],
+      ["startUpdate", 403, "not_allowed"],
+      ["updateAddress", 403, "not_allowed"],
+      ["saveUpdateAddress", 403, "not_allowed"],
+      ["removeUpdateAddress", 403, "not_allowed"],
     ]);
     expect(await stateOf(install)).toEqual(before);
     expect((await install.call("finishPublish", { upload }, { token: install.tokens.owner })).status).toBe(200);

@@ -221,6 +221,34 @@ in the build's log:   poplin: deploying 0.3.1 (was asked for latest)
 
 When it deploys a release, poplin's deploy prints the line above, with the version. When it cannot find or fetch the release it deploys nothing, and prints one line that starts with `poplin:`, holds `Nothing was deployed`, and says what to do.
 
+**With one command.** `poplin update` has the install start that build itself, at a Deploy Hook you make once. Cloudflare's documentation gives these steps for making one:
+
+| Step | In Cloudflare's dashboard                                  |
+| ---- | ---------------------------------------------------------- |
+| 1    | go to Workers & Pages and select your Worker               |
+| 2    | go to Settings, then Builds, then Deploy Hooks             |
+| 3    | enter a name and select the branch to build                |
+| 4    | select Create and copy the generated URL                   |
+
+```sh
+export POPLIN_UPDATE_ADDRESS="paste the URL here"
+npx poplin update --save-address
+npx poplin update
+```
+
+| Line                           | Does                                                                                         |
+| ------------------------------ | -------------------------------------------------------------------------------------------- |
+| `poplin update --save-address` | saves the URL in the install, once; the install never shows it again                         |
+| `poplin update`                | starts the build when a newer version is out; `--anyway` starts it whatever the version      |
+| `poplin update --check`        | says which version is out and whether a URL is saved; starts nothing                         |
+| `poplin update --forget-address` | removes the saved URL                                                                      |
+
+The install takes a URL of this form alone, and only an admin's login saves it or starts an update. One update a minute can be started. [Security](security.md#who-holds-which-credential) says what the URL can do.
+
+```text
+https://api.cloudflare.com/client/v4/workers/builds/deploy_hooks/<DEPLOY_HOOK_ID>
+```
+
 **Choose the version.** The build reads one build variable, `POPLIN_VERSION`. Cloudflare's documentation puts build variables in your Worker's Settings, under Build, in Build variables and secrets.
 
 | `POPLIN_VERSION`     | The build deploys                                                            |

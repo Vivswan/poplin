@@ -352,6 +352,7 @@ function storedRows(label: string, makeDriver: DriverFactory): void {
       ]);
       expect(["a1".repeat(32), "b2".repeat(32), "161,161", "178,178"].filter((needle) => logged.includes(needle))).toEqual([]);
       expect(await rows(driver, "SELECT name, created_at FROM secrets")).toEqual([{ name: "session_key", created_at: NOW + 2 }]);
+      await expect(rows(driver, "INSERT INTO secrets (name, value, created_at) VALUES ('another_secret', 'x', 1)")).rejects.toThrow();
       expect(await rows(driver, "SELECT * FROM versions")).toEqual([]);
     });
   });

@@ -149,9 +149,12 @@ An install begins five logins a minute for all computers together. In a minute t
 | `poplin config versions_kept`                                        | shows one setting                                 |
 | `poplin config versions_kept 10`                                     | changes one setting                               |
 | `poplin doctor`                                                      | checks that the install answers, and prints its version beside this poplin's, as `install 0.1.0, this poplin 0.1.0`; changes nothing |
+| `poplin update`                                                      | starts an update of the install to the newest version; `--check` says what it would do |
 | `poplin setup --server https://poplin.your-name.workers.dev --domain example.com --login you@example.com` | finishes a new install, as its setup page does |
 | `poplin setup --check --server https://poplin.your-name.workers.dev` | lists what that would change, with the same flags; changes nothing |
 | `poplin help rollback`                                               | shows the help of one command                     |
+
+`poplin update` needs a Deploy Hook saved in the install once: [Install](install.md#update-the-install) shows how. It is read from `POPLIN_UPDATE_ADDRESS` in the environment, and no command prints it.
 
 `poplin setup` reads the Cloudflare API token from `POPLIN_SETUP_TOKEN` in the environment. A new install needs `--domain` and `--login`. On an install that has them, `--login` alone corrects a first login that was mistyped. It needs no login, and it works only until the first login to the install. [Install](install.md#from-a-terminal-instead) shows where it fits.
 
@@ -190,6 +193,7 @@ ok  update    0.2.0 is out (this install runs 0.1.0): https://example.com/change
 | What Cloudflare adds | a `CF-Worker` header on every request a Worker sends, which names the install's domain             |
 | Where it shows       | the `update` row of `poplin doctor`, and `update` under `--json`; no row when nothing newer is out |
 | Switching it off     | `poplin config update_check off`: nothing is asked, and a release learned before is not shown      |
+| Updating to it       | `poplin update`, once a Deploy Hook is saved in the install                                        |
 
 ## The agent tools
 
@@ -248,6 +252,16 @@ A refused command prints one sentence and often a hint. With `--json` it prints 
 | `too_many_requests`                            | asked too often                                    | wait a minute                                                 |
 | `allowance_spent`                              | the day's free allowance of the database is used up | wait until 00:00 UTC; asking sooner is refused the same way  |
 | `internal`, `crashed`                          | something failed                                   | try again; `poplin doctor` reports on the install             |
+
+**Updating an install**
+
+| Code                 | Means                                                       | What to do                                                     |
+| -------------------- | ----------------------------------------------------------- | -------------------------------------------------------------- |
+| `no_update_address`  | the install has no Deploy Hook saved                        | put its URL in `POPLIN_UPDATE_ADDRESS`, then `poplin update --save-address` |
+| `no_address_to_save` | `POPLIN_UPDATE_ADDRESS` holds no URL                        | put the Deploy Hook's URL in it for this one command           |
+| `no_update`          | no newer version is known to the install                    | `poplin update --anyway` rebuilds all the same                 |
+| `update_refused`     | Cloudflare refused to start the build, with the status shown | make a new Deploy Hook and save it                             |
+| `update_unreachable` | Cloudflare did not answer in time; the build may have started | wait a minute, then try again                                |
 
 **Setting up an install**
 

@@ -2,6 +2,7 @@
 
 import type { UploadLimits } from "@poplin/core/src/actions/begin-publish";
 import type { Install } from "@poplin/core/src/actions/records";
+import type { Rebuilding } from "@poplin/core/src/actions/start-update";
 import { OPEN_ROUTES, ROUTES } from "@poplin/core/src/api/routes";
 import { AllowanceSpent } from "@poplin/core/src/database/driver";
 import { siteReference } from "@poplin/core/src/sites/labels";
@@ -56,6 +57,9 @@ export interface ApiDeps extends Install {
 
   /** The key one visitor's requests are counted by: `visitorKey` of the address the host itself saw, never of a header a visitor can set. */
   readonly visitorOf: (request: Request) => Promise<string>;
+
+  /** How the provider starts a rebuild of the install: which addresses it takes, and what sends the one request. The starts are counted in `counters`. */
+  readonly rebuild: Omit<Rebuilding, "counters">;
 }
 
 function isOpen(name: RouteName): name is OpenName {
@@ -130,6 +134,7 @@ async function answer(name: RouteName, request: Request, params: Readonly<Record
     request,
     limits: deps.limits,
     version: deps.version,
+    rebuilding: { ...deps.rebuild, counters: deps.counters },
   };
 
   if (name === "exportFile") return respondFile(await HANDLERS.exportFile(call));

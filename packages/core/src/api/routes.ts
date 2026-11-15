@@ -3,6 +3,7 @@
 // The server registers its handlers from this table and a client builds its requests from it, so the two cannot differ.
 // A request carries `Authorization: Bearer <token>`, but for the routes of `OPEN_ROUTES`, which a computer with no token calls to get one. A JSON body goes with `Content-Type: application/json`, a file's bytes with `application/octet-stream`.
 // A duplicate is a run of requests too: `duplicateSite` copies a few files a request, as many as one request's calls allow, and is sent again with the `upload` it answered until it answers the new site.
+// The address that starts a rebuild of the install is sent in and never answered: its three routes answer whether one is saved and since when.
 // An export and an import are a run of small requests the client drives: `exportSites` a page at a time, then `exportFiles` and `exportFile` for each version; `beginImport`, then the upload routes under the id it answers.
 
 import type * as v from "valibot";
@@ -25,7 +26,9 @@ import type { ROLLBACK_OPTIONS } from "../actions/rollback";
 import type { showUpload } from "../actions/show-upload";
 import type { signEveryoneOut } from "../actions/sign-out";
 import type { SiteAnswer } from "../actions/site-object";
+import type { START_OPTIONS, startUpdate } from "../actions/start-update";
 import type { Update } from "../actions/update";
+import type { UPDATE_ADDRESS_REQUEST, updateAddressState } from "../actions/update-address";
 import type { uploadFile } from "../actions/upload-file";
 import type { SettingValues } from "../records/settings";
 
@@ -178,6 +181,11 @@ export const ROUTES = {
   changeConfig: send<void, Partial<SettingValues>, Answer<typeof changeConfig>>("PATCH", "/config", () => `${BASE}/config`),
   signEveryoneOut: ask<void, Answer<typeof signEveryoneOut>>("DELETE", "/sessions", () => `${BASE}/sessions`),
   listAudit: ask<v.InferInput<typeof AUDIT_QUERY>, Answer<typeof listAudit>>("GET", "/audit", ({ limit, before }) => `${BASE}/audit${queryOf({ limit, before })}`),
+
+  startUpdate: ask<v.InferInput<typeof START_OPTIONS>, Answer<typeof startUpdate>>("POST", "/update", ({ anyway }) => `${BASE}/update${queryOf({ anyway })}`),
+  updateAddress: ask<void, Answer<typeof updateAddressState>>("GET", "/update/address", () => `${BASE}/update/address`),
+  saveUpdateAddress: send<void, v.InferInput<typeof UPDATE_ADDRESS_REQUEST>, Answer<typeof updateAddressState>>("PUT", "/update/address", () => `${BASE}/update/address`),
+  removeUpdateAddress: ask<void, Answer<typeof updateAddressState>>("DELETE", "/update/address", () => `${BASE}/update/address`),
 } as const;
 
 /** The routes that take no token: a computer calls them to get one. `beginLogin` answers `verify_url`, the address of `ALLOW_PAGE` on the install that was asked, with the code. */

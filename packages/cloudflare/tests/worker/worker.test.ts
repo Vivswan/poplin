@@ -668,6 +668,34 @@ describe("a computer's login", () => {
     expect(statuses.filter(([, status]) => status !== 401)).toEqual([]);
   });
 
+  // Drift: the Worker is where the address check and the count of starts are joined to a real request. Wired without either, a pasted address of any host would be sent to, or a script could queue builds without end.
+  test("an admin saves only a Deploy Hook, one start sends it one POST that follows no redirect, and a second start in the minute sends nothing", async () => {
+    const hook = "https://api.cloudflare.com/client/v4/workers/builds/deploy_hooks/a1b2c3d4-e5f6-7890-abcd-ef1234567890";
+    const sent: unknown[][] = [];
+    const worker = instance(w, undefined, undefined, async (address, init) => {
+      sent.push([address, init.method, init.redirect, "body" in init]);
+
+      return Response.json({ success: true });
+    });
+    const token = await tokenOf(w, "admin");
+    const start = (): Promise<Response> => api(worker, token, "POST", ROUTES.startUpdate.path({ anyway: true }));
+
+    // The binding's minute is the wall clock's, not the test's: a run that would cross one waits for the next.
+    const left = MINUTE_MS - (Date.now() % MINUTE_MS);
+    if (left < MINUTE_END_MS) await new Promise((resolve) => setTimeout(resolve, left));
+
+    const elsewhere = await api(worker, token, "PUT", ROUTES.saveUpdateAddress.path(), { address: "https://example.com/client/v4/workers/builds/deploy_hooks/a1b2c3d4" });
+    const unsaved = await start();
+    const saved = await done<{ set: boolean }>(await api(worker, token, "PUT", ROUTES.saveUpdateAddress.path(), { address: hook }));
+    const first = await done<{ started: boolean; to: string | null }>(await start());
+    const second = await start();
+    const state = await api(worker, token, "GET", ROUTES.updateAddress.path());
+
+    expect([elsewhere.status, unsaved.status, saved.set, first, second.status]).toEqual([400, 409, true, { started: true, from: JSON.parse(manifest).version, to: null }, 429]);
+    expect(sent).toEqual([[hook, "POST", "manual", false]]);
+    expect(await state.text()).not.toContain("a1b2c3d4");
+  });
+
   // Drift: questions are counted by the address Cloudflare saw, and logins begun by all addresses together. One key for everyone would let one computer silence every terminal, and no count of the install would let a few addresses spend a day's writes.
   test("the sixth login begun in a minute is refused whichever address begins it, and the twenty-sixth question of one address is refused while another address is answered", async () => {
     const worker = instance(w);
