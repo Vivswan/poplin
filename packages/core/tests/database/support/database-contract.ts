@@ -159,6 +159,19 @@ function updateCheck(label: string, makeDatabase: DatabaseFactory): void {
 
       expect([before, written, await database.readUpdateCheck()]).toEqual([undefined, { checked_at: NOW + 1, news: null, seen_at: null, auto: { ...start, taken: "0.2.0" } }, written]);
     });
+
+    // Drift: the frame of every screen is drawn from one read of four records. One that gave a record differently from its own read would show a release, a start, or an alarm that the screen behind it denies.
+    test("the frame's one read gives the settings, the saved address, the kept run, and the last asking, each as its own read gives it: nothing on an empty install, then each once it is kept", async () => {
+      const database = await opened(makeDatabase);
+      const empty = await database.readFrame();
+      await database.initSettings(SETTINGS, BY_ADA);
+      await database.keepUpdateAddress("https://builds.provider.example/hooks/first-3f9c", BY_ADA);
+      await database.keepDomainCheck({ ran_at: NOW, by: ADA, run: "check", pieces: [{ piece: "Record", detail: "every site", part: "reach", state: "ok" }] }, { run: "check" });
+      await database.keepUpdateCheck({ checked_at: NOW, news: null });
+      const each = { settings: await database.readSettings(), updateAddress: await database.readUpdateAddress(), domainCheck: await database.readDomainCheck(), updateCheck: await database.readUpdateCheck() };
+
+      expect([empty, Object.values(each).includes(undefined), await database.readFrame()]).toEqual([{ settings: undefined, updateAddress: undefined, domainCheck: undefined, updateCheck: undefined }, false, each]);
+    });
   });
 }
 
@@ -186,6 +199,7 @@ function domainCheck(label: string, makeDatabase: DatabaseFactory): void {
       await database.keepDomainCheck(second, { run: "repair", from: "setup" });
 
       expect([before, kept, await database.readDomainCheck()]).toEqual([undefined, { ...first, users_changed_at: null }, { ...second, users_changed_at: null }]);
+      expect(await database.readFrame()).toEqual({ settings: undefined, updateAddress: undefined, domainCheck: { ...second, users_changed_at: null }, updateCheck: undefined });
       expect((await auditTrail(database)).map(({ action, by, at, detail }) => ({ action, by, at, detail }))).toEqual([
         { action: "domain_synced", by: ADA, at: NOW, detail: { run: "check", from: "dashboard" } },
         { action: "domain_synced", by: ADA, at: NOW + 5, detail: { run: "repair", from: "setup" } },

@@ -171,6 +171,14 @@ export interface SettingsAndKey {
   readonly key: Uint8Array<ArrayBuffer> | undefined;
 }
 
+/** What the frame around every screen of the dashboard is drawn from, as one read gave it; each is `undefined` where its own read gives that. */
+export interface FrameRecords {
+  readonly settings: SettingValues | undefined;
+  readonly updateAddress: UpdateAddress | undefined;
+  readonly domainCheck: RememberedCheck | undefined;
+  readonly updateCheck: UpdateCheck | undefined;
+}
+
 /** The change was made; `site` is the site after it. */
 export interface Done {
   readonly kind: "done";
@@ -735,6 +743,13 @@ export interface Database {
 
   /** The install's settings, `undefined` before setup stored them. */
   readSettings(): Promise<SettingValues | undefined>;
+
+  /**
+   * Read what the dashboard's frame is drawn from, in one step: the settings, the address that starts a rebuild, the kept run of the domain, and the last asking for a newer version.
+   *
+   * @returns each as its own read gives it
+   */
+  readFrame(): Promise<FrameRecords>;
 
   /**
    * Store the settings of a new install.

@@ -42,6 +42,7 @@ import type {
   Database,
   Done,
   ExportPage,
+  FrameRecords,
   LeftoversPage,
   LoginDecision,
   LoginRoom,
@@ -179,6 +180,14 @@ const READ_SETTINGS = built(BUILD.select({ value: settings.value }).from(setting
 
 /** The signing key, as hex text. */
 const READ_SIGNING_KEY = built(BUILD.select({ value: secrets.value }).from(secrets).where(eq(secrets.name, "session_key")));
+
+/** The address that starts a rebuild, and when it was saved. */
+const READ_UPDATE_ADDRESS = built(BUILD.select({ value: secrets.value, created_at: secrets.created_at }).from(secrets).where(eq(secrets.name, "update_address")));
+
+/** The last asking for a newer version, its news and its start as JSON text. */
+const READ_UPDATE_CHECK = built(
+  BUILD.select({ checked_at: updateCheck.checked_at, news: updateCheck.news, seen_at: updateCheck.seen_at, auto: updateCheck.auto }).from(updateCheck).where(eq(updateCheck.id, 1)),
+);
 
 /** The form of a day: a date such as `2026-11-13`, which sorts as text in the order of time. */
 const DAY_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
@@ -320,6 +329,12 @@ function updateCheckIn(result: StatementResult | undefined): UpdateCheck | undef
   const check = v.safeParse(UPDATE_CHECK, { checked_at: row.checked_at, news, seen_at: row.seen_at, auto });
 
   return check.success ? check.output : undefined;
+}
+
+function updateAddressIn(result: StatementResult | undefined): UpdateAddress | undefined {
+  const row = result?.rows[0];
+
+  return row === undefined ? undefined : updateAddressFromRow(row);
 }
 
 function settingsIn(result: StatementResult | undefined): SettingValues | undefined {
@@ -973,8 +988,7 @@ export class SqlDatabase implements Database {
   }
 
   async readUpdateCheck(): Promise<UpdateCheck | undefined> {
-    const asked = BUILD.select({ checked_at: updateCheck.checked_at, news: updateCheck.news, seen_at: updateCheck.seen_at, auto: updateCheck.auto }).from(updateCheck).where(eq(updateCheck.id, 1));
-    const [read] = await this.#driver.batch([built(asked)]);
+    const [read] = await this.#driver.batch([READ_UPDATE_CHECK]);
 
     return updateCheckIn(read);
   }
@@ -1043,6 +1057,12 @@ export class SqlDatabase implements Database {
     const [read] = await this.#driver.batch([READ_SETTINGS]);
 
     return settingsIn(read);
+  }
+
+  async readFrame(): Promise<FrameRecords> {
+    const [stored, address, domain, update] = await this.#driver.batch([READ_SETTINGS, READ_UPDATE_ADDRESS, domainCheckAsked(), READ_UPDATE_CHECK]);
+
+    return { settings: settingsIn(stored), updateAddress: updateAddressIn(address), domainCheck: domainCheckIn(domain), updateCheck: updateCheckIn(update) };
   }
 
   async initSettings(values: SettingValues, signed: Signed): Promise<{ readonly kind: "done" | "already_set"; readonly values: SettingValues }> {
@@ -1133,11 +1153,9 @@ export class SqlDatabase implements Database {
   }
 
   async readUpdateAddress(): Promise<UpdateAddress | undefined> {
-    const address = BUILD.select({ value: secrets.value, created_at: secrets.created_at }).from(secrets).where(eq(secrets.name, "update_address"));
-    const [read] = await this.#driver.batch([built(address)]);
-    const row = read?.rows[0];
+    const [read] = await this.#driver.batch([READ_UPDATE_ADDRESS]);
 
-    return row === undefined ? undefined : updateAddressFromRow(row);
+    return updateAddressIn(read);
   }
 
   async keepUpdateAddress(address: string, signed: Signed): Promise<void> {

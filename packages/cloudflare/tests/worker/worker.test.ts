@@ -738,10 +738,14 @@ describe("the admin hostname", () => {
     expect({
       "an address that asks nothing but who is there": await asked("/data/public-address?name=docs"),
       "the people, who are in the settings the session read": await asked("/data/people"),
+      "a page of the dashboard: the session, then all its frame shows": await asked("/"),
+      "the frame alone": await asked("/data/frame"),
       "one site: the site, its views, and who published it": await asked(`/data/sites/${site.label}`),
     }).toEqual({
       "an address that asks nothing but who is there": [200, 1],
       "the people, who are in the settings the session read": [200, 1],
+      "a page of the dashboard: the session, then all its frame shows": [200, 2],
+      "the frame alone": [200, 2],
       "one site: the site, its views, and who published it": [200, 4],
     });
   });

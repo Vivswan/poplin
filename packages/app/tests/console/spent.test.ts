@@ -32,18 +32,11 @@ describe("a console whose install meets a day's allowance that is used up", () =
     expect(await told(answer)).toEqual([503, WAIT, "no-store", { ok: false, code: "allowance_spent", about: "writing", sentence: SENTENCES.no_more_writing }]);
   });
 
-  // Drift: a page has no client yet to draw a refusal, and the frame it would be drawn in reads the settings, which a database that gives no more reading cannot.
+  // Drift: a page has no client yet to draw a refusal, and the frame it would be drawn in reads the database, which one that gives no more reading cannot.
   test("answers a page in plain words with the wait", async () => {
     const opened = await openConsole("/next");
-    const { database } = opened.base.install;
-    const reads = database.readSettings.bind(database);
-    let asked = 0;
-    // The session reads the settings first; the page's own read is the one that meets the spent day.
-    database.readSettings = () => {
-      asked += 1;
-
-      return asked === 1 ? reads() : Promise.reject(new AllowanceSpent("reading"));
-    };
+    // The session is read before it; the frame's own read is the one that meets the spent day.
+    opened.base.install.database.readFrame = () => Promise.reject(new AllowanceSpent("reading"));
 
     expect(await told(await opened.get("/settings"))).toEqual([503, WAIT, "no-store", `${SENTENCES.no_more_reading}\n`]);
   });
