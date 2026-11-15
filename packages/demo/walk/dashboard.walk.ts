@@ -1,5 +1,7 @@
 // The link walk: every place the dashboard's own controls lead to, on a wide screen and on a phone, in the light scheme and in the dark one. A question is opened and left, so nothing is changed until the last stop, which starts the sample data over.
 
+import { readFile } from "node:fs/promises";
+
 import { expect, type Locator, type Page } from "@playwright/test";
 
 import { arrive, openPanel, said, screenHeading, siteName, test } from "./visit";
@@ -55,6 +57,16 @@ const STOPS: readonly Stop[] = [
     name: "Activity, from the side",
     open: (page) => toSection(page, "Activity"),
     shows: (page, wide) => [screenHeading(page, "Activity"), rows(page, wide, "Activity")],
+  },
+  {
+    name: "the total, at the foot of Activity",
+    open: async () => {},
+    shows: (page) => [page.getByRole("navigation", { name: "Pages", exact: true }).filter({ visible: true }).getByText(/^1 to 50 of [\d,]+$/)],
+  },
+  {
+    name: "the log saved as a file, from Download",
+    open: saveLog,
+    shows: (page) => [said(page, "Download started.")],
   },
   {
     name: "Usage, from the side",
@@ -260,6 +272,15 @@ interface Stop {
 
   /** Leaves the place without changing anything; what it showed is then gone. Left out, the place stays open for the next stop. */
   readonly close?: (page: Page) => Promise<void>;
+}
+
+/** Save the Activity log as comma-separated values, and read the file's first line: the headings of its fields. */
+async function saveLog(page: Page): Promise<void> {
+  await page.getByRole("button", { name: "Download", exact: true }).filter({ visible: true }).click();
+  const [file] = await Promise.all([page.waitForEvent("download"), page.getByRole("menuitem", { name: "CSV", exact: true }).click()]);
+  const [first] = (await readFile(await file.path(), "utf8")).split("\r\n");
+
+  expect([file.suggestedFilename(), first]).toEqual([expect.stringMatching(/^poplin-activity-\d{4}-\d{2}-\d{2}\.csv$/), "When (UTC),Who,What,Site,Action"]);
 }
 
 /** Go to a section by its entry at the side, which a narrow screen keeps behind a button. */

@@ -21,7 +21,7 @@ export type Total = InferResponseType<typeof api.activity.total.$get, 200>;
 export type Entry = Page["entries"][number];
 
 /** What the address narrows the log to, with only the keys and values the server knows. */
-function narrowingOf(query: URLSearchParams): NonNullable<Parameters<typeof api.activity.total.$get>[0]>["query"] {
+export function narrowingOf(query: URLSearchParams): NonNullable<Parameters<typeof api.activity.total.$get>[0]>["query"] {
   const kind = kindOf(query);
   const site = (query.get("site") ?? "").trim();
 

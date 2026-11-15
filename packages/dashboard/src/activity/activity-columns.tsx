@@ -1,10 +1,10 @@
 // How an entry of the log is drawn in the table: when, who, what, and the site it was done to.
 
+import { whatOf } from "@poplin/app/src/console/activity-what";
 import { Link } from "@tanstack/react-router";
 import type { ReactNode } from "react";
 
 import type { Entry } from "@/activity/activity-queries";
-import { whatOf } from "@/activity/activity-words";
 import { wholeMoment } from "@/lib/sites";
 import { type LoginNames, Who } from "@/shared/who";
 import type { ColumnSpec } from "@/table/data-table";

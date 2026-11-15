@@ -1,4 +1,4 @@
-// The Activity screen's routes: which entries a page holds under each narrowing, what each entry says of its site and its token, how a page goes on and back in either order, and how many entries the log is said to hold.
+// The Activity screen's routes: which entries a page holds under each narrowing, what each entry says of its site and its token, how a page goes on and back in either order, how many entries the log is said to hold, and the file the log is saved as.
 
 import { describe, expect, test } from "bun:test";
 
@@ -189,5 +189,121 @@ describe("the total of the log", () => {
     const opened = await openConsole();
 
     expect((await opened.getLoggedOut("/data/activity/total")).status).toBe(401);
+  });
+});
+
+/** Append logins to an install's log until it holds as many entries; an opened install holds one already. */
+async function fillLog(opened: Awaited<ReturnType<typeof openConsole>>, entries: number): Promise<void> {
+  const { install, owner, clock } = opened.base;
+  for (let count = 1; count < entries; count += 1) await install.database.appendAudit({ action: "login", detail: {} }, { by: owner, at: clock.now });
+}
+
+describe("the log as a file", () => {
+  // Drift: the file would hold other entries than the screen's filters show, name a token by its id where the screen names it by its note, or say something else was done than the screen says.
+  test.each([
+    ["?kind=access", ['"Added the token ""the laptop""",,token_added']],
+    ["?site=notes", ["Changed the site's settings,trip-notes,details", "Made the site,field-notes,create"]],
+    ["?kind=access&site=notes", []],
+  ])("under %p holds a heading and the entries of that narrowing, the newest first, in the screen's words", async (query, ends) => {
+    const { opened } = await openWithHistory();
+    const { owner, clock } = opened.base;
+    const response = await opened.get(`/data/activity/download${query}`);
+    const when = new Date(clock.now).toISOString();
+
+    expect([response.status, await response.text()]).toEqual([200, ["When (UTC),Who,What,Site,Action", ...ends.map((end) => `${when},${owner},${end}`), ""].join("\r\n")]);
+  });
+
+  // Drift: a browser would show the file instead of saving it, save it under a name with no date or the wrong ending, or keep a copy of the log in its cache.
+  test.each([
+    ["", "text/csv; charset=utf-8", "csv"],
+    ["?format=csv", "text/csv; charset=utf-8", "csv"],
+    ["?format=jsonl", "application/jsonl; charset=utf-8", "jsonl"],
+  ])("under %p is answered as a file to save, named by the day, and kept by no cache", async (query, type, ending) => {
+    const opened = await openConsole();
+    const response = await opened.get(`/data/activity/download${query}`);
+    const day = new Date(opened.base.clock.now).toISOString().slice(0, 10);
+
+    expect([response.headers.get("Content-Type"), response.headers.get("Content-Disposition"), response.headers.get("Cache-Control")]).toEqual([type, `attachment; filename="poplin-activity-${day}.${ending}"`, "no-store"]);
+  });
+
+  // Drift: a line of the JSON file would lose what the action set, which only this format holds.
+  test("as one JSON object a line holds what each action set", async () => {
+    const { opened, token } = await openWithHistory();
+    const lines = (await (await opened.get("/data/activity/download?format=jsonl&kind=access")).text()).split("\n");
+
+    expect([lines.length, JSON.parse(lines[0] ?? "null")]).toEqual([
+      2,
+      { when: new Date(opened.base.clock.now).toISOString(), who: opened.base.owner, what: 'Added the token "the laptop"', site: "", action: "token_added", detail: { token, scope: "publisher", note: "the laptop" } },
+    ]);
+  });
+
+  // Drift: a file would grow with the log, in rows read and in the time one request is given, or be cut without a word, so that a reader takes it for the whole log.
+  test.each([
+    [2000, "settings_set", null],
+    [2001, "2,000 entries. The log holds more: download the next part.", "2"],
+  ])("of a log of %d entries holds 2,000 of them, and its last line and the place after it say whether the log holds more", async (entries, last, after) => {
+    const opened = await openConsole();
+    await fillLog(opened, entries);
+    const text = (await (await opened.get("/data/activity/download?format=jsonl")).text()).trimEnd().split("\n");
+    const said = JSON.parse(text.at(-1) ?? "null") as { readonly note?: string; readonly action?: string };
+    const next = await (await opened.get("/data/activity/download/next")).json();
+
+    expect([text.slice(0, 2000).length, said.note ?? said.action, next]).toEqual([2000, last, { ok: true, after }]);
+  });
+
+  // Drift: a file cut by a failure would end like a whole one, and be read as the whole log; a browser reports a failed download only when the answer breaks off.
+  test("breaks off with an error when a reading after the first fails, instead of ending as a whole file", async () => {
+    const opened = await openConsole();
+    await fillLog(opened, 1501);
+    const { database } = opened.base.install;
+    const read = database.listAudit.bind(database);
+    const readings = { count: 0 };
+    database.listAudit = async (query) => {
+      readings.count += 1;
+      if (readings.count > 1) throw new Error("the database is away");
+
+      return read(query);
+    };
+    const response = await opened.get("/data/activity/download");
+
+    expect(response.status).toBe(200);
+    await expect(response.text()).rejects.toThrow("the database is away");
+  });
+
+  // Drift: a long log could not be saved whole: the second file would repeat the first one's entries or skip some, or two files of a day would be saved under one name.
+  test("of a long log goes on in a second file from the place the first ended, each named by its number, and the last says nothing of more", async () => {
+    const opened = await openConsole();
+    await fillLog(opened, 2501);
+    const day = new Date(opened.base.clock.now).toISOString().slice(0, 10);
+    const { after } = (await (await opened.get("/data/activity/download/next?kind=access")).json()) as { readonly after: string };
+    const files = [await opened.get("/data/activity/download?kind=access&format=jsonl&part=1"), await opened.get(`/data/activity/download?kind=access&format=jsonl&part=2&after=${after}`)];
+    const lines = await Promise.all(files.map(async (file) => (await file.text()).trimEnd().split("\n")));
+    const end = await (await opened.get(`/data/activity/download/next?kind=access&after=${after}`)).json();
+
+    expect(files.map((file) => file.headers.get("Content-Disposition"))).toEqual([1, 2].map((part) => `attachment; filename="poplin-activity-${day}-${part}.jsonl"`));
+    expect([lines.map((file) => file.length), lines[0]?.at(-1), end]).toEqual([[2001, 500], '{"note":"2,000 entries. The log holds more: download the next part."}', { ok: true, after: null }]);
+  });
+
+  // Drift: a crafted address would reach the log with a key it does not know, or the file would be read in an order its bound is not said for.
+  test.each([
+    ["?format=xml", "format"],
+    ["?after=soon", "after"],
+    ["?part=0", "part"],
+    ["?dir=asc", "dir"],
+    ["?kind=everything", "kind"],
+    ["/next?format=csv", "format"],
+    ["/next?after=0", "after"],
+  ])("refuses %s by the key alone", async (query, about) => {
+    const opened = await openConsole();
+    const response = await opened.get(`/data/activity/download${query}`);
+
+    expect([response.status, await response.json()]).toEqual([400, { ok: false, code: "bad_argument", about, sentence: `The value of ${about} is not one it takes.` }]);
+  });
+
+  // Drift: the file is the install's whole history; without a session it would be handed to anyone who knows the address.
+  test("is answered to nobody without a session, nor is the place a file ends", async () => {
+    const opened = await openConsole();
+
+    expect([(await opened.getLoggedOut("/data/activity/download")).status, (await opened.getLoggedOut("/data/activity/download/next")).status]).toEqual([401, 401]);
   });
 });

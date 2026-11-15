@@ -40,6 +40,7 @@ const signingKey = await base.install.database.readSigningKey();
 const knownPaths = fc.oneof(
   fc.constantFrom("/", "/?view=trash", "/tokens", "/tokens/allow?code=WDJB-MJHT", "/settings", "/activity", "/usage", "/domain", "/login", "/api/sites", "/*", "/assets/app-4f1c.js", "/assets/other.js"),
   fc.constantFrom("/data/sites", "/data/sites?view=trash", "/data/sites?after=1-000000000000", "/data/activity?after=3", "/data/usage", "/data/settings", "/data/frame", "/data/tokens", "/data/people", "/data/logins", "/data/*", "/data/update"),
+  fc.constantFrom("/data/activity?back=3&size=100", "/data/activity/total?kind=sites", "/data/activity/download", "/data/activity/download?format=jsonl&after=3&part=2", "/data/activity/download/next"),
   fc.constantFrom(...LABELS).map((label) => `/sites/${label}`),
   fc.constantFrom(...LABELS).map((label) => `/data/sites/${label}`),
   fc.tuple(fc.constantFrom(...LABELS), fc.constantFrom(...CHANGES)).map(([label, change]) => `/data/sites/${label}/${change}`),

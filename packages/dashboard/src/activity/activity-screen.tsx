@@ -1,5 +1,7 @@
 // The Activity screen: the audit log in one table, the newest entry first or the oldest, narrowed by the kind of action and by a site's name.
 
+import { MOST_IN_FILE } from "@poplin/app/src/console/activity-file";
+import { whatOf } from "@poplin/app/src/console/activity-what";
 import { useNavigate } from "@tanstack/react-router";
 import { ListFilterIcon } from "lucide-react";
 import { type ReactNode, useMemo } from "react";
@@ -7,7 +9,8 @@ import { type ReactNode, useMemo } from "react";
 import { activityColumns, SiteThen, When } from "@/activity/activity-columns";
 import { ActivityFoot } from "@/activity/activity-foot";
 import { type Entry, type Page, useActivityPage, useActivityTotal } from "@/activity/activity-queries";
-import { emptyWords, KINDS, type Kind, kindOf, logQuery, sortedQuery, sortOf, whatOf } from "@/activity/activity-words";
+import { emptyWords, KINDS, type Kind, kindOf, logQuery, sortedQuery, sortOf } from "@/activity/activity-words";
+import { DownloadMenu } from "@/activity/download-menu";
 import { usePageSize } from "@/activity/page-size";
 import { Button } from "@/components/ui/button";
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyTitle } from "@/components/ui/empty";
@@ -201,6 +204,12 @@ export function ActivityScreen(): ReactNode {
   const pages =
     page === undefined ? null : <ActivityFoot query={query} page={page} total={total} size={size} onSize={chooseSize} onMove={move} busy={isPlaceholderData} />;
 
+  // A page with no entry says the log is empty only when it is the log's first page.
+  const paged = query.get("after") !== null || query.get("back") !== null;
+  // A page still shown from the address before says nothing of the log the address now asks for.
+  const whole = page !== undefined && !isPlaceholderData && page.next === null && page.previous === null;
+  const fitsOne = whole || (!isPlaceholderData && total?.whole === true && total.total <= MOST_IN_FILE);
+
   const rowActions = (entry: Entry): ReactNode => {
     const name = entry.site?.name;
     if (name === undefined || name === site) return null;
@@ -218,7 +227,7 @@ export function ActivityScreen(): ReactNode {
     <AppShell current="activity" heading="Activity">
       <section aria-label="Activity" className="flex min-h-0 min-w-0 flex-1 flex-col">
         <div className="flex shrink-0 flex-wrap items-center gap-2 px-6 pb-3 max-md:px-4">
-          <div className="max-md:flex max-md:basis-full">
+          <div className="max-md:order-1 max-md:flex max-md:min-w-0 max-md:flex-1">
             <SearchBox
               sent={site}
               onSearch={(text) => move({ site: text }, true)}
@@ -227,14 +236,20 @@ export function ActivityScreen(): ReactNode {
               maxLength={MAX_SEARCH}
             />
           </div>
-          <KindSelect kind={kind} onChoose={(chosen) => move({ kind: chosen === "all" ? "" : chosen })} />
-          <div className="ml-auto flex items-center gap-2 max-md:ml-0 max-md:min-w-0 max-md:flex-[2]">
-            <OrderSelect
-              descending={sortOf(query).descending}
-              onChoose={(descending) => void navigate({ to: PATH, search: searchOf(sortedQuery(query, { key: "when", descending })) })}
-            />
-            <TimeZoneToggle choice={timeZone} onChoose={chooseTimeZone} />
+          <div className="flex min-w-0 flex-1 items-center gap-2 max-md:order-3 max-md:basis-full">
+            <KindSelect kind={kind} onChoose={(chosen) => move({ kind: chosen === "all" ? "" : chosen })} />
+            <div className="ml-auto flex items-center gap-2 max-md:ml-0 max-md:min-w-0 max-md:flex-[2]">
+              <OrderSelect
+                descending={sortOf(query).descending}
+                onChoose={(descending) => void navigate({ to: PATH, search: searchOf(sortedQuery(query, { key: "when", descending })) })}
+              />
+              <TimeZoneToggle choice={timeZone} onChoose={chooseTimeZone} />
+            </div>
           </div>
+          {/* One menu at both widths, so the file after a file is offered wherever the first was saved: at the toolbar's end, which a phone draws beside the search. */}
+          <span className="max-md:order-2">
+            <DownloadMenu query={query} fitsOne={fitsOne} empty={page === undefined || (!paged && page.entries.length === 0)} />
+          </span>
         </div>
         {instead ?? (
           <>

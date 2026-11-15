@@ -15,7 +15,7 @@ import { readShell } from "../../../app/tests/console/support/shell";
 import type { Bindings } from "../../src/worker/bindings";
 import { signer } from "../login/support/access";
 import {
-  ADMIN, type Answer, type ApiCalls, accessHeaders, ask, api, BINDINGS, cookieOf, countedBindings, done, installOf, instance, logIn, OWNER,
+  ADMIN, type Answer, type ApiCalls, accessHeaders, ask, api, BINDINGS, cookieOf, countedBindings, done, freePlanBindings, installOf, instance, logIn, OWNER,
   PATHS, type Published, page, publish, send, spentDatabase, tokenOf, type World, under, wait, world,
 } from "./support/install";
 
@@ -51,6 +51,9 @@ const MINUTE_MS = 60_000;
 
 /** The end of a minute, in milliseconds: too little of it for a test that counts requests within one. */
 const MINUTE_END_MS = 2000;
+
+/** The most entries one file of the audit log holds. */
+const FILE_ENTRIES = 2000;
 
 /** A site in the form of one, for a request to every route that names a site. */
 const SITE = { param: { site: "zzzzzzzzzzzz" } };
@@ -137,6 +140,23 @@ function failingDatabase(fails: (batch: number) => boolean): D1Database {
         if (fails(batches)) return Promise.reject(new Error("the database is away"));
 
         return Reflect.apply(member, inner, given);
+      };
+    },
+  });
+}
+
+/** A database binding that adds the rows every batch read to `rows`, as the provider counts them against a day's allowance. */
+function meteredDatabase(database: D1Database, rows: { read: number }): D1Database {
+  return new Proxy(database, {
+    get(inner, name) {
+      const member: unknown = Reflect.get(inner, name, inner);
+      if (typeof member !== "function" || name !== "batch") return member;
+
+      return async (...given: unknown[]): Promise<unknown> => {
+        const results = (await Reflect.apply(member, inner, given)) as readonly D1Result[];
+        for (const { meta } of results) rows.read += meta.rows_read;
+
+        return results;
       };
     },
   });
@@ -692,6 +712,42 @@ describe("the admin hostname", () => {
       [200, "text/javascript;charset=utf-8", KEPT_FOR_GOOD, true],
       [200, "text/css;charset=utf-8", KEPT_FOR_GOOD, true],
       [404, "text/plain; charset=UTF-8", null, false],
+    ]);
+  });
+});
+
+describe("the audit log as a file", () => {
+  // Drift: the log is only ever added to, so its file is the one answer of the dashboard that grows with it. Built whole, read a listing's page at a time, or with no bound, it would pass what the Free plan gives one request.
+  test("a log longer than a file holds is sent a reading at a time, 2,000 entries in 6 queries and a row read an entry, and says that the log holds more; where the next file goes on costs 3 queries and the same rows", async () => {
+    const session = { Cookie: cookieOf(await logIn(instance(w), w)) };
+    await BINDINGS.DB.prepare(
+      "WITH RECURSIVE counted(entry) AS (SELECT 1 UNION ALL SELECT entry + 1 FROM counted WHERE entry < ?) INSERT INTO audit (at, actor, action, detail) SELECT ?, ?, 'login', '{}' FROM counted",
+    )
+      .bind(FILE_ENTRIES + 200, Date.now(), OWNER)
+      .run();
+    const tally = { calls: 0 };
+    const rows = { read: 0 };
+    const bindings = freePlanBindings(tally);
+    const metered = { ...bindings, DB: meteredDatabase(bindings.DB, rows) };
+    // A new instance, since an instance keeps the bindings of its first request; what its start costs is counted apart.
+    const worker = instance(w);
+    await ask(worker, `${ADMIN}/data/frame`, { headers: session }, metered);
+    const start = { ...tally, ...rows };
+
+    const answer = await ask(worker, `${ADMIN}/data/activity/download?part=1`, { headers: session }, metered);
+    const pieces: string[] = [];
+    const decoder = new TextDecoder();
+    for await (const piece of answer.body ?? []) pieces.push(decoder.decode(piece));
+    const file = { calls: tally.calls - start.calls, read: rows.read - start.read };
+    const next = await ask(worker, `${ADMIN}/data/activity/download/next`, { headers: session }, metered);
+
+    expect([answer.status, answer.headers.get("Content-Disposition")]).toEqual([200, expect.stringMatching(/^attachment; filename="poplin-activity-\d{4}-\d{2}-\d{2}-1\.csv"$/)]);
+    expect(pieces.map((piece) => piece.split("\r\n").length - 1)).toEqual([1, 1000, 1000, 1]);
+    expect(pieces.at(-1)).toBe('"2,000 entries. The log holds more: download the next part."\r\n');
+    expect([file, await next.json(), { calls: tally.calls - start.calls - file.calls, read: rows.read - start.read - file.read }]).toEqual([
+      { calls: 6, read: FILE_ENTRIES + 4 },
+      { ok: true, after: expect.stringMatching(/^[1-9]\d*$/) },
+      { calls: 3, read: FILE_ENTRIES + 3 },
     ]);
   });
 });

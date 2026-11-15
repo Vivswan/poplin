@@ -138,7 +138,7 @@ A run that cannot make the install answer, or cannot start the checks, fails: th
 | a plan whose bot settings the API can change                        | `crawler`                                                                |
 | the guard rule, the redirect rule, or the rate rule on the zone     | `L8-method`, `L8-scanner`, `L8-http`, `burst-rate-rule`                  |
 | a run started by hand with the many-files check switched on         | `L10`: two thousand uploads, so not on every green main                  |
-| a person in a browser                                               | `L2`, `L3`, `L4-in`, `L5b`, `L6`, `L7`, `L9`: the checklist below        |
+| a person in a browser                                               | `L2`, `L3`, `L4-in`, `L5b`, `L6`, `L7`, `L9`, `download`: the checklist below        |
 
 ## The token's permissions
 
@@ -176,6 +176,7 @@ Before you start: Access is on for the test account, and the `POPLIN_LIVE_LOGIN`
 | `L5b`   | In Zero Trust, delete the Access application named `poplin`. Open a private site logged out. Run the workflow again.                                             | Status 404 and no part of the page. After the workflow, the application is back and the login works.    |
 | `L6`    | Reload a private page twenty times. Open the Worker's metrics in the Cloudflare dashboard.                                                                       | CPU time per request under 10 ms, the Free plan's limit.                                                |
 | `L9`    | Open an unlisted site in Chromium, Firefox, and Safari. Publish new content to it. Reload within five minutes, then after.                                       | Which reload first shows the new version in each engine, and that no page mixes files of both versions. |
+| `download` | On an install whose Activity holds more than 2,000 entries, press Download, then CSV. Open the Worker's metrics in the Cloudflare dashboard. | The file is named `poplin-activity-<date>-1.csv`, holds the heading and 2,000 entries, and ends with the line that says the log holds more. CPU time of that request under 10 ms, the Free plan's limit. |
 | `copy`  | After `setup`, open the copy on GitHub, and the Worker's build settings in Cloudflare. Read the log of the first build. | The deploy command runs the `deploy` script of `package.json`. The log holds one line that starts with `poplin:`. Note what the copy's `wrangler.jsonc` holds that the repository's does not. |
 | `update` | With a release of poplin published, follow "Update the install" in `docs/run/update.md` on the install of `setup`. Read the new build's log. | The log holds `poplin: deploying`, the release's version, and `(was asked for latest)`. The dashboard, its sites, and its settings are as before, and the account holds no second bucket or database. |
 | `pin`   | Set the build variable `POPLIN_VERSION` to an older release's version and build again. Then set it to `v1` and build again. | The first log names the older version. The second build fails with one line that starts with `poplin:` and holds `Nothing was deployed`, and the install still answers. |
