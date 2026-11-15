@@ -65,9 +65,9 @@ function leavingQuestion(person: Person | undefined): Question | undefined {
 
 /** Draw the Users tab. */
 export function PeopleTab({ people, failure, actions, onRetry }: PeopleTabProps): ReactNode {
-  // Each opening of the dialog has its own number: an add that answers after its dialog was left closes nothing that was opened since.
-  const [adding, setAdding] = useState<number>();
-  const openings = useRef(0);
+  // Each opening of the dialog has its own number: an add that answers after its dialog was left closes nothing that was opened since. The number stays while the dialog closes, so the dialog is the same one and gives the focus back.
+  const [adding, setAdding] = useState({ opening: 0, open: false });
+  const adder = useRef<HTMLButtonElement>(null);
   const [leaving, setLeaving] = useState<Person>();
   const [signingOut, setSigningOut] = useState(false);
   const rows = useMemo<readonly Person[]>(() => (people?.logins ?? []).map((email) => ({ email, you: email === people?.you })), [people]);
@@ -78,10 +78,7 @@ export function PeopleTab({ people, failure, actions, onRetry }: PeopleTabProps)
 
     return <RowMenu name={person.email} onRemove={() => setLeaving(person)} />;
   };
-  const openAdding = (): void => {
-    openings.current += 1;
-    setAdding(openings.current);
-  };
+  const openAdding = (): void => setAdding(({ opening }) => ({ opening: opening + 1, open: true }));
   const answerLeaving = (yes: boolean): void => {
     if (yes && leaving !== undefined) void actions.removePerson(leaving.email);
 
@@ -103,7 +100,7 @@ export function PeopleTab({ people, failure, actions, onRetry }: PeopleTabProps)
             <LogOutIcon data-icon="inline-start" />
             Sign everyone out
           </Button>
-          <Button variant="outline" onClick={openAdding}>
+          <Button ref={adder} variant="outline" onClick={openAdding}>
             <PlusIcon data-icon="inline-start" />
             Add a user
           </Button>
@@ -140,15 +137,16 @@ export function PeopleTab({ people, failure, actions, onRetry }: PeopleTabProps)
         </>
       )}
       <AskDialog
-        key={adding}
-        open={adding !== undefined}
-        onOpenChange={(open) => setAdding((now) => (open || now !== adding ? now : undefined))}
+        key={adding.opening}
+        open={adding.open}
+        onOpenChange={(open) => setAdding((now) => (open || now.opening !== adding.opening ? now : { ...now, open: false }))}
         title="Add a user"
         says="This user can log in here and change everything."
         label="Email"
         hint="Such as name@example.com."
         initial=""
         maxLength={LONGEST_EMAIL}
+        returnTo={adder}
         submit="Add a user"
         onSubmit={actions.addPerson}
       />

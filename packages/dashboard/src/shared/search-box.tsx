@@ -6,6 +6,7 @@ import { type ReactNode, useEffect, useState } from "react";
 import { useDebouncedCallback } from "use-debounce";
 
 import { InputGroup, InputGroupAddon, InputGroupButton, InputGroupInput } from "@/components/ui/input-group";
+import { FOCUS_HOME } from "@/lib/focus";
 
 /** How long typing rests before the search is sent, in milliseconds. */
 const REST_MS = 250;
@@ -58,6 +59,7 @@ export function SearchBox({ sent, onSearch, placeholder, label, maxLength, class
         maxLength={maxLength}
         placeholder={placeholder}
         aria-label={label}
+        {...FOCUS_HOME}
         className="[&::-webkit-search-cancel-button]:hidden"
       />
       {typed === "" ? null : (

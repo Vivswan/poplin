@@ -11,6 +11,7 @@ import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyTitle } from "
 import { Popover, PopoverContent, PopoverDescription, PopoverHeader, PopoverTitle, PopoverTrigger } from "@/components/ui/popover";
 import { Select, SelectContent, SelectGroup, SelectItem, SelectSeparator, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { searchOf, useAddressQuery } from "@/lib/address";
+import { useFocusHome } from "@/lib/focus";
 import { copy } from "@/lib/notify";
 import { addressParts, type Site, shownName } from "@/lib/sites";
 import { useChosenTimeZone } from "@/lib/timezone";
@@ -417,10 +418,12 @@ export function SitesScreen(): ReactNode {
   );
   const nothing = error !== null || (!isPending && sites.length === 0);
   const toFirst = (): void => void navigate({ to: "/", search: searchOf(queryWith(query, {})) });
+  // A site that left the list, or a panel that closed over a row that is gone, leaves the focus on nothing: the search takes it.
+  const kept = useFocusHome();
 
   return (
     <AppShell current="sites" heading="Sites">
-      <div className={cn("grid min-h-0 flex-1 grid-cols-1", opened !== undefined && beside && "grid-cols-[minmax(0,1fr)_440px]")}>
+      <div {...kept} className={cn("grid min-h-0 flex-1 grid-cols-1", opened !== undefined && beside && "grid-cols-[minmax(0,1fr)_440px]")}>
         {/* Where the panel has the row to itself the list keeps its place under it, out of sight and out of reach, so it is found as it was left. */}
         <section
           aria-label="Sites"

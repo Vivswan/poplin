@@ -8,6 +8,7 @@ import { type ReactNode, useMemo, useRef } from "react";
 import { accessActions } from "@/access/access-actions";
 import { ACCESS_KEY, useEndedTokens, usePeople, useReview, useTokens, useWaiting } from "@/access/access-queries";
 import { askedIn, TOKENS_PATH, PEOPLE_PATH, tokenSortOf, tokenSortQuery } from "@/access/access-values";
+import { useFocusHome } from "@/lib/focus";
 import { PeopleTab } from "@/access/people-tab";
 import { ReviewDialog } from "@/access/review-dialog";
 import { TokensTab } from "@/access/tokens-tab";
@@ -59,6 +60,8 @@ export function AccessScreen(): ReactNode {
   const ended = useEndedTokens(sort, tab === "tokens");
   const kept = listQuery(query);
   const opener = useRef<HTMLElement | null>(null);
+  // A user, a token, or a waiting login that left its list leaves the focus on nothing: the tab that is open takes it.
+  const keptFocus = useFocusHome();
   const openReview = (id: string): void => {
     opener.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     void navigate({ to: "/tokens/review/$login", params: { login: id }, search: searchOf(kept) });
@@ -66,7 +69,7 @@ export function AccessScreen(): ReactNode {
 
   return (
     <AppShell current="access" heading="Access">
-      <div className="flex min-h-0 flex-1 flex-col border-t">
+      <div {...keptFocus} className="flex min-h-0 flex-1 flex-col border-t">
         <ScreenTabs label="Who has access" tabs={TABS} active={tab} onChoose={(chosen) => void navigate({ to: TAB_PATHS[chosen] })} />
         {asked !== undefined && review.error !== null ? (
           <div className="px-6 pt-3 max-md:px-4">

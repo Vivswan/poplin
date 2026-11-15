@@ -1,11 +1,12 @@
 // A question with one field: a dialog that asks for a value, and says a refusal at the field with the typed value kept.
 
-import { type FormEvent, type ReactNode, useEffect, useId, useState } from "react";
+import { type FormEvent, type ReactNode, type RefObject, useEffect, useId, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Field, FieldDescription, FieldError, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
+import { thenHome } from "@/lib/focus";
 
 /** What the dialog is drawn from. */
 interface AskDialogProps {
@@ -36,6 +37,9 @@ interface AskDialogProps {
   /** `true` where the value the field opens with is itself an answer: the button is then on for it. */
   readonly takesInitial?: boolean;
 
+  /** What takes the focus when the dialog closes, for a dialog that is drawn anew at each opening and so knows no control that opened it. */
+  readonly returnTo?: RefObject<HTMLElement | null>;
+
   /** The words of the button that sends the value. */
   readonly submit: string;
 
@@ -44,11 +48,12 @@ interface AskDialogProps {
 }
 
 /** Ask for one value in a dialog. The button stays off while the value is empty, and while it is unchanged unless the value it opened with is an answer. */
-export function AskDialog({ open, onOpenChange, title, says, label, hint, initial, maxLength, takesInitial = false, submit, onSubmit }: AskDialogProps): ReactNode {
+export function AskDialog({ open, onOpenChange, title, says, label, hint, initial, maxLength, takesInitial = false, returnTo, submit, onSubmit }: AskDialogProps): ReactNode {
   const id = useId();
   const [value, setValue] = useState(initial);
   const [refusal, setRefusal] = useState<string>();
   const [busy, setBusy] = useState(false);
+  const field = useRef<HTMLInputElement>(null);
   useEffect(() => {
     if (!open) return;
 
@@ -61,13 +66,16 @@ export function AskDialog({ open, onOpenChange, title, says, label, hint, initia
     setBusy(true);
     const refused = await onSubmit(value.trim());
     setBusy(false);
-    if (refused === undefined) onOpenChange(false);
-    else setRefusal(refused);
+    if (refused === undefined) return onOpenChange(false);
+
+    setRefusal(refused);
+    // The button that was pressed was off while the value was sent, which takes the focus from it: the field to correct takes it.
+    field.current?.focus();
   };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-sm">
+      <DialogContent className="sm:max-w-sm" finalFocus={thenHome(returnTo)}>
         <form onSubmit={(event) => void send(event)} className="flex flex-col gap-4">
           <DialogHeader>
             <DialogTitle>{title}</DialogTitle>
@@ -76,6 +84,7 @@ export function AskDialog({ open, onOpenChange, title, says, label, hint, initia
           <Field data-invalid={refusal !== undefined}>
             <FieldLabel htmlFor={id}>{label}</FieldLabel>
             <Input
+              ref={field}
               id={id}
               value={value}
               onChange={(event) => setValue(event.target.value)}

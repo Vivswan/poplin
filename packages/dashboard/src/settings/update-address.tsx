@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { FieldError } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { api } from "@/lib/api";
+import { FOCUS_HOME } from "@/lib/focus";
 import { sayDone, send } from "@/lib/notify";
 import { wholeMoment } from "@/lib/sites";
 import { Confirm } from "@/shared/confirm";
@@ -70,6 +71,7 @@ export function UpdateAddressRow({ state, draft }: { readonly state: UpdateAddre
             autoComplete="off"
             spellCheck={false}
             aria-invalid={draft.refusal !== undefined}
+            autoFocus
             className="w-72 max-w-full min-w-0"
           />
           <Button type="button" variant="ghost" onClick={draft.discard}>
@@ -80,7 +82,7 @@ export function UpdateAddressRow({ state, draft }: { readonly state: UpdateAddre
         <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
           <p>{since === null ? "Not set" : `Set ${wholeMoment(since)}`}</p>
           <div className="flex items-center gap-2">
-            <Button type="button" variant="outline" onClick={draft.show}>
+            <Button type="button" variant="outline" onClick={draft.show} {...FOCUS_HOME}>
               {since === null ? "Add" : "Replace"}
             </Button>
             {since === null ? null : (

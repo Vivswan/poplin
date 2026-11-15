@@ -1,0 +1,67 @@
+// Where the focus goes when a change takes away the control that held it: a row that was removed, a button that left with its bar, the opener of a dialog.
+// The browser then leaves the focus on the page's body, where no key reaches anything.
+
+import { type FocusEventHandler, type RefObject, useEffect, useRef } from "react";
+
+/** The mark of an element that takes a lost focus: a panel's heading, a list's search, the open tab of a screen. */
+export const FOCUS_HOME = { "data-focus-home": "" } as const;
+
+/** The two handlers a region is given, so the hook knows whether the focus is inside it. */
+interface Held {
+  readonly onFocusCapture: FocusEventHandler;
+  readonly onBlurCapture: FocusEventHandler;
+}
+
+/**
+ * Give a lost focus a home: nothing happens while any control holds the focus.
+ *
+ * @param find - finds what takes the focus. Left out, or where it finds nothing that is still on the page, the last marked home in the page's order takes it, which is the one of the innermost thing in view: a panel's heading comes after its list's search
+ */
+function focusHome(find?: () => HTMLElement | null | undefined): void {
+  if (document.activeElement !== document.body) return;
+
+  const found = find?.();
+  const home = found?.isConnected === true ? found : [...document.querySelectorAll<HTMLElement>("[data-focus-home]")].at(-1);
+  home?.focus();
+}
+
+/**
+ * What a dialog is told of the focus it gives back when it closes: back as the dialog does it, and from there home if that left it on nothing. The control that opened a dialog may be gone by the time it closes.
+ *
+ * @param returnTo - what takes the focus in place of the dialog's own choice, while it is still on the page
+ * @returns the answer to the dialog library's question where the focus goes
+ */
+export function thenHome(returnTo?: RefObject<HTMLElement | null>): () => HTMLElement | true {
+  return () => {
+    // The dialog moves the focus right after this answer: the look for a lost focus comes a frame later.
+    window.requestAnimationFrame(() => focusHome());
+
+    return returnTo?.current?.isConnected === true ? returnTo.current : true;
+  };
+}
+
+/**
+ * Keep the focus in a region of a screen: when the region was drawn again and the control that held the focus is gone, the focus goes home.
+ *
+ * A focus a person moved out of the region is left where it went.
+ *
+ * @param find - as `focusHome` takes it
+ * @returns the handlers to spread onto the region's element
+ */
+export function useFocusHome(find?: () => HTMLElement | null | undefined): Held {
+  const inside = useRef(false);
+
+  // A control that is taken away gets no blur, so the region still counts as holding the focus while the page's body has it.
+  useEffect(() => {
+    if (inside.current) focusHome(find);
+  });
+
+  return {
+    onFocusCapture: () => {
+      inside.current = true;
+    },
+    onBlurCapture: () => {
+      inside.current = false;
+    },
+  };
+}

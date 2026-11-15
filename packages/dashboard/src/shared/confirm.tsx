@@ -2,6 +2,7 @@
 
 import { type ReactNode, useRef } from "react";
 
+import { thenHome } from "@/lib/focus";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -45,7 +46,7 @@ function actionLook(question: Question | undefined): "destructive" | "outline" |
  * Ask a question.
  *
  * @param question - the question to show; `undefined` shows none
- * @param onAnswer - called once: `true` when the change is to be done. Escape and a press outside answer `false`
+ * @param onAnswer - called once: `true` when the change is to be done. Escape and a press outside answer `false`. Once it has closed, a focus the change left on nothing goes home
  */
 export function Confirm({ question, onAnswer }: { readonly question: Question | undefined; readonly onAnswer: (yes: boolean) => void }): ReactNode {
   // The words stay while the dialog closes, so it does not empty as it fades.
@@ -56,7 +57,7 @@ export function Confirm({ question, onAnswer }: { readonly question: Question | 
 
   return (
     <AlertDialog open={question !== undefined} onOpenChange={(open) => (open ? undefined : onAnswer(false))}>
-      <AlertDialogContent>
+      <AlertDialogContent finalFocus={thenHome()}>
         <AlertDialogHeader>
           <AlertDialogTitle>{shown?.title}</AlertDialogTitle>
           <AlertDialogDescription>{shown?.says}</AlertDialogDescription>

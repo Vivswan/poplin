@@ -11,6 +11,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Field, FieldContent, FieldDescription, FieldError, FieldLabel } from "@/components/ui/field";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
+import { thenHome } from "@/lib/focus";
 import { shortMoment, wholeMoment } from "@/lib/sites";
 import { PanelFact, PanelFacts } from "@/shared/side-panel";
 
@@ -179,7 +180,7 @@ export function ReviewDialog({ login, actions, onClose, returnTo }: ReviewDialog
 
   return (
     <Dialog open={login !== undefined} onOpenChange={(open) => (open ? undefined : onClose())}>
-      <DialogContent className="gap-4 sm:max-w-md" finalFocus={returnTo}>
+      <DialogContent className="gap-4 sm:max-w-md" finalFocus={thenHome(returnTo)}>
         {shown === undefined ? null : <ReviewForm key={shown.id} login={shown} actions={actions} onClose={onClose} under={under} />}
       </DialogContent>
     </Dialog>

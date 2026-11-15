@@ -8,6 +8,7 @@ import { type KeyboardEvent, type ReactElement, type ReactNode, useRef, useState
 
 import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
+import { FOCUS_HOME, useFocusHome } from "@/lib/focus";
 import { useMedia } from "@/lib/media";
 import { IconButton } from "@/shared/icon-button";
 
@@ -152,6 +153,8 @@ export function SidePanel({ title, closeLink, onClose, back, beside, children }:
   const [place, setPlace] = useState<HTMLElement | null>(null);
   const heading = useRef<HTMLHeadingElement>(null);
   const standsBeside = useStandsBeside();
+  // A change of the thing can take away the control that was pressed for it: the heading takes the focus then.
+  const kept = useFocusHome();
 
   return (
     <aside
@@ -164,12 +167,13 @@ export function SidePanel({ title, closeLink, onClose, back, beside, children }:
           <Dialog.Portal container={place} className="flex min-h-0 flex-1 flex-col">
             <Dialog.Popup
               initialFocus={heading}
+              {...kept}
               onKeyDownCapture={closesAtEscape(onClose)}
               className="flex min-h-0 flex-1 flex-col overflow-y-auto outline-none"
             >
               {/* Beside its list the heading stands on the line of the list's tools, and the first hairline under it where the list's tools end. */}
               <header className={cn("flex shrink-0 items-center gap-1 px-6 max-md:px-4", standsBeside ? "h-11 pb-3" : "h-14")}>
-                <Dialog.Title ref={heading} tabIndex={-1} className="min-w-0 truncate text-base font-bold outline-none" title={title}>
+                <Dialog.Title ref={heading} tabIndex={-1} {...FOCUS_HOME} className="min-w-0 truncate text-base font-bold outline-none" title={title}>
                   {title ?? <Skeleton className="h-5 w-40" />}
                 </Dialog.Title>
                 {beside}

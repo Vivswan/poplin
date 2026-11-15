@@ -3,6 +3,7 @@
 import type { ReactNode } from "react";
 
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { FOCUS_HOME } from "@/lib/focus";
 
 /** One tab of a strip. */
 export interface ScreenTab<Id extends string> {
@@ -40,7 +41,7 @@ export function ScreenTabs<Id extends string>({ label, tabs, active, onChoose }:
       <Tabs value={active} onValueChange={choose}>
         <TabsList aria-label={label}>
           {tabs.map((tab) => (
-            <TabsTrigger key={tab.id} value={tab.id} className="px-3">
+            <TabsTrigger key={tab.id} value={tab.id} className="px-3" {...(tab.id === active ? FOCUS_HOME : {})}>
               {tab.label}
             </TabsTrigger>
           ))}

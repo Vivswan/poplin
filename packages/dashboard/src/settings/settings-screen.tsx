@@ -1,9 +1,10 @@
 // The Settings screen: one page that reads from top to bottom, every setting a row under the heading of its group, and one Save for everything that was changed, in a bar under the page while a change waits.
 
 import { Link, useLocation } from "@tanstack/react-router";
-import { type FormEvent, type ReactNode, useEffect, useState } from "react";
+import { type FormEvent, type ReactNode, useEffect, useRef, useState } from "react";
 
 import { Skeleton } from "@/components/ui/skeleton";
+import { useFocusHome } from "@/lib/focus";
 import { useChosenTimeZone } from "@/lib/timezone";
 import { LeaveGuard } from "@/shared/leave-guard";
 import { SaveBar } from "@/shared/save-bar";
@@ -140,6 +141,9 @@ export function SettingsScreen(): ReactNode {
   const count = draft.pending.length + (address.unsaved ? 1 : 0);
   const busy = draft.busy || address.busy;
   const marked = useNamedSetting(settings !== undefined);
+  // Save and Discard leave with their bar, and the focus with them: it goes back to the control of the page that had it last, or, where that was the update link's field and is gone, to the button that opens it.
+  const last = useRef<HTMLElement | null>(null);
+  const kept = useFocusHome(() => last.current);
 
   const save = async (event: FormEvent): Promise<void> => {
     event.preventDefault();
@@ -154,8 +158,13 @@ export function SettingsScreen(): ReactNode {
 
   return (
     <AppShell current="settings" heading="Settings">
-      <form onSubmit={(event) => void save(event)} noValidate aria-label="Settings" className="flex min-h-0 flex-1 flex-col border-t">
-        <div className="min-h-0 flex-1 overflow-y-auto px-6 pt-5 pb-12 max-md:px-4">
+      <form onSubmit={(event) => void save(event)} noValidate aria-label="Settings" className="flex min-h-0 flex-1 flex-col border-t" {...kept}>
+        <div
+          onFocusCapture={(event) => {
+            last.current = event.target;
+          }}
+          className="min-h-0 flex-1 overflow-y-auto px-6 pt-5 pb-12 max-md:px-4"
+        >
           <div className={COLUMN}>
             <p className="mb-5 text-muted-foreground">How this install treats new sites, visitors, limits, and updates.</p>
             {error === null ? null : <p className="py-8 text-muted-foreground">{error.message}</p>}

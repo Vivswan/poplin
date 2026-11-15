@@ -1,11 +1,12 @@
 // The dialog that changes how a site is named: its title, which the dashboard shows first, and its name, which its link is written with. Each field says its own refusal, with what was typed kept.
 
-import { type FormEvent, type ReactNode, useId, useState } from "react";
+import { type FormEvent, type ReactNode, type Ref, useId, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Field, FieldDescription, FieldError, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
+import { thenHome } from "@/lib/focus";
 import { LONGEST_NAME, type Site } from "@/lib/sites";
 
 /** What is said under each field while nothing is refused there. */
@@ -56,6 +57,7 @@ function NamingField({
   placeholder,
   maxLength,
   first = false,
+  field,
 }: {
   readonly label: string;
   readonly value: string;
@@ -65,6 +67,7 @@ function NamingField({
   readonly placeholder?: string;
   readonly maxLength?: number;
   readonly first?: boolean;
+  readonly field?: Ref<HTMLInputElement>;
 }): ReactNode {
   const id = useId();
   const saysId = `${id}-says`;
@@ -73,6 +76,7 @@ function NamingField({
     <Field data-invalid={refusal !== undefined}>
       <FieldLabel htmlFor={id}>{label}</FieldLabel>
       <Input
+        ref={field}
         id={id}
         value={value}
         onChange={(event) => onChange(event.target.value)}
@@ -97,6 +101,7 @@ export function EditSiteDialog({ site, onClose, onSave }: EditSiteDialogProps): 
   const [name, setName] = useState(site?.name ?? "");
   const [refusal, setRefusal] = useState<NamingRefusal>();
   const [busy, setBusy] = useState(false);
+  const fields = { title: useRef<HTMLInputElement>(null), name: useRef<HTMLInputElement>(null) };
   if (site !== undefined && site !== shown) {
     setShown(site);
     setTitle(typedTitle(site));
@@ -121,14 +126,17 @@ export function EditSiteDialog({ site, onClose, onSave }: EditSiteDialogProps): 
     setBusy(true);
     const refused = await onSave(shown, changes);
     setBusy(false);
-    if (refused === undefined) onClose();
-    else setRefusal(refused);
+    if (refused === undefined) return onClose();
+
+    setRefusal(refused);
+    // The button that was pressed was off while the change was sent, which takes the focus from it: the refused field takes it, or the first one.
+    fields[refused.about ?? "title"].current?.focus();
   };
   const refusalAt = (field: FieldKey): string | undefined => (refusal?.about === field ? refusal.sentence : undefined);
 
   return (
     <Dialog open={site !== undefined} onOpenChange={(open) => (open ? undefined : onClose())}>
-      <DialogContent className="sm:max-w-sm">
+      <DialogContent className="sm:max-w-sm" finalFocus={thenHome()}>
         <form onSubmit={(event) => void send(event)} className="flex flex-col gap-4">
           <DialogHeader>
             <DialogTitle>Edit the site</DialogTitle>
@@ -142,8 +150,9 @@ export function EditSiteDialog({ site, onClose, onSave }: EditSiteDialogProps): 
             hint={HINTS.title}
             placeholder={shown?.title_typed === false ? (shown.title ?? undefined) : undefined}
             first
+            field={fields.title}
           />
-          <NamingField label="Name" value={name} onChange={type("name", setName)} refusal={refusalAt("name")} hint={HINTS.name} maxLength={LONGEST_NAME} />
+          <NamingField label="Name" value={name} onChange={type("name", setName)} refusal={refusalAt("name")} hint={HINTS.name} maxLength={LONGEST_NAME} field={fields.name} />
           {refusal?.about === null ? <FieldError>{refusal.sentence}</FieldError> : null}
           <DialogFooter>
             <Button type="button" variant="outline" onClick={onClose}>
