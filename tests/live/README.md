@@ -117,7 +117,7 @@ one run, at its ceilings         2 (the bucket found or made) + 150 (checks) + 1
 a day of 40 such runs            40 x 302 + 150 (the midnight reset) = 12,230
 31 such days                     12,230 x 31 = 379,130 of the 1,000,000 R2 takes for free in a month
 a run with the many-files check  2 + 2,300 + 150 = 2,452, started by hand alone
-a usual run                      about 50 (checks) + 112 (reset)
+a usual run                      about 85 (checks) + 112 (reset)
 ```
 
 A run starts after a green main that changed a file reaching the install, or by hand, so 40 a day is far above what happens. The count is the harness's own, one for each request that makes the install write or list; the install lists once more for every thousand files.
@@ -126,11 +126,40 @@ A run starts after a green main that changed a file reaching the install, or by 
 burst-rate-rule, usual   about 850 requests to the Worker: the rule blocks a few seconds after one data center passed 300
 burst-rate-rule, worst   340 (burst) + 800 (paced, 12 ms apart) = 1,140: no block, and no data center past 300 for 5 seconds
 own-limit                about 700
-a run, at its worst      1,140 + 700 = 1,840
-the plan's day           100,000 requests to the Worker, reached at about 54 such runs
+backup-drill             64, of which 34 make the install write to its bucket or list it
+a run, at its worst      1,140 + 700 + 64 = 1,904
+the plan's day           100,000 requests to the Worker, reached at about 52 such runs
 ```
 
 The runs of one day must stay under the plan's 100,000 requests to the Worker. The other checks send a few dozen more.
+
+## The backup drill
+
+`backup-drill` proves that a backup restores: what is exported, removed, and put back is exported again, and the two backups are compared.
+
+| Step     | On the install                                                                                |
+| -------- | --------------------------------------------------------------------------------------------- |
+| make     | 3 sites of its own: private with three versions, the second live; unlisted, renamed; public   |
+| export   | each of the three with every version, a zip a site                                            |
+| remove   | each of the three, for good                                                                   |
+| import   | each zip                                                                                      |
+| export   | each of the three again                                                                       |
+| compare  | each second zip with its first, in `tests/live/compare-backups.ts`; one visit opens a site    |
+| clean up | each of the three removed for good, after a failure too                                       |
+
+It never reads or changes a sample site: every export and every import names one site of its own.
+
+| The compare passes over      | Which is                    |
+| ---------------------------- | --------------------------- |
+| `made_at` of `manifest.json` | the moment the zip was made |
+
+Anything else that is not the same fails the check, with its place in the backup and what both backups hold there. A file is printed as its length and its SHA-256, never as its bytes.
+
+```text
+backup-drill: 3 sites, 5 files, 119 bytes put back and exported the same; passed over made_at of manifest.json; <milliseconds> ms
+```
+
+The line holds no name and no address. One drill is 64 requests when none is sent again.
 
 ## The check of the rate rule
 

@@ -2,8 +2,8 @@
 
 import { expect } from "bun:test";
 
-import { type Bench, type Check, type LiveSite, type Ran, Skip } from "../records";
-import { expectRefused, GHOST_ID, labelAddress } from "../util";
+import { type Bench, type Check, type LiveSite, Skip } from "../records";
+import { expectRefused, GHOST_ID, labelAddress, siteOf } from "../util";
 
 /** The content type of a page as the install stores it. */
 const HTML = /^text\/html\b/;
@@ -28,13 +28,6 @@ const SCRIPT = /^text\/javascript\b/;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-/** The site a command answered, after a command that must exit 0. */
-function siteOf(ran: Ran): LiveSite {
-  expect(ran.code).toBe(0);
-
-  return ran.value.site as LiveSite;
 }
 
 /** Open an address as a stranger and fail unless the page's whole text comes back. */

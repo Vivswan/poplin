@@ -4,7 +4,7 @@ import { dirname, join } from "node:path";
 
 import { type ApiInstall, answered, bytes } from "../../../app/tests/api/support/install";
 import { backupEntries, readZip, writeZip, type ZipEntry } from "../backup/support/zips";
-import { type Bench, cleanUp, folderOf, jsonOf, openBench, scratch } from "./support/harness";
+import { type Bench, cleanUp, folderOf, jsonOf, openBench, published, scratch } from "./support/harness";
 
 /** A site as an install stores it, as far as these tests read it. */
 interface Stored {
@@ -24,13 +24,6 @@ interface Line {
 /** A JSON answer in the install's place. */
 function answer(status: number, body: unknown): Response {
   return new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
-}
-
-/** Publish a folder as a new site; answers its label. */
-async function published(bench: Bench, name: string, pages: Readonly<Record<string, string>>, flags = ""): Promise<string> {
-  const made = jsonOf(await bench.run(`${folderOf(name, pages)} ${flags} --json`));
-
-  return (made.site as { label: string }).label;
 }
 
 /** Publish a site through the API, with the content types the test names: what no file extension gives. */

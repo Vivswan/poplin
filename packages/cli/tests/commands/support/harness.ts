@@ -195,3 +195,15 @@ export function jsonOf(ran: Ran): Record<string, unknown> {
 
   return JSON.parse(ran.out[0] ?? "");
 }
+
+/**
+ * Publish a folder of pages as a new site.
+ *
+ * @param flags - what the publish is run with beside the folder, such as `--unlisted`
+ * @returns the site's label
+ */
+export async function published(bench: Bench, name: string, pages: Readonly<Record<string, string>>, flags = ""): Promise<string> {
+  const made = jsonOf(await bench.run(`${folderOf(name, pages)} ${flags} --json`));
+
+  return (made.site as { label: string }).label;
+}

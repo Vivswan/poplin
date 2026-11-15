@@ -10,6 +10,7 @@ import { MemoryStore } from "../../packages/core/src/storage/memory";
 import { openBench } from "./bench";
 import { probeMissing } from "./capabilities";
 import { CHECKS } from "./checks";
+import { DRILL_COST } from "./checks/backup";
 import type { Bench, Missing, Outcome } from "./records";
 import { runCheck } from "./report";
 import { FAKE_DOMAIN, type FakeSwitches, openFake } from "./support/fake-install";
@@ -31,6 +32,7 @@ const WITH_TOKEN = [
   "delete-restore",
   "mcp",
   "export-import",
+  "backup-drill",
   "outside-page",
   "L4",
   "L5",
@@ -102,6 +104,13 @@ const CASES: readonly Case[] = [
 /** How a line ends on the fake, whose edge sees one address: once in each lane of the burst and once at the end. */
 const ONE_SEEN = "the edge saw addresses x1 (IPv4) in samples x21";
 
+/** One request a fake refuses in the install's place: the so-manieth of a method to a path. */
+interface Refusal {
+  readonly method: string;
+  readonly path: RegExp;
+  readonly nth: number;
+}
+
 /** How the reason starts of a check of the rate rule skipped for no data center past the limit, before its line. */
 const NOT_PROVEN = "one data center that takes more than 300 of the runner's requests in ten seconds";
 
@@ -143,6 +152,43 @@ async function publishDemoSite(bench: Bench, kind: "whole" | "no-worker"): Promi
   if (kind === "whole") writeFileSync(join(folder, "sw.js"), "self.addEventListener('fetch', () => undefined);");
 
   expect((await bench.cli("publish", folder, "--name", "demo", "--public", "--public-name", "demo")).code).toBe(0);
+}
+
+/**
+ * Run the backup drill alone on a fake install.
+ *
+ * @param refusal - the one request the fake refuses in the install's place; `undefined` for a fake that answers every one
+ * @returns what the drill came to and said, the failure it reported, every request it sent, how many of them the bucket's meter counted, and how many sites it left
+ */
+async function drillOn(refusal: Refusal | undefined): Promise<{ readonly result: Outcome["result"]; readonly said: string[]; readonly failure: string; readonly requests: number; readonly bucket: number; readonly left: number }> {
+  const fake = await openFake();
+  const meter = meterBucket(fake.fetch, CEILINGS.checks);
+  const said: string[] = [];
+  const sent = { all: 0, matching: 0 };
+  const counted: Fetch = async (input, init) => {
+    sent.all += 1;
+    const named = refusal !== undefined && (init.method ?? "GET") === refusal.method && refusal.path.test(new URL(input).pathname);
+    if (named) sent.matching += 1;
+
+    if (named && sent.matching === refusal.nth) return Response.json({ error: { code: "forbidden", message: "Refused by the test." } }, { status: 403 });
+
+    return meter.fetch(input, init);
+  };
+  const parts = { domain: FAKE_DOMAIN, token: fake.token, run: "selftest", missing: {}, fetch: counted, pause: fake.pause, now: fake.now, manyFiles: MANY_FILES };
+  const { bench, close } = openBench({ ...parts, say: (text) => said.push(text) });
+  OPENED.push(close);
+
+  const drill = CHECKS.find((check) => check.id === "backup-drill");
+  if (drill === undefined) throw new Error("the checks hold no backup drill");
+
+  let failure = "";
+  const outcome = await runCheck(bench, drill, (error) => {
+    failure = String(error);
+  });
+  const requests = sent.all;
+  const left = [...((await bench.cli("list")).value.sites as unknown[]), ...((await bench.cli("list", "--trash")).value.sites as unknown[])].length;
+
+  return { result: outcome.result, said, failure, requests, bucket: meter.spent(), left };
 }
 
 afterEach(() => {
@@ -198,6 +244,26 @@ describe("the live checks, against a local fake", () => {
     expect(switches.noToken === true ? [] : left.value.sites).toEqual([]);
     // A check that grew into a loop of publishes would be held back on the real install alone, and a route the meter does not know would be billed uncounted.
     expect({ stopped: meter.stopped(), uncounted }).toEqual({ stopped: undefined, uncounted: [] });
+  }, RUN_MS);
+
+  // The README and the check state what one drill costs the install; a drill that grew would spend more of the plan's day than a reader was told.
+  test("the backup drill sends the requests it states, says one line that holds no address, and leaves no site", async () => {
+    expect(await drillOn(undefined)).toEqual({
+      said: ["backup-drill: 3 sites, 5 files, 119 bytes put back and exported the same; passed over made_at of manifest.json; 0 ms"],
+      result: "passed",
+      failure: "",
+      left: 0,
+      ...DRILL_COST,
+    });
+  }, RUN_MS);
+
+  // A drill that fails half way has made sites on an install that keeps them; one whose own removal fails has left one there and must not pass.
+  test.each<[string, Refusal, RegExp, number]>([
+    ["a drill that fails at its second export still removes every site it made", { method: "GET", path: /^\/api\/export\/sites\/[^/]+$/, nth: 4 }, /Expected: 0\s+Received: 1/, 0],
+    ["a drill whose first import is refused reports that, not the removals of sites that are gone", { method: "POST", path: /^\/api\/import\/sites$/, nth: 1 }, /"imported": 1/, 0],
+    ["a drill whose removal at the end is refused fails, and says no line", { method: "DELETE", path: /^\/api\/sites\/[^/]+$/, nth: 4 }, /could not remove 1 of its 3 sites/, 1],
+  ])("%s", async (_what, refusal, failure, left) => {
+    expect(await drillOn(refusal)).toMatchObject({ said: [], result: "failed", failure: expect.stringMatching(failure), left });
   }, RUN_MS);
 
   // A failure that said only the answers left it open whether the rule was gone or the requests never met in one count; a line that held the address the edge saw would put it in a public log.
