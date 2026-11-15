@@ -2,13 +2,10 @@
 
 import * as v from "valibot";
 
-import { mintSiteId } from "../sites/ids";
 import { isContentType } from "../storage/storage";
 import { COUNT, HOLDER, MOMENT, POSITIVE, SITE_ID } from "./fields";
+import { randomText } from "./random-text";
 import { NEW_SITE, SITE_ACCESS, SITE_DETAILS, SITE_FOLDER, TITLE } from "./site";
-
-/** How many characters an upload id holds. */
-const UPLOAD_ID_LENGTH = 16;
 
 /** The form of an upload id. */
 const UPLOAD_ID_PATTERN = /^[0-9a-z]{16}$/;
@@ -105,8 +102,7 @@ function isUploadId(value: unknown): boolean {
  * @returns 16 base36 characters, about 82 bits, each as likely as any other
  */
 export function mintUploadId(): UploadId {
-  // Two minted site ids give 24 evenly drawn characters; the first 16 are as evenly drawn.
-  return `${mintSiteId()}${mintSiteId()}`.slice(0, UPLOAD_ID_LENGTH) as UploadId;
+  return randomText("upload-id") as UploadId;
 }
 
 /**

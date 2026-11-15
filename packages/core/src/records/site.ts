@@ -3,11 +3,9 @@
 import * as v from "valibot";
 
 import type { PublicName, SiteName } from "../names/names";
-import { mintSiteId, type SiteId } from "../sites/ids";
+import type { SiteId } from "../sites/ids";
 import { COUNT, HOLDER, type Holder, MOMENT, POSITIVE, PUBLIC_NAME, SITE_ID, SITE_NAME } from "./fields";
-
-/** How many characters a folder key holds. */
-const FOLDER_LENGTH = 16;
+import { randomText } from "./random-text";
 
 /** The form of a folder key. */
 const FOLDER_PATTERN = /^[0-9a-z]{16}$/;
@@ -143,8 +141,7 @@ function accessOf(row: SiteRow): SiteAccess {
  * @returns 16 base36 characters, about 82 bits, each as likely as any other; a site's files are stored under it
  */
 export function mintSiteFolder(): SiteFolder {
-  // Two minted ids give 24 evenly drawn characters; the first 16 are as evenly drawn.
-  return `${mintSiteId()}${mintSiteId()}`.slice(0, FOLDER_LENGTH) as SiteFolder;
+  return randomText("site-folder") as SiteFolder;
 }
 
 /**

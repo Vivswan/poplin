@@ -3,6 +3,7 @@
 //   the code     WDJB-MJHT, shown in the terminal and on the dashboard, so a person can see the two match; it proves nothing
 //   the secret   poplin_login_<id>_<256 random bits>, held by the terminal alone; only its SHA-256 is stored
 
+import { RANDOM_SHAPES, randomText } from "../records/random-text";
 import type { Login } from "./logins";
 import type { Scope } from "./scopes";
 import { randomHex, sameText, sha256Hex } from "./util";
@@ -11,13 +12,11 @@ const SECRET_PREFIX = "poplin_login_";
 const ID_BYTES = 8;
 const SECRET_BYTES = 32;
 const SECRET_PATTERN = new RegExp(`^${SECRET_PREFIX}([0-9a-f]{${ID_BYTES * 2}})_[0-9a-f]{${SECRET_BYTES * 2}}$`);
-const CODE_ALPHABET = "BCDFGHJKLMNPQRSTVWXZ";
-const CODE_LENGTH = 8;
+const { alphabet: CODE_ALPHABET, length: CODE_LENGTH } = RANDOM_SHAPES["login-code"];
 const CODE_PATTERN = new RegExp(`^[${CODE_ALPHABET}]{${CODE_LENGTH}}$`);
 const CODE_SEPARATORS = /[ \t\r\n-]/g;
 const SMALL_LETTERS = /[a-z]/g;
 const MAX_TYPED_LENGTH = 32;
-const UNBIASED_BYTES = 256 - (256 % CODE_ALPHABET.length);
 const LIFETIME_MS = 10 * 60 * 1000;
 
 declare const loginIdBrand: unique symbol;
@@ -49,19 +48,6 @@ export type ComputerLogin = PendingLogin | (LoginFacts & { readonly state: "allo
 
 /** What a new login asks for. `computer` is the name the terminal gave itself, stored as given; `visitor` is the key of whoever asks. */
 type LoginRequest = { readonly scope: Scope; readonly computer: string; readonly visitor: string; readonly now: number };
-
-function mintCode(): UserCode {
-  let code = "";
-
-  while (code.length < CODE_LENGTH) {
-    // A byte past the last whole run of the alphabet is drawn again, so every letter is as likely as any other.
-    for (const byte of crypto.getRandomValues(new Uint8Array(CODE_LENGTH))) {
-      if (byte < UNBIASED_BYTES && code.length < CODE_LENGTH) code += CODE_ALPHABET[byte % CODE_ALPHABET.length];
-    }
-  }
-
-  return code as UserCode;
-}
 
 /**
  * Read a code as a person typed it or an address carried it.
@@ -99,9 +85,10 @@ export function parseLoginSecret(presented: string): LoginId | undefined {
 export async function mintComputerLogin(request: LoginRequest): Promise<{ readonly secret: string; readonly login: PendingLogin }> {
   const id = randomHex(ID_BYTES) as LoginId;
   const secret = `${SECRET_PREFIX}${id}_${randomHex(SECRET_BYTES)}`;
+  const code = randomText("login-code") as UserCode;
   const { scope, computer, visitor, now } = request;
 
-  return { secret, login: { id, code: mintCode(), hash: await sha256Hex(secret), scope, computer, visitor, createdAt: now, expiresAt: now + LIFETIME_MS, state: "pending" } };
+  return { secret, login: { id, code, hash: await sha256Hex(secret), scope, computer, visitor, createdAt: now, expiresAt: now + LIFETIME_MS, state: "pending" } };
 }
 
 /**

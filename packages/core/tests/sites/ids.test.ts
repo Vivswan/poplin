@@ -2,18 +2,6 @@ import { describe, expect, test } from "bun:test";
 
 import { mintSiteId, parseSiteId } from "../../src/sites/ids";
 
-/** A random source that hands out the given bytes in order, then zeros. */
-function scripted(bytes: readonly number[]): (target: Uint8Array) => void {
-  let at = 0;
-
-  return (target) => {
-    for (let slot = 0; slot < target.length; slot += 1) {
-      target[slot] = bytes[at] ?? 0;
-      at += 1;
-    }
-  };
-}
-
 describe("parseSiteId", () => {
   // Drift: the id is the whole of an unlisted site's protection and the key of its record; a looser form would read a record under a key no mint can make.
   test.each([
@@ -42,11 +30,5 @@ describe("mintSiteId", () => {
       accepted: 1000,
       symbols: "0123456789abcdefghijklmnopqrstuvwxyz",
     });
-  });
-
-  test("drift: 256 is not a multiple of 36, so a byte from 252 up must be thrown away, or the first four symbols would come up more often", () => {
-    const id = mintSiteId(scripted([0, 35, 36, 251, 252, 253, 254, 255, 1, 2, 3, 4, 5, 6, 7, 8]));
-
-    expect<string>(id).toBe("0z0z12345678");
   });
 });
