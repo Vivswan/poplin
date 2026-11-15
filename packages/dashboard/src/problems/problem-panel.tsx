@@ -27,6 +27,9 @@ interface ProblemPanelProps {
 
   /** What Escape does: the move back to the list. */
   readonly onClose: () => void;
+
+  /** Finds the problem's row in the list, which takes the focus when the panel closes. */
+  readonly opener: () => HTMLElement | undefined;
 }
 
 /** The way from a problem to where it is acted on: the setting of a limit, or another screen. Nothing for a problem acted on here. */
@@ -51,8 +54,8 @@ function WayThere({ problem }: { readonly problem: Problem }): ReactNode {
 }
 
 /** Draw the panel of a problem. One that is no longer in the list says so, and a list that could not be read says that. */
-export function ProblemPanel({ problem, read, failure, closeLink, onClose }: ProblemPanelProps): ReactNode {
-  const frame = { closeLink, onClose, back: "Back to usage" };
+export function ProblemPanel({ problem, read, failure, closeLink, onClose, opener }: ProblemPanelProps): ReactNode {
+  const frame = { closeLink, onClose, opener, back: "Back to usage" };
   if (problem === undefined) {
     const says = read ? "This problem is not in the list any more." : failure;
 
