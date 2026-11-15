@@ -1,3 +1,5 @@
+@layer theme, base, components, utilities;
+
 /* Two designed palettes behind one set of names: each colour gives its light and its dark value. */
 
 /* The system setting picks the scheme; the header switch can pin either one. */
@@ -103,21 +105,23 @@ code {
   letter-spacing: 0.04em;
 }
 
-button,
-input {
-  font: inherit;
-  color: inherit;
+/* These two sit in the layer under the controls' utility classes, so a control's own type and corners win over them. */
+@layer base {
+  button {
+    font: inherit;
+    color: inherit;
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 3px;
+    border-radius: 4px;
+  }
 }
 
 ::selection {
   background: var(--accent);
   color: var(--on-accent);
-}
-
-:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 3px;
-  border-radius: 4px;
 }
 
 main {
@@ -224,38 +228,26 @@ main {
   color: var(--muted);
 }
 
-.theme {
-  display: grid;
-  place-items: center;
-  width: 40px;
-  height: 40px;
-  margin: -6px;
-  padding: 0;
-  border: 0;
-  border-radius: 6px;
-  background: none;
-  color: var(--muted);
-  cursor: pointer;
-}
-
-.theme:hover {
-  color: var(--fg);
-}
-
-/* One of three marks shows: the screen while the system decides, the sun or the moon once one is chosen. */
-.theme .lucide {
+/* The theme switch shows one of three marks: the screen while the system decides, the sun or the moon once one is chosen. */
+[data-theme-switch] .lucide {
   display: none;
 }
 
-:root:not([data-theme]) .theme .system,
-:root[data-theme="light"] .theme .light,
-:root[data-theme="dark"] .theme .dark {
+:root:not([data-theme]) [data-theme-switch] .system,
+:root[data-theme="light"] [data-theme-switch] .light,
+:root[data-theme="dark"] [data-theme-switch] .dark {
   display: block;
 }
 
+/* The switch's place is held from the first paint, so the links beside it never move when the switch arrives. */
+.js .switch {
+  display: grid;
+  width: 28px;
+  height: 28px;
+}
+
 /* The switch and the copy buttons need a script; without one they are not offered. */
-html:not(.js) .theme,
-html:not(.js) [data-copy] {
+html:not(.js) [data-slot="button"] {
   display: none;
 }
 
@@ -265,18 +257,11 @@ html:not(.js) [data-copy] {
   visibility: hidden;
 }
 
-.access:has(input[value="private"]:checked) [data-show~="private"],
-.access:has(input[value="unlisted"]:checked) [data-show~="unlisted"],
-.access:has(input[value="public"]:checked) [data-show~="public"] {
+.access[data-access="private"] [data-show~="private"],
+.access[data-access="unlisted"] [data-show~="unlisted"],
+.access[data-access="public"] [data-show~="public"] {
   opacity: 1;
   visibility: visible;
-}
-
-@supports not selector(:has(*)) {
-  .access [data-show~="private"] {
-    opacity: 1;
-    visibility: visible;
-  }
 }
 
 .swap {

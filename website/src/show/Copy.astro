@@ -1,5 +1,5 @@
 ---
-import CopyIcon from "@lucide/astro/icons/copy";
+import { CopyButton } from "../controls/copy-button.tsx";
 
 interface Props {
   /** What the button copies, shown beside it. */
@@ -40,13 +40,7 @@ const pieces = command.split(/(https?:\/\/[^\s,]+)/);
       <code>{command}</code>
     )
   }
-  <button type="button" data-copy={command} aria-label={`Copy: ${command}`}>
-    <span class="idle">
-      <CopyIcon />
-      Copy
-    </span>
-    <span data-said aria-live="polite"></span>
-  </button>
+  <CopyButton client:idle command={command} />
 </div>
 
 <style>
@@ -96,39 +90,5 @@ const pieces = command.split(/(https?:\/\/[^\s,]+)/);
     padding-block: 0;
     white-space: normal;
     overflow-wrap: anywhere;
-  }
-
-  button {
-    flex: none;
-    display: inline-grid;
-    place-items: center;
-    height: var(--button);
-    padding: 0 8px;
-    border: 0;
-    border-radius: 6px;
-    background: var(--surface);
-    color: var(--accent-text);
-    font: 600 0.8125rem / 1 var(--sans);
-    cursor: pointer;
-  }
-
-  button:hover {
-    color: var(--fg);
-  }
-
-  /* What the button says after a press takes the place of its icon and word, so the button never changes width. */
-  .idle,
-  [data-said] {
-    grid-area: 1 / 1;
-  }
-
-  .idle {
-    display: inline-flex;
-    align-items: center;
-    gap: 3px;
-  }
-
-  button[data-told] .idle {
-    visibility: hidden;
   }
 </style>

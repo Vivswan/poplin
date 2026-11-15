@@ -1,6 +1,6 @@
 ---
-import ChevronDown from "@lucide/astro/icons/chevron-down";
 import ChevronRight from "@lucide/astro/icons/chevron-right";
+import { AgentPicker } from "../controls/agent-picker.tsx";
 import { AGENTS } from "../lib/agents.ts";
 import { EXAMPLE_DASHBOARD } from "../lib/example.ts";
 import { SETUP_PROMPT } from "../lib/paths.ts";
@@ -9,7 +9,7 @@ import Copy from "./Copy.astro";
 // The first thing offered is one sentence to paste into any agent. Adding it by hand stays one click away.
 ---
 
-<div class="start">
+<div class="start" data-picked={AGENTS[0]?.id}>
   <Copy command={SETUP_PROMPT} wrap />
 
   <details class="byhand">
@@ -20,15 +20,10 @@ import Copy from "./Copy.astro";
     <div class="steps">
       <Copy label="Once" command={`npx poplin login --server https://${EXAMPLE_DASHBOARD}`} />
       <div class="pick">
-        <label>
+        <div class="then">
           <span>Then, in</span>
-          <span class="select">
-            <select name="agent" aria-label="Your agent">
-              {AGENTS.map((agent) => <option value={agent.id}>{agent.name}</option>)}
-            </select>
-            <ChevronDown />
-          </span>
-        </label>
+          <AgentPicker client:idle agents={AGENTS.map((agent) => ({ value: agent.id, label: agent.name }))} />
+        </div>
         <span class="where">
           {AGENTS.map((agent) => <code data-agent={agent.id}>{agent.where}</code>)}
         </span>
@@ -100,7 +95,7 @@ import Copy from "./Copy.astro";
   }
 
   .steps :global(.label),
-  .pick label > span:first-child {
+  .then > span:first-child {
     flex: none;
     width: 4.75rem;
   }
@@ -135,9 +130,15 @@ import Copy from "./Copy.astro";
     color: var(--muted);
   }
 
-  .pick label {
+  .then {
     display: flex;
     align-items: center;
+  }
+
+  /* The library keeps an unseen input beside the picker, for a form to send, fixed to the window. No form sends this
+     pick, and a fixed element makes a phone's browser draw the corners of the table above differently, so it is left out. */
+  .then :global(input) {
+    display: none;
   }
 
   .where {
@@ -147,50 +148,6 @@ import Copy from "./Copy.astro";
     font-size: 0.8125rem;
     text-overflow: ellipsis;
     white-space: nowrap;
-  }
-
-  /* The picker belongs to the same family as the switches: a filled pill, its own arrow, even padding either side. */
-  .select {
-    position: relative;
-    display: inline-flex;
-    align-items: center;
-  }
-
-  select {
-    appearance: none;
-    min-height: 32px;
-    margin: 0;
-    padding: 0 36px 0 12px;
-    border: 0;
-    border-radius: 8px;
-    background: var(--surface);
-    color: var(--fg);
-    font: 600 0.875rem / 1.3 var(--sans);
-    cursor: pointer;
-  }
-
-  select:hover {
-    box-shadow: inset 0 0 0 1px var(--faint);
-  }
-
-  select:focus-visible {
-    outline: 2px solid var(--accent);
-    outline-offset: 2px;
-  }
-
-  .select svg {
-    position: absolute;
-    right: 12px;
-    top: 50%;
-    margin-top: -8px;
-    color: var(--muted);
-    pointer-events: none;
-  }
-
-  option {
-    background: var(--surface);
-    color: var(--fg);
-    font-weight: 400;
   }
 
   /* Only the chosen agent's line is there, so its row is exactly as tall as that line. */
@@ -210,13 +167,6 @@ import Copy from "./Copy.astro";
 
     .where {
       flex-basis: 100%;
-    }
-  }
-
-  /* Where the picker cannot be read from CSS, the plain setting that any agent takes is what shows. */
-  @supports not selector(:has(*)) {
-    [data-agent="other"] {
-      display: revert;
     }
   }
 </style>

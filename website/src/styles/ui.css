@@ -1,0 +1,25 @@
+/* The controls are parts of a UI library, written in its CSS framework's utility classes. Only the framework's theme
+   and utilities are taken, not its reset, so nothing else on the page is restyled. */
+@layer theme, base, components, utilities;
+
+@import "tailwindcss/theme.css" layer(theme);
+@import "tailwindcss/utilities.css" layer(utilities) source(none);
+
+@source "../ui";
+@source "../controls";
+
+/* The names the library's parts read, each given from one of the site's own colours. */
+@theme inline {
+  --color-background: var(--bg);
+  --color-foreground: var(--fg);
+  --color-card: var(--surface);
+  --color-popover: var(--surface);
+  --color-popover-foreground: var(--fg);
+  --color-muted: var(--fill);
+  --color-muted-foreground: var(--muted);
+  --color-accent: var(--fill);
+  --color-accent-foreground: var(--fg);
+  --color-ring: var(--accent);
+  --color-link: var(--accent-text);
+  --color-faint: var(--faint);
+}

@@ -1,4 +1,6 @@
 import { fileURLToPath } from "node:url";
+import react from "@astrojs/react";
+import tailwindcss from "@tailwindcss/vite";
 import { defineConfig } from "astro/config";
 import { samplesIntegration } from "./integrations/samples.ts";
 
@@ -12,5 +14,7 @@ export default defineConfig({
   // Rasters are made at build time from the repository's own SVG drawings, so processing them is safe.
   image: { dangerouslyProcessSVG: true },
   // One sample folder stands in for a published page; the others stay out of the built site.
-  integrations: [samplesIntegration(samplesDir, "sales-report")],
+  integrations: [samplesIntegration(samplesDir, "sales-report"), react()],
+  // The controls are written in the utility classes of a CSS framework, which this builds into their stylesheet.
+  vite: { plugins: [tailwindcss()] },
 });

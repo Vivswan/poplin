@@ -1,5 +1,6 @@
 ---
 import ChevronRight from "@lucide/astro/icons/chevron-right";
+import { Choice } from "../controls/choice.tsx";
 import Site from "../layouts/Site.astro";
 import Account from "../show/Account.astro";
 import Ask from "../show/Ask.astro";
@@ -9,7 +10,6 @@ import Browser from "../show/Browser.astro";
 import Compare from "../show/Compare.astro";
 import Copy from "../show/Copy.astro";
 import Provider from "../show/Provider.astro";
-import Seg from "../show/Seg.astro";
 import Sites from "../show/Sites.astro";
 import Start from "../show/Start.astro";
 import Who from "../show/Who.astro";
@@ -19,8 +19,8 @@ import { AGENTS } from "../lib/agents.ts";
 const demoUrl = URL.parse(process.env.DEMO_URL ?? "");
 const demo = demoUrl?.protocol === "https:" ? demoUrl.href : undefined;
 
-// The agent picker is a native select read by CSS: one rule puts the chosen agent's line on the page.
-const pickerRules = `${AGENTS.map((agent) => `.byhand:has(option[value="${agent.id}"]:checked) [data-agent="${agent.id}"]`).join(",")}{display:revert}`;
+// The Start block carries the picked agent, and one rule puts that agent's line on the page.
+const pickerRules = `${AGENTS.map((agent) => `.start[data-picked="${agent.id}"] [data-agent="${agent.id}"]`).join(",")}{display:revert}`;
 
 ---
 
@@ -40,13 +40,14 @@ const pickerRules = `${AGENTS.map((agent) => `.byhand:has(option[value="${agent.
       </div>
     </section>
 
-    <!-- One path from the request to the site. The form carries the two switches, so they work with no script. -->
-    <form class="access path" aria-label="From a request to a site" onsubmit="return false">
+    <!-- One path from the request to the site. The form carries what the two switches chose, and the stylesheet shows it. -->
+    <form class="access path" aria-label="From a request to a site" onsubmit="return false" data-door="agent" data-access="private">
       <section class="step" aria-labelledby="ask">
         <div class="say">
           <h2 id="ask">Ask, or type</h2>
           <p>Give your agent a folder. Or run one command in a terminal.</p>
-          <Seg
+          <Choice
+            client:idle
             name="door"
             legend="How you publish"
             options={[
@@ -71,7 +72,8 @@ const pickerRules = `${AGENTS.map((agent) => `.byhand:has(option[value="${agent.
         <div class="say">
           <h2 id="who">Choose who opens it</h2>
           <p>Unlisted opens it to anyone with the address; public, to everyone, at a shorter address too. One letter in the address says which: p&nbsp;private, u&nbsp;unlisted.</p>
-          <Seg
+          <Choice
+            client:idle
             name="access"
             legend="Who can open it"
             options={[
@@ -183,22 +185,23 @@ const pickerRules = `${AGENTS.map((agent) => `.byhand:has(option[value="${agent.
           animate(part, { opacity: opens(part, choice) ? 1 : 0, visibility: opens(part, choice) ? "visible" : "hidden" }, { duration, ease: EASE });
         }
       };
-      let chosen = path.querySelector<HTMLInputElement>('input[name="access"]:checked')?.value ?? "";
+      let chosen = path.dataset.access ?? "";
       fade(chosen, 0);
-      const pace = scope.bind((event: Event) => {
-        const choice = event.target;
-        if (!(choice instanceof HTMLInputElement) || choice.name !== "access") return;
+      // Either switch says `choice`; the form carries what was chosen, so only a new access choice is paced.
+      const pace = scope.bind(() => {
+        const choice = path.dataset.access ?? "";
+        if (choice === chosen) return;
 
-        fade(choice.value, FADE);
+        fade(choice, FADE);
         for (const letter of shows) {
-          if (letter.closest(".letter") && opens(letter, choice.value) && !opens(letter, chosen)) animate(letter, { "--lit": [1, 0] }, { duration: 0.7, ease: EASE });
+          if (letter.closest(".letter") && opens(letter, choice) && !opens(letter, chosen)) animate(letter, { "--lit": [1, 0] }, { duration: 0.7, ease: EASE });
         }
-        chosen = choice.value;
+        chosen = choice;
       });
-      path.addEventListener("change", pace);
+      path.addEventListener("choice", pace);
 
       return () => {
-        path.removeEventListener("change", pace);
+        path.removeEventListener("choice", pace);
         root.classList.remove("moves");
       };
     },
@@ -321,7 +324,7 @@ const pickerRules = `${AGENTS.map((agent) => `.byhand:has(option[value="${agent.
     text-decoration: underline;
   }
 
-  .say :global(.seg) {
+  .say :global([data-slot="toggle-group"]) {
     margin-top: 16px;
   }
 

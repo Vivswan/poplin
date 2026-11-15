@@ -72,17 +72,10 @@ const HOST = EXAMPLE_HOST;
     visibility: hidden;
   }
 
-  :global(.path:has(input[value="agent"]:checked)) [data-door="agent"],
-  :global(.path:has(input[value="terminal"]:checked)) [data-door="terminal"] {
+  :global(.path[data-door="agent"]) [data-door="agent"],
+  :global(.path[data-door="terminal"]) [data-door="terminal"] {
     opacity: 1;
     visibility: visible;
-  }
-
-  @supports not selector(:has(*)) {
-    [data-door="agent"] {
-      opacity: 1;
-      visibility: visible;
-    }
   }
 
   /* Both doors are one window of one size: a title, a body, and for the agent a place to type. */

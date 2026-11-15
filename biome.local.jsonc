@@ -39,7 +39,7 @@
   },
   // Reads an .astro file whole, so a name its template uses counts as used.
   "html": { "experimentalFullSupportEnabled": true },
-  // Reads the dashboard's stylesheet, which is written in the directives of its CSS framework.
+  // Reads the stylesheets of the dashboard and of the website's controls, which are written in the directives of their CSS framework.
   "css": { "parser": { "tailwindDirectives": true } },
   // A later entry replaces an earlier entry's options for the same rule, so a narrower place repeats what it keeps.
   "overrides": [

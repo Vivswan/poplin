@@ -3,10 +3,9 @@ import "@fontsource/libre-franklin/latin-400.css";
 import "@fontsource/libre-franklin/latin-600.css";
 import "@fontsource/libre-franklin/latin-700.css";
 import "../styles/theme.css";
-import Monitor from "@lucide/astro/icons/monitor";
-import Moon from "@lucide/astro/icons/moon";
-import Sun from "@lucide/astro/icons/sun";
+import "../styles/ui.css";
 import { getImage } from "astro:assets";
+import { ThemeSwitch } from "../controls/theme-switch.tsx";
 import { REPOSITORY_URL, sitePath } from "../lib/paths.ts";
 import { released } from "../lib/released.ts";
 
@@ -84,12 +83,8 @@ const card = await getImage({ src: social, width: 1200, height: 630, format: "pn
               </li>
             ))
           }
-          <li>
-            <button class="theme" type="button" data-theme-switch aria-label="Theme: system">
-              <Monitor class="system" />
-              <Sun class="light" />
-              <Moon class="dark" />
-            </button>
+          <li class="switch">
+            <ThemeSwitch client:idle />
           </li>
         </ul>
       </nav>
@@ -104,43 +99,5 @@ const card = await getImage({ src: social, width: 1200, height: 630, format: "pn
         <li><a href={`${REPOSITORY_URL}/blob/main/LICENSE.md`}>License</a></li>
       </ul>
     </footer>
-    <script>
-      const root = document.documentElement;
-      // The theme follows the system until one is chosen; the switch goes system, light, dark, and back to system.
-      const themeSwitch = document.querySelector<HTMLButtonElement>("[data-theme-switch]");
-      const NEXT: Record<string, string> = { system: "light", light: "dark", dark: "system" };
-      const name = () => themeSwitch?.setAttribute("aria-label", `Theme: ${root.dataset.theme ?? "system"}`);
-      name();
-      themeSwitch?.addEventListener("click", () => {
-        const next = NEXT[root.dataset.theme ?? "system"] ?? "system";
-        if (next === "system") delete root.dataset.theme;
-        else root.dataset.theme = next;
-        name();
-        try {
-          if (next === "system") localStorage.removeItem("theme");
-          else localStorage.setItem("theme", next);
-        } catch {
-          // The choice still holds for this page; it is only not remembered.
-        }
-      });
-
-      for (const button of document.querySelectorAll<HTMLButtonElement>("button[data-copy]")) {
-        button.addEventListener("click", async () => {
-          const said = button.querySelector<HTMLElement>("[data-said]");
-          if (!said) return;
-          try {
-            await navigator.clipboard.writeText(button.dataset.copy ?? "");
-            said.textContent = "Copied";
-          } catch {
-            said.textContent = "Failed";
-          }
-          button.toggleAttribute("data-told", true);
-          setTimeout(() => {
-            said.textContent = "";
-            button.toggleAttribute("data-told", false);
-          }, 1600);
-        });
-      }
-    </script>
   </body>
 </html>
