@@ -39,7 +39,7 @@ That is the label. Every command and tool takes it to name one site. The bare id
 
 ```text
 $ poplin ./report
-uploaded 3 files, 48 KB
+uploaded 3 files, 48 kB
 made  report--k3f9x2ab71qz  private
 https://report--k3f9x2ab71qz-p-poplin.example.com
 ```

@@ -59,7 +59,7 @@ describe("export", () => {
     const one = await bench.run(`export docs --out ${join(folder, "one.zip")}`);
 
     expect(live).toMatchObject({ code: 0, err: [] });
-    expect(live.out.map((line) => line.replace(/ {2,}/g, "  ").replace(/, [\d.]+ K?B$/, ", <size>")).sort()).toEqual([
+    expect(live.out.map((line) => line.replace(/ {2,}/g, "  ").replace(/, [\d.]+ k?B$/, ", <size>")).sort()).toEqual([
       `exported  ${docs}  1 version  1 file  19 B`,
       `exported  ${notes}  1 version  2 files  27 B`,
       `wrote ${join(folder, "live.zip")}: 2 sites, 3 files, <size>`,

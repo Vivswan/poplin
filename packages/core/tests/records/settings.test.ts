@@ -177,20 +177,20 @@ describe("SETTING_VALUES", () => {
 });
 
 describe("showBytes", () => {
-  // Drift: the dashboard and the CLI show a size against a limit typed as `9GB`; a binary unit or another rounding would show a full install as one with room.
+  // Drift: the dashboard and the CLI show a size against a limit typed as `9GB`; a binary unit would show a full install as one with room, and a size rounded up would show an install a byte under its limit as full.
   test.each([
     [0, "0 B"],
     [999, "999 B"],
-    [1000, "1 KB"],
-    [1500, "1.5 KB"],
-    [1_250_000, "1.3 MB"],
+    [1000, "1 kB"],
+    [1500, "1.5 kB"],
+    [1_250_000, "1.2 MB"],
     [1_449_999, "1.4 MB"],
-    [999_949, "999.9 KB"],
-    [999_950, "1 MB"],
+    [999_999, "999.9 kB"],
     [200_000_000, "200 MB"],
+    [sizeBytes({ count: 9, unit: "GB" }) - 1, "8.9 GB"],
     [sizeBytes({ count: 9, unit: "GB" }), "9 GB"],
     [12_345_678_901, "12.3 GB"],
-    [1_000_000_000_000, "1000 GB"],
+    [1_000_000_000_000, "1 TB"],
   ])("%d bytes are shown as %s", (bytes, shown) => {
     expect(showBytes(bytes)).toBe(shown);
   });
