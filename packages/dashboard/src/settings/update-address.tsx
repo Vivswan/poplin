@@ -16,11 +16,8 @@ import { SETTINGS_KEY, type UpdateAddress } from "@/settings/settings-queries";
 /** The id of the field the address is typed into. */
 export const ADDRESS_FIELD = "update-address";
 
-/** What the line says under its name: what the address does. */
-const USE = "Starts an update.";
-
 /** What the line's question mark says of the address. */
-const MEANING = "Your host's secret address. It is never shown again.";
+const MEANING = "A secret address from your host that starts an update.";
 
 /** The question before the address is removed: it cannot be read back, so nothing puts it back. */
 const REMOVE = {
@@ -57,10 +54,10 @@ export function UpdateAddressRow({ state, draft }: { readonly state: UpdateAddre
       label="Rebuild address"
       controlId={ADDRESS_FIELD}
       about={() => <p>{MEANING}</p>}
-      help={since === null ? `${USE} None is saved.` : `${USE} Saved ${wholeMoment(since)}.`}
+      help={since === null ? "None saved" : `Saved ${wholeMoment(since)}`}
       refusal={draft.refusal}
     >
-      {since !== null && !draft.replacing ? (
+      {since !== null && !draft.replacing && draft.typed === "" ? (
         <>
           <Button type="button" variant="outline" onClick={draft.replace}>
             Replace
@@ -82,11 +79,11 @@ export function UpdateAddressRow({ state, draft }: { readonly state: UpdateAddre
             aria-invalid={draft.refusal !== undefined}
             className="w-64 min-w-0 max-md:w-auto max-md:flex-1"
           />
-          {draft.replacing ? (
+          {since === null ? null : (
             <Button type="button" variant="ghost" onClick={draft.discard}>
               Cancel
             </Button>
-          ) : null}
+          )}
         </>
       )}
       <Confirm question={asking ? REMOVE : undefined} onAnswer={(yes) => void remove(yes)} />

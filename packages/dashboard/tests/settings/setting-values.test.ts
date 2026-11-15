@@ -1,4 +1,4 @@
-// How a setting's text is put into its control and read back where the source cannot say it alone: the unit a text carries against the unit of its row, a number the server must get to refuse, and a default written for reading.
+// How a setting's text is put into its control and read back where the source cannot say it alone: the unit a text carries against the unit of its row, and a default written for reading.
 
 import { describe, expect, test } from "bun:test";
 
@@ -10,11 +10,9 @@ function numberOf(key: string, unit: string, word: string | null = null): Row {
 }
 
 describe("the text of a number", () => {
-  // Drift: a default in MB put into a row stored in KB would be sent as KB; a typed minus or fraction would be taken for a unit, so the next digit typed would be sent as `5-1MB`, or rounded to a value nobody typed.
+  // Drift: a default in MB put into a row stored in KB would be sent as KB, or an emptied field would lose its unit, so the next count typed would be sent with none.
   test.each([
     ["a text in another unit than the row's", numberOf("max_site_size", "KB"), "200MB", { count: 200, unit: "MB" }],
-    ["a typed minus, which the server refuses", numberOf("max_total_size", "MB"), "-1MB", { count: -1, unit: "MB" }],
-    ["a typed fraction, which the server refuses", numberOf("max_total_size", "MB"), "1.5MB", { count: 1.5, unit: "MB" }],
     ["an emptied field, which keeps its unit", numberOf("max_total_size", "MB"), "MB", { count: null, unit: "MB" }],
   ])("of %s is taken apart and read back unchanged", (_what, row, text, parts) => {
     expect([partsOf(row, text), textOf(row, parts)]).toEqual([parts, text]);

@@ -6,12 +6,12 @@ import { unitWord, wordsOf } from "@/settings/settings-words";
 /** How a number is written where it is only read: with separators between its thousands. */
 const COUNT_FORMAT = new Intl.NumberFormat("en-US");
 
-/** The two parts of a number's text: its number, which may be none and may hold a sign or a fraction the server refuses, and the unit after it. */
-const PARTS = /^(-?[0-9]*\.?[0-9]*)(.*)$/;
+/** The two parts of a number's text: its count, which may be none, and the unit after it. The field lets in whole counts from 0 up alone. */
+const PARTS = /^([0-9]*)(.*)$/;
 
 /** A number's text taken apart. */
 interface Parts {
-  /** The count as typed, which the server checks; `null` for the word of no number and for a text with no number. */
+  /** The count; `null` for the word of no number and for a text with no count. */
   readonly count: number | null;
 
   /** The unit after the digits, such as `MB`, `%`, or nothing. */
@@ -33,9 +33,8 @@ export function partsOf(row: Row, text: string): Parts {
   if (text === wordOf(row)) return { count: null, unit: row.unit };
 
   const [, typed = "", unit = ""] = PARTS.exec(text) ?? [];
-  const count = typed === "" ? Number.NaN : Number(typed);
 
-  return { count: Number.isFinite(count) ? count : null, unit };
+  return { count: typed === "" ? null : Number(typed), unit };
 }
 
 /**

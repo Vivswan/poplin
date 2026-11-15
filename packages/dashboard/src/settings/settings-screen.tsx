@@ -21,8 +21,11 @@ import { blocksOf, UPDATES } from "@/settings/settings-words";
 import { ADDRESS_FIELD, UpdateAddressRow } from "@/settings/update-address";
 import { AppShell } from "@/shell/app-shell";
 
-/** The look of a block's heading: small and quiet, across the page, with room above it that sets the blocks apart. */
-const HEADING = "border-b px-6 pt-8 pb-2 text-xs font-medium text-muted-foreground max-md:px-4";
+/** The look of a block's heading: small and quiet. One hairline above it, across the page, sets the blocks apart; the rows under it stand together with no rule between them. */
+const HEADING = "mt-4 border-t px-6 pt-5 pb-1.5 text-xs font-medium text-muted-foreground max-md:px-4";
+
+/** The first heading of the page has no block above it to be set apart from. */
+const FIRST_HEADING = "mt-0 border-t-0";
 
 /** How long a line an address names stays shaded, in milliseconds. */
 const MARKED_FOR = 2000;
@@ -38,11 +41,11 @@ const SIGN_OUT = {
 /** The waiting changes of the settings, as the rows need them. */
 type Draft = ReturnType<typeof useDraft>;
 
-/** The line over the settings that also change the domain's rules: what a change does at once, and what waits for a repair. */
+/** The line over the settings that also change the domain's rules: those follow at the next repair. */
 function RepairNote(): ReactNode {
   return (
-    <p className="border-b px-6 py-2.5 text-[13px] text-muted-foreground max-md:px-4">
-      Applies to your sites at once. For your domain, press Repair in{" "}
+    <p className="px-6 pb-1.5 text-[13px] text-muted-foreground max-md:px-4">
+      The rules on your domain change after Repair in{" "}
       <Link to="/domain" className="text-link underline-offset-2 hover:underline">
         Domain
       </Link>
@@ -98,7 +101,7 @@ function Rows({
     <div className="pb-8">
       {blocksOf(settings.rows).map((block, index) => (
         <section key={block.id} aria-labelledby={`block-${block.id}`}>
-          <h2 id={`block-${block.id}`} className={cn(HEADING, index === 0 && "pt-5")}>
+          <h2 id={`block-${block.id}`} className={cn(HEADING, index === 0 && FIRST_HEADING)}>
             {block.heading}
           </h2>
           {block.rows.some((row) => row.repair) ? <RepairNote /> : null}
@@ -125,7 +128,7 @@ function Waiting(): ReactNode {
   return (
     <div className="flex flex-col pt-5" aria-busy="true">
       {[0, 1, 2, 3].map((row) => (
-        <div key={row} className="flex h-12 items-center border-b px-6 max-md:px-4">
+        <div key={row} className="flex h-12 items-center px-6 max-md:px-4">
           <Skeleton className="h-4 w-full max-w-3xl" />
         </div>
       ))}

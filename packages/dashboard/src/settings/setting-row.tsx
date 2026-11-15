@@ -1,4 +1,4 @@
-// The line of one setting: its name, the question mark that holds one short sentence, its default, and the way back to it, and at the line's end the control, with one icon before it for the host's warnings.
+// The line of one setting: its name, the question mark that holds one short sentence, its default, and the way back to it, and after it the control, with one icon after it for the host's warnings.
 
 import { TriangleAlertIcon } from "lucide-react";
 import type { ReactNode } from "react";
@@ -67,12 +67,12 @@ export function SettingRow({ row, text, refusal, onChange, marked }: SettingRowP
 
   return (
     <RowLine label={words.label} controlId={id} anchor={settingAnchor(row.key)} marked={marked} about={about} small={isSwitch(row)} refusal={refusal}>
+      <SettingControl row={row} id={id} text={text} onChange={onChange} refused={refusal !== undefined} />
       {row.warnings.length === 0 ? null : (
         <Hint label={`Warning: ${row.warnings.join(" ")}`} icon={<TriangleAlertIcon />} className="text-warn hover:text-warn">
           {() => row.warnings.map((warning) => <p key={warning}>{warning}</p>)}
         </Hint>
       )}
-      <SettingControl row={row} id={id} text={text} onChange={onChange} refused={refusal !== undefined} />
     </RowLine>
   );
 }

@@ -15,7 +15,7 @@ export interface AddressDraft {
   /** What the field holds. */
   readonly typed: string;
 
-  /** Whether the field is shown over a saved address, to replace it. */
+  /** Whether the field was asked for over a saved address, to replace it. A field that holds typing is shown whatever this says. */
   readonly replacing: boolean;
 
   /** The sentence the last save was refused with, until the field is typed in again. */
@@ -56,9 +56,9 @@ export function useAddressDraft(): AddressDraft {
   const saving = useMutation({
     mutationFn: (address: string) => answerOf(api.settings["update-address"].$post({ json: { address } })),
     onSuccess: async (_done, address) => {
-      // The field lets go of the address the moment it is saved; one typed while the save was on its way stays.
+      // The field lets go of the address the moment it is saved; one typed while the save was on its way stays, and keeps the field shown.
       setTyped((kept) => (kept.trim() === address ? "" : kept));
-      setReplacing((kept) => kept && typed.trim() !== address);
+      setReplacing(false);
       await client.invalidateQueries({ queryKey: SETTINGS_KEY });
       sayDone("Rebuild address saved. It is not shown again.");
     },
