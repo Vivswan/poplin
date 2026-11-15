@@ -64,6 +64,7 @@ function row(name: string): ReturnType<typeof within> {
 
 afterEach(() => {
   cleanup();
+  window.localStorage.clear();
   asked.reviewed = [];
   asked.removed = [];
 });
