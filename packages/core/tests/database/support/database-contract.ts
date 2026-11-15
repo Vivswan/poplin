@@ -745,6 +745,11 @@ function sites(label: string, makeDatabase: DatabaseFactory): void {
       expect(page(await database.listSites({ trash: false, limit: 100, sort: "access", dir: "desc" }))).toEqual([...live].reverse());
       expect([page(await database.listSites({ trash: false, limit: 100, expires: "never" })), page(await database.listSites({ trash: false, limit: 100, expires: "set" }))]).toEqual([[...live].reverse(), []]);
 
+      // Drift: a name is looked for as plain text; read as a pattern, `%` and `_` would list every site, and a text cut at a NUL would too.
+      const found = async (named: string): Promise<string[]> => page(await database.listSites({ trash: false, limit: 100, sort: "name", named }));
+
+      expect([await found(REPORT.slice(1, 4)), await found(REPORT.toUpperCase()), await found("%"), await found("_"), await found("\u0000"), await found(`${REPORT}\u0000`)]).toEqual([live, live, [], [], [], []]);
+
       // The trash shows what was deleted last first, whenever its content changed: the oldest site, deleted last, leads.
       await database.trashSite("aaaaaaaaaaaa" as SiteId, { by: ADA, at: NOW + 10 });
       const trash = await database.listSites({ trash: true, limit: 1 });

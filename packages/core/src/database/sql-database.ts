@@ -132,9 +132,9 @@ function narrowing(query: SitesQuery, params: SqlValue[]): string[] {
   }
 
   if (query.named !== undefined) {
-    // The text is matched as it stands: the three signs LIKE reads as its own are escaped.
-    params.push(`%${query.named.replace(/[\\%_]/g, "\\$&")}%`);
-    conditions.push(`s.name LIKE ?${params.length} ESCAPE '\\'`);
+    // The text is looked for as it stands, with no sign read as a pattern. A name holds no capital, so one typed with capitals is looked for without.
+    params.push(query.named.toLowerCase());
+    conditions.push(`instr(s.name, ?${params.length}) > 0`);
   }
 
   if (query.access !== undefined) {

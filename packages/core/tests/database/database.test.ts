@@ -263,7 +263,7 @@ class MemoryDatabase implements Database {
     const listed = [...this.#sites.values()]
       .filter((kept) => (kept.place.state === "trash") === query.trash)
       .filter((kept) => owner === undefined || kept.fields.owner === owner)
-      .filter((kept) => query.named === undefined || kept.fields.name.includes(query.named))
+      .filter((kept) => query.named === undefined || kept.fields.name.includes(query.named.toLowerCase()))
       .filter((kept) => query.access === undefined || kept.access.access === query.access)
       .filter((kept) => query.expires === undefined || (kept.fields.expires === "never") === (query.expires === "never"))
       .filter((kept) => after === undefined || comesBefore(after, cursorOf(kept), query))
