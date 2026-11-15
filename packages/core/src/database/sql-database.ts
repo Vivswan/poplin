@@ -123,7 +123,6 @@ import {
   insertSite,
   isFirstPending,
   isFree,
-  isServed,
   keepEarlierId,
   moveLive,
   narrowing,
@@ -131,11 +130,11 @@ import {
   publicNameIsFree,
   publicNameOf,
   requireCursor,
+  servedSite,
   setAccess,
   siteById,
   sitesWhere,
   storedDetails,
-  versionsOfSite,
 } from "./site-statements";
 import { BUILD, CHANGED, ONE, bare, built, insertFrom, qualified, written } from "./statements";
 import {
@@ -472,8 +471,7 @@ export class SqlDatabase implements Database {
 
   async findServed(address: Address, now: number): Promise<ServedSite | undefined> {
     const addressed = "id" in address ? eq(sites.id, address.id) : eq(sites.public_name, address.public_name);
-    const fields = { ...SITE_FIELDS, versions: versionsOfSite(true).as("versions") };
-    const [found] = await this.#driver.batch([built(BUILD.select(fields).from(sites).where(and(addressed, isServed(now))))]);
+    const [found] = await this.#driver.batch([servedSite(addressed, now)]);
 
     return servedIn(found);
   }

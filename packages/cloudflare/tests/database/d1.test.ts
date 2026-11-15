@@ -118,8 +118,9 @@ const ROWS: Readonly<Record<string, readonly [read: number, written: number]>> =
   "getSiteNames": [10, 0],
   "getSiteByPublicName": [2, 0],
   "getSiteByFolder": [3, 0],
-  "findServed, by id": [3, 0],
+  "findServed, by id": [2, 0],
   "findServed, by public name": [2, 0],
+  "findServed, a site that keeps two versions": [2, 0],
   "readTotals": [1, 0],
   "exportSites": [18, 0],
   "exportSites, after": [18, 0],
@@ -674,6 +675,7 @@ describe("D1: the rows every operation of the database costs of a day's allowanc
     await cost("setLiveVersion, the same", () => database.setLiveVersion(first.id, 2, BY_ADA));
     await database.setLiveVersion(first.id, 3, BY_ADA);
     await cost("setLiveVersion, previous", () => database.setLiveVersion(first.id, "previous", BY_ADA));
+    await cost("findServed, a site that keeps two versions", () => database.findServed({ id: first.id }, NOW));
     await cost("trashSite", () => database.trashSite(third.id, BY_ADA));
     await cost("trashSite, in the trash", () => database.trashSite(third.id, BY_ADA));
     await cost("restoreSite", () => database.restoreSite(third.id, BY_ADA));

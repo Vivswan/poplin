@@ -969,6 +969,23 @@ export function versionContents(label: string, makeDatabase: DatabaseFactory): v
       expect(contents).toEqual([first, second, first]);
     });
 
+    // Drift: a page view needs the live version alone, and every other one it reads is a row of the day's allowance. A lookup that took another for the live one would tag every page wrongly, and a browser would keep the old files.
+    test("a served site is the site as its own read gives it, with the live version alone of the ones it keeps: the newest, and the older one after a rollback", async () => {
+      const database = await opened(makeDatabase);
+      const site = await made(database, draft(REPORT, "public", DOCS));
+      for (const later of [1, 2]) await database.publishUploadAsVersion(await begunVersion(database, site), { keep: 3, details: {} }, { by: BO, at: NOW + later });
+      const newest = [await database.findServed({ id: site.id }, NOW), await database.findServed({ public_name: DOCS }, NOW)].map((found) => found?.site);
+      const kept = await database.getSite(site.id);
+      await database.setLiveVersion(site.id, 2, BY_ADA);
+      const older = (await database.findServed({ id: site.id }, NOW))?.site;
+      const rolledBack = await database.getSite(site.id);
+      const liveAlone = (whole: Site | undefined): unknown => (whole === undefined ? undefined : { ...whole, versions: whole.versions.filter((version) => version.number === whole.live_version) });
+
+      expect(kept?.versions.map((version) => version.number)).toEqual([1, 2, 3]);
+      expect<unknown>([...newest, older]).toEqual([liveAlone(kept), liveAlone(kept), liveAlone(rolledBack)]);
+      expect([newest[0], older].map((served) => served?.versions.map((version) => [version.number, version.published_at]))).toEqual([[[3, NOW + 2]], [[2, NOW + 1]]]);
+    });
+
     // Drift: a version made from no list of files, as a test's or one stored without it, must be served as one nothing is known of, never as one known to hold nothing.
     test("a version stored without it is one nothing is known of, and a site from a backup carries what is given for each of its versions", async () => {
       const database = await opened(makeDatabase);

@@ -76,7 +76,7 @@ export interface SiteDetails {
   readonly expires?: "never" | number;
 }
 
-/** A site an address serves, with what its live version is known to hold. */
+/** A site an address serves, its `versions` holding the live one alone, with what that version is known to hold. */
 export interface ServedSite {
   readonly site: Site;
   readonly contents: VersionContents;
@@ -501,7 +501,7 @@ export interface Database {
   /**
    * The site an address serves at `now`.
    *
-   * @returns the site and what its live version holds; `undefined` for an address of no site, of a site in the trash, or of a site past its expiry
+   * @returns the site with its live version alone, and what that version holds; `undefined` for an address of no site, of a site in the trash, or of a site past its expiry
    */
   findServed(address: Address, now: number): Promise<ServedSite | undefined>;
 

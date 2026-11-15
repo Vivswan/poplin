@@ -1,7 +1,7 @@
 // The statements that read and change sites and their kept versions, and the conditions a listing of sites is narrowed and ordered by.
 
 import { and, eq, exists, gt, isNotNull, isNull, ne, notExists, or, type SQL, sql as fragment } from "drizzle-orm";
-import { alias } from "drizzle-orm/sqlite-core";
+import { alias, type SQLiteColumn } from "drizzle-orm/sqlite-core";
 import * as v from "valibot";
 
 import type { PublicName } from "../names/names";
@@ -105,20 +105,30 @@ export function narrowing(query: SitesQuery): SQL[] {
   return conditions;
 }
 
-/**
- * The kept versions of the site a statement selects, gathered into one JSON value.
- *
- * @param withContents - whether each carries what it holds, as serving reads it: whether it has a `404.html`, and of the live one its files without an extension. It costs no row more
- */
-export function versionsOfSite(withContents = false): SQL<string> {
-  const kept = [versions.number, versions.published_at, versions.published_by, versions.bytes, versions.files];
+/** One version of the site a statement selects, as a JSON object of what a site's record keeps of it and, where given, more. */
+function versionObject(more: readonly SQLiteColumn[] = []): SQL {
+  const kept = [versions.number, versions.published_at, versions.published_by, versions.bytes, versions.files, ...more];
   const pairs = kept.map((column) => fragment`${fragment.raw(`'${column.name}'`)}, ${qualified(column)}`);
-  const bareOfLive = fragment`CASE WHEN ${qualified(versions.number)} = ${qualified(sites.live_version)} THEN ${qualified(versions.bare_files)} END`;
-  if (withContents) pairs.push(fragment`'missing_page', ${qualified(versions.missing_page)}`, fragment`'bare_files', ${bareOfLive}`);
 
-  const version = fragment`json_object(${fragment.join(pairs, fragment`, `)})`;
+  return fragment`json_object(${fragment.join(pairs, fragment`, `)})`;
+}
 
-  return fragment<string>`(SELECT json_group_array(${version}) FROM ${versions} WHERE ${qualified(versions.folder)} = ${qualified(sites.folder)})`;
+/** The kept versions of the site a statement selects, gathered into one JSON value. */
+function versionsOfSite(): SQL<string> {
+  return fragment<string>`(SELECT json_group_array(${versionObject()}) FROM ${versions} WHERE ${qualified(versions.folder)} = ${qualified(sites.folder)})`;
+}
+
+/**
+ * The site an address serves, with its live version alone as its versions, and what that version holds: whether it has a `404.html`, and its files without an extension.
+ * The version is joined by its key, so a site costs the same rows however many versions it keeps.
+ *
+ * @param addressed - the condition that names the site
+ */
+export function servedSite(addressed: SQL | undefined, now: number): Statement {
+  const live = and(eq(versions.folder, sites.folder), eq(versions.number, sites.live_version));
+  const fields = { ...SITE_FIELDS, versions: fragment<string>`json_array(${versionObject([versions.missing_page, versions.bare_files])})`.as("versions") };
+
+  return built(BUILD.select(fields).from(sites).innerJoin(versions, live).where(and(addressed, isServed(now))));
 }
 
 /**
@@ -156,7 +166,7 @@ export function siteById(id: SiteId): Statement {
 }
 
 /** Added to a lookup by address: the site is outside the trash and not past its expiry at `now`. */
-export function isServed(now: number): SQL | undefined {
+function isServed(now: number): SQL | undefined {
   return and(eq(sites.trashed, 0), or(isNull(sites.expires_at), gt(sites.expires_at, now)));
 }
 
