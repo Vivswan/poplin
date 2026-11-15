@@ -176,7 +176,7 @@ export const COMMANDS = [
   {
     name: "setup",
     group: "the install",
-    about: "finish a new install with its provider's token",
+    about: "finish a new install with an account token",
     arguments: [],
     flags: [
       { name: "--check", about: "say what a setup would change, and change nothing" },
@@ -186,7 +186,7 @@ export const COMMANDS = [
     ],
     examples: ["poplin setup --server https://poplin.example.com", "poplin setup --check --server https://poplin.example.com"],
     notes: [
-      "The install does the work: this sends it the provider's token from",
+      "The install does the work: this sends it the account token from",
       "POPLIN_SETUP_TOKEN and prints its rows. The token is never an argument and",
       "is never saved. It needs no login, and works only until somebody has",
       "logged in to the install: from then on the dashboard's Domain tab does the",
@@ -196,8 +196,8 @@ export const COMMANDS = [
       "  --domain example.com --login owner@example.com",
       "A first login that was mistyped is corrected the same way, until",
       "somebody has logged in: --login with the right email.",
-      "To make the token, open /setup at that address in a browser: the page",
-      "links the provider's form for a new token with its rights chosen.",
+      "To make the account token, open /setup at that address in a browser: the",
+      "page links the provider's form for a new token with its rights chosen.",
     ],
   },
   {

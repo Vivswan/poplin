@@ -328,7 +328,7 @@ describe("run", () => {
     // Drift: the stored logins and the login page's own list are two lists; a change that printed the first alone would leave a new person stopped at the login with nothing saying why.
     const added = await bench.run("config logins ada@example.com,second@example.com");
 
-    const step = "one more step: on the dashboard's Domain tab, paste a token and press Repair, so the login page lets a new email in; until then only an email that was already a login gets in";
+    const step = "one more step: on the dashboard's Domain tab, paste an account token and press Repair, so the login page lets a new email in; until then only an email that was already a login gets in";
 
     expect([added.out, added.err]).toEqual([["logins  ada@example.com,second@example.com"], [step]]);
 
@@ -449,7 +449,7 @@ describe("run", () => {
     ["login with no install to ask", {}, "login", 3, "login needs the address of the install"],
     ["login at an address that is not https", {}, "login --server http://poplin.example.com:8787", 2, "--server takes an https:// address with nothing after the host"],
     ["setup with no install to ask", {}, "setup", 3, "setup needs the address of the install"],
-    ["setup with no token to send", {}, "setup --server https://poplin.example.com", 1, "setup needs a token of the install's provider, and POPLIN_SETUP_TOKEN holds none"],
+    ["setup with no token to send", {}, "setup --server https://poplin.example.com", 1, "setup needs an account token of the install's provider, and POPLIN_SETUP_TOKEN holds none"],
   ])("%s sends nothing and exits with its own code", async (_name, env, line, code, sentence) => {
     const bench = await openBench();
 

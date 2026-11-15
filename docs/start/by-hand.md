@@ -20,7 +20,7 @@ Steps 1 to 5 happen in your browser, and after them your dashboard works. Step 6
 
 `example.com` stands for your own domain, on this page and in every command: type yours in its place.
 
-Two words the steps use: a **Worker** is the program Cloudflare runs for you, and a **token** is a long password that lets a program change your Cloudflare account.
+Two words the steps use: a **Worker** is the program Cloudflare runs for you, and an **account token** is a long password that lets a program change your Cloudflare account.
 
 ## What you need
 
