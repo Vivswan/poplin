@@ -112,23 +112,23 @@ const NAME_IS_HELD = "SELECT (EXISTS (SELECT 1 FROM sites WHERE public_name = ?1
 
 /** A new access for a live site, only when it differs and the public name asked for is free. */
 const SET_ACCESS = `
-UPDATE sites SET access = ?2, public_name = ?3, updated_at = ?4
+UPDATE sites SET access = ?2, public_name = ?3
 WHERE id = ?1 AND trashed = 0 AND (access <> ?2 OR public_name IS NOT ?3)
   AND (?3 IS NULL OR (NOT EXISTS (SELECT 1 FROM sites WHERE public_name = ?3 AND id <> ?1) AND NOT EXISTS (SELECT 1 FROM sites WHERE id = ?3)))`;
 
 /** A new id for a live site, only while that id is free. */
 const SET_ID = `
-UPDATE sites SET id = ?2, updated_at = ?3
+UPDATE sites SET id = ?2
 WHERE id = ?1 AND trashed = 0 AND NOT EXISTS (SELECT 1 FROM sites WHERE id = ?2) AND NOT EXISTS (SELECT 1 FROM sites WHERE public_name = ?2)`;
 
 /** The counts of site `?1` on the days in the JSON list `?3`, moved to its new id `?2`, only when the statement before it wrote the audit entry of that change. */
 const MOVE_COUNTS = "UPDATE request_counts SET site = ?2 WHERE site = ?1 AND day IN (SELECT j.value FROM json_each(?3) AS j) AND changes() = 1";
 
 /** A live site into the trash. */
-const TRASH = "UPDATE sites SET trashed_at = ?2, updated_at = ?2 WHERE id = ?1 AND trashed = 0";
+const TRASH = "UPDATE sites SET trashed_at = ?2 WHERE id = ?1 AND trashed = 0";
 
 /** A trashed site out of the trash, without an expiry that is not after `?2`. */
-const RESTORE = "UPDATE sites SET trashed_at = NULL, updated_at = ?2, expires_at = CASE WHEN expires_at > ?2 THEN expires_at END WHERE id = ?1 AND trashed = 1";
+const RESTORE = "UPDATE sites SET trashed_at = NULL, expires_at = CASE WHEN expires_at > ?2 THEN expires_at END WHERE id = ?1 AND trashed = 1";
 
 /** The audit entry of a delete, written while the site is still there to name. */
 const AUDIT_DELETE = "INSERT INTO audit (at, actor, action, site_id, site_name, detail) SELECT ?1, ?2, 'delete', id, name, '{}' FROM sites WHERE id = ?3";
@@ -285,7 +285,7 @@ EXISTS (SELECT 1 FROM uploads u JOIN sites s ON s.folder = u.folder
 
 /** The access asked with upload `?1`, set by the rule of `SET_ACCESS`, only while the upload can be published. */
 const SET_ACCESS_WITH_UPLOAD = `
-UPDATE sites SET access = ?2, public_name = ?3, updated_at = ?4
+UPDATE sites SET access = ?2, public_name = ?3
 WHERE folder = (SELECT folder FROM uploads WHERE id = ?1) AND (access <> ?2 OR public_name IS NOT ?3)
   AND (?3 IS NULL OR (NOT EXISTS (SELECT 1 FROM sites o WHERE o.public_name = ?3 AND o.folder <> sites.folder) AND NOT EXISTS (SELECT 1 FROM sites o WHERE o.id = ?3)))
   AND ${UPLOAD_CAN_PUBLISH}`;
@@ -831,7 +831,7 @@ export class SqlDatabase implements Database {
   async changeAccess(id: SiteId, access: SiteAccess, signed: Signed): Promise<Done | Unchanged | Refused<"not_found" | "in_trash" | "name_taken">> {
     const publicName = publicNameOf(access);
     const [updated, , after] = await this.#driver.batch([
-      sql(SET_ACCESS, id, access.access, publicName, signed.at),
+      sql(SET_ACCESS, id, access.access, publicName),
       auditSite(signed, "access", id, { access: access.access, public_name: publicName }),
       sql(SITE_BY_ID, id),
     ]);
@@ -848,11 +848,11 @@ export class SqlDatabase implements Database {
 
   async changeDetails(id: SiteId, details: SiteDetails, signed: Signed): Promise<Done | Unchanged | Refused<"not_found" | "in_trash">> {
     const given = v.parse(SITE_DETAILS, details);
-    const params: SqlValue[] = [id, signed.at];
+    const params: SqlValue[] = [id];
     const { sets, differs } = detailColumns(given, params);
     if (sets.length === 0) return this.#unchanged(id);
 
-    const text = `UPDATE sites SET ${sets.join(", ")}, updated_at = ?2 WHERE id = ?1 AND trashed = 0 AND (${differs.join(" OR ")})`;
+    const text = `UPDATE sites SET ${sets.join(", ")} WHERE id = ?1 AND trashed = 0 AND (${differs.join(" OR ")})`;
     const [updated, , after] = await this.#driver.batch([sql(text, ...params), auditSite(signed, "details", id, given), sql(SITE_BY_ID, id)]);
     if (changed(updated)) return done(after);
 
@@ -863,7 +863,7 @@ export class SqlDatabase implements Database {
     for (let attempt = 0; attempt < MINT_ATTEMPTS; attempt += 1) {
       const next = this.#mintId();
       const [updated, , after, before] = await this.#driver.batch([
-        sql(SET_ID, id, next, signed.at),
+        sql(SET_ID, id, next),
         auditSite(signed, "new_id", next, { from: id }),
         sql(SITE_BY_ID, next),
         sql(SITE_BY_ID, id),
@@ -1352,7 +1352,7 @@ export class SqlDatabase implements Database {
     const detail = { access: access.access, public_name: publicNameOf(access) };
 
     return [
-      sql(SET_ACCESS_WITH_UPLOAD, id, access.access, publicNameOf(access), signed.at),
+      sql(SET_ACCESS_WITH_UPLOAD, id, access.access, publicNameOf(access)),
       sql(AUDIT_WITH_UPLOAD, signed.at, signed.by, "access", id, JSON.stringify(detail)),
     ];
   }
@@ -1364,12 +1364,12 @@ export class SqlDatabase implements Database {
     signed: Signed,
   ): Statement[] {
     const given = v.parse(SITE_DETAILS, asked.details);
-    const params: SqlValue[] = [id, asked.access, asked.publicName, signed.at];
+    const params: SqlValue[] = [id, asked.access, asked.publicName];
     const { sets, differs } = detailColumns(given, params);
     if (sets.length === 0) return [];
 
     const text = `
-UPDATE sites SET ${sets.join(", ")}, updated_at = ?4
+UPDATE sites SET ${sets.join(", ")}
 WHERE folder = (SELECT folder FROM uploads WHERE id = ?1) AND (${differs.join(" OR ")}) AND ${UPLOAD_HAS_ACCESS} AND ${UPLOAD_CAN_PUBLISH}`;
 
     return [sql(text, ...params), sql(AUDIT_WITH_UPLOAD, signed.at, signed.by, "details", id, JSON.stringify(given))];

@@ -24,7 +24,7 @@ describe("deleteSite", () => {
     expect(steps).toMatchObject([
       { ok: true, left: [], before: { state: "live" }, site: { id, state: "trash", gone_on: NOW + 4 * DAY, public_name: "report" } },
       { ok: false, code: "in_trash" },
-      { ok: true, before: { state: "trash" }, site: before.ok ? { ...before.site, updated: NOW + DAY, views: null } : {} },
+      { ok: true, before: { state: "trash" }, site: before.ok ? { ...before.site, views: null } : {} },
       { ok: false, code: "not_in_trash" },
     ]);
     expect([await world.keys(), await world.audit()]).toEqual([keys, ["create", "trash", "restore"]]);

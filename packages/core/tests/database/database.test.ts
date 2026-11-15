@@ -120,8 +120,14 @@ function keptOf(site: Site, nextVersion: number): Kept {
   return { fields, access: accessOf(site), place, nextVersion };
 }
 
-function changedAt(kept: Kept, at: number, change: Partial<Fields> = {}): Kept {
+/** A site whose content changed at `at`: a publish, or another version made live. */
+function changedAt(kept: Kept, at: number, change: Partial<Fields>): Kept {
   return { ...kept, fields: { ...kept.fields, ...change, updated_at: at } };
+}
+
+/** A site with other settings and the content it had: its change time stays. */
+function withFields(kept: Kept, change: Partial<Fields>): Kept {
+  return { ...kept, fields: { ...kept.fields, ...change } };
 }
 
 /** Why a site that is live could not be changed: there is none, or it sits in the trash. `undefined` for a live site. */
@@ -258,7 +264,7 @@ class MemoryDatabase implements Database {
 
     if (publicName !== null && this.#holds(publicName)) return { kind: "name_taken" };
 
-    return this.#changed({ ...changedAt(kept, signed.at), access: accessOf(access) }, signed, "access", { access: access.access, public_name: publicName });
+    return this.#changed({ ...kept, access: accessOf(access) }, signed, "access", { access: access.access, public_name: publicName });
   }
 
   async changeDetails(id: SiteId, details: SiteDetails, signed: Signed): Promise<Done | Unchanged | Refused<"not_found" | "in_trash">> {
@@ -271,7 +277,7 @@ class MemoryDatabase implements Database {
     const differs = stated.some(([key, value]) => kept.fields[key as keyof SiteDetails] !== value);
     if (!differs) return { kind: "unchanged", site: siteOf(kept) };
 
-    return this.#changed(changedAt(kept, signed.at, Object.fromEntries(stated)), signed, "details", given);
+    return this.#changed(withFields(kept, Object.fromEntries(stated)), signed, "details", given);
   }
 
   async giveNewId(id: SiteId, signed: Signed): Promise<Done | Refused<"not_found" | "in_trash">> {
@@ -287,7 +293,7 @@ class MemoryDatabase implements Database {
     }
 
 
-    return this.#changed(changedAt(kept, signed.at, { id: next }), signed, "new_id", { from: id });
+    return this.#changed(withFields(kept, { id: next }), signed, "new_id", { from: id });
   }
 
   async trashSite(id: SiteId, signed: Signed): Promise<Done | Refused<"not_found" | "in_trash">> {
@@ -295,7 +301,7 @@ class MemoryDatabase implements Database {
     const refusal = unreachable(kept);
     if (kept === undefined || refusal !== undefined) return refusal ?? { kind: "not_found" };
 
-    return this.#changed({ ...changedAt(kept, signed.at), place: { state: "trash", trashed_at: signed.at } }, signed, "trash", {});
+    return this.#changed({ ...kept, place: { state: "trash", trashed_at: signed.at } }, signed, "trash", {});
   }
 
   async restoreSite(id: SiteId, signed: Signed): Promise<Done | Refused<"not_found" | "not_in_trash">> {
@@ -307,7 +313,7 @@ class MemoryDatabase implements Database {
     const { expires } = kept.fields;
     const lasting = expires === "never" || expires > signed.at ? expires : "never";
 
-    return this.#changed({ ...changedAt(kept, signed.at, { expires: lasting }), place: { state: "live" } }, signed, "restore", {});
+    return this.#changed({ ...withFields(kept, { expires: lasting }), place: { state: "live" } }, signed, "restore", {});
   }
 
   async deleteSite(id: SiteId, signed: Signed): Promise<Done | Refused<"not_found">> {

@@ -551,12 +551,12 @@ function sites(label: string, makeDatabase: DatabaseFactory): void {
           "site" in step ? [step.kind, step.site.access, "public_name" in step.site ? step.site.public_name : null, step.site.updated_at] : step.kind,
         ),
       ).toEqual([
-        ["done", "unlisted", null, NOW + 5],
-        ["unchanged", "unlisted", null, NOW + 5],
-        ["done", "public", REPORT, NOW + 5],
-        ["done", "public", DOCS, NOW + 5],
-        ["unchanged", "public", DOCS, NOW + 5],
-        ["done", "private", null, NOW + 5],
+        ["done", "unlisted", null, NOW],
+        ["unchanged", "unlisted", null, NOW],
+        ["done", "public", REPORT, NOW],
+        ["done", "public", DOCS, NOW],
+        ["unchanged", "public", DOCS, NOW],
+        ["done", "private", null, NOW],
       ]);
       const named = { id: site.id, name: REPORT };
       expect<unknown>((await auditTrail(database)).filter((entry) => entry.action === "access")).toEqual([
@@ -575,7 +575,7 @@ function sites(label: string, makeDatabase: DatabaseFactory): void {
       const moved = await database.giveNewId(site.id, { by: ADA, at: NOW + 9 });
       if (moved.kind !== "done") throw new Error(`the new id was refused: ${moved.kind}`);
 
-      expect(moved.site).toEqual({ ...site, id: moved.site.id, updated_at: NOW + 9 });
+      expect(moved.site).toEqual({ ...site, id: moved.site.id });
       expect(moved.site.id).not.toBe(site.id);
       expect((await auditTrail(database)).at(-1)).toMatchObject({ action: "new_id", site: { id: moved.site.id, name: REPORT }, detail: { from: site.id } });
       expect([await database.getSite(site.id), await database.findServed({ id: site.id }, NOW)]).toEqual([undefined, undefined]);
@@ -591,14 +591,14 @@ function sites(label: string, makeDatabase: DatabaseFactory): void {
       const database = await opened(makeDatabase);
       const site = await made(database, draft(REPORT, "public", DOCS));
       const trashed = await database.trashSite(site.id, { by: ADA, at: NOW + 1 });
-      const inTrash = { ...site, updated_at: NOW + 1, state: "trash", trashed_at: NOW + 1 };
+      const inTrash = { ...site, state: "trash", trashed_at: NOW + 1 };
 
       expect(trashed).toEqual({ kind: "done", site: inTrash } as typeof trashed);
       expect([await database.findServed({ id: site.id }, NOW), await database.findServed({ public_name: DOCS }, NOW)]).toEqual([undefined, undefined]);
       expect<unknown>([await database.getSite(site.id), await database.getSiteByPublicName(DOCS)]).toEqual([inTrash, inTrash]);
       expect(await database.createSite(draft(DOCS, "public"), BY_ADA)).toEqual({ kind: "name_taken" });
-      expect(await database.restoreSite(site.id, { by: ADA, at: NOW + 2 })).toEqual({ kind: "done", site: { ...site, updated_at: NOW + 2 } });
-      expect(await database.findServed({ public_name: DOCS }, NOW)).toEqual({ ...site, updated_at: NOW + 2 });
+      expect(await database.restoreSite(site.id, { by: ADA, at: NOW + 2 })).toEqual({ kind: "done", site });
+      expect(await database.findServed({ public_name: DOCS }, NOW)).toEqual(site);
     });
 
     // Drift: a site restored with an expiry already behind it would be live in the answer and served to nobody, and the sweep would trash it again.
@@ -610,7 +610,7 @@ function sites(label: string, makeDatabase: DatabaseFactory): void {
       const database = await opened(makeDatabase);
       const site = await made(database, { ...draft(REPORT), expires });
       await database.trashSite(site.id, BY_ADA);
-      const restored = { ...site, expires: kept, updated_at: NOW + 5 };
+      const restored = { ...site, expires: kept };
 
       expect(await database.restoreSite(site.id, { by: ADA, at: NOW + 5 })).toEqual({ kind: "done", site: restored });
       expect([await database.getSite(site.id), await database.findServed({ id: site.id }, NOW + 5)]).toEqual([restored, restored]);
@@ -670,7 +670,7 @@ function sites(label: string, makeDatabase: DatabaseFactory): void {
       const database = await opened(makeDatabase);
       const site = await made(database, draft(REPORT));
       const later: Signed = { by: ADA, at: NOW + 3 };
-      const changed = { ...site, name: DOCS, title: "Q3 report", search_engines: true, expires: NOW + 100, updated_at: NOW + 3 };
+      const changed = { ...site, name: DOCS, title: "Q3 report", search_engines: true, expires: NOW + 100 };
 
       expect(await database.changeDetails(site.id, { name: DOCS, title: "Q3 report", search_engines: true, expires: NOW + 100 }, later)).toEqual({
         kind: "done",

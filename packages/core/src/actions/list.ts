@@ -24,7 +24,7 @@ export const LIST_QUERY = v.strictObject({
   access: v.optional(v.picklist(["private", "unlisted", "public"])),
 });
 
-/** One page of sites, the one changed last first. `next` is what `after` takes to get the following page, and is absent on the last. */
+/** One page of sites, the one whose content changed last first: a publish and a version made live count, a setting does not. `next` is what `after` takes to get the following page, and is absent on the last. */
 interface Listed {
   readonly ok: true;
   readonly sites: readonly SiteObject[];

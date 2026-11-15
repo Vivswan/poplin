@@ -24,7 +24,7 @@ describe("restoreSite", () => {
 
     expect([swept, restored, again]).toMatchObject([
       { ok: true, trashed: kept === "never" ? 1 : 0 },
-      { ok: true, before: { state: "trash", expires: NOW + Number.parseInt(expires, 10) * DAY }, site: { state: "live", expires: kept, updated: NOW + 2 * DAY } },
+      { ok: true, before: { state: "trash", expires: NOW + Number.parseInt(expires, 10) * DAY }, site: { state: "live", expires: kept, updated: NOW } },
       { ok: true, trashed: 0 },
     ]);
     expect([await world.install.database.findServed({ id }, world.clock.now), await getSite(world.install, OWNER, id)]).toMatchObject([{ id, expires: kept }, { site: { state: "live", expires: kept } }]);
