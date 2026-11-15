@@ -749,6 +749,29 @@ test.describe("on a screen 1440 px wide, under a site's panel", () => {
   });
 });
 
+test.describe("on a screen 1440 px wide, where a site's panel lies over more than rows", () => {
+  test.use({ viewport: VIEWPORTS[0] });
+
+  // Drift: the focus would go under the panel again on a control that is in no row: the panel lies over the last heading of the table and the end of its tools as well.
+  test("a focus that leaves the first row for a heading under the panel, or reaches a tool of the list under it, closes the panel and stays there", async ({ page }) => {
+    await arrive(page);
+    const first = page.getByRole("row").getByRole("button", { name: /^Details of / }).first();
+    const tool = page.getByRole("button", { name: "Columns", exact: true });
+
+    await openPanel(page, SAMPLE.site);
+    await first.focus();
+    await expect(panel(page)).toBeVisible();
+    await page.keyboard.press("Shift+Tab");
+    await expect(page.getByRole("dialog")).toHaveCount(0);
+    await expect(page.getByRole("columnheader").last().locator(":focus")).toHaveCount(1);
+
+    await openPanel(page, SAMPLE.site);
+    await tool.focus();
+    await expect(page.getByRole("dialog")).toHaveCount(0);
+    await expect(tool).toBeFocused();
+  });
+});
+
 test.describe("on a phone, while a line says a result", () => {
   test.use({ viewport: PHONE });
 

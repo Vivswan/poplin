@@ -148,11 +148,20 @@ function leftBy(place: HTMLElement): boolean {
   return document.activeElement === document.body || place.contains(document.activeElement);
 }
 
-/** Whether the panel lies over a control, in part or in whole. */
+/**
+ * Whether the panel hides a control, in part or in whole: the two overlap, and in the middle of what they share a press reaches the panel, not a layer that lies over both.
+ *
+ * The list itself, which takes the focus at a press on a row, holds its rows beside the panel and is never hidden.
+ */
 function covers(place: HTMLElement, control: Element): boolean {
-  const [over, under] = [place.getBoundingClientRect(), control.getBoundingClientRect()];
+  if (place.contains(control) || control.querySelector(ROWS) !== null) return false;
 
-  return under.right > over.left && under.left < over.right && under.bottom > over.top && under.top < over.bottom;
+  const [over, under] = [place.getBoundingClientRect(), control.getBoundingClientRect()];
+  const [left, right, top, bottom] = [Math.max(over.left, under.left), Math.min(over.right, under.right), Math.max(over.top, under.top), Math.min(over.bottom, under.bottom)];
+
+  if (right <= left || bottom <= top) return false;
+
+  return place.contains(document.elementFromPoint((left + right) / 2, (top + bottom) / 2));
 }
 
 /**
@@ -169,16 +178,16 @@ function closes({ reason, event }: Dialog.Root.ChangeEventDetails): boolean {
 }
 
 /**
- * Close a panel when the focus reaches a control of a row that lies under it, so the focus is never out of sight: the list keeps its width under the panel, which covers the end of each row.
+ * Close a panel when the focus reaches a control that lies under it, so the focus is never out of sight: the list keeps its width under the panel, which covers the end of its rows, of its headings, and of its tools.
  *
- * The library tells of a focus that leaves the panel only, and a row is reached from another row as well.
+ * The library tells of a focus that leaves the panel only, and a covered control is reached from a row as well.
  */
 function useNoFocusUnder(place: HTMLElement | null, onClose: () => void): void {
   useEffect(() => {
     if (place === null) return;
 
     const onFocus = ({ target }: FocusEvent): void => {
-      if (target instanceof Element && target.closest(ROWS) !== null && covers(place, target)) onClose();
+      if (target instanceof Element && covers(place, target)) onClose();
     };
     document.addEventListener("focusin", onFocus);
 
