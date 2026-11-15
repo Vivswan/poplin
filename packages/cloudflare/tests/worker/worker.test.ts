@@ -941,7 +941,7 @@ describe("a computer's login", () => {
     const session = { Cookie: cookieOf(login) };
     const opened = await ask(worker, `${ADMIN}${login.headers.get("Location")}`, { headers: session });
     const found = await ask(worker, `${ADMIN}/data/logins/find?code=${begun.code}`, { headers: session });
-    const decision = { code: begun.code, allow: true, confirm: true };
+    const decision = { code: begun.code, allow: true, confirm: true, scope: "publisher" };
 
     const unsigned = await send(worker, `${ADMIN}/data/logins/decide`, decision);
     w.clock.now += 5000;

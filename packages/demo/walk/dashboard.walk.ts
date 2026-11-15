@@ -60,6 +60,9 @@ const OWN_FACE = '"Libre Franklin Variable"';
 /** The mark of a filled button among the classes the UI library draws it with. */
 const FILLED = /(^| )bg-primary( |$)/;
 
+/** The path of the data of one waiting login, which a review reads. */
+const LOGIN_DATA = /\/data\/logins\/[0-9a-f]+$/;
+
 /** Every place of the walk, in the order it is taken: each starts where the one before it ended. */
 const STOPS: readonly Stop[] = [
   {
@@ -337,18 +340,29 @@ const STOPS: readonly Stop[] = [
     shows: (page, wide) => [rows(page, wide, "Removed tokens").getByText(SAMPLE.token, { exact: true })],
   },
   {
-    name: "the review of a waiting login",
-    open: (page) => page.getByRole("button", { name: `Review ${SAMPLE.login}`, exact: true }).click(),
+    name: "the review of a waiting login, which names it in quotes and starts at the least it may change",
+    open: (page, wide) => reviewOf(page, wide, SAMPLE.login).click(),
     shows: (page) => [
-      page
-        .getByRole("dialog", { name: `Allow ${SAMPLE.login}?`, exact: true })
-        .getByRole("checkbox", { name: "The codes match", exact: true }),
+      review(page).getByText("Allow it only if you started this login yourself.", { exact: true }),
+      review(page).getByText(`"${SAMPLE.login}"`, { exact: true }),
+      review(page).getByRole("button", { name: "Own sites only", exact: true, pressed: true }),
+      review(page).getByRole("button", { name: "Allow", exact: true, disabled: true }),
     ],
-    close: (page) =>
-      page
-        .getByRole("dialog", { name: `Allow ${SAMPLE.login}?`, exact: true })
-        .getByRole("button", { name: "Close", exact: true })
-        .click(),
+    close: (page) => review(page).getByRole("button", { name: "Close", exact: true }).click(),
+  },
+  {
+    name: "the review a terminal's link opens, which shows no whole code and turns Allow on once its last letters are typed",
+    open: async (page, wide) => {
+      const read = page.waitForResponse((response) => LOGIN_DATA.test(new URL(response.url()).pathname));
+      await reviewOf(page, wide, SAMPLE.login).click();
+      const { code } = ((await (await read).json()) as { readonly login: { readonly code: string } }).login;
+      await page.goto(`tokens/allow?code=${code}`);
+      await expect(review(page).getByRole("button", { name: "Allow", exact: true, disabled: true })).toBeVisible();
+      await expect(review(page).getByText(code)).toHaveCount(0);
+      await review(page).getByRole("textbox", { name: "Last 4 letters of the code in your terminal", exact: true }).fill(code.slice(-4));
+    },
+    shows: (page) => [review(page).getByText(/^Anyone can start a login and send its link\./), review(page).getByRole("button", { name: "Allow", exact: true, disabled: false })],
+    close: (page) => review(page).getByRole("button", { name: "Close", exact: true }).click(),
   },
   {
     name: "a reset of the sample data, which keeps the screen it was pressed on",
@@ -434,6 +448,19 @@ function lines(page: Page): Locator {
 async function narrowSites(page: Page, filter: string): Promise<void> {
   await page.getByRole("combobox", { name: "Which sites", exact: true }).click();
   await page.getByRole("option", { name: filter, exact: true }).click();
+}
+
+/** The review of a waiting login, under the title every review has. */
+function review(page: Page): Locator {
+  return page.getByRole("dialog", { name: "Allow this login?", exact: true });
+}
+
+/** The button that opens the review of the waiting login that gave itself a name: its row says the name, the button does not. */
+function reviewOf(page: Page, wide: boolean, name: string): Locator {
+  return rows(page, wide, "Tokens")
+    .getByRole(wide ? "row" : "listitem")
+    .filter({ hasText: name })
+    .getByRole("button", { name: "Review", exact: true });
 }
 
 /** Press one entry of the menu at the end of a row, which is named after what the row holds. */

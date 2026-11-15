@@ -42,12 +42,12 @@ test("a saved demo survives a stop of the worker and a reload", async ({ page })
 test("a login listed before the browser stops the worker can still be reviewed after it", async ({ page }) => {
   await arrive(page);
   await page.goto("tokens/list");
-  const review = page.getByRole("button", { name: `Review ${WAITING}`, exact: true });
+  const review = page.getByRole("row").filter({ hasText: WAITING }).getByRole("button", { name: "Review", exact: true });
   await expect(review).toBeVisible();
   await stopWorker(page);
   await review.click();
 
-  await expect(page.getByRole("dialog", { name: `Allow ${WAITING}?`, exact: true }).getByRole("checkbox", { name: "The codes match", exact: true })).toBeVisible();
+  await expect(page.getByRole("dialog", { name: "Allow this login?", exact: true }).getByRole("textbox", { name: "Last 4 letters of the code in your terminal", exact: true })).toBeVisible();
 });
 
 test("a forced reload of a deep page, around the worker, comes back to it", async ({ page, baseURL }) => {
