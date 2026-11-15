@@ -4,12 +4,14 @@ import type { UploadLimits } from "@poplin/core/src/actions/begin-publish";
 import type { Install } from "@poplin/core/src/actions/records";
 import type { Rebuilding } from "@poplin/core/src/actions/start-update";
 import { OPEN_ROUTES, ROUTES } from "@poplin/core/src/api/routes";
+import type { TokenRecord } from "@poplin/core/src/auth/tokens";
 import { AllowanceSpent } from "@poplin/core/src/database/driver";
 import { siteReference } from "@poplin/core/src/sites/labels";
 import { Hono } from "hono";
+import { HTTPException } from "hono/http-exception";
 
 import type { Counters, Taken } from "../limits/limits";
-import { authenticate, type ReadToken } from "./authenticate";
+import { type Authenticated, authenticate, type ReadToken } from "./authenticate";
 import { hasContentType, readJson, readQuery } from "./body";
 import { type Call, HANDLERS, OPEN_HANDLERS, type OpenName, QUERIES, type RouteName } from "./handlers";
 import { refusal, respond, respondFile, spentRefusal } from "./respond";
@@ -62,6 +64,18 @@ export interface ApiDeps extends Install {
   readonly rebuild: Omit<Rebuilding, "counters">;
 }
 
+/** What one request to a route that takes a token is answered from. */
+interface Asked {
+  /** The request as it came. */
+  readonly request: Request;
+
+  /** The segments of the path that the route's pattern names. */
+  readonly params: Readonly<Record<string, string>>;
+
+  /** The live token the request presented. */
+  readonly token: TokenRecord;
+}
+
 function isOpen(name: RouteName): name is OpenName {
   return (OPEN_ROUTES as readonly RouteName[]).includes(name);
 }
@@ -104,14 +118,9 @@ async function answerOpen(name: OpenName, request: Request, deps: ApiDeps): Prom
   return respond(await OPEN_HANDLERS[name]({ install: deps, body: sent.value, origin: url.origin, visitor: taken.visitor }));
 }
 
-/** Answer one request to one route: who asks first, then what was sent, then the route's handler. */
-async function answer(name: RouteName, request: Request, params: Readonly<Record<string, string>>, deps: ApiDeps): Promise<Response> {
-  if (isOpen(name)) return answerOpen(name, request, deps);
-
+/** Answer one request to one route that takes a token: what was sent, then the route's handler. */
+async function answer(name: Exclude<RouteName, OpenName>, { request, params, token }: Asked, deps: ApiDeps): Promise<Response> {
   const route = ROUTES[name];
-  const token = await authenticate(request, deps.readToken, deps.now());
-  if (token === undefined) return refusal("not_logged_in");
-
   if (!hasContentType(request, route.sends)) return refusal("unsupported_media_type");
 
   const query = readQuery(new URL(request.url), QUERIES[name] ?? {});
@@ -145,25 +154,35 @@ async function answer(name: RouteName, request: Request, params: Readonly<Record
 /**
  * Build the API of one install.
  *
- * Every request is authenticated by `Authorization: Bearer <token>` alone, and whether the token may do what it asks is decided by the action. `HEAD` is answered as `GET` without its body.
+ * Every request is authenticated by `Authorization: Bearer <token>` alone, and whether the token may do what it asks is decided by the action. One with no live token is answered 401 with `WWW-Authenticate`. `HEAD` is answered as `GET` without its body.
  *
  * The two routes a computer logs in through take no token: they are counted by visitor, the logins begun by all visitors together too, and what they hand out is decided by an admin on the dashboard.
  *
  * @returns the handler of every request under `/api`, which never throws. It answers a path that is no route 404, a route under another method 405 with `Allow`, a database spent for the day 503 with `Retry-After`, and any other failure 500
  */
 export function createApi(deps: ApiDeps): { readonly fetch: (request: Request) => Promise<Response> } {
-  const app = new Hono();
+  const app = new Hono<Authenticated>();
   const methods = new Map<string, string[]>();
+  const live = authenticate(deps.readToken, deps.now);
 
   for (const [name, route] of Object.entries(ROUTES) as [RouteName, (typeof ROUTES)[RouteName]][]) {
     methods.set(route.pattern, [...(methods.get(route.pattern) ?? []), route.method]);
-    app.on(route.method, route.pattern, (context) => answer(name, context.req.raw, context.req.param(), deps));
+
+    if (isOpen(name)) {
+      app.on(route.method, route.pattern, (context) => answerOpen(name, context.req.raw, deps));
+      continue;
+    }
+
+    app.on(route.method, route.pattern, live, (context) => answer(name, { request: context.req.raw, params: context.req.param(), token: context.get("token") }, deps));
   }
 
   for (const [pattern, allowed] of methods) app.all(pattern, () => refusal("method_not_allowed", undefined, { Allow: allowed.join(", ") }));
 
   app.notFound(() => refusal("not_found", "route"));
   app.onError((error) => {
+    // The one such error is the refusal of a request with no live token: an answer, and no failure to report.
+    if (error instanceof HTTPException) return error.getResponse();
+
     deps.report?.(error);
     if (error instanceof AllowanceSpent) return spentRefusal(error, deps.now());
 

@@ -1,30 +1,55 @@
 // Who sends a request: the bearer token in its `Authorization` header, checked against the record the install keeps of it. The API reads no cookie.
 
 import { parseToken, type TokenId, type TokenRecord, verifyToken } from "@poplin/core/src/auth/tokens";
+import type { Context, MiddlewareHandler } from "hono";
+import { bearerAuth } from "hono/bearer-auth";
 
-/** The one form of the header: the scheme, one space, and the token. */
-const BEARER_PATTERN = /^Bearer (\S+)$/i;
+import { refusal } from "./respond";
+
+/** How a 401 says to authenticate when the request held no token in the header's one form. */
+const CHALLENGE = "Bearer";
 
 /** Finds the record of a token by its id; the install's database, or a cache in front of it. */
 export type ReadToken = (id: TokenId) => Promise<TokenRecord | undefined>;
 
+/** What a request holds once its token is found live: the token's record, under `token`. */
+export interface Authenticated {
+  readonly Variables: { readonly token: TokenRecord };
+}
+
+/** What every request that presents no live token is answered, whatever is wrong with it. */
+function refused(): Response {
+  return refusal("not_logged_in");
+}
+
 /**
- * Find the live token a request presents.
+ * Build the step that lets a request on only when it presents a live token.
+ *
+ * It ends any other request with the 401 of `not_logged_in` and a `WWW-Authenticate` of the `Bearer` scheme. That header says `invalid_token` for a token that is malformed, unknown, revoked, run out, or of a wrong secret; which of them is not told.
  *
  * @param now - the clock, in milliseconds since the epoch
- * @returns the token's record, or `undefined` for a missing header, a malformed token, an unknown or revoked one, a wrong secret, or one that ran out; which of them is not told
+ * @returns the step that sets `token` to the token's record
  */
-export async function authenticate(request: Request, readToken: ReadToken, now: number): Promise<TokenRecord | undefined> {
-  const presented = BEARER_PATTERN.exec(request.headers.get("Authorization") ?? "")?.[1];
-  if (presented === undefined) return undefined;
+export function authenticate(readToken: ReadToken, now: () => number): MiddlewareHandler<Authenticated> {
+  const isLive = async (presented: string, context: Context<Authenticated>): Promise<boolean> => {
+    const id = parseToken(presented);
+    if (!id.ok) return false;
 
-  const id = parseToken(presented);
-  if (!id.ok) return undefined;
+    const record = await readToken(id.value);
+    if (record === undefined) return false;
 
-  const record = await readToken(id.value);
-  if (record === undefined) return undefined;
+    const verified = await verifyToken(presented, record, now());
+    if (!verified.ok) return false;
 
-  const verified = await verifyToken(presented, record, now);
+    context.set("token", verified.value);
 
-  return verified.ok ? verified.value : undefined;
+    return true;
+  };
+
+  return bearerAuth({
+    verifyToken: isLive,
+    noAuthenticationHeader: { message: refused, wwwAuthenticateHeader: CHALLENGE },
+    invalidAuthenticationHeader: { message: refused, wwwAuthenticateHeader: CHALLENGE },
+    invalidToken: { message: refused },
+  });
 }

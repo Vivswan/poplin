@@ -43,6 +43,9 @@ const BACKED_UP = {
 /** Every route that takes a token, in the table's order. */
 const TOKEN_ROUTES = Object.keys(ROUTES).filter((name) => !(OPEN_ROUTES as readonly string[]).includes(name));
 
+/** How a 401 says to authenticate when the token it was sent is not a live one. */
+const TOKEN_REFUSED = 'Bearer error="invalid_token"';
+
 /** What a browser sends ahead of a script's request from another origin. */
 const PREFLIGHT = { Origin: "https://www.example.com", "Access-Control-Request-Method": "GET" };
 
@@ -357,13 +360,13 @@ describe("createApi", () => {
 
   // Drift: every route changes or shows something an install owns; one that ran before the token was checked would be open to anyone who can reach the address.
   test.each([
-    ["no token, though a cookie names an admin's", () => null],
-    ["a word that is no token", () => "let-me-in"],
-    ["a token of no record", () => `poplin_${"0".repeat(16)}_${"0".repeat(64)}`],
-    ["a token with another's secret", (install: ApiInstall) => `${install.tokens.admin.slice(0, 24)}${install.tokens.owner.slice(24)}`],
-    ["an admin token past its 30 days", (install: ApiInstall) => install.tokens.admin],
-    ["a revoked token", (install: ApiInstall) => install.tokens.stranger],
-  ])("a request with %s is answered 401 on every route, with nothing but the code, and changes nothing", async (why, tokenOf) => {
+    ["no token, though a cookie names an admin's", () => null, "Bearer"],
+    ["a word that is no token", () => "let-me-in", TOKEN_REFUSED],
+    ["a token of no record", () => `poplin_${"0".repeat(16)}_${"0".repeat(64)}`, TOKEN_REFUSED],
+    ["a token with another's secret", (install: ApiInstall) => `${install.tokens.admin.slice(0, 24)}${install.tokens.owner.slice(24)}`, TOKEN_REFUSED],
+    ["an admin token past its 30 days", (install: ApiInstall) => install.tokens.admin, TOKEN_REFUSED],
+    ["a revoked token", (install: ApiInstall) => install.tokens.stranger, TOKEN_REFUSED],
+  ])("a request with %s is answered 401 on every route, with nothing but the code and how to authenticate, and changes nothing", async (why, tokenOf, challenge) => {
     const install = await openApi();
     const site = await published(install, { name: "report" });
     const upload = await staged(install, { site });
@@ -376,14 +379,30 @@ describe("createApi", () => {
     for (const [name, sample] of Object.entries(samples(site, upload)) as [RouteName, Sample][]) {
       const request = requestOf(name, sample.args as never, { token, body: sample.body, headers: { Cookie: `session=${install.tokens.admin}` } });
       const answered = await install.ask(request);
-      answers.push([name, answered.status, answered.body]);
+      answers.push([name, answered.status, answered.body, answered.response.headers.get("WWW-Authenticate")]);
     }
 
     const refused = { error: { code: "not_logged_in", message: "no token was sent, or it is not a live token of this install" } };
     install.clock.now = NOW;
 
-    expect(answers).toEqual(TOKEN_ROUTES.map((name) => [name, 401, refused]));
+    expect(answers).toEqual(TOKEN_ROUTES.map((name) => [name, 401, refused, challenge]));
     expect(await stateOf(install)).toEqual(before);
+  });
+
+  // Drift: HTTP lets a client write the scheme in any case and put more than one space after it; a stricter reading turns a live token away, and a looser one takes another scheme's credentials.
+  test.each([
+    ["the scheme in small letters", (token: string) => `bearer ${token}`, 200, null],
+    ["two spaces after the scheme", (token: string) => `Bearer  ${token}`, 200, null],
+    ["the scheme alone", () => "Bearer", 401, "Bearer"],
+    ["under another scheme", (token: string) => `Basic ${token}`, 401, "Bearer"],
+    ["with no scheme", (token: string) => token, 401, "Bearer"],
+    ["twice", (token: string) => `Bearer ${token} ${token}`, 401, "Bearer"],
+  ])("a live token sent as %s is read as HTTP reads it", async (_form, headerOf, status, challenge) => {
+    const install = await openApi();
+
+    const answered = await install.ask(requestOf("whoami", undefined, { token: null, headers: { Authorization: headerOf(install.tokens.admin) } }));
+
+    expect([answered.status, answered.response.headers.get("WWW-Authenticate")]).toEqual([status, challenge]);
   });
 
   // Drift: a publisher token sits in an agent's shell; a route that skipped the action's check would let one agent read, change, or delete another's sites and uploads.
