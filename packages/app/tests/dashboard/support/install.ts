@@ -38,6 +38,9 @@ export const FREE_LIMITS = {
 /** The key material of the test dashboard's tokens. */
 export const CSRF_SECRET = new Uint8Array(32).fill(9);
 
+/** The version of poplin the test dashboard says it runs. */
+export const VERSION = "1.0.0";
+
 /** The login address a request without a session is sent to, up to the place to return to. */
 export const LOGIN = `${ORIGIN}/login?return=`;
 
@@ -98,7 +101,7 @@ export async function openDashboard(domain?: DomainPlug): Promise<Opened> {
   };
 
   const counters = new MemoryCounters();
-  const dashboard = createDashboard({ install, readSession: sessionOf, loginPath: "/login", csrfSecret: CSRF_SECRET, domain, freeLimits: FREE_LIMITS, ...codeCounts(counters) });
+  const dashboard = createDashboard({ install, version: VERSION, readSession: sessionOf, loginPath: "/login", csrfSecret: CSRF_SECRET, domain, freeLimits: FREE_LIMITS, ...codeCounts(counters) });
   const get: Opened["get"] = (path, headers = {}) => dashboard.fetch(new Request(`${ORIGIN}${path}`, { headers: { Cookie: cookie, ...headers } }));
 
   const tokenOf = (page: string): string => /name="csrf" value="([^"]+)"/.exec(page)?.[1] ?? "";

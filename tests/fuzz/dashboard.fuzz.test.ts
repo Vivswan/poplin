@@ -12,6 +12,7 @@ import { hostile } from "./hostile";
 const ANSWERS = [200, 302, 303, 400, 403, 404, 405, 413, 415];
 const METHODS = ["GET", "HEAD", "POST", "POST", "POST", "POST", "POST", "PUT", "DELETE", "OPTIONS"];
 const FORM = "application/x-www-form-urlencoded";
+const OWN_SCRIPT = '<script src="/copy.js" defer></script>';
 const TYPES = [FORM, FORM, FORM, FORM, FORM, `${FORM}; charset=utf-8`, "multipart/form-data; boundary=x", "text/plain", "application/json", ""];
 const ORIGINS = [ORIGIN, ORIGIN, ORIGIN, ORIGIN, ORIGIN, ORIGIN, ORIGIN, "https://evil.example.com", "https://shop-page.example.com", "null", "", "https://poplin.example.com:444", "HTTPS://POPLIN.EXAMPLE.COM"];
 const FETCH_SITES = ["same-origin", "same-origin", "same-origin", "same-origin", "same-origin", "same-site", "cross-site", "none", ""];
@@ -117,7 +118,7 @@ property(
       shownToStranger: !loggedIn && !isLoginRedirect(response, page),
       changedUnasked: !(loggedIn && fromOwnPage) && after !== before,
       guarded: isGuarded(response),
-      script: /<script|href="javascript:/i.test(page),
+      script: /<script|href="javascript:/i.test(page.replace(OWN_SCRIPT, "")),
     };
 
     expect(facts).toEqual({ published: true, shownToStranger: false, changedUnasked: false, guarded: true, script: false });

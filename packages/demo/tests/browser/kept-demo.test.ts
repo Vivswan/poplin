@@ -59,9 +59,9 @@ test("a demo opened from a save goes on where the first was, and one saved after
   await second.fetch(new Request(`${HOME}/reset`, { method: "POST" }));
   const third = await open(second.save());
 
-  expect([sent.status, sent.headers.get("Location")]).toEqual([303, `/poplin/demo${trashed}?done=trashed`]);
+  expect([sent.status, sent.headers.get("Location")]).toEqual([303, `/poplin/demo/?done=trashed&site=${trashed.slice("/sites/".length)}`]);
   expect([switched.status, switched.headers.get("Location")]).toEqual([303, "/poplin/demo/"]);
-  expect([later.status, later.headers.get("Location")]).toEqual([303, `/poplin/demo${kept}?done=trashed`]);
+  expect([later.status, later.headers.get("Location")]).toEqual([303, `/poplin/demo/?done=trashed&site=${kept.slice("/sites/".length)}`]);
   expect([trash.includes(trashed), trash.includes(kept)]).toEqual([true, true]);
   expect([(await page(first, "/")).includes(FOLLOWS_SYSTEM), dark.includes(FOLLOWS_SYSTEM)]).toEqual([false, false]);
   expect(await sitePage(third, "checkout")).not.toBe("");

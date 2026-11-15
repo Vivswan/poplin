@@ -31,6 +31,9 @@ const ADDRESS_ATTRIBUTE = /\b(href|action|formaction)="([^"]*)"/g;
 /** A hostname one label under the install's domain, with the scheme before it and the slash after it when a text writes them. */
 const HOST_ADDRESS = new RegExp(`(https://)?(?<![%\\w.-])([a-z0-9-]+)${DOMAIN_ENDING.replaceAll(".", "\\.")}/?`, "g");
 
+/** A site's hostname as the dashboard shows it with the id left out: the name and its two dashes, the stand-in for the id, then the rest of the label and the domain. */
+const MASKED_ADDRESS = new RegExp(`([a-z0-9-]+--)((?:<span[^>]*>)?\\*+(?:</span>)?)(-[a-z0-9-]+)${DOMAIN_ENDING.replaceAll(".", "\\.")}/?`, "g");
+
 /** The query keys that speak to the preview and never reach the app, each with the request header that carries its value on. */
 const PREVIEW_KEYS = { as: "Preview-As", "preview-visitor": "Preview-Visitor", "preview-login": "Preview-Login" } as const;
 
@@ -144,7 +147,9 @@ export function forceTheme(text: string, theme: "light" | "dark"): string {
 /** Every address of the install a text holds outside an attribute, written as the preview's own: what a person reads and copies is what works here. */
 function localText(text: string, origin: string): string {
   const host = origin.replace(/^https?:\/\//, "");
-  const written = text.replace(HOST_ADDRESS, (...[whole = "", scheme, label = ""]: string[]) => {
+  // An address with its id left out is no hostname the next step would know: it is written as the preview's path first, with the stand-in kept where the id was.
+  const masked = text.replace(MASKED_ADDRESS, (...[, name = "", mask = "", rest = ""]: string[]) => `${host}${SERVED_PREFIX}/${name}${mask}${rest}/`);
+  const written = masked.replace(HOST_ADDRESS, (...[whole = "", scheme, label = ""]: string[]) => {
     if (!ADDRESSES.isSiteHost(`${label}${DOMAIN_ENDING}`)) return whole;
 
     return `${scheme === undefined ? host : origin}${SERVED_PREFIX}/${label}/`;

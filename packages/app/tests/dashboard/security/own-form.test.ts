@@ -109,18 +109,20 @@ const FORMS: Readonly<Record<string, Arrange>> = {
     fields: { name: "report", access: "public", public_name: "report", title: "", embeddable: "on" },
     answer: [303, `${path}?done=saved`],
   })),
+  "/sites/:site/access": ofSite("access", async (_opened, path) => ({ fields: { access: "unlisted" }, answer: [303, `${path}?done=made_unlisted`] })),
+  "/sites/:site/rename": ofSite("rename", async (_opened, path, site) => ({ page: `${path}?ask=rename`, fields: { name: "notes" }, answer: [303, `/sites/notes--${site.id}?done=renamed`] })),
   "/sites/:site/rollback": ofSite("rollback", async (opened, path, site) => {
     await addVersion(opened, site);
     await addVersion(opened, site);
 
     return { fields: { version: "previous" }, answer: [303, `${path}?done=rolled_back`] };
   }),
-  "/sites/:site/new-link": ofSite("new-link", async () => ({ fields: {}, answer: [303, "a new label"] })),
+  "/sites/:site/new-link": ofSite("new-link", async (_opened, path) => ({ page: `${path}?ask=new-link`, fields: {}, answer: [303, "a new label"] })),
   // The fixture's site is a row without files, so the action behind the form answers that there is no page to copy: the form itself was taken.
-  "/sites/:site/duplicate": ofSite("duplicate", async (_opened, path) => ({ fields: { name: "" }, answer: [303, `${path}?refused=no_index`] })),
+  "/sites/:site/duplicate": ofSite("duplicate", async (_opened, path) => ({ page: `${path}?ask=duplicate`, fields: { name: "" }, answer: [303, `${path}?ask=duplicate&refused=no_index`] })),
   // No copy is in progress under the id the page was opened with, so the action answers that the copy is gone: the form itself was taken.
   "/sites/:site/cancel-copy": ofSite("cancel-copy", async (_opened, path) => ({ page: `${path}?${COPYING}`, fields: { upload: NO_UPLOAD }, answer: [303, `${path}?refused=not_found&about=upload`] })),
-  "/sites/:site/delete": ofSite("delete", async (_opened, path) => ({ fields: {}, answer: [303, `${path}?done=trashed`] })),
+  "/sites/:site/delete": ofSite("delete", async (_opened, _path, site) => ({ fields: {}, answer: [303, `/?done=trashed&site=report--${site.id}`] })),
   "/sites/:site/restore": ofSite("restore", async (opened, path, site) => {
     await trash(opened, site);
 
@@ -129,7 +131,7 @@ const FORMS: Readonly<Record<string, Arrange>> = {
   "/sites/:site/delete-forever": ofSite("delete-forever", async (opened, _path, site) => {
     await trash(opened, site);
 
-    return { fields: { confirm: `report--${site.id}` }, answer: [303, "/?view=trash&done=deleted"] };
+    return { fields: { confirm: "report" }, answer: [303, "/?view=trash&done=deleted"] };
   }),
   "/tokens/allow": ofLogin("allow", { confirm: "yes" }, "allowed"),
   "/tokens/deny": ofLogin("deny", {}, "denied"),
@@ -164,7 +166,7 @@ const FORMS: Readonly<Record<string, Arrange>> = {
 
 /** The pattern of the address a form posts to: a site's label gives way to `:site`. */
 function patternOf(action: string): string {
-  return action.replace(/^\/sites\/[^/]+\//, "/sites/:site/");
+  return action.replace(/^\/sites\/[^/]+\//, "/sites/:site/").replace(/\?.*$/, "");
 }
 
 // Drift: a page whose Referrer-Policy makes a browser withhold the Origin, under a check that asks for one, refuses every button of a real install while tests that type the Origin in stay green.
@@ -212,7 +214,9 @@ test("the routes posted as a browser are every form route there is: each change 
   const login = await beginLogin(opened.install, { scope: "publisher", computer: "laptop" }, "one-visitor");
   if (!login.ok) throw new Error(`the fixture login was refused: ${login.code}`);
 
-  const pages = ["/", "/?view=trash", `/sites/report--${live.id}`, `/sites/report--${live.id}?${COPYING}`, `/sites/old--${gone.id}`, "/tokens", `/tokens/allow?code=${login.code}`, "/settings", "/activity", "/usage", "/domain"];
+  const site = `/sites/report--${live.id}`;
+  const asks = ["rename", "duplicate", "new-link"].map((ask) => `${site}?ask=${ask}`);
+  const pages = ["/", "/?view=trash", site, `${site}?${COPYING}`, ...asks, `/sites/old--${gone.id}`, "/tokens", `/tokens/allow?code=${login.code}`, "/settings", "/activity", "/usage", "/domain"];
   const seen = new Set<string>();
 
   for (const path of pages) {

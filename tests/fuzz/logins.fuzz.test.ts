@@ -117,6 +117,7 @@ async function openDesk(): Promise<Desk> {
     install,
     dashboard: createDashboard({
       install: { database, store, now: () => clock.now, addressOf: ADDRESSES.addressOf, publicAddressOf: ADDRESSES.publicAddressOf, reservedNames: ADDRESSES.reservedNames },
+      version: "1.0.0",
       readSession: async (headers) => (headers.get("Cookie") === SESSION ? { ok: true, value: ADA } : { ok: false }),
       loginPath: "/login",
       csrfSecret: new Uint8Array(32).fill(9),

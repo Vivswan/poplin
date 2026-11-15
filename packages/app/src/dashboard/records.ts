@@ -31,11 +31,19 @@ export interface Visit {
   readonly login: string;
 }
 
-/** A page before the frame goes around it. `status` is 200 when left out. */
+/**
+ * A page before the frame goes around it. `status` is 200 when left out.
+ *
+ * `beside` sits on the heading's line. `panel` is the detail of one row, shown beside the page on a wide screen and in its place on a narrow one, where the heading leads `back` to the page.
+ * `ownNotice` says that the page itself tells the result of the change that led to it, so the frame does not.
+ */
 export interface Page {
   readonly tab: Tab;
   readonly heading: string;
   readonly body: Html;
+  readonly beside?: Html;
+  readonly panel?: { readonly body: Html; readonly back: string };
+  readonly ownNotice?: boolean;
   readonly status?: 400 | 403 | 404 | 405 | 413 | 415 | 429 | 502 | 503;
 }
 

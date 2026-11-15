@@ -16,6 +16,12 @@ import { requireFields } from "../security/form";
 /** A version number as the roll back form sends it. */
 const VERSION_PATTERN = /^[1-9][0-9]*$/;
 
+/** What is said once a site's access is set, by the access it then has. */
+const ACCESS_DONE = { private: "made_private", unlisted: "made_unlisted", public: "made_public" } as const;
+
+/** The keys of an address that name the table's filter and its search. */
+const LIST_KEYS = ["access", "q"];
+
 /** What the set action is asked. */
 type Asked = Parameters<typeof updateSite>[2];
 
@@ -27,6 +33,13 @@ interface Refusal {
 
 function sitePath(reference: string): string {
   return `/sites/${encodeURIComponent(reference)}`;
+}
+
+/** The path of the table under the filter and the search a form's address carries. */
+function tablePath(url: URL): string {
+  const kept = new URLSearchParams(LIST_KEYS.flatMap((key) => (url.searchParams.has(key) ? [[key, url.searchParams.get(key) ?? ""]] : [])));
+
+  return kept.size === 0 ? "/" : `/?${kept}`;
 }
 
 function refused(reference: string, refusal: Refusal): string {
@@ -65,6 +78,32 @@ async function saveSettings(visit: Visit, reference: string, form: Form): Promis
   return withNotice(sitePath(saved.site.label), { done: "saved" });
 }
 
+/** Set who can open the site, and nothing else of it. A site going public may name its short link. */
+async function changeAccess(visit: Visit, reference: string, form: Form): Promise<string> {
+  const fields = requireFields(form, ["access"]);
+  if (fields === undefined) return refused(reference, { code: "missing_field" });
+
+  const publicName = form.get("public_name") ?? "";
+  // The action checks the access, so the word goes to it as it was sent.
+  const asked = { site: reference, access: fields.access as Asked["access"], ...(fields.access === "public" && publicName !== "" ? { public_name: publicName } : {}) };
+  const saved = await updateSite(visit.install, visit.actor, asked);
+  // A refused access comes back to the question it was asked in, so it can be answered again.
+  if (!saved.ok) return withNotice(`${sitePath(reference)}?${new URLSearchParams({ ask: fields.access })}`, { refused: saved.code, about: saved.about });
+
+  return withNotice(sitePath(saved.site.label), { done: ACCESS_DONE[saved.site.access] });
+}
+
+async function rename(visit: Visit, reference: string, form: Form): Promise<string> {
+  const fields = requireFields(form, ["name"]);
+  if (fields === undefined) return refused(reference, { code: "missing_field" });
+
+  const saved = await updateSite(visit.install, visit.actor, { site: reference, name: fields.name });
+  // A refused name comes back into its field, so it is corrected and not typed again.
+  if (!saved.ok) return withNotice(`${sitePath(reference)}?${new URLSearchParams({ ask: "rename", name: fields.name })}`, { refused: saved.code, about: saved.about });
+
+  return withNotice(sitePath(saved.site.label), { done: "renamed" });
+}
+
 async function rollBack(visit: Visit, reference: string, form: Form): Promise<string> {
   const fields = requireFields(form, ["version"]);
   if (fields === undefined) return refused(reference, { code: "missing_field" });
@@ -91,7 +130,8 @@ async function duplicate(visit: Visit, reference: string, form: Form): Promise<s
   const name = form.get("name") ?? "";
   const first = name === "" ? { site: reference } : { site: reference, name };
   const copied = await duplicateSite(visit.install, visit.actor, upload === "" ? first : { site: reference, upload });
-  if (!copied.ok) return refused(reference, copied);
+  // A copy refused before it began comes back to its question, where another name can be typed.
+  if (!copied.ok) return withNotice(upload === "" ? `${sitePath(reference)}?ask=duplicate` : sitePath(reference), { refused: copied.code, about: copied.about });
 
   if (copied.site !== null) return withNotice(sitePath(copied.site.label), { done: "duplicated" });
 
@@ -115,7 +155,8 @@ async function moveToTrash(visit: Visit, reference: string): Promise<string> {
   const trashed = await deleteSite(visit.install, visit.actor, { site: reference });
   if (!trashed.ok) return refused(reference, trashed);
 
-  return withNotice(sitePath(trashed.before?.label ?? reference), { done: "trashed" });
+  // Back to the table under the filter and the search it had, with the one press that takes the delete back.
+  return withNotice(tablePath(visit.url), { done: "trashed", site: trashed.before?.label ?? reference });
 }
 
 async function restore(visit: Visit, reference: string): Promise<string> {
@@ -132,7 +173,8 @@ async function deleteForever(visit: Visit, reference: string, form: Form): Promi
   const shown = await getSite(visit.install, visit.actor, reference);
   if (!shown.ok) return refused(reference, shown);
 
-  if (fields.confirm !== shown.site.label) return refused(reference, { code: "wrong_confirmation" });
+  // The name is what is typed: a label holds the id, which for an unlisted site is the key to it, and is not shown to be copied.
+  if (fields.confirm !== shown.site.name) return refused(reference, { code: "wrong_confirmation" });
 
   const deleted = await deleteSite(visit.install, visit.actor, { site: shown.site.label, forever: true });
   if (!deleted.ok) return refused(reference, deleted);
@@ -143,6 +185,8 @@ async function deleteForever(visit: Visit, reference: string, form: Form): Promi
 /** Every change of a site, by the last part of the address its form posts to. The subject is the site's label from that address. */
 export const SITE_CHANGES: Readonly<Record<string, Change<[string]>>> = {
   settings: saveSettings,
+  access: changeAccess,
+  rename,
   rollback: rollBack,
   "new-link": makeNewLink,
   duplicate,

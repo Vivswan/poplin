@@ -4,9 +4,10 @@ import { AllowanceSpent } from "@poplin/core/src/database/driver";
 
 import { createDashboard } from "../../src/dashboard/dashboard";
 import { importCsrfKey, mintCsrfToken } from "../../src/dashboard/security/csrf";
-import { CSRF_SECRET, codeCounts, FREE_LIMITS, LOGIN, ORIGIN, type Opened, openDashboard } from "./support/install";
+import { CSRF_SECRET, codeCounts, FREE_LIMITS, LOGIN, ORIGIN, type Opened, openDashboard, VERSION } from "./support/install";
+import { attributesOf, textsOf } from "./support/markup";
 
-const CSP = /^default-src 'none'; style-src 'nonce-([A-Za-z0-9+/=]+)'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'$/;
+const CSP = /^default-src 'none'; style-src 'nonce-([A-Za-z0-9+/=]+)'; script-src 'self'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'$/;
 const HALF_DAY_MS = 12 * 60 * 60 * 1000;
 
 /** Everything a change could touch, as text: the sites, the trash, the settings, the signing key, and the audit log. */
@@ -29,9 +30,9 @@ test("every page renders for an admin, under the install's title, and names its 
   const pages = [
     ["/", "Sites", "Sites"],
     ["/?view=trash", "Sites", "Sites"],
-    [`/sites/report--${site.id}`, "report", "Sites"],
-    ["/tokens", "Tokens", "Tokens"],
-    ["/tokens/allow", "Log a computer in", "Tokens"],
+    [`/sites/report--${site.id}`, "Sites", "Sites"],
+    ["/tokens", "Tokens", "Access"],
+    ["/tokens/allow", "Log a computer in", "Access"],
     ["/settings", "Settings", "Settings"],
     ["/activity", "Activity", "Activity"],
     ["/usage", "Usage", "Usage"],
@@ -43,8 +44,8 @@ test("every page renders for an admin, under the install's title, and names its 
 
     expect([path, answer.status, answer.headers.get("Content-Type")]).toEqual([path, 200, "text/html; charset=UTF-8"]);
     expect(page).toContain(`<title>${heading} - poplin.example.com</title>`);
-    expect(page).toContain(`<h1>${heading}</h1>`);
-    expect(page).toMatch(new RegExp(`aria-current="page">${tab}</a>`));
+    expect(page).toMatch(new RegExp(`<h1>(<a href="/">)?${heading}(</a>)?</h1>`));
+    expect(page).toMatch(new RegExp(`aria-current="page">(<svg.*?</svg>)?${tab}</a>`));
   }
 });
 
@@ -101,7 +102,7 @@ test("every answer carries the strict policy and the no-store, no-frame, no-snif
   }
 });
 
-test("a page asks the browser for nothing: no script, no link element, no image, no import, and no address of another origin but the sites' own links", async () => {
+test("a page asks the browser for its own copy script and nothing else: no inline script, no link element, no image, no import, and no address of another origin but the sites' own links", async () => {
   const opened = await openDashboard();
   const site = await opened.publish("report");
 
@@ -109,9 +110,10 @@ test("a page asks the browser for nothing: no script, no link element, no image,
     const page = await (await opened.get(path)).text();
     const addresses = page.match(/https?:\/\/[^"<\s]*/g) ?? [];
 
-    expect(page).not.toMatch(/<script|<link|<img|<iframe|<object|<embed|@import|url\(|\ssrc=|srcset=/i);
+    expect(page.match(/<script[^>]*>[^<]*/g)).toEqual(['<script src="/copy.js" defer>']);
+    expect(page.replace('<script src="/copy.js" defer>', "")).not.toMatch(/<script|<link|<img|<iframe|<object|<embed|@import|url\(|\ssrc=|srcset=/i);
     expect(addresses.filter((address) => !address.startsWith(`https://report--${site.id}-u-poplin.example.com`))).toEqual([]);
-    expect(page.match(/<form[^>]*>/g)?.every((form) => /method="post" action="\/[^/"]/.test(form)) ?? true).toBe(true);
+    expect(page.match(/<form[^>]*>/g)?.every((form) => /method="post" action="\/[^/"]/.test(form) || /method="get" action="\/" role="search"/.test(form)) ?? true).toBe(true);
   }
 });
 
@@ -167,7 +169,7 @@ test("a token lives twelve hours and no longer, and the same form with it then d
   opened.clock.now += HALF_DAY_MS;
   const done = await opened.post(`/sites/report--${site.id}/delete`, {}, { csrf });
 
-  expect([done.status, done.headers.get("Location")]).toEqual([303, `/sites/report--${site.id}?done=trashed`]);
+  expect([done.status, done.headers.get("Location")]).toEqual([303, `/?done=trashed&site=report--${site.id}`]);
 
   opened.clock.now += 1;
   const late = await opened.post(`/sites/report--${site.id}/restore`, {}, { csrf });
@@ -191,10 +193,26 @@ test("a method the dashboard does not answer is refused with the methods it does
   expect(await stored(opened)).toBe(snapshot);
 });
 
+// Drift: the notes of a release are the one address of another origin a page links to; opened in place, or with a referrer, they would take the admin off the dashboard and tell the other side where from.
+test("the side ends in the version the install runs, and names a newer release once one is known, with a link to its notes that opens beside the dashboard and carries no referrer", async () => {
+  const opened = await openDashboard();
+  const quiet = await (await opened.get("/")).text();
+
+  expect(await textsOf(quiet, ".side .about")).toEqual([`poplin ${VERSION}`]);
+
+  await opened.install.database.keepUpdateCheck({ checked_at: opened.clock.now, news: { version: "1.1.0", released: "2026-12-01", notes: "https://example.com/changelog/", database: false } });
+  const told = await (await opened.get("/settings")).text();
+
+  expect(await textsOf(told, ".side .about p")).toEqual(["1.1.0 is out What changed", `poplin ${VERSION}`]);
+  expect(["href", "target", "rel"].map((name) => told.match(new RegExp(`<p class="news">.*? ${name}="([^"]*)"`))?.[1])).toEqual(["https://example.com/changelog/", "_blank", "noreferrer"]);
+  expect(await attributesOf(told, "a[target]", "href")).toEqual(["https://example.com/changelog/"]);
+});
+
 test("a session that cannot be read, as when the database is down, is answered like no session: the way to the login and nothing else", async () => {
   const opened = await openDashboard();
   const broken = createDashboard({
     install: opened.install,
+    version: VERSION,
     readSession: () => Promise.reject(new Error("the database is down")),
     loginPath: "/login",
     csrfSecret: CSRF_SECRET,

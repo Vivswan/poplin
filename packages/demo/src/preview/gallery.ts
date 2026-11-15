@@ -56,7 +56,7 @@ const SETUP_WORDS: Readonly<Record<PlugState, string>> = {
 /** The sentences the dashboard says after a change to a site, by the code its address carries. */
 const SITE_NOTICES: readonly (readonly [name: string, query: string])[] = [
   ["Saved", "done=saved"],
-  ["Rolled back", "done=rolled_back"],
+  ["An older version made live", "done=rolled_back"],
   ["New link made", "done=new_link"],
   ["Restored from the trash", "done=restored"],
   ["Refused: public name taken", "refused=name_taken"],
@@ -214,9 +214,9 @@ function siteEntries(places: ReadonlyMap<string, Place>): Entry[] {
     { group, name: "Unlisted, no frames, renamed since it was made", path: page("pricing") },
     { group, name: "Expires in two days", path: page("checkout") },
     { group, name: "Expired", path: page("spring-offer") },
-    { group, name: "In the trash: restore, delete forever", path: page("old-notes") },
+    { group, name: "In the trash: restore, delete for good", path: page("old-notes") },
     { group, name: "Moved to the trash", path: `${page("old-notes")}?done=trashed` },
-    { group, name: "Refused: typed label did not match", path: `${page("old-notes")}?refused=wrong_confirmation` },
+    { group, name: "Refused: typed text did not match", path: `${page("old-notes")}?refused=wrong_confirmation` },
     { group, name: "Refused: the site sits in the trash", path: `${page("old-notes")}?refused=in_trash` },
     { group, name: "No such site", path: `/sites/${NO_SITE}`, status: 404 },
     ...SITE_NOTICES.map(([name, query]) => ({ group, name, path: `${page("sales-report")}?${query}` })),

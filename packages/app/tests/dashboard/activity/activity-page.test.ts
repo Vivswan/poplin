@@ -7,8 +7,8 @@ import type { Database } from "@poplin/core/src/database/database";
 
 import { openDashboard } from "../support/install";
 
-/** The queries one page of the log makes of the install's database, whatever its entries name: the settings, the entries, and the names of their sites. */
-const PAGE_QUERIES = 3;
+/** The queries one page of the log makes of the install's database, whatever its entries name: the settings, the entries, the names of their sites, and for the side's notice of a newer release the settings again and the newest release known. */
+const PAGE_QUERIES = 5;
 
 /** One row of the table: when, who, what, and the cell of the site. */
 const ROW = /<tr><td>(?:<time[^>]*>)?([^<]*)(?:<\/time>)?<\/td><td>([^<]*)<\/td><td>([^<]*)<\/td><td>(.*?)<\/td><\/tr>/g;

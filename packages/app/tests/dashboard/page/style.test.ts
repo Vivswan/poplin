@@ -35,6 +35,21 @@ test("every pair of a text colour and the ground it is read on meets WCAG AA, on
       ["danger", "ground"],
       ["good", "ground"],
       ["onButton", "button"],
+      ["soft", "lift"],
+      ["soft", "tone"],
+      ["faint", "ground"],
+      ["faint", "lift"],
+      ["link", "tone"],
+      ["danger", "lift"],
+      ["danger", "dangerTint"],
+      ["good", "lift"],
+      ["warn", "lift"],
+      ["privateInk", "privateTint"],
+      ["unlistedInk", "unlistedTint"],
+      ["publicInk", "publicTint"],
+      ["ink", "askTint"],
+      ["lift", "ink"],
+      ["lift", "danger"],
     ] as const;
 
     for (const [text, ground] of pairs) {
@@ -42,7 +57,7 @@ test("every pair of a text colour and the ground it is read on meets WCAG AA, on
       if (ratio < AA) failing.push(`${screen} ${text} on ${ground}: ${ratio.toFixed(2)}`);
     }
 
-    const edge = contrast(colours.soft, colours.ground);
+    const edge = contrast(colours.control, colours.lift);
     if (edge < AA_EDGE) failing.push(`${screen} input border: ${edge.toFixed(2)}`);
   }
 

@@ -6,6 +6,7 @@ import { settingsToText } from "@poplin/core/src/records/settings";
 import type { Site } from "@poplin/core/src/records/site";
 
 import { landing, ORIGIN, type Opened, openDashboard } from "../support/install";
+import { attributesOf } from "../support/markup";
 
 const NOTICE = /<p class="notice (done|refused)" role="status">([^<]*)<\/p>/;
 
@@ -63,9 +64,9 @@ test("the duplicate form makes a private copy and lands on it; a site of more fi
 
   expect(upload).not.toBe("");
   expect([NOTICE.exec(waiting)?.[2], waiting.includes(`name="upload" value="${upload}"`), sitesMeanwhile]).toEqual(["The copy is not finished. Press Keep copying until it is.", true, 1]);
-  expect(waiting).toContain("<p>Copied 16 of 20 files: 4 are left. One press of Keep copying copies up to 16 more. The copy is no site until every file is there.</p>");
+  expect(waiting).toContain("<p>Copied 16 of 20 files: 4 are left. Keep copying copies up to 16 more. The new site appears when every file is copied.</p>");
   expect(waiting).toContain(`cancel this copy and run <code>poplin duplicate report--${site.id}</code> in a terminal`);
-  expect(NOTICE.exec(await landing(opened, finished))?.[2]).toBe("This is the copy: a new private site with its own address. The site it was copied from is unchanged.");
+  expect(NOTICE.exec(await landing(opened, finished))?.[2]).toBe("This is the copy: a new private site with its own link. The site it was copied from is unchanged.");
   expect([await shown(opened, label), await shown(opened, site.id)]).toMatchObject([
     { name: "report-draft", access: "private", public_name: null, files: 20, live_version: 1 },
     { id: site.id, access: "public", public_name: "report" },
@@ -118,7 +119,7 @@ test("a copy the install has no room for names the limit it does not fit, and a 
     "That copy can no longer be gone on with: it was cancelled, or its day to finish ran out. Unless the list of sites shows it, duplicate the site again.",
   ]);
   expect([full.headers.get("Location"), NOTICE.exec(await landing(opened, full))?.[2]]).toEqual([
-    `${path}?refused=too_large&about=max_total_size`,
+    `${path}?ask=duplicate&refused=too_large&about=max_total_size`,
     "The copy does not fit under max_total_size, which bounds all sites together, the trash and unfinished copies included. No copy was made.",
   ]);
 });
@@ -143,7 +144,7 @@ test("each form of a live site does its change through the action, writes the ac
   const rolled = await opened.post(`${path}/rollback`, { version: "previous" });
 
   expect(rolled.headers.get("Location")).toBe(`${path}?done=rolled_back`);
-  expect(NOTICE.exec(await landing(opened, rolled))?.slice(1)).toEqual(["done", "Rolled back."]);
+  expect(NOTICE.exec(await landing(opened, rolled))?.slice(1)).toEqual(["done", "That version is live now."]);
   expect(await shown(opened, site.id)).toMatchObject({ live_version: 1 });
 
   const forward = await opened.post(`${path}/rollback`, { version: "2" });
@@ -155,12 +156,13 @@ test("each form of a live site does its change through the action, writes the ac
   const [, label = ""] = /^\/sites\/(report--[0-9a-z]{12})\?done=new_link$/.exec(relinked.headers.get("Location") ?? "") ?? [];
 
   expect(label).not.toBe(`report--${site.id}`);
-  expect(NOTICE.exec(await landing(opened, relinked))?.slice(1)).toEqual(["done", "The site has a new link. The address with the old id stopped working."]);
+  expect(NOTICE.exec(await landing(opened, relinked))?.slice(1)).toEqual(["done", "The site has a new link. The old link stopped working."]);
   expect([await shown(opened, site.id), await shown(opened, label)]).toMatchObject(["not_found", { label, public_name: "docs" }]);
 
   const trashed = await opened.post(`/sites/${label}/delete`, {});
 
-  expect(trashed.headers.get("Location")).toBe(`/sites/${label}?done=trashed`);
+  expect(trashed.headers.get("Location")).toBe(`/?done=trashed&site=${label}`);
+  expect(await attributesOf(await landing(opened, trashed), ".result form", "action")).toEqual([`/sites/${label}/restore`]);
   expect(NOTICE.exec(await landing(opened, trashed))?.slice(1)).toEqual(["done", "Moved to the trash."]);
   expect(await shown(opened, label)).toMatchObject({ state: "trash" });
 
@@ -172,18 +174,58 @@ test("each form of a live site does its change through the action, writes the ac
   expect((await opened.audit()).map((entry) => entry.action).reverse().slice(2)).toEqual(["publish", "access", "details", "details", "live_version", "live_version", "new_id", "trash", "restore"]);
 });
 
-test("delete forever needs the site's label typed exactly, checked on the server; anything else deletes nothing", async () => {
+// Drift: the panel's switch and its rename send one field each; a handler that also wrote the fields it was not sent would wipe a title or a switch on every press.
+test("the access form sets who can open the site and nothing else, the rename form its name and nothing else, and a delete from a row's menu lands back on the table", async () => {
+  const opened = await openDashboard();
+  const admin = { scope: "admin", holder: opened.owner } as const;
+  const site = await opened.publish("report", "private");
+  const path = `/sites/report--${site.id}`;
+  const typed = await opened.post(`${path}/settings`, { access: "private", title: "Q3", search_engines: "on", expires: "7d" });
+
+  expect(typed.headers.get("Location")).toBe(`${path}?done=saved`);
+
+  const kept = { title: "Q3", search_engines: true, embeddable: false, expires: opened.clock.now + 7 * 86_400_000 };
+  const unlisted = await opened.post(`${path}/access`, { access: "unlisted" });
+
+  expect(unlisted.headers.get("Location")).toBe(`${path}?done=made_unlisted`);
+  expect(NOTICE.exec(await landing(opened, unlisted))?.slice(1)).toEqual(["done", "Unlisted now. Anyone with the link opens it."]);
+  expect(await shown(opened, site.id)).toMatchObject({ access: "unlisted", public_name: null, ...kept });
+
+  const named = await opened.post(`${path}/access`, { access: "public", public_name: "docs" });
+  const own = await opened.post(`${path}/access`, { access: "private", public_name: "ignored" });
+  const again = await opened.post(`${path}/access`, { access: "public", public_name: "" });
+
+  expect([named, own, again].map((answer) => answer.headers.get("Location"))).toEqual([`${path}?done=made_public`, `${path}?done=made_private`, `${path}?done=made_public`]);
+  expect(await shown(opened, site.id)).toMatchObject({ access: "public", public_name: "report", ...kept });
+  expect((await opened.post(`${path}/access`, { access: "everyone" })).headers.get("Location")).toBe(`${path}?ask=everyone&refused=bad_argument&about=access`);
+  expect((await opened.post(`${path}/access`, {})).headers.get("Location")).toBe(`${path}?refused=missing_field`);
+
+  const renamed = await opened.post(`${path}/rename`, { name: "notes" });
+
+  expect(renamed.headers.get("Location")).toBe(`/sites/notes--${site.id}?done=renamed`);
+  expect(NOTICE.exec(await landing(opened, renamed))?.slice(1)).toEqual(["done", "Renamed. The link took the new name. The old link keeps working."]);
+  expect(await shown(opened, site.id)).toMatchObject({ name: "notes", access: "public", public_name: "report", ...kept });
+  expect((await opened.post(`/sites/notes--${site.id}/rename`, { name: "No Such Name" })).headers.get("Location")).toBe(`/sites/notes--${site.id}?ask=rename&name=No+Such+Name&refused=bad_name&about=name`);
+
+  const fromRow = await opened.post(`/sites/notes--${site.id}/delete?from=list&access=public&q=no&after=1-000000000000`, {});
+
+  expect(fromRow.headers.get("Location")).toBe(`/?access=public&q=no&done=trashed&site=notes--${site.id}`);
+  expect(await getSite(opened.install, admin, site.id)).toMatchObject({ ok: true, site: { state: "trash" } });
+});
+
+// Drift: the label holds the id, which is an unlisted site's key; a page that showed it to be typed back showed the key in the clear.
+test("delete forever needs the site's name typed exactly, checked on the server; anything else, its label included, deletes nothing", async () => {
   const opened = await openDashboard();
   const site = await opened.publish("report");
   const label = `report--${site.id}`;
   await opened.install.database.trashSite(site.id, { by: opened.owner, at: opened.clock.now });
   const before = (await opened.audit()).length;
 
-  for (const confirm of ["", "report", site.id, label.toUpperCase(), `${label}x`, ` ${label}`, "yes"]) {
+  for (const confirm of ["", label, site.id, "REPORT", "reportx", " report", "yes"]) {
     const answer = await opened.post(`/sites/${label}/delete-forever`, { confirm });
 
     expect([confirm, answer.headers.get("Location")]).toEqual([confirm, `/sites/${label}?refused=wrong_confirmation`]);
-    expect(NOTICE.exec(await landing(opened, answer))?.slice(1)).toEqual(["refused", "The typed label did not match, so nothing was deleted."]);
+    expect(NOTICE.exec(await landing(opened, answer))?.slice(1)).toEqual(["refused", "The typed text did not match, so nothing was deleted."]);
   }
 
   const missing = await opened.post(`/sites/${label}/delete-forever`, {});
@@ -191,10 +233,10 @@ test("delete forever needs the site's label typed exactly, checked on the server
   expect(missing.headers.get("Location")).toBe(`/sites/${label}?refused=missing_field`);
   expect([await shown(opened, site.id), (await opened.audit()).length]).toMatchObject([{ state: "trash" }, before]);
 
-  const deleted = await opened.post(`/sites/${label}/delete-forever`, { confirm: label });
+  const deleted = await opened.post(`/sites/${label}/delete-forever`, { confirm: "report" });
 
   expect(deleted.headers.get("Location")).toBe("/?view=trash&done=deleted");
-  expect(NOTICE.exec(await landing(opened, deleted))?.slice(1)).toEqual(["done", "Deleted forever."]);
+  expect(NOTICE.exec(await landing(opened, deleted))?.slice(1)).toEqual(["done", "Deleted for good."]);
   expect([await shown(opened, site.id), (await opened.audit())[0]?.action]).toEqual(["not_found", "delete"]);
 });
 
@@ -212,8 +254,8 @@ test("every refusal of an action comes back as its code in the address and its s
     [`${path}/settings`, { access: "public", public_name: "No Good", title: "" }, `${path}?refused=bad_name&about=public_name`, "The name breaks the rules: 3 to 40 characters, lowercase letters, digits, and single dashes inside."],
     [`${path}/settings`, { access: "private", name: "No Good", title: "" }, `${path}?refused=bad_name&about=name`, "The name breaks the rules: 3 to 40 characters, lowercase letters, digits, and single dashes inside."],
     [`${path}/settings`, { access: "everyone", title: "" }, `${path}?refused=bad_argument&about=access`, "The value of access is not one it takes."],
-    [`${path}/settings`, { access: "private", title: "", expires: "yesterday" }, `${path}?refused=bad_argument&about=expires`, "The value of expires is not one it takes."],
-    [`${path}/settings`, { access: "private", title: "", expires: "0d" }, `${path}?refused=bad_argument&about=expires`, "The value of expires is not one it takes."],
+    [`${path}/settings`, { access: "private", title: "", expires: "yesterday" }, `${path}?refused=bad_argument&about=expires`, "Deletes itself takes never, a span such as 7d, or a day such as 2026-12-01."],
+    [`${path}/settings`, { access: "private", title: "", expires: "0d" }, `${path}?refused=bad_argument&about=expires`, "Deletes itself takes never, a span such as 7d, or a day such as 2026-12-01."],
     [`${path}/settings`, { access: "private" }, `${path}?refused=missing_field`, "The form was incomplete, so nothing was changed."],
     [`${path}/settings`, { title: "x" }, `${path}?refused=missing_field`, "The form was incomplete, so nothing was changed."],
     [`${path}/rollback`, {}, `${path}?refused=missing_field`, "The form was incomplete, so nothing was changed."],
@@ -228,7 +270,7 @@ test("every refusal of an action comes back as its code in the address and its s
     [`${inTrash}/rollback`, { version: "previous" }, `${inTrash}?refused=in_trash`, "The site sits in the trash. Restore it first."],
     [`${inTrash}/new-link`, {}, `${inTrash}?refused=in_trash`, "The site sits in the trash. Restore it first."],
     [`${inTrash}/delete`, {}, `${inTrash}?refused=in_trash`, "The site sits in the trash. Restore it first."],
-    ["/sites/report--000000000000/delete", {}, "/sites/report--000000000000?refused=not_found", "No site with that id or public name."],
+    ["/sites/report--000000000000/delete", {}, "/sites/report--000000000000?refused=not_found", "No such site."],
     ["/sites/Not%20A%20Site/new-link", {}, "/sites/Not%20A%20Site?refused=bad_argument&about=site", "The value of site is not one it takes."],
   ] as const;
 

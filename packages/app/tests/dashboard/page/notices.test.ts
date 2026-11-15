@@ -6,7 +6,8 @@ const ORIGIN = "https://poplin.example.com";
 
 test("a refusal names what it is about only when that is a plain name; anything else from an address is left out", () => {
   const cases = [
-    ["expires", "The value of expires is not one it takes."],
+    ["title", "The value of title is not one it takes."],
+    ["expires", "Deletes itself takes never, a span such as 7d, or a day such as 2026-12-01."],
     ["max_total_size", "The value of max_total_size is not one it takes."],
     [undefined, "The value of a field is not one it takes."],
     ["<script>", "The value of a field is not one it takes."],
@@ -26,7 +27,7 @@ test("a refusal that names a limit or an upload says so: the limit a copy does n
     ["too_large", "max_pending_uploads", "Too many copies and uploads are unfinished at once. Finish or cancel one; an unfinished one is removed about a day after it began. No copy was made."],
     ["too_large", "max_manifest_size", "The copy does not fit a limit of the install: max_manifest_size. No copy was made."],
     ["too_large", "<script>", "The form was too large, so nothing was changed."],
-    ["not_found", undefined, "No site with that id or public name."],
+    ["not_found", undefined, "No such site."],
     ["not_found", "upload", "That copy can no longer be gone on with: it was cancelled, or its day to finish ran out. Unless the list of sites shows it, duplicate the site again."],
   ] as const;
 
@@ -36,9 +37,12 @@ test("a refusal that names a limit or an upload says so: the limit a copy does n
 test("a result written into a path is read back as its sentence; an address shows no sentence that is not in the table", () => {
   const cases = [
     [withNotice("/settings", { done: "saved" }), "/settings?done=saved", { kind: "done", text: "Saved." }],
-    [withNotice("/?view=trash", { done: "deleted" }), "/?view=trash&done=deleted", { kind: "done", text: "Deleted forever." }],
+    [withNotice("/?view=trash", { done: "deleted" }), "/?view=trash&done=deleted", { kind: "done", text: "Deleted for good." }],
     [withNotice("/sites/a--b", { refused: "in_trash" }), "/sites/a--b?refused=in_trash", { kind: "refused", text: "The site sits in the trash. Restore it first." }],
     [withNotice("/x", { refused: "bad_argument", about: "title" }), "/x?refused=bad_argument&about=title", { kind: "refused", text: "The value of title is not one it takes." }],
+    [withNotice("/", { done: "trashed", site: "report--abcdefghijkl" }), "/?done=trashed&site=report--abcdefghijkl", { kind: "done", text: "Moved to the trash.", undo: "/sites/report--abcdefghijkl/restore" }],
+    ["/?done=trashed&site=..%2F..%2Fsettings%2Fsign-everyone-out", "/?done=trashed&site=..%2F..%2Fsettings%2Fsign-everyone-out", { kind: "done", text: "Moved to the trash." }],
+    ["/?done=saved&site=report--abcdefghijkl", "/?done=saved&site=report--abcdefghijkl", { kind: "done", text: "Saved." }],
     ["/x?done=Pay+now", "/x?done=Pay+now", undefined],
     ["/x?done=constructor", "/x?done=constructor", undefined],
     ["/x?refused=constructor", "/x?refused=constructor", { kind: "refused", text: "The request was refused." }],

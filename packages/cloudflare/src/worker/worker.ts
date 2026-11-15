@@ -85,6 +85,7 @@ function answerDashboard(request: Request, instance: Instance, held: Held): Prom
   const now = instance.install.now();
   const dashboard = createDashboard({
     install: instance.install,
+    version: instance.version,
     readSession: (headers) => readSession(headers, { key: held.sessionKey, logins: held.logins, now }),
     loginPath: INSTALL_OBJECTS.loginPath,
     csrfSecret: held.formsSecret,

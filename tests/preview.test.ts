@@ -49,6 +49,9 @@ const LOCAL_LINK = /href="(\/[^"]*)"/g;
 /** Any address of the install's own domain, which no local page may send a browser to. */
 const INSTALL_ADDRESS = /(?:href|action|formaction)="[^"]*example\.com[^"]*"/g;
 
+/** The one link of a dashboard page that leaves the preview on purpose: the notes of the newer release its side names, opened beside the page with no referrer. */
+const NOTES_LINK = /<a href="https:\/\/example\.com\/changelog\/" target="_blank" rel="noreferrer">/g;
+
 /** What the demo's source in a repository names of one runtime, and what it imports from outside the places it may, each as `[file, what]`; `files` counts the files read. */
 async function demoReach(root: string): Promise<{ files: number; runtime: string[][]; imports: string[][] }> {
   const files = repositoryFiles(root).filter((path) => DEMO_SOURCE.match(path));
@@ -147,7 +150,7 @@ describe("the local preview", () => {
     const first = await createPreview({ ...host, openDriver: () => drivers.shift() ?? new BunSqliteDriver() });
     const resumed = await createPreview({ ...host, resumed: true, openDriver: () => seeded ?? new BunSqliteDriver() });
     const home = await (await first.fetch(new Request(`${ORIGIN}${base}/`))).text();
-    const paths = Array.from(home.matchAll(/(?:href|action)="([^"#]*)"/g), ([, path = ""]) => path);
+    const paths = Array.from(home.replace(NOTES_LINK, "").matchAll(/(?:href|action)="([^"#]*)"/g), ([, path = ""]) => path);
     const [, page = ""] = /href="([^"]*\/sites\/sales-report--[^"]*)"/.exec(home) ?? [];
     const again = await (await resumed.fetch(new Request(`${ORIGIN}${base}/`))).text();
     const stranger = await first.fetch(new Request(`${ORIGIN}${base}/settings?as=visitor`));
@@ -189,7 +192,7 @@ describe("the local preview", () => {
     const html = pages.filter(([, page]) => page.type.startsWith("text/html"));
 
     expect(pages.filter(([path, page]) => page.status !== (stated.get(path) ?? 200) && !isHonest(path, page.status)).map(([path, page]) => [path, page.status])).toEqual([]);
-    expect(html.flatMap(([path, page]) => (page.text.match(INSTALL_ADDRESS) ?? []).map((found) => [path, found]))).toEqual([]);
+    expect(html.flatMap(([path, page]) => (page.text.replace(NOTES_LINK, "").match(INSTALL_ADDRESS) ?? []).map((found) => [path, found]))).toEqual([]);
     expect(html.filter(([, page]) => !page.text.includes('id="preview-bar"')).map(([path]) => path)).toEqual([]);
     expect(["/", "/tokens", "/settings", "/activity", "/usage", "/domain", "/setup/fresh", "/state/allow/waiting", "/?view=trash"].filter((path) => !seen.has(path))).toEqual([]);
     expect([...seen.keys()].filter((path) => path.startsWith("/gallery"))).toEqual([]);
@@ -225,6 +228,16 @@ describe("the local preview", () => {
     });
   });
 
+  // Drift: the dashboard leaves an unlisted site's id out of the link it shows; a rewrite that knew only whole hostnames wrote the name before the preview's host.
+  test("an unlisted site's link, shown with its id left out, reads as the preview's own path with the stand-in where the id was", async () => {
+    const preview = await openPreview(false);
+    const page = await (await open(preview, "/?access=unlisted")).text();
+    const shown = page.match(/<span class="lk">[^<]*<span class="mask"[^>]*>[^<]*<\/span>[^<]*<\/span>/g) ?? [];
+
+    expect(shown.length).toBeGreaterThan(0);
+    expect(shown.every((link) => /^<span class="lk">[a-z0-9.:-]+\/served\/[a-z0-9-]+--<span class="mask"[^>]*>\*+<\/span>-u-poplin\/<\/span>$/.test(link))).toBe(true);
+  });
+
   test("a form sent from a preview page changes the install, and a reset brings the sample data back: without this the forms are pictures", async () => {
     const preview = await openPreview(false);
     const page = (await preview.entries()).find((entry) => entry.name.startsWith("Private, three versions"))?.path ?? "";
@@ -237,7 +250,7 @@ describe("the local preview", () => {
       }),
     );
 
-    expect([sent.status, sent.headers.get("Location")]).toEqual([303, `${page}?done=trashed`]);
+    expect([sent.status, sent.headers.get("Location")]).toEqual([303, `/?done=trashed&site=${page.slice("/sites/".length)}`]);
     expect(await (await open(preview, "/?view=trash")).text()).toContain("sales-report");
 
     await preview.fetch(new Request(`${ORIGIN}/reset`, { method: "POST" }));

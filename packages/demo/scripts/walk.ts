@@ -124,6 +124,7 @@ async function useIt(walk: Walk, page: Page): Promise<string> {
   await page.goto(demo);
   const [copied = ""] = await siteNames(page);
   await page.click(`${SITE_LINK}:text-is("${copied}")`);
+  await page.click('.panel a[href*="ask=duplicate"]');
   await page.fill('form[action$="/duplicate"] input[name="name"]', COPY_NAME);
   await page.click('form[action$="/duplicate"] button[type="submit"]');
   await page.waitForLoadState();

@@ -13,28 +13,32 @@ test("a heading, a title, a notice, and a nonce reach the document escaped, in t
 
   expect(document).toContain(`<title>${ESCAPED} - ${ESCAPED}</title>`);
   expect(document).toContain(`<h1>${ESCAPED}</h1>`);
-  expect(document).toContain(`<p class="brand">${ESCAPED}</p>`);
+  expect(document).toMatch(new RegExp(`<p class="brand"><svg.*?</svg>${ESCAPED.replaceAll("(", "\\(").replaceAll(")", "\\)")}</p>`));
   expect(document).toContain(`<style nonce="${ESCAPED}">`);
   expect(document).toContain(`<p class="notice refused" role="status">${ESCAPED}</p>`);
-  expect(document).not.toContain("<script>");
+  expect(document.match(/<script[^>]*>/g)).toEqual(['<script src="/copy.js" defer>']);
   expect(document).not.toContain("<img");
 });
 
-test("the frame marks exactly one tab as the current page: the page's own", async () => {
+// Drift: the side holds four sections for six pages; a page that marked no section, or two pages as the current one, would leave a reader lost.
+test("the frame marks exactly one link as the current page, the page's own, and the section it sits under", async () => {
   const frames = [
-    ["sites", "Sites"],
-    ["tokens", "Tokens"],
-    ["settings", "Settings"],
-    ["activity", "Activity"],
-    ["usage", "Usage"],
+    ["sites", "Sites", "Sites"],
+    ["tokens", "Access", "Access"],
+    ["settings", "Settings", "Settings"],
+    ["activity", "Activity", "Activity"],
+    ["usage", "Usage", "Activity"],
+    ["domain", "Domain", "Settings"],
   ] as const;
 
-  for (const [tab, label] of frames) {
-    const document = String(await framePage({ tab, heading: "Heading", body: html`` }, { title: "Title", nonce: "n" }));
+  for (const [tab, label, section] of frames) {
+    const document = String(await framePage({ tab, heading: "Heading", body: html`` }, { title: "Title", nonce: "n", tabs: "domain" })).replace(/<svg.*?<\/svg>/g, "");
 
     expect(document.match(/aria-current="page">[^<]*/g)).toEqual([`aria-current="page">${label}`]);
+    expect(document.match(/aria-current="(?:page|true)">[^<]*/g)?.[0]).toMatch(new RegExp(`>${section}$`));
   }
 });
+
 
 test("a refused page says the table's sentence and never the code's own text, and the token field escapes its value", async () => {
   const page = refusedPage({ tab: "sites", heading: "Site", status: 404 }, { code: "<b>not_a_code</b>", about: HOSTILE });

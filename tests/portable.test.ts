@@ -75,6 +75,7 @@ const ALLOWED: readonly (readonly [file: string, what: string, reason: string])[
   ["packages/demo/src/browser/worker.ts", "worker", "a browser's service worker, which the demo runs in"],
   ["packages/demo/src/browser/kept-demo.ts", "worker", "a browser's service worker, which the demo runs in"],
   ["packages/demo/src/browser/free-headers.ts", "worker", "a browser's service worker, which the demo runs in"],
+  ["packages/app/tests/dashboard/support/markup.ts", "HTMLRewriter", "the test runner's own HTML parser, which reads a page in the dashboard's tests; no page of the product is built with it"],
 ];
 
 /** The files that are read as source. */

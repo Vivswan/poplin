@@ -1,8 +1,9 @@
 // The owner's dashboard: the pages on the admin hostname where a logged-in admin sees and manages every site and the install's settings.
 //
-//   GET  /                         the sites, or the trash with ?view=trash
-//   GET  /sites/<label>            one site
-//   POST /sites/<label>/<change>   settings, rollback, new-link, delete, restore, delete-forever
+//   GET  /                         the sites, searched with ?q= and narrowed with ?access=, or the trash with ?view=trash
+//   GET  /sites/<label>            the sites with one site's panel beside them; ?ask= opens one question in it
+//   POST /sites/<label>/<change>   settings, access, rename, rollback, new-link, duplicate, cancel-copy, delete, restore, delete-forever
+//   GET  /copy.js                  the one script: it copies a link to the clipboard
 //   GET  /tokens                   the tokens, and where a computer's code is typed
 //   GET  /tokens/allow?code=<code> one computer's login, to allow or deny
 //   POST /tokens/<change>          allow, deny, revoke
@@ -17,6 +18,7 @@
 
 import { readConfig } from "@poplin/core/src/actions/config";
 import type { Install } from "@poplin/core/src/actions/records";
+import { updateOf } from "@poplin/core/src/actions/update";
 import { ALLOW_PAGE } from "@poplin/core/src/api/routes";
 import type { Login } from "@poplin/core/src/auth/logins";
 import { AllowanceSpent, secondsToNextDay } from "@poplin/core/src/database/driver";
@@ -26,6 +28,7 @@ import { NONCE, secureHeaders } from "hono/secure-headers";
 
 import type { Counters } from "../limits/limits";
 import { showActivity } from "./activity/activity-page";
+import { COPY_SCRIPT, COPY_SCRIPT_PATH } from "./page/copy-script";
 import { framePage, refusedPage } from "./page/frame";
 import { noticeIn, refusalSentence } from "./page/notices";
 import type { Change, Form, Page, Visit } from "./records";
@@ -35,7 +38,6 @@ import type { FreeLimits } from "./settings/free-limits";
 import { SETTINGS_CHANGES } from "./settings/settings-changes";
 import { showSettings } from "./settings/settings-page";
 import { SITE_CHANGES } from "./sites/site-changes";
-import { showSite } from "./sites/site-page";
 import { showSites } from "./sites/sites-page";
 import { showAllow } from "./tokens/allow-page";
 import { TOKEN_CHANGES } from "./tokens/token-changes";
@@ -86,6 +88,9 @@ interface DashboardParts {
   /** Reads who a request's session names: an email that is in the logins now, or a refusal. */
   readonly readSession: (headers: Headers) => Promise<{ readonly ok: true; readonly value: Login } | { readonly ok: false }>;
 
+  /** The version of poplin the install runs, shown at the foot of the side. */
+  readonly version: string;
+
   /** The path of the dashboard's own hostname where a login starts. */
   readonly loginPath: string;
 
@@ -107,7 +112,7 @@ interface DashboardParts {
 
 /** What the handlers of one request share. `tabs` says whether the frame shows the Domain tab. */
 interface Shared {
-  Variables: { visit: Visit; form: Form; tabs: "domain" | undefined };
+  Variables: { visit: Visit; form: Form; tabs: "domain" | undefined; version: string };
 }
 
 /** Something that answers a request, as a Worker's `fetch` does. */
@@ -138,7 +143,10 @@ async function respond(context: Context<Shared>, page: Page): Promise<Response> 
   const visit = context.get("visit");
   const config = await readConfig(visit.install, visit.actor);
   const title = config.ok ? config.values.dashboard_title : PLAIN_TITLE;
-  const document = await framePage(page, { title, nonce: context.get("secureHeadersNonce") ?? "", notice: noticeIn(visit.url), tabs: context.get("tabs") });
+  const notice = page.ownNotice === true ? undefined : noticeIn(visit.url);
+  const version = context.get("version");
+  const running = { version, update: await updateOf(visit.install, version) };
+  const document = await framePage(page, { title, nonce: context.get("secureHeadersNonce") ?? "", notice, csrf: visit.csrf, tabs: context.get("tabs"), running });
 
   return context.html(document, page.status ?? 200);
 }
@@ -203,6 +211,7 @@ export function createDashboard(parts: DashboardParts): Dashboard {
     const csrf = await mintCsrfToken({ key: await csrfKey, email: who.value, now: parts.install.now() });
     context.set("visit", { install: parts.install, actor, url, csrf, login: loginAddress(parts.loginPath, url, "/") });
     context.set("tabs", parts.domain === undefined ? undefined : "domain");
+    context.set("version", parts.version);
 
     return next();
   };
@@ -233,7 +242,7 @@ export function createDashboard(parts: DashboardParts): Dashboard {
 
   app.use(
     secureHeaders({
-      contentSecurityPolicy: { defaultSrc: ["'none'"], styleSrc: [NONCE], formAction: ["'self'"], frameAncestors: ["'none'"], baseUri: ["'none'"] },
+      contentSecurityPolicy: { defaultSrc: ["'none'"], styleSrc: [NONCE], scriptSrc: ["'self'"], formAction: ["'self'"], frameAncestors: ["'none'"], baseUri: ["'none'"] },
       xFrameOptions: "DENY",
       // A form of the page then carries the page's origin; a request to any other origin carries no referrer.
       referrerPolicy: "same-origin",
@@ -242,8 +251,9 @@ export function createDashboard(parts: DashboardParts): Dashboard {
   app.use(noStore, session, method);
   app.post("*", bodyLimit({ maxSize: MAX_FORM_BYTES, onError: (context) => refuse(context, "too_large", 413) }), fromHere);
 
+  app.get(COPY_SCRIPT_PATH, (context) => context.body(COPY_SCRIPT, 200, { "Content-Type": "text/javascript; charset=utf-8" }));
   app.get("/", async (context) => respond(context, await showSites(context.get("visit"))));
-  app.get("/sites/:site", async (context) => respond(context, await showSite(context.get("visit"), context.req.param("site"))));
+  app.get("/sites/:site", async (context) => respond(context, await showSites(context.get("visit"), context.req.param("site"))));
   app.post("/sites/:site/:change", (context) => change(context, SITE_CHANGES, context.req.param("change"), context.req.param("site")));
   for (const path of CODE_PATHS) app.use(path, fewCodes);
   app.get("/tokens", async (context) => respond(context, await showTokens(context.get("visit"))));

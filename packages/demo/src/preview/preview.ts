@@ -167,8 +167,8 @@ async function answerLogin(request: Request, world: World): Promise<Response> {
   return new Response(null, { status: 302, headers: { Location: outcome.location, "Set-Cookie": outcome.setCookie } });
 }
 
-function dashboardMount(world: World, prefix: string): Mount {
-  const dashboard = createDashboard({ install: world.install, readSession: sessionOf(world), loginPath: "/login", csrfSecret: world.csrfSecret, domain: previewPlug("partial"), freeLimits: FREE_LIMITS, ...countsOf(world) });
+function dashboardMount(world: World, prefix: string, version: string): Mount {
+  const dashboard = createDashboard({ install: world.install, version, readSession: sessionOf(world), loginPath: "/login", csrfSecret: world.csrfSecret, domain: previewPlug("partial"), freeLimits: FREE_LIMITS, ...countsOf(world) });
   const answer: Mount["answer"] = (request) => (new URL(request.url).pathname === "/login" ? answerLogin(request, world) : dashboard.fetch(request));
 
   return { prefix, origin: ADMIN_ORIGIN, base: "", holds: "pages", answer };
@@ -223,7 +223,7 @@ async function openScene(host: Host, resumed: boolean): Promise<Scene> {
   if (!resumed) await checkForUpdate(seeded.install, { fetch: sampleLatest(host.version) });
   const setups = ([...PLUG_STATES, SHUT] as const).map((state) => setupMount(seeded, state));
 
-  return { seeded, token, dashboard: dashboardMount(seeded, ""), mounts: [dashboardMount(empty, EMPTY_PREFIX), apiMount(seeded, host.version), ...setups] };
+  return { seeded, token, dashboard: dashboardMount(seeded, "", host.version), mounts: [dashboardMount(empty, EMPTY_PREFIX, host.version), apiMount(seeded, host.version), ...setups] };
 }
 
 function themeOf(request: Request): (typeof THEMES)[number] | undefined {
