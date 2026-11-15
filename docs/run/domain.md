@@ -66,3 +66,13 @@ Three settings save without these permissions. The dashboard has them in Setting
 | `search_engines_allowed` | Let search engines in |
 | `outside_pages`          | Allow embedding      |
 | `block_bots`             | Block bots           |
+
+## Optional: an email when charges reach 1 dollar
+
+One more permission on the account token lets Repair make a budget alert in your Cloudflare account. Add it the same way, in the three steps above.
+
+| First box | Second box    | Third box | With it, Cloudflare                                                                              | Without it         |
+| --------- | ------------- | --------- | ------------------------------------------------------------------------------------------------ | ------------------ |
+| Account   | Notifications | Edit      | emails your first user when the account's usage charges for the billing period reach 1 US dollar | Repair makes no alert, and leaves one it made |
+
+The alert is named `poplin: usage charges reached 1 dollar`, under Notifications in Cloudflare. It counts the whole account's charges, and it stops nothing. [Limits and cost](limits-and-cost.md#what-can-cost-money) says what can cost money.

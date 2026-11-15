@@ -20,6 +20,7 @@ const THEIRS = {
   rule: { id: "their-rule", ref: "their_rule", description: "the owner's own", expression: "true", action: "block", enabled: true },
   application: { id: "their-application", name: "wiki", type: "self_hosted", domain: "wiki.example.com" },
   policy: { id: "their-policy", name: "wiki readers", decision: "allow" },
+  alert: { id: "their-alert", name: "my budget", alert_type: "billing_budget_alert", enabled: true },
 };
 
 /** The phase the owner's rule sits in, beside two of poplin's. */
@@ -34,6 +35,7 @@ const REMOVED = [
   "Worker: removed 1",
   "Database: removed 1",
   "Bucket objects: removed 2",
+  "Budget alert: removed 1",
 ];
 
 /** What a run on an account that holds nothing of poplin's tells. */
@@ -97,6 +99,7 @@ async function installed(): Promise<World> {
   world.account.rulesets[THEIR_PHASE]?.rules.push({ ...THEIRS.rule });
   world.account.applications.push({ ...THEIRS.application });
   world.account.policies.push({ ...THEIRS.policy });
+  world.account.alerts.push({ ...THEIRS.alert });
 
   return world;
 }
@@ -120,10 +123,10 @@ async function run(world: World, asking = "true"): Promise<Told> {
 
 /** What the account still holds: everything of the kinds a start-over removes. */
 function heldBy(world: World): unknown {
-  const { records, routes, rulesets, applications, policies, databases } = world.account;
+  const { records, routes, rulesets, applications, policies, databases, alerts } = world.account;
   const rules = Object.values(rulesets).flatMap((ruleset) => ruleset?.rules ?? []);
 
-  return { records, routes, rules, applications: applications.map(({ aud: _aud, ...application }) => application), policies, databases, objects: world.objects, worker: world.worker };
+  return { records, routes, rules, applications: applications.map(({ aud: _aud, ...application }) => application), policies, databases, alerts, objects: world.objects, worker: world.worker };
 }
 
 /** What stays after a start-over: the owner's own things, and nothing of poplin's. */
@@ -134,12 +137,13 @@ const ONLY_THEIRS = {
   applications: [THEIRS.application],
   policies: [THEIRS.policy],
   databases: [],
+  alerts: [THEIRS.alert],
   objects: [],
   worker: false,
 };
 
 describe("the start-over of the test install, against a local fake account", () => {
-  test("everything poplin made is removed and counted, the owner's record, route, rule, application, and policy stay, and a second run removes nothing", async () => {
+  test("everything poplin made is removed and counted, the owner's record, route, rule, application, policy, and alert stay, and a second run removes nothing", async () => {
     const world = await installed();
     const first = await run(world);
     const held = heldBy(world);

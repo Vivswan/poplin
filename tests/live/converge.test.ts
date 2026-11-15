@@ -275,12 +275,13 @@ describe("what a failed wait for the install repeats of its answer", () => {
   });
 });
 
-/** The calls Cloudflare refuses a token made from the link on the setup page, which carries eight rights and none of the three optional ones. */
+/** The calls Cloudflare refuses a token made from the link on the setup page, which carries eight rights and none of the four optional ones. */
 const REFUSED_WITH_EIGHT_RIGHTS = [
   "GET /zones/zone-1/rulesets/phases/http_request_dynamic_redirect/entrypoint",
   "GET /zones/zone-1/rulesets/phases/http_request_firewall_custom/entrypoint",
   "GET /zones/zone-1/rulesets/phases/http_ratelimit/entrypoint",
   "GET /zones/zone-1/bot_management",
+  `GET /accounts/${INSTALL_ACCOUNT}/alerting/v3/policies`,
 ];
 
 describe("the zone's repair with the eight rights of the token link alone, against a local fake account", () => {
@@ -305,6 +306,7 @@ describe("the zone's repair with the eight rights of the token link alone, again
       ["WAF rule", "optional", "the token permission for the WAF rule"],
       ["Rate rule", "optional", "the token permission for the Rate rule"],
       ["Bot settings", "optional", "the token permission for the Bot settings"],
+      ["Budget alert", "optional", "the token permission for the Budget alert"],
     ]);
     expect([...new Set(rows.filter((row) => row.state === "created").map((row) => row.object))]).toEqual([
       "DNS record",
