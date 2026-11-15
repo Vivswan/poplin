@@ -1,6 +1,8 @@
-// What the checks share: the forms of a site's address as a stranger types them, and the one way a refusal is checked.
+// What the checks share: the forms of a site's address as a stranger types them, the site a command answered, and the one way a refusal is checked.
 
 import { expect } from "bun:test";
+
+import type { LiveSite, Ran } from "./records";
 
 /** The fixed word every label address ends in, before the domain. */
 const MARKER = "-poplin";
@@ -33,6 +35,13 @@ export function isOwnAddress(domain: string, address: string): boolean {
   const { hostname } = new URL(address);
 
   return hostname === domain || hostname.endsWith(`.${domain}`);
+}
+
+/** The site a command answered, after a command that must exit 0. */
+export function siteOf(ran: Ran): LiveSite {
+  expect(ran.code).toBe(0);
+
+  return ran.value.site as LiveSite;
 }
 
 /**
