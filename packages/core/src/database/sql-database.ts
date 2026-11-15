@@ -3,8 +3,8 @@
 // A change is one batch: the statement that changes a row carries its own condition, and each statement after it runs only when the one before it changed a row.
 // So a change and its audit entry are kept together or not at all, and nothing is decided from an earlier read.
 
-import { and, asc, desc, eq, getTableName, gt, isNotNull, isNull, lt, ne, notExists, or, type SQL, sql as fragment } from "drizzle-orm";
-import { alias, type SQLiteColumn } from "drizzle-orm/sqlite-core";
+import { and, asc, desc, eq, exists, getTableName, gt, isNotNull, isNull, lt, ne, notExists, or, type SQL, sql as fragment } from "drizzle-orm";
+import { alias, type SQLiteColumn, type SQLiteTable } from "drizzle-orm/sqlite-core";
 import { drizzle } from "drizzle-orm/sqlite-proxy";
 import * as v from "valibot";
 
@@ -53,7 +53,7 @@ import type {
   UploadsPage,
 } from "./database";
 import type { SqlDriver, SqlValue, Statement, StatementResult } from "./driver";
-import { audit, sites, totals, uploads, versions } from "./schema";
+import { audit, leftovers, requestCounts, sites, totals, uploads, versions } from "./schema";
 
 /** How many ids are tried for one site before giving up; an id is about 62 random bits, so a second try is already a rare event. */
 const MINT_ATTEMPTS = 5;
@@ -69,6 +69,15 @@ const BUILD = drizzle(() => Promise.reject(new Error("a statement is run by the 
 
 /** True when the statement before it in the batch changed one row. */
 const CHANGED = fragment`changes() = 1`;
+
+/** A row that stands for "there is one" in a subquery. */
+const ONE = { one: fragment`1` };
+
+/** The columns an audit entry is written with; `seq` is the engine's to give. */
+const AUDIT_COLUMNS = [audit.at, audit.actor, audit.action, audit.site_id, audit.site_name, audit.detail];
+
+/** The columns a version is written with. */
+const VERSION_COLUMNS = [versions.folder, versions.number, versions.published_at, versions.published_by, versions.bytes, versions.files];
 
 /** The `sites` table under a second name, for a statement that asks about the other sites. */
 const OTHER = alias(sites, "other");
@@ -96,29 +105,11 @@ const SITE_FIELDS = {
 /** The id and the name of a site, as `getSiteNames` reads them. */
 const NAMED_SITE = v.object({ id: SITE_ID, name: SITE_NAME });
 
-/** The audit entry of a change to the site now at id `?4`, written only when the statement before it changed a row. */
-const AUDIT_SITE =
-  "INSERT INTO audit (at, actor, action, site_id, site_name, detail) SELECT ?1, ?2, ?3, id, name, ?5 FROM sites WHERE id = ?4 AND changes() = 1";
-
 /** The audit entry of a change to no site, written only when the statement before it changed a row. */
 const AUDIT_PLAIN = "INSERT INTO audit (at, actor, action, detail) SELECT ?1, ?2, ?3, ?4 WHERE changes() = 1";
 
 /** An audit entry that goes with no change. */
 const AUDIT_NOTE = "INSERT INTO audit (at, actor, action, site_id, site_name, detail) VALUES (?1, ?2, ?3, ?4, ?5, ?6)";
-
-/** A new site, only while its id and its public name are free: no site has either as its id or its public name. The schema adds version 1 with the row. Its owner is whoever began upload `?12`, and `?9` when it is made from none. */
-const INSERT_SITE = `
-INSERT INTO sites (id, name, folder, access, public_name, title, search_engines, expires_at, live_version, next_version, owner, created_at, updated_at, embeddable, page_title)
-SELECT ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, 1, 2, COALESCE((SELECT owner FROM uploads WHERE id = ?12), ?9), ?10, ?10, ?11, ?13
-WHERE NOT EXISTS (SELECT 1 FROM sites WHERE id = ?1)
-  AND NOT EXISTS (SELECT 1 FROM sites WHERE public_name = ?1)
-  AND (?5 IS NULL OR (?5 <> ?1 AND NOT EXISTS (SELECT 1 FROM sites WHERE public_name = ?5) AND NOT EXISTS (SELECT 1 FROM sites WHERE id = ?5)))`;
-
-/** The size of the first version, which the schema made with the site, stated only when the site was made. */
-const SIZE_FIRST_VERSION = "UPDATE versions SET bytes = ?2, files = ?3 WHERE folder = ?1 AND number = 1 AND changes() = 1";
-
-/** Whether a site has `?1` as its public name or its id. */
-const NAME_IS_HELD = "SELECT (EXISTS (SELECT 1 FROM sites WHERE public_name = ?1) OR EXISTS (SELECT 1 FROM sites WHERE id = ?1)) AS held";
 
 /** The place of each access in a listing sorted by access: from the most private to the most open. */
 const ACCESS_RANKS = { private: 0, unlisted: 1, public: 2 } as const;
@@ -148,68 +139,6 @@ function narrowing(query: SitesQuery): SQL[] {
 
   return conditions;
 }
-
-/** A new id for a live site, only while that id is free. */
-const SET_ID = `
-UPDATE sites SET id = ?2
-WHERE id = ?1 AND trashed = 0 AND NOT EXISTS (SELECT 1 FROM sites WHERE id = ?2) AND NOT EXISTS (SELECT 1 FROM sites WHERE public_name = ?2)`;
-
-/** The counts of site `?1` on the days in the JSON list `?3`, moved to its new id `?2`, only when the statement before it wrote the audit entry of that change. */
-const MOVE_COUNTS = "UPDATE request_counts SET site = ?2 WHERE site = ?1 AND day IN (SELECT j.value FROM json_each(?3) AS j) AND changes() = 1";
-
-/** A live site into the trash. */
-const TRASH = "UPDATE sites SET trashed_at = ?2 WHERE id = ?1 AND trashed = 0";
-
-/** A trashed site out of the trash, without an expiry that is not after `?2`. */
-const RESTORE = "UPDATE sites SET trashed_at = NULL, expires_at = CASE WHEN expires_at > ?2 THEN expires_at END WHERE id = ?1 AND trashed = 1";
-
-/** The audit entry of a delete, written while the site is still there to name. */
-const AUDIT_DELETE = "INSERT INTO audit (at, actor, action, site_id, site_name, detail) SELECT ?1, ?2, 'delete', id, name, '{}' FROM sites WHERE id = ?3";
-
-/** The delete itself, only when its audit entry was written. */
-const DELETE_SITE = "DELETE FROM sites WHERE id = ?1 AND changes() = 1";
-
-/** A page of the leftovers in ascending order, from above folder `?1`. */
-const LIST_LEFTOVERS = "SELECT folder FROM leftovers WHERE folder > ?1 ORDER BY folder LIMIT ?2";
-
-/** The leftover of folder `?1`, forgotten. */
-const FORGET_LEFTOVER = "DELETE FROM leftovers WHERE folder = ?1";
-
-/** The next version number of a live site, set aside. */
-const RESERVE = "UPDATE sites SET next_version = next_version + 1 WHERE id = ?1 AND trashed = 0";
-
-/** The number the statement before it set aside. */
-const RESERVED = "SELECT next_version - 1 AS number FROM sites WHERE id = ?1";
-
-/** A version, only when its number was reserved and is above every kept one, so a slower, older publish never replaces a newer one. */
-const INSERT_VERSION = `
-INSERT INTO versions (folder, number, published_at, published_by, bytes, files)
-SELECT s.folder, ?2, ?3, ?4, ?5, ?6 FROM sites s
-WHERE s.id = ?1 AND s.trashed = 0 AND ?2 < s.next_version AND ?2 > (SELECT MAX(v.number) FROM versions v WHERE v.folder = s.folder)`;
-
-/** The version just kept made live. */
-const SET_LIVE_TO_NEW = "UPDATE sites SET live_version = ?2, updated_at = ?3 WHERE id = ?1 AND changes() = 1";
-
-/** The versions beyond the `?2` highest dropped, only after a publish. */
-const DROP_OLD_VERSIONS = `
-DELETE FROM versions
-WHERE changes() = 1 AND folder = (SELECT folder FROM sites WHERE id = ?1)
-  AND number NOT IN (SELECT number FROM versions WHERE folder = (SELECT folder FROM sites WHERE id = ?1) ORDER BY number DESC LIMIT ?2)`;
-
-/** A kept version of a live site made live, only when it is not live already. */
-const SET_LIVE = `
-UPDATE sites SET live_version = ?2, updated_at = ?3
-WHERE id = ?1 AND trashed = 0 AND live_version <> ?2 AND EXISTS (SELECT 1 FROM versions v WHERE v.folder = sites.folder AND v.number = ?2)`;
-
-/** The highest kept version below the live one made live. */
-const SET_LIVE_TO_PREVIOUS = `
-UPDATE sites SET live_version = (SELECT MAX(v.number) FROM versions v WHERE v.folder = sites.folder AND v.number < sites.live_version), updated_at = ?2
-WHERE id = ?1 AND trashed = 0 AND EXISTS (SELECT 1 FROM versions v WHERE v.folder = sites.folder AND v.number < sites.live_version)`;
-
-/** The audit entry of a move of the live version, naming the version the site is at now. */
-const AUDIT_LIVE = `
-INSERT INTO audit (at, actor, action, site_id, site_name, detail)
-SELECT ?1, ?2, 'live_version', id, name, json_object('version', live_version) FROM sites WHERE id = ?3 AND changes() = 1`;
 
 /** A site from a backup under the id it had, only while its id, its folder, and its public name are free, and upload `?16` is pending as the first version of its folder. The schema adds its live version with the row. */
 const IMPORT_SITE = `
@@ -297,9 +226,6 @@ const UPLOAD_WITH_MANIFEST = `SELECT ${UPLOAD_COLUMNS}, manifest FROM uploads WH
 
 /** The upload with id `?1` and the files its manifest holds under key `?2`. The engine reads one value out of the row: it walks no entry of the manifest. */
 const UPLOAD_WITH_FILE = `SELECT ${UPLOAD_COLUMNS}, json_extract(manifest, '$.' || ?2) AS file FROM uploads WHERE id = ?1`;
-
-/** Added to `INSERT_SITE` for a site made from upload `?12`: only while that upload is pending and is the first version of the same folder. */
-const WHILE_UPLOAD_IS_PENDING = "AND EXISTS (SELECT 1 FROM uploads WHERE id = ?12 AND state = 'pending' AND folder = ?3 AND number = 1)";
 
 /** An upload marked finished and its manifest dropped, only when the statement before it changed a row. */
 const FINISH_UPLOAD = "UPDATE uploads SET state = 'finished', manifest = '{}' WHERE id = ?1 AND changes() = 1";
@@ -604,10 +530,9 @@ function isServed(now: number): SQL | undefined {
 
 /** A new access for a live site, only when it differs and the public name asked for is free: no other site has it as its public name, and no site as its id. */
 function setAccess(id: SiteId, access: SiteAccess["access"], publicName: PublicName | null): Statement {
-  const one = { one: fragment`1` };
   const heldByAnother = (name: PublicName): SQL | undefined => and(eq(OTHER.public_name, name), ne(OTHER.id, id));
   const isFree = (name: PublicName): SQL | undefined =>
-    and(notExists(BUILD.select(one).from(OTHER).where(heldByAnother(name))), notExists(BUILD.select(one).from(OTHER).where(eq(OTHER.id, name))));
+    and(notExists(BUILD.select(ONE).from(OTHER).where(heldByAnother(name))), notExists(BUILD.select(ONE).from(OTHER).where(eq(OTHER.id, name))));
   const differs = or(ne(sites.access, access), fragment`${sites.public_name} IS NOT ${publicName}`);
   const live = and(eq(sites.id, id), eq(sites.trashed, 0), differs, publicName === null ? undefined : isFree(publicName));
 
@@ -625,17 +550,92 @@ function storedDetails(given: SiteDetails): Partial<Pick<typeof sites.$inferInse
   };
 }
 
-/** The audit entry of a change to the site now at the given id, written only when the statement before it changed a row. */
-function auditOfSite(signed: Signed, action: AuditAction, id: SiteId, detail: Readonly<Record<string, unknown>>): Statement {
-  const columns = fragment.join([audit.at, audit.actor, audit.action, audit.site_id, audit.site_name, audit.detail].map(bare), fragment`, `);
-  const entry = fragment`SELECT ${signed.at}, ${signed.by}, ${action}, ${sites.id}, ${sites.name}, ${JSON.stringify(detail)} FROM ${sites} WHERE ${sites.id} = ${id} AND ${CHANGED}`;
-
-  // The insert builder names every column of the table, `seq` among them, and a `seq` that is given costs the engine one row read more than one left out.
-  return built(BUILD.run(fragment`INSERT INTO ${audit} (${columns}) ${entry}`));
+/** A statement written with the template, for what the builder has no word for. */
+function written(text: SQL): Statement {
+  return built(BUILD.all(text));
 }
 
-function auditSite(signed: Signed, action: AuditAction, id: SiteId, detail: Readonly<Record<string, unknown>>): Statement {
-  return sql(AUDIT_SITE, signed.at, signed.by, action, id, JSON.stringify(detail));
+/**
+ * An `INSERT` of the columns named, from a `SELECT`.
+ * The insert builder names every column of a table, and a key the engine would give costs one row read more when it is named.
+ */
+function insertFrom(table: SQLiteTable, columns: readonly SQLiteColumn[], select: SQL): Statement {
+  return written(fragment`INSERT INTO ${table} (${fragment.join(columns.map(bare), fragment`, `)}) ${select}`);
+}
+
+/** The audit entry of a change to the site now at the given id, written only when the statement before it changed a row. */
+function auditOfSite(signed: Signed, action: AuditAction, id: SiteId, detail: Readonly<Record<string, unknown>>): Statement {
+  const entry = fragment`SELECT ${signed.at}, ${signed.by}, ${action}, ${sites.id}, ${sites.name}, ${JSON.stringify(detail)} FROM ${sites} WHERE ${sites.id} = ${id} AND ${CHANGED}`;
+
+  return insertFrom(audit, AUDIT_COLUMNS, entry);
+}
+
+/** Whether no site has a name as its id, and none as its public name. */
+function isFree(name: string): SQL | undefined {
+  return and(notExists(BUILD.select(ONE).from(OTHER).where(eq(OTHER.id, name))), notExists(BUILD.select(ONE).from(OTHER).where(eq(OTHER.public_name, name))));
+}
+
+/** A new site, only while its id and its public name are free, and its upload, when it has one, is pending as the first version of its folder. Its owner is whoever began that upload, or `signed.by`. */
+function insertSite(id: SiteId, site: v.InferOutput<typeof NEW_SITE>, signed: Signed, upload: UploadId | undefined): Statement {
+  const publicName = publicNameOf(site);
+  const columns = [
+    sites.id,
+    sites.name,
+    sites.folder,
+    sites.access,
+    sites.public_name,
+    sites.title,
+    sites.search_engines,
+    sites.expires_at,
+    sites.live_version,
+    sites.next_version,
+    sites.owner,
+    sites.created_at,
+    sites.updated_at,
+    sites.embeddable,
+    sites.page_title,
+  ];
+  const owner = fragment`COALESCE((SELECT ${uploads.owner} FROM ${uploads} WHERE ${uploads.id} = ${upload ?? null}), ${signed.by})`;
+  const expires = site.expires === "never" ? null : site.expires;
+  const identity = fragment`${id}, ${site.name}, ${site.folder}, ${site.access}, ${publicName}, ${site.title}, ${site.search_engines ? 1 : 0}, ${expires}`;
+  const values = fragment`${identity}, 1, 2, ${owner}, ${signed.at}, ${signed.at}, ${site.embeddable ? 1 : 0}, ${site.page_title ?? null}`;
+  const pending = and(eq(uploads.id, upload ?? ""), eq(uploads.state, "pending"), eq(uploads.folder, site.folder), eq(uploads.number, 1));
+  const conditions = and(
+    isFree(id),
+    publicName === null ? undefined : and(fragment`${publicName} <> ${id}`, isFree(publicName)),
+    upload === undefined ? undefined : exists(BUILD.select(ONE).from(uploads).where(pending)),
+  );
+
+  return insertFrom(sites, columns, fragment`SELECT ${values} WHERE ${conditions}`);
+}
+
+/** A kept version of a site, as a subquery of a statement on `sites` asks for it. */
+function keptVersion(condition: SQL): SQL {
+  return fragment`FROM ${versions} WHERE ${versions.folder} = ${sites.folder} AND ${condition}`;
+}
+
+/** The kept version a move of the live version goes to: the number given, or the highest below the live one. */
+function moveLive(id: SiteId, target: number | "previous", at: number): Statement {
+  const live = and(eq(sites.id, id), eq(sites.trashed, 0));
+
+  if (target === "previous") {
+    const below = keptVersion(fragment`${versions.number} < ${sites.live_version}`);
+    const previous = fragment<number>`(SELECT MAX(${versions.number}) ${below})`;
+
+    return built(BUILD.update(sites).set({ live_version: previous, updated_at: at }).where(and(live, fragment`EXISTS (SELECT 1 ${below})`)));
+  }
+
+  const kept = fragment`EXISTS (SELECT 1 ${keptVersion(fragment`${versions.number} = ${target}`)})`;
+
+  return built(BUILD.update(sites).set({ live_version: target, updated_at: at }).where(and(live, ne(sites.live_version, target), kept)));
+}
+
+/** The versions of the site with the given id beyond the `keep` highest dropped, only after a publish. */
+function dropOldVersions(id: SiteId, keep: number): Statement {
+  const folder = fragment`(SELECT ${sites.folder} FROM ${sites} WHERE ${sites.id} = ${id})`;
+  const highest = fragment`(SELECT ${versions.number} FROM ${versions} WHERE ${versions.folder} = ${folder} ORDER BY ${versions.number} DESC LIMIT ${keep})`;
+
+  return built(BUILD.delete(versions).where(fragment`${CHANGED} AND ${versions.folder} = ${folder} AND ${versions.number} NOT IN ${highest}`));
 }
 
 function auditPlain(signed: Signed, action: AuditAction, detail: Readonly<Record<string, unknown>>): Statement {
@@ -985,12 +985,13 @@ export class SqlDatabase implements Database {
   async giveNewId(id: SiteId, signed: Signed): Promise<Done | Refused<"not_found" | "in_trash">> {
     for (let attempt = 0; attempt < MINT_ATTEMPTS; attempt += 1) {
       const next = this.#mintId();
+      const days = JSON.stringify(viewDays(dayOf(signed.at)));
       const [updated, , after, before] = await this.#driver.batch([
-        sql(SET_ID, id, next),
-        auditSite(signed, "new_id", next, { from: id }),
+        built(BUILD.update(sites).set({ id: next }).where(and(eq(sites.id, id), eq(sites.trashed, 0), isFree(next)))),
+        auditOfSite(signed, "new_id", next, { from: id }),
         siteById(next),
         siteById(id),
-        sql(MOVE_COUNTS, id, next, JSON.stringify(viewDays(dayOf(signed.at)))),
+        built(BUILD.update(requestCounts).set({ site: next }).where(and(eq(requestCounts.site, id), fragment`${requestCounts.day} IN (SELECT j.value FROM json_each(${days}) AS j)`, CHANGED))),
       ]);
       if (changed(updated)) return done(after);
 
@@ -1002,21 +1003,28 @@ export class SqlDatabase implements Database {
   }
 
   async trashSite(id: SiteId, signed: Signed): Promise<Done | Refused<"not_found" | "in_trash">> {
-    const [updated, , after] = await this.#driver.batch([sql(TRASH, id, signed.at), auditSite(signed, "trash", id, {}), siteById(id)]);
+    const trash = BUILD.update(sites).set({ trashed_at: signed.at }).where(and(eq(sites.id, id), eq(sites.trashed, 0)));
+    const [updated, , after] = await this.#driver.batch([built(trash), auditOfSite(signed, "trash", id, {}), siteById(id)]);
     if (changed(updated)) return done(after);
 
     return unreachable(siteIn(after)) ?? { kind: "not_found" };
   }
 
   async restoreSite(id: SiteId, signed: Signed): Promise<Done | Refused<"not_found" | "not_in_trash">> {
-    const [updated, , after] = await this.#driver.batch([sql(RESTORE, id, signed.at), auditSite(signed, "restore", id, {}), siteById(id)]);
+    // An expiry that is not after the moment of the restore is dropped with it.
+    const expiry = fragment<number | null>`CASE WHEN ${sites.expires_at} > ${signed.at} THEN ${sites.expires_at} END`;
+    const restore = BUILD.update(sites).set({ trashed_at: null, expires_at: expiry }).where(and(eq(sites.id, id), eq(sites.trashed, 1)));
+    const [updated, , after] = await this.#driver.batch([built(restore), auditOfSite(signed, "restore", id, {}), siteById(id)]);
     if (changed(updated)) return done(after);
 
     return { kind: siteIn(after) === undefined ? "not_found" : "not_in_trash" };
   }
 
   async deleteSite(id: SiteId, signed: Signed): Promise<Done | Refused<"not_found">> {
-    const [before, , deleted] = await this.#driver.batch([siteById(id), sql(AUDIT_DELETE, signed.at, signed.by, id), sql(DELETE_SITE, id)]);
+    // The audit entry is written while the site is still there to name, and the delete only when it was.
+    const entry = fragment`SELECT ${signed.at}, ${signed.by}, 'delete', ${sites.id}, ${sites.name}, '{}' FROM ${sites} WHERE ${sites.id} = ${id}`;
+    const remove = BUILD.delete(sites).where(and(eq(sites.id, id), CHANGED));
+    const [before, , deleted] = await this.#driver.batch([siteById(id), insertFrom(audit, AUDIT_COLUMNS, entry), built(remove)]);
     if (!changed(deleted)) return { kind: "not_found" };
 
     return done(before);
@@ -1026,7 +1034,8 @@ export class SqlDatabase implements Database {
     requirePage(query.limit);
 
     // One row more than the page shows whether another page follows.
-    const [listed] = await this.#driver.batch([sql(LIST_LEFTOVERS, query.after ?? "", query.limit + 1)]);
+    const page = BUILD.select({ folder: leftovers.folder }).from(leftovers).where(gt(leftovers.folder, query.after ?? "")).orderBy(asc(leftovers.folder)).limit(query.limit + 1);
+    const [listed] = await this.#driver.batch([built(page)]);
     const folders = (listed?.rows ?? []).slice(0, query.limit).map((row) => v.parse(SITE_FOLDER, row.folder));
     const last = folders.at(-1);
     if (last === undefined || (listed?.rows.length ?? 0) <= query.limit) return { folders };
@@ -1035,11 +1044,13 @@ export class SqlDatabase implements Database {
   }
 
   async forgetLeftover(folder: SiteFolder): Promise<void> {
-    await this.#driver.batch([sql(FORGET_LEFTOVER, folder)]);
+    await this.#driver.batch([built(BUILD.delete(leftovers).where(eq(leftovers.folder, folder)))]);
   }
 
   async reserveVersion(id: SiteId): Promise<Reserved | Refused<"not_found" | "in_trash">> {
-    const [updated, reserved, after] = await this.#driver.batch([sql(RESERVE, id), sql(RESERVED, id), siteById(id)]);
+    const reserve = BUILD.update(sites).set({ next_version: fragment`${sites.next_version} + 1` }).where(and(eq(sites.id, id), eq(sites.trashed, 0)));
+    const number = BUILD.select({ number: fragment<number>`${sites.next_version} - 1`.as("number") }).from(sites).where(eq(sites.id, id));
+    const [updated, reserved, after] = await this.#driver.batch([built(reserve), built(number), siteById(id)]);
     if (changed(updated)) return { kind: "reserved", number: Number(reserved?.rows[0]?.number) };
 
     return unreachable(siteIn(after)) ?? { kind: "not_found" };
@@ -1051,12 +1062,15 @@ export class SqlDatabase implements Database {
     requireCount("the size of a version in bytes", version.bytes);
     requireCount("the number of files of a version", version.files);
 
+    // A version is kept only when its number was set aside and is above every kept one, so a slower, older publish never replaces a newer one.
+    const above = fragment`${version.number} < ${sites.next_version} AND ${version.number} > (SELECT MAX(${versions.number}) FROM ${versions} WHERE ${versions.folder} = ${sites.folder})`;
+    const entry = fragment`SELECT ${sites.folder}, ${version.number}, ${signed.at}, ${signed.by}, ${version.bytes}, ${version.files} FROM ${sites} WHERE ${sites.id} = ${id} AND ${sites.trashed} = 0 AND ${above}`;
     const [before, , updated, , , after] = await this.#driver.batch([
       siteById(id),
-      sql(INSERT_VERSION, id, version.number, signed.at, signed.by, version.bytes, version.files),
-      sql(SET_LIVE_TO_NEW, id, version.number, signed.at),
-      auditSite(signed, "publish", id, { version: version.number }),
-      sql(DROP_OLD_VERSIONS, id, version.keep),
+      insertFrom(versions, VERSION_COLUMNS, entry),
+      built(BUILD.update(sites).set({ live_version: version.number, updated_at: signed.at }).where(and(eq(sites.id, id), CHANGED))),
+      auditOfSite(signed, "publish", id, { version: version.number }),
+      dropOldVersions(id, version.keep),
       siteById(id),
     ]);
     if (!changed(updated)) return unreachable(siteIn(after)) ?? { kind: "stale_number" };
@@ -1073,8 +1087,9 @@ export class SqlDatabase implements Database {
     target: number | "previous",
     signed: Signed,
   ): Promise<Done | Unchanged | Refused<"not_found" | "in_trash" | "no_such_version">> {
-    const update = target === "previous" ? sql(SET_LIVE_TO_PREVIOUS, id, signed.at) : sql(SET_LIVE, id, target, signed.at);
-    const [updated, , after] = await this.#driver.batch([update, sql(AUDIT_LIVE, signed.at, signed.by, id), siteById(id)]);
+    // The audit entry names the version the site is at after the move.
+    const entry = fragment`SELECT ${signed.at}, ${signed.by}, 'live_version', ${sites.id}, ${sites.name}, json_object('version', ${sites.live_version}) FROM ${sites} WHERE ${sites.id} = ${id} AND ${CHANGED}`;
+    const [updated, , after] = await this.#driver.batch([moveLive(id, target, signed.at), insertFrom(audit, AUDIT_COLUMNS, entry), siteById(id)]);
     if (changed(updated)) return done(after);
 
     const site = siteIn(after);
@@ -1114,7 +1129,7 @@ export class SqlDatabase implements Database {
     // The upload is finished straight after the audit entry, so each statement up to the versions sees the one row the statement before it wrote.
     const results = await this.#driver.batch([
       sql(IMPORT_SITE, ...identity, row.owner, row.created_at, row.updated_at, row.trashed_at, id, row.page_title),
-      auditSite(signed, "imported", row.id, { versions: row.versions.length }),
+      auditOfSite(signed, "imported", row.id, { versions: row.versions.length }),
       sql(FINISH_UPLOAD, id),
       sql(IMPORT_VERSIONS, row.folder, JSON.stringify(row.versions)),
       sql(IMPORT_IS_HELD, row.id, row.folder),
@@ -1533,20 +1548,19 @@ WHERE folder = (SELECT folder FROM uploads WHERE id = ?1) AND (${differs.join(" 
   async #insertSite(draft: NewSite, signed: Signed, upload?: UploadId): Promise<Done | Refused<"name_taken" | "not_pending">> {
     const site = v.parse(NEW_SITE, draft);
     const publicName = publicNameOf(site);
-    const expires = site.expires === "never" ? null : site.expires;
     const detail = { access: site.access, public_name: publicName };
-    const columns = [site.name, site.folder, site.access, publicName, site.title, site.search_engines ? 1 : 0, expires, signed.by, signed.at, site.embeddable ? 1 : 0];
-    const text = upload === undefined ? INSERT_SITE : `${INSERT_SITE}\n  ${WHILE_UPLOAD_IS_PENDING}`;
-    const insert = (id: SiteId): Statement => sql(text, id, ...columns, upload ?? null, site.page_title ?? null);
+    // The first version, which the schema made with the site, is given its size only when the site was made.
+    const size = BUILD.update(versions).set({ bytes: site.bytes, files: site.files }).where(and(eq(versions.folder, site.folder), eq(versions.number, 1), CHANGED));
+    const held = fragment`SELECT (EXISTS (SELECT 1 FROM ${sites} WHERE ${sites.public_name} = ${publicName}) OR EXISTS (SELECT 1 FROM ${sites} WHERE ${sites.id} = ${publicName})) AS held`;
 
     for (let attempt = 0; attempt < MINT_ATTEMPTS; attempt += 1) {
       const id = this.#mintId();
-      const [inserted, , , , held, made, waiting] = await this.#driver.batch([
-        insert(id),
-        sql(SIZE_FIRST_VERSION, site.folder, site.bytes, site.files),
-        auditSite(signed, "create", id, detail),
+      const [inserted, , , , taken, made, waiting] = await this.#driver.batch([
+        insertSite(id, site, signed, upload),
+        built(size),
+        auditOfSite(signed, "create", id, detail),
         sql(FINISH_UPLOAD, upload ?? null),
-        sql(NAME_IS_HELD, publicName),
+        written(held),
         siteById(id),
         sql(UPLOAD_BY_ID, upload ?? null),
       ]);
@@ -1554,7 +1568,7 @@ WHERE folder = (SELECT folder FROM uploads WHERE id = ?1) AND (${differs.join(" 
 
       if (upload !== undefined && uploadIn(waiting)?.state !== "pending") return { kind: "not_pending" };
 
-      if (publicName !== null && held?.rows[0]?.held === 1) return { kind: "name_taken" };
+      if (publicName !== null && taken?.rows[0]?.held === 1) return { kind: "name_taken" };
     }
 
     throw new Error(`no free site id in ${MINT_ATTEMPTS} tries`);
