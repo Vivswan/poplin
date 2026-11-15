@@ -988,7 +988,7 @@ for (const viewport of SMALL_PHONES) {
     // Drift: the sheet of the sections would not scroll again, and on a screen shorter than what it holds the start of an update would lie under its edge, out of reach; or the button that closes the sheet would scroll away with its top.
     test("the start of an update can be reached and pressed, by scrolling where the sheet is too short, with the way to close the sheet still in sight", async ({ page }) => {
       await arrive(page);
-      await page.getByRole("button", { name: "Sections", exact: true }).click();
+      await page.getByRole("button", { name: SECTIONS_BUTTON }).click();
       const start = page.getByRole("dialog").getByRole("button", { name: "Update now", exact: true });
 
       await start.scrollIntoViewIfNeeded();
@@ -1184,7 +1184,7 @@ test("the list that picks the sites of the graph stands in the order of the titl
 });
 
 // Drift: what went wrong would be remembered and shown nowhere: no mark at the side, no list on Usage, a row that opens nothing, or details that cannot be copied into a report.
-test("a section whose screen holds a problem says so at the side, Usage lists what went wrong, a row opens its panel, the panel's details are copied, and Escape gives the list back with the focus in it", async ({ page }) => {
+test("a section whose screen holds a problem says so at the side, Usage lists what went wrong, a row opens its panel, the panel's details are copied, and Escape gives the focus back to the row", async ({ page }) => {
   await arrive(page);
   const sections = page.getByRole("navigation", { name: "Sections", exact: true });
   await expect(sections.getByRole("link", { name: "Usage 2 problems", exact: true })).toBeVisible();
@@ -1205,8 +1205,7 @@ test("a section whose screen holds a problem says so at the side, Usage lists wh
 
   await page.keyboard.press("Escape");
   await expect(panel).toBeHidden();
-  await expect(rows(page, true, "Problems")).toBeVisible();
-  expect(await page.evaluate(() => document.activeElement !== document.body)).toBe(true);
+  await expect(rows(page, true, "Problems").getByRole("button", { name: "Details of A request failed", exact: true })).toBeFocused();
 
   await toSection(page, "Domain");
   await expect(page.getByRole("group", { name: "The login could not be checked", exact: true }).getByRole("button", { name: "Copy the details", exact: true })).toBeVisible();
