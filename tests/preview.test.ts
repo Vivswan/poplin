@@ -276,6 +276,17 @@ describe("the local preview", () => {
     expect(rising).toEqual([]);
   });
 
+  // Drift: a seed that published its samples without their pages' own titles would show a site's name once its typed title is emptied, where the Edit dialog says the page's own title is used, as on an install a publish filled.
+  test("a sample site whose typed title is taken away is called by its entry page's own title", async () => {
+    const preview = await openPreview(false);
+    const { sites } = await data<{ sites: readonly { readonly label: string; readonly title: string | null }[] }>(preview, "/data/sites?q=pricing");
+    const [pricing] = sites;
+    const emptied = await change(preview, `/data/sites/${pricing?.label}/naming`, { title: "" });
+    const { site } = (await emptied.json()) as { readonly site: { readonly title: string | null; readonly title_typed: boolean } };
+
+    expect([pricing?.title, site.title_typed, site.title]).toEqual(["Pricing", false, "Fernhollow Kettle Works: third quarter 2026 sales review"]);
+  });
+
   test("the demo names no runtime and imports only portable source, its own files, and SQLite: without this it stops running in a browser or a Worker the day someone reaches for a file or a process", () => {
     const reach = [
       'import { readFileSync } from "node:fs";',

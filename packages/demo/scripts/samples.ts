@@ -4,7 +4,11 @@ import { readdir } from "node:fs/promises";
 import { join } from "node:path";
 
 import { readFiles } from "../../cli/src/files/read";
+import { readTitle } from "../../cli/src/files/title";
 import type { Samples } from "../src/preview/seed";
+
+/** The page a site opens with, whose own title a publish sends. */
+const ENTRY_PAGE = "index.html";
 
 /** The folder that holds one folder per sample site. */
 const SAMPLES = join(import.meta.dir, "..", "..", "..", "demo", "samples");
@@ -12,7 +16,7 @@ const SAMPLES = join(import.meta.dir, "..", "..", "..", "demo", "samples");
 /**
  * Read every sample site whole.
  *
- * @returns the files of each folder under `demo/samples`, by the folder's name, with the content type a publish gives each
+ * @returns each folder under `demo/samples`, by the folder's name: its files with the content type a publish gives each, and the title a publish reads from its entry page
  * @throws {Error} a sample cannot be read, or holds a file a publish refuses
  */
 export async function readSamples(): Promise<Samples> {
@@ -24,7 +28,10 @@ export async function readSamples(): Promise<Samples> {
 
     const files = listing.files.map(async ({ path, contentType, open }) => ({ path, contentType, bytes: new Uint8Array(await new Response(open()).arrayBuffer()) }));
 
-    return [name, await Promise.all(files)] as const;
+    const entry = listing.files.find((file) => file.path === ENTRY_PAGE);
+    const title = entry === undefined ? undefined : await readTitle(entry);
+
+    return [name, { files: await Promise.all(files), ...(title === undefined ? {} : { title }) }] as const;
   });
 
   return Object.fromEntries(await Promise.all(read));

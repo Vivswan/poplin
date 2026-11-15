@@ -65,11 +65,11 @@ interface Built {
   readonly gzipped: number;
 }
 
-/** Every sample site as the worker unpacks it: each file as its path, its media type, and its bytes in base64. */
+/** Every sample site as the worker unpacks it: its entry page's own title, `null` for none, and each file as its path, its media type, and its bytes in base64. */
 async function packedSamples(): Promise<string> {
-  const packed = Object.entries(await readSamples()).map(([name, files]) => [
+  const packed = Object.entries(await readSamples()).map(([name, { title, files }]) => [
     name,
-    files.map(({ path, contentType, bytes }) => [path, contentType, Buffer.from(bytes).toString("base64")]),
+    [title ?? null, files.map(({ path, contentType, bytes }) => [path, contentType, Buffer.from(bytes).toString("base64")])],
   ]);
 
   return JSON.stringify(Object.fromEntries(packed));

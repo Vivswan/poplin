@@ -38,11 +38,16 @@ const WAITING = [
   { scope: "admin", computer: "build-server" },
 ] as const;
 
-/** The one page of the site that stands for the demo itself: it leads back to the demo, two folders above the place the site is served at. */
-const STAND_IN = {
-  path: "index.html",
-  contentType: "text/html; charset=utf-8",
-  bytes: new TextEncoder().encode('<!doctype html>\n<meta charset="utf-8">\n<meta http-equiv="refresh" content="0; url=../../">\n<title>poplin demo</title>\n<p><a href="../../">Open the demo</a></p>\n'),
+/** The site that stands for the demo itself: one page, which leads back to the demo, two folders above the place the site is served at. */
+const STAND_IN: Sample = {
+  title: "poplin demo",
+  files: [
+    {
+      path: "index.html",
+      contentType: "text/html; charset=utf-8",
+      bytes: new TextEncoder().encode('<!doctype html>\n<meta charset="utf-8">\n<meta http-equiv="refresh" content="0; url=../../">\n<title>poplin demo</title>\n<p><a href="../../">Open the demo</a></p>\n'),
+    },
+  ],
 };
 
 /** The token the seed's check of the domain is run with. The preview's plug takes any, and nothing keeps it. */
@@ -122,8 +127,17 @@ interface SampleFile {
   readonly bytes: Uint8Array<ArrayBuffer>;
 }
 
-/** The files of every sample site, by the name of its folder under `demo/samples`. */
-export type Samples = Readonly<Record<string, readonly SampleFile[]>>;
+/** One sample site, read by the host as a publish reads a folder. */
+interface Sample {
+  /** The title of its entry page, which a publish sends beside the files; left out for a page with none. */
+  readonly title?: string;
+
+  /** Its files. */
+  readonly files: readonly SampleFile[];
+}
+
+/** Every sample site, by the name of its folder under `demo/samples`. */
+export type Samples = Readonly<Record<string, Sample>>;
 
 /** A moment that touches no site: how many days ago it happens, what is done, and by whom. A token is a publisher's unless it names another scope. A `computer` asks to publish and is allowed or denied. */
 type PlainMoment = { readonly ago: number; readonly by: Who } & (
@@ -138,10 +152,10 @@ type PlainMoment = { readonly ago: number; readonly by: Who } & (
 /** One moment of the history. */
 type Moment = PlainMoment | SiteMoment;
 
-/** A sample site as the history goes on with it: the label it has now, and the files every version of it holds. */
+/** A sample site as the history goes on with it: the label it has now, and what every publish of it sends: its files, and its entry page's own title where the page has one. */
 interface Made {
   label: string;
-  readonly files: Parameters<typeof publishSite>[2]["files"];
+  readonly sent: Pick<Parameters<typeof publishSite>[2], "files" | "page_title">;
 }
 
 /** What the history has made so far: who acts under each name, the id of each token by its note, and each site by the name it was made under. */
@@ -171,16 +185,27 @@ function made<Value>(known: ReadonlyMap<string, Value>, name: string): Value {
   return value;
 }
 
-/** The files a draft publishes: its sample at the root, and every sample beside it under its folder. A site of many files shows what a small one cannot, such as a copy that takes more than one request. */
-function filesOf(draft: Draft, samples: Samples): Made["files"] {
+/** A sample by its name; a name the host handed no sample for is a mistake in the seed. */
+function sampleOf(name: string, samples: Samples): Sample {
+  const sample = name === THE_DEMO ? STAND_IN : samples[name];
+  if (sample === undefined) throw new Error(`the demo's seed has no sample called ${name}`);
+
+  return sample;
+}
+
+/**
+ * What a draft publishes: its sample at the root, with that sample's own title as a publish reads it from the entry page, and every sample beside it under its folder.
+ *
+ * A site of many files shows what a small one cannot, such as a copy that takes more than one request.
+ */
+function sentOf(draft: Draft, samples: Samples): Made["sent"] {
   const placed = [["", draft.sample] as const, ...Object.entries(draft.beside ?? {}).map(([folder, sample]) => [`${folder}/`, sample] as const)];
+  const files = placed.flatMap(([folder, sample]) =>
+    sampleOf(sample, samples).files.map(({ path, contentType, bytes }) => ({ path: `${folder}${path}`, contentType, size: bytes.length, open: () => new Blob([bytes]).stream() })),
+  );
+  const { title } = sampleOf(draft.sample, samples);
 
-  return placed.flatMap(([folder, sample]) => {
-    const files = sample === THE_DEMO ? [STAND_IN] : samples[sample];
-    if (files === undefined) throw new Error(`the demo's seed has no sample called ${sample}`);
-
-    return files.map(({ path, contentType, bytes }) => ({ path: `${folder}${path}`, contentType, size: bytes.length, open: () => new Blob([bytes]).stream() }));
-  });
+  return title === undefined ? { files } : { files, page_title: title };
 }
 
 /** The two people of the install, each as an admin behind a session. */
@@ -196,9 +221,9 @@ function people(world: World): Cast["actors"] {
 
 /** Publish a sample site for the first time. */
 async function makeSite(world: World, cast: Cast, draft: Draft, samples: Samples): Promise<void> {
-  const files = filesOf(draft, samples);
-  const { site } = done(await publishSite(world.install, made(cast.actors, draft.by), { files, name: draft.name, ...draft.settings }), draft.name);
-  cast.sites.set(draft.name, { label: site.label, files });
+  const sent = sentOf(draft, samples);
+  const { site } = done(await publishSite(world.install, made(cast.actors, draft.by), { ...sent, name: draft.name, ...draft.settings }), draft.name);
+  cast.sites.set(draft.name, { label: site.label, sent });
 }
 
 /** Do one thing to a site that is made, and keep the label it has after it. */
@@ -207,7 +232,7 @@ async function changeSite(world: World, cast: Cast, moment: SiteMoment): Promise
   const actor = made(cast.actors, moment.by);
   const site = made(cast.sites, moment.site);
   const answers = {
-    version: () => publishSite(install, actor, { files: site.files, site: site.label }),
+    version: () => publishSite(install, actor, { ...site.sent, site: site.label }),
     set: () => updateSite(install, actor, { site: site.label, ...(moment.does === "set" ? moment.changes : {}) }),
     trash: () => deleteSite(install, actor, { site: site.label }),
     restore: () => restoreSite(install, actor, site.label),

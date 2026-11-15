@@ -25,8 +25,8 @@ declare const BUILD: string;
 /** What the build puts in place of this name: the version of poplin the demo was built from. */
 declare const VERSION: string;
 
-/** What the build puts in place of this name: every sample site, each file as its path, its media type, and its bytes in base64. */
-declare const PACKED_SAMPLES: Readonly<Record<string, readonly (readonly [path: string, contentType: string, base64: string])[]>>;
+/** What the build puts in place of this name: every sample site as its entry page's own title, `null` for none, and each file as its path, its media type, and its bytes in base64. */
+declare const PACKED_SAMPLES: Readonly<Record<string, readonly [title: string | null, files: readonly (readonly [path: string, contentType: string, base64: string])[]]>>;
 
 /** What the build puts in place of this name: the names of the client's script and stylesheet, and of every file of the client. */
 declare const CLIENT: { readonly entry: { readonly script: string; readonly style: string }; readonly names: readonly string[] };
@@ -157,10 +157,10 @@ async function realSites(): Promise<RealSites | undefined> {
 }
 
 function samples(): Samples {
-  const unpacked = Object.entries(PACKED_SAMPLES).map(([name, files]) => {
-    const read = files.map(([path, contentType, base64]) => ({ path, contentType, bytes: base64ToUint8Array(base64) }));
+  const unpacked = Object.entries(PACKED_SAMPLES).map(([name, [title, packed]]) => {
+    const files = packed.map(([path, contentType, base64]) => ({ path, contentType, bytes: base64ToUint8Array(base64) }));
 
-    return [name, read] as const;
+    return [name, title === null ? { files } : { files, title }] as const;
   });
 
   return Object.fromEntries(unpacked);
