@@ -3,11 +3,13 @@
 import { describe, expect, test } from "bun:test";
 
 import type { SiteName } from "../../../src/names/names";
+import type { Login } from "../../../src/auth/logins";
 import type { DomainCheck } from "../../../src/records/domain-check";
 import type { SiteId } from "../../../src/sites/ids";
 import { auditLog, everLoggedIn } from "./audit-contract";
 import {
   ADA,
+  ADMIN,
   BO,
   BY_ADA,
   BY_BO_LATER,
@@ -183,11 +185,39 @@ function domainCheck(label: string, makeDatabase: DatabaseFactory): void {
       const kept = await database.readDomainCheck();
       await database.keepDomainCheck(second, { run: "repair", from: "setup" });
 
-      expect([before, kept, await database.readDomainCheck()]).toEqual([undefined, first, second]);
+      expect([before, kept, await database.readDomainCheck()]).toEqual([undefined, { ...first, users_changed_at: null }, { ...second, users_changed_at: null }]);
       expect((await auditTrail(database)).map(({ action, by, at, detail }) => ({ action, by, at, detail }))).toEqual([
         { action: "domain_synced", by: ADA, at: NOW, detail: { run: "check", from: "dashboard" } },
         { action: "domain_synced", by: ADA, at: NOW + 5, detail: { run: "repair", from: "setup" } },
       ]);
+    });
+
+    // Drift: the domain's login lets in the users of the last repair. A change that no row remembered, or that a check or an earlier repair cleared, would leave Domain saying nothing is left to do while a new user cannot log in.
+    test("a user added or removed waits until a repair that began no earlier settles it, and a login left as it was changes nothing", async () => {
+      const database = await opened(makeDatabase);
+      const [bo, cy] = ["bo@example.com" as Login, "cy@example.com" as Login];
+      const run = (kind: DomainCheck["run"]): DomainCheck => ({ ran_at: NOW + 9, by: ADMIN, run: kind, pieces: [] });
+      const waits = async (): Promise<number | null | undefined> => (await database.readDomainCheck())?.users_changed_at;
+      await database.initSettings(SETTINGS, BY_ADA);
+
+      await database.addLogin(bo, BY_ADA);
+      const beforeAnyRun = await waits();
+      await database.keepDomainCheck(run("check"), {});
+      const afterFirstRun = await waits();
+      await database.addLogin(cy, { by: ADMIN, at: NOW + 1 });
+      await database.addLogin(cy, { by: ADMIN, at: NOW + 2 });
+      const afterAdd = await waits();
+      await database.keepDomainCheck(run("check"), {});
+      await database.keepDomainCheck(run("repair"), {});
+      await database.keepDomainCheck(run("repair"), {}, NOW);
+      const afterRunsThatSettleNothing = await waits();
+      await database.keepDomainCheck(run("repair"), {}, NOW + 1);
+      const afterRepair = await waits();
+      await database.removeLogin(cy, { by: ADMIN, at: NOW + 3 });
+      await database.removeLogin(cy, { by: ADMIN, at: NOW + 4 });
+      await database.removeLogin(ADMIN, { by: ADMIN, at: NOW + 5 });
+
+      expect([beforeAnyRun, afterFirstRun, afterAdd, afterRunsThatSettleNothing, afterRepair, await waits()]).toEqual([undefined, null, NOW + 1, NOW + 1, null, NOW + 3]);
     });
   });
 }

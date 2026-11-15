@@ -12,7 +12,7 @@ import type { Login } from "../auth/logins";
 import type { TokenId, TokenRecord } from "../auth/tokens";
 import type { PublicName } from "../names/names";
 import { type AuditAction, type AuditEntry, auditFromRow } from "../records/audit";
-import type { DomainCheck } from "../records/domain-check";
+import type { DomainCheck, RememberedCheck } from "../records/domain-check";
 import { computerLoginFromRow } from "../records/computer-login";
 import { LOGIN } from "../records/fields";
 import { SETTING_CHANGES, SETTING_VALUES, type SettingValues } from "../records/settings";
@@ -64,7 +64,7 @@ import type {
   UploadRoom,
   UploadsPage,
 } from "./database";
-import { domainCheckAsked, domainCheckIn, domainCheckKept } from "./domain-check";
+import { domainCheckAsked, domainCheckIn, domainCheckKept, usersChanged } from "./domain-check";
 import type { SqlDriver, Statement, StatementResult } from "./driver";
 import { contentsValues, servedIn, versionsWithContents } from "./served";
 import { fileUnderKey, manifestFromText, manifestKey, manifestToText } from "./manifest";
@@ -982,14 +982,14 @@ export class SqlDatabase implements Database {
     await this.#driver.batch([built(BUILD.update(updateCheck).set({ auto }).where(eq(updateCheck.id, 1)))]);
   }
 
-  async readDomainCheck(): Promise<DomainCheck | undefined> {
+  async readDomainCheck(): Promise<RememberedCheck | undefined> {
     const [read] = await this.#driver.batch([domainCheckAsked()]);
 
     return domainCheckIn(read);
   }
 
-  async keepDomainCheck(check: DomainCheck, detail: Readonly<Record<string, unknown>>): Promise<void> {
-    await this.#driver.batch([domainCheckKept(check), auditPlain({ by: check.by, at: check.ran_at }, "domain_synced", detail)]);
+  async keepDomainCheck(check: DomainCheck, detail: Readonly<Record<string, unknown>>, settled?: number): Promise<void> {
+    await this.#driver.batch([domainCheckKept(check, settled), auditPlain({ by: check.by, at: check.ran_at }, "domain_synced", detail)]);
   }
 
   async readStorageWrites(day: string): Promise<{ readonly writes: number; readonly most: number } | undefined> {
@@ -1059,7 +1059,7 @@ export class SqlDatabase implements Database {
   async addLogin(login: Login, signed: Signed): Promise<{ readonly kind: "done" | "unchanged"; readonly values: SettingValues } | Refused<"not_set_up">> {
     const added = fragment<string>`json_insert(${settings.value}, '$.logins[#]', ${v.parse(LOGIN, login)})`;
     const add = BUILD.update(settings).set({ value: added, updated_at: signed.at }).where(and(eq(settings.id, 1), fragment`NOT ${isStoredLogin(login)}`));
-    const [updated, , read] = await this.#driver.batch([built(add), auditOfLogins(signed), READ_SETTINGS]);
+    const [updated, , , read] = await this.#driver.batch([built(add), auditOfLogins(signed), usersChanged(signed.at), READ_SETTINGS]);
     const values = settingsIn(read);
     if (values === undefined) return { kind: "not_set_up" };
 
@@ -1072,7 +1072,7 @@ export class SqlDatabase implements Database {
     // A login works when the login page is known to let it in: the signer's own email, or any login for a signer that is none.
     const keepsWorkingLogin = fragment`CASE WHEN ${isStoredLogin(signed.by)} THEN ${login} <> ${signed.by} ELSE json_array_length(${settings.value}, '$.logins') > 1 END`;
     const remove = BUILD.update(settings).set({ value: removed, updated_at: signed.at }).where(and(eq(settings.id, 1), isStoredLogin(login), keepsWorkingLogin));
-    const [updated, , read] = await this.#driver.batch([built(remove), auditOfLogins(signed), READ_SETTINGS]);
+    const [updated, , , read] = await this.#driver.batch([built(remove), auditOfLogins(signed), usersChanged(signed.at), READ_SETTINGS]);
     const values = settingsIn(read);
     if (values === undefined) return { kind: "not_set_up" };
 

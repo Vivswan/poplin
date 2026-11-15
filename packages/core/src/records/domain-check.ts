@@ -6,6 +6,7 @@
 //   unread        the run could not say: the token lacked a right, the piece failed, or the run stopped before it
 //
 // It is a memory of one run, never the state now, and it holds nothing of the token the run was given.
+// Beside the run the install keeps one fact of its own: when a user was last added or removed with no repair after it. The domain's login lets in the users of the last repair, so that change waits for one.
 
 import * as v from "valibot";
 
@@ -44,6 +45,9 @@ export const DOMAIN_CHECK = v.strictObject({
   run: v.picklist(["check", "repair"]),
   pieces: v.pipe(v.array(CHECKED_PIECE), v.maxLength(MOST_PIECES)),
 });
+
+/** The last run as the install reads it back, with the moment the users last changed and no repair carried it to the domain: `null` when none waits. */
+export type RememberedCheck = DomainCheck & { readonly users_changed_at: number | null };
 
 /** One remembered piece. */
 export type CheckedPiece = v.InferOutput<typeof CHECKED_PIECE>;

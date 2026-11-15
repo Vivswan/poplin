@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 
 import { domainState } from "../../src/actions/domain-state";
+import type { Login } from "../../src/auth/logins";
 import type { CheckedPiece, DomainCheck } from "../../src/records/domain-check";
 import { ADMIN, DAY, makeWorld, NOW } from "./support/actions-fixture";
 
@@ -60,7 +61,7 @@ describe("domainState", () => {
   ])("$name raises $note", async ({ found, note }) => {
     const { check, answer } = await stateAfter(pieces(found));
 
-    expect<unknown>(answer).toEqual({ ok: true, check, age: 0, stale: false, note });
+    expect<unknown>(answer).toEqual({ ok: true, check, age: 0, stale: false, waits: false, note });
   });
 
   // Drift: the record is a memory of one run. Shown as the state now a month on, it would alarm a person about a login they mended at the provider long ago, or keep quiet about its own age.
@@ -74,5 +75,28 @@ describe("domainState", () => {
     const { answer } = await stateAfter(pieces(found), ago);
 
     expect(answer).toMatchObject({ age: Math.max(0, ago), stale, note });
+  });
+
+  // Drift: a user added in Access cannot log in until a repair. Outranked by a rule piece, or dropped with an old run, the one line a person reads would send them to the wrong thing or to nothing.
+  test.each([
+    { name: "every piece ok", ago: 0, found: {}, note: { code: "users_changed", about: null } },
+    { name: "the login broken", ago: 0, found: { login: "broken" }, note: { code: "login_broken", about: "Login application" } },
+    { name: "a record broken", ago: 0, found: { record: "broken" }, note: { code: "sites_unreachable", about: "Record" } },
+    { name: "another piece broken", ago: 0, found: { bots: "broken" }, note: { code: "users_changed", about: null } },
+    { name: "a piece unread", ago: 0, found: { rule: "failed" }, note: { code: "users_changed", about: null } },
+    { name: "a year old, the login broken", ago: 365 * DAY, found: { login: "broken" }, note: { code: "users_changed", about: null } },
+    { name: "a year old, every piece ok", ago: 365 * DAY, found: {}, note: { code: "users_changed", about: null } },
+  ] as const)("users changed after a run with $name raise $note, until a repair settles them", async ({ ago, found, note }) => {
+    const world = await makeWorld();
+    const check: DomainCheck = { ran_at: NOW - ago, by: ADMIN.holder, run: "repair", pieces: pieces(found) };
+    await world.install.database.keepDomainCheck(check, {});
+    await world.install.database.addLogin("bo@example.com" as Login, { by: ADMIN.holder, at: NOW });
+    const waiting = await domainState(world.install, ADMIN);
+    await world.install.database.keepDomainCheck(check, {}, NOW);
+
+    expect<unknown>([waiting, await domainState(world.install, ADMIN)]).toMatchObject([
+      { check, waits: true, note },
+      { check, waits: false },
+    ]);
   });
 });

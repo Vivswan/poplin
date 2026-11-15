@@ -15,7 +15,7 @@
 // leftovers    the folders of removed sites, each until its files are gone from the bucket
 // sweep_place  one row while a walk of the scheduled sweep is under way: where its last run stopped
 // update_check one row once the install has asked for the newest release: when it asked, the newest it knows, since when, and its last try to start an update by itself
-// domain_check one row once the domain was checked or repaired: when, by whom, and how each piece stood
+// domain_check one row once the domain was checked or repaired: when, by whom, how each piece stood, and whether the users changed since
 
 import type { Step } from "./migrate";
 
@@ -201,14 +201,15 @@ CREATE TABLE update_check (
   CHECK ((news IS NULL) = (seen_at IS NULL))
 ) STRICT`;
 
-/** The last check or repair of the domain: when it ran, who ran it, which of the two it was, and its pieces as a JSON list. Each run replaces the row. */
+/** The last check or repair of the domain: when it ran, who ran it, which of the two it was, and its pieces as a JSON list. Each run replaces the row. `users_changed_at`: when a user was last added or removed with no repair after it. */
 const DOMAIN_CHECK = `
 CREATE TABLE domain_check (
   id INTEGER NOT NULL PRIMARY KEY CHECK (id = 1),
   ran_at INTEGER NOT NULL,
   ran_by TEXT NOT NULL,
   run TEXT NOT NULL CHECK (run IN ('check', 'repair')),
-  pieces TEXT NOT NULL CHECK (json_valid(pieces) AND json_type(pieces) = 'array')
+  pieces TEXT NOT NULL CHECK (json_valid(pieces) AND json_type(pieces) = 'array'),
+  users_changed_at INTEGER
 ) STRICT`;
 
 /** A site that is removed leaves its folder to be emptied, whatever removed it. */

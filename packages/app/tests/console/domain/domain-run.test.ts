@@ -46,6 +46,7 @@ test("a run is kept as the last check of the domain: when, by whom, which run, a
       ran_at: opened.install.now(),
       by: opened.owner,
       run: "repair",
+      users_changed_at: null,
       pieces: [
         { piece: "Record", detail: "every site", part: "reach", state: "ok" },
         { piece: "Record", detail: "the dashboard", part: "reach", state: "ok" },

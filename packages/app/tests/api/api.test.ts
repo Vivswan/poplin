@@ -331,6 +331,7 @@ describe("createApi", () => {
       check: { ran_at: NOW, by: ada, run: "check", pieces: [piece] },
       age: 0,
       stale: false,
+      waits: false,
       note: { code: "login_broken", about: "Login" },
     });
     expect(part(await done((api) => api.sites[":site"].$delete({ param: { site: moved }, query: { forever: "true" } })), "before").id).toBe(moved);

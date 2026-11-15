@@ -182,6 +182,7 @@ test("the token of the install's own account is answered the reading and the log
     ran_at: opened.install.now(),
     by: opened.owner,
     run: "repair",
+    users_changed_at: null,
     pieces: [{ piece: "DNS record", detail: "poplin.example.com", part: "reach", state: "ok" }],
   });
   expect((await opened.audit())[0]).toMatchObject({ action: "domain_synced", by: opened.owner, detail: { run: "repair", from: "setup", created: ["DNS record: poplin.example.com"] } });

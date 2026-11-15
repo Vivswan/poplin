@@ -10,7 +10,7 @@ import type { Login } from "../auth/logins";
 import type { EndedToken, TokenId, TokenRecord } from "../auth/tokens";
 import type { PublicName, SiteName } from "../names/names";
 import type { AuditAction, AuditEntry } from "../records/audit";
-import type { DomainCheck } from "../records/domain-check";
+import type { DomainCheck, RememberedCheck } from "../records/domain-check";
 import type { Holder } from "../records/fields";
 import type { SiteId } from "../sites/ids";
 import type { UpdateAddress } from "../records/secret";
@@ -683,17 +683,18 @@ export interface Database {
    */
   keepAutoStart(start: AutoStart): Promise<void>;
 
-  /** The last check or repair of the domain: `undefined` before any run was kept, and for a kept run that cannot be read. */
-  readDomainCheck(): Promise<DomainCheck | undefined>;
+  /** The last check or repair of the domain, and when the users last changed with no repair after it: `undefined` before any run was kept, and for a kept run that cannot be read. */
+  readDomainCheck(): Promise<RememberedCheck | undefined>;
 
   /**
    * Keep a check or repair of the domain in place of the one kept before, with one `domain_synced` audit entry, in one step: two rows written, however many pieces the run holds.
    *
    * @param check - the run; its `by` and `ran_at` sign the audit entry
    * @param detail - what the audit entry says of the run
+   * @param settled - for a repair that left the domain's login standing, the moment it began: a change of the users up to then waits for a repair no more. Left out, a change that waits keeps waiting
    * @throws {Error} a value breaks its rule
    */
-  keepDomainCheck(check: DomainCheck, detail: Readonly<Record<string, unknown>>): Promise<void>;
+  keepDomainCheck(check: DomainCheck, detail: Readonly<Record<string, unknown>>, settled?: number): Promise<void>;
 
   /** The install's settings, `undefined` before setup stored them. */
   readSettings(): Promise<SettingValues | undefined>;
@@ -718,6 +719,7 @@ export interface Database {
 
   /**
    * Let one more email log in. It is one step that reads no list first: of logins added and removed at the same moment, each change lands. It writes one `settings_changed` audit entry, which holds the logins after it.
+   * An install that keeps a check of its domain remembers, in the same step, that the users changed: one more row written.
    *
    * @returns `unchanged` for an email that already is a login, which writes nothing
    * @throws {Error} the login is no email in its normal form
@@ -727,7 +729,7 @@ export interface Database {
   /**
    * Stop one email from logging in, in the same one step, and only while a login that works stays: the signer's own email when it is a login, and any login at all when the signer is none.
    *
-   * It writes one `settings_changed` audit entry, which holds the logins after it.
+   * It writes one `settings_changed` audit entry, which holds the logins after it, and an install that keeps a check of its domain remembers that the users changed.
    *
    * @returns `unchanged` for an email that is no login, and `no_working_login` for the signer's own email or the last login there is; neither writes anything
    * @throws {Error} the login is no email in its normal form

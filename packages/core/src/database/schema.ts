@@ -293,7 +293,7 @@ export const updateCheck = sqliteTable(
   ],
 );
 
-/** The last check or repair of the domain: when it ran, who ran it, which of the two it was, and its pieces as a JSON list. Each run replaces the row. */
+/** The last check or repair of the domain: when it ran, who ran it, which of the two it was, and its pieces as a JSON list. Each run replaces the row. `users_changed_at`: when a user was last added or removed with no repair after it. */
 export const domainCheck = sqliteTable(
   "domain_check",
   {
@@ -302,6 +302,7 @@ export const domainCheck = sqliteTable(
     ran_by: text().notNull(),
     run: text({ enum: ["check", "repair"] }).notNull(),
     pieces: text().notNull(),
+    users_changed_at: integer(),
   },
   (table) => [
     check("domain_check_one_row", sql`${table.id} = 1`),
