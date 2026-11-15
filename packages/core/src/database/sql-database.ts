@@ -1138,10 +1138,11 @@ export class SqlDatabase implements Database {
     return settingsIn(read);
   }
 
-  async readFrame(): Promise<FrameRecords> {
-    const [stored, address, domain, update] = await this.#driver.batch([READ_SETTINGS, READ_UPDATE_ADDRESS, domainCheckAsked(), READ_UPDATE_CHECK]);
+  async readFrame(now: number): Promise<FrameRecords> {
+    const [yesterday] = daysUpTo(dayOf(now), 2);
+    const [stored, address, domain, update, noted] = await this.#driver.batch([READ_SETTINGS, READ_UPDATE_ADDRESS, domainCheckAsked(), READ_UPDATE_CHECK, problemsAsked(yesterday ?? dayOf(now))]);
 
-    return { settings: settingsIn(stored), updateAddress: updateAddressIn(address), domainCheck: domainCheckIn(domain), updateCheck: updateCheckIn(update) };
+    return { settings: settingsIn(stored), updateAddress: updateAddressIn(address), domainCheck: domainCheckIn(domain), updateCheck: updateCheckIn(update), problems: problemsIn(noted) };
   }
 
   async initSettings(values: SettingValues, signed: Signed): Promise<{ readonly kind: "done" | "already_set"; readonly values: SettingValues }> {

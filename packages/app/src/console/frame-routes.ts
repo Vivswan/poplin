@@ -12,7 +12,7 @@ import type { Actor } from "@poplin/core/src/auth/scopes";
 import { Hono } from "hono";
 
 import { NOTHING, refused, refuseInvalid, type Shared } from "./data";
-import { type Marked, markedOf, NOTHING_MARKED } from "./problems-routes";
+import { type Marked, markedIn, NOTHING_MARKED } from "./problems-routes";
 
 /** What the side says in a few words when a piece of the domain needs work, when the users changed since the last repair, and when the last check is only old. */
 const [NEEDS_FIXING, USERS_CHANGED, CHECK_IS_OLD] = ["Domain needs fixing", "Users changed", "Domain check is old"];
@@ -66,21 +66,19 @@ function domainNoteOf(state: ReturnType<typeof domainStateOf>): DomainNote | nul
 /**
  * Read what the frame shows, as one question to the database. It asks the provider nothing.
  *
- * It costs one read of the database more than its parts did before the problems: their list of the last two days.
- *
  * @returns the frame of an install whose settings cannot be read has no release, no start, no note, and nothing marked
  */
 export async function frameOf(install: Install, actor: Actor, asked: Asked): Promise<Frame> {
   if (actor.scope !== "admin") return NO_FRAME;
 
-  const read = await install.database.readFrame();
+  const read = await install.database.readFrame(install.now());
   // A request that brought the settings answers all it shows from those.
   const settings = install.knownSettings ?? read.settings;
   if (settings === undefined) return NO_FRAME;
 
   const domainNote = asked.domain ? domainNoteOf(domainStateOf(read.domainCheck, install.now())) : null;
   // What the domain needs marks its screen as a problem there does. A check that is only old is a reminder, and marks nothing.
-  const marked = await markedOf(install, actor, domainNote === null || domainNote.quiet ? null : domainNote.sentence);
+  const marked = markedIn(read.problems, install.now(), { screen: asked.domain, says: domainNote === null || domainNote.quiet ? null : domainNote.sentence });
 
   return { update: updateIn({ settings, updateCheck: read.updateCheck }, asked.version) ?? null, starts: read.updateAddress !== undefined, domainNote, ...marked };
 }
