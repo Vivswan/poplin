@@ -11,7 +11,7 @@ import type { Sort } from "@/table/data-table";
 export const ACCESS_KEY = ["access"] as const;
 
 /** The waiting logins as the server answers them: the newest, without their codes, and how many more wait. */
-type Waiting = InferResponseType<typeof api.logins.$get, 200>;
+export type Waiting = InferResponseType<typeof api.logins.$get, 200>;
 
 /** One waiting login of the list. Times are milliseconds since the epoch. */
 export type WaitingLogin = Waiting["logins"][number];
@@ -20,7 +20,7 @@ export type WaitingLogin = Waiting["logins"][number];
 export type Review = InferResponseType<(typeof api.logins)[":login"]["$get"], 200>["login"];
 
 /** The people who can log in, and which one is logged in here. */
-type People = InferResponseType<typeof api.people.$get, 200>;
+export type People = InferResponseType<typeof api.people.$get, 200>;
 
 /** One token as the server answers it: never its value. */
 export type Token = InferResponseType<typeof api.tokens.$get, 200>["tokens"][number];
@@ -59,22 +59,29 @@ export function useReview(asked: Asked | undefined): UseQueryResult<Review> {
   });
 }
 
-/** Read the people who can log in. */
-export function usePeople(): UseQueryResult<People> {
-  return useQuery({ queryKey: [...ACCESS_KEY, "people"], queryFn: () => answerOf(api.people.$get()) });
+/**
+ * Read the people who can log in.
+ *
+ * @param shown - `false` reads nothing: the people are read where their tab is shown
+ */
+export function usePeople(shown: boolean): UseQueryResult<People> {
+  return useQuery({ queryKey: [...ACCESS_KEY, "people"], queryFn: () => answerOf(api.people.$get()), enabled: shown });
 }
 
 /**
  * Read the tokens in the order the address asks for.
  *
  * The tokens before stay shown while the next order is on its way, so the table does not empty at a press on a heading.
+ *
+ * @param shown - `false` reads nothing: the tokens are read where their tab is shown
  */
-export function useTokens(sort: Sort): UseQueryResult<readonly Token[]> {
+export function useTokens(sort: Sort, shown: boolean): UseQueryResult<readonly Token[]> {
   const query = { sort: sort.key as "name" | "allowed", dir: sort.descending ? ("desc" as const) : ("asc" as const) };
 
   return useQuery({
     queryKey: [...ACCESS_KEY, "tokens", query],
     queryFn: async () => (await answerOf(api.tokens.$get({ query }))).tokens,
     placeholderData: keepPreviousData,
+    enabled: shown,
   });
 }

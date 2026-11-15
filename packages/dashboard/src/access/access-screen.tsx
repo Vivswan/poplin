@@ -1,4 +1,4 @@
-// The Access screen: the logins that wait to be allowed, the people who can log in, and the computers and agents that publish with a token. A waiting login is reviewed in a dialog over the lists.
+// The Access screen: two tabs, the people who can log in and the tokens that computers and agents publish with, each one list. A waiting login stands among the tokens and is reviewed in a dialog over them.
 
 import { ALLOW_PAGE } from "@poplin/core/src/api/routes";
 import { useQueryClient } from "@tanstack/react-query";
@@ -6,31 +6,41 @@ import { useMatches, useNavigate, useParams } from "@tanstack/react-router";
 import { type ReactNode, useMemo, useRef } from "react";
 
 import { accessActions } from "@/access/access-actions";
-import { ACCESS_KEY, useReview, useWaiting } from "@/access/access-queries";
-import { ACCESS_PATH, askedIn, tokenSortOf, tokenSortQuery } from "@/access/access-values";
-import { PeopleList } from "@/access/people-list";
+import { ACCESS_KEY, usePeople, useReview, useTokens, useWaiting } from "@/access/access-queries";
+import { askedIn, TOKENS_PATH, PEOPLE_PATH, tokenSortOf, tokenSortQuery } from "@/access/access-values";
+import { PeopleTab } from "@/access/people-tab";
 import { ReviewDialog } from "@/access/review-dialog";
-import { TokensTable } from "@/access/tokens-table";
-import { WaitingLogins } from "@/access/waiting-logins";
+import { TokensTab } from "@/access/tokens-tab";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { searchOf, useAddressQuery } from "@/lib/address";
+import { ScreenTabs } from "@/shared/screen-tabs";
 import { AppShell } from "@/shell/app-shell";
 
-/** The keys of the address the lists keep while a review opens and closes: the order of the tokens. */
+/** The keys of the address the tokens keep while a review opens and closes: their order. */
 const KEPT_KEYS = ["sort", "dir"] as const;
 
-/** The query of the lists alone, without what a review was opened with. */
+/** The path of each tab. */
+const TAB_PATHS = { people: PEOPLE_PATH, tokens: TOKENS_PATH } as const;
+
+/** The tabs of the screen, in the order shown. */
+const TABS = [
+  { id: "people", label: "People" },
+  { id: "tokens", label: "Tokens" },
+] as const;
+
+/** The query of the tokens alone, without what a review was opened with. */
 function listQuery(query: URLSearchParams): URLSearchParams {
   return new URLSearchParams(KEPT_KEYS.flatMap((key) => (query.has(key) ? [[key, query.get(key) ?? ""]] : [])));
 }
 
-/** Draw the Access screen for the address: the lists, and the review the path or a terminal's code names. */
+/** Draw the Access screen for the address: the tab the path names, and the review the path or a terminal's code names, over the tokens. */
 export function AccessScreen(): ReactNode {
   const navigate = useNavigate();
   const query = useAddressQuery();
-  const allows = useMatches({ select: (matches) => matches.some((match) => match.fullPath === ALLOW_PAGE) });
+  const paths = useMatches({ select: (matches) => matches.map((match) => match.fullPath as string) });
+  const tab = paths.includes(PEOPLE_PATH) ? "people" : "tokens";
   const { login } = useParams({ strict: false });
-  const asked = askedIn(allows, query, login);
+  const asked = askedIn(paths.includes(ALLOW_PAGE), query, login);
   const client = useQueryClient();
   // The login under review is not read again after a change: a read by code is a counted try, and the review closes anyway.
   const actions = useMemo(
@@ -40,33 +50,48 @@ export function AccessScreen(): ReactNode {
   const review = useReview(asked);
   // A code that names no login tells nothing of the logins that do wait: they are neither read nor drawn from an earlier read.
   const listed = asked?.by !== "code" || review.data !== undefined;
-  const waiting = useWaiting(listed);
+  const waiting = useWaiting(listed && tab === "tokens");
+  const sort = tokenSortOf(query);
+  const people = usePeople(tab === "people");
+  const tokens = useTokens(sort, tab === "tokens");
   const kept = listQuery(query);
   const opener = useRef<HTMLElement | null>(null);
   const openReview = (id: string): void => {
     opener.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     void navigate({ to: "/tokens/review/$login", params: { login: id }, search: searchOf(kept) });
   };
-  const sort = tokenSortOf(query);
 
   return (
     <AppShell current="access" heading="Access">
-      <div className="flex min-h-0 flex-1 flex-col gap-6 overflow-y-auto pb-8">
+      <div className="flex min-h-0 flex-1 flex-col border-t">
+        <ScreenTabs label="Who has access" tabs={TABS} active={tab} onChoose={(chosen) => void navigate({ to: TAB_PATHS[chosen] })} />
         {asked !== undefined && review.error !== null ? (
-          <div className="px-6 max-md:px-4">
+          <div className="px-6 pt-3 max-md:px-4">
             <Alert role="status">
               <AlertDescription>{review.error.message}</AlertDescription>
             </Alert>
           </div>
         ) : null}
-        {listed ? <WaitingLogins waiting={waiting.data} failure={waiting.error?.message} onReview={(login) => openReview(login.id)} /> : null}
-        <PeopleList actions={actions} />
-        <TokensTable actions={actions} sort={sort} onSort={(next) => void navigate({ to: ACCESS_PATH, search: searchOf(tokenSortQuery(next)) })} />
+        {tab === "people" ? (
+          <PeopleTab people={people.data} failure={people.error?.message} actions={actions} onRetry={() => void people.refetch()} />
+        ) : (
+          <TokensTab
+            tokens={tokens.data}
+            waiting={listed ? waiting.data : undefined}
+            failure={tokens.error?.message}
+            waitingFailure={listed ? waiting.error?.message : undefined}
+            sort={sort}
+            onSort={(next) => void navigate({ to: TOKENS_PATH, search: searchOf(tokenSortQuery(next)) })}
+            onReview={(login) => openReview(login.id)}
+            actions={actions}
+            onRetry={() => void tokens.refetch()}
+          />
+        )}
       </div>
       <ReviewDialog
         login={asked === undefined ? undefined : review.data}
         actions={actions}
-        onClose={() => void navigate({ to: ACCESS_PATH, search: searchOf(kept), replace: true })}
+        onClose={() => void navigate({ to: TOKENS_PATH, search: searchOf(kept), replace: true })}
         returnTo={opener}
       />
     </AppShell>

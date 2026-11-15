@@ -1,12 +1,15 @@
-// What the Access screen reads from its address and how it writes its values for a person: what a token may change, a computer's name, the order of the tokens, and which login is under review.
+// What the Access screen reads from its address and how it writes its values for a person: which tab is shown, what a token may change, a computer's name, the order of the tokens, and which login is under review.
 
 import { CODE_KEY } from "@poplin/core/src/api/routes";
 
 import type { Sort } from "@/table/data-table";
 import { firstSort, type Orders, sortIn, sortKeys } from "@/table/sort";
 
-/** The path of the Access screen. */
-export const ACCESS_PATH = "/tokens";
+/** The path of the Access screen, which shows the people. */
+export const PEOPLE_PATH = "/tokens";
+
+/** The path of the tokens. A review is drawn over them. */
+export const TOKENS_PATH = "/tokens/list";
 
 /** What a token of each scope may change, as the screen says it. */
 export const SCOPE_WORDS = { admin: "Everything", publisher: "Own sites only" } as const;

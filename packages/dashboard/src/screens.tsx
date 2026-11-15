@@ -31,6 +31,7 @@ const ROUTES = ROOT.addChildren([
   SITES.addChildren([createRoute({ getParentRoute: () => SITES, path: "/" }), createRoute({ getParentRoute: () => SITES, path: "/sites/$label" })]),
   ACCESS.addChildren([
     createRoute({ getParentRoute: () => ACCESS, path: "/tokens" }),
+    createRoute({ getParentRoute: () => ACCESS, path: "/tokens/list" }),
     createRoute({ getParentRoute: () => ACCESS, path: "/tokens/review/$login" }),
     createRoute({ getParentRoute: () => ACCESS, path: ALLOW_PAGE }),
   ]),

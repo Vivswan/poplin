@@ -69,7 +69,8 @@ describe("an address of the console", () => {
     for (const address of [
       "/?access=public&q=a+b",
       "/sites/a%20site?sort=name",
-      "/tokens?sort=name&dir=desc",
+      "/tokens",
+      "/tokens/list?sort=name&dir=desc",
       "/tokens/review/login-1",
       "/tokens/allow?code=ABCD-1234",
       "/activity?kind=sites",
@@ -87,7 +88,8 @@ describe("an address of the console", () => {
     expect(drawn).toEqual({
       "/?access=public&q=a+b": ["Sites", "Sites", ["/sites?access=public&q=a+b"]],
       "/sites/a%20site?sort=name": ["Sites", "Sites", ["/sites/a%20site", "/sites?sort=name&dir=asc"]],
-      "/tokens?sort=name&dir=desc": ["Access", "Access", ["/logins", "/people", "/tokens?sort=name&dir=desc"]],
+      "/tokens": ["Access", "Access", ["/people"]],
+      "/tokens/list?sort=name&dir=desc": ["Access", "Access", ["/logins", "/tokens?sort=name&dir=desc"]],
       "/tokens/review/login-1": ["Access", "Access", ["/logins/login-1", "/tokens?sort=allowed&dir=desc"]],
       "/tokens/allow?code=ABCD-1234": ["Access", "Access", ["/logins/find?code=ABCD-1234"]],
       "/activity?kind=sites": ["Activity", "Activity", ["/activity?kind=sites"]],

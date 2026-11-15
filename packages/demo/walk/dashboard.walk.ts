@@ -19,7 +19,7 @@ const SAMPLE = { site: "pricing", person: "jonas@example.com", token: "design-la
 /** Where the notes of a newer version are read: the page of the project's releases. */
 const RELEASES = "https://github.com/Vivswan/poplin/releases";
 
-/** An email typed into the field that adds a person, and never sent. */
+/** An email typed into the dialog that adds a person, and never sent. */
 const TYPED_EMAIL = "walk@example.com";
 
 /** The kinds of file whose refusal breaks a screen. */
@@ -44,7 +44,12 @@ const STOPS: readonly Stop[] = [
   {
     name: "Access, from the side",
     open: (page) => toSection(page, "Access"),
-    shows: (page, wide) => [screenHeading(page, "Access"), rows(page, wide, "People"), rows(page, wide, "Computers and agents")],
+    shows: (page, wide) => [screenHeading(page, "Access"), page.getByRole("tab", { name: "People", selected: true }), rows(page, wide, "People")],
+  },
+  {
+    name: "Tokens, the second tab of Access",
+    open: (page) => page.getByRole("tab", { name: "Tokens", exact: true }).click(),
+    shows: (page, wide) => [screenHeading(page, "Access"), page.getByRole("tab", { name: "Tokens", selected: true }), rows(page, wide, "Tokens")],
   },
   {
     name: "Activity, from the side",
@@ -108,13 +113,13 @@ const STOPS: readonly Stop[] = [
   },
   {
     name: "Rename, from a row's menu",
-    open: (page) => fromRowMenu(page, "Rename"),
+    open: (page) => fromRowMenu(page, SAMPLE.site, "Rename"),
     shows: (page) => [page.getByRole("dialog", { name: "Rename the site", exact: true }).getByRole("textbox", { name: "Name", exact: true })],
     close: cancelDialog,
   },
   {
     name: "New link, from a row's menu",
-    open: (page) => fromRowMenu(page, "New link"),
+    open: (page) => fromRowMenu(page, SAMPLE.site, "New link"),
     shows: (page) => [question(page, "Make a new link?")],
     close: leaveBy("Cancel"),
   },
@@ -176,23 +181,39 @@ const STOPS: readonly Stop[] = [
     close: leaveBy("Cancel"),
   },
   {
-    name: "the field that adds a person, with an email typed",
+    name: "the dialog that adds a person, with an email typed",
     open: async (page) => {
       await toSection(page, "Access");
-      await page.getByRole("textbox", { name: "Email of the person to add", exact: true }).fill(TYPED_EMAIL);
+      await page.getByRole("button", { name: "Add a person", exact: true }).click();
+      await addPerson(page).getByRole("textbox", { name: "Email", exact: true }).fill(TYPED_EMAIL);
     },
-    shows: (page) => [page.getByRole("button", { name: "Add a person", exact: true, disabled: false })],
-    close: (page) => page.getByRole("textbox", { name: "Email of the person to add", exact: true }).fill(""),
+    shows: (page) => [addPerson(page).getByRole("button", { name: "Add a person", exact: true, disabled: false })],
+    close: (page) => addPerson(page).getByRole("button", { name: "Cancel", exact: true }).click(),
+  },
+  {
+    name: "the question before everyone is signed out, from the people",
+    open: (page) => page.getByRole("button", { name: "Sign everyone out", exact: true }).click(),
+    shows: (page) => [question(page, "Sign everyone out?")],
+    close: leaveBy("Cancel"),
   },
   {
     name: "the question before a person is removed",
-    open: (page) => page.getByRole("button", { name: `Remove ${SAMPLE.person}`, exact: true }).click(),
+    open: (page) => fromRowMenu(page, SAMPLE.person, "Remove"),
     shows: (page) => [question(page, `Remove ${SAMPLE.person}?`)],
     close: leaveBy("Keep"),
   },
   {
+    name: "how a token is added, from the tokens",
+    open: async (page) => {
+      await page.getByRole("tab", { name: "Tokens", exact: true }).click();
+      await page.getByRole("button", { name: "Add a token", exact: true }).click();
+    },
+    shows: (page) => [page.getByRole("dialog", { name: "Add a token", exact: true }).getByRole("button", { name: "Copy the command", exact: true })],
+    close: pressEscape,
+  },
+  {
     name: "the question before a token is removed",
-    open: (page) => page.getByRole("button", { name: `Remove ${SAMPLE.token}`, exact: true }).click(),
+    open: (page) => fromRowMenu(page, SAMPLE.token, "Remove"),
     shows: (page) => [question(page, `Remove ${SAMPLE.token}?`)],
     close: leaveBy("Keep"),
   },
@@ -254,10 +275,15 @@ async function narrowSites(page: Page, filter: string): Promise<void> {
   await page.getByRole("option", { name: filter, exact: true }).click();
 }
 
-/** Press one entry of a site's row menu. */
-async function fromRowMenu(page: Page, entry: string): Promise<void> {
-  await page.getByRole("button", { name: `More for ${SAMPLE.site}`, exact: true }).click();
+/** Press one entry of the menu at the end of a row, which is named after what the row holds. */
+async function fromRowMenu(page: Page, row: string, entry: string): Promise<void> {
+  await page.getByRole("button", { name: `More for ${row}`, exact: true }).click();
   await page.getByRole("menuitem", { name: entry, exact: true }).click();
+}
+
+/** The dialog that adds a person. */
+function addPerson(page: Page): Locator {
+  return page.getByRole("dialog", { name: "Add a person", exact: true });
 }
 
 /** The panel of the sample site: beside the table on a wide screen, over the list on a narrow one. */

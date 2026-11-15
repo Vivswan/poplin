@@ -12,6 +12,7 @@ const POLICY =
 const SCREENS = [
   { path: "", heading: "Sites", holds: { role: "table", name: "Sites" } },
   { path: "tokens", heading: "Access", holds: { role: "table", name: "People" } },
+  { path: "tokens/list", heading: "Access", holds: { role: "table", name: "Tokens" } },
   { path: "activity", heading: "Activity", holds: { role: "table", name: "Activity" } },
   { path: "usage", heading: "Usage", holds: { role: "table", name: "Usage" } },
   { path: "settings", heading: "Settings", holds: { role: "form", name: "Settings" } },

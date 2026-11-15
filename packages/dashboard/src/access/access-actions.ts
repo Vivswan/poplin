@@ -1,4 +1,4 @@
-// What is done on the Access screen: a waiting login is allowed or denied, a person is added or taken out, a token is removed. Each change is sent and its result said in one line.
+// What is done on the Access screen: a waiting login is allowed or denied, a person is added or taken out, a token is removed, every browser is signed out. Each change is sent and its result said in one line.
 
 import type { Review, Token } from "@/access/access-queries";
 import { answerOf, api, Refused } from "@/lib/api";
@@ -6,8 +6,8 @@ import { sayDone, sayRefused, send } from "@/lib/notify";
 
 /** What each decision says once it is done. */
 const DECIDED = {
-  allowed: "Allowed. The computer collects its token within a few seconds, and then shows under Computers and agents.",
-  lowered: "Allowed, for its own sites only. The computer collects its token within a few seconds, and then shows under Computers and agents.",
+  allowed: "Allowed. Its token shows here in a few seconds.",
+  lowered: "Allowed, for its own sites only. Its token shows here in a few seconds.",
   denied: "Denied. The computer was not logged in.",
 } as const;
 
@@ -16,7 +16,7 @@ const COLLECTED_AFTER_MS = 6000;
 
 /** What a person's change says once it is done. */
 const PEOPLE_SAID = {
-  added: "Added. One more step before this person can log in: open Settings, then Domain, paste a token, and press Repair.",
+  added: "Added. Next, open Domain and press Repair.",
   removed: "Removed. That person can no longer log in.",
   gone: "That person was removed already.",
 } as const;
@@ -54,6 +54,9 @@ export interface AccessActions {
 
   /** Copies the command that logs a computer in, and says so. */
   readonly copyCommand: (command: string) => Promise<void>;
+
+  /** Ends every session of the dashboard, this one included: the page is then asked for again, which leads to the login. */
+  readonly signEveryoneOut: () => Promise<void>;
 }
 
 /** The line of a done decision: a computer that asked for everything and got less is told apart. */
@@ -143,6 +146,10 @@ export function accessActions(onChanged: () => void): AccessActions {
       } catch {
         sayRefused("Not copied. Select the command and copy it.");
       }
+    },
+    signEveryoneOut: async () => {
+      const done = await send(api.settings["sign-everyone-out"].$post({ json: {} }));
+      if (done !== undefined) window.location.reload();
     },
   };
 }

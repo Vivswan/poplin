@@ -18,8 +18,7 @@ import { PanelFact, PanelFacts } from "@/shared/side-panel";
 const CHOICES = ["admin", "publisher"] as const;
 
 /** What the choice of less means, for a computer that asked for everything. */
-const ASKED_EVERYTHING =
-  "It asked for everything: every site, the settings, and who has access. With own sites only it publishes, and changes only the sites it published.";
+const ASKED_EVERYTHING = "Everything means every site, the settings, and who has access.";
 
 /** What a review is drawn from. */
 interface ReviewDialogProps {
