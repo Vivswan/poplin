@@ -18,6 +18,7 @@ import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectVa
 import { expiryOf, shortMoment, wholeMoment } from "@/lib/sites";
 import { Confirm, type Question } from "@/shared/confirm";
 import { IconButton } from "@/shared/icon-button";
+import type { Fitted } from "@/table/column-widths";
 import { type ColumnSpec, DataTable, type Sort } from "@/table/data-table";
 import { useTableLayout } from "@/table/layout";
 
@@ -166,15 +167,16 @@ function OrderSelect({ sort, onSort }: Pick<TokensTabProps, "sort" | "onSort">):
   );
 }
 
-/** What a phone says under a row's name: what a waiting login asks for, or what a token may change, since when, and until when. */
+/** What a phone says under a row's name, in the words of the table's headings: what the row can change, and for a token since when, and until when. */
 function PhoneFacts({ row }: { readonly row: TokenRow }): ReactNode {
-  if (row.kind === "waiting") return <span className="truncate text-[13px] text-muted-foreground">Asks for: {SCOPE_WORDS[row.scope]}</span>;
+  const scope = <span className="truncate text-[13px] text-muted-foreground">Can change: {SCOPE_WORDS[row.scope]}</span>;
+  if (row.kind === "waiting") return scope;
 
   const { token } = row;
 
   return (
     <>
-      <span className="truncate text-[13px] text-muted-foreground">{SCOPE_WORDS[token.scope]}</span>
+      {scope}
       <span className="truncate text-[13px] text-muted-foreground">
         Allowed <Allowed token={token} />, {token.expires === "never" ? "never runs out" : `runs out ${expiryOf(token.expires)}`}
       </span>
@@ -215,19 +217,26 @@ function leavingQuestion(token: Token | undefined): Question | undefined {
 /** Draw the Tokens tab. */
 export function TokensTab({ tokens, ended, waiting, failure, waitingFailure, sort, onSort, onReview, actions, onRetry }: TokensTabProps): ReactNode {
   const [leaving, setLeaving] = useState<Token>();
+  // The list and the removed tokens under it stand in the same columns: each is told what the other measured.
+  const [fitted, setFitted] = useState<Fitted>();
+  const [removedFitted, setRemovedFitted] = useState<Fitted>();
   const layout = useTableLayout("tokens", COLUMNS);
   const rows = useMemo(() => tokenRows(waiting?.logins ?? [], tokens ?? []), [waiting, tokens]);
   // A read of the tokens that was refused does not hide the logins that wait: they are listed, and the refusal is said under them.
   const unreadTokens = tokens === undefined ? failure : undefined;
   const after = afterRows(waiting?.more ?? 0, unreadTokens ?? waitingFailure);
   const names = useMemo(() => namesOf(tokens ?? [], ended), [tokens, ended]);
-  const removed = ended === undefined || ended.tokens.length === 0 ? undefined : <RemovedTokens ended={ended} names={names} />;
-  const afterAll = after === undefined && removed === undefined ? undefined : (
-    <>
-      {after}
-      {removed}
-    </>
-  );
+  const none = ended === undefined || ended.tokens.length === 0;
+  const removed = none ? undefined : <RemovedTokens ended={ended} names={names} layout={layout} />;
+  // Under the table the removed tokens are a second table in the same columns; under a phone's list, and where no list is, they stand alone.
+  const paired = none ? undefined : <RemovedTokens ended={ended} names={names} layout={layout} alongside={fitted} endWidth={ACTION_WIDTH} onFitted={setRemovedFitted} />;
+  const afterAll = (under: ReactNode): ReactNode =>
+    after === undefined && under === undefined ? undefined : (
+      <>
+        {after}
+        {under}
+      </>
+    );
 
   const actionOf = (row: TokenRow): ReactNode => {
     const { shown } = computerName(row.name);
@@ -281,7 +290,9 @@ export function TokensTab({ tokens, ended, waiting, failure, waitingFailure, sor
             actions={actionOf}
             actionsWidth={ACTION_WIDTH}
             loading={tokens === undefined && rows.length === 0}
-            after={afterAll}
+            after={afterAll(paired)}
+            alongside={removedFitted}
+            onFitted={setFitted}
           />
         </div>
         <div className="line-room min-h-0 flex-1 overflow-y-auto md:hidden">
@@ -293,7 +304,7 @@ export function TokensTab({ tokens, ended, waiting, failure, waitingFailure, sor
                     <span className="truncate">
                       <Name row={row} />
                     </span>
-                    {row.kind === "waiting" ? <WaitingMark login={row.login} /> : null}
+                    {row.kind === "waiting" ? <WaitingMark login={row.login} /> : <span className="shrink-0 text-[13px] text-muted-foreground">Working</span>}
                   </span>
                   <PhoneFacts row={row} />
                 </div>
@@ -301,7 +312,7 @@ export function TokensTab({ tokens, ended, waiting, failure, waitingFailure, sor
               </li>
             ))}
           </ul>
-          {afterAll}
+          {afterAll(removed)}
         </div>
       </>
     );

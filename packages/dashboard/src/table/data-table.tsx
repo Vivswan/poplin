@@ -28,7 +28,7 @@ import {
 } from "@tanstack/react-table";
 import { cn } from "cn";
 import { ArrowDownIcon, ArrowUpIcon, ChevronsUpDownIcon, Columns3Icon, GripVerticalIcon } from "lucide-react";
-import { type FocusEvent, type KeyboardEvent, type MouseEvent, type PointerEventHandler, type ReactNode, useMemo, useState } from "react";
+import { type FocusEvent, type KeyboardEvent, type MouseEvent, type PointerEventHandler, type ReactNode, useEffect, useMemo, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -43,9 +43,9 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
 import { Skeleton } from "@/components/ui/skeleton";
-import { type ColumnWidths, NARROWEST, type SizedColumn, widthsForRoom } from "@/table/column-widths";
+import { type ColumnWidths, type Fitted, NARROWEST, type SizedColumn, widthsForRoom } from "@/table/column-widths";
 import type { TableLayout } from "@/table/layout";
-import { useFitted, useRoom, useTopOfPage } from "@/table/measure";
+import { useFitted, useRoom, useTopOfPage, widestOf } from "@/table/measure";
 
 /** What of the table library this table uses. */
 const FEATURES = tableFeatures({ rowSortingFeature, columnVisibilityFeature, columnOrderingFeature, columnSizingFeature, columnResizingFeature });
@@ -147,6 +147,12 @@ interface DataTableProps<Row> {
 
   /** Which list the rows are a page of, in any words that differ from list to list: the column edges of one page then hold on the next, and move only for a value wider than any before. Left out, the columns fit the rows that are shown. */
   readonly list?: string;
+
+  /** What another table that stands in the same columns measured: each column is drawn wide enough for the values of both, so the edges of the two tables line up. */
+  readonly alongside?: Fitted;
+
+  /** Told what this table measured whenever it changes, and `undefined` once the table is gone: what the other table of such a pair is given as `alongside`. */
+  readonly onFitted?: (fitted: Fitted | undefined) => void;
 }
 
 type Head = Header<typeof FEATURES, object, unknown>;
@@ -510,6 +516,8 @@ export function DataTable<Row>({
   after,
   page,
   list,
+  alongside,
+  onFitted,
 }: DataTableProps<Row>): ReactNode {
   const specs = useMemo(() => new Map(columns.map((column) => [column.id, column])), [columns]);
   const definitions = useMemo(() => columns.map(definitionOf), [columns]);
@@ -519,9 +527,14 @@ export function DataTable<Row>({
   const sameList = list === undefined ? undefined : `${list} ${shown.map((spec) => spec.id).join(" ")}`;
   const [sized, fitted] = useFitted([rows, columns, layout.order, layout.hidden, sort.key, loading, room > 0], sameList);
   useTopOfPage(sized, page);
+  useEffect(() => {
+    onFitted?.(fitted);
+
+    return () => onFitted?.(undefined);
+  }, [fitted, onFitted]);
   const [dragged, setDragged] = useState<string>();
   const endWidth = actions === undefined ? 0 : actionsWidth;
-  const widths = widthsForRoom(shown, fitted, layout.sizes, room - endWidth);
+  const widths = widthsForRoom(shown, alongside === undefined ? fitted : widestOf(fitted, alongside), layout.sizes, room - endWidth);
   const { drawn, spare } = widths;
   // The table library is told the widths as drawn, so an edge that is dragged starts from where it is seen.
   const sizing = Object.fromEntries(drawn);

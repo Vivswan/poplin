@@ -4,9 +4,11 @@ import { clearPage } from "../lib/support/page";
 
 import { afterAll, afterEach, describe, expect, test } from "bun:test";
 import { cleanup, fireEvent, render, within } from "@testing-library/react";
+import type { ReactNode } from "react";
 
 import type { Ended, EndedToken } from "@/access/access-queries";
 import { RemovedTokens } from "@/access/removed-tokens";
+import { useTableLayout } from "@/table/layout";
 
 /** A day in November 2026, in milliseconds since the epoch. */
 const THEN = 1_794_000_000_000;
@@ -40,11 +42,18 @@ function said(): string[][] {
   return within(table)
     .getAllByRole("row")
     .slice(1)
-    .map((row) => [row.querySelector("td")?.textContent ?? "", row.querySelector("td:last-child .text-faint")?.textContent ?? ""]);
+    .map((row) => [row.querySelector("td")?.textContent ?? "", row.querySelector("td:nth-child(2)")?.textContent ?? ""]);
+}
+
+/** The removed tokens over the layout of the list they stand under. */
+function Held({ list }: { readonly list: Ended }): ReactNode {
+  const layout = useTableLayout("tokens", [{ id: "name", fixed: true }, { id: "state" }, { id: "scope" }, { id: "allowed" }, { id: "expires" }]);
+
+  return <RemovedTokens ended={list} names={NAMES} layout={layout} />;
 }
 
 function drawn(list: Ended): void {
-  render(<RemovedTokens ended={list} names={NAMES} />);
+  render(<Held list={list} />);
 }
 
 afterEach(() => {

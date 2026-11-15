@@ -111,6 +111,26 @@ describe("a waiting login with no token beside it", () => {
 });
 
 describe("the removed tokens under the list", () => {
+  // Drift: each of the two tables would be fitted to its own words alone, so the same column would begin at another place in the list than in the removed tokens under it.
+  test("stand in the columns of the list, each column as wide in one table as in the other", () => {
+    const own = HTMLElement.prototype.getBoundingClientRect;
+    // The test page lays nothing out: a heading is 10 px wide a letter, so "Can change" and "Could change" differ, as "State" and "How" do.
+    HTMLElement.prototype.getBoundingClientRect = function box(this: HTMLElement): DOMRect {
+      return { width: (this.textContent ?? "").length * 10 } as DOMRect;
+    };
+    window.localStorage.setItem("poplin.tokens.removed", "true");
+    render(<Tab ended={ENDED} />);
+    HTMLElement.prototype.getBoundingClientRect = own;
+    const widths = ["Tokens", "Removed tokens"].map((name) =>
+      [...(within(document.body).getAllByRole("table", { name })[0]?.querySelectorAll("col") ?? [])].slice(0, 4).map((column) => column.style.width),
+    );
+
+    expect(widths).toEqual([
+      ["48px", "50px", "120px", "70px"],
+      ["48px", "50px", "120px", "70px"],
+    ]);
+  });
+
   // Drift: the fold would be missing where it matters most, on an install whose every token was removed, or stand empty where none ever was.
   test.each([
     ["under the tokens that work", [TOKEN], [WAITING_LOGIN], ENDED, true],

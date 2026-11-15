@@ -82,6 +82,15 @@ function widerOf(one: ReadonlyMap<string, number>, other: ReadonlyMap<string, nu
 }
 
 /**
+ * The wider of two measurings, column by column.
+ *
+ * @returns what each column needs to hold the values of both
+ */
+export function widestOf(one: Fitted, other: Fitted): Fitted {
+  return { needs: widerOf(one.needs, other.needs), least: widerOf(one.least, other.least) };
+}
+
+/**
  * The widths each column's heading and values need, measured when what the table shows changes, again once every font its text is drawn in has arrived, and when a person chooses another time zone, which makes a written time longer or shorter.
  *
  * @param shows - what the table shows, and whether it is in sight at all: a change of any of these is a reason to measure again; always the same count of them
@@ -104,7 +113,7 @@ export function useFitted(shows: readonly unknown[], sameList?: string): readonl
     const measure = (): void => {
       const read = fittedWidths(element);
       setFitted((before) => {
-        const next = keeps ? { needs: widerOf(before.needs, read.needs), least: widerOf(before.least, read.least) } : read;
+        const next = keeps ? widestOf(before, read) : read;
 
         // The same widths as before are no change: a new map would draw the table again for nothing, over and over.
         return sameWidths(before.needs, next.needs) && sameWidths(before.least, next.least) ? before : next;
