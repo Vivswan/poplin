@@ -33,6 +33,7 @@ const WITH_DETAIL: Readonly<Partial<Record<AuditEntry["action"], (detail: AuditE
   publish: (detail) => (typeof detail.version === "number" ? `Published version ${detail.version}` : undefined),
   live_version: (detail) => (typeof detail.version === "number" ? `Made version ${detail.version} live` : undefined),
   access: (detail) => (typeof detail.access === "string" ? `Made it ${detail.access}` : undefined),
+  details: expiryWords,
   token_added: (detail) => named("Added the token", detail.note),
   token_revoked: (detail) => named("Removed the token", detail.note),
   login_allowed: (detail) => named("Allowed the token", detail.computer),
@@ -43,6 +44,13 @@ const WITH_DETAIL: Readonly<Partial<Record<AuditEntry["action"], (detail: AuditE
 
 function named(words: string, name: unknown): string | undefined {
   return typeof name === "string" && name !== "" ? `${words} "${name}"` : undefined;
+}
+
+/** A change of when a site deletes itself, and of nothing else, says so. */
+function expiryWords(detail: AuditEntry["detail"]): string | undefined {
+  if (Object.keys(detail).join() !== "expires") return undefined;
+
+  return detail.expires === "never" ? "Set it to never delete itself" : "Set when it deletes itself";
 }
 
 /** A run on the domain says which it was, and a repair with a failure names the first step that failed: the run may have gone on past it. */

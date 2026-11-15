@@ -4,7 +4,7 @@ import { readFile } from "node:fs/promises";
 
 import { expect, type Locator, type Page } from "@playwright/test";
 
-import { arrive, openPanel, reset, said, screenHeading, siteName, test } from "./visit";
+import { arrive, openPanel, reset, said, screenHeading, siteName, TRASH, test } from "./visit";
 
 /** The screens the walk is taken on. A wide one shows tables and the side navigation; a narrow one shows lists, and the sections behind a button. */
 const VIEWPORTS = [
@@ -23,6 +23,12 @@ const SCHEMES = ["light", "dark"] as const;
 
 /** What the sample data holds that the walk opens: an unlisted site by its title, a site by its title for the graph, a person who is not the visitor, a token, and a login that waits. */
 const SAMPLE = { site: "Pricing", graphed: "Team handbook", person: "jonas@example.com", token: "design-laptop", login: "build-server" } as const;
+
+/** The sample site that is in the trash: what the list calls it, which is its title, and its name, which its link holds. */
+const TRASHED = { title: "Notes from the offsite", name: "old-notes" } as const;
+
+/** How a moment is written: the day with two figures, and the time to the minute. */
+const MOMENT = String.raw`\d{2} [A-Z][a-z]{2} \d{4}, \d{2}:\d{2}`;
 
 /** Where the notes of a newer version are read: the page of the project's releases. */
 const RELEASES = "https://github.com/Vivswan/poplin/releases";
@@ -1014,4 +1020,57 @@ test("two times of the same length take the same room in the face the dashboard 
   expect([measured.carried, measured.first]).toEqual([["loaded"], true]);
   expect(measured.shown[0]).toBe(measured.shown[1]);
   expect(measured.control[0]).not.toBe(measured.control[1]);
+});
+
+// Drift: a site could be told when to delete itself from a terminal alone, or the panel would show a span where the day it ends on is asked for.
+test("in a site's panel, a span is shown as the moment it ends before it is saved and after, Undo takes it away again, and a day is picked in a dialog that one Escape leaves", async ({ page }) => {
+  const fact = panel(page).locator("dd").filter({ has: page.getByRole("button", { name: "Change when it deletes itself", exact: true }) });
+  const change = panel(page).getByRole("button", { name: "Change when it deletes itself", exact: true });
+  await arrive(page);
+  await openPanel(page, SAMPLE.site);
+  await expect(fact).toHaveText("NeverChange");
+
+  await change.click();
+  await expect(page.getByRole("menuitem")).toHaveText([new RegExp(`^1 day${MOMENT}$`), new RegExp(`^7 days${MOMENT}$`), new RegExp(`^30 days${MOMENT}$`), "On a day...", "Never"]);
+  await page.getByRole("menuitem", { name: /^7 days/ }).click();
+  await expect(said(page, "Saved.")).toBeVisible();
+  await expect(fact).toHaveText(new RegExp(`^${MOMENT}ChangeThen its link stops working, and it moves to the trash\\.$`));
+
+  await lines(page).filter({ hasText: "Saved." }).getByRole("button", { name: "Undo", exact: true }).click();
+  await expect(said(page, "Put back.")).toBeVisible();
+  await expect(fact).toHaveText("NeverChange");
+
+  await change.click();
+  await page.getByRole("menuitem", { name: "On a day...", exact: true }).click();
+  const day = page.getByRole("dialog", { name: "Pick a day", exact: true });
+  await expect(day.getByRole("button", { name: "Save", exact: true })).toBeDisabled();
+  await day.getByRole("gridcell").getByRole("button", { disabled: false }).first().click();
+  await expect(day.getByText(/^Deletes itself \d{2} [A-Z][a-z]{2} \d{4}, 00:00$/)).toBeVisible();
+  await pressEscape(page);
+  await expect(day).toBeHidden();
+  await expect(change).toBeFocused();
+  await expect(fact).toHaveText("NeverChange");
+});
+
+// Drift: a site in the trash could be removed for good from a terminal alone, or one press would remove it, with its title where its name is asked for.
+test("a site in the trash is deleted for good only once its name is typed, with the focus on Cancel first; it then leaves the list with no Undo, and Activity says so", async ({ page }) => {
+  const asks = question(page, `Delete ${TRASHED.title} for good?`);
+  const remove = asks.getByRole("button", { name: "Delete for good", exact: true });
+  await arrive(page);
+  await page.goto(TRASH);
+  await fromRowMenu(page, TRASHED.title, "Delete for good");
+  await expect(asks.getByRole("button", { name: "Cancel", exact: true })).toBeFocused();
+  await expect(remove).toBeDisabled();
+
+  await asks.getByRole("textbox", { name: "Site's name", exact: true }).fill(TRASHED.title);
+  await expect(remove).toBeDisabled();
+  await asks.getByRole("textbox", { name: "Site's name", exact: true }).fill(TRASHED.name);
+  await remove.click();
+  await expect(said(page, `${TRASHED.title} deleted for good.`)).toBeVisible();
+  await expect(siteName(page, TRASHED.title)).toHaveCount(0);
+  await expect(lines(page).getByRole("button")).toHaveCount(0);
+  await expect(page.getByLabel("Find a site", { exact: true }).filter({ visible: true })).toBeFocused();
+
+  await toSection(page, "Activity");
+  await expect(page.locator(':text-is("Deleted for good"):visible').first()).toBeVisible();
 });

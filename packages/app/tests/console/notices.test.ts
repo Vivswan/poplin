@@ -5,7 +5,7 @@ import { refusalSentence } from "../../src/console/notices";
 test("a refusal names what it is about only when that is a plain name; anything else from an address is left out", () => {
   const cases = [
     ["title", "The value of title is not one it takes."],
-    ["expires", "Deletes itself takes never, a span such as 7d, or a day such as 2026-12-01."],
+    ["expires", "Pick a day that is still ahead."],
     ["max_sites", "Use a whole number, 1 or more, or leave it empty for no limit."],
     [undefined, "The value of a field is not one it takes."],
     ["<script>", "The value of a field is not one it takes."],
