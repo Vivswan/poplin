@@ -144,6 +144,11 @@ function closesAtEscape(onClose: () => void): (event: KeyboardEvent<HTMLElement>
   };
 }
 
+/** Whether something lies over the page that takes every key for itself, such as a question: the library hides the rest of the page from assistive technology for as long. */
+function liesUnder(place: HTMLElement): boolean {
+  return place.closest('[aria-hidden="true"]') !== null;
+}
+
 /**
  * Draw a panel: the library's dialog without its modal layer, drawn into its own place in the page and never over it, so nothing is dimmed and the rest of the page stays in use.
  *
@@ -163,7 +168,8 @@ export function SidePanel({ title, closeLink, onClose, back, beside, children }:
       className={cn("flex min-h-0 min-w-0 flex-col bg-background", standsBeside ? "border-l" : "col-start-1 row-start-1")}
     >
       {place === null ? null : (
-        <Dialog.Root open modal={false} disablePointerDismissal onOpenChange={(open) => (open ? undefined : onClose())}>
+        // An Escape pressed while a question lies over the page is the question's alone, also where the focus is on neither.
+        <Dialog.Root open modal={false} disablePointerDismissal onOpenChange={(open) => (open || liesUnder(place) ? undefined : onClose())}>
           <Dialog.Portal container={place} className="flex min-h-0 flex-1 flex-col">
             <Dialog.Popup
               initialFocus={heading}

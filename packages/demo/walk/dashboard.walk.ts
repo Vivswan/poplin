@@ -177,10 +177,15 @@ const STOPS: readonly Stop[] = [
     close: cancelDialog,
   },
   {
-    name: "New link, from the panel",
+    // Drift: the press leaves the focus on the page, and the Escape after it would close the panel under the question too.
+    name: "New link, from the panel, left by Escape after a press on the dimmed page",
     open: (page) => panel(page).getByRole("button", { name: "New link", exact: true }).click(),
     shows: (page) => [question(page, "Make a new link?")],
-    close: leaveBy("Cancel"),
+    close: async (page) => {
+      await page.mouse.click(5, 5);
+      await pressEscape(page);
+      await expect(panel(page).getByRole("heading", { name: SAMPLE.site, exact: true })).toBeVisible();
+    },
   },
   {
     name: "the question before a site is opened wider",
