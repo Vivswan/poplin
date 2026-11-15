@@ -1,4 +1,4 @@
-// The block of a setting: its name, one sentence, and its control at rest, and under the control only what is needed: the default with the way back to it while the value differs, and the host's warnings, each on a line.
+// The row of a setting: its name, one sentence with the default after it, and its control; the way back to the default while the value differs; the same words behind the "?" a narrow column shows; and the host's warnings behind the mark after the control.
 
 import { clearPage } from "../lib/support/page";
 
@@ -22,7 +22,7 @@ const SIZE: Row = {
   repair: false,
 };
 
-/** Draw the block over a text, and collect every text it sends. */
+/** Draw the row over a text, and collect every text it sends. */
 function drawn(row: Row, text = row.text): { readonly page: ReturnType<typeof within>; readonly sent: string[] } {
   const sent: string[] = [];
   render(<SettingRow row={row} text={text} refusal={undefined} onChange={(next) => sent.push(next)} marked={false} />);
@@ -33,27 +33,43 @@ function drawn(row: Row, text = row.text): { readonly page: ReturnType<typeof wi
 afterEach(cleanup);
 afterAll(clearPage);
 
-describe("the block of a setting", () => {
-  // Drift: the default, a question mark, or the setting's key would stand in the block of a setting that is at its default.
-  test("shows at rest only its name, its one sentence, its control, and its unit", () => {
+/** The paragraphs of the popover that is open, found by the name a screen reader reads it under. */
+function opened(name: string): (string | null)[] {
+  return [...within(document.body).getByRole("dialog", { name }).querySelectorAll("p")].map((line) => line.textContent);
+}
+
+describe("the row of a setting", () => {
+  // Drift: a Reset, a warning's mark, or the setting's key would stand in the row of a setting that is at its default, or the default would go unsaid.
+  test("shows at rest its name, its one sentence with the default in brackets, its control, and its unit", () => {
     drawn(SIZE);
 
-    expect(document.body.textContent).toBe("All sites togetherThe most all sites hold, the trash included.MB");
+    expect(document.body.textContent).toBe("All sites togetherThe most all sites hold, the trash included. (Default: 9,000 MB)MB");
   });
 
-  // Drift: a changed value would not say what the default is, or Reset would put back something other than the default.
-  test("names the default under a value that differs from it, with a Reset that puts it back", () => {
+  // Drift: a changed value would have no way back, or Reset would put back something other than the default.
+  test("offers Reset beside the default of a value that differs from it, which puts the default back", () => {
     const { page, sent } = drawn(SIZE, "12000MB");
-    const line = page.getByText(/^Default:/).textContent;
+    const line = page.getByText(/Default:/).textContent;
     fireEvent.click(page.getByRole("button", { name: "Reset" }));
 
-    expect([line, sent]).toEqual(["Default: 9,000 MBReset", ["9000MB"]]);
+    expect([line, sent]).toEqual(["The most all sites hold, the trash included. (Default: 9,000 MB) Reset", ["9000MB"]]);
   });
 
-  // Drift: two warnings would run together as one paragraph, or hide behind an icon again though the block has the room.
-  test("shows the host's warnings under the control, each sentence a line of its own", () => {
-    drawn({ ...SIZE, warnings: WARNINGS });
+  // Drift: a narrow column, which hides the sentence beside the name, would have no way to read it or the default, or no way back to the default.
+  test("holds the sentence, the default, and the Reset of a changed value behind the question mark too", () => {
+    const { page, sent } = drawn(SIZE, "12000MB");
+    fireEvent.click(page.getByRole("button", { name: "About All sites together" }));
+    const lines = opened("All sites together");
+    fireEvent.click(within(page.getByRole("dialog", { name: "All sites together" })).getByRole("button", { name: "Reset" }));
 
-    expect(within(document.body).getAllByLabelText("Warning").map((icon) => icon.parentElement?.textContent)).toEqual(WARNINGS);
+    expect([lines, sent]).toEqual([["The most all sites hold, the trash included.", "Default: 9,000 MBReset"], ["9000MB"]]);
+  });
+
+  // Drift: a warning would have no mark after the control, or two warnings would run together as one paragraph.
+  test("holds the host's warnings behind the mark after the control, each sentence a line of its own", () => {
+    const { page } = drawn({ ...SIZE, warnings: WARNINGS });
+    fireEvent.click(page.getByRole("button", { name: "Warning" }));
+
+    expect(opened("Warning")).toEqual(WARNINGS);
   });
 });

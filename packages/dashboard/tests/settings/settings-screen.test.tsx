@@ -109,7 +109,7 @@ async function press(target: HTMLElement): Promise<void> {
 
 /** The switch of the search engines of new sites. */
 function engines(page: ReturnType<typeof within>): HTMLElement {
-  return page.getByRole("switch", { name: "Show new sites in search engines" });
+  return page.getByRole("switch", { name: "List new sites" });
 }
 
 /** The field of a count, by the name of its setting. */
@@ -155,7 +155,7 @@ describe("the one page", () => {
 
     expect([blocks, document.body.textContent?.includes("update_channel")]).toEqual([
       [
-        ["New sites", "Search engines", "Keep deleted sites"],
+        ["New sites", "List new sites", "Keep deleted sites"],
         ["Storage", "All sites together"],
         ["Updates", "Check for new versions", "Update channel", "Update link"],
       ],

@@ -55,7 +55,7 @@ export function UpdateAddressRow({ state, draft }: { readonly state: UpdateAddre
     <SettingFrame
       name="Update link"
       controlId={ADDRESS_FIELD}
-      says={SAYS}
+      says={[SAYS]}
       under={draft.refusal === undefined ? undefined : <FieldError className="text-[13px]">{draft.refusal}</FieldError>}
     >
       {pasting ? (
@@ -77,7 +77,7 @@ export function UpdateAddressRow({ state, draft }: { readonly state: UpdateAddre
           </Button>
         </>
       ) : (
-        <div className="flex flex-col items-start gap-2">
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
           <p>{since === null ? "Not set" : `Set ${wholeMoment(since)}`}</p>
           <div className="flex items-center gap-2">
             <Button type="button" variant="outline" onClick={draft.show}>

@@ -1,9 +1,20 @@
-// One setting of the Settings screen as a block that reads from top to bottom: its name, one short sentence, the control, and under the control the lines that are there only when needed.
+// One setting of the Settings screen as a row. A wide column has the name at the left, with one short sentence and the default under it, and the control at the right.
+// A narrow column keeps the sentence and the default behind a "?" beside the name; the control stands at the row's right, or under the name where it does not fit.
 
 import { cn } from "cn";
+import { CircleHelpIcon, TriangleAlertIcon } from "lucide-react";
 import type { ReactNode } from "react";
 
-/** What a block is drawn from. */
+import { Button } from "@/components/ui/button";
+import { Popover, PopoverContent, PopoverDescription, PopoverTitle, PopoverTrigger } from "@/components/ui/popover";
+
+/** What is shown only in a wide column: the column is the container the screen names. */
+const WIDE_ONLY = "hidden @[900px]:block";
+
+/** What is shown only in a narrow column. */
+const NARROW_ONLY = "@[900px]:hidden";
+
+/** What a row is drawn from. */
 interface SettingFrameProps {
   /** The name of what is set. */
   readonly name: string;
@@ -11,32 +22,122 @@ interface SettingFrameProps {
   /** The id of the control: the name has this id with `-label` after it, for a control it names. */
   readonly controlId: string;
 
-  /** The id of the block itself, where an address can name it. */
+  /** The id of the row itself, where an address can name it. */
   readonly anchor?: string;
 
-  /** `true` while the block is pointed out: it is shaded for a moment. */
+  /** `true` while the row is pointed out: it is shaded for a moment. */
   readonly marked?: boolean;
 
-  /** One short sentence that says what the setting does; empty for none. */
-  readonly says: string;
+  /** What the setting does, in short sentences; an empty one is left out. */
+  readonly says: readonly string[];
+
+  /** The default as it is read, such as `7 days`; left out for what has none. */
+  readonly fallback?: string;
+
+  /** Puts the default back; given only while the value differs from it. */
+  readonly onReset?: () => void;
+
+  /** What the host warns of at this value. */
+  readonly warnings?: readonly string[];
 
   /** The control, at its own width. */
   readonly children: ReactNode;
 
-  /** The lines under the control, each drawn only while it has something to say. */
+  /** The line under the control, drawn only while it has something to say: a refusal. */
   readonly under?: ReactNode;
 }
 
-/** Draw one block. */
-export function SettingFrame({ name, controlId, anchor, marked = false, says, children, under }: SettingFrameProps): ReactNode {
+/** The way back to the default. */
+function Reset({ onReset }: { readonly onReset: () => void }): ReactNode {
   return (
-    <div id={anchor} className={cn("-mx-3 mt-6 flex flex-col items-start rounded-lg px-3 py-2 motion-safe:transition-colors", marked && "bg-muted/60")}>
-      <h3 id={`${controlId}-label`} className="text-base leading-6 font-semibold">
-        {name}
-      </h3>
-      {says === "" ? null : <p className="text-muted-foreground">{says}</p>}
-      <div className="mt-2.5 flex min-h-8 max-w-full items-center gap-2.5">{children}</div>
-      {under === undefined ? null : <div className="mt-1.5 flex flex-col gap-1 text-[13px] leading-5 text-muted-foreground empty:hidden">{under}</div>}
+    <Button type="button" variant="link" size="xs" className="h-auto p-0 text-[13px] text-link" onClick={onReset}>
+      Reset
+    </Button>
+  );
+}
+
+/** The "?" beside a name in a narrow column: it opens the sentences, the default, and the way back to it. */
+function About({ name, says, fallback, onReset }: Pick<SettingFrameProps, "name" | "says" | "fallback" | "onReset">): ReactNode {
+  return (
+    <Popover>
+      <PopoverTrigger render={<Button type="button" variant="ghost" size="icon-xs" aria-label={`About ${name}`} className={cn("text-muted-foreground", NARROW_ONLY)} />}>
+        <CircleHelpIcon />
+      </PopoverTrigger>
+      <PopoverContent align="start" className="gap-1.5">
+        <PopoverTitle>{name}</PopoverTitle>
+        <PopoverDescription render={<div />} className="flex flex-col gap-1.5 text-popover-foreground">
+          {says.map((sentence) => (
+            <p key={sentence}>{sentence}</p>
+          ))}
+          {fallback === undefined ? null : (
+            <p className="flex items-center gap-2 text-muted-foreground">
+              Default: {fallback}
+              {onReset === undefined ? null : <Reset onReset={onReset} />}
+            </p>
+          )}
+        </PopoverDescription>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
+/** The mark after a control the host warns about: it opens what the host says. */
+function Warnings({ warnings }: { readonly warnings: readonly string[] }): ReactNode {
+  return (
+    <Popover>
+      <PopoverTrigger render={<Button type="button" variant="ghost" size="icon-sm" aria-label="Warning" className="shrink-0 text-warn hover:text-warn" />}>
+        <TriangleAlertIcon />
+      </PopoverTrigger>
+      <PopoverContent align="end" className="gap-1.5">
+        <PopoverTitle>Warning</PopoverTitle>
+        <PopoverDescription render={<div />} className="flex flex-col gap-1.5 text-popover-foreground">
+          {warnings.map((warning) => (
+            <p key={warning}>{warning}</p>
+          ))}
+        </PopoverDescription>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
+/** Draw one row. */
+export function SettingFrame({ name, controlId, anchor, marked = false, says, fallback, onReset, warnings = [], children, under }: SettingFrameProps): ReactNode {
+  const sentences = says.filter((sentence) => sentence !== "");
+
+  return (
+    <div
+      id={anchor}
+      className={cn(
+        "-mx-3 flex flex-wrap items-center justify-between gap-x-6 gap-y-2 rounded-lg px-3 py-2.5 motion-safe:transition-colors",
+        "@[900px]:grid @[900px]:grid-cols-[minmax(0,3fr)_minmax(0,2fr)] @[900px]:items-start",
+        marked && "bg-muted/60",
+      )}
+    >
+      <div className="min-w-0">
+        <div className="flex items-center gap-1">
+          <h3 id={`${controlId}-label`} className="leading-6 font-semibold">
+            {name}
+          </h3>
+          {sentences.length === 0 && fallback === undefined ? null : <About name={name} says={sentences} fallback={fallback} onReset={onReset} />}
+        </div>
+        <p className={cn("text-muted-foreground", WIDE_ONLY)}>
+          {sentences.join(" ")}
+          {fallback === undefined ? null : ` (Default: ${fallback})`}
+          {onReset === undefined ? null : (
+            <>
+              {" "}
+              <Reset onReset={onReset} />
+            </>
+          )}
+        </p>
+      </div>
+      <div className="flex max-w-full min-w-0 flex-col gap-1.5">
+        <div className="flex min-h-8 max-w-full items-center gap-2">
+          {children}
+          {warnings.length === 0 ? null : <Warnings warnings={warnings} />}
+        </div>
+        {under === undefined ? null : <div className="text-[13px] leading-5 empty:hidden">{under}</div>}
+      </div>
     </div>
   );
 }

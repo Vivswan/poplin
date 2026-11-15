@@ -5,7 +5,6 @@ import type { ReactNode } from "react";
 
 import { Input } from "@/components/ui/input";
 import { InputGroup, InputGroupAddon, InputGroupInput, InputGroupText } from "@/components/ui/input-group";
-import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
@@ -53,16 +52,7 @@ interface ControlProps {
 }
 
 function SwitchControl({ row, id, text, onChange, refused }: ControlProps): ReactNode {
-  const words = wordsOf(row.key);
-
-  return (
-    <span className="flex min-h-8 items-center gap-3">
-      <Switch id={id} aria-labelledby={`${id}-does`} checked={isOn(row, text)} onCheckedChange={(checked) => onChange(switchText(row, checked))} aria-invalid={refused} />
-      <Label id={`${id}-does`} htmlFor={id} className="font-normal">
-        {words.switchLabel ?? words.label}
-      </Label>
-    </span>
-  );
+  return <Switch id={id} aria-labelledby={`${id}-label`} checked={isOn(row, text)} onCheckedChange={(checked) => onChange(switchText(row, checked))} aria-invalid={refused} />;
 }
 
 /** A choice among a few named values. */

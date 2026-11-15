@@ -73,9 +73,9 @@ const STOPS: readonly Stop[] = [
     shows: (page) => [
       screenHeading(page, "Settings"),
       page.getByRole("heading", { name: "New sites", exact: true }),
-      page.getByRole("switch", { name: "Show new sites in search engines", exact: true }),
+      page.getByRole("switch", { name: "List new sites", exact: true }),
       page.getByRole("textbox", { name: "All sites together", exact: true }),
-      page.getByRole("switch", { name: "Check once a day", exact: true }),
+      page.getByRole("switch", { name: "Check for new versions", exact: true }),
     ],
   },
   {

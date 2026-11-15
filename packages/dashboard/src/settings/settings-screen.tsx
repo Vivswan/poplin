@@ -1,4 +1,4 @@
-// The Settings screen: one page that reads from top to bottom, every setting a block under the heading of its group, and one Save for everything that was changed, in a bar that floats over the foot of the screen while a change waits.
+// The Settings screen: one page that reads from top to bottom, every setting a row under the heading of its group, and one Save for everything that was changed, in a bar that floats over the foot of the screen while a change waits.
 
 import { Link, useLocation } from "@tanstack/react-router";
 import { cn } from "cn";
@@ -17,11 +17,14 @@ import { blocksOf, UPDATES } from "@/settings/settings-words";
 import { ADDRESS_FIELD, UpdateAddressRow } from "@/settings/update-address";
 import { AppShell } from "@/shell/app-shell";
 
-/** The look of a group's heading: larger than a setting's name, with clear room above it. */
-const HEADING = "mt-12 text-lg leading-7 font-bold";
+/** The column the page is read in: in the middle of a very wide window, so a name and its control are never a whole screen apart. The rows ask how wide it is. */
+const COLUMN = "@container mx-auto w-full max-w-[1100px]";
 
-/** The first heading stands closer under the page's opening sentence. */
-const FIRST_HEADING = "mt-7";
+/** A group: its heading over its rows, and a line between it and the group before. */
+const GROUP = "mt-5 border-t pt-5 first-of-type:mt-0 first-of-type:border-t-0 first-of-type:pt-0";
+
+/** The look of a group's heading: larger than a setting's name. */
+const HEADING = "mb-1 text-lg leading-7 font-bold";
 
 /** How long a block an address names stays shaded, in milliseconds. */
 const MARKED_FOR = 2000;
@@ -32,7 +35,7 @@ type Draft = ReturnType<typeof useDraft>;
 /** The line under the heading of the settings that also change the domain's rules: those follow at the next repair. */
 function RepairNote(): ReactNode {
   return (
-    <p className="mt-1 text-muted-foreground">
+    <p className="mb-1 text-muted-foreground">
       The rules on your domain change after Repair in{" "}
       <Link to="/domain" className="text-link underline-offset-2 hover:underline">
         Domain
@@ -56,9 +59,9 @@ function Groups({
 }): ReactNode {
   return (
     <>
-      {blocksOf(settings.rows).map((block, index) => (
-        <section key={block.id} aria-labelledby={`block-${block.id}`}>
-          <h2 id={`block-${block.id}`} className={cn(HEADING, index === 0 && FIRST_HEADING)}>
+      {blocksOf(settings.rows).map((block) => (
+        <section key={block.id} aria-labelledby={`block-${block.id}`} className={GROUP}>
+          <h2 id={`block-${block.id}`} className={HEADING}>
             {block.heading}
           </h2>
           {block.rows.some((row) => row.repair) ? <RepairNote /> : null}
@@ -82,7 +85,7 @@ function Groups({
 /** What stands in the blocks' place before they are read. */
 function Waiting(): ReactNode {
   return (
-    <div className="mt-12 flex flex-col gap-10" aria-busy="true">
+    <div className="flex flex-col gap-6" aria-busy="true">
       {[0, 1, 2].map((block) => (
         <div key={block} className="flex flex-col gap-2.5">
           <Skeleton className="h-5 w-40" />
@@ -150,10 +153,12 @@ export function SettingsScreen(): ReactNode {
     <AppShell current="settings" heading="Settings">
       <form onSubmit={(event) => void save(event)} noValidate aria-label="Settings" className="relative flex min-h-0 flex-1 flex-col border-t">
         <div className={cn("min-h-0 flex-1 overflow-y-auto px-6 pt-5 pb-12 max-md:px-4", count > 0 && SAVE_BAR_ROOM)}>
-          <p className="text-muted-foreground">How this install treats new sites, visitors, limits, and updates.</p>
-          {error === null ? null : <p className="py-8 text-muted-foreground">{error.message}</p>}
-          {settings === undefined && error === null ? <Waiting /> : null}
-          {settings === undefined ? null : <Groups settings={settings} draft={draft} address={address} marked={marked} />}
+          <div className={COLUMN}>
+            <p className="mb-5 text-muted-foreground">How this install treats new sites, visitors, limits, and updates.</p>
+            {error === null ? null : <p className="py-8 text-muted-foreground">{error.message}</p>}
+            {settings === undefined && error === null ? <Waiting /> : null}
+            {settings === undefined ? null : <Groups settings={settings} draft={draft} address={address} marked={marked} />}
+          </div>
         </div>
         <SaveBar count={count} busy={busy} onDiscard={discard} />
       </form>
