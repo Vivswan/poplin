@@ -50,7 +50,7 @@ export function SiteThen({ entry }: { readonly entry: Entry }): ReactNode {
 export function activityColumns(logins: LoginNames): readonly ColumnSpec<Entry>[] {
   return [
     { id: "when", header: "When", fixed: true, sortable: "desc", cell: (entry) => <When entry={entry} /> },
-    { id: "who", header: "Who", cell: (entry) => <Who by={entry.by} logins={logins} /> },
+    { id: "who", header: "Who", cell: (entry) => <Who by={entry.by} logins={logins} unnamed="a token" /> },
     { id: "what", header: "What", widest: 480, cell: (entry) => <span title={whatOf(entry)}>{whatOf(entry)}</span> },
     { id: "site", header: "Site", cell: (entry) => <SiteThen entry={entry} /> },
   ];

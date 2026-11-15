@@ -126,7 +126,7 @@ function PhoneList({ page, after }: { readonly page: Page; readonly after: React
             </span>
             <span className="flex min-w-0 items-center gap-2 text-xs text-muted-foreground">
               <span className="min-w-0 truncate">
-                <Who by={entry.by} logins={page.logins} />
+                <Who by={entry.by} logins={page.logins} unnamed="a token" />
               </span>
               <span className="shrink-0">
                 <When entry={entry} />
