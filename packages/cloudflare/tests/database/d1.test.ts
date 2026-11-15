@@ -5,6 +5,7 @@ import { describe, expect, test } from "vitest";
 import { beginPublish } from "@poplin/core/src/actions/begin-publish";
 import { beginLogin, redeemLogin } from "@poplin/core/src/actions/computer-logins";
 import { finishPublish } from "@poplin/core/src/actions/finish-publish";
+import { publishSite } from "@poplin/core/src/actions/publish";
 import type { Install } from "@poplin/core/src/actions/records";
 import { uploadFile } from "@poplin/core/src/actions/upload-file";
 import type { Login } from "@poplin/core/src/auth/logins";
@@ -18,6 +19,7 @@ import { describeSqlDriver, sqlDatabaseOver } from "@poplin/core/tests/database/
 
 import type { Bindings } from "../../src/worker/bindings";
 import { D1Driver } from "../../src/database/d1";
+import { runSweep } from "../../src/worker/sweep";
 
 /** The bindings of wrangler.jsonc, simulated. */
 const BINDINGS: Bindings = env;
@@ -165,5 +167,29 @@ describe("D1: the rows a computer's login costs of a day's allowance", () => {
     const asked = await redeemLogin(install, { secret });
 
     expect([asked, begun, rows]).toEqual([{ ok: true, state: "pending" }, { read: 58, written: 4 }, { read: 59, written: 4 }]);
+  });
+});
+
+describe("D1: the rows a scheduled sweep costs of a day's allowance", () => {
+  // Drift: the sweep runs 96 times a day, and a day allows 100,000 rows written. A run that wrote a row with nothing due would spend the allowance of an install nobody uses.
+  test("a run writes no row on an install that holds nothing, and none on one whose site, upload, and login are not due", async () => {
+    const { install, rows } = await meteredInstall();
+    await install.database.initSettings(defaultSettings({ installer: "ada@example.com" as Login, hostname: "poplin.example.com" }), { by: PUBLISHER.holder, at: NOW });
+    rows.read = 0;
+    rows.written = 0;
+    await runSweep(install);
+    const idle = { ...rows };
+
+    await publishSite(install, PUBLISHER, { name: "report", files: [{ path: "index.html", size: 4, contentType: "text/html", open: () => new Blob(["page"]).stream() }] });
+    await beginPublish(install, PUBLISHER, { name: "notes", files: [{ path: "index.html", size: 4, content_type: "text/html" }] });
+    await beginLogin(install, { scope: "publisher", computer: "laptop" }, "visitor-1");
+    rows.read = 0;
+    rows.written = 0;
+    await runSweep(install);
+
+    expect([idle, rows]).toEqual([
+      { read: 8, written: 0 },
+      { read: 10, written: 0 },
+    ]);
   });
 });
