@@ -1,5 +1,6 @@
 import { beforeAll, describe, expect, test } from "bun:test";
 import type { Site } from "@poplin/core/src/records/site";
+import { parseObjectKey } from "@poplin/core/src/storage/storage";
 import { serveSite } from "../../src/sites/serve";
 import { type Install, labelHost, NOW, openInstall, typedHost } from "./support/install";
 
@@ -794,15 +795,135 @@ describe("the body", () => {
       equal: true,
     });
   });
+});
 
-  // Drift: a 304 would leave the object's stream open, holding the store's connection.
-  test("a body that is not sent is cancelled, not left open", async () => {
-    const host = labelHost(world.report);
-    const etag = (await serve(ask(host, "/data.bin"))).headers.get("ETag") ?? "";
-    const before = world.install.bodies.length;
-    await serve(ask(host, "/data.bin", { "If-None-Match": etag }));
-    const [unsent] = world.install.bodies.slice(before);
+// A request that holds a file is told so without the store opening the file's body. Every other `If-None-Match` is answered as if the request sent none.
+describe("If-None-Match on a file", () => {
+  const OTHER = '"other"';
+  const OLDER_VERSION = '"v0-lx2a"';
+  const PART = "bytes=0-3";
+  const PAST_THE_END = "bytes=99-";
 
-    expect(await unsent?.getReader().read()).toEqual({ done: true, value: undefined });
+  /** `held` is the 304 with the file's headers; `as none sent` is the answer to the same request without its `If-None-Match`. */
+  type Outcome = "held" | "as none sent";
+
+  /** One request: the site and path asked for, the header made from the store's tag of the file `tagOf`, and the part asked for. */
+  interface Asked {
+    readonly site: "guide" | "bare";
+    readonly path: string;
+    readonly tagOf: string;
+    readonly sent: (own: string) => string;
+    readonly range: string | undefined;
+  }
+
+  /** A request, its outcome, and what a GET costs: the keys the store is asked for, in order, and the bodies it opens. */
+  type Row = readonly [why: string, asked: Asked, outcome: Outcome, calls: readonly string[], opened: number];
+
+  /** An answer with what it cost the store: the keys it was asked for, without the site's folder, and the bodies it opened. */
+  interface Answer {
+    readonly status: number;
+    readonly body: string;
+    readonly headers: Record<string, string>;
+    readonly calls: readonly string[];
+    readonly opened: number;
+  }
+
+  type Sent = Asked["sent"];
+
+  const own: Sent = (tag) => tag;
+  const any: Sent = () => "*";
+  const other: Sent = () => OTHER;
+  const others: Sent = () => `${OTHER}, "more"`;
+
+  const script = (sent: Sent, range?: string): Asked => ({ site: "guide", path: "/app.js", tagOf: "app.js", sent, range });
+  const page = (sent: Sent): Asked => ({ site: "guide", path: "/about.html", tagOf: "about.html", sent, range: undefined });
+  const missing = (site: Asked["site"], tagOf: string, sent: Sent): Asked => ({ site, path: "/nothing.txt", tagOf, sent, range: undefined });
+
+  const ROWS: readonly Row[] = [
+    ["a file's own tag", script(own), "held", ["app.js"], 0],
+    ["its weak form", script((tag) => `W/${tag}`), "held", ["app.js"], 0],
+    ["the wildcard", script(any), "held", ["app.js"], 0],
+    ["a list that ends with the file's tag", script((tag) => `${OTHER}, W/${tag}`), "held", ["app.js"], 0],
+    ["a list that holds the wildcard", script(() => `${OTHER} , *`), "held", ["app.js"], 0],
+    ["another tag", script(other), "as none sent", ["app.js"], 1],
+    ["the tag without its quotes", script((tag) => tag.slice(1, -1)), "as none sent", ["app.js"], 1],
+    ["a list of other tags", script(others), "as none sent", ["app.js", "app.js"], 1],
+    ["a version's tag, on a file that is no page", script(() => OLDER_VERSION), "as none sent", ["app.js"], 1],
+    ["nothing but commas", script(() => ",,,"), "as none sent", ["app.js"], 1],
+    ["a file's own tag and a part of it", script(own, PART), "held", ["app.js"], 0],
+    ["a file's own tag and a part past its end", script(own, PAST_THE_END), "held", ["app.js"], 0],
+    ["the wildcard and a part past its end", script(any, PAST_THE_END), "held", ["app.js"], 0],
+    ["another tag and a part of it", script(other, PART), "as none sent", ["app.js"], 1],
+    ["another tag and a part past its end", script(other, PAST_THE_END), "as none sent", ["app.js"], 0],
+    ["a list of other tags and a part of it", script(others, PART), "as none sent", ["app.js", "app.js"], 1],
+    ["a page, with the store's tag of it, which no page goes out with", page(own), "as none sent", ["about.html", "about.html"], 1],
+    ["a page, with the wildcard", page(any), "held", ["about.html"], 0],
+    ["a page, with the wildcard beside another version's tag", page(() => `${OLDER_VERSION}, *`), "held", ["about.html"], 0],
+    ["a missing file, with the tag of the site's 404 page", missing("guide", "404.html", own), "as none sent", ["nothing.txt", "404.html"], 1],
+    ["a missing file, with the wildcard", missing("guide", "404.html", any), "as none sent", ["nothing.txt", "404.html"], 1],
+    ["a missing file, with a list that holds the tag of the site's 404 page", missing("guide", "404.html", (tag) => `${OTHER}, ${tag}`), "as none sent", ["nothing.txt", "404.html"], 1],
+    ["a missing file of a site without a 404 page, with the wildcard", missing("bare", "index.html", any), "as none sent", ["nothing.txt", "404.html"], 0],
+    ["a missing file of a site without a 404 page, with another tag", missing("bare", "index.html", other), "as none sent", ["nothing.txt", "404.html"], 0],
+  ];
+
+  let install: Install;
+  let sites: Readonly<Record<Asked["site"], Site>>;
+
+  /** The store's tag of a site's file, in quotes, as a file that is no page goes out with it. */
+  async function storeTag(site: Site, file: string): Promise<string> {
+    const key = parseObjectKey(`${prefixOf(site)}${file}`);
+    const looked = key.ok ? await install.serving.store.head(key.key) : undefined;
+    if (looked?.kind !== "found") throw new Error(`the test's site holds no ${file}`);
+
+    return `"${looked.info.etag}"`;
+  }
+
+  async function answer(site: Site, path: string, method: string, headers: Record<string, string>): Promise<Answer> {
+    const [calls, opened] = [install.keys.length, install.bodies.length];
+    const response = await serveSite(new Request(`https://${labelHost(site)}${path}`, { method, headers }), install.serving);
+    const prefix = prefixOf(site);
+
+    return {
+      status: response.status,
+      body: await response.text(),
+      headers: Object.fromEntries([...response.headers].sort()),
+      calls: install.keys.slice(calls).map((key) => key.replace(prefix, "")),
+      opened: install.bodies.length - opened,
+    };
+  }
+
+  /** A row's request by a method, and the same request without its `If-None-Match`. */
+  async function asking(asked: Asked, method: string): Promise<{ readonly got: Answer; readonly plain: Answer }> {
+    const site = sites[asked.site];
+    const part: Record<string, string> = asked.range === undefined ? {} : { Range: asked.range };
+    const got = await answer(site, asked.path, method, { ...part, "If-None-Match": asked.sent(await storeTag(site, asked.tagOf)) });
+
+    return { got, plain: await answer(site, asked.path, method, part) };
+  }
+
+  beforeAll(async () => {
+    install = await openInstall();
+    const files = { "index.html": ["home", HTML], "about.html": ["about page", HTML], "app.js": ["let a = 1;", "text/javascript"] } as const;
+
+    sites = {
+      guide: await install.publish({ name: "guide", access: "unlisted", files: { ...files, "404.html": ["<h1>lost</h1>", HTML] } }),
+      bare: await install.publish({ name: "bare", access: "unlisted", files }),
+    };
+  });
+
+  // Drift: a browser's check of a file it holds would open the file in the bucket again, or a tag that names another file would confirm a stale copy.
+  test.each(ROWS)("%s: a GET", async (_why, asked, outcome, calls, opened) => {
+    const { got, plain } = await asking(asked, "GET");
+    const { "content-length": _length, ...kept } = (await answer(sites[asked.site], asked.path, "GET", {})).headers;
+
+    expect(got).toEqual({ ...(outcome === "held" ? { status: 304, body: "", headers: kept } : plain), calls: [...calls], opened });
+  });
+
+  // Drift: a HEAD would answer a validator another way than the GET it stands for, or start opening files.
+  test.each(ROWS)("%s: a HEAD, which opens no body", async (_why, asked, outcome) => {
+    const { got, plain } = await asking(asked, "HEAD");
+    const { "content-length": _length, ...kept } = plain.headers;
+
+    expect(got).toEqual({ ...(outcome === "held" ? { ...plain, status: 304, headers: kept } : plain), opened: 0 });
   });
 });

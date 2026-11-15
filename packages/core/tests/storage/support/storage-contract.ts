@@ -238,13 +238,15 @@ function rangedAndConditionalReads(label: string, makeStore: StoreFactory): void
     // Drift: a 304 saves the body; answering it for a stale etag would pin a visitor to an old version of the site.
     test.each([
       ["the current etag", (info: ObjectInfo): ReadOptions => ({ ifNoneMatch: info.etag }), "not-modified"],
+      ["the current etag, with a range the object holds", (info: ObjectInfo): ReadOptions => ({ ifNoneMatch: info.etag, range: { offset: 2, length: 3 } }), "not-modified"],
       ["the current etag, even with an unsatisfiable range", (info: ObjectInfo): ReadOptions => ({ ifNoneMatch: info.etag, range: { offset: 99 } }), "not-modified"],
+      ["another etag, with a range the object holds", (): ReadOptions => ({ ifNoneMatch: STALE_ETAG, range: { offset: 2, length: 3 } }), "part"],
       ["another etag", (): ReadOptions => ({ ifNoneMatch: STALE_ETAG }), "found"],
     ] as const)("a read with if-none-match on %s", async (_name, options, kind) => {
       const store = await makeStore();
       const key = objectKey("blog/v1/data.txt");
       const info = await store.write(key, bytesOf(DIGITS), TEXT);
-      const outcomes = { "not-modified": { kind: "not-modified", info }, found: { kind: "found", info, span: { offset: 0, length: 10 }, text: DIGITS } };
+      const outcomes = { "not-modified": { kind: "not-modified", info }, found: { kind: "found", info, span: { offset: 0, length: 10 }, text: DIGITS }, part: { kind: "found", info, span: { offset: 2, length: 3 }, text: "234" } };
 
       expect<unknown>(await readText(store, key, options(info))).toEqual(outcomes[kind]);
     });

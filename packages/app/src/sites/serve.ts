@@ -5,7 +5,10 @@
 //   one database query         the record and the letter decide          see below
 //   the page's version tag     the request holds the live version         304, with no read of the bucket
 //   path -> one to three keys  no file path                              404, which a browser may keep on an open site
-//   one bucket read per key    the body goes out as the store gave it; three reads at most, for a path without an extension, and one for every other
+//   the store, key by key      the first key that holds a file answers       the body goes out as the store gave it
+//   the file's own tag         the request holds the file as it is         304, and the store opens no body: it is asked with the tag
+//   several tags, or `*`       the store compares one tag                  the file is looked at first, and read after that when the request holds another
+//   the store's tag of a page  no page goes out with it                    the page is read a second time, as if no tag was sent
 //   no key holds a file        one more read, of the site's own `404.html`   that page with status 404; the plain 404 for a site without one
 //                              a page for a request that holds another version carries `Clear-Site-Data`, so the browser drops that version's files
 //
@@ -56,6 +59,15 @@ const PLAIN_BODIES = {
 
 /** The path of the page a site shows in place of a file it does not hold: the one at its root. */
 const MISSING_PAGE = "/404.html";
+
+/** What a weak tag starts with; it names the same file. */
+const WEAK = /^W\//;
+
+/** A tag as a header carries it: in quotes. */
+const QUOTED = /^".*"$/;
+
+/** The tag that stands for whatever file an address holds. */
+const ANY_FILE = "*";
 
 /** The verdict on an address that serves nothing. */
 const NOT_FOUND: Verdict = { kind: "none" };
@@ -163,18 +175,28 @@ function requestedRange(headers: Headers): ByteRange | undefined {
   return parseRange(headers.get("Range"));
 }
 
-function etagMatches(header: string | null, etag: string): boolean {
-  if (header === null) return false;
+/** The tags a request holds, from its `If-None-Match`: each in its quotes and without a weak mark, or the one that stands for any file. */
+function sentTags(header: string | null): readonly string[] {
+  if (header === null) return [];
 
-  const sent = header.split(",").map((tag) => tag.trim().replace(/^W\//, ""));
-
-  return sent.includes("*") || sent.includes(etag);
+  return header
+    .split(",")
+    .map((tag) => tag.trim().replace(WEAK, ""))
+    .filter((tag) => tag === ANY_FILE || QUOTED.test(tag));
 }
 
-/** The headers of a file. A page's tag is its site's live version; every other file's is the store's own. */
+/** The tag a file goes out with. A page's is its site's live version; every other file's is the store's own. */
+function fileTag(info: ObjectInfo, served: Served): string {
+  return isPage(info.contentType) ? served.tag : `"${info.etag}"`;
+}
+
+function holdsFile(sent: readonly string[], info: ObjectInfo, served: Served): boolean {
+  return sent.includes(ANY_FILE) || sent.includes(fileTag(info, served));
+}
+
 function fileHeaders(info: ObjectInfo, served: Served): Headers {
   const headers = siteHeaders({ site: served.site, contentType: info.contentType, settings: served.serving.settings, addresses: served.serving.addresses });
-  headers.set("ETag", isPage(info.contentType) ? served.tag : `"${info.etag}"`);
+  headers.set("ETag", fileTag(info, served));
   headers.set("Accept-Ranges", "bytes");
 
   return headers;
@@ -224,14 +246,35 @@ async function missingFile(request: Request, keys: readonly ObjectKey[], served:
   return new Response(result.body, { status: 404, headers });
 }
 
-async function answerRead(request: Request, result: Exclude<ReadResult, { kind: "missing" }>, served: Served, ranged: boolean): Promise<Response> {
+/**
+ * Read a file for a request, unless the request holds it: `not-modified` then, and the store opened no body.
+ *
+ * The store compares one tag. A request that holds several, or the one for any file, costs a look at the file first, and a read after it when it holds another.
+ */
+async function readUnlessHeld(key: ObjectKey, range: ByteRange | undefined, sent: readonly string[], served: Served): Promise<ReadResult> {
+  const { store } = served.serving;
+  const asked = range === undefined ? {} : { range };
+  const [only] = sent;
+  if (only === undefined) return store.read(key, asked);
+
+  if (sent.length > 1 || only === ANY_FILE) {
+    const looked = await store.head(key);
+    if (looked.kind === "missing") return looked;
+
+    return holdsFile(sent, looked.info, served) ? { kind: "not-modified", info: looked.info } : store.read(key, asked);
+  }
+
+  const result = await store.read(key, { ...asked, ifNoneMatch: only.slice(1, -1) });
+  if (result.kind !== "not-modified" || !isPage(result.info.contentType)) return result;
+
+  // No page ever went out with the store's tag, so a request that sends it holds no page: it is read again as if it sent none.
+  return store.read(key, asked);
+}
+
+function answerRead(request: Request, result: Exclude<ReadResult, { kind: "missing" }>, served: Served, ranged: boolean): Response {
   const headers = fileHeaders(result.info, served);
 
-  if (result.kind === "not-modified" || etagMatches(request.headers.get("If-None-Match"), headers.get("ETag") ?? "")) {
-    if (result.kind === "found") await result.body.cancel();
-
-    return new Response(null, { status: 304, headers });
-  }
+  if (result.kind === "not-modified") return new Response(null, { status: 304, headers });
 
   if (result.kind === "range-not-satisfiable") return plain(request, 416, { "Content-Range": `bytes */${result.info.size}` });
 
@@ -250,9 +293,10 @@ async function answerRead(request: Request, result: Exclude<ReadResult, { kind: 
 
 async function answerGet(request: Request, keys: readonly ObjectKey[], served: Served): Promise<Response> {
   const range = requestedRange(request.headers);
+  const sent = sentTags(request.headers.get("If-None-Match"));
 
   for (const key of keys) {
-    const result = await served.serving.store.read(key, range === undefined ? {} : { range });
+    const result = await readUnlessHeld(key, range, sent, served);
     if (result.kind === "missing") continue;
 
     return answerRead(request, result, served, range !== undefined);
@@ -267,7 +311,7 @@ async function answerHead(request: Request, keys: readonly ObjectKey[], served: 
     if (result.kind === "missing") continue;
 
     const headers = fileHeaders(result.info, served);
-    if (etagMatches(request.headers.get("If-None-Match"), headers.get("ETag") ?? "")) return new Response(null, { status: 304, headers });
+    if (holdsFile(sentTags(request.headers.get("If-None-Match")), result.info, served)) return new Response(null, { status: 304, headers });
 
     headers.set("Content-Length", String(result.info.size));
 

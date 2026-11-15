@@ -165,7 +165,7 @@ function cacheFacts(asked: Asked, response: Response): Record<string, boolean> {
 }
 
 property(
-  "any hostname, path, and headers get a published answer, read only the addressed site, show no private site without the login, and clear the cache only with a page for a request that holds another version",
+  "any hostname, path, and headers get a published answer, read only the addressed site, open no file they do not send, show no private site without the login, and clear the cache only with a page for a request that holds another version",
   fc.asyncProperty(hosts, paths, fc.constantFrom(...METHODS), headers, settings, async (host, path, method, sent, chosen) => {
     const address = `https://${host}${path}`;
     fc.pre(URL.canParse(address));
@@ -173,6 +173,7 @@ property(
     const asked = askedOf(new URL(address), method, sent);
     const prefix = asked.site === undefined ? "no site, so no read" : `${asked.site.folder}/v${asked.site.live_version}/`;
     const before = install.keys.length;
+    const opened = install.bodies.length;
     const response = await serveSite(new Request(address, { method, headers: sent }), { ...install.serving, settings: chosen });
     await response.body?.cancel();
 
@@ -181,12 +182,13 @@ property(
       published: ANSWERS.includes(response.status),
       outside: keys.filter((key) => !key.startsWith(prefix)),
       reads: keys.length <= MAX_READS,
+      openedUnsent: (response.status === 304 || method === "HEAD") && install.bodies.length > opened,
       blockedShown: chosen.outside_pages === "blocked" && isOutsideSubrequest(sent) && SHOWN.includes(response.status),
       crossOriginOpened: [...response.headers.keys()].some((name) => name.startsWith("access-control-")),
       broken: Object.entries({ ...accessFacts(asked, response, keys), ...cacheFacts(asked, response) }).filter(([, isBroken]) => isBroken).map(([fact]) => fact),
     };
 
-    expect(facts).toEqual({ published: true, outside: [], reads: true, blockedShown: false, crossOriginOpened: false, broken: [] });
+    expect(facts).toEqual({ published: true, outside: [], reads: true, openedUnsent: false, blockedShown: false, crossOriginOpened: false, broken: [] });
   }),
 );
 
