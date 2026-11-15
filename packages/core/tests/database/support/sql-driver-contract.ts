@@ -9,7 +9,7 @@ import type { Database } from "../../../src/database/database";
 import { AllowanceSpent, type SqlDriver, type SqlValue, type Statement, type StatementResult } from "../../../src/database/driver";
 import { openDatabase } from "../../../src/database/open";
 import { SqlDatabase } from "../../../src/database/sql-database";
-import { migrate, type Step, storedVersion } from "../../../src/migrations/migrate";
+import { migrate, readStanding, type Step } from "../../../src/migrations/migrate";
 import { STEPS } from "../../../src/migrations/registry";
 import type { ManifestFile } from "../../../src/records/upload";
 import type { SiteId } from "../../../src/sites/ids";
@@ -46,6 +46,20 @@ const STEP_THAT_FAILS_HALFWAY: Step = {
   description: "add a notes table",
   statements: ["CREATE TABLE notes (text TEXT)", "INSERT INTO nowhere VALUES (1)"],
 };
+
+const FIRST_STEP_OF_ANOTHER_BUILD: Step = { number: 1, description: "create the schema", statements: [...(STEPS[0]?.statements ?? []), "CREATE TABLE notes (text TEXT)"] };
+
+const MADE_BY_ANOTHER_BUILD = {
+  kind: "differs" as const,
+  stored: 1,
+  step: 1,
+  message: `step 0001 (${STEPS[0]?.description}) of the database was applied by another build of poplin, so its tables are not the ones this build reads. Run the build that made the database, or delete the database and poplin makes it anew`,
+};
+
+const LEDGER_WITHOUT_FINGERPRINTS: readonly Statement[] = [
+  { sql: "CREATE TABLE schema_steps (step INTEGER NOT NULL PRIMARY KEY, description TEXT NOT NULL, applied_at INTEGER NOT NULL) STRICT", params: [] },
+  { sql: "INSERT INTO schema_steps (step, description, applied_at) VALUES (1, 'create the schema', ?1)", params: [NOW] },
+];
 
 const MENDED_STEP: Step = { ...STEP_THAT_FAILS_HALFWAY, statements: ["CREATE TABLE notes (text TEXT)"] };
 
@@ -191,14 +205,28 @@ function migrations(label: string, makeDriver: DriverFactory): void {
 
       expect(outcomes.map((outcome) => outcome.kind)).toEqual(["current", "current", "current"]);
       expect(outcomes.flatMap((outcome) => (outcome.kind === "current" ? outcome.applied : []))).toEqual(STEPS.map((step) => step.description));
-      expect(await storedVersion(driver)).toBe(SCHEMA_VERSION);
+      expect(await readStanding(driver, STEPS)).toEqual({ kind: "at", version: SCHEMA_VERSION });
+    });
+
+    // Drift: a step changed in place keeps its number, so a database an earlier build made counts as up to date and every statement written for the new tables fails on it, one request at a time.
+    test.each([
+      ["whose first step ran other statements", (driver: SqlDriver) => migrate(driver, [FIRST_STEP_OF_ANOTHER_BUILD], NOW)],
+      ["whose ledger holds no fingerprint", (driver: SqlDriver) => driver.batch(LEDGER_WITHOUT_FINGERPRINTS)],
+    ])("a database %s is refused as made by another build, and nothing in it changes", async (_name, make) => {
+      const driver = await makeDriver();
+      await make(driver);
+      const held = async (): Promise<unknown> => [await schemaOf(driver), await rows(driver, "SELECT * FROM schema_steps")];
+      const before = await held();
+
+      expect([await openDatabase(driver, NOW), await readStanding(driver, STEPS)]).toEqual([MADE_BY_ANOTHER_BUILD, MADE_BY_ANOTHER_BUILD]);
+      expect(await held()).toEqual(before);
     });
 
     // Drift: an older Worker still running after a newer one migrated would write rows the newer schema does not expect.
     test("a database stamped by a newer poplin is refused with the upgrade named, and nothing in it changes", async () => {
       const driver = await migrated(makeDriver);
       await driver.batch([
-        { sql: "INSERT INTO schema_steps (step, description, applied_at) VALUES (?1, ?2, ?3)", params: [SCHEMA_VERSION + 1, "a step of a later release", NOW] },
+        { sql: "INSERT INTO schema_steps (step, description, applied_at, fingerprint) VALUES (?1, ?2, ?3, 'later')", params: [SCHEMA_VERSION + 1, "a step of a later release", NOW] },
       ]);
       const schema = await schemaOf(driver);
       const opened = await openDatabase(driver, NOW);
@@ -220,7 +248,7 @@ function migrations(label: string, makeDriver: DriverFactory): void {
 
       expect(failed).toMatchObject({ kind: "failed", stored: SCHEMA_VERSION, step: STEP_THAT_FAILS_HALFWAY.number });
       expect(failed.kind === "failed" ? failed.message : "").toMatch(/^the database could not be brought up to date: .* Try again$/);
-      expect([await storedVersion(driver), await schemaOf(driver)]).toEqual([SCHEMA_VERSION, schema]);
+      expect([await readStanding(driver, STEPS), await schemaOf(driver)]).toEqual([{ kind: "at", version: SCHEMA_VERSION }, schema]);
       expect(await migrate(driver, [...STEPS, MENDED_STEP], NOW)).toEqual({
         kind: "current",
         version: STEP_THAT_FAILS_HALFWAY.number,
@@ -234,7 +262,7 @@ function migrations(label: string, makeDriver: DriverFactory): void {
       const spent: SqlDriver = { batch: (statements) => (statements.some((statement) => statement.sql.startsWith("INSERT")) ? Promise.reject(new AllowanceSpent("writing")) : inner.batch(statements)) };
 
       await expect(migrate(spent, STEPS, NOW)).rejects.toThrow(AllowanceSpent);
-      expect(await storedVersion(inner)).toBe(0);
+      expect(await readStanding(inner, STEPS)).toEqual({ kind: "at", version: 0 });
     });
 
     test("opening an empty database applies every step and hands back a database that works", async () => {
@@ -433,7 +461,7 @@ function queryPlans(label: string, makeDriver: DriverFactory): void {
       const swept = await database.sweepComputerLogins(denied.expiresAt);
       await database.listLeftovers({ limit: 10, after: gone.folder });
       await database.forgetLeftover(gone.folder);
-      await storedVersion(driver);
+      await readStanding(driver, STEPS);
 
       const scans: string[] = [];
       for (const statement of driver.statements) {
@@ -447,11 +475,13 @@ function queryPlans(label: string, makeDriver: DriverFactory): void {
       }
 
       // The token list hands back every row it walks, and the sweep walks the logins, which the room keeps few. An import walks the list of versions it was given, and a new login the visitors its own count gave: neither is a table.
+      // The ledger holds one row a step.
       expect([exported.sites, imported.kind, again.kind, redeemed.kind, swept]).toEqual([[], "done", "done", "done", 1]);
       expect(driver.statements.length).toBeGreaterThan(105);
       expect(scans).toEqual([
         'SCAN tokens USING INDEX tokens_by_creation <- select "id", "hash", "scope", "note", "created_at", "expires_at" from "tokens" order by "tokens"."created_at" desc, "tokens"."id" desc',
         'SCAN logins USING INDEX logins_by_visitor <- delete from "logins" where "logins"."expires_at" <= ?',
+        "SCAN schema_steps <- SELECT * FROM schema_steps ORDER BY step",
       ]);
     });
   });

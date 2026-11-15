@@ -10,7 +10,7 @@ import { type Asked, bodyOf, refusal } from "./replies";
  * @param run - receives the connection to the fake and the live list of what was asked
  */
 export async function withFake(
-  respond: (asked: Asked, earlier: number) => Response | undefined,
+  respond: (asked: Asked, earlier: number) => Response | undefined | Promise<Response | undefined>,
   run: (connection: Connection, asked: readonly Asked[]) => Promise<void>,
 ): Promise<void> {
   const asked: Asked[] = [];
@@ -22,7 +22,7 @@ export async function withFake(
 
       asked.push(entry);
 
-      return respond(entry, asked.length - 1) ?? refusal(404, 7003, "No route for that URI");
+      return (await respond(entry, asked.length - 1)) ?? refusal(404, 7003, "No route for that URI");
     },
   });
 

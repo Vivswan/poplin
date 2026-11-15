@@ -1,6 +1,6 @@
 // Make the standing test install match main: the bucket, the database, the login, the Worker, then every object of the zone as the Domain tab's own repair makes it.
 //
-//   the zone -> the account's plans, all free -> bucket, database -> the login application -> wrangler deploy of the built bundle
+//   the zone -> the account's plans, all free -> bucket, database, made anew when another build made it -> the login application -> wrangler deploy of the built bundle
 //     -> the zone plug's repair -> wait for the install to answer -> the test install's caps
 //
 // It holds no state: every step reads what is there and changes what differs. A token that lacks a permission, or an account with a switch off, stops the piece it belongs to.
@@ -22,6 +22,7 @@ import { privateSitesPattern } from "../../src/zone/layout";
 import { createDomainPlug } from "../../src/zone/zone-plug";
 import { capInstall } from "./caps";
 import { readFreePlans } from "./plan";
+import { settleDatabase } from "./shape";
 import { removeTokens, seedToken } from "./tokens";
 import { type Found, findInstall, isStop, liveLogin, openRun, type Run, reportStop, type Stop, stopOf } from "./util";
 
@@ -45,6 +46,9 @@ const LIVE_SETTINGS = { dashboard_title: "poplin live checks", trash_days: "1", 
 
 /** How long the install has to answer after a deploy, and how often it is asked, in milliseconds. */
 const READY = { withinMs: 300_000, everyMs: 5_000 };
+
+/** The most characters of the install's own words a failed wait repeats. */
+const SAID_LENGTH = 200;
 
 /** The states of a row that the repair left as wanted. */
 const SETTLED: ReadonlySet<DomainRow["state"]> = new Set(["present", "created", "changed", "removed"]);
@@ -287,23 +291,37 @@ async function repairZone(run: Run, found: Found, login: string, progress: Progr
   return failed ?? skipped;
 }
 
+/**
+ * Read what the install answered, for the log: its status, and the first line of a body in plain text, which is how the Worker says why it cannot start.
+ *
+ * @returns the status alone for any other body, and status 0 for no answer
+ */
+export async function answerOf(asking: Promise<Response>): Promise<{ readonly status: number; readonly told: string }> {
+  const response = await asking.catch(() => undefined);
+  if (response === undefined) return { status: 0, told: "0" };
+
+  const { status } = response;
+  const plain = response.headers.get("Content-Type")?.startsWith("text/plain") === true;
+  // A body that breaks off leaves the status, which did arrive.
+  const [line = ""] = plain ? (await response.text().catch(() => "")).split("\n") : [];
+
+  return { status, told: line === "" ? String(status) : `${status}: ${line.slice(0, SAID_LENGTH)}` };
+}
+
 /** Ask the install's API until it answers as a Worker that started: a 401 to a request with no token. */
 async function waitUntilReady(found: Found): Promise<Stop | undefined> {
   const address = `https://${found.layout.adminHostname}/api/whoami`;
   const deadline = Date.now() + READY.withinMs;
-  let status = 0;
+  let last = { status: 0, told: "0" };
 
   while (Date.now() < deadline) {
-    status = await fetch(address, { redirect: "manual", signal: AbortSignal.timeout(READY.everyMs) }).then(
-      (response) => response.status,
-      () => 0,
-    );
-    if (status === 401) return undefined;
+    last = await answerOf(fetch(address, { redirect: "manual", signal: AbortSignal.timeout(READY.everyMs) }));
+    if (last.status === 401) return undefined;
 
     await Bun.sleep(READY.everyMs);
   }
 
-  return { kind: "failed", what: `the install did not answer within ${READY.withinMs / 1000} seconds (last status ${status})` };
+  return { kind: "failed", what: `the install did not answer within ${READY.withinMs / 1000} seconds (last status ${last.told})` };
 }
 
 /** Give the install its caps with a token made for the one call, and remove the token's row. A row that stays stops the run as caps that were refused do. */
@@ -339,12 +357,15 @@ async function converge(run: Run, progress: Progress, env: Environment): Promise
   if (database.id === undefined) return { kind: "failed", what: "the database has no id" };
 
   run.hide(database.id);
-  note(run, progress, { piece: "Database", result: "present" });
+  const settled = await settleDatabase(run, database.id);
+  if (isStop(settled)) return settled;
+
+  note(run, progress, { piece: "Database", result: settled.result });
 
   const access = await ensureAccess(run, found, login, progress);
   if (isStop(access)) return access;
 
-  const deployed = await deployWorker(run, await workerConfig(run, found, { databaseId: database.id, access, login }));
+  const deployed = await deployWorker(run, await workerConfig(run, found, { databaseId: settled.id, access, login }));
   if (deployed !== undefined) return deployed;
 
   note(run, progress, { piece: "Worker", result: "deployed" });
@@ -352,7 +373,7 @@ async function converge(run: Run, progress: Progress, env: Environment): Promise
   const unready = (await repairZone(run, found, login, progress)) ?? (await waitUntilReady(found));
   if (unready !== undefined) return unready;
 
-  const uncapped = await capTestInstall(run, found, database.id);
+  const uncapped = await capTestInstall(run, found, settled.id);
   if (uncapped !== undefined) return uncapped;
 
   note(run, progress, { piece: "Storage and file caps", result: "set" });

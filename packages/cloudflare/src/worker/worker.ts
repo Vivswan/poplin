@@ -49,6 +49,9 @@ const TRY_AGAIN = "Something went wrong. Try again.";
 /** What the hostname of a Worker's own address ends in. Cloudflare gives every Worker one, whatever its routes. */
 const OWN_ADDRESS = ".workers.dev";
 
+/** The answer of an install whose database another build of poplin made: by a schema step that was not this code's, or with settings this code does not read. */
+const MADE_BY_ANOTHER_BUILD = "This install's database was made by another build of poplin, so its records are not the ones this build reads. Deploy the build that made it, or delete the database and poplin makes it anew.";
+
 /** The setup page, for a redirect from the Worker's own address. */
 const SETUP = "/setup";
 
@@ -73,6 +76,8 @@ function failureText(failure: Stopped): string {
   }
 
   if (failure.kind === "newer") return "This install's database is newer than its code: update poplin.";
+
+  if (failure.kind === "differs") return MADE_BY_ANOTHER_BUILD;
 
   return "This install's database could not be brought up to date. Try again.";
 }

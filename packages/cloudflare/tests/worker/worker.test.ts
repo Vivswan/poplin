@@ -26,6 +26,9 @@ const LARGE_BYTES = 5 * 1024 * 1024;
 /** The first settings the tests' Worker starts from. */
 const FIRST = BINDINGS.FIRST_SETTINGS as Readonly<Record<string, string>>;
 
+/** What every host answers on a database another build of poplin made. */
+const MADE_BY_ANOTHER_BUILD = "This install's database was made by another build of poplin, so its records are not the ones this build reads. Deploy the build that made it, or delete the database and poplin makes it anew.";
+
 /** The milliseconds of one minute, which is how long the rate limiting binding counts for. */
 const MINUTE_MS = 60_000;
 
@@ -258,13 +261,28 @@ describe("an instance's first request", () => {
   test("a database newer than the code is refused with the way out, and is served again once the code knows it", async () => {
     const worker = instance(w);
     await ask(instance(w), `${ADMIN}/api/whoami`);
-    await BINDINGS.DB.exec("INSERT INTO schema_steps (step, description, applied_at) VALUES (999, 'a step of a newer poplin', 0)");
+    await BINDINGS.DB.exec("INSERT INTO schema_steps (step, description, applied_at, fingerprint) VALUES (999, 'a step of a newer poplin', 0, 'newer')");
     const refused = await ask(worker, `${ADMIN}/api/whoami`);
     await BINDINGS.DB.exec("DELETE FROM schema_steps WHERE step = 999");
     const served = await ask(worker, `${ADMIN}/api/whoami`);
 
     expect({ status: refused.status, text: await refused.text() }).toEqual({ status: 503, text: "This install's database is newer than its code: update poplin.\n" });
     expect(served.status).toBe(401);
+  });
+
+  // Drift: a database an earlier build made counts as up to date by its step number, so every request met the catch-all line with no reason: a public site's address, the dashboard, and the API alike.
+  test.each([
+    ["stored settings that lack a setting this build reads", "UPDATE settings SET value = json_remove(value, '$.max_storage_writes_per_day')"],
+    ["a schema step another build applied", "UPDATE schema_steps SET fingerprint = 'of another build'"],
+  ])("%s stop the start with the reason, on every host", async (_name, drift) => {
+    await ask(instance(w), `${ADMIN}/api/whoami`);
+    await BINDINGS.DB.exec(drift);
+    const worker = instance(w);
+    const answers = await Promise.all(["https://docs-page.example.com/", "https://docs-p-poplin.example.com/", `${ADMIN}/`, `${ADMIN}/api/whoami`].map((url) => ask(worker, url)));
+
+    expect(await Promise.all(answers.map(async (answer) => ({ status: answer.status, text: await answer.text() })))).toEqual(
+      answers.map(() => ({ status: 503, text: `${MADE_BY_ANOTHER_BUILD}\n` })),
+    );
   });
 });
 

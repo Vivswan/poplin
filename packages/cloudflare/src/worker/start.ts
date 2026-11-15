@@ -3,8 +3,8 @@
 //   ZONE, ACCOUNT_ID, WORKER_NAME   read and checked                     else `binding`, naming every one that is refused
 //   ZONE or ACCOUNT_ID absent       a Worker with nothing set            `unset`: its setup page alone, until somebody has logged in
 //   ACCESS             read and checked; absent, the login stays shut    else `binding`
-//   DB                 opened, its pending schema steps applied           else `newer` or `failed`
-//   settings           stored from FIRST_SETTINGS over the defaults, only while none exist  else `binding`
+//   DB                 opened, its pending schema steps applied           else `newer`, `differs`, or `failed`
+//   settings           stored from FIRST_SETTINGS over the defaults, only while none exist  else `binding`; stored ones this build cannot read are `differs`
 //   signing key        stored, only while none exists
 
 import { createApi } from "@poplin/app/src/api/api";
@@ -18,7 +18,7 @@ import type { Rebuilding } from "@poplin/core/src/actions/start-update";
 import { parseLogins } from "@poplin/core/src/auth/logins";
 import type { Database } from "@poplin/core/src/database/database";
 import { openDatabase } from "@poplin/core/src/database/open";
-import { defaultSettings, settingsFromText, settingsToText } from "@poplin/core/src/records/settings";
+import { defaultSettings, SETTING_VALUES, settingsFromText, settingsToText } from "@poplin/core/src/records/settings";
 import * as v from "valibot";
 import { version } from "../../../cli/package.json";
 import { D1Driver } from "../database/d1";
@@ -46,6 +46,9 @@ const KEY_BYTES = 32;
 
 /** The text form of every setting, as the binding holds it. */
 const SETTING_TEXTS = v.record(v.string(), v.string());
+
+/** Every setting this build reads, by its key. */
+const SETTING_KEYS = Object.keys(SETTING_VALUES.entries);
 
 /** The refusal of every login on an install whose Access application setup has not made yet. */
 export const NO_ACCESS = "not-set-up";
@@ -131,10 +134,11 @@ export interface Unset {
   readonly secrets: Pick<Held, "visitorSecret" | "formsSecret">;
 }
 
-/** Why an instance could not start. `binding` names every variable that is refused, at least one. `unset` is no fault: the Worker was deployed and setup has not given it its domain and its account. */
+/** Why an instance could not start. `binding` names every variable that is refused, at least one. `differs` is a database another build of poplin made. `unset` is no fault: the Worker was deployed and setup has not given it its domain and its account. */
 export type Failure =
   | { readonly kind: "binding"; readonly refused: readonly RefusedBinding[] }
   | { readonly kind: "newer" }
+  | { readonly kind: "differs" }
   | { readonly kind: "failed" }
   | { readonly kind: "unset"; readonly unset: Unset };
 
@@ -146,13 +150,11 @@ function badBinding(binding: RefusedBinding["binding"], refusal: string): Starte
 }
 
 /**
- * Store the first settings while the install has none. Two instances that start together store one row: the second is answered `already_set`.
+ * Store the first settings of an install that has none. Two instances that start together store one row: the second is answered `already_set`.
  *
  * The binding must name the logins; every setting it leaves out starts at its default.
  */
 async function ensureSettings(database: Database, binding: unknown, at: { readonly now: number; readonly hostname: string }): Promise<Started | undefined> {
-  if ((await database.readSettings()) !== undefined) return undefined;
-
   if (binding === undefined) return badBinding("FIRST_SETTINGS", "absent");
 
   const texts = v.safeParse(SETTING_TEXTS, binding);
@@ -175,6 +177,28 @@ async function ensureSettings(database: Database, binding: unknown, at: { readon
   await database.initSettings(first.values, { by: installer, at: at.now });
 
   return undefined;
+}
+
+/**
+ * Say whether the install holds settings, so that settings another build wrote stop the start with their own reason.
+ *
+ * @returns whether settings are stored; or the failure, logged by the key that is wrong and never by a value
+ * @throws whatever the database rejects with
+ */
+async function hasSettings(database: Database): Promise<boolean | Started> {
+  try {
+    return (await database.readSettings()) !== undefined;
+  } catch (error) {
+    if (!v.isValiError(error)) throw error;
+
+    // A key this build does not know is text of the stored record's own, so it is not repeated.
+    const keys = new Set(error.issues.map((issue) => String(issue.path?.[0]?.key)));
+    const known = SETTING_KEYS.filter((key) => keys.has(key));
+    const told = keys.size > known.length ? [...known, "a key this build does not know"] : known;
+    console.error(`poplin: the stored settings are not the ones this build reads, at ${told.join(", ")}`);
+
+    return { ok: false, failure: { kind: "differs" } };
+  }
 }
 
 /** Read the Worker's variables, and list every one that cannot be used. An absent `ACCESS` is no fault: the login stays shut until setup writes it. */
@@ -202,9 +226,16 @@ function readVariables(env: Bindings): {
  *
  * A Worker without its values whose database holds settings is one that lost them: it names them and offers no setup, which would give it another first login than the stored one.
  */
-async function startUnset(given: { readonly database: Database; readonly env: Bindings; readonly outside: Outside; readonly refused: readonly RefusedBinding[]; readonly script: string | undefined }): Promise<Started> {
-  const { database, env, outside, refused, script } = given;
-  if (script === undefined || (await database.readSettings()) !== undefined) return { ok: false, failure: { kind: "binding", refused } };
+async function startUnset(given: {
+  readonly database: Database;
+  readonly env: Bindings;
+  readonly outside: Outside;
+  readonly refused: readonly RefusedBinding[];
+  readonly script: string | undefined;
+  readonly settled: boolean;
+}): Promise<Started> {
+  const { database, env, outside, refused, script, settled } = given;
+  if (script === undefined || settled) return { ok: false, failure: { kind: "binding", refused } };
 
   const key = await database.ensureSigningKey(crypto.getRandomValues(new Uint8Array(KEY_BYTES)), outside.now());
   const unset: Unset = {
@@ -234,16 +265,19 @@ export async function startInstance(env: Bindings, outside: Outside, visitorOf: 
   const opened = await openDatabase(new D1Driver(env.DB), now);
   if (opened.kind === "newer") return { ok: false, failure: { kind: "newer" } };
 
-  if (opened.kind === "failed") {
+  if (opened.kind !== "open") {
     console.error(`poplin: ${opened.message}`);
 
-    return { ok: false, failure: { kind: "failed" } };
+    return { ok: false, failure: { kind: opened.kind } };
   }
 
   const { database } = opened;
-  if (!zone.ok || !own.ok) return startUnset({ database, env, outside, refused, script: own.ok ? own.value.script : own.script });
+  const settled = await hasSettings(database);
+  if (typeof settled !== "boolean") return settled;
 
-  const unset = await ensureSettings(database, env.FIRST_SETTINGS, { now, hostname: zone.value.adminHostname });
+  if (!zone.ok || !own.ok) return startUnset({ database, env, outside, refused, script: own.ok ? own.value.script : own.script, settled });
+
+  const unset = settled ? undefined : await ensureSettings(database, env.FIRST_SETTINGS, { now, hostname: zone.value.adminHostname });
   if (unset !== undefined) return unset;
 
   await database.ensureSigningKey(crypto.getRandomValues(new Uint8Array(KEY_BYTES)), now);

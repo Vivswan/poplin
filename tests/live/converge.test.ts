@@ -8,7 +8,7 @@ import { join } from "node:path";
 
 import type { DomainRow } from "../../packages/app/src/dashboard/domain/records";
 import type { Login } from "../../packages/core/src/auth/logins";
-import { convergeInstall, needOf } from "../../packages/cloudflare/scripts/live/converge";
+import { answerOf, convergeInstall, needOf } from "../../packages/cloudflare/scripts/live/converge";
 import { openRun } from "../../packages/cloudflare/scripts/live/util";
 import { createDomainPlug } from "../../packages/cloudflare/src/zone/zone-plug";
 import { withFake } from "../../packages/cloudflare/tests/zone/support/fake-cloudflare";
@@ -37,6 +37,9 @@ const NOT_READ = "Account plans: not read: needs the token permission Billing: R
 
 /** The warning that goes with it. */
 const NOT_READ_WARNING = "::warning::The account's plans were not read, so nothing checked that they are free: the run needs the token permission Billing: Read.";
+
+/** A sentence a Worker that cannot start answers. */
+const REASON = "This install's database is newer than its code: update poplin.";
 
 /** What the fake account holds, and which lists its token may read. A list that is absent is refused. */
 interface FakeAccount {
@@ -166,6 +169,22 @@ describe("the script that makes the test install, against a local fake account",
 
     expect(read.length).toBeGreaterThan(0);
     expect(read.filter((name) => !written.includes(name))).toEqual([]);
+  });
+});
+
+describe("what a failed wait for the install repeats of its answer", () => {
+  // Drift: a wait that told the status alone ended as "last status 503" after five minutes, while the Worker's own sentence said why it could not start.
+  test.each([
+    ["the first line of the Worker's reason", new Response(`${REASON}\nMore.\n`, { status: 503, headers: { "Content-Type": "text/plain; charset=utf-8" } }), `503: ${REASON}`],
+    ["a long line, cut", new Response("x".repeat(500), { status: 500, headers: { "Content-Type": "text/plain" } }), `500: ${"x".repeat(200)}`],
+    ["the status alone of a page that is no plain text", new Response("<title>example.com</title>", { status: 502, headers: { "Content-Type": "text/html" } }), "502"],
+    ["the status alone of an answer with no body", new Response(null, { status: 401 }), "401"],
+    ["the status alone of a plain text that breaks off", new Response(new ReadableStream({ start: (stream) => stream.error(new Error("cut")) }), { status: 503, headers: { "Content-Type": "text/plain" } }), "503"],
+    ["0 for no answer", undefined, "0"],
+  ])("%s", async (_what, response, told) => {
+    const asking = response === undefined ? Promise.reject(new Error("the name does not resolve")) : Promise.resolve(response);
+
+    expect((await answerOf(asking)).told).toBe(told);
   });
 });
 
