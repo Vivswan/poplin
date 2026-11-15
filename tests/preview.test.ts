@@ -272,10 +272,16 @@ describe("the local preview", () => {
   // Drift: the Activity screen shows the log as it is stored, newest first. A seed that wrote its history out of order would show days that jump back and forth.
   test("the seeded activity never rises in time down the list", async () => {
     const preview = await openPreview(false);
-    const { entries } = await data<{ entries: readonly { readonly at: number }[] }>(preview, "/data/activity");
+    const entries: { readonly at: number }[] = [];
+    // Every page is read: the install's own first entry is the last row of the last one.
+    for (let after: string | null = ""; after !== null; ) {
+      const page: { readonly entries: readonly { readonly at: number }[]; readonly next: string | null } = await data(preview, `/data/activity${after === "" ? "" : `?after=${after}`}`);
+      entries.push(...page.entries);
+      after = page.next;
+    }
     const rising = entries.filter((entry, index) => index > 0 && entry.at > (entries[index - 1]?.at ?? 0));
 
-    expect(entries.length).toBeGreaterThan(20);
+    expect(entries.length).toBeGreaterThan(200);
     expect(rising).toEqual([]);
   });
 

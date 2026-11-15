@@ -30,7 +30,7 @@ import { rebased, unbased } from "./base";
 import { ADMIN_ORIGIN, askMount, type Mount, previewValue, SERVED_PREFIX, siteOrigin } from "./mount";
 import { galleryPage, loginPage, missingPage, plainPage } from "./own-pages";
 import { type RealSites, realAddresses } from "./real-sites";
-import { keepLoginsWaiting, type Samples, seedWorld } from "./seed";
+import { keepLoginsWaiting, SEEDED_DAYS, type Samples, seedWorld } from "./seed";
 import { ADDRESSES, openWorld, type World } from "./world";
 
 /** What one request to the preview's API may carry. */
@@ -57,8 +57,8 @@ const SAMPLE_REBUILD = "https://provider.example/rebuilds/sample";
 /** The stand-in for the provider's rebuild: it takes the sample address alone and answers every start as taken, without a request. */
 const REBUILD: Omit<Rebuilding, "counters"> = { accepts: (address) => address.href === SAMPLE_REBUILD, fetch: async () => new Response(null, { status: 204 }) };
 
-/** How long before now the seeded install was set up, in days, which is before its sample history begins, and a day in milliseconds. */
-const [SEEDED_DAYS, DAY_MS] = [45, 86_400_000];
+/** A day in milliseconds. */
+const DAY_MS = 86_400_000;
 
 /** Where the dashboard of the install that holds nothing is mounted. */
 const EMPTY_PREFIX = "/empty";

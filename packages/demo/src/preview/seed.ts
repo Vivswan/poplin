@@ -115,6 +115,9 @@ const EARLIER: readonly Moment[] = Array.from({ length: EARLIER_DAYS }, (_day, i
   return index % CHECK_EVERY === 0 ? { ago, does: "domain", by: "mira", run: "check" } : { ago, does: "login", by: "mira" };
 });
 
+/** How many days before now a seeded install was set up: a day before the oldest moment of its history, so its first entry is the log's oldest. */
+export const SEEDED_DAYS = Math.ceil(Math.max(...[...SITES, ...SITE_HISTORY, ...HISTORY, ...EARLIER].map((moment) => moment.ago))) + 1;
+
 /** The computers that stand behind the sample logins of one demo install. */
 interface SampleComputers {
   /** A step to run before a page is answered: it collects the tokens of the logins a visitor allowed, and keeps a login waiting. */
