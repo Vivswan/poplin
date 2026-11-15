@@ -162,9 +162,12 @@ const ROWS: Readonly<Record<string, readonly [read: number, written: number]>> =
   "changeDetails": [6, 4],
   "changeDetails, the same": [6, 0],
   "listAudit": [20, 0],
-  "listAudit, one kind, the sites named with a text": [46, 0],
+  "listAudit, one kind, the sites named with a text": [45, 0],
   "listAudit, the oldest first": [20, 0],
-  "listAudit, the oldest first, the next page of one kind": [26, 0],
+  "listAudit, the oldest first, the next page of one kind": [25, 0],
+  "listAudit, a reading for a file": [45, 0],
+  "endOfAuditPart, of twenty entries": [21, 0],
+  "endOfAuditPart, of one kind, past the log's end": [45, 0],
   "countAudit": [45, 0],
   "countAudit, one kind, the sites named with a text": [45, 0],
   "countAudit, no further back than five entries": [5, 0],
@@ -384,7 +387,7 @@ describe("D1: the rows a listing, a change to a site, and a page of the audit lo
       "a detail that changes": [6, 4],
       "the same detail again": [6, 0],
       "a page of twenty entries": [20, 0],
-      "a page of the entries of one kind for one site": [33, 0],
+      "a page of the entries of one kind for one site": [32, 0],
       "a page by name": [33, 0],
       "the page by name after it": [34, 0],
       "a page by title": [33, 0],
@@ -613,6 +616,9 @@ describe("D1: the rows every operation of the database costs of a day's allowanc
     await cost("listAudit, one kind, the sites named with a text", () => database.listAudit({ limit: 20, actions: ["create"], site: "site-1" }));
     await cost("listAudit, the oldest first", () => database.listAudit({ limit: 20, dir: "asc" }));
     await cost("listAudit, the oldest first, the next page of one kind", () => database.listAudit({ limit: 20, dir: "asc", after: 20, actions: ["create"] }));
+    await cost("listAudit, a reading for a file", () => database.listAudit({ limit: 1000 }));
+    await cost("endOfAuditPart, of twenty entries", () => database.endOfAuditPart({ entries: 20 }));
+    await cost("endOfAuditPart, of one kind, past the log's end", () => database.endOfAuditPart({ entries: 2000, actions: ["create"] }));
     await cost("countAudit", () => database.countAudit({ most: 10_000 }));
     await cost("countAudit, one kind, the sites named with a text", () => database.countAudit({ most: 10_000, actions: ["create"], site: "site-1" }));
     await cost("countAudit, no further back than five entries", () => database.countAudit({ most: 5, actions: ["create"] }));

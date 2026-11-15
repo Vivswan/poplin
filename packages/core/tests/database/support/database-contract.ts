@@ -1394,6 +1394,16 @@ function auditLog(label: string, makeDatabase: DatabaseFactory): void {
       await expect(database.listAudit({ limit: 0 })).rejects.toThrow(RangeError);
     });
 
+    // Drift: a file of the log is read 1,000 entries a reading; a reading cut at a listing's 100 would end the file early, and one with no bound would hold a whole long log in memory.
+    test("one reading holds up to 1,000 entries, and no more is asked of it", async () => {
+      const database = await opened(makeDatabase);
+      for (let count = 0; count < 120; count += 1) await database.appendAudit({ action: "login", detail: {} }, { by: BO, at: NOW + count });
+      const read = await database.listAudit({ limit: 1000 });
+
+      expect([read.length, read.at(0)?.seq, read.at(-1)?.seq]).toEqual([120, 120, 1]);
+      await expect(database.listAudit({ limit: 1001 })).rejects.toThrow(RangeError);
+    });
+
     // Drift: the Activity page's filters are these conditions; one that matched a name's LIKE signs, or was dropped on the second page, would show entries the filter says are left out.
     test("a page is narrowed to some actions and to the sites whose name then held a text, and the next page stays narrowed", async () => {
       const database = await opened(makeDatabase);
@@ -1449,28 +1459,27 @@ function auditLog(label: string, makeDatabase: DatabaseFactory): void {
       await made(database, draft(DOCS));
       await database.trashSite(report.id, { by: BO, at: NOW + 1 });
 
-      expect([
-        await database.countAudit({ most: 5 }),
-        await database.countAudit({ most: 100, actions: ["create"] }),
-        await database.countAudit({ most: 100, site: "o" }),
-        await database.countAudit({ most: 100, actions: ["login"], site: "o" }),
-        await database.countAudit({ most: 100, actions: [] }),
-        await database.countAudit({ most: 4 }),
-        await database.countAudit({ most: 3 }),
-        await database.countAudit({ most: 2, actions: ["create"] }),
-        await database.countAudit({ most: 1, actions: ["create"] }),
-      ]).toEqual([
-        { count: 4, whole: true },
-        { count: 2, whole: true },
-        { count: 3, whole: true },
-        { count: 0, whole: true },
-        { count: 0, whole: true },
-        { count: 4, whole: false },
-        { count: 3, whole: false },
-        { count: 1, whole: false },
-        { count: 0, whole: false },
-      ]);
+      const whole = [{ most: 5 }, { most: 100, actions: ["create"] }, { most: 100, site: "o" }, { most: 100, actions: ["login"], site: "o" }, { most: 100, actions: [] }] as const;
+      const cut = [{ most: 4 }, { most: 3 }, { most: 2, actions: ["create"] }, { most: 1, actions: ["create"] }] as const;
+      const counted = await Promise.all([...whole, ...cut].map(async (query) => Object.values(await database.countAudit(query))));
+
+      expect(counted).toEqual([[4, true], [2, true], [3, true], [0, true], [0, true], [4, false], [3, false], [1, false], [0, false]]);
       await expect(database.countAudit({ most: 0 })).rejects.toThrow(RangeError);
+    });
+
+    // Drift: the next file of the log goes on after this place; one entry too early repeats an entry in two files, one too late drops one, and a place where the log has ended offers an empty file.
+    test("a part of the log ends on its last entry when an entry lies behind it, under the narrowing of a page, and nowhere when the log ends with it", async () => {
+      const database = await opened(makeDatabase);
+      const report = await made(database, draft(REPORT));
+      await database.appendAudit({ action: "login", detail: {} }, { by: BO, at: NOW });
+      await made(database, draft(DOCS));
+      await database.trashSite(report.id, { by: BO, at: NOW + 1 });
+
+      const parts = [{ entries: 1 }, { entries: 3 }, { entries: 4 }, { entries: 2, after: 3 }, { entries: 1, after: 3 }] as const;
+      const narrowed = [{ entries: 1, actions: ["create"] }, { entries: 2, actions: ["create"] }, { entries: 2, site: REPORT }, { entries: 1, site: REPORT }] as const;
+
+      expect(await Promise.all([...parts, ...narrowed].map((query) => database.endOfAuditPart(query)))).toEqual([4, 2, undefined, undefined, 2, 3, undefined, undefined, 4]);
+      await expect(database.endOfAuditPart({ entries: 0 })).rejects.toThrow(RangeError);
     });
 
     // Drift: a listing oldest first pages by the same cursor as one newest first; a cursor read the wrong way round, or a filter dropped in one direction, would repeat a page or skip the entries between two pages.

@@ -278,7 +278,7 @@ export interface LoginDecision {
 
 /** Which entries of the audit log one page holds. */
 export interface AuditQuery {
-  /** The most entries one page holds, from 1 to 100. */
+  /** The most entries one page holds, from 1 to 1,000. */
   readonly limit: number;
 
   /** The `seq` of the entry the page before ended on; absent for the first page. */
@@ -298,6 +298,21 @@ export interface AuditQuery {
 export interface AuditCountQuery {
   /** How many entries the count reads at the most, from the newest back; at least 1. */
   readonly most: number;
+
+  /** Only the entries of these actions; every entry when absent. */
+  readonly actions?: readonly AuditAction[];
+
+  /** Only the entries about a site whose name then held this text; every entry when absent. */
+  readonly site?: string;
+}
+
+/** Which part of the audit log is asked about: the entries behind a place, the newest first, as many as a file of the log holds. */
+export interface AuditPartQuery {
+  /** How many entries the part holds; at least 1. */
+  readonly entries: number;
+
+  /** The `seq` of the entry the part before ended on; absent for the first part. */
+  readonly after?: number;
 
   /** Only the entries of these actions; every entry when absent. */
   readonly actions?: readonly AuditAction[];
@@ -708,9 +723,9 @@ export interface Database {
   /**
    * One page of the audit log, the newest entry first, or the oldest first when `dir` is `asc`.
    *
-   * @param query - how many entries, from 1 to 100, and `after`, the `seq` of the entry the page before ended on: only entries behind that one in the direction asked are answered. A `seq` is a cursor taken from an entry, never a count
+   * @param query - how many entries, from 1 to 1,000, and `after`, the `seq` of the entry the page before ended on: only entries behind that one in the direction asked are answered. A `seq` is a cursor taken from an entry, never a count
    * @returns the page; narrowed by `actions` or `site`, it reads every entry from where it starts to the page's last
-   * @throws {RangeError} `limit` is not a whole number from 1 to 100
+   * @throws {RangeError} `limit` is not a whole number from 1 to 1,000
    */
   listAudit(query: AuditQuery): Promise<readonly AuditEntry[]>;
 
@@ -721,6 +736,14 @@ export interface Database {
    * @throws {RangeError} `most` is not a whole number of at least 1
    */
   countAudit(query: AuditCountQuery): Promise<AuditCount>;
+
+  /**
+   * Find where a part of the audit log ends, without handing its entries out: it reads the part's rows and one more, and answers one number.
+   *
+   * @returns the `seq` of the part's last entry when the log holds an entry behind it, which is the place the next part goes on after; `undefined` when the log ends inside the part or with it
+   * @throws {RangeError} `entries` is not a whole number of at least 1
+   */
+  endOfAuditPart(query: AuditPartQuery): Promise<number | undefined>;
 
   /**
    * Add requests, and the page views among them, to a day's count of one site and of all sites together, and drop the counts of every day more than a year before it. No audit entry is written.
