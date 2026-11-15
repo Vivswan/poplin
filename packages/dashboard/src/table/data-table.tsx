@@ -71,6 +71,13 @@ const TABLE_LOOK = "mb-2.5 table-fixed border-separate border-spacing-0 text-sm"
 /** The look of the last column, which stays in place: it has a hairline at its left edge only while the table is wider than its room, where a cell scrolls under it. The scroll area says when that is. */
 const PINNED_LOOK = "sticky right-0 in-data-[has-overflow-x]:border-l";
 
+/** The look of a row that holds the focus after a key: a ring drawn by its cells, so the cells that stay in place carry it too, where they would lie over a ring of the row's own. */
+const FOCUSED_ROW_LOOK = cn(
+  "outline-none focus-visible:[&>td]:shadow-[inset_0_2px_0_var(--ring),inset_0_-2px_0_var(--ring)]",
+  "focus-visible:[&>td:first-child]:shadow-[inset_2px_0_0_var(--ring),inset_0_2px_0_var(--ring),inset_0_-2px_0_var(--ring)]",
+  "focus-visible:[&>td:last-child]:shadow-[inset_-2px_0_0_var(--ring),inset_0_2px_0_var(--ring),inset_0_-2px_0_var(--ring)]",
+);
+
 /** The look of a heading while it is dragged to another place. */
 const DRAGGED_LOOK = "flex h-9 w-fit cursor-grabbing items-center rounded-md border bg-popover px-3 text-xs text-foreground shadow-md";
 
@@ -312,7 +319,7 @@ function BodyRow<Row>({
       onFocus={hintWhenCut}
       className={cn(
         "group/row bg-background hover:bg-muted has-[:focus-visible]:bg-muted data-[state=selected]:bg-chosen data-[state=selected]:has-[:focus-visible]:bg-chosen [&>td]:border-b",
-        "outline-none focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring",
+        FOCUSED_ROW_LOOK,
         onOpen !== undefined && "cursor-pointer focus-visible:bg-muted",
       )}
     >

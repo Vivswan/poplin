@@ -155,7 +155,7 @@ function PhoneList({
             key={site.label}
             tabIndex={-1}
             data-state={site.label === opened ? "selected" : undefined}
-            className="group/row relative flex min-h-16 items-center gap-2 border-b px-4 py-2 outline-none focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring data-[state=selected]:bg-chosen"
+            className="group/row relative flex min-h-16 items-center gap-2 border-b px-4 py-2 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring data-[state=selected]:bg-chosen"
           >
             {/* The row's own button lies under everything else in it: a press beside the title and the row's controls lands on it and opens the panel. */}
             <Button

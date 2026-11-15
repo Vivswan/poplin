@@ -705,6 +705,18 @@ test("after a change the focus is where the next key is of use: the panel's head
   await expect(perDay).toBeFocused();
 });
 
+// Drift: a row reached by a key would show the pointer's tint alone again: a class that turns a row's outline off also turns off the one asked for with the focus, and a ring of the row's own lies under the cells that stay in place.
+test("a site's row that takes the focus from a key draws a ring on all four sides, by its cells", async ({ page }) => {
+  await arrive(page);
+  const row = page.getByRole("table", { name: "Sites", exact: true }).locator("tbody > tr").first();
+  // A key before the focus is what tells the engine to show it.
+  await page.keyboard.press("Tab");
+  await row.focus();
+
+  const edges = await row.evaluate((focused) => [...focused.children].map((cell) => getComputedStyle(cell).boxShadow.split("inset").length - 1));
+  expect({ first: edges.at(0), between: [...new Set(edges.slice(1, -1))], last: edges.at(-1) }).toEqual({ first: 3, between: [2], last: 3 });
+});
+
 // Drift: the filter at a row's end would search for a name again: the entries from before a new link or a rename would be gone, and those of another site of that name shown.
 test("on Activity, Only this site keeps the entries of the row's site, the first one from before its new link among them, under a mark that names the site, and the mark's button shows every site again", async ({ page }) => {
   await arrive(page);

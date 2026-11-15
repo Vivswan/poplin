@@ -122,7 +122,7 @@ function PhoneList({ page, place, after }: { readonly page: Page; readonly place
     <div ref={list} className="line-room min-h-0 flex-1 overflow-y-auto md:hidden">
       <ul aria-label="Activity" className="border-t">
         {page.entries.map((entry) => (
-          <li key={entry.seq} tabIndex={-1} className="flex min-h-16 flex-col justify-center gap-0.5 border-b px-4 py-2 outline-none focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring">
+          <li key={entry.seq} tabIndex={-1} className="flex min-h-16 flex-col justify-center gap-0.5 border-b px-4 py-2 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring">
             <span className="flex min-w-0 items-baseline gap-2">
               <span className="truncate">{whatOf(entry)}</span>
               <span className="min-w-0 shrink-0 truncate">
