@@ -10,6 +10,9 @@ import { HOST, PID_PATH, pidFile, stopRunning } from "../packages/demo/scripts/r
 import { readSamples } from "../packages/demo/scripts/samples";
 import { plantedRepository, repositoryFiles } from "./support/repository-files";
 
+/** The version the demo's installs are told they run. */
+const VERSION = "1.0.0";
+
 /** The repository this file sits in. */
 const ROOT = join(import.meta.dir, "..");
 
@@ -101,7 +104,7 @@ function isHonest(path: string, status: number): boolean {
 
 /** Open the demo as the command does: over bun's SQLite and the real sample sites. */
 async function openPreview(gallery: boolean): Promise<Awaited<ReturnType<typeof createPreview>>> {
-  return createPreview({ openDriver: () => new BunSqliteDriver(), samples: await readSamples(), gallery });
+  return createPreview({ openDriver: () => new BunSqliteDriver(), samples: await readSamples(), version: VERSION, gallery });
 }
 
 describe("the local preview", () => {
@@ -140,7 +143,7 @@ describe("the local preview", () => {
     const base = "/poplin/demo";
     const drivers = [new BunSqliteDriver(), new BunSqliteDriver()];
     const [seeded] = drivers;
-    const host = { samples: await readSamples(), gallery: false, base };
+    const host = { samples: await readSamples(), version: VERSION, gallery: false, base };
     const first = await createPreview({ ...host, openDriver: () => drivers.shift() ?? new BunSqliteDriver() });
     const resumed = await createPreview({ ...host, resumed: true, openDriver: () => seeded ?? new BunSqliteDriver() });
     const home = await (await first.fetch(new Request(`${ORIGIN}${base}/`))).text();

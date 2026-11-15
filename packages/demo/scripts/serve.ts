@@ -7,6 +7,7 @@
 //
 // This file and its neighbours start the server and keep the pid file. The demo itself is `../src/preview/`, which names no runtime.
 
+import manifest from "../../cli/package.json" with { type: "json" };
 import { BunSqliteDriver } from "../../core/tests/database/support/bun-sqlite-driver";
 import { createPreview } from "../src/preview/preview";
 import { readSamples } from "./samples";
@@ -29,7 +30,7 @@ async function watch(args: readonly string[]): Promise<number> {
 async function serve(port: number, gallery: boolean): Promise<void> {
   await stopRunning(port);
 
-  const preview = await createPreview({ openDriver: () => new BunSqliteDriver(), samples: await readSamples(), gallery });
+  const preview = await createPreview({ openDriver: () => new BunSqliteDriver(), samples: await readSamples(), version: manifest.version, gallery });
   const server = Bun.serve({
     hostname: HOST,
     port,

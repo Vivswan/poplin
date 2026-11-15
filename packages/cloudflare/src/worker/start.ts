@@ -18,6 +18,7 @@ import type { Database } from "@poplin/core/src/database/database";
 import { openDatabase } from "@poplin/core/src/database/open";
 import { defaultSettings, settingsFromText, settingsToText } from "@poplin/core/src/records/settings";
 import * as v from "valibot";
+import { version } from "../../../cli/package.json";
 import { D1Driver } from "../database/d1";
 import { CloudflareCounters } from "../limits/counters";
 import { accessIdentity } from "../login/access-token";
@@ -48,6 +49,9 @@ export const NO_ACCESS = "not-set-up";
 
 /** The login of a Worker with no `ACCESS` variable: nobody is anybody. */
 const NOBODY: Identify<string> = async () => ({ ok: false, refusal: NO_ACCESS });
+
+/** The version of poplin this Worker was built from: the one the released package states, read when the Worker is bundled. */
+const VERSION: string = version;
 
 /** The address layout of an install, as serving and the login ask it. */
 type Addresses = ReturnType<typeof hostnameAddresses>;
@@ -89,6 +93,9 @@ export interface Instance {
 
   /** The install's side at Cloudflare, for setup and the Domain tab. */
   readonly domain: DomainPlug;
+
+  /** The version of poplin the install runs. */
+  readonly version: string;
 }
 
 /** A variable of the Worker that cannot be used. `refusal` says what is wrong with it and never quotes its value. */
@@ -244,6 +251,7 @@ export async function startInstance(env: Bindings, outside: Outside, visitorOf: 
     ...install,
     readToken: (id) => database.getToken(id),
     limits: API_LIMITS,
+    version: VERSION,
     report: (error) => console.error("poplin: an API request failed", error),
     counters,
     visitorOf: (request) => visitorOf(request, database),
@@ -257,6 +265,7 @@ export async function startInstance(env: Bindings, outside: Outside, visitorOf: 
     api,
     identify: access.ok ? accessIdentity({ keys: accessKeys({ teamDomain: access.value.teamDomain, fetch: outside.fetch }), audience: access.value.audience }) : NOBODY,
     domain: createDomainPlug({ ...own.value, layout, fetch: outside.cloudflare }),
+    version: VERSION,
   };
 
   return { ok: true, instance };

@@ -3,9 +3,10 @@ import { existsSync } from "node:fs";
 import { join } from "node:path";
 
 import type { Code } from "../../../app/src/api/respond";
-import { ORIGIN } from "../../../app/tests/api/support/install";
+import { INSTALL_VERSION, ORIGIN } from "../../../app/tests/api/support/install";
 import { saveLogin } from "../../src/local/login-file";
 import type { Login } from "../../src/local/login";
+import { VERSION } from "../../src/poplin";
 import { type Bench, cleanUp, folderOf, jsonOf, openBench, type Ran } from "./support/harness";
 
 /** Every code the API refuses with. A code the API gains does not compile until it is listed here, and so is run through the table. */
@@ -212,8 +213,8 @@ describe("run", () => {
 
     expect(who.out.slice(0, 2)).toEqual([`install  ${ORIGIN}`, "role     admin"]);
     expect(jsonOf(await bench.run("whoami --json"))).toMatchObject({ server: ORIGIN, token: { scope: "admin", note: "a test" } });
-    expect(doctor.out.map((line) => line.split(/ {2,}/).slice(0, 2).join(" "))).toEqual(["ok install", "ok login", "ok settings", "ok sites", "ok trash", "nothing was changed"]);
-    expect(asPublisher.out[2]).toBe("ok  settings  not read: this token is no admin's");
+    expect(doctor.out.map((line) => line.split(/ {2,}/).slice(0, 2).join(" "))).toEqual(["ok install", "ok version", "ok login", "ok settings", "ok sites", "ok trash", "nothing was changed"]);
+    expect(asPublisher.out[3]).toBe("ok  settings  not read: this token is no admin's");
     expect((await bench.run("config trash_days")).out).toEqual(["7"]);
     expect((await bench.run("config")).out).toContain("max_site_size                200MB");
     expect(await stateOf(bench)).toEqual(before);
@@ -375,7 +376,7 @@ describe("run", () => {
     const machine = { env: { POPLIN_CONFIG_DIR: join(bench.home, "config") }, platform: process.platform, home: bench.home };
     await saveLogin({ server: ORIGIN, token } as Login, machine);
     const deep = `${'{"a":'.repeat(10_000)}1${"}".repeat(10_000)}`;
-    bench.hook = () => new Response(`{"token":{"id":"0000000000000000","scope":"admin","note":"","created":0,"expires":"never"},"more":${deep}}`, { status: 200 });
+    bench.hook = () => new Response(`{"token":{"id":"0000000000000000","scope":"admin","note":"","created":0,"expires":"never"},"version":"1.0.0","more":${deep}}`, { status: 200 });
 
     const typed = await bench.run(`show ${token} --json`, { env: {} });
     const dry = await bench.run(`${folderOf("report", { "index.html": "x" })} --dry-run --title ${token}`, { env: {} });
@@ -417,6 +418,24 @@ describe("run", () => {
     expect(summary(listed)).toEqual({ code: 0, out: ["no sites"], err: ["the first 0 sites are shown, and the install holds more"] });
   });
 
+  // Drift: the install is built from one release and the command from another, and this line is the one place a person reads both.
+  test.each([
+    ["the same version", VERSION, `ok  version   install ${VERSION}, this poplin ${VERSION}`],
+    ["another version", INSTALL_VERSION, `ok  version   install ${INSTALL_VERSION}, this poplin ${VERSION}: the install and this poplin are of two versions; update the older one`],
+  ])("doctor names the install's version beside its own, on an install of %s", async (_name, installed, line) => {
+    const bench = await openBench();
+    bench.hook = async (request) => {
+      if (!request.url.endsWith("/api/whoami")) return undefined;
+
+      return Response.json({ ...(await (await bench.install.api.fetch(request)).json()), version: installed });
+    };
+
+    const report = await bench.run("doctor");
+
+    expect([report.code, report.out[1]]).toEqual([0, line]);
+    expect(jsonOf(await bench.run("doctor --json"))).toMatchObject({ version: installed, poplin: VERSION });
+  });
+
   test("doctor exits 1 when a check fails, with its report still printed: without this a script reads a failed check as health", async () => {
     const bench = await openBench();
     bench.hook = (request) => (request.url.endsWith("/api/config") ? answer(500, { error: { code: "internal", message: "no" } }) : undefined);
@@ -424,7 +443,7 @@ describe("run", () => {
     const report = await bench.run("doctor");
 
     expect(report.code).toBe(1);
-    expect(report.out[2]).toBe("failed  settings  the install failed to do that");
+    expect(report.out[3]).toBe("failed  settings  the install failed to do that");
     expect(report.out.at(-1)).toBe("nothing was changed");
   });
 

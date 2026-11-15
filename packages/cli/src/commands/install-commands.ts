@@ -3,6 +3,7 @@
 import { settingsToText } from "../../../core/src/records/settings";
 import type { Failure } from "../client/client";
 import { clearLogin } from "../local/login-file";
+import { VERSION } from "../poplin";
 import { readSetting } from "./install-settings";
 import { type Problem, problem, problemOf } from "./problems";
 import type { Outcome, RequestOf, Session } from "./records";
@@ -13,6 +14,9 @@ const STILL_LIVE = "the token may still be live: revoke it on the install's dash
 
 /** What a change of the logins still needs: the login page in front of the install keeps a list of its own. */
 const LOGINS_STEP = "one more step: on the dashboard's Domain tab, paste a token and press Repair, so the login page lets a new email in; until then only an email that was already a login gets in";
+
+/** What follows the two versions of an install and a command that differ, in the words the list of problems has for them. */
+const TWO_VERSIONS = "the install and this poplin are of two versions; update the older one";
 
 /** The commands this module runs, as the parser read them. */
 type InstallRequest = RequestOf<"whoami" | "logout" | "config" | "doctor">;
@@ -112,12 +116,19 @@ function checkOf(check: string, failure: Failure | undefined, detail: string): C
   return { check, ok: false, detail: said.about === undefined ? said.message : `${said.message}: ${said.about}` };
 }
 
+/** The versions of the install and of this command, side by side. Two that differ are a finding, not a failure: every call the report makes was still answered. */
+function versionCheck(install: string): Check {
+  const both = `install ${install}, this poplin ${VERSION}`;
+
+  return { check: "version", ok: true, detail: install === VERSION ? both : `${both}: ${TWO_VERSIONS}` };
+}
+
 /** Report on the install with calls that only read: who the token is, the settings, and the sites. Nothing is changed. */
 async function doctor({ client, server, source }: Session): Promise<Outcome> {
   const who = await client.call("whoami", undefined);
   if (!who.ok) return failed(who.failure);
 
-  const { token } = who.value;
+  const { token, version } = who.value;
   const settings = await client.call("readConfig", undefined);
   const sites = await client.call("listSites", {});
   const trash = await client.call("listSites", { trash: true });
@@ -126,6 +137,7 @@ async function doctor({ client, server, source }: Session): Promise<Outcome> {
   const trashed = trash.ok ? `${countText(trash.value.sites.length, "site")}${trash.value.next === undefined ? "" : " and more"}` : "";
   const checks: Check[] = [
     { check: "install", ok: true, detail: `${server} answers` },
+    versionCheck(version),
     { check: "login", ok: true, detail: `${token.scope} token ${token.id}, ${source === "file" ? "saved on this machine" : "from the environment"}, expires ${expiryText(token.expires)}` },
     checkOf("settings", settings.ok ? undefined : settings.failure, kept),
     checkOf("sites", sites.ok ? undefined : sites.failure, live),
@@ -133,7 +145,7 @@ async function doctor({ client, server, source }: Session): Promise<Outcome> {
   ];
   const lines = columns(checks.map((check) => [check.ok ? "ok" : "failed", check.check, check.detail]));
 
-  const outcome: Outcome = { ok: true, value: { server, token, checks }, lines: [...lines, "nothing was changed"] };
+  const outcome: Outcome = { ok: true, value: { server, version, poplin: VERSION, token, checks }, lines: [...lines, "nothing was changed"] };
 
   return checks.every((check) => check.ok) ? outcome : { ...outcome, found: "failed" };
 }

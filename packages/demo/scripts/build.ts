@@ -12,6 +12,7 @@ import { join } from "node:path";
 import { parseArgs } from "node:util";
 import { gzipSync } from "node:zlib";
 
+import manifest from "../../cli/package.json" with { type: "json" };
 import { notFoundPage } from "./deep-links";
 import { readSamples } from "./samples";
 
@@ -57,7 +58,7 @@ async function bundle(samples: string, tag: string): Promise<string> {
     target: "browser",
     format: "iife",
     minify: true,
-    define: { BUILD: JSON.stringify(tag), PACKED_SAMPLES: samples },
+    define: { BUILD: JSON.stringify(tag), PACKED_SAMPLES: samples, VERSION: JSON.stringify(manifest.version) },
   });
   const [script] = built.outputs;
   if (!built.success || script === undefined) throw new AggregateError(built.logs, "the demo's worker did not bundle");

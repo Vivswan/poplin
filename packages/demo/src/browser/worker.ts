@@ -16,6 +16,9 @@ declare const self: ServiceWorkerGlobalScope;
 /** What the build puts in place of this name: a tag of the worker's own content and of SQLite's file, so each build has its own. */
 declare const BUILD: string;
 
+/** What the build puts in place of this name: the version of poplin the demo was built from. */
+declare const VERSION: string;
+
 /** What the build puts in place of this name: every sample site, each file as its path, its media type, and its bytes in base64. */
 declare const PACKED_SAMPLES: Readonly<Record<string, readonly (readonly [path: string, contentType: string, base64: string])[]>>;
 
@@ -131,7 +134,7 @@ function samples(): Samples {
 
 /** Start the demo, and save one that started from the seed: its pages name sites a second seed would name otherwise. */
 async function start(saved: SavedDemo | undefined): ReturnType<typeof openKeptDemo> {
-  const demo = await openKeptDemo({ sqlite: await loadSqlite(await wasmBytes()), samples: samples(), base: BASE, saved });
+  const demo = await openKeptDemo({ sqlite: await loadSqlite(await wasmBytes()), samples: samples(), version: VERSION, base: BASE, saved });
   if (saved === undefined) await save(demo);
 
   return demo;

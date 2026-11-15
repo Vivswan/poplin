@@ -8,7 +8,7 @@ import type { Login } from "@poplin/core/src/auth/logins";
 import { AllowanceSpent } from "@poplin/core/src/database/driver";
 
 import { ADDRESSES } from "../sites/support/layout";
-import { type Answered, type ApiInstall, LIMITS, NOW, ORIGIN, openApi, requestOf, VISITOR_HEADER } from "./support/install";
+import { type Answered, type ApiInstall, INSTALL_VERSION, LIMITS, NOW, ORIGIN, openApi, requestOf, VISITOR_HEADER } from "./support/install";
 
 type RouteName = keyof typeof ROUTES;
 
@@ -204,6 +204,7 @@ describe("createApi", () => {
     };
 
     expect(part(await done("whoami", undefined), "token")).toMatchObject({ scope: "admin", note: "a test", expires: NOW + 30 * DAY });
+    expect((await done("whoami", undefined)).body.version).toBe(INSTALL_VERSION);
     const issued = await done("issueToken", undefined, { body: { scope: "publisher", note: "ci" } });
     expect((await done("listTokens", undefined)).body.tokens).toHaveLength(4);
     expect(part(await done("whoami", undefined, { token: issued.body.token }), "token")).toMatchObject({ scope: "publisher", note: "ci", expires: "never" });

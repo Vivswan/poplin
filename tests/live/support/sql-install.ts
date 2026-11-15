@@ -23,6 +23,9 @@ const ADMIN_HOST = "poplin.example.com";
 /** The admin whose settings the install starts with. */
 const INSTALLER = "ada@example.com" as Login;
 
+/** The version the fake says it runs. */
+const VERSION = "1.0.0";
+
 /** What one request can carry: room for the repository's sample sites. */
 const LIMITS = { fileBytes: 1_000_000, files: 100, manifestBytes: 100_000 };
 
@@ -67,6 +70,7 @@ export async function openSqlInstall(): Promise<SqlInstall> {
     reservedNames: ADDRESSES.reservedNames,
     readToken: (id) => database.getToken(id),
     limits: LIMITS,
+    version: VERSION,
     counters,
     visitorOf: async () => "one-visitor",
   });

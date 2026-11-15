@@ -24,6 +24,9 @@ export const ORIGIN = "https://poplin.example.com";
 /** What one request to the test install can carry: small, so a test passes each cap with a few bytes. A site of forty files is one that three requests copy. */
 export const LIMITS: ApiLimits = { fileBytes: 64, files: 40, manifestBytes: 4096 };
 
+/** The version the test install says it runs: one no build of poplin states, so a test that reads it cannot pass on the workspace's own. */
+export const INSTALL_VERSION = "7.8.9";
+
 /** The request header a test names its visitor in; every request without it comes from one visitor. */
 export const VISITOR_HEADER = "Test-Visitor";
 
@@ -166,6 +169,7 @@ export async function openApi(overrides: Partial<ReturnType<typeof defaultSettin
     reservedNames: ADDRESSES.reservedNames,
     readToken: (id) => database.getToken(id),
     limits,
+    version: INSTALL_VERSION,
     report: (error) => reported.push(error),
     // Found anew on every request, so a test that swaps the method in is heard.
     counters: { takeMinute: (window, now) => counters.takeMinute(window, now) },

@@ -78,6 +78,9 @@ export interface Call {
 
   /** What one request can carry. */
   readonly limits: UploadLimits;
+
+  /** The version of poplin the install runs. */
+  readonly version: string;
 }
 
 /** One request to a route that takes no token: nobody asks, so there is no actor. */
@@ -150,7 +153,7 @@ export const OPEN_HANDLERS: { readonly [Name in OpenName]: Handler<Name, OpenCal
 
 /** The handler of every route that takes a token, by the route's name. A route without one does not compile. */
 export const HANDLERS: { readonly [Name in Exclude<RouteName, OpenName>]: Handler<Name> } = {
-  whoami: async ({ token }) => ({ ok: true, token: tokenObject(token) }),
+  whoami: async ({ token, version }) => ({ ok: true, token: tokenObject(token), version }),
   logout: ({ install, actor, token }) => revokeToken(install, actor, token.id),
   listTokens: ({ install, actor }) => listTokens(install, actor),
   issueToken: ({ install, actor, body }) => checked(TOKEN_REQUEST, body, (request) => issueToken(install, actor, request)),

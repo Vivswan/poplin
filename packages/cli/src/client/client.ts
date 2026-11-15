@@ -65,7 +65,7 @@ const CONFIG_ANSWER = v.looseObject({ values: SETTING_VALUES });
 
 /** The form of the answer to a done request, for every route this client calls. An answer of another form is a failure, so no command reads a key that is not there. */
 const ANSWERS = {
-  whoami: v.looseObject({ token: TOKEN }),
+  whoami: v.looseObject({ token: TOKEN, version: v.string() }),
   logout: v.looseObject({ token: TOKEN }),
   beginLogin: v.looseObject({ code: v.string(), secret: v.string(), verify_url: v.string(), expires_in: v.number(), interval: v.number() }),
   redeemLogin: v.variant("state", [

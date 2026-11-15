@@ -5,6 +5,8 @@ import { reset } from "cloudflare:test";
 import { OPEN_ROUTES, ROUTES } from "@poplin/core/src/api/routes";
 import { settingsFromText } from "@poplin/core/src/records/settings";
 import { beforeEach, describe, expect, test, vi } from "vitest";
+import manifest from "../../../cli/package.json?raw";
+import built from "../../dist/worker.js";
 import bundle from "../../dist/worker.js?raw";
 import type { Bindings } from "../../src/worker/bindings";
 import { signer } from "../login/support/access";
@@ -702,5 +704,14 @@ describe("the built bundle", () => {
     expect(modules.filter((path) => /(^|\/)tests\/|\.test\.|\/support\/|vitest|fixtures/.test(path))).toEqual([]);
     expect([...bundle.matchAll(/^import .*$/gm)].map(([line]) => line)).toEqual([]);
     expect(new TextEncoder().encode(bundle).byteLength).toBeLessThan(MOST_BUNDLE_BYTES);
+  });
+
+  // Drift: a release writes its number into the package's manifest alone, so a bundle that held a number of its own would name an old release on every install.
+  test("answers with the version the released package's manifest states", async () => {
+    // The built Worker reads the runtime's own clock, so its token is issued at that time.
+    const token = await tokenOf({ ...w, clock: { now: Date.now() } }, "admin");
+    const answered = await done<{ version: string }>(await api(built, token, "GET", ROUTES.whoami.path()));
+
+    expect(answered.version).toBe((JSON.parse(manifest) as { version: string }).version);
   });
 });

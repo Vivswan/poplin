@@ -79,6 +79,9 @@ export interface Host {
   /** The files of every sample site the seed publishes. */
   readonly samples: Samples;
 
+  /** The version of poplin the demo's installs say they run. */
+  readonly version: string;
+
   /** Whether `/gallery` answers; it does not when left out. */
   readonly gallery?: boolean;
 
@@ -167,9 +170,9 @@ function dashboardMount(world: World, prefix: string): Mount {
   return { prefix, origin: ADMIN_ORIGIN, base: "", holds: "pages", answer };
 }
 
-function apiMount(world: World): Mount {
+function apiMount(world: World, version: string): Mount {
   const { database } = world.install;
-  const api = createApi({ ...world.install, readToken: (id) => database.getToken(id), limits: API_LIMITS, report: (error) => console.error("preview: an API request failed", error), ...countsOf(world) });
+  const api = createApi({ ...world.install, readToken: (id) => database.getToken(id), limits: API_LIMITS, version, report: (error) => console.error("preview: an API request failed", error), ...countsOf(world) });
 
   return { prefix: "/api", origin: ADMIN_ORIGIN, base: "/api", holds: "json", answer: api.fetch };
 }
@@ -207,7 +210,7 @@ async function openScene(host: Host, resumed: boolean): Promise<Scene> {
   const { token } = resumed ? { token: "" } : await seedWorld(seeded, host.samples);
   const setups = ([...PLUG_STATES, SHUT] as const).map((state) => setupMount(seeded, state));
 
-  return { seeded, token, dashboard: dashboardMount(seeded, ""), mounts: [dashboardMount(empty, EMPTY_PREFIX), apiMount(seeded), ...setups] };
+  return { seeded, token, dashboard: dashboardMount(seeded, ""), mounts: [dashboardMount(empty, EMPTY_PREFIX), apiMount(seeded, host.version), ...setups] };
 }
 
 function themeOf(request: Request): (typeof THEMES)[number] | undefined {

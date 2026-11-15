@@ -148,7 +148,7 @@ An install begins five logins a minute for all computers together. In a minute t
 | `poplin config`                                                      | shows every setting                               |
 | `poplin config versions_kept`                                        | shows one setting                                 |
 | `poplin config versions_kept 10`                                     | changes one setting                               |
-| `poplin doctor`                                                      | checks that the install answers; changes nothing  |
+| `poplin doctor`                                                      | checks that the install answers, and prints its version beside this poplin's, as `install 0.1.0, this poplin 0.1.0`; changes nothing |
 | `poplin setup --server https://poplin.your-name.workers.dev --domain example.com --login you@example.com` | finishes a new install, as its setup page does |
 | `poplin setup --check --server https://poplin.your-name.workers.dev` | lists what that would change, with the same flags; changes nothing |
 | `poplin help rollback`                                               | shows the help of one command                     |

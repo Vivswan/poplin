@@ -7,6 +7,9 @@ import { SqlJsDriver } from "../../src/browser/sqljs-driver";
 import { createPreview } from "../../src/preview/preview";
 import { SQLITE } from "./support/sqlite";
 
+/** The version the demo's installs are told they run. */
+const VERSION = "1.0.0";
+
 /** The address a visitor's browser shows the demo at. */
 const HOME = "https://example.com/poplin/demo";
 
@@ -19,7 +22,7 @@ const FOLLOWS_SYSTEM = "color-scheme: light dark";
 type Demo = Awaited<ReturnType<typeof openKeptDemo>>;
 
 async function open(saved?: ReturnType<Demo["save"]>): Promise<Demo> {
-  return openKeptDemo({ sqlite: SQLITE, samples: await readSamples(), base: "/poplin/demo", saved });
+  return openKeptDemo({ sqlite: SQLITE, samples: await readSamples(), version: VERSION, base: "/poplin/demo", saved });
 }
 
 async function page(demo: Demo, path: string): Promise<string> {
@@ -87,7 +90,7 @@ test.each([
   ["at the root of its origin", ""],
   ["under a base path", "/poplin/demo"],
 ])("whatever `to` an address names, the demo %s redirects only to a place of its own folder", async (_, base) => {
-  const demo = await openKeptDemo({ sqlite: SQLITE, samples: await readSamples(), base });
+  const demo = await openKeptDemo({ sqlite: SQLITE, samples: await readSamples(), version: VERSION, base });
   const origin = "https://example.com";
   const inside = (location: string, asked: string): boolean => {
     const target = new URL(location, asked);
@@ -118,7 +121,7 @@ test.each([
 
 test("a served page's `Clear-Site-Data` stays inside the demo: without this the demo tells a browser to drop the cache of the whole origin, which holds the website's own pages", async () => {
   const stale = { "If-None-Match": '"v9-stale"' };
-  const control = await createPreview({ openDriver: () => new SqlJsDriver(SQLITE), samples: await readSamples() });
+  const control = await createPreview({ openDriver: () => new SqlJsDriver(SQLITE), samples: await readSamples(), version: VERSION });
   const demo = await open();
 
   expect((await control.fetch(new Request("https://example.com/served/lisbon-page/", { headers: stale }))).headers.get("Clear-Site-Data")).toBe('"cache"');

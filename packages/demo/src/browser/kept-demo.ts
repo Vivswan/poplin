@@ -47,6 +47,9 @@ interface KeptHost {
   /** The loaded SQLite module. */
   readonly sqlite: SqlJsStatic;
 
+  /** The version of poplin the demo's installs say they run. */
+  readonly version: string;
+
   /** The files of every sample site the seed publishes. */
   readonly samples: Samples;
 
@@ -150,6 +153,7 @@ export async function openKeptDemo(host: KeptHost): Promise<KeptDemo> {
 
   const preview = await createPreview({
     samples: host.samples,
+    version: host.version,
     base: host.base,
     reasonAt: REASON_AT,
     resumed: saved !== undefined,

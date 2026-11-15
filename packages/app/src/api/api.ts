@@ -45,6 +45,9 @@ export interface ApiDeps extends Install {
   /** What one request can carry. */
   readonly limits: ApiLimits;
 
+  /** The version of poplin the install runs, as its build stated it. */
+  readonly version: string;
+
   /** Told of every failure a request ends in, before the request is answered 500. */
   readonly report?: (error: unknown) => void;
 
@@ -126,6 +129,7 @@ async function answer(name: RouteName, request: Request, params: Readonly<Record
     body: sent?.value,
     request,
     limits: deps.limits,
+    version: deps.version,
   };
 
   if (name === "exportFile") return respondFile(await HANDLERS.exportFile(call));
