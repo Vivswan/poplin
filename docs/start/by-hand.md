@@ -187,7 +187,11 @@ Your install is ready, and it publishes two ways.
 
 ```text
 Mac:      npx poplin ~/Desktop/report
-Windows:  npx poplin C:\Users\user\Desktop\report
+Windows:  npx poplin "C:\Users\user\Desktop\report"
 ```
 
-On a Mac, `~` is your own folder. On Windows, `user` stands for your own name on the computer. To take an install down, see [Remove](../run/remove.md).
+On a Mac, `~` is your own folder. On Windows, `user` stands for your own name on the computer, and the quotes keep a path that holds a space in one piece.
+
+On a Mac, a name with a space is typed in quotes after the `~/`: `~/"Desktop/my report"`.
+
+To take an install down, see [Remove](../run/remove.md).

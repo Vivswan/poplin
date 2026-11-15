@@ -40,7 +40,7 @@ npx poplin whoami
 
 The first line prints the version of Node.js, which must be 24 or higher. When it prints an error or a lower version, ask the user to run the LTS installer from <https://nodejs.org> and to tell you when it is done. Then run both lines again: do not install it yourself.
 
-If the new Node.js is still not found, your terminal is older than the install: ask the user to restart you, the way step 5 has it.
+If the new Node.js is still not found, the terminal you run in is older than the install, and starting you again inside it changes nothing. Ask the user to restart you in a new terminal window, the way step 5 has it.
 
 | `npx poplin whoami` prints                      | Means                      | Next                                             |
 | ----------------------------------------------- | -------------------------- | ------------------------------------------------ |
@@ -247,13 +247,14 @@ The server has one name, `poplin`, one command, `npx`, and two arguments, `popli
 
 Edit your own configuration only, and only after the yes of step 1. The tools may not appear until you are restarted: if so, tell the user, and do step 6 with the command.
 
-Before a restart, tell the user three things, since the chat may not come back:
+Before a restart, tell the user four things, since the chat may not come back:
 
 | Tell the user      | In words like                                           |
 | ------------------ | ------------------------------------------------------- |
-| what is done       | the install is made and this computer is logged in      |
-| how to restart you | close the agent, then start it again in the same folder |
-| what to say next   | `Go on with the poplin setup.`                          |
+| what is done       | only what is done by then. From step 2: Node.js is installed. From step 5: this computer is logged in and the tools are added |
+| what is left       | from step 2: every step after the check. From step 5: the last check                                                          |
+| how to restart you | close the agent, open a new terminal window, and start the agent again there, in the same folder                              |
+| what to say next   | `Go on with the poplin setup.`                                                                                                |
 
 ## 6. Confirm, and tell the user
 

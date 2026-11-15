@@ -26,7 +26,7 @@ Paste it into an agent, such as Claude Code or Codex: an AI tool that runs in a 
 
 - **One yes, at the start.** It covers the setup, the tools of step 5 included, and nothing else: the agent publishes, shares, and deletes only when you ask.
 - **Your agent's own questions are expected.** The tool may ask you to approve each command before it runs, such as `node --version`. That is the tool's own safety, apart from the one yes.
-- **A restart** is closing the agent and starting it again, in the same folder. The chat may not come back: afterwards, say `Go on with the poplin setup.`
+- **A restart** is closing the agent, opening a new terminal window, and starting the agent again there, in the same folder. The agent asks for one when its terminal, open since before Node.js was installed, does not find it, and when the tools of step 5 do not show. The chat may not come back: afterwards, say `Go on with the poplin setup.`
 - **The dashboard's address** is asked only when you have an install and this computer has no login.
 - **The Cloudflare API token stays out of the chat.** You paste it into the setup page, in your own browser.
 - **The agent acts as you**, with the login step 4 saves on this computer. It leaves a saved login as it is. The login lasts 30 days: after that the agent asks you before it makes a new one.
