@@ -237,7 +237,7 @@ describe("the product, from a token to an opened site", () => {
     expect({ status: opened.status, cache: opened.headers.get("Cache-Control"), text: await opened.text() }).toEqual({ status: 200, cache: "private, no-cache", text: "<h1>report</h1>" });
     expect({ status: file.status, type: file.headers.get("Content-Type"), text: await file.text() }).toEqual({ status: 200, type: "text/csv", text: "a,b\n1,2\n" });
     expect({ status: login.status, to: login.headers.get("Location"), cache: login.headers.get("Cache-Control") }).toEqual({ status: 302, to: "/", cache: "no-store" });
-    expect(login.headers.get("Set-Cookie")).toMatch(/^__Secure-poplin-session=[^;]+; Secure; HttpOnly; SameSite=Lax; Path=\/; Max-Age=\d+$/);
+    expect(login.headers.get("Set-Cookie")).toMatch(/^__Secure-poplin-session=[^;]+; Max-Age=\d+; Path=\/; HttpOnly; Secure; SameSite=Lax$/);
     expect(shown.site.addresses.public).toBe("https://yearly-page.example.com");
     expect({ status: named.status, text: await named.text() }).toEqual({ status: 200, text: "<h1>report</h1>" });
     expect({ status: stale.status, to: stale.headers.get("Location") }).toEqual({ status: 302, to: `${under(site, "u")}/data/table.csv?x=1` });

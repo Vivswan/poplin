@@ -40,7 +40,9 @@ describe("the session cookie", () => {
     const key = await keyOf(1);
     const value = await buildSession({ email: loginOf("owner@example.com"), issuedAt: NOW, key });
 
-    expect(await mintSessionCookie({ email: loginOf("owner@example.com"), key, now: NOW })).toBe(`${NAME}=${value}; Secure; HttpOnly; SameSite=Lax; Path=/; Max-Age=2592000`);
+    const [pair, ...attributes] = (await mintSessionCookie({ email: loginOf("owner@example.com"), key, now: NOW })).split("; ");
+
+    expect([pair, attributes.sort()]).toEqual([`${NAME}=${value}`, ["HttpOnly", "Max-Age=2592000", "Path=/", "SameSite=Lax", "Secure"]]);
   });
 
   // Drift: the reader and the writer would disagree on the name or the form, and every login would bounce.

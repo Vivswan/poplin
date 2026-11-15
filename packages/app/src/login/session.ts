@@ -6,6 +6,7 @@
 
 import { buildSession, verifySession } from "@poplin/core/src/auth/cookie";
 import { isLogin, type Login, type Logins } from "@poplin/core/src/auth/logins";
+import { serialize } from "hono/utils/cookie";
 
 const COOKIE_NAME = "__Secure-poplin-session";
 const MAX_AGE_SECONDS = 30 * 24 * 60 * 60;
@@ -73,7 +74,7 @@ async function checkValue(value: string, check: SessionCheck): Promise<CheckedSe
 export async function mintSessionCookie(session: NewSession): Promise<string> {
   const value = await buildSession({ email: session.email, issuedAt: session.now, key: session.key });
 
-  return `${COOKIE_NAME}=${value}; Secure; HttpOnly; SameSite=Lax; Path=/; Max-Age=${MAX_AGE_SECONDS}`;
+  return serialize(COOKIE_NAME, value, { secure: true, httpOnly: true, sameSite: "Lax", path: "/", maxAge: MAX_AGE_SECONDS });
 }
 
 /**
