@@ -98,7 +98,7 @@ const TOTALS_START_AT_ZERO = "INSERT INTO totals (id, sites, trashed_sites, byte
 /** What was done, by whom, and when. */
 const AUDIT = `
 CREATE TABLE audit (
-  seq INTEGER PRIMARY KEY AUTOINCREMENT,
+  seq INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
   at INTEGER NOT NULL,
   actor TEXT NOT NULL,
   action TEXT NOT NULL,

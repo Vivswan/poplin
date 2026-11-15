@@ -6,10 +6,10 @@ import { join } from "node:path";
 import { buildDemo } from "../../scripts/build";
 
 /** The most the worker's script may weigh as a host sends it, in bytes: it holds the product's code and the sample sites. */
-const SCRIPT_BUDGET = 150_000;
+const SCRIPT_BUDGET = 220_000;
 
 /** The most a first visit may load, in bytes gzipped: about what one photograph weighs. */
-const TOTAL_BUDGET = 500_000;
+const TOTAL_BUDGET = 600_000;
 
 /** A module of one runtime, as a bundle names it: an import a browser cannot resolve. */
 const RUNTIME_MODULE = /["'`](?:node|bun):[a-z_/]+["'`]|\brequire\(/g;

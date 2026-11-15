@@ -3,6 +3,9 @@
 // A change is one batch: the statement that changes a row carries its own condition, and each statement after it runs only when the one before it changed a row.
 // So a change and its audit entry are kept together or not at all, and nothing is decided from an earlier read.
 
+import { and, asc, desc, eq, getTableName, isNotNull, isNull, lt, ne, notExists, or, type SQL, sql as fragment } from "drizzle-orm";
+import { alias, type SQLiteColumn } from "drizzle-orm/sqlite-core";
+import { drizzle } from "drizzle-orm/sqlite-proxy";
 import * as v from "valibot";
 
 import type { ComputerLogin, LoginId, PendingLogin, UserCode } from "../auth/computer-logins";
@@ -50,6 +53,7 @@ import type {
   UploadsPage,
 } from "./database";
 import type { SqlDriver, SqlValue, Statement, StatementResult } from "./driver";
+import { audit, sites, versions } from "./schema";
 
 /** How many ids are tried for one site before giving up; an id is about 62 random bits, so a second try is already a rare event. */
 const MINT_ATTEMPTS = 5;
@@ -65,6 +69,35 @@ const SELECT_SITE = `
 SELECT s.id, s.name, s.folder, s.access, s.public_name, s.title, s.page_title, s.search_engines, s.embeddable, s.expires_at, s.live_version, s.owner, s.created_at, s.updated_at, s.trashed_at,
   (SELECT json_group_array(json_object('number', v.number, 'published_at', v.published_at, 'published_by', v.published_by, 'bytes', v.bytes, 'files', v.files)) FROM versions v WHERE v.folder = s.folder) AS versions
 FROM sites s`;
+
+/** Where statements are built from the declared schema. None is run here: each goes to the driver, in a batch. */
+const BUILD = drizzle(() => Promise.reject(new Error("a statement is run by the driver, in a batch")));
+
+/** True when the statement before it in the batch changed one row. */
+const CHANGED = fragment`changes() = 1`;
+
+/** The `sites` table under a second name, for a statement that asks about the other sites. */
+const OTHER = alias(sites, "other");
+
+/** The columns `SELECT_SITE` gives, as a built statement selects them. */
+const SITE_FIELDS = {
+  id: sites.id,
+  name: sites.name,
+  folder: sites.folder,
+  access: sites.access,
+  public_name: sites.public_name,
+  title: sites.title,
+  page_title: sites.page_title,
+  search_engines: sites.search_engines,
+  embeddable: sites.embeddable,
+  expires_at: sites.expires_at,
+  live_version: sites.live_version,
+  owner: sites.owner,
+  created_at: sites.created_at,
+  updated_at: sites.updated_at,
+  trashed_at: sites.trashed_at,
+  versions: versionsOfSite().as("versions"),
+};
 
 /** The site with id `?1`. */
 const SITE_BY_ID = `${SELECT_SITE} WHERE s.id = ?1`;
@@ -115,43 +148,30 @@ const NAME_IS_HELD = "SELECT (EXISTS (SELECT 1 FROM sites WHERE public_name = ?1
 const ACCESS_RANKS = { private: 0, unlisted: 1, public: 2 } as const;
 
 /** The same places, as the listing's statement computes them. */
-const ACCESS_RANK = `CASE s.access ${Object.entries(ACCESS_RANKS)
-  .map(([access, rank]) => `WHEN '${access}' THEN ${rank}`)
-  .join(" ")} END`;
+const ACCESS_RANK = fragment`CASE ${sites.access} ${fragment.raw(
+  Object.entries(ACCESS_RANKS)
+    .map(([access, rank]) => `WHEN '${access}' THEN ${rank}`)
+    .join(" "),
+)} END`;
 
 /** The direction a listing takes when none is asked: the last change first, a name and an access from the start. */
 const DEFAULT_DIRECTIONS = { updated: "desc", name: "asc", access: "asc" } as const;
 
-/** The conditions that narrow a listing to what its query asks for, the trash or not as `?1`; each value they compare with is added to `params`. */
-function narrowing(query: SitesQuery, params: SqlValue[]): string[] {
-  const conditions = ["s.trashed = ?1"];
+/** The conditions that narrow a listing to what its query asks for: the trash or not, and each filter given. */
+function narrowing(query: SitesQuery): SQL[] {
+  const conditions: SQL[] = [eq(sites.trashed, query.trash ? 1 : 0)];
 
-  if (query.owner !== undefined) {
-    params.push(query.owner);
-    conditions.push(`s.owner = ?${params.length}`);
-  }
+  if (query.owner !== undefined) conditions.push(eq(sites.owner, query.owner));
 
-  if (query.named !== undefined) {
-    // The text is looked for as it stands, with no sign read as a pattern. A name holds no capital, so one typed with capitals is looked for without.
-    params.push(query.named.toLowerCase());
-    conditions.push(`instr(s.name, ?${params.length}) > 0`);
-  }
+  // The text is looked for as it stands, with no sign read as a pattern. A name holds no capital, so one typed with capitals is looked for without.
+  if (query.named !== undefined) conditions.push(fragment`instr(${sites.name}, ${query.named.toLowerCase()}) > 0`);
 
-  if (query.access !== undefined) {
-    params.push(query.access);
-    conditions.push(`s.access = ?${params.length}`);
-  }
+  if (query.access !== undefined) conditions.push(eq(sites.access, query.access));
 
-  if (query.expires !== undefined) conditions.push(query.expires === "set" ? "s.expires_at IS NOT NULL" : "s.expires_at IS NULL");
+  if (query.expires !== undefined) conditions.push(query.expires === "set" ? isNotNull(sites.expires_at) : isNull(sites.expires_at));
 
   return conditions;
 }
-
-/** A new access for a live site, only when it differs and the public name asked for is free. */
-const SET_ACCESS = `
-UPDATE sites SET access = ?2, public_name = ?3
-WHERE id = ?1 AND trashed = 0 AND (access <> ?2 OR public_name IS NOT ?3)
-  AND (?3 IS NULL OR (NOT EXISTS (SELECT 1 FROM sites WHERE public_name = ?3 AND id <> ?1) AND NOT EXISTS (SELECT 1 FROM sites WHERE id = ?3)))`;
 
 /** A new id for a live site, only while that id is free. */
 const SET_ID = `
@@ -320,7 +340,7 @@ EXISTS (SELECT 1 FROM uploads u JOIN sites s ON s.folder = u.folder
   WHERE u.id = ?1 AND u.state = 'pending' AND s.trashed = 0 AND u.number < s.next_version
     AND u.number > (SELECT MAX(v.number) FROM versions v WHERE v.folder = s.folder))`;
 
-/** The access asked with upload `?1`, set by the rule of `SET_ACCESS`, only while the upload can be published. */
+/** The access asked with upload `?1`, set by the rule of `setAccess`, only while the upload can be published. */
 const SET_ACCESS_WITH_UPLOAD = `
 UPDATE sites SET access = ?2, public_name = ?3
 WHERE folder = (SELECT folder FROM uploads WHERE id = ?1) AND (access <> ?2 OR public_name IS NOT ?3)
@@ -500,9 +520,6 @@ const FORGET_UPDATE_ADDRESS = "DELETE FROM secrets WHERE name = 'update_address'
 /** Whether any audit entry is a login. The scan runs from the oldest entry and stops at the first, which sits near the start of every log that has one. */
 const HAS_LOGIN = "SELECT EXISTS (SELECT 1 FROM audit WHERE action = 'login') AS found";
 
-/** The columns of an audit entry. The page's conditions and its order are added where it is read. */
-const LIST_AUDIT = "SELECT seq, at, actor, action, site_id, site_name, detail FROM audit";
-
 /** The form of a day: a date such as `2026-11-13`, which sorts as text in the order of time. */
 const DAY_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -540,6 +557,12 @@ const DETAIL_COLUMNS: { readonly [Key in keyof Required<SiteDetails>]: (value: R
   expires: (expires) => ["expires_at", expires === "never" ? null : expires],
 };
 
+/** What the builder gives for one statement. */
+interface BuiltQuery {
+  readonly sql: string;
+  readonly params: readonly unknown[];
+}
+
 /** One file as a stored manifest holds it: its path, size, type, and place in the manifest. */
 type StoredFile = readonly [path: string, size: number, type: string, place: number];
 
@@ -563,6 +586,72 @@ function detailColumns(given: SiteDetails, params: SqlValue[]): { readonly sets:
 
 function sql(text: string, ...params: SqlValue[]): Statement {
   return { sql: text, params };
+}
+
+/**
+ * A column with its table's name before it.
+ * A built statement that reads one table writes its selected columns bare, and a subquery inside the selection would read a bare column as its own.
+ */
+function qualified(column: SQLiteColumn): SQL {
+  return fragment`${fragment.identifier(getTableName(column.table))}.${fragment.identifier(column.name)}`;
+}
+
+/** A column by its name alone, as the column list of an `INSERT` takes it. */
+function bare(column: SQLiteColumn): SQL {
+  return fragment`${fragment.identifier(column.name)}`;
+}
+
+/** The kept versions of the site a statement selects, gathered into one JSON value. */
+function versionsOfSite(): SQL<string> {
+  const kept = [versions.number, versions.published_at, versions.published_by, versions.bytes, versions.files];
+  const pairs = kept.map((column) => fragment`${fragment.raw(`'${column.name}'`)}, ${qualified(column)}`);
+  const version = fragment`json_object(${fragment.join(pairs, fragment`, `)})`;
+
+  return fragment<string>`(SELECT json_group_array(${version}) FROM ${versions} WHERE ${qualified(versions.folder)} = ${qualified(sites.folder)})`;
+}
+
+/** A built statement as the driver takes it. */
+function built(query: { toSQL(): BuiltQuery } | { getQuery(): BuiltQuery }): Statement {
+  const { sql: text, params } = "toSQL" in query ? query.toSQL() : query.getQuery();
+
+  return { sql: text, params: params as SqlValue[] };
+}
+
+/** The site with the given id, with its kept versions. */
+function siteById(id: SiteId): Statement {
+  return built(BUILD.select(SITE_FIELDS).from(sites).where(eq(sites.id, id)));
+}
+
+/** A new access for a live site, only when it differs and the public name asked for is free: no other site has it as its public name, and no site as its id. */
+function setAccess(id: SiteId, access: SiteAccess["access"], publicName: PublicName | null): Statement {
+  const one = { one: fragment`1` };
+  const heldByAnother = (name: PublicName): SQL | undefined => and(eq(OTHER.public_name, name), ne(OTHER.id, id));
+  const isFree = (name: PublicName): SQL | undefined =>
+    and(notExists(BUILD.select(one).from(OTHER).where(heldByAnother(name))), notExists(BUILD.select(one).from(OTHER).where(eq(OTHER.id, name))));
+  const differs = or(ne(sites.access, access), fragment`${sites.public_name} IS NOT ${publicName}`);
+  const live = and(eq(sites.id, id), eq(sites.trashed, 0), differs, publicName === null ? undefined : isFree(publicName));
+
+  return built(BUILD.update(sites).set({ access, public_name: publicName }).where(live));
+}
+
+/** The details given, as the columns of `sites` store them. */
+function storedDetails(given: SiteDetails): Partial<Pick<typeof sites.$inferInsert, "name" | "title" | "search_engines" | "embeddable" | "expires_at">> {
+  return {
+    ...(given.name === undefined ? {} : { name: given.name }),
+    ...(given.title === undefined ? {} : { title: given.title }),
+    ...(given.search_engines === undefined ? {} : { search_engines: given.search_engines ? 1 : 0 }),
+    ...(given.embeddable === undefined ? {} : { embeddable: given.embeddable ? 1 : 0 }),
+    ...(given.expires === undefined ? {} : { expires_at: given.expires === "never" ? null : given.expires }),
+  };
+}
+
+/** The audit entry of a change to the site now at the given id, written only when the statement before it changed a row. */
+function auditOfSite(signed: Signed, action: AuditAction, id: SiteId, detail: Readonly<Record<string, unknown>>): Statement {
+  const columns = fragment.join([audit.at, audit.actor, audit.action, audit.site_id, audit.site_name, audit.detail].map(bare), fragment`, `);
+  const entry = fragment`SELECT ${signed.at}, ${signed.by}, ${action}, ${sites.id}, ${sites.name}, ${JSON.stringify(detail)} FROM ${sites} WHERE ${sites.id} = ${id} AND ${CHANGED}`;
+
+  // The insert builder names every column of the table, `seq` among them, and a `seq` that is given costs the engine one row read more than one left out.
+  return built(BUILD.run(fragment`INSERT INTO ${audit} (${columns}) ${entry}`));
 }
 
 function auditSite(signed: Signed, action: AuditAction, id: SiteId, detail: Readonly<Record<string, unknown>>): Statement {
@@ -856,38 +945,36 @@ export class SqlDatabase implements Database {
     requireCursor(query);
 
     // The trash is listed by when each site went there, the sites by when their content last changed.
-    const moment = query.trash ? "s.trashed_at" : "s.updated_at";
+    const moment = query.trash ? sites.trashed_at : sites.updated_at;
     const sort = query.sort ?? "updated";
-    const [direction, beyond] = (query.dir ?? DEFAULT_DIRECTIONS[sort]) === "desc" ? ["DESC", "<"] : ["ASC", ">"];
-    const column = { updated: moment, name: "s.name", access: ACCESS_RANK }[sort];
-    const params: SqlValue[] = [query.trash ? 1 : 0];
-    const conditions = narrowing(query, params);
+    const descending = (query.dir ?? DEFAULT_DIRECTIONS[sort]) === "desc";
+    const column = { updated: fragment`${moment}`, name: fragment`${sites.name}`, access: ACCESS_RANK }[sort];
+    const conditions = narrowing(query);
 
     if (query.after !== undefined) {
       const { after } = query;
-      params.push({ updated: after.updated_at, name: after.name ?? "", access: ACCESS_RANKS[after.access ?? "private"] }[sort], after.id);
-      conditions.push(`(${column}, s.id) ${beyond} (?${params.length - 1}, ?${params.length})`);
+      const place = { updated: after.updated_at, name: after.name ?? "", access: ACCESS_RANKS[after.access ?? "private"] }[sort];
+      conditions.push(fragment`(${column}, ${sites.id}) ${descending ? fragment`<` : fragment`>`} (${place}, ${after.id})`);
     }
 
     // One row more than the page shows whether another page follows.
-    params.push(query.limit + 1);
-    const text = `${SELECT_SITE} WHERE ${conditions.join(" AND ")} ORDER BY ${column} ${direction}, s.id ${direction} LIMIT ?${params.length}`;
-    const [listed] = await this.#driver.batch([sql(text, ...params)]);
-    const sites = (listed?.rows ?? []).slice(0, query.limit).map(siteFromRow);
-    const last = sites.at(-1);
-    if (last === undefined || (listed?.rows.length ?? 0) <= query.limit) return { sites };
+    const page = BUILD.select(SITE_FIELDS).from(sites).where(and(...conditions)).orderBy(descending ? desc(column) : asc(column), descending ? desc(sites.id) : asc(sites.id)).limit(query.limit + 1);
+    const [listed] = await this.#driver.batch([built(page)]);
+    const listedSites = (listed?.rows ?? []).slice(0, query.limit).map(siteFromRow);
+    const last = listedSites.at(-1);
+    if (last === undefined || (listed?.rows.length ?? 0) <= query.limit) return { sites: listedSites };
 
     const listedBy = { updated: {}, name: { name: last.name }, access: { access: last.access } }[sort];
 
-    return { sites, next: { updated_at: last.state === "trash" ? last.trashed_at : last.updated_at, id: last.id, ...listedBy } };
+    return { sites: listedSites, next: { updated_at: last.state === "trash" ? last.trashed_at : last.updated_at, id: last.id, ...listedBy } };
   }
 
   async changeAccess(id: SiteId, access: SiteAccess, signed: Signed): Promise<Done | Unchanged | Refused<"not_found" | "in_trash" | "name_taken">> {
     const publicName = publicNameOf(access);
     const [updated, , after] = await this.#driver.batch([
-      sql(SET_ACCESS, id, access.access, publicName),
-      auditSite(signed, "access", id, { access: access.access, public_name: publicName }),
-      sql(SITE_BY_ID, id),
+      setAccess(id, access.access, publicName),
+      auditOfSite(signed, "access", id, { access: access.access, public_name: publicName }),
+      siteById(id),
     ]);
     if (changed(updated)) return done(after);
 
@@ -902,12 +989,13 @@ export class SqlDatabase implements Database {
 
   async changeDetails(id: SiteId, details: SiteDetails, signed: Signed): Promise<Done | Unchanged | Refused<"not_found" | "in_trash">> {
     const given = v.parse(SITE_DETAILS, details);
-    const params: SqlValue[] = [id];
-    const { sets, differs } = detailColumns(given, params);
-    if (sets.length === 0) return this.#unchanged(id);
+    const stored = storedDetails(given);
+    const columns = Object.keys(stored) as (keyof typeof stored)[];
+    if (columns.length === 0) return this.#unchanged(id);
 
-    const text = `UPDATE sites SET ${sets.join(", ")} WHERE id = ?1 AND trashed = 0 AND (${differs.join(" OR ")})`;
-    const [updated, , after] = await this.#driver.batch([sql(text, ...params), auditSite(signed, "details", id, given), sql(SITE_BY_ID, id)]);
+    const differs = or(...columns.map((column) => fragment`${sites[column]} IS NOT ${stored[column] ?? null}`));
+    const update = BUILD.update(sites).set(stored).where(and(eq(sites.id, id), eq(sites.trashed, 0), differs));
+    const [updated, , after] = await this.#driver.batch([built(update), auditOfSite(signed, "details", id, given), siteById(id)]);
     if (changed(updated)) return done(after);
 
     return this.#unchangedIn(after);
@@ -1028,11 +1116,11 @@ export class SqlDatabase implements Database {
 
     // One row more than the page shows whether another page follows.
     const [listed] = await this.#driver.batch([sql(EXPORT_SITES, query.after ?? "", query.limit + 1)]);
-    const sites = (listed?.rows ?? []).slice(0, query.limit).map(siteFromRow);
-    const last = sites.at(-1);
-    if (last === undefined || (listed?.rows.length ?? 0) <= query.limit) return { sites };
+    const listedSites = (listed?.rows ?? []).slice(0, query.limit).map(siteFromRow);
+    const last = listedSites.at(-1);
+    if (last === undefined || (listed?.rows.length ?? 0) <= query.limit) return { sites: listedSites };
 
-    return { sites, next: last.id };
+    return { sites: listedSites, next: last.id };
   }
 
   async importUploadAsSite(id: UploadId, site: Site, signed: Signed): Promise<Done | Refused<"id_taken" | "folder_taken" | "name_taken" | "not_pending">> {
@@ -1379,21 +1467,13 @@ export class SqlDatabase implements Database {
 
   async listAudit(query: AuditQuery): Promise<readonly AuditEntry[]> {
     requirePage(query.limit);
-    const conditions = ["seq < ?1"];
-    const params: SqlValue[] = [query.before ?? NEWEST];
-
-    if (query.actions !== undefined) {
-      params.push(JSON.stringify(query.actions));
-      conditions.push(`action IN (SELECT value FROM json_each(?${params.length}))`);
-    }
-
-    if (query.site !== undefined) {
-      params.push(query.site);
-      conditions.push(`instr(site_name, ?${params.length}) > 0`);
-    }
-
-    params.push(query.limit);
-    const [listed] = await this.#driver.batch([sql(`${LIST_AUDIT} WHERE ${conditions.join(" AND ")} ORDER BY seq DESC LIMIT ?${params.length}`, ...params)]);
+    const conditions = [
+      lt(audit.seq, query.before ?? NEWEST),
+      query.actions === undefined ? undefined : fragment`${audit.action} IN (SELECT value FROM json_each(${JSON.stringify(query.actions)}))`,
+      query.site === undefined ? undefined : fragment`instr(${audit.site_name}, ${query.site}) > 0`,
+    ];
+    const page = BUILD.select().from(audit).where(and(...conditions)).orderBy(desc(audit.seq)).limit(query.limit);
+    const [listed] = await this.#driver.batch([built(page)]);
 
     return (listed?.rows ?? []).map(auditFromRow);
   }

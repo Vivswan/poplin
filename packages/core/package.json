@@ -2,6 +2,9 @@
   "name": "@poplin/core",
   "private": true,
   "type": "module",
+  "scripts": {
+    "draft-step": "bun scripts/draft-step.ts"
+  },
   "exports": {
     "./actions": "./src/actions.ts",
     "./src/actions/abandon-publish": "./src/actions/abandon-publish.ts",
@@ -46,6 +49,7 @@
     "./src/database/database": "./src/database/database.ts",
     "./src/database/driver": "./src/database/driver.ts",
     "./src/database/open": "./src/database/open.ts",
+    "./src/database/sql-database": "./src/database/sql-database.ts",
     "./src/names/hostname": "./src/names/hostname.ts",
     "./src/names/names": "./src/names/names.ts",
     "./src/names/marker": "./src/names/marker.ts",
@@ -66,7 +70,11 @@
     "./tests/storage/support/storage-contract": "./tests/storage/support/storage-contract.ts"
   },
   "dependencies": {
+    "drizzle-orm": "0.45.4",
     "jose": "6.2.17",
     "valibot": "1.5.0"
+  },
+  "devDependencies": {
+    "drizzle-kit": "0.31.11"
   }
 }

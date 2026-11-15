@@ -12,9 +12,13 @@ import type { Login } from "@poplin/core/src/auth/logins";
 import type { Actor } from "@poplin/core/src/auth/scopes";
 import type { TokenId } from "@poplin/core/src/auth/tokens";
 import { openDatabase } from "@poplin/core/src/database/open";
+import { SqlDatabase } from "@poplin/core/src/database/sql-database";
 import { defaultSettings } from "@poplin/core/src/records/settings";
 import { MemoryStore } from "@poplin/core/src/storage/memory";
-import { begunFiles, describeDatabase, numberedFiles } from "@poplin/core/tests/database/support/database-contract";
+import type { PublicName, SiteName } from "@poplin/core/src/names/names";
+import type { SiteFolder } from "@poplin/core/src/records/site";
+import type { SiteId } from "@poplin/core/src/sites/ids";
+import { BY_ADA, begunFiles, describeDatabase, draft, numberedFiles } from "@poplin/core/tests/database/support/database-contract";
 import { describeSqlDriver, sqlDatabaseOver } from "@poplin/core/tests/database/support/sql-driver-contract";
 
 import type { Bindings } from "../../src/worker/bindings";
@@ -35,6 +39,9 @@ const PLACES = 50;
 
 /** The visitors that hold the places between them, three logins each. */
 const VISITORS = 17;
+
+/** The sites the listing is read from. */
+const LISTED = 30;
 
 /** The rows the batches of a database read and wrote, as the provider counts them toward a day's allowance. */
 interface RowCounts {
@@ -145,6 +152,76 @@ describe("D1: the rows a publish costs of a day's allowance", () => {
   // Drift: a day allows 5,000,000 rows read and 100,000 written, and every query fails once either is spent; a publish whose cost grew faster than its files would spend a day in one go.
   test.each([50, 200])("a whole publish of %d files reads one row a file and 26 more, and writes 21", async (files) => {
     expect(await publishCost(files)).toEqual({ read: files + 26, written: 21 });
+  });
+});
+
+describe("D1: the rows a listing, a change to a site, and a page of the audit log cost of a day's allowance", () => {
+  // Drift: these statements are built from the declared schema, and the provider counts rows by how the engine runs a statement, not by what it answers. A statement built another way can answer the same and read more.
+  test("a page of ten sites reads its eleven sites and their versions; a change reads its site, writes it and its audit entry; a page of the log reads its entries", async () => {
+    const { driver, rows } = await meteredDatabase();
+    const minted = { count: 0 };
+    const mintId = (): SiteId => {
+      minted.count += 1;
+
+      return `site${String(minted.count).padStart(8, "0")}` as SiteId;
+    };
+    const opened = await openDatabase(driver, NOW);
+    if (opened.kind !== "open") throw new Error(`the database did not open: ${opened.kind}`);
+
+    const database = new SqlDatabase(driver, mintId);
+    const ids: SiteId[] = [];
+
+    for (let index = 0; index < LISTED; index += 1) {
+      const site = { ...draft(`site-${index}` as SiteName), folder: `fold${String(index).padStart(12, "0")}` as SiteFolder };
+      const made = await database.createSite(site, { ...BY_ADA, at: NOW + index });
+      if (made.kind === "done") ids.push(made.site.id);
+    }
+
+    const [first, second] = ids as [SiteId, SiteId];
+    const blog = { access: "public", public_name: "blog" as PublicName } as const;
+    const cost = async (run: () => Promise<unknown>): Promise<readonly [read: number, written: number]> => {
+      rows.read = 0;
+      rows.written = 0;
+      await run();
+
+      return [rows.read, rows.written];
+    };
+    const page = await database.listSites({ trash: false, limit: 10 });
+    const named = await database.listSites({ trash: false, limit: 10, sort: "name" });
+
+    expect({
+      "the first page": await cost(() => database.listSites({ trash: false, limit: 10 })),
+      "the page after it": await cost(() => database.listSites({ trash: false, limit: 10, ...(page.next === undefined ? {} : { after: page.next }) })),
+      "a page of one holder's private sites, by name": await cost(() => database.listSites({ trash: false, limit: 10, owner: BY_ADA.by, named: "site-1", access: "private" })),
+      "an access that changes": await cost(() => database.changeAccess(first, blog, BY_ADA)),
+      "the same access again": await cost(() => database.changeAccess(first, blog, BY_ADA)),
+      "a public name that is taken": await cost(() => database.changeAccess(second, blog, BY_ADA)),
+      "a detail that changes": await cost(() => database.changeDetails(second, { title: "Report" }, BY_ADA)),
+      "the same detail again": await cost(() => database.changeDetails(second, { title: "Report" }, BY_ADA)),
+      "a page of twenty entries": await cost(() => database.listAudit({ limit: 20 })),
+      "a page of the entries of one kind for one site": await cost(() => database.listAudit({ limit: 20, actions: ["create"], site: "site-1" })),
+      "a page by name": await cost(() => database.listSites({ trash: false, limit: 10, sort: "name" })),
+      "the page by name after it": await cost(() => database.listSites({ trash: false, limit: 10, sort: "name", ...(named.next === undefined ? {} : { after: named.next }) })),
+      "a page by access, the most open first": await cost(() => database.listSites({ trash: false, limit: 10, sort: "access", dir: "desc" })),
+      "a page of the sites that never expire": await cost(() => database.listSites({ trash: false, limit: 10, expires: "never" })),
+      "a page of the trash": await cost(() => database.listSites({ trash: true, limit: 10 })),
+    }).toEqual({
+      "the first page": [32, 0],
+      "the page after it": [34, 0],
+      "a page of one holder's private sites, by name": [51, 0],
+      "an access that changes": [8, 4],
+      "the same access again": [7, 0],
+      "a public name that is taken": [7, 0],
+      "a detail that changes": [6, 3],
+      "the same detail again": [6, 0],
+      "a page of twenty entries": [20, 0],
+      "a page of the entries of one kind for one site": [33, 0],
+      "a page by name": [105, 0],
+      "the page by name after it": [75, 0],
+      "a page by access, the most open first": [83, 0],
+      "a page of the sites that never expire": [32, 0],
+      "a page of the trash": [1, 0],
+    });
   });
 });
 
