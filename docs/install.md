@@ -16,6 +16,8 @@ after:   https://poplin.example.com                       your dashboard
 
 Steps 1 to 5 happen in your browser, and after them your dashboard works. Step 6 logs in the computer you publish from. With the domain already active on Cloudflare, allow about an hour for the dashboard; twenty minutes more for step 6.
 
+`example.com` stands for your own domain, on this page and in every command: type yours in its place.
+
 Two words the steps use: a **Worker** is the program Cloudflare runs for you, and a **token** is a long password that lets a program change your Cloudflare account.
 
 ## What you need
@@ -28,6 +30,7 @@ Two words the steps use: a **Worker** is the program Cloudflare runs for you, an
 | a payment method on the account | step 1 asks for one, and charges nothing                                                                 |
 | a GitHub account                | free. Step 2 puts a copy of poplin's code there                                                          |
 | Node.js, on your own computer   | for step 6 alone                                                                                         |
+| an agent, to publish by asking  | one that can run commands on your computer, such as Claude Code or Codex. A chat in a browser cannot     |
 
 **A domain that is not on Cloudflare yet** is added on Cloudflare's home page. Cloudflare shows two nameservers; paste them in the Nameservers setting at the shop where you bought the domain. The domain turns Active up to a day later.
 
@@ -58,18 +61,30 @@ Two words the steps use: a **Worker** is the program Cloudflare runs for you, an
    https://poplin.your-name.workers.dev
    ```
 
+   **If the build fails**, no such page opens: Cloudflare shows the build's log, and its last lines say why.
+
+   | The log                                                                 | Do                              |
+   | ----------------------------------------------------------------------- | ------------------------------- |
+   | has a line that starts with `poplin:` and holds `Nothing was deployed.` | what the rest of that line says |
+   | names R2                                                                | finish the R2 row of step 1     |
+
+   Then build again, with the browser steps of [Update the install](#update-the-install).
 3. **Make a Cloudflare API token.** One link opens Cloudflare's form with the eight permissions poplin needs already chosen. It worked if the form shows eight rows already filled. A zone is your domain.
 
    [Open the token form with the permissions chosen](https://dash.cloudflare.com/profile/api-tokens?permissionGroupKeys=%5B%7B%22key%22%3A%22zone%22%2C%22type%22%3A%22read%22%7D%2C%7B%22key%22%3A%22dns%22%2C%22type%22%3A%22edit%22%7D%2C%7B%22key%22%3A%22workers_routes%22%2C%22type%22%3A%22edit%22%7D%2C%7B%22key%22%3A%22access%22%2C%22type%22%3A%22edit%22%7D%2C%7B%22key%22%3A%22workers_scripts%22%2C%22type%22%3A%22edit%22%7D%2C%7B%22key%22%3A%22access_acct%22%2C%22type%22%3A%22read%22%7D%2C%7B%22key%22%3A%22zone_settings%22%2C%22type%22%3A%22read%22%7D%2C%7B%22key%22%3A%22d1%22%2C%22type%22%3A%22edit%22%7D%5D&accountId=%2A&zoneId=all&name=poplin%20setup)
 
-   Add nothing. Finish the form, from top to bottom:
+   Finish the form, from top to bottom:
 
-   | On the form       | Do                                                                               |
-   | ----------------- | -------------------------------------------------------------------------------- |
-   | Account Resources | choose Include, then your account                                                |
-   | Zone Resources    | choose Include, then Specific zone, then your domain                             |
-   | the bottom        | press Continue to summary, then Create Token                                     |
-   | the next page     | The token is shown once: paste it into a note now; you need it in the next step. |
+   | On the form       | Do                                                                                                                 |
+   | ----------------- | ------------------------------------------------------------------------------------------------------------------ |
+   | the eight rows    | leave them. The three of [the optional part](#optional-block-junk-traffic-and-crawlers) can be added now, or later |
+   | Account Resources | choose Include, then your account                                                                                  |
+   | Zone Resources    | choose Include, then Specific zone, then your domain                                                               |
+   | every other field | leave it as it is                                                                                                  |
+   | the bottom        | press Continue to summary, then Create Token                                                                       |
+   | the next page     | The token is shown once: paste it into a note now; you need it in the next step.                                   |
+
+   Keep the note for as long as you may add a login or a permission: both ask for the token again. Without the note, Roll in the token's menu gives the token a new text.
 
    **If the form opens empty**, press Create Token, then Create Custom Token. For each row below, press Add more and choose in its three boxes:
 
@@ -86,7 +101,7 @@ Two words the steps use: a **Worker** is the program Cloudflare runs for you, an
 
    Then finish the form as in the table above.
 
-4. **Finish on the setup page.** Open the Worker's address from step 2: it shows the setup page. Fill its three boxes and press Repair (the first time it also makes everything).
+4. **Finish on the setup page.** Open the Worker's address from step 2, the one ending in `workers.dev`: it shows the setup page. Fill its three boxes and press Repair (the first time it also makes everything).
 
    | Box                  | Put in                                                            |
    | -------------------- | ----------------------------------------------------------------- |
@@ -109,23 +124,44 @@ Two words the steps use: a **Worker** is the program Cloudflare runs for you, an
 
    The sample shows a few of the rows. `repaired` counts the rows Repair made. The page calls a permission a right. The token is used for that one request and kept nowhere. Repair is safe to repeat.
 
-   | A row says             | Means                                                                                                                                    |
-   | ---------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
-   | `not set up: optional` | nothing is wrong. The row waits on one of three optional permissions: see [the optional part](#optional-block-junk-traffic-and-crawlers) |
-   | `failed`               | it says why. For a permission the token lacks it ends with `Add this right to the token` and the permission's name                       |
+   With the eight permissions, Repair adds a DNS record, routes, and a login of poplin's own. It removes only a record that carries poplin's mark and a route that names poplin's Worker. A website or a mailbox on the domain stays as it is.
 
-   **Only when a row says failed for a permission**, add it to the token. Your tokens are listed on the page step 3's link opened (in Cloudflare: My Profile, then API Tokens).
+   Three optional permissions switch the optional rows on. One permission can hold more than one row, so the page counts more optional rows than three.
+
+   **When the page shows something else**, the table has it. Fix the cause and press Repair again: what is already made stays.
+
+   | The page says                                                            | Means                                                               | Do                                                                         |
+   | ------------------------------------------------------------------------ | ------------------------------------------------------------------- | -------------------------------------------------------------------------- |
+   | `Token refused.`                                                         | Cloudflare does not take the token, or it does not reach the domain | paste the whole text of step 3; check its Account and Zone Resources       |
+   | `The token shows no domain of that name.`                                | the domain is mistyped, not Active, or not the token's zone         | correct the Domain box, or edit the token's Zone Resources                 |
+   | `The domain is no domain. Type it alone, such as example.com.`           | the box holds more than a domain, or one over 50 characters long    | type the domain alone; a longer domain cannot hold an install              |
+   | `The email is no email address.`                                         | the email is mistyped                                               | type it again                                                              |
+   | `No answer from the provider. Try again.`                                | Cloudflare gave no answer, or asked to wait                         | press Repair again in a minute                                             |
+   | `Too many tries. Wait a minute.`                                         | the page takes five tries a minute                                  | wait a minute                                                              |
+   | `The database takes no more today`, and when to try again                | the day's free allowance of the database is used up                 | try again after midnight UTC                                               |
+   | `Open Zero Trust and pick a plan (Free works): that switches Access on.` | Zero Trust is not switched on: the first row of step 1              | open the link beside that line, pick the Free plan, then press Repair      |
+   | a row `not set up: optional`                                             | nothing is wrong: an optional permission is not on the token        | nothing, or [the optional part](#optional-block-junk-traffic-and-crawlers) |
+   | a row `failed` that ends with `Add this right to the token` and a name   | the token lacks the permission of that name                         | add it to the token: the table below                                       |
+   | a row `failed` with other words, and rows `not run`                      | that one step failed, and the row says why                          | do what the row asks, if it asks; then press Repair again                  |
+
+   `poplin setup` prints the same rows, and answers the first five lines of the table with a code each. The table Setting up an install of [Using](using.md#when-poplin-refuses) lists the codes.
+
+   **Only when a row says failed for a permission**, add it to the token. Your tokens are listed on the page step 3's link opened (in Cloudflare: My Profile, then API Tokens). Each token's row ends in a menu.
 
    | You                         | Do, in the token's menu                                                              |
    | --------------------------- | ------------------------------------------------------------------------------------ |
    | still have the token's text | choose Edit, add the permission, save. Paste the same text and press Repair          |
    | no longer have it           | choose Roll. Roll makes a new token text. Add the permission, and paste the new text |
 
-5. **Open your dashboard and log in.** Cloudflare's login asks for your email and sends a code to its inbox. A new address can take a few minutes to answer: until then the browser says it cannot find the site; wait a few minutes and reload. No code arrives when the email differs from the one in step 4: go back to the setup page, type the right email with the token, and press Repair.
+5. **Open your dashboard and log in.** Cloudflare's login asks for your email and sends a code to its inbox. A new address can take a few minutes to answer: until then the browser says it cannot find the site; wait a few minutes and reload.
+
+   No code arrives when the email differs from the one in step 4: go back to the setup page, type the right email with the token, and press Repair.
 
    ```text
    https://poplin.example.com
    ```
+
+   After the code, the dashboard opens on its Sites tab, which says `No sites yet. An agent or the command below publishes the first.`
 
    This first login closes the setup page for good. Step 6 is for the computer that publishes.
 
@@ -136,16 +172,37 @@ Two words the steps use: a **Worker** is the program Cloudflare runs for you, an
    Windows:  press the Windows key, type PowerShell, press Enter
    ```
 
-   Type each line and press Enter. The first time, it asks whether it may download poplin: answer `y`. The first line opens your dashboard, where you allow the computer.
+   Type each line and press Enter, with your own domain in place of `example.com`. The two lines are the same on a Mac and on Windows. The first time, it asks whether it may download poplin: answer `y`.
 
    ```sh
    npx poplin login --server https://poplin.example.com
    npx poplin doctor
    ```
 
-   Every check `poplin doctor` prints starts with `ok`. Its last line says `nothing was changed`.
+   The first line prints a short code and opens your dashboard on the page Allow this computer?, which shows a code too. Only when the two are the same, tick the box and press Allow.
 
-Your install is ready. Paste the line from [the README](../README.md#use-it-from-an-ai-agent) into your agent (an AI assistant that can run commands for you), or see [Using](using.md).
+   Every check `poplin doctor` prints starts with `ok`, and its last line says `nothing was changed`:
+
+   ```text
+   ok  install   https://poplin.example.com answers
+   ok  version   install 0.1.0, this poplin 0.1.0
+   ok  login     admin token 3f9a1c07b2d84e65, saved on this machine, expires 2026-12-15
+   ok  settings  19 settings read
+   ok  sites     0 sites
+   ok  trash     0 sites
+   nothing was changed
+   ```
+
+Your install is ready, and it publishes two ways.
+
+| Publish            | Do                                                                                                                                |
+| ------------------ | --------------------------------------------------------------------------------------------------------------------------------- |
+| by asking an agent | paste the line of [the README](../README.md#use-it-from-an-ai-agent) into Claude Code, Codex, or another agent that runs commands |
+| by a command       | `npx poplin ./report`: see [Using](using.md)                                                                                      |
+
+The agent asks for the address of your install. Give it your dashboard's, `https://poplin.example.com`, not the one ending in `workers.dev`.
+
+The agent then asks before it logs in, and before it adds poplin's tools to its own configuration as an MCP server, which is how an agent gets tools. A chat in a browser cannot run commands, so it cannot publish.
 
 ## Optional: block junk traffic and crawlers
 
@@ -178,7 +235,7 @@ A new login works after step 2, not before. Removing another person's login need
 
 ## The Domain tab
 
-After the first login, the Domain tab does what the setup page did. Check lists every object and changes nothing. Repair makes them match again.
+After the first login, the Domain tab does what the setup page did. Check lists every piece and changes nothing. Repair makes them match again.
 
 ## Change a setting
 
@@ -219,6 +276,12 @@ export POPLIN_SETUP_TOKEN="paste the token here"
 npx poplin setup --server https://poplin.your-name.workers.dev --domain example.com --login you@example.com
 ```
 
+In PowerShell on Windows the first line is this one, and the second is the same:
+
+```powershell
+$env:POPLIN_SETUP_TOKEN = "paste the token here"
+```
+
 ## Update the install
 
 An update is one more build. Run in Cloudflare's build, poplin's deploy fetches a release of poplin from GitHub and deploys that, under the name, the bucket, and the database your copy's `wrangler.jsonc` names. Your copy on GitHub stays as it is, and nothing updates on its own.
@@ -243,13 +306,19 @@ When it deploys a release, poplin's deploy prints the line above, with the versi
 | ---- | ---------------------------------------------------------- |
 | 1    | go to Workers & Pages and select your Worker               |
 | 2    | go to Settings, then Builds, then Deploy Hooks             |
-| 3    | enter a name and select the branch to build                |
+| 3    | enter a name and select the branch to build: `main`        |
 | 4    | select Create and copy the generated URL                   |
 
 ```sh
 export POPLIN_UPDATE_ADDRESS="paste the URL here"
 npx poplin update --save-address
 npx poplin update
+```
+
+In PowerShell on Windows the first line is this one, and the other two are the same:
+
+```powershell
+$env:POPLIN_UPDATE_ADDRESS = "paste the URL here"
 ```
 
 | Line                           | Does                                                                                         |

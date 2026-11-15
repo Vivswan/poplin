@@ -15,6 +15,8 @@ You:    Take it down.                     ->  the agent calls delete_site
 
 An agent uses the tools. A person uses the commands. Both do the same things.
 
+The examples write `poplin`. Type `npx poplin` in its place, as [Install](install.md) does, unless poplin is installed on the computer. `example.com` stands for your own domain.
+
 ## How a site is named
 
 ```text
@@ -63,6 +65,7 @@ https://report--k3f9x2ab71qz-p-poplin.example.com
 | `poplin set report--k3f9x2ab71qz --public`              | public at its own name: `report-page.example.com`      |
 | `poplin set report--k3f9x2ab71qz --public --public-name docs` | public at another name: `docs-page.example.com`  |
 
+- **You** is every login of the install: yourself, and anyone [Install](install.md#add-a-login) adds.
 - **To or from private changes the address:** the letter before `-poplin` turns from `p` to `u`, or back. The old address sends visitors on.
 - **A public site keeps its unlisted address too.**
 - **Leaving public gives the public name up.** That address stops working.
@@ -183,6 +186,11 @@ $ poplin doctor
 ok  install   https://poplin.example.com answers
 ok  version   install 0.1.0, this poplin 0.1.0
 ok  update    0.2.0 is out (this install runs 0.1.0): https://example.com/changelog/#v0-2-0
+ok  login     admin token 3f9a1c07b2d84e65, saved on this machine, expires 2026-12-15
+ok  settings  19 settings read
+ok  sites     4 sites
+ok  trash     0 sites
+nothing was changed
 ```
 
 | Question             | Answer                                                                                             |
@@ -286,9 +294,9 @@ A refused command prints one sentence and often a hint. With `--json` it prints 
 | `no_setup_server`       | `poplin setup` was given no address                         | `poplin setup --server https://poplin.your-name.workers.dev`  |
 | `no_setup_token`        | `POPLIN_SETUP_TOKEN` holds no token                         | put the token of [Install](install.md), step 3, in it         |
 | `setup_token_refused`   | the token was refused, or it is of another account          | make one with the rights step 3 lists, in the install's account |
-| `setup_provider_silent` | Cloudflare gave the install no answer                       | try again                                                     |
+| `setup_provider_silent` | Cloudflare gave the install no answer, or asked it to wait  | try again in a minute                                         |
 | `setup_no_domain`       | the token shows no such domain                              | give `--domain` a domain that is Active in the token's account |
-| `setup_bad_domain`      | `--domain` holds more than a domain                         | the domain alone: `--domain example.com`                      |
+| `setup_bad_domain`      | `--domain` holds more than a domain, or one over 50 characters | the domain alone: `--domain example.com`                   |
 | `setup_bad_login`       | `--login` holds no email address                            | a new install needs both: `--domain <domain> --login <email>` |
 | `setup_closed`          | nothing at that address takes a setup                       | after the first login, use the dashboard's Domain tab         |
 

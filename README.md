@@ -20,25 +20,29 @@ What gets published is a site: one HTML file, or a folder of files with an `inde
 
 ## Use it from an AI agent
 
-Paste this line into your agent:
+**First time? Install first.** [Install](docs/install.md) shows how.
+
+The agent publishes to an install: your own copy of poplin, set up once in your Cloudflare account. The agent cannot make the install for you: it logs your computer in to one and adds poplin's tools to itself.
+
+Then paste this line into an agent that can run commands on your computer, such as Claude Code or Codex. A chat in a browser cannot.
 
 ```text
 Look at https://github.com/Vivswan/poplin, read its skill, and help me set up poplin.
 ```
 
-If you are the agent: the skill is [`skills/poplin/SKILL.md`](skills/poplin/SKILL.md).
+The agent asks for the address of your install. That is your dashboard's address: `https://poplin.example.com`.
 
-**First time?** The agent publishes to an install: your own copy of poplin, set up once in your Cloudflare account. [Install](docs/install.md) shows how to get one. The agent asks for its address.
+If you are the agent: the skill is [`skills/poplin/SKILL.md`](skills/poplin/SKILL.md).
 
 ## Who can open a site
 
-| Access                | Who can open it          | Address                                     |
-| --------------------- | ------------------------ | ------------------------------------------- |
-| private (the default) | only you, after a login  | `report--k3f9x2ab71qz-p-poplin.example.com` |
-| unlisted              | anyone who has the link  | `report--k3f9x2ab71qz-u-poplin.example.com` |
-| public                | everyone                 | a name you choose: `docs-page.example.com`  |
+| Access                | Who can open it          | Address                                                           |
+| --------------------- | ------------------------ | ----------------------------------------------------------------- |
+| private (the default) | only you, after a login  | `report--k3f9x2ab71qz-p-poplin.example.com`                       |
+| unlisted              | anyone who has the link  | `report--k3f9x2ab71qz-u-poplin.example.com`                       |
+| public                | everyone                 | a name you choose, `docs-page.example.com`, and its unlisted link |
 
-`example.com` stands for your own domain. Your dashboard is a private page that lists every site you published: `poplin.example.com`.
+`example.com` stands for your own domain. "You" is every login of your install: yourself, and anyone you add. Your dashboard is a private page that lists every site you published: `poplin.example.com`.
 
 ## Use it from the command line
 

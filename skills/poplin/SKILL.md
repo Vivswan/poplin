@@ -21,8 +21,8 @@ You publish with the MCP tools, or with the `poplin` command when the tools are 
 
 | MCP tool        | Does                                       | The same with the command                                 |
 | --------------- | ------------------------------------------ | --------------------------------------------------------- |
-| `publish_site`  | makes a new site from `path`               | `npx poplin publish ./report`                             |
-| `publish_site`  | with `site`: new content for that site     | `npx poplin publish ./report --site report--k3f9x2ab71qz` |
+| `publish_site`  | makes a new site from `path`               | `npx poplin ./report`                                     |
+| `publish_site`  | with `site`: new content for that site     | `npx poplin ./report --site report--k3f9x2ab71qz`         |
 | `get_site`      | shows one site and its versions            | `npx poplin show report--k3f9x2ab71qz`                    |
 | `list_sites`    | lists the sites; with `trash`, the trash   | `npx poplin list`, `npx poplin list --trash`              |
 | `update_site`   | changes who can open a site, by `access`   | `npx poplin set report--k3f9x2ab71qz --unlisted`          |
@@ -80,7 +80,7 @@ Leave `forever` to the user. With the command, `--forever` asks a person to type
 
 **What is uploaded.** Every file under the folder, except hidden files (a name starting with a dot) and anything named `node_modules`, at any depth. One HTML file is published as the site's `index.html`.
 
-Look at the folder first: what is in it will be on the site, and an unlisted or public site shows all of it. `npx poplin publish ./report --dry-run` lists the files and uploads nothing.
+Look at the folder first: what is in it will be on the site, and an unlisted or public site shows all of it. `npx poplin ./report --dry-run` lists the files and uploads nothing.
 
 **The site is static.** Files are served as they are. Relative links between them work (`<a href="notes/q3.html">`, `<img src="chart.svg">`). There is no server code, no form handler, and no database, so build pages that need none.
 
