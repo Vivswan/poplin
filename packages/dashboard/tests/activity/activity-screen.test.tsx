@@ -23,7 +23,14 @@ const PAGE = {
   logins: {},
   next: "12",
   previous: null,
+  stopped: false,
 };
+
+/** A narrowed page that found no entry among those it looked at, and stopped with the log going on behind place 9. */
+const STOPPED_PAGE = { ...PAGE, entries: [], next: "9", stopped: true };
+
+/** What the log answers a read with; a test swaps the page, and it is put back after each. */
+const answered = { page: PAGE as typeof PAGE | typeof STOPPED_PAGE };
 
 /** How many entries the log holds, as the server answers it. */
 const TOTAL = { ok: true, total: 1240, whole: true };
@@ -39,8 +46,8 @@ function cacheOf(): QueryClient {
   return new QueryClient({ defaultOptions: { queries: { retry: false } } });
 }
 
-/** Draw the screen at an address, with the log answered by one page whatever is asked. */
-async function draw(address: string, cache = cacheOf()): Promise<void> {
+/** Draw the screen at an address, with the log answered by one page whatever is asked, and wait for the words that page draws. */
+async function draw(address: string, cache = cacheOf(), shown = "mira@example.com"): Promise<void> {
   globalThis.fetch = (async (input: Request | string | URL) => {
     const { pathname, search } = new URL(input instanceof Request ? input.url : input, window.location.href);
     if (pathname === `${BOOT.base}/data/activity/total`) {
@@ -53,7 +60,7 @@ async function draw(address: string, cache = cacheOf()): Promise<void> {
 
     asked.push(search);
 
-    return Response.json(PAGE);
+    return Response.json(answered.page);
   }) as typeof fetch;
 
   await drawAt(
@@ -66,7 +73,7 @@ async function draw(address: string, cache = cacheOf()): Promise<void> {
       </ThemeProvider>
     </QueryClientProvider>,
   );
-  await readAfter(0);
+  await readAfter(0, shown);
 }
 
 /** Press a button of the page by its name, and let the screen read what the press asks for. */
@@ -78,9 +85,9 @@ async function press(name: string): Promise<void> {
 }
 
 /** Wait until the screen has read the log again after the reads counted, and drawn the rows of the answer. */
-async function readAfter(reads: number): Promise<void> {
+async function readAfter(reads: number, shown = "mira@example.com"): Promise<void> {
   await waitFor(() => expect(asked.length).toBeGreaterThan(reads));
-  await within(document.body).findAllByText("mira@example.com");
+  await within(document.body).findAllByText(shown);
 }
 
 function whenOrder(): string | null {
@@ -93,6 +100,7 @@ afterEach(() => {
   window.localStorage.clear();
   asked.length = 0;
   counted.length = 0;
+  answered.page = PAGE;
 });
 afterAll(clearPage);
 
@@ -151,6 +159,19 @@ describe("the pages of the log", () => {
     await within(document.body).findAllByText("1 to 1 of 1,240");
 
     expect([foot.length > 0, open, counted]).toEqual([true, ["?kind=access&sort=when&dir=asc", ["?kind=access"]], ["?kind=access", "?kind=access"]]);
+  });
+
+  // Drift: a search for a rare site whose newest entry lies deep in the log would read "No activity" as if the log held none, with Download shut and no way to look further.
+  test("a narrowed page with no entry that stopped looking keeps Download open and offers Search further under its words, which goes on from where it stopped", async () => {
+    answered.page = STOPPED_PAGE;
+    await draw("/activity?site=o", cacheOf(), 'No activity for "o"');
+    const download = within(document.body).getByRole("button", { name: "Download" }) as HTMLButtonElement;
+    const words = within(document.body).queryAllByText("Searched the newest 5,000 entries.");
+    const before = asked.length;
+    fireEvent.click(within(document.body).getAllByRole("button", { name: "Search further" })[0] as HTMLElement);
+    await readAfter(before, 'No activity for "o"');
+
+    expect([download.disabled, words.length, asked.at(-1), window.location.search]).toEqual([false, 1, "?site=o&after=9", "?site=o&after=9&from=1"]);
   });
 
   // Drift: a size would be kept and never asked of the server, or a page of the new size would be read from a place among pages of the old one.

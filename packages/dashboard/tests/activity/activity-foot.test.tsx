@@ -12,11 +12,11 @@ import type { PageSize } from "@/activity/page-size";
 /** What a press on the foot asked for: a move to a page, or another size of a page. */
 type Asked = Readonly<Record<string, string>> | PageSize;
 
-/** A page of as many entries, with the places the pages around it are reached from. */
-function pageOf(rows: number, next: string | null, previous: string | null): Page {
+/** A page of as many entries, with the places the pages around it are reached from, and whether it is a narrowed page that stopped looking before the log's end. */
+function pageOf(rows: number, next: string | null, previous: string | null, stopped = false): Page {
   const entries = Array.from({ length: rows }, (_entry, index) => ({ seq: 1000 - index, at: 1_700_000_000_000, by: "mira@example.com", action: "login" as const, detail: {}, site: null }));
 
-  return { ok: true, entries, logins: {}, next, previous } as Page;
+  return { ok: true, entries, logins: {}, next, previous, stopped } as Page;
 }
 
 /** Draw the foot at a query, and answer everything a press asks for. */
@@ -83,6 +83,38 @@ describe("the foot of the log", () => {
     fireEvent.click(within(document.body).getByRole("button", { name: way }));
 
     expect(foot.asked).toEqual([place]);
+  });
+
+  // Drift: a narrowed page that stopped looking would read as the log's last, with no way to the older entries of a rare site; or the way on would be offered twice, or would count the next page's rows from the wrong number.
+  test.each([
+    ["a page that stopped with some entries found", "site=o", pageOf(3, "9", null, true), { total: { ok: true, total: 3, whole: false } }, ["1 to 3 of 3+", ["Search further"], { after: "9", from: "4" }]],
+    ["a page that stopped with none found", "site=o", pageOf(0, "9", null, true), {}, [null, ["Search further"], { after: "9", from: "1" }]],
+    ["a page gone back to that stopped", "site=o&back=2", pageOf(0, "3", "5002", true), {}, [null, ["Search further"], { back: "5002" }]],
+    ["a page that goes on from a stop with none found, counted from 1", "site=o&after=9&from=1", pageOf(3, "4", "8", true), {}, ["1 to 3", ["First page", "Previous page", "Search further"], { after: "4", from: "4" }]],
+    ["a page gone back to that stopped after three entries found", "site=o&back=2&from=51", pageOf(3, "3", "5002", true), {}, ["98 to 100", ["First page", "Next page", "Search further"], { back: "5002", from: "48" }]],
+    ["a page gone back to that stopped within a page of the list's start", "site=o&back=2&from=3", pageOf(3, "3", "5002", true), {}, ["50 to 52", ["First page", "Next page", "Search further"], {}]],
+  ] as const)("on %s the foot says how far it searched, and Search further is the one way on in the direction it was read", (_what, query, page, more, [says, ways, place]) => {
+    const foot = drawn(query, page, more);
+    const words = within(document.body).queryByText("Searched the newest 5,000 entries.");
+    const offered = buttons();
+    fireEvent.click(within(document.body).getByRole("button", { name: "Search further" }));
+
+    expect([foot.says(), words !== null, offered, foot.asked]).toEqual([says, true, [...ways], [place]]);
+  });
+
+  // Drift: a page gone back to that stopped short holds the entries just ahead of the page it came from; counted as a full page, its Next page would number that page's first entry too low.
+  test("Next page from a page gone back to that stopped short counts on from its own last entry", () => {
+    const foot = drawn("site=o&back=2&from=51", pageOf(3, "3", "5002", true));
+    fireEvent.click(within(document.body).getByRole("button", { name: "Next page" }));
+
+    expect(foot.asked).toEqual([{ after: "3", from: "101" }]);
+  });
+
+  // Drift: a page that did not stop would offer a search with nothing behind it.
+  test("a page that did not stop says nothing of a search", () => {
+    drawn("site=o", pageOf(3, null, null));
+
+    expect([within(document.body).queryByText(/Searched/), within(document.body).queryByRole("button", { name: "Search further" })]).toEqual([null, null]);
   });
 
   // Drift: the choice of a size would name sizes the server refuses, or a pick would not reach the screen.

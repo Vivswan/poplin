@@ -248,7 +248,7 @@ export function ActivityScreen(): ReactNode {
           </div>
           {/* One menu at both widths, so the file after a file is offered wherever the first was saved: at the toolbar's end, which a phone draws beside the search. */}
           <span className="max-md:order-2">
-            <DownloadMenu query={query} fitsOne={fitsOne} empty={page === undefined || (!paged && page.entries.length === 0)} />
+            <DownloadMenu query={query} fitsOne={fitsOne} empty={page === undefined || (!paged && page.entries.length === 0 && !page.stopped)} />
           </span>
         </div>
         {instead ?? (
@@ -269,6 +269,8 @@ export function ActivityScreen(): ReactNode {
             {page === undefined ? null : <PhoneList page={page} after={pages} />}
           </>
         )}
+        {/* A page with no entry that stopped looking is not the log's end: the way to look further stands under its words. */}
+        {instead !== undefined && page?.stopped === true ? pages : null}
       </section>
     </AppShell>
   );
