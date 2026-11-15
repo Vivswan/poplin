@@ -32,11 +32,30 @@ export const UPDATE_NEWS = v.strictObject({
 /** The last time the install asked for the newest release, and the newest it has learned of; `null` while no release is known. */
 export const UPDATE_CHECK = v.strictObject({ checked_at: MOMENT, news: v.nullable(UPDATE_NEWS) });
 
+/** The file the website publishes, as JSON text: a release, or a `version` of `null` before the first one. `database: true` says updating to the release changes the database, and a file without the key says it does not. */
+const LATEST_FILE = v.pipe(
+  v.string(),
+  v.parseJson(),
+  v.union([v.object({ version: v.null() }), v.object({ ...UPDATE_NEWS.entries, database: v.optional(UPDATE_NEWS.entries.database, false) })]),
+);
+
 /** A release, as the install keeps it. */
 export type UpdateNews = v.InferOutput<typeof UPDATE_NEWS>;
 
 /** When the install last asked, and what it knows. */
 export type UpdateCheck = v.InferOutput<typeof UPDATE_CHECK>;
+
+/**
+ * Read the text of the website's `latest.json` as the newest release.
+ *
+ * @returns the release, `null` for a file that names none yet, or `undefined` for a text that is not that file
+ */
+export function publishedRelease(text: string): UpdateNews | null | undefined {
+  const latest = v.safeParse(LATEST_FILE, text);
+  if (!latest.success) return undefined;
+
+  return latest.output.version === null ? null : latest.output;
+}
 
 /**
  * Read a typed address as one that starts a rebuild of the install.

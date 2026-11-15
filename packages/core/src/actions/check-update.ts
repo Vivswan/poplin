@@ -7,11 +7,9 @@
 //
 // The request carries nothing of the install: no version, no id, and no address is put in its URL or its headers.
 
-import * as v from "valibot";
-
 import { homepage } from "../../../cli/package.json";
 import { textUpTo } from "../api/text-up-to";
-import { UPDATE_NEWS, type UpdateNews } from "../records/update";
+import { publishedRelease, type UpdateNews } from "../records/update";
 import type { Install } from "./records";
 import { DAY_MS } from "./site-object";
 
@@ -23,9 +21,6 @@ const PATIENCE_MS = 5000;
 
 /** The most bytes of an answer that are read. */
 const MOST_BYTES = 16_384;
-
-/** What the file holds, as JSON text: a release, or a `version` of `null` before the first one. Keys it gains later are left unread. */
-const LATEST = v.pipe(v.string(), v.parseJson(), v.union([v.object({ version: v.null() }), v.object(UPDATE_NEWS.entries)]));
 
 /** Fetches an address: the platform's own `fetch`, or a stand-in. */
 type Fetch = (address: string, init: { readonly signal: AbortSignal }) => Promise<Response>;
@@ -52,10 +47,10 @@ async function newestRelease(asking: Asking): Promise<UpdateNews | null | undefi
       return undefined;
     }
 
-    const latest = v.safeParse(LATEST, await textUpTo(response.body, MOST_BYTES));
-    if (!latest.success) return undefined;
+    const text = await textUpTo(response.body, MOST_BYTES);
+    if (text === undefined) return undefined;
 
-    return latest.output.version === null ? null : latest.output;
+    return publishedRelease(text);
   } catch {
     return undefined;
   }

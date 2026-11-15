@@ -42,6 +42,7 @@ describe("checkForUpdate and updateOf", () => {
   // Drift: the file is on a website the install does not control. Each row is an answer that must end as a notice, or as none, and never as an error on the scheduled run that asked.
   test.each([
     { name: "a release above the running version", asking: website(RELEASE), update: NOTICE, news: RELEASE },
+    { name: "a release that says nothing of the database", asking: website({ version: RELEASE.version, released: RELEASE.released, notes: RELEASE.notes }), update: NOTICE, news: RELEASE },
     { name: "a release with keys this version does not know", asking: website({ ...RELEASE, pulled: false, size: { bytes: 9 } }), update: NOTICE, news: RELEASE },
     { name: "a release that changes the database", asking: website({ ...RELEASE, database: true }), update: { ...NOTICE, database: true }, news: { ...RELEASE, database: true } },
     { name: "no release yet", asking: website({ version: null }), update: undefined, news: null },
