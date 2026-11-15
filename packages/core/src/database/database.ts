@@ -59,7 +59,7 @@ export interface SiteDetails {
 /** Where a visitor's hostname points: a site's id, or a public name. */
 export type Address = { readonly id: SiteId } | { readonly public_name: PublicName };
 
-/** Where a page of a listing ended: the id of its last site, and when its content last changed, by a publish or by another version made live. */
+/** Where a page of a listing ended: the id of its last site, and the moment it is listed by. For a site that is when its content last changed, by a publish or by another version made live; for one in the trash, when it went there. */
 interface SitesCursor {
   readonly updated_at: number;
   readonly id: SiteId;
@@ -86,7 +86,7 @@ export interface SitesQuery {
   readonly access?: SiteAccess["access"];
 }
 
-/** One page of a listing, the site whose content changed last first, and of sites changed at one moment the one with the greater id. `next` is absent on the last page. */
+/** One page of a listing, the site whose content changed last first, or of the trash the site deleted last first; of sites listed by one moment the one with the greater id comes first. `next` is absent on the last page. */
 export interface SitesPage {
   readonly sites: readonly Site[];
   readonly next?: SitesCursor;

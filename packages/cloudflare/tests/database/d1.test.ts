@@ -202,9 +202,9 @@ describe("D1: the rows a scheduled sweep costs of a day's allowance", () => {
     await runSweep(install, latest);
 
     expect([first, idle, rows, website.asked]).toEqual([
-      { read: 11, written: 1 },
-      { read: 9, written: 0 },
-      { read: 11, written: 0 },
+      { read: 12, written: 1 },
+      { read: 10, written: 0 },
+      { read: 12, written: 0 },
       1,
     ]);
   });

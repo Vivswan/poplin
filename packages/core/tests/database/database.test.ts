@@ -140,6 +140,11 @@ function unreachable(kept: Kept | undefined): Refused<"not_found" | "in_trash"> 
   return undefined;
 }
 
+/** What a site is listed by: when its content last changed, or for one in the trash when it went there. */
+function listedBy(kept: Kept): Listed {
+  return { updated_at: kept.place.state === "trash" ? kept.place.trashed_at : kept.fields.updated_at, id: kept.fields.id };
+}
+
 /** Whether the first site comes before the second in a listing: the one changed last first, and of two changed at one moment the one with the greater id. */
 function listedBefore(left: Listed, right: Listed): boolean {
   if (left.updated_at !== right.updated_at) return left.updated_at > right.updated_at;
@@ -248,13 +253,13 @@ class MemoryDatabase implements Database {
     const listed = [...this.#sites.values()]
       .filter((kept) => (kept.place.state === "trash") === query.trash)
       .filter((kept) => owner === undefined || kept.fields.owner === owner)
-      .filter((kept) => after === undefined || listedBefore(after, kept.fields))
-      .sort((left, right) => (listedBefore(left.fields, right.fields) ? -1 : 1));
+      .filter((kept) => after === undefined || listedBefore(after, listedBy(kept)))
+      .sort((left, right) => (listedBefore(listedBy(left), listedBy(right)) ? -1 : 1));
+    const last = listed.at(query.limit - 1);
     const sites = listed.slice(0, query.limit).map(siteOf);
-    const last = sites.at(-1);
     if (last === undefined || listed.length <= query.limit) return { sites };
 
-    return { sites, next: { updated_at: last.updated_at, id: last.id } };
+    return { sites, next: listedBy(last) };
   }
 
   async changeAccess(id: SiteId, access: SiteAccess, signed: Signed): Promise<Done | Unchanged | Refused<"not_found" | "in_trash" | "name_taken">> {

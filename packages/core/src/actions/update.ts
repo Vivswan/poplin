@@ -1,6 +1,7 @@
 // The notice of a newer release: what the install last learned from the project's website, set beside the version it runs.
 
 import { PLAIN_VERSION } from "../records/update";
+import type { SettingValues } from "../records/settings";
 import type { Install } from "./records";
 
 /** A release newer than the running version. */
@@ -39,14 +40,18 @@ function isNewer(newest: string, current: string): boolean {
 }
 
 /**
- * Say whether a newer poplin than the running one is out, from what the install last learned. Nothing is fetched: it is two reads of the database.
+ * Say whether a newer poplin than the running one is out, from what the install last learned. Nothing is fetched: it reads the database, twice at most.
  *
  * @param current - the version the install runs
+ * @param known - the settings, from a caller that has read them already; read here when left out
  * @returns the newer release, or `undefined` when none is known, the newest known is not strictly newer, either version is not of the form `1.2.3`, or `update_check` is off
  */
-export async function updateOf(install: Pick<Install, "database">, current: string): Promise<Update | undefined> {
-  const [settings, check] = await Promise.all([install.database.readSettings(), install.database.readUpdateCheck()]);
-  if (settings?.update_check !== true || check === undefined || check.news === null) return undefined;
+export async function updateOf(install: Pick<Install, "database">, current: string, known?: Pick<SettingValues, "update_check">): Promise<Update | undefined> {
+  const settings = known ?? (await install.database.readSettings());
+  if (settings?.update_check !== true) return undefined;
+
+  const check = await install.database.readUpdateCheck();
+  if (check === undefined || check.news === null) return undefined;
 
   const { version, released, notes, database } = check.news;
   if (!isNewer(version, current)) return undefined;

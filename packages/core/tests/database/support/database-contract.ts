@@ -734,7 +734,14 @@ function sites(label: string, makeDatabase: DatabaseFactory): void {
       ]);
       expect(page(await database.listSites({ trash: true, limit: 100 }))).toEqual(["dddddddddddd"]);
       expect(page(await database.listSites({ trash: false, owner: BO, limit: 100 }))).toEqual(["bbbbbbbbbbbb"]);
-      expect(page(await database.listSites({ trash: true, owner: ADA, limit: 100 }))).toEqual([]);
+
+      // The trash shows what was deleted last first, whenever its content changed: the oldest site, deleted last, leads.
+      await database.trashSite("aaaaaaaaaaaa" as SiteId, { by: ADA, at: NOW + 10 });
+      const trash = await database.listSites({ trash: true, limit: 1 });
+
+      expect<unknown>([page(trash), trash.next]).toEqual([["aaaaaaaaaaaa"], { updated_at: NOW + 10, id: "aaaaaaaaaaaa" }]);
+      expect(page(await database.listSites({ trash: true, limit: 1, ...(trash.next === undefined ? {} : { after: trash.next }) }))).toEqual(["dddddddddddd"]);
+      expect(page(await database.listSites({ trash: true, owner: ADA, limit: 100 }))).toEqual(["aaaaaaaaaaaa"]);
       expect(ids).toHaveLength(5);
       await expect(database.listSites({ trash: false, limit: 0 })).rejects.toThrow(RangeError);
       await expect(database.listSites({ trash: false, limit: 101 })).rejects.toThrow(RangeError);

@@ -145,7 +145,7 @@ async function respond(context: Context<Shared>, page: Page): Promise<Response> 
   const title = config.ok ? config.values.dashboard_title : PLAIN_TITLE;
   const notice = page.ownNotice === true ? undefined : noticeIn(visit.url);
   const version = context.get("version");
-  const running = { version, update: await updateOf(visit.install, version) };
+  const running = { version, update: await updateOf(visit.install, version, config.ok ? config.values : undefined) };
   const document = await framePage(page, { title, nonce: context.get("secureHeadersNonce") ?? "", notice, csrf: visit.csrf, tabs: context.get("tabs"), running });
 
   return context.html(document, page.status ?? 200);

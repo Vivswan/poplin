@@ -810,6 +810,8 @@ export class SqlDatabase implements Database {
   async listSites(query: SitesQuery): Promise<SitesPage> {
     requirePage(query.limit);
 
+    // The trash is listed by when each site went there, the sites by when their content last changed.
+    const moment = query.trash ? "s.trashed_at" : "s.updated_at";
     const conditions = ["s.trashed = ?1"];
     const params: SqlValue[] = [query.trash ? 1 : 0];
 
@@ -820,7 +822,7 @@ export class SqlDatabase implements Database {
 
     if (query.after !== undefined) {
       params.push(query.after.updated_at, query.after.id);
-      conditions.push(`(s.updated_at, s.id) < (?${params.length - 1}, ?${params.length})`);
+      conditions.push(`(${moment}, s.id) < (?${params.length - 1}, ?${params.length})`);
     }
 
     if (query.named !== undefined) {
@@ -836,13 +838,13 @@ export class SqlDatabase implements Database {
 
     // One row more than the page shows whether another page follows.
     params.push(query.limit + 1);
-    const text = `${SELECT_SITE} WHERE ${conditions.join(" AND ")} ORDER BY s.updated_at DESC, s.id DESC LIMIT ?${params.length}`;
+    const text = `${SELECT_SITE} WHERE ${conditions.join(" AND ")} ORDER BY ${moment} DESC, s.id DESC LIMIT ?${params.length}`;
     const [listed] = await this.#driver.batch([sql(text, ...params)]);
     const sites = (listed?.rows ?? []).slice(0, query.limit).map(siteFromRow);
     const last = sites.at(-1);
     if (last === undefined || (listed?.rows.length ?? 0) <= query.limit) return { sites };
 
-    return { sites, next: { updated_at: last.updated_at, id: last.id } };
+    return { sites, next: { updated_at: last.state === "trash" ? last.trashed_at : last.updated_at, id: last.id } };
   }
 
   async changeAccess(id: SiteId, access: SiteAccess, signed: Signed): Promise<Done | Unchanged | Refused<"not_found" | "in_trash" | "name_taken">> {
