@@ -746,8 +746,8 @@ describe("the audit log as a file", () => {
     expect(pieces.at(-1)).toBe('"2,000 entries. The log holds more: download the next part."\r\n');
     expect([file, await next.json(), { calls: tally.calls - start.calls - file.calls, read: rows.read - start.read - file.read }]).toEqual([
       { calls: 5, read: FILE_ENTRIES + 3 },
-      { ok: true, after: expect.stringMatching(/^[1-9]\d*$/) },
-      { calls: 3, read: FILE_ENTRIES + 3 },
+      { ok: true, from: expect.stringMatching(/^[1-9]\d*$/), after: expect.stringMatching(/^[1-9]\d*$/) },
+      { calls: 4, read: FILE_ENTRIES + 4 },
     ]);
   });
 });

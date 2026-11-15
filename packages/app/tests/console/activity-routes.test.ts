@@ -161,7 +161,7 @@ describe("a page of the log", () => {
     ]).toEqual([
       { ok: true, total: 3, whole: true },
       { ok: true, total: 0, whole: true },
-      { ok: true, after: null },
+      { ok: true, from: "9", after: null },
       ["When (UTC),Who,What,Site,Action", ...["Made a new link,trip-notes,new_id", "Changed the site's settings,trip-notes,details", "Made the site,field-notes,create"].map((end) => `${when},${owner},${end}`), ""].join("\r\n"),
     ]);
   });
@@ -373,7 +373,7 @@ describe("the log as a file", () => {
     const said = JSON.parse(text.at(-1) ?? "null") as { readonly note?: string; readonly action?: string };
     const next = await (await opened.get("/data/activity/download/next")).json();
 
-    expect([text.slice(0, 2000).length, said.note ?? said.action, next]).toEqual([2000, last, { ok: true, after }]);
+    expect([text.slice(0, 2000).length, said.note ?? said.action, next]).toEqual([2000, last, { ok: true, from: String(entries + 1), after }]);
   });
 
   // Drift: a full file of one site's entries would end with no word of more, though the place after it says the log goes on: its reader would take the file for the site's whole history.
@@ -385,7 +385,25 @@ describe("the log as a file", () => {
     const text = (await (await opened.get(`/data/activity/download?format=jsonl&of=${site.id}`)).text()).trimEnd().split("\n");
     const next = await (await opened.get(`/data/activity/download/next?of=${site.id}`)).json();
 
-    expect([text.length, text.at(-1), next]).toEqual([2001, '{"note":"2,000 entries. The log holds more: download the next part."}', { ok: true, after: "3" }]);
+    expect([text.length, text.at(-1), next]).toEqual([2001, '{"note":"2,000 entries. The log holds more: download the next part."}', { ok: true, from: "2003", after: "3" }]);
+  });
+
+  // Drift: the first file would be read from the newest entry at the time of its own request. An entry written after its end was counted would shift it by one, and the entry between the two files would be in neither.
+  test("read from the place its end was counted from, the first file ends where the second begins, though an entry was written in between", async () => {
+    const opened = await openConsole();
+    await opened.base.publish("first-site");
+    await fillLog(opened, 2000);
+    const { from, after } = (await (await opened.get("/data/activity/download/next")).json()) as { readonly from: string; readonly after: string };
+    await opened.base.publish("late-site");
+    const files = [await opened.get(`/data/activity/download?format=jsonl&part=1&after=${from}`), await opened.get(`/data/activity/download?format=jsonl&part=2&after=${after}`)];
+    const [first = [], second = []] = await Promise.all(files.map(async (file) => (await file.text()).trimEnd().split("\n").map((line) => JSON.parse(line) as { readonly site?: string; readonly action?: string })));
+
+    expect([first.length, first.filter((entry) => entry.site === "late-site").length, first.at(-2), second.map((entry) => entry.action)]).toEqual([
+      2001,
+      0,
+      expect.objectContaining({ site: "first-site", action: "create" }),
+      ["settings_set"],
+    ]);
   });
 
   // Drift: a file cut by a failure would end like a whole one, and be read as the whole log; a browser reports a failed download only when the answer breaks off.
@@ -418,7 +436,7 @@ describe("the log as a file", () => {
     const end = await (await opened.get(`/data/activity/download/next?kind=access&after=${after}`)).json();
 
     expect(files.map((file) => file.headers.get("Content-Disposition"))).toEqual([1, 2].map((part) => `attachment; filename="poplin-activity-${day}-${part}.jsonl"`));
-    expect([lines.map((file) => file.length), lines[0]?.at(-1), end]).toEqual([[2001, 500], '{"note":"2,000 entries. The log holds more: download the next part."}', { ok: true, after: null }]);
+    expect([lines.map((file) => file.length), lines[0]?.at(-1), end]).toEqual([[2001, 500], '{"note":"2,000 entries. The log holds more: download the next part."}', { ok: true, from: after, after: null }]);
   });
 
   // Drift: a crafted address would reach the log with a key it does not know, or the file would be read in an order its bound is not said for.
@@ -494,8 +512,8 @@ describe("a narrowed log longer than one reading looks at", () => {
     const end = await (await opened.get("/data/activity/download/next?site=o&after=9")).json();
 
     expect([next, end]).toEqual([
-      { ok: true, after: "9" },
-      { ok: true, after: null },
+      { ok: true, from: String(AUDIT_WINDOW + 9), after: "9" },
+      { ok: true, from: "9", after: null },
     ]);
     expect(lines.map((file) => file.map((line) => (JSON.parse(line) as { readonly site?: string; readonly note?: string }).site ?? line))).toEqual([
       ["docs", `{"note":"Searched ${AUDIT_WINDOW.toLocaleString("en-US")} entries of the log. It holds more: download the next part."}`],

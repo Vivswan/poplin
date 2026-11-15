@@ -63,24 +63,21 @@ function saveFrom(address: string): void {
 /**
  * Write the address the server answers a file at.
  *
- * @param from - the file, where it is not the first: the place it goes on from, and its number
- * @param numbered - whether the file's name carries its number: only a log of one file has none
+ * @param file - `after` is the place the file is read from, left out for the newest entry; `part` is the number its name carries, left out for a log of one file
  */
-function fileAddress(narrowing: Narrowing, format: Format, from: NextFile | undefined, numbered: boolean): string {
-  const asked = new URLSearchParams({ format });
-  for (const [key, value] of Object.entries(narrowing)) asked.set(key, value);
-
-  if (from !== undefined) asked.set("after", from.after);
-  if (numbered) asked.set("part", String(from?.part ?? 1));
-
-  return `${BOOT.base}/data/activity/download?${asked}`;
+function fileAddress(narrowing: Narrowing, format: Format, file: { readonly after: string | undefined; readonly part: number | undefined }): string {
+  return `${BOOT.base}/data${api.activity.download.$path({ query: { format, ...narrowing, after: file.after, part: file.part?.toString() } })}`;
 }
 
-/** Ask the server for the place the file after a file goes on from: `null` when the log ends with the file, and `undefined` after a refusal, which was said. */
-async function placeAfter(narrowing: Narrowing, from: NextFile | undefined): Promise<string | null | undefined> {
+/**
+ * Ask the server where a file is read from and where the file after it goes on from.
+ *
+ * @returns `from`, the place the file is read from, and `after`, `null` when the log ends with the file; `undefined` after a refusal, which was said
+ */
+async function placesOf(narrowing: Narrowing, from: NextFile | undefined): Promise<{ readonly from: string; readonly after: string | null } | undefined> {
   const asked = from === undefined ? narrowing : { ...narrowing, after: from.after };
 
-  return (await send(api.activity.download.next.$get({ query: asked })))?.after;
+  return send(api.activity.download.next.$get({ query: asked }));
 }
 
 /** Draw the Download button and its menu: the formats, and after a file that did not hold the whole log, the way to the next one. */
@@ -95,11 +92,13 @@ export function DownloadMenu({ query, fitsOne, empty }: DownloadMenuProps): Reac
   /** Save one file, and say what was saved: with the way to the next file where the log goes on. */
   const save = async (format: Format, from?: NextFile): Promise<void> => {
     // A log known to fit one file is saved at once; any other file first learns whether one follows it.
-    const after = fitsOne && from === undefined ? null : await placeAfter(narrowing, from);
-    if (after === undefined) return undefined;
+    const places = fitsOne && from === undefined ? { from: undefined, after: null } : await placesOf(narrowing, from);
+    if (places === undefined) return undefined;
 
-    saveFrom(fileAddress(narrowing, format, from, from !== undefined || after !== null));
-    const then = after === null ? undefined : { of, format, after, part: (from?.part ?? 1) + 1 };
+    // The file is read from the place its end was counted from: an entry written since is in no file, and none is left out between two.
+    const part = from?.part ?? 1;
+    saveFrom(fileAddress(narrowing, format, { after: places.from, part: from !== undefined || places.after !== null ? part : undefined }));
+    const then = places.after === null ? undefined : { of, format, after: places.after, part: part + 1 };
     keep(then);
     if (then !== undefined) return sayDone(words.done, { label: words.more, run: () => void save(format, then) });
 

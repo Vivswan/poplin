@@ -23,6 +23,8 @@ interface Done {
 /**
  * Draw the menu over the log of one kind, with the server answering each question about the file after a file in turn.
  *
+ * The server says each file is read from the place it was asked about, and a first file from place 900.
+ *
  * @param places - the place each file's follower goes on from, in the order asked; `null` ends the log, and a sentence refuses
  * @param query - the query of the address the log is at
  */
@@ -38,7 +40,7 @@ function drawn(fitsOne: boolean, places: readonly (string | null | { readonly se
     const answer = answers.shift() ?? null;
     if (answer !== null && typeof answer === "object") return Response.json({ ok: false, code: "no_more_reading", about: null, ...answer }, { status: 503 });
 
-    return Response.json({ ok: true, after: answer });
+    return Response.json({ ok: true, from: new URLSearchParams(search).get("after") ?? "900", after: answer });
   }) as typeof fetch;
   render(
     <ThemeProvider storageKey="test.theme">
@@ -87,11 +89,11 @@ describe("the Download menu", () => {
   });
 
   // Drift: a long log could be saved only as its newest part: the next file would start over, repeat the first, lose the format, or two files would be saved under one name.
-  // A file of a filtered log may end where its search stopped, so the screen would say 2,000 entries were saved when the file holds fewer.
+  // A filtered file may end sooner, so the screen must not say 2,000; a first file read from another place than its end was counted from would leave an entry out between two files.
   test.each([
     ["the whole log, whose files are full", "after=40", "", "Downloaded 2,000.", "Next 2,000"],
     ["a filtered log, whose file may end sooner", "kind=sites&after=40", "&kind=sites", "Downloaded a part.", "Next part"],
-  ])("saves %s a file after another: each goes on from the place the server names, numbered, until the log ends", async (_what, query, kept, done, next) => {
+  ])("saves %s a file after another: each is read from the place the server names, numbered, until the log ends", async (_what, query, kept, done, next) => {
     const menu = drawn(false, ["150", null], query);
     await choose("CSV");
     await said(done);
@@ -104,7 +106,7 @@ describe("the Download menu", () => {
       null,
       {
         asked: [`/data/activity/download/next${kept.replace("&", "?")}`, `/data/activity/download/next?${kept.slice(1)}${kept === "" ? "" : "&"}after=150`],
-        saved: [`${BOOT.base}/data/activity/download?format=csv${kept}&part=1`, `${BOOT.base}/data/activity/download?format=csv${kept}&after=150&part=2`],
+        saved: [`${BOOT.base}/data/activity/download?format=csv${kept}&after=900&part=1`, `${BOOT.base}/data/activity/download?format=csv${kept}&after=150&part=2`],
       },
     ]);
   });

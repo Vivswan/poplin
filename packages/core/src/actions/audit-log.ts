@@ -182,23 +182,25 @@ async function endOfNarrowedFile(install: Install, asked: Omit<Asked, "limit">, 
 /**
  * Find the place the file after a file of the log goes on from. It hands no entry out.
  *
- * A file of the whole log ends at its last entry, found by reading the file's rows and one more. A narrowed file ends there too, or sooner: where one of its readings stopped short.
+ * A narrowed file may end sooner than a full one: where one of its readings stopped short. The file is to be read from `from`, the place its end was counted from, so an entry written meanwhile shifts neither.
  *
- * @param query - `kind`, `site`, and `after` as the file's readings take them; `entries` is how many entries the file holds, 10,000 at the most
- * @returns `after`, or `null` when the log ends with the file, so no file follows; `not_allowed` for anyone but an admin, or `bad_argument` naming the key that was refused
+ * @param query - `kind`, `site`, `of`, and `after` as the file's readings take them; `entries` is how many entries the file holds, 10,000 at the most
+ * @returns `from`, the place the file itself is read from, and `after`, or `null` when the log ends with the file, so no file follows; `not_allowed` for anyone but an admin, or `bad_argument` naming the key that was refused
  */
 export async function nextAuditFile(
   install: Install,
   actor: Actor,
   query: v.InferInput<typeof AUDIT_FILE_END_QUERY>,
-): Promise<{ readonly ok: true; readonly after: number | null } | Refused<"not_allowed" | "bad_argument">> {
+): Promise<{ readonly ok: true; readonly from: number; readonly after: number | null } | Refused<"not_allowed" | "bad_argument">> {
   if (actor.scope !== "admin") return refuse("not_allowed");
 
   const asked = v.safeParse(AUDIT_FILE_END_QUERY, query);
   if (!asked.success) return refuse("bad_argument", v.getDotPath(asked.issues[0]) ?? "query");
 
   const { entries, ...narrowed } = asked.output;
-  if (narrowed.kind !== undefined || narrowed.site !== undefined || narrowed.of !== undefined) return { ok: true, after: await endOfNarrowedFile(install, narrowed, entries) };
+  const from = narrowed.after ?? ((await install.database.listAudit({ limit: 1 })).at(0)?.seq ?? 0) + 1;
+  const placed = { ...narrowed, after: from };
+  if (narrowed.kind !== undefined || narrowed.site !== undefined || narrowed.of !== undefined) return { ok: true, from, after: await endOfNarrowedFile(install, placed, entries) };
 
-  return { ok: true, after: (await install.database.endOfAuditPart({ entries, after: narrowed.after })) ?? null };
+  return { ok: true, from, after: (await install.database.endOfAuditPart({ entries, after: from })) ?? null };
 }

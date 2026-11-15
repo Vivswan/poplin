@@ -5,7 +5,7 @@
 //                         a narrowed page looks at 5,000 entries of the log and no more: one that stopped there says so, and its place goes on from where it stopped
 //   GET /activity/total   how many entries the log holds, counted no further back than the newest 10,000, or the newest 5,000 under ?kind=, ?site= and ?of=
 //   GET /activity/download        the entries under ?kind=, ?site= and ?of= as a file, the newest first and 2,000 at the most, in ?format=csv or jsonl; ?after= goes on after the file before, and ?part= numbers the file's name
-//   GET /activity/download/next   the place the file after one goes on from, or none when the log ends with it
+//   GET /activity/download/next   the place the file after one goes on from, or none when the log ends with it, and the place the file itself is read from: a first file is asked with that as ?after=
 
 import { vValidator } from "@hono/valibot-validator";
 import { AUDIT_COUNT_QUERY, AUDIT_FILE_PAGE, AUDIT_NARROWING, AUDIT_QUERY, countAudit, listAuditForFile, listAuditForScreen, nextAuditFile } from "@poplin/core/src/actions/audit-log";
@@ -304,5 +304,5 @@ export const activityRoutes = new Hono<Shared>()
     const next = await nextAuditFile(install, actor, { ...context.req.valid("query"), entries: MOST_IN_FILE });
     if (!next.ok) return refused(context, next);
 
-    return context.json({ ok: true as const, after: next.after === null ? null : String(next.after) });
+    return context.json({ ok: true as const, from: String(next.from), after: next.after === null ? null : String(next.after) });
   });
