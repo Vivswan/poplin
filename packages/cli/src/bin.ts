@@ -73,9 +73,7 @@ function thisProcess(): Io {
     terminal: { asks: watched && process.stdin.isTTY === true, progress: watched && process.env.TERM !== PLAIN_TERMINAL },
     ask,
     computer: hostname(),
-    open: (address) => {
-      openBrowser(address, machine);
-    },
+    open: (address) => void openBrowser(address, machine),
     pause,
     stopped: STOP.signal,
   };
