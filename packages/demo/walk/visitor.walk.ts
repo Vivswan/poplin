@@ -39,10 +39,9 @@ async function openEveryScreen(page: Page): Promise<(number | undefined)[]> {
   return statuses;
 }
 
-/** Choose the dark theme in the account's menu. */
+/** Choose the dark theme with the switch at the top. */
 async function chooseDark(page: Page): Promise<void> {
-  await page.getByRole("button", { name: /^Account/ }).click();
-  await page.getByRole("menuitemradio", { name: "Dark", exact: true }).click();
+  await page.getByRole("button", { name: "Switch to dark", exact: true }).click();
 }
 
 test("the first visit lands on the dashboard with sample sites", async ({ page, baseURL }) => {
@@ -170,7 +169,7 @@ test("a page outside the demo's folder stays the host's own", async ({ page, con
 test.describe("a browser that asks for the light scheme", () => {
   test.use({ colorScheme: "light" });
 
-  test("the theme chosen in the account's menu holds on the next page", async ({ page }) => {
+  test("the theme chosen with the switch at the top holds on the next page", async ({ page }) => {
     await arrive(page);
     await chooseDark(page);
     await page.goto("tokens");

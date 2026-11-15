@@ -10,7 +10,7 @@ const VIEWPORTS = [
   { width: 390, height: 844, wide: false },
 ] as const;
 
-/** The schemes a browser asks for. The dashboard follows the browser until a theme is chosen in the account's menu. */
+/** The schemes a browser asks for. The dashboard follows the browser until a theme is chosen with the switch at the top. */
 const SCHEMES = ["light", "dark"] as const;
 
 /** What the sample data holds that the walk opens: an unlisted site by its title, a site by its title for the graph, a person who is not the visitor, a token, and a login that waits. */
@@ -166,7 +166,7 @@ const STOPS: readonly Stop[] = [
   {
     name: "the account's menu",
     open: (page) => page.getByRole("button", { name: /^Account/ }).click(),
-    shows: (page) => [page.getByRole("menuitemradio", { name: "System", exact: true })],
+    shows: (page) => [page.getByRole("menuitem", { name: "Use system theme", exact: true })],
     close: pressEscape,
   },
   {

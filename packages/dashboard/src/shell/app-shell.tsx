@@ -30,8 +30,6 @@ import {
   DropdownMenuGroup,
   DropdownMenuItem,
   DropdownMenuLabel,
-  DropdownMenuRadioGroup,
-  DropdownMenuRadioItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
@@ -40,9 +38,11 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { api } from "@/lib/api";
 import { BOOT } from "@/lib/boot";
 import { useFrame, useStarted } from "@/lib/frame";
+import { useMedia } from "@/lib/media";
 import { sayDone, sayRefused, send } from "@/lib/notify";
 import { useChosenTimeZone } from "@/lib/timezone";
 import { Confirm, type Question } from "@/shared/confirm";
+import { IconButton } from "@/shared/icon-button";
 import { siteKey } from "@/sites/site-queries";
 
 /** The sections, in the order shown, each with the path of its screen: first what a person looks at, then, set apart by a gap, what a person sets up. */
@@ -59,12 +59,8 @@ const SECTIONS = [
 /** The name at the top of the side, the same on every install. */
 const NAME = "poplin";
 
-/** The looks a person can choose. */
-const THEMES = [
-  { value: "system", label: "System", icon: MonitorIcon },
-  { value: "light", label: "Light", icon: SunIcon },
-  { value: "dark", label: "Dark", icon: MoonIcon },
-] as const;
+/** What the browser matches while the system asks for the dark look. */
+const SYSTEM_DARK = "(prefers-color-scheme: dark)";
 
 /** What keeps the router from marking a link of the frame as the place the address is at for every address under it, and from adding a class of its own. */
 const NO_OWN_MARK = { activeOptions: { exact: true }, activeProps: {} } as const;
@@ -107,7 +103,34 @@ function SectionLink({ section, current }: { readonly section: (typeof SECTIONS)
   );
 }
 
-/** The account menu: who is logged in, and the look of the dashboard, kept in this browser. */
+/**
+ * The switch between the light look and the dark one, kept in this browser. Until it is pressed the dashboard follows the system.
+ */
+function ThemeToggle(): ReactNode {
+  const { theme, setTheme } = useTheme();
+  const systemDark = useMedia(SYSTEM_DARK);
+  const dark = theme === "dark" || (theme === "system" && systemDark);
+
+  return (
+    <IconButton label={dark ? "Switch to light" : "Switch to dark"} onClick={() => setTheme(dark ? "light" : "dark")} className="max-md:size-10">
+      {dark ? <SunIcon /> : <MoonIcon />}
+    </IconButton>
+  );
+}
+
+/** The email of who is logged in, whole: where one line is too short for it, it goes on at the "@" on a second line. What follows the "@" is quieter either way. */
+function Email({ className }: { readonly className?: string }): ReactNode {
+  const at = Math.max(BOOT.email.lastIndexOf("@"), 0);
+
+  return (
+    <span title={BOOT.email} className={cn("flex min-w-0 flex-wrap text-xs leading-4 font-normal", className)}>
+      <span className="max-w-full break-all text-foreground">{BOOT.email.slice(0, at)}</span>
+      <span className="max-w-full break-all text-muted-foreground">{BOOT.email.slice(at)}</span>
+    </span>
+  );
+}
+
+/** The account menu: who is logged in, and the way back to the system's look. */
 function AccountMenu({ compact, offer }: { readonly compact?: boolean; readonly offer: Offer | undefined }): ReactNode {
   const { theme, setTheme } = useTheme();
   const initial = BOOT.email.slice(0, 1).toUpperCase();
@@ -121,32 +144,29 @@ function AccountMenu({ compact, offer }: { readonly compact?: boolean; readonly 
         aria-label={`Account: ${BOOT.email}`}
         className={cn(
           "flex items-center gap-2 rounded-md text-left outline-none hover:bg-sidebar-accent/60 focus-visible:ring-2 focus-visible:ring-ring aria-expanded:bg-sidebar-accent/60",
-          compact ? "p-1" : "h-10 w-full px-2",
+          compact ? "p-1" : "min-h-10 w-full px-2 py-1.5",
         )}
       >
         {avatar}
         {compact ? null : (
           <>
-            <span className="min-w-0 flex-1 truncate">{BOOT.email}</span>
+            <Email className="flex-1" />
             <ChevronsUpDownIcon className="size-3.5 shrink-0 text-faint" />
           </>
         )}
       </DropdownMenuTrigger>
       <DropdownMenuContent side={compact ? "bottom" : "top"} align={compact ? "end" : "start"} className="w-(--anchor-width) min-w-52">
         <DropdownMenuGroup>
-          <DropdownMenuLabel className="truncate">{BOOT.email}</DropdownMenuLabel>
+          <DropdownMenuLabel>
+            <Email />
+          </DropdownMenuLabel>
         </DropdownMenuGroup>
         <DropdownMenuSeparator />
         <DropdownMenuGroup>
-          <DropdownMenuLabel>Theme</DropdownMenuLabel>
-          <DropdownMenuRadioGroup value={theme} onValueChange={(value) => setTheme(value as typeof theme)}>
-            {THEMES.map(({ value, label, icon: Icon }) => (
-              <DropdownMenuRadioItem key={value} value={value} closeOnClick>
-                <Icon />
-                {label}
-              </DropdownMenuRadioItem>
-            ))}
-          </DropdownMenuRadioGroup>
+          <DropdownMenuItem disabled={theme === "system"} onClick={() => setTheme("system")}>
+            <MonitorIcon />
+            Use system theme
+          </DropdownMenuItem>
         </DropdownMenuGroup>
         {compact && offer !== undefined ? (
           <>
@@ -311,6 +331,7 @@ function PhoneSections({ current }: { readonly current: Section }): ReactNode {
         <div className="mt-auto flex flex-col gap-2">
           <DomainNote onGo={() => setOpen(false)} />
           <p className="px-2.5 text-xs leading-5 text-faint">Running poplin {BOOT.version}</p>
+          <Email className="px-2.5 pb-1" />
         </div>
       </SheetContent>
     </Sheet>
@@ -364,6 +385,7 @@ export function AppShell({
           <div className="ml-auto flex items-center gap-2">
             {tools}
             <DemoTag />
+            <ThemeToggle />
             <span className="md:hidden">
               <AccountMenu compact offer={offer} />
             </span>

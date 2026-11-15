@@ -1,10 +1,10 @@
-// The frame around every screen: what it says of the domain at the side.
+// The frame around every screen: what it says of the domain at the side, and the switch of the look at the top.
 
 import { clearPage } from "../lib/support/page";
 
 import { afterAll, afterEach, describe, expect, test } from "bun:test";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { cleanup, screen } from "@testing-library/react";
+import { cleanup, fireEvent, screen } from "@testing-library/react";
 
 import { ThemeProvider } from "@/components/theme-provider";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -12,6 +12,9 @@ import { BOOT } from "@/lib/boot";
 import { FRAME_KEY } from "@/lib/frame";
 import { AppShell } from "@/shell/app-shell";
 import { drawAt } from "../lib/support/router";
+
+/** The key the look is kept under in these tests. */
+const THEME_KEY = "test.theme";
 
 /** What the frame holds besides the note on the domain. */
 const FRAME = { ok: true, update: null, starts: false } as const;
@@ -24,7 +27,7 @@ async function drawWith(domainNote: { readonly label: string; readonly sentence:
   await drawAt(
     "/",
     <QueryClientProvider client={client}>
-      <ThemeProvider storageKey="test.theme">
+      <ThemeProvider storageKey={THEME_KEY}>
         <TooltipProvider>
           <AppShell current="sites" heading="Sites">
             <p>The screen.</p>
@@ -35,7 +38,10 @@ async function drawWith(domainNote: { readonly label: string; readonly sentence:
   );
 }
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  localStorage.removeItem(THEME_KEY);
+});
 afterAll(clearPage);
 
 describe("the note on the domain at the side", () => {
@@ -59,5 +65,21 @@ describe("the note on the domain at the side", () => {
     await drawWith(null);
 
     expect(screen.queryByRole("link", { name: /^Domain ./ })).toBeNull();
+  });
+});
+
+describe("the switch of the look at the top", () => {
+  // Drift: the look would be chosen only in a menu again, a press would not change it, or the button would name the look it already shows.
+  test("turns the page dark on a press and then offers the way back, kept in the browser", async () => {
+    await drawWith(null);
+    const before = document.documentElement.classList.contains("dark");
+    fireEvent.click(screen.getByRole("button", { name: "Switch to dark" }));
+
+    expect([before, document.documentElement.classList.contains("dark"), localStorage.getItem(THEME_KEY), screen.getByRole("button", { name: "Switch to light" }) !== null]).toEqual([
+      false,
+      true,
+      "dark",
+      true,
+    ]);
   });
 });

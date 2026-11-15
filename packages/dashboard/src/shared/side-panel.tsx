@@ -4,10 +4,11 @@
 import { Dialog } from "@base-ui/react/dialog";
 import { cn } from "cn";
 import { XIcon } from "lucide-react";
-import { type KeyboardEvent, type ReactElement, type ReactNode, useRef, useState, useSyncExternalStore } from "react";
+import { type KeyboardEvent, type ReactElement, type ReactNode, useRef, useState } from "react";
 
 import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
+import { useMedia } from "@/lib/media";
 import { IconButton } from "@/shared/icon-button";
 
 /** The width from which a panel stands beside its list: the list then still has room for its fixed column, one more, and a row's actions, and for its tools above them. */
@@ -34,20 +35,13 @@ interface SidePanelProps {
   readonly children: ReactNode;
 }
 
-function subscribeToWidth(onChange: () => void): () => void {
-  const query = window.matchMedia(BESIDE);
-  query.addEventListener("change", onChange);
-
-  return () => query.removeEventListener("change", onChange);
-}
-
 /**
  * Whether the screen is wide enough for a panel to stand beside its list.
  *
  * A screen lays its list out for the panel beside it only when this says so; under it the panel takes the whole row and the list is out of sight.
  */
 export function useStandsBeside(): boolean {
-  return useSyncExternalStore(subscribeToWidth, () => window.matchMedia(BESIDE).matches);
+  return useMedia(BESIDE);
 }
 
 /**
