@@ -717,6 +717,21 @@ test.describe("on a screen 1440 px wide, under a site's panel", () => {
     await pressEscape(page);
     await expect(details).toBeFocused();
   });
+
+  // Drift: the focus would go under the panel and out of sight again: the end of each row lies under the panel, and a row's controls keep the panel open.
+  test("a focus that reaches a row's control under the panel closes the panel and stays there; one on a row's control beside the panel keeps it open", async ({ page }) => {
+    await arrive(page);
+    const beside = page.getByRole("row").getByRole("button", { name: `Details of ${SAMPLE.graphed}`, exact: true });
+    const under = page.getByRole("row").getByRole("button", { name: `More for ${SAMPLE.graphed}`, exact: true });
+
+    await openPanel(page, SAMPLE.site);
+    await beside.focus();
+    await expect(panel(page)).toBeVisible();
+
+    await under.focus();
+    await expect(page.getByRole("dialog")).toHaveCount(0);
+    await expect(under).toBeFocused();
+  });
 });
 
 test.describe("on a phone, while a line says a result", () => {
