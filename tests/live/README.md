@@ -15,6 +15,7 @@ Live Checks workflow
   build the Worker bundle
   packages/cloudflare/scripts/live/start-over.ts a run by hand with `start_over` ticked: everything poplin made, removed
   packages/cloudflare/scripts/live/converge.ts   the account's plans, bucket, database, login, wrangler deploy, the Domain tab's repair, the caps
+                                                 `Worker: deployed` in its log: Cloudflare took the built bundle and the source map beside it in one upload
   packages/cloudflare/scripts/live/suite.ts      a token for the run -> bun test tests/live/live.test.ts -> the token removed
   packages/cloudflare/scripts/live/reset.ts      a token for the reset -> the install put back -> every token removed
   step summary                                   one table of the install's pieces, one of the checks, one of the reset

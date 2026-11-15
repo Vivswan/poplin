@@ -27,6 +27,12 @@ const MOST_BUNDLE_BYTES = 3_000_000;
 /** This repository's own guard on the gzipped bundle: Cloudflare sets no limit on that size. The bundle is about 630,000 bytes then. */
 const MOST_BUNDLE_GZIP_BYTES = 800_000;
 
+/** A path that starts at the root of a disk, or an address: it would name the machine a map was built on. */
+const ABSOLUTE = /^(?:[/\\]|[A-Za-z]:|[a-z]+:\/\/)/;
+
+/** The folder of a person's account on macOS, Linux, or Windows, as a map's JSON would hold it. */
+const HOME_FOLDER = /[/\\]Users[/\\]|\/home\//;
+
 /** The policy the dashboard goes out under: it runs its own script alone and reads this origin alone. */
 const POLICY = "default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self'; connect-src 'self'; img-src 'self' data:; form-action 'self'; frame-ancestors 'none'; base-uri 'none'";
 
@@ -951,6 +957,16 @@ describe("the built bundle", () => {
     expect(parse(bundle)[0].map((left) => left.n)).toEqual([]);
     expect(new TextEncoder().encode(bundle).byteLength).toBeLessThan(MOST_BUNDLE_BYTES);
     expect(await gzippedBytes(bundle)).toBeLessThan(MOST_BUNDLE_GZIP_BYTES);
+  });
+
+  // Drift: every upload sends the map to Cloudflare, sources and all, so a path of the machine that built it would go with it; a map written into the bundle would triple the file an install runs.
+  // The map is about 7,100,000 bytes, 1,350,000 gzipped. Cloudflare takes a map of up to 60 MiB, 15 MiB gzipped, so no cap of this repository is set on it.
+  test("ends in the name of the map beside it, and the map names every source by a relative path and holds no home folder", () => {
+    const map = JSON.parse(bundleMap) as { sources: string[]; sourceRoot?: string };
+
+    expect(bundle.trimEnd().split("\n").at(-1)).toBe("//# sourceMappingURL=worker.js.map");
+    expect([map.sourceRoot ?? "", ...map.sources].filter((path) => ABSOLUTE.test(path))).toEqual([]);
+    expect(bundleMap.match(HOME_FOLDER)).toBeNull();
   });
 
   // Drift: every other test here runs the Worker's source, and the file an install runs is that source minified: a name the minifier changed that the code reads back would break that file alone.

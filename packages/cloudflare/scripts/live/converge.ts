@@ -172,7 +172,7 @@ async function ensureAccess(run: Run, found: Found, login: string, progress: Pro
 /**
  * The Worker's configuration for the test install: the repository's own, with the test account's id, bucket, database, zone, and login.
  *
- * @returns what wrangler uploads the built bundle by: the file as it is, already minified, so `minify` is left out
+ * @returns what wrangler uploads the built bundle by: the file as it is, already minified, so `minify` is left out; the map the build wrote beside it goes with it, as the repository's own configuration says
  */
 export async function workerConfig(
   run: Pick<Run, "accountId">,

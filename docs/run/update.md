@@ -35,6 +35,8 @@ in the build's log:   poplin: deploying 0.3.1 (was asked for latest)
 
 When it cannot find or fetch the release it deploys nothing, and prints one line that starts with `poplin:`, holds `Nothing was deployed`, and says what to do.
 
+A deploy from Cloudflare's build or from a terminal uploads the Worker's source map with it, so an error in Cloudflare's log of the Worker names a source file and its line. No address serves the map.
+
 ## The command on your computer
 
 `poplin doctor` names both versions. When they differ, the row says so:
