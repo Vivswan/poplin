@@ -23,8 +23,8 @@ const COLUMN = "@container w-full max-w-[1100px]";
 /** A group: its heading over its rows, and a line between it and the group before. */
 const GROUP = "mt-5 border-t pt-5 first-of-type:mt-0 first-of-type:border-t-0 first-of-type:pt-0";
 
-/** The look of a group's heading: larger than a setting's name. */
-const HEADING = "mb-1 text-lg leading-7 font-bold";
+/** The look of a group's heading: as large as the screen's title and no larger, and larger than a setting's name. */
+const HEADING = "mb-1 text-base leading-6 font-bold";
 
 /** The setting that starts updates by itself, and what its row says while no update link is saved: the switch then starts nothing. */
 const [AUTO_UPDATE, NEEDS_LINK] = ["auto_update", "Needs an update link to work."] as const;

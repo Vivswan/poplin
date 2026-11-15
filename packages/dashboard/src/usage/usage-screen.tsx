@@ -21,7 +21,7 @@ import { VisitsBlock } from "@/usage/visits-block";
 /** What each line counts, in the words of the screen. */
 const NAMES: Readonly<Record<Line["what"], string>> = {
   stored: "Storage",
-  sites: "Sites",
+  sites: "Sites, the trash included",
   trashed: "In the trash",
   files: "Files",
   requests: "Requests today",

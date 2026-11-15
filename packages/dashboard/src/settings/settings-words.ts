@@ -32,7 +32,7 @@ const WORDS: Readonly<Record<string, Words>> = {
     start: "30",
   },
   default_search_engines: { block: "sites", label: "Show in search engines", about: "A new public site starts with its switch on." },
-  versions_kept: { block: "sites", label: "Versions kept", about: "How many versions a site keeps, the live one included.", unit: "versions" },
+  versions_kept: { block: "sites", label: "Keep versions", about: "How many versions a site keeps, the live one included.", unit: "versions" },
   trash_days: { block: "sites", label: "Keep deleted sites", about: "After that, a deleted site is gone for good.", unit: "days" },
   search_engines_allowed: {
     block: "visitors",
@@ -53,7 +53,7 @@ const WORDS: Readonly<Record<string, Words>> = {
   },
   max_total_size: { block: "storage", label: "All sites together", about: "The most all sites hold, the trash included." },
   max_site_size: { block: "storage", label: "One site", about: "The most one site holds." },
-  max_sites: { block: "storage", label: "Number of sites", about: "The most sites this install holds, or empty for no limit.", unit: "sites", empty: "No limit" },
+  max_sites: { block: "storage", label: "Number of sites", about: "The most sites, the trash included, or empty for no limit.", unit: "sites", empty: "No limit" },
   max_files_per_publish: { block: "publishing", label: "Files per publish", about: "The most files in one publish, up to 10,000.", unit: "files" },
   max_files_per_day: { block: "publishing", label: "Files per day", about: "The most files published or duplicated in one UTC day.", unit: "files" },
   max_storage_writes_per_day: { block: "publishing", label: "Storage writes per day", about: "A published file counts as 1 write, a duplicated file as 2.", unit: "writes" },

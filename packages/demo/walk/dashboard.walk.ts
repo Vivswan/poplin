@@ -642,6 +642,29 @@ test.describe("on a phone, after a site's panel", () => {
   });
 });
 
+test.describe("on a phone, on Usage", () => {
+  test.use({ viewport: PHONE });
+
+  // Drift: the names of the lines would scroll in a room as low as a wide screen's again, which shows two of a dozen where a row holds one name.
+  test("with every site picked, five names of the lines or more show at once, and the rest by scrolling", async ({ page }) => {
+    await arrive(page);
+    await toSection(page, "Usage");
+    await page.getByRole("combobox", { name: "Compare sites", exact: true }).click();
+    await page.getByRole("button", { name: "Select all", exact: true }).click();
+    await pressEscape(page);
+    const names = page.getByRole("list", { name: "Lines", exact: true });
+    await expect(names.getByRole("listitem")).not.toHaveCount(1);
+
+    const shown = await names.evaluate((list) => {
+      const room = (list.closest("[data-slot='scroll-area']") ?? list).getBoundingClientRect();
+      const whole = [...list.children].map((name) => name.getBoundingClientRect()).filter((name) => name.top >= room.top - 1 && name.bottom <= room.bottom + 1);
+
+      return { atOnce: whole.length >= 5, scrolls: whole.length < list.children.length };
+    });
+    expect(shown).toEqual({ atOnce: true, scrolls: true });
+  });
+});
+
 test.describe("on a phone, in a question", () => {
   test.use({ viewport: PHONE });
 
@@ -773,6 +796,22 @@ test("no screen draws a rule between its header and what follows it", async ({ p
   }
 });
 
+// Drift: a group's heading would be set larger than the screen's own title again, so the page would read as if the group were the screen.
+test("no heading of a screen is larger than the screen's title", async ({ page }) => {
+  await arrive(page);
+  const larger: Record<string, (string | null)[]> = {};
+  for (const stop of screens()) {
+    await toScreen(page, stop);
+    larger[stop.screen] = await screenHeading(page, stop.screen).evaluate((title) => {
+      const size = (heading: Element): number => Number.parseFloat(getComputedStyle(heading).fontSize);
+
+      return [...document.querySelectorAll("h2, h3, h4")].filter((heading) => size(heading) > size(title)).map((heading) => heading.textContent);
+    });
+  }
+
+  expect(larger).toEqual(Object.fromEntries(screens().map((stop) => [stop.screen, []])));
+});
+
 // Drift: the filter at a row's end would search for a name again: the entries from before a new link or a rename would be gone, and those of another site of that name shown.
 test("on Activity, Only this site keeps the entries of the row's site, the first one from before its new link among them, under a mark that names the site, and the mark's button shows every site again", async ({ page }) => {
   await arrive(page);
@@ -793,6 +832,18 @@ test("on Activity, Only this site keeps the entries of the row's site, the first
   await page.getByRole("button", { name: "Show every site", exact: true }).click();
   await expect(mark).toBeHidden();
   await expect(log.getByRole("row").filter({ hasNot: ofSite })).not.toHaveCount(0);
+});
+
+// Drift: the list would follow the sites' names again, which it shows second and in grey, so its titles would stand in no order a person can see.
+test("the list that picks the sites of the graph stands in the order of the titles it shows first", async ({ page }) => {
+  await arrive(page);
+  await toSection(page, "Usage");
+  await page.getByRole("combobox", { name: "Compare sites", exact: true }).click();
+  await expect(page.getByRole("option").first()).toBeVisible();
+
+  const titles = await page.getByRole("option").evaluateAll((options) => options.map((option) => option.firstElementChild?.textContent ?? ""));
+  expect(titles).toContain(SAMPLE.graphed);
+  expect(titles).toEqual([...titles].sort((left, right) => (left.toLowerCase() < right.toLowerCase() ? -1 : 1)));
 });
 
 // Drift: Enter after typing would tick nothing again, or tick the first site of the list from before the typed text, which the text does not find.

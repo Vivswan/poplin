@@ -77,7 +77,7 @@ export function useVisits(choice: Choice): UseQueryResult<Visits> {
 }
 
 /**
- * Read the sites whose name holds a typed text, by name: the first page of them.
+ * Read the sites whose name holds a typed text, in the order of their titles, which the list shows first: the first page of them.
  *
  * @param wanted - whether the list is open; nothing is read while it is not
  */
@@ -86,7 +86,7 @@ export function useOptions(typed: string, wanted: boolean): UseQueryResult<reado
     queryKey: ["sites", "options", typed],
     enabled: wanted,
     queryFn: async () => {
-      const page = await answerOf(api.sites.$get({ query: { q: typed, sort: "name" } }));
+      const page = await answerOf(api.sites.$get({ query: { q: typed, sort: "title" } }));
 
       return page.sites.map((site) => ({ id: site.id, title: site.title ?? site.name, name: site.name }));
     },
