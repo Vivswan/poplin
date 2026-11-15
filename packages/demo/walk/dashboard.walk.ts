@@ -604,6 +604,26 @@ test.describe("on a phone, in a question", () => {
   });
 });
 
+// Drift: one press on Private would end a public link again with nothing asked, and a public name typed as a link ends would get that ending twice with nothing said.
+test("a public site is asked about before its public link ends, Cancel leaves it public, and the question that makes a site public shows the link a typed name gets", async ({ page }) => {
+  const handbook = page.getByRole("dialog", { name: SAMPLE.graphed, exact: true });
+  const asks = page.getByRole("dialog", { name: `Make ${SAMPLE.graphed} public?`, exact: true });
+  await arrive(page);
+  await openPanel(page, SAMPLE.graphed);
+
+  await handbook.getByRole("button", { name: "Private", exact: true }).click();
+  await expect(question(page, `Make ${SAMPLE.graphed} private?`)).toContainText("Its public link stops working.");
+  await leaveBy("Cancel")(page);
+  await expect(handbook.getByRole("button", { name: "Public", exact: true })).toHaveAttribute("aria-pressed", "true");
+
+  await handbook.getByRole("button", { name: "Unlisted", exact: true }).click();
+  await leaveBy("Make it unlisted")(page);
+  await expect(handbook.getByRole("button", { name: "Unlisted", exact: true })).toHaveAttribute("aria-pressed", "true");
+  await handbook.getByRole("button", { name: "Public", exact: true }).click();
+  await asks.getByRole("textbox", { name: "Public name", exact: true }).fill("handbook-page");
+  await expect(asks.getByText(/handbook-page-page$/)).toBeVisible();
+});
+
 // Drift: a change would leave the focus on the page itself again, where no key reaches anything: the control that held it is gone once the change is done.
 test("after a change the focus is where the next key is of use: on the panel's heading, in the refused field, on the button that adds a user", async ({ page }) => {
   await arrive(page);

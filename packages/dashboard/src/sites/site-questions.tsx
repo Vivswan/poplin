@@ -1,12 +1,29 @@
-// The questions the Sites screen asks before a change of a site: its title and name, a new link, and opening the site wider. They are asked from a row's menu and from the panel alike, and drawn once, beside both.
+// The questions the Sites screen asks before a change of a site: its title and name, a new link, and who can open it. They are asked from a row's menu and from the panel alike, and drawn once, beside both.
 
 import { type ReactNode, useRef } from "react";
+import { useDebounce } from "use-debounce";
 
-import { ACCESSES, type Access, LONGEST_NAME, type Site, shownName } from "@/lib/sites";
+import { ACCESSES, type Access, LONGEST_NAME, plainAddress, type Site, shownName } from "@/lib/sites";
 import { AskDialog } from "@/shared/ask-dialog";
 import { Confirm, type Question } from "@/shared/confirm";
 import { EditSiteDialog } from "@/sites/edit-site-dialog";
 import type { SiteActions } from "@/sites/site-actions";
+import { usePublicAddress } from "@/sites/site-queries";
+
+/** How long the typing of a public name rests before its address is asked, in milliseconds. */
+const REST_MS = 250;
+
+/** What a site's users are told of who can open it once it is no longer public, by the access it gets. */
+const AFTER_PUBLIC: Readonly<Record<Exclude<Access, "public">, string>> = {
+  private: "Its public link stops working.",
+  unlisted: "Its public link stops working. Anyone with its other link can open it. No login.",
+};
+
+/** What a question says of a site that is not public now, by the access it gets. */
+const OPENS_TO: Readonly<Record<Exclude<Access, "public">, string>> = {
+  private: "Only users who can log in here can open it.",
+  unlisted: "Anyone with the link can open it. No login.",
+};
 
 /** What is asked about a site before it is changed. */
 export type Ask = { readonly kind: "naming" } | { readonly kind: "new-link" } | { readonly kind: "access"; readonly access: Access };
@@ -17,7 +34,7 @@ export interface Asked {
   readonly ask: Ask;
 }
 
-/** The words of the question before a site is opened wider or given a new link. */
+/** The words of the question before a site is given a new link or another access. */
 function questionOf({ site, ask }: Asked): Question | undefined {
   if (ask.kind === "new-link") {
     const kept = site.access === "public" ? " Its public link keeps working." : "";
@@ -29,8 +46,23 @@ function questionOf({ site, ask }: Asked): Question | undefined {
   if (ask.kind !== "access" || ask.access === "public") return undefined;
 
   const word = ACCESSES.find((entry) => entry.access === ask.access)?.label.toLowerCase() ?? "";
+  const says = site.access === "public" ? AFTER_PUBLIC[ask.access] : OPENS_TO[ask.access];
 
-  return { title: `Make ${shownName(site)} ${word}?`, says: "Anyone with the link can open it. No login.", yes: `Make it ${word}` };
+  return { title: `Make ${shownName(site)} ${word}?`, says, yes: `Make it ${word}` };
+}
+
+/** The line under the public name: the address the site gets under the name typed, as the server writes it. A name that gets none leaves the plain hint. */
+function PublicAddress({ name }: { readonly name: string }): ReactNode {
+  const [asked] = useDebounce(name, REST_MS);
+  const { data } = usePublicAddress(asked);
+  // An address is of the name it was asked for: while another name is typed, none is shown.
+  if (data === undefined || asked !== name) return "The public link uses this name.";
+
+  return (
+    <>
+      Its link will be <span className="block break-all font-mono text-[13px] text-foreground">{plainAddress(data.address)}</span>
+    </>
+  );
 }
 
 /** The site a person is asked to make public, or `undefined` while that is not asked. */
@@ -79,7 +111,7 @@ export function SiteQuestions({
         title={shown === undefined ? "" : `Make ${shownName(shown)} public?`}
         says="Everyone can open it, at a public link. No login."
         label="Public name"
-        hint="The public link uses this name."
+        under={(name) => <PublicAddress name={name} />}
         initial={shown?.name ?? ""}
         maxLength={LONGEST_NAME}
         takesInitial

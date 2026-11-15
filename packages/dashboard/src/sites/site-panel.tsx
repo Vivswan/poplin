@@ -70,7 +70,7 @@ function LinkBlock({ site, actions, reveal }: { readonly site: Site; readonly ac
   );
 }
 
-/** Who can open the site, as a choice of three. A site made more private is changed at once; one opened wider is asked about first. */
+/** Who can open the site, as a choice of three. Each change is asked about first: it gives the site another link, or ends one. */
 function AccessBlock({ site, onChoose }: { readonly site: Site; readonly onChoose: (access: Access) => void }): ReactNode {
   return (
     <PanelBlock label="Who can open it">
@@ -199,9 +199,7 @@ export function SitePanel({ label, actions, reveal, onAsk, closeLink, onClose, o
   }
 
   const choose = (access: Access): void => {
-    const [from, to] = [ACCESSES.findIndex((entry) => entry.access === site.access), ACCESSES.findIndex((entry) => entry.access === access)];
-    if (to > from) onAsk(site, { kind: "access", access });
-    else if (to < from) void actions.setAccess(site, access);
+    if (access !== site.access) onAsk(site, { kind: "access", access });
   };
   const remove = async (): Promise<void> => {
     if (await actions.remove(site)) onClose();

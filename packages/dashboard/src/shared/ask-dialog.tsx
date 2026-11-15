@@ -28,6 +28,9 @@ interface AskDialogProps {
   /** The hint under the field while nothing is refused. */
   readonly hint?: string;
 
+  /** What stands under the field for the value it holds, in place of the hint. */
+  readonly under?: (value: string) => ReactNode;
+
   /** The value the field opens with. */
   readonly initial: string;
 
@@ -48,8 +51,9 @@ interface AskDialogProps {
 }
 
 /** Ask for one value in a dialog. The button stays off while the value is empty, and while it is unchanged unless the value it opened with is an answer. */
-export function AskDialog({ open, onOpenChange, title, says, label, hint, initial, maxLength, takesInitial = false, returnTo, submit, onSubmit }: AskDialogProps): ReactNode {
+export function AskDialog({ open, onOpenChange, title, says, label, hint, under, initial, maxLength, takesInitial = false, returnTo, submit, onSubmit }: AskDialogProps): ReactNode {
   const id = useId();
+  const saysId = `${id}-says`;
   const [value, setValue] = useState(initial);
   const [refusal, setRefusal] = useState<string>();
   const [busy, setBusy] = useState(false);
@@ -87,15 +91,24 @@ export function AskDialog({ open, onOpenChange, title, says, label, hint, initia
               ref={field}
               id={id}
               value={value}
-              onChange={(event) => setValue(event.target.value)}
+              onChange={(event) => {
+                setValue(event.target.value);
+                // A refusal is about the value that was sent: it leaves with that value.
+                setRefusal(undefined);
+              }}
               onFocus={(event) => event.currentTarget.select()}
               aria-invalid={refusal !== undefined}
+              aria-describedby={saysId}
               autoComplete="off"
               spellCheck={false}
               maxLength={maxLength}
               autoFocus
             />
-            {refusal === undefined ? <FieldDescription>{hint}</FieldDescription> : <FieldError>{refusal}</FieldError>}
+            {refusal === undefined ? (
+              <FieldDescription id={saysId}>{under === undefined ? hint : under(value.trim())}</FieldDescription>
+            ) : (
+              <FieldError id={saysId}>{refusal}</FieldError>
+            )}
           </Field>
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>

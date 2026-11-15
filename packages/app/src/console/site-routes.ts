@@ -3,6 +3,7 @@
 //   GET  /sites                    one page; ?view=trash, ?q=, ?access=, ?sort= with ?dir=, ?after=
 //   GET  /sites/<label>            one site, and whether the install lets search engines in
 //                                  both with the names of the logins there are, for whoever published a version
+//   GET  /public-address?name=     the address a site made public under that name answers at
 //   POST /sites/<label>/<change>   naming, access, settings, delete, restore, new-link, make-live
 
 import { vValidator } from "@hono/valibot-validator";
@@ -15,6 +16,7 @@ import { restoreSite } from "@poplin/core/src/actions/restore";
 import { ROLLBACK_OPTIONS, rollbackSite } from "@poplin/core/src/actions/rollback";
 import { updateSite } from "@poplin/core/src/actions/set";
 import { getSite } from "@poplin/core/src/actions/show";
+import { parsePublicName } from "@poplin/core/src/names/names";
 import { Hono } from "hono";
 import * as v from "valibot";
 
@@ -41,6 +43,9 @@ const PAGE_QUERY = v.object({
 
 /** What names one site in a route's path: its label. */
 const ONE_SITE = v.object({ site: v.string() });
+
+/** What the address of a public name is asked with: the name as it is typed. */
+const NAMED = v.object({ name: v.string() });
 
 /** What each change of a site carries. */
 const CHANGES = {
@@ -116,6 +121,13 @@ export const siteRoutes = new Hono<Shared>()
     if (!config.ok) return refused(context, config);
 
     return context.json({ ok: true as const, site: shown.site, logins: await loginNames(context.get("asker"), publishersOf(shown.site)), search_engines_allowed: config.values.search_engines_allowed });
+  })
+  .get("/public-address", vValidator("query", NAMED, refuseInvalid), (context) => {
+    const { install } = context.get("asker");
+    const named = parsePublicName(context.req.valid("query").name, install.reservedNames);
+    if (!named.ok) return refused(context, { code: named.refusal === "reserved" ? "reserved_name" : "bad_name", about: "name" });
+
+    return context.json({ ok: true as const, address: install.publicAddressOf(named.value) });
   })
   .post("/sites/:site/naming", vValidator("param", ONE_SITE, refuseInvalid), vValidator("json", CHANGES.naming, refuseInvalid), async (context) => {
     const { install, actor } = context.get("asker");

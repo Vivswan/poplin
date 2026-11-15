@@ -90,6 +90,11 @@ export interface AddressParts {
   readonly after: string;
 }
 
+/** Write an address as a screen does: without its scheme and its last slash. */
+export function plainAddress(address: string): string {
+  return address.replace(/^https?:\/\//, "").replace(/\/$/, "");
+}
+
 /**
  * Split an address of a site into the part every row shares, the site's own part, and the id a screen leaves out.
  *
@@ -100,7 +105,7 @@ export interface AddressParts {
  * @returns the address without its scheme and last slash, in four parts that join to it
  */
 export function addressParts(address: string, id: string): AddressParts {
-  const plain = address.replace(/^https?:\/\//, "").replace(/\/$/, "");
+  const plain = plainAddress(address);
   const cut = plain.lastIndexOf("/") + 1;
   const [shared, own] = [plain.slice(0, cut), plain.slice(cut)];
   // The id stands in the site's own label: the first label of a host, or the whole of a path's last part. A domain may hold two dashes of its own.

@@ -57,3 +57,18 @@ export function siteKey(label: string): readonly unknown[] {
 export function useSite(label: string): UseQueryResult<Shown> {
   return useQuery({ queryKey: siteKey(label), queryFn: () => answerOf(api.sites[":site"].$get({ param: { site: label } })) });
 }
+
+/**
+ * Read the address a site answers at once it is public under a name.
+ *
+ * A name no site may hold answers no address.
+ *
+ * @param name - the public name as it is typed; an empty one is not asked
+ */
+export function usePublicAddress(name: string): UseQueryResult<InferResponseType<(typeof api)["public-address"]["$get"], 200>> {
+  return useQuery({
+    queryKey: ["public-address", name],
+    queryFn: () => answerOf(api["public-address"].$get({ query: { name } })),
+    enabled: name !== "",
+  });
+}
