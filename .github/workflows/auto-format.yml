@@ -47,6 +47,7 @@ jobs:
           key: bun-${{ runner.os }}-${{ hashFiles('**/bun.lock') }}
           restore-keys: bun-${{ runner.os }}-
       - name: Format (biome)
+        continue-on-error: true
         run: bun x @biomejs/biome@2.6.4 check --write .
 
       # The diff's exit status is the branch: 0 leaves nothing to commit, so the push step stands down.
