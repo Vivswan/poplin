@@ -85,10 +85,12 @@ A finish, a look at an upload, a delete, a copy, and a backup's list of files ea
 
 The dashboard's Usage screen draws a graph under Visits: how often pages were opened, day by day.
 
-| Choice        | Offers                                                  |
-| ------------- | ------------------------------------------------------- |
-| Days shown    | 30 days, 60 days, 90 days, 180 days, 1 year             |
-| Compare sites | up to five sites, each drawn as a line beside All sites |
+| Choice        | Offers                                                                       |
+| ------------- | ---------------------------------------------------------------------------- |
+| Days shown    | 30 days, 60 days, 90 days, 180 days, 1 year                                  |
+| Compare sites | up to 50 sites, each drawn as a line beside All sites                        |
+| Select all    | in the list of Compare sites: ticks every site the list shows, up to the 50  |
+| Clear         | in the same list: unticks every site                                         |
 
 - **A point** is one UTC day in a graph of up to 90 days, and one week in a longer one, where the first point may hold fewer days.
 - **A year is kept:** the counts of 365 UTC days, today included. A day with no count shows 0, and so does every day before the install was made.
