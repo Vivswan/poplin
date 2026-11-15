@@ -9,31 +9,45 @@ How each kind of install updates, and the notice of a newer version; the steps i
 
 Nothing updates on its own. An install says when a newer version is out, and how it updates depends on how it was made.
 
-| The install was made      | It updates by                                                     | `poplin update`                        |
-| ------------------------- | ----------------------------------------------------------------- | -------------------------------------- |
-| with the button of step 2 | one more build at Cloudflare: in the browser, or with one command | starts that build, once a URL is saved |
-| from a terminal           | two commands in its folder: From a terminal, below                | answers `no_update_address`: no URL    |
-| with the OpenTofu module  | a new bundle and an apply: [With OpenTofu](with-opentofu.md)        | answers `no_update_address`: no URL    |
+| The install was made      | It updates by                                                       |
+| ------------------------- | ------------------------------------------------------------------- |
+| with the button of step 2 | three clicks at Cloudflare: [Build again](#build-again)             |
+| from a terminal           | two commands in its folder: [From a terminal](#from-a-terminal)     |
+| with the OpenTofu module  | a new bundle and an apply: [With OpenTofu](with-opentofu.md)        |
 
-**The notice.** While the setting `update_check` is on, the install says when a newer version is out. [A newer version](#a-newer-version) shows where. `poplin update --check` says the same on every kind of install.
+## Build again
 
-**A build at Cloudflare.** Run in Cloudflare's build, poplin's deploy fetches a release of poplin from GitHub and deploys that, under the name, the bucket, and the database your copy's `wrangler.jsonc` names. Your copy on GitHub stays as it is.
+For an install made with the button. Cloudflare's documentation gives these steps for building again:
+
+| Step | In Cloudflare's dashboard                                              |
+| ---- | ---------------------------------------------------------------------- |
+| 1    | go to Workers & Pages and select your Worker, `poplin`                 |
+| 2    | select Deployments, then View build history at the bottom of the page  |
+| 3    | select the ellipses next to the newest build, then select Retry build  |
+
+**It worked when** the `version` row of `npx poplin doctor` names the new version. Your sites, settings, and logins stay: the build deploys under the name, the bucket, and the database your copy's `wrangler.jsonc` names.
+
+Run in Cloudflare's build, poplin's deploy fetches a release of poplin from GitHub and deploys that. Your copy on GitHub stays as it is.
 
 ```text
 in the build's log:   poplin: deploying 0.3.1 (was asked for latest)
 ```
 
-**In the browser.** Cloudflare's documentation gives these steps for building again:
+When it cannot find or fetch the release it deploys nothing, and prints one line that starts with `poplin:`, holds `Nothing was deployed`, and says what to do.
 
-| Step | In Cloudflare's dashboard                                              |
-| ---- | ---------------------------------------------------------------------- |
-| 1    | open your Worker                                                       |
-| 2    | select Deployments, then View build history at the bottom of the page  |
-| 3    | select the ellipses next to the newest build, then select Retry build  |
+## The command on your computer
 
-When it deploys a release, poplin's deploy prints the line above, with the version. When it cannot find or fetch the release it deploys nothing, and prints one line that starts with `poplin:`, holds `Nothing was deployed`, and says what to do.
+`poplin doctor` names both versions. When they differ, the row says so:
 
-**With one command.** `poplin update` has the install start that build itself, at a Deploy Hook you make once. Cloudflare's documentation gives these steps for making one:
+```text
+ok  version   install 0.2.0, this poplin 0.1.0: the install and this poplin are of two versions; update the older one
+```
+
+`npx poplin@latest doctor` runs the newest command.
+
+## Optional: update with one command
+
+`poplin update` has the install start that build itself, at a Deploy Hook you make once. Nothing else needs it. Cloudflare's documentation gives these steps for making one:
 
 | Step | In Cloudflare's dashboard                                  |
 | ---- | ---------------------------------------------------------- |
@@ -67,7 +81,11 @@ The install takes a URL of this form alone, and only an admin's login saves it o
 https://api.cloudflare.com/client/v4/workers/builds/deploy_hooks/<DEPLOY_HOOK_ID>
 ```
 
-**Choose the version.** The build reads one build variable, `POPLIN_VERSION`. Cloudflare's documentation puts build variables in your Worker's Settings, under Build, in Build variables and secrets.
+Cloudflare builds neither an install made from a terminal nor one the OpenTofu module made, so neither has a Deploy Hook unless you connect a build of your own. With no URL saved, `poplin update` answers `no_update_address` and starts nothing.
+
+## Choose the version
+
+The build reads one build variable, `POPLIN_VERSION`. Cloudflare's documentation puts build variables in your Worker's Settings, under Build, in Build variables and secrets.
 
 | `POPLIN_VERSION`     | The build deploys                                                            |
 | -------------------- | ---------------------------------------------------------------------------- |
@@ -77,16 +95,18 @@ https://api.cloudflare.com/client/v4/workers/builds/deploy_hooks/<DEPLOY_HOOK_ID
 
 A release refuses a database whose schema a newer release changed. The install then answers `This install's database is newer than its code: update poplin.` until a release that knows that schema is deployed again.
 
-**From a terminal.** An install made from a terminal updates with the two commands below. They deploy the files in that folder: nothing is fetched, and `POPLIN_VERSION` is not read. What step 4 gave the Worker stays.
+## From a terminal
+
+An install made from a terminal updates with the two commands below. They deploy the files in that folder: nothing is fetched, and `POPLIN_VERSION` is not read. What step 4 gave the Worker stays.
 
 ```sh
 git -C poplin pull
 bun run --cwd poplin deploy
 ```
 
-Cloudflare builds neither an install made from a terminal nor one the OpenTofu module made, so neither has a Deploy Hook unless you connect a build of your own. With no URL saved, `poplin update` answers `no_update_address` and starts nothing.
-
 ## A newer version
+
+While the setting `update_check` is on, the install says when a newer version is out. `poplin update --check` says the same on every kind of install.
 
 ```text
 $ poplin doctor

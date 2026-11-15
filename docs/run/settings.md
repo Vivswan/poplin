@@ -29,7 +29,7 @@ The dashboard's Settings tab changes the same settings.
 | `poplin setup --check --server https://poplin.your-name.workers.dev` | lists what that would change, with the same flags; changes nothing |
 | `poplin help rollback`                                               | shows the help of one command                     |
 
-`poplin update` needs a Deploy Hook saved in the install once: [Update the install](update.md#update-the-install) shows how. It is read from `POPLIN_UPDATE_ADDRESS` in the environment, and no command prints it.
+`poplin update` needs a Deploy Hook saved in the install once: [Update the install](update.md#optional-update-with-one-command) shows how. It is read from `POPLIN_UPDATE_ADDRESS` in the environment, and no command prints it.
 
 An install made with the Deploy button has a build at Cloudflare to make the Deploy Hook for. One made from a terminal or with the OpenTofu module has none: with no URL saved it answers `no_update_address`, and updates as [Update the install](update.md#update-the-install) says.
 
