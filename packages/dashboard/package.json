@@ -18,6 +18,7 @@
     "@dnd-kit/modifiers": "9.0.0",
     "@dnd-kit/sortable": "10.0.0",
     "@fontsource-variable/libre-franklin": "5.3.0",
+    "@fontsource/noto-sans": "5.3.0",
     "@poplin/core": "workspace:*",
     "@tanstack/react-query": "5.107.1",
     "@tanstack/react-router": "1.170.46",

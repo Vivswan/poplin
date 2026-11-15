@@ -99,6 +99,7 @@
         "@dnd-kit/modifiers": "9.0.0",
         "@dnd-kit/sortable": "10.0.0",
         "@fontsource-variable/libre-franklin": "5.3.0",
+        "@fontsource/noto-sans": "5.3.0",
         "@poplin/core": "workspace:*",
         "@tanstack/react-query": "5.107.1",
         "@tanstack/react-router": "1.170.46",
@@ -450,6 +451,8 @@
     "@fontsource-variable/libre-franklin": ["@fontsource-variable/libre-franklin@5.3.0", "", {}, "sha512-PEQemCKVRtkLZJNpfvR4wG7x87c8iG05XJuEaX59ogMcAQpdtCZz/NXZUrXLJyvyx3/HD70W4LUppWLBdEdU2g=="],
 
     "@fontsource/libre-franklin": ["@fontsource/libre-franklin@5.3.0", "", {}, "sha512-owd+HDvD4hnGHG1jO3rHtg0BiNT0DJbZMaSqJ7g4r0646G5Q91MjTFWxZbpwg8njLu4BSH3EBqwkVSMLud6brg=="],
+
+    "@fontsource/noto-sans": ["@fontsource/noto-sans@5.3.0", "", {}, "sha512-fBCog2PY7DiVVTEEqtI/Qdinx/knobHYfoGpjFXdfBX5RoJaBp1Prw2G75p0OIsdlMZg3cLo0c+YbIUYOxnQJw=="],
 
     "@happy-dom/global-registrator": ["@happy-dom/global-registrator@21.0.4", "", { "dependencies": { "@types/node": ">=20.0.0", "happy-dom": "^21.0.4" } }, "sha512-Bbr0hW9hhDhBf3Jp0EyDlkCbFgbr0z2jd3BMKYOYW+fOkPM4Nx195GMXyCtRCGEgoNn6i09FabXrSkNFm2ONzg=="],
 

@@ -5,18 +5,12 @@
 
 @custom-variant dark (&:is(.dark *));
 
-/* Figures that all take the same room, from a face of the reader's system. The dashboard's own face draws each figure as wide as its shape, so the times and numbers of a column would not line up. */
+/* Figures that all take the same room. The dashboard's own face draws each figure as wide as its shape, so the times and numbers of a column would not line up. */
+/* The ten figures come from a face that is carried along; a browser thickens it itself where the text is bold. */
 @font-face {
   font-family: "Even Figures";
-  font-weight: 100 599;
-  src: local("Helvetica Neue"), local("Arial"), local("Liberation Sans"), local("Roboto"), local("Noto Sans"), local("DejaVu Sans");
-  unicode-range: U+30-39;
-}
-@font-face {
-  font-family: "Even Figures";
-  font-weight: 600 900;
-  src:
-    local("Helvetica Neue Bold"), local("Arial Bold"), local("Liberation Sans Bold"), local("Roboto Bold"), local("Noto Sans Bold"), local("DejaVu Sans Bold");
+  font-weight: 400;
+  src: url("@fontsource/noto-sans/files/noto-sans-latin-400-normal.woff2") format("woff2");
   unicode-range: U+30-39;
 }
 

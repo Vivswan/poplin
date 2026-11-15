@@ -33,6 +33,9 @@ const DATA_PATH = "/data/";
 /** Two times of the same length whose figures differ: the ones of the first are narrow shapes, the ones of the second wide. */
 const TIMES = ["11 Nov 2026, 11:11", "08 Nov 2026, 06:59"] as const;
 
+/** The face the dashboard carries for its figures, as its stylesheet names it: the first face of every text. */
+const FIGURES = '"Even Figures"';
+
 /** The dashboard's own face alone, whose figures are each as wide as their shape: what the times are measured in as the control. */
 const OWN_FACE = '"Libre Franklin Variable"';
 
@@ -425,13 +428,13 @@ for (const { width, height, wide } of VIEWPORTS) {
   }
 }
 
-// Drift: the figures of a column would be as wide as their shapes again, so its times and numbers would end at different places row by row.
-test("two times of the same length take the same room, where the dashboard's own face alone gives each its own", async ({ page }) => {
+// Drift: the figures of a column would be as wide as their shapes again, or come from whatever the visitor's machine has, so its times and numbers would end at different places row by row.
+test("two times of the same length take the same room in the face the dashboard carries, where its own face alone gives each its own", async ({ page }) => {
   await arrive(page);
-  await page.evaluate(() => document.fonts.ready);
 
   const measured = await page.evaluate(
-    ([times, ownFace]) => {
+    async ([times, figures, ownFace]) => {
+      const carried = await document.fonts.load(`14px ${figures}`, "0");
       const widthOf = (text: string, family: string): number => {
         const span = document.createElement("span");
         span.textContent = text;
@@ -443,11 +446,19 @@ test("two times of the same length take the same room, where the dashboard's own
         return width;
       };
 
-      return { shown: times.map((time) => widthOf(time, "inherit")), control: times.map((time) => widthOf(time, ownFace)) };
+      return {
+        carried: carried.map((face) => face.status),
+        // One engine writes the name with its quotes, another without.
+        first: getComputedStyle(document.body).fontFamily.replaceAll('"', "").startsWith(figures.replaceAll('"', "")),
+        // No face of the machine is named: where the carried one did not load, the figures fall to the dashboard's own, and the widths differ.
+        shown: times.map((time) => widthOf(time, `${figures}, ${ownFace}`)),
+        control: times.map((time) => widthOf(time, ownFace)),
+      };
     },
-    [TIMES, OWN_FACE] as const,
+    [TIMES, FIGURES, OWN_FACE] as const,
   );
 
+  expect([measured.carried, measured.first]).toEqual([["loaded"], true]);
   expect(measured.shown[0]).toBe(measured.shown[1]);
   expect(measured.control[0]).not.toBe(measured.control[1]);
 });

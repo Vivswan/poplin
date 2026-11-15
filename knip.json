@@ -18,7 +18,8 @@
     },
     "packages/dashboard": {
       "entry": ["src/main.tsx", "tests/**/*.test.{ts,tsx}"],
-      "ignore": ["src/components/ui/**"]
+      "ignore": ["src/components/ui/**"],
+      "ignoreDependencies": ["@fontsource/noto-sans"]
     }
   }
 }
