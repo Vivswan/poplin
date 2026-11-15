@@ -9,10 +9,13 @@ import type { SiteId } from "../sites/ids";
 import { removeFiles, sitePrefix } from "./files";
 import { reachSite } from "./reach";
 import { type Install, type Refused, refuse } from "./records";
-import { type SiteAnswer, type SiteObject, siteAnswer } from "./site-object";
+import { SITE_OBJECT, siteAnswer } from "./site-object";
 
 /** What a delete may ask for besides its site: whether the site goes now and for good. */
 export const DELETE_OPTIONS = v.strictObject({ forever: v.optional(v.boolean()) });
+
+/** What a delete answers: the site as it was, the site in the trash or `null` once it is gone for good, and the prefix whose files are not all removed yet. */
+export const DELETED_SITE = v.object({ before: v.nullable(SITE_OBJECT), site: v.nullable(SITE_OBJECT), left: v.pipe(v.array(v.string()), v.readonly()) });
 
 /** A site removed for good, as it last was. `left` holds the site's prefix while files of it are still to be removed, and is empty once all went. */
 interface Removed {
@@ -59,7 +62,7 @@ export async function deleteSite(
   install: Install,
   actor: Actor,
   request: v.InferInput<typeof DELETE_OPTIONS> & { readonly site: string },
-): Promise<(Omit<SiteAnswer, "site"> & { readonly site: SiteObject | null; readonly left: readonly string[] }) | Refused<"not_set_up" | "bad_argument" | "not_found" | "not_allowed" | "in_trash">> {
+): Promise<({ readonly ok: true } & Readonly<v.InferOutput<typeof DELETED_SITE>>) | Refused<"not_set_up" | "bad_argument" | "not_found" | "not_allowed" | "in_trash">> {
   const reached = await reachSite(install, actor, request.site);
   if (!reached.ok) return reached;
 

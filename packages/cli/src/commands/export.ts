@@ -1,6 +1,8 @@
 // Export: ask the install for its settings, its sites, and every file of each, and write them into one zip as they arrive. No file is held whole, and the zip takes its name only when all of it is written.
 
-import type { ROUTES } from "../../../core/src/api/routes";
+import type * as v from "valibot";
+
+import { EXPORTED_FILES, EXPORTED_SETTINGS, EXPORTED_SITE, EXPORTED_SITES } from "../../../core/src/actions/export";
 import { showBytes } from "../../../core/src/records/settings";
 import { siteLabel } from "../../../core/src/sites/labels";
 import { BACKUP_FORMAT, type IndexedFile, LAYOUT, type Manifest } from "../backup/layout";
@@ -16,7 +18,7 @@ import { siteWord } from "./wire";
 type ExportRequest = RequestOf<"export">;
 
 /** A site as the install stores it, which is what a backup holds of it. */
-type StoredSite = NonNullable<(typeof ROUTES)["exportSite"]["types"]>["done"]["site"];
+type StoredSite = v.InferOutput<typeof EXPORTED_SITE>["site"];
 
 /** What an export works with: the install, the zip, and what shows a file's arrival. */
 interface Job {
@@ -60,7 +62,8 @@ async function writeVersion(job: Job, site: StoredSite, label: string, version: 
   let cursor: string | undefined;
 
   do {
-    const page = need(await job.client.call("exportFiles", cursor === undefined ? { site: site.id, version } : { site: site.id, version, cursor }));
+    const query = { version: String(version), ...(cursor === undefined ? {} : { cursor }) };
+    const page = need(await job.client.call(EXPORTED_FILES, (api) => api.export.sites[":site"].files.$get({ param: { site: site.id }, query })));
 
     for (const listed of page.files) {
       const file = need(await job.client.download({ site: site.id, version, path: listed.path }));
@@ -98,7 +101,7 @@ async function writeSite(job: Job, site: StoredSite): Promise<Exported> {
 
 /** Write the settings and every site of the install, a page of sites at a time. */
 async function writeInstall(job: Job, allVersions: boolean): Promise<readonly Exported[]> {
-  const settings = need(await job.client.call("exportSettings", undefined));
+  const settings = need(await job.client.call(EXPORTED_SETTINGS, (api) => api.export.settings.$get()));
   needFormat(settings.format);
   job.writer.addJson(LAYOUT.settings, settings.settings);
 
@@ -106,7 +109,8 @@ async function writeInstall(job: Job, allVersions: boolean): Promise<readonly Ex
   let after: StoredSite["id"] | undefined;
 
   do {
-    const page = need(await job.client.call("exportSites", { ...(allVersions ? { all_versions: true } : {}), ...(after === undefined ? {} : { after }) }));
+    const query = { ...(after === undefined ? {} : { after }), ...(allVersions ? { all_versions: "true" } : {}) };
+    const page = need(await job.client.call(EXPORTED_SITES, (api) => api.export.sites.$get({ query })));
     needFormat(page.format);
 
     for (const site of page.sites) written.push(await writeSite(job, site));
@@ -118,7 +122,8 @@ async function writeInstall(job: Job, allVersions: boolean): Promise<readonly Ex
 }
 
 async function writeOne(job: Job, request: ExportRequest & { readonly site: NonNullable<ExportRequest["site"]> }): Promise<readonly Exported[]> {
-  const one = need(await job.client.call("exportSite", { site: siteWord(request.site), ...(request.allVersions ? { all_versions: true } : {}) }));
+  const asked = { param: { site: siteWord(request.site) }, query: request.allVersions ? { all_versions: "true" } : {} };
+  const one = need(await job.client.call(EXPORTED_SITE, (api) => api.export.sites[":site"].$get(asked)));
   needFormat(one.format);
 
   return [await writeSite(job, one.site)];

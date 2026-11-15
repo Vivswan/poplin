@@ -2,6 +2,10 @@
 //
 // A count is an estimate. The day's requests are sampled, and a sampled request stands for up to 50, so no count is shown as an exact number.
 
+import * as v from "valibot";
+
+import { COUNT } from "./fields";
+
 /** How many UTC days the counts are kept and summed over, today included. */
 const VIEW_DAYS = 7;
 
@@ -17,11 +21,11 @@ const FEWEST_NAMED = 10;
 /** How many digits of a count are shown; the rest are zeros. */
 const SHOWN_DIGITS = 2;
 
-/** About how many times a site's pages were opened: on the UTC day so far, and over the last seven UTC days, that day included. Both are whole numbers from 0. */
-export interface SiteViews {
-  readonly today: number;
-  readonly week: number;
-}
+/** The two counts of a site's views, each a whole number from 0. */
+export const SITE_VIEWS = v.object({ today: COUNT, week: COUNT });
+
+/** About how many times a site's pages were opened: on the UTC day so far, and over the last seven UTC days, that day included. */
+export type SiteViews = Readonly<v.InferOutput<typeof SITE_VIEWS>>;
 
 /**
  * The UTC day a moment falls on.

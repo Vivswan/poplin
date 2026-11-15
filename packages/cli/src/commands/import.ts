@@ -1,13 +1,17 @@
 // Import: check the whole backup, then put its sites back one at a time. A site the install refuses changes nothing there, and the next one is tried.
 
-import type { ROUTES } from "../../../core/src/api/routes";
+import type * as v from "valibot";
+
+import type { ImportRequest as Begin } from "../../../core/src/actions/begin-import";
+import { SETTINGS_ANSWER } from "../../../core/src/actions/store-settings";
+import { BEGUN_UPLOAD } from "../../../core/src/actions/uploads";
 import { showBytes } from "../../../core/src/records/settings";
 import { type Backup, type BackupSite, openBackup } from "../backup/read";
 import type { Called, Failure } from "../client/client";
 import { problem, problemOf } from "./problems";
 import type { Outcome, RequestOf, Session } from "./records";
 import { countText } from "./text";
-import { callUnhurried, giveUpUpload, sendUpload, type UploadFile } from "./upload";
+import { abandonUpload, callUnhurried, giveUpUpload, sendUpload, type UploadFile } from "./upload";
 import { siteWord } from "./wire";
 
 /** What stands between two facts of a line. */
@@ -32,11 +36,8 @@ const AFTERMATH = {
 /** The `import` command as the parser read it. */
 type ImportRequest = RequestOf<"import">;
 
-/** What the import of one site is begun with. */
-type Begin = NonNullable<(typeof ROUTES)["beginImport"]["types"]>["body"];
-
 /** The answer to a begun import. */
-type Begun = NonNullable<(typeof ROUTES)["beginImport"]["types"]>["done"];
+type Begun = v.InferOutput<typeof BEGUN_UPLOAD>;
 
 /** The labels of the sites to import; `undefined` for every site of the backup. */
 type Chosen = ReadonlySet<string> | undefined;
@@ -114,7 +115,7 @@ function isRefusedAs(failure: Failure, code: string): boolean {
 
 /** Begin the import of one site with every version the backup holds; one the install finds too large is begun once more with its live version alone. */
 async function begin(session: Pick<Session, "client" | "io">, format: number, site: BackupSite): Promise<{ readonly begun: Called<Begun>; readonly sending: Sending }> {
-  const send = (body: Begin): Promise<Called<Begun>> => callUnhurried(session.io, () => session.client.call("beginImport", undefined, body));
+  const send = (body: Begin): Promise<Called<Begun>> => callUnhurried(session.io, () => session.client.call(BEGUN_UPLOAD, (api) => api.import.sites.$post({ json: body })));
   const whole = sendingOf(format, site, false);
   const begun = await send(whole.body);
   if (begun.ok || !isRefusedAs(begun.failure, TOO_LARGE) || site.versions.length < 2) return { begun, sending: whole };
@@ -166,7 +167,7 @@ async function importSite(session: Session, format: number, site: BackupSite): P
 
     return unfinished(site, sent.failure, AFTERMATH[became.kind]);
   } catch (error) {
-    await client.call("abandonPublish", { upload });
+    await abandonUpload(client, upload);
 
     throw error;
   } finally {
@@ -217,7 +218,8 @@ async function send(backup: Backup, request: ImportRequest, chosen: Chosen, sess
   const { format } = backup.manifest;
 
   if (request.settings) {
-    const restored = await client.call("importSettings", undefined, { format, settings: { ...backup.settings }, logins: request.logins });
+    const sent = { format, settings: { ...backup.settings }, logins: request.logins };
+    const restored = await client.call(SETTINGS_ANSWER, (api) => api.import.settings.$post({ json: sent }));
     if (!restored.ok) return { ok: false, problem: problemOf(restored.failure, "changes") };
   }
 

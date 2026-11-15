@@ -1,28 +1,32 @@
 // The notice of a newer release: what the install last learned from the project's website, set beside the version it runs.
 
 import gt from "semver/functions/gt";
+import * as v from "valibot";
 
-import { isPlainVersion } from "../records/update";
+import { isPlainVersion, UPDATE_NEWS } from "../records/update";
 import type { SettingValues } from "../records/settings";
 import type { Install } from "./records";
 
-/** A release newer than the running version. */
-export interface Update {
+/** A release newer than the running version, as an answer holds it. */
+export const UPDATE_NOTICE = v.object({
   /** The version the install runs. */
-  readonly current: string;
+  current: UPDATE_NEWS.entries.version,
 
   /** The newest released version. */
-  readonly newest: string;
+  newest: UPDATE_NEWS.entries.version,
 
   /** The UTC date the newest version came out, such as `2026-12-01`. */
-  readonly released: string;
+  released: UPDATE_NEWS.entries.released,
 
   /** The address of its release notes. */
-  readonly notes: string;
+  notes: UPDATE_NEWS.entries.notes,
 
   /** Whether updating to it changes the database, which no older poplin can read afterwards. */
-  readonly database: boolean;
-}
+  database: UPDATE_NEWS.entries.database,
+});
+
+/** A release newer than the running version. */
+export type Update = Readonly<v.InferOutput<typeof UPDATE_NOTICE>>;
 
 /**
  * Say whether a newer poplin than the running one is out, from what the install last learned. Nothing is fetched: it reads the database, twice at most.

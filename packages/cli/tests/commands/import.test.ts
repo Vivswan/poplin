@@ -2,7 +2,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { readdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 
-import type { ApiInstall } from "../../../app/tests/api/support/install";
+import { type ApiInstall, answered, bytes } from "../../../app/tests/api/support/install";
 import { backupEntries, readZip, writeZip, type ZipEntry } from "../backup/support/zips";
 import { type Bench, cleanUp, folderOf, jsonOf, openBench, runThroughPauses, scratch } from "./support/harness";
 
@@ -36,11 +36,11 @@ async function published(bench: Bench, name: string, pages: Readonly<Record<stri
 /** Publish a site through the API, with the content types the test names: what no file extension gives. */
 async function publishedTyped(install: ApiInstall, name: string, files: readonly (readonly [path: string, text: string, type: string])[]): Promise<void> {
   const declared = files.map(([path, text, type]) => ({ path, size: text.length, content_type: type }));
-  const begun = await install.call("beginPublish", undefined, { body: { name, files: declared } });
+  const begun = await answered(install.routes.uploads.$post({ json: { name, files: declared } }));
   const upload = (begun.body.upload as { id: string }).id;
-  for (const [path, text] of files) await install.call("uploadFile", { upload, path }, { body: text });
+  for (const [path, text] of files) await install.routes.uploads[":upload"].file.$put({ param: { upload }, query: { path } }, bytes(text));
 
-  expect((await install.call("finishPublish", { upload })).status).toBe(200);
+  expect((await install.routes.uploads[":upload"].finish.$post({ param: { upload } })).status).toBe(200);
 }
 
 /**
@@ -67,15 +67,16 @@ async function filled(bench: Bench): Promise<{ readonly notes: string; readonly 
 
 /** Everything an install holds that a backup carries: every site as it is stored, and every file of every kept version with its content type and its text. */
 async function held(install: ApiInstall): Promise<{ readonly sites: readonly Stored[]; readonly files: Readonly<Record<string, readonly [type: string | null, text: string]>> }> {
-  const sites = (await install.call("exportSites", { all_versions: true })).body.sites as Stored[];
+  const sites = (await answered(install.routes.export.sites.$get({ query: { all_versions: "true" } }))).body.sites as Stored[];
   const files: Record<string, readonly [string | null, string]> = {};
 
   for (const site of sites) {
     for (const { number: version } of site.versions) {
-      const listed = (await install.call("exportFiles", { site: site.id, version })).body.files as { path: string }[];
+      const one = { param: { site: site.id }, query: { version: String(version) } };
+      const listed = (await answered(install.routes.export.sites[":site"].files.$get(one))).body.files as { path: string }[];
 
       for (const { path } of listed) {
-        const { response } = await install.call("exportFile", { site: site.id, version, path });
+        const response = await install.routes.export.sites[":site"].file.$get({ param: one.param, query: { ...one.query, path } });
         files[`${site.name}/v${version}/${path}`] = [decodeURIComponent(response.headers.get("Poplin-Content-Type") ?? ""), await response.text()];
       }
     }
@@ -161,7 +162,7 @@ describe("import", () => {
     into.hook = (request) => (request.method === "PUT" && into.sent.some((sent) => sent.endsWith("/finish")) ? Promise.reject(new Error("reset")) : undefined);
     const broken = jsonOf(await runThroughPauses(into, `import ${zip} --json`, () => into.sent.at(-1)?.startsWith("PUT") === true && into.sent.some((sent) => sent.endsWith("/finish"))));
     into.hook = undefined;
-    const made = (await into.install.call("exportSites", {})).body.sites;
+    const made = (await answered(into.install.routes.export.sites.$get())).body.sites;
     const again = await into.run(`import ${zip} --json`);
 
     expect([broken.imported, broken.failed, broken.stopped, (broken.sites as Line[]).at(-1)?.code]).toEqual([1, 1, true, "unreachable"]);
@@ -197,7 +198,7 @@ describe("import", () => {
 
     const ran = await into.run(`import ${zip} --json`);
     const said = jsonOf(ran);
-    const names = async (bench: Bench): Promise<string[]> => ((await bench.install.call("exportSites", {})).body.sites as { name: string }[]).map((site) => site.name).sort();
+    const names = async (bench: Bench): Promise<string[]> => ((await answered(bench.install.routes.export.sites.$get())).body.sites as { name: string }[]).map((site) => site.name).sort();
     const backed = await names(from);
 
     expect([said.failed, said.stopped, ran.waits, said.imported, await names(into)]).toEqual([0, false, [2000], backed.length, backed]);
@@ -217,7 +218,7 @@ describe("import", () => {
     const said = jsonOf(stopped);
 
     expect([said.imported, said.failed, said.stopped, stopped.waits, into.sent.filter((line) => line === "POST /api/import/sites").length]).toEqual([0, 1, true, [2000], 1]);
-    expect((await into.install.call("exportSites", {})).body.sites).toEqual([]);
+    expect((await answered(into.install.routes.export.sites.$get())).body.sites).toEqual([]);
   });
 
   // Drift: four files are on their way at once; a file the install refused during the rest would be the failure told, a refusal of one site alone, and the run would go on after Ctrl-C.
@@ -266,7 +267,7 @@ describe("import", () => {
 
     expect([stopped.code, said.stopped, said.sites]).toMatchObject([1, true, [{ code: "stopped", message: "the command was stopped; the upload was given up and the site was not made" }]]);
     expect([sent("POST /api/import/sites"), sent("PUT"), sent("DELETE /api/uploads/")]).toEqual([1, 2, 1]);
-    expect((await into.install.call("exportSites", {})).body.sites).toEqual([]);
+    expect((await answered(into.install.routes.export.sites.$get())).body.sites).toEqual([]);
   });
 
   test("a site the install refuses is reported with the install's code and the next is tried, and any failure exits 1: without this one taken name would stop a restore", async () => {
@@ -303,14 +304,14 @@ describe("import", () => {
     await into.run("config max_site_size 45B");
 
     const human = await into.run(`import ${zip} --site ${notes}`);
-    const stored = (await into.install.call("exportSite", { site: notes, all_versions: true })).body.site as Stored;
+    const stored = (await answered(into.install.routes.export.sites[":site"].$get({ param: { site: notes }, query: { all_versions: "true" } }))).body.site as Stored;
     const tight = await openBench();
     await tight.run("config max_site_size 10B");
     const failed = jsonOf(await tight.run(`import ${zip} --site ${notes} --json`));
 
     expect(human).toMatchObject({ code: 0, out: [`imported  ${notes}  live version only  3 files  39 B`, "1 imported, 0 skipped, 0 failed"] });
     expect(stored.versions.map((version) => version.number)).toEqual([2]);
-    expect([failed.failed, (failed.sites as Line[])[0]?.code, (await tight.install.call("listSites", {})).body.sites]).toEqual([1, "too_large", []]);
+    expect([failed.failed, (failed.sites as Line[])[0]?.code, (await answered(tight.install.routes.sites.$get())).body.sites]).toEqual([1, "too_large", []]);
   });
 
   test("--dry-run checks the zip and lists its sites without a login or a request, and --site picks one by label, id, or public name: without this the flags are read and dropped", async () => {

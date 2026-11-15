@@ -3,21 +3,26 @@
 
 import { expect } from "bun:test";
 import fc from "fast-check";
+import { hc } from "hono/client";
+import type { ExtractSchema } from "hono/types";
 
-import { OPEN_ROUTES, ROUTES } from "../../packages/core/src/api/routes";
+import type { Api } from "../../packages/app/src/api/api";
 import { type ApiInstall, ORIGIN, openApi } from "../../packages/app/tests/api/support/install";
 import { fuzzTarget } from "./config";
 import { hostile } from "./hostile";
 
 const ANSWERS = [200, 400, 401, 403, 404, 405, 409, 413, 415, 429];
 const UNPROVEN = [401, 404, 405];
-const OPEN_PATHS: readonly string[] = OPEN_ROUTES.map((name) => ROUTES[name].path());
+const ROUTES = hc<Api>(ORIGIN).api;
+const OPEN_PATHS: readonly string[] = [ROUTES.logins.$path(), ROUTES.logins.token.$path()];
 const UNPROVEN_ON_OPEN = [200, 400, 405, 413, 415, 429];
 const METHODS = ["GET", "GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS", "PROPFIND"];
 const CONTENT_TYPES = ["application/json", "application/json; charset=utf-8", "application/octet-stream", "text/plain", "multipart/form-data; boundary=x", "APPLICATION/JSON", ""];
 const NO_SITE = "zzzzzzzzzzzz";
 const NO_UPLOAD = "zzzzzzzzzzzzzzzz";
 const PAGE = { path: "index.html", size: 4, content_type: "text/html" };
+const NO_TOKEN = "00000000000000aa";
+const BYTES = { "Content-Type": "application/octet-stream" };
 const RUNS_PER_INSTALL = 200;
 
 /** The install the requests go to, with a site, a pending upload, and the paths of every route about them. It is made anew every so many runs, since a run may revoke a token or delete the site. */
@@ -27,26 +32,83 @@ interface Target {
   runs: number;
 }
 
+/** What the paths of one pass over the routes name: a site, an upload, and the query of the routes that take one. */
+interface Named {
+  readonly site: string;
+  readonly upload: string;
+  readonly trash?: "true";
+  readonly limit?: "1";
+  readonly forever?: "true";
+}
+
 const property = fuzzTarget(import.meta.file);
 
 let target = await openTarget();
 
+/** The typed client of an install, asking with one token. Its requests go to the API itself, with no network between. */
+function callsOf(install: ApiInstall, token: string): typeof ROUTES {
+  const fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => install.api.fetch(new Request(input, init));
+
+  return hc<Api>(ORIGIN, { fetch, headers: { Authorization: `Bearer ${token}` } }).api;
+}
+
+/** The id of the upload a done request answered. */
+async function uploadOf(response: Pick<Response, "json">): Promise<string> {
+  const { upload } = (await response.json()) as { upload: { id: string } };
+
+  return upload.id;
+}
+
+/** The paths of every route, under the path the app declares it by. A route the app declares and this leaves out does not compile, nor one it does not declare. */
+function pathsOf({ site, upload, trash, limit, forever }: Named): Readonly<Record<keyof ExtractSchema<Api>, readonly string[]>> {
+  const one = { param: { site }, query: {} };
+  const held = { param: { upload }, query: {} };
+  const file = { version: "1", path: PAGE.path };
+
+  return {
+    "/api/whoami": [ROUTES.whoami.$path()],
+    "/api/token": [ROUTES.token.$path()],
+    "/api/tokens": [ROUTES.tokens.$path()],
+    "/api/tokens/:token": [ROUTES.tokens[":token"].$path({ param: { token: NO_TOKEN }, query: {} })],
+    "/api/logins": [ROUTES.logins.$path()],
+    "/api/logins/token": [ROUTES.logins.token.$path()],
+    "/api/sites": [ROUTES.sites.$path({ query: { trash, limit } })],
+    "/api/sites/:site": [ROUTES.sites[":site"].$path(one), ROUTES.sites[":site"].$path({ ...one, query: { forever } })],
+    "/api/sites/:site/rollback": [ROUTES.sites[":site"].rollback.$path(one)],
+    "/api/sites/:site/new-link": [ROUTES.sites[":site"]["new-link"].$path(one)],
+    "/api/sites/:site/restore": [ROUTES.sites[":site"].restore.$path(one)],
+    "/api/sites/:site/duplicate": [ROUTES.sites[":site"].duplicate.$path(one)],
+    "/api/uploads": [ROUTES.uploads.$path()],
+    "/api/uploads/:upload": [ROUTES.uploads[":upload"].$path(held)],
+    "/api/uploads/:upload/file": [ROUTES.uploads[":upload"].file.$path({ ...held, query: { path: PAGE.path } })],
+    "/api/uploads/:upload/finish": [ROUTES.uploads[":upload"].finish.$path(held)],
+    "/api/export/settings": [ROUTES.export.settings.$path()],
+    "/api/export/sites": [ROUTES.export.sites.$path({ query: { limit } })],
+    "/api/export/sites/:site": [ROUTES.export.sites[":site"].$path(one)],
+    "/api/export/sites/:site/files": [ROUTES.export.sites[":site"].files.$path({ ...one, query: { version: file.version, limit } })],
+    "/api/export/sites/:site/file": [ROUTES.export.sites[":site"].file.$path({ ...one, query: file })],
+    "/api/import/settings": [ROUTES.import.settings.$path()],
+    "/api/import/sites": [ROUTES.import.sites.$path()],
+    "/api/config": [ROUTES.config.$path()],
+    "/api/sessions": [ROUTES.sessions.$path()],
+    "/api/audit": [ROUTES.audit.$path({ query: { limit, site } })],
+    "/api/update": [ROUTES.update.$path()],
+    "/api/update/address": [ROUTES.update.address.$path()],
+  };
+}
+
 async function openTarget(): Promise<Target> {
   const install = await openApi();
-  const { owner: token } = install.tokens;
-  const first = await install.call("beginPublish", undefined, { token, body: { name: "report", files: [PAGE] } });
-  const upload = (first.body.upload as { id: string }).id;
-  await install.call("uploadFile", { upload, path: PAGE.path }, { token, body: "page" });
-  const finished = await install.call("finishPublish", { upload }, { token });
-  const site = (finished.body.site as { id: string }).id;
-  const pending = await install.call("beginPublish", undefined, { token, body: { site, files: [PAGE] } });
-  const named = { site, upload: (pending.body.upload as { id: string }).id, token: "00000000000000aa", path: PAGE.path, version: 1 };
-  const paths = Object.values(ROUTES).flatMap((route) => [
-    (route.path as (args: object) => string)(named),
-    (route.path as (args: object) => string)({ ...named, site: NO_SITE, upload: NO_UPLOAD, trash: true, limit: 1, forever: true }),
-  ]);
+  const calls = callsOf(install, install.tokens.owner);
+  const upload = await uploadOf(await calls.uploads.$post({ query: {}, json: { name: "report", files: [PAGE] } }));
+  await calls.uploads[":upload"].file.$put({ param: { upload }, query: { path: PAGE.path } }, { headers: BYTES, init: { body: "page" } });
+  const finished = await calls.uploads[":upload"].finish.$post({ param: { upload }, query: {} });
+  const site = ((await finished.json()) as { site: { id: string } }).site.id;
+  const pending = await uploadOf(await calls.uploads.$post({ query: {}, json: { site, files: [PAGE] } }));
+  const held = Object.values(pathsOf({ site, upload: pending })).flat();
+  const absent = Object.values(pathsOf({ site: NO_SITE, upload: NO_UPLOAD, trash: "true", limit: "1", forever: "true" })).flat();
 
-  return { install, paths, runs: 0 };
+  return { install, paths: [...held, ...absent], runs: 0 };
 }
 
 /** The install to send the next request to. */
@@ -58,7 +120,7 @@ async function nextTarget(): Promise<Target> {
   return target;
 }
 
-const pathChoices = fc.nat({ max: 2 * Object.keys(ROUTES).length - 1 });
+const pathChoices = fc.nat({ max: target.paths.length - 1 });
 const mangled = hostile(fc.constantFrom("/api/sites", "/api/sites/report--k3f9x2ab71qz/rollback", "/api/uploads/0000000000000000/file?path=index.html", "/api/audit?limit=5&before=3", "/api/tokens/00000000000000aa"));
 const tokenChoices = fc.constantFrom("admin" as const, "owner" as const, "stranger" as const);
 const credentials = fc.oneof(
@@ -179,7 +241,7 @@ property(
       const request = build(address, method, bearer === undefined ? extra : { ...extra, Authorization: bearer }, body);
       fc.pre(request !== undefined && URL.canParse(address));
 
-      const proven = credential.who !== undefined && (await install.call("whoami", undefined, { token: install.tokens[credential.who] })).status === 200;
+      const proven = credential.who !== undefined && (await callsOf(install, install.tokens[credential.who]).whoami.$get({ query: {} })).status === 200;
       const before = proven ? undefined : [await install.audit(), await install.keys(), await pendingOf(install)];
       const response = await install.api.fetch(request as Request);
       const text = await response.text();

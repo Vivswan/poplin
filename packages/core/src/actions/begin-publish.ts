@@ -14,7 +14,7 @@ import { type CheckedChanges, defaultExpiry, readChanges, SITE_CHANGES, type Sit
 import { checkFilePath } from "./files";
 import { enterInstall, reachSite } from "./reach";
 import { type Install, type Refused, refuse } from "./records";
-import { type UploadObject, uploadObject } from "./uploads";
+import { type BegunUpload, uploadObject } from "./uploads";
 
 /** The page every site has at its top. */
 export const ENTRY_PAGE = "index.html";
@@ -261,7 +261,7 @@ export async function beginPublish(
   actor: Actor,
   request: unknown,
   limits: UploadLimits = UNBOUNDED,
-): Promise<{ readonly ok: true; readonly upload: UploadObject } | Refused<BeginCode>> {
+): Promise<BegunUpload | Refused<BeginCode>> {
   const asked = v.safeParse(PUBLISH_REQUEST, request);
   if (!asked.success) return refuse("bad_argument", v.getDotPath(asked.issues[0])?.split(".")[0] ?? "request");
 

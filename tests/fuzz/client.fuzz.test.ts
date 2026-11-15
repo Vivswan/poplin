@@ -6,8 +6,23 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import fc from "fast-check";
 
-import { CALL_NAMES, type CallName, createClient } from "../../packages/cli/src/client/client";
+import { type Called, type Client, createClient } from "../../packages/cli/src/client/client";
 import { run } from "../../packages/cli/src/commands/run";
+import { ABANDONED_UPLOAD } from "../../packages/core/src/actions/abandon-publish";
+import { BEGUN_LOGIN_ANSWER, REDEEMED_LOGIN } from "../../packages/core/src/actions/computer-logins";
+import { DELETED_SITE } from "../../packages/core/src/actions/delete";
+import { DUPLICATED_SITE } from "../../packages/core/src/actions/duplicate";
+import { EXPORTED_FILES, EXPORTED_SETTINGS, EXPORTED_SITE, EXPORTED_SITES } from "../../packages/core/src/actions/export";
+import { PUBLISHED_SITE } from "../../packages/core/src/actions/finish-publish";
+import { LISTED_SITES } from "../../packages/core/src/actions/list";
+import { REVOKED_TOKEN, WHOAMI_ANSWER } from "../../packages/core/src/actions/manage-tokens";
+import { SHOWN_UPLOAD } from "../../packages/core/src/actions/show-upload";
+import { SITE_ANSWER } from "../../packages/core/src/actions/site-object";
+import { STARTED_UPDATE } from "../../packages/core/src/actions/start-update";
+import { SETTINGS_ANSWER } from "../../packages/core/src/actions/store-settings";
+import { UPDATE_ADDRESS_STATE } from "../../packages/core/src/actions/update-address";
+import { STORED_FILE } from "../../packages/core/src/actions/upload-file";
+import { BEGUN_UPLOAD } from "../../packages/core/src/actions/uploads";
 import { fuzzTarget } from "./config";
 import { hostile } from "./hostile";
 
@@ -24,6 +39,7 @@ const SITE = {
   name: "report",
   public_name: null,
   title: null,
+  title_typed: false,
   access: "private",
   url: "https://report--k3f9x2ab71qz-p-poplin.example.com",
   addresses: { site: "https://report--k3f9x2ab71qz-p-poplin.example.com", public: null },
@@ -36,8 +52,11 @@ const SITE = {
   files: 1,
   updated: 0,
   state: "live",
+  views: null,
 };
 const UPLOAD = { id: "0123456789abcdef", state: "pending", version: 1, files: 1, bytes: 1, expires: 0 };
+const ADMIN = { id: "0000000000000000", scope: "admin", note: "", created: 0, expires: "never" };
+const PARAM = { site: SITE.label, upload: UPLOAD.id };
 const NEAR_ANSWERS: readonly unknown[] = [
   {},
   [],
@@ -53,12 +72,23 @@ const NEAR_ANSWERS: readonly unknown[] = [
   { site: { ...SITE, versions: "many" }, before: null },
   { sites: [SITE], next: { updated_at: 1, id: "k3f9x2ab71qz" } },
   { sites: [SITE, null] },
-  { token: { id: "0000000000000000", scope: "admin", note: "", created: 0, expires: "never" } },
-  { token: { id: "0000000000000000", scope: "owner", note: "", created: 0, expires: "never" } },
+  { token: ADMIN },
+  { token: { ...ADMIN, scope: "owner" } },
+  { token: ADMIN, version: "1.4.0" },
+  { code: "ABCD-EFGH", secret: "a-secret", expires_in: 600, interval: 5, verify_url: "https://poplin.example.com/tokens/allow?code=ABCD-EFGH" },
+  { state: "pending" },
+  { state: "allowed", token: "a-token" },
+  { site: null, before: null, copy: { upload: UPLOAD.id, copied: 0, files: 1 } },
   { upload: UPLOAD },
   { upload: UPLOAD, missing: ["index.html", "gone.css"], more: false },
   { upload: { id: "0123456789abcdef", state: "pending" }, missing: "index.html", more: "no" },
   { path: "index.html", size: 1 },
+  { files: [{ path: "index.html", size: 1 }] },
+  { format: 1, settings: {} },
+  { format: 1, sites: [], next: SITE.id },
+  { format: 1, site: { id: SITE.id, name: SITE.name, live_version: 1, versions: [{ number: 1, files: 1, bytes: 1 }] } },
+  { started: true, from: "1.4.0", to: null },
+  { set: true, since: 0 },
   { values: { versions_kept: "many" } },
   { left: [] },
   { left: [1, 2, 3] },
@@ -84,9 +114,32 @@ const COMMAND_LINES = [
   ["doctor"],
 ];
 
+const CALLS: readonly ((client: Client) => Promise<Called<unknown>>)[] = [
+  (client) => client.call(WHOAMI_ANSWER, (api) => api.whoami.$get({ query: {} })),
+  (client) => client.call(REVOKED_TOKEN, (api) => api.token.$delete({ query: {} })),
+  (client) => client.call(BEGUN_LOGIN_ANSWER, (api) => api.logins.$post({ query: {}, json: { scope: "publisher", computer: "laptop" } })),
+  (client) => client.call(REDEEMED_LOGIN, (api) => api.logins.token.$post({ query: {}, json: { secret: "a-secret" } })),
+  (client) => client.call(LISTED_SITES, (api) => api.sites.$get({ query: { trash: "true", limit: "50" } })),
+  (client) => client.call(SITE_ANSWER, (api) => api.sites[":site"].$get({ param: PARAM, query: {} })),
+  (client) => client.call(DELETED_SITE, (api) => api.sites[":site"].$delete({ param: PARAM, query: { forever: "true" } })),
+  (client) => client.call(DUPLICATED_SITE, (api) => api.sites[":site"].duplicate.$post({ param: PARAM, query: {}, json: {} })),
+  (client) => client.call(BEGUN_UPLOAD, (api) => api.uploads.$post({ query: {}, json: { files: [{ path: "index.html", size: 1, content_type: "text/html" }] } })),
+  (client) => client.call(SHOWN_UPLOAD, (api) => api.uploads[":upload"].$get({ param: PARAM, query: {} })),
+  (client) => client.upload(STORED_FILE, { upload: UPLOAD.id, path: "index.html", body: new Uint8Array(1) }),
+  (client) => client.call(PUBLISHED_SITE, (api) => api.uploads[":upload"].finish.$post({ param: PARAM, query: {} })),
+  (client) => client.call(ABANDONED_UPLOAD, (api) => api.uploads[":upload"].$delete({ param: PARAM, query: {} })),
+  (client) => client.call(EXPORTED_SETTINGS, (api) => api.export.settings.$get({ query: {} })),
+  (client) => client.call(EXPORTED_SITES, (api) => api.export.sites.$get({ query: { limit: "50" } })),
+  (client) => client.call(EXPORTED_SITE, (api) => api.export.sites[":site"].$get({ param: PARAM })),
+  (client) => client.call(EXPORTED_FILES, (api) => api.export.sites[":site"].files.$get({ param: PARAM, query: { version: "1" } })),
+  (client) => client.call(SETTINGS_ANSWER, (api) => api.config.$get({ query: {} })),
+  (client) => client.call(STARTED_UPDATE, (api) => api.update.$post({ query: {} })),
+  (client) => client.call(UPDATE_ADDRESS_STATE, (api) => api.update.address.$get({ query: {} })),
+];
+
 const property = fuzzTarget(import.meta.file);
 
-const names = fc.constantFrom<CallName>(...CALL_NAMES);
+const calls = fc.constantFrom(...CALLS);
 const statuses = fc.oneof(fc.constantFrom(...STATUSES), fc.integer({ min: 200, max: 599 }));
 const jsonTexts = fc.oneof(fc.constantFrom(...NEAR_ANSWERS), fc.jsonValue()).map((value) => JSON.stringify(value));
 const bodies = fc
@@ -165,9 +218,9 @@ property(
 
 property(
   "a call is done only for status 200 with a JSON body, which it hands back whole, and anything else is a failure and never a throw",
-  fc.asyncProperty(names, answers, async (name, answer) => {
+  fc.asyncProperty(calls, answers, async (call, answer) => {
     const client = createClient({ server: SERVER, token: TOKEN, fetch: scripted([answer]), timeoutMs: 1000 });
-    const called = await client.call(name as "getSite", { site: "report--k3f9x2ab71qz", upload: "0123456789abcdef", path: "index.html" } as never);
+    const called = await call(client);
 
     if (!called.ok) return;
 

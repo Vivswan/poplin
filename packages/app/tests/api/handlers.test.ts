@@ -2,16 +2,19 @@ import { describe, expect, spyOn, test } from "bun:test";
 
 import { PUBLISH_REQUEST } from "@poplin/core/src/actions/begin-publish";
 import { sweepExpired } from "@poplin/core/src/actions/sweep";
-import { type ROUTES, STORED_TYPE_HEADER } from "@poplin/core/src/api/routes";
+import { STORED_TYPE_HEADER } from "@poplin/core/src/api/routes";
 import type { Login, } from "@poplin/core/src/auth/logins";
-import { mintToken } from "@poplin/core/src/auth/tokens";
+import type { InferRequestType } from "hono/client";
 
-import { type Call, HANDLERS } from "../../src/api/handlers";
 import { serveSite } from "../../src/sites/serve";
 import { ADDRESSES, } from "../sites/support/layout";
-import { type Answered, type ApiInstall, LIMITS, NOW, openApi, requestOf } from "./support/install";
+import { type Answered, type ApiClient, type ApiInstall, answered, bytes, NOW, openApi } from "./support/install";
 
-type RouteName = keyof typeof ROUTES;
+/** What a publish is begun with, less its files. */
+type Publish = Omit<InferRequestType<ApiClient["uploads"]["$post"]>["json"], "files">;
+
+/** What an import of one site is begun with. */
+type Import = InferRequestType<ApiClient["import"]["sites"]["$post"]>["json"];
 
 /** One site of a backup with its files. */
 type Entry = Backup["sites"][number];
@@ -39,7 +42,7 @@ const SIGNING_KEY = new Uint8Array(32).fill(0xa7);
 const CANARY = "canary-note-5d1";
 
 /** A public site of the importing install, to hold a name an import asks for. */
-const OTHER = { name: "other", access: "public" };
+const OTHER = { name: "other", access: "public" } as const;
 
 /** The login the serving of the second install knows. */
 const ADMIN_EMAIL = "ada@example.com";
@@ -53,13 +56,14 @@ function pages(text: string): Record<string, string> {
 }
 
 /** Publish over the staged routes, as the owner unless another token is given; answers the site's id. */
-async function published(install: ApiInstall, asked: object, files: Readonly<Record<string, string>>, token: string = install.tokens.owner): Promise<string> {
+async function published(install: ApiInstall, asked: Publish, files: Readonly<Record<string, string>>, token: string = install.tokens.owner): Promise<string> {
+  const api = install.as(token);
   const manifest = Object.entries(files).map(([path, text]) => ({ path, size: text.length, content_type: path.endsWith(".css") ? "text/css" : "text/html; charset=utf-8" }));
-  const begun = await install.call("beginPublish", undefined, { token, body: { ...asked, files: manifest } });
+  const begun = await answered(api.uploads.$post({ json: { ...asked, files: manifest }, query: {} }));
   const upload = part(begun, "upload")?.id as string;
-  for (const [path, text] of Object.entries(files)) await install.call("uploadFile", { upload, path }, { token, body: text });
+  for (const [path, text] of Object.entries(files)) await api.uploads[":upload"].file.$put({ param: { upload }, query: { path } }, bytes(text));
 
-  const finished = await install.call("finishPublish", { upload }, { token });
+  const finished = await answered(api.uploads[":upload"].finish.$post({ param: { upload }, query: {} }));
   if (finished.status !== 200) throw new Error(`the fixture publish was refused: ${JSON.stringify([begun.body, finished.body])}`);
 
   return part(finished, "site").id as string;
@@ -78,22 +82,22 @@ async function source(): Promise<ApiInstall & { readonly ids: Readonly<Record<"r
     await published(install, { site: manual }, pages(text));
   }
 
-  await install.call("rollbackSite", { site: manual }, { body: { version: 2 } });
-  await install.call("deleteSite", { site: gone });
-  await install.call("issueToken", undefined, { body: { scope: "publisher", note: CANARY } });
+  await install.routes.sites[":site"].rollback.$post({ param: { site: manual }, json: { version: 2 }, query: {} });
+  await install.routes.sites[":site"].$delete({ param: { site: gone }, query: {} });
+  await install.routes.tokens.$post({ json: { scope: "publisher", note: CANARY }, query: {} });
   await install.database.ensureSigningKey(SIGNING_KEY, NOW);
 
   return { ...install, ids: { report, notes, docs, gone, manual } };
 }
 
-/** Ask a JSON route as the admin; the test fails here when it is refused. */
-async function got<Name extends RouteName>(install: ApiInstall, name: Name, args: Parameters<(typeof ROUTES)[Name]["path"]>[0], material: string[]): Promise<Answered> {
-  const answered = await install.call(name, args);
-  if (answered.status !== 200) throw new Error(`${name} was refused: ${JSON.stringify(answered.body)}`);
+/** Read what a call of a JSON route answered; the test fails here when it is refused. */
+async function got(sent: Parameters<typeof answered>[0], material: string[]): Promise<Answered> {
+  const answer = await answered(sent);
+  if (answer.status !== 200) throw new Error(`an export was refused: ${JSON.stringify(answer.body)}`);
 
-  material.push(await answered.response.text());
+  material.push(await answer.response.text());
 
-  return answered;
+  return answer;
 }
 
 /** Fetch every file of one version, a page of one file at a time, so the cursor is walked. */
@@ -102,9 +106,9 @@ async function filesOf(install: ApiInstall, site: string, version: number, mater
   let cursor: string | undefined;
 
   do {
-    const page = await got(install, "exportFiles", { site, version, limit: 1, cursor }, material);
+    const page = await got(install.routes.export.sites[":site"].files.$get({ param: { site }, query: { version: String(version), limit: "1", cursor } }), material);
     for (const { path, size } of page.body.files as { path: string; size: number }[]) {
-      const response = await install.api.fetch(requestOf("exportFile", { site, version, path }, { token: install.tokens.admin }));
+      const { response } = await answered(install.routes.export.sites[":site"].file.$get({ param: { site }, query: { version: String(version), path } }));
       const bytes = new Uint8Array(await response.arrayBuffer());
       material.push(new TextDecoder().decode(bytes), JSON.stringify([...response.headers]));
       files.push({ path: `v${version}/${path}`, size, content_type: decodeURIComponent(response.headers.get(STORED_TYPE_HEADER) ?? ""), bytes });
@@ -119,12 +123,12 @@ async function filesOf(install: ApiInstall, site: string, version: number, mater
 /** Export an install as a client does: the settings, the sites two a page, and each site's files. */
 async function exportAll(install: ApiInstall, allVersions: boolean): Promise<Backup> {
   const material: string[] = [];
-  const settings = await got(install, "exportSettings", undefined, material);
+  const settings = await got(install.routes.export.settings.$get({ query: {} }), material);
   const sites: Backup["sites"] = [];
   let after: string | undefined;
 
   do {
-    const page = await got(install, "exportSites", { limit: 2, after: after as never, all_versions: allVersions }, material);
+    const page = await got(install.routes.export.sites.$get({ query: { limit: "2", after, all_versions: String(allVersions) } }), material);
     for (const site of page.body.sites as { id: string; versions: { number: number }[] }[]) {
       const files = [];
       for (const { number } of site.versions) files.push(...(await filesOf(install, site.id, number, material)));
@@ -142,7 +146,7 @@ async function exportAll(install: ApiInstall, allVersions: boolean): Promise<Bac
 function begin(install: ApiInstall, entry: Entry, change: object = {}): Promise<Answered> {
   const files = entry.files.map(({ path, size, content_type }) => ({ path, size, content_type }));
 
-  return install.call("beginImport", undefined, { body: { format: 1, site: entry.site, files, ...change } });
+  return answered(install.routes.import.sites.$post({ json: { format: 1, site: entry.site, files, ...change } as Import, query: {} }));
 }
 
 /** Import one site of a backup: begin, send every file, finish. Answers the finish. */
@@ -151,14 +155,16 @@ async function imported(install: ApiInstall, entry: Entry): Promise<Answered> {
   if (begun.status !== 200) return begun;
 
   const upload = part(begun, "upload").id as string;
-  for (const file of entry.files) await install.call("uploadFile", { upload, path: file.path }, { body: file.bytes });
+  for (const file of entry.files) await install.routes.uploads[":upload"].file.$put({ param: { upload }, query: { path: file.path } }, bytes(file.bytes));
 
-  return install.call("finishPublish", { upload });
+  return answered(install.routes.uploads[":upload"].finish.$post({ param: { upload }, query: {} }));
 }
 
 /** Every site as the rule book shows it, the trash included, by id. */
 async function sitesOf(install: ApiInstall): Promise<Record<string, unknown>> {
-  const listed = [...((await install.call("listSites", {})).body.sites as { id: string }[]), ...((await install.call("listSites", { trash: true })).body.sites as { id: string }[])];
+  const live = await answered(install.routes.sites.$get({ query: {} }));
+  const trash = await answered(install.routes.sites.$get({ query: { trash: "true" } }));
+  const listed = [...(live.body.sites as { id: string }[]), ...(trash.body.sites as { id: string }[])];
 
   return Object.fromEntries(listed.map((site) => [site.id, site]));
 }
@@ -214,7 +220,7 @@ describe("an export imported into another install", () => {
 
     const finishes = [];
     for (const entry of backup.sites) finishes.push((await imported(second, entry)).status);
-    const settings = await second.call("importSettings", undefined, { body: { format: backup.format, settings: backup.settings } });
+    const settings = await answered(second.routes.import.settings.$post({ json: { format: backup.format, settings: backup.settings }, query: {} }));
     const entries = await second.database.listAudit({ limit: 100 });
     const { ids } = first;
     const sites = await sitesOf(second);
@@ -223,7 +229,7 @@ describe("an export imported into another install", () => {
 
     // No time differs: a site keeps the moments it was made, changed, published, and trashed at.
     expect([finishes, sites, await storeOf(second)]).toEqual([[200, 200, 200, 200, 200], await sitesOf(first), await storeOf(first)]);
-    expect([settings.status, part(settings, "values")]).toEqual([200, part(await first.call("readConfig", undefined), "values")]);
+    expect([settings.status, part(settings, "values")]).toEqual([200, part(await answered(first.routes.config.$get({ query: {} })), "values")]);
     expect((await exportAll(second, true)).sites).toEqual(backup.sites);
 
     // The folder is the one thing an import makes anew, and no export names it.
@@ -242,12 +248,13 @@ describe("an export imported into another install", () => {
       (await served(second, label(ids.gone), true))[0],
     ]).toEqual([[200, "<h1>report</h1>"], [302, ""], [200, "<h1>notes</h1>"], [200, "<h1>docs</h1>"], [200, "<h1>docs</h1>"], [200, "<h1>manual 2</h1>"], 404]);
 
-    await second.call("rollbackSite", { site: manual }, { body: { version: 3 } });
-    const lost = await second.call("getSite", { site: manual }, { token: second.tokens.owner });
+    await second.routes.sites[":site"].rollback.$post({ param: { site: manual }, json: { version: 3 }, query: {} });
+    const lost = await second.as(second.tokens.owner).sites[":site"].$get({ param: { site: manual }, query: {} });
     const next = await published(second, { site: manual }, pages("manual 4"), second.tokens.admin);
+    const versions = part(await answered(second.routes.sites[":site"].$get({ param: { site: next }, query: {} })), "site").versions as { number: number }[];
 
     // A publisher's token is not in a backup, so the site it made is an admin's alone in the second install.
-    expect([lost.status, await served(second, label(manual), true), (part(await second.call("getSite", { site: next }), "site").versions as { number: number }[]).map((version) => version.number)]).toEqual([
+    expect<unknown>([lost.status, await served(second, label(manual), true), versions.map((version) => version.number)]).toEqual([
       404,
       [200, "<h1>manual 4</h1>"],
       [2, 3, 4],
@@ -258,12 +265,12 @@ describe("an export imported into another install", () => {
   test("settings whose title is as long as one change may make it are exported and imported whole", async () => {
     const [first, second] = [await openApi(), await openApi()];
     const title = "x".repeat(65_490);
-    const changed = await first.call("changeConfig", undefined, { body: { dashboard_title: title } });
-    const exported = await first.call("exportSettings", undefined);
+    const changed = await first.routes.config.$patch({ json: { dashboard_title: title }, query: {} });
+    const exported = await answered(first.routes.export.settings.$get({ query: {} }));
 
-    const imported = await second.call("importSettings", undefined, { body: { format: exported.body.format, settings: exported.body.settings } });
+    const imported = await answered(second.routes.import.settings.$post({ json: { format: exported.body.format, settings: exported.body.settings } as never, query: {} }));
 
-    expect([changed.status, exported.status, imported.status, part(imported, "values").dashboard_title === title]).toEqual([200, 200, 200, true]);
+    expect<unknown>([changed.status, exported.status, imported.status, part(imported, "values").dashboard_title === title]).toEqual([200, 200, 200, true]);
   });
 
   // Drift: `--all-versions` is a flag of the client; an export that sent every version without it, or an import that needed them all, would make every backup as large as the bucket.
@@ -273,7 +280,7 @@ describe("an export imported into another install", () => {
     const backup = await exportAll(first, false);
     for (const entry of backup.sites) await imported(second, entry);
 
-    const manual = part(await second.call("getSite", { site: first.ids.manual }), "site");
+    const manual = part(await answered(second.routes.sites[":site"].$get({ param: { site: first.ids.manual }, query: {} })), "site");
     const keys = (await second.keys()).map((key) => key.split("/").slice(1).join("/")).sort();
 
     const carried = backup.sites.map(({ site, files }) => `${site.name}: versions ${(site.versions as { number: number }[]).map((version) => version.number)}, ${files.length} files`);
@@ -303,7 +310,7 @@ describe("an import into an install that holds sites", () => {
   // Drift: each row is a site the install would have to change or shadow to take the import; one that passed would hand an address to other content with no word to its owner.
   test.each([
     ["the same site again", "report", {}, (install: ApiInstall, entry: Entry): Promise<unknown> => imported(install, entry), 409, { code: "id_taken", about: "id" }],
-    ["a site whose id is the public name of a site here", "report", {}, (install: ApiInstall, entry: Entry): Promise<unknown> => published(install, { ...OTHER, public_name: entry.site.id }, pages("other")), 409, { code: "id_taken", about: "id" }],
+    ["a site whose id is the public name of a site here", "report", {}, (install: ApiInstall, { site }: Entry): Promise<unknown> => published(install, { ...OTHER, public_name: site.id as string }, pages("other")), 409, { code: "id_taken", about: "id" }],
     ["a public name another site here holds", "docs", {}, (install: ApiInstall): Promise<unknown> => published(install, { ...OTHER, public_name: "docs" }, pages("other")), 409, { code: "name_taken", about: "public_name" }],
     ["a backup of a newer format", "notes", { format: 2 }, async (): Promise<unknown> => undefined, 400, { code: "backup_too_new", about: "format" }],
     ["a format that is no number", "notes", { format: "1" }, async (): Promise<unknown> => undefined, 400, { code: "bad_argument", about: "format" }],
@@ -333,23 +340,26 @@ describe("an import into an install that holds sites", () => {
     const audit = await second.audit();
     const upload = part(await begin(second, entry), "upload").id as string;
     const [kept, last] = [entry.files.slice(0, -1), entry.files.at(-1)];
-    for (const file of kept) await second.call("uploadFile", { upload, path: file.path }, { body: file.bytes });
+    if (last === undefined) throw new Error("the fixture site has no file");
 
-    const early = await second.call("finishPublish", { upload });
-    const shown = await second.call("showUpload", { upload });
+    const sendFile = (file: BackupFile, body: string | Uint8Array = file.bytes): Promise<Answered> => answered(second.routes.uploads[":upload"].file.$put({ param: { upload }, query: { path: file.path } }, bytes(body)));
+    for (const file of kept) await sendFile(file);
+
+    const early = await answered(second.routes.uploads[":upload"].finish.$post({ param: { upload }, query: {} }));
+    const shown = await answered(second.routes.uploads[":upload"].$get({ param: { upload }, query: {} }));
     const hidden = [await sitesOf(second), await served(second, "docs", false), await second.audit()];
-    const wrong = await second.call("uploadFile", { upload, path: last?.path ?? "" }, { body: "x" });
-    await second.call("uploadFile", { upload, path: last?.path ?? "" }, { body: last?.bytes });
-    const finished = await second.call("finishPublish", { upload });
+    const wrong = await sendFile(last, "x");
+    await sendFile(last);
+    const finished = await answered(second.routes.uploads[":upload"].finish.$post({ param: { upload }, query: {} }));
 
-    expect<unknown>([early.status, early.body.error, shown.body.missing]).toEqual([409, expect.objectContaining({ code: "missing_files", about: last?.path }), [last?.path]]);
+    expect<unknown>([early.status, early.body.error, shown.body.missing]).toEqual([409, expect.objectContaining({ code: "missing_files", about: last.path }), [last.path]]);
     expect([hidden, wrong.status]).toEqual([[{}, [404, "Not found\n"], audit], 400]);
     expect<unknown>([finished.status, part(finished, "site").id, await served(second, "docs", false)]).toEqual([200, entry.site.id, [200, "<h1>docs</h1>"]]);
   });
 
   // Drift: an import that stops half way leaves files in the bucket under no site; kept, they would fill the bucket unseen, and a record left pending would hold the site's id against its next import.
   test.each([
-    ["given up", async (install: ApiInstall, upload: string) => void (await install.call("abandonPublish", { upload })), 0, ["abandoned"]],
+    ["given up", async (install: ApiInstall, upload: string) => void (await install.routes.uploads[":upload"].$delete({ param: { upload }, query: {} })), 0, ["abandoned"]],
     ["left for a day and swept", async (install: ApiInstall) => {
       install.clock.now = NOW + 26 * 3_600_000;
       const swept = await sweepExpired({ ...install, now: () => install.clock.now, addressOf: String, publicAddressOf: String, reservedNames: new Set() }, { scope: "admin", holder: ADMIN_EMAIL as Login }, { limit: 100, from: { uploads: true } });
@@ -363,12 +373,15 @@ describe("an import into an install that holds sites", () => {
     const second = await openApi();
     const before = [await sitesOf(second), await storeOf(second), await second.audit()];
     const upload = part(await begin(second, entry), "upload").id as string;
-    for (const file of entry.files.slice(0, 3)) await second.call("uploadFile", { upload, path: file.path }, { body: file.bytes });
+    const [early] = entry.files;
+    if (early === undefined) throw new Error("the fixture site has no file");
+
+    for (const file of entry.files.slice(0, 3)) await second.routes.uploads[":upload"].file.$put({ param: { upload }, query: { path: file.path } }, bytes(file.bytes));
     const stored = (await second.keys()).length;
     await end(second, upload);
 
-    const late = await second.call("uploadFile", { upload, path: entry.files[0]?.path ?? "" }, { body: entry.files[0]?.bytes });
-    const finished = await second.call("finishPublish", { upload });
+    const late = await second.routes.uploads[":upload"].file.$put({ param: { upload }, query: { path: early.path } }, bytes(early.bytes));
+    const finished = await second.routes.uploads[":upload"].finish.$post({ param: { upload }, query: {} });
 
     const { uploads } = await second.database.listUploads({ before: Number.MAX_SAFE_INTEGER, limit: 100 });
 
@@ -385,30 +398,31 @@ describe("an import into an install that holds sites", () => {
     const first = await source();
     const backup = await exportAll(first, true);
     const [entry] = backup.sites;
-    if (entry === undefined) throw new Error("the fixture backup is empty");
+    const [file] = entry?.files ?? [];
+    if (entry === undefined || file === undefined) throw new Error("the fixture backup is empty");
 
     const second = await openApi();
     const upload = part(await begin(second, entry), "upload").id as string;
     const before = [await stateOf(first), await stateOf(second)];
-    const token = first.tokens.owner;
-    const site = first.ids.report;
-    const body = { format: 1, site: entry.site, files: entry.files.map(({ path, size, content_type }) => ({ path, size, content_type })) };
+    const [owner, other] = [first.as(first.tokens.owner), second.as(second.tokens.owner)];
+    const param = { site: first.ids.report };
+    const json = { format: 1, site: entry.site, files: entry.files.map(({ path, size, content_type }) => ({ path, size, content_type })) } as Import;
 
     const answers = [
-      await first.call("exportSettings", undefined, { token }),
-      await first.call("exportSites", {}, { token }),
-      await first.call("exportSite", { site }, { token }),
-      await first.call("exportFiles", { site, version: 1 }, { token }),
-      await first.call("exportFile", { site, version: 1, path: "index.html" }, { token }),
-      await first.call("importSettings", undefined, { token, body: { format: 1, settings: backup.settings } }),
-      await first.call("beginImport", undefined, { token, body }),
-      await second.call("showUpload", { upload }, { token: second.tokens.owner }),
-      await second.call("uploadFile", { upload, path: entry.files[0]?.path ?? "" }, { token: second.tokens.owner, body: entry.files[0]?.bytes }),
-      await second.call("finishPublish", { upload }, { token: second.tokens.owner }),
-      await second.call("abandonPublish", { upload }, { token: second.tokens.owner }),
+      await answered(owner.export.settings.$get({ query: {} })),
+      await answered(owner.export.sites.$get({ query: {} })),
+      await answered(owner.export.sites[":site"].$get({ param, query: {} })),
+      await answered(owner.export.sites[":site"].files.$get({ param, query: { version: "1" } })),
+      await answered(owner.export.sites[":site"].file.$get({ param, query: { version: "1", path: "index.html" } })),
+      await answered(owner.import.settings.$post({ json: { format: 1, settings: backup.settings }, query: {} })),
+      await answered(owner.import.sites.$post({ json, query: {} })),
+      await answered(other.uploads[":upload"].$get({ param: { upload }, query: {} })),
+      await answered(other.uploads[":upload"].file.$put({ param: { upload }, query: { path: file.path } }, bytes(file.bytes))),
+      await answered(other.uploads[":upload"].finish.$post({ param: { upload }, query: {} })),
+      await answered(other.uploads[":upload"].$delete({ param: { upload }, query: {} })),
     ];
 
-    expect(answers.map((answered) => [answered.status, part(answered, "error").code])).toEqual([...Array.from({ length: 7 }, () => [403, "not_allowed"]), ...Array.from({ length: 4 }, () => [404, "not_found"])]);
+    expect(answers.map((answer) => [answer.status, part(answer, "error").code])).toEqual([...Array.from({ length: 7 }, () => [403, "not_allowed"]), ...Array.from({ length: 4 }, () => [404, "not_found"])]);
     expect([await stateOf(first), await stateOf(second)]).toEqual(before);
   });
 });
@@ -416,22 +430,28 @@ describe("an import into an install that holds sites", () => {
 describe("a route that declares files", () => {
   // Drift: the handler and the action each have the schema at hand; a check in both reads a 10,000-file list twice inside the 10 ms of CPU one request gets.
   test.each([
-    ["beginPublish", async () => ({ name: "report", files: [{ path: "index.html", size: 4, content_type: "text/html" }, { path: "css/site.css", size: 9, content_type: "text/css" }] })],
-    ["beginImport", async () => {
-      const [entry] = (await exportAll(await source(), false)).sites;
+    [
+      "the route that begins a publish",
+      async () => ({ name: "report", files: [{ path: "index.html", size: 4, content_type: "text/html" }, { path: "css/site.css", size: 9, content_type: "text/css" }] }),
+      (api: ApiClient, json: object) => api.uploads.$post({ json: json as never, query: {} }),
+    ],
+    [
+      "the route that begins an import",
+      async () => {
+        const [entry] = (await exportAll(await source(), false)).sites;
 
-      return { format: 1, site: entry?.site, files: entry?.files.map(({ path, size, content_type }) => ({ path, size, content_type })) ?? [] };
-    }],
-  ] as const)("%s checks each sent file once", async (name, sent) => {
+        return { format: 1, site: entry?.site, files: entry?.files.map(({ path, size, content_type }) => ({ path, size, content_type })) ?? [] };
+      },
+      (api: ApiClient, json: object) => api.import.sites.$post({ json: json as never, query: {} }),
+    ],
+  ] as const)("%s checks each sent file once", async (_what, sent, send) => {
     const install = await openApi();
     const body = await sent();
-    const holder = (await mintToken({ scope: "admin", note: "a test", now: NOW })).record.id;
-    const core = { database: install.database, store: install.store, now: () => NOW, ...ADDRESSES };
     using checks = spyOn(PUBLISH_REQUEST.entries.files.item, "~run");
 
-    const answered = await HANDLERS[name]({ install: core, actor: { scope: "admin", holder }, body, limits: LIMITS } as unknown as Call);
+    const answer = await answered(send(install.routes, body));
 
-    expect([answered.ok, checks.mock.calls.length]).toEqual([true, body.files.length]);
+    expect([answer.status, checks.mock.calls.length]).toEqual([200, body.files.length]);
   });
 });
 
@@ -447,7 +467,7 @@ describe("the one route that answers a file", () => {
     ["no path", { version: 2, path: "" }, 404, "not_found"],
   ] as const)("%s is answered as bytes or refused, and never as a page a browser would render", async (_what, asked, status, answer) => {
     const first = await source();
-    const response = await first.api.fetch(requestOf("exportFile", { site: first.ids.manual, ...asked }, { token: first.tokens.admin }));
+    const { response } = await answered(first.routes.export.sites[":site"].file.$get({ param: { site: first.ids.manual }, query: { version: String(asked.version), path: asked.path } }));
     const text = await response.text();
     const { headers } = response;
 
@@ -466,13 +486,14 @@ describe("the one route that answers a file", () => {
   // Drift: a pending upload's files sit in the bucket under a version number no site keeps yet; an export that listed or read them would leak a publish before it is live.
   test("the files of a pending upload are in no listing and behind no path", async () => {
     const first = await source();
-    const { owner: token } = first.tokens;
-    const begun = await first.call("beginPublish", undefined, { token, body: { site: first.ids.report, files: [{ path: "index.html", size: 6, content_type: "text/html" }] } });
-    await first.call("uploadFile", { upload: part(begun, "upload").id as string, path: "index.html" }, { token, body: "secret" });
+    const owner = first.as(first.tokens.owner);
+    const param = { site: first.ids.report };
+    const begun = await answered(owner.uploads.$post({ json: { site: first.ids.report, files: [{ path: "index.html", size: 6, content_type: "text/html" }] }, query: {} }));
+    await owner.uploads[":upload"].file.$put({ param: { upload: part(begun, "upload").id as string }, query: { path: "index.html" } }, bytes("secret"));
 
-    const listed = await first.call("exportFiles", { site: first.ids.report, version: 2 });
-    const read = await first.call("exportFile", { site: first.ids.report, version: 2, path: "index.html" });
+    const listed = await first.routes.export.sites[":site"].files.$get({ param, query: { version: "2" } });
+    const read = await answered(first.routes.export.sites[":site"].file.$get({ param, query: { version: "2", path: "index.html" } }));
 
-    expect([(await first.keys()).some((key) => key.endsWith("/v2/index.html")), listed.status, read.status, part(read, "error").code]).toEqual([true, 404, 404, "no_such_version"]);
+    expect<unknown>([(await first.keys()).some((key) => key.endsWith("/v2/index.html")), listed.status, read.status, part(read, "error").code]).toEqual([true, 404, 404, "no_such_version"]);
   });
 });

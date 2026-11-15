@@ -6,7 +6,9 @@ import { join } from "node:path";
 
 import { createClient, type Fetch } from "../../packages/cli/src/client/client";
 import type { Io } from "../../packages/cli/src/commands/records";
-import type { ROUTES } from "../../packages/core/src/api/routes";
+import { DELETED_SITE } from "../../packages/core/src/actions/delete";
+import { LISTED_SITES } from "../../packages/core/src/actions/list";
+import { SETTINGS_ANSWER } from "../../packages/core/src/actions/store-settings";
 import { parseLogins } from "../../packages/core/src/auth/logins";
 import { run } from "../../packages/cli/src/commands/run";
 import { openSession } from "../../packages/cli/tests/mcp/support/session";
@@ -27,8 +29,8 @@ const SETTINGS = { trash_days: 1, visitor_requests_per_minute: 120 };
 /** When every site of a run moves to the trash by itself, so a run that was killed leaves nothing for good. */
 const EXPIRES = "1d";
 
-/** Where a listing goes on: the `next` of the page before, absent for the first page. */
-type Cursor = NonNullable<(typeof ROUTES)["listSites"]["types"]>["done"]["next"];
+/** Where a listing goes on, as an address holds it: the `next` of the page before a key a part, and no key for the first page. */
+type Cursor = Readonly<Partial<Record<"after_updated_at" | "after_id" | "after_name" | "after_access", string>>>;
 
 /** What a bench is opened with. */
 interface BenchParts {
@@ -166,24 +168,27 @@ export function openBench(parts: BenchParts): OpenBench {
   // Every site of a live run in one listing, read to its last page before any is removed.
   const liveSites = async (trash: boolean): Promise<string[]> => {
     const ids: string[] = [];
-    let after: Cursor;
+    let after: Cursor = {};
 
-    do {
-      const listed = await client.call("listSites", { trash, limit: PAGE, after });
+    for (;;) {
+      const query = { trash: String(trash), limit: String(PAGE), ...after };
+      const listed = await client.call(LISTED_SITES, (api) => api.sites.$get({ query }));
       if (!listed.ok) throw new Error(`the sweep could not list the sites: ${listed.failure.kind}`);
 
       ids.push(...listed.value.sites.filter((site) => site.name.startsWith(SWEPT_PREFIX)).map((site) => site.id));
-      after = listed.value.next;
-    } while (after !== undefined);
 
-    return ids;
+      const { next } = listed.value;
+      if (next === undefined) return ids;
+
+      after = { after_updated_at: String(next.updated_at), after_id: next.id, after_name: next.name, after_access: next.access };
+    }
   };
 
   const sweep = async (): Promise<void> => {
     if (parts.token === undefined) return;
 
     for (const id of [...(await liveSites(false)), ...(await liveSites(true))]) {
-      const removed = await client.call("deleteSite", { site: id, forever: true });
+      const removed = await client.call(DELETED_SITE, (api) => api.sites[":site"].$delete({ param: { site: id }, query: { forever: "true" } }));
       if (!removed.ok) throw new Error(`the sweep could not remove a site: ${removed.failure.kind}`);
 
       if (removed.value.left.length > 0) throw new Error("the sweep removed a site and the install kept some of its files");
@@ -196,7 +201,8 @@ export function openBench(parts: BenchParts): OpenBench {
     const logins = parts.login === undefined ? undefined : parseLogins([parts.login]);
     if (logins?.ok === false) throw new Error("the login the suite was given is no email address");
 
-    const changed = await client.call("changeConfig", undefined, logins === undefined ? SETTINGS : { ...SETTINGS, logins: [...logins.value] });
+    const settings = logins === undefined ? SETTINGS : { ...SETTINGS, logins: [...logins.value] };
+    const changed = await client.call(SETTINGS_ANSWER, (api) => api.config.$patch({ query: {}, json: settings }));
     if (!changed.ok) throw new Error(`the install refused the suite's settings: ${changed.failure.kind}`);
   };
 

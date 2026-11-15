@@ -11,7 +11,7 @@ import { randomText } from "./random-text";
 const FOLDER_PATTERN = /^[0-9a-z]{16}$/;
 
 /** Who may open a site: only its admins, anyone with its address, or everyone under its public name too. */
-const ACCESSES = ["private", "unlisted", "public"] as const;
+export const ACCESSES = ["private", "unlisted", "public"] as const;
 
 /** The key of a site's file folder. */
 export const SITE_FOLDER = v.custom<SiteFolder>(isSiteFolder, "a site folder is 16 lowercase base36 characters");

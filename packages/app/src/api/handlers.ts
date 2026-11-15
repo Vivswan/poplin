@@ -1,118 +1,49 @@
-// The handler of every route: it checks what was sent against the action's schema, calls that one action, and hands back its answer. No rule lives here.
-// An action that takes anything checks what was sent itself, so a long file list is read once.
+// What a route's handler does beyond calling its one action: it checks what was sent against the action's schema, and joins what only the request knows to the action's answer. No rule lives here.
 
-import { abandonPublish } from "@poplin/core/src/actions/abandon-publish";
-import { beginImport } from "@poplin/core/src/actions/begin-import";
-import { AUDIT_QUERY, listAudit } from "@poplin/core/src/actions/audit-log";
-import { beginPublish, type UploadLimits } from "@poplin/core/src/actions/begin-publish";
-import { SITE_CHANGES } from "@poplin/core/src/actions/changes";
-import { beginLogin, LOGIN_REQUEST, LOGIN_SECRET, redeemLogin } from "@poplin/core/src/actions/computer-logins";
-import { changeConfig, readConfig } from "@poplin/core/src/actions/config";
-import { DELETE_OPTIONS, deleteSite } from "@poplin/core/src/actions/delete";
-import { DUPLICATE_REQUEST, duplicateSite } from "@poplin/core/src/actions/duplicate";
-import { EXPORT_FILE_QUERY, EXPORT_FILES_QUERY, EXPORT_QUERY, EXPORT_SITE_QUERY, exportFile, exportFiles, exportSettings, exportSite, exportSites } from "@poplin/core/src/actions/export";
-import { finishPublish } from "@poplin/core/src/actions/finish-publish";
-import { importSettings, SETTINGS_IMPORT } from "@poplin/core/src/actions/import-settings";
-import { LIST_QUERY, listSites } from "@poplin/core/src/actions/list";
-import { issueToken, listTokens, revokeToken, TOKEN_REQUEST, tokenObject } from "@poplin/core/src/actions/manage-tokens";
-import { newLink } from "@poplin/core/src/actions/new-link";
+import type { UploadLimits } from "@poplin/core/src/actions/begin-publish";
+import { beginLogin, LOGIN_REQUEST } from "@poplin/core/src/actions/computer-logins";
+import { tokenObject, type WHOAMI_ANSWER } from "@poplin/core/src/actions/manage-tokens";
 import { type Install, type Refused, refuse } from "@poplin/core/src/actions/records";
-import { restoreSite } from "@poplin/core/src/actions/restore";
-import { ROLLBACK_OPTIONS, rollbackSite } from "@poplin/core/src/actions/rollback";
-import { updateSite } from "@poplin/core/src/actions/set";
-import { getSite } from "@poplin/core/src/actions/show";
-import { signEveryoneOut } from "@poplin/core/src/actions/sign-out";
-import { showUpload } from "@poplin/core/src/actions/show-upload";
-import { type Rebuilding, START_OPTIONS, startUpdate } from "@poplin/core/src/actions/start-update";
 import { updateOf } from "@poplin/core/src/actions/update";
-import { removeUpdateAddress, saveUpdateAddress, UPDATE_ADDRESS_REQUEST, updateAddressState } from "@poplin/core/src/actions/update-address";
+import { saveUpdateAddress, UPDATE_ADDRESS_REQUEST } from "@poplin/core/src/actions/update-address";
 import { uploadFile } from "@poplin/core/src/actions/upload-file";
-import { ALLOW_PAGE, CODE_KEY, type OPEN_ROUTES, type ROUTES } from "@poplin/core/src/api/routes";
+import { ALLOW_PAGE, CODE_KEY } from "@poplin/core/src/api/routes";
 import type { Actor } from "@poplin/core/src/auth/scopes";
 import type { TokenRecord } from "@poplin/core/src/auth/tokens";
 import * as v from "valibot";
 
-import { capBody, type QueryShape } from "./body";
-import type { Result } from "./respond";
+import { capBody } from "./body";
 
-/** The query each route takes; a route missing here takes none. */
-export const QUERIES: { readonly [Name in RouteName]?: QueryShape } = {
-  listSites: {
-    ...{ trash: "switch", limit: "number", after_updated_at: "number", after_id: "text", after_name: "text", after_access: "text" },
-    ...{ named: "text", access: "text", expires: "text", sort: "text", dir: "text" },
-  },
-  deleteSite: { forever: "switch" },
-  uploadFile: { path: "text" },
-  exportSites: { limit: "number", after: "text", all_versions: "switch" },
-  exportSite: { all_versions: "switch" },
-  exportFiles: { version: "number", limit: "number", cursor: "text" },
-  exportFile: { version: "number", path: "text" },
-  listAudit: { limit: "number", before: "number", kind: "text", site: "text" },
-  startUpdate: { anyway: "switch" },
-};
+/** What the upload of one file takes from its query: the path the file is stored under. */
+export const FILE_QUERY = v.strictObject({ path: v.string() });
 
-/** The name of a route in the table. */
-export type RouteName = keyof typeof ROUTES;
+/** What an action answers, behind its promise. */
+type AnswerOf<Action extends (...parameters: never[]) => Promise<unknown>> = Awaited<ReturnType<Action>>;
 
-/** The name of a route that takes no token. */
-export type OpenName = (typeof OPEN_ROUTES)[number];
+/** The answer of a begun login, with the address of the dashboard page where an admin decides it. */
+type Begun = Extract<AnswerOf<typeof beginLogin>, { readonly ok: true }> & { readonly verify_url: string };
 
-/** One request as its handler takes it: who asks, and what the route's path, query, and body hold. */
-export interface Call {
-  /** The install the action runs on. */
-  readonly install: Install;
+/** One file as its upload sends it: the upload it belongs to, the query that names its path, and the request whose body holds its bytes. */
+interface SentFile {
+  /** The path's `:upload`. */
+  readonly upload: string;
 
-  /** The record of the token the request presented. */
-  readonly token: TokenRecord;
+  /** The query, checked by `FILE_QUERY`. */
+  readonly query: v.InferOutput<typeof FILE_QUERY>;
 
-  /** Whoever that token stands for. */
-  readonly actor: Actor;
-
-  /** The path's `:site`, which has the form of a site reference; `""` on a route without one. */
-  readonly site: string;
-
-  /** The path's `:upload` or `:token`; `""` on a route without one. */
-  readonly named: string;
-
-  /** The query, read by the route's shape. */
-  readonly query: Readonly<Record<string, string | number | boolean>>;
-
-  /** The parsed JSON body of a route that sends one, `undefined` otherwise. */
-  readonly body: unknown;
-
-  /** The request itself, whose body a route that sends bytes reads. */
+  /** The request itself, whose body is read here. */
   readonly request: Request;
 
   /** What one request can carry. */
   readonly limits: UploadLimits;
-
-  /** The version of poplin the install runs. */
-  readonly version: string;
-
-  /** What starts a rebuild of the install at its provider. */
-  readonly rebuilding: Rebuilding;
 }
 
-/** One request to a route that takes no token: nobody asks, so there is no actor. */
-interface OpenCall {
-  /** The install the action runs on. */
-  readonly install: Install;
-
-  /** The parsed JSON body. */
-  readonly body: unknown;
-
-  /** The origin the request was sent to, which is the dashboard's. */
-  readonly origin: string;
-
-  /** The key the asking visitor's requests are counted by. */
-  readonly visitor: string;
-}
-
-/** What the handler of a route answers: the route's `done` type, or a refusal. */
-type Handler<Name extends RouteName, Asked = Call> = (call: Asked) => Promise<Result<NonNullable<(typeof ROUTES)[Name]["types"]>["done"]>>;
-
-/** Check a sent value against an action's schema, and run the action on what passes. */
-async function checked<Schema extends v.GenericSchema, Answer>(
+/**
+ * Check a sent value against an action's schema, and run the action on what passes.
+ *
+ * @returns the action's answer, or `bad_argument` about the first key that was refused, `body` for a value that is no object
+ */
+export async function checked<Schema extends v.GenericSchema, Answer>(
   schema: Schema,
   sent: unknown,
   run: (asked: v.InferOutput<Schema>) => Promise<Answer>,
@@ -123,21 +54,16 @@ async function checked<Schema extends v.GenericSchema, Answer>(
   return run(asked.output);
 }
 
-/** The listing a query asks for: the parts of the cursor become one `after`. */
-function listingOf(query: Call["query"]): unknown {
-  const { after_updated_at: updated_at, after_id: id, after_name: name, after_access: access, ...rest } = query;
-  const after = { updated_at, id, ...(name === undefined ? {} : { name }), ...(access === undefined ? {} : { access }) };
-
-  return Object.values(after).every((part) => part === undefined) ? rest : { ...rest, after };
-}
-
-/** Store the body of a request as one file, reading no more of it than one request may carry. */
-async function storeBody({ install, actor, named, query, request, limits }: Call): ReturnType<Handler<"uploadFile">> {
+/**
+ * Store the body of a request as one file, reading no more of it than one request may carry.
+ *
+ * @returns the stored file, the action's refusal, or `too_large` about `max_file_size` for a body past the cap
+ */
+export async function storeBody(install: Install, actor: Actor, { upload, query, request, limits }: SentFile): Promise<AnswerOf<typeof uploadFile> | Refused<"too_large">> {
   const body = capBody(request, limits.fileBytes);
-  if (typeof query.path !== "string") return refuse("bad_argument", "path");
 
   try {
-    const stored = await uploadFile(install, actor, { upload: named, path: query.path, body: body.stream });
+    const stored = await uploadFile(install, actor, { upload, path: query.path, body: body.stream });
 
     return body.exceeded() ? refuse("too_large", "max_file_size") : stored;
   } catch (error) {
@@ -147,74 +73,40 @@ async function storeBody({ install, actor, named, query, request, limits }: Call
   }
 }
 
-/** Begin a login, and add the address of the dashboard page where an admin decides it. */
-async function beginWithAddress({ install, body, origin, visitor }: OpenCall): ReturnType<Handler<"beginLogin">> {
+/**
+ * Begin a login, and add the address of the dashboard page where an admin decides it.
+ *
+ * @param origin - the origin the request was sent to, which is the dashboard's
+ * @param visitor - the key the asking visitor's requests are counted by
+ */
+export async function beginWithAddress(install: Install, body: unknown, origin: string, visitor: string): Promise<Begun | Exclude<AnswerOf<typeof beginLogin>, { readonly ok: true }> | Refused<"bad_argument">> {
   const begun = await checked(LOGIN_REQUEST, body, (request) => beginLogin(install, request, visitor));
   if (!begun.ok) return begun;
 
   return { ...begun, verify_url: `${origin}${ALLOW_PAGE}?${new URLSearchParams({ [CODE_KEY]: begun.code })}` };
 }
 
-/** Save the address that starts a rebuild. A body of any other form is refused about `address`, never about a key it holds: the address may have been typed where a key goes. */
-async function saveAddress({ install, actor, body, rebuilding }: Call): ReturnType<Handler<"saveUpdateAddress">> {
+/**
+ * Save the address that starts a rebuild.
+ *
+ * @param accepts - whether the host's provider starts rebuilds at an address
+ * @returns the action's answer. A body of any other form is refused about `address`, never about a key it holds: the address may have been typed where a key goes
+ */
+export async function saveAddress(install: Install, actor: Actor, body: unknown, accepts: (address: URL) => boolean): Promise<AnswerOf<typeof saveUpdateAddress> | Refused<"bad_argument">> {
   const sent = v.safeParse(UPDATE_ADDRESS_REQUEST, body);
   if (!sent.success) return refuse("bad_argument", "address");
 
-  return saveUpdateAddress(install, actor, sent.output.address, rebuilding.accepts);
+  return saveUpdateAddress(install, actor, sent.output.address, accepts);
 }
 
-/** Say who the token is and which version the install runs, with the newer release when one is out. */
-async function answerWhoami({ install, token, version }: Call): ReturnType<Handler<"whoami">> {
+/**
+ * Say who a token is and which version the install runs, with the newer release when one is out.
+ *
+ * @param version - the version of poplin the install runs
+ */
+export async function answerWhoami(install: Install, token: TokenRecord, version: string): Promise<{ readonly ok: true } & v.InferOutput<typeof WHOAMI_ANSWER>> {
   const update = await updateOf(install, version);
   const answer = { ok: true, token: tokenObject(token), version } as const;
 
   return update === undefined ? answer : { ...answer, update };
 }
-
-/** The handler of every route that takes no token, by the route's name. */
-export const OPEN_HANDLERS: { readonly [Name in OpenName]: Handler<Name, OpenCall> } = {
-  beginLogin: beginWithAddress,
-  redeemLogin: ({ install, body }) => checked(LOGIN_SECRET, body, (request) => redeemLogin(install, request)),
-};
-
-/** The handler of every route that takes a token, by the route's name. A route without one does not compile. */
-export const HANDLERS: { readonly [Name in Exclude<RouteName, OpenName>]: Handler<Name> } = {
-  whoami: answerWhoami,
-  logout: ({ install, actor, token }) => revokeToken(install, actor, token.id),
-  listTokens: ({ install, actor }) => listTokens(install, actor),
-  issueToken: ({ install, actor, body }) => checked(TOKEN_REQUEST, body, (request) => issueToken(install, actor, request)),
-  revokeToken: ({ install, actor, named }) => revokeToken(install, actor, named),
-
-  listSites: ({ install, actor, query }) => checked(LIST_QUERY, listingOf(query), (asked) => listSites(install, actor, asked)),
-  getSite: ({ install, actor, site }) => getSite(install, actor, site),
-  updateSite: ({ install, actor, site, body }) => checked(SITE_CHANGES, body, (changes) => updateSite(install, actor, { ...changes, site })),
-  rollbackSite: ({ install, actor, site, body }) => checked(ROLLBACK_OPTIONS, body, (options) => rollbackSite(install, actor, { ...options, site })),
-  newLink: ({ install, actor, site }) => newLink(install, actor, site),
-  deleteSite: ({ install, actor, site, query }) => checked(DELETE_OPTIONS, query, (options) => deleteSite(install, actor, { ...options, site })),
-  restoreSite: ({ install, actor, site }) => restoreSite(install, actor, site),
-  duplicateSite: ({ install, actor, site, body }) => checked(DUPLICATE_REQUEST, body, (asked) => duplicateSite(install, actor, { ...asked, site })),
-
-  beginPublish: ({ install, actor, body, limits }) => beginPublish(install, actor, body, limits),
-  showUpload: ({ install, actor, named }) => showUpload(install, actor, named),
-  uploadFile: storeBody,
-  finishPublish: ({ install, actor, named }) => finishPublish(install, actor, named),
-  abandonPublish: ({ install, actor, named }) => abandonPublish(install, actor, named),
-
-  exportSettings: ({ install, actor }) => exportSettings(install, actor),
-  exportSites: ({ install, actor, query }) => checked(EXPORT_QUERY, query, (asked) => exportSites(install, actor, asked)),
-  exportSite: ({ install, actor, site, query }) => checked(EXPORT_SITE_QUERY, query, (asked) => exportSite(install, actor, { ...asked, site })),
-  exportFiles: ({ install, actor, site, query }) => checked(EXPORT_FILES_QUERY, query, (asked) => exportFiles(install, actor, { ...asked, site })),
-  exportFile: ({ install, actor, site, query }) => checked(EXPORT_FILE_QUERY, query, (asked) => exportFile(install, actor, { ...asked, site })),
-  importSettings: ({ install, actor, body }) => checked(SETTINGS_IMPORT, body, (request) => importSettings(install, actor, request)),
-  beginImport: ({ install, actor, body, limits }) => beginImport(install, actor, body, limits),
-
-  readConfig: ({ install, actor }) => readConfig(install, actor),
-  changeConfig: ({ install, actor, body }) => changeConfig(install, actor, body),
-  signEveryoneOut: ({ install, actor }) => signEveryoneOut(install, actor),
-  listAudit: ({ install, actor, query }) => checked(AUDIT_QUERY, query, (asked) => listAudit(install, actor, asked)),
-
-  startUpdate: ({ install, actor, query, version, rebuilding }) => checked(START_OPTIONS, query, (asked) => startUpdate(install, actor, { ...asked, version }, rebuilding)),
-  updateAddress: ({ install, actor }) => updateAddressState(install, actor),
-  saveUpdateAddress: saveAddress,
-  removeUpdateAddress: ({ install, actor }) => removeUpdateAddress(install, actor),
-};

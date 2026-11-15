@@ -1,6 +1,5 @@
-// An install the API tests send requests to: a real database on bun's SQLite, a store in memory, three tokens, and a client built from core's route table alone.
+// An install the API tests send requests to: a real database on bun's SQLite, a store in memory, three tokens, and a client typed from the routes the API declares.
 
-import { ROUTES, type Route } from "@poplin/core/src/api/routes";
 import type { Login } from "@poplin/core/src/auth/logins";
 import { mintToken } from "@poplin/core/src/auth/tokens";
 import type { Database } from "@poplin/core/src/database/database";
@@ -10,8 +9,9 @@ import { defaultSettings } from "@poplin/core/src/records/settings";
 import { MemoryStore } from "@poplin/core/src/storage/memory";
 import type { ObjectStore } from "@poplin/core/src/storage/storage";
 import { BunSqliteDriver } from "@poplin/core/tests/database/support/bun-sqlite-driver";
+import { type ClientRequestOptions, hc } from "hono/client";
 
-import { type ApiLimits, createApi } from "../../../src/api/api";
+import { type Api, type ApiLimits, createApi } from "../../../src/api/api";
 import { MemoryCounters } from "../../../src/limits/memory-counters";
 import { ADDRESSES } from "../../sites/support/layout";
 
@@ -36,18 +36,8 @@ export const REBUILD_ADDRESS = "https://builds.provider.example/hooks/3f9c2a7e5b
 /** The admin whose settings the install starts with. */
 const INSTALLER = "ada@example.com" as Login;
 
-/** The name of a route in core's table. */
-type RouteName = keyof typeof ROUTES;
-
-/** What a route's path is built from. */
-type ArgsOf<Name extends RouteName> = Parameters<(typeof ROUTES)[Name]["path"]>[0];
-
-/** What goes with one call besides the route's arguments. A `token` of `null` sends no `Authorization` header. */
-interface Sent {
-  readonly token?: string | null;
-  readonly body?: unknown;
-  readonly headers?: Readonly<Record<string, string>>;
-}
+/** The routes of the API as a client typed from them calls them: `routes.sites[":site"].$get({ param, query })`. */
+export type ApiClient = ReturnType<typeof hc<Api>>["api"];
 
 /** What a call answered: the status, the parsed JSON body, which is empty for an answer that is no JSON, and the response itself. */
 export interface Answered {
@@ -58,6 +48,7 @@ export interface Answered {
 
 /**
  * A test install. `tokens` are whole tokens: an admin's, and two publishers'. `reported` holds every failure the API was told of.
+ * `routes` sends as the admin, `as` as another token or, for `null`, with no `Authorization` header, and `ask` sends a request written out by hand. `requests` holds every request the three sent, in order.
  *
  * `calls` counts every batch sent to the database and every call made to the store, since the test last set it to zero.
  *
@@ -77,8 +68,10 @@ export interface ApiInstall {
   readonly reported: unknown[];
   readonly keys: () => Promise<string[]>;
   readonly audit: () => Promise<number>;
+  readonly routes: ApiClient;
+  readonly as: (token: string | null, headers?: Readonly<Record<string, string>>) => ApiClient;
   readonly ask: (request: Request) => Promise<Answered>;
-  readonly call: <Name extends RouteName>(name: Name, args: ArgsOf<Name>, sent?: Sent) => Promise<Answered>;
+  readonly requests: Request[];
 }
 
 /** A driver that counts the batches it passes on. */
@@ -116,29 +109,32 @@ function counted(store: MemoryStore, calls: { store: number }): ObjectStore {
   };
 }
 
-/** The body and the content type a route's request goes with. */
-function bodyOf(route: Route<never, unknown, unknown>, body: unknown): { readonly body?: BodyInit; readonly type?: string } {
-  if (route.sends === "nothing") return {};
+/**
+ * Build what a typed call is given second to send a body as it is: the bytes of a file, or text the type of its route does not take.
+ *
+ * @param headers - headers that go with the body; a `Content-Type` here replaces the one of a file's bytes
+ */
+export function bytes(body: string | Uint8Array | ReadableStream<Uint8Array>, headers: Readonly<Record<string, string>> = {}): ClientRequestOptions {
+  const sent = typeof body === "string" ? new TextEncoder().encode(body) : body;
 
-  if (route.sends === "json") return { body: JSON.stringify(body), type: "application/json" };
-
-  return { body: typeof body === "string" ? new TextEncoder().encode(body) : (body as BodyInit), type: "application/octet-stream" };
+  // A stream body is sent as it is read, which a request must say.
+  return { headers: { "Content-Type": "application/octet-stream", ...headers }, init: { body: sent, duplex: "half" } as RequestInit };
 }
 
 /**
- * Build the request of one route, as a client that knows core's table and nothing else would.
+ * Read what a call answered.
  *
- * @param sent - the token, the body, and headers that replace the built ones
+ * @param sent - the call of a typed route, or any other response on its way
  */
-export function requestOf<Name extends RouteName>(name: Name, args: ArgsOf<Name>, sent: Sent = {}): Request {
-  const route = ROUTES[name] as Route<ArgsOf<Name>, unknown, unknown>;
-  const { body, type } = bodyOf(route, sent.body);
-  const headers = new Headers(sent.headers);
-  if (type !== undefined && !headers.has("Content-Type")) headers.set("Content-Type", type);
-  if (sent.token != null) headers.set("Authorization", `Bearer ${sent.token}`);
+export async function answered(sent: Promise<Pick<Response, "status" | "headers">>): Promise<Answered> {
+  // A typed call narrows the type of the response it was handed; the value is that response.
+  const response = (await sent) as Response;
+  const text = await response.clone().text();
 
-  // A stream body is sent as it is read, which a request must say.
-  return new Request(`${ORIGIN}${route.path(args)}`, { method: route.method, headers, body, duplex: "half" } as RequestInit);
+  // A route that answers a file's bytes has no JSON to parse: its body is read from `response`.
+  const isJson = response.headers.get("Content-Type")?.startsWith("application/json") === true;
+
+  return { status: response.status, body: text === "" || !isJson ? {} : JSON.parse(text), response };
 }
 
 /**
@@ -191,14 +187,16 @@ export async function openApi(overrides: Partial<ReturnType<typeof defaultSettin
     },
   });
 
-  const ask = async (request: Request): Promise<Answered> => {
-    const response = await api.fetch(request);
-    const text = await response.clone().text();
+  const requests: Request[] = [];
+  const send = (request: Request): Promise<Response> => {
+    requests.push(request);
 
-    // A route that answers a file's bytes has no JSON to parse: its body is read from `response`.
-    const isJson = response.headers.get("Content-Type")?.startsWith("application/json") === true;
+    return api.fetch(request);
+  };
+  const as: ApiInstall["as"] = (token, headers = {}) => {
+    const fetch = (input: string | URL | Request, init?: RequestInit): Promise<Response> => send(new Request(input, init));
 
-    return { status: response.status, body: text === "" || !isJson ? {} : JSON.parse(text), response };
+    return hc<Api>(ORIGIN, { fetch: fetch as typeof globalThis.fetch, headers: token === null ? headers : { ...headers, Authorization: `Bearer ${token}` } }).api;
   };
 
   return {
@@ -213,7 +211,9 @@ export async function openApi(overrides: Partial<ReturnType<typeof defaultSettin
     reported,
     keys: async () => (await store.list({ prefix: "" })).objects.map((object) => object.key),
     audit: async () => (await driver.batch([{ sql: "SELECT COUNT(*) AS entries FROM audit", params: [] }]))[0]?.rows[0]?.entries as number,
-    ask,
-    call: (name, args, sent = {}) => ask(requestOf(name, args, { token: admin, ...sent })),
+    routes: as(admin),
+    as,
+    ask: (request) => answered(send(request)),
+    requests,
   };
 }

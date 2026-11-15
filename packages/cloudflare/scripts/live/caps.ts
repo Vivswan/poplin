@@ -9,6 +9,7 @@
 //
 // The publish of two thousand files, which a person switches on, fits one publish and one day.
 
+import { SETTINGS_ANSWER } from "@poplin/core/src/actions/store-settings";
 import type { SettingValues } from "@poplin/core/src/records/settings";
 
 import { createClient, type Fetch } from "../../../cli/src/client/client";
@@ -41,7 +42,7 @@ interface Reached {
  * @returns why the install did not take them, in words that quote nothing it said, or `undefined` once it did
  */
 export async function capInstall(reached: Reached): Promise<Stop | undefined> {
-  const changed = await createClient(reached).call("changeConfig", undefined, LIVE_CAPS);
+  const changed = await createClient(reached).call(SETTINGS_ANSWER, (api) => api.config.$patch({ json: LIVE_CAPS }));
   if (changed.ok) return undefined;
 
   const { failure } = changed;

@@ -1,13 +1,18 @@
 // The commands about sites: set, show, list, rollback, new-link, duplicate, delete, and restore. Each is one call to the install, but for duplicate, which calls until the copy is whole, and prints what the install answered.
 
-import type { ROUTES } from "../../../core/src/api/routes";
+import type * as v from "valibot";
+
+import { DELETED_SITE } from "../../../core/src/actions/delete";
+import { type DUPLICATE_REQUEST, DUPLICATED_SITE } from "../../../core/src/actions/duplicate";
+import { LISTED_SITES } from "../../../core/src/actions/list";
+import { SITE_ANSWER, type SiteObject } from "../../../core/src/actions/site-object";
 import { showBytes } from "../../../core/src/records/settings";
 import { showViews } from "../../../core/src/records/views";
 import type { Called, Failure } from "../client/client";
 import { problem, problemOf } from "./problems";
 import type { Outcome, RequestOf, Session } from "./records";
-import { addressChange, columns, countText, dayText, type SiteObject, searchNotes, siteLines } from "./text";
-import { callUnhurried, givenUp, giveUpUpload } from "./upload";
+import { addressChange, columns, countText, dayText, searchNotes, siteLines } from "./text";
+import { abandonUpload, callUnhurried, givenUp, giveUpUpload } from "./upload";
 import { siteChanges, siteWord } from "./wire";
 
 /** How many sites one page of a listing holds: the most the API gives. */
@@ -36,7 +41,7 @@ type Asked<Kind extends SiteRequest["kind"]> = RequestOf<Kind>;
 type OneSite = Asked<"show" | "new-link" | "restore">;
 
 /** The cursor a page of a listing ends with, which asks for the page after it. */
-type Cursor = NonNullable<(typeof ROUTES)["listSites"]["types"]>["done"]["next"];
+type Cursor = v.InferOutput<typeof LISTED_SITES>["next"];
 
 /** The problem of a call that failed. A call that changes a site says so, since a change whose answer was lost may have been made. */
 function failed(called: { readonly ok: false; readonly failure: Parameters<typeof problemOf>[0] }, call: "reads" | "changes" = "changes"): Outcome {
@@ -63,7 +68,7 @@ function accessFacts(site: SiteObject): string[] {
 }
 
 /** The answer of an action on one site, printed as what was done and the site's address, and its old address when the action changed it. */
-function answered(called: Called<{ readonly before: SiteObject | null; readonly site: SiteObject }>, done: string, facts: (site: SiteObject) => readonly string[], notes: readonly string[] = []): Outcome {
+function answered(called: Called<v.InferOutput<typeof SITE_ANSWER>>, done: string, facts: (site: SiteObject) => readonly string[], notes: readonly string[] = []): Outcome {
   if (!called.ok) return failed(called);
 
   const { before, site } = called.value;
@@ -73,7 +78,7 @@ function answered(called: Called<{ readonly before: SiteObject | null; readonly 
 
 async function set(request: Asked<"set">, { client }: Session): Promise<Outcome> {
   const changes = siteChanges(request.settings);
-  const changed = await client.call("updateSite", { site: siteWord(request.site) }, changes);
+  const changed = await client.call(SITE_ANSWER, (api) => api.sites[":site"].$patch({ param: { site: siteWord(request.site) }, json: changes }));
   if (!changed.ok) return failed(changed);
 
   const { site, before } = changed.value;
@@ -83,7 +88,7 @@ async function set(request: Asked<"set">, { client }: Session): Promise<Outcome>
 }
 
 async function show(request: OneSite, { client }: Session): Promise<Outcome> {
-  const shown = await client.call("getSite", { site: siteWord(request.site) });
+  const shown = await client.call(SITE_ANSWER, (api) => api.sites[":site"].$get({ param: { site: siteWord(request.site) } }));
   if (!shown.ok) return failed(shown, "reads");
 
   const { site } = shown.value;
@@ -118,13 +123,23 @@ function listed(sites: readonly SiteObject[], trash: boolean): string[] {
   return columns(sites.map((site) => [site.label, site.access, site.url, site.title ?? ""]));
 }
 
+/** A cursor as the address holds it: one key a part, and no key for a part it lacks. */
+function cursorKeys(after: Cursor): { readonly after_updated_at?: string; readonly after_id?: string; readonly after_name?: string; readonly after_access?: string } {
+  if (after === undefined) return {};
+
+  const { updated_at, id, name, access } = after;
+
+  return { after_updated_at: String(updated_at), after_id: id, ...(name === undefined ? {} : { after_name: name }), ...(access === undefined ? {} : { after_access: access }) };
+}
+
 /** Every page of the listing, up to the cap. */
 async function list(request: Asked<"list">, { client }: Session): Promise<Outcome> {
   const sites: SiteObject[] = [];
   let after: Cursor;
 
   for (let pages = 0; pages < MAX_PAGES && (pages === 0 || after !== undefined); pages += 1) {
-    const page = await client.call("listSites", after === undefined ? { trash: request.trash, limit: PAGE } : { trash: request.trash, limit: PAGE, after });
+    const query = { trash: String(request.trash), limit: String(PAGE), ...cursorKeys(after) };
+    const page = await client.call(LISTED_SITES, (api) => api.sites.$get({ query }));
     if (!page.ok) return failed(page, "reads");
 
     sites.push(...page.value.sites);
@@ -139,13 +154,14 @@ async function list(request: Asked<"list">, { client }: Session): Promise<Outcom
 
 async function rollback(request: Asked<"rollback">, { client }: Session): Promise<Outcome> {
   const site = siteWord(request.site);
-  const rolled = await client.call("rollbackSite", { site }, request.to === undefined ? {} : { version: request.to });
+  const to = request.to === undefined ? {} : { version: request.to };
+  const rolled = await client.call(SITE_ANSWER, (api) => api.sites[":site"].rollback.$post({ param: { site }, json: to }));
 
   return answered(rolled, "rolled back", (now) => [`version ${now.live_version} is live`]);
 }
 
 async function newLink(request: OneSite, { client }: Session): Promise<Outcome> {
-  const linked = await client.call("newLink", { site: siteWord(request.site) });
+  const linked = await client.call(SITE_ANSWER, (api) => api.sites[":site"]["new-link"].$post({ param: { site: siteWord(request.site) } }));
   if (!linked.ok) return failed(linked);
 
   const { before, site } = linked.value;
@@ -173,6 +189,13 @@ async function stopCopy(session: Session, upload: string | undefined, failure: F
   return givenUp(failure, AFTERMATH[became.kind]);
 }
 
+/** Make one call of a copy, and make it again after each rest the install asks for. The first call names the copy, and each one after it the upload the copy answered. */
+function copyOn({ client, io }: Session, site: string, first: v.InferInput<typeof DUPLICATE_REQUEST>, upload: string | undefined): Promise<Called<v.InferOutput<typeof DUPLICATED_SITE>>> {
+  const json = upload === undefined ? first : { upload };
+
+  return callUnhurried(io, () => client.call(DUPLICATED_SITE, (api) => api.sites[":site"].duplicate.$post({ param: { site }, json })));
+}
+
 /** Copy a site: the install copies a few files a call, so the call is sent again with the upload it answered until it answers the new site. A copy that cannot be finished, or that the person stops, is given up, as a publish is. */
 async function duplicate(request: Asked<"duplicate">, session: Session): Promise<Outcome> {
   const { client, io } = session;
@@ -182,7 +205,7 @@ async function duplicate(request: Asked<"duplicate">, session: Session): Promise
 
   try {
     for (let done = -1; ; ) {
-      const called = await callUnhurried(io, () => client.call("duplicateSite", { site }, upload === undefined ? first : { upload }));
+      const called = await copyOn(session, site, first, upload);
       if (!called.ok) return await stopCopy(session, upload, called.failure);
 
       const { copy } = called.value;
@@ -197,7 +220,7 @@ async function duplicate(request: Asked<"duplicate">, session: Session): Promise
       if (io.terminal.progress) io.status(`copying ${copy.copied} of ${countText(copy.files, "file")}`);
     }
   } catch (error) {
-    if (upload !== undefined) await client.call("abandonPublish", { upload });
+    if (upload !== undefined) await abandonUpload(client, upload);
 
     throw error;
   } finally {
@@ -209,14 +232,14 @@ async function duplicate(request: Asked<"duplicate">, session: Session): Promise
 async function deleteForever(request: Asked<"delete">, { client, io }: Session): Promise<Outcome> {
   if (!io.terminal.asks) return { ok: false, problem: problem("no_terminal") };
 
-  const found = await client.call("getSite", { site: siteWord(request.site) });
+  const found = await client.call(SITE_ANSWER, (api) => api.sites[":site"].$get({ param: { site: siteWord(request.site) } }));
   if (!found.ok) return failed(found, "reads");
 
   const { label } = found.value.site;
   const typed = await io.ask(`This removes ${label} and every file of it for good. Type its label to go on: `);
   if (typed.trim() !== label) return { ok: false, problem: problem("not_confirmed") };
 
-  const deleted = await client.call("deleteSite", { site: label, forever: true });
+  const deleted = await client.call(DELETED_SITE, (api) => api.sites[":site"].$delete({ param: { site: label }, query: { forever: "true" } }));
   if (!deleted.ok) return failed(deleted);
 
   const notes = deleted.value.left.length === 0 ? [] : ["the site is gone, and some of its files are still being removed"];
@@ -227,7 +250,7 @@ async function deleteForever(request: Asked<"delete">, { client, io }: Session):
 async function deleteSite(request: Asked<"delete">, session: Session): Promise<Outcome> {
   if (request.forever) return deleteForever(request, session);
 
-  const trashed = await session.client.call("deleteSite", { site: siteWord(request.site) });
+  const trashed = await session.client.call(DELETED_SITE, (api) => api.sites[":site"].$delete({ param: { site: siteWord(request.site) } }));
   if (!trashed.ok) return failed(trashed);
 
   const { site } = trashed.value;
@@ -239,7 +262,7 @@ async function deleteSite(request: Asked<"delete">, session: Session): Promise<O
 }
 
 async function restore(request: OneSite, { client }: Session): Promise<Outcome> {
-  const restored = await client.call("restoreSite", { site: siteWord(request.site) });
+  const restored = await client.call(SITE_ANSWER, (api) => api.sites[":site"].restore.$post({ param: { site: siteWord(request.site) } }));
 
   return answered(restored, "restored", (site) => [site.access, ...accessFacts(site)]);
 }

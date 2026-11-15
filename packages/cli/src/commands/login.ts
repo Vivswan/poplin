@@ -5,7 +5,9 @@
 //
 // Nothing is saved before the token arrives, so a login that is stopped, denied, or runs out leaves the machine as it was.
 
-import type { ROUTES } from "../../../core/src/api/routes";
+import type * as v from "valibot";
+
+import { BEGUN_LOGIN_ANSWER, REDEEMED_LOGIN } from "../../../core/src/actions/computer-logins";
 import { type Client, createClient, type Failure } from "../client/client";
 import { isServer, parseLogin } from "../local/login";
 import { readLoginFile, saveLogin } from "../local/login-file";
@@ -35,10 +37,10 @@ const CONTROL = /\p{Cc}/gu;
 const LOGIN_VARIABLES = ["POPLIN_SERVER", "POPLIN_TOKEN"];
 
 /** What an install answers a begun login with. */
-type Begun = NonNullable<(typeof ROUTES)["beginLogin"]["types"]>["done"];
+type Begun = v.InferOutput<typeof BEGUN_LOGIN_ANSWER>;
 
 /** What an install answers the terminal of an allowed login with: the token, once, and its record. */
-type Collected = Extract<NonNullable<(typeof ROUTES)["redeemLogin"]["types"]>["done"], { readonly state: "allowed" }>;
+type Collected = Extract<v.InferOutput<typeof REDEEMED_LOGIN>, { readonly state: "allowed" }>;
 
 function refused(said: Problem): Outcome {
   return { ok: false, problem: said };
@@ -89,7 +91,7 @@ function clamped(seconds: number): number {
  */
 async function begin(client: Client, asked: { readonly scope: "publisher" | "admin"; readonly computer: string }, io: Io): Promise<Begun | Problem> {
   for (let rests = 0; ; rests += 1) {
-    const begun = await client.call("beginLogin", undefined, asked);
+    const begun = await client.call(BEGUN_LOGIN_ANSWER, (api) => api.logins.$post({ json: asked }));
     if (begun.ok) return begun.value;
 
     const { failure } = begun;
@@ -116,7 +118,7 @@ function announce(page: string, begun: Begun, json: boolean, io: Io): void {
 
 /** Ask for the token once: the token, the reason to stop, or the seconds to wait before the next question. */
 async function ask(client: Client, secret: string, interval: number): Promise<Collected | Problem | number> {
-  const asked = await client.call("redeemLogin", undefined, { secret });
+  const asked = await client.call(REDEEMED_LOGIN, (api) => api.logins.token.$post({ json: { secret } }));
   if (!asked.ok) return passes(asked.failure) ? restOf(asked.failure, interval) : problemOf(asked.failure);
 
   const answer = asked.value;

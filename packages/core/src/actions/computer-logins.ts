@@ -13,7 +13,7 @@ import type { Login } from "../auth/logins";
 import type { Actor } from "../auth/scopes";
 import { mintToken } from "../auth/tokens";
 import { LOGIN } from "../records/fields";
-import { type TokenObject, tokenObject } from "./manage-tokens";
+import { TOKEN_OBJECT, tokenObject } from "./manage-tokens";
 import { type Install, type Refused, refuse } from "./records";
 
 /** The longest name a computer gives itself, in characters. */
@@ -52,6 +52,18 @@ export const LOGIN_SECRET = v.strictObject({ secret: v.pipe(v.string(), v.maxLen
 /** What an admin decides about the login under a code. `scope` is what an allowed computer becomes; left out, what it asked to be. */
 const LOGIN_DECISION = v.strictObject({ code: v.string(), allow: v.boolean(), scope: v.optional(v.picklist(["publisher", "admin"])) });
 
+/** A login begun: the code to show a person, the secret to keep, the seconds until the login runs out, and the seconds to wait between two questions. */
+const BEGUN_LOGIN = v.object({ code: v.string(), secret: v.string(), expires_in: v.number(), interval: v.number() });
+
+/** What the API answers a login begun: with `verify_url`, the address of the page where an admin allows it. */
+export const BEGUN_LOGIN_ANSWER = v.object({ ...BEGUN_LOGIN.entries, verify_url: v.string() });
+
+/** What a terminal is answered: wait, give up, or the token, which is shown this once. */
+export const REDEEMED_LOGIN = v.variant("state", [
+  v.object({ state: v.picklist(["pending", "denied", "expired"]) }),
+  v.object({ state: v.literal("allowed"), token: v.string(), record: TOKEN_OBJECT }),
+]);
+
 /**
  * A pending login as an admin sees it: never its secret, nor the secret's hash. Times are milliseconds since the epoch.
  *
@@ -67,9 +79,7 @@ export interface LoginObject {
 }
 
 /** What a terminal is answered: wait, give up, or the token, which is shown this once. */
-export type Redeemed =
-  | { readonly state: "pending" | "denied" | "expired" }
-  | { readonly state: "allowed"; readonly token: string; readonly record: TokenObject };
+export type Redeemed = Readonly<v.InferOutput<typeof REDEEMED_LOGIN>>;
 
 function loginObject(login: ComputerLogin): LoginObject {
   return { id: login.id, code: showUserCode(login.code), scope: login.scope, computer: login.computer, asked: login.createdAt, expires: login.expiresAt };
@@ -107,7 +117,7 @@ export async function beginLogin(
   install: Install,
   request: v.InferInput<typeof LOGIN_REQUEST>,
   visitor: string,
-): Promise<{ readonly ok: true; readonly code: string; readonly secret: string; readonly expires_in: number; readonly interval: number } | Refused<"bad_argument">> {
+): Promise<({ readonly ok: true } & Readonly<v.InferOutput<typeof BEGUN_LOGIN>>) | Refused<"bad_argument">> {
   const asked = v.safeParse(LOGIN_REQUEST, request);
   if (!asked.success) return refuse("bad_argument", v.getDotPath(asked.issues[0])?.split(".")[0] ?? "request");
 

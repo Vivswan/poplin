@@ -3,7 +3,7 @@ import { existsSync } from "node:fs";
 import { join } from "node:path";
 
 import type { Code } from "../../../app/src/api/respond";
-import { INSTALL_VERSION, NOW, ORIGIN, REBUILD_ADDRESS } from "../../../app/tests/api/support/install";
+import { answered, INSTALL_VERSION, NOW, ORIGIN, REBUILD_ADDRESS } from "../../../app/tests/api/support/install";
 import { saveLogin } from "../../src/local/login-file";
 import type { Login } from "../../src/local/login";
 import { VERSION } from "../../src/poplin";
@@ -62,7 +62,7 @@ async function withSite(): Promise<{ readonly bench: Bench; readonly label: stri
 
 /** The sites and the trash as the install holds them. */
 async function stateOf(bench: Bench): Promise<unknown> {
-  return [(await bench.install.call("listSites", {})).body, (await bench.install.call("listSites", { trash: true })).body, await bench.install.keys()];
+  return [(await answered(bench.install.routes.sites.$get())).body, (await answered(bench.install.routes.sites.$get({ query: { trash: "true" } }))).body, await bench.install.keys()];
 }
 
 function summary(ran: Ran): { code: number; out: string[]; err: string[] } {
@@ -91,7 +91,7 @@ describe("run", () => {
     expect(shown.out.slice(0, 4)).toEqual([label, url, `id              ${label.slice(-12)}`, "name            report"]);
     expect(shown.out.at(-1)).toMatch(/^version 1 {2}2023-11-14 {2}by [0-9a-f]{16} {2}live$/);
     expect(shown.out.filter((line) => line.startsWith("pages opened"))).toEqual(["pages opened    about 10 or fewer times today, about 10 or fewer in the last 7 days"]);
-    expect(json).toEqual((await bench.install.call("getSite", { site: label })).body);
+    expect(json).toEqual((await answered(bench.install.routes.sites[":site"].$get({ param: { site: label } }))).body);
   });
 
   test("set --name prints the new label and the name it had, and the label typed before the rename still names the site: an agent holds the old label", async () => {
@@ -435,15 +435,14 @@ describe("run", () => {
     expect(echoed).toMatchObject({ error: { code: "bad_argument", about: "Bearer [token]" } });
   });
 
-  test("the question of delete --forever hides a token an install put where the label goes: the harness would fail this run otherwise", async () => {
+  test("delete --forever asks nothing about a site whose label an install filled with a token: the question would show it to whoever watches the terminal", async () => {
     const { bench, label } = await withSite();
-    const real = (await bench.install.call("getSite", { site: label })).body as { site: object };
+    const real = (await answered(bench.install.routes.sites[":site"].$get({ param: { site: label } }))).body as { site: object };
     bench.hook = (request) => (request.method === "GET" ? answer(200, { ...real, site: { ...real.site, label: bench.install.tokens.admin } }) : undefined);
 
     const asked = await bench.run(`delete ${label} --forever`, { terminal: { asks: true, progress: true }, typed: label });
 
-    expect(asked.asked).toEqual(["This removes [token] and every file of it for good. Type its label to go on: "]);
-    expect(asked.code).toBe(1);
+    expect([asked.asked, asked.code]).toEqual([[], 5]);
   });
 
   test("list stops after ten pages when an install never ends its listing: without this the command asks forever", async () => {

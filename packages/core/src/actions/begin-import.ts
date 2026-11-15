@@ -12,7 +12,7 @@ import { checkManifest, ENTRY_PAGE, FULL, roomUnder, type UploadLimits } from ".
 import { BACKUP_FORMAT, type ExportedSite } from "./export";
 import { enterInstall } from "./reach";
 import { type Install, type Refused, refuse } from "./records";
-import { type UploadObject, uploadKey, uploadObject } from "./uploads";
+import { type BegunUpload, uploadKey, uploadObject } from "./uploads";
 
 /** An import bounded by nothing but the install's own limits. */
 const UNBOUNDED: UploadLimits = { fileBytes: Number.MAX_SAFE_INTEGER, files: Number.MAX_SAFE_INTEGER };
@@ -142,7 +142,7 @@ export async function beginImport(
   actor: Actor,
   request: unknown,
   limits: UploadLimits = UNBOUNDED,
-): Promise<{ readonly ok: true; readonly upload: UploadObject } | Refused<ImportCode>> {
+): Promise<BegunUpload | Refused<ImportCode>> {
   if (actor.scope !== "admin") return refuse("not_allowed");
 
   const asked = v.safeParse(IMPORT_REQUEST, request);

@@ -3,6 +3,7 @@
 import type { Refused } from "@poplin/core/src/actions/records";
 import { type AllowanceSpent, secondsToNextDay } from "@poplin/core/src/database/driver";
 import { type ApiError, STORED_TYPE_HEADER } from "@poplin/core/src/api/routes";
+import type { TypedResponse } from "hono";
 
 /** The HTTP status of every code an action or the API itself refuses with. A code missing here does not compile. */
 const STATUS = {
@@ -89,6 +90,15 @@ export type Code = keyof typeof STATUS;
 /** What a handler answers: a done action, or a refusal with one of the codes. */
 export type Result<Done> = ({ readonly ok: true } & Done) | Refused<Code>;
 
+/** The body of a done answer: what the action answered, less its `ok`. */
+type Body<Answer> = Answer extends { readonly ok: true } ? Omit<Answer, "ok"> : never;
+
+/** The response of a refusal, typed for a client by its body. */
+export type Refusal = Response & TypedResponse<ApiError, (typeof STATUS)[Code], "json">;
+
+/** The response of a handler's answer, typed for a client by its body: the done answer under 200, or a refusal. */
+export type Answered<Answer> = (Response & TypedResponse<Body<Answer>, 200, "json">) | Refusal;
+
 function json(status: number, body: unknown, extra: Readonly<Record<string, string>> = {}): Response {
   return new Response(JSON.stringify(body), { status, headers: { ...HEADERS, ...extra } });
 }
@@ -99,11 +109,11 @@ function json(status: number, body: unknown, extra: Readonly<Record<string, stri
  * @param about - the argument, the limit, or the path the code is about, as the action named it; one that holds a token or a login's secret is left out, since a caller may have sent one where a name goes
  * @param headers - headers to send beside the fixed ones, such as `Allow`
  */
-export function refusal(code: Code, about?: string, headers?: Readonly<Record<string, string>>): Response {
+export function refusal(code: Code, about?: string, headers?: Readonly<Record<string, string>>): Refusal {
   const named = about !== undefined && !TOKEN_SHAPE.test(about);
   const error: ApiError["error"] = named ? { code, message: MESSAGES[code], about } : { code, message: MESSAGES[code] };
 
-  return json(STATUS[code], { error } satisfies ApiError, headers);
+  return json(STATUS[code], { error } satisfies ApiError, headers) as Refusal;
 }
 
 /**
@@ -112,7 +122,7 @@ export function refusal(code: Code, about?: string, headers?: Readonly<Record<st
  * @param now - the clock, in milliseconds since the epoch
  * @returns status 503 with the code `allowance_spent`, about `reading` or `writing`, and `Retry-After` up to the next midnight UTC
  */
-export function spentRefusal(spent: AllowanceSpent, now: number): Response {
+export function spentRefusal(spent: AllowanceSpent, now: number): Refusal {
   return refusal("allowance_spent", spent.spent, { "Retry-After": String(secondsToNextDay(now)) });
 }
 
@@ -134,8 +144,8 @@ export function respondFile(result: Result<{ readonly size: number; readonly con
  *
  * @returns 200 with the answer less its `ok`, or the refusal's response
  */
-export function respond(result: Result<object>): Response {
+export function respond<Answer extends Result<object>>(result: Answer): Answered<Answer> {
   if (!result.ok) return refusal(result.code, result.about);
 
-  return json(200, Object.fromEntries(Object.entries(result).filter(([key]) => key !== "ok")));
+  return json(200, Object.fromEntries(Object.entries(result).filter(([key]) => key !== "ok"))) as Answered<Answer>;
 }

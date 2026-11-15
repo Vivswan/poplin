@@ -1,16 +1,43 @@
 // The site object: the one shape in which every action answers with a site.
 
-import type { PublicName, SiteName } from "../names/names";
-import type { Holder } from "../records/fields";
+import * as v from "valibot";
+
+import { COUNT, HOLDER, MOMENT, POSITIVE, PUBLIC_NAME, SITE_ID, SITE_LABEL, SITE_NAME } from "../records/fields";
 import type { SettingValues } from "../records/settings";
-import type { Site } from "../records/site";
-import type { SiteViews } from "../records/views";
-import type { SiteId } from "../sites/ids";
-import { type SiteLabel, siteLabel } from "../sites/labels";
+import { ACCESSES, type Site } from "../records/site";
+import { SITE_VIEWS, type SiteViews } from "../records/views";
+import { siteLabel } from "../sites/labels";
 import type { Install } from "./records";
 
 /** How many milliseconds a day holds. */
 export const DAY_MS = 86_400_000;
+
+/** A site as an answer holds it. */
+export const SITE_OBJECT = v.object({
+  id: SITE_ID,
+  label: SITE_LABEL,
+  name: SITE_NAME,
+  public_name: v.nullable(PUBLIC_NAME),
+  title: v.nullable(v.string()),
+  title_typed: v.boolean(),
+  access: v.picklist(ACCESSES),
+  url: v.string(),
+  addresses: v.object({ site: v.string(), public: v.nullable(v.string()) }),
+  search_engines: v.boolean(),
+  embeddable: v.boolean(),
+  expires: v.union([v.literal("never"), MOMENT]),
+  versions: v.pipe(v.array(v.object({ number: POSITIVE, published: MOMENT, published_by: HOLDER })), v.readonly()),
+  live_version: POSITIVE,
+  bytes: COUNT,
+  files: COUNT,
+  updated: MOMENT,
+  state: v.picklist(["live", "trash"]),
+  views: v.nullable(SITE_VIEWS),
+  gone_on: v.optional(MOMENT),
+});
+
+/** What an action on one site answers: the site as the action found it, and the site after it. */
+export const SITE_ANSWER = v.object({ before: v.nullable(SITE_OBJECT), site: SITE_OBJECT });
 
 /**
  * A site as a caller sees it. Times are milliseconds since the epoch.
@@ -21,39 +48,14 @@ export const DAY_MS = 86_400_000;
  * `title` is the typed title, and the entry page's own while none is typed; `title_typed` says which.
  * `views` is about how often the site's pages were opened, today and over the last seven UTC days: estimates from a sample, never exact counts. Only showing and listing read them; every other answer has `null`.
  */
-export interface SiteObject {
-  readonly id: SiteId;
-  readonly label: SiteLabel;
-  readonly name: SiteName;
-  readonly public_name: PublicName | null;
-  readonly title: string | null;
-  readonly title_typed: boolean;
-  readonly access: Site["access"];
-  readonly url: string;
-  readonly addresses: { readonly site: string; readonly public: string | null };
-  readonly search_engines: boolean;
-  readonly embeddable: boolean;
-  readonly expires: "never" | number;
-  readonly versions: readonly { readonly number: number; readonly published: number; readonly published_by: Holder }[];
-  readonly live_version: number;
-  readonly bytes: number;
-  readonly files: number;
-  readonly updated: number;
-  readonly state: Site["state"];
-  readonly views: SiteViews | null;
-  readonly gone_on?: number;
-}
+export type SiteObject = Readonly<v.InferOutput<typeof SITE_OBJECT>>;
 
 /**
  * An action done. `site` is the site after it, and `before` the site as the action found it: `null` when the action made the site.
  *
  * `before` is read when the action starts, a moment ahead of the change itself.
  */
-export interface SiteAnswer {
-  readonly ok: true;
-  readonly before: SiteObject | null;
-  readonly site: SiteObject;
-}
+export type SiteAnswer = { readonly ok: true } & Readonly<v.InferOutput<typeof SITE_ANSWER>>;
 
 /**
  * Build the site object of a stored site.

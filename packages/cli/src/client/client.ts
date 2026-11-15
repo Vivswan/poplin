@@ -1,10 +1,11 @@
-// The client of the HTTP API: one call per route of core's table, answered with a checked value or a failure in words. Nothing it does throws.
+// The client of the HTTP API: its requests are typed from the routes the app declares, and each is answered with a checked value or a failure in words. Nothing it does throws.
 
+import { hc } from "hono/client";
 import * as v from "valibot";
 
-import { ROUTES, type Route, STORED_TYPE_HEADER } from "../../../core/src/api/routes";
+import type { Api } from "../../../app/src/api/api";
+import { API_ERROR, type ApiError, STORED_TYPE_HEADER } from "../../../core/src/api/routes";
 import { textUpTo } from "../../../core/src/api/text-up-to";
-import { SETTING_VALUES } from "../../../core/src/records/settings";
 
 /** How long a call that carries JSON, or nothing, may take: 30 seconds. */
 const CALL_TIMEOUT_MS = 30_000;
@@ -15,122 +16,11 @@ const FILE_TIMEOUT_MS = 600_000;
 /** The most bytes of an answer that are read: 16 MB, far above a page of a hundred sites. */
 const MAX_ANSWER_BYTES = 16_000_000;
 
-/** A site as an answer holds it. Keys beyond these are kept as sent. */
-const SITE = v.looseObject({
-  id: v.string(),
-  label: v.string(),
-  name: v.string(),
-  public_name: v.nullable(v.string()),
-  title: v.nullable(v.string()),
-  access: v.picklist(["private", "unlisted", "public"]),
-  url: v.string(),
-  addresses: v.looseObject({ site: v.string(), public: v.nullable(v.string()) }),
-  search_engines: v.boolean(),
-  embeddable: v.boolean(),
-  expires: v.union([v.literal("never"), v.number()]),
-  versions: v.array(v.looseObject({ number: v.number(), published: v.number(), published_by: v.string() })),
-  live_version: v.number(),
-  bytes: v.number(),
-  files: v.number(),
-  updated: v.number(),
-  state: v.picklist(["live", "trash"]),
-  views: v.nullable(v.looseObject({ today: v.number(), week: v.number() })),
-  gone_on: v.optional(v.number()),
-});
-
-/** A token as an answer holds it: never the token itself. */
-const TOKEN = v.looseObject({
-  id: v.string(),
-  scope: v.picklist(["admin", "publisher"]),
-  note: v.string(),
-  created: v.number(),
-  expires: v.union([v.literal("never"), v.number()]),
-});
-
-/** A newer release than the one the install runs, as an answer holds it. */
-const UPDATE = v.looseObject({ current: v.string(), newest: v.string(), notes: v.string() });
-
-/** A staged publish as an answer holds it. */
-const UPLOAD = v.looseObject({ id: v.string(), state: v.string(), version: v.number(), files: v.number(), bytes: v.number(), expires: v.number() });
-
-/** The answer of an action on one site. */
-const SITE_ANSWER = v.looseObject({ before: v.nullable(SITE), site: SITE });
-
-/** A site as a backup holds it: what names it, and what each version it keeps holds. Every other key is kept as sent, and checked by the install that imports it. */
-const STORED_SITE = v.looseObject({
-  id: v.string(),
-  name: v.string(),
-  live_version: v.number(),
-  versions: v.array(v.looseObject({ number: v.number(), files: v.number(), bytes: v.number() })),
-});
-
-/** The install's settings as an answer holds them. */
-const CONFIG_ANSWER = v.looseObject({ values: SETTING_VALUES });
-
-/** Whether the install keeps an address that starts its rebuild, as an answer holds it: never the address. */
-const ADDRESS_STATE = v.looseObject({ set: v.boolean(), since: v.nullable(v.number()) });
-
-/** The form of the answer to a done request, for every route this client calls. An answer of another form is a failure, so no command reads a key that is not there. */
-const ANSWERS = {
-  whoami: v.looseObject({ token: TOKEN, version: v.string(), update: v.optional(UPDATE) }),
-  logout: v.looseObject({ token: TOKEN }),
-  beginLogin: v.looseObject({ code: v.string(), secret: v.string(), verify_url: v.string(), expires_in: v.number(), interval: v.number() }),
-  redeemLogin: v.variant("state", [
-    v.looseObject({ state: v.picklist(["pending", "denied", "expired"]) }),
-    v.looseObject({ state: v.literal("allowed"), token: v.string(), record: TOKEN }),
-  ]),
-  listSites: v.looseObject({ sites: v.array(SITE), next: v.optional(v.looseObject({ updated_at: v.number(), id: v.string() })) }),
-  getSite: SITE_ANSWER,
-  updateSite: SITE_ANSWER,
-  rollbackSite: SITE_ANSWER,
-  newLink: SITE_ANSWER,
-  deleteSite: v.looseObject({ before: v.nullable(SITE), site: v.nullable(SITE), left: v.array(v.string()) }),
-  restoreSite: SITE_ANSWER,
-  duplicateSite: v.looseObject({
-    before: v.null(),
-    site: v.nullable(v.looseObject({ ...SITE.entries, created: v.boolean() })),
-    copy: v.looseObject({ upload: v.string(), copied: v.number(), files: v.number() }),
-  }),
-  beginPublish: v.looseObject({ upload: UPLOAD }),
-  showUpload: v.looseObject({ upload: UPLOAD, missing: v.array(v.string()), more: v.boolean() }),
-  uploadFile: v.looseObject({ path: v.string(), size: v.number() }),
-  finishPublish: v.looseObject({ before: v.nullable(SITE), site: v.looseObject({ ...SITE.entries, created: v.boolean() }), left: v.array(v.string()) }),
-  abandonPublish: v.looseObject({ left: v.array(v.string()) }),
-  exportSettings: v.looseObject({ format: v.number(), settings: v.record(v.string(), v.string()) }),
-  exportSites: v.looseObject({ format: v.number(), sites: v.array(STORED_SITE), next: v.optional(v.string()) }),
-  exportSite: v.looseObject({ format: v.number(), site: STORED_SITE }),
-  exportFiles: v.looseObject({ files: v.array(v.looseObject({ path: v.string(), size: v.number() })), next: v.optional(v.string()) }),
-  importSettings: CONFIG_ANSWER,
-  beginImport: v.looseObject({ upload: UPLOAD }),
-  readConfig: CONFIG_ANSWER,
-  changeConfig: CONFIG_ANSWER,
-  startUpdate: v.looseObject({ started: v.literal(true), from: v.string(), to: v.nullable(v.string()) }),
-  updateAddress: ADDRESS_STATE,
-  saveUpdateAddress: ADDRESS_STATE,
-  removeUpdateAddress: ADDRESS_STATE,
-} as const;
-
-/** The route that answers one stored file's bytes, which no JSON form describes. */
-const FILE_ROUTE = ROUTES.exportFile;
-
 /** A count of bytes as a header writes it. */
 const BYTE_COUNT = /^\d{1,15}$/;
 
 /** How long an answer asks its caller to wait, as `Retry-After` writes whole seconds. */
 const WAIT_SECONDS = /^\d{1,9}$/;
-
-/** The body of every refusal of the API. */
-const REFUSAL = v.looseObject({ error: v.looseObject({ code: v.string(), message: v.string(), about: v.optional(v.string()) }) });
-
-/** Every route this client calls, by its name in core's table. */
-export const CALL_NAMES = Object.keys(ANSWERS) as readonly CallName[];
-
-/** The name of a route this client calls. */
-export type CallName = keyof typeof ANSWERS;
-
-type ArgsOf<Name extends CallName> = Parameters<(typeof ROUTES)[Name]["path"]>[0];
-
-type TypesOf<Name extends CallName> = NonNullable<(typeof ROUTES)[Name]["types"]>;
 
 /** The platform's `fetch`, or a stand-in for it. */
 export type Fetch = (input: string, init: RequestInit) => Promise<Response>;
@@ -180,46 +70,44 @@ interface ClientOptions {
   readonly stopped?: AbortSignal;
 }
 
+/** Every route of an install as a request to send, typed by what the route takes. A value that goes into a path is put there as it is given, so it is one a parser or a checked answer made. */
+type ApiCalls = ReturnType<typeof hc<Api>>["api"];
+
+/** What is read of an answer here: its status, its headers, and its body. */
+type Raw = Pick<Response, "status" | "headers" | "body">;
+
+/** The answer of a route whose done request answers JSON of one form. */
+type Answering<Done> = Promise<Raw & { json(): Promise<Done | ApiError> }>;
+
+/** One file of an upload as it is sent: the upload it belongs to, the path it is stored under, its bytes, and the exact count of bytes a stream holds, which is sent as `Content-Length`. */
+interface SentFile {
+  readonly upload: string;
+  readonly path: string;
+  readonly body: ReadableStream<Uint8Array> | Uint8Array;
+  readonly length?: number;
+}
+
 /**
- * A client of one install.
+ * A client of one install. None of its three calls throws.
  *
- * `call` takes the route's arguments, then the JSON value or the bytes of one file of a route that sends one, then the exact count of bytes a stream holds, which is sent as `Content-Length`.
- * It answers the route's answer, checked against the form the route answers in, or the failure, and never throws.
+ * `call` sends the one request `ask` makes of the routes, and answers the route's answer, checked against `form`, or the failure. A form the route's answer does not fit does not compile.
+ *
+ * `upload` sends the bytes of one file of an upload, and answers as `call` does.
  *
  * `download` asks for one stored file of one version of a site. Its bytes are not read here: the caller reads the stream to its end or cancels it, and a read that breaks off throws there.
  */
 export interface Client {
-  readonly call: <Name extends CallName>(name: Name, args: ArgsOf<Name>, body?: TypesOf<Name>["body"], length?: number) => Promise<Called<TypesOf<Name>["done"]>>;
-  readonly download: (args: Parameters<typeof FILE_ROUTE.path>[0]) => Promise<Called<Download>>;
-}
-
-/** What goes with one request: the JSON value or the bytes of a route that sends one, and the count of bytes a stream holds. */
-interface Sent {
-  readonly body?: unknown;
-  readonly length?: number | undefined;
+  readonly call: <Form extends v.GenericSchema>(form: Form, ask: (api: ApiCalls) => Answering<v.InferOutput<Form>>) => Promise<Called<v.InferOutput<Form>>>;
+  readonly upload: <Form extends v.GenericSchema>(form: Form, file: SentFile) => Promise<Called<v.InferOutput<Form>>>;
+  readonly download: (file: { readonly site: string; readonly version: number; readonly path: string }) => Promise<Called<Download>>;
 }
 
 function failed(failure: Failure): { readonly ok: false; readonly failure: Failure } {
   return { ok: false, failure };
 }
 
-/** The headers and the body of one request. A stream is sent as it is read, which the request must say. */
-function requestOf(route: Route<never, unknown, unknown>, token: string | undefined, body: unknown, length: number | undefined): RequestInit {
-  const headers: Record<string, string> = { Accept: "application/json" };
-  if (token !== undefined) headers.Authorization = `Bearer ${token}`;
-
-  if (route.sends === "nothing") return { method: route.method, headers };
-
-  if (route.sends === "json") return { method: route.method, headers: { ...headers, "Content-Type": "application/json" }, body: JSON.stringify(body) };
-
-  headers["Content-Type"] = "application/octet-stream";
-  if (length !== undefined) headers["Content-Length"] = String(length);
-
-  return { method: route.method, headers, body: body as BodyInit, duplex: "half" } as RequestInit;
-}
-
 /** The text of an answer, read up to the cap; `undefined` for one that is longer. */
-async function readText(response: Response): Promise<string | undefined> {
+async function readText(response: Raw): Promise<string | undefined> {
   if (response.body === null) return "";
 
   return textUpTo(response.body, MAX_ANSWER_BYTES);
@@ -234,14 +122,14 @@ function parseJson(text: string): { readonly value: unknown } | undefined {
 }
 
 /** The wait an answer asks for, under the key a failure keeps it; nothing for an answer that names no whole seconds. */
-function waitOf(response: Response): { readonly retryAfter?: number } {
+function waitOf(response: Raw): { readonly retryAfter?: number } {
   const header = response.headers.get("Retry-After") ?? "";
 
   return WAIT_SECONDS.test(header) ? { retryAfter: Number(header) } : {};
 }
 
 /** Read an answer that is JSON into the value a done answer holds, or into the failure any other answer is. */
-async function readJson(response: Response): Promise<Called<unknown>> {
+async function readJson(response: Raw): Promise<Called<unknown>> {
   const { status } = response;
   const wait = waitOf(response);
   const text = await readText(response);
@@ -250,7 +138,7 @@ async function readJson(response: Response): Promise<Called<unknown>> {
 
   if (status === 200) return { ok: true, value: parsed.value };
 
-  const refusal = v.safeParse(REFUSAL, parsed.value);
+  const refusal = v.safeParse(API_ERROR, parsed.value);
   if (!refusal.success || status < 400) return failed({ kind: "unexpected", status, ...wait });
 
   const { code, message, about } = refusal.output.error;
@@ -259,14 +147,14 @@ async function readJson(response: Response): Promise<Called<unknown>> {
   return failed({ kind: "refused", status, code, message, about, ...wait });
 }
 
-/** Read an answer into the route's value or a failure. */
-async function readAnswer<Name extends CallName>(name: Name, response: Response): Promise<Called<TypesOf<Name>["done"]>> {
+/** Read an answer into the value of its form, or a failure. An answer of another form is a failure, so no command reads a key that is not there. */
+async function readAnswer<Form extends v.GenericSchema>(form: Form, response: Raw): Promise<Called<v.InferOutput<Form>>> {
   const read = await readJson(response);
   if (!read.ok) return read;
 
-  if (!v.is(ANSWERS[name], read.value)) return failed({ kind: "unexpected", status: response.status });
+  if (!v.is(form, read.value)) return failed({ kind: "unexpected", status: response.status });
 
-  return { ok: true, value: read.value as TypesOf<Name>["done"] };
+  return { ok: true, value: read.value };
 }
 
 /** The media type a header holds percent-encoded; `undefined` for a header that is absent or is no such text. */
@@ -281,7 +169,7 @@ function storedType(header: string | null): string | undefined {
 }
 
 /** Read the answer to a download: the stream with what the headers say of it, or the refusal a JSON body holds. A done answer without its length or its type is none. */
-async function readDownload(response: Response): Promise<Called<Download>> {
+async function readDownload(response: Raw): Promise<Called<Download>> {
   const { status } = response;
 
   if (status !== 200) {
@@ -308,15 +196,16 @@ async function readDownload(response: Response): Promise<Called<Download>> {
  * A call waits 30 seconds for its answer, and the upload of one file 10 minutes. A download has 10 minutes from its request to its last byte. No call is sent twice, and no redirect is followed, so the token goes to the install's origin alone.
  */
 export function createClient(options: ClientOptions): Client {
-  const ask = async <Done>(route: Route<never, unknown, unknown>, path: string, sent: Sent, read: (response: Response) => Promise<Called<Done>>): Promise<Called<Done>> => {
-    const carriesFile = route.sends === "bytes" || route.answers === "bytes";
-    const timeoutMs = options.timeoutMs ?? (carriesFile ? FILE_TIMEOUT_MS : CALL_TIMEOUT_MS);
+  const headers = { Accept: "application/json", ...(options.token === undefined ? {} : { Authorization: `Bearer ${options.token}` }) };
+
+  const ask = async <Done>(patienceMs: number, send: (api: ApiCalls) => Promise<Raw>, read: (response: Raw) => Promise<Called<Done>>): Promise<Called<Done>> => {
+    const timeoutMs = options.timeoutMs ?? patienceMs;
     const tooLong = AbortSignal.timeout(timeoutMs);
     const signal = options.stopped === undefined ? tooLong : AbortSignal.any([tooLong, options.stopped]);
-    const request = { ...requestOf(route, options.token, sent.body, sent.length), redirect: "manual" as const, signal };
+    const routes = hc<Api>(options.server, { headers, fetch: (input: RequestInfo | URL, init?: RequestInit) => options.fetch(String(input), { ...init, redirect: "manual", signal }) });
 
     try {
-      return await read(await options.fetch(`${options.server}${path}`, request));
+      return await read(await send(routes.api));
     } catch {
       if (options.stopped?.aborted === true) return failed({ kind: "stopped" });
 
@@ -327,13 +216,22 @@ export function createClient(options: ClientOptions): Client {
     }
   };
 
-  const call: Client["call"] = (name, args, body, length) => {
-    const route = ROUTES[name] as Route<unknown, unknown, unknown>;
+  const call: Client["call"] = (form, send) => ask(CALL_TIMEOUT_MS, send, (response) => readAnswer(form, response));
 
-    return ask(route as Route<never, unknown, unknown>, route.path(args), { body, length }, (response) => readAnswer(name, response));
+  const upload: Client["upload"] = (form, file) => {
+    const sent = { "Content-Type": "application/octet-stream", ...(file.length === undefined ? {} : { "Content-Length": String(file.length) }) };
+    // A stream is sent as it is read, which the request must say.
+    const init = { body: file.body, duplex: "half" } as RequestInit;
+    const send = (api: ApiCalls): Promise<Raw> => api.uploads[":upload"].file.$put({ param: { upload: file.upload }, query: { path: file.path } }, { headers: sent, init });
+
+    return ask(FILE_TIMEOUT_MS, send, (response) => readAnswer(form, response));
   };
 
-  const download: Client["download"] = (args) => ask(FILE_ROUTE as Route<never, unknown, unknown>, FILE_ROUTE.path(args), {}, readDownload);
+  const download: Client["download"] = ({ site, version, path }) => {
+    const send = (api: ApiCalls): Promise<Raw> => api.export.sites[":site"].file.$get({ param: { site }, query: { version: String(version), path } });
 
-  return { call, download };
+    return ask(FILE_TIMEOUT_MS, send, readDownload);
+  };
+
+  return { call, upload, download };
 }

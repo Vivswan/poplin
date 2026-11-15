@@ -3,18 +3,18 @@
 import * as v from "valibot";
 
 import type { Actor } from "../auth/scopes";
+import { MOMENT } from "../records/fields";
 import { rebuildAddress } from "../records/update";
 import { type Install, type Refused, refuse } from "./records";
 
 /** What a request to save the address sends. */
 export const UPDATE_ADDRESS_REQUEST = v.strictObject({ address: v.string() });
 
+/** What each action on the address answers: whether one is saved, and since when. */
+export const UPDATE_ADDRESS_STATE = v.object({ set: v.boolean(), since: v.nullable(MOMENT) });
+
 /** Whether an address is saved, and since when in milliseconds since the epoch; `since` is `null` while none is. */
-interface UpdateAddressState {
-  readonly ok: true;
-  readonly set: boolean;
-  readonly since: number | null;
-}
+type UpdateAddressState = { readonly ok: true } & Readonly<v.InferOutput<typeof UPDATE_ADDRESS_STATE>>;
 
 /**
  * Say whether an address that starts a rebuild is saved.

@@ -2,8 +2,9 @@
 // Without these the pieces could each pass their own tests and still not be joined into a product that publishes a site and serves it.
 
 import { reset } from "cloudflare:test";
-import { OPEN_ROUTES, ROUTES } from "@poplin/core/src/api/routes";
+import type { Api } from "@poplin/app/src/api/api";
 import { settingsFromText } from "@poplin/core/src/records/settings";
+import type { ExtractSchema } from "hono/types";
 import { hexToUint8Array, uint8ArrayToHex } from "uint8array-extras";
 import { beforeEach, describe, expect, test, vi } from "vitest";
 import manifest from "../../../cli/package.json?raw";
@@ -11,7 +12,10 @@ import built from "../../dist/worker.js";
 import bundle from "../../dist/worker.js?raw";
 import type { Bindings } from "../../src/worker/bindings";
 import { signer } from "../login/support/access";
-import { ADMIN, accessHeaders, ask, api, BINDINGS, cookieOf, countedBindings, done, installOf, instance, logIn, OWNER, type Published, page, publish, spentDatabase, tokenOf, type World, under, wait, world } from "./support/install";
+import {
+  ADMIN, type Answer, type ApiCalls, accessHeaders, ask, api, BINDINGS, cookieOf, countedBindings, done, installOf, instance, logIn, OWNER,
+  PATHS, type Published, page, publish, spentDatabase, tokenOf, type World, under, wait, world,
+} from "./support/install";
 
 /** The largest bundle that passes: three times today's, so a library pulled in whole fails here. */
 const MOST_BUNDLE_BYTES = 1_000_000;
@@ -28,8 +32,60 @@ const MINUTE_MS = 60_000;
 /** The end of a minute, in milliseconds: too little of it for a test that counts requests within one. */
 const MINUTE_END_MS = 2000;
 
-/** Values in the form of a site, an upload, a token's id, a path, and a version, for a request to every route. */
-const NAMED = { site: "zzzzzzzzzzzz", upload: "zzzzzzzzzzzzzzzz", token: "00000000000000aa", path: "index.html", version: 1 };
+/** A site in the form of one, for a request to every route that names a site. */
+const SITE = { param: { site: "zzzzzzzzzzzz" } };
+
+/** An upload in the form of one, for a request to every route that names an upload. */
+const UPLOAD = { param: { upload: "zzzzzzzzzzzzzzzz" } };
+
+/** A file of a version in the form of one, for a request to every route that names a file. */
+const FILE = { version: "1", path: "index.html" };
+
+/** The JSON of a request that is refused before its body is read. */
+const UNREAD = {} as never;
+
+/** One request to every route, under the path and the method the app declares it by. A route the app declares and this leaves out does not compile, nor one it does not declare. */
+const EVERY_ROUTE: { readonly [Path in keyof Routes]: { readonly [Method in keyof Routes[Path]]: (calls: ApiCalls) => Promise<Answer> } } = {
+  "/api/whoami": { $get: (calls) => calls.whoami.$get({ query: {} }) },
+  "/api/token": { $delete: (calls) => calls.token.$delete({ query: {} }) },
+  "/api/tokens": { $get: (calls) => calls.tokens.$get({ query: {} }), $post: (calls) => calls.tokens.$post({ query: {}, json: UNREAD }) },
+  "/api/tokens/:token": { $delete: (calls) => calls.tokens[":token"].$delete({ param: { token: "00000000000000aa" }, query: {} }) },
+  "/api/logins": { $post: (calls) => calls.logins.$post({ query: {}, json: UNREAD }) },
+  "/api/logins/token": { $post: (calls) => calls.logins.token.$post({ query: {}, json: UNREAD }) },
+  "/api/sites": { $get: (calls) => calls.sites.$get({ query: {} }) },
+  "/api/sites/:site": {
+    $get: (calls) => calls.sites[":site"].$get({ ...SITE, query: {} }),
+    $patch: (calls) => calls.sites[":site"].$patch({ ...SITE, query: {}, json: UNREAD }),
+    $delete: (calls) => calls.sites[":site"].$delete({ ...SITE, query: {} }),
+  },
+  "/api/sites/:site/rollback": { $post: (calls) => calls.sites[":site"].rollback.$post({ ...SITE, query: {}, json: UNREAD }) },
+  "/api/sites/:site/new-link": { $post: (calls) => calls.sites[":site"]["new-link"].$post({ ...SITE, query: {} }) },
+  "/api/sites/:site/restore": { $post: (calls) => calls.sites[":site"].restore.$post({ ...SITE, query: {} }) },
+  "/api/sites/:site/duplicate": { $post: (calls) => calls.sites[":site"].duplicate.$post({ ...SITE, query: {}, json: UNREAD }) },
+  "/api/uploads": { $post: (calls) => calls.uploads.$post({ query: {}, json: UNREAD }) },
+  "/api/uploads/:upload": { $get: (calls) => calls.uploads[":upload"].$get({ ...UPLOAD, query: {} }), $delete: (calls) => calls.uploads[":upload"].$delete({ ...UPLOAD, query: {} }) },
+  "/api/uploads/:upload/file": { $put: (calls) => calls.uploads[":upload"].file.$put({ ...UPLOAD, query: { path: FILE.path } }) },
+  "/api/uploads/:upload/finish": { $post: (calls) => calls.uploads[":upload"].finish.$post({ ...UPLOAD, query: {} }) },
+  "/api/export/settings": { $get: (calls) => calls.export.settings.$get({ query: {} }) },
+  "/api/export/sites": { $get: (calls) => calls.export.sites.$get({ query: {} }) },
+  "/api/export/sites/:site": { $get: (calls) => calls.export.sites[":site"].$get({ ...SITE, query: {} }) },
+  "/api/export/sites/:site/files": { $get: (calls) => calls.export.sites[":site"].files.$get({ ...SITE, query: { version: FILE.version } }) },
+  "/api/export/sites/:site/file": { $get: (calls) => calls.export.sites[":site"].file.$get({ ...SITE, query: FILE }) },
+  "/api/import/settings": { $post: (calls) => calls.import.settings.$post({ query: {}, json: UNREAD }) },
+  "/api/import/sites": { $post: (calls) => calls.import.sites.$post({ query: {}, json: UNREAD }) },
+  "/api/config": { $get: (calls) => calls.config.$get({ query: {} }), $patch: (calls) => calls.config.$patch({ query: {}, json: UNREAD }) },
+  "/api/sessions": { $delete: (calls) => calls.sessions.$delete({ query: {} }) },
+  "/api/audit": { $get: (calls) => calls.audit.$get({ query: SITE.param }) },
+  "/api/update": { $post: (calls) => calls.update.$post({ query: {} }) },
+  "/api/update/address": {
+    $get: (calls) => calls.update.address.$get({ query: {} }),
+    $put: (calls) => calls.update.address.$put({ query: {}, json: UNREAD }),
+    $delete: (calls) => calls.update.address.$delete({ query: {} }),
+  },
+};
+
+/** Every route the app declares, by its path and then its method. */
+type Routes = ExtractSchema<Api>;
 
 /** What the API answers a computer that begins a login. */
 interface Begun {
@@ -226,10 +282,10 @@ describe("the product, from a token to an opened site", () => {
     const file = await ask(worker, `${under(site, "p")}/data/table.csv`, { headers: owner });
     const login = await logIn(worker, w, `${ADMIN}/login?return=${encodeURIComponent(`${under(site, "p")}/`)}`);
 
-    const shown = await done<{ site: Published }>(await api(worker, token, "PATCH", ROUTES.updateSite.path({ site: site.label }), { access: "public", public_name: "yearly" }));
+    const shown = await done<{ site: Published }>(await api(worker, token).sites[":site"].$patch({ param: { site: site.label }, query: {}, json: { access: "public", public_name: "yearly" } }));
     const named = await ask(worker, "https://yearly-page.example.com/");
     const stale = await ask(worker, `${under(site, "p")}/data/table.csv?x=1`, { headers: owner });
-    const moved = await done<{ site: Published }>(await api(worker, token, "POST", ROUTES.newLink.path({ site: site.label })));
+    const moved = await done<{ site: Published }>(await api(worker, token).sites[":site"]["new-link"].$post({ param: { site: site.label }, query: {} }));
     const old = [await ask(worker, `${under(site, "p")}/`, { headers: owner }), await ask(worker, `${under(site, "u")}/`)];
     const fresh = await ask(worker, `${under(moved.site, "u")}/`);
 
@@ -320,7 +376,7 @@ describe("the product, from a token to an opened site", () => {
     const second = await accessHeaders(w, { email: "second@example.com" });
 
     const before = await ask(worker, `${under(site, "p")}/`, { headers: second });
-    await done(await api(worker, await tokenOf(w, "admin"), "PATCH", ROUTES.changeConfig.path(), { logins: [OWNER] }));
+    await done(await api(worker, await tokenOf(w, "admin")).config.$patch({ query: {}, json: { logins: [OWNER] } }));
     const withinTheMinute = await ask(worker, `${under(site, "p")}/`, { headers: second });
     wait(w, 1 / 60);
     const afterTheMinute = await ask(worker, `${under(site, "p")}/`, { headers: second });
@@ -379,7 +435,7 @@ describe("the product, from a token to an opened site", () => {
     await publish(worker, token, { site: site.label }, [page("<p>two</p>")]);
     const newer = await holding(one);
     const two = newer.headers.get("ETag");
-    await done(await api(worker, token, "POST", ROUTES.rollbackSite.path({ site: site.label }), { version: 1 }));
+    await done(await api(worker, token).sites[":site"].rollback.$post({ param: { site: site.label }, query: {}, json: { version: 1 } }));
     const back = await holding(two);
 
     expect({ status: first.status, cache: first.headers.get("Cache-Control"), clear: first.headers.get("Clear-Site-Data") }).toEqual({ status: 200, cache: "public, max-age=300, must-revalidate", clear: null });
@@ -508,9 +564,9 @@ describe("the admin hostname", () => {
     const worker = instance(w);
     await ask(worker, `${ADMIN}/api/whoami`);
     const token = await tokenOf(w, "admin");
-    const known = await api(worker, token, "GET", ROUTES.whoami.path());
-    const unknown = await api(worker, null, "GET", ROUTES.whoami.path());
-    const exported = await api(worker, token, "GET", ROUTES.exportSettings.path());
+    const known = await api(worker, token).whoami.$get({ query: {} });
+    const unknown = await api(worker, null).whoami.$get({ query: {} });
+    const exported = await api(worker, token).export.settings.$get({ query: {} });
     const unsigned = await ask(worker, `${ADMIN}/login`);
     const posted = await ask(worker, `${ADMIN}/login`, { method: "POST" });
 
@@ -530,10 +586,10 @@ describe("the admin hostname", () => {
     const stranger = await ask(worker, `${ADMIN}/`);
     const sites = await ask(worker, `${ADMIN}/`, { headers: session });
     const unmarked = await ask(worker, `${ADMIN}/sites/${site.label}/delete`, { method: "POST", headers: { ...session, ...FORM }, body: "" });
-    const after = await done<{ site: Published }>(await api(worker, token, "GET", ROUTES.getSite.path({ site: site.label })));
+    const after = await done<{ site: Published }>(await api(worker, token).sites[":site"].$get({ param: { site: site.label }, query: {} }));
     const unknown = await ask(worker, `${ADMIN}/no-such-page`, { headers: session });
 
-    await done(await api(worker, token, "DELETE", ROUTES.signEveryoneOut.path()));
+    await done(await api(worker, token).sessions.$delete({ query: {} }));
     const signedOut = await ask(worker, `${ADMIN}/`, { headers: session });
     wait(w, 1 / 60);
     const privately = await ask(worker, `${under(site, "p")}/`, { headers: owner });
@@ -590,10 +646,10 @@ describe("a database whose allowance for the day is used up", () => {
     const answers = [
       await ask(paused, `${site.addresses.public}/`, {}, noReading),
       await ask(paused, `${site.addresses.public}/`, { method: "HEAD" }, noReading),
-      await ask(paused, `${ADMIN}${ROUTES.whoami.path()}`, { headers: bearer }, noReading),
+      await ask(paused, `${ADMIN}${PATHS.whoami.$path()}`, { headers: bearer }, noReading),
       await ask(paused, `${ADMIN}/`, { headers: session }, noReading),
       await ask(paused, `${ADMIN}/setup/api/check`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ token: "a-token-0123456789-abcdefgh" }) }, noReading),
-      await ask(reading, `${ADMIN}${ROUTES.issueToken.path()}`, { method: "POST", headers: { ...bearer, "Content-Type": "application/json" }, body: JSON.stringify({ scope: "publisher", note: "a test" }) }, noWriting),
+      await ask(reading, `${ADMIN}${PATHS.tokens.$path()}`, { method: "POST", headers: { ...bearer, "Content-Type": "application/json" }, body: JSON.stringify({ scope: "publisher", note: "a test" }) }, noWriting),
     ];
     const told = await Promise.all(answers.map(async (answer) => [answer.status, answer.headers.get("Retry-After"), answer.headers.get("Cache-Control"), await answer.text()]));
 
@@ -615,11 +671,11 @@ describe("a computer's login", () => {
   async function begin(worker: ReturnType<typeof instance>, address: string): Promise<Response> {
     const headers = { "Content-Type": "application/json", "CF-Connecting-IP": address };
 
-    return ask(worker, `${ADMIN}${ROUTES.beginLogin.path()}`, { method: "POST", headers, body: JSON.stringify({ scope: "publisher", computer: "laptop" }) });
+    return ask(worker, `${ADMIN}${PATHS.logins.$path()}`, { method: "POST", headers, body: JSON.stringify({ scope: "publisher", computer: "laptop" }) });
   }
 
-  function collect(worker: ReturnType<typeof instance>, secret: string): Promise<Response> {
-    return api(worker, null, "POST", ROUTES.redeemLogin.path(), { secret });
+  function collect(worker: ReturnType<typeof instance>, secret: string): Promise<Answer> {
+    return api(worker, null).logins.token.$post({ query: {}, json: { secret } });
   }
 
   // Drift: the pieces each hold their own rule, and the entry joins them: a route not mounted, a return path dropped at the login, or a dashboard built without its counters would leave no way to a first token.
@@ -642,7 +698,7 @@ describe("a computer's login", () => {
     w.clock.now += 5000;
     const collected = await done<{ state: string; token: string }>(await collect(worker, begun.secret));
     const again = await done<{ state: string }>(await collect(worker, begun.secret));
-    const who = await done<{ token: { scope: string; note: string } }>(await api(worker, collected.token, "GET", ROUTES.whoami.path()));
+    const who = await done<{ token: { scope: string; note: string } }>(await api(worker, collected.token).whoami.$get({ query: {} }));
 
     expect([begun.verify_url, waiting.state]).toEqual([`${ADMIN}/tokens/allow?code=${begun.code}`, "pending"]);
     expect([stranger.status, stranger.headers.get("Location")]).toEqual([302, `${ADMIN}/login?return=${encodeURIComponent(`/tokens/allow?code=${begun.code}`)}`]);
@@ -655,17 +711,14 @@ describe("a computer's login", () => {
   // Drift: the two login routes are the only ones a request with no token may reach; an entry that let a third through would hand the install to anyone who can reach its address.
   test("every other route of the API refuses a request with no token", async () => {
     const worker = instance(w);
-    const open: readonly string[] = OPEN_ROUTES;
-    const closed = Object.entries(ROUTES).filter(([name]) => !open.includes(name));
+    const { "/api/logins": begin, "/api/logins/token": redeem, ...closed } = EVERY_ROUTE;
     const statuses: [string, number][] = [];
 
-    for (const [name, route] of closed) {
-      const path = (route.path as (args: object) => string)(NAMED);
-      const answer = await api(worker, null, route.method, path, route.sends === "json" ? {} : undefined);
-      statuses.push([name, answer.status]);
+    for (const [path, methods] of Object.entries(closed)) {
+      for (const [method, send] of Object.entries(methods)) statuses.push([`${method} ${path}`, (await send(api(worker, null))).status]);
     }
 
-    expect(closed.length).toBeGreaterThan(25);
+    expect(statuses.length).toBeGreaterThan(25);
     expect(statuses.filter(([, status]) => status !== 401)).toEqual([]);
   });
 
@@ -679,18 +732,18 @@ describe("a computer's login", () => {
       return Response.json({ success: true });
     });
     const token = await tokenOf(w, "admin");
-    const start = (): Promise<Response> => api(worker, token, "POST", ROUTES.startUpdate.path({ anyway: true }));
+    const start = (): Promise<Answer> => api(worker, token).update.$post({ query: { anyway: "true" } });
 
     // The binding's minute is the wall clock's, not the test's: a run that would cross one waits for the next.
     const left = MINUTE_MS - (Date.now() % MINUTE_MS);
     if (left < MINUTE_END_MS) await new Promise((resolve) => setTimeout(resolve, left));
 
-    const elsewhere = await api(worker, token, "PUT", ROUTES.saveUpdateAddress.path(), { address: "https://example.com/client/v4/workers/builds/deploy_hooks/a1b2c3d4" });
+    const elsewhere = await api(worker, token).update.address.$put({ query: {}, json: { address: "https://example.com/client/v4/workers/builds/deploy_hooks/a1b2c3d4" } });
     const unsaved = await start();
-    const saved = await done<{ set: boolean }>(await api(worker, token, "PUT", ROUTES.saveUpdateAddress.path(), { address: hook }));
+    const saved = await done<{ set: boolean }>(await api(worker, token).update.address.$put({ query: {}, json: { address: hook } }));
     const first = await done<{ started: boolean; to: string | null }>(await start());
     const second = await start();
-    const state = await api(worker, token, "GET", ROUTES.updateAddress.path());
+    const state = await api(worker, token).update.address.$get({ query: {} });
 
     expect([elsewhere.status, unsaved.status, saved.set, first, second.status]).toEqual([400, 409, true, { started: true, from: JSON.parse(manifest).version, to: null }, 429]);
     expect(sent).toEqual([[hook, "POST", "manual", false]]);
@@ -703,7 +756,7 @@ describe("a computer's login", () => {
     const question = (address: string): Promise<Response> => {
       const headers = { "Content-Type": "application/json", "CF-Connecting-IP": address };
 
-      return ask(worker, `${ADMIN}${ROUTES.redeemLogin.path()}`, { method: "POST", headers, body: JSON.stringify({ secret: `poplin_login_${"0".repeat(16)}_${"0".repeat(64)}` }) });
+      return ask(worker, `${ADMIN}${PATHS.logins.token.$path()}`, { method: "POST", headers, body: JSON.stringify({ secret: `poplin_login_${"0".repeat(16)}_${"0".repeat(64)}` }) });
     };
     const begun: number[] = [];
     const asked: number[] = [];
@@ -739,7 +792,7 @@ describe("the built bundle", () => {
   test("answers with the version the released package's manifest states", async () => {
     // The built Worker reads the runtime's own clock, so its token is issued at that time.
     const token = await tokenOf({ ...w, clock: { now: Date.now() } }, "admin");
-    const answered = await done<{ version: string }>(await api(built, token, "GET", ROUTES.whoami.path()));
+    const answered = await done<{ version: string }>(await api(built, token).whoami.$get({ query: {} }));
 
     expect(answered.version).toBe((JSON.parse(manifest) as { version: string }).version);
   });

@@ -3,9 +3,10 @@
 import * as v from "valibot";
 
 import type { Actor } from "../auth/scopes";
-import { mintToken, type TokenId, type TokenRecord } from "../auth/tokens";
-import { TOKEN_ID } from "../records/fields";
+import { mintToken, type TokenRecord } from "../auth/tokens";
+import { MOMENT, TOKEN_ID } from "../records/fields";
 import { type Install, type Refused, refuse } from "./records";
+import { UPDATE_NOTICE } from "./update";
 
 /** The longest note a token carries, in characters. */
 const MAX_NOTE_LENGTH = 200;
@@ -13,18 +14,27 @@ const MAX_NOTE_LENGTH = 200;
 /** What a new token is asked with: its scope, and a note that says what it is for, such as a workspace's name. */
 export const TOKEN_REQUEST = v.strictObject({ scope: v.picklist(["publisher", "admin"]), note: v.pipe(v.string(), v.maxLength(MAX_NOTE_LENGTH)) });
 
+/** A token as an answer holds it. */
+export const TOKEN_OBJECT = v.object({
+  id: TOKEN_ID,
+  scope: v.picklist(["publisher", "admin"]),
+  note: v.string(),
+  created: MOMENT,
+  expires: v.union([v.literal("never"), MOMENT]),
+});
+
+/** What revoking a token answers, and so a logout: the token as it was. */
+export const REVOKED_TOKEN = v.object({ token: TOKEN_OBJECT });
+
+/** What the API answers a token that asks who it is: the token, the version the install runs, and a newer release when one is known. */
+export const WHOAMI_ANSWER = v.object({ token: TOKEN_OBJECT, version: v.string(), update: v.optional(UPDATE_NOTICE) });
+
 /**
  * A token as a caller sees it: never the token itself, nor its hash. Times are milliseconds since the epoch.
  *
  * `expires` is `"never"` for a publisher token, which lives until it is revoked.
  */
-export interface TokenObject {
-  readonly id: TokenId;
-  readonly scope: TokenRecord["scope"];
-  readonly note: string;
-  readonly created: number;
-  readonly expires: "never" | number;
-}
+export type TokenObject = Readonly<v.InferOutput<typeof TOKEN_OBJECT>>;
 
 /** Build the token object of a stored record. */
 export function tokenObject(record: TokenRecord): TokenObject {
@@ -83,7 +93,7 @@ export async function revokeToken(
   install: Install,
   actor: Actor,
   id: string,
-): Promise<{ readonly ok: true; readonly token: TokenObject } | Refused<"not_allowed" | "bad_argument" | "not_found">> {
+): Promise<({ readonly ok: true } & Readonly<v.InferOutput<typeof REVOKED_TOKEN>>) | Refused<"not_allowed" | "bad_argument" | "not_found">> {
   if (!v.is(TOKEN_ID, id)) return refuse("bad_argument", "token");
 
   if (actor.scope !== "admin" && actor.holder !== id) return refuse("not_allowed");

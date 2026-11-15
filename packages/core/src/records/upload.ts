@@ -22,6 +22,9 @@ export const UPLOAD_ID = v.custom<UploadId>(isUploadId, "an upload id is 16 lowe
 /** One file of a publish as it is declared before its bytes are sent: a `path`, a `size` that is a count, and a `content_type` a header can carry and a store can keep as written, and nothing besides. */
 export const MANIFEST_FILE = v.custom<ManifestFile>(isManifestFile, "a declared file holds a path, a size, and a content type");
 
+/** Whether an upload still takes files, is live, or will never be. */
+export const UPLOAD_STATE = v.picklist(["pending", "finished", "abandoned"]);
+
 /** What finishing an upload makes: a new site, a copy of the version `from` names, the next version of a site with the settings and the page title asked with it, or a site from a backup, kept as the row `siteFromRow` reads. */
 const PLAN = v.variant("kind", [
   v.object({ kind: v.literal("create"), site: NEW_SITE }),
@@ -36,7 +39,7 @@ const UPLOAD_COLUMNS = {
   folder: SITE_FOLDER,
   number: POSITIVE,
   owner: HOLDER,
-  state: v.picklist(["pending", "finished", "abandoned"]),
+  state: UPLOAD_STATE,
   plan: v.pipe(v.string(), v.parseJson(), PLAN),
   bytes: COUNT,
   files: POSITIVE,

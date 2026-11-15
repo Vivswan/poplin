@@ -3,6 +3,7 @@
 import { resolve } from "node:path";
 import type * as v from "valibot";
 
+import { DELETED_SITE } from "../../../core/src/actions/delete";
 import type { TOOL_INPUTS } from "../../../core/src/actions/tool-inputs";
 import { parsePublicName, parseSiteName } from "../../../core/src/names/names";
 import { siteReference } from "../../../core/src/sites/labels";
@@ -145,7 +146,7 @@ async function deleteForever(raw: string, host: Host): Promise<Outcome> {
   if (isProblem(site)) return refused(site);
 
   return online(host, async ({ client }) => {
-    const deleted = await client.call("deleteSite", { site: siteWord(site), forever: true });
+    const deleted = await client.call(DELETED_SITE, (api) => api.sites[":site"].$delete({ param: { site: siteWord(site) }, query: { forever: "true" } }));
     if (!deleted.ok) return refused(problemOf(deleted.failure, "changes"));
 
     const { before, left } = deleted.value;

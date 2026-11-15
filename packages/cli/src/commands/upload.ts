@@ -2,8 +2,12 @@
 
 import pMap, { pMapStop } from "p-map";
 import pRetry from "p-retry";
+import type * as v from "valibot";
 
-import type { ROUTES } from "../../../core/src/api/routes";
+import { ABANDONED_UPLOAD } from "../../../core/src/actions/abandon-publish";
+import { PUBLISHED_SITE } from "../../../core/src/actions/finish-publish";
+import { SHOWN_UPLOAD } from "../../../core/src/actions/show-upload";
+import { STORED_FILE } from "../../../core/src/actions/upload-file";
 import type { Called, Client, Failure } from "../client/client";
 import { problem, problemOf } from "./problems";
 import type { Io, Outcome, Session } from "./records";
@@ -42,7 +46,7 @@ const MAX_REST_SECONDS = 60;
 const MS_PER_SECOND = 1000;
 
 /** The answer to a finished upload. */
-export type Published = NonNullable<(typeof ROUTES)["finishPublish"]["types"]>["done"];
+export type Published = v.InferOutput<typeof PUBLISHED_SITE>;
 
 /** What a rest needs of the machine's ends. */
 type Resting = Pick<Io, "pause" | "status" | "terminal">;
@@ -200,7 +204,7 @@ export async function callUnhurried<Done>(io: Resting, call: () => Promise<Calle
 
 async function sendOnce(client: Client, upload: string, file: UploadFile): Promise<Called<unknown>> {
   const body = await file.open();
-  const sent = await client.call("uploadFile", { upload, path: file.path }, body, file.size);
+  const sent = await client.upload(STORED_FILE, { upload, path: file.path, body, length: file.size });
 
   // A request that broke off leaves the file open; a stream the request still holds refuses the cancel, and closes with the request.
   if (!sent.ok) await body.cancel().catch(() => undefined);
@@ -285,6 +289,15 @@ export function givenUp(failure: Failure, aftermath: string): Outcome {
   return { ok: false, problem: { ...said, hint } };
 }
 
+/** Ask the install to give an upload up. The answer names the files of it that are not removed yet. */
+export function abandonUpload(client: Client, upload: string): Promise<Called<v.InferOutput<typeof ABANDONED_UPLOAD>>> {
+  return client.call(ABANDONED_UPLOAD, (api) => api.uploads[":upload"].$delete({ param: { upload } }));
+}
+
+function finishUpload(client: Client, upload: string): Promise<Called<Published>> {
+  return client.call(PUBLISHED_SITE, (api) => api.uploads[":upload"].finish.$post({ param: { upload } }));
+}
+
 /**
  * Give an upload up after a failure. Once the person stopped the command, before this or during it, the upload is given up with calls that wait a few seconds at most.
  *
@@ -293,10 +306,10 @@ export function givenUp(failure: Failure, aftermath: string): Outcome {
  * @returns what became of the upload; nothing here throws
  */
 export async function giveUpUpload(session: Pick<Session, "client" | "afterStop">, upload: string): Promise<GivenUp> {
-  const tried = await session.client.call("abandonPublish", { upload });
+  const tried = await abandonUpload(session.client, upload);
   const stopped = !tried.ok && tried.failure.kind === "stopped";
   const client = stopped ? session.afterStop : session.client;
-  const abandoned = stopped ? await client.call("abandonPublish", { upload }) : tried;
+  const abandoned = stopped ? await abandonUpload(client, upload) : tried;
   if (abandoned.ok) return { kind: "abandoned" };
 
   const refusal = abandoned.failure.kind === "refused" ? abandoned.failure.code : undefined;
@@ -304,7 +317,7 @@ export async function giveUpUpload(session: Pick<Session, "client" | "afterStop"
 
   if (refusal !== "upload_finished") return { kind: "unknown" };
 
-  const live = await client.call("finishPublish", { upload });
+  const live = await finishUpload(client, upload);
   if (!live.ok) return { kind: "live" };
 
   return { kind: "published", answer: live.value };
@@ -322,7 +335,7 @@ export async function giveUpUpload(session: Pick<Session, "client" | "afterStop"
  */
 export async function sendUpload<File extends UploadFile>(client: Client, upload: string, files: readonly File[], on: Sending<File>): Promise<Called<Published>> {
   const sending = { arrived: on.arrived, pace: new Pace(on.io), stopped: on.io.stopped };
-  const finish = (): Promise<Called<Published>> => unhurried(sending.pace, () => client.call("finishPublish", { upload }));
+  const finish = (): Promise<Called<Published>> => unhurried(sending.pace, () => finishUpload(client, upload));
 
   const unsent = await sendFiles(client, upload, files, sending);
   if (unsent !== undefined) return { ok: false, failure: unsent };
@@ -330,7 +343,7 @@ export async function sendUpload<File extends UploadFile>(client: Client, upload
   let finished = await finish();
 
   for (let attempt = 1; attempt < FINISH_ATTEMPTS && lacksFiles(finished); attempt += 1) {
-    const shown = await unhurried(sending.pace, () => client.call("showUpload", { upload }));
+    const shown = await unhurried(sending.pace, () => client.call(SHOWN_UPLOAD, (api) => api.uploads[":upload"].$get({ param: { upload } })));
     if (!shown.ok) return shown;
 
     const lacking = new Set(shown.value.missing);

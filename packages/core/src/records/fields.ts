@@ -6,6 +6,7 @@ import { type Login, parseLogin } from "../auth/logins";
 import type { TokenId } from "../auth/tokens";
 import { type PublicName, parseSiteName, type SiteName } from "../names/names";
 import { parseSiteId, type SiteId } from "../sites/ids";
+import { type SiteLabel, siteReference } from "../sites/labels";
 
 /** The form `mintToken` gives a token's id. */
 const TOKEN_ID_PATTERN = /^[0-9a-f]{16}$/;
@@ -34,6 +35,9 @@ export const PUBLIC_NAME = v.custom<PublicName>(isSiteName, "a public name is 3 
 /** A site's id. */
 export const SITE_ID = v.custom<SiteId>(isSiteId, "a site id is 12 lowercase base36 characters");
 
+/** A site's label: its name, two dashes, and its id. */
+export const SITE_LABEL = v.custom<SiteLabel>(isSiteLabel, "a site label is a site name, two dashes, and a site id");
+
 /** Whoever holds a credential: a token's id, or the email of an admin acting through the dashboard. */
 export const HOLDER = v.union([TOKEN_ID, LOGIN]);
 
@@ -58,4 +62,12 @@ function isSiteName(value: unknown): boolean {
 
 function isSiteId(value: unknown): boolean {
   return typeof value === "string" && parseSiteId(value).ok;
+}
+
+function isSiteLabel(value: unknown): boolean {
+  if (typeof value !== "string") return false;
+
+  const reference = siteReference(value);
+
+  return reference.ok && reference.value.kind === "site";
 }

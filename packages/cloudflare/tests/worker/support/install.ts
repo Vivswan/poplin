@@ -2,11 +2,14 @@
 
 import { createExecutionContext, createScheduledController, waitOnExecutionContext } from "cloudflare:test";
 import { env } from "cloudflare:workers";
+import type { Api } from "@poplin/app/src/api/api";
+import type { PUBLISH_REQUEST } from "@poplin/core/src/actions/begin-publish";
 import { issueToken } from "@poplin/core/src/actions/manage-tokens";
 import type { Install } from "@poplin/core/src/actions/records";
-import { ROUTES } from "@poplin/core/src/api/routes";
 import type { Login } from "@poplin/core/src/auth/logins";
 import { openDatabase } from "@poplin/core/src/database/open";
+import { hc } from "hono/client";
+import type * as v from "valibot";
 import { D1Driver } from "../../../src/database/d1";
 import { R2Store } from "../../../src/storage/r2";
 import type { Bindings } from "../../../src/worker/bindings";
@@ -24,6 +27,9 @@ export const ADMIN = "https://poplin.example.com";
 
 /** The one login of the example first settings. */
 export const OWNER = "owner@example.com" as Login;
+
+/** Every route of the API for its address alone: `$path()` builds one and sends nothing. */
+export const PATHS: ApiCalls = hc<Api>(ADMIN).api;
 
 /** The milliseconds of one hour. */
 const HOUR_MS = 3_600_000;
@@ -45,6 +51,17 @@ const NO_WEBSITE: Outside["latest"] = { fetch: async () => new Response("Not fou
 
 /** One Worker instance. */
 export type Worker = ReturnType<typeof createWorker>;
+
+/** What a test reads of an answer of the API, however the request was sent. */
+export interface Answer {
+  readonly status: number;
+  readonly headers: Headers;
+  readonly text: () => Promise<string>;
+  readonly json: () => Promise<unknown>;
+}
+
+/** Every route of the API as a request to send, typed from the routes the app declares. */
+export type ApiCalls = ReturnType<typeof hc<Api>>["api"];
 
 /** A test's world: the clock every instance reads, the team that signs Access tokens, and the keys address the instances fetch. */
 export interface World {
@@ -150,32 +167,35 @@ export async function tokenOf(from: World, scope: "admin" | "publisher"): Promis
   return issued.token;
 }
 
-/** One request to the API with a token: bytes go as a file, anything else as JSON. */
-export function api(worker: Worker, token: string | null, method: string, path: string, body?: Uint8Array<ArrayBuffer> | object): Promise<Response> {
-  const headers = new Headers(token === null ? {} : { Authorization: `Bearer ${token}` });
-  if (body === undefined) return ask(worker, `${ADMIN}${path}`, { method, headers });
+/** The API as one caller asks it: with the token, or with no `Authorization` header for `null`. */
+export function api(worker: Worker, token: string | null): ApiCalls {
+  const headers: Record<string, string> = token === null ? {} : { Authorization: `Bearer ${token}` };
 
-  const bytes = body instanceof Uint8Array;
-  headers.set("Content-Type", bytes ? "application/octet-stream" : "application/json");
+  // The client names every address as text.
+  return hc<Api>(ADMIN, { headers, fetch: (input: RequestInfo | URL, init?: RequestInit) => ask(worker, String(input), init) }).api;
+}
 
-  return ask(worker, `${ADMIN}${path}`, { method, headers, body: bytes ? body : JSON.stringify(body) });
+/** Send the bytes of one file of an upload. */
+export function sendFile(calls: ApiCalls, upload: string, file: Pick<TestFile, "path" | "body">): Promise<Answer> {
+  return calls.uploads[":upload"].file.$put({ param: { upload }, query: { path: file.path } }, { headers: { "Content-Type": "application/octet-stream" }, init: { body: file.body } });
 }
 
 /** The JSON of a done request. */
-export async function done<Body>(response: Response): Promise<Body> {
+export async function done<Body>(response: Answer): Promise<Body> {
   if (response.status !== 200) throw new Error(`the API answered ${response.status}: ${await response.text()}`);
 
-  return response.json<Body>();
+  return (await response.json()) as Body;
 }
 
 /** Publish files through the API's three steps: begin, one put per file, finish. */
-export async function publish(worker: Worker, token: string, asked: Record<string, unknown>, files: readonly TestFile[]): Promise<Published> {
+export async function publish(worker: Worker, token: string, asked: Omit<v.InferInput<typeof PUBLISH_REQUEST>, "files">, files: readonly TestFile[]): Promise<Published> {
+  const calls = api(worker, token);
   const manifest = files.map((file) => ({ path: file.path, size: file.body.byteLength, content_type: file.type }));
-  const begun = await done<{ upload: { id: string } }>(await api(worker, token, "POST", ROUTES.beginPublish.path(), { ...asked, files: manifest }));
+  const begun = await done<{ upload: { id: string } }>(await calls.uploads.$post({ query: {}, json: { ...asked, files: manifest } }));
 
-  for (const file of files) await done(await api(worker, token, "PUT", ROUTES.uploadFile.path({ upload: begun.upload.id, path: file.path }), file.body));
+  for (const file of files) await done(await sendFile(calls, begun.upload.id, file));
 
-  return (await done<{ site: Published }>(await api(worker, token, "POST", ROUTES.finishPublish.path({ upload: begun.upload.id })))).site;
+  return (await done<{ site: Published }>(await calls.uploads[":upload"].finish.$post({ param: { upload: begun.upload.id }, query: {} }))).site;
 }
 
 export function page(text: string): TestFile {

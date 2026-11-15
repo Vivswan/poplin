@@ -1,5 +1,7 @@
 // Finish a publish or an import: every declared file is checked to be in the store, then the database row is written, which is the one step that makes the files live.
 
+import * as v from "valibot";
+
 import type { Actor } from "../auth/scopes";
 import type { Signed } from "../database/database";
 import type { SettingValues } from "../records/settings";
@@ -7,8 +9,15 @@ import { type Site, siteFromRow } from "../records/site";
 import { parseUploadId, type Upload, type UploadPlan } from "../records/upload";
 import { enterInstall } from "./reach";
 import { type Install, type Refused, refuse } from "./records";
-import { type SiteAnswer, type SiteObject, siteAnswer } from "./site-object";
+import { SITE_OBJECT, siteAnswer } from "./site-object";
 import { discardUpload, isWithinReach, missingFiles, removeDropped } from "./uploads";
+
+/** What a publish answers: the site answer with `created` on the site, and the prefixes of dropped versions whose files are not all removed yet. */
+export const PUBLISHED_SITE = v.object({
+  before: v.nullable(SITE_OBJECT),
+  site: v.object({ ...SITE_OBJECT.entries, created: v.boolean() }),
+  left: v.pipe(v.array(v.string()), v.readonly()),
+});
 
 /** The codes a recorded upload is refused with for good: it can never be made live, so its files go. */
 type LostCode = "not_found" | "in_trash" | "name_taken" | "stale_version" | "id_taken";
@@ -17,10 +26,7 @@ type LostCode = "not_found" | "in_trash" | "name_taken" | "stale_version" | "id_
 type FinishCode = LostCode | "not_set_up" | "bad_argument" | "missing_files";
 
 /** The answer to a publish: the site answer with `created` on the site. `left` names the prefixes of dropped versions whose files are not all removed yet; it is empty when all went. */
-interface Published extends SiteAnswer {
-  readonly site: SiteObject & { readonly created: boolean };
-  readonly left: readonly string[];
-}
+type Published = { readonly ok: true } & Readonly<v.InferOutput<typeof PUBLISHED_SITE>>;
 
 /** An upload made live. `before` is the site it was published onto, `null` for a new site; `dropped` are the versions the site no longer keeps. */
 interface Committed {

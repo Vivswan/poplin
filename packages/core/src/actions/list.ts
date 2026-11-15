@@ -7,7 +7,7 @@ import { MOMENT, POSITIVE, SITE_ID } from "../records/fields";
 import { dayOf } from "../records/views";
 import { enterInstall } from "./reach";
 import { type Install, type Refused, refuse } from "./records";
-import { type SiteObject, siteObject } from "./site-object";
+import { SITE_OBJECT, siteObject } from "./site-object";
 
 /** The most sites one page holds, and how many a page holds when no limit is asked. */
 const MAX_PAGE = 100;
@@ -30,12 +30,11 @@ export const LIST_QUERY = v.strictObject({
   dir: v.optional(v.picklist(["asc", "desc"])),
 });
 
+/** What a listing answers: one page of sites, and what `after` takes to get the following page. */
+export const LISTED_SITES = v.object({ sites: v.pipe(v.array(SITE_OBJECT), v.readonly()), next: LIST_QUERY.entries.after });
+
 /** One page of sites, the one whose content changed last first: a publish and a version made live count, a setting does not. The trash shows the site deleted last first. `next` is what `after` takes to get the following page, and is absent on the last. */
-interface Listed {
-  readonly ok: true;
-  readonly sites: readonly SiteObject[];
-  readonly next?: v.InferOutput<typeof LIST_QUERY>["after"];
-}
+type Listed = { readonly ok: true } & Readonly<v.InferOutput<typeof LISTED_SITES>>;
 
 /**
  * List the sites an actor may see, each with about how often its pages were opened: every site for an admin, its own for a publisher.

@@ -1,4 +1,4 @@
-// What a request carries, read under a cap: a JSON body, a file's bytes, and the query. Nothing is held past the cap.
+// What a request carries, read under a cap: a JSON body and a file's bytes. Nothing is held past the cap.
 
 import { type Refused, refuse } from "@poplin/core/src/actions/records";
 
@@ -8,27 +8,11 @@ const JSON_TYPE = "application/json";
 /** The content type a file's bytes are sent with. */
 const BYTES_TYPE = "application/octet-stream";
 
-/** A whole number as a query or a header gives it: no sign, no leading zero, no fraction, and short enough to be exact. */
-const WHOLE_PATTERN = /^(?:0|[1-9]\d{0,14})$/;
+/** A whole number as a header or a query gives it: no sign, no leading zero, no fraction, and short enough to be exact. */
+export const WHOLE_PATTERN = /^(?:0|[1-9]\d{0,14})$/;
 
 /** Reads a JSON body as text, refusing bytes that are not UTF-8. */
 const UTF8 = new TextDecoder("utf-8", { fatal: true });
-
-/** What a query key is read as. */
-type QueryKind = "text" | "number" | "switch";
-
-/** The keys a route's query may hold, each with what it is read as. No other key is taken. */
-export type QueryShape = Readonly<Record<string, QueryKind>>;
-
-function readValue(kind: QueryKind, raw: string): string | number | boolean | undefined {
-  if (kind === "text") return raw;
-
-  if (kind === "number") return WHOLE_PATTERN.test(raw) ? Number(raw) : undefined;
-
-  if (raw === "true") return true;
-
-  return raw === "false" ? false : undefined;
-}
 
 /** The media type of a request's body, without its parameters, in lowercase. */
 function mediaType(request: Request): string {
@@ -51,25 +35,6 @@ export function hasContentType(request: Request, sends: "nothing" | "json" | "by
   if (sends === "nothing") return true;
 
   return mediaType(request) === (sends === "json" ? JSON_TYPE : BYTES_TYPE);
-}
-
-/**
- * Read a request's query by a route's shape.
- *
- * @returns the values of the keys that are given, or `bad_argument` naming the first key that is unknown, given twice, or not of its kind
- */
-export function readQuery(url: URL, shape: QueryShape): { readonly ok: true; readonly values: Readonly<Record<string, string | number | boolean>> } | Refused<"bad_argument"> {
-  const values: Record<string, string | number | boolean> = {};
-
-  for (const [key, raw] of url.searchParams) {
-    const kind = Object.hasOwn(shape, key) ? shape[key] : undefined;
-    const value = kind === undefined || Object.hasOwn(values, key) ? undefined : readValue(kind, raw);
-    if (value === undefined) return refuse("bad_argument", Object.hasOwn(shape, key) ? key : "query");
-
-    values[key] = value;
-  }
-
-  return { ok: true, values };
 }
 
 /**

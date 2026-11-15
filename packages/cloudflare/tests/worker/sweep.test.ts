@@ -2,10 +2,9 @@
 
 import { reset } from "cloudflare:test";
 import { publishSite } from "@poplin/core/src/actions/publish";
-import { ROUTES } from "@poplin/core/src/api/routes";
 import { parseUserCode } from "@poplin/core/src/auth/computer-logins";
 import { beforeEach, describe, expect, test } from "vitest";
-import { ADMIN, api, ask, BINDINGS, done, freePlanBindings, installOf, instance, OWNER, page, publish, sweep, tokenOf, type World, wait, world } from "./support/install";
+import { ADMIN, api, ask, BINDINGS, done, freePlanBindings, installOf, instance, OWNER, page, publish, sendFile, sweep, tokenOf, type World, wait, world } from "./support/install";
 
 /** The most database and bucket calls one scheduled invocation may make, the start of its instance included: 50 to the database, which is all D1 answers on the Free plan, and 250 to the bucket. */
 const INVOCATION_CALLS = 300;
@@ -59,8 +58,8 @@ describe("the scheduled run", () => {
     const kept = await publish(worker, token, { name: "kept" }, [page("<p>kept</p>")]);
     const brief = await publish(worker, token, { name: "brief", expires: "1h" }, [page("<p>brief</p>")]);
     const manifest = [{ path: "index.html", size: HTML.byteLength, content_type: "text/html" }];
-    const begun = await done<{ upload: { id: string } }>(await api(worker, token, "POST", ROUTES.beginPublish.path(), { name: "unfinished", files: manifest }));
-    await done(await api(worker, token, "PUT", ROUTES.uploadFile.path({ upload: begun.upload.id, path: "index.html" }), HTML));
+    const begun = await done<{ upload: { id: string } }>(await api(worker, token).uploads.$post({ query: {}, json: { name: "unfinished", files: manifest } }));
+    await done(await sendFile(api(worker, token), begun.upload.id, { path: "index.html", body: HTML }));
     const stored = await keysUnder("");
 
     wait(w, 2);
@@ -94,7 +93,7 @@ describe("the scheduled run", () => {
       },
     };
     const token = await tokenOf(w, "publisher");
-    const whoami = async (): Promise<unknown> => (await done<{ update?: unknown }>(await api(instance(w, undefined, latest), token, "GET", ROUTES.whoami.path()))).update;
+    const whoami = async (): Promise<unknown> => (await done<{ update?: unknown }>(await api(instance(w, undefined, latest), token).whoami.$get({ query: {} }))).update;
     w.clock.now = Math.ceil(w.clock.now / DAY_MS) * DAY_MS;
     const before = await whoami();
 
@@ -116,7 +115,7 @@ describe("the scheduled run", () => {
   test("a login that ran out is removed by the run that ends the walk, and one still waiting stays", async () => {
     const worker = instance(w);
     await ask(worker, `${ADMIN}/api/whoami`);
-    const begin = async (): Promise<string> => (await done<{ code: string }>(await api(worker, null, "POST", ROUTES.beginLogin.path(), { scope: "publisher", computer: "laptop" }))).code;
+    const begin = async (): Promise<string> => (await done<{ code: string }>(await api(worker, null).logins.$post({ query: {}, json: { scope: "publisher", computer: "laptop" } }))).code;
     const { database } = await installOf(w);
     const stored = async (shown: string): Promise<boolean> => {
       const code = parseUserCode(shown);

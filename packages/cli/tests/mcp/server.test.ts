@@ -1,8 +1,10 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { dirname, join } from "node:path";
 
-import { LIMITS, NOW, ORIGIN, REBUILD_ADDRESS } from "../../../app/tests/api/support/install";
-import { ROUTES } from "../../../core/src/api/routes";
+import { hc } from "hono/client";
+
+import type { Api } from "../../../app/src/api/api";
+import { answered, LIMITS, NOW, ORIGIN, REBUILD_ADDRESS } from "../../../app/tests/api/support/install";
 import { TOOL_INPUTS } from "../../../core/src/actions/tool-inputs";
 import { cleanUp, folderOf } from "../commands/support/harness";
 import { type Answer, type McpBench, openMcp } from "./support/bench";
@@ -99,7 +101,7 @@ describe("the MCP server", () => {
     ]);
     expect(made.data.path).toBe(folder);
     expect((await bench.install.keys()).filter((key) => key.includes(".env") || key.includes("node_modules"))).toEqual([]);
-    expect(await bench.install.call("listSites", {}).then((listed) => (listed.body.sites as unknown[]).length)).toBe(1);
+    expect(await answered(bench.install.routes.sites.$get()).then((listed) => (listed.body.sites as unknown[]).length)).toBe(1);
   });
 
   test("a relative path is read from the server's working directory and answered as the absolute path: an agent told nothing cannot know which folder went up", async () => {
@@ -244,8 +246,8 @@ describe("the MCP server", () => {
     const stands: Readonly<Record<string, string>> = { TRASHED: trashed.label, SECOND: second.label, LARGE: large };
     const args = Object.fromEntries(Object.entries(asked).map(([key, value]) => [key, typeof value === "string" ? (stands[value] ?? value) : value]));
     const before = [
-      (await bench.install.call("listSites", {})).body,
-      (await bench.install.call("listSites", { trash: true })).body,
+      (await answered(bench.install.routes.sites.$get())).body,
+      (await answered(bench.install.routes.sites.$get({ query: { trash: "true" } }))).body,
       await bench.install.keys(),
     ];
 
@@ -253,8 +255,8 @@ describe("the MCP server", () => {
 
     expect({ error: answer.error, code: codeOf(answer), starts: answer.text.startsWith(`${code}: `) }).toEqual({ error: true, code, starts: true });
     expect([
-      (await bench.install.call("listSites", {})).body,
-      (await bench.install.call("listSites", { trash: true })).body,
+      (await answered(bench.install.routes.sites.$get())).body,
+      (await answered(bench.install.routes.sites.$get({ query: { trash: "true" } }))).body,
       await bench.install.keys(),
     ]).toEqual(before);
   });
@@ -353,10 +355,11 @@ describe("the MCP server", () => {
       if (bench.sent.length === before) silent.push(tool);
     }
 
-    const paths: readonly string[] = [ROUTES.startUpdate.pattern, ROUTES.updateAddress.pattern];
+    const { update } = hc<Api>(ORIGIN).api;
+    const paths: readonly string[] = [update.$path(), update.address.$path()];
 
     expect(silent).toEqual([]);
-    expect(bench.sent.filter((line) => paths.some((update) => line.includes(update)))).toEqual([]);
+    expect(bench.sent.filter((line) => paths.some((path) => line.includes(path)))).toEqual([]);
     expect([bench.install.provider.sent, (await bench.install.database.readUpdateAddress())?.address]).toEqual([[], REBUILD_ADDRESS]);
   });
 

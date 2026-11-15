@@ -30,6 +30,9 @@ const COUNT_KEY = "start_update";
 /** What a request to start an update may ask for. */
 export const START_OPTIONS = v.strictObject({ anyway: v.optional(v.boolean()) });
 
+/** What a start answers: a rebuild the provider took, the version the install runs, and the newer one it knows of. */
+export const STARTED_UPDATE = v.object({ started: v.literal(true), from: v.string(), to: v.nullable(v.string()) });
+
 /** Whether a start fit into its minute. */
 type Taken = { readonly ok: true } | { readonly ok: false; readonly retryAfterSeconds: number };
 
@@ -55,12 +58,7 @@ interface Asked extends v.InferOutput<typeof START_OPTIONS> {
 }
 
 /** A rebuild the provider took: the version the install runs, and the newer one it knows of, `null` for a rebuild asked for with none known. */
-interface Started {
-  readonly ok: true;
-  readonly started: true;
-  readonly from: string;
-  readonly to: string | null;
-}
+type Started = { readonly ok: true } & Readonly<v.InferOutput<typeof STARTED_UPDATE>>;
 
 /** Count one start against the install's minute. A counter that cannot answer counts as a full minute. */
 async function takeStart(rebuilding: Rebuilding, now: number): Promise<Taken> {

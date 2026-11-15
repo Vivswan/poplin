@@ -1,5 +1,8 @@
 // The commands about this machine's login and about the install as a whole: whoami, logout, config, and doctor.
 
+import { LISTED_SITES } from "../../../core/src/actions/list";
+import { REVOKED_TOKEN, WHOAMI_ANSWER } from "../../../core/src/actions/manage-tokens";
+import { SETTINGS_ANSWER } from "../../../core/src/actions/store-settings";
 import { settingsToText } from "../../../core/src/records/settings";
 import type { Failure } from "../client/client";
 import { clearLogin } from "../local/login-file";
@@ -40,7 +43,7 @@ function expiryText(expires: "never" | number): string {
 }
 
 async function whoami({ client, server, source }: Session): Promise<Outcome> {
-  const answered = await client.call("whoami", undefined);
+  const answered = await client.call(WHOAMI_ANSWER, (api) => api.whoami.$get());
   if (!answered.ok) return failed(answered.failure);
 
   const { token } = answered.value;
@@ -66,7 +69,7 @@ function isRevoked(failure: Failure | undefined): boolean {
  * A login from the environment has no file of its own, so the saved login of this machine, which may be another one, is left alone.
  */
 async function logout({ client, io, server, source }: Session): Promise<Outcome> {
-  const revoked = await client.call("logout", undefined);
+  const revoked = await client.call(REVOKED_TOKEN, (api) => api.token.$delete());
   const failure = revoked.ok ? undefined : revoked.failure;
   if (source === "file") await clearLogin(io.machine);
 
@@ -85,7 +88,7 @@ async function logout({ client, io, server, source }: Session): Promise<Outcome>
 
 async function config(action: ConfigAction, { client }: Session): Promise<Outcome> {
   if (action.kind !== "change") {
-    const read = await client.call("readConfig", undefined);
+    const read = await client.call(SETTINGS_ANSWER, (api) => api.config.$get());
     if (!read.ok) return failed(read.failure);
 
     const texts = settingsToText(read.value.values);
@@ -97,7 +100,7 @@ async function config(action: ConfigAction, { client }: Session): Promise<Outcom
   const value = readSetting(action.key, action.value);
   if (value === undefined) return { ok: false, problem: problem("bad_argument", action.key) };
 
-  const changed = await client.call("changeConfig", undefined, { [action.key]: value });
+  const changed = await client.call(SETTINGS_ANSWER, (api) => api.config.$patch({ json: { [action.key]: value } }));
   if (!changed.ok) return failed(changed.failure, "changes");
 
   const lines = columns([[action.key, settingsToText(changed.value.values)[action.key]]]);
@@ -130,13 +133,13 @@ function updateCheck(update: { readonly current: string; readonly newest: string
 
 /** Report on the install with calls that only read: who the token is, the settings, and the sites. Nothing is changed. */
 async function doctor({ client, server, source }: Session): Promise<Outcome> {
-  const who = await client.call("whoami", undefined);
+  const who = await client.call(WHOAMI_ANSWER, (api) => api.whoami.$get());
   if (!who.ok) return failed(who.failure);
 
   const { token, version, update } = who.value;
-  const settings = await client.call("readConfig", undefined);
-  const sites = await client.call("listSites", {});
-  const trash = await client.call("listSites", { trash: true });
+  const settings = await client.call(SETTINGS_ANSWER, (api) => api.config.$get());
+  const sites = await client.call(LISTED_SITES, (api) => api.sites.$get());
+  const trash = await client.call(LISTED_SITES, (api) => api.sites.$get({ query: { trash: "true" } }));
   const kept = settings.ok ? `${Object.keys(settings.value.values).length} settings read` : "";
   const live = sites.ok ? `${countText(sites.value.sites.length, "site")}${sites.value.next === undefined ? "" : " and more"}` : "";
   const trashed = trash.ok ? `${countText(trash.value.sites.length, "site")}${trash.value.next === undefined ? "" : " and more"}` : "";

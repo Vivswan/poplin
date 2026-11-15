@@ -2,6 +2,9 @@
 //
 // The address is read from the environment alone: never from an argument, which a process list shows. The install keeps it and never answers with it.
 
+import { WHOAMI_ANSWER } from "../../../core/src/actions/manage-tokens";
+import { STARTED_UPDATE } from "../../../core/src/actions/start-update";
+import { UPDATE_ADDRESS_STATE } from "../../../core/src/actions/update-address";
 import type { Failure } from "../client/client";
 import { problem, problemOf } from "./problems";
 import type { Outcome, RequestOf, Session } from "./records";
@@ -23,7 +26,7 @@ function failed(failure: Failure): Outcome {
 }
 
 async function start(anyway: boolean, { client }: Session): Promise<Outcome> {
-  const started = await client.call("startUpdate", anyway ? { anyway } : {});
+  const started = await client.call(STARTED_UPDATE, (api) => api.update.$post({ query: anyway ? { anyway: "true" } : {} }));
   if (!started.ok) return failed(started.failure);
 
   const { from, to } = started.value;
@@ -37,7 +40,7 @@ async function save({ client, io }: Session): Promise<Outcome> {
   const address = io.machine.env[ADDRESS_VARIABLE] ?? "";
   if (address === "") return { ok: false, problem: problem("no_address_to_save") };
 
-  const saved = await client.call("saveUpdateAddress", undefined, { address });
+  const saved = await client.call(UPDATE_ADDRESS_STATE, (api) => api.update.address.$put({ json: { address } }));
   if (saved.ok) return { ok: true, value: stateOf(saved.value), lines: ["the rebuild address is saved; to update: poplin update"] };
 
   if (saved.failure.kind === "refused" && saved.failure.code === "bad_argument") return { ok: false, problem: problem("bad_argument", ADDRESS_VARIABLE, NOT_TAKEN) };
@@ -46,7 +49,7 @@ async function save({ client, io }: Session): Promise<Outcome> {
 }
 
 async function forget({ client }: Session): Promise<Outcome> {
-  const removed = await client.call("removeUpdateAddress", undefined);
+  const removed = await client.call(UPDATE_ADDRESS_STATE, (api) => api.update.address.$delete());
   if (!removed.ok) return failed(removed.failure);
 
   return { ok: true, value: stateOf(removed.value), lines: ["the rebuild address is removed"] };
@@ -54,10 +57,10 @@ async function forget({ client }: Session): Promise<Outcome> {
 
 /** Say what an update would do, with calls that only read: the newer version when one is out, and whether an address is saved. */
 async function check({ client }: Session): Promise<Outcome> {
-  const who = await client.call("whoami", undefined);
+  const who = await client.call(WHOAMI_ANSWER, (api) => api.whoami.$get());
   if (!who.ok) return failed(who.failure);
 
-  const state = await client.call("updateAddress", undefined);
+  const state = await client.call(UPDATE_ADDRESS_STATE, (api) => api.update.address.$get());
   if (!state.ok) return failed(state.failure);
 
   const { version, update } = who.value;

@@ -4,7 +4,7 @@ import { join } from "node:path";
 
 import { createDashboard } from "../../../app/src/dashboard/dashboard";
 import { MemoryCounters } from "../../../app/src/limits/memory-counters";
-import { NOW, ORIGIN } from "../../../app/tests/api/support/install";
+import { answered, NOW, ORIGIN } from "../../../app/tests/api/support/install";
 import { FREE_LIMITS } from "../../../app/tests/dashboard/support/install";
 import { ADDRESSES } from "../../../app/tests/sites/support/layout";
 import type { Login as Email } from "../../../core/src/auth/logins";
@@ -156,7 +156,7 @@ describe("logIn", () => {
 
     const saved = desk.saved();
     const code = CODE.exec(ran.out.join("\n"))?.[0] ?? "";
-    const who = await desk.bench.install.call("whoami", undefined, { token: saved?.token });
+    const who = await answered(desk.bench.install.as(saved?.token ?? null).whoami.$get());
 
     expect([ran.code, ran.err, ran.out.slice(0, 5)]).toEqual([
       0,
@@ -238,11 +238,11 @@ describe("logIn", () => {
 
       return allow(desk, address);
     });
-    const token = desk.saved()?.token;
+    const saved = desk.bench.install.as(desk.saved()?.token ?? null);
 
     expect([ran.code, ran.opened, page.includes("A publisher: this computer may publish, and manage only the sites it published.")]).toEqual([0, [], true]);
-    expect((await desk.bench.install.call("whoami", undefined, { token })).body.token).toMatchObject({ scope: "publisher", expires: "never" });
-    expect((await desk.bench.install.call("listTokens", undefined, { token })).status).toBe(403);
+    expect((await answered(saved.whoami.$get())).body.token).toMatchObject({ scope: "publisher", expires: "never" });
+    expect((await answered(saved.tokens.$get())).status).toBe(403);
   });
 
   // Drift: an agent relays the address to its user from the first line while the command still waits; a line that came late, or that was not JSON, would leave the user with nothing to open.

@@ -1,9 +1,15 @@
 // Store one file of a pending upload at its final key. The file is one of the manifest's, and its bytes are exactly as many as the manifest declared.
 
+import * as v from "valibot";
+
 import type { Actor } from "../auth/scopes";
+import { COUNT } from "../records/fields";
 import { parseUploadId } from "../records/upload";
 import { type Install, type Refused, refuse } from "./records";
 import { isKeptVersion, isWithinReach, uploadKey, uploadObject } from "./uploads";
+
+/** What storing a file answers: its path as the manifest names it, and the bytes stored. */
+export const STORED_FILE = v.object({ path: v.string(), size: COUNT });
 
 /** One file to store: the upload's id as sent, the file's path as the manifest names it, and its bytes, which are read once. */
 interface FileRequest {
@@ -51,7 +57,7 @@ export async function uploadFile(
   install: Install,
   actor: Actor,
   request: FileRequest,
-): Promise<{ readonly ok: true; readonly path: string; readonly size: number } | Refused<"bad_argument" | "not_found" | "upload_finished" | "size_mismatch">> {
+): Promise<({ readonly ok: true } & Readonly<v.InferOutput<typeof STORED_FILE>>) | Refused<"bad_argument" | "not_found" | "upload_finished" | "size_mismatch">> {
   const id = parseUploadId(request.upload);
   if (id === undefined) return unread(request.body, "bad_argument", "upload");
 

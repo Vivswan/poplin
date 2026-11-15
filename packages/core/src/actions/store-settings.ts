@@ -6,16 +6,18 @@
 // One change is made by nobody who is a login: while nobody has ever logged in, no login is known to work, and the first one may have been mistyped.
 // `storeFirstLogin` replaces it, for a caller that has proven it may change the install's side at the provider, and for no longer than that.
 
+import * as v from "valibot";
+
 import type { Login } from "../auth/logins";
 import type { Actor } from "../auth/scopes";
-import type { SettingValues } from "../records/settings";
+import { SETTING_VALUES, type SettingValues } from "../records/settings";
 import { type Install, type Refused, refuse } from "./records";
 
-/** The settings as they are after a change. */
-interface Stored {
-  readonly ok: true;
-  readonly values: SettingValues;
-}
+/** What reading or changing the settings answers: every setting. */
+export const SETTINGS_ANSWER = v.object({ values: SETTING_VALUES });
+
+/** The settings as they are, read or after a change. */
+export type Stored = { readonly ok: true } & Readonly<v.InferOutput<typeof SETTINGS_ANSWER>>;
 
 /**
  * Decide whether new logins keep one that works.

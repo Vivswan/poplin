@@ -1,6 +1,10 @@
 import { describe, expect, test } from "bun:test";
 
-import { ORIGIN, openApi } from "../../../app/tests/api/support/install";
+import { answered, bytes, ORIGIN, openApi } from "../../../app/tests/api/support/install";
+import { LISTED_SITES } from "../../../core/src/actions/list";
+import { WHOAMI_ANSWER } from "../../../core/src/actions/manage-tokens";
+import { SITE_ANSWER } from "../../../core/src/actions/site-object";
+import { STORED_FILE } from "../../../core/src/actions/upload-file";
 import { createClient, type Fetch } from "../../src/client/client";
 
 /** A token in the form of one, which no install knows. */
@@ -14,7 +18,7 @@ function answer(status: number, body: unknown): Response {
 const hangs: Fetch = (_input, init) => new Promise((_resolve, reject) => init.signal?.addEventListener("abort", () => reject(init.signal?.reason)));
 
 describe("client", () => {
-  test("a call is built from core's route table: the method, the path, the bearer token, and the body with its type and its length", async () => {
+  test("a call is built from the routes the app declares: the method, the path, the bearer token, and the body with its type and its length", async () => {
     const seen: { method: string; url: string; headers: Record<string, string>; body: string }[] = [];
     const record: Fetch = async (input, init) => {
       const request = new Request(input, init);
@@ -24,10 +28,10 @@ describe("client", () => {
     };
     const client = createClient({ server: ORIGIN, token: TOKEN, fetch: record });
 
-    await client.call("getSite", { site: "report--k3f9x2ab71qz" });
-    await client.call("updateSite", { site: "docs" }, { title: "Q3 sales" });
-    await client.call("uploadFile", { upload: "0123456789abcdef", path: "css/a b.css" }, new TextEncoder().encode("body{}"), 6);
-    await client.call("listSites", { trash: true, limit: 5 });
+    await client.call(SITE_ANSWER, (api) => api.sites[":site"].$get({ param: { site: "report--k3f9x2ab71qz" } }));
+    await client.call(SITE_ANSWER, (api) => api.sites[":site"].$patch({ param: { site: "docs" }, json: { title: "Q3 sales" } }));
+    await client.upload(STORED_FILE, { upload: "0123456789abcdef", path: "css/a b.css", body: new TextEncoder().encode("body{}"), length: 6 });
+    await client.call(LISTED_SITES, (api) => api.sites.$get({ query: { trash: "true", limit: "5" } }));
 
     expect(seen.map((request) => `${request.method} ${request.url}`)).toEqual([
       `GET ${ORIGIN}/api/sites/report--k3f9x2ab71qz`,
@@ -50,13 +54,13 @@ describe("client", () => {
     const admin = createClient({ server: ORIGIN, token: install.tokens.admin, fetch });
     const nobody = createClient({ server: ORIGIN, token: TOKEN, fetch });
 
-    expect(await admin.call("whoami", undefined)).toMatchObject({ ok: true, value: { token: { scope: "admin" } } });
-    expect(await admin.call("listSites", {})).toEqual({ ok: true, value: { sites: [] } });
-    expect(await admin.call("getSite", { site: "zzzzzzzzzzzz" })).toEqual({
+    expect(await admin.call(WHOAMI_ANSWER, (api) => api.whoami.$get())).toMatchObject({ ok: true, value: { token: { scope: "admin" } } });
+    expect(await admin.call(LISTED_SITES, (api) => api.sites.$get())).toEqual({ ok: true, value: { sites: [] } });
+    expect(await admin.call(SITE_ANSWER, (api) => api.sites[":site"].$get({ param: { site: "zzzzzzzzzzzz" } }))).toEqual({
       ok: false,
       failure: { kind: "refused", status: 404, code: "not_found", message: "there is no such thing here" },
     });
-    expect(await nobody.call("whoami", undefined)).toMatchObject({ ok: false, failure: { kind: "refused", status: 401, code: "not_logged_in" } });
+    expect(await nobody.call(WHOAMI_ANSWER, (api) => api.whoami.$get())).toMatchObject({ ok: false, failure: { kind: "refused", status: 401, code: "not_logged_in" } });
   });
 
   test.each<[string, Fetch, unknown]>([
@@ -70,7 +74,7 @@ describe("client", () => {
   ])("%s is a failure of its own kind that never holds the token, and nothing throws", async (_name, fetch, failure) => {
     const client = createClient({ server: ORIGIN, token: TOKEN, fetch, timeoutMs: 20 });
 
-    const called = await client.call("whoami", undefined);
+    const called = await client.call(WHOAMI_ANSWER, (api) => api.whoami.$get());
 
     expect(called).toEqual({ ok: false, failure } as never);
     expect(JSON.stringify(called)).not.toContain(TOKEN);
@@ -79,10 +83,10 @@ describe("client", () => {
   test("a download hands back the real API's file as a stream with its length and its stored type, and a refusal as its code: without this a file route would be read as JSON and capped at 16 MB", async () => {
     const install = await openApi();
     const type = "text/x-notes; charset=utf-8";
-    const begun = await install.call("beginPublish", undefined, { body: { name: "notes", files: [{ path: "index.html", size: 5, content_type: type }] } });
+    const begun = await answered(install.routes.uploads.$post({ json: { name: "notes", files: [{ path: "index.html", size: 5, content_type: type }] } }));
     const upload = (begun.body.upload as { id: string }).id;
-    await install.call("uploadFile", { upload, path: "index.html" }, { body: "hello" });
-    const site = ((await install.call("finishPublish", { upload })).body.site as { id: string }).id;
+    await install.routes.uploads[":upload"].file.$put({ param: { upload }, query: { path: "index.html" } }, bytes("hello"));
+    const site = ((await answered(install.routes.uploads[":upload"].finish.$post({ param: { upload } }))).body.site as { id: string }).id;
     const client = createClient({ server: ORIGIN, token: install.tokens.admin, fetch: (input, init) => install.api.fetch(new Request(input, init)) });
 
     const file = await client.download({ site, version: 1, path: "index.html" });
@@ -118,6 +122,6 @@ describe("client", () => {
   ])("a call answered with %s keeps the wait with the failure, or none", async (_name, response, failure) => {
     const client = createClient({ server: ORIGIN, token: TOKEN, fetch: async () => response });
 
-    expect(await client.call("uploadFile", { upload: "0123456789abcdef", path: "index.html" }, new Uint8Array(1), 1)).toEqual({ ok: false, failure } as never);
+    expect(await client.upload(STORED_FILE, { upload: "0123456789abcdef", path: "index.html", body: new Uint8Array(1), length: 1 })).toEqual({ ok: false, failure } as never);
   });
 });

@@ -7,7 +7,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { setImmediate } from "node:timers/promises";
 
-import { type ApiInstall, ORIGIN, openApi } from "../../../../app/tests/api/support/install";
+import { type ApiInstall, answered, ORIGIN, openApi } from "../../../../app/tests/api/support/install";
 import type { Io } from "../../../src/commands/records";
 import { run } from "../../../src/commands/run";
 import { words } from "./command-line";
@@ -137,7 +137,7 @@ export async function runThroughPauses(bench: Bench, line: string, pausing: () =
 
 /** What an install holds that only a finished upload may change: the sites, and the keys of the store. */
 export async function stateOf(bench: Bench): Promise<unknown> {
-  const sites = await bench.install.call("listSites", {});
+  const sites = await answered(bench.install.routes.sites.$get());
 
   return [sites.body, await bench.install.keys()];
 }

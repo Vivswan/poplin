@@ -27,6 +27,7 @@
   "devDependencies": {
     "@actions/core": "3.0.1",
     "@cloudflare/vitest-plugin": "1.8.2",
+    "hono": "4.13.18",
     "uint8array-extras": "1.6.0",
     "vitest": "5.1.0",
     "wrangler": "4.162.0"

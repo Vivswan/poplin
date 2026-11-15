@@ -1,13 +1,16 @@
 // Publish: read the folder, begin the upload, send every file, and finish. A site changes only in the last step, and an upload that cannot be finished is given up.
 
-import type { ROUTES } from "../../../core/src/api/routes";
+import type * as v from "valibot";
+
+import type { PUBLISH_REQUEST } from "../../../core/src/actions/begin-publish";
+import { BEGUN_UPLOAD } from "../../../core/src/actions/uploads";
 import { showBytes } from "../../../core/src/records/settings";
 import { type PublishFile, readFiles } from "../files/read";
 import { readTitle } from "../files/title";
 import { type Problem, problem, problemOf } from "./problems";
 import type { Io, Outcome, RequestOf, Session } from "./records";
 import { addressChange, columns, countText, searchNotes, siteLines } from "./text";
-import { callUnhurried, givenUp, giveUpUpload, type Published, sendUpload } from "./upload";
+import { abandonUpload, callUnhurried, givenUp, giveUpUpload, type Published, sendUpload } from "./upload";
 import { siteChanges, siteWord } from "./wire";
 
 /** The page whose own title a site shows while none is typed for it. */
@@ -25,7 +28,7 @@ const AFTERMATH = {
 type PublishRequest = RequestOf<"publish">;
 
 /** What a publish is begun with. */
-type Manifest = NonNullable<(typeof ROUTES)["beginPublish"]["types"]>["body"];
+type Manifest = v.InferInput<typeof PUBLISH_REQUEST>;
 
 /** A publish with its folder read: the files, and what the install is asked to make of them. */
 export interface PublishPlan {
@@ -136,7 +139,7 @@ export function previewPublish(plan: PublishPlan): Outcome {
  */
 export async function sendPublish(plan: PublishPlan, session: Session): Promise<Outcome> {
   const { client, io } = session;
-  const begun = await callUnhurried(io, () => client.call("beginPublish", undefined, plan.manifest));
+  const begun = await callUnhurried(io, () => client.call(BEGUN_UPLOAD, (api) => api.uploads.$post({ json: plan.manifest })));
   if (!begun.ok) return begun.failure.kind === "refused" ? { ok: false, problem: problemOf(begun.failure) } : givenUp(begun.failure, AFTERMATH.unbegun);
 
   const upload = begun.value.upload.id;
@@ -152,7 +155,7 @@ export async function sendPublish(plan: PublishPlan, session: Session): Promise<
 
     return givenUp(finished.failure, AFTERMATH[became.kind]);
   } catch (error) {
-    await client.call("abandonPublish", { upload });
+    await abandonUpload(client, upload);
 
     throw error;
   } finally {

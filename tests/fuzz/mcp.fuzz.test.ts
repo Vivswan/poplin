@@ -9,10 +9,12 @@ import { join } from "node:path";
 import { PassThrough } from "node:stream";
 import fc from "fast-check";
 
+import { createClient } from "../../packages/cli/src/client/client";
 import { run } from "../../packages/cli/src/commands/run";
 import { protocolMessages } from "../../packages/cli/tests/mcp/support/bench";
 import { TOOL_INPUTS } from "../../packages/core/src/actions/tool-inputs";
-import { ROUTES } from "../../packages/core/src/api/routes";
+import { STARTED_UPDATE } from "../../packages/core/src/actions/start-update";
+import { UPDATE_ADDRESS_STATE } from "../../packages/core/src/actions/update-address";
 import { fuzzTarget } from "./config";
 import { hostile } from "./hostile";
 
@@ -22,7 +24,6 @@ const CRASHED = "poplin failed in a way it has no word for";
 const SCRATCH = mkdtempSync(join(tmpdir(), "poplin-fuzz-"));
 const FOLDER = join(SCRATCH, "report");
 const TOOL_NAMES = Object.keys(TOOL_INPUTS);
-const UPDATE_PATHS: readonly string[] = [ROUTES.startUpdate.pattern, ROUTES.updateAddress.pattern];
 const ARGUMENT_NAMES = [...new Set(Object.values(TOOL_INPUTS).flatMap((schema) => Object.keys(schema.entries)))];
 const METHODS = [
   "initialize",
@@ -62,6 +63,7 @@ interface Session {
 }
 
 const property = fuzzTarget(import.meta.file);
+const UPDATE_PATHS = await updatePaths();
 
 const ids = fc.oneof(fc.integer(), fc.string({ maxLength: 8 }), fc.constant(null));
 const strings = fc.oneof(
@@ -116,6 +118,24 @@ const lines = fc.oneof(
   { arbitrary: fc.jsonValue().map((value) => JSON.stringify(value)), weight: 1 },
 );
 const answers = fc.constantFrom(...ANSWERS);
+
+/** The paths of the routes that update an install, as the client asks for them of a stand-in that answers nothing of use. */
+async function updatePaths(): Promise<readonly string[]> {
+  const paths: string[] = [];
+  const client = createClient({
+    server: SERVER,
+    fetch: async (address) => {
+      paths.push(new URL(address).pathname);
+
+      return new Response("{}");
+    },
+  });
+
+  await client.call(STARTED_UPDATE, (api) => api.update.$post({ query: {} }));
+  await client.call(UPDATE_ADDRESS_STATE, (api) => api.update.address.$get({ query: {} }));
+
+  return paths;
+}
 
 /**
  * Run `poplin mcp` in process over two pipes: write the lines, wait until `done` holds of what the server wrote, close stdin, and wait for the exit.

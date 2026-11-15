@@ -10,14 +10,15 @@ import * as v from "valibot";
 
 import type { Actor } from "../auth/scopes";
 import { parseSiteName, type SiteName } from "../names/names";
+import { COUNT, POSITIVE } from "../records/fields";
 import type { Site } from "../records/site";
 import { mintSiteFolder } from "../records/site";
-import { type ManifestFile, mintUploadId, parseUploadId, type Upload } from "../records/upload";
+import { type ManifestFile, mintUploadId, parseUploadId, UPLOAD_ID, type Upload } from "../records/upload";
 import { MAX_LIST_LIMIT, type ObjectStore } from "../storage/storage";
 import { checkManifest, FULL, roomUnder, type UploadLimits } from "./begin-publish";
 import { defaultExpiry } from "./changes";
 import { fileKey, versionPrefix } from "./files";
-import { finishPublish } from "./finish-publish";
+import { finishPublish, PUBLISHED_SITE } from "./finish-publish";
 import { reachSite } from "./reach";
 import { type Install, type Refused, refuse } from "./records";
 import { discardUpload, isWithinReach, missingFiles, uploadKey } from "./uploads";
@@ -43,26 +44,29 @@ const UNBOUNDED: UploadLimits = { fileBytes: Number.MAX_SAFE_INTEGER, files: Num
 /** What a duplicate may ask for besides its site: the `name` of the copy on the first call, or the `upload` an earlier call answered, to go on with it. */
 export const DUPLICATE_REQUEST = v.strictObject({ name: v.optional(v.string()), upload: v.optional(v.string()) });
 
+/** How far a copy is: the upload that holds it, and how many of its files are stored. */
+const PROGRESS = v.object({ upload: UPLOAD_ID, copied: COUNT, files: POSITIVE });
+
+/** A copy that is not a site yet: `copy.upload` is what the next call names. `copied` may equal `files` here, one call before the site is made. */
+const COPYING = v.object({ before: v.null(), site: v.null(), copy: PROGRESS });
+
+/** A copy that is a site. */
+const COPIED = v.object({ ...PUBLISHED_SITE.entries, copy: PROGRESS });
+
+/** What a duplicate answers: the copy's progress, and the new site once every file is copied. */
+export const DUPLICATED_SITE = v.union([COPYING, COPIED]);
+
 /** The codes a duplicate may be refused with. */
 type DuplicateCode = Extract<Awaited<ReturnType<typeof reachSite | typeof finishPublish>>, { readonly ok: false }>["code"] | "bad_name" | "bad_path" | "no_index" | "too_large" | "too_many_sites" | "no_such_version";
 
-/** How far a copy is: the upload that holds it, and how many of its files are stored. */
-interface Progress {
-  readonly upload: Upload["id"];
-  readonly copied: number;
-  readonly files: number;
-}
+/** How far a copy is. */
+type Progress = Readonly<v.InferOutput<typeof PROGRESS>>;
 
-/** A copy that is not a site yet: `copy.upload` is what the next call names. `copied` may equal `files` here, one call before the site is made. */
-interface Copying {
-  readonly ok: true;
-  readonly before: null;
-  readonly site: null;
-  readonly copy: Progress;
-}
+/** A copy that is not a site yet. */
+type Copying = { readonly ok: true } & Readonly<v.InferOutput<typeof COPYING>>;
 
 /** A copy that is a site. */
-type Duplicated = Extract<Awaited<ReturnType<typeof finishPublish>>, { readonly ok: true }> & { readonly copy: Progress };
+type Duplicated = { readonly ok: true } & Readonly<v.InferOutput<typeof COPIED>>;
 
 /** A copy's plan. */
 type CopyPlan = Extract<Upload["plan"], { readonly kind: "duplicate" }>;

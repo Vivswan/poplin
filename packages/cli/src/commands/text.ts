@@ -2,16 +2,13 @@
 
 import stringWidth from "string-width";
 
-import type { ROUTES } from "../../../core/src/api/routes";
+import type { SiteObject } from "../../../core/src/actions/site-object";
 
 /** How many characters of an ISO moment are its day. */
 const DAY_LENGTH = 10;
 
 /** What stands between two columns of a row. */
 const GAP = "  ";
-
-/** A site as the API answers with it. */
-export type SiteObject = NonNullable<(typeof ROUTES)["getSite"]["types"]>["done"]["site"];
 
 /**
  * Word a moment as its day in UTC, such as `2026-12-01`.

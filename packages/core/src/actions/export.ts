@@ -3,7 +3,7 @@
 import * as v from "valibot";
 
 import type { Actor } from "../auth/scopes";
-import { POSITIVE, SITE_ID } from "../records/fields";
+import { COUNT, POSITIVE, SITE_ID, SITE_NAME } from "../records/fields";
 import { settingsToText } from "../records/settings";
 import type { Site } from "../records/site";
 import { type ListCursor, MAX_LIST_LIMIT } from "../storage/storage";
@@ -40,6 +40,21 @@ export const EXPORT_FILES_QUERY = v.strictObject({
 /** What names one stored file of one version. */
 export const EXPORT_FILE_QUERY = v.strictObject({ version: POSITIVE, path: v.string() });
 
+/** A site as a backup holds it, by the keys a client reads: what names it, and what each version it carries holds. Every other key is checked by the install that imports it. */
+const STORED_SITE = v.object({ id: SITE_ID, name: SITE_NAME, live_version: POSITIVE, versions: v.pipe(v.array(v.object({ number: POSITIVE, files: COUNT, bytes: COUNT })), v.readonly()) });
+
+/** What the export of the settings answers: every setting in the text form it is typed in, under the backup's format number. */
+export const EXPORTED_SETTINGS = v.object({ format: v.number(), settings: v.record(v.string(), v.string()) });
+
+/** What a page of exported sites answers, by the keys a client reads of each site. */
+export const EXPORTED_SITES = v.object({ format: v.number(), sites: v.pipe(v.array(STORED_SITE), v.readonly()), next: v.optional(SITE_ID) });
+
+/** What the export of one site answers, by the keys a client reads of the site. */
+export const EXPORTED_SITE = v.object({ format: v.number(), site: STORED_SITE });
+
+/** What a page of one version's files answers: each file's path and length, and what `cursor` takes to get the following page. */
+export const EXPORTED_FILES = v.object({ files: v.pipe(v.array(v.object({ path: v.string(), size: COUNT })), v.readonly()), next: v.optional(v.string()) });
+
 /** Each member of a union without one key, so a field only some members have stays with them. */
 type Without<Value, Key extends PropertyKey> = Value extends unknown ? Omit<Value, Key> : never;
 
@@ -58,11 +73,7 @@ interface ExportedSites {
 }
 
 /** One page of the files a version holds, in the store's order. `next` is what `cursor` takes to get the following page, and is absent on the last. */
-interface ExportedFiles {
-  readonly ok: true;
-  readonly files: readonly { readonly path: string; readonly size: number }[];
-  readonly next?: string;
-}
+type ExportedFiles = { readonly ok: true } & Readonly<v.InferOutput<typeof EXPORTED_FILES>>;
 
 /** One stored file: its length in bytes, the media type it is served with, and its bytes, which are read once. */
 interface ExportedFile {
@@ -98,7 +109,7 @@ async function reachVersion(install: Install, actor: Actor, asked: { readonly si
 export async function exportSettings(
   install: Install,
   actor: Actor,
-): Promise<{ readonly ok: true; readonly format: typeof BACKUP_FORMAT; readonly settings: Readonly<Record<string, string>> } | Refused<"not_allowed" | "not_set_up">> {
+): Promise<({ readonly ok: true } & Readonly<v.InferOutput<typeof EXPORTED_SETTINGS>>) | Refused<"not_allowed" | "not_set_up">> {
   if (actor.scope !== "admin") return refuse("not_allowed");
 
   const values = await install.database.readSettings();

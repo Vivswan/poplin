@@ -1,7 +1,10 @@
 // What the steps of a staged publish or import share: the upload as a caller sees it, whether an actor may still touch one, where its files go, what the store holds of it, and giving it up.
 
+import * as v from "valibot";
+
 import { type Actor, mayReachSite } from "../auth/scopes";
-import type { ManifestFile, Upload } from "../records/upload";
+import { COUNT, MOMENT, POSITIVE } from "../records/fields";
+import { type ManifestFile, UPLOAD_ID, UPLOAD_STATE, type Upload } from "../records/upload";
 import { MAX_LIST_LIMIT, type ObjectStore } from "../storage/storage";
 import { fileKey, removeFiles, sitePrefix, versionPrefix } from "./files";
 import type { Install } from "./records";
@@ -22,6 +25,12 @@ const SPARE_PAGES = 2;
 /** How an import declares one file: `v`, the number of the version it belongs to, and its path in that version. */
 const IMPORTED_PATH = /^v([1-9]\d{0,15})\/(.+)$/s;
 
+/** A staged publish as an answer holds it. */
+export const UPLOAD_OBJECT = v.object({ id: UPLOAD_ID, state: UPLOAD_STATE, version: POSITIVE, files: POSITIVE, bytes: COUNT, expires: MOMENT });
+
+/** What beginning a publish or an import answers: the upload, whose id every later step names. */
+export const BEGUN_UPLOAD = v.object({ upload: UPLOAD_OBJECT });
+
 /** What says where an upload's files go. */
 type Placed = Pick<Upload, "folder" | "number" | "plan">;
 
@@ -31,14 +40,10 @@ type Placed = Pick<Upload, "folder" | "number" | "plan">;
  * `version` is the number the files become once finished, `files` and `bytes` what the manifest declared. `expires` is when a pending upload stops taking files.
  * An import's `version` is 1 whatever versions its site keeps.
  */
-export interface UploadObject {
-  readonly id: Upload["id"];
-  readonly state: Upload["state"];
-  readonly version: number;
-  readonly files: number;
-  readonly bytes: number;
-  readonly expires: number;
-}
+type UploadObject = Readonly<v.InferOutput<typeof UPLOAD_OBJECT>>;
+
+/** A publish or an import begun. */
+export type BegunUpload = { readonly ok: true } & Readonly<v.InferOutput<typeof BEGUN_UPLOAD>>;
 
 /** Build the upload object of a stored upload. */
 export function uploadObject(upload: Upload): UploadObject {

@@ -11,7 +11,9 @@
 import { mkdtempDisposableSync, readdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { ROUTES } from "@poplin/core/src/api/routes";
+import { DELETED_SITE } from "@poplin/core/src/actions/delete";
+import { LISTED_SITES } from "@poplin/core/src/actions/list";
+import type * as v from "valibot";
 
 import { type Client, createClient, type Failure, type Fetch } from "../../../cli/src/client/client";
 import type { Io } from "../../../cli/src/commands/records";
@@ -77,7 +79,7 @@ interface Tally {
 }
 
 /** One page of a listing. */
-type Sites = NonNullable<(typeof ROUTES)["listSites"]["types"]>["done"]["sites"];
+type Sites = v.InferOutput<typeof LISTED_SITES>["sites"];
 
 /** Why a call got no answer to use, in words that quote nothing the install said. */
 function told(failure: Failure): string {
@@ -109,7 +111,7 @@ function ioOf(ends: ResetEnds, scratch: string): Io {
 
 /** The first page of the sites outside the trash, or of the ones inside it. */
 async function firstPage(client: Client, io: Io, trash: boolean): Promise<Sites | Stop> {
-  const listed = await callUnhurried(io, () => client.call("listSites", { trash, limit: PAGE }));
+  const listed = await callUnhurried(io, () => client.call(LISTED_SITES, (api) => api.sites.$get({ query: { trash: String(trash), limit: String(PAGE) } })));
   if (!listed.ok) return { kind: "failed", what: `the install did not list its sites (${told(listed.failure)})` };
 
   return listed.value.sites;
@@ -127,7 +129,7 @@ async function removeSites(client: Client, io: Io, trash: boolean): Promise<numb
     if (doomed.length === 0) return removed;
 
     for (const site of doomed) {
-      const gone = await callUnhurried(io, () => client.call("deleteSite", { site: site.id, forever: true }));
+      const gone = await callUnhurried(io, () => client.call(DELETED_SITE, (api) => api.sites[":site"].$delete({ param: { site: site.id }, query: { forever: "true" } })));
       if (!gone.ok) return { kind: "failed", what: `the install did not remove a site (${told(gone.failure)})` };
 
       removed += 1;
