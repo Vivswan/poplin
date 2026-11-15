@@ -1406,6 +1406,44 @@ function tokensAndSettings(label: string, makeDatabase: DatabaseFactory): void {
       await expect(database.changeSettings({ trash_days: 0 }, BY_ADA)).rejects.toThrow();
       await expect(database.changeSettings({ logins: [] }, BY_ADA)).rejects.toThrow();
     });
+
+    // Drift: two admins changing people at the same moment must both be heard, and somebody must always be able to log in; a list read and written back would let the second undo the first, or let two removals empty it.
+    test("one login is added or removed in one step: changes made at the same moment all land, and a login that works always stays", async () => {
+      const database = await opened(makeDatabase);
+      const [bo, cy, di] = ["bo@example.com" as Login, "cy@example.com" as Login, "di@example.com" as Login];
+      const byAdmin: Signed = { by: ADMIN, at: NOW + 1 };
+      const kinds = (answers: readonly { readonly kind: string }[]): string[] => answers.map((answer) => answer.kind);
+      const stored = async (): Promise<unknown> => [...((await database.readSettings())?.logins ?? [])].sort();
+
+      expect(kinds(await Promise.all([database.addLogin(bo, BY_ADA), database.removeLogin(ADMIN, BY_ADA)]))).toEqual(["not_set_up", "not_set_up"]);
+      await database.initSettings(SETTINGS, BY_ADA);
+      const added = await Promise.all([database.addLogin(bo, BY_ADA), database.addLogin(cy, byAdmin), database.changeSettings({ trash_days: 30 }, BY_ADA)]);
+      const crossed = await Promise.all([database.addLogin(di, byAdmin), database.removeLogin(bo, byAdmin)]);
+      const values = { ...SETTINGS, trash_days: 30 };
+
+      expect([kinds(added), kinds(crossed), await stored()]).toEqual([["done", "done", "done"], ["done", "done"], [ADMIN, cy, di]]);
+      expect([
+        await database.addLogin(cy, byAdmin),
+        await database.removeLogin(bo, byAdmin),
+        await database.removeLogin(ADMIN, byAdmin),
+        await database.removeLogin(cy, BY_ADA),
+        await database.removeLogin(di, BY_ADA),
+        await database.removeLogin(ADMIN, BY_ADA),
+      ]).toEqual([
+        { kind: "unchanged", values: { ...values, logins: [ADMIN, cy, di] } },
+        { kind: "unchanged", values: { ...values, logins: [ADMIN, cy, di] } },
+        { kind: "no_working_login" },
+        { kind: "done", values: { ...values, logins: [ADMIN, di] } },
+        { kind: "done", values: { ...values, logins: [ADMIN] } },
+        { kind: "no_working_login" },
+      ]);
+
+      const details = await auditDetails(database, "settings_changed");
+
+      expect([details.length, details.slice(-2), await stored()]).toEqual([7, [{ logins: [ADMIN, di] }, { logins: [ADMIN] }], [ADMIN]]);
+      await expect(database.addLogin("Bo@Example.com" as Login, BY_ADA)).rejects.toThrow();
+      await expect(database.removeLogin("" as Login, BY_ADA)).rejects.toThrow();
+    });
   });
 }
 

@@ -66,6 +66,11 @@ const ROWS: Readonly<Record<string, readonly [read: number, written: number]>> =
   "changeSettings": [3, 3],
   "changeSettings, the same": [3, 0],
   "initSettings, already set": [4, 0],
+  "addLogin": [5, 3],
+  "addLogin, already one": [5, 0],
+  "removeLogin": [8, 3],
+  "removeLogin, not one": [5, 0],
+  "removeLogin, the last": [5, 0],
   "ensureSigningKey, the first": [2, 1],
   "ensureSigningKey, kept": [1, 0],
   "readSigningKey": [1, 0],
@@ -608,6 +613,14 @@ describe("D1: the rows every operation of the database costs of a day's allowanc
     const pieces = Array.from({ length: 200 }, (_piece, at) => ({ piece: "Record", detail: `record ${at}`, part: "reach", state: "needs_repair" }) as const);
     await cost("keepDomainCheck, 200 pieces over the run before", () => database.keepDomainCheck({ ran_at: NOW + 1, by: BY_ADA.by, run: "repair", pieces }, { run: "repair" }));
     await cost("readDomainCheck", () => database.readDomainCheck());
+
+    // The logins change after every read of the log: an entry they wrote earlier would sit before the first login, which the read above walks to.
+    const person = "bo@example.com" as Login;
+    await cost("addLogin", () => database.addLogin(person, BY_ADA));
+    await cost("addLogin, already one", () => database.addLogin(person, BY_ADA));
+    await cost("removeLogin", () => database.removeLogin(person, BY_ADA));
+    await cost("removeLogin, not one", () => database.removeLogin(person, BY_ADA));
+    await cost("removeLogin, the last", () => database.removeLogin(ADMIN, BY_ADA));
 
     expect(costs).toEqual(ROWS);
   });

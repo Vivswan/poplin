@@ -9,12 +9,13 @@ import { drizzle } from "drizzle-orm/sqlite-proxy";
 import * as v from "valibot";
 
 import type { ComputerLogin, LoginId, PendingLogin, UserCode } from "../auth/computer-logins";
+import type { Login } from "../auth/logins";
 import type { TokenId, TokenRecord } from "../auth/tokens";
 import type { PublicName, SiteName } from "../names/names";
 import { type AuditAction, type AuditEntry, auditFromRow } from "../records/audit";
 import type { DomainCheck } from "../records/domain-check";
 import { computerLoginFromRow } from "../records/computer-login";
-import { SITE_ID, SITE_NAME } from "../records/fields";
+import { LOGIN, SITE_ID, SITE_NAME } from "../records/fields";
 import { SETTING_CHANGES, SETTING_VALUES, type SettingValues } from "../records/settings";
 import { signingKeyFromRow, signingKeyToText, type UpdateAddress, updateAddressFromRow } from "../records/secret";
 import { NEW_SITE, SITE_DETAILS, SITE_FOLDER, type Site, type SiteAccess, type SiteFolder, siteFromRow, siteToRow } from "../records/site";
@@ -410,6 +411,18 @@ function dropOldVersions(folder: SQL, keep: number): Statement {
 /** The audit entry of a change to no site, written only when the statement before it changed a row. */
 function auditPlain(signed: Signed, action: AuditAction, detail: Readonly<Record<string, unknown>>): Statement {
   return insertFrom(audit, PLAIN_AUDIT_COLUMNS, fragment`SELECT ${signed.at}, ${signed.by}, ${action}, ${JSON.stringify(detail)} WHERE ${CHANGED}`);
+}
+
+/** Whether an email is one of the stored logins, for a statement on the settings row. */
+function isStoredLogin(email: string): SQL {
+  return fragment`EXISTS (SELECT 1 FROM json_each(${settings.value}, '$.logins') AS j WHERE j.value = ${email})`;
+}
+
+/** The audit entry of one login added or removed, with the logins after it, written only when the statement before it changed a row. */
+function auditOfLogins(signed: Signed): Statement {
+  const detail = fragment`json_object('logins', json_extract(${settings.value}, '$.logins'))`;
+
+  return insertFrom(audit, PLAIN_AUDIT_COLUMNS, fragment`SELECT ${signed.at}, ${signed.by}, 'settings_changed', ${detail} FROM ${settings} WHERE ${settings.id} = 1 AND ${CHANGED}`);
 }
 
 /** A secret in place of the stored one of its name, or as the first. */
@@ -1206,6 +1219,31 @@ export class SqlDatabase implements Database {
     if (values === undefined) return { kind: "not_set_up" };
 
     return { kind: changed(updated) ? "done" : "unchanged", values };
+  }
+
+  async addLogin(login: Login, signed: Signed): Promise<{ readonly kind: "done" | "unchanged"; readonly values: SettingValues } | Refused<"not_set_up">> {
+    const added = fragment<string>`json_insert(${settings.value}, '$.logins[#]', ${v.parse(LOGIN, login)})`;
+    const add = BUILD.update(settings).set({ value: added, updated_at: signed.at }).where(and(eq(settings.id, 1), fragment`NOT ${isStoredLogin(login)}`));
+    const [updated, , read] = await this.#driver.batch([built(add), auditOfLogins(signed), READ_SETTINGS]);
+    const values = settingsIn(read);
+    if (values === undefined) return { kind: "not_set_up" };
+
+    return { kind: changed(updated) ? "done" : "unchanged", values };
+  }
+
+  async removeLogin(login: Login, signed: Signed): Promise<{ readonly kind: "done" | "unchanged"; readonly values: SettingValues } | Refused<"not_set_up" | "no_working_login">> {
+    const place = fragment`(SELECT j.key FROM json_each(${settings.value}, '$.logins') AS j WHERE j.value = ${v.parse(LOGIN, login)})`;
+    const removed = fragment<string>`json_remove(${settings.value}, '$.logins[' || ${place} || ']')`;
+    // A login works when the login page is known to let it in: the signer's own email, or any login for a signer that is none.
+    const keepsWorkingLogin = fragment`CASE WHEN ${isStoredLogin(signed.by)} THEN ${login} <> ${signed.by} ELSE json_array_length(${settings.value}, '$.logins') > 1 END`;
+    const remove = BUILD.update(settings).set({ value: removed, updated_at: signed.at }).where(and(eq(settings.id, 1), isStoredLogin(login), keepsWorkingLogin));
+    const [updated, , read] = await this.#driver.batch([built(remove), auditOfLogins(signed), READ_SETTINGS]);
+    const values = settingsIn(read);
+    if (values === undefined) return { kind: "not_set_up" };
+
+    if (changed(updated)) return { kind: "done", values };
+
+    return values.logins.includes(login) ? { kind: "no_working_login" } : { kind: "unchanged", values };
   }
 
   async readSigningKey(): Promise<Uint8Array<ArrayBuffer> | undefined> {

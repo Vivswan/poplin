@@ -3,6 +3,7 @@
 
 import { describe, expect, test } from "bun:test";
 
+import type { Login } from "../../../src/auth/logins";
 import { mintToken } from "../../../src/auth/tokens";
 import type { Database } from "../../../src/database/database";
 import { AllowanceSpent, type SqlDriver, type SqlValue, type Statement, type StatementResult } from "../../../src/database/driver";
@@ -399,6 +400,8 @@ function queryPlans(label: string, makeDriver: DriverFactory): void {
       await database.revokeToken(token.id, BY_ADA);
       await database.readSettings();
       await database.changeSettings({ trash_days: 30 }, BY_ADA);
+      await database.addLogin("bo@example.com" as Login, BY_ADA);
+      await database.removeLogin("bo@example.com" as Login, BY_ADA);
       await database.appendAudit({ action: "login", detail: {} }, BY_ADA);
       await database.listAudit({ limit: 10 });
       await database.listAudit({ limit: 10, dir: "asc" });

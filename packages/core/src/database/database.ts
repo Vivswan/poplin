@@ -589,6 +589,24 @@ export interface Database {
     signed: Signed,
   ): Promise<{ readonly kind: "done" | "unchanged"; readonly values: SettingValues } | Refused<"not_set_up">>;
 
+  /**
+   * Let one more email log in. It is one step that reads no list first: of logins added and removed at the same moment, each change lands. It writes one `settings_changed` audit entry, which holds the logins after it.
+   *
+   * @returns `unchanged` for an email that already is a login, which writes nothing
+   * @throws {Error} the login is no email in its normal form
+   */
+  addLogin(login: Login, signed: Signed): Promise<{ readonly kind: "done" | "unchanged"; readonly values: SettingValues } | Refused<"not_set_up">>;
+
+  /**
+   * Stop one email from logging in, in the same one step, and only while a login that works stays: the signer's own email when it is a login, and any login at all when the signer is none.
+   *
+   * It writes one `settings_changed` audit entry, which holds the logins after it.
+   *
+   * @returns `unchanged` for an email that is no login, and `no_working_login` for the signer's own email or the last login there is; neither writes anything
+   * @throws {Error} the login is no email in its normal form
+   */
+  removeLogin(login: Login, signed: Signed): Promise<{ readonly kind: "done" | "unchanged"; readonly values: SettingValues } | Refused<"not_set_up" | "no_working_login">>;
+
   /** The bytes of the key that signs sessions, `undefined` before one was stored. No other operation returns them. */
   readSigningKey(): Promise<Uint8Array<ArrayBuffer> | undefined>;
 

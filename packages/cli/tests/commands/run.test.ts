@@ -35,6 +35,8 @@ const CODES: Readonly<Record<Code, true>> = {
   too_many_sites: true,
   not_set_up: true,
   no_working_login: true,
+  already_a_login: true,
+  not_a_login: true,
   no_update_address: true,
   no_update: true,
   update_refused: true,

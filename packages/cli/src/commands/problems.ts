@@ -42,6 +42,8 @@ const API_ROWS = {
     hint: "keep an email that is a login now: a new one gets in only after a Repair on the dashboard's Domain tab",
     exit: "failed",
   },
+  already_a_login: { sentence: "that email is a login already", hint: "poplin config logins shows the logins", exit: "failed" },
+  not_a_login: { sentence: "that email is no login", hint: "poplin config logins shows the logins", exit: "failed" },
   no_update_address: { sentence: "the install has no rebuild address", hint: "put the provider's address in POPLIN_UPDATE_ADDRESS, then: poplin update --save-address", exit: "failed" },
   no_update: { sentence: "no newer version is known to the install", hint: "to rebuild all the same: poplin update --anyway", exit: "failed" },
   update_refused: {
