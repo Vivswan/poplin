@@ -720,10 +720,10 @@ describe("a database whose allowance for the day is used up", () => {
       [503, "6400", "public, max-age=60", ""],
       [503, "6400", "no-store", JSON.stringify({ error: { code: "allowance_spent", message: "a day's allowance of the install is used up: ask again after midnight UTC", about: "reading" } })],
       [503, "6400", "no-store", `${NO_READING}\n`],
-      [503, "6400", "no-store", JSON.stringify({ ok: false, code: "no_more_reading", about: null, sentence: NO_READING })],
+      [503, "6400", "no-store", JSON.stringify({ ok: false, code: "allowance_spent", about: "reading", sentence: NO_READING })],
       [503, "6400", "no-store", JSON.stringify({ ok: false, refusal: "allowance_spent" })],
       [503, "6400", "no-store", JSON.stringify({ error: { code: "allowance_spent", message: "a day's allowance of the install is used up: ask again after midnight UTC", about: "writing" } })],
-      [503, "6400", "no-store", JSON.stringify({ ok: false, code: "no_more_writing", about: null, sentence: "The database takes no more changes today: its free allowance for writing is used up. Changes work again after midnight UTC." })],
+      [503, "6400", "no-store", JSON.stringify({ ok: false, code: "allowance_spent", about: "writing", sentence: "The database takes no more changes today: its free allowance for writing is used up. Changes work again after midnight UTC." })],
     ]);
     // The entry writes down each failure it answers itself. The dashboard answers the change it could not write, so the entry never sees that one.
     expect(failed).toHaveBeenCalledTimes(7);

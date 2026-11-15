@@ -35,8 +35,6 @@ export const VERSION = "1.0.0";
 interface Owned {
   readonly install: Install;
   readonly owner: Awaited<ReturnType<typeof openInstall>>["owner"];
-
-  /** The owner's session, as a `Cookie` header carries it. */
   readonly cookie: string;
   readonly clock: { now: number };
   readonly counters: MemoryCounters;

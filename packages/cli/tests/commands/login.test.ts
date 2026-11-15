@@ -36,8 +36,6 @@ interface SendOptions {
 interface Decision {
   readonly code: string;
   readonly allow: boolean;
-
-  /** The admin's word that the code on the screen is the terminal's. */
   readonly confirm?: boolean;
 }
 

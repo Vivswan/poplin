@@ -20,6 +20,9 @@ const SAMPLES = join(import.meta.dir, "..", "..", "demo", "samples");
 /** The most the samples and the demo hold together, one version of each: what the test install keeps between runs. */
 const STANDING = { files: 40, bytes: 3_000_000 };
 
+/** How long a test that builds the demo may take, in milliseconds: the build holds the dashboard's client, which is built first. */
+const BUILD_MS = 60_000;
+
 /** How many versions of a site an install keeps by default: the demo's site is published anew at every reset. */
 const VERSIONS_KEPT = defaultSettings({ installer: "ada@example.com" as Login, hostname: "poplin.example.com" }).versions_kept;
 
@@ -49,7 +52,7 @@ describe("the caps of the test install, against a local fake", () => {
     expect({ files: total.files <= STANDING.files, bytes: total.bytes <= STANDING.bytes }).toEqual({ files: true, bytes: true });
     expect(kept.filter((site) => site.files > LIVE_CAPS.max_files_per_publish || site.bytes * VERSIONS_KEPT > sizeBytes(LIVE_CAPS.max_site_size))).toEqual([]);
     expect(total.bytes * VERSIONS_KEPT).toBeLessThan(sizeBytes(LIVE_CAPS.max_total_size));
-  });
+  }, BUILD_MS);
 
   test("an install takes the caps and keeps every other setting, and a reset with the real demo still fits under them", async () => {
     const install = await openSqlInstall();
@@ -76,5 +79,5 @@ describe("the caps of the test install, against a local fake", () => {
     });
 
     expect<unknown>({ capped, after, ended: "kind" in ended ? ended : ended.demo }).toEqual({ capped: undefined, after: { ...before, ...LIVE_CAPS }, ended: "published" });
-  });
+  }, BUILD_MS);
 });

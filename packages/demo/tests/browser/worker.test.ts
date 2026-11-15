@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import { existsSync, mkdtempDisposableSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { Parser } from "htmlparser2";
+import { DomUtils, parseDocument } from "htmlparser2";
 
 import { buildDemo } from "../../scripts/build";
 
@@ -41,19 +41,8 @@ test("the built 404 page sends an address inside the demo through the first page
   using site = mkdtempDisposableSync(join(tmpdir(), "poplin-site-"));
   await buildDemo({ out: site.path });
   const sent: string[] = [];
-  let [script, inScript] = ["", false];
-  const page = new Parser({
-    onopentagname: (name) => {
-      inScript = name === "script";
-    },
-    ontext: (chunk) => {
-      if (inScript) script += chunk;
-    },
-    onclosetag: () => {
-      inScript = false;
-    },
-  });
-  page.end(readFileSync(join(site.path, "404.html"), "utf8"));
+  const page = parseDocument(readFileSync(join(site.path, "404.html"), "utf8"));
+  const script = DomUtils.getElementsByTagName("script", page).map((found) => DomUtils.textContent(found)).join("");
 
   new Function("location", script)({ pathname: "/activity", search: "?kind=sites", hash: "#content", replace: (address: string) => sent.push(address) });
 

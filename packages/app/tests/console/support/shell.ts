@@ -1,6 +1,6 @@
 // The console's one page as a test reads it: by a parser, as a browser does, never by a pattern over its text.
 
-import { Parser } from "htmlparser2";
+import { DomUtils, parseDocument } from "htmlparser2";
 
 /** What the page holds. */
 interface Shell {
@@ -17,13 +17,6 @@ interface Shell {
   readonly runs: number;
 }
 
-/** Whether a tag is something a browser runs from the page's own text. */
-function runsHere(name: string, attributes: Readonly<Record<string, string>>): boolean {
-  if (name === "script") return attributes.src === undefined && attributes.type !== "application/json";
-
-  return name === "a" && (attributes.href ?? "").trim().toLowerCase().startsWith("javascript:");
-}
-
 /**
  * Read a page of the console.
  *
@@ -31,25 +24,18 @@ function runsHere(name: string, attributes: Readonly<Record<string, string>>): b
  * @throws {SyntaxError} the page's start values are no JSON
  */
 export function readShell(page: string): Shell {
-  const [scripts, styles]: [string[], string[]] = [[], []];
-  let [boot, runs, inBoot] = ["", 0, false];
-  const parser = new Parser({
-    onopentag: (name, attributes) => {
-      inBoot = name === "script" && attributes.id === "boot";
-      if (name === "script" && attributes.src !== undefined) scripts.push(attributes.src);
+  const document = parseDocument(page);
+  const scripts = DomUtils.getElementsByTagName("script", document);
+  const links = DomUtils.getElementsByTagName("link", document);
+  const anchors = DomUtils.getElementsByTagName("a", document);
+  const boot = scripts.filter((script) => script.attribs.id === "boot").map((script) => DomUtils.textContent(script)).join("");
+  const written = scripts.filter((script) => script.attribs.src === undefined && script.attribs.type !== "application/json");
+  const running = anchors.filter((anchor) => (anchor.attribs.href ?? "").trim().toLowerCase().startsWith("javascript:"));
 
-      if (name === "link" && attributes.rel === "stylesheet") styles.push(attributes.href ?? "");
-
-      if (runsHere(name, attributes)) runs += 1;
-    },
-    ontext: (text) => {
-      if (inBoot) boot += text;
-    },
-    onclosetag: () => {
-      inBoot = false;
-    },
-  });
-  parser.end(page);
-
-  return { boot: boot === "" ? null : JSON.parse(boot), scripts, styles, runs };
+  return {
+    boot: boot === "" ? null : JSON.parse(boot),
+    scripts: scripts.flatMap((script) => (script.attribs.src === undefined ? [] : [script.attribs.src])),
+    styles: links.filter((link) => link.attribs.rel === "stylesheet").map((link) => link.attribs.href ?? ""),
+    runs: written.length + running.length,
+  };
 }

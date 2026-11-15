@@ -12,9 +12,7 @@ import { ORIGIN } from "../../packages/app/tests/console/support/install";
 import { fuzzTarget } from "./config";
 import { hostile } from "./hostile";
 
-/** Every status the dashboard answers with. */
 const ANSWERS = [200, 302, 400, 401, 403, 404, 415, 429];
-
 const METHODS = ["GET", "HEAD", "POST", "POST", "POST", "POST", "POST", "PUT", "DELETE", "OPTIONS"];
 const JSON_TYPE = "application/json";
 const FORM = "application/x-www-form-urlencoded";
@@ -22,11 +20,7 @@ const TYPES = [JSON_TYPE, JSON_TYPE, JSON_TYPE, JSON_TYPE, `${JSON_TYPE}; charse
 const ORIGINS = [ORIGIN, ORIGIN, ORIGIN, ORIGIN, ORIGIN, ORIGIN, ORIGIN, "https://evil.example.com", "https://shop-page.example.com", "null", "", "https://poplin.example.com:444", "HTTPS://POPLIN.EXAMPLE.COM"];
 const FETCH_SITES = ["same-origin", "same-origin", "same-origin", "same-origin", "same-origin", "same-site", "cross-site", "none", ""];
 const CHANGES = ["settings", "make-live", "new-link", "delete", "restore", "rename", "access", "constructor", "__proto__", ""];
-
-/** The login address a request without a session is sent to, up to the place to return to. */
 const LOGIN = `${ORIGIN}/login?return=`;
-
-/** What a data route answers a request without a session. */
 const LOGGED_OUT = JSON.stringify({ ok: false, code: "no_session", about: null, sentence: "Log in again." });
 
 const property = fuzzTarget(import.meta.file);
@@ -58,8 +52,6 @@ const fields = fc.dictionary(
   values,
   { maxKeys: 6 },
 );
-
-/** What a request carries as its body: a JSON object, or text that is none. */
 const bodies = fc.oneof({ arbitrary: fields.map((sent) => JSON.stringify(sent)), weight: 4 }, { arbitrary: fields.map((sent) => JSON.stringify({ values: sent })), weight: 2 }, { arbitrary: hostile(fc.constant("{}")), weight: 1 });
 
 /** Everything a change could touch, as text. */

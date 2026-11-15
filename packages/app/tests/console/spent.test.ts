@@ -29,7 +29,7 @@ describe("a console whose install meets a day's allowance that is used up", () =
 
     const answer = await opened.change("/data/settings/sign-everyone-out", {});
 
-    expect(await told(answer)).toEqual([503, WAIT, "no-store", { ok: false, code: "no_more_writing", about: null, sentence: SENTENCES.no_more_writing }]);
+    expect(await told(answer)).toEqual([503, WAIT, "no-store", { ok: false, code: "allowance_spent", about: "writing", sentence: SENTENCES.no_more_writing }]);
   });
 
   // Drift: a page has no client yet to draw a refusal, and the frame it would be drawn in reads the settings, which a database that gives no more reading cannot.
