@@ -2,7 +2,7 @@
 
 import { expect, type Page } from "@playwright/test";
 
-import { arrive, FIRST_LOAD_MS, said, screenHeading, siteLink, siteLinks, TRASH, test, trash, WHAT_IT_IS } from "./visit";
+import { arrive, FIRST_LOAD_MS, openPanel, said, screenHeading, siteName, siteNames, TRASH, test, trash, WHAT_IT_IS } from "./visit";
 
 /** The policy every page of the dashboard is answered with. */
 const POLICY =
@@ -47,10 +47,10 @@ async function chooseDark(page: Page): Promise<void> {
 
 test("the first visit lands on the dashboard with sample sites", async ({ page, baseURL }) => {
   await page.goto("/");
-  await expect(siteLinks(page).first()).toBeVisible({ timeout: FIRST_LOAD_MS });
+  await expect(siteNames(page).first()).toBeVisible({ timeout: FIRST_LOAD_MS });
 
   expect(page.url()).toBe(baseURL);
-  expect(await siteLinks(page).count()).toBeGreaterThanOrEqual(5);
+  expect(await siteNames(page).count()).toBeGreaterThanOrEqual(5);
 });
 
 test("the first screen says that it is a demo, and offers the Reset", async ({ page }) => {
@@ -88,7 +88,7 @@ test("a change changes the data: a deleted site leaves the list for the trash", 
   await trash(page, victim);
   await page.goto(TRASH);
 
-  await expect(siteLink(page, victim)).toBeVisible();
+  await expect(siteName(page, victim)).toBeVisible();
 });
 
 test("a reload keeps the visit", async ({ page }) => {
@@ -97,7 +97,7 @@ test("a reload keeps the visit", async ({ page }) => {
   await page.goto(TRASH);
   await page.reload();
 
-  await expect(siteLink(page, victim)).toBeVisible();
+  await expect(siteName(page, victim)).toBeVisible();
 });
 
 test("a setting typed and saved is still there after a reload", async ({ page }) => {
@@ -111,15 +111,17 @@ test("a setting typed and saved is still there after a reload", async ({ page })
   await expect(page.getByRole("textbox", { name: SETTING.label, exact: true })).toHaveValue(SETTING.value);
 });
 
-test("a sample site is served with every stylesheet it links", async ({ page }) => {
+test("a press on a site's title opens the site in a tab of its own, served with every stylesheet it links", async ({ page }) => {
   const [name = ""] = await arrive(page);
-  await siteLink(page, name).click();
-  // The panel's way to the site is a link drawn as a button, which opens a tab of its own: its address is followed in this one.
-  const served = new URL((await page.getByRole("dialog").getByRole("button", { name: "Open the site", exact: true }).getAttribute("href")) ?? "", page.url()).href;
-  const answer = await page.goto(served);
-  const linked = await page.locator('link[rel="stylesheet"]').count();
-  const sheets = await page.evaluate(() => [...document.styleSheets].filter((sheet) => sheet.href !== null && sheet.cssRules.length > 0).length);
+  const [site] = await Promise.all([page.waitForEvent("popup"), siteName(page, name).click()]);
+  await site.waitForLoadState();
+  // The tab's own answer is not kept by the browser that opened it: the page is asked for once more to read its status.
+  const answer = await site.reload();
+  const linked = await site.locator('link[rel="stylesheet"]').count();
+  const sheets = await site.evaluate(() => [...document.styleSheets].filter((sheet) => sheet.href !== null && sheet.cssRules.length > 0).length);
 
+  expect(site.url()).toBe(new URL((await siteName(page, name).getAttribute("href")) ?? "", page.url()).href);
+  await expect(page.getByRole("dialog")).toHaveCount(0);
   expect(answer?.status()).toBe(200);
   expect(linked).toBeGreaterThanOrEqual(1);
   expect(sheets).toBe(linked);
@@ -128,8 +130,8 @@ test("a sample site is served with every stylesheet it links", async ({ page }) 
 // The icon is a drawing sent at the address of an icon file, with the engine told not to guess the type: each engine must still draw it.
 test("a sample site that holds no favicon.ico answers poplin's icon there, and the engine draws it", async ({ page }) => {
   const [name = ""] = await arrive(page);
-  await siteLink(page, name).click();
-  const served = new URL((await page.getByRole("dialog").getByRole("button", { name: "Open the site", exact: true }).getAttribute("href")) ?? "", page.url()).href;
+  // The title's link opens a tab of its own: its address is followed in this one.
+  const served = new URL((await siteName(page, name).getAttribute("href")) ?? "", page.url()).href;
   await page.goto(served);
   const icon = new URL("favicon.ico", served).href;
   // The pixel sits on the front sheet's selvedge red alone, clear of both blue sheets.
@@ -147,6 +149,13 @@ test("a sample site that holds no favicon.ico answers poplin's icon there, and t
   }, icon);
 
   expect(drawn).toEqual([200, "image/svg+xml", "nosniff", [210, 60, 86, 255]]);
+});
+
+test("a press on a site's row beside its title opens the site's panel", async ({ page }) => {
+  const [name = ""] = await arrive(page);
+  await openPanel(page, name);
+
+  await expect(page.getByRole("dialog").getByRole("button", { name: "Open the site", exact: true })).toBeVisible();
 });
 
 test("a page outside the demo's folder stays the host's own", async ({ page, context }) => {
@@ -193,7 +202,7 @@ test("the Reset at the top starts over", async ({ page }) => {
   await page.getByRole("button", { name: "Reset", exact: true }).click();
 
   await expect(said(page, "Sample data reset.")).toBeVisible();
-  await expect(siteLink(page, victim)).toBeVisible();
+  await expect(siteName(page, victim)).toBeVisible();
 });
 
 test("a deep link on a first visit reaches its page, query and fragment kept, through the host's 404 page", async ({ page, baseURL }) => {

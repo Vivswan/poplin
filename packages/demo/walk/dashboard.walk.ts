@@ -2,7 +2,7 @@
 
 import { expect, type Locator, type Page } from "@playwright/test";
 
-import { arrive, said, screenHeading, siteLink, test } from "./visit";
+import { arrive, openPanel, said, screenHeading, siteName, test } from "./visit";
 
 /** The screens the walk is taken on. A wide one shows tables and the side navigation; a narrow one shows lists, and the sections behind a button. */
 const VIEWPORTS = [
@@ -33,7 +33,7 @@ const STOPS: readonly Stop[] = [
   {
     name: "Sites, from the side",
     open: (page) => toSection(page, "Sites"),
-    shows: (page) => [screenHeading(page, "Sites"), siteLink(page, SAMPLE.site)],
+    shows: (page) => [screenHeading(page, "Sites"), siteName(page, SAMPLE.site)],
   },
   {
     name: "the notes of the newer version, at the side",
@@ -131,7 +131,7 @@ const STOPS: readonly Stop[] = [
   },
   {
     name: "a site's panel",
-    open: (page) => siteLink(page, SAMPLE.site).click(),
+    open: (page) => openPanel(page, SAMPLE.site),
     shows: (page) => [
       panel(page).getByRole("heading", { name: SAMPLE.site, exact: true }),
       panel(page).getByRole("heading", { name: "Versions", exact: true }),
@@ -161,7 +161,7 @@ const STOPS: readonly Stop[] = [
       panel(page)
         .getByRole("button", { name: /^Close/ })
         .click(),
-    shows: (page) => [screenHeading(page, "Sites"), siteLink(page, SAMPLE.site)],
+    shows: (page) => [screenHeading(page, "Sites"), siteName(page, SAMPLE.site)],
   },
   {
     name: "the account's menu",

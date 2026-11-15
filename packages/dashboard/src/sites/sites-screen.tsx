@@ -128,14 +128,14 @@ function NewSite(): ReactNode {
 function PhoneList({
   sites,
   opened,
-  nameCell,
+  onOpen,
   rowActions,
   onCopy,
   after,
 }: {
   readonly sites: readonly Site[];
   readonly opened: string | undefined;
-  readonly nameCell: (site: Site) => ReactNode;
+  readonly onOpen: (site: Site) => void;
   readonly rowActions: (site: Site) => ReactNode;
   readonly onCopy: (site: Site) => void;
   readonly after: ReactNode;
@@ -147,24 +147,32 @@ function PhoneList({
           <li
             key={site.label}
             data-state={site.label === opened ? "selected" : undefined}
-            className="group/row flex min-h-16 items-center gap-2 border-b px-4 py-2 data-[state=selected]:bg-chosen"
+            className="group/row relative flex min-h-16 items-center gap-2 border-b px-4 py-2 data-[state=selected]:bg-chosen"
           >
+            {/* The row's own button lies under everything else in it: a press beside the title and the row's controls lands on it and opens the panel. */}
+            <Button
+              variant="ghost"
+              aria-label={`Details of ${shownName(site)}`}
+              className="absolute inset-0 h-auto rounded-none hover:bg-transparent focus-visible:ring-inset"
+              onClick={() => onOpen(site)}
+            />
             <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-              <span className="truncate">{nameCell(site)}</span>
+              {/* A title that is a link lies over the row's button; plain words let a press through to it. */}
+              <span className={cn("w-fit max-w-full truncate", site.state !== "trash" && "relative")}>{nameCell(site)}</span>
               <span className="flex min-w-0 items-center gap-2">
                 <AccessMark access={site.access} className="shrink-0" />
                 {site.title === null ? null : <span className="truncate font-mono text-xs text-faint">{site.name}</span>}
-                <IconButton label="Copy the link" onClick={() => onCopy(site)} className="-my-2 shrink-0">
+                <IconButton label="Copy the link" onClick={() => onCopy(site)} className="relative -my-2 shrink-0">
                   <CopyIcon />
                 </IconButton>
                 {site.state === "trash" ? null : (
-                  <IconButton label="Open the site" link={<a href={site.url} target="_blank" rel="noreferrer" />} className="-my-2 shrink-0">
+                  <IconButton label="Open the site" link={<a href={site.url} target="_blank" rel="noreferrer" />} className="relative -my-2 shrink-0">
                     <ExternalLinkIcon />
                   </IconButton>
                 )}
               </span>
             </div>
-            {rowActions(site)}
+            <span className="relative">{rowActions(site)}</span>
           </li>
         ))}
       </ul>
@@ -311,28 +319,18 @@ function useSitePlaces(query: URLSearchParams) {
   return { toTable, toSite, stay };
 }
 
-/** How a site's name is drawn in its row: a link that opens the site's panel. */
-function useNameCell(
-  opened: string | undefined,
-  toTable: ReturnType<typeof useSitePlaces>["toTable"],
-  toSite: ReturnType<typeof useSitePlaces>["toSite"],
-): (site: Site) => ReactNode {
-  return useCallback(
-    (site: Site): ReactNode => {
-      const shown = { title: shownName(site), "aria-expanded": site.label === opened, className: NAME_LOOK };
+/** How a site's title is drawn in its row: a link that opens the site in a tab of its own. A site in the trash is not served, so its title is plain. */
+function nameCell(site: Site): ReactNode {
+  const name = shownName(site);
 
-      // The name of the site whose panel is open leads back to the table, which closes the panel.
-      return site.label === opened ? (
-        <Link {...toTable} {...shown}>
-          {shownName(site)}
-        </Link>
-      ) : (
-        <Link {...toSite(site)} {...shown}>
-          {shownName(site)}
-        </Link>
-      );
-    },
-    [opened, toTable, toSite],
+  return site.state === "trash" ? (
+    <span data-slot="site-name" title={name} className="font-medium">
+      {name}
+    </span>
+  ) : (
+    <a data-slot="site-name" href={site.url} target="_blank" rel="noreferrer" title={name} className={NAME_LOOK}>
+      {name}
+    </a>
   );
 }
 
@@ -358,9 +356,6 @@ function useReveal(opened: string | undefined): Reveal {
 
 /** What the table's columns are drawn with. */
 interface ColumnParts {
-  /** Draws the first column, which shows the site's title and opens the site. */
-  readonly nameCell: (site: Site) => ReactNode;
-
   /** Copies a site's whole link. */
   readonly onCopy: (site: Site) => void;
 
@@ -372,11 +367,11 @@ interface ColumnParts {
 }
 
 /** The table the filter shows: the sites, or the trash, each with its own columns, kept layout, and width for a row's actions. */
-function useShownTable(filter: Filter, { nameCell, onCopy, reveal, logins }: ColumnParts) {
+function useShownTable(filter: Filter, { onCopy, reveal, logins }: ColumnParts) {
   const trash = filter === "trash";
   const columns = useMemo(
     () => (trash ? trashColumns(nameCell, logins) : siteColumns(nameCell, onCopy, reveal, logins)),
-    [trash, nameCell, onCopy, reveal, logins],
+    [trash, onCopy, reveal, logins],
   );
   const layout = useTableLayout(trash ? "trashed-sites" : "site-list", columns);
 
@@ -398,11 +393,10 @@ export function SitesScreen(): ReactNode {
   const follow = useCallback((site: Pick<Site, "label">): void => void navigate({ ...toSite(site), replace: true }), [navigate, toSite]);
   const actions = useSiteChanges(opened, follow);
   const open = useCallback((site: Site): void => void navigate(site.label === opened ? toTable : toSite(site)), [navigate, opened, toTable, toSite]);
-  const nameCell = useNameCell(opened, toTable, toSite);
   const copy = useCallback((site: Site): void => void actions.copyLink(site), [actions]);
   const reveal = useReveal(opened);
   const logins = page?.logins ?? NO_LOGINS;
-  const { columns, layout, label, actionsWidth } = useShownTable(filter, { nameCell, onCopy: copy, reveal, logins });
+  const { columns, layout, label, actionsWidth } = useShownTable(filter, { onCopy: copy, reveal, logins });
   const [asked, setAsked] = useState<Asked>();
   const ask = useCallback((site: Site, about: Ask): void => setAsked({ site, ask: about }), []);
   const rowActions = (site: Site): ReactNode => (
@@ -460,7 +454,7 @@ export function SitesScreen(): ReactNode {
                   after={pages}
                 />
               </div>
-              <PhoneList sites={sites} opened={opened} nameCell={nameCell} rowActions={rowActions} onCopy={copy} after={pages} />
+              <PhoneList sites={sites} opened={opened} onOpen={open} rowActions={rowActions} onCopy={copy} after={pages} />
             </>
           )}
         </section>

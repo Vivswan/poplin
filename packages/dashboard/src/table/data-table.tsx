@@ -72,6 +72,7 @@ const LOADING_ROWS = 6;
 /** What a press on these never does: open the row. */
 const OWN_CONTROLS = "a, button, input, [role^='menu'], [role='dialog']";
 
+
 /** The look of a heading's grip: it lies over the heading's far end, so it takes no room from the words, and shows when its heading is pointed at or it holds the focus. */
 const GRIP_LOOK = cn(
   "absolute top-2 flex size-5 cursor-grab items-center justify-center rounded-sm bg-background text-faint opacity-0 outline-none active:cursor-grabbing",
@@ -305,16 +306,25 @@ function BodyRow<Row>({
   const onClick = (event: MouseEvent): void => {
     if (!(event.target as Element).closest(OWN_CONTROLS)) onOpen?.(row);
   };
+  // Enter or Space opens the row while the row itself holds the focus, not one of its controls.
+  const onKeyDown = (event: KeyboardEvent): void => {
+    if (onOpen === undefined || event.target !== event.currentTarget || (event.key !== "Enter" && event.key !== " ")) return;
+
+    event.preventDefault();
+    onOpen(row);
+  };
 
   return (
     <tr
       data-state={selected ? "selected" : undefined}
+      tabIndex={onOpen === undefined ? undefined : 0}
       onClick={onClick}
+      onKeyDown={onKeyDown}
       onMouseOver={hintWhenCut}
       onFocus={hintWhenCut}
       className={cn(
         "group/row bg-background hover:bg-muted has-[:focus-visible]:bg-muted data-[state=selected]:bg-chosen data-[state=selected]:has-[:focus-visible]:bg-chosen [&>td]:border-b",
-        onOpen !== undefined && "cursor-pointer",
+        onOpen !== undefined && "cursor-pointer outline-none focus-visible:bg-muted focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring",
       )}
     >
       {cells.map((spec) => (

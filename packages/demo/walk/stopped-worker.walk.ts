@@ -2,7 +2,7 @@
 
 import { expect, type Page } from "@playwright/test";
 
-import { arrive, FIRST_LOAD_MS, screenHeading, siteLink, siteLinks, TRASH, test, trash } from "./visit";
+import { arrive, FIRST_LOAD_MS, screenHeading, siteName, siteNames, TRASH, test, trash } from "./visit";
 
 /** Stop the demo's worker, as a browser does to an idle one. */
 async function stopWorker(page: Page): Promise<void> {
@@ -20,19 +20,19 @@ test("after the browser stops the worker, an open page's change still works and 
   await trash(page, second);
   await page.goto(TRASH);
 
-  await expect(siteLink(page, victim)).toBeVisible();
-  await expect(siteLink(page, second)).toBeVisible();
+  await expect(siteName(page, victim)).toBeVisible();
+  await expect(siteName(page, second)).toBeVisible();
 });
 
 test("a saved demo survives a stop of the worker and a reload", async ({ page }) => {
   const [victim = ""] = await arrive(page);
   await trash(page, victim);
   await page.goto(TRASH);
-  await expect(siteLinks(page).first()).toBeVisible();
+  await expect(siteNames(page).first()).toBeVisible();
   await stopWorker(page);
   await page.reload();
 
-  await expect(siteLink(page, victim)).toBeVisible();
+  await expect(siteName(page, victim)).toBeVisible();
 });
 
 test("a forced reload of a deep page, around the worker, comes back to it", async ({ page, baseURL }) => {
