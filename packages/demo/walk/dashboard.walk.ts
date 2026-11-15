@@ -30,6 +30,12 @@ const NEEDED_KINDS = ["document", "script", "stylesheet", "font"];
 /** The path every read and change of the dashboard's data goes to. */
 const DATA_PATH = "/data/";
 
+/** Two times of the same length whose figures differ: the ones of the first are narrow shapes, the ones of the second wide. */
+const TIMES = ["11 Nov 2026, 11:11", "08 Nov 2026, 06:59"] as const;
+
+/** The dashboard's own face alone, whose figures are each as wide as their shape: what the times are measured in as the control. */
+const OWN_FACE = '"Libre Franklin Variable"';
+
 /** Every place of the walk, in the order it is taken: each starts where the one before it ended. */
 const STOPS: readonly Stop[] = [
   {
@@ -418,3 +424,30 @@ for (const { width, height, wide } of VIEWPORTS) {
     });
   }
 }
+
+// Drift: the figures of a column would be as wide as their shapes again, so its times and numbers would end at different places row by row.
+test("two times of the same length take the same room, where the dashboard's own face alone gives each its own", async ({ page }) => {
+  await arrive(page);
+  await page.evaluate(() => document.fonts.ready);
+
+  const measured = await page.evaluate(
+    ([times, ownFace]) => {
+      const widthOf = (text: string, family: string): number => {
+        const span = document.createElement("span");
+        span.textContent = text;
+        span.style.cssText = `position:absolute;white-space:nowrap;font-family:${family}`;
+        document.body.append(span);
+        const { width } = span.getBoundingClientRect();
+        span.remove();
+
+        return width;
+      };
+
+      return { shown: times.map((time) => widthOf(time, "inherit")), control: times.map((time) => widthOf(time, ownFace)) };
+    },
+    [TIMES, OWN_FACE] as const,
+  );
+
+  expect(measured.shown[0]).toBe(measured.shown[1]);
+  expect(measured.control[0]).not.toBe(measured.control[1]);
+});

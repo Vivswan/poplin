@@ -55,14 +55,18 @@ export function momentIn(moment: number, choice: TimeZoneChoice = shown, own?: s
 }
 
 /**
- * Write the day of a moment in the chosen time zone: 14 Nov 2026, 06 Nov 2026. The day always has two figures, so the days of a column stand under each other from its left edge.
+ * Write the day of a moment in the chosen time zone: 14 Nov 2026, 06 Sep 2026. The day always has two figures and the month three letters, so the days of a column stand under each other from its left edge.
  *
  * @param moment - milliseconds since the epoch
  * @param choice - the time zone to write in; left out, the one a person chose
  * @param own - the name of the browser's own time zone; left out, the browser's
  */
 export function dayIn(moment: number, choice: TimeZoneChoice = shown, own?: string): string {
-  return new Intl.DateTimeFormat("en-GB", { day: "2-digit", month: "short", year: "numeric", timeZone: timeZoneOf(choice, own) }).format(moment);
+  // The parts are read one by one and joined here: this way of writing has three letters for every month, where the British one has four for September.
+  const parts = new Intl.DateTimeFormat("en-US", { day: "2-digit", month: "short", year: "numeric", timeZone: timeZoneOf(choice, own) }).formatToParts(moment);
+  const [day, month, year] = (["day", "month", "year"] as const).map((type) => parts.find((part) => part.type === type)?.value ?? "");
+
+  return `${day} ${month} ${year}`;
 }
 
 /**

@@ -29,6 +29,13 @@ describe("a time of the dashboard", () => {
     expect(dayIn(Date.UTC(2026, 11, 31, 23, 30), choice, OWN)).toBe(day);
   });
 
+  // Drift: a month would be written with four letters, so the times of a column would end at different places.
+  test("writes every month with three letters", () => {
+    const months = Array.from({ length: 12 }, (_, month) => dayIn(Date.UTC(2026, month, 15, 12), "utc").slice(3, -5));
+
+    expect(months).toEqual(["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]);
+  });
+
   // Drift: the choice's label would name the winter time zone in summer.
   test("names the browser's own timeZone as it is at the moment", () => {
     expect([ownTimeZoneName(BEFORE, OWN), ownTimeZoneName(AFTER, OWN)]).toEqual(["CET", "CEST"]);
