@@ -1,14 +1,13 @@
 // A bench for the MCP tests: the real API of an install in memory, `poplin mcp` run in process on two pipes, and the SDK's client on their other ends.
 
 import { PassThrough } from "node:stream";
-import { Client } from "@modelcontextprotocol/client";
+import type { Client } from "@modelcontextprotocol/client";
 import { type JSONRPCMessage, parseJSONRPCMessage } from "@modelcontextprotocol/server";
-import { StdioServerTransport } from "@modelcontextprotocol/server/stdio";
 
 import { type ApiInstall, ORIGIN, openApi } from "../../../../app/tests/api/support/install";
 import type { Io } from "../../../src/commands/records";
-import { run } from "../../../src/commands/run";
 import { sendUnlessAborted } from "../../commands/support/harness";
+import { openSession } from "./session";
 
 /** What a test may answer a request with in the install's place; nothing lets the install answer. */
 type Hook = (request: Request) => Response | undefined | Promise<Response | undefined>;
@@ -101,8 +100,10 @@ export async function openMcp(home: string, env?: Readonly<Record<string, string
     stopped: stopping.signal,
   };
 
-  const exited = run(["mcp"], io, { input, output });
-  const client = new Client({ name: "bench", version: "1.0.0" });
+  output.on("data", (chunk: Buffer) => {
+    text += chunk.toString();
+  });
+  const { client, exited, close } = await openSession(io, { input, output });
 
   const bench: McpBench = {
     install,
@@ -128,9 +129,7 @@ export async function openMcp(home: string, env?: Readonly<Record<string, string
       input.write(`${line}\n`);
     },
     close: async () => {
-      await client.close();
-      input.end();
-      const code = await exited;
+      const code = await close();
       assertNoToken(bench, tokens);
 
       return code;
@@ -141,12 +140,6 @@ export async function openMcp(home: string, env?: Readonly<Record<string, string
       return exited;
     },
   };
-
-  output.on("data", (chunk: Buffer) => {
-    text += chunk.toString();
-  });
-  // The SDK's stream transport, turned around: it reads what the server writes and writes what the server reads.
-  await client.connect(new StdioServerTransport(output, input));
 
   return bench;
 }

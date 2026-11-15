@@ -3,14 +3,13 @@
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { createInterface } from "node:readline";
-import { PassThrough } from "node:stream";
 
 import { createClient, type Fetch } from "../../packages/cli/src/client/client";
 import type { Io } from "../../packages/cli/src/commands/records";
 import type { ROUTES } from "../../packages/core/src/api/routes";
 import { parseLogins } from "../../packages/core/src/auth/logins";
 import { run } from "../../packages/cli/src/commands/run";
+import { openSession } from "../../packages/cli/tests/mcp/support/session";
 import type { Bench, Draft, LiveSite, Missing, Ran } from "./records";
 
 /** What every site name a live run makes starts with, whatever the run: the sweep removes each such site. */
@@ -18,12 +17,6 @@ const SWEPT_PREFIX = "live-";
 
 /** How long a stranger's request may take: a hostname with no Worker behind it answers slowly or never. */
 const VISIT_TIMEOUT_MS = 30_000;
-
-/** What a client opens an MCP session with. */
-const HELLO = { protocolVersion: "2025-06-18", capabilities: {}, clientInfo: { name: "live checks", version: "1.0.0" } };
-
-/** The id of the one tool call of an MCP session. */
-const CALL_ID = 2;
 
 /** The most sites one page of a listing holds. */
 const PAGE = 100;
@@ -131,37 +124,16 @@ export function openBench(parts: BenchParts): OpenBench {
   };
 
   const mcp = async (tool: string, input: Record<string, unknown>): Promise<Record<string, unknown>> => {
-    const pipes = { input: new PassThrough(), output: new PassThrough() };
-    const exited = run(
-      ["mcp"],
-      io(() => undefined),
-      pipes,
-    );
-    const answers = createInterface({ input: pipes.output })[Symbol.asyncIterator]();
-    const send = (message: Record<string, unknown>): boolean => pipes.input.write(`${JSON.stringify({ jsonrpc: "2.0", ...message })}\n`);
+    const session = await openSession(io(() => undefined));
 
-    send({ id: 1, method: "initialize", params: HELLO });
-    await answers.next();
-    send({ method: "notifications/initialized" });
-    send({ id: CALL_ID, method: "tools/call", params: { name: tool, arguments: input } });
-    let answer: unknown;
+    try {
+      const result = await session.client.callTool({ name: tool, arguments: input });
+      if (result.isError === true || !isRecord(result.structuredContent)) throw new Error(`the MCP tool ${tool} answered an error`);
 
-    // The server may write a notification first: the answer is the line that carries the call's id.
-    while (answer === undefined) {
-      const line = await answers.next();
-      if (line.done === true) break;
-
-      const message: unknown = JSON.parse(String(line.value));
-      if (isRecord(message) && message.id === CALL_ID) answer = message;
+      return result.structuredContent;
+    } finally {
+      await session.close();
     }
-
-    pipes.input.end();
-    await exited;
-
-    const result = isRecord(answer) && isRecord(answer.result) ? answer.result : {};
-    if (result.isError === true || !isRecord(result.structuredContent)) throw new Error(`the MCP tool ${tool} answered an error`);
-
-    return result.structuredContent;
   };
 
   const folder = (text: string): string => {
