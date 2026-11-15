@@ -14,7 +14,7 @@ import type { PublicName } from "../names/names";
 import { type AuditAction, type AuditEntry, auditFromRow } from "../records/audit";
 import type { DomainCheck, RememberedCheck } from "../records/domain-check";
 import { computerLoginFromRow } from "../records/computer-login";
-import { LOGIN } from "../records/fields";
+import { LOGIN, SITE_ID } from "../records/fields";
 import { SETTING_CHANGES, SETTING_VALUES, type SettingValues } from "../records/settings";
 import { signingKeyFromRow, signingKeyToText, type UpdateAddress, updateAddressFromRow } from "../records/secret";
 import { NEW_SITE, SITE_DETAILS, SITE_FOLDER, type Site, type SiteAccess, type SiteFolder, siteFromRow, siteToRow } from "../records/site";
@@ -41,6 +41,7 @@ import type {
   CountedRequests,
   Database,
   Done,
+  DueSites,
   ExportPage,
   FrameRecords,
   LeftoversPage,
@@ -68,6 +69,7 @@ import type {
   SitesPage,
   SitesQuery,
   SitesShown,
+  SweepStart,
   TokenStates,
   Unchanged,
   UploadedVersion,
@@ -195,6 +197,9 @@ const READ_UPDATE_ADDRESS = built(BUILD.select({ value: secrets.value, created_a
 const READ_UPDATE_CHECK = built(
   BUILD.select({ checked_at: updateCheck.checked_at, news: updateCheck.news, seen_at: updateCheck.seen_at, auto: updateCheck.auto }).from(updateCheck).where(eq(updateCheck.id, 1)),
 );
+
+/** Where the scheduled sweep's walk stopped, as JSON text. */
+const READ_SWEEP_PLACE = built(BUILD.select({ place: sweepPlace.place }).from(sweepPlace).where(eq(sweepPlace.id, 1)));
 
 /** The form of a day: a date such as `2026-11-13`, which sorts as text in the order of time. */
 const DAY_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
@@ -576,11 +581,25 @@ export class SqlDatabase implements Database {
   }
 
   async trashSite(id: SiteId, signed: Signed): Promise<Done | Refused<"not_found" | "in_trash">> {
-    const trash = BUILD.update(sites).set({ trashed_at: signed.at }).where(and(eq(sites.id, id), eq(sites.trashed, 0)));
-    const [updated, , after] = await this.#driver.batch([built(trash), auditOfSite(signed, "trash", id, {}), siteById(id)]);
-    if (changed(updated)) return done(after);
+    const { moved, after } = await this.#trashWhere(undefined, id, signed);
+    if (moved) return done(after);
 
     return unreachable(siteIn(after)) ?? { kind: "not_found" };
+  }
+
+  async listDueSites(due: DueSites, limit: number): Promise<readonly SiteId[]> {
+    requirePage(limit);
+    // Each condition is the one its index holds, so the engine walks the due sites alone and reads no site's row.
+    const [dueBy, since] = "expiredBy" in due ? [sites.expires_at, and(lte(sites.expires_at, due.expiredBy), isNull(sites.trashed_at))] : [sites.trashed_at, lte(sites.trashed_at, due.trashedBy)];
+    const [found] = await this.#driver.batch([built(BUILD.select({ id: sites.id }).from(sites).where(since).orderBy(asc(dueBy), asc(sites.id)).limit(limit))]);
+
+    return (found?.rows ?? []).map((row) => v.parse(SITE_ID, row.id));
+  }
+
+  async trashExpiredSite(id: SiteId, signed: Signed): Promise<Done | Refused<"not_due">> {
+    const { moved, after } = await this.#trashWhere(lte(sites.expires_at, signed.at), id, signed);
+
+    return moved ? done(after) : { kind: "not_due" };
   }
 
   async restoreSite(id: SiteId, signed: Signed): Promise<Done | Refused<"not_found" | "not_in_trash">> {
@@ -594,13 +613,11 @@ export class SqlDatabase implements Database {
   }
 
   async deleteSite(id: SiteId, signed: Signed): Promise<Done | Refused<"not_found">> {
-    // The audit entry is written while the site is still there to name, and the delete only when it was.
-    const entry = fragment`SELECT ${signed.at}, ${signed.by}, 'delete', ${sites.id}, ${sites.name}, '{}' FROM ${sites} WHERE ${sites.id} = ${id}`;
-    const remove = BUILD.delete(sites).where(and(eq(sites.id, id), CHANGED));
-    const [before, , deleted] = await this.#driver.batch([siteById(id), insertFrom(audit, AUDIT_COLUMNS, entry), built(remove)]);
-    if (!changed(deleted)) return { kind: "not_found" };
+    return (await this.#deleteWhere(eq(sites.id, id), id, signed)) ?? { kind: "not_found" };
+  }
 
-    return done(before);
+  async deleteSatOutSite(id: SiteId, signed: Signed, trashedBy: number): Promise<Done | Refused<"not_due">> {
+    return (await this.#deleteWhere(and(eq(sites.id, id), lte(sites.trashed_at, trashedBy)), id, signed)) ?? { kind: "not_due" };
   }
 
   async listLeftovers(query: { readonly limit: number; readonly after?: SiteFolder }): Promise<LeftoversPage> {
@@ -1035,9 +1052,15 @@ export class SqlDatabase implements Database {
   }
 
   async readSweepPlace(): Promise<SweepPlace | undefined> {
-    const [read] = await this.#driver.batch([built(BUILD.select({ place: sweepPlace.place }).from(sweepPlace).where(eq(sweepPlace.id, 1)))]);
+    const [read] = await this.#driver.batch([READ_SWEEP_PLACE]);
 
     return placeIn(read);
+  }
+
+  async readSweepStart(): Promise<SweepStart> {
+    const [update, stored, place] = await this.#driver.batch([READ_UPDATE_CHECK, READ_SETTINGS, READ_SWEEP_PLACE]);
+
+    return { updateCheck: updateCheckIn(update), settings: settingsIn(stored), place: placeIn(place) };
   }
 
   async keepSweepPlace(place: SweepPlace | undefined): Promise<void> {
@@ -1349,6 +1372,24 @@ export class SqlDatabase implements Database {
     const read = await this.#driver.batch([requestsOf(day, ALL_SITES), ...ofSite]);
 
     return { site: requestsIn(read[1]), all: requestsIn(read[0]) };
+  }
+
+  /** Move the live site with an id to the trash while a further condition holds for it, with its audit entry: whether it moved, and the read of the site after. */
+  async #trashWhere(holds: SQL | undefined, id: SiteId, signed: Signed): Promise<{ readonly moved: boolean; readonly after: StatementResult | undefined }> {
+    const trash = BUILD.update(sites).set({ trashed_at: signed.at }).where(and(eq(sites.id, id), eq(sites.trashed, 0), holds));
+    const [updated, , after] = await this.#driver.batch([built(trash), auditOfSite(signed, "trash", id, {}), siteById(id)]);
+
+    return { moved: changed(updated), after };
+  }
+
+  /** Remove the site with an id for good while a condition holds for it, with its audit entry; `undefined` when it does not hold. */
+  async #deleteWhere(holds: SQL | undefined, id: SiteId, signed: Signed): Promise<Done | undefined> {
+    // The audit entry is written while the site is still there to name, and the delete only when it was.
+    const entry = fragment`SELECT ${signed.at}, ${signed.by}, 'delete', ${sites.id}, ${sites.name}, '{}' FROM ${sites} WHERE ${holds}`;
+    const remove = BUILD.delete(sites).where(and(eq(sites.id, id), CHANGED));
+    const [before, , deleted] = await this.#driver.batch([siteById(id), insertFrom(audit, AUDIT_COLUMNS, entry), built(remove)]);
+
+    return changed(deleted) ? done(before) : undefined;
   }
 
   /** The statements that set the access asked with an upload, and their audit entry; none when no access is asked. */

@@ -43,10 +43,11 @@ export async function emptyLeftover(install: Install, folder: SiteFolder): Promi
  * In that order a crash between the two leaves files no row points to, which nothing can serve. The other order would leave a site that is served with files missing.
  * The database keeps the folder as a leftover from the moment the row goes, so the sweep removes whatever this call left.
  *
- * @returns the site as it was, or `undefined` when there is no such site
+ * @param trashedBy - remove the site only while it sits in the trash since that moment or before, checked in the step that removes it; left out, the site goes wherever it is
+ * @returns the site as it was, or `undefined` when there is no such site, or none that sat in the trash that long
  */
-export async function removeSite(install: Install, id: SiteId, signed: Signed): Promise<Removed | undefined> {
-  const deleted = await install.database.deleteSite(id, signed);
+export async function removeSite(install: Install, id: SiteId, signed: Signed, trashedBy?: number): Promise<Removed | undefined> {
+  const deleted = trashedBy === undefined ? await install.database.deleteSite(id, signed) : await install.database.deleteSatOutSite(id, signed, trashedBy);
   if (deleted.kind !== "done") return undefined;
 
   return { site: deleted.site, left: await emptyLeftover(install, deleted.site.folder) };

@@ -135,12 +135,12 @@ const ROWS: Readonly<Record<string, readonly [read: number, written: number]>> =
   "setLiveVersion, a number": [10, 3],
   "setLiveVersion, the same": [7, 0],
   "setLiveVersion, previous": [11, 3],
-  "trashSite": [7, 9],
+  "trashSite": [7, 10],
   "trashSite, in the trash": [6, 0],
   "restoreSite": [7, 9],
   "deleteSite": [14, 7],
   "listLeftovers": [1, 0],
-  "storedBack: addUpload, importUploadAsSite, abandonUpload, removeUpload": [29, 26],
+  "storedBack: addUpload, importUploadAsSite, abandonUpload, removeUpload": [29, 27],
   "forgetLeftover": [1, 1],
   "addUpload, a new site": [9, 6],
   "getUpload": [1, 0],
@@ -590,9 +590,9 @@ describe("D1: the rows a scheduled sweep costs of a day's allowance", () => {
     await runSweep(install, latest, running);
 
     expect([first, idle, rows, website.asked]).toEqual([
-      { read: 13, written: 1 },
-      { read: 10, written: 0 },
-      { read: 12, written: 0 },
+      { read: 10, written: 1 },
+      { read: 8, written: 0 },
+      { read: 8, written: 0 },
       1,
     ]);
   });
