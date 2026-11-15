@@ -1,4 +1,4 @@
-// One site, beside the table: its link, who can open it, its facts and versions, the settings it is seldom given, and what is done to the whole of it.
+// One site, over the end of the table: its link, who can open it, its facts and versions, the settings it is seldom given, and what is done to the whole of it.
 
 import { showBytes } from "@poplin/core/src/records/settings";
 import { Link } from "@tanstack/react-router";

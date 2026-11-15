@@ -1,5 +1,5 @@
-// The panel of one thing, opened from a list. On a wide screen it stands beside the list; on a narrower one it takes the list's place until it is closed.
-// Escape closes it either way, and the focus goes into it when it opens and back to where it came from when it closes.
+// The panel of one thing, opened from a list. On a wide screen it lies over the end of the list, which keeps its width; on a narrower one it takes the list's place until it is closed.
+// Escape closes it either way, a press beside it closes it where the list is in sight, and the focus goes into it when it opens and back to where it came from when it closes.
 
 import { Dialog } from "@base-ui/react/dialog";
 import { cn } from "cn";
@@ -12,8 +12,11 @@ import { FOCUS_HOME, useFocusHome } from "@/lib/focus";
 import { useMedia } from "@/lib/media";
 import { IconButton } from "@/shared/icon-button";
 
-/** The width from which a panel stands beside its list: the list then still has room for its fixed column, one more, and a row's actions, and for its tools above them. */
-const BESIDE = "(min-width: 1040px)";
+/** The width from which a panel lies over the end of its list: beside the panel the list then still shows its fixed column and one more. */
+const OVER = "(min-width: 1040px)";
+
+/** The places beside a panel that close nothing when they are pressed or take the focus: a row of the list opens, changes, or closes the panel itself, a result's button acts on the panel's thing, and a question the panel asked lies over the page. */
+const OWN_PLACES = "[data-opens], [data-sonner-toaster], [role='dialog'], [role='alertdialog']";
 
 /** What a panel is drawn from. */
 interface SidePanelProps {
@@ -37,12 +40,12 @@ interface SidePanelProps {
 }
 
 /**
- * Whether the screen is wide enough for a panel to stand beside its list.
+ * Whether the screen is wide enough for a panel to lie over the end of its list, with the list in sight beside it.
  *
- * A screen lays its list out for the panel beside it only when this says so; under it the panel takes the whole row and the list is out of sight.
+ * Under that width the panel takes the whole row and the list is out of sight.
  */
-export function useStandsBeside(): boolean {
-  return useMedia(BESIDE);
+export function useLiesOver(): boolean {
+  return useMedia(OVER);
 }
 
 /**
@@ -150,14 +153,27 @@ function liesUnder(place: HTMLElement): boolean {
 }
 
 /**
+ * Whether what the library says closed the panel closes it: Escape does, and so does a press beside it or a focus that left it, unless it went to a place of its own.
+ *
+ * A focus that left for nothing was taken away with its control, and stays the panel's.
+ */
+function closes({ reason, event }: Dialog.Root.ChangeEventDetails): boolean {
+  if (reason !== "outside-press" && reason !== "focus-out") return true;
+
+  const went = reason === "focus-out" ? (event as FocusEvent).relatedTarget : event.target;
+
+  return went instanceof Element && went.closest(OWN_PLACES) === null;
+}
+
+/**
  * Draw a panel: the library's dialog without its modal layer, drawn into its own place in the page and never over it, so nothing is dimmed and the rest of the page stays in use.
  *
- * It moves the focus to the heading, closes on Escape, and gives the focus back. Beside its list it is set off by a hairline; where it has the row to itself it lies over the list's place.
+ * It moves the focus to the heading, closes on Escape, and gives the focus back. Over the end of its list it is set off by a hairline and a soft shadow, and a press beside it closes it; where it has the row to itself it lies in the list's place.
  */
 export function SidePanel({ title, closeLink, onClose, back, beside, children }: SidePanelProps): ReactNode {
   const [place, setPlace] = useState<HTMLElement | null>(null);
   const heading = useRef<HTMLHeadingElement>(null);
-  const standsBeside = useStandsBeside();
+  const liesOver = useLiesOver();
   // A change of the thing can take away the control that was pressed for it: the heading takes the focus then.
   const kept = useFocusHome();
 
@@ -165,11 +181,11 @@ export function SidePanel({ title, closeLink, onClose, back, beside, children }:
     <aside
       ref={setPlace}
       aria-label={title ?? "Details"}
-      className={cn("flex min-h-0 min-w-0 flex-col bg-background", standsBeside ? "border-l" : "col-start-1 row-start-1")}
+      className={cn("flex min-h-0 min-w-0 flex-col bg-background", liesOver ? "absolute inset-y-0 right-0 z-40 w-[440px] border-l shadow-[-12px_0_24px_-16px_rgb(0_0_0/0.25)]" : "col-start-1 row-start-1")}
     >
       {place === null ? null : (
         // An Escape pressed while a question lies over the page is the question's alone, also where the focus is on neither.
-        <Dialog.Root open modal={false} disablePointerDismissal onOpenChange={(open) => (open || liesUnder(place) ? undefined : onClose())}>
+        <Dialog.Root open modal={false} disablePointerDismissal={!liesOver} onOpenChange={(open, details) => (open || liesUnder(place) || !closes(details) ? undefined : onClose())}>
           <Dialog.Portal container={place} className="flex min-h-0 flex-1 flex-col">
             <Dialog.Popup
               initialFocus={heading}
@@ -177,8 +193,8 @@ export function SidePanel({ title, closeLink, onClose, back, beside, children }:
               onKeyDownCapture={closesAtEscape(onClose)}
               className="line-room flex min-h-0 flex-1 flex-col overflow-y-auto outline-none"
             >
-              {/* Beside its list the heading stands on the line of the list's tools, and the first hairline under it where the list's tools end. */}
-              <header className={cn("flex shrink-0 items-center gap-1 px-6 max-md:px-4", standsBeside ? "h-11 pb-3" : "h-14")}>
+              {/* Over its list the heading stands on the line of the list's tools, and the first hairline under it where the list's tools end. */}
+              <header className={cn("flex shrink-0 items-center gap-1 px-6 max-md:px-4", liesOver ? "h-11 pb-3" : "h-14")}>
                 <Dialog.Title ref={heading} tabIndex={-1} {...FOCUS_HOME} className="min-w-0 truncate text-base font-bold outline-none" title={title}>
                   {title ?? <Skeleton className="h-5 w-40" />}
                 </Dialog.Title>

@@ -1,4 +1,4 @@
-// The Sites screen: every site in one table, searched and narrowed by the server, with one site's panel beside it; or the trash.
+// The Sites screen: every site in one table, searched and narrowed by the server, with one site's panel over its end; or the trash.
 
 import { useQueryClient } from "@tanstack/react-query";
 import { Link, linkOptions, useNavigate, useParams } from "@tanstack/react-router";
@@ -18,7 +18,7 @@ import { useChosenTimeZone } from "@/lib/timezone";
 import { IconButton } from "@/shared/icon-button";
 import { PAGE_WAY, Pages, queryWith, useFirstRowFocus, useShownPlace, useTopOfPlace } from "@/shared/pages";
 import { SearchBox } from "@/shared/search-box";
-import { useStandsBeside } from "@/shared/side-panel";
+import { useLiesOver } from "@/shared/side-panel";
 import type { LoginNames } from "@/shared/who";
 import { AppShell } from "@/shell/app-shell";
 import { siteActions } from "@/sites/site-actions";
@@ -49,7 +49,7 @@ const PUBLISH_COMMAND = "npx poplin ./my-folder";
 function FilterSelect({ filter, onChoose }: { readonly filter: Filter; readonly onChoose: (filter: Filter) => void }): ReactNode {
   return (
     <Select items={FILTERS} value={filter} onValueChange={(value) => onChoose(value as Filter)}>
-      <SelectTrigger aria-label="Which sites" className="w-36 shrink-0 max-md:w-32 @max-md:w-25">
+      <SelectTrigger aria-label="Which sites" className="w-36 shrink-0 max-md:w-32">
         <SelectValue />
       </SelectTrigger>
       <SelectContent alignItemWithTrigger={false} align="start">
@@ -255,7 +255,7 @@ function NoRows(props: NoRowsProps): ReactNode {
   );
 }
 
-/** What sits above the table: the search, the filter, the order on a phone, the columns' menu, and how a new site is made. Search and order keep an open panel open; another filter closes it. */
+/** What sits above the table: the search, the filter, the order on a phone, the columns' menu, and how a new site is made. */
 function Toolbar({
   query,
   filter,
@@ -424,7 +424,7 @@ export function SitesScreen(): ReactNode {
   const { label: opened } = useParams({ strict: false });
   const filter = filterOf(query);
   const search = query.get("q") ?? "";
-  const beside = useStandsBeside();
+  const over = useLiesOver();
   const { data: page, error, isPending, isPlaceholderData, refetch, place } = useShownSites(query);
 
   const { toTable, toSite, stay } = useSitePlaces(query);
@@ -456,11 +456,11 @@ export function SitesScreen(): ReactNode {
 
   return (
     <AppShell current="sites" heading="Sites">
-      <div {...kept} className={cn("grid min-h-0 flex-1 grid-cols-1", opened !== undefined && beside && "grid-cols-[minmax(0,1fr)_440px]")}>
-        {/* Where the panel has the row to itself the list keeps its place under it, out of sight and out of reach, so it is found as it was left. */}
+      <div {...kept} className="relative grid min-h-0 flex-1 grid-cols-1">
+        {/* The list keeps its width under an open panel. Where the panel has the row to itself the list is out of sight and out of reach, and is found as it was left. */}
         <section
           aria-label="Sites"
-          className={cn("@container col-start-1 row-start-1 flex min-h-0 min-w-0 flex-col", opened !== undefined && !beside && "invisible")}
+          className={cn("@container col-start-1 row-start-1 flex min-h-0 min-w-0 flex-col", opened !== undefined && !over && "invisible")}
           {...firstRow}
         >
           <Toolbar query={query} filter={filter} search={search} columns={<ColumnsMenu columns={columns} layout={layout} />} onStay={stay} />

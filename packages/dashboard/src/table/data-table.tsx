@@ -312,6 +312,7 @@ function BodyRow<Row>({
   return (
     <tr
       data-state={selected ? "selected" : undefined}
+      data-opens={onOpen === undefined ? undefined : ""}
       tabIndex={onOpen === undefined ? -1 : 0}
       onClick={onClick}
       onKeyDown={onKeyDown}
@@ -489,7 +490,7 @@ export function ColumnsMenu<Row>({ columns, layout }: { readonly columns: readon
     <DropdownMenu>
       <DropdownMenuTrigger render={<Button variant="outline" />}>
         <Columns3Icon data-icon="inline-start" />
-        {/* Beside an open panel the list is narrow: the button keeps its mark and gives its room to the search. */}
+        {/* In a narrow list the button keeps its mark and gives its room to the search. */}
         <span className="@max-xl:sr-only">Columns</span>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-52">
