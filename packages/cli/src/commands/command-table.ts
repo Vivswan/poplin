@@ -12,13 +12,6 @@ const EVERYWHERE: readonly FlagSpec[] = [
   { name: VERSION_FLAG, about: "print the version" },
 ];
 
-/** The flags of every command that talks to an install. */
-const INSTALL_FLAGS: readonly FlagSpec[] = [
-  { name: "--json", about: "print the site object, or the error object" },
-  { name: "--server", value: "<address>", about: "the address of the install to talk to" },
-  ...EVERYWHERE,
-];
-
 /** The argument that names one site. */
 const SITE = { name: "site", about: "its label, its bare id, or its public name" };
 
@@ -60,7 +53,7 @@ export const COMMANDS = [
       { name: "--name", value: "<name>", about: "the site's name; with --site, its new name" },
       { name: "--dry-run", about: "list the files and the name, and upload nothing" },
       ...SITE_SETTINGS,
-      ...INSTALL_FLAGS,
+      ...installFlags("the site, or what --dry-run lists"),
     ],
     examples: [
       "poplin ./report",
@@ -76,7 +69,7 @@ export const COMMANDS = [
     group: "one site",
     about: "change a site's settings",
     arguments: [{ ...SITE, required: true }],
-    flags: [{ name: "--name", value: "<name>", about: "a new name; its id and every address stay" }, ...SITE_SETTINGS, ...INSTALL_FLAGS],
+    flags: [{ name: "--name", value: "<name>", about: "a new name; its id and every address stay" }, ...SITE_SETTINGS, ...installFlags("the site")],
     examples: [
       "poplin set report--k3f9x2ab71qz --unlisted",
       "poplin set report--k3f9x2ab71qz --public",
@@ -90,7 +83,7 @@ export const COMMANDS = [
     group: "one site",
     about: "look at a site",
     arguments: [{ ...SITE, required: true }],
-    flags: INSTALL_FLAGS,
+    flags: installFlags("the site"),
     examples: [],
   },
   {
@@ -98,7 +91,7 @@ export const COMMANDS = [
     group: "one site",
     about: "go back a version",
     arguments: [{ ...SITE, required: true }],
-    flags: [{ name: "--to", value: "<version>", about: "go to that version, not one back" }, ...INSTALL_FLAGS],
+    flags: [{ name: "--to", value: "<version>", about: "go to that version, not one back" }, ...installFlags("the site")],
     examples: ["poplin rollback report--k3f9x2ab71qz"],
   },
   {
@@ -106,7 +99,7 @@ export const COMMANDS = [
     group: "one site",
     about: "give a site a new id, so a new address",
     arguments: [{ ...SITE, required: true }],
-    flags: INSTALL_FLAGS,
+    flags: installFlags("the site"),
     examples: ["poplin new-link report--k3f9x2ab71qz"],
   },
   {
@@ -114,7 +107,7 @@ export const COMMANDS = [
     group: "one site",
     about: "make a private copy of a site, with a new address",
     arguments: [{ ...SITE, required: true }],
-    flags: [{ name: "--name", value: "<name>", about: "the copy's name; the site's own without it" }, ...INSTALL_FLAGS],
+    flags: [{ name: "--name", value: "<name>", about: "the copy's name; the site's own without it" }, ...installFlags("the copy")],
     examples: ["poplin duplicate report--k3f9x2ab71qz", "poplin duplicate report --name report-draft"],
     notes: [
       "The copy holds the live version's files and the site's title and settings.",
@@ -126,7 +119,7 @@ export const COMMANDS = [
     group: "one site",
     about: "move a site into the trash",
     arguments: [{ ...SITE, required: true }],
-    flags: [{ name: "--forever", about: "remove it now, after you type its label" }, ...INSTALL_FLAGS],
+    flags: [{ name: "--forever", about: "remove it now, after you type its label" }, ...installFlags("the site, or what --forever left")],
     examples: ["poplin delete report--k3f9x2ab71qz", "poplin delete report"],
   },
   {
@@ -134,7 +127,7 @@ export const COMMANDS = [
     group: "one site",
     about: "take a site back out of the trash",
     arguments: [{ ...SITE, required: true }],
-    flags: INSTALL_FLAGS,
+    flags: installFlags("the site"),
     examples: [],
   },
   {
@@ -142,7 +135,7 @@ export const COMMANDS = [
     group: "all sites",
     about: "list every site",
     arguments: [],
-    flags: [{ name: "--trash", about: "list the deleted sites instead" }, ...INSTALL_FLAGS],
+    flags: [{ name: "--trash", about: "list the deleted sites instead" }, ...installFlags("the sites")],
     examples: ["poplin list", "poplin list --trash"],
   },
   {
@@ -154,7 +147,7 @@ export const COMMANDS = [
       { name: "--publisher", about: "save a publisher's token, for an agent" },
       { name: "--name", value: "<name>", about: "what the dashboard calls this machine" },
       { name: "--no-browser", about: "print the address, and open no browser" },
-      ...INSTALL_FLAGS,
+      ...installFlags("the address and the code, then the login"),
     ],
     examples: ["poplin login --server https://poplin.example.com", "poplin login --publisher --name ci-runner"],
     notes: [
@@ -169,7 +162,7 @@ export const COMMANDS = [
     group: "you, on this machine",
     about: "forget this machine's token",
     arguments: [],
-    flags: INSTALL_FLAGS,
+    flags: installFlags("whether the token was revoked"),
     examples: ["poplin logout"],
   },
   {
@@ -177,7 +170,7 @@ export const COMMANDS = [
     group: "you, on this machine",
     about: "print the install, your role, and the token's id",
     arguments: [],
-    flags: INSTALL_FLAGS,
+    flags: installFlags("the install, the token, and the version"),
     examples: ["poplin whoami"],
   },
   {
@@ -189,12 +182,9 @@ export const COMMANDS = [
       { name: "--check", about: "say what a setup would change, and change nothing" },
       { name: "--domain", value: "<domain>", about: "a new install's domain: example.com" },
       { name: "--login", value: "<email>", about: "the first login, or its correction" },
-      ...INSTALL_FLAGS,
+      ...installFlags("the rows and the steps"),
     ],
-    examples: [
-      "poplin setup --server https://poplin.example.com",
-      "poplin setup --check --server https://poplin.example.com",
-    ],
+    examples: ["poplin setup --server https://poplin.example.com", "poplin setup --check --server https://poplin.example.com"],
     notes: [
       "The install does the work: this sends it the provider's token from",
       "POPLIN_SETUP_TOKEN and prints its rows. The token is never an argument and",
@@ -218,7 +208,7 @@ export const COMMANDS = [
       { name: "key", about: "the setting to show; without it, every setting", required: false },
       { name: "value", about: "the value to give it: 7d, 9GB, 25%, on", required: false },
     ],
-    flags: INSTALL_FLAGS,
+    flags: installFlags("the settings"),
     examples: ["poplin config", "poplin config versions_kept 10", "poplin config outside_pages allowed"],
     notes: [
       "outside_pages, search_engines_allowed, and block_bots are also held in",
@@ -231,7 +221,7 @@ export const COMMANDS = [
     group: "the install",
     about: "check that the install works, and report",
     arguments: [],
-    flags: INSTALL_FLAGS,
+    flags: installFlags("the checks and the versions"),
     examples: ["poplin doctor"],
   },
   {
@@ -244,7 +234,7 @@ export const COMMANDS = [
       { name: "--anyway", about: "rebuild even when no newer version is known" },
       { name: "--save-address", about: "save the rebuild address from POPLIN_UPDATE_ADDRESS" },
       { name: "--forget-address", about: "remove the saved rebuild address" },
-      ...INSTALL_FLAGS,
+      ...installFlags("what was started or found, or whether an address is saved"),
     ],
     examples: ["poplin update", "poplin update --check", "poplin update --save-address"],
     notes: [
@@ -266,7 +256,7 @@ export const COMMANDS = [
       { name: "--out", value: "<file>", about: "the zip to write; poplin-backup-<day>.zip without it" },
       { name: "--overwrite", about: "replace a file that is already there" },
       { name: "--all-versions", about: "add the kept versions" },
-      ...INSTALL_FLAGS,
+      ...installFlags("the zip's file and its sites"),
     ],
     examples: ["poplin export", "poplin export --all-versions --out backup.zip", "poplin export report--k3f9x2ab71qz"],
     notes: ["The zip holds plain files: every site's record and files, and the settings.", "It holds no token and no signing key."],
@@ -281,7 +271,7 @@ export const COMMANDS = [
       { name: "--settings", about: "replace the install's settings, but for the logins" },
       { name: "--logins", about: "with --settings: replace the logins too" },
       { name: "--dry-run", about: "check the zip and list its sites, and import nothing" },
-      ...INSTALL_FLAGS,
+      ...installFlags("the sites, and the counts unless --dry-run"),
     ],
     examples: ["poplin import backup.zip", "poplin import backup.zip --dry-run", "poplin import backup.zip --site report--k3f9x2ab71qz"],
     notes: [
@@ -328,3 +318,16 @@ export interface CommandSpec {
 
 /** The word of a command in the table. */
 export type CommandName = (typeof COMMANDS)[number]["name"];
+
+/**
+ * The flags of a command that talks to an install.
+ *
+ * @param prints - what the command's `--json` prints once it is done, as the words that follow `print JSON:`
+ */
+function installFlags(prints: string): readonly FlagSpec[] {
+  return [
+    { name: "--json", about: `print JSON: ${prints}, or the error object` },
+    { name: "--server", value: "<address>", about: "the address of the install to talk to" },
+    ...EVERYWHERE,
+  ];
+}

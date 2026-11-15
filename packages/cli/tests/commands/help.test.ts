@@ -1,10 +1,12 @@
-import { describe, expect, test } from "bun:test";
+import { afterEach, describe, expect, test } from "bun:test";
+import { join } from "node:path";
 
 import { COMMANDS, type CommandName, type CommandSpec, SESSION } from "../../src/commands/command-table";
 import { helpText } from "../../src/commands/help";
 import { SETTING_SAMPLES } from "../../src/commands/install-settings";
 import { parseCommand } from "../../src/commands/parse-command";
 import { words } from "./support/command-line";
+import { cleanUp, jsonOf, openBench, scratch } from "./support/harness";
 
 /** A site label in the published form. */
 const LABEL = "report--k3f9x2ab71qz";
@@ -35,6 +37,19 @@ const FLAG_VALUES: Readonly<Record<string, string>> = {
 /** A word for each argument a command needs. */
 const ARGUMENTS: Readonly<Record<string, string>> = { path: "./report", site: LABEL, zip: "backup.zip", key: "versions_kept" };
 
+/** The flag that asks for an answer as JSON. */
+const JSON_FLAG = "--json";
+
+/** Commands that answer no one site, each with a key of the object its `--json` prints and the words its help names that key by. The logout comes last: it ends the login the others run under. */
+const PRINTED: readonly (readonly [line: string, key: string, named: string])[] = [
+  ["doctor --json", "checks", "the checks"],
+  ["config --json", "values", "the settings"],
+  ["whoami --json", "token", "the token"],
+  ["update --check --json", "address", "an address"],
+  ["list --json", "sites", "the sites"],
+  ["logout --json", "revoked", "revoked"],
+];
+
 /** What a flag needs beside it to be a whole command: `set` needs a setting, and a public name goes with `--public`. */
 const COMPANIONS: Readonly<Record<string, readonly string[]>> = {
   "set --public-name": ["--public"],
@@ -54,6 +69,11 @@ function lineWith(spec: CommandSpec, flag: CommandSpec["flags"][number]): string
 /** Every flag of every command, each beside the command that lists it. */
 const LISTED = SPECS.flatMap((spec) => spec.flags.map((flag) => ({ spec, flag })));
 
+/** What the help of a command says its `--json` prints; empty for a command that takes no such flag. */
+function jsonLine(command: string): string {
+  return SPECS.find((spec) => spec.name === command)?.flags.find((flag) => flag.name === JSON_FLAG)?.about ?? "";
+}
+
 function isPrinted(help: string, flag: CommandSpec["flags"][number]): boolean {
   return help.includes(`\n  ${flag.value === undefined ? flag.name : `${flag.name} ${flag.value}`} `);
 }
@@ -66,6 +86,8 @@ function kindWith(spec: CommandSpec, flag: CommandSpec["flags"][number]): string
 
   return spec.name;
 }
+
+afterEach(cleanUp);
 
 describe("helpText", () => {
   test("every flag of every command parses on that command and is printed in its help: without this a flag is documented and refused, or accepted and undocumented", () => {
@@ -92,6 +114,28 @@ describe("helpText", () => {
     expect(LISTED.filter(({ flag }) => takesValue.get(flag.name) !== (flag.value !== undefined)).map(({ spec, flag }) => `${spec.name} ${flag.name}`)).toEqual(
       [],
     );
+  });
+
+  // Drift: one sentence stood under every command, so doctor, config, update, whoami, and export each promised a site object that none of them answers with.
+  test("the help of a command names what its --json really prints: each key below is in the printed object, and the help says its words", async () => {
+    const bench = await openBench();
+    const rows = [[`export --out "${join(scratch(), "backup.zip")}" --json`, "zip_bytes", "the zip"] as const, ...PRINTED];
+    const wrong: string[] = [];
+
+    for (const [line, key, named] of rows) {
+      const printed = jsonOf(await bench.run(line));
+      if (!(key in printed) || !jsonLine(line.split(" ")[0] ?? "").includes(named)) wrong.push(line);
+    }
+
+    expect(wrong).toEqual([]);
+  });
+
+  test("every --json line of the help has one form, and only a command that takes one site or a path promises the site", () => {
+    const takers = SPECS.filter((spec) => jsonLine(spec.name) !== "");
+    const oneSite = takers.filter((spec) => spec.arguments.some((argument) => argument.required && ["site", "path"].includes(argument.name)));
+
+    expect(takers.filter((spec) => !/^print JSON: .*, or the error object$/.test(jsonLine(spec.name))).map((spec) => spec.name)).toEqual([]);
+    expect(takers.filter((spec) => /the (site|copy)\b/.test(jsonLine(spec.name))).map((spec) => spec.name)).toEqual(oneSite.map((spec) => spec.name));
   });
 
   test("every help text is plain ASCII in lines of at most 80 characters and names its command: a terminal 80 wide shows it unbroken", () => {
