@@ -47,13 +47,17 @@ describe("the note on the domain at the side", () => {
     await drawWith(note);
     const link = screen.getByRole("link", { name: note.label });
 
-    expect([link.getAttribute("href"), link.querySelector("svg") !== null, link.className.includes("text-destructive")]).toEqual([`${BOOT.base}/domain`, alarm, alarm]);
+    expect([link.getAttribute("href"), link.querySelector("svg") !== null, link.className.includes("text-destructive")]).toEqual([
+      `${BOOT.base}/domain`,
+      alarm,
+      alarm,
+    ]);
   });
 
   // Drift: a domain with nothing to do would still carry a line at the side.
   test("is not drawn when the install has nothing to say of its domain", async () => {
     await drawWith(null);
 
-    expect(screen.queryByRole("link", { name: /Domain/ })).toBeNull();
+    expect(screen.queryByRole("link", { name: /^Domain ./ })).toBeNull();
   });
 });

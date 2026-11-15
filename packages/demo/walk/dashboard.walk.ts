@@ -49,21 +49,17 @@ const STOPS: readonly Stop[] = [
   {
     name: "Activity, from the side",
     open: (page) => toSection(page, "Activity"),
-    shows: (page, wide) => [screenHeading(page, "Activity"), page.getByRole("tab", { name: "Activity", selected: true }), rows(page, wide, "Activity")],
+    shows: (page, wide) => [screenHeading(page, "Activity"), rows(page, wide, "Activity")],
   },
   {
-    name: "Usage, the second tab of Activity",
-    open: (page) => page.getByRole("tab", { name: "Usage", exact: true }).click(),
-    shows: (page, wide) => [screenHeading(page, "Usage"), page.getByRole("tab", { name: "Usage", selected: true }), rows(page, wide, "Usage")],
+    name: "Usage, from the side",
+    open: (page) => toSection(page, "Usage"),
+    shows: (page, wide) => [screenHeading(page, "Usage"), rows(page, wide, "Usage")],
   },
   {
     name: "Settings, from the side",
     open: (page) => toSection(page, "Settings"),
-    shows: (page) => [
-      screenHeading(page, "Settings"),
-      page.getByRole("tab", { name: "Settings", selected: true }),
-      page.getByRole("form", { name: "Sites", exact: true }),
-    ],
+    shows: (page) => [screenHeading(page, "Settings"), page.getByRole("form", { name: "Sites", exact: true })],
   },
   {
     name: "the question before everyone is signed out",
@@ -72,13 +68,9 @@ const STOPS: readonly Stop[] = [
     close: leaveBy("Cancel"),
   },
   {
-    name: "Domain, the second tab of Settings",
-    open: (page) => page.getByRole("tab", { name: "Domain", exact: true }).click(),
-    shows: (page) => [
-      screenHeading(page, "Domain"),
-      page.getByRole("tab", { name: "Domain", selected: true }),
-      page.getByRole("heading", { name: "First, make a token", exact: true }),
-    ],
+    name: "Domain, from the side",
+    open: (page) => toSection(page, "Domain"),
+    shows: (page) => [screenHeading(page, "Domain"), page.getByRole("heading", { name: "First, make a token", exact: true })],
   },
   {
     name: "the trash, from the filter of Sites",
@@ -314,7 +306,7 @@ for (const { width, height, wide } of VIEWPORTS) {
     test.describe(`at ${width}x${height}, in the ${scheme} scheme`, () => {
       test.use({ viewport: { width, height }, colorScheme: scheme });
 
-      test("every section, tab, panel, menu, and question opens and closes, with nothing refused, blocked, thrown, or asked elsewhere", async ({
+      test("every section, panel, menu, and question opens and closes, with nothing refused, blocked, thrown, or asked elsewhere", async ({
         page,
         baseURL,
       }) => {

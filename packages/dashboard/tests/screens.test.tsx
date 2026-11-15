@@ -91,9 +91,9 @@ describe("an address of the console", () => {
       "/tokens/review/login-1": ["Access", "Access", ["/logins/login-1", "/tokens?sort=allowed&dir=desc"]],
       "/tokens/allow?code=ABCD-1234": ["Access", "Access", ["/logins/find?code=ABCD-1234"]],
       "/activity?kind=sites": ["Activity", "Activity", ["/activity?kind=sites"]],
-      "/usage": ["Usage", "Activity", ["/usage"]],
+      "/usage": ["Usage", "Usage", ["/usage"]],
       "/settings": ["Settings", "Settings", ["/settings"]],
-      "/domain": ["Domain", "Settings", ["/domain"]],
+      "/domain": ["Domain", "Domain", ["/domain"]],
       "/nowhere/at/all": ["Not found", "Sites", []],
       "/Settings": ["Not found", "Sites", []],
     });

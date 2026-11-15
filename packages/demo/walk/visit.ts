@@ -31,7 +31,7 @@ function watch(context: BrowserContext, origin: string): Seen {
   return seen;
 }
 
-/** The heading of the screen a page shows. A screen whose section has tabs keeps its heading for a screen reader alone. */
+/** The heading of the screen a page shows. */
 export function screenHeading(page: Page, name: string): Locator {
   return page.getByRole("heading", { level: 1, name, exact: true });
 }

@@ -16,6 +16,7 @@ describe("what an entry says", () => {
     ["token_revoked", { token: "a1", note: "the laptop" }, 'Removed the token "the laptop"'],
     ["login_allowed", { computer: "studio" }, 'Allowed the computer "studio"'],
     ["update_started", { from: "1.0.0", to: "1.1.0" }, "Started an update to 1.1.0"],
+    ["update_started", { from: "1.0.0", to: "1.1.0", automatic: true }, "Started an update to 1.1.0 by itself"],
     ["domain_synced", { run: "check" }, "Checked the domain"],
     ["domain_synced", { run: "repair", failed: [] }, "Repaired the domain"],
     ["domain_synced", { run: "repair", failed: ["the login page: refused", "the rules: refused"] }, "Repair failed at the login page"],

@@ -1,12 +1,14 @@
 // The frame every screen sits in: the sections at the side, what the domain needs and the account at its foot, and the working area. On a phone the sections are behind a button at the top.
 
 import { useQueryClient } from "@tanstack/react-query";
-import { Link, useLocation, useNavigate, useParams } from "@tanstack/react-router";
+import { Link, useNavigate, useParams } from "@tanstack/react-router";
 import { cn } from "cn";
 import {
   ActivityIcon,
   ArrowUpCircleIcon,
   ChevronsUpDownIcon,
+  GaugeIcon,
+  GlobeIcon,
   KeyRoundIcon,
   LayoutListIcon,
   MenuIcon,
@@ -34,7 +36,6 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Sheet, SheetContent, SheetDescription, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { api } from "@/lib/api";
 import { BOOT } from "@/lib/boot";
@@ -43,33 +44,15 @@ import { sayDone, sayRefused, send } from "@/lib/notify";
 import { Confirm, type Question } from "@/shared/confirm";
 import { siteKey } from "@/sites/site-queries";
 
-/** The sections, in the order shown, each with the path of its first screen. A section that holds more screens names them all, the first one included. */
+/** The sections, in the order shown, each with the path of its screen. */
 const SECTIONS = [
-  { key: "sites", label: "Sites", icon: LayoutListIcon, inside: "/", screens: [] },
-  { key: "access", label: "Access", icon: KeyRoundIcon, inside: "/tokens", screens: [] },
-  {
-    key: "activity",
-    label: "Activity",
-    icon: ActivityIcon,
-    inside: "/activity",
-    screens: [
-      { label: "Activity", path: "/activity" },
-      { label: "Usage", path: "/usage" },
-    ],
-  },
-  {
-    key: "settings",
-    label: "Settings",
-    icon: SettingsIcon,
-    inside: "/settings",
-    // The Domain screen is there only in a dashboard built with the provider's side of the install.
-    screens: BOOT.domain
-      ? [
-          { label: "Settings", path: "/settings" },
-          { label: "Domain", path: "/domain" },
-        ]
-      : [],
-  },
+  { key: "sites", label: "Sites", icon: LayoutListIcon, inside: "/" },
+  { key: "access", label: "Access", icon: KeyRoundIcon, inside: "/tokens" },
+  { key: "activity", label: "Activity", icon: ActivityIcon, inside: "/activity" },
+  { key: "usage", label: "Usage", icon: GaugeIcon, inside: "/usage" },
+  // The Domain screen is there only in a dashboard built with the provider's side of the install.
+  ...(BOOT.domain ? ([{ key: "domain", label: "Domain", icon: GlobeIcon, inside: "/domain" }] as const) : []),
+  { key: "settings", label: "Settings", icon: SettingsIcon, inside: "/settings" },
 ] as const;
 
 /** The name at the top of the side, the same on every install. */
@@ -251,6 +234,9 @@ function VersionLine({ offer, started }: { readonly offer: Offer | undefined; re
           </a>
         </p>
       )}
+      {update?.database === true ? (
+        <p>This release changes the database, so it never starts by itself.{offer === undefined ? "" : " Press Update now."}</p>
+      ) : null}
       {offer === undefined ? null : (
         <Button variant="outline" size="xs" onClick={offer.ask}>
           Update now
@@ -297,31 +283,6 @@ function useOffer(): { readonly offer: Offer | undefined; readonly started: bool
 
   // A started update is not offered again from this page: the new version takes its place within minutes.
   return { offer: update !== null && starts && !started ? { newest: update.newest, ask: () => setAsking(true) } : undefined, started, question };
-}
-
-/** The screens of a section that holds more than one, as tabs in the title's place: the same in every such section. */
-function SectionTabs({ section }: { readonly section: (typeof SECTIONS)[number] }): ReactNode {
-  const navigate = useNavigate();
-  // A path with a slash at its end names the same screen, so its tab is marked too.
-  const path = useLocation({ select: (location) => location.pathname.replace(/(.)\/$/, "$1") });
-  if (section.screens.length === 0) return null;
-
-  const choose = (chosen: unknown): void => {
-    const screen = section.screens.find((entry) => entry.path === chosen);
-    if (screen !== undefined) void navigate({ to: screen.path });
-  };
-
-  return (
-    <Tabs value={path} onValueChange={choose}>
-      <TabsList aria-label={`Screens of ${section.label}`}>
-        {section.screens.map((screen) => (
-          <TabsTrigger key={screen.path} value={screen.path} className="px-3">
-            {screen.label}
-          </TabsTrigger>
-        ))}
-      </TabsList>
-    </Tabs>
-  );
 }
 
 /** The sections on a phone: behind a button at the top, in a sheet that closes once a place is chosen. */
@@ -372,7 +333,6 @@ export function AppShell({
   readonly tools?: ReactNode;
   readonly children: ReactNode;
 }): ReactNode {
-  const section = SECTIONS.find((entry) => entry.key === current) ?? SECTIONS[0];
   const { offer, started, question } = useOffer();
 
   return (
@@ -396,9 +356,7 @@ export function AppShell({
       <main className="flex min-h-0 min-w-0 flex-col">
         <header className="flex h-14 shrink-0 items-center gap-3 px-6 max-md:gap-2 max-md:px-4">
           <PhoneSections current={current} />
-          {/* Where tabs name the screens, they stand in the title's place: the title stays for a screen reader. */}
-          <h1 className={section.screens.length === 0 ? "min-w-0 truncate text-base font-bold" : "sr-only"}>{heading}</h1>
-          <SectionTabs section={section} />
+          <h1 className="min-w-0 truncate text-base font-bold">{heading}</h1>
           <div className="ml-auto flex items-center gap-2">
             {tools}
             <DemoTag />

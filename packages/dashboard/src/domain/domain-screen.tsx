@@ -109,14 +109,14 @@ export function DomainScreen(): ReactNode {
 
   if (data === undefined) {
     return (
-      <AppShell current="settings" heading="Domain">
+      <AppShell current="domain" heading="Domain">
         <Waiting failure={error?.message} onAgain={() => void refetch()} />
       </AppShell>
     );
   }
 
   return (
-    <AppShell current="settings" heading="Domain">
+    <AppShell current="domain" heading="Domain">
       <div className="flex min-h-0 flex-1 flex-col gap-8 overflow-y-auto pb-10">
         <div className="px-6 pt-1 max-md:px-4">
           <TokenForm form={data.form} onRun={run} />

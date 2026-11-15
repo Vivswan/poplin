@@ -90,7 +90,7 @@ export function UsageScreen(): ReactNode {
   const layout = useTableLayout("usage", columns);
 
   return (
-    <AppShell current="activity" heading="Usage">
+    <AppShell current="usage" heading="Usage">
       <section aria-label="Usage" className="flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto">
         <div className="flex shrink-0 flex-wrap items-center gap-2 px-6 pb-3 max-md:px-4">
           <div className="ml-auto max-md:hidden">

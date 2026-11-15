@@ -51,7 +51,7 @@ const WITH_DETAIL: Readonly<Partial<Record<Entry["action"], (detail: Entry["deta
   token_revoked: (detail) => named("Removed the token", detail.note),
   login_allowed: (detail) => named("Allowed the computer", detail.computer),
   login_denied: (detail) => named("Denied the computer", detail.computer),
-  update_started: (detail) => (typeof detail.to === "string" ? `Started an update to ${detail.to}` : undefined),
+  update_started: (detail) => (typeof detail.to === "string" ? `Started an update to ${detail.to}${detail.automatic === true ? " by itself" : ""}` : undefined),
   domain_synced: domainWords,
 };
 
