@@ -22,6 +22,7 @@ The dashboard's Settings screen changes the same settings, all but `logins`: cha
 | Reset                           | beside a default the row differs from: puts it back                      |
 | a warning mark after the field  | follows the number as it is typed; [Limits and cost](limits-and-cost.md) says what earns one |
 | a sentence under the field      | Save refused that value; every refused row gets one at the first Save    |
+| `Use a whole number, 1 or more.` | such a sentence, for a number typed with a fraction, such as `1.5`      |
 | `Needs an update link to work.` | under Update automatically, while no update link is saved                |
 
 | Heading    | Settings                                                                                           |
@@ -84,7 +85,7 @@ A new user can log in after step 2, not before. `poplin config logins` shows the
 
 To remove another user, choose Remove in the menu at the end of that user's row, and press Remove when asked. That user is out of the dashboard at once, and out of private sites within a minute. Your own email cannot be the one you remove.
 
-After either change Domain says `Users changed. Press Repair.` until a Repair: a removed user is taken off Cloudflare's list by it too.
+Either change waits for a Repair, and [the line at the top of Domain](domain.md) says so. The Repair takes a removed user off Cloudflare's list too. A list changed with `poplin config logins`, or by `poplin import` with `--settings --logins`, waits the same way.
 
 Sign everyone out, on the same tab, makes every browser log in to the dashboard again, yours too. [Security](../about/security.md#hardening) says what it ends and what it leaves.
 

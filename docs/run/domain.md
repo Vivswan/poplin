@@ -16,7 +16,7 @@ After the first login, Domain does what the setup page did.
 | Repair              | fixes every piece that needs it                                                                |
 | the table           | one row per piece, in the columns Piece, State, and Detail                                     |
 
-After a user is added or removed under Access, the line says `Users changed. Press Repair.` until a Repair: Cloudflare's login page keeps its own list of users.
+After a user is added or removed, under Access or [another way](settings.md#add-a-user), the line says `Users changed. Press Repair.` until a Repair: Cloudflare's login page keeps its own list of users. Where a piece is to repair or was not done, the line counts those first.
 
 Check and Repair each open a dialog that asks for a token:
 
