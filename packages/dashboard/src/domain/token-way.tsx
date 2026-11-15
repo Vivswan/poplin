@@ -1,4 +1,4 @@
-// The way to a token: one button that opens the provider's form with the rights chosen, and behind a quiet line what the form asks, what to do when it opens empty, and which rights are optional.
+// The way to a token: a button that opens the provider's form with the rights chosen, and the help behind a quiet line.
 
 import { ExternalLinkIcon } from "lucide-react";
 import type { ReactNode } from "react";
@@ -21,7 +21,7 @@ function FormHelp({ form }: { readonly form: Domain["form"] }): ReactNode {
   return (
     <Popover>
       <PopoverTrigger render={<Button type="button" variant="link" className="h-auto px-0 text-link" />}>Token help</PopoverTrigger>
-      <PopoverContent align="start" className="max-h-(--available-height) w-80 overflow-y-auto">
+      <PopoverContent side="bottom" align="start" className="max-h-(--available-height) w-80 overflow-y-auto">
         <p>{form.tokenNote}</p>
         <PopoverHeader>
           <PopoverTitle>Form opened empty?</PopoverTitle>
@@ -64,17 +64,17 @@ export function TokenWay({ form }: { readonly form: Domain["form"] }): ReactNode
   const link = httpsLink(form.tokenLink);
 
   return (
-    <div className="flex min-w-0 flex-col gap-2">
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
-        {link === undefined ? null : (
+    <div className="flex min-w-0 flex-col items-start gap-2">
+      {link === undefined ? null : (
+        <>
           <Button variant="outline" nativeButton={false} render={<a href={link} target="_blank" rel="noreferrer" />}>
             Open the token form
             <ExternalLinkIcon data-icon="inline-end" />
           </Button>
-        )}
-        <FormHelp form={form} />
-      </div>
-      {link === undefined ? null : <p className="text-muted-foreground">It opens with the rights chosen. Create the token, then copy it.</p>}
+          <p className="text-muted-foreground">It opens with the rights chosen. Create the token, then copy it.</p>
+        </>
+      )}
+      <FormHelp form={form} />
     </div>
   );
 }

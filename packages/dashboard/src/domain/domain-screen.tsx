@@ -23,7 +23,7 @@ import { shortMoment, wholeMoment } from "@/lib/sites";
 import { useChosenTimeZone } from "@/lib/timezone";
 import { AppShell } from "@/shell/app-shell";
 
-/** What an install that remembers no run says in place of a count, and where the rows would be. */
+/** What an install that remembers no run says in place of a count, and small beside it. */
 const NEVER = { line: "Not checked yet", says: "Press Check to see every piece." } as const;
 
 /** The run the install remembers. */
@@ -124,12 +124,13 @@ export function DomainScreen(): ReactNode {
   const ran = made?.ran;
   const { line, tone, rows } = shownOf(ran, data.last);
   const read = data.last !== null && (made === undefined || data.last.ran_at !== made.before) ? data.last : undefined;
+  const never = rows === undefined ? NEVER.says : undefined;
 
   return (
     <AppShell current="domain" heading="Domain">
       <section aria-label="Domain" className="flex min-h-0 flex-1 flex-col">
         <div className="flex shrink-0 flex-wrap items-center gap-x-4 gap-y-2 px-6 pb-3 max-md:px-4">
-          <StatusLine line={line} tone={tone} beside={read === undefined ? undefined : <LastRun last={read} />} />
+          <StatusLine line={line} tone={tone} beside={read === undefined ? never : <LastRun last={read} />} />
           <div className="ml-auto flex items-center gap-2">
             <DialogTrigger handle={asks} payload="check" render={<Button variant="outline" />}>
               Check
@@ -144,15 +145,7 @@ export function DomainScreen(): ReactNode {
             <PersonSteps steps={ran.steps} />
           </div>
         )}
-        {rows === undefined ? (
-          <Empty className="flex-none rounded-none border-t border-solid py-16">
-            <EmptyHeader>
-              <EmptyTitle>{NEVER.says}</EmptyTitle>
-            </EmptyHeader>
-          </Empty>
-        ) : (
-          <Pieces rows={rows} />
-        )}
+        {rows === undefined ? null : <Pieces rows={rows} />}
       </section>
       <RunDialog handle={asks} form={data.form} onRun={run} />
     </AppShell>

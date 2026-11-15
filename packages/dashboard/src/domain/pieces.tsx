@@ -66,10 +66,8 @@ export function Pieces({ rows }: { readonly rows: Ran["rows"] }): ReactNode {
       <ul aria-label="Pieces" className="min-h-0 flex-1 overflow-y-auto border-t md:hidden">
         {placed.map((piece) => (
           <li key={piece.place} className="flex min-h-16 flex-col justify-center gap-0.5 border-b px-4 py-2">
-            <div className="flex items-start justify-between gap-3">
-              <span className={cn("leading-5", piece.tone === "bad" && "font-medium")}>{piece.piece}</span>
-              <StateMark piece={piece} />
-            </div>
+            <span className={cn("leading-5", piece.tone === "bad" && "font-medium")}>{piece.piece}</span>
+            <StateMark piece={piece} />
             <p className={cn("break-words", piece.tone !== "bad" && "text-muted-foreground")}>{piece.detail}</p>
           </li>
         ))}

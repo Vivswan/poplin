@@ -15,8 +15,8 @@ import { BrandMark } from "@/shell/app-shell";
 
 /** What the screen says first, by the boxes its form has. */
 const LEADS = {
-  first: "This install is new. Make a token, then press Repair.",
-  login: "Nobody has logged in yet. Make a token, then press Repair.",
+  first: "Make a token, fill in three boxes, press Repair.",
+  login: "Make a token, paste it, press Repair.",
 } as const;
 
 /** What a repair left: the line that counts the pieces, which logins the install expects, the steps only a person can do, and one row per piece. */
@@ -64,12 +64,12 @@ export function SetupScreen({ start }: { readonly start: NonNullable<typeof SETU
       <main className="flex w-full flex-col gap-8 pt-6 pb-16">
         <div className="flex flex-col gap-1 px-6 max-md:px-4">
           <h1 className="text-base font-bold">Setup</h1>
-          <p className="text-muted-foreground">{LEADS[start.boxes]}</p>
+          {ran === undefined ? <p className="text-muted-foreground">{LEADS[start.boxes]}</p> : null}
         </div>
+        {ran === undefined ? null : <Result ran={ran} head={head} />}
         <div className="px-6 max-md:px-4">
           <SetupForm form={start.form} boxes={start.boxes} onRepair={repair} />
         </div>
-        {ran === undefined ? null : <Result ran={ran} head={head} />}
       </main>
     </div>
   );
