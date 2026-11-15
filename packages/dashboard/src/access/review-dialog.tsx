@@ -1,4 +1,4 @@
-// The review of one waiting login: what it asks for, the name it gave, what it may change once allowed, the letters of its code that the person types from their terminal, and Allow or Deny. A login's code is shown whole nowhere.
+// The review of one waiting login: what it asks for, the name it gave, what it may change once allowed, the letters of its code that the person types from their terminal, and Allow or Deny. The page never holds those letters: the server checks them.
 //
 // Anyone can begin a login, so nothing the login says of itself is the page's own words: its name is a quoted fact, and what it may change starts at the least, whatever it asked for.
 
@@ -31,6 +31,9 @@ const SAYS_FIRST = {
 
 /** How many letters at the end of a code the person types. */
 const TYPED_LETTERS = 4;
+
+/** The most characters the field takes: a whole code with its dash, for one who types all of it. */
+const MOST_TYPED = 9;
 
 /** What a person may type between the letters of a code. */
 const CODE_SEPARATORS = /[\s-]/g;
@@ -95,48 +98,49 @@ function ScopeChoice({
   );
 }
 
-/** How what was typed stands to a code: its last letters or the whole of it, not yet as long as those, or other letters. Capitals, spaces, and dashes are the typist's to choose. */
-function typedAgainst(typed: string, code: string): "same" | "short" | "other" {
-  const [given, letters] = [typed, code].map((text) => text.replace(CODE_SEPARATORS, "").toUpperCase()) as [string, string];
-  if (given === letters || given === letters.slice(-TYPED_LETTERS)) return "same";
-
-  return given.length < TYPED_LETTERS ? "short" : "other";
+/** How many of the letters a person may type are typed, without the spaces and dashes between them. */
+function lettersIn(typed: string): number {
+  return typed.replace(CODE_SEPARATORS, "").length;
 }
 
-/** The check that the login is the person's own: the code is not shown whole, and its last letters are typed from the terminal, which only the one who began the login has. */
-function TypedCode({ code, onMatch }: { readonly code: string; readonly onMatch: (matches: boolean) => void }): ReactNode {
+/** The check that the login is the person's own: the page knows no part of its code, and the person types the code's end from the terminal, which only the one who began the login has. */
+function TypedCode({
+  typed,
+  refusal,
+  field,
+  onType,
+}: {
+  readonly typed: string;
+  readonly refusal: string | undefined;
+  readonly field: RefObject<HTMLInputElement | null>;
+  readonly onType: (typed: string) => void;
+}): ReactNode {
   const id = useId();
-  const [typed, setTyped] = useState("");
-  const wrong = typedAgainst(typed, code) === "other";
 
   return (
-    <Field data-invalid={wrong} className="gap-1.5 border-t pt-4">
+    <Field data-invalid={refusal !== undefined} className="gap-1.5 border-t pt-4">
       <FieldLabel htmlFor={id} className="font-normal">
         Last {TYPED_LETTERS} letters of the code in your terminal
       </FieldLabel>
       <div>
         <Input
           id={id}
+          ref={field}
           value={typed}
-          aria-invalid={wrong}
+          aria-invalid={refusal !== undefined}
           autoComplete="off"
           autoCapitalize="characters"
           spellCheck={false}
-          maxLength={code.length}
+          maxLength={MOST_TYPED}
           className="w-28 font-mono uppercase max-md:h-10"
-          onChange={(event) => {
-            setTyped(event.target.value);
-            onMatch(typedAgainst(event.target.value, code) === "same");
-          }}
+          onChange={(event) => onType(event.target.value)}
         />
       </div>
       <div className="min-h-5 max-md:min-h-10">
-        {wrong ? (
-          <FieldError className="text-[13px]">Those are not the last letters of this login's code.</FieldError>
+        {refusal === undefined ? (
+          <FieldDescription className="text-[13px]">Type them to allow.</FieldDescription>
         ) : (
-          <FieldDescription className="text-[13px]">
-            It starts <span className="font-mono">{code.slice(0, code.length - TYPED_LETTERS)}</span>. Type the rest to allow.
-          </FieldDescription>
+          <FieldError className="text-[13px]">{refusal}</FieldError>
         )}
       </div>
     </Field>
@@ -157,16 +161,33 @@ function ReviewForm({
   readonly onClose: () => void;
   readonly under: RefObject<Review | undefined>;
 }): ReactNode {
-  const [confirmed, setConfirmed] = useState(false);
+  const field = useRef<HTMLInputElement>(null);
+  const [typed, setTyped] = useState("");
   const [scope, setScope] = useState<Review["scope"]>("publisher");
-  const sending = useMutation({ mutationFn: (allow: boolean) => actions.decide(login, { allow, confirm: confirmed, scope }) });
+  const [refusal, setRefusal] = useState<string>();
+  const sending = useMutation({ mutationFn: (allow: boolean) => actions.decide(login, { allow, letters: typed, scope }) });
   const busy = sending.isPending;
 
   // The answer is acted on only while this login is still the one under review: a review that was left, even one still fading out, does not close the one that followed it.
   const decide = (allow: boolean): void =>
     sending.mutate(allow, {
-      onSuccess: (decided) => (under.current?.id === login.id && decided.kind !== "refused" ? onClose() : undefined),
+      onSuccess: (decided) => {
+        if (under.current?.id !== login.id) return undefined;
+
+        if (decided.kind === "done" || decided.kind === "gone") return onClose();
+
+        if (decided.kind !== "letters") return undefined;
+
+        setRefusal(decided.sentence);
+        field.current?.focus();
+
+        return undefined;
+      },
     });
+  const type = (letters: string): void => {
+    setTyped(letters);
+    setRefusal(undefined);
+  };
 
   return (
     <>
@@ -191,12 +212,12 @@ function ReviewForm({
         </dd>
       </PanelFacts>
       {login.scope === "admin" ? <p className="text-[13px] text-muted-foreground">{EVERYTHING_GIVES}</p> : null}
-      <TypedCode code={login.code} onMatch={setConfirmed} />
+      <TypedCode typed={typed} refusal={refusal} field={field} onType={type} />
       <DialogFooter>
         <Button type="button" variant="outline" disabled={busy} onClick={() => decide(false)}>
           Deny
         </Button>
-        <Button type="button" disabled={busy || !confirmed} onClick={() => decide(true)}>
+        <Button type="button" disabled={busy || lettersIn(typed) < TYPED_LETTERS} onClick={() => decide(true)}>
           Allow
         </Button>
       </DialogFooter>

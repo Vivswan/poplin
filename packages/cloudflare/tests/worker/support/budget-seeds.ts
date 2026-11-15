@@ -3,6 +3,7 @@
 // A made-up site `n` has the id `000000000001`, the folder `0000000000000001`, and the name `site-1`; a made-up token `n` has the id `0000000000000001`.
 
 import { beginLogin } from "@poplin/core/src/actions/computer-logins";
+import { parseLoginSecret } from "@poplin/core/src/auth/computer-logins";
 import { BINDINGS, done, OWNER } from "./install";
 import { apiOf, sql, type Stage, unmeasured } from "./budget-stage";
 
@@ -154,17 +155,17 @@ export async function uploadOf(stage: Stage, token: string, asked: { readonly de
  * Make logins of computers that wait to be allowed, three a visitor, through the rule book: the API counts the logins begun in a minute, which a seed must not use up.
  *
  * @param scope - what each computer asks to be; a publisher when left out
- * @returns the code of each, the oldest first
+ * @returns the id of each and the code its terminal shows, the oldest first
  */
-export async function waitingLogins(stage: Stage, count: number, scope: "publisher" | "admin" = "publisher"): Promise<readonly string[]> {
-  const codes: string[] = [];
+export async function waitingLogins(stage: Stage, count: number, scope: "publisher" | "admin" = "publisher"): Promise<readonly { readonly id: string; readonly code: string }[]> {
+  const logins: { readonly id: string; readonly code: string }[] = [];
   for (let at = 0; at < count; at += 1) {
     const begun = await beginLogin(stage.install, { scope, computer: `laptop ${at}` }, `visitor-${Math.floor(at / 3)}`);
     if (!begun.ok) throw new Error(`the row's login was refused: ${begun.code}`);
 
-    codes.push(begun.code);
+    logins.push({ id: parseLoginSecret(begun.secret) ?? "", code: begun.code });
   }
 
-  return codes;
+  return logins;
 }
 

@@ -5,11 +5,8 @@ import * as v from "valibot";
 /** The response header of a route that answers bytes, holding the media type the file is stored with, percent-encoded as `encodeURIComponent` does. */
 export const STORED_TYPE_HEADER = "Poplin-Content-Type";
 
-/** The dashboard page where an admin allows or denies a computer's login; the code goes in its query. */
-export const ALLOW_PAGE = "/tokens/allow";
-
-/** The query key of that page that holds the code. */
-export const CODE_KEY = "code";
+/** The dashboard page where an admin allows or denies a computer's login: the login's id follows it, and no part of its code. */
+export const REVIEW_PAGE = "/tokens/review";
 
 /** Every refusal, whatever the route: the code, a sentence for a person, and the argument, limit, or path the code is about. */
 export const API_ERROR = v.object({ error: v.object({ code: v.string(), message: v.string(), about: v.exactOptional(v.string()) }) });

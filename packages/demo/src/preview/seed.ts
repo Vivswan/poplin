@@ -5,6 +5,7 @@
 // Every name and address is invented. The history is played in the order of its moments, so the audit log rises in time with its sequence, as a real install's does.
 
 import { beginLogin, decideLogin, redeemLogin } from "../../../core/src/actions/computer-logins";
+import { parseLoginSecret } from "../../../core/src/auth/computer-logins";
 import { changeConfig } from "../../../core/src/actions/config";
 import { deleteSite } from "../../../core/src/actions/delete";
 import { listSites } from "../../../core/src/actions/list";
@@ -259,7 +260,8 @@ async function decideComputer(world: World, cast: Cast, moment: Extract<Moment, 
   const { install, clock } = world;
   const asked = done(await beginLogin(install, { scope: "publisher", computer: moment.computer }, "preview"), `the login of ${moment.computer}`);
   clock.held = install.now() + MINUTE_MS;
-  const decision = moment.allow ? ({ code: asked.code, allow: true, scope: "publisher" } as const) : ({ code: asked.code, allow: false } as const);
+  const login = parseLoginSecret(asked.secret) ?? "";
+  const decision = moment.allow ? ({ login, allow: true, scope: "publisher", letters: asked.code } as const) : ({ login, allow: false } as const);
   done(await decideLogin(install, made(cast.actors, moment.by), decision), `the decision on ${moment.computer}`);
   if (moment.allow) done(await redeemLogin(install, { secret: asked.secret }), `the token of ${moment.computer}`);
 }

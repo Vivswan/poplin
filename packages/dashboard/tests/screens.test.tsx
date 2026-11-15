@@ -31,7 +31,7 @@ const ADDRESSES: readonly (readonly [string, Shown])[] = [
   ["/tokens", ["Access", "Access", ["/people"]]],
   ["/tokens/list?sort=name&dir=desc", ["Access", "Access", ["/logins", "/tokens?sort=name&dir=desc"]]],
   ["/tokens/review/login-1", ["Access", "Access", ["/logins/login-1", "/tokens?sort=allowed&dir=desc"]]],
-  ["/tokens/allow?code=ABCD-1234", ["Access", "Access", ["/logins/find?code=ABCD-1234"]]],
+  ["/tokens/allow?code=ABCD-1234", ["Not found", "Sites", []]],
   ["/activity?kind=sites", ["Activity", "Activity", ["/activity?kind=sites"]]],
   ["/usage", ["Usage", "Usage", ["/usage", "/usage/visits?range=30"]]],
   ["/settings", ["Settings", "Settings", ["/settings"]]],

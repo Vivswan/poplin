@@ -2,7 +2,7 @@
 
 import { html, raw } from "hono/html";
 
-import { type Entry, GROUPS } from "./gallery";
+import { type Entry, GROUPS, type Printed } from "./gallery";
 
 /** The look of the preview's own pages. It follows the system's scheme. */
 const STYLE = `
@@ -105,6 +105,31 @@ bun packages/cli/src/bin.ts login --server ${gallery.origin}</pre></section>
  */
 export function plainPage(text: string, status: number): Promise<string> {
   return shell(String(status), html`<h1>${status}</h1><p class="banner">Demo. The product answers this request with the status ${status} and these words alone, as plain text:</p><pre>${text}</pre>`);
+}
+
+/** The lines `poplin login` prints on one computer: the address that opens the review, as a link, and the code. */
+function printedLines(printed: Printed): Markup {
+  return html`<section><h2>${printed.computer}</h2>
+<pre>open this address, and allow this login there:
+  <a href="${printed.address}">${printed.address}</a>
+the page asks for the last 4 letters of this code:
+  <code>${printed.code}</code></pre></section>`;
+}
+
+/**
+ * Build the page that stands where the terminals of the sample computers that wait would be.
+ *
+ * @returns a page with what each terminal prints; no page of the dashboard shows a code whole
+ */
+export function terminalPage(printed: readonly Printed[]): Promise<string> {
+  const none = html`<p>No login waits. Open Access once, or reset the sample data.</p>`;
+
+  return shell(
+    "Logins that wait",
+    html`<h1>What the waiting computers print</h1>
+<p class="banner">Demo. No computer is behind a sample login, so this page stands where each terminal would be.</p>
+<div class="groups">${printed.length === 0 ? none : printed.map(printedLines)}</div>`,
+  );
 }
 
 /**

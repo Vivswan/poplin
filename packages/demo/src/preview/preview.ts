@@ -28,7 +28,7 @@ import { changingPlug, PLUG_STATES, type PlugState, previewFirstRun, previewPlug
 import { type Entry, galleryOf, STAGES } from "./gallery";
 import { rebased, unbased } from "./base";
 import { ADMIN_ORIGIN, askMount, type Mount, previewValue, SERVED_PREFIX, siteOrigin } from "./mount";
-import { galleryPage, loginPage, missingPage, plainPage } from "./own-pages";
+import { galleryPage, loginPage, missingPage, plainPage, terminalPage } from "./own-pages";
 import { panelNow } from "./panel-now";
 import { type RealSites, realAddresses } from "./real-sites";
 import { keepLoginsWaiting, SEEDED_DAYS, type Samples, seedWorld } from "./seed";
@@ -368,7 +368,9 @@ export async function createPreview(host: Host): Promise<Preview> {
     const stage = stageAt(url.pathname);
     if (stage === undefined) return own(await missingPage(), 404);
 
-    return stage({ world: scene.seeded });
+    const staged = await stage({ world: scene.seeded });
+
+    return staged instanceof Response ? staged : own(await terminalPage(staged));
   }
 
   return {
