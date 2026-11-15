@@ -31,7 +31,7 @@ const WORDS: Readonly<Record<string, Words>> = {
     wordLabels: { word: "Never", number: "After" },
     start: "30",
   },
-  default_search_engines: { block: "sites", label: "List new sites", about: "A new public site starts listed in search engines." },
+  default_search_engines: { block: "sites", label: "Show in search engines", about: "A new public site can show up in search engines." },
   versions_kept: { block: "sites", label: "Versions kept", about: "How many versions a site keeps, the live one included.", unit: "versions" },
   trash_days: { block: "sites", label: "Keep deleted sites", about: "After that, a deleted site is gone for good.", unit: "days" },
   search_engines_allowed: {
