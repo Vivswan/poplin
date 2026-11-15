@@ -56,10 +56,10 @@ export type Failure =
 /** What a call answers: the route's answer, or why there is none. */
 export type Called<Done> = { readonly ok: true; readonly value: Done } | { readonly ok: false; readonly failure: Failure };
 
-/** One stored file as the install sends it: its bytes, which are read once, their count, and the media type it is served with. */
+/** One stored file as the install sends it: its bytes, which are read once, and the media type it is served with. `size` is their count when the answer names it in `Content-Length`: a server may send the bytes without one. */
 interface Download {
   readonly body: ReadableStream<Uint8Array>;
-  readonly size: number;
+  readonly size?: number;
   readonly contentType: string;
 }
 
@@ -189,7 +189,7 @@ function storedType(header: string | null): string | undefined {
   }
 }
 
-/** Read the answer to a download: the stream with what the headers say of it, or the refusal a JSON body holds. A done answer without its length or its type is none. */
+/** Read the answer to a download: the stream with what the headers say of it, or the refusal a JSON body holds. A done answer without its type, or with a length that is no count, is none. */
 async function readDownload(response: Raw): Promise<Called<Download>> {
   const { status } = response;
 
@@ -199,16 +199,16 @@ async function readDownload(response: Raw): Promise<Called<Download>> {
     return read.ok ? failed({ kind: "unexpected", status }) : read;
   }
 
-  const length = response.headers.get("Content-Length") ?? "";
+  const length = response.headers.get("Content-Length");
   const contentType = storedType(response.headers.get(STORED_TYPE_HEADER));
 
-  if (!BYTE_COUNT.test(length) || contentType === undefined) {
+  if ((length !== null && !BYTE_COUNT.test(length)) || contentType === undefined) {
     await response.body?.cancel().catch(() => undefined);
 
     return failed({ kind: "unexpected", status });
   }
 
-  return { ok: true, value: { body: response.body ?? new Blob([]).stream(), size: Number(length), contentType } };
+  return { ok: true, value: { body: response.body ?? new Blob([]).stream(), contentType, ...(length === null ? {} : { size: Number(length) }) } };
 }
 
 /**

@@ -67,9 +67,11 @@ async function writeVersion(job: Job, site: StoredSite, label: string, version: 
 
     for (const listed of page.files) {
       const file = need(await job.client.download({ site: site.id, version, path: listed.path }));
-      await job.writer.addFile(LAYOUT.file(label, version, listed.path), file.body, file.size);
+      // An answer may name no length: the listing's is then the file's, and the zip refuses a stream of any other.
+      const size = file.size ?? listed.size;
+      await job.writer.addFile(LAYOUT.file(label, version, listed.path), file.body, size);
 
-      index.push({ path: listed.path, size: file.size, content_type: file.contentType });
+      index.push({ path: listed.path, size, content_type: file.contentType });
       job.arrived(label);
     }
 

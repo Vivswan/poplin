@@ -115,8 +115,17 @@ describe("client", () => {
     expect(absent).toMatchObject({ ok: false, failure: { kind: "refused", status: 404, code: "not_found", about: "path" } });
   });
 
+  // Drift: a server may send a file with no `Content-Length`, as the local preview does. A client that asked for the header would refuse every file of an export.
+  test("a download with no length is taken with its stored type and read to its end", async () => {
+    const streamed = new Response(new Blob(["first ", "second"]).stream(), { headers: { "Poplin-Content-Type": "text%2Fplain" } });
+    const client = createClient({ server: ORIGIN, token: TOKEN, fetch: async () => streamed });
+
+    const file = await client.download({ site: "k3f9x2ab71qz", version: 1, path: "index.html" });
+
+    expect([streamed.headers.has("Content-Length"), file.ok && [file.value.size, file.value.contentType, await new Response(file.value.body).text()]]).toEqual([false, [undefined, "text/plain", "first second"]]);
+  });
+
   test.each<[string, Response, unknown]>([
-    ["no length", new Response("hello", { headers: { "Poplin-Content-Type": "text%2Fplain" } }), { kind: "unexpected", status: 200 }],
     ["a length that is no count", new Response("hello", { headers: { "Content-Length": "-5", "Poplin-Content-Type": "text%2Fplain" } }), { kind: "unexpected", status: 200 }],
     ["no stored type", new Response("hello", { headers: { "Content-Length": "5" } }), { kind: "unexpected", status: 200 }],
     ["a stored type that is not percent-encoded text", new Response("hello", { headers: { "Content-Length": "5", "Poplin-Content-Type": "%E0%A4%A" } }), { kind: "unexpected", status: 200 }],

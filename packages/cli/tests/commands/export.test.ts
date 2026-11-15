@@ -70,6 +70,29 @@ describe("export", () => {
     expect([one.out.at(-1)?.split(": ")[1]?.split(", ").slice(0, 2), await namesIn("one.zip")]).toEqual([["1 site", "1 file"], ["sites/docs/site.json", "sites/docs/versions/1/files/index.html", "sites/docs/versions/1/files.json", "manifest.json"]]);
   });
 
+  // Drift: the local preview sends each file with no `Content-Length`; an export that needed the header ended in `unexpected_answer: status 200` there.
+  test("an export of files that come with no length writes the same zip as one of files that name it", async () => {
+    const bench = await openBench();
+    await publishedTwice(bench, "notes");
+    const folder = scratch();
+    const whole = await bench.run(`export --all-versions --out ${join(folder, "whole.zip")}`);
+    bench.hook = async (request) => {
+      if (!isFileRequest(request)) return undefined;
+
+      const answered = await bench.install.api.fetch(request);
+      const headers = new Headers(answered.headers);
+      headers.delete("Content-Length");
+
+      return new Response(answered.body, { status: answered.status, headers });
+    };
+
+    const streamed = await bench.run(`export --all-versions --out ${join(folder, "streamed.zip")}`);
+    const entries = async (zip: string): Promise<unknown> => (await readZip(join(folder, zip))).filter(([name]) => name !== "manifest.json");
+
+    expect([streamed.code, streamed.err, streamed.out.at(-1)?.split(": ")[1]]).toEqual([0, [], whole.out.at(-1)?.split(": ")[1]]);
+    expect(await entries("streamed.zip")).toEqual(await entries("whole.zip"));
+  });
+
   test("a zip that is already there is refused before the install is asked, and --overwrite replaces it: without this an export could silently eat an older backup", async () => {
     const bench = await openBench();
     await publishedTwice(bench, "notes");
@@ -89,7 +112,7 @@ describe("export", () => {
     ["a refusal half way", () => answer(500, { error: { code: "internal", message: "no" } }), /^the install failed to do that/, 1],
     ["a file that stops arriving", () => new Response(new ReadableStream({ pull: (controller) => controller.error(new Error("reset")) }), { headers: { "Content-Length": "6", "Poplin-Content-Type": "text%2Fcss" } }), /^the backup cannot be written: /, 1],
     ["a file shorter than the install said", () => new Response("bo", { headers: { "Content-Length": "6", "Poplin-Content-Type": "text%2Fcss" } }), /^the backup cannot be written: /, 1],
-    ["a file without its length", () => new Response("body{}", { headers: { "Poplin-Content-Type": "text%2Fcss" } }), /^the install answered in a form this poplin does not know/, 5],
+    ["a streamed file shorter than the listing said", () => new Response("bo", { headers: { "Poplin-Content-Type": "text%2Fcss" } }), /^the backup cannot be written: /, 1],
   ])("an export that meets %s leaves no file, and an older backup under --overwrite keeps its bytes: without this half a backup would stand under the name of a whole one", async (_what, respond, said, code) => {
     const bench = await openBench();
     await publishedTwice(bench, "notes");
