@@ -5,6 +5,7 @@ import "@fontsource/libre-franklin/latin-700.css";
 import "../styles/theme.css";
 import { getImage } from "astro:assets";
 import { REPOSITORY_URL, sitePath } from "../lib/paths.ts";
+import { released } from "../lib/released.ts";
 
 interface Props {
   title: string;
@@ -14,6 +15,7 @@ interface Props {
 
 const { title, description, path } = Astro.props;
 const pageUrl = new URL(sitePath(path), Astro.site).href;
+const newest = released();
 const links = [
   { href: sitePath("docs/"), label: "Docs" },
   { href: REPOSITORY_URL, label: "GitHub" },
@@ -100,8 +102,11 @@ const card = await getImage({ src: social, width: 1200, height: 630, format: "pn
       <slot />
     </main>
     <footer class="foot wrap">
-      <p>poplin 0.0.1</p>
-      <a href={`${REPOSITORY_URL}/blob/main/LICENSE.md`}>License</a>
+      <p>poplin {newest?.version}</p>
+      <ul>
+        <li><a href={`${REPOSITORY_URL}/releases`}>Changelog</a></li>
+        <li><a href={`${REPOSITORY_URL}/blob/main/LICENSE.md`}>License</a></li>
+      </ul>
     </footer>
     <script>
       const root = document.documentElement;

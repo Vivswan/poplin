@@ -167,7 +167,8 @@ main {
   padding-block: 22px;
 }
 
-.top ul {
+.top ul,
+.foot ul {
   display: flex;
   align-items: center;
   gap: 4px 26px;
