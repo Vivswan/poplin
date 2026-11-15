@@ -35,8 +35,8 @@ export interface SiteNamed {
   readonly title: string | null;
 }
 
-/** The site an id belonged to before a new link, as it is now. */
-export interface LaterSite extends SiteNamed {
+/** The site an id names, as it is now: the one that has the id, or the one that gave it up at a new link. */
+export interface SiteNow extends SiteNamed {
   /** The id it has now. */
   readonly id: SiteId;
 }
@@ -327,6 +327,24 @@ export interface AuditFound {
   readonly stoppedAt: number | undefined;
 }
 
+/** An entry of the audit log with what it names, as that is now. */
+export interface NamedAuditEntry {
+  /** The entry as the log holds it. */
+  readonly entry: AuditEntry;
+
+  /** The site the entry is about, as it is now: the one that has the id the entry holds, or the one that gave it up at a new link. `null` for an entry about no site, and once the site is gone for good. */
+  readonly site: SiteNow | null;
+
+  /** The note of the token that did it, removed or not; `null` for a login, and for a token with no note. */
+  readonly tokenNote: string | null;
+}
+
+/** What a narrowed reading of the audit log found, each entry with what it names. */
+export interface NamedAuditFound extends Pick<AuditFound, "stoppedAt"> {
+  /** The entries the narrowing keeps, in the direction asked. */
+  readonly entries: readonly NamedAuditEntry[];
+}
+
 /** Which entries of the audit log a count is of, and how far into the log it reads. */
 export interface AuditCountQuery {
   /** How many entries the count reads at the most, from the newest back; at least 1. */
@@ -431,7 +449,7 @@ export interface Database {
    * @param ids - the ids to look up, at most 100 different ones
    * @throws {RangeError} more than 100 different ids are asked for
    */
-  getLaterSites(ids: readonly SiteId[]): Promise<ReadonlyMap<SiteId, LaterSite>>;
+  getLaterSites(ids: readonly SiteId[]): Promise<ReadonlyMap<SiteId, SiteNow>>;
 
   /** The site holding this public name, in the trash or not. */
   getSiteByPublicName(name: PublicName): Promise<Site | undefined>;
@@ -808,6 +826,20 @@ export interface Database {
    * @throws {RangeError} `limit` is not a whole number from 1 to 1,000
    */
   searchAudit(query: AuditSearch): Promise<AuditFound>;
+
+  /**
+   * The page `listAudit` reads, each entry with what it names as it is now: its site, and the note of the token that did it. The one statement that reads the page finds them, each by a key.
+   *
+   * @throws {RangeError} `limit` is not a whole number from 1 to 1,000
+   */
+  listNamedAudit(query: AuditQuery): Promise<readonly NamedAuditEntry[]>;
+
+  /**
+   * The page `searchAudit` reads, each entry with what it names as it is now, found as `listNamedAudit` finds it.
+   *
+   * @throws {RangeError} `limit` is not a whole number from 1 to 1,000
+   */
+  searchNamedAudit(query: AuditSearch): Promise<NamedAuditFound>;
 
   /**
    * Count the entries of the audit log a narrowing keeps, reading no further back than the newest `most` entries, so a long log costs no more than `most` rows.

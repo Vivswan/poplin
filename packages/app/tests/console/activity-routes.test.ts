@@ -198,7 +198,7 @@ describe("a page of the log", () => {
 
     expect(answers.map((answer) => (answer as Page).logins)).toEqual(Array.from({ length: 3 }, () => ({ [token]: "the laptop" })));
     expect(file.split("\r\n")[1]?.split(",").slice(1)).toEqual(["the laptop", "Made the site", "by-a-login", "", "create"]);
-    expect(named.mock.calls.map(([ids]) => [...ids].sort())).toEqual([[token, unnamed.record.id].sort(), [token, unnamed.record.id].sort(), [token], [token]]);
+    expect(named.mock.calls.map(([ids]) => [...ids].sort())).toEqual([[token, unnamed.record.id].sort(), [token]]);
   });
 
   // Drift: a second page would repeat or skip entries, go on against the order it is read in, or a last page would offer a page after it.
@@ -426,9 +426,9 @@ describe("the log as a file", () => {
     const opened = await openConsole();
     await fillLog(opened, 1501);
     const { database } = opened.base.install;
-    const read = database.listAudit.bind(database);
+    const read = database.listNamedAudit.bind(database);
     const readings = { count: 0 };
-    database.listAudit = async (query) => {
+    database.listNamedAudit = async (query) => {
       readings.count += 1;
       if (readings.count > 1) throw new Error("the database is away");
 

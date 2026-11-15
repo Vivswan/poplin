@@ -747,7 +747,7 @@ describe("the audit log as a file", () => {
     const rows = { read: 0 };
     const bindings = freePlanBindings(tally);
     const metered = { ...bindings, DB: meteredDatabase(bindings.DB, rows) };
-    // A new instance, since an instance keeps the bindings of its first request; what its start costs is counted apart.
+    // A new instance, since an instance keeps the bindings of its first request. That request is asked before the file, so this count leaves out what an instance's start costs: the test below counts a file that is an instance's first request.
     const worker = instance(w);
     await ask(worker, `${ADMIN}/data/frame`, { headers: session }, metered);
     const start = { ...tally, ...rows };
@@ -767,6 +767,39 @@ describe("the audit log as a file", () => {
       { ok: true, from: expect.stringMatching(/^[1-9]\d*$/), after: expect.stringMatching(/^[1-9]\d*$/) },
       { calls: 4, read: FILE_ENTRIES + 4 },
     ]);
+  });
+
+  // Drift: a reading that named its sites and its tokens by lookups of a hundred ids each would take 47 queries for such a file, and 51 as an instance's first request: one more than the Free plan gives, so the download would break off.
+  // The rows are pinned where no start is counted: an entry and its token's row, each read once.
+  test.each([
+    ["an instance that answered before", true, { calls: 5, read: 2 * FILE_ENTRIES + 4 }],
+    ["a new instance, its start counted with the file", false, { calls: 9 }],
+  ])("a file of 2,000 entries, each about its own site that is gone and by its own token, is read by %s in the queries of any other file, far under the Free plan's 50", async (_which, warm, cost) => {
+    const session = { Cookie: cookieOf(await logIn(instance(w), w)) };
+    const counted = "WITH RECURSIVE counted(entry) AS (SELECT 1 UNION ALL SELECT entry + 1 FROM counted WHERE entry < ?)";
+    await BINDINGS.DB.batch([
+      BINDINGS.DB.prepare(`${counted} INSERT INTO tokens (id, hash, scope, note, created_at) SELECT printf('%016x', entry), 'none', 'publisher', 'agent ' || entry, ? FROM counted`).bind(FILE_ENTRIES + 200, Date.now()),
+      BINDINGS.DB.prepare(
+        `${counted} INSERT INTO audit (at, actor, action, site_id, site_name, detail) SELECT ?, printf('%016x', entry), 'delete', printf('%012d', entry), 'gone-' || entry, '{}' FROM counted`,
+      ).bind(FILE_ENTRIES + 200, Date.now()),
+    ]);
+    const tally = { calls: 0 };
+    const rows = { read: 0 };
+    const bindings = freePlanBindings(tally);
+    const metered = { ...bindings, DB: meteredDatabase(bindings.DB, rows) };
+    const worker = instance(w);
+    if (warm) await ask(worker, `${ADMIN}/data/frame`, { headers: session }, metered);
+    const start = { ...tally, ...rows };
+
+    const answer = await ask(worker, `${ADMIN}/data/activity/download`, { headers: session }, metered);
+    const lines = (await answer.text()).split("\r\n");
+
+    expect([lines.length - 1, lines[1]?.split(",").slice(1), lines.at(-2)]).toEqual([
+      FILE_ENTRIES + 2,
+      [`agent ${FILE_ENTRIES + 200}`, "Deleted for good", `gone-${FILE_ENTRIES + 200}`, "", "delete"],
+      '"2,000 entries. The log holds more: download the next part."',
+    ]);
+    expect({ calls: tally.calls - start.calls, read: rows.read - start.read }).toMatchObject(cost);
   });
 });
 

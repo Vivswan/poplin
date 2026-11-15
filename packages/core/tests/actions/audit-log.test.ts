@@ -55,7 +55,7 @@ describe("listAuditForFile", () => {
     const told = async (query: Parameters<typeof listAuditForFile>[2]): Promise<unknown> => {
       const read = await listAuditForFile(world.install, ADMIN, query);
 
-      return read.ok ? read.entries.map((entry) => entry.action) : read;
+      return read.ok ? read.entries.map(({ entry }) => entry.action) : read;
     };
     const next = (query: Parameters<typeof nextAuditFile>[2]): ReturnType<typeof nextAuditFile> => nextAuditFile(world.install, ADMIN, query);
 
@@ -96,6 +96,7 @@ describe("a narrowed reading of a log longer than its window", () => {
     for (let count = 0; count < AUDIT_WINDOW + 5; count += 1) await world.install.database.appendAudit({ action: "login", detail: {} }, { by: ADMIN.holder, at: NOW });
     await made(world, ADMIN, "docs");
     const told = (read: Awaited<ReturnType<typeof listAudit>>): unknown => (read.ok ? [read.entries.map((entry) => entry.site?.name ?? entry.action), Object.keys(read)] : read);
+    const toldOfFile = (read: Awaited<ReturnType<typeof listAuditForFile>>): unknown => told(read.ok ? { ...read, entries: read.entries.map(({ entry }) => entry) } : read);
     const screen = await listAuditForScreen(world.install, ADMIN, { limit: 201, kind: "access" });
 
     expect([
@@ -104,7 +105,7 @@ describe("a narrowed reading of a log longer than its window", () => {
       told(await listAudit(world.install, ADMIN, { site: "o", limit: 1 })),
       told(await listAudit(world.install, ADMIN, { site: "nowhere" })),
       told(await listAudit(world.install, ADMIN, { limit: 1 })),
-      told(await listAuditForFile(world.install, ADMIN, { site: "o" })),
+      toldOfFile(await listAuditForFile(world.install, ADMIN, { site: "o" })),
       await countAudit(world.install, ADMIN, { site: "o" }),
       await countAudit(world.install, ADMIN),
       await nextAuditFile(world.install, ADMIN, { entries: 2000, site: "o" }),

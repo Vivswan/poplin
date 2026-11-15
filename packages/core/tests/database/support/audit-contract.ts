@@ -4,7 +4,7 @@ import { describe, expect, test } from "bun:test";
 
 import type { Login } from "../../../src/auth/logins";
 import { mintToken } from "../../../src/auth/tokens";
-import type { Database, Signed } from "../../../src/database/database";
+import type { Database, Signed, SiteNow } from "../../../src/database/database";
 import type { SiteName } from "../../../src/names/names";
 import type { AuditEntry } from "../../../src/records/audit";
 import type { Site } from "../../../src/records/site";
@@ -23,6 +23,7 @@ import {
   auditTrail,
   draft,
   made,
+  mintFrom,
   opened,
   publish,
   storedBack,
@@ -159,6 +160,51 @@ export function auditLog(label: string, makeDatabase: DatabaseFactory): void {
         { seq: 1, at: NOW, by: ADA, action: "create", site: named, detail: { access: "private", public_name: null } },
       ]);
       await expect(database.listAudit({ limit: 0 })).rejects.toThrow(RangeError);
+    });
+
+    // Drift: the Activity screen and a file of the log show each entry's site and login by what the page's own statement joined. A join that named another site, lost a moved or a trashed one, or dropped a removed token's note would show a wrong name.
+    test("a named page holds a plain page's entries, each with the site and the token note the lookups by id answer: a site renamed, trashed or behind a new link, none once it is gone, and the holder of an id another site gave up", async () => {
+      const database = await opened(makeDatabase, mintFrom("aaaaaaaaaaaa", "bbbbbbbbbbbb", "aaaaaaaaaaaa", "cccccccccccc", "dddddddddddd", "eeeeeeeeeeee"));
+      const [laptop, agent, unnamed] = await Promise.all([{ note: "laptop" }, { note: "agent" }, { note: "" }].map(async ({ note }) => (await mintToken({ scope: "publisher", note, now: NOW })).record));
+      if (laptop === undefined || agent === undefined || unnamed === undefined) throw new Error("no token was minted");
+
+      for (const token of [laptop, agent, unnamed]) await database.addToken(token, BY_ADA);
+      const first = await made(database, { ...draft(REPORT), title: "Typed" }, { by: laptop.id, at: NOW });
+      await database.giveNewId(first.id, { by: agent.id, at: NOW });
+      const holder = await made(database, draft(DOCS), { by: unnamed.id, at: NOW });
+      await database.changeDetails(holder.id, { name: "figures" as SiteName }, BY_ADA);
+      const binned = await made(database, draft("binned" as SiteName));
+      await database.trashSite(binned.id, BY_ADA);
+      const gone = await made(database, draft("gone" as SiteName));
+      await database.deleteSite(gone.id, BY_ADA);
+      await database.revokeToken(agent.id, BY_ADA);
+      await database.appendAudit({ action: "login", detail: {} }, BY_ADA);
+
+      const named = await database.listNamedAudit({ limit: 100, dir: "asc" });
+      const plain = await database.listAudit({ limit: 100, dir: "asc" });
+      const ids = plain.flatMap((entry) => (entry.site === null ? [] : [entry.site.id]));
+      const [names, later, notes] = await Promise.all([database.getSiteNames(ids), database.getLaterSites(ids), database.getTokenNames([laptop.id, agent.id, unnamed.id])]);
+      const lookedUp = (id: SiteNow["id"]): SiteNow | null => {
+        const now = names.get(id);
+
+        return now === undefined ? (later.get(id) ?? null) : { id, ...now };
+      };
+      const searched = await database.searchNamedAudit({ limit: 100, dir: "asc", actions: ["create", "delete"] });
+
+      expect(named).toEqual(plain.map((entry) => ({ entry, site: entry.site === null ? null : lookedUp(entry.site.id), tokenNote: notes.get(entry.by as never) ?? null })));
+      expect(searched).toEqual({ entries: named.filter(({ entry }) => entry.action === "create" || entry.action === "delete"), stoppedAt: undefined });
+      expect(named.filter(({ entry }) => entry.site !== null).map(({ entry, site, tokenNote }) => [entry.action, entry.site?.name, site?.id ?? null, site?.name ?? null, site?.title ?? null, tokenNote])).toEqual([
+        ["create", REPORT, "aaaaaaaaaaaa", "figures", null, "laptop"],
+        ["new_id", REPORT, "bbbbbbbbbbbb", REPORT, "Typed", "agent"],
+        ["create", DOCS, "aaaaaaaaaaaa", "figures", null, null],
+        ["details", "figures", "aaaaaaaaaaaa", "figures", null, null],
+        ["create", "binned", "cccccccccccc", "binned", null, null],
+        ["trash", "binned", "cccccccccccc", "binned", null, null],
+        ["create", "gone", null, null, null, null],
+        ["delete", "gone", null, null, null, null],
+      ]);
+      await expect(database.listNamedAudit({ limit: 1001 })).rejects.toThrow(RangeError);
+      await expect(database.searchNamedAudit({ limit: 0, actions: ["create"] })).rejects.toThrow(RangeError);
     });
 
     // Drift: a file of the log is read 1,000 entries a reading; a reading cut at a listing's 100 would end the file early, and one with no bound would hold a whole long log in memory.

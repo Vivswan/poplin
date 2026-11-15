@@ -5,6 +5,7 @@ import { describe, expect, test } from "bun:test";
 
 import type { Login } from "../../../src/auth/logins";
 import { mintToken } from "../../../src/auth/tokens";
+import { auditSearchAsked } from "../../../src/database/audit-reads";
 import { AUDIT_WINDOW, type Database } from "../../../src/database/database";
 import { AllowanceSpent, type SqlDriver, type SqlValue, type Statement, type StatementResult } from "../../../src/database/driver";
 import { openDatabase } from "../../../src/database/open";
@@ -456,6 +457,10 @@ function queryPlans(label: string, makeDriver: DriverFactory): void {
       await database.searchAudit({ limit: 10, actions: ["login"], site: "report" });
       await database.searchAudit({ limit: 10, dir: "asc", after: 3, site: "report" });
       await database.searchAudit({ limit: 10, actions: ["login"], of: site.id });
+      await database.listNamedAudit({ limit: 10 });
+      await database.listNamedAudit({ limit: 10, dir: "asc", after: 1 });
+      await database.searchNamedAudit({ limit: 10, actions: ["login"], site: "report" });
+      await database.searchNamedAudit({ limit: 10, dir: "asc", after: 3, of: site.id });
       await database.countAudit({ most: 10, of: site.id });
       const created = await begunSite(database, draft(REPORT));
       const updated = await begunVersion(database, imported.kind === "done" ? imported.site : site);
@@ -510,6 +515,8 @@ function queryPlans(label: string, makeDriver: DriverFactory): void {
         `SELECT coalesce(${newest} - ? < (SELECT min("audit"."seq") FROM "audit"), 1) AS whole, (select count(*) as "found" from "audit" where ("audit"."seq" > ${newest} - ? and "audit"."action" in (?) and ${about})) AS found`,
         `${page} ("audit"."seq" < (SELECT max("audit"."seq") + 1 FROM "audit") AND "audit"."seq" >= (SELECT max("audit"."seq") + 1 FROM "audit") - ? and "audit"."action" in (?) and ${about}) order by "audit"."seq" desc limit ?`,
         `${page} ("audit"."seq" > ? AND "audit"."seq" <= ? + ? and ${about}) order by "audit"."seq" asc limit ?`,
+        // A named page finds each entry's site and token by a key, so it walks only what the plain page of the same search walks.
+        auditSearchAsked({ limit: 10, actions: ["login"], site: "report" }, true).sql,
       ];
       const counted = `select coalesce(min("newest"."seq") <= (SELECT min("audit"."seq") FROM "audit"), 1) as "whole", coalesce(sum("kept"), 0) as "found" from ${newestKept}`;
       const readOnce = (statement: string): string[] => [`SCAN sites <- ${statement}`, `SCAN earlier_ids USING COVERING INDEX earlier_ids_by_folder <- ${statement}`];

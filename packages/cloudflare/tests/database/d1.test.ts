@@ -187,6 +187,9 @@ const ROWS: Readonly<Record<string, readonly [read: number, written: number]>> =
   "listAudit, the oldest first": [20, 0],
   "searchAudit, the oldest first, the next page of one kind": [27, 0],
   "listAudit, a reading for a file": [45, 0],
+  "listNamedAudit": [32, 0],
+  "searchNamedAudit, one kind, the sites named with a text": [71, 0],
+  "listNamedAudit, a reading for a file": [77, 0],
   "endOfAuditPart, of twenty entries": [21, 0],
   "countAudit": [46, 0],
   "countAudit, one kind, the sites named with a text": [64, 0],
@@ -730,6 +733,9 @@ describe("D1: the rows every operation of the database costs of a day's allowanc
     await cost("listAudit, the oldest first", () => database.listAudit({ limit: 20, dir: "asc" }));
     await cost("searchAudit, the oldest first, the next page of one kind", () => database.searchAudit({ limit: 20, dir: "asc", after: 20, actions: ["create"] }));
     await cost("listAudit, a reading for a file", () => database.listAudit({ limit: 1000 }));
+    await cost("listNamedAudit", () => database.listNamedAudit({ limit: 20 }));
+    await cost("searchNamedAudit, one kind, the sites named with a text", () => database.searchNamedAudit({ limit: 20, actions: ["create"], site: "site-1" }));
+    await cost("listNamedAudit, a reading for a file", () => database.listNamedAudit({ limit: 1000 }));
     await cost("endOfAuditPart, of twenty entries", () => database.endOfAuditPart({ entries: 20 }));
     await cost("countAudit", () => database.countAudit({ most: 10_000 }));
     await cost("countAudit, one kind, the sites named with a text", () => database.countAudit({ most: 10_000, actions: ["create"], site: "site-1" }));
