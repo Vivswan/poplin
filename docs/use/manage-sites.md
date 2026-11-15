@@ -61,12 +61,20 @@ For a site that is not in the trash, the panel has the link, who can open it, th
 
 | In the panel                  | Does, or says                                                                    |
 | ----------------------------- | -------------------------------------------------------------------------------- |
-| Private                       | changes the site at once                                                         |
-| Unlisted, on a private site   | asks first: `Anyone with the link can open it. No login.`                        |
-| Public                        | asks for a Public name, filled with the site's name, then Make it public         |
+| Private, Unlisted, or Public  | asks first, as the next table shows; Cancel leaves the site as it is             |
 | a Public name that is refused | says why at the field, and keeps what was typed                                  |
 | Show in search engines        | on a site that is not public: `Only a public site is listed.`                    |
 | Show in search engines        | on a public site, while Let search engines in is off: `Off for every site in Settings.` |
+
+| From                | To       | The question says                                                                  | Its button       |
+| ------------------- | -------- | ---------------------------------------------------------------------------------- | ---------------- |
+| Unlisted            | Private  | `Only users who can log in here can open it.`                                      | Make it private  |
+| Private             | Unlisted | `Anyone with the link can open it. No login.`                                      | Make it unlisted |
+| Public              | Private  | `Its public link stops working.`                                                   | Make it private  |
+| Public              | Unlisted | `Its public link stops working. Anyone with its other link can open it. No login.` | Make it unlisted |
+| Private or Unlisted | Public   | `Everyone can open it, at a public link. No login.`, over the field Public name    | Make it public   |
+
+The field Public name starts with the site's name. Under it, `Its link will be` shows the address the site gets for the name typed, such as `docs-page.example.com`.
 
 [Who can open a site](who-can-open.md) says what a public name is. Let search engines in is in [Settings](../run/settings.md#change-a-setting), under Visitors.
 
