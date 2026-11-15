@@ -24,8 +24,9 @@ interface Done {
  * Draw the menu over the log of one kind, with the server answering each question about the file after a file in turn.
  *
  * @param places - the place each file's follower goes on from, in the order asked; `null` ends the log, and a sentence refuses
+ * @param query - the query of the address the log is at
  */
-function drawn(fitsOne: boolean, places: readonly (string | null | { readonly sentence: string })[] = []): Done {
+function drawn(fitsOne: boolean, places: readonly (string | null | { readonly sentence: string })[] = [], query = "kind=sites&after=40"): Done {
   const done: Done = { asked: [], saved: [] };
   const answers = [...places];
   HTMLAnchorElement.prototype.click = function click(this: HTMLAnchorElement): void {
@@ -41,7 +42,7 @@ function drawn(fitsOne: boolean, places: readonly (string | null | { readonly se
   }) as typeof fetch;
   render(
     <ThemeProvider storageKey="test.theme">
-      <DownloadMenu query={new URLSearchParams("kind=sites&after=40")} fitsOne={fitsOne} empty={false} />
+      <DownloadMenu query={new URLSearchParams(query)} fitsOne={fitsOne} empty={false} />
       <Toaster />
     </ThemeProvider>,
   );
@@ -86,20 +87,24 @@ describe("the Download menu", () => {
   });
 
   // Drift: a long log could be saved only as its newest part: the next file would start over, repeat the first, lose the format, or two files would be saved under one name.
-  test("saves a longer log a file after another: each goes on from the place the server names, numbered, until the log ends", async () => {
-    const done = drawn(false, ["150", null]);
+  // A file of a filtered log may end where its search stopped, so the screen would say 2,000 entries were saved when the file holds fewer.
+  test.each([
+    ["the whole log, whose files are full", "after=40", "", "Downloaded 2,000.", "Next 2,000"],
+    ["a filtered log, whose file may end sooner", "kind=sites&after=40", "&kind=sites", "Downloaded a part.", "Next part"],
+  ])("saves %s a file after another: each goes on from the place the server names, numbered, until the log ends", async (_what, query, kept, done, next) => {
+    const menu = drawn(false, ["150", null], query);
     await choose("CSV");
-    await said("Downloaded 2,000.");
-    const offered = within(document.body).getAllByRole("button", { name: "Next 2,000" }).length;
-    await choose("Next 2,000");
+    await said(done);
+    const offered = within(document.body).getAllByRole("button", { name: next }).length;
+    await choose(next);
     await said("Downloaded the last part.");
 
-    expect([offered, within(document.body).queryByRole("button", { name: "Next 2,000" }), done]).toEqual([
+    expect([offered, within(document.body).queryByRole("button", { name: next }), menu]).toEqual([
       1,
       null,
       {
-        asked: ["/data/activity/download/next?kind=sites", "/data/activity/download/next?kind=sites&after=150"],
-        saved: [`${BOOT.base}/data/activity/download?format=csv&kind=sites&part=1`, `${BOOT.base}/data/activity/download?format=csv&kind=sites&after=150&part=2`],
+        asked: [`/data/activity/download/next${kept.replace("&", "?")}`, `/data/activity/download/next?${kept.slice(1)}${kept === "" ? "" : "&"}after=150`],
+        saved: [`${BOOT.base}/data/activity/download?format=csv${kept}&part=1`, `${BOOT.base}/data/activity/download?format=csv${kept}&after=150&part=2`],
       },
     ]);
   });

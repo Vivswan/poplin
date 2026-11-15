@@ -21,6 +21,12 @@ const FORMATS = [
 /** How many entries one file holds, as the screen writes it. */
 const A_FILE = showCount(MOST_IN_FILE);
 
+/** What the screen says after a file that is not the last, and how it names the way to the next: by the count for a file of the whole log, which is full, and as a part for a file of a filtered log, which may end sooner. */
+const FILE_WORDS = {
+  whole: { done: `Downloaded ${A_FILE}.`, more: `Download the next ${A_FILE}`, next: `Next ${A_FILE}` },
+  filtered: { done: "Downloaded a part.", more: "Download the next part", next: "Next part" },
+} as const;
+
 /** A format's value. */
 type Format = (typeof FORMATS)[number]["value"];
 
@@ -84,6 +90,7 @@ export function DownloadMenu({ query, fitsOne, empty }: DownloadMenuProps): Reac
   const [kept, keep] = useState<NextFile>();
   // A file of other filters has no next one here.
   const next = kept?.of === of ? kept : undefined;
+  const words = FILE_WORDS[Object.keys(narrowing).length === 0 ? "whole" : "filtered"];
 
   /** Save one file, and say what was saved: with the way to the next file where the log goes on. */
   const save = async (format: Format, from?: NextFile): Promise<void> => {
@@ -94,7 +101,7 @@ export function DownloadMenu({ query, fitsOne, empty }: DownloadMenuProps): Reac
     saveFrom(fileAddress(narrowing, format, from, from !== undefined || after !== null));
     const then = after === null ? undefined : { of, format, after, part: (from?.part ?? 1) + 1 };
     keep(then);
-    if (then !== undefined) return sayDone(`Downloaded ${A_FILE}.`, { label: `Download the next ${A_FILE}`, run: () => void save(format, then) });
+    if (then !== undefined) return sayDone(words.done, { label: words.more, run: () => void save(format, then) });
 
     return sayDone(from === undefined ? "Download started." : "Downloaded the last part.");
   };
@@ -103,9 +110,9 @@ export function DownloadMenu({ query, fitsOne, empty }: DownloadMenuProps): Reac
     <span className="flex items-center gap-2">
       {next === undefined ? null : (
         <span className="flex items-center gap-1 text-muted-foreground max-xl:hidden">
-          Downloaded {A_FILE}.
+          {words.done}
           <Button variant="link" size="sm" className="px-1" onClick={() => void save(next.format, next)}>
-            Next {A_FILE}
+            {words.next}
           </Button>
         </span>
       )}
@@ -117,7 +124,7 @@ export function DownloadMenu({ query, fitsOne, empty }: DownloadMenuProps): Reac
         <DropdownMenuContent align="end" className="w-44">
           {next === undefined ? null : (
             <>
-              <DropdownMenuItem onClick={() => void save(next.format, next)}>Next {A_FILE}</DropdownMenuItem>
+              <DropdownMenuItem onClick={() => void save(next.format, next)}>{words.next}</DropdownMenuItem>
               <DropdownMenuSeparator />
             </>
           )}
