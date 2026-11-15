@@ -165,6 +165,12 @@ export interface SigningKey {
   readonly key: Uint8Array<ArrayBuffer>;
 }
 
+/** The settings and the bytes of the signing key as one read gave them; each is `undefined` before it was stored. */
+export interface SettingsAndKey {
+  readonly settings: SettingValues | undefined;
+  readonly key: Uint8Array<ArrayBuffer> | undefined;
+}
+
 /** The change was made; `site` is the site after it. */
 export interface Done {
   readonly kind: "done";
@@ -769,8 +775,15 @@ export interface Database {
    */
   removeLogin(login: Login, signed: Signed): Promise<{ readonly kind: "done" | "unchanged"; readonly values: SettingValues } | Refused<"not_set_up" | "no_working_login">>;
 
-  /** The bytes of the key that signs sessions, `undefined` before one was stored. No other operation returns them. */
+  /** The bytes of the key that signs sessions, `undefined` before one was stored. Only this and `readSettingsAndKey` return them. */
   readSigningKey(): Promise<Uint8Array<ArrayBuffer> | undefined>;
+
+  /**
+   * Read the settings and the signing key together, in one step: what a session is checked against.
+   *
+   * @returns each as its own read gives it, `undefined` before it was stored
+   */
+  readSettingsAndKey(): Promise<SettingsAndKey>;
 
   /**
    * Store the signing key when the install has none. Of callers starting at the same moment one stores its key and every other gets that key back.

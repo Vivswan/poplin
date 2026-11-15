@@ -52,6 +52,23 @@ export function signingKey(label: string, makeDatabase: DatabaseFactory): void {
       expect<unknown>(await database.readSigningKey()).toEqual(new Uint8Array(48).fill(0xe5));
     });
 
+    // Drift: a session is checked against both; a joint read that gave either one differently from its own read would refuse a good cookie or trust a removed login.
+    test("the settings and the key read together are what each read alone gives: neither before setup, then the one without the other, then both", async () => {
+      const database = await opened(makeDatabase);
+      const together = [await database.readSettingsAndKey()];
+      await database.initSettings(SETTINGS, BY_ADA);
+      together.push(await database.readSettingsAndKey());
+      await database.ensureSigningKey(FIRST_KEY, NOW);
+      together.push(await database.readSettingsAndKey());
+
+      expect<unknown>(together).toEqual([
+        { settings: undefined, key: undefined },
+        { settings: SETTINGS, key: undefined },
+        { settings: await database.readSettings(), key: await database.readSigningKey() },
+      ]);
+      expect<unknown>(together[2]?.key).toEqual(FIRST_KEY);
+    });
+
     // Drift: a backup or a dashboard page that carried the key would let whoever reads it sign a cookie for any login.
     test("no listing, export, settings read, or audit entry holds the key, before or after it is replaced", async () => {
       const database = await opened(makeDatabase);

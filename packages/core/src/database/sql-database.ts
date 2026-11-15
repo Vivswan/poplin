@@ -53,6 +53,7 @@ import type {
   RequestCounts,
   Reserved,
   ServedSite,
+  SettingsAndKey,
   Signed,
   SigningKey,
   SiteDetails,
@@ -1105,6 +1106,12 @@ export class SqlDatabase implements Database {
     const [read] = await this.#driver.batch([READ_SIGNING_KEY]);
 
     return signingKeyIn(read);
+  }
+
+  async readSettingsAndKey(): Promise<SettingsAndKey> {
+    const [stored, key] = await this.#driver.batch([READ_SETTINGS, READ_SIGNING_KEY]);
+
+    return { settings: settingsIn(stored), key: signingKeyIn(key) };
   }
 
   async ensureSigningKey(fresh: Uint8Array, at: number): Promise<SigningKey> {

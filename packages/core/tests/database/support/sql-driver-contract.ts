@@ -429,6 +429,7 @@ function queryPlans(label: string, makeDriver: DriverFactory): void {
       const exported = await database.exportSites({ limit: 10, after: NO_SITE });
       await database.exportSites({ limit: 10 });
       await database.readSigningKey();
+      await database.readSettingsAndKey();
       await database.ensureSigningKey(FIRST_KEY, NOW);
       await database.rotateSigningKey(SECOND_KEY, BY_ADA);
       const moved = await database.giveNewId(site.id, BY_ADA);

@@ -92,6 +92,7 @@ const ROWS: Readonly<Record<string, readonly [read: number, written: number]>> =
   "ensureSigningKey, the first": [2, 1],
   "ensureSigningKey, kept": [1, 0],
   "readSigningKey": [1, 0],
+  "readSettingsAndKey": [2, 0],
   "rotateSigningKey": [1, 3],
   "keepUpdateAddress": [1, 3],
   "readUpdateAddress": [1, 0],
@@ -615,6 +616,7 @@ describe("D1: the rows every operation of the database costs of a day's allowanc
     await cost("ensureSigningKey, the first", () => database.ensureSigningKey(new Uint8Array(32).fill(1), NOW));
     await cost("ensureSigningKey, kept", () => database.ensureSigningKey(new Uint8Array(32).fill(2), NOW));
     await cost("readSigningKey", () => database.readSigningKey());
+    await cost("readSettingsAndKey", () => database.readSettingsAndKey());
     await cost("rotateSigningKey", () => database.rotateSigningKey(new Uint8Array(32).fill(3), BY_ADA));
     await cost("keepUpdateAddress", () => database.keepUpdateAddress("https://example.com/hook", BY_ADA));
     await cost("readUpdateAddress", () => database.readUpdateAddress());

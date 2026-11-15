@@ -721,6 +721,26 @@ describe("the admin hostname", () => {
     expect([out.status, signedOut.map((answer) => answer.status), privately.status]).toEqual([200, [302, 401], 200]);
   });
 
+  // Drift: D1 answers one invocation 50 queries, a batch being one. Reads that left their batch would cost every request of the dashboard a query more each, unseen until a long request ran out of them.
+  test("a request of the dashboard on a warm instance asks the database as few questions as its row says, the session's read among them", async () => {
+    const tally = { calls: 0 };
+    const worker = instance(w);
+    await ask(worker, `${ADMIN}/api/whoami`, {}, countedBindings(tally));
+    const session = { Cookie: cookieOf(await logIn(worker, w)) };
+    const asked = async (path: string): Promise<readonly [status: number, queries: number]> => {
+      tally.calls = 0;
+      const answer = await ask(worker, `${ADMIN}${path}`, { headers: session });
+
+      return [answer.status, tally.calls];
+    };
+
+    expect({
+      "an address that asks nothing but who is there": await asked("/data/public-address?name=docs"),
+    }).toEqual({
+      "an address that asks nothing but who is there": [200, 1],
+    });
+  });
+
   // Drift: the dashboard's client rides inside the Worker's one file. Built without it, or handed out behind the session, the page would load and draw nothing; without the header a browser would fetch two megabytes again at every visit.
   test("the dashboard's page names a script and a stylesheet under /assets/, and each is answered to anyone by its media type, for a browser to keep for good; a name the build did not write is not found", async () => {
     const worker = instance(w);
@@ -739,7 +759,7 @@ describe("the admin hostname", () => {
 
 describe("the audit log as a file", () => {
   // Drift: the log is only ever added to, so its file is the one answer of the dashboard that grows with it. Built whole, read a listing's page at a time, or with no bound, it would pass what the Free plan gives one request.
-  test("a log longer than a file holds is sent a reading at a time, 2,000 entries in 5 queries and a row read an entry, and says that the log holds more; where the next file goes on costs 3 queries and the same rows", async () => {
+  test("a log longer than a file holds is sent a reading at a time, 2,000 entries in 4 queries and a row read an entry, and says that the log holds more; where the next file goes on costs 3 queries and the same rows", async () => {
     const session = { Cookie: cookieOf(await logIn(instance(w), w)) };
     await BINDINGS.DB.prepare(
       "WITH RECURSIVE counted(entry) AS (SELECT 1 UNION ALL SELECT entry + 1 FROM counted WHERE entry < ?) INSERT INTO audit (at, actor, action, detail) SELECT ?, ?, 'login', '{}' FROM counted",
@@ -766,17 +786,17 @@ describe("the audit log as a file", () => {
     expect(pieces.map((piece) => piece.split("\r\n").length - 1)).toEqual([1, 1000, 1000, 1]);
     expect(pieces.at(-1)).toBe('"2,000 entries. The log holds more: download the next part."\r\n');
     expect([file, await next.json(), { calls: tally.calls - start.calls - file.calls, read: rows.read - start.read - file.read }]).toEqual([
-      { calls: 5, read: FILE_ENTRIES + 3 },
+      { calls: 4, read: FILE_ENTRIES + 3 },
       { ok: true, from: expect.stringMatching(/^[1-9]\d*$/), after: expect.stringMatching(/^[1-9]\d*$/) },
-      { calls: 4, read: FILE_ENTRIES + 4 },
+      { calls: 3, read: FILE_ENTRIES + 4 },
     ]);
   });
 
   // Drift: a reading that named its sites and its tokens by lookups of a hundred ids each would take 47 queries for such a file, and 51 as an instance's first request: one more than the Free plan gives, so the download would break off.
   // The rows are pinned where no start is counted: an entry and its token's row, each read once.
   test.each([
-    ["an instance that answered before", true, { calls: 5, read: 2 * FILE_ENTRIES + 4 }],
-    ["a new instance, its start counted with the file", false, { calls: 9 }],
+    ["an instance that answered before", true, { calls: 4, read: 2 * FILE_ENTRIES + 4 }],
+    ["a new instance, its start counted with the file", false, { calls: 8 }],
   ])("a file of 2,000 entries, each about its own site that is gone and by its own token, is read by %s in the queries of any other file, far under the Free plan's 50", async (_which, warm, cost) => {
     const session = { Cookie: cookieOf(await logIn(instance(w), w)) };
     const counted = "WITH RECURSIVE counted(entry) AS (SELECT 1 UNION ALL SELECT entry + 1 FROM counted WHERE entry < ?)";

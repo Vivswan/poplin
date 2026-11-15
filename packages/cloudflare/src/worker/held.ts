@@ -49,12 +49,12 @@ export async function derivedSecret(key: Uint8Array<ArrayBuffer>): Promise<Pick<
 }
 
 /**
- * Read the settings and the signing key.
+ * Read the settings and the signing key, as one question to the database.
  *
  * @throws {Error} the install holds no settings or no signing key, or the database failed
  */
-export async function readHeld(database: Pick<Database, "readSettings" | "readSigningKey">): Promise<Held> {
-  const [settings, key] = await Promise.all([database.readSettings(), database.readSigningKey()]);
+export async function readHeld(database: Pick<Database, "readSettingsAndKey">): Promise<Held> {
+  const { settings, key } = await database.readSettingsAndKey();
   if (settings === undefined || key === undefined) throw new Error("the install holds no settings or no signing key");
 
   const logins = parseLogins(settings.logins);
