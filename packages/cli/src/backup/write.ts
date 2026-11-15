@@ -13,6 +13,9 @@ const PART_SUFFIX = ".part";
 /** How many random bytes name the file while it is written. */
 const PART_BYTES = 4;
 
+/** The file's mode, where the system has file modes: its owner reads and writes it and nobody else does, since it holds every private site. */
+const FILE_MODE = 0o600;
+
 /** Why a backup cannot be written where it was asked: a file is already there, or the file cannot be made. */
 type NotWritable = { readonly ok: false; readonly reason: "exists" } | { readonly ok: false; readonly reason: "unwritable"; readonly why: string };
 
@@ -73,7 +76,7 @@ export async function createBackup(target: string, overwrite: boolean): Promise<
   if (!overwrite && (await isThere(target))) return { ok: false, reason: "exists" };
 
   const part = `${target}.${randomBytes(PART_BYTES).toString("hex")}${PART_SUFFIX}`;
-  const file = createWriteStream(part, { flags: "wx" });
+  const file = createWriteStream(part, { flags: "wx", mode: FILE_MODE });
   const refused = await once(file, "open").then(() => undefined, reasonOf);
   if (refused !== undefined) return { ok: false, reason: "unwritable", why: refused };
 

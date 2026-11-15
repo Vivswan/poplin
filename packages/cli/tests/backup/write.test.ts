@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { mkdtempSync, readdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -54,6 +54,27 @@ afterEach(() => {
 });
 
 describe("createBackup", () => {
+  // Drift: the zip holds every private site and the settings; made with the mode a common umask leaves, another user of the same computer reads it.
+  test.skipIf(process.platform === "win32")("the file is for its owner alone while it is written and once it is finished, also in place of a file others could read", async () => {
+    const folder = scratch();
+    const target = join(folder, "backup.zip");
+    writeFileSync(target, "the old backup");
+    chmodSync(target, 0o644);
+    // A umask that takes nothing away, so the mode seen is the one the writer asked for.
+    const umask = process.umask(0);
+
+    try {
+      const writer = await begun(target, true);
+      writer.addJson("first.json", { a: 1 });
+      const during = readdirSync(folder).filter((name) => name.endsWith(".part"));
+      const part = statSync(join(folder, during[0] ?? "")).mode & 0o777;
+      await writer.finish();
+
+      expect([part, statSync(target).mode & 0o777].map((mode) => mode.toString(8))).toEqual(["600", "600"]);
+    } finally {
+      process.umask(umask);
+    }
+  });
   test("the entries are written in the order added, and the target is there only once the zip is finished: without this a reader could open half a backup", async () => {
     const folder = scratch();
     const target = join(folder, "backup.zip");
