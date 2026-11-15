@@ -14,7 +14,15 @@ npx poplin config
 npx poplin config trash_days 30
 ```
 
-The dashboard's Settings screen changes the same settings, all but `logins`: change them, then press Save in the bar at the foot. Each setting is a row that shows its default, as `(Default: 9,000 MB)`. Reset, beside a default the row differs from, puts it back.
+The dashboard's Settings screen changes the same settings, all but `logins`: change them, then press Save in the bar at the foot. Each setting is a row.
+
+| In a row                        | Means                                                                    |
+| ------------------------------- | ------------------------------------------------------------------------ |
+| `(Default: 9,000 MB)`           | the setting's default                                                    |
+| Reset                           | beside a default the row differs from: puts it back                      |
+| a warning mark after the field  | follows the number as it is typed; [Limits and cost](limits-and-cost.md) says what earns one |
+| a sentence under the field      | Save refused that value; every refused row gets one at the first Save    |
+| `Needs an update link to work.` | under Update automatically, while no update link is saved                |
 
 | Heading    | Settings                                                                                           |
 | ---------- | -------------------------------------------------------------------------------------------------- |
