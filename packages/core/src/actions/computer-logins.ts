@@ -1,14 +1,14 @@
-// A computer logged in from the dashboard: a terminal asks, an admin allows or denies it under a code both see, and the terminal collects its token once.
+// A computer logged in from the dashboard: a terminal asks, an admin allows or denies it, typing the end of a code the terminal alone shows, and the terminal collects its token once.
 //
 //   beginLogin    anyone      a pending login: a code to show and a secret to keep. It grants nothing, and no visitor's logins keep another's out
 //   listLogins    an admin    every login that waits to be decided
-//   showLogin     an admin    what the login under a code asks for
+//   showLogin     an admin    what one waiting login asks for: never a part of its code
 //   decideLogin   an admin    allowed or denied, once
 //   redeemLogin   the secret  pending, denied, expired, or the token, which is made at this moment and handed out once
 
 import * as v from "valibot";
 
-import { type ComputerLogin, holdsSecret, type LoginId, mintComputerLogin, parseLoginSecret, parseUserCode, showUserCode } from "../auth/computer-logins";
+import { type ComputerLogin, endsUserCode, holdsSecret, type LoginId, mintComputerLogin, parseLoginId, parseLoginSecret, showUserCode } from "../auth/computer-logins";
 import type { Login } from "../auth/logins";
 import type { Actor } from "../auth/scopes";
 import { mintToken } from "../auth/tokens";
@@ -52,10 +52,10 @@ export const LOGIN_REQUEST = v.strictObject({
 /** What a terminal asks for its token with. */
 export const LOGIN_SECRET = v.strictObject({ secret: v.pipe(v.string(), v.maxLength(MAX_SECRET_LENGTH)) });
 
-/** What an admin decides about the login under a code. `scope` is what an allowed computer becomes: it is named each time, so no computer is let in with a scope nobody chose. */
+/** What an admin decides about one waiting login, named by its id. To let it in they name its scope, so none is let in with a scope nobody chose, and type the `letters` its code ends with, which the terminal alone shows. */
 const LOGIN_DECISION = v.variant("allow", [
-  v.strictObject({ code: v.string(), allow: v.literal(false) }),
-  v.strictObject({ code: v.string(), allow: v.literal(true), scope: v.picklist(["publisher", "admin"]) }),
+  v.strictObject({ login: v.string(), allow: v.literal(false) }),
+  v.strictObject({ login: v.string(), allow: v.literal(true), scope: v.picklist(["publisher", "admin"]), letters: v.string() }),
 ]);
 
 /**
@@ -83,11 +83,10 @@ export const REDEEMED_LOGIN = v.variant("state", [
 /**
  * A pending login as an admin sees it: never its secret, nor the secret's hash. Times are milliseconds since the epoch.
  *
- * `id` names the login and proves nothing. `code` is written as the terminal shows it, such as `WDJB-MJHT`. `computer` is what the computer called itself, which nobody checked.
+ * `id` names the login and proves nothing. No part of its code is here: a person types the code's end from the terminal to allow it. `computer` is what the computer called itself, which nobody checked.
  */
 export interface LoginObject {
   readonly id: LoginId;
-  readonly code: string;
   readonly scope: ComputerLogin["scope"];
   readonly computer: string;
   readonly asked: number;
@@ -98,7 +97,7 @@ export interface LoginObject {
 export type Redeemed = Readonly<v.InferOutput<typeof REDEEMED_LOGIN>>;
 
 function loginObject(login: ComputerLogin): LoginObject {
-  return { id: login.id, code: showUserCode(login.code), scope: login.scope, computer: login.computer, asked: login.createdAt, expires: login.expiresAt };
+  return { id: login.id, scope: login.scope, computer: login.computer, asked: login.createdAt, expires: login.expiresAt };
 }
 
 /** The email of an admin behind a session. A token allows no computer in, so no token outlives its own expiry through a login it allowed. */
@@ -108,12 +107,12 @@ function personOf(actor: Actor): Login | undefined {
   return actor.holder;
 }
 
-/** The login a person may still decide under a typed code: pending, and not run out. */
-async function waitingLogin(install: Install, typed: string): Promise<ComputerLogin | undefined> {
-  const code = parseUserCode(typed);
-  if (code === undefined) return undefined;
+/** The login a person may still decide, by its id: pending, and not run out. */
+async function waitingLogin(install: Install, named: string): Promise<ComputerLogin | undefined> {
+  const id = parseLoginId(named);
+  if (id === undefined) return undefined;
 
-  const login = await install.database.findComputerLogin(code);
+  const login = await install.database.getComputerLogin(id);
   if (login?.state !== "pending" || login.expiresAt <= install.now()) return undefined;
 
   return login;
@@ -160,53 +159,49 @@ export async function listLogins(install: Install, actor: Actor): Promise<{ read
 }
 
 /**
- * Show the pending login under a code.
+ * Show one waiting login.
  *
- * @param code - the code as typed, with or without its dash, in any capitals
- * @returns the login, `not_allowed` for anyone but an admin behind a session, or `no_such_login` for a code of no login and for a login that was decided or ran out
+ * @param id - the login's id, as an address or a request carried it
+ * @returns the login, `not_allowed` for anyone but an admin behind a session, or `no_such_login` for an id of no login and for a login that was decided or ran out
  */
-export async function showLogin(install: Install, actor: Actor, code: string): Promise<{ readonly ok: true; readonly login: LoginObject } | Refused<"not_allowed" | "no_such_login">> {
+export async function showLogin(install: Install, actor: Actor, id: string): Promise<{ readonly ok: true; readonly login: LoginObject } | Refused<"not_allowed" | "no_such_login">> {
   if (personOf(actor) === undefined) return refuse("not_allowed");
 
-  const login = await waitingLogin(install, code);
+  const login = await waitingLogin(install, id);
   if (login === undefined) return refuse("no_such_login");
 
   return { ok: true, login: loginObject(login) };
 }
 
 /**
- * Allow or deny the pending login under a code. The decision is made once and writes one audit entry; an allowed login gives its token to the terminal that holds its secret.
+ * Allow or deny one waiting login. The decision is made once and writes one audit entry; an allowed login gives its token to the terminal that holds its secret.
  *
- * An admin may allow a computer for less than it asked, never for more: a login that asked to be an admin may be allowed as a publisher.
+ * An admin may allow a computer for less than it asked, never for more. Only one who sees the terminal allows it: the letters are in no answer and no address.
  *
- * @param decision - the code as typed, whether the computer is let in, and for one that is, the scope it is let in with; anything is taken and checked
- * @returns the login as it was decided, `not_allowed` for anyone but an admin behind a session, `bad_argument` about `scope` for an allowed login with no scope or with more than it asked, or `no_such_login` as in `showLogin`
+ * @param decision - the login's id and whether the computer is let in; for one that is, its scope and the letters its code ends with, as typed; anything is taken and checked
+ * @returns the login as it was decided, `not_allowed` for anyone but an admin behind a session, `not_confirmed` for letters that are not the code's last four or the whole code, `bad_argument` about `scope` for more than was asked, or `no_such_login`
  * @throws {Error} the database failed
  */
 export async function decideLogin(
   install: Install,
   actor: Actor,
   decision: v.InferInput<typeof LOGIN_DECISION>,
-): Promise<{ readonly ok: true; readonly login: LoginObject } | Refused<"not_allowed" | "bad_argument" | "no_such_login">> {
+): Promise<{ readonly ok: true; readonly login: LoginObject } | Refused<"not_allowed" | "bad_argument" | "no_such_login" | "not_confirmed">> {
   const admin = personOf(actor);
   if (admin === undefined) return refuse("not_allowed");
 
   const asked = v.safeParse(LOGIN_DECISION, decision);
   if (!asked.success) return refuse("bad_argument", v.getDotPath(asked.issues[0])?.split(".")[0] ?? "decision");
 
-  const allow = asked.output.allow;
+  const login = await waitingLogin(install, asked.output.login);
+  if (login === undefined) return refuse("no_such_login");
+
   const scope = asked.output.allow ? asked.output.scope : undefined;
-  const code = parseUserCode(asked.output.code);
-  if (code === undefined) return refuse("no_such_login");
+  if (asked.output.allow && !endsUserCode(asked.output.letters, login.code)) return refuse("not_confirmed", "letters");
 
-  if (scope === "admin") {
-    const login = await waitingLogin(install, code);
-    if (login === undefined) return refuse("no_such_login");
+  if (scope === "admin" && login.scope !== "admin") return refuse("bad_argument", "scope");
 
-    if (login.scope !== "admin") return refuse("bad_argument", "scope");
-  }
-
-  const decided = await install.database.decideComputerLogin(code, { state: allow ? "allowed" : "denied", asPublisher: scope === "publisher", by: admin, at: install.now() });
+  const decided = await install.database.decideComputerLogin(login.code, { state: asked.output.allow ? "allowed" : "denied", asPublisher: scope === "publisher", by: admin, at: install.now() });
   if (decided.kind !== "done") return refuse("no_such_login");
 
   return { ok: true, login: loginObject(decided.login) };

@@ -7,7 +7,8 @@ import { type Install, type Refused, refuse } from "@poplin/core/src/actions/rec
 import { updateOf } from "@poplin/core/src/actions/update";
 import { saveUpdateAddress, UPDATE_ADDRESS_REQUEST } from "@poplin/core/src/actions/update-address";
 import { uploadFile } from "@poplin/core/src/actions/upload-file";
-import { ALLOW_PAGE, CODE_KEY } from "@poplin/core/src/api/routes";
+import { REVIEW_PAGE } from "@poplin/core/src/api/routes";
+import { parseLoginSecret } from "@poplin/core/src/auth/computer-logins";
 import type { Actor } from "@poplin/core/src/auth/scopes";
 import type { TokenRecord } from "@poplin/core/src/auth/tokens";
 import type { PublicWord } from "@poplin/core/src/names/marker";
@@ -93,7 +94,8 @@ export async function beginWithAddress(install: Install, body: unknown, origin: 
   const begun = await checked(LOGIN_REQUEST, body, (request) => beginLogin(install, request, visitor));
   if (!begun.ok) return begun;
 
-  return { ...begun, verify_url: `${origin}${ALLOW_PAGE}?${new URLSearchParams({ [CODE_KEY]: begun.code })}` };
+  // The address names the login by the id its secret starts with, which proves nothing. No part of the code is in it: the page asks for the code's end, so the address alone allows nothing.
+  return { ...begun, verify_url: `${origin}${REVIEW_PAGE}/${parseLoginSecret(begun.secret)}` };
 }
 
 /**

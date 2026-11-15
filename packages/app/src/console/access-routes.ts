@@ -1,9 +1,8 @@
 // The data of the Access screen: the logins that wait to be allowed, the people who can log in, and the tokens of computers and agents.
 //
-//   GET  /logins                   the newest logins that wait, without their codes, and how many more wait
-//   GET  /logins/find?code=<code>  the login a terminal's address names, to review; counted as a try at a code
-//   GET  /logins/<id>              one waiting login, to review
-//   POST /logins/decide            allow the login under a code with the scope the person chose, or deny it; counted as a try at a code
+//   GET  /logins                   the newest logins that wait, and how many more wait
+//   GET  /logins/<id>              one waiting login, to review: no part of its code
+//   POST /logins/decide            deny a login, or allow it with the scope the person chose and the end of its code, which they typed; counted as a try at a code
 //   GET  /people                   the emails that can log in, and which one asks
 //   POST /people/add, /remove      one email in, or out, in one step each
 //   GET  /tokens                   every token that works, never its value; ?sort= with ?dir=; and the newest that ended
@@ -14,7 +13,6 @@ import { decideLogin, listLogins, showLogin } from "@poplin/core/src/actions/com
 import { readConfig } from "@poplin/core/src/actions/config";
 import { addLogin, removeLogin } from "@poplin/core/src/actions/logins";
 import { listTokenStates, revokeToken } from "@poplin/core/src/actions/manage-tokens";
-import { CODE_KEY } from "@poplin/core/src/api/routes";
 import { Hono, type MiddlewareHandler } from "hono";
 import * as v from "valibot";
 
@@ -38,13 +36,10 @@ const ONE_LOGIN = v.object({ login: v.string() });
 /** What names one token in a route's path: its id. */
 const ONE_TOKEN = v.object({ token: v.string() });
 
-/** The code a terminal's address carries. */
-const CODED = v.object({ [CODE_KEY]: v.string() });
-
-/** What a decision carries: the code and whether the computer is let in; for one that is, whether the person said its code is theirs, and the scope they chose, which is never left to what the computer asked. */
+/** What a decision carries: the login's id and whether the computer is let in; for one that is, the scope the person chose, which is never left to what the computer asked, and the letters they typed. */
 const DECISION = v.variant("allow", [
-  v.object({ code: v.string(), allow: v.literal(false) }),
-  v.object({ code: v.string(), allow: v.literal(true), confirm: v.optional(v.boolean()), scope: v.picklist(["publisher", "admin"]) }),
+  v.object({ login: v.string(), allow: v.literal(false) }),
+  v.object({ login: v.string(), allow: v.literal(true), scope: v.picklist(["publisher", "admin"]), letters: v.string() }),
 ]);
 
 /** One email to add or take out, as it was typed. */
@@ -53,7 +48,7 @@ const PERSON = v.object({ login: v.string() });
 /** One token as the listing answers it. */
 type Token = Extract<Awaited<ReturnType<typeof listTokenStates>>, { ok: true }>["tokens"][number];
 
-/** Refuse a try at a login's code that does not fit the asking visitor's minute. */
+/** Refuse a try at a login's code that does not fit the asking visitor's minute. It stands behind the check of the body, so a request that is no decision spends no try. */
 const fewCodes: MiddlewareHandler<Shared> = async (context, next) => {
   if (!(await context.get("takesCode")())) return refused(context, { code: "too_many_tries" });
 
@@ -75,7 +70,7 @@ function sortedTokens(tokens: readonly Token[], key: keyof typeof TOKEN_SORT_KEY
   return descending ? ordered.reverse() : ordered;
 }
 
-/** The Access screen's data routes. Each calls the action the dashboard's own page calls; a login's code is answered only for the one login under review. */
+/** The Access screen's data routes. Each calls the action the dashboard's own page calls; no part of a login's code is in an answer. */
 export const accessRoutes = new Hono<Shared>()
   .get("/logins", async (context) => {
     const { install, actor } = context.get("asker");
@@ -86,29 +81,16 @@ export const accessRoutes = new Hono<Shared>()
 
     return context.json({ ok: true as const, logins, more: listed.logins.length - logins.length });
   })
-  .get("/logins/find", fewCodes, vValidator("query", CODED, refuseInvalid), async (context) => {
+  .get("/logins/:login", vValidator("param", ONE_LOGIN, refuseInvalid), async (context) => {
     const { install, actor } = context.get("asker");
-    const shown = await showLogin(install, actor, context.req.valid("query")[CODE_KEY]);
+    const shown = await showLogin(install, actor, context.req.valid("param").login);
 
     return shown.ok ? context.json({ ok: true as const, login: shown.login }) : refused(context, shown);
   })
-  .get("/logins/:login", vValidator("param", ONE_LOGIN, refuseInvalid), async (context) => {
-    const { install, actor } = context.get("asker");
-    const listed = await listLogins(install, actor);
-    if (!listed.ok) return refused(context, listed);
-
-    const login = listed.logins.find((entry) => entry.id === context.req.valid("param").login);
-
-    return login === undefined ? refused(context, { code: "login_gone" }) : context.json({ ok: true as const, login });
-  })
-  .post("/logins/decide", fewCodes, vValidator("json", DECISION, refuseInvalid), async (context) => {
+  .post("/logins/decide", vValidator("json", DECISION, refuseInvalid), fewCodes, async (context) => {
     const { install, actor } = context.get("asker");
     const decision = context.req.valid("json");
-    // A computer is let in only by one who said its code is their own; keeping one out needs no such word.
-    if (decision.allow && decision.confirm !== true) return refused(context, { code: "not_confirmed", about: "confirm" });
-
-    const { code } = decision;
-    const decided = await decideLogin(install, actor, decision.allow ? { code, allow: true, scope: decision.scope } : { code, allow: false });
+    const decided = await decideLogin(install, actor, decision);
 
     return decided.ok ? context.json({ ok: true as const, allowed: decision.allow, scope: decided.login.scope }) : refused(context, decided);
   })

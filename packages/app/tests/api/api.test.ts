@@ -288,7 +288,10 @@ describe("createApi", () => {
     expect(part(await done((api) => api.whoami.$get({ query: {} }), install.as(issued.body.token as string)), "token")).toMatchObject({ scope: "publisher", note: "ci", expires: "never" });
     await done((api) => api.tokens[":token"].$delete({ param: { token: part(issued, "record").id as string }, query: {} }));
     const login = await done((api) => api.logins.$post({ json: { scope: "publisher", computer: "laptop" }, query: {} }), install.as(null));
-    expect(login.body).toMatchObject({ expires_in: 600, interval: 5, verify_url: `${ORIGIN}/tokens/allow?code=${login.body.code}` });
+    // Drift: an address that held the code, or any part of it, would give whoever was sent the address the letters the page asks for.
+    const [code, verify] = [String(login.body.code), String(login.body.verify_url)];
+    expect(login.body).toMatchObject({ expires_in: 600, interval: 5, verify_url: `${ORIGIN}/tokens/review/${String(login.body.secret).split("_")[2]}` });
+    expect([code.slice(0, 4), code.slice(-4)].filter((half) => verify.includes(half))).toEqual([]);
     expect((await done((api) => api.logins.token.$post({ json: { secret: login.body.secret as string }, query: {} }), install.as(null))).body).toEqual({ state: "pending" });
 
     const begun = await done((api) => api.uploads.$post({ json: { name: "report", files: manifest(PAGES) }, query: {} }));
@@ -949,7 +952,7 @@ describe("what the API refuses before any action runs", () => {
     const install = await openApi();
     const { takeMinute } = install.counters;
     const begun = await answered(install.as(null).logins.$post({ json: { scope: "publisher", computer: "laptop" }, query: {} }));
-    const allowed = await decideLogin(installOf(install), { scope: "admin", holder: "ada@example.com" as Login }, { code: String(begun.body.code), allow: true, scope: "publisher" });
+    const allowed = await decideLogin(installOf(install), { scope: "admin", holder: "ada@example.com" as Login }, { login: String(begun.body.secret).split("_")[2] ?? "", allow: true, scope: "publisher", letters: String(begun.body.code).slice(-4) });
     const ask = (): Promise<Answered> => answered(install.as(null).logins.token.$post({ json: { secret: begun.body.secret as string }, query: {} }));
     install.counters.takeMinute = () => Promise.reject(new Error("the counter is down"));
 

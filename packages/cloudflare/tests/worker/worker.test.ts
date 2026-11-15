@@ -989,8 +989,11 @@ describe("a computer's login", () => {
     const login = await logIn(worker, w, stranger.headers.get("Location") ?? "");
     const session = { Cookie: cookieOf(login) };
     const opened = await ask(worker, `${ADMIN}${login.headers.get("Location")}`, { headers: session });
-    const found = await ask(worker, `${ADMIN}/data/logins/find?code=${begun.code}`, { headers: session });
-    const decision = { code: begun.code, allow: true, confirm: true, scope: "publisher" };
+    const id = begun.secret.split("_")[2] ?? "";
+    const found = await ask(worker, `${ADMIN}/data/logins/${id}`, { headers: session });
+    const byCode = await ask(worker, `${ADMIN}/data/logins/find?code=${begun.code}`, { headers: session });
+    const decision = { login: id, allow: true, scope: "publisher", letters: begun.code.slice(-4) };
+    const linkAlone = await send(worker, `${ADMIN}/data/logins/decide`, { ...decision, letters: begun.code.endsWith("B") ? "CCCC" : "BBBB" }, session);
 
     const unsigned = await send(worker, `${ADMIN}/data/logins/decide`, decision);
     w.clock.now += 5000;
@@ -1001,10 +1004,14 @@ describe("a computer's login", () => {
     const again = await done<{ state: string }>(await collect(worker, begun.secret));
     const who = await done<{ token: { scope: string; note: string } }>(await api(worker, collected.token).whoami.$get({ query: {} }));
 
-    expect([begun.verify_url, waiting.state]).toEqual([`${ADMIN}/tokens/allow?code=${begun.code}`, "pending"]);
-    expect([stranger.status, stranger.headers.get("Location")]).toEqual([302, `${ADMIN}/login?return=${encodeURIComponent(`/tokens/allow?code=${begun.code}`)}`]);
-    expect([login.status, login.headers.get("Location"), opened.status, ((await readShell(await opened.text())).boot as { email: string }).email]).toEqual([302, `/tokens/allow?code=${begun.code}`, 200, OWNER]);
-    expect([found.status, await found.json()]).toMatchObject([200, { ok: true, login: { code: begun.code, computer: "laptop", scope: "publisher" } }]);
+    const shown = await found.text();
+
+    expect([begun.verify_url, waiting.state]).toEqual([`${ADMIN}/tokens/review/${id}`, "pending"]);
+    expect([stranger.status, stranger.headers.get("Location")]).toEqual([302, `${ADMIN}/login?return=${encodeURIComponent(`/tokens/review/${id}`)}`]);
+    expect([login.status, login.headers.get("Location"), opened.status, ((await readShell(await opened.text())).boot as { email: string }).email]).toEqual([302, `/tokens/review/${id}`, 200, OWNER]);
+    expect([found.status, JSON.parse(shown)]).toMatchObject([200, { ok: true, login: { id, computer: "laptop", scope: "publisher" } }]);
+    // The code is in the terminal alone: no half of it is in what the page is given, no address that holds it leads to a login, and letters that are not its last allow nothing.
+    expect([[begun.code.slice(0, 4), begun.code.slice(-4)].some((half) => shown.includes(half)), byCode.status, linkAlone.status]).toEqual([false, 400, 400]);
     expect([unsigned.status, untouched.state]).toEqual([401, "pending"]);
     expect([allowed.status, await allowed.json()]).toEqual([200, { ok: true, allowed: true, scope: "publisher" }]);
     expect([collected.state, again.state, who.token]).toMatchObject(["allowed", "expired", { scope: "publisher", note: "laptop" }]);

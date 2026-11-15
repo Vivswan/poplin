@@ -60,9 +60,6 @@ const OWN_FACE = '"Libre Franklin Variable"';
 /** The mark of a filled button among the classes the UI library draws it with. */
 const FILLED = /(^| )bg-primary( |$)/;
 
-/** The path of the data of one waiting login, which a review reads. */
-const LOGIN_DATA = /\/data\/logins\/[0-9a-f]+$/;
-
 /** Every place of the walk, in the order it is taken: each starts where the one before it ended. */
 const STOPS: readonly Stop[] = [
   {
@@ -351,18 +348,19 @@ const STOPS: readonly Stop[] = [
     close: (page) => review(page).getByRole("button", { name: "Close", exact: true }).click(),
   },
   {
-    name: "the review a terminal's link opens, which shows no whole code and turns Allow on once its last letters are typed",
-    open: async (page, wide) => {
-      const read = page.waitForResponse((response) => LOGIN_DATA.test(new URL(response.url()).pathname));
-      await reviewOf(page, wide, SAMPLE.login).click();
-      const { code } = ((await (await read).json()) as { readonly login: { readonly code: string } }).login;
-      await page.goto(`tokens/allow?code=${code}`);
+    name: "the review the printed link opens, which holds no letter to type and allows the login once the terminal's are typed",
+    open: async (page) => {
+      // The demo's own page stands where the terminal would be: it prints the link and the code.
+      await page.goto("state/allow/waiting");
+      const printed = page.locator("section").filter({ hasText: SAMPLE.login });
+      const letters = ((await printed.locator("code").textContent()) ?? "").slice(-4);
+      await printed.getByRole("link").click();
       await expect(review(page).getByRole("button", { name: "Allow", exact: true, disabled: true })).toBeVisible();
-      await expect(review(page).getByText(code)).toHaveCount(0);
-      await review(page).getByRole("textbox", { name: "Last 4 letters of the code in your terminal", exact: true }).fill(code.slice(-4));
+      expect([letters.length, page.url().includes(letters), (await review(page).innerHTML()).includes(letters)]).toEqual([4, false, false]);
+      await review(page).getByRole("textbox", { name: "Last 4 letters of the code in your terminal", exact: true }).fill(letters);
     },
     shows: (page) => [review(page).getByText(/^Anyone can start a login and send its link\./), review(page).getByRole("button", { name: "Allow", exact: true, disabled: false })],
-    close: (page) => review(page).getByRole("button", { name: "Close", exact: true }).click(),
+    close: (page) => review(page).getByRole("button", { name: "Allow", exact: true }).click(),
   },
   {
     name: "a reset of the sample data, which keeps the screen it was pressed on",

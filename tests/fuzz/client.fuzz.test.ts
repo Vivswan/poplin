@@ -76,7 +76,7 @@ const NEAR_ANSWERS: readonly unknown[] = [
   { token: ADMIN },
   { token: { ...ADMIN, scope: "owner" } },
   { token: ADMIN, version: "1.4.0" },
-  { code: "ABCD-EFGH", secret: "a-secret", expires_in: 600, interval: 5, verify_url: "https://poplin.example.com/tokens/allow?code=ABCD-EFGH" },
+  { code: "ABCD-EFGH", secret: "a-secret", expires_in: 600, interval: 5, verify_url: "https://poplin.example.com/tokens/review/0123456789abcdef" },
   { state: "pending" },
   { state: "allowed", token: "a-token" },
   { site: null, before: null, copy: { upload: UPLOAD.id, copied: 0, files: 1 } },

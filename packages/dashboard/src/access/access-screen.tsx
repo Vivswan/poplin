@@ -1,13 +1,12 @@
 // The Access screen: two tabs, the people who can log in and the tokens that computers and agents publish with, each one list. A waiting login stands among the tokens and is reviewed in a dialog over them.
 
-import { ALLOW_PAGE } from "@poplin/core/src/api/routes";
 import { useQueryClient } from "@tanstack/react-query";
 import { useMatches, useNavigate, useParams } from "@tanstack/react-router";
 import { type ReactNode, useMemo, useRef } from "react";
 
 import { accessActions } from "@/access/access-actions";
 import { ACCESS_KEY, useEndedTokens, usePeople, useReview, useTokens, useWaiting } from "@/access/access-queries";
-import { askedIn, TOKENS_PATH, PEOPLE_PATH, tokenSortOf, tokenSortQuery } from "@/access/access-values";
+import { TOKENS_PATH, PEOPLE_PATH, tokenSortOf, tokenSortQuery } from "@/access/access-values";
 import { useFocusHome } from "@/lib/focus";
 import { PeopleTab } from "@/access/people-tab";
 import { ReviewDialog } from "@/access/review-dialog";
@@ -38,17 +37,16 @@ function listQuery(query: URLSearchParams): URLSearchParams {
   return new URLSearchParams(KEPT_KEYS.flatMap((key) => (query.has(key) ? [[key, query.get(key) ?? ""]] : [])));
 }
 
-/** Draw the Access screen for the address: the tab the path names, and the review the path or a terminal's code names, over the tokens. */
+/** Draw the Access screen for the address: the tab the path names, and the review of the login the path names, over the tokens. */
 export function AccessScreen(): ReactNode {
   useChosenTimeZone();
   const navigate = useNavigate();
   const query = useAddressQuery();
   const paths = useMatches({ select: (matches) => matches.map((match) => match.fullPath as string) });
   const tab = paths.includes(PEOPLE_PATH) ? "people" : "tokens";
-  const { login } = useParams({ strict: false });
-  const asked = askedIn(paths.includes(ALLOW_PAGE), query, login);
+  const { login: asked } = useParams({ strict: false });
   const client = useQueryClient();
-  // The login under review is not read again after a change: a read by code is a counted try, and the review closes anyway.
+  // The login under review is not read again after a change: the review closes anyway.
   const actions = useMemo(
     () =>
       accessActions(
@@ -59,9 +57,7 @@ export function AccessScreen(): ReactNode {
     [client],
   );
   const review = useReview(asked);
-  // A code that names no login tells nothing of the logins that do wait: they are neither read nor drawn from an earlier read.
-  const listed = asked?.by !== "code" || review.data !== undefined;
-  const waiting = useWaiting(listed && tab === "tokens");
+  const waiting = useWaiting(tab === "tokens");
   const sort = tokenSortOf(query);
   const people = usePeople(tab === "people");
   const tokens = useTokens(sort, tab === "tokens");
@@ -70,6 +66,8 @@ export function AccessScreen(): ReactNode {
   const opener = useRef<HTMLElement | null>(null);
   // The login whose Review was pressed here. A review the address alone opened was not asked for on this screen: anyone can send its address.
   const pressed = useRef<string | undefined>(undefined);
+  // A press opens one review: the same address reached again, by the browser's own Forward, was not pressed.
+  if (asked === undefined) pressed.current = undefined;
   // A user, a token, or a waiting login that left its list leaves the focus on nothing: the tab that is open takes it.
   const keptFocus = useFocusHome();
   const openReview = (id: string): void => {
@@ -96,9 +94,9 @@ export function AccessScreen(): ReactNode {
             <TokensTab
               tokens={tokens.data}
               ended={ended.data}
-              waiting={listed ? waiting.data : undefined}
+              waiting={waiting.data}
               failure={tokens.error?.message}
-              waitingFailure={listed ? waiting.error?.message : undefined}
+              waitingFailure={waiting.error?.message}
               sort={sort}
               onSort={(next) => void navigate({ to: TOKENS_PATH, search: searchOf(tokenSortQuery(next)) })}
               onReview={(login) => openReview(login.id)}
@@ -110,7 +108,7 @@ export function AccessScreen(): ReactNode {
       </MiddleColumn>
       <ReviewDialog
         login={asked === undefined ? undefined : review.data}
-        byLink={asked?.by === "code" || (asked?.by === "id" && asked.id !== pressed.current)}
+        byLink={asked !== pressed.current}
         actions={actions}
         onClose={() => void navigate({ to: TOKENS_PATH, search: searchOf(kept), replace: true })}
         returnTo={opener}
