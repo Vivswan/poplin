@@ -7,6 +7,8 @@ order: 30
 
 An install is your own copy of poplin, in your own Cloudflare account. You make it once. After that, your agent and your computers publish to it.
 
+**The quickest way is to ask your agent.** Paste the line of [the README](../README.md#use-it-from-an-ai-agent) into it: it tells you what to click and checks each step. This page is the same steps, for doing them by hand.
+
 ```text
 before:  a Cloudflare account, and a domain on it (example.com)
 
