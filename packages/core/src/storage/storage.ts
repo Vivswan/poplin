@@ -15,7 +15,7 @@ const KEY_SEPARATOR = "/";
 /** The most UTF-8 bytes one UTF-16 unit of a string becomes. */
 const MAX_BYTES_PER_UNIT = 3;
 
-/** Segments an S3 client or a URL parser would resolve away, as they read once percent-decoded. */
+/** Segments a storage client or a URL parser would resolve away, as they read once percent-decoded. */
 const DOT_SEGMENTS: ReadonlySet<string> = new Set([".", ".."]);
 
 /** What starts a percent escape; a segment without one decodes to itself. */
@@ -45,7 +45,7 @@ declare const listCursorBrand: unique symbol;
  *
  * The rules: 1 to 1024 UTF-8 bytes; segments joined by `/`, none empty (so no leading, trailing, or doubled slash) and none `.` or `..`; no control character and no lone surrogate.
  *
- * A key is also in Unicode NFC: R2 normalises keys to it and would fold two spellings into one object.
+ * A key is also in Unicode NFC: a store may normalise keys to it, which would fold two spellings into one object.
  *
  * `%` is an ordinary character, kept as written. The one escape refused is a segment that percent-decodes to `.` or `..` (`%2e`, `.%2E`): a URL parser resolves it away.
  * Whatever puts a key in a URL percent-encodes each segment, so no other escape can change the path.
@@ -55,7 +55,7 @@ export type ObjectKey = string & { readonly [objectKeyBrand]: true };
 /**
  * A store's name for the bytes of one object, unquoted. Only a store makes one.
  *
- * It changes whenever a write changes the bytes. A write of the same bytes may keep it: R2 and S3 hash the content.
+ * It changes whenever a write changes the bytes. A write of the same bytes may keep it: a store may derive it from the content.
  */
 export type Etag = string & { readonly [etagBrand]: true };
 
@@ -122,7 +122,7 @@ export type ReadResult =
   | { readonly kind: "range-not-satisfiable"; readonly info: ObjectInfo }
   | { readonly kind: "missing" };
 
-/** The bytes to store. A stream carries its length up front because R2 and S3 refuse one of unknown length. */
+/** The bytes to store. A stream carries its length up front: a store may refuse one of unknown length. */
 export type WriteBody = Uint8Array | ArrayBuffer | { readonly stream: ReadableStream<Uint8Array>; readonly size: number };
 
 /** What is stored beside the bytes. `isContentType` says which content type a store keeps; it is kept as written, without trimming, case folding, or normalising. */
@@ -157,7 +157,7 @@ export type ListPage = { readonly objects: readonly ObjectSummary[] } & (
 );
 
 /**
- * An object store: R2 behind its binding, an S3-compatible bucket, or memory in tests.
+ * An object store: a bucket behind a provider's adapter, or memory in tests.
  *
  * Every answer the product acts on is a result variant. A method rejects only when the store itself fails, or where its `@throws` says so.
  */
@@ -262,7 +262,7 @@ export function resolveRange(range: ByteRange, size: number): ByteSpan | "unsati
 /**
  * Decide whether text is a content type a file may be stored and served with. This is the one place that rule is written.
  *
- * @returns `false` for the empty string, for a control character, a line break included, which no header value carries, and for a lone surrogate, which R2 stores as U+FFFD
+ * @returns `false` for the empty string, for a control character, a line break included, which no header value carries, and for a lone surrogate, which no store keeps as written
  */
 export function isContentType(text: string): boolean {
   return text.length > 0 && !UNSTORABLE_CHARACTER.test(text);
@@ -287,7 +287,7 @@ export function checkWriteOptions(options: WriteOptions): WriteOptions {
  * Refuse a listing no store answers as asked. Every implementation's `list` calls it first, and nowhere else decides this.
  *
  * @returns the page limit, `MAX_LIST_LIMIT` when the options name none
- * @throws {TypeError} `prefix` holds a lone surrogate, which R2 reads as U+FFFD, or is not in NFC, the form every key has
+ * @throws {TypeError} `prefix` holds a lone surrogate, which no store reads as written, or is not in NFC, the form every key has
  * @throws {RangeError} `limit` is not a whole number from 1 to `MAX_LIST_LIMIT`
  */
 export function checkListOptions(options: ListOptions): number {

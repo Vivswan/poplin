@@ -4,7 +4,7 @@ import { MemoryStore } from "../../src/storage/memory";
 import { type ByteRange, deletePrefix, type ListOptions, type ListPage, type ObjectKey, parseObjectKey, resolveRange } from "../../src/storage/storage";
 import { bytesOf, describeObjectStore, objectKey, readText } from "./support/storage-contract";
 
-/** A key of exactly the 1024 bytes R2 and S3 accept. */
+/** A key of exactly the 1024 bytes the key rules accept. */
 const LONGEST_KEY = "k".repeat(1024);
 
 /** A store that counts the calls a removal spends, and lists one object a page so a small folder has many pages. */
@@ -33,7 +33,7 @@ async function folderOfFifty(): Promise<CountingStore> {
 }
 
 describe("parseObjectKey", () => {
-  // Drift: a key becomes a bucket path and part of a URL; one that R2 and S3 normalise differently would be written here and read nowhere.
+  // Drift: a key becomes a bucket path and part of a URL; one that two stores normalise differently would be written here and read nowhere.
   test.each([
     [".settings", { ok: true, key: ".settings" }],
     ["sites/blog/v1/index.html", { ok: true, key: "sites/blog/v1/index.html" }],

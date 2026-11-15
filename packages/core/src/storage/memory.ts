@@ -1,4 +1,4 @@
-// An object store held in memory: the test double every core test runs against, behaving as the R2 one does.
+// An object store held in memory: the test double every core test runs against, behaving as the store contract says.
 
 import {
   type ByteSpan,
@@ -47,7 +47,7 @@ async function bufferBody(body: WriteBody): Promise<Uint8Array> {
 
   if (body instanceof ArrayBuffer) return new Uint8Array(body.slice(0));
 
-  // The size is read before the wait, as R2 fixes a stream's length when the call begins.
+  // The size is read before the wait: a stream's length is fixed when the call begins.
   const { stream, size } = body;
   const bytes = new Uint8Array(await new Response(stream).arrayBuffer());
   if (bytes.length !== size) throw new Error(`the stream held ${bytes.length} bytes, not the ${size} it declared`);
@@ -74,7 +74,7 @@ function summaryOf(stored: StoredObject): ObjectSummary {
 /**
  * An `ObjectStore` that keeps its objects in this instance and loses them with it.
  *
- * It differs from R2 in one stated way: every write gets a fresh etag, equal bytes included.
+ * It differs from a store that hashes the content in one stated way: every write gets a fresh etag, equal bytes included.
  *
  * A list cursor is the last key of its page.
  */

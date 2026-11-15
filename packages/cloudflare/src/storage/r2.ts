@@ -31,6 +31,7 @@ const UNTYPED = "application/octet-stream";
 /** The characters of an etag R2 issues. R2 reads `*` as "any object" and throws on a quote, so a visitor's string with other characters is never sent. */
 const R2_ETAG = /^[\w-]+$/;
 
+// R2 normalises a key to NFC and stores a lone surrogate as U+FFFD: core refuses both, so a key is listed as it was written.
 function listedKey(raw: string): ObjectKey {
   const parsed = parseObjectKey(raw);
   if (!parsed.ok) throw new Error(`the bucket holds a key this store could not have written (${parsed.refusal}): ${JSON.stringify(raw)}`);

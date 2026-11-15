@@ -37,7 +37,7 @@ const LISTED_KEYS = [
   "blog2/v1/index.html",
 ] as const;
 
-/** Half a surrogate pair: no UTF-8 holds it, so R2 would store U+FFFD in its place. */
+/** Half a surrogate pair: no UTF-8 holds it, so a store would keep another character in its place. */
 const LONE_SURROGATE = "\ud83d";
 
 type StoreFactory = () => ObjectStore | Promise<ObjectStore>;
@@ -137,7 +137,7 @@ function readingAndWriting(label: string, makeStore: StoreFactory): void {
       expect<unknown>(await store.head(key)).toEqual({ kind: "missing" });
     });
 
-    // Drift: R2 fixes a stream's length as the call begins; a store that read the size again later would keep a cut upload R2 refuses.
+    // Drift: a stream's length is fixed as the call begins; a store that read the size again later would keep a cut upload another store refuses.
     test("a stream held to the size it declared when the write began: a size the caller lowers afterwards does not make a short stream whole", async () => {
       const store = await makeStore();
       const key = objectKey("blog/v1/app.js");
@@ -164,7 +164,7 @@ function readingAndWriting(label: string, makeStore: StoreFactory): void {
       });
     });
 
-    // Drift: R2 turns a lone surrogate into U+FFFD; a store that took one would serve another content type than it was given.
+    // Drift: a store may replace a lone surrogate with another character; a store that took one would serve another content type than it was given.
     test("a write whose content type holds a lone surrogate is refused, and stores nothing", async () => {
       const store = await makeStore();
       const key = objectKey("blog/v1/index.html");
@@ -296,7 +296,7 @@ function listing(label: string, makeStore: StoreFactory): void {
       ]);
     });
 
-    // Drift: R2 turns a lone surrogate into U+FFFD and normalises to NFC, so such a prefix would list other keys on R2 than in memory.
+    // Drift: a store may replace a lone surrogate and normalise to NFC, so such a prefix would list other keys on one store than on another.
     test.each([
       ["a lone surrogate", `blog/${LONE_SURROGATE}`, "lone surrogate"],
       ["text that is not NFC", "blog/cafe\u0301", "NFC"],
@@ -307,7 +307,7 @@ function listing(label: string, makeStore: StoreFactory): void {
       await expect(store.list({ prefix })).rejects.toThrow(reason);
     });
 
-    test.each([0, -1, 1.5, MAX_LIST_LIMIT + 1, Number.NaN])("a limit of %d is refused before anything is listed, as R2 would refuse it", async (limit) => {
+    test.each([0, -1, 1.5, MAX_LIST_LIMIT + 1, Number.NaN])("a limit of %d is refused before anything is listed", async (limit) => {
       const store = await makeStore();
 
       await expect(store.list({ prefix: "", limit })).rejects.toBeInstanceOf(RangeError);
@@ -327,7 +327,7 @@ function deleting(label: string, makeStore: StoreFactory): void {
       expect(keysOf(await listEveryPage(store, { prefix: "" }))).toEqual(["blog/v1/style.css"]);
     });
 
-    // Drift: R2 and S3 take 1000 keys per delete call; emptying a large site must not stop there or fail on a key already gone.
+    // Drift: a store may take only so many keys per delete call; emptying a large site must not stop there or fail on a key already gone.
     test("delete-many removes more keys than one store call takes, skips a missing one, and touches nothing else", async () => {
       const store = await makeStore();
       const doomed = Array.from({ length: MAX_LIST_LIMIT + 1 }, (_unused, at) => `blog/v1/file-${at}`);
