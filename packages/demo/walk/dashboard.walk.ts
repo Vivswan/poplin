@@ -13,8 +13,8 @@ const VIEWPORTS = [
 /** The schemes a browser asks for. The dashboard follows the browser until a theme is chosen in the account's menu. */
 const SCHEMES = ["light", "dark"] as const;
 
-/** What the sample data holds that the walk opens: an unlisted site, a person who is not the visitor, a token, and a login that waits. */
-const SAMPLE = { site: "pricing", person: "jonas@example.com", token: "design-laptop", login: "build-server" } as const;
+/** What the sample data holds that the walk opens: an unlisted site, a site by its title for the graph, a person who is not the visitor, a token, and a login that waits. */
+const SAMPLE = { site: "pricing", graphed: "Team handbook", person: "jonas@example.com", token: "design-laptop", login: "build-server" } as const;
 
 /** Where the notes of a newer version are read: the page of the project's releases. */
 const RELEASES = "https://github.com/Vivswan/poplin/releases";
@@ -59,7 +59,13 @@ const STOPS: readonly Stop[] = [
   {
     name: "Usage, from the side",
     open: (page) => toSection(page, "Usage"),
-    shows: (page, wide) => [screenHeading(page, "Usage"), rows(page, wide, "Usage")],
+    shows: (page, wide) => [screenHeading(page, "Usage"), rows(page, wide, "Usage"), page.getByRole("heading", { name: "Visits", exact: true }), page.locator("path[data-line=all]")],
+  },
+  {
+    name: "a site picked beside all sites, on the graph of visits",
+    open: (page) => tickSite(page),
+    shows: (page) => [page.getByRole("list", { name: "Lines", exact: true }).getByText(SAMPLE.graphed, { exact: true }), page.locator("path[data-line]").nth(1)],
+    close: (page) => tickSite(page),
   },
   {
     name: "Settings, from the side",
@@ -284,6 +290,13 @@ async function fromRowMenu(page: Page, row: string, entry: string): Promise<void
 /** The dialog that adds a person. */
 function addPerson(page: Page): Locator {
   return page.getByRole("dialog", { name: "Add a person", exact: true });
+}
+
+/** Tick or untick the graphed sample site in the list that picks the sites of the graph, and close the list. */
+async function tickSite(page: Page): Promise<void> {
+  await page.getByRole("combobox", { name: "Compare sites", exact: true }).click();
+  await page.getByRole("option", { name: new RegExp(`^${SAMPLE.graphed}`) }).click();
+  await page.keyboard.press("Escape");
 }
 
 /** The panel of the sample site: beside the table on a wide screen, over the list on a narrow one. */

@@ -44,18 +44,21 @@ const DOMAIN_TOKEN = "sample-token";
 /** How long a login waits before it runs out, in milliseconds. */
 const LOGIN_LIFE_MS = 600_000;
 
-/** The requests counted today and the opens of a page among them, by the name of the site that answered them: together nine tenths of the day's limit, so a line near its limit shows. Each earlier day of the week counts a share of them. */
-const COUNTED: Readonly<Record<string, readonly [requests: number, views: number]>> = {
-  "sales-report": [1_860, 410],
-  lisbon: [214_259, 14_800],
-  handbook: [8_415, 2_150],
-  "launch-deck": [240, 64],
-  pricing: [130, 38],
-  "team-site": [96, 31],
+/** Today's requests, the opens of a page among them, and how many days back a share of both is counted, by the name of the site. Together today's are nine tenths of the day's limit, so a line near its limit shows. */
+const COUNTED: Readonly<Record<string, readonly [requests: number, views: number, days: number]>> = {
+  "sales-report": [1_860, 410, 365],
+  lisbon: [214_259, 14_800, 200],
+  handbook: [8_415, 2_150, 365],
+  "launch-deck": [240, 64, 120],
+  pricing: [130, 38, 45],
+  "team-site": [96, 31, 90],
 };
 
-/** The days the counts are seeded over: today and the six before it. */
-const COUNTED_DAYS = 7;
+/** The share of a weekday's count a Saturday or a Sunday gets. */
+const WEEKEND_SHARE = 0.8;
+
+/** The days over which a site's count grew from a third to what it is today. */
+const GROWTH_DAYS = 300;
 
 /** Every sample site, by the name it is made under, the oldest first. */
 const SITES: readonly Draft[] = [
@@ -293,16 +296,25 @@ async function play(world: World, cast: Cast, moment: Moment): Promise<void> {
   }
 }
 
+/** The share of today's count a day got: less on a weekend, and less the longer ago it was. Today has the whole. */
+function sharedOn(weekday: number, ago: number): number {
+  if (ago === 0) return 1;
+
+  const grown = 1 - (2 / 3) * Math.min(ago / GROWTH_DAYS, 1);
+
+  return (weekday === 0 || weekday === 6 ? WEEKEND_SHARE : 1) * grown;
+}
+
 async function countRequests(world: World, start: number): Promise<void> {
   const listed = done(await listSites(world.install, world.admin), "the list of sites");
 
   for (const site of listed.sites) {
-    const [requests, views] = COUNTED[site.public_name ?? site.name] ?? [0, 0];
-    if (requests === 0) continue;
+    const [requests, views, days] = COUNTED[site.public_name ?? site.name] ?? [0, 0, 0];
 
-    for (let ago = 0; ago < COUNTED_DAYS; ago += 1) {
-      const day = new Date(start - ago * DAY_MS).toISOString().slice(0, DAY_LENGTH);
-      await world.install.database.addRequests({ day, site: site.id, requests: Math.ceil(requests / (ago + 1)), views: Math.floor(views / (ago + 1)) });
+    for (let ago = 0; ago < days; ago += 1) {
+      const moment = new Date(start - ago * DAY_MS);
+      const share = sharedOn(moment.getUTCDay(), ago);
+      await world.install.database.addRequests({ day: moment.toISOString().slice(0, DAY_LENGTH), site: site.id, requests: Math.ceil(requests * share), views: Math.floor(views * share) });
     }
   }
 }

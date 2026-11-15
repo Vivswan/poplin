@@ -9,8 +9,8 @@ import { buildDemo } from "../../scripts/build";
 /** The most the worker's script may weigh as a host sends it, in bytes: it holds the product's code and the sample sites, and nothing of the dashboard's client, which the host serves beside it. */
 const SCRIPT_BUDGET = 220_000;
 
-/** The most every file of the built demo may weigh together, in bytes gzipped. The dashboard's client is about 392,000 of it, and a first visit loads about 859,000: the worker, SQLite, and of the client its script, its stylesheet, and one font. */
-const TOTAL_BUDGET = 1_000_000;
+/** The most every file of the built demo may weigh together, in bytes gzipped. The dashboard's client is about 446,000 of it, and a first visit loads about 907,000: the worker, SQLite, and of the client its script, its stylesheet, and one font. */
+const TOTAL_BUDGET = 1_100_000;
 
 /** A file of the dashboard's client as the build names it: the name holds a hash of the file's content. */
 const CLIENT_FILE = /^assets\/[\w-]+-[\w-]{8}\.(?:js|css|woff2)$/;

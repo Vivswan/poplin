@@ -16,6 +16,7 @@ import { type ColumnSpec, DataTable } from "@/table/data-table";
 import { useTableLayout } from "@/table/layout";
 import { type Line, useUsage } from "@/usage/usage-queries";
 import { shareOf } from "@/usage/usage-values";
+import { VisitsBlock } from "@/usage/visits-block";
 
 /** What each line counts, in the words of the screen. */
 const NAMES: Readonly<Record<Line["what"], string>> = {
@@ -109,6 +110,7 @@ export function UsageScreen(): ReactNode {
   return (
     <AppShell current="usage" heading="Usage">
       <section aria-label="Usage" className="flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto">
+        <VisitsBlock />
         {error === null ? null : <p className="px-6 py-8 text-muted-foreground max-md:px-4">{error.message}</p>}
         {usage === undefined && error === null ? (
           <div className="flex flex-col border-t" aria-busy="true">

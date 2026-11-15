@@ -10,6 +10,7 @@ import { frameRoutes } from "./frame-routes";
 import { settingsRoutes } from "./settings-routes";
 import { siteRoutes } from "./site-routes";
 import { usageRoutes } from "./usage-routes";
+import { visitsRoutes } from "./visits-routes";
 
 /** The data routes, each screen's own chained on. They are mounted under `/data`, after the session check and the guard on changes. */
 export const dataRoutes = new Hono<Shared>()
@@ -18,6 +19,7 @@ export const dataRoutes = new Hono<Shared>()
   .route("/", accessRoutes)
   .route("/", activityRoutes)
   .route("/", usageRoutes)
+  .route("/", visitsRoutes)
   .route("/", settingsRoutes)
   .route("/", domainRoutes);
 
