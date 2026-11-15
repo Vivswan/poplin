@@ -34,6 +34,11 @@ const MOMENT_FORMAT = new Intl.DateTimeFormat("en-GB", {
   timeZoneName: "short",
 });
 
+/** What a site is called on a screen: its title, or its name where it has none. Its name is read in its link. */
+export function shownName(site: Pick<Site, "name" | "title">): string {
+  return site.title ?? site.name;
+}
+
 /** How a count is written: with its thousands set apart. */
 const COUNT_FORMAT = new Intl.NumberFormat("en");
 

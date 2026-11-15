@@ -2,9 +2,10 @@
 
 import { answerOf, api, Refused } from "@/lib/api";
 import { sayDone, sayRefused, send } from "@/lib/notify";
-import { ACCESSES, type Access, type Site } from "@/lib/sites";
+import { ACCESSES, type Access, type Site, shownName } from "@/lib/sites";
+import type { NamingRefusal, SiteNaming } from "@/sites/edit-site-dialog";
 
-/** The changes of a site. Each but `rename` and `remove` answers the site after the change, or `undefined` when it was refused and the refusal was shown. */
+/** The changes of a site. Each but `name` and `remove` answers the site after the change, or `undefined` when it was refused and the refusal was shown. */
 export interface SiteActions {
   /** Copies the site's whole link, and says so. */
   readonly copyLink: (site: Site) => Promise<void>;
@@ -12,8 +13,8 @@ export interface SiteActions {
   /** Sets who can open the site. */
   readonly setAccess: (site: Site, access: Access) => Promise<Site | undefined>;
 
-  /** Answers the site under its new name, or the sentence of the refusal, which the one who asked shows at the field. */
-  readonly rename: (site: Site, name: string) => Promise<Site | string>;
+  /** Gives the site another title, another name, or both. Answers nothing when it is done, or the refusal, which the one who asked shows at its field. */
+  readonly name: (site: Site, naming: SiteNaming) => Promise<NamingRefusal | undefined>;
 
   /** Turns one of the site's two switches on or off. */
   readonly setSetting: (site: Site, setting: "search_engines" | "embeddable", on: boolean) => Promise<Site | undefined>;
@@ -85,18 +86,18 @@ export function siteActions(onChanged: (before: Site, after: Site | null) => voi
     remove: async (site) => {
       const back = (): void => void restore(site);
 
-      return (await run(site, send(routes.delete.$post({ param: at(site), json: {} })), `${site.name} moved to the trash.`, back)) !== undefined;
+      return (await run(site, send(routes.delete.$post({ param: at(site), json: {} })), `${shownName(site)} moved to the trash.`, back)) !== undefined;
     },
-    rename: async (site, name) => {
-      // A refused name is said at its field, where it is corrected, so the sentence goes back to the one who asked.
+    name: async (site, naming) => {
+      // A refused value is said at its field, where it is corrected, so the refusal goes back to the one who asked.
       try {
-        const renamed = await answerOf(routes.rename.$post({ param: at(site), json: { name } }));
-        onChanged(site, renamed.site);
-        sayDone("Renamed. The link took the new name. The old link keeps working.");
+        const named = await answerOf(routes.naming.$post({ param: at(site), json: naming }));
+        onChanged(site, named.site);
+        sayDone("Saved.");
 
-        return renamed.site;
+        return undefined;
       } catch (error) {
-        if (error instanceof Refused) return error.message;
+        if (error instanceof Refused) return { about: error.about === "title" || error.about === "name" ? error.about : null, sentence: error.message };
 
         throw error;
       }

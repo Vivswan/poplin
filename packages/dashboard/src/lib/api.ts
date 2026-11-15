@@ -42,7 +42,7 @@ export class Refused extends Error {
   }
 }
 
-/** The data routes, called as `api.sites.$get({ query })` or `api.sites[":site"].rename.$post({ param, json })`. */
+/** The data routes, called as `api.sites.$get({ query })` or `api.sites[":site"].naming.$post({ param, json })`. */
 export const api = hc<DataRoutes>(`${BOOT.base}/data`);
 
 function isRefusal(data: unknown): data is RefusalBody {

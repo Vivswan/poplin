@@ -3,7 +3,7 @@
 //   GET  /sites                    one page; ?view=trash, ?q=, ?access=, ?sort= with ?dir=, ?after=
 //   GET  /sites/<label>            one site
 //                                  both with the names of the logins there are, for whoever published a version
-//   POST /sites/<label>/<change>   rename, access, settings, delete, restore, new-link, make-live
+//   POST /sites/<label>/<change>   naming, access, settings, delete, restore, new-link, make-live
 
 import { vValidator } from "@hono/valibot-validator";
 import { SITE_CHANGES } from "@poplin/core/src/actions/changes";
@@ -43,9 +43,9 @@ const ONE_SITE = v.object({ site: v.string() });
 
 /** What each change of a site carries. */
 const CHANGES = {
-  rename: v.object({ name: v.string() }),
+  naming: v.pick(SITE_CHANGES, ["name", "title"]),
   access: v.object({ access: v.picklist(ACCESSES), public_name: v.optional(v.string()) }),
-  settings: v.pick(SITE_CHANGES, ["title", "search_engines", "embeddable"]),
+  settings: v.pick(SITE_CHANGES, ["search_engines", "embeddable"]),
   makeLive: v.required(ROLLBACK_OPTIONS),
 };
 
@@ -106,7 +106,7 @@ export const siteRoutes = new Hono<Shared>()
 
     return context.json({ ok: true as const, site: shown.site, logins: await loginNames(context.get("asker")) });
   })
-  .post("/sites/:site/rename", vValidator("param", ONE_SITE, refuseInvalid), vValidator("json", CHANGES.rename, refuseInvalid), async (context) => {
+  .post("/sites/:site/naming", vValidator("param", ONE_SITE, refuseInvalid), vValidator("json", CHANGES.naming, refuseInvalid), async (context) => {
     const { install, actor } = context.get("asker");
     const changed = await updateSite(install, actor, { site: context.req.valid("param").site, ...context.req.valid("json") });
 

@@ -5,7 +5,7 @@ import type { ReactNode } from "react";
 
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import type { Site } from "@/lib/sites";
+import { type Site, shownName } from "@/lib/sites";
 import type { SiteActions } from "@/sites/site-actions";
 import type { Ask } from "@/sites/site-questions";
 
@@ -42,13 +42,13 @@ export function SiteRowActions({ site, actions, onAsk, onRemoved }: SiteRowActio
     <span className="inline-flex items-center gap-0.5 opacity-60 group-focus-within/row:opacity-100 group-hover/row:opacity-100 has-aria-expanded:opacity-100 pointer-coarse:opacity-100">
       <DropdownMenu>
         <DropdownMenuTrigger
-          render={<Button variant="ghost" size="icon-sm" aria-label={`More for ${site.name}`} title="More" className="pointer-coarse:size-10" />}
+          render={<Button variant="ghost" size="icon-sm" aria-label={`More for ${shownName(site)}`} title="More" className="pointer-coarse:size-10" />}
         >
           <MoreHorizontalIcon />
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="w-40">
           <DropdownMenuItem render={<a href={site.url} target="_blank" rel="noreferrer" />}>Open</DropdownMenuItem>
-          <DropdownMenuItem onClick={() => onAsk(site, { kind: "rename" })}>Rename</DropdownMenuItem>
+          <DropdownMenuItem onClick={() => onAsk(site, { kind: "naming" })}>Edit</DropdownMenuItem>
           <DropdownMenuItem onClick={() => onAsk(site, { kind: "new-link" })}>New link</DropdownMenuItem>
           <DropdownMenuSeparator />
           <DropdownMenuItem variant="destructive" onClick={() => void remove()}>

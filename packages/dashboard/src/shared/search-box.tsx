@@ -1,5 +1,6 @@
 // The search box every list has above it: it searches as a person types, after a short rest, and keeps the text in the address.
 
+import { cn } from "cn";
 import { SearchIcon, XIcon } from "lucide-react";
 import { type ReactNode, useEffect, useState } from "react";
 import { useDebouncedCallback } from "use-debounce";
@@ -25,10 +26,13 @@ interface SearchBoxProps {
 
   /** The most characters the box takes. */
   readonly maxLength?: number;
+
+  /** Classes laid over the box's own, such as a width of its own on a phone. */
+  readonly className?: string;
 }
 
 /** Draw a search box with a button that clears it. */
-export function SearchBox({ sent, onSearch, placeholder, label, maxLength }: SearchBoxProps): ReactNode {
+export function SearchBox({ sent, onSearch, placeholder, label, maxLength, className }: SearchBoxProps): ReactNode {
   const [typed, setTyped] = useState(sent);
   // Text that came back to what the list is searched for already is not sent again.
   const search = useDebouncedCallback((text: string) => (text === sent ? undefined : onSearch(text)), REST_MS);
@@ -43,7 +47,7 @@ export function SearchBox({ sent, onSearch, placeholder, label, maxLength }: Sea
   }, [sent, search]);
 
   return (
-    <InputGroup className="w-64 max-md:w-auto max-md:flex-1">
+    <InputGroup className={cn("w-64 max-md:w-auto max-md:flex-1", className)}>
       <InputGroupAddon>
         <SearchIcon />
       </InputGroupAddon>

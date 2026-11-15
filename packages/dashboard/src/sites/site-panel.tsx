@@ -7,7 +7,7 @@ import { type ReactElement, type ReactNode, useEffect } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
-import { ACCESSES, type Access, addressParts, expiryOf, shortMoment, showCount, type Site, wholeMoment } from "@/lib/sites";
+import { ACCESSES, type Access, addressParts, expiryOf, shortMoment, showCount, shownName, type Site, wholeMoment } from "@/lib/sites";
 import { IconButton } from "@/shared/icon-button";
 import { PanelBlock, PanelFact, PanelFacts, PanelLoading, PanelSwitch, SidePanel } from "@/shared/side-panel";
 import type { SiteActions } from "@/sites/site-actions";
@@ -94,7 +94,6 @@ function FactsBlock({ site }: { readonly site: Site }): ReactNode {
   return (
     <PanelBlock>
       <PanelFacts>
-        <PanelFact name="Title">{site.title ?? "None"}</PanelFact>
         <PanelFact name="Views">
           {site.views === null ? "Not known" : `about ${showCount(site.views.today)} today, about ${showCount(site.views.week)} in 7 days`}
         </PanelFact>
@@ -187,21 +186,21 @@ export function SitePanel({ label, actions, reveal, onAsk, closeLink, onClose, o
 
   if (site.state === "trash") {
     return (
-      <SidePanel title={site.name} {...frame}>
+      <SidePanel title={shownName(site)} {...frame}>
         <FactsBlock site={site} />
         <TrashBlock site={site} onRestore={() => void actions.restore(site)} />
       </SidePanel>
     );
   }
 
-  const renameButton = (
-    <IconButton label="Rename" onClick={() => onAsk(site, { kind: "rename" })}>
+  const editButton = (
+    <IconButton label="Edit" onClick={() => onAsk(site, { kind: "naming" })}>
       <PencilIcon />
     </IconButton>
   );
 
   return (
-    <SidePanel title={site.name} beside={renameButton} {...frame}>
+    <SidePanel title={shownName(site)} beside={editButton} {...frame}>
       <LinkBlock site={site} actions={actions} reveal={reveal} />
       <AccessBlock site={site} onChoose={choose} />
       <FactsBlock site={site} />

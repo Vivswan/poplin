@@ -21,7 +21,7 @@ const FORM = "application/x-www-form-urlencoded";
 const TYPES = [JSON_TYPE, JSON_TYPE, JSON_TYPE, JSON_TYPE, `${JSON_TYPE}; charset=utf-8`, "Application/JSON", FORM, "multipart/form-data; boundary=x", "text/plain", "application/jsonx", ""];
 const ORIGINS = [ORIGIN, ORIGIN, ORIGIN, ORIGIN, ORIGIN, ORIGIN, ORIGIN, "https://evil.example.com", "https://shop-page.example.com", "null", "", "https://poplin.example.com:444", "HTTPS://POPLIN.EXAMPLE.COM"];
 const FETCH_SITES = ["same-origin", "same-origin", "same-origin", "same-origin", "same-origin", "same-site", "cross-site", "none", ""];
-const CHANGES = ["settings", "make-live", "new-link", "delete", "restore", "rename", "access", "constructor", "__proto__", ""];
+const CHANGES = ["settings", "make-live", "new-link", "delete", "restore", "naming", "access", "constructor", "__proto__", ""];
 const LOGIN = `${ORIGIN}/login?return=`;
 const LOGGED_OUT = JSON.stringify({ ok: false, code: "no_session", about: null, sentence: "Log in again." });
 
@@ -44,7 +44,7 @@ const knownPaths = fc.oneof(
   fc.constantFrom(...LABELS).map((label) => `/data/sites/${label}`),
   fc.tuple(fc.constantFrom(...LABELS), fc.constantFrom(...CHANGES)).map(([label, change]) => `/data/sites/${label}/${change}`),
 );
-const changePaths = fc.constantFrom("/data/sites/shop/new-link", "/data/sites/shop/delete", "/data/sites/shop/restore", "/data/sites/shop/settings", "/data/settings", "/data/settings/sign-everyone-out", "/data/people/add");
+const changePaths = fc.constantFrom("/data/sites/shop/new-link", "/data/sites/shop/delete", "/data/sites/shop/restore", "/data/sites/shop/settings", "/data/sites/shop/naming", "/data/settings", "/data/settings/sign-everyone-out", "/data/people/add");
 const paths = fc.oneof({ arbitrary: changePaths, weight: 3 }, { arbitrary: knownPaths, weight: 3 }, { arbitrary: hostile(knownPaths), weight: 2 });
 const cookies = fc.constantFrom(base.cookie, base.cookie, base.cookie, base.cookie, base.cookie, base.cookie, `${base.cookie}x`, "__Secure-poplin-session=", "theme=dark", undefined);
 const words = fc.constantFrom("private", "unlisted", "public", "previous", "1", "2", "yes", "on", "off", "never", "7d", "2030-01-01", "9GB", "50GB", "docs", "gallery", "<script>alert(1)</script>", "next@example.com", ...LABELS);
@@ -176,7 +176,7 @@ test("a change sent as JSON by a logged-in page is done", async () => {
   // A site made here: the property's own runs may have left any other in the trash, where a rename is refused.
   const fresh = await base.publish("control");
   const before = await stored();
-  const facts = await factsOf({ path: `/data/sites/control--${fresh.id}/settings`, method: "POST", cookie: base.cookie, origin: ORIGIN, fetchSite: "same-origin", type: JSON_TYPE, body: JSON.stringify({ title: "A control" }) });
+  const facts = await factsOf({ path: `/data/sites/control--${fresh.id}/naming`, method: "POST", cookie: base.cookie, origin: ORIGIN, fetchSite: "same-origin", type: JSON_TYPE, body: JSON.stringify({ title: "A control" }) });
 
   expect([facts, (await stored()) === before]).toEqual([{ published: true, shownToStranger: false, changedUnasked: false, guarded: true, script: false }, false]);
 });

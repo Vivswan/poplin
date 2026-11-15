@@ -36,12 +36,12 @@ export function screenHeading(page: Page, name: string): Locator {
   return page.getByRole("heading", { level: 1, name, exact: true });
 }
 
-/** The names of the sites the Sites screen lists, each the link that opens its site: in the table of a wide screen and in the list of a narrow one. */
+/** The sites the Sites screen lists, each the link that opens its site: in the table of a wide screen and in the list of a narrow one. A link reads the site's title, or its name where it has none. */
 export function siteLinks(page: Page): Locator {
   return page.getByRole("region", { name: "Sites", exact: true }).getByRole("link");
 }
 
-/** The link of one site in the list the Sites screen shows. */
+/** The link of one site in the list the Sites screen shows, by what the list calls the site. */
 export function siteLink(page: Page, name: string): Locator {
   return page.getByRole("region", { name: "Sites", exact: true }).getByRole("link", { name, exact: true });
 }
@@ -54,7 +54,7 @@ export function said(page: Page, words: string): Locator {
 /**
  * Open the demo as a browser that never saw it does, and wait for its sites.
  *
- * @returns the names of the sample sites the dashboard lists
+ * @returns what the dashboard calls each sample site it lists: the site's title, or its name where it has none
  */
 export async function arrive(page: Page): Promise<string[]> {
   await page.goto("./");

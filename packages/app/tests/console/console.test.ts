@@ -143,7 +143,7 @@ describe("a change", () => {
     const opened = await openConsole();
     const site = await opened.base.publish("first-name", "private");
     const label = `${site.name}--${site.id}`;
-    const response = await opened.change(`/data/sites/${label}/rename`, { name: "second-name" });
+    const response = await opened.change(`/data/sites/${label}/naming`, { name: "second-name" });
     const listed = (await (await opened.get("/data/sites")).json()) as Listed;
 
     expect([response.status, ((await response.json()) as { site: { name: string } }).site.name]).toEqual([200, "second-name"]);
@@ -152,7 +152,7 @@ describe("a change", () => {
 
   // Drift: a refusal would reach the client without the sentence it shows, or under a status that hides what it is.
   test.each([
-    ["a name that breaks the rules", "rename", { name: "Not A Name" }, 400, "bad_name"],
+    ["a name that breaks the rules", "naming", { name: "Not A Name" }, 400, "bad_name"],
     ["a change that is not there", "explode", {}, 404, "no_page"],
   ])("refused for %s says why", async (_case, change, body, status, code) => {
     const opened = await openConsole();
@@ -167,7 +167,7 @@ describe("a change", () => {
   // Drift: a site no label names would be answered as a plain bad request.
   test("of a site that is not there answers 404", async () => {
     const opened = await openConsole();
-    const response = await opened.change("/data/sites/no-site--abcdefghijkl/rename", { name: "second-name" });
+    const response = await opened.change("/data/sites/no-site--abcdefghijkl/naming", { name: "second-name" });
 
     expect(response.status).toBe(404);
   });
@@ -182,7 +182,7 @@ describe("a change", () => {
   ])("sent as %s is refused and changes nothing", async (_case, headers, status) => {
     const opened = await openConsole();
     const site = await opened.base.publish("first-name", "private");
-    const response = await opened.change(`/data/sites/${site.name}--${site.id}/rename`, "name=second-name", headers);
+    const response = await opened.change(`/data/sites/${site.name}--${site.id}/naming`, "name=second-name", headers);
     const listed = (await (await opened.get("/data/sites")).json()) as Listed;
 
     expect(response.status).toBe(status);
@@ -193,7 +193,7 @@ describe("a change", () => {
   test("without a session answers 401 and changes nothing", async () => {
     const opened = await openConsole();
     const site = await opened.base.publish("first-name", "private");
-    const response = await opened.change(`/data/sites/${site.name}--${site.id}/rename`, { name: "second-name" }, { Cookie: "" });
+    const response = await opened.change(`/data/sites/${site.name}--${site.id}/naming`, { name: "second-name" }, { Cookie: "" });
 
     const listed = (await (await opened.get("/data/sites")).json()) as Listed;
 

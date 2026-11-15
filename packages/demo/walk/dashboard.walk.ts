@@ -112,9 +112,12 @@ const STOPS: readonly Stop[] = [
     close: pressEscape,
   },
   {
-    name: "Rename, from a row's menu",
-    open: (page) => fromRowMenu(page, SAMPLE.site, "Rename"),
-    shows: (page) => [page.getByRole("dialog", { name: "Rename the site", exact: true }).getByRole("textbox", { name: "Name", exact: true })],
+    name: "the title and the name, from a row's menu",
+    open: (page) => fromRowMenu(page, SAMPLE.site, "Edit"),
+    shows: (page) => [
+      editDialog(page).getByRole("textbox", { name: "Title", exact: true }),
+      editDialog(page).getByRole("textbox", { name: "Name", exact: true }),
+    ],
     close: cancelDialog,
   },
   {
@@ -132,9 +135,9 @@ const STOPS: readonly Stop[] = [
     ],
   },
   {
-    name: "Rename, from the panel",
-    open: (page) => panel(page).getByRole("button", { name: "Rename", exact: true }).click(),
-    shows: (page) => [page.getByRole("dialog", { name: "Rename the site", exact: true }).getByRole("textbox", { name: "Name", exact: true })],
+    name: "the title and the name, from the panel",
+    open: (page) => panel(page).getByRole("button", { name: "Edit", exact: true }).click(),
+    shows: (page) => [editDialog(page).getByRole("textbox", { name: "Name", exact: true })],
     close: cancelDialog,
   },
   {
@@ -301,9 +304,14 @@ function leaveBy(label: string): (page: Page) => Promise<void> {
   return (page) => page.getByRole("alertdialog").getByRole("button", { name: label, exact: true }).click();
 }
 
-/** Leave a dialog with a field by its Cancel. */
+/** The dialog that changes a site's title and name. */
+function editDialog(page: Page): Locator {
+  return page.getByRole("dialog", { name: "Edit the site", exact: true });
+}
+
+/** Leave the dialog of a site's title and name by its Cancel. */
 async function cancelDialog(page: Page): Promise<void> {
-  await page.getByRole("dialog", { name: "Rename the site", exact: true }).getByRole("button", { name: "Cancel", exact: true }).click();
+  await editDialog(page).getByRole("button", { name: "Cancel", exact: true }).click();
 }
 
 /** Leave a menu or a popover with Escape. */

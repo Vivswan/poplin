@@ -11,7 +11,7 @@ import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyTitle } from "
 import { Popover, PopoverContent, PopoverDescription, PopoverHeader, PopoverTitle, PopoverTrigger } from "@/components/ui/popover";
 import { Select, SelectContent, SelectGroup, SelectItem, SelectSeparator, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { searchOf, useAddressQuery } from "@/lib/address";
-import type { Site } from "@/lib/sites";
+import { type Site, shownName } from "@/lib/sites";
 import { IconButton } from "@/shared/icon-button";
 import { Pages, queryWith } from "@/shared/pages";
 import { SearchBox } from "@/shared/search-box";
@@ -19,7 +19,7 @@ import { useStandsBeside } from "@/shared/side-panel";
 import { AppShell } from "@/shell/app-shell";
 import { siteActions } from "@/sites/site-actions";
 import type { LoginNames } from "@/shared/who";
-import { AccessMark, type Reveal, SiteLink, siteColumns, trashColumns } from "@/sites/site-columns";
+import { AccessMark, type Reveal, siteColumns, trashColumns } from "@/sites/site-columns";
 import { SitePanel } from "@/sites/site-panel";
 import { SITES_KEY, useSitesPage } from "@/sites/site-queries";
 import { type Ask, type Asked, SiteQuestions } from "@/sites/site-questions";
@@ -28,11 +28,11 @@ import { emptyWords, FILTERS, type Filter, filteredQuery, filterOf, SORTS, sorte
 import { ColumnsMenu, DataTable } from "@/table/data-table";
 import { useTableLayout } from "@/table/layout";
 
-/** The most characters a site's name holds. */
+/** The most characters the list is searched for: as many as the server's listing takes. */
 const MAX_SEARCH = 40;
 
 /** How a site's name looks in its row. */
-const NAME_LOOK = "-mx-1 rounded-sm px-1 py-0.5 font-medium outline-none hover:underline focus-visible:ring-2 focus-visible:ring-ring";
+const NAME_LOOK = "rounded-sm py-0.5 font-medium outline-none hover:underline focus-visible:ring-2 focus-visible:ring-ring";
 
 /** The width of the last column of the trash, whose rows end with a worded button. */
 const RESTORE_WIDTH = 104;
@@ -107,7 +107,7 @@ function NewSite(): ReactNode {
   );
 }
 
-/** The sites on a phone: one row each, the name over who can open it and the link, and after the last row what follows the list. */
+/** The sites on a phone: one row each, the site's title over who can open it and the name its link is written with, with the way to copy the link, and after the last row what follows the list. */
 function PhoneList({
   sites,
   opened,
@@ -136,7 +136,7 @@ function PhoneList({
               <span className="truncate">{nameCell(site)}</span>
               <span className="flex min-w-0 items-center gap-2">
                 <AccessMark access={site.access} className="shrink-0" />
-                <SiteLink site={site} className="text-faint" />
+                {site.title === null ? null : <span className="truncate font-mono text-xs text-faint">{site.name}</span>}
                 <IconButton label="Copy the link" onClick={() => onCopy(site)} className="-my-2 shrink-0">
                   <CopyIcon />
                 </IconButton>
@@ -230,12 +230,13 @@ function Toolbar({
   const navigate = useNavigate();
 
   return (
-    <div className="flex shrink-0 items-center gap-2 px-6 pb-3 max-md:px-4">
+    <div className="flex shrink-0 items-center gap-2 px-6 pb-3 max-md:flex-wrap max-md:px-4">
       <SearchBox
         sent={search}
         onSearch={(text) => onStay(queryWith(query, { q: text }), true)}
         placeholder="Find a site"
-        label="Find a site by name"
+        label="Find a site"
+        className="max-md:basis-full"
         maxLength={MAX_SEARCH}
       />
       <FilterSelect filter={filter} onChoose={(chosen) => void navigate({ to: "/", search: searchOf(filteredQuery(query, chosen)) })} />
@@ -296,16 +297,16 @@ function useNameCell(
 ): (site: Site) => ReactNode {
   return useCallback(
     (site: Site): ReactNode => {
-      const shown = { title: site.name, "aria-expanded": site.label === opened, className: NAME_LOOK };
+      const shown = { title: shownName(site), "aria-expanded": site.label === opened, className: NAME_LOOK };
 
       // The name of the site whose panel is open leads back to the table, which closes the panel.
       return site.label === opened ? (
         <Link {...toTable} {...shown}>
-          {site.name}
+          {shownName(site)}
         </Link>
       ) : (
         <Link {...toSite(site)} {...shown}>
-          {site.name}
+          {shownName(site)}
         </Link>
       );
     },
@@ -335,7 +336,7 @@ function useReveal(opened: string | undefined): Reveal {
 
 /** What the table's columns are drawn with. */
 interface ColumnParts {
-  /** Draws the Name column, which opens the site. */
+  /** Draws the first column, which shows the site's title and opens the site. */
   readonly nameCell: (site: Site) => ReactNode;
 
   /** Copies a site's whole link. */
@@ -355,7 +356,7 @@ function useShownTable(filter: Filter, { nameCell, onCopy, reveal, logins }: Col
     () => (trash ? trashColumns(nameCell, logins) : siteColumns(nameCell, onCopy, reveal, logins)),
     [trash, nameCell, onCopy, reveal, logins],
   );
-  const layout = useTableLayout(trash ? "trash" : "sites", columns);
+  const layout = useTableLayout(trash ? "trashed-sites" : "site-list", columns);
 
   return { columns, layout, label: trash ? "Sites in the trash" : "Sites", actionsWidth: trash ? RESTORE_WIDTH : undefined };
 }

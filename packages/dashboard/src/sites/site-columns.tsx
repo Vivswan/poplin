@@ -119,7 +119,7 @@ function Moment({ moment }: { readonly moment: number }): ReactNode {
 /**
  * The columns of the Sites table.
  *
- * @param nameCell - draws the Name column, which opens the site
+ * @param nameCell - draws the first column, which shows the site's title and opens the site
  * @param onCopy - copies a site's whole link; its button stands right after the link, however short the link is cut
  * @param reveal - which sites show the id in their link
  * @param logins - the name of each login that has one, by the login's id
@@ -141,7 +141,7 @@ export function siteColumns(
   );
 
   return [
-    { id: "name", header: "Name", sortable: SITE_ORDERS.first.name, fixed: true, cell: nameCell },
+    { id: "site", header: "Site", fixed: true, cell: nameCell },
     {
       id: "access",
       header: "Who can open it",
@@ -150,6 +150,7 @@ export function siteColumns(
     },
     { id: "link", header: "Link", widest: 360, gives: LINK_GIVES, cell: linkCell },
     { id: "updated", header: "Updated", sortable: SITE_ORDERS.first.updated, cell: (site) => <Moment moment={site.updated} /> },
+    { id: "name", header: "Name", hidden: true, sortable: SITE_ORDERS.first.name, cell: (site) => <span className="text-muted-foreground">{site.name}</span> },
     { id: "by", header: "Published by", hidden: true, cell: (site) => <PublishedBy site={site} logins={logins} /> },
     {
       id: "views",
@@ -178,12 +179,6 @@ export function siteColumns(
       hidden: true,
       cell: (site) => <span className="text-muted-foreground">{expiryOf(site.expires)}</span>,
     },
-    {
-      id: "title",
-      header: "Title",
-      hidden: true,
-      cell: (site) => <span className="text-muted-foreground">{site.title ?? "None"}</span>,
-    },
   ];
 }
 
@@ -194,7 +189,7 @@ export function siteColumns(
  */
 export function trashColumns(nameCell: (site: Site) => ReactNode, logins: LoginNames): readonly ColumnSpec<Site>[] {
   return [
-    { id: "name", header: "Name", fixed: true, cell: nameCell },
+    { id: "site", header: "Site", fixed: true, cell: nameCell },
     {
       id: "gone",
       header: "Leaves the trash",

@@ -43,9 +43,22 @@ function sumOf(widths: Iterable<number>): number {
 }
 
 /**
+ * Make a column of a group narrower by what the group lacks, where one of them gives way that far. A column a person gave a width keeps it.
+ *
+ * @param drawn - the width of each column, which the narrower width is written into
+ * @returns whether the room was made
+ */
+function madeRoom(group: readonly SizedColumn[], sizes: Readonly<Record<string, number>>, drawn: Map<string, number>, lacking: number): boolean {
+  const giver = group.find((column) => column.gives !== undefined && sizes[column.id] === undefined && (drawn.get(column.id) ?? 0) - lacking >= column.gives);
+  if (giver !== undefined) drawn.set(giver.id, (drawn.get(giver.id) ?? 0) - lacking);
+
+  return giver !== undefined;
+}
+
+/**
  * The columns in groups: each takes as many as fit the room, in order, and a column wider than the room has a group to itself.
  *
- * A column that gives way is drawn as wide as the room its group has left, where that is no less than what it gives way to. One a person gave a width keeps it.
+ * A column that misses the room its group has left stays in the group where it, or a column before it there, gives way by what is missing.
  *
  * @param drawn - the width of each column, which a column that gives way is written into
  */
@@ -53,15 +66,15 @@ function groupsOf(columns: readonly SizedColumn[], sizes: Readonly<Record<string
   const groups: SizedColumn[][] = [];
   let left = 0;
   for (const column of columns) {
-    const width = drawn.get(column.id) ?? 0;
-    const squeezed = width > left && sizes[column.id] === undefined && column.gives !== undefined && column.gives <= left;
-    if (groups.length === 0 || (width > left && !squeezed)) {
-      groups.push([]);
-      left = room;
+    const lacking = (drawn.get(column.id) ?? 0) - left;
+    const group = groups.at(-1);
+    if (group === undefined || (lacking > 0 && !madeRoom([...group, column], sizes, drawn, lacking))) {
+      groups.push([column]);
+      left = room - (drawn.get(column.id) ?? 0);
+    } else {
+      group.push(column);
+      left = Math.max(0, -lacking);
     }
-    if (squeezed) drawn.set(column.id, left);
-    groups.at(-1)?.push(column);
-    left -= drawn.get(column.id) ?? 0;
   }
 
   return groups;

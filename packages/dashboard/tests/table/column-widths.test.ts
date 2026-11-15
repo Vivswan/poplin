@@ -54,6 +54,13 @@ describe("the widths of a table's columns", () => {
     expect(widthsOf(columns, { origin: 250 }, 500)).toMatchObject({ drawn: { origin: 250 }, stops: ["colour", "origin"] });
   });
 
+  // Drift: the column after a long one would leave the group for a few pixels, though the long one has them to give.
+  test("draw a column that gives way narrower to keep the column after it in the group", () => {
+    const columns = [COLUMNS[0], { id: "origin", gives: 150 }, COLUMNS[1], COLUMNS[2]] as const;
+
+    expect(widthsOf(columns, {}, 600)).toEqual({ drawn: { name: 120, origin: 300, colour: 100, weight: 80 }, gaps: {}, stops: [] });
+  });
+
   // Drift: a column whose values fill their cell would be left at its heading's width with the room empty beside it.
   test("give the room left over to the column that grows, unless a person gave it a width", () => {
     const columns = COLUMNS.map((column) => (column.id === "weight" ? { ...column, grows: true } : column));

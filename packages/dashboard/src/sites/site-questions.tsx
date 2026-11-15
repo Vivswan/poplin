@@ -1,14 +1,14 @@
-// The questions the Sites screen asks before a change of a site: a new name, a new link, and opening the site wider. They are asked from a row's menu and from the panel alike, and drawn once, beside both.
+// The questions the Sites screen asks before a change of a site: its title and name, a new link, and opening the site wider. They are asked from a row's menu and from the panel alike, and drawn once, beside both.
 
 import type { ReactNode } from "react";
 
-import { ACCESSES, type Access, type Site } from "@/lib/sites";
-import { AskDialog } from "@/shared/ask-dialog";
+import { ACCESSES, type Access, type Site, shownName } from "@/lib/sites";
 import { Confirm, type Question } from "@/shared/confirm";
+import { EditSiteDialog } from "@/sites/edit-site-dialog";
 import type { SiteActions } from "@/sites/site-actions";
 
 /** What is asked about a site before it is changed. */
-export type Ask = { readonly kind: "rename" } | { readonly kind: "new-link" } | { readonly kind: "access"; readonly access: Access };
+export type Ask = { readonly kind: "naming" } | { readonly kind: "new-link" } | { readonly kind: "access"; readonly access: Access };
 
 /** A question that is open: the site it is about, and what is asked. */
 export interface Asked {
@@ -29,7 +29,7 @@ function questionOf({ site, ask }: Asked): Question | undefined {
   const word = ACCESSES.find((entry) => entry.access === ask.access)?.label.toLowerCase() ?? "";
   const says = ask.access === "public" ? "Everyone can open it, at a public link. No login." : "Anyone with the link can open it. No login.";
 
-  return { title: `Make ${site.name} ${word}?`, says, yes: `Make it ${word}` };
+  return { title: `Make ${shownName(site)} ${word}?`, says, yes: `Make it ${word}` };
 }
 
 /**
@@ -47,7 +47,7 @@ export function SiteQuestions({
   readonly actions: SiteActions;
   readonly onClose: () => void;
 }): ReactNode {
-  const renamed = asked?.ask.kind === "rename" ? asked.site : undefined;
+  const named = asked?.ask.kind === "naming" ? asked.site : undefined;
 
   const answer = (yes: boolean): void => {
     onClose();
@@ -57,27 +57,9 @@ export function SiteQuestions({
 
     if (asked.ask.kind === "access") void actions.setAccess(asked.site, asked.ask.access);
   };
-  const rename = async (name: string): Promise<string | undefined> => {
-    if (renamed === undefined) return undefined;
-
-    const done = await actions.rename(renamed, name);
-
-    return typeof done === "string" ? done : undefined;
-  };
-
   return (
     <>
-      <AskDialog
-        open={renamed !== undefined}
-        onOpenChange={(open) => (open ? undefined : onClose())}
-        title="Rename the site"
-        says="The link takes the new name. The old link keeps working."
-        label="Name"
-        hint="3 to 40 lowercase letters, digits, and single dashes."
-        initial={renamed?.name ?? ""}
-        submit="Rename"
-        onSubmit={rename}
-      />
+      <EditSiteDialog site={named} onClose={onClose} onSave={actions.name} />
       <Confirm question={asked === undefined ? undefined : questionOf(asked)} onAnswer={answer} />
     </>
   );
