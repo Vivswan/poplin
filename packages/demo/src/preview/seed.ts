@@ -67,6 +67,9 @@ const WEEKEND_SHARE = 0.8;
 /** The days over which a site's count grew from a third to what it is today. */
 const GROWTH_DAYS = 300;
 
+/** The days the history of the sites and the people spans, the days before it one person was alone, and how many of those days pass from one check of the domain to the next. */
+const [HISTORY_DAYS, EARLIER_DAYS, CHECK_EVERY] = [31, 170, 7];
+
 /** What happened to the install besides the making of its sites, the oldest moment first. The settings end with a second login, a limit on the sites, and a day's requests above the provider's free limit, so its warning shows. */
 const HISTORY: readonly PlainMoment[] = [
   { ago: 30.9, does: "token", by: "mira", note: "report agent" },
@@ -94,6 +97,13 @@ const HISTORY: readonly PlainMoment[] = [
   { ago: 0.9, does: "login", by: "mira" },
   { ago: 0.3, does: "login", by: "jonas" },
 ];
+
+/** The first person's own months before the history above: a login most days, and a check of the domain each week, so the log holds more entries than a page shows. */
+const EARLIER: readonly Moment[] = Array.from({ length: EARLIER_DAYS }, (_day, index): Moment => {
+  const ago = HISTORY_DAYS + EARLIER_DAYS - index;
+
+  return index % CHECK_EVERY === 0 ? { ago, does: "domain", by: "mira", run: "check" } : { ago, does: "login", by: "mira" };
+});
 
 /** One file of a sample site, read whole by the host. */
 interface SampleFile {
@@ -343,7 +353,7 @@ export async function seedWorld(world: World, samples: Samples): Promise<Seeded>
   const cast: Cast = { actors: people(world), tokens: new Map(), sites: new Map() };
   const moments = [
     ...SITES.map((draft) => ({ ago: draft.ago, run: () => makeSite(world, cast, draft, samples) })),
-    ...[...HISTORY, ...SITE_HISTORY].map((moment) => ({ ago: moment.ago, run: () => play(world, cast, moment) })),
+    ...[...EARLIER, ...HISTORY, ...SITE_HISTORY].map((moment) => ({ ago: moment.ago, run: () => play(world, cast, moment) })),
   ];
 
   // The oldest moment is played first, whatever list it stands in.
