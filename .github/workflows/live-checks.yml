@@ -1,6 +1,9 @@
-# Checks a real install on the Cloudflare test account after main is green, and on a manual run. Puts it back to the sample sites after each run, and at midnight UTC.
+# Checks a real install on the Cloudflare test account after a green main that changed a file reaching it, and on a manual run.
+# Puts it back to the sample sites after each run of the checks, and at midnight UTC.
 #
-#   build the Worker bundle -> make the standing test install match main -> run tests/live against it -> put the install back
+#   decide: did a commit since the last green deploy change a file that reaches the install?
+#     run   build the Worker bundle -> make the standing test install match main -> run tests/live against it -> put the install back
+#     skip  a notice and a line of the step summary, green, with no call to Cloudflare
 #
 #   put back: every site but the demo removed, the trash emptied, the samples of demo/samples and the demo published, waiting logins and every token removed
 #
@@ -50,6 +53,10 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 55
     environment: cloudflare-live-tests
+    # The decision reads the earlier runs of this workflow and their steps.
+    permissions:
+      contents: read
+      actions: read
     # One lane: a run waits for the one before it, and a newer waiting run replaces an older one.
     concurrency:
       group: live-checks
@@ -58,12 +65,22 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: main
+          # Every commit of main: the decision lists the files changed since an earlier one.
+          fetch-depth: 0
           persist-credentials: false
       - uses: ./.github/actions/setup
+      # Only the verdict `skip` holds the steps below back. A decision that fails stops the job red.
+      - name: Decide whether this commit reaches the test install
+        id: decide
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: bun packages/cloudflare/scripts/live/decide.ts
       - name: Build the Worker bundle
+        if: steps.decide.outputs.verdict != 'skip'
         run: bun run --cwd packages/cloudflare build
       - name: Make the test install match main
         id: converge
+        if: steps.decide.outputs.verdict != 'skip'
         timeout-minutes: 12
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
@@ -71,6 +88,7 @@ jobs:
           POPLIN_LIVE_LOGIN: ${{ secrets.POPLIN_LIVE_LOGIN }}
         run: bun run --silent --cwd packages/cloudflare live:converge
       - name: Run the live checks
+        if: steps.decide.outputs.verdict != 'skip'
         timeout-minutes: 25
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
@@ -89,9 +107,31 @@ jobs:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: bun run --silent --cwd packages/cloudflare live:reset
 
+  # Before the midnight reset: wait until no other run of this workflow is queued or running. The lane holds one waiting
+  # job, and a job that joins it takes that one's place, so a reset that joined while the checks waited would cancel them.
+  # This job is in no lane, so its own wait cancels nothing. A lane busy for an hour ends the run red, with no reset.
+  lane:
+    if: github.event_name == 'schedule' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 70
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: main
+          persist-credentials: false
+      - uses: ./.github/actions/setup
+      - name: Wait until no other run is queued or running
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: bun packages/cloudflare/scripts/live/lane.ts
+
   # The midnight run. It shares the lane of the checks, so it never touches the install while they do. On an account
   # that holds no test install it says so and ends green.
   reset:
+    needs: lane
     if: github.event_name == 'schedule' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 15

@@ -118,11 +118,13 @@ describe("the script that makes the test install, against a local fake account",
     expect(told.summary).not.toContain(ZONE.name);
   });
 
-  test("every step output the workflow reads is one the script writes, even on a run that stopped", async () => {
+  test("every output of the step the workflow reads is one the script writes, even on a run that stopped", async () => {
     const told = await converge({ zones: [ZONE], buckets: [] });
     const written = told.outputs.map((output) => `${CONVERGE_STEP}.${output}`);
     const workflow: unknown = Bun.YAML.parse(readFileSync(WORKFLOW, "utf8"));
-    const read = stringsOf(workflow).flatMap((text) => [...text.matchAll(OUTPUT_READ)].map((match) => `${match[1]}.${match[2]}`));
+    const read = stringsOf(workflow)
+      .flatMap((text) => [...text.matchAll(OUTPUT_READ)].map((match) => `${match[1]}.${match[2]}`))
+      .filter((name) => name.startsWith(`${CONVERGE_STEP}.`));
 
     expect(read.length).toBeGreaterThan(0);
     expect(read.filter((name) => !written.includes(name))).toEqual([]);

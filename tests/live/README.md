@@ -2,20 +2,55 @@
 
 The checks of a deployed install: a stranger's requests over HTTPS, and a token holder's commands through the CLI and the MCP server.
 
-| To                                                | Run                                                            | Needs                                                                     |
-| ------------------------------------------------- | -------------------------------------------------------------- | ------------------------------------------------------------------------- |
-| check the checks themselves, against a local fake | `bun test ./tests/live`                                        | nothing                                                                   |
-| check an install of your own                      | `bun run live`                                                 | `POPLIN_LIVE_DOMAIN`, and `POPLIN_LIVE_TOKEN` for the checks that publish |
-| check the test install                            | the `Live Checks` workflow: after every green main, or by hand | the `cloudflare-live-tests` environment                                   |
+| To                                                | Run                                                                       | Needs                                                                     |
+| ------------------------------------------------- | ------------------------------------------------------------------------- | ------------------------------------------------------------------------- |
+| check the checks themselves, against a local fake | `bun test ./tests/live`                                                   | nothing                                                                   |
+| check an install of your own                      | `bun run live`                                                            | `POPLIN_LIVE_DOMAIN`, and `POPLIN_LIVE_TOKEN` for the checks that publish |
+| check the test install                            | the `Live Checks` workflow: after a green main that reaches it, or by hand | the `cloudflare-live-tests` environment                                   |
 
 ```text
 Live Checks workflow
+  packages/cloudflare/scripts/live/decide.ts     the files of every commit since the last green deploy -> run, or skip
   build the Worker bundle
   packages/cloudflare/scripts/live/converge.ts   bucket, database, login, wrangler deploy, the Domain tab's repair
   packages/cloudflare/scripts/live/suite.ts      a token for the run -> bun test tests/live/live.test.ts -> the token removed
   packages/cloudflare/scripts/live/reset.ts      a token for the reset -> the install put back -> every token removed
-  step summary                                   one table of the install's pieces, one of the checks, one of the reset
+  step summary                                   one line of the decision, one table of the install's pieces, one of the checks, one of the reset
 ```
+
+## What starts a run
+
+| A green main that changed                                                                    | Deploy and checks |
+| -------------------------------------------------------------------------------------------- | ----------------- |
+| `packages/{core,app,cloudflare,demo,cli}/**`, tests included                                 | run               |
+| `demo/**`, `tests/live/**`                                                                   | run               |
+| `wrangler.jsonc`, the root `package.json`, `bun.lock`, `.bun-version`, `tsconfig*`           | run               |
+| `.github/workflows/live-checks.yml`, `.github/actions/setup/**`, `.gitattributes`            | run               |
+| a file in no row of the table in `decide.ts`                                                 | run               |
+| only `website/**`, `docs/**`, `brand/**`, `skills/**`, `*.md` at the root                    | skip              |
+| only the rest of `.github/**`, `.githooks/**`, the root test guards, the other folders of `tests/` | skip              |
+| only the settings of lint, review, and release tools at the root                             | skip              |
+
+The table in `decide.ts` holds every row. A test fails when a file of the repository is in none.
+
+| Also                                                             | Deploy and checks                        |
+| ---------------------------------------------------------------- | ---------------------------------------- |
+| a run started by hand                                            | run                                      |
+| the last run that touched the install did not end green          | run                                      |
+| a midnight reset after the last deploy ended red                 | run                                      |
+| no earlier deploy is found, or its commit is not in main         | run                                      |
+| GitHub does not answer the decision                              | run                                      |
+| 00:00 UTC                                                        | neither: the reset alone, every day      |
+
+The files are those of every commit after the last run that deployed and ended green. A change one run skipped still counts for the next, and so does a file changed and put back.
+
+A skip ends green, with a notice and one line of the step summary. It makes no call to Cloudflare.
+
+```text
+Live checks skipped: no file that reaches the test install changed since 0a1b2c3 (2 files, e.g. docs/using.md)
+```
+
+The midnight reset first waits, in `lane.ts`, until no run of the checks is queued or running. The lane holds one waiting job, and a reset that joined it then would take the place of the checks that wait. A lane busy for an hour ends that run red, with no reset.
 
 ## The test install
 
@@ -23,9 +58,9 @@ One install on the Cloudflare test account, called staging. It stays up between 
 
 |             | Staging                                                                          |
 | ----------- | -------------------------------------------------------------------------------- |
-| Runs        | the latest main                                                                  |
+| Runs        | the latest main that changed a file reaching it                                  |
 | Who gets in | the owner alone, behind the login; the demo's site is public                     |
-| Updated     | after every green main                                                           |
+| Updated     | after a green main that changed such a file                                      |
 | Put back    | after every run of the checks, whatever they came to, and at 00:00 UTC every day |
 
 | A reset removes                      | A reset leaves                                                               |
