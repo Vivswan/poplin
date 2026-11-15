@@ -6,14 +6,14 @@
 //   POST <base>/data/...        one change, as JSON
 //   GET  <base>/...             the shell page, whatever the path: the client draws the screen the path names
 //
-// A read needs the session. A change is JSON and nothing else: a page of another origin cannot send JSON with the session unless this origin lets it, which it never does. The framework's own check refuses the form a foreign page could send.
+// A read needs the session. A change needs it too, and is refused when its headers name any page but this origin's own: a browser counts every site of the install as the same site as the dashboard and sends the session along.
+// A change is also JSON and nothing else, which a page of another origin cannot send unless this origin lets it, and it never does.
 
 import type { Install } from "@poplin/core/src/actions/records";
 import type { Rebuilding } from "@poplin/core/src/actions/start-update";
 import type { Login } from "@poplin/core/src/auth/logins";
 import { Hono, type MiddlewareHandler } from "hono";
 import { bodyLimit } from "hono/body-limit";
-import { csrf } from "hono/csrf";
 import { HTTPException } from "hono/http-exception";
 import { secureHeaders } from "hono/secure-headers";
 
@@ -115,6 +115,16 @@ function sessionCheck(parts: ConsoleParts): MiddlewareHandler<Shared> {
 /** The most bytes a change's body holds: no change of the console comes near it. */
 const MOST_BODY_BYTES = 1_048_576;
 
+/** Let a change through only when no header a browser wrote names a page of another origin, a site of the same install included. One with neither header goes on to the JSON rule: one host hands a page's request over before the browser wrote them. */
+const ownPageOnly: MiddlewareHandler<Shared> = async (context, next) => {
+  const site = context.req.header("Sec-Fetch-Site");
+  const origin = context.req.header("Origin");
+  const foreign = (site !== undefined && site !== "same-origin") || (origin !== undefined && origin !== new URL(context.req.url).origin);
+  if (foreign) return context.text("Forbidden", 403);
+
+  return next();
+};
+
 /** Let a change through only when its media type is JSON, whatever parameters follow it. */
 const jsonOnly: MiddlewareHandler<Shared> = async (context, next) => {
   if (!hasContentType(context.req.raw, "json")) return refused(context, { code: "not_json" });
@@ -150,7 +160,7 @@ export function createConsole(parts: ConsoleParts): Console {
   app.get("/favicon.ico", (context) => context.body(ICON.body, 200, { "Content-Type": ICON.type, "Cache-Control": KEPT_A_DAY }));
 
   app.use(noStore, sessionCheck(parts));
-  app.post("*", bodyLimit({ maxSize: MOST_BODY_BYTES, onError: (context) => refused(context, { code: "too_large" }) }), csrf(), jsonOnly);
+  app.post("*", bodyLimit({ maxSize: MOST_BODY_BYTES, onError: (context) => refused(context, { code: "too_large" }) }), ownPageOnly, jsonOnly);
 
   app.route("/data", dataRoutes);
   app.all("/data/*", (context) => refused(context, { code: "no_page" }));
