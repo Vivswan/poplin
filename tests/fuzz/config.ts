@@ -6,7 +6,7 @@
 //   FUZZ_PATH     with FUZZ_SEED, jumps straight to the counterexample path a failure printed
 //   FUZZ_REPORTS  a directory that receives one `<target>-<n>/report.md` per failing property
 //
-// An async run that has not settled after five seconds fails its property. One still running when the property's budget ends is dropped as interrupted.
+// An async run that has not settled after five seconds fails its property. A budget ends between two runs: a run that began goes to its end, so nothing of it lands in the test after it.
 
 import { test } from "bun:test";
 import { mkdirSync, writeFileSync } from "node:fs";
@@ -55,6 +55,15 @@ function replay(): { seed?: number; path?: string } {
   return { seed: SEED, path: REPLAY_PATH };
 }
 
+/** Ends a check between two runs: a run asked for after the budget is answered as an interrupt and never begun. */
+function endsAfter<Ts>(budgetMs: number): fc.Plugin<Ts> {
+  return () => {
+    const end = Date.now() + budgetMs;
+
+    return { decorateRun: (run) => (value) => (Date.now() < end ? run(value) : new fc.PreconditionFailure(true)) };
+  };
+}
+
 function writeReport(folder: string, title: string, command: string, failure: string): void {
   if (REPORTS === undefined) return;
 
@@ -101,7 +110,7 @@ export function fuzzTarget(file: string): RegisterProperty {
     const check = async (): Promise<void> => {
       const share = TARGET_BUDGET_MS / registered;
 
-      await fc.assert(property, { numRuns: RUNS, interruptAfterTimeLimit: share, timeout: HUNG_RUN_MS, includeErrorInReport: true, reporter: report, ...replay() });
+      await fc.assert(property, { numRuns: RUNS, plugins: [endsAfter(share)], timeout: HUNG_RUN_MS, includeErrorInReport: true, reporter: report, ...replay() });
     };
 
     test(name, check, TARGET_BUDGET_MS + TEST_TIMEOUT_SLACK_MS);
