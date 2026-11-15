@@ -145,6 +145,19 @@ describe("the order of the log", () => {
 });
 
 describe("the pages of the log", () => {
+  // Drift: Next page is pressed at the foot of a long page, and the next page would open scrolled to its own foot, its first entries out of sight.
+  test("a page gone on to is shown from its first entry, on a wide screen and on a phone", async () => {
+    await draw("/activity");
+    const lists = [document.querySelector('[data-slot="scroll-area-viewport"]'), document.querySelector('ul[aria-label="Activity"]')?.parentElement];
+    for (const list of lists) if (list !== null && list !== undefined) list.scrollTop = 300;
+    const scrolled = lists.map((list) => list?.scrollTop);
+
+    await press("Next page");
+    await waitFor(() => expect(lists.map((list) => list?.scrollTop)).toEqual([0, 0]));
+
+    expect(scrolled).toEqual([300, 300]);
+  });
+
   // Drift: every turn of a page would count the log again, at up to 10,000 rows a count, or a narrowed log would show the total of the whole one.
   test("the total is read once for a narrowing, not again at a page's turn or in another order, and again once the screen was closed", async () => {
     const cache = cacheOf();

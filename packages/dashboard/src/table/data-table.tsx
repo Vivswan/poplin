@@ -45,7 +45,7 @@ import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
 import { Skeleton } from "@/components/ui/skeleton";
 import { type ColumnWidths, NARROWEST, type SizedColumn, widthsForRoom } from "@/table/column-widths";
 import type { TableLayout } from "@/table/layout";
-import { useFitted, useRoom } from "@/table/measure";
+import { useFitted, useRoom, useTopOfPage } from "@/table/measure";
 
 /** What of the table library this table uses. */
 const FEATURES = tableFeatures({ rowSortingFeature, columnVisibilityFeature, columnOrderingFeature, columnSizingFeature, columnResizingFeature });
@@ -141,6 +141,9 @@ interface DataTableProps<Row> {
 
   /** What follows the last row, such as the way to the next page: it scrolls up and down with the rows, and stays in place when they scroll sideways. */
   readonly after?: ReactNode;
+
+  /** Which page of a list the rows are, in any words that differ from page to page: when it changes, the list is shown from its first row. */
+  readonly page?: string;
 }
 
 type Head = Header<typeof FEATURES, object, unknown>;
@@ -463,12 +466,14 @@ export function DataTable<Row>({
   actionsWidth = ICON_ACTIONS_WIDTH,
   loading = false,
   after,
+  page,
 }: DataTableProps<Row>): ReactNode {
   const specs = useMemo(() => new Map(columns.map((column) => [column.id, column])), [columns]);
   const definitions = useMemo(() => columns.map(definitionOf), [columns]);
   const data = useMemo(() => [...rows] as object[], [rows]);
   const [frame, room] = useRoom();
   const [sized, fitted] = useFitted([rows, columns, layout.order, layout.hidden, sort.key, loading, room > 0]);
+  useTopOfPage(sized, page);
   const [dragged, setDragged] = useState<string>();
   const shown = layout.order.filter((id) => !layout.hidden.includes(id)).flatMap((id) => specs.get(id) ?? []);
   const endWidth = actions === undefined ? 0 : actionsWidth;

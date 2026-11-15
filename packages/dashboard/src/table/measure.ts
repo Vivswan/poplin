@@ -1,4 +1,4 @@
-// What a table measures of itself in the page: the room it scrolls in, and the width each column's heading and values need.
+// What a table measures of itself in the page: the room it scrolls in, and the width each column's heading and values need; and where it shows a new page of its rows from.
 
 import { type RefObject, useLayoutEffect, useRef, useState } from "react";
 
@@ -56,6 +56,19 @@ function fontOf(table: HTMLTableElement): string {
   const { fontStyle, fontWeight, fontSize, fontFamily } = getComputedStyle(table);
 
   return `${fontStyle} ${fontWeight} ${fontSize} ${fontFamily}`;
+}
+
+/**
+ * Show a table from its first row whenever its rows are another page of their list, however far the page before was scrolled.
+ *
+ * @param page - which page the rows are, in any words that differ from page to page
+ */
+export function useTopOfPage(table: RefObject<HTMLTableElement | null>, page: string | undefined): void {
+  // biome-ignore lint/correctness/useExhaustiveDependencies: the page is the reason to scroll, not a value the scrolling reads.
+  useLayoutEffect(() => {
+    const scrolled = table.current?.closest('[data-slot="scroll-area-viewport"]');
+    if (scrolled !== null && scrolled !== undefined) scrolled.scrollTop = 0;
+  }, [page]);
 }
 
 /** Whether two readings of a table's columns are the same widths. */
