@@ -1,6 +1,6 @@
-// How wide each shown column of a table is drawn in the room the table has, and where the table stops when it scrolls sideways.
-// A column is as wide as a person made it, or as its heading and values need, up to a cap. Columns that fit the room are drawn side by side.
-// Columns that do not are laid out in groups, each as wide as the room between the fixed column and the rows' actions, so the edge of that room never falls inside a column.
+// How wide each shown column of a table is drawn in the room the table has.
+// A column is as wide as a person made it, or as its heading and values need, up to a cap. Room the columns leave over goes to the column that grows, or stays empty after the last one.
+// Columns that need more than the room keep their widths: the table is then wider than its room and scrolls sideways.
 
 /** The narrowest any column is drawn, in pixels: room for the first letters of its heading and for the edge that resizes it. */
 export const NARROWEST = 48;
@@ -16,10 +16,7 @@ export interface SizedColumn {
   /** The widest it is drawn for its values' sake, in pixels; a person can still drag it wider. Left out, a general cap. */
   readonly widest?: number;
 
-  /** The narrowest it is drawn to stay beside the columns before it, in pixels, where its own width has no room: for a column whose values can lose their middle. Left out, it moves to the next group whole. */
-  readonly gives?: number;
-
-  /** Whether it takes the room the columns beside it leave over: for a column whose values wrap or fill their cell. */
+  /** Whether it takes the room the columns leave over: for a column whose values wrap or fill their cell. */
   readonly grows?: boolean;
 
   /** The one column that is always first and stays in place. */
@@ -31,83 +28,19 @@ export interface ColumnWidths {
   /** The width of each shown column, in pixels, by column id. */
   readonly drawn: ReadonlyMap<string, number>;
 
-  /** The empty room after the last column of a group, in pixels, by that column's id: what the group's columns leave over. */
-  readonly gaps: ReadonlyMap<string, number>;
-
-  /** The ids of the columns a sideways scroll stops at: the first of each group. Empty where every column fits the room. */
-  readonly stops: readonly string[];
-}
-
-function sumOf(widths: Iterable<number>): number {
-  return [...widths].reduce((sum, width) => sum + width, 0);
+  /** The empty room after the last column, in pixels: what the columns leave over where none grows. 0 where they fill the room or need more than it. */
+  readonly spare: number;
 }
 
 /**
- * Make a column of a group narrower by what the group lacks, where one of them gives way that far. A column a person gave a width keeps it.
+ * The width each shown column is drawn at, and the room left empty after the last.
  *
- * @param drawn - the width of each column, which the narrower width is written into
- * @returns whether the room was made
- */
-function madeRoom(group: readonly SizedColumn[], sizes: Readonly<Record<string, number>>, drawn: Map<string, number>, lacking: number): boolean {
-  const giver = group.find((column) => column.gives !== undefined && sizes[column.id] === undefined && (drawn.get(column.id) ?? 0) - lacking >= column.gives);
-  if (giver !== undefined) drawn.set(giver.id, (drawn.get(giver.id) ?? 0) - lacking);
-
-  return giver !== undefined;
-}
-
-/**
- * The columns in groups: each takes as many as fit the room, in order, and a column wider than the room has a group to itself.
- *
- * A column that misses the room its group has left stays in the group where it, or a column before it there, gives way by what is missing.
- *
- * @param drawn - the width of each column, which a column that gives way is written into
- */
-function groupsOf(columns: readonly SizedColumn[], sizes: Readonly<Record<string, number>>, drawn: Map<string, number>, room: number): SizedColumn[][] {
-  const groups: SizedColumn[][] = [];
-  let left = 0;
-  for (const column of columns) {
-    const lacking = (drawn.get(column.id) ?? 0) - left;
-    const group = groups.at(-1);
-    if (group === undefined || (lacking > 0 && !madeRoom([...group, column], sizes, drawn, lacking))) {
-      groups.push([column]);
-      left = room - (drawn.get(column.id) ?? 0);
-    } else {
-      group.push(column);
-      left = Math.max(0, -lacking);
-    }
-  }
-
-  return groups;
-}
-
-/**
- * Place the room a group's columns leave over: the column that grows takes it, unless a person gave it a width; otherwise it stays empty after the group's last column.
- *
- * @param drawn - the width of each column, which a growing column's new width is written into
- * @returns the empty room after the group, by its last column's id, or nothing
- */
-function spareOf(group: readonly SizedColumn[], sizes: Readonly<Record<string, number>>, drawn: Map<string, number>, room: number): [string, number][] {
-  const spare = room - sumOf(group.map((column) => drawn.get(column.id) ?? 0));
-  const last = group.at(-1);
-  if (spare <= 0 || last === undefined) return [];
-
-  const grower = group.find((column) => column.grows === true && sizes[column.id] === undefined);
-  if (grower === undefined) return [[last.id, spare]];
-
-  drawn.set(grower.id, (drawn.get(grower.id) ?? 0) + spare);
-
-  return [];
-}
-
-/**
- * The width each shown column is drawn at, the room left empty, and where a sideways scroll stops.
- *
- * A width a person set wins over the fitted one. The fixed columns leave room for the narrowest of another column, and no other column is drawn wider than the room beside them.
- * Where the columns do not fit that room side by side, the table is wider than its room and scrolls sideways from one group of whole columns to the next.
+ * A width a person set wins over the fitted one, and no column is drawn narrower for the room's sake: where the columns need more than the room, the table scrolls sideways.
+ * Only a fixed column is held back, so that the narrowest of another column stays in reach beside it.
  *
  * @param fitted - the width each column's heading and values need, in pixels, by column id; a column not measured yet is drawn at the narrowest
  * @param sizes - the widths a person set, by column id
- * @param free - the room for the columns, in pixels; 0 before the room is first measured, when every column is drawn at its own width
+ * @param free - the room for the columns, in pixels; 0 before the room is first measured
  */
 export function widthsForRoom(
   shown: readonly SizedColumn[],
@@ -118,17 +51,24 @@ export function widthsForRoom(
   const own = (column: SizedColumn): number =>
     Math.max(NARROWEST, sizes[column.id] ?? Math.min(Math.ceil(fitted.get(column.id) ?? 0), column.widest ?? WIDEST_FITTED));
   const drawn = new Map(shown.map((column) => [column.id, own(column)]));
-  if (free <= 0) return { drawn, gaps: new Map(), stops: [] };
+  if (free <= 0) return { drawn, spare: 0 };
 
-  const [fixed, moving] = [shown.filter((column) => column.fixed === true), shown.filter((column) => column.fixed !== true)];
-  const others = moving.length === 0 ? 0 : NARROWEST;
+  const fixed = shown.filter((column) => column.fixed === true);
+  const others = shown.length === fixed.length ? 0 : NARROWEST;
   for (const column of fixed) drawn.set(column.id, Math.min(own(column), Math.max(NARROWEST, Math.floor((free - others) / fixed.length))));
-  const beside = free - sumOf(fixed.map((column) => drawn.get(column.id) ?? 0));
-  for (const column of moving) drawn.set(column.id, Math.min(own(column), beside));
 
-  // With no other column the fixed ones have the room to themselves, and what they leave over stays empty after the last.
-  const groups = moving.length === 0 ? [fixed] : groupsOf(moving, sizes, drawn, beside);
-  const gaps = new Map(groups.flatMap((group) => spareOf(group, sizes, drawn, moving.length === 0 ? free : beside)));
+  const spare = free - [...drawn.values()].reduce((sum, width) => sum + width, 0);
+  if (spare <= 0) return { drawn, spare: 0 };
 
-  return { drawn, gaps, stops: groups.length > 1 ? groups.flatMap((group) => group[0]?.id ?? []) : [] };
+  if (!shown.some((column) => column.grows === true)) return { drawn, spare };
+
+  const unsized = shown.filter((column) => sizes[column.id] === undefined);
+  const loose = (column: SizedColumn): boolean => column.fixed !== true;
+  // Where a person gave the growing column a width, the room goes to the last column nobody sized, and then to the last column: none stays empty between the columns.
+  const grower = unsized.find((column) => column.grows === true) ?? unsized.findLast(loose) ?? shown.findLast(loose);
+  if (grower === undefined) return { drawn, spare };
+
+  drawn.set(grower.id, (drawn.get(grower.id) ?? 0) + spare);
+
+  return { drawn, spare: 0 };
 }

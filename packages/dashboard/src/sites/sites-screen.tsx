@@ -12,16 +12,16 @@ import { Popover, PopoverContent, PopoverDescription, PopoverHeader, PopoverTitl
 import { Select, SelectContent, SelectGroup, SelectItem, SelectSeparator, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { searchOf, useAddressQuery } from "@/lib/address";
 import { copy } from "@/lib/notify";
-import { type Site, shownName } from "@/lib/sites";
+import { addressParts, type Site, shownName } from "@/lib/sites";
 import { useChosenTimeZone } from "@/lib/timezone";
 import { IconButton } from "@/shared/icon-button";
 import { Pages, queryWith } from "@/shared/pages";
 import { SearchBox } from "@/shared/search-box";
 import { useStandsBeside } from "@/shared/side-panel";
+import type { LoginNames } from "@/shared/who";
 import { AppShell } from "@/shell/app-shell";
 import { siteActions } from "@/sites/site-actions";
-import type { LoginNames } from "@/shared/who";
-import { AccessMark, type Reveal, siteColumns, trashColumns } from "@/sites/site-columns";
+import { AccessMark, type Reveal, RevealButton, SiteLink, siteColumns, trashColumns } from "@/sites/site-columns";
 import { SitePanel } from "@/sites/site-panel";
 import { SITES_KEY, useSitesPage } from "@/sites/site-queries";
 import { type Ask, type Asked, SiteQuestions } from "@/sites/site-questions";
@@ -70,11 +70,11 @@ function FilterSelect({ filter, onChoose }: { readonly filter: Filter; readonly 
 
 /** The order of the list on a phone, where no heading can be pressed. */
 function SortSelect({ query, onChoose }: { readonly query: URLSearchParams; readonly onChoose: (key: string) => void }): ReactNode {
-  const items = SORTS.map((entry) => ({ value: entry.key, label: `By ${entry.label.toLowerCase()}` }));
+  const items = SORTS.map((entry) => ({ value: entry.key, label: entry.label }));
 
   return (
     <Select items={items} value={sortOf(query).key} onValueChange={(value) => onChoose(String(value))}>
-      <SelectTrigger aria-label="Order" className="w-32 md:hidden">
+      <SelectTrigger aria-label="Order" className="w-40 md:hidden">
         <SelectValue />
       </SelectTrigger>
       <SelectContent alignItemWithTrigger={false} align="end">
@@ -124,13 +124,14 @@ function NewSite(): ReactNode {
   );
 }
 
-/** The sites on a phone: one row each, the site's title over who can open it and the name its link is written with, with the way to copy the link, and after the last row what follows the list. */
+/** The sites on a phone: one row each, the site's title and who can open it over its link, written as the table writes it, with the ways to show, copy and open it, and after the last row what follows the list. */
 function PhoneList({
   sites,
   opened,
   onOpen,
   rowActions,
   onCopy,
+  reveal,
   after,
 }: {
   readonly sites: readonly Site[];
@@ -138,6 +139,7 @@ function PhoneList({
   readonly onOpen: (site: Site) => void;
   readonly rowActions: (site: Site) => ReactNode;
   readonly onCopy: (site: Site) => void;
+  readonly reveal: Reveal;
   readonly after: ReactNode;
 }): ReactNode {
   return (
@@ -157,11 +159,14 @@ function PhoneList({
               onClick={() => onOpen(site)}
             />
             <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-              {/* A title that is a link lies over the row's button; plain words let a press through to it. */}
-              <span className={cn("w-fit max-w-full truncate", site.state !== "trash" && "relative")}>{nameCell(site)}</span>
               <span className="flex min-w-0 items-center gap-2">
+                {/* A title that is a link lies over the row's button; plain words let a press through to it. */}
+                <span className={cn("min-w-0 truncate", site.state !== "trash" && "relative")}>{nameCell(site)}</span>
                 <AccessMark access={site.access} className="shrink-0" />
-                {site.title === null ? null : <span className="truncate font-mono text-xs text-faint">{site.name}</span>}
+              </span>
+              <span className="flex min-w-0 items-center">
+                <SiteLink site={site} whole={reveal.shows(site)} wraps={reveal.shows(site)} className="mr-1 text-muted-foreground" />
+                {addressParts(site.url, site.id).hidden === "" ? null : <RevealButton site={site} reveal={reveal} className="relative -my-2 shrink-0" />}
                 <IconButton label="Copy the link" onClick={() => onCopy(site)} className="relative -my-2 shrink-0">
                   <CopyIcon />
                 </IconButton>
@@ -369,10 +374,7 @@ interface ColumnParts {
 /** The table the filter shows: the sites, or the trash, each with its own columns, kept layout, and width for a row's actions. */
 function useShownTable(filter: Filter, { onCopy, reveal, logins }: ColumnParts) {
   const trash = filter === "trash";
-  const columns = useMemo(
-    () => (trash ? trashColumns(nameCell, logins) : siteColumns(nameCell, onCopy, reveal, logins)),
-    [trash, onCopy, reveal, logins],
-  );
+  const columns = useMemo(() => (trash ? trashColumns(nameCell, logins) : siteColumns(nameCell, onCopy, reveal, logins)), [trash, onCopy, reveal, logins]);
   const layout = useTableLayout(trash ? "trashed-sites" : "site-list", columns);
 
   return { columns, layout, label: trash ? "Sites in the trash" : "Sites", actionsWidth: trash ? RESTORE_WIDTH : undefined };
@@ -454,7 +456,7 @@ export function SitesScreen(): ReactNode {
                   after={pages}
                 />
               </div>
-              <PhoneList sites={sites} opened={opened} onOpen={open} rowActions={rowActions} onCopy={copy} after={pages} />
+              <PhoneList sites={sites} opened={opened} onOpen={open} rowActions={rowActions} onCopy={copy} reveal={reveal} after={pages} />
             </>
           )}
         </section>

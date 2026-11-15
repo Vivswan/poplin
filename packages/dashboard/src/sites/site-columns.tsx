@@ -5,7 +5,7 @@ import { cn } from "cn";
 import { CopyIcon, ExternalLinkIcon, EyeIcon, EyeOffIcon, GlobeIcon, LinkIcon, LockIcon } from "lucide-react";
 import type { ReactNode } from "react";
 
-import { ACCESSES, type Access, addressParts, expiryOf, shortMoment, showCount, type Site, wholeMoment } from "@/lib/sites";
+import { ACCESSES, type Access, addressParts, expiryOf, type Site, shortMoment, showCount, wholeMoment } from "@/lib/sites";
 import { IconButton } from "@/shared/icon-button";
 import { type LoginNames, Who } from "@/shared/who";
 import { SITE_ORDERS } from "@/sites/sites-query";
@@ -16,9 +16,6 @@ const ACCESS_ICONS = { private: LockIcon, unlisted: LinkIcon, public: GlobeIcon 
 
 /** The look of a button after a link in the table: quiet at rest, as a row's menu is, and whole when the row is pointed at or holds the focus. */
 const AFTER_LINK_LOOK = "size-6 shrink-0 opacity-60 group-hover/row:opacity-100 group-focus-within/row:opacity-100 pointer-coarse:opacity-100";
-
-/** The narrowest the Link column is drawn to stay in sight beside the columns before it, in pixels: the start of a site's name, its hidden id and what follows, and the three buttons. */
-const LINK_GIVES = 284;
 
 /** Which sites show the id in their link, and the switch of one. */
 export interface Reveal {
@@ -65,16 +62,19 @@ function HiddenId({ length }: { readonly length: number }): ReactNode {
  *
  * @param address - the address to write; the site's link when left out
  * @param whole - `true` shows the id too; otherwise as many dots stand where it is, and Copy still gives the whole address
+ * @param wraps - `true` goes on in the next line where the text is too long, and cuts nothing
  */
 export function SiteLink({
   site,
   address = site.url,
   whole = false,
+  wraps = false,
   className,
 }: {
   readonly site: Pick<Site, "url" | "id">;
   readonly address?: string;
   readonly whole?: boolean;
+  readonly wraps?: boolean;
   readonly className?: string;
 }): ReactNode {
   const { shared, before, hidden, after } = addressParts(address, site.id);
@@ -82,12 +82,12 @@ export function SiteLink({
 
   return (
     <span
-      className={cn("inline-flex max-w-full min-w-0 overflow-hidden align-bottom font-mono text-xs", className)}
+      className={cn("min-w-0 font-mono text-xs", wraps ? "break-all" : "inline-flex max-w-full overflow-hidden align-bottom", className)}
       title={masked ? "Part of the link is hidden here. Copy gives the whole link." : `${shared}${before}${hidden}${after}`}
     >
-      <span className="truncate">{before}</span>
+      <span className={wraps ? undefined : "truncate"}>{before}</span>
       {hidden === "" ? null : (
-        <span className="shrink-0">
+        <span className={wraps ? undefined : "shrink-0"}>
           {masked ? <HiddenId length={hidden.length} /> : hidden}
           {after}
         </span>
@@ -160,14 +160,14 @@ export function siteColumns(
   );
 
   return [
-    { id: "title", header: "Site", sortable: SITE_ORDERS.first.title, fixed: true, cell: nameCell },
+    { id: "title", header: "Site", sortable: SITE_ORDERS.first.title, fixed: true, grows: true, cell: nameCell },
     {
       id: "access",
       header: "Who can open it",
       sortable: SITE_ORDERS.first.access,
       cell: (site) => <AccessMark access={site.access} />,
     },
-    { id: "link", header: "Link", widest: 380, gives: LINK_GIVES, cell: linkCell },
+    { id: "link", header: "Link", widest: 380, cell: linkCell },
     { id: "updated", header: "Updated", sortable: SITE_ORDERS.first.updated, cell: (site) => <Moment moment={site.updated} /> },
     { id: "name", header: "Name", hidden: true, sortable: SITE_ORDERS.first.name, cell: (site) => <span className="text-muted-foreground">{site.name}</span> },
     { id: "by", header: "Published by", hidden: true, cell: (site) => <PublishedBy site={site} logins={logins} /> },
@@ -208,7 +208,7 @@ export function siteColumns(
  */
 export function trashColumns(nameCell: (site: Site) => ReactNode, logins: LoginNames): readonly ColumnSpec<Site>[] {
   return [
-    { id: "site", header: "Site", fixed: true, cell: nameCell },
+    { id: "site", header: "Site", fixed: true, grows: true, cell: nameCell },
     {
       id: "gone",
       header: "Leaves the trash",

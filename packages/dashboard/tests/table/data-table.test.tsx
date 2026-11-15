@@ -1,13 +1,11 @@
 // The shared table: what its headings say about order, which columns it draws in which order, and what it keeps of a layout.
 
-import { clearPage } from "../lib/support/page";
-
 import { afterAll, afterEach, describe, expect, test } from "bun:test";
 import { act, cleanup, fireEvent, render, within } from "@testing-library/react";
 import { type ReactNode, useState } from "react";
-
 import { type ColumnSpec, DataTable, type Sort } from "@/table/data-table";
 import { type TableLayout, useTableLayout } from "@/table/layout";
+import { clearPage } from "../lib/support/page";
 
 /** A row of the test table. */
 interface Fruit {

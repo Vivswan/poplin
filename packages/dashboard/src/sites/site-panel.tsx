@@ -8,11 +8,11 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { FieldDescription } from "@/components/ui/field";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
-import { ACCESSES, type Access, addressParts, expiryOf, shortMoment, showCount, shownName, type Site, wholeMoment } from "@/lib/sites";
+import { ACCESSES, type Access, addressParts, expiryOf, type Site, shortMoment, showCount, shownName, wholeMoment } from "@/lib/sites";
 import { IconButton } from "@/shared/icon-button";
 import { PanelBlock, PanelFact, PanelFacts, PanelLoading, PanelSwitch, SidePanel } from "@/shared/side-panel";
-import type { SiteActions } from "@/sites/site-actions";
 import { Who } from "@/shared/who";
+import type { SiteActions } from "@/sites/site-actions";
 import { type Reveal, RevealButton, SiteLink } from "@/sites/site-columns";
 import { type Shown, useSite } from "@/sites/site-queries";
 import type { Ask } from "@/sites/site-questions";
@@ -50,7 +50,7 @@ function LinkBlock({ site, actions, reveal }: { readonly site: Site; readonly ac
   return (
     <PanelBlock label="Link">
       <div className="flex items-center gap-1 rounded-md border bg-muted/40 py-1 pr-1 pl-2.5">
-        <SiteLink site={site} whole={whole} />
+        <SiteLink site={site} whole={whole} wraps />
         {hides ? <RevealButton site={site} reveal={reveal} /> : null}
         <IconButton label="Copy the link" onClick={() => void actions.copyLink(site)}>
           <CopyIcon />
@@ -60,9 +60,8 @@ function LinkBlock({ site, actions, reveal }: { readonly site: Site; readonly ac
         </IconButton>
       </div>
       {also === undefined ? null : (
-        <p className="flex min-w-0 items-baseline gap-1.5 text-muted-foreground">
-          <span className="shrink-0">It also opens at</span>
-          <SiteLink site={site} address={also} whole={whole} />
+        <p className="text-muted-foreground">
+          It also opens at <SiteLink site={site} address={also} whole={whole} wraps />
         </p>
       )}
     </PanelBlock>
@@ -209,17 +208,12 @@ export function SitePanel({ label, actions, reveal, onAsk, closeLink, onClose, o
       <PanelBlock label="Settings">
         <PanelSwitch
           id="site-search-engines"
-          label="Search engines may list it"
+          label="Show in search engines"
           on={site.search_engines}
           onChange={(on) => actions.setSetting(site, "search_engines", on)}
         />
         {site.access === "public" ? null : <FieldDescription className="-mt-1 text-[13px] leading-5">Only a public site is listed.</FieldDescription>}
-        <PanelSwitch
-          id="site-embeddable"
-          label="Other websites may embed it"
-          on={site.embeddable}
-          onChange={(on) => actions.setSetting(site, "embeddable", on)}
-        />
+        <PanelSwitch id="site-embeddable" label="Allow embedding" on={site.embeddable} onChange={(on) => actions.setSetting(site, "embeddable", on)} />
       </PanelBlock>
       <PanelBlock>
         <div className="flex items-center gap-2">

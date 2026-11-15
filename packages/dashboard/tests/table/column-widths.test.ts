@@ -1,4 +1,4 @@
-// The widths a table is drawn with: what a person set, what the content needs, and the groups a table too wide for its room scrolls by.
+// The widths a table is drawn with: what a person set, what the content needs, and where the room left over goes.
 
 import { describe, expect, test } from "bun:test";
 
@@ -17,15 +17,15 @@ const FITTED = new Map([
 
 /** What the widths come to, as plain values. */
 function widthsOf(columns: readonly SizedColumn[], sizes: Readonly<Record<string, number>>, free: number): unknown {
-  const { drawn, gaps, stops } = widthsForRoom(columns, FITTED, sizes, free);
+  const { drawn, spare } = widthsForRoom(columns, FITTED, sizes, free);
 
-  return { drawn: Object.fromEntries(drawn), gaps: Object.fromEntries(gaps), stops };
+  return { drawn: Object.fromEntries(drawn), spare };
 }
 
 describe("the widths of a table's columns", () => {
   // Drift: a column would be wider than its content by a fixed number again, or one long value would push the others out.
   test("are what the content needs, up to a cap, and the room left over stays empty after the last column", () => {
-    expect(widthsOf(COLUMNS, {}, 1000)).toEqual({ drawn: { name: 120, colour: 100, weight: 80, origin: 320 }, gaps: { origin: 380 }, stops: [] });
+    expect(widthsOf(COLUMNS, {}, 1000)).toEqual({ drawn: { name: 120, colour: 100, weight: 80, origin: 320 }, spare: 380 });
   });
 
   // Drift: a width a person set would lose to the fitted one, or a column could not be made narrower than its content.
@@ -33,53 +33,31 @@ describe("the widths of a table's columns", () => {
     ["a narrower width than the content", { colour: 50 }, { name: 120, colour: 50, weight: 80, origin: 320 }],
     ["a wider width than the cap", { origin: 500 }, { name: 120, colour: 100, weight: 80, origin: 500 }],
   ])("keep %s", (_, sizes, drawn) => {
-    expect(widthsOf(COLUMNS, sizes, 1000)).toMatchObject({ drawn, stops: [] });
+    expect(widthsOf(COLUMNS, sizes, 1000)).toMatchObject({ drawn });
   });
 
-  // Drift: the edge of the room would fall inside a column again: each group must be exactly as wide as the room beside the fixed column.
-  test("lay columns that do not fit out in groups of whole columns, each as wide as the room beside the fixed column", () => {
-    expect(widthsOf(COLUMNS, {}, 420)).toEqual({
-      drawn: { name: 120, colour: 100, weight: 80, origin: 300 },
-      gaps: { weight: 120 },
-      stops: ["colour", "origin"],
-    });
-  });
-
-  // Drift: a long column that misses its room by a little would leave the group, and most of the room empty behind it.
-  test("draw a column that gives way in the room its group has left, down to what it gives way to", () => {
-    const columns = COLUMNS.map((column) => (column.id === "origin" ? { ...column, gives: 150 } : column));
-
-    expect(widthsOf(columns, {}, 500)).toEqual({ drawn: { name: 120, colour: 100, weight: 80, origin: 200 }, gaps: {}, stops: [] });
-    expect(widthsOf(columns, {}, 440)).toMatchObject({ drawn: { origin: 320 }, gaps: { weight: 140 }, stops: ["colour", "origin"] });
-    expect(widthsOf(columns, { origin: 250 }, 500)).toMatchObject({ drawn: { origin: 250 }, stops: ["colour", "origin"] });
-  });
-
-  // Drift: the column after a long one would leave the group for a few pixels, though the long one has them to give.
-  test("draw a column that gives way narrower to keep the column after it in the group", () => {
-    const columns = [COLUMNS[0], { id: "origin", gives: 150 }, COLUMNS[1], COLUMNS[2]] as const;
-
-    expect(widthsOf(columns, {}, 600)).toEqual({ drawn: { name: 120, origin: 300, colour: 100, weight: 80 }, gaps: {}, stops: [] });
+  // Drift: a table too narrow for its columns would squeeze one or draw empty room between them again, where it is to scroll sideways.
+  test.each([420, 300, 619])("keep every column's own width and leave no room empty in a room of %d, which they do not fit", (free) => {
+    expect(widthsOf(COLUMNS, {}, free)).toEqual({ drawn: { name: 120, colour: 100, weight: 80, origin: 320 }, spare: 0 });
   });
 
   // Drift: a column whose values fill their cell would be left at its heading's width with the room empty beside it.
-  test("give the room left over to the column that grows, unless a person gave it a width", () => {
+  test("give the room left over to the column that grows, or to the last column where a person gave that one a width", () => {
     const columns = COLUMNS.map((column) => (column.id === "weight" ? { ...column, grows: true } : column));
 
-    expect(widthsOf(columns, {}, 1000)).toMatchObject({ drawn: { weight: 460 }, gaps: {} });
-    expect(widthsOf(columns, { weight: 90 }, 1000)).toMatchObject({ drawn: { weight: 90 }, gaps: { origin: 370 } });
+    expect(widthsOf(columns, {}, 1000)).toMatchObject({ drawn: { weight: 460 }, spare: 0 });
+    expect(widthsOf(columns, { weight: 90 }, 1000)).toMatchObject({ drawn: { weight: 90, origin: 690 }, spare: 0 });
+    expect(widthsOf(columns, { name: 100, colour: 100, weight: 90, origin: 300 }, 1000)).toMatchObject({ drawn: { weight: 90, origin: 710 }, spare: 0 });
   });
 
   // Drift: a fixed column dragged very wide would cover every other column, with no way to reach them.
   test("leave room beside a fixed column for the narrowest of another column", () => {
-    expect(widthsOf(COLUMNS, { name: 900 }, 400)).toMatchObject({
-      drawn: { name: 352, colour: 48, weight: 48, origin: 48 },
-      stops: ["colour", "weight", "origin"],
-    });
+    expect(widthsOf(COLUMNS, { name: 900 }, 400)).toMatchObject({ drawn: { name: 352, colour: 100 }, spare: 0 });
     expect(widthsOf(COLUMNS, { name: 250 }, 400)).toMatchObject({ drawn: { name: 250, colour: 100 } });
   });
 
   // Drift: a table with only its fixed column would be drawn narrower than its room, with rows that stop short.
   test("leave the room after a lone fixed column empty", () => {
-    expect(widthsOf([{ id: "name", fixed: true }], {}, 600)).toEqual({ drawn: { name: 120 }, gaps: { name: 480 }, stops: [] });
+    expect(widthsOf([{ id: "name", fixed: true }], {}, 600)).toEqual({ drawn: { name: 120 }, spare: 480 });
   });
 });

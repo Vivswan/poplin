@@ -1,7 +1,8 @@
 // The table every list of the dashboard is shown in. The server sorts and narrows the rows; the person arranges the columns: drags them into another order, drags an edge to resize, and chooses which are shown.
 // Every chosen column is drawn, as wide as its values need or as a person made it.
-// Where they do not fit the room the table scrolls sideways in its own area, between the first column and the rows' actions, which stay in place, and stops only where whole columns show.
+// Where they do not fit the room the table scrolls sideways in its own area, between the first column and the rows' actions, which stay in place.
 
+import { ScrollArea as ScrollAreaParts } from "@base-ui/react/scroll-area";
 import {
   type Announcements,
   closestCenter,
@@ -25,20 +26,9 @@ import {
   tableFeatures,
   useTable,
 } from "@tanstack/react-table";
-import { ScrollArea as ScrollAreaParts } from "@base-ui/react/scroll-area";
 import { cn } from "cn";
 import { ArrowDownIcon, ArrowUpIcon, ChevronsUpDownIcon, Columns3Icon, GripVerticalIcon } from "lucide-react";
-import {
-  type CSSProperties,
-  type FocusEvent,
-  Fragment,
-  type KeyboardEvent,
-  type MouseEvent,
-  type PointerEventHandler,
-  type ReactNode,
-  useMemo,
-  useState,
-} from "react";
+import { type FocusEvent, type KeyboardEvent, type MouseEvent, type PointerEventHandler, type ReactNode, useMemo, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -72,7 +62,6 @@ const LOADING_ROWS = 6;
 /** What a press on these never does: open the row. */
 const OWN_CONTROLS = "a, button, input, [role^='menu'], [role='dialog']";
 
-
 /** The look of a heading's grip: it lies over the heading's far end, so it takes no room from the words, and shows when its heading is pointed at or it holds the focus. */
 const GRIP_LOOK = cn(
   "absolute top-2 flex size-5 cursor-grab items-center justify-center rounded-sm bg-background text-faint opacity-0 outline-none active:cursor-grabbing",
@@ -84,12 +73,6 @@ const TABLE_LOOK = "mb-2.5 table-fixed border-separate border-spacing-0 text-sm"
 
 /** The look of a heading while it is dragged to another place. */
 const DRAGGED_LOOK = "flex h-9 w-fit cursor-grabbing items-center rounded-md border bg-popover px-3 text-xs text-foreground shadow-md";
-
-/** How a table wider than its room scrolls sideways: one stop at a time, and a stop lies just past the fixed column. */
-const STOPS_LOOK = cn(
-  "[&>[data-slot=scroll-area-viewport]]:snap-x [&>[data-slot=scroll-area-viewport]]:snap-mandatory",
-  "[&>[data-slot=scroll-area-viewport]]:scroll-pl-(--fixed-width)",
-);
 
 /** The look of a column's edge: a hairline that shows under the pointer, with the focus, and while it is dragged. */
 const EDGE_LOOK = cn(
@@ -190,16 +173,12 @@ function landingMark(over: boolean, from: number, at: number): string | false {
 function HeadCell<Row>({
   header,
   spec,
-  stop,
-  gap,
   sort,
   onSort,
   onNudge,
 }: {
   readonly header: Head;
   readonly spec: ColumnSpec<Row>;
-  readonly stop: boolean;
-  readonly gap: number;
   readonly sort: Sort;
   readonly onSort: ((next: Sort | undefined) => void) | undefined;
   readonly onNudge: (id: string, by: number) => void;
@@ -225,80 +204,76 @@ function HeadCell<Row>({
   };
 
   return (
-    <>
-      <th
-        ref={setNodeRef}
-        scope="col"
-        data-column={spec.id}
-        aria-sort={ariaSort(sortable, spec.id, sort)}
-        title={spec.header}
-        className={cn(
-          "group/head relative h-9 border-b bg-background p-0 text-left text-xs font-normal text-muted-foreground select-none",
-          fixed && "sticky left-0 z-20",
-          stop && "snap-start",
-          isDragging && "opacity-40",
-          landingMark(isOver, activeIndex, index),
-        )}
+    <th
+      ref={setNodeRef}
+      scope="col"
+      data-column={spec.id}
+      aria-sort={ariaSort(sortable, spec.id, sort)}
+      title={spec.header}
+      className={cn(
+        "group/head relative h-9 border-b bg-background p-0 text-left text-xs font-normal text-muted-foreground select-none",
+        fixed && "sticky left-0 z-20",
+        isDragging && "opacity-40",
+        landingMark(isOver, activeIndex, index),
+      )}
+    >
+      <div
+        className={cn("flex h-9 min-w-0 items-center gap-0.5 pr-3 pl-3", fixed && "pl-6", spec.numeric === true && "flex-row-reverse")}
+        onPointerDown={fixed ? undefined : (listeners?.onPointerDown as PointerEventHandler | undefined)}
       >
-        <div
-          className={cn("flex h-9 min-w-0 items-center gap-0.5 pr-3 pl-3", fixed && "pl-6", spec.numeric === true && "flex-row-reverse")}
-          onPointerDown={fixed ? undefined : (listeners?.onPointerDown as PointerEventHandler | undefined)}
-        >
-          {sortable ? (
-            <button
-              type="button"
-              onClick={press}
-              className={cn(
-                "-mx-1 flex min-w-0 items-center gap-1 rounded-sm px-1 py-0.5 outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring",
-                sorted && "font-bold text-foreground",
-              )}
-            >
-              {words}
-              {sortArrow(sorted, sort.descending)}
-            </button>
-          ) : (
-            words
-          )}
-          {fixed ? null : (
-            <button
-              type="button"
-              {...attributes}
-              {...listeners}
-              aria-label={`Move the ${spec.header} column`}
-              title="Drag to move the column"
-              className={cn(GRIP_LOOK, spec.numeric === true ? "left-1" : "right-2.5")}
-            >
-              <GripVerticalIcon className="size-3.5" />
-            </button>
-          )}
-        </div>
-        <button
-          type="button"
-          aria-label={`Resize the ${spec.header} column`}
-          title="Drag to resize; double-click to reset"
-          onMouseDown={header.getResizeHandler()}
-          onTouchStart={header.getResizeHandler()}
-          onDoubleClick={() => header.column.resetSize()}
-          onKeyDown={onEdgeKey}
-          className={cn(EDGE_LOOK, header.column.getIsResizing() && "after:w-0.5 after:bg-ring")}
-        />
-      </th>
-      {gap > 0 ? <td className="h-9 border-b bg-background p-0" /> : null}
-    </>
+        {sortable ? (
+          <button
+            type="button"
+            onClick={press}
+            className={cn(
+              "-mx-1 flex min-w-0 items-center gap-1 rounded-sm px-1 py-0.5 outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring",
+              sorted && "font-bold text-foreground",
+            )}
+          >
+            {words}
+            {sortArrow(sorted, sort.descending)}
+          </button>
+        ) : (
+          words
+        )}
+        {fixed ? null : (
+          <button
+            type="button"
+            {...attributes}
+            {...listeners}
+            aria-label={`Move the ${spec.header} column`}
+            title="Drag to move the column"
+            className={cn(GRIP_LOOK, spec.numeric === true ? "left-1" : "right-2.5")}
+          >
+            <GripVerticalIcon className="size-3.5" />
+          </button>
+        )}
+      </div>
+      <button
+        type="button"
+        aria-label={`Resize the ${spec.header} column`}
+        title="Drag to resize; double-click to reset"
+        onMouseDown={header.getResizeHandler()}
+        onTouchStart={header.getResizeHandler()}
+        onDoubleClick={() => header.column.resetSize()}
+        onKeyDown={onEdgeKey}
+        className={cn(EDGE_LOOK, header.column.getIsResizing() && "after:w-0.5 after:bg-ring")}
+      />
+    </th>
   );
 }
 
 function BodyRow<Row>({
   row,
   cells,
-  gaps,
+  spare,
   selected,
   onOpen,
   actions,
 }: {
   readonly row: Row;
   readonly cells: readonly ColumnSpec<Row>[];
-  readonly gaps: ReadonlyMap<string, number>;
+  readonly spare: boolean;
   readonly selected: boolean;
   readonly onOpen?: (row: Row) => void;
   readonly actions?: ReactNode;
@@ -324,17 +299,16 @@ function BodyRow<Row>({
       onFocus={hintWhenCut}
       className={cn(
         "group/row bg-background hover:bg-muted has-[:focus-visible]:bg-muted data-[state=selected]:bg-chosen data-[state=selected]:has-[:focus-visible]:bg-chosen [&>td]:border-b",
-        onOpen !== undefined && "cursor-pointer outline-none focus-visible:bg-muted focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring",
+        onOpen !== undefined &&
+          "cursor-pointer outline-none focus-visible:bg-muted focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring",
       )}
     >
       {cells.map((spec) => (
-        <Fragment key={spec.id}>
-          <td className={cn("h-11 bg-inherit px-3 py-0", spec.fixed === true && "sticky left-0 z-10 pl-6", spec.numeric === true && "text-right")}>
-            <div className="truncate">{spec.cell(row)}</div>
-          </td>
-          {gaps.has(spec.id) ? <td className="h-11 bg-inherit p-0" /> : null}
-        </Fragment>
+        <td key={spec.id} className={cn("h-11 bg-inherit px-3 py-0", spec.fixed === true && "sticky left-0 z-10 pl-6", spec.numeric === true && "text-right")}>
+          <div className="truncate">{spec.cell(row)}</div>
+        </td>
       ))}
+      {spare ? <td className="h-11 bg-inherit p-0" /> : null}
       {actions === undefined ? null : <td className="sticky right-0 z-10 h-11 bg-inherit py-0 pr-6 pl-1 text-right whitespace-nowrap">{actions}</td>}
     </tr>
   );
@@ -343,31 +317,24 @@ function BodyRow<Row>({
 /** A row that stands in for one being read: the table's own height and columns, so nothing moves when the rows arrive. */
 function LoadingRow<Row>({
   cells,
-  gaps,
+  spare,
   withActions,
 }: {
   readonly cells: readonly ColumnSpec<Row>[];
-  readonly gaps: ReadonlyMap<string, number>;
+  readonly spare: boolean;
   readonly withActions: boolean;
 }): ReactNode {
   return (
     <tr className="[&>td]:border-b">
       {cells.map((spec) => (
-        <Fragment key={spec.id}>
-          <td className={cn("h-11 px-3 py-0", spec.fixed === true && "pl-6")}>
-            <Skeleton className={cn("h-4", spec.fixed === true ? "w-32" : "w-16")} />
-          </td>
-          {gaps.has(spec.id) ? <td /> : null}
-        </Fragment>
+        <td key={spec.id} className={cn("h-11 px-3 py-0", spec.fixed === true && "pl-6")}>
+          <Skeleton className={cn("h-4", spec.fixed === true ? "w-32" : "w-16")} />
+        </td>
       ))}
+      {spare ? <td /> : null}
       {withActions ? <td className="h-11" /> : null}
     </tr>
   );
-}
-
-/** The width the fixed columns take at the table's near edge, in pixels: a sideways scroll stops just past it. */
-function sumOfFixed<Row>(shown: readonly ColumnSpec<Row>[], drawn: ReadonlyMap<string, number>): number {
-  return shown.filter((spec) => spec.fixed === true).reduce((sum, spec) => sum + (drawn.get(spec.id) ?? 0), 0);
 }
 
 /** Say a cell's whole text in the hint a pointer shows, where the cell is too narrow for it. */
@@ -376,7 +343,7 @@ function hintWhenCut(event: MouseEvent | FocusEvent): void {
   if (cell !== null) cell.title = cell.scrollWidth > cell.clientWidth ? (cell.textContent ?? "") : "";
 }
 
-/** The widths of a table's columns as the browser is told them: one per column, one per empty room after a group, and one for the rows' actions. */
+/** The widths of a table's columns as the browser is told them: one per column, one for the room they leave empty, and one for the rows' actions. */
 function Widths<Row>({
   shown,
   widths,
@@ -389,11 +356,9 @@ function Widths<Row>({
   return (
     <colgroup>
       {shown.map((spec) => (
-        <Fragment key={spec.id}>
-          <col style={{ width: widths.drawn.get(spec.id) }} />
-          {widths.gaps.has(spec.id) ? <col style={{ width: widths.gaps.get(spec.id) }} /> : null}
-        </Fragment>
+        <col key={spec.id} style={{ width: widths.drawn.get(spec.id) }} />
       ))}
+      {widths.spare === 0 ? null : <col style={{ width: widths.spare }} />}
       {endWidth === 0 ? null : <col style={{ width: endWidth }} />}
     </colgroup>
   );
@@ -510,7 +475,7 @@ export function DataTable<Row>({
   const shown = layout.order.filter((id) => !layout.hidden.includes(id)).flatMap((id) => specs.get(id) ?? []);
   const endWidth = actions === undefined ? 0 : actionsWidth;
   const widths = widthsForRoom(shown, fitted, layout.sizes, room - endWidth);
-  const { drawn, gaps, stops } = widths;
+  const { drawn, spare } = widths;
   // The table library is told the widths as drawn, so an edge that is dragged starts from where it is seen.
   const sizing = Object.fromEntries(drawn);
   const table = useTable({
@@ -557,17 +522,13 @@ export function DataTable<Row>({
       accessibility={{ announcements: announcementsOf(specs) }}
     >
       {/* The library's scroll area draws its bars whenever the table is longer or wider than its room, also where the system hides its own. Its content part tells it when the table's size changes. */}
-      <ScrollArea
-        ref={frame}
-        className={cn("min-h-0 flex-1", stops.length > 0 && STOPS_LOOK)}
-        style={{ "--fixed-width": `${sumOfFixed(shown, drawn)}px` } as CSSProperties}
-      >
+      <ScrollArea ref={frame} className="min-h-0 flex-1">
         <ScrollAreaParts.Content>
           <table
             ref={sized}
             aria-label={label}
             aria-busy={loading}
-            style={{ width: [...drawn.values(), ...gaps.values()].reduce((sum, size) => sum + size, endWidth) }}
+            style={{ width: [...drawn.values()].reduce((sum, size) => sum + size, spare + endWidth) }}
             className={cn(TABLE_LOOK, table.store.state.columnResizing.isResizingColumn !== false && "cursor-col-resize select-none")}
           >
             <Widths shown={shown} widths={widths} endWidth={endWidth} />
@@ -577,13 +538,10 @@ export function DataTable<Row>({
                   {headers.map((header) => {
                     const spec = specs.get(header.column.id);
 
-                    const place = { stop: stops.includes(header.column.id), gap: gaps.get(header.column.id) ?? 0 };
-
-                    return spec === undefined ? null : (
-                      <HeadCell key={header.id} header={header} spec={spec} {...place} sort={sort} onSort={onSort} onNudge={onNudge} />
-                    );
+                    return spec === undefined ? null : <HeadCell key={header.id} header={header} spec={spec} sort={sort} onSort={onSort} onNudge={onNudge} />;
                   })}
                 </SortableContext>
+                {spare === 0 ? null : <td className="h-9 border-b bg-background p-0" />}
                 {actions === undefined ? null : (
                   <th className="sticky right-0 h-9 border-b bg-background p-0">
                     <span className="sr-only">Actions</span>
@@ -594,10 +552,18 @@ export function DataTable<Row>({
             <tbody>
               {loading
                 ? Array.from({ length: LOADING_ROWS }, (_, row) => row).map((row) => (
-                    <LoadingRow key={row} cells={shown} gaps={gaps} withActions={actions !== undefined} />
+                    <LoadingRow key={row} cells={shown} spare={spare > 0} withActions={actions !== undefined} />
                   ))
                 : rows.map((row) => (
-                    <BodyRow key={rowId(row)} row={row} cells={shown} gaps={gaps} selected={rowId(row) === selected} onOpen={onOpen} actions={actions?.(row)} />
+                    <BodyRow
+                      key={rowId(row)}
+                      row={row}
+                      cells={shown}
+                      spare={spare > 0}
+                      selected={rowId(row) === selected}
+                      onOpen={onOpen}
+                      actions={actions?.(row)}
+                    />
                   ))}
             </tbody>
           </table>

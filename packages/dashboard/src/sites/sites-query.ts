@@ -13,12 +13,12 @@ export const FILTERS = [
   { value: "trash", label: "Trash" },
 ] as const;
 
-/** The columns the server orders by, with the words of each and the direction a first press asks for. */
+/** The columns the server orders by, with the words a narrow screen names each order by and the direction a first press asks for. */
 export const SORTS = [
-  { key: "updated", label: "Updated", first: "desc" },
-  { key: "title", label: "Title", first: "asc" },
-  { key: "name", label: "Name", first: "asc" },
-  { key: "access", label: "Access", first: "asc" },
+  { key: "updated", label: "By updated", first: "desc" },
+  { key: "title", label: "By title", first: "asc" },
+  { key: "name", label: "By name", first: "asc" },
+  { key: "access", label: "Who can open it", first: "asc" },
 ] as const;
 
 /** The orders of the table: the site whose content changed last comes first in a table nobody sorted. */

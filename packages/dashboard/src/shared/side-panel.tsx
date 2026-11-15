@@ -63,7 +63,7 @@ export function PanelFact({ name, children }: { readonly name: string; readonly 
   return (
     <>
       <dt className="text-muted-foreground">{name}</dt>
-      <dd className="min-w-0 truncate">{children}</dd>
+      <dd className="min-w-0 break-words">{children}</dd>
     </>
   );
 }
@@ -167,8 +167,8 @@ export function SidePanel({ title, closeLink, onClose, back, beside, children }:
               onKeyDownCapture={closesAtEscape(onClose)}
               className="flex min-h-0 flex-1 flex-col overflow-y-auto outline-none"
             >
-              {/* Beside its list the heading stands on the line of the list's tools, and the first hairline under it meets the list's. */}
-              <header className={cn("flex shrink-0 items-center gap-1 px-6 max-md:px-4", standsBeside ? "h-20 pb-12" : "h-14")}>
+              {/* Beside its list the heading stands on the line of the list's tools, and the first hairline under it where the list's tools end. */}
+              <header className={cn("flex shrink-0 items-center gap-1 px-6 max-md:px-4", standsBeside ? "h-11 pb-3" : "h-14")}>
                 <Dialog.Title ref={heading} tabIndex={-1} className="min-w-0 truncate text-base font-bold outline-none" title={title}>
                   {title ?? <Skeleton className="h-5 w-40" />}
                 </Dialog.Title>
