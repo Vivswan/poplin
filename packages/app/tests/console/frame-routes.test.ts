@@ -2,7 +2,7 @@
 
 import { describe, expect, test } from "bun:test";
 
-import { TOKEN, usualPlug } from "../dashboard/domain/support/fake-plug";
+import { TOKEN, usualPlug } from "./support/fake-plug";
 import { openConsole, REBUILD_HOST } from "./support/console";
 import { readShell } from "./support/shell";
 

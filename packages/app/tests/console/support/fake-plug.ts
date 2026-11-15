@@ -1,6 +1,6 @@
 // A domain plug written by hand for the tests: it answers what a test scripted and records what it was asked with.
 
-import type { DomainPlug, DomainReading, DomainRow, DomainSettings, FirstRun } from "../../../../src/dashboard/domain/records";
+import type { DomainPlug, DomainReading, DomainRow, DomainSettings, FirstRun } from "../../../src/console/domain/records";
 
 /** The token the tests paste. No answer, header, or audit entry may hold it. */
 export const TOKEN = "planted-token-0123456789-abcdefghij";

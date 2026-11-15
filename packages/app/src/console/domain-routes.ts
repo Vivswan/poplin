@@ -15,8 +15,8 @@ import { SETTING_VALUES, type SettingValues } from "@poplin/core/src/records/set
 import { type Context, Hono } from "hono";
 import * as v from "valibot";
 
-import { type DomainRun, REFUSAL_STATUS, runDomain } from "../dashboard/domain/domain-run";
-import type { GuardKey } from "../dashboard/domain/records";
+import { type DomainRun, REFUSAL_STATUS, runDomain } from "./domain/domain-run";
+import type { GuardKey } from "./domain/records";
 import { refused, refuseInvalid, type Shared } from "./data";
 import { keptAnswer, runDone, runRefusal } from "./domain-answers";
 

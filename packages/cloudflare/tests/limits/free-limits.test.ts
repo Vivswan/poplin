@@ -1,4 +1,4 @@
-import { freeLimitWarnings } from "@poplin/app/src/dashboard/settings/free-limits";
+import { freeLimitWarnings } from "@poplin/app/src/console/settings/free-limits";
 import type { Login } from "@poplin/core/src/auth/logins";
 import { MOST_STORE_CALLS } from "@poplin/app/src/sites/serve";
 import { COPY_CALLS } from "@poplin/core/src/actions/duplicate";

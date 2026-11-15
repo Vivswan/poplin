@@ -7,7 +7,7 @@
 
 import { spentRefusal } from "@poplin/app/src/api/respond";
 import { spentAnswer } from "@poplin/app/src/console/spent";
-import { spentRun } from "@poplin/app/src/dashboard/domain/setup";
+import { spentRun } from "@poplin/app/src/console/domain/setup";
 import { pausedResponse } from "@poplin/app/src/sites/paused";
 import type { AllowanceSpent } from "@poplin/core/src/database/driver";
 import { readZoneBinding } from "../zone/zone-binding";

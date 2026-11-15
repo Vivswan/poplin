@@ -42,7 +42,6 @@ export function answerFirstSetup(request: Request, unset: Unset, now: () => numb
     open: async () => !(await unset.database.hasLoggedIn()),
     counters: unset.counters,
     visitorOf: (asked) => visitorKey(clientAddress(asked.headers), unset.secrets.visitorSecret, now()),
-    csrfSecret: unset.secrets.formsSecret,
   });
 
   return setup.fetch(request);
@@ -62,7 +61,6 @@ export function answerSetup(request: Request, instance: Instance, held: Held, op
     open,
     counters: instance.counters,
     visitorOf: (asked) => visitorKey(clientAddress(asked.headers), held.visitorSecret, instance.install.now()),
-    csrfSecret: held.formsSecret,
   });
 
   return setup.fetch(request);

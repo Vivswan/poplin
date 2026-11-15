@@ -4,9 +4,9 @@ import { importSessionKey } from "@poplin/core/src/auth/cookie";
 import { parseLogins } from "@poplin/core/src/auth/logins";
 
 import { createConsole } from "../../../src/console/console";
-import type { DomainPlug } from "../../../src/dashboard/domain/records";
+import type { DomainPlug } from "../../../src/console/domain/records";
 import { readSession } from "../../../src/login/session";
-import { codeCounts, FREE_LIMITS, ORIGIN, openDashboard, VERSION } from "../../dashboard/support/install";
+import { codeCounts, FREE_LIMITS, ORIGIN, openOwned, VERSION } from "./install";
 
 /** The one host the test console's provider starts rebuilds at. */
 export const REBUILD_HOST = "rebuilds.example.com";
@@ -26,7 +26,7 @@ export const CLIENT: Parameters<typeof createConsole>[0]["client"] = {
 /** A test console and what the tests reach it through. */
 interface Opened {
   /** The install's helpers: `publish` makes a site, `owner` is the logged-in email. */
-  readonly base: Awaited<ReturnType<typeof openDashboard>>;
+  readonly base: Awaited<ReturnType<typeof openOwned>>;
 
   /** Every address the provider was asked to start a rebuild at, in order. */
   readonly rebuilds: readonly string[];
@@ -51,7 +51,7 @@ interface Opened {
  * @param domain - the provider's side of the install; left out, the console has no Domain screen
  */
 export async function openConsole(base = "", domain?: DomainPlug): Promise<Opened> {
-  const opened = await openDashboard();
+  const opened = await openOwned();
   const { database } = opened.install;
 
   // As a host would: the key and the logins are read on every request.

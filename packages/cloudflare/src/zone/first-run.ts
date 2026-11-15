@@ -3,7 +3,7 @@
 // No account is known before the token: a repair takes the account from the zone the token shows the domain in, and writes the install's values to the Worker of that name in that account.
 // A token of another account therefore writes to its own account's Worker, or to none, and never to this one.
 
-import type { FirstRun } from "@poplin/app/src/dashboard/domain/records";
+import type { FirstRun } from "@poplin/app/src/console/domain/records";
 import type { Connection } from "./client";
 import { parseDomainLayout } from "./layout";
 import { createDomainPlug, tokenFacts } from "./zone-plug";

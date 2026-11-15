@@ -10,14 +10,8 @@ import type { SettingValues } from "@poplin/core/src/records/settings";
 /** What marks the key made for the visitor limit. A new label would start every visitor's minute anew and break nothing. */
 const VISITOR_LABEL = "poplin visitor key";
 
-/** What marks the bytes made for the dashboard's forms. It differs from the visitor's, so neither secret tells the other. */
-const FORMS_LABEL = "poplin dashboard forms";
-
 /** The key the visitor limit hashes addresses with. */
 const VISITOR_KEY = { name: "HMAC", hash: "SHA-256", length: 256 } as const;
-
-/** The bits of the secret the dashboard signs its forms with. */
-const FORMS_BITS = 256;
 
 /** Writes a label as the bytes a derivation takes. */
 const ENCODER = new TextEncoder();
@@ -35,9 +29,6 @@ export interface Held {
 
   /** Hashes a visitor's network for the per-visitor limit. It is derived from the signing key, so nothing more is stored. */
   readonly visitorSecret: CryptoKey;
-
-  /** Signs the tokens of the dashboard's forms. It is derived from the signing key under a label of its own. */
-  readonly formsSecret: Uint8Array<ArrayBuffer>;
 }
 
 /** How a secret is derived from the signing key: HKDF with SHA-256, no salt, and the label as its info. */
@@ -46,17 +37,15 @@ function derivation(label: string): HkdfParams {
 }
 
 /**
- * Derive the two secrets an instance keeps beside the session key.
+ * Derive the secret an instance keeps beside the session key.
  *
  * @param key - the bytes of the install's signing key
- * @returns the key that hashes a visitor's address for the limits, and the bytes that sign the forms of the dashboard and of the setup page
+ * @returns the key that hashes a visitor's address for the limits
  */
-export async function derivedSecrets(key: Uint8Array<ArrayBuffer>): Promise<Pick<Held, "visitorSecret" | "formsSecret">> {
-  const derivable = await crypto.subtle.importKey("raw", key, "HKDF", false, ["deriveKey", "deriveBits"]);
-  const visitorSecret = await crypto.subtle.deriveKey(derivation(VISITOR_LABEL), derivable, VISITOR_KEY, false, ["sign"]);
-  const formsSecret = new Uint8Array(await crypto.subtle.deriveBits(derivation(FORMS_LABEL), derivable, FORMS_BITS));
+export async function derivedSecret(key: Uint8Array<ArrayBuffer>): Promise<Pick<Held, "visitorSecret">> {
+  const derivable = await crypto.subtle.importKey("raw", key, "HKDF", false, ["deriveKey"]);
 
-  return { visitorSecret, formsSecret };
+  return { visitorSecret: await crypto.subtle.deriveKey(derivation(VISITOR_LABEL), derivable, VISITOR_KEY, false, ["sign"]) };
 }
 
 /**
@@ -71,5 +60,5 @@ export async function readHeld(database: Pick<Database, "readSettings" | "readSi
   const logins = parseLogins(settings.logins);
   if (!logins.ok) throw new Error(`the stored logins are refused: ${logins.refusal}`);
 
-  return { settings, logins: logins.value, sessionKey: await importSessionKey(key), ...(await derivedSecrets(key)) };
+  return { settings, logins: logins.value, sessionKey: await importSessionKey(key), ...(await derivedSecret(key)) };
 }

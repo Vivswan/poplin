@@ -99,7 +99,7 @@ type StagedNow = Staged & { readonly fresh: boolean };
  * @param files - how many files the copy holds
  * @returns 15 up to a thousand files, 20 up to two thousand, and one fewer for every two thousand more: 16 for ten thousand
  */
-export function copiesPerCall(files: number): number {
+function copiesPerCall(files: number): number {
   const pages = Math.ceil(files / MAX_LIST_LIMIT) + SPARE_PAGES;
   const finishing = files > MAX_LIST_LIMIT ? 0 : FINISH_CALLS + pages;
 

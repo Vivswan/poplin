@@ -9,7 +9,7 @@
 
 import { createApi } from "@poplin/app/src/api/api";
 import type { Counters } from "@poplin/app/src/limits/limits";
-import type { DomainPlug, FirstRun } from "@poplin/app/src/dashboard/domain/records";
+import type { DomainPlug, FirstRun } from "@poplin/app/src/console/domain/records";
 import type { Identify } from "@poplin/app/src/login/login";
 import { hostnameAddresses } from "@poplin/app/src/sites/hostname-addresses";
 import type { Asking } from "@poplin/core/src/actions/check-update";
@@ -35,7 +35,7 @@ import { readZoneBinding } from "../zone/zone-binding";
 import { createFirstRun } from "../zone/first-run";
 import { createDomainPlug } from "../zone/zone-plug";
 import type { Bindings } from "./bindings";
-import { derivedSecrets, type Held } from "./held";
+import { derivedSecret, type Held } from "./held";
 import { readOwnWorker } from "./own-worker";
 
 /** What one request to the API may carry. Cloudflare's Free plan ends a request body at 100 MB, and core ends a manifest at 1.5 MB itself. */
@@ -130,8 +130,8 @@ export interface Unset {
   /** The Cloudflare side of an install that has no domain and no account yet. */
   readonly first: FirstRun;
 
-  /** The secrets the setup page counts its visitors and signs its forms with. */
-  readonly secrets: Pick<Held, "visitorSecret" | "formsSecret">;
+  /** The secret the setup page counts its visitors with. */
+  readonly secrets: Pick<Held, "visitorSecret">;
 }
 
 /** Why an instance could not start. `binding` names every variable that is refused, at least one. `differs` is a database another build of poplin made. `unset` is no fault: the Worker was deployed and setup has not given it its domain and its account. */
@@ -242,7 +242,7 @@ async function startUnset(given: {
     database,
     counters: new CloudflareCounters({ limiter: env.MINUTE_LIMITS, database }),
     first: createFirstRun({ script, fetch: outside.cloudflare }),
-    secrets: await derivedSecrets(key.key),
+    secrets: await derivedSecret(key.key),
   };
 
   return { ok: false, failure: { kind: "unset", unset } };

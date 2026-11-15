@@ -6,7 +6,7 @@ import { mkdtempDisposableSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import type { DomainRow } from "../../packages/app/src/dashboard/domain/records";
+import type { DomainRow } from "../../packages/app/src/console/domain/records";
 import type { Login } from "../../packages/core/src/auth/logins";
 import { answerOf, convergeInstall, needOf } from "../../packages/cloudflare/scripts/live/converge";
 import { openRun } from "../../packages/cloudflare/scripts/live/util";

@@ -6,7 +6,7 @@
 // A check is the repair's own code with the changes left unsent, so the two cannot disagree on what a repair would do.
 // The link to the token form carries every permission an install needs. A piece that needs one of the others is no failure without it: its row says which to add.
 
-import type { DomainPlug, DomainReading, DomainRow, DomainSettings, DomainState, DomainStep, ReadSettings, TokenFacts } from "@poplin/app/src/dashboard/domain/records";
+import type { DomainPlug, DomainReading, DomainRow, DomainSettings, DomainState, DomainStep, ReadSettings, TokenFacts } from "@poplin/app/src/console/domain/records";
 import { type Login, parseLogins } from "@poplin/core/src/auth/logins";
 import { ACCESS_NOT_ENABLED, isAccessOff, readLoginFacts, syncAccess } from "./access/access";
 import { syncZoneBots } from "./bots/bots";

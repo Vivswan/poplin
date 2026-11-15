@@ -1,9 +1,4 @@
-// The one table of sentences the dashboard says after a change: what was done, or why it was refused.
-//
-//   POST, done      ->  303 /sites/report--k3f9x2ab71qz?done=saved
-//   POST, refused   ->  303 /sites/report--k3f9x2ab71qz?refused=bad_argument&about=expires
-//
-// The address carries a code, never a sentence, so a crafted link can only show a line of this table.
+// The one table of sentences the dashboard says when it refuses a change: the client shows the sentence it is sent, so the words live here alone.
 
 import type { abandonPublish } from "@poplin/core/src/actions/abandon-publish";
 import type { listAudit } from "@poplin/core/src/actions/audit-log";
@@ -21,9 +16,8 @@ import type { updateSite } from "@poplin/core/src/actions/set";
 import type { getSite } from "@poplin/core/src/actions/show";
 import type { signEveryoneOut } from "@poplin/core/src/actions/sign-out";
 import type { startUpdate } from "@poplin/core/src/actions/start-update";
-import { siteReference } from "@poplin/core/src/sites/labels";
 
-import type { DomainReading } from "../domain/records";
+import type { DomainReading } from "./domain/records";
 
 /** What each refusal code says. `{about}` is the field or setting the code is about. A code of an action missing here does not compile. */
 const REFUSALS: Readonly<Record<ActionCode | OwnCode, string>> = {
@@ -44,18 +38,13 @@ const REFUSALS: Readonly<Record<ActionCode | OwnCode, string>> = {
   upload_finished: "The copy is finished already: it is a site of its own now, in the list of sites.",
   stale_version: "A newer publish went live first.",
   id_taken: "A site here already has that id.",
-  wrong_confirmation: "The typed text did not match, so nothing was deleted.",
   not_confirmed: "The box was not ticked, so nothing was changed.",
-  missing_field: "The form was incomplete, so nothing was changed.",
-  not_a_form: "The request was not a form, so nothing was changed.",
-  too_large: "The form was too large, so nothing was changed.",
-  not_from_here: "The request did not come from this page, or the page was open for too long. Reload the page and try again.",
+  not_json: "The request was not sent as JSON, so nothing was changed.",
+  too_large: "The request was too large, so nothing was changed.",
   no_page: "There is no such page.",
-  bad_method: "The dashboard does not answer that kind of request.",
   too_many_tries: "Too many tries. Wait a minute.",
   no_such_login: "No login waits under that code. It was allowed or denied already, or its 10 minutes ran out. Run poplin login again.",
   no_working_login: "Your own email has to stay in the logins, so nothing was changed. Another admin can take it out.",
-  no_such_token: "No token has that id. It may be revoked already.",
   token_gone: "That token is gone already.",
   login_gone: "That login no longer waits: it was allowed or denied, or its 10 minutes ran out. On the computer, run poplin login again.",
   already_a_login: "That email can log in already.",
@@ -75,7 +64,7 @@ const REFUSALS: Readonly<Record<ActionCode | OwnCode, string>> = {
   update_refused: "The rebuild address refused the request, so no update was started. Check the address in Settings, under Updates.",
 };
 
-/** What a code says when what it is about gives it another meaning: `too_large` is a form's own refusal, and about a limit a copy that does not fit it; `not_found` is a site, and about an upload a copy. `other` stands for any limit not named. */
+/** What a code says when what it is about gives it another meaning: `too_large` is a request that is too large, and about a limit a copy that does not fit it; `not_found` is a site, and about an upload a copy. `other` stands for any limit not named. */
 const ABOUT_REFUSALS: Readonly<Record<string, Readonly<Record<string, string>>>> = {
   too_large: {
     max_total_size: "The copy does not fit under max_total_size, which bounds all sites together, the trash and unfinished copies included. No copy was made.",
@@ -111,29 +100,6 @@ const ABOUT_REFUSALS: Readonly<Record<string, Readonly<Record<string, string>>>>
     upload: "That copy can no longer be gone on with: it was cancelled, or its day to finish ran out. Unless the list of sites shows it, duplicate the site again.",
   },
 };
-
-/** What each finished change says. */
-const DONE = {
-  saved: "Saved.",
-  saved_logins: "Saved. One more step: open the Domain tab, paste a token, and press Repair. Until then the login page lets in only the emails it had before.",
-  made_private: "Private now. Only people who can log in here open it.",
-  made_unlisted: "Unlisted now. Anyone with the link opens it.",
-  made_public: "Public now. Everyone opens it.",
-  renamed: "Renamed. The link took the new name. The old link keeps working.",
-  rolled_back: "That version is live now.",
-  new_link: "The site has a new link. The old link stopped working.",
-  trashed: "Moved to the trash.",
-  restored: "Restored from the trash.",
-  duplicated: "This is the copy: a new private site with its own link. The site it was copied from is unchanged.",
-  copying: "The copy is not finished. Press Keep copying until it is.",
-  copy_cancelled: "The copy was cancelled and its files removed. No site was made.",
-  copy_cancelled_files_left: "The copy was cancelled, and no site was made. Its remaining files are being removed from the bucket.",
-  deleted: "Deleted for good.",
-  deleted_files_left: "Deleted for good. Its remaining files are being removed from the bucket.",
-  allowed: "Allowed. The computer collects its token within a few seconds.",
-  denied: "Denied. The computer was not logged in.",
-  revoked: "Revoked. The token works nowhere now.",
-} as const;
 
 /** The sentence for a code this table does not hold. */
 const UNKNOWN_REFUSAL = "The request was refused.";
@@ -172,21 +138,11 @@ type ActionCode =
 /** Why a run of the domain plug read no table. */
 type RunRefusal = Extract<DomainReading, { readonly ok: false }>["refusal"];
 
-/** The codes of the dashboard's own refusals: a form it cannot take, or a request it does not answer. */
-type OwnCode = "wrong_confirmation" | "not_confirmed" | "missing_field" | "not_a_form" | "too_large" | "not_from_here" | "no_page" | "bad_method" | "too_many_tries" | "no_such_token" | "no_more_writing" | "no_more_reading" | AccessCode | RunRefusal;
+/** The codes of the dashboard's own refusals: a request it cannot take, or one it does not answer. */
+type OwnCode = "not_confirmed" | "not_json" | "too_large" | "no_page" | "too_many_tries" | "no_more_writing" | "no_more_reading" | AccessCode | RunRefusal;
 
 /** The codes of the Access screen's own refusals: a token or a waiting login that is gone. */
 type AccessCode = "token_gone" | "login_gone";
-
-/** A change that was done, or a refusal with what it is about. `site` is the label of the site a done change can be taken back on. */
-type Result = { readonly done: keyof typeof DONE; readonly site?: string } | { readonly refused: string; readonly about?: string };
-
-/** A sentence that tells the result of a change, and whether it reports a change or a refusal. `undo` is the path a form posts to that takes the change back. */
-export interface Notice {
-  readonly kind: "done" | "refused";
-  readonly text: string;
-  readonly undo?: string;
-}
 
 /** The sentence of a code whose meaning hangs on what it is about; none for a code that has one meaning, or is about nothing. */
 function sentenceAbout(code: string, about: string | undefined): string | undefined {
@@ -210,48 +166,4 @@ export function refusalSentence(code: string, about?: string): string {
   const sentence = sentenceAbout(code, named) ?? REFUSALS[code as keyof typeof REFUSALS];
 
   return sentence.replace("{about}", named ?? NO_ABOUT);
-}
-
-/**
- * Read the result an address carries.
- *
- * @returns the sentence to show, or `undefined` when the address carries no result this table holds
- */
-export function noticeIn(url: URL): Notice | undefined {
-  const done = url.searchParams.get("done");
-  if (done !== null && Object.hasOwn(DONE, done)) {
-    const site = url.searchParams.get("site") ?? "";
-    const text = DONE[done as keyof typeof DONE];
-
-    // Only a move to the trash is taken back, and only by the form the address could not forge: the restore form checks its own token.
-    const named = siteReference(site);
-
-    return done === "trashed" && named.ok && named.value.kind === "site" ? { kind: "done", text, undo: `/sites/${site}/restore` } : { kind: "done", text };
-  }
-
-  const refused = url.searchParams.get("refused");
-  if (refused === null) return undefined;
-
-  return { kind: "refused", text: refusalSentence(refused, url.searchParams.get("about") ?? undefined) };
-}
-
-/**
- * Write a result into a dashboard path.
- *
- * @param path - a dashboard path, with or without a query of its own
- * @returns the path with the result's code added; `noticeIn` reads it back
- */
-export function withNotice(path: string, result: Result): string {
-  const query = new URLSearchParams();
-  if ("done" in result) {
-    query.set("done", result.done);
-    if (result.site !== undefined) query.set("site", result.site);
-  }
-
-  if ("refused" in result) {
-    query.set("refused", result.refused);
-    if (result.about !== undefined) query.set("about", result.about);
-  }
-
-  return `${path}${path.includes("?") ? "&" : "?"}${query}`;
 }

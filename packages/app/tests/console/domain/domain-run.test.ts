@@ -1,9 +1,9 @@
 import { expect, test } from "bun:test";
 
-import { runDomain } from "../../../src/dashboard/domain/domain-run";
-import { openDashboard } from "../support/install";
-import type { DomainRow } from "../../../src/dashboard/domain/records";
-import { fakePlug, TOKEN } from "./support/fake-plug";
+import { runDomain } from "../../../src/console/domain/domain-run";
+import { openOwned } from "../support/install";
+import type { DomainRow } from "../../../src/console/domain/records";
+import { fakePlug, TOKEN } from "../support/fake-plug";
 
 /** One row of every state a plug can answer, the failed one twice: once for a missing right, once for another reason. */
 const EVERY_STATE: readonly DomainRow[] = [
@@ -23,7 +23,7 @@ const EVERY_STATE: readonly DomainRow[] = [
 
 /** The settings of a test install and a run asked of it by its owner. */
 async function openRun() {
-  const opened = await openDashboard();
+  const opened = await openOwned();
   const settings = await opened.install.database.readSettings();
   if (settings === undefined) throw new Error("the settings are not stored");
 
@@ -119,7 +119,7 @@ test("a run that is refused, that the plug throws on, or that is not recorded ke
 });
 
 test("every text of a reading has the token taken out before anything is shown or written, and an empty token changes no text", async () => {
-  const opened = await openDashboard();
+  const opened = await openOwned();
   const settings = await opened.install.database.readSettings();
   if (settings === undefined) throw new Error("the settings are not stored");
 
@@ -140,7 +140,7 @@ test("every text of a reading has the token taken out before anything is shown o
 });
 
 test("a reading that is no table is handed on as it is and writes no audit entry: a refused token did nothing worth a line", async () => {
-  const opened = await openDashboard();
+  const opened = await openOwned();
   const settings = await opened.install.database.readSettings();
   if (settings === undefined) throw new Error("the settings are not stored");
 

@@ -7,18 +7,17 @@ import type { Actor } from "@poplin/core/src/auth/scopes";
 import type { Context, TypedResponse } from "hono";
 import * as v from "valibot";
 
-import type { DomainPlug } from "../dashboard/domain/records";
-import { refusalSentence } from "../dashboard/page/notices";
-import type { FreeLimits } from "../dashboard/settings/free-limits";
+import type { DomainPlug } from "./domain/records";
+import { refusalSentence } from "./notices";
+import type { FreeLimits } from "./settings/free-limits";
 
 /** The status a refusal goes out with, for the codes that are no plain bad request. */
 const STATUSES: Readonly<Record<string, 403 | 404 | 413 | 415 | 429>> = {
   not_found: 404,
   no_page: 404,
-  not_from_here: 403,
   not_allowed: 403,
   too_large: 413,
-  not_a_form: 415,
+  not_json: 415,
   too_many_tries: 429,
 };
 

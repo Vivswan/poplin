@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 
 import { defaultSettings, type SettingValues } from "@poplin/core/src/records/settings";
 
-import { freeLimitWarnings } from "../../../src/dashboard/settings/free-limits";
+import { freeLimitWarnings } from "../../../src/console/settings/free-limits";
 import { FREE_LIMITS } from "../support/install";
 
 const DEFAULTS = defaultSettings({ installer: "owner@example.com" as SettingValues["logins"][number], hostname: "poplin.example.com" });

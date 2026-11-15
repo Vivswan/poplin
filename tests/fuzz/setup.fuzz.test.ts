@@ -5,12 +5,12 @@ import { expect, test } from "bun:test";
 import fc from "fast-check";
 
 import { createSetupConsole } from "../../packages/app/src/console/setup-console";
-import { REFUSAL_STATUS } from "../../packages/app/src/dashboard/domain/domain-run";
-import type { DomainReading } from "../../packages/app/src/dashboard/domain/records";
+import { REFUSAL_STATUS } from "../../packages/app/src/console/domain/domain-run";
+import type { DomainReading } from "../../packages/app/src/console/domain/records";
 import { MemoryCounters } from "../../packages/app/src/limits/memory-counters";
 import { CLIENT } from "../../packages/app/tests/console/support/console";
-import { fakePlug, firstRunOf } from "../../packages/app/tests/dashboard/domain/support/fake-plug";
-import { CSRF_SECRET, ORIGIN } from "../../packages/app/tests/dashboard/support/install";
+import { fakePlug, firstRunOf } from "../../packages/app/tests/console/support/fake-plug";
+import { ORIGIN } from "../../packages/app/tests/console/support/install";
 import { AllowanceSpent } from "../../packages/core/src/database/driver";
 import { fuzzTarget } from "./config";
 import { hostile } from "./hostile";
@@ -83,7 +83,6 @@ async function answerOf(run: Run, answer: DomainReading = { ok: false, refusal: 
     open: async () => true,
     counters: new MemoryCounters(),
     visitorOf: async () => "203.0.113.7",
-    csrfSecret: CSRF_SECRET,
     client: CLIENT,
   });
   const answered = await setup.fetch(new Request(`${ORIGIN}/setup/${WAYS[run.by]}/${run.run}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(run.typed) }));

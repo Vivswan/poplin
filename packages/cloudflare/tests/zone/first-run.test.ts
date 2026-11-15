@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import type { DomainReading, DomainSettings } from "@poplin/app/src/dashboard/domain/records";
+import type { DomainReading, DomainSettings } from "@poplin/app/src/console/domain/records";
 import type { Login } from "@poplin/core/src/auth/logins";
 import { createFirstRun } from "../../src/zone/first-run";
 import { withFake } from "./support/fake-cloudflare";

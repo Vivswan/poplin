@@ -6,7 +6,7 @@ import { createConsole } from "../../../app/src/console/console";
 import { MemoryCounters } from "../../../app/src/limits/memory-counters";
 import { answered, NOW, ORIGIN } from "../../../app/tests/api/support/install";
 import { CLIENT } from "../../../app/tests/console/support/console";
-import { FREE_LIMITS } from "../../../app/tests/dashboard/support/install";
+import { FREE_LIMITS } from "../../../app/tests/console/support/install";
 import { ADDRESSES } from "../../../app/tests/sites/support/layout";
 import type { Login as Email } from "../../../core/src/auth/logins";
 import { type Bench, cleanUp, jsonOf, openBench, type Ran } from "./support/harness";
@@ -236,7 +236,7 @@ describe("logIn", () => {
   // Drift: a link an attacker sent the admin, or a page of another origin posting for them, must not let a computer in; each row is one way to press Allow that is not the admin choosing to.
   test.each([
     ["with no session", { session: false }, { confirm: true }, 401, "no_session"],
-    ["as a form, which a page of any origin can send", { form: true }, { confirm: true }, 415, "not_a_form"],
+    ["as a form, which a page of any origin can send", { form: true }, { confirm: true }, 415, "not_json"],
     ["without the box ticked", {}, {}, 400, "not_confirmed"],
   ] as const)("an Allow pressed %s lets no computer in: the login stays pending and runs out", async (_how, options, ticked, status, refusal) => {
     const desk = await openDesk();

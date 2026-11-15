@@ -18,7 +18,7 @@ const BODY_HEADERS = ["Content-Length", "ETag"];
  *
  * The address is read as a browser reads it, so whatever a browser would follow elsewhere is refused, in every spelling of it.
  *
- * @param asked - what the visitor's address names, such as `/settings?done=saved`; any text at all
+ * @param asked - what the visitor's address names, such as `/activity?kind=sites`; any text at all
  * @param under - the folder it is read against and must stay in: a path with its closing slash, such as `/poplin/demo/`
  * @returns the path, query, and fragment to redirect to, which a browser reads back as the very address that was checked; `undefined` for an address that leads out of the folder or off the origin
  */

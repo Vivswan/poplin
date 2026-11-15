@@ -1,7 +1,7 @@
 // A static host has no file for a page inside the demo, such as `/demo/settings`: only the demo's worker answers it.
 // A visitor who opens such an address first, or reloads one around the worker, gets the host's 404 page. This script on that page sends them through the demo's first page.
 //
-//   /poplin/demo/settings?done=saved#content   ->   /poplin/demo/?to=%2Fsettings%3Fdone%3Dsaved#content
+//   /poplin/demo/activity?kind=sites#content   ->   /poplin/demo/?to=%2Factivity%3Fkind%3Dsites#content
 
 /** The `script` element that sends an address inside the demo to the demo's first page; on any other address it does nothing. */
 function deepLinkScript(at: string): string {

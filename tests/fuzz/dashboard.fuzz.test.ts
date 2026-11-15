@@ -8,7 +8,7 @@ import fc from "fast-check";
 
 import { openConsole } from "../../packages/app/tests/console/support/console";
 import { readShell } from "../../packages/app/tests/console/support/shell";
-import { ORIGIN } from "../../packages/app/tests/dashboard/support/install";
+import { ORIGIN } from "../../packages/app/tests/console/support/install";
 import { fuzzTarget } from "./config";
 import { hostile } from "./hostile";
 

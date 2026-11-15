@@ -1,10 +1,7 @@
 // The demo as a host keeps it that can be stopped at any moment: everything it holds is handed out by `save`, and a demo opened from that goes on where the first one was.
 //
-//   what a save holds   the two installs' databases, their stored files, the bytes that sign their forms, and the visitor's cookies
-//
-// It also stands where a server would between the browser and the demo. A browser hides `Cookie` and `Origin` from a worker and takes no `Set-Cookie` from one, so the cookies live here.
+//   what a save holds   the two installs' databases and their stored files
 
-import { parseSetCookie, stringifyCookie } from "cookie";
 import type { SqlJsStatic } from "sql.js";
 
 import type { ClientFiles } from "../../../app/src/console/shell";
@@ -26,12 +23,6 @@ const DEEP_LINK_KEY = "to";
 /** Where a visitor finds why a request failed: the demo runs in a worker of the browser, which has no terminal. */
 const REASON_AT = "The console of this page's service worker, in the browser's developer tools, says why.";
 
-/** The bytes of a secret that signs one install's forms. */
-const SECRET_BYTES = 32;
-
-/** A cookie's value is kept and sent back as it was written, as a browser does. */
-const AS_WRITTEN = { decode: (value: string): string => value, encode: (value: string): string => value };
-
 /** Everything a demo holds, in the order its installs were opened. Structured cloning carries it whole. */
 export interface SavedDemo {
   /** The SQLite file of each install. */
@@ -39,12 +30,6 @@ export interface SavedDemo {
 
   /** The stored objects of each install. */
   readonly stores: readonly SavedStore[];
-
-  /** The bytes that sign each install's forms: a page drawn before a stop sends its form after it. */
-  readonly secrets: readonly Uint8Array<ArrayBuffer>[];
-
-  /** The visitor's cookies, by name. */
-  readonly cookies: Readonly<Record<string, string>>;
 }
 
 /** What a demo is opened from. */
@@ -70,7 +55,7 @@ interface KeptHost {
 
 /** A running demo. */
 interface KeptDemo {
-  /** Answers one request of the browser, as a server in front of the demo would hand it on. The answer's `Set-Cookie` is kept here, and is still on it. */
+  /** Answers one request of the browser, as a server in front of the demo would hand it on. */
   readonly fetch: (request: Request) => Promise<Response>;
 
   /** Hands out everything the demo holds now. */
@@ -81,7 +66,6 @@ interface KeptDemo {
 interface Held {
   readonly databases: SqlJsDriver[];
   readonly stores: KeptStore[];
-  readonly secrets: Uint8Array<ArrayBuffer>[];
 }
 
 /** The databases of the installs before the last reset. A request that began before that reset may still read them, so they are closed at the reset after it. */
@@ -96,16 +80,6 @@ function held<Item>(list: Item[], item: Item): Item {
   return item;
 }
 
-/** Keep what an answer sets as cookies: the name and the value of each, without its attributes. */
-function keepCookies(response: Response, cookies: Record<string, string>): void {
-  for (const line of response.headers.getSetCookie()) {
-    const { name, value } = parseSetCookie(line, AS_WRITTEN);
-    if (name === "" || value === undefined) continue;
-
-    cookies[name] = value;
-  }
-}
-
 /** Where a deep link leads that came back through the demo's first page as `?to=<path>`: a static host has no file for a page inside the demo. A path that leads out of the demo is none, and the first page answers. */
 function deepLink(request: Request, base: string): string | undefined {
   const url = new URL(request.url);
@@ -116,23 +90,6 @@ function deepLink(request: Request, base: string): string | undefined {
   return insidePath(`.${to}`, `${base}/`);
 }
 
-/** The request with the headers a browser sends a server and hides from a worker. */
-async function serverRequest(request: Request, cookies: Readonly<Record<string, string>>): Promise<Request> {
-  const headers = new Headers(request.headers);
-  if (Object.keys(cookies).length > 0) headers.set("Cookie", stringifyCookie(cookies, AS_WRITTEN));
-
-  if (request.method === "GET" || request.method === "HEAD") return new Request(request.url, { method: request.method, headers });
-
-  // A worker is asked only by pages of its own origin's scope, and is never told the sender. The form's signed token still has to match.
-  const body = await request.arrayBuffer();
-  const sender = headers.get("Origin");
-  if (sender === null || sender === "null") headers.set("Origin", new URL(request.url).origin);
-
-  headers.set("Content-Length", String(body.byteLength));
-
-  return new Request(request.url, { method: request.method, headers, body });
-}
-
 /**
  * Open the demo: from what an earlier one saved, or from the seed.
  *
@@ -141,9 +98,8 @@ async function serverRequest(request: Request, cookies: Readonly<Record<string, 
  */
 export async function openKeptDemo(host: KeptHost): Promise<KeptDemo> {
   const { saved } = host;
-  const left = { databases: [...(saved?.databases ?? [])], stores: [...(saved?.stores ?? [])], secrets: [...(saved?.secrets ?? [])] };
-  const now: Held = { databases: [], stores: [], secrets: [] };
-  const cookies: Record<string, string> = { ...saved?.cookies };
+  const left = { databases: [...(saved?.databases ?? [])], stores: [...(saved?.stores ?? [])] };
+  const now: Held = { databases: [], stores: [] };
   const retired: Retired = [];
 
   // SQLite's memory is outside the garbage collector's reach: a database is given back only when it is closed.
@@ -166,7 +122,6 @@ export async function openKeptDemo(host: KeptHost): Promise<KeptDemo> {
     resumed: saved !== undefined,
     openDriver,
     openStore: () => held(now.stores, new KeptStore(left.stores.shift())),
-    formSecret: () => held(now.secrets, left.secrets.shift() ?? crypto.getRandomValues(new Uint8Array(SECRET_BYTES))),
   });
 
   return {
@@ -174,8 +129,7 @@ export async function openKeptDemo(host: KeptHost): Promise<KeptDemo> {
       const sentOn = deepLink(request, host.base);
       if (sentOn !== undefined) return new Response(null, { status: 302, headers: { Location: sentOn } });
 
-      const response = await preview.fetch(await serverRequest(request, cookies));
-      keepCookies(response, cookies);
+      const response = await preview.fetch(request);
       // The header speaks for the whole origin, which a static host shares with pages that are not the demo's.
       response.headers.delete(ORIGIN_WIDE_HEADER);
 
@@ -184,8 +138,6 @@ export async function openKeptDemo(host: KeptHost): Promise<KeptDemo> {
     save: () => ({
       databases: now.databases.map((driver) => driver.save()),
       stores: now.stores.map((store) => store.save()),
-      secrets: [...now.secrets],
-      cookies: { ...cookies },
     }),
   };
 }

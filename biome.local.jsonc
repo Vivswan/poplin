@@ -320,25 +320,6 @@
         }
       }
     },
-    // The test runner's own HTML parser reads a page in the dashboard's tests; no page of the product is built with it. The other globals stay refused.
-    {
-      "includes": ["packages/app/tests/dashboard/support/markup.ts"],
-      "linter": {
-        "rules": {
-          "style": {
-            "noRestrictedGlobals": {
-              "level": "error",
-              "options": {
-                "deniedGlobals": {
-                  "FixedLengthStream": "Portable code names no provider global: packages/cloudflare owns it.",
-                  "WebSocketPair": "Portable code names no provider global: packages/cloudflare owns it."
-                }
-              }
-            }
-          }
-        }
-      }
-    },
     // A published package's entry is the one file that re-exports: core is private, so its modules reach npm through it.
     {
       "includes": ["packages/cli/src/core.ts"],

@@ -8,7 +8,7 @@
 //
 // The console's plug is one that changes: its first check finds pieces to repair, a repair mends them, and every run after finds them in place.
 
-import type { DomainPlug, DomainReading, DomainRow, DomainState, FirstRun } from "../../../app/src/dashboard/domain/records";
+import type { DomainPlug, DomainReading, DomainRow, DomainState, FirstRun } from "../../../app/src/console/domain/records";
 
 /** Every state a preview plug can be in, as the address of the setup page names it. */
 export const PLUG_STATES = ["fresh", "partial", "access-off", "done", "token-refused", "unreachable"] as const;

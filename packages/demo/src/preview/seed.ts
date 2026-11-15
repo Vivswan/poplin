@@ -12,7 +12,7 @@ import { listSites } from "../../../core/src/actions/list";
 import { issueToken, revokeToken } from "../../../core/src/actions/manage-tokens";
 import { newLink } from "../../../core/src/actions/new-link";
 import { publishSite } from "../../../core/src/actions/publish";
-import { runDomain } from "../../../app/src/dashboard/domain/domain-run";
+import { runDomain } from "../../../app/src/console/domain/domain-run";
 import { restoreSite } from "../../../core/src/actions/restore";
 import { updateSite } from "../../../core/src/actions/set";
 import { parseLogin } from "../../../core/src/auth/logins";

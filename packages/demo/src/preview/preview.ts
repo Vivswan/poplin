@@ -102,9 +102,6 @@ export interface Host {
   /** Opens the object store of one install; a memory store when left out. A host that keeps the demo across its own restarts hands in a store it can save. */
   readonly openStore?: () => ObjectStore;
 
-  /** The bytes that sign one install's forms; random when left out. */
-  readonly formSecret?: () => Uint8Array<ArrayBuffer>;
-
   /** Whether the first drivers and stores the host opens already hold a demo: nothing is seeded into them, and the preview knows no admin token. */
   readonly resumed?: boolean;
 
@@ -218,7 +215,6 @@ function setupScreenMount(world: World, state: PlugState | typeof SHUT | typeof 
     install: world.install,
     domain: state === FIRST ? previewFirstRun() : previewPlug(state === SHUT ? "done" : state),
     open: async () => state !== SHUT,
-    csrfSecret: world.csrfSecret,
     client: host.client,
     at,
     ...countsOf(world),
@@ -249,7 +245,7 @@ function sampleLatest(version: string): Asking["fetch"] {
 
 /** Open the two installs, the seeded one first: a host that keeps the demo hands its drivers and stores out in that order every time. */
 async function openScene(host: Host, resumed: boolean): Promise<Scene> {
-  const kept = (): Parameters<typeof openWorld>[1] => ({ store: host.openStore?.(), csrfSecret: host.formSecret?.() });
+  const kept = (): Parameters<typeof openWorld>[1] => ({ store: host.openStore?.() });
   const seeded = await openWorld(host.openDriver(), { ...kept(), ...(resumed ? {} : { since: Date.now() - SEEDED_DAYS * DAY_MS }) });
   const empty = await openWorld(host.openDriver(), kept());
   const { token } = resumed ? { token: "" } : await seedWorld(seeded, host.samples);

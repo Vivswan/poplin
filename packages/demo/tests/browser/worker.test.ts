@@ -55,7 +55,7 @@ test("the built 404 page sends an address inside the demo through the first page
   });
   page.end(readFileSync(join(site.path, "404.html"), "utf8"));
 
-  new Function("location", script)({ pathname: "/settings", search: "?done=saved", hash: "#content", replace: (address: string) => sent.push(address) });
+  new Function("location", script)({ pathname: "/activity", search: "?kind=sites", hash: "#content", replace: (address: string) => sent.push(address) });
 
-  expect(sent).toEqual(["/?to=%2Fsettings%3Fdone%3Dsaved#content"]);
+  expect(sent).toEqual(["/?to=%2Factivity%3Fkind%3Dsites#content"]);
 });

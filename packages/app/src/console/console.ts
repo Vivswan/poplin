@@ -16,8 +16,9 @@ import { csrf } from "hono/csrf";
 import { HTTPException } from "hono/http-exception";
 import { secureHeaders } from "hono/secure-headers";
 
-import type { DomainPlug } from "../dashboard/domain/records";
-import type { FreeLimits } from "../dashboard/settings/free-limits";
+import type { DomainPlug } from "./domain/records";
+import type { FreeLimits } from "./settings/free-limits";
+import { hasContentType } from "../api/body";
 import { type CodeTries, takesCode } from "../limits/code-tries";
 import { refused, type Shared } from "./data";
 import { frameOf } from "./frame-routes";
@@ -112,8 +113,7 @@ const MOST_BODY_BYTES = 1_048_576;
 
 /** Let a change through only when its media type is JSON, whatever parameters follow it. */
 const jsonOnly: MiddlewareHandler<Shared> = async (context, next) => {
-  const [type = ""] = (context.req.header("Content-Type") ?? "").split(";");
-  if (type.trim().toLowerCase() !== "application/json") return refused(context, { code: "not_a_form" });
+  if (!hasContentType(context.req.raw, "json")) return refused(context, { code: "not_json" });
 
   return next();
 };

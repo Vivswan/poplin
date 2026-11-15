@@ -6,8 +6,8 @@ import { describe, expect, test } from "bun:test";
 import { createSetupConsole } from "../../src/console/setup-console";
 import type { Counters } from "../../src/limits/limits";
 import { MemoryCounters } from "../../src/limits/memory-counters";
-import { type FakePlug, fakePlug, firstRunOf, TOKEN } from "../dashboard/domain/support/fake-plug";
-import { CSRF_SECRET, ORIGIN, openDashboard } from "../dashboard/support/install";
+import { type FakePlug, fakePlug, firstRunOf, TOKEN } from "./support/fake-plug";
+import { ORIGIN, openOwned } from "./support/install";
 import { CLIENT } from "./support/console";
 import { readShell } from "./support/shell";
 
@@ -47,7 +47,7 @@ function guardedPlug(): FakePlug {
 }
 
 async function openSetup(options: Options = {}) {
-  const opened = await openDashboard();
+  const opened = await openOwned();
   const plug = guardedPlug();
   const reads = { count: 0 };
   const { database } = opened.install;
@@ -69,7 +69,6 @@ async function openSetup(options: Options = {}) {
     open: options.open ?? (async () => true),
     counters: options.counters ?? new MemoryCounters(),
     visitorOf: async () => "203.0.113.7",
-    csrfSecret: CSRF_SECRET,
     client: CLIENT,
     at: options.at,
   });

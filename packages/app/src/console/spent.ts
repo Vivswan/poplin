@@ -8,7 +8,7 @@
 import { AllowanceSpent, secondsToNextDay } from "@poplin/core/src/database/driver";
 import { WritesSpent } from "@poplin/core/src/storage/metered";
 
-import { refusalSentence } from "../dashboard/page/notices";
+import { refusalSentence } from "./notices";
 
 /** The refusal of each allowance of the database that is used up for the day. */
 const SPENT_CODES = { writing: "no_more_writing", reading: "no_more_reading" } as const;

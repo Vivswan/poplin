@@ -74,7 +74,7 @@ test("a deep link that comes back as `?to=` is sent on to its page inside the de
     return [answer.status, answer.headers.get("Location")];
   };
 
-  expect(await sentOn("?to=%2Fsettings%3Fdone%3Dsaved%23content")).toEqual([302, "/poplin/demo/settings?done=saved#content"]);
+  expect(await sentOn("?to=%2Factivity%3Fkind%3Dsites%23content")).toEqual([302, "/poplin/demo/activity?kind=sites#content"]);
   expect([await sentOn("?to=%2F..%2F"), await sentOn("?to=%2F..%2Fdemo-two%2F"), await sentOn("?view=trash")]).toEqual([
     [200, null],
     [200, null],

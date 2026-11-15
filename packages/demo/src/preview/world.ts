@@ -24,7 +24,7 @@ const ADMIN_EMAIL = "mira@example.com";
 /** The title of the demo's dashboards, where a real install starts with the hostname of its dashboard. */
 const DASHBOARD_TITLE = "poplin";
 
-/** The bytes of a signing key and of a forms secret. */
+/** The bytes of a signing key. */
 const KEY_BYTES = 32;
 
 /** A clock that follows the machine's own unless the seed holds it at one moment. */
@@ -36,9 +36,6 @@ interface Clock {
 interface Kept {
   /** The object store, which the host can save. */
   readonly store?: ObjectStore;
-
-  /** The bytes that sign the forms' tokens. */
-  readonly csrfSecret?: Uint8Array<ArrayBuffer>;
 
   /** When the install was set up, in milliseconds since the epoch: now when left out. A seeded install was set up before its sample history began. */
   readonly since?: number;
@@ -57,9 +54,6 @@ export interface World {
 
   /** The request counts of the limits, the login codes, and the setup page. */
   readonly counters: MemoryCounters;
-
-  /** The bytes that sign the forms' tokens. */
-  readonly csrfSecret: Uint8Array<ArrayBuffer>;
 }
 
 function layout(): ReturnType<typeof hostnameAddresses> {
@@ -76,7 +70,7 @@ export const ADDRESSES = layout();
  * Open a fresh install with the default settings and the sample admin as its one login.
  *
  * @param driver - a SQL database of the host's own, such as SQLite in memory: empty, or holding a demo opened before
- * @param kept - the store and the forms secret of a host that keeps them; a memory store and random bytes when left out
+ * @param kept - the store of a host that keeps one; a memory store when left out
  * @returns the install, with nothing published in an empty database; settings and a signing key that are there already stay as they are
  * @throws {Error} the database did not open
  */
@@ -99,6 +93,5 @@ export async function openWorld(driver: SqlDriver, kept: Kept = {}): Promise<Wor
     admin: { scope: "admin", holder },
     clock,
     counters: new MemoryCounters(),
-    csrfSecret: kept.csrfSecret ?? crypto.getRandomValues(new Uint8Array(KEY_BYTES)),
   };
 }

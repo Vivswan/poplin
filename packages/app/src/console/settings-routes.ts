@@ -14,8 +14,8 @@ import { defaultSettings, SETTING_VALUES, type SettingValues, settingsFromText, 
 import { Hono } from "hono";
 import * as v from "valibot";
 
-import { DOMAIN_SETTINGS } from "../dashboard/settings/constants";
-import { type FreeLimits, freeLimitWarnings } from "../dashboard/settings/free-limits";
+import { DOMAIN_SETTINGS } from "./settings/constants";
+import { type FreeLimits, freeLimitWarnings } from "./settings/free-limits";
 import { NOTHING, refused, refuseInvalid, type Shared } from "./data";
 import { type Control, controlOf } from "./setting-controls";
 

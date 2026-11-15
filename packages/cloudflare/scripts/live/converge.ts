@@ -10,7 +10,7 @@
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { DomainRow, DomainSettings } from "@poplin/app/src/dashboard/domain/records";
+import type { DomainRow, DomainSettings } from "@poplin/app/src/console/domain/records";
 import { parseLogins } from "@poplin/core/src/auth/logins";
 import { BaseBuckets } from "cloudflare/resources/r2/buckets/buckets";
 

@@ -4,7 +4,7 @@
 //   GET  <at>/assets/<file>  the client's script, stylesheet, and fonts, which a browser keeps for good
 //   POST <at>/data/check     read every piece with the token in the body
 //   POST <at>/data/repair    make every piece match; on an install with nothing set it also gives the install its domain and first login
-//   anything else            the setup page's own handler, which answers the two paths a program calls
+//   anything else            the setup's own handler, which answers the two paths a program calls
 //
 // Every run is the setup page's own run of a program's call: it is counted against the sender's address, refused when the counter cannot answer, and reads nothing of the install before the token is proven.
 // The token is in the body of its one request and nowhere else. While the page is shut every path answers 404 and says nothing.
@@ -12,9 +12,9 @@
 import { type Context, Hono, type MiddlewareHandler } from "hono";
 import { secureHeaders } from "hono/secure-headers";
 
-import { createSetup } from "../dashboard/domain/setup";
-import type { DomainReading } from "../dashboard/domain/records";
-import type { DomainRun } from "../dashboard/domain/domain-run";
+import { createSetup } from "./domain/setup";
+import type { DomainReading } from "./domain/records";
+import type { DomainRun } from "./domain/domain-run";
 import { POLICY } from "./console";
 import { runDone, runRefusal } from "./domain-answers";
 import { type ClientFiles, KEPT_FOR_GOOD, shellPage } from "./shell";
@@ -28,7 +28,7 @@ const SETUP_PATH = "/setup";
 /** The whole answer of a page that is shut. */
 const NOT_FOUND = "Not found.";
 
-/** What the setup page's own handler is built from. */
+/** What the setup's own handler is built from. */
 type SetupParts = Parameters<typeof createSetup>[0];
 
 /** What the setup screen is built from: the setup page's own parts, and the client's files. */
@@ -40,7 +40,7 @@ interface SetupConsoleParts extends SetupParts {
   readonly at?: string;
 }
 
-/** What the handlers of one request share: the setup page's own handler, which runs a program's call. */
+/** What the handlers of one request share: the setup's own handler, which runs a program's call. */
 interface SetupShared {
   Variables: { runs: (request: Request) => Promise<Response> };
 }
@@ -65,7 +65,7 @@ function notFound(): Response {
   return new Response(NOT_FOUND, { status: 404, headers: { "Content-Type": "text/plain; charset=utf-8" } });
 }
 
-/** Send a run to the setup page's own handler as a program's call, and answer what it read as the screen draws it. */
+/** Send a run to the setup's own handler as a program's call, and answer what it read as the screen draws it. */
 async function ran(context: Context<SetupShared>, run: DomainRun) {
   const answered = await context.get("runs")(new Request(new URL(`${SETUP_PATH}/api/${run}`, context.req.url), context.req.raw));
 
@@ -87,10 +87,9 @@ const setupRoutes = new Hono<SetupShared>().post("/check", carries, (context) =>
 export type SetupRoutes = typeof setupRoutes;
 
 /**
- * Build the setup screen over the setup page's own handler.
+ * Build the setup screen over the setup's own handler.
  *
- * @returns a handler for the page, the client's files, and the two runs; every other request goes to the setup page's own handler. While `open` answers `false`, or fails to say, every path is a 404 that says nothing
- * @throws {RangeError} the CSRF secret is under 32 bytes
+ * @returns a handler for the page, the client's files, and the two runs; every other request goes to the setup's own handler. While `open` answers `false`, or fails to say, every path is a 404 that says nothing
  */
 export function createSetupConsole(parts: SetupConsoleParts): { readonly fetch: (request: Request) => Promise<Response> } {
   // The gate below asks whether the page is open, once a request, before anything reaches the page's own handler: that one is told yes.

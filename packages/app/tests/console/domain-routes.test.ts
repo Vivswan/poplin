@@ -7,8 +7,8 @@ import { AllowanceSpent } from "@poplin/core/src/database/driver";
 import type { DomainCheck } from "@poplin/core/src/records/domain-check";
 
 import { keptAnswer, runDone } from "../../src/console/domain-answers";
-import type { DomainReading, DomainRow, DomainState } from "../../src/dashboard/domain/records";
-import { fakePlug, TOKEN, usualPlug } from "../dashboard/domain/support/fake-plug";
+import type { DomainReading, DomainRow, DomainState } from "../../src/console/domain/records";
+import { fakePlug, TOKEN, usualPlug } from "./support/fake-plug";
 import { openConsole } from "./support/console";
 import { readShell } from "./support/shell";
 

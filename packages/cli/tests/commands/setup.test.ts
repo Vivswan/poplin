@@ -1,17 +1,14 @@
 import { afterEach, describe, expect, test } from "bun:test";
 
-import type { DomainReading } from "../../../app/src/dashboard/domain/records";
-import { createSetup } from "../../../app/src/dashboard/domain/setup";
+import type { DomainReading } from "../../../app/src/console/domain/records";
+import { createSetup } from "../../../app/src/console/domain/setup";
 import { MemoryCounters } from "../../../app/src/limits/memory-counters";
 import { ORIGIN } from "../../../app/tests/api/support/install";
-import { fakePlug, firstRunOf, TOKEN, usualPlug } from "../../../app/tests/dashboard/domain/support/fake-plug";
+import { fakePlug, firstRunOf, TOKEN, usualPlug } from "../../../app/tests/console/support/fake-plug";
 import { type Bench, cleanUp, jsonOf, openBench } from "./support/harness";
 
 /** The environment of a person who has a provider's token and no login. */
 const ENV = { POPLIN_SETUP_TOKEN: TOKEN };
-
-/** The secret the setup page signs its forms with: 32 bytes, as the page asks. */
-const SECRET = new Uint8Array(32).fill(7);
 
 /** The command line of a setup of the test install. */
 const SETUP = `setup --server ${ORIGIN}`;
@@ -24,7 +21,6 @@ function withSetup(bench: Bench, plug: ReturnType<typeof fakePlug>, open = true)
     open: async () => open,
     counters: new MemoryCounters(),
     visitorOf: async () => "203.0.113.7",
-    csrfSecret: SECRET,
   });
   bench.hook = (request) => setup.fetch(request);
 }
@@ -123,7 +119,7 @@ describe("poplin setup", () => {
     const bench = await openBench();
     const plug = usualPlug();
     const first = firstRunOf(plug);
-    const setup = createSetup({ install: { database: bench.install.database, now: () => bench.install.clock.now }, domain: first, open: async () => true, counters: new MemoryCounters(), visitorOf: async () => "203.0.113.7", csrfSecret: SECRET });
+    const setup = createSetup({ install: { database: bench.install.database, now: () => bench.install.clock.now }, domain: first, open: async () => true, counters: new MemoryCounters(), visitorOf: async () => "203.0.113.7" });
     bench.hook = (request) => setup.fetch(request);
 
     const repaired = await bench.run(`${SETUP} --domain example.com --login Owner@example.com`, { env: ENV });

@@ -8,9 +8,9 @@
 
 import type { DomainCheck } from "@poplin/core/src/records/domain-check";
 
-import { refusalSentence } from "../dashboard/page/notices";
-import type { DomainRun } from "../dashboard/domain/domain-run";
-import type { DomainReading, DomainRow, DomainState, DomainStep } from "../dashboard/domain/records";
+import { refusalSentence } from "./notices";
+import type { DomainRun } from "./domain/domain-run";
+import type { DomainReading, DomainRow, DomainState, DomainStep } from "./domain/records";
 
 /** The label of each state and how it is read: `good` stands, `bad` needs work, `idle` was left as it is and is no failure. */
 const STATES: Readonly<Record<DomainState, Pick<ShownRow, "state" | "tone">>> = {

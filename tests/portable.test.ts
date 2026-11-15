@@ -396,18 +396,9 @@ describe("provider code stays out of the portable packages", () => {
       "website/src/planted.ts",
       ".github/scripts/planted.ts",
     ];
-    const kept = "packages/app/tests/dashboard/support/markup.ts";
-    const refused = plantedLint({
-      ...Object.fromEntries([...PORTABLE_PLACES, ...outside].map((path) => [path, leak])),
-      [kept]: "export const page = new HTMLRewriter();\nexport const stream = new FixedLengthStream(1);\n",
-    });
+    const refused = plantedLint(Object.fromEntries([...PORTABLE_PLACES, ...outside].map((path) => [path, leak])));
 
-    expect(refused).toEqual(
-      [
-        `noRestrictedGlobals: ${kept}:2`,
-        ...PORTABLE_PLACES.flatMap((path) => [`noRestrictedImports: ${path}:1`, `noRestrictedGlobals: ${path}:2`, `noRestrictedTypes: ${path}:3`]),
-      ].sort(),
-    );
+    expect(refused).toEqual(PORTABLE_PLACES.flatMap((path) => [`noRestrictedImports: ${path}:1`, `noRestrictedGlobals: ${path}:2`, `noRestrictedTypes: ${path}:3`]).sort());
   });
 
   test("drift: code that runs in a browser or in any runtime names none: the dashboard's source and core's are refused a runtime's module and global, and a tool or a test beside the dashboard's source is not", () => {
@@ -511,9 +502,9 @@ describe("provider code stays out of the portable packages", () => {
     ["its word for a domain in a name", "const zoneId = read();", "zone"],
     ["its word for a domain in a text", 'const meaning = "The zone\'s bot switches.";', "zone"],
   ])("names %s", (_, line, word) => {
-    using tree = plantedRepository({ "packages/app/src/dashboard/planted.ts": `// A planted file.\n${line}\n` });
+    using tree = plantedRepository({ "packages/app/src/console/planted.ts": `// A planted file.\n${line}\n` });
 
-    expect(violations(tree.path)).toEqual([`provider word: packages/app/src/dashboard/planted.ts:2: ${word}`]);
+    expect(violations(tree.path)).toEqual([`provider word: packages/app/src/console/planted.ts:2: ${word}`]);
   });
 
   test("drift: a JSX file was refused whole, so the dashboard could hold none; its names, texts, and markup are read, and its comments are not", () => {
