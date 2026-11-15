@@ -4,6 +4,7 @@
 //   the app is asked   https://poplin.example.com/data/sites
 //   the app answers    "url": "https://<a site's host label>.example.com/"    Location: https://<a site's host label>.example.com/
 //   the browser gets   "url": "http://127.0.0.1:4400/served/<a site's host label>/"    Location: /served/<a site's host label>/
+//   a site with a real address, where the host has one: "url": "https://<its address on a real install>/"
 //
 // A site's place is its whole first host label, so the mount knows nothing of how a label is built.
 //
@@ -38,6 +39,12 @@ const RETURN_KEY = "return";
 /** That key and its value in the query of a path, as a page or a header writes them. */
 const RETURN_VALUE = /([?&;]return=)([^&#]*)/;
 
+/** The scheme every real address of a site begins with. */
+const HTTPS = "https://";
+
+/** No site with a real address. */
+const NO_REAL: ReadonlyMap<string, string> = new Map();
+
 /** The headers a rewritten body no longer matches. */
 const BODY_HEADERS = ["Content-Length", "ETag", "Accept-Ranges"];
 
@@ -69,6 +76,9 @@ interface Look {
 
   /** Draws a page of the preview around a refusal the app answers as plain text, which leads back to the dashboard. */
   readonly framed: (text: string, status: number) => Promise<string>;
+
+  /** The address a link to a site leads to instead of the preview's own serving of it, by the site's hostname: the root of an https origin, or of the dashboard. None when left out. */
+  readonly real?: ReadonlyMap<string, string>;
 }
 
 function mountedPath(mount: Pick<Mount, "prefix" | "base">, path: string): string {
@@ -108,9 +118,10 @@ function localPath(path: string, here: Pick<Mount, "prefix" | "origin" | "base">
  * Write the address in the preview of one the app wrote.
  *
  * @param here - the mount whose page holds the address, which a path without a host belongs to
- * @returns a path of the preview; an address of neither the install nor the mount stays as it is
+ * @param real - the address a site's own leads to instead, by the site's hostname
+ * @returns a path of the preview, or the real address of a site that has one; an address of neither the install nor the mount stays as it is
  */
-export function localAddress(address: string, here: Pick<Mount, "prefix" | "origin" | "base">): string {
+export function localAddress(address: string, here: Pick<Mount, "prefix" | "origin" | "base">, real: ReadonlyMap<string, string> = NO_REAL): string {
   if (address.startsWith("/") && !address.startsWith("//")) return localPath(address, here);
 
   const url = URL.parse(address);
@@ -118,7 +129,7 @@ export function localAddress(address: string, here: Pick<Mount, "prefix" | "orig
 
   // The place a login goes back to is an address of the install too.
   const back = url.searchParams.get(RETURN_KEY);
-  if (back !== null) url.searchParams.set(RETURN_KEY, localAddress(back, here));
+  if (back !== null) url.searchParams.set(RETURN_KEY, localAddress(back, here, real));
 
   const rest = `${url.search}${url.hash}`;
   if (url.origin === here.origin) return `${mountedPath(here, url.pathname)}${rest}`;
@@ -127,14 +138,24 @@ export function localAddress(address: string, here: Pick<Mount, "prefix" | "orig
 
   if (!ADDRESSES.isSiteHost(url.hostname)) return address;
 
-  return `${servedPath(url.hostname)}${url.pathname}${rest}`;
+  const root = real.get(url.hostname);
+  if (root === undefined) return `${servedPath(url.hostname)}${url.pathname}${rest}`;
+
+  // The dashboard's own root is a path of the preview, as every address of the dashboard is.
+  const moved = `${root}${url.pathname.slice(1)}${rest}`;
+
+  return moved.startsWith(`${ADMIN_ORIGIN}/`) ? moved.slice(ADMIN_ORIGIN.length) : moved;
 }
 
 /** Every address of the install a text holds outside an attribute, written as the preview's own: what a person reads and copies is what works here. */
-function localText(text: string, origin: string): string {
+function localText(text: string, origin: string, real: ReadonlyMap<string, string>): string {
   const host = origin.replace(/^https?:\/\//, "");
   const written = text.replace(HOST_ADDRESS, (...[whole = "", scheme, label = ""]: string[]) => {
     if (!ADDRESSES.isSiteHost(`${label}${DOMAIN_ENDING}`)) return whole;
+
+    // A real address is written as the text wrote the site's own: with its scheme or without.
+    const root = real.get(`${label}${DOMAIN_ENDING}`);
+    if (root !== undefined) return scheme === undefined ? root.slice(HTTPS.length) : root;
 
     return `${scheme === undefined ? host : origin}${SERVED_PREFIX}/${label}/`;
   });
@@ -143,13 +164,14 @@ function localText(text: string, origin: string): string {
 }
 
 async function rewriteBody(text: string, kind: Kind, here: Mount, look: Look, status: number): Promise<string> {
-  if (kind === "json") return localText(text, look.origin);
+  const real = look.real ?? NO_REAL;
+  if (kind === "json") return localText(text, look.origin, real);
 
   if (kind === "plain") return look.framed(text, status);
 
-  const linked = withAddresses(text, (address) => localAddress(address, here));
+  const linked = withAddresses(text, (address) => localAddress(address, here, real));
 
-  return localText(linked, look.origin);
+  return localText(linked, look.origin, real);
 }
 
 /** Which kind of text a response holds that this mount rewrites; none for a body that goes out as it is. */
@@ -212,7 +234,7 @@ export async function askMount(request: Request, here: Mount, look: Look): Promi
   const response = await here.answer(await appRequest(request, here));
   const headers = new Headers(response.headers);
   const location = headers.get("Location");
-  if (location !== null) headers.set("Location", localAddress(location, here));
+  if (location !== null) headers.set("Location", localAddress(location, here, look.real));
 
   // The session cookie is made for the install's own domain, which no local origin is.
   headers.delete("Set-Cookie");

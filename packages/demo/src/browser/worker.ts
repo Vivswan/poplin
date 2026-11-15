@@ -10,6 +10,7 @@ import { createStore, del, get, set } from "idb-keyval";
 import { base64ToUint8Array } from "uint8array-extras";
 
 import type { ClientFiles } from "../../../app/src/console/shell";
+import { REAL_SITES_FILE, type RealSites, readRealSites } from "../preview/real-sites";
 import type { Samples } from "../preview/seed";
 // The first module of the bundle to run: every other one builds its requests and responses with the classes this one puts in place.
 import { plainResponse } from "./free-headers";
@@ -38,6 +39,9 @@ const WASM = new URL(`sql-wasm.wasm?v=${BUILD}`, self.registration.scope).href;
 
 /** Where the dashboard's client is: in a folder beside this script. */
 const CLIENT_FOLDER = new URL("assets/", self.registration.scope).href;
+
+/** Where the host keeps the real addresses of the sample sites, if it has them: beside this script. */
+const REAL_SITES = new URL(REAL_SITES_FILE, self.registration.scope).href;
 
 /** The media type of a file whose host names none. */
 const NO_TYPE = "application/octet-stream";
@@ -141,6 +145,17 @@ async function clientFile(name: string): ReturnType<ClientFiles["file"]> {
   return { body: new Uint8Array(await file.arrayBuffer()), type: file.headers.get("Content-Type") ?? NO_TYPE };
 }
 
+/** The real addresses the host has now, asked anew at every start: an install that holds the sample sites makes them again, at other addresses. `undefined` for a host without the file, with one that is no JSON, or one that cannot be reached. */
+async function realSites(): Promise<RealSites | undefined> {
+  try {
+    const answered = await fetch(REAL_SITES, { cache: "no-store" });
+
+    return answered.ok ? readRealSites(await answered.json()) : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 function samples(): Samples {
   const unpacked = Object.entries(PACKED_SAMPLES).map(([name, files]) => {
     const read = files.map(([path, contentType, base64]) => ({ path, contentType, bytes: base64ToUint8Array(base64) }));
@@ -154,7 +169,7 @@ function samples(): Samples {
 /** Start the demo, and save one that started from the seed: its pages name sites a second seed would name otherwise. */
 async function start(saved: SavedDemo | undefined): ReturnType<typeof openKeptDemo> {
   const client: ClientFiles = { entry: async () => CLIENT.entry, file: clientFile };
-  const demo = await openKeptDemo({ sqlite: await loadSqlite(await wasmBytes()), samples: samples(), version: VERSION, base: BASE, client, saved });
+  const demo = await openKeptDemo({ sqlite: await loadSqlite(await wasmBytes()), samples: samples(), version: VERSION, base: BASE, client, saved, real: await realSites() });
   if (saved === undefined) await save(demo);
 
   return demo;

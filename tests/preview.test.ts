@@ -8,6 +8,7 @@ import { readShell } from "../packages/app/tests/console/support/shell";
 import { BunSqliteDriver } from "../packages/core/tests/database/support/bun-sqlite-driver";
 import { withAddresses } from "../packages/demo/src/preview/addresses";
 import { createPreview } from "../packages/demo/src/preview/preview";
+import { readRealSites } from "../packages/demo/src/preview/real-sites";
 import { HOST, PID_PATH, pidFile, stopRunning } from "../packages/demo/scripts/running";
 import { readSamples } from "../packages/demo/scripts/samples";
 import { plantedLint } from "./support/planted-lint";
@@ -243,6 +244,26 @@ describe("the local preview", () => {
     expect(answers.flatMap(([path, text]) => (text.match(INSTALL_ADDRESS) ?? []).map((found) => [path, found]))).toEqual([]);
     expect(served.filter(([, local]) => !local)).toEqual([]);
     expect(served.filter(([, , status]) => status === 200).length).toBeGreaterThan(5);
+  });
+
+  // Drift: a demo beside an install that holds the same sites sends a visitor to the real ones. An address taken from the host's file as it stands, or kept for a site the visitor changed, would send them somewhere the row does not describe.
+  test("a host's real addresses become the links of the sample sites they name, under a base too, one that is no https root does not, the demo's own site leads to its dashboard, and a site a visitor changed is the demo's own again", async () => {
+    const real = { "sales-report": "https://sales-report--p1a2b3.example.org/", "lisbon-trip": "https://lisbon-page.example.org/", handbook: "http://handbook-page.example.org/", nobody: "https://nobody.example.org/" };
+    const base = "/poplin/demo";
+    const preview = await createPreview({ openDriver: () => new BunSqliteDriver(), samples: await readSamples(), version: VERSION, client: CLIENT, base, real: readRealSites(real) });
+    const urls = async (): Promise<Record<string, string>> => Object.fromEntries((await data<Listed>(preview, `${base}/data/sites`)).sites.map((site) => [site.name, site.url]));
+    const before = await urls();
+    const { sites } = await data<Listed>(preview, `${base}/data/sites?q=sales-report`);
+    const panel = await (await open(preview, `${base}/data/sites/${sites[0]?.label}`)).text();
+    const sent = await change(preview, `${base}/data/sites/${sites[0]?.label}/access`, { access: "unlisted" });
+    const checkout = (await data<Listed>(preview, `${base}/data/sites?q=checkout`)).sites[0]?.label;
+    const renamed = await change(preview, `${base}/data/sites/${checkout}/naming`, { name: "lisbon-trip" });
+    const after = await urls();
+
+    expect([before["sales-report"], before["lisbon-trip"], before.demo, before.handbook]).toEqual([real["sales-report"], real["lisbon-trip"], `${ORIGIN}${base}/`, `${ORIGIN}${base}/served/handbook-page/`]);
+    expect(panel).toContain(`"${real["sales-report"]}"`);
+    expect([sent.status, renamed.status]).toEqual([200, 200]);
+    expect([after["sales-report"]?.startsWith(`${ORIGIN}${base}/served/sales-report--`), Object.values(after).filter((url) => url.startsWith("https://"))]).toEqual([true, []]);
   });
 
   // Drift: the Activity screen shows the log as it is stored, newest first. A seed that wrote its history out of order would show days that jump back and forth.

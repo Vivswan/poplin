@@ -1,10 +1,9 @@
-// The sample data of the demo, made through the product's own actions: tokens, sites published from the sample sites the host hands in, a site in the trash, settings above a free limit, logins, the day's requests, and a check of the domain.
+// The sample data of the demo, made through the product's own actions: tokens, the sites of `sample-sites.ts` published from the sample sites the host hands in, settings above a free limit, logins, the day's requests, and a check of the domain.
 //
 // The check finds every piece in place, so the install remembers a healthy domain. A Check on the Domain tab finds pieces to repair and replaces that memory; a reset brings the healthy one back.
 //
 // Every name and address is invented. The history is played in the order of its moments, so the audit log rises in time with its sequence, as a real install's does.
 
-import type { SiteChanges } from "../../../core/src/actions/changes";
 import { beginLogin, decideLogin, redeemLogin } from "../../../core/src/actions/computer-logins";
 import { changeConfig } from "../../../core/src/actions/config";
 import { deleteSite } from "../../../core/src/actions/delete";
@@ -18,6 +17,7 @@ import { updateSite } from "../../../core/src/actions/set";
 import { parseLogin } from "../../../core/src/auth/logins";
 import type { Actor } from "../../../core/src/auth/scopes";
 import { previewPlug } from "./domain-plug";
+import { type Draft, SITE_HISTORY, type SiteMoment, SITES, THE_DEMO, type Who } from "./sample-sites";
 import type { World } from "./world";
 
 /** The milliseconds of one day, and of one minute. */
@@ -37,6 +37,13 @@ const WAITING = [
   { scope: "publisher", computer: "studio-laptop" },
   { scope: "admin", computer: "build-server" },
 ] as const;
+
+/** The one page of the site that stands for the demo itself: it leads back to the demo, two folders above the place the site is served at. */
+const STAND_IN = {
+  path: "index.html",
+  contentType: "text/html; charset=utf-8",
+  bytes: new TextEncoder().encode('<!doctype html>\n<meta charset="utf-8">\n<meta http-equiv="refresh" content="0; url=../../">\n<title>poplin demo</title>\n<p><a href="../../">Open the demo</a></p>\n'),
+};
 
 /** The token the seed's check of the domain is run with. The preview's plug takes any, and nothing keeps it. */
 const DOMAIN_TOKEN = "sample-token";
@@ -60,75 +67,32 @@ const WEEKEND_SHARE = 0.8;
 /** The days over which a site's count grew from a third to what it is today. */
 const GROWTH_DAYS = 300;
 
-/** Every sample site, by the name it is made under, the oldest first. */
-const SITES: readonly Draft[] = [
-  { ago: 30, name: "handbook", sample: "trip-summary", by: "mira", settings: { access: "public", title: "Team handbook" } },
-  { ago: 21, name: "sales-report", sample: "sales-report", by: "report agent", settings: { title: "Q3 sales report" } },
-  { ago: 15, name: "old-notes", sample: "trip-summary", by: "travel agent", settings: { title: "Notes from the offsite" } },
-  { ago: 12, name: "launch-deck", sample: "launch-deck", by: "mira", settings: { access: "unlisted", title: "Launch deck" } },
-  { ago: 10, name: "team-site", sample: "checkout-prototype", beside: { deck: "launch-deck", report: "sales-report" }, by: "mira", settings: { title: "Team site" } },
-  { ago: 9, name: "lisbon-trip", sample: "trip-summary", by: "travel agent", settings: { access: "public", public_name: "lisbon", title: "Lisbon, four days" } },
-  { ago: 5, name: "pricing-draft", sample: "sales-report", by: "report agent", settings: { access: "unlisted", embeddable: false } },
-  { ago: 4, name: "spring-offer", sample: "checkout-prototype", by: "mira", settings: { access: "unlisted", title: "Spring offer", expires: "1h" } },
-  { ago: 2, name: "status-board", sample: "launch-deck", by: "mira", settings: {} },
-  { ago: 0, name: "checkout", sample: "checkout-prototype", by: "mira", settings: { title: "Checkout prototype", expires: "2d" } },
-];
-
 /** What happened to the install besides the making of its sites, the oldest moment first. The settings end with a second login, a limit on the sites, and a day's requests above the provider's free limit, so its warning shows. */
-const HISTORY: readonly Moment[] = [
+const HISTORY: readonly PlainMoment[] = [
   { ago: 30.9, does: "token", by: "mira", note: "report agent" },
   { ago: 30.8, does: "token", by: "mira", note: "travel agent" },
   { ago: 29.6, does: "settings", by: "mira", changes: { logins: ["mira@example.com", SECOND_ADMIN] } },
   { ago: 29.5, does: "login", by: "jonas" },
   { ago: 28.9, does: "domain", by: "mira", run: "check" },
   { ago: 28.8, does: "domain", by: "mira", run: "repair" },
-  { ago: 27.7, does: "version", by: "mira", site: "handbook" },
   { ago: 26.5, does: "token", by: "jonas", note: "old laptop" },
-  { ago: 25.6, does: "version", by: "jonas", site: "handbook" },
   { ago: 24.4, does: "login", by: "mira" },
   { ago: 23.2, does: "login", by: "jonas" },
-  { ago: 22.4, does: "set", by: "jonas", site: "handbook", changes: { search_engines: true } },
   { ago: 21.6, does: "login", by: "mira" },
-  { ago: 20, does: "version", by: "report agent", site: "sales-report" },
-  { ago: 19, does: "version", by: "report agent", site: "sales-report" },
-  { ago: 18.6, does: "set", by: "jonas", site: "sales-report", changes: { embeddable: false } },
   { ago: 17.3, does: "login", by: "jonas" },
-  { ago: 16.4, does: "version", by: "report agent", site: "sales-report" },
-  { ago: 14.5, does: "set", by: "mira", site: "old-notes", changes: { access: "unlisted" } },
   { ago: 14.1, does: "login", by: "mira" },
-  { ago: 13.8, does: "version", by: "mira", site: "handbook" },
-  { ago: 13.1, does: "version", by: "travel agent", site: "old-notes" },
   { ago: 12.4, does: "login", by: "jonas" },
-  { ago: 11.6, does: "link", by: "mira", site: "launch-deck" },
   { ago: 11.2, does: "computer", by: "mira", computer: "design-laptop", allow: true },
   { ago: 10.6, does: "login", by: "jonas" },
-  { ago: 9.7, does: "version", by: "report agent", site: "sales-report" },
-  { ago: 8.9, does: "version", by: "mira", site: "launch-deck" },
-  { ago: 8.6, does: "version", by: "travel agent", site: "lisbon-trip" },
   { ago: 7.9, does: "revoke", by: "mira", note: "old laptop" },
   { ago: 7.4, does: "login", by: "mira" },
-  { ago: 6.8, does: "version", by: "mira", site: "team-site" },
   { ago: 6.1, does: "computer", by: "jonas", computer: "kiosk-display", allow: false },
-  { ago: 5.6, does: "version", by: "report agent", site: "sales-report" },
-  { ago: 4.6, does: "version", by: "report agent", site: "pricing-draft" },
   { ago: 4.3, does: "login", by: "mira" },
-  { ago: 3.9, does: "set", by: "mira", site: "pricing-draft", changes: { name: "pricing" } },
-  { ago: 3.5, does: "version", by: "travel agent", site: "lisbon-trip" },
-  { ago: 3.2, does: "set", by: "jonas", site: "spring-offer", changes: { embeddable: false } },
-  { ago: 3, does: "trash", by: "mira", site: "old-notes" },
   { ago: 2.9, does: "login", by: "jonas" },
-  { ago: 2.7, does: "version", by: "report agent", site: "sales-report" },
-  { ago: 2.4, does: "trash", by: "jonas", site: "launch-deck" },
-  { ago: 2.3, does: "restore", by: "mira", site: "launch-deck" },
   { ago: 1.8, does: "login", by: "jonas" },
-  { ago: 1.5, does: "version", by: "mira", site: "team-site" },
   { ago: 1, does: "settings", by: "mira", changes: { max_sites: 40, requests_per_day: 250_000 } },
   { ago: 0.9, does: "login", by: "mira" },
-  { ago: 0.7, does: "version", by: "report agent", site: "pricing-draft" },
-  { ago: 0.6, does: "version", by: "mira", site: "handbook" },
-  { ago: 0.4, does: "version", by: "travel agent", site: "lisbon-trip" },
   { ago: 0.3, does: "login", by: "jonas" },
-  { ago: 0.2, does: "version", by: "report agent", site: "sales-report" },
 ];
 
 /** One file of a sample site, read whole by the host. */
@@ -146,34 +110,17 @@ interface SampleFile {
 /** The files of every sample site, by the name of its folder under `demo/samples`. */
 export type Samples = Readonly<Record<string, readonly SampleFile[]>>;
 
-/** Who does a thing: one of the two people, or an agent by the note of its token. */
-type Who = "mira" | "jonas" | "report agent" | "travel agent";
-
-/** One sample site: how many days ago it is made, the sample it is published from, the samples it holds beside that one, each under a folder, and who publishes it. */
-interface Draft {
-  readonly ago: number;
-  readonly name: string;
-  readonly sample: string;
-  readonly beside?: Readonly<Record<string, string>>;
-  readonly by: Who;
-  readonly settings: SiteChanges;
-}
-
-/** A moment that touches a site, by the name the site was made under, whatever it is called since. */
-type SiteMoment =
-  | { readonly does: "version" | "trash" | "restore" | "link"; readonly site: string }
-  | { readonly does: "set"; readonly site: string; readonly changes: SiteChanges };
-
-/** A moment that touches no site. A `computer` asks to publish and is allowed or denied. */
-type PlainMoment =
+/** A moment that touches no site: how many days ago it happens, what is done, and by whom. A `computer` asks to publish and is allowed or denied. */
+type PlainMoment = { readonly ago: number; readonly by: Who } & (
   | { readonly does: "token" | "revoke"; readonly note: string }
   | { readonly does: "settings"; readonly changes: Readonly<Record<string, unknown>> }
   | { readonly does: "domain"; readonly run: "check" | "repair" }
   | { readonly does: "computer"; readonly computer: string; readonly allow: boolean }
-  | { readonly does: "login" };
+  | { readonly does: "login" }
+);
 
-/** One moment of the history: how many days ago it happens, what is done, and by whom. */
-type Moment = { readonly ago: number; readonly by: Who } & (SiteMoment | PlainMoment);
+/** One moment of the history. */
+type Moment = PlainMoment | SiteMoment;
 
 /** A sample site as the history goes on with it: the label it has now, and the files every version of it holds. */
 interface Made {
@@ -213,7 +160,7 @@ function filesOf(draft: Draft, samples: Samples): Made["files"] {
   const placed = [["", draft.sample] as const, ...Object.entries(draft.beside ?? {}).map(([folder, sample]) => [`${folder}/`, sample] as const)];
 
   return placed.flatMap(([folder, sample]) => {
-    const files = samples[sample];
+    const files = sample === THE_DEMO ? [STAND_IN] : samples[sample];
     if (files === undefined) throw new Error(`the demo's seed has no sample called ${sample}`);
 
     return files.map(({ path, contentType, bytes }) => ({ path: `${folder}${path}`, contentType, size: bytes.length, open: () => new Blob([bytes]).stream() }));
@@ -239,7 +186,7 @@ async function makeSite(world: World, cast: Cast, draft: Draft, samples: Samples
 }
 
 /** Do one thing to a site that is made, and keep the label it has after it. */
-async function changeSite(world: World, cast: Cast, moment: SiteMoment & { readonly by: Who }): Promise<void> {
+async function changeSite(world: World, cast: Cast, moment: SiteMoment): Promise<void> {
   const { install } = world;
   const actor = made(cast.actors, moment.by);
   const site = made(cast.sites, moment.site);
@@ -396,7 +343,7 @@ export async function seedWorld(world: World, samples: Samples): Promise<Seeded>
   const cast: Cast = { actors: people(world), tokens: new Map(), sites: new Map() };
   const moments = [
     ...SITES.map((draft) => ({ ago: draft.ago, run: () => makeSite(world, cast, draft, samples) })),
-    ...HISTORY.map((moment) => ({ ago: moment.ago, run: () => play(world, cast, moment) })),
+    ...[...HISTORY, ...SITE_HISTORY].map((moment) => ({ ago: moment.ago, run: () => play(world, cast, moment) })),
   ];
 
   // The oldest moment is played first, whatever list it stands in.

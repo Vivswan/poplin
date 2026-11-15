@@ -62,7 +62,7 @@ One install on the Cloudflare test account, called staging. It stays up between 
 |             | Staging                                                                          |
 | ----------- | -------------------------------------------------------------------------------- |
 | Runs        | the latest main that changed a file reaching it                                  |
-| Who gets in | the owner alone, behind the login; the demo's site is public                     |
+| Who gets in | the owner alone, behind the login; a stranger opens the public and unlisted sample sites |
 | Updated     | after a green main that changed such a file                                      |
 | Put back    | after every run of the checks, whatever they came to, and at 00:00 UTC every day |
 
@@ -70,10 +70,22 @@ One install on the Cloudflare test account, called staging. It stays up between 
 | ------------------------------------ | ---------------------------------------------------------------------------- |
 | every site but the demo's, for good  | the logins and every other setting                                           |
 | everything in the trash              | the Worker, the bucket, the database, and the zone's objects                 |
-| every token, its own among them      | the four sample sites of `demo/samples`, published anew, each private        |
+| every token, its own among them      | the sample sites below, published anew                                       |
 | every login of a computer that waits | the demo: a public site with the public name `demo`, updated where it stands |
 
+| The sample sites a reset leaves | How many                              |
+| ------------------------------- | ------------------------------------- |
+| public                          | 2, and the demo                       |
+| unlisted                        | 3, one of them runs out after 7 days  |
+| private                         | 4, one of them runs out after 2 days  |
+| in the trash                    | 1                                     |
+| with three versions             | 1; every other has one                |
+
+Each site, its title, and who opens it come from one table, `packages/demo/src/preview/sample-sites.ts`. The demo's seed plays its whole history, and the reset publishes what it ends in, so the install's Sites screen and the demo's list the same sites. The install holds no site that already ran out.
+
 The demo is what `bun run demo:build` writes, at `demo-<public word>.<domain>`. The install serves its files, and the demo's worker answers every address inside it.
+
+The reset writes `sites.json` beside the demo's files: the address of each sample site outside the trash. The demo's links to those sites then lead to the install's own: a public or unlisted one opens, a private one shows the login. No line of a run names an address.
 
 The owner sets these; the environment is `cloudflare-live-tests`.
 
@@ -95,7 +107,7 @@ The owner sets these; the environment is `cloudflare-live-tests`.
 | bucket writes and lists: 150 by the checks, 2,300 with the many-files check, 150 by a reset | `budget.ts`, around every request to the install | the request is not sent, and the step stops red       |
 | every site the checks make is removed for good                                         | the checks' own sweep, then the reset         | the reset runs after failed checks too                        |
 | a site of a run that was killed                                                        | published with `--expires 1d`, trash of one day | the midnight reset removes it                               |
-| the samples and the demo: 40 files and 3 MB at most                                    | `caps.test.ts`, from the repository's files   | the self-test fails                                           |
+| the sample sites and the demo: 12 sites, 110 files, and 4 MB at most                   | `caps.test.ts`, from a reset of a local fake  | the self-test fails                                           |
 
 A token without Billing: Read cannot read the subscriptions: the run goes on, with a warning and a skipped row. The zone's plan is checked all the same.
 
@@ -104,7 +116,7 @@ one run, at its ceilings         2 (the bucket found or made) + 150 (checks) + 1
 a day of 40 such runs            40 x 302 + 150 (the midnight reset) = 12,230
 31 such days                     12,230 x 31 = 379,130 of the 1,000,000 R2 takes for free in a month
 a run with the many-files check  2 + 2,300 + 150 = 2,452, started by hand alone
-a usual run                      about 50 (checks) + 33 (reset)
+a usual run                      about 50 (checks) + 112 (reset)
 ```
 
 A run starts after a green main that changed a file reaching the install, or by hand, so 40 a day is far above what happens. The count is the harness's own, one for each request that makes the install write or list; the install lists once more for every thousand files.

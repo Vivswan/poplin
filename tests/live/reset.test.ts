@@ -1,4 +1,4 @@
-// The reset of the test install runs against a local fake: the SQL it sends has no other reader, and a reset that left a token, a second demo site, or an emptied setting behind would show on the real install alone.
+// The reset of the test install runs against a local fake: the SQL it sends has no other reader, and a reset that left a token, a second demo site, an emptied setting, or other sites than the demo lists behind would show on the real install alone.
 
 import { afterEach, describe, expect, test } from "bun:test";
 import { mkdirSync, writeFileSync } from "node:fs";
@@ -7,7 +7,10 @@ import { join } from "node:path";
 import { CEILINGS } from "../../packages/cloudflare/scripts/live/budget";
 import { resetInstall, runReset } from "../../packages/cloudflare/scripts/live/reset";
 import { openRun } from "../../packages/cloudflare/scripts/live/util";
-import { readFiles } from "../../packages/cli/src/files/read";
+import { BunSqliteDriver } from "../../packages/core/tests/database/support/bun-sqlite-driver";
+import { readSamples } from "../../packages/demo/scripts/samples";
+import { createPreview } from "../../packages/demo/src/preview/preview";
+import { readRealSites } from "../../packages/demo/src/preview/real-sites";
 import { withFake } from "../../packages/cloudflare/tests/zone/support/fake-cloudflare";
 import { type Asked, page, refusal } from "../../packages/cloudflare/tests/zone/support/replies";
 import { openBench } from "./bench";
@@ -18,14 +21,34 @@ import { catchStep } from "./support/step";
 /** The repository's sample sites. */
 const SAMPLES = join(import.meta.dir, "..", "..", "demo", "samples");
 
-/** The names of the sample sites, as a reset publishes them. */
-const SAMPLE_NAMES = ["checkout-prototype", "launch-deck", "sales-report", "trip-summary"];
+/** What a reset leaves, written by hand: every site by its name, who may open it, its public name, whether it is in the trash, its live version, and whether it runs out. The demo's version is the reset's own count. */
+const LEFT_SITES: readonly (readonly [name: string, access: string, publicName: string | null, trashed: 0 | 1, version: number, expires: 0 | 1])[] = [
+  ["checkout", "private", null, 0, 1, 1],
+  ["handbook", "public", "handbook", 0, 1, 0],
+  ["launch-deck", "unlisted", null, 0, 1, 0],
+  ["lisbon-trip", "public", "lisbon", 0, 1, 0],
+  ["old-notes", "unlisted", null, 1, 1, 0],
+  ["pricing", "unlisted", null, 0, 1, 0],
+  ["sales-report", "private", null, 0, 3, 0],
+  ["spring-offer", "unlisted", null, 0, 1, 1],
+  ["status-board", "private", null, 0, 1, 0],
+  ["team-site", "private", null, 0, 1, 0],
+];
 
-/** How many files the publishes of the sample sites hold together, as the CLI lists them. */
-const SAMPLE_FILES = (await Promise.all(SAMPLE_NAMES.map((name) => readFiles(join(SAMPLES, name))))).reduce((sum, listed) => sum + (listed.ok ? listed.count : 0), 0);
+/** The sample sites a reset leaves outside the trash, and the ones it leaves inside it. */
+const [PUBLISHED = [], BINNED = []] = [0, 1].map((trashed) => LEFT_SITES.filter((site) => site[3] === trashed).map(([name]) => name));
 
-/** How many files the demo of these tests holds. */
-const DEMO_FILES = 2;
+/** The site of the demo's seed alone: one that ran out, which an install that is put back does not hold. */
+const SEED_ALONE = "winter-offer";
+
+/** The path of the demo's file of real addresses, as an upload names it. */
+const REAL_SITES_PATH = "path=sites.json";
+
+/** The version the demo's installs are told they run. */
+const VERSION = "1.0.0";
+
+/** The dashboard's client of a demo no browser opens. */
+const NO_CLIENT = { entry: async () => ({ script: "app.js", style: "app.css" }), file: async () => undefined };
 
 /** The account of the fake Cloudflare. */
 const ACCOUNT = "0".repeat(32);
@@ -38,14 +61,35 @@ const WAITING = `INSERT INTO logins (id, code, hash, scope, computer, visitor, s
   ('login-one', 'CODEONE1', 'hash-one', 'publisher', 'a laptop', 'a visitor', 'pending', NULL, 1700000000000, 1700000600000),
   ('login-two', 'CODETWO2', 'hash-two', 'admin', 'a desktop', 'a visitor', 'allowed', 'ada@example.com', 1700000000000, 1700000600000)`;
 
-/** The bucket writes and lists of a reset that removes three sites and publishes the samples and a new demo: one a site removed, one a file stored, one a publish finished. */
-const FIRST_RESET = 3 + (SAMPLE_FILES + SAMPLE_NAMES.length) + (DEMO_FILES + 1);
+/** The bucket writes and lists of a reset that removes three sites and publishes the samples and a new demo of three files: 3 removals, 76 for ten sites and their 66 files, 12 for two more versions of one, 1 move to the trash, 4 for the demo. */
+const FIRST_RESET = 96;
+
+/** What every reset says it published: the samples in the table's order, the ones in the trash, the one site with three versions, and how many the demo links to. */
+const PUT = {
+  published: ["handbook", "sales-report", "launch-deck", "team-site", "lisbon-trip", "pricing", "spring-offer", "status-board", "checkout"],
+  binned: BINNED,
+  versioned: { name: "sales-report", versions: 3 },
+  linked: PUBLISHED.length,
+};
 
 /** The benches a test opened, closed after it. */
 const OPENED: (() => void)[] = [];
 
 /** A fake install and the token a reset of it runs with. */
 type Install = Awaited<ReturnType<typeof openSqlInstall>>;
+
+/** A site as the API lists it, in what a row of the Sites screen shows of it. */
+interface Listed {
+  readonly name: string;
+  readonly access: string;
+  readonly public_name: string | null;
+  readonly title: string | null;
+  readonly title_typed: boolean;
+  readonly embeddable: boolean;
+  readonly expires: "never" | number;
+  readonly state: string;
+  readonly url: string;
+}
 
 /** What a reset must leave of an install: every site with its place and version, and how many tokens and waiting logins. */
 interface Left {
@@ -116,16 +160,16 @@ async function left(install: Install): Promise<Left> {
   const [logins] = await install.sql("SELECT COUNT(*) AS rows FROM logins");
 
   return {
-    sites: await install.sql("SELECT name, access, public_name, trashed, expires_at, live_version FROM sites ORDER BY name"),
+    sites: await install.sql("SELECT name, access, public_name, trashed, expires_at IS NOT NULL AS expires, live_version FROM sites ORDER BY name"),
     tokens: tokens?.rows,
     logins: logins?.rows,
   };
 }
 
-/** What a reset leaves: the demo's site at a version, the four samples, and nothing else. */
+/** What a reset leaves: the demo's site at a version, the sample sites, and nothing else. */
 function resetState(demoVersion: number): Left {
-  const samples = SAMPLE_NAMES.map((name) => ({ name, access: "private", public_name: null, trashed: 0, expires_at: null, live_version: 1 }));
-  const demo = { name: "demo", access: "public", public_name: "demo", trashed: 0, expires_at: null, live_version: demoVersion };
+  const samples = LEFT_SITES.map(([name, access, publicName, trashed, version, expires]) => ({ name, access, public_name: publicName, trashed, expires, live_version: version }));
+  const demo = { name: "demo", access: "public", public_name: "demo", trashed: 0, expires: 0, live_version: demoVersion };
 
   return { sites: [...samples, demo].sort((one, other) => one.name.localeCompare(other.name)), tokens: 0, logins: 0 };
 }
@@ -135,7 +179,7 @@ afterEach(() => {
 });
 
 describe("the reset of the test install, against a local fake", () => {
-  test("a reset leaves the samples and the demo alone, with no trash, token, or waiting login, and the settings untouched; the next one updates the demo's site", async () => {
+  test("a reset leaves the sample sites and the demo alone, one sample in the trash, with no token or waiting login, and the settings untouched; the next one updates the demo's site", async () => {
     const install = await openSqlInstall();
     await fill(install);
     const settings = await install.settings();
@@ -144,7 +188,7 @@ describe("the reset of the test install, against a local fake", () => {
     const demo = await install.sql("SELECT id FROM sites WHERE public_name = 'demo'");
 
     expect({ ended: first, left: await left(install), settings: await install.settings() }).toEqual({
-      ended: { removed: 2, trashed: 1, published: SAMPLE_NAMES, demo: "published", operations: FIRST_RESET },
+      ended: { ...PUT, removed: 2, trashed: 1, demo: "published", operations: FIRST_RESET },
       left: resetState(1),
       settings,
     });
@@ -154,10 +198,55 @@ describe("the reset of the test install, against a local fake", () => {
     const second = await reset(install, await install.addToken("the second reset"));
 
     expect({ ended: second, left: await left(install), demo: await install.sql("SELECT id FROM sites WHERE public_name = 'demo'") }).toEqual({
-      ended: { removed: 4, trashed: 0, published: SAMPLE_NAMES, demo: "updated", operations: FIRST_RESET + 1 },
+      ended: { ...PUT, removed: PUBLISHED.length, trashed: BINNED.length, demo: "updated", operations: FIRST_RESET + PUBLISHED.length + BINNED.length - 3 },
       left: resetState(2),
       demo,
     });
+  });
+
+  // Drift: the demo and the install are told to hold the same sites by one table, through two writers. A writer that read a row otherwise would show on the two Sites screens side by side alone.
+  test("after a reset the install lists the sites the demo's seed lists, each with the same name, access, public name, title, frame switch, expiry or none, and place in or out of the trash", async () => {
+    const install = await openSqlInstall();
+    await reset(install, await install.addToken("a reset"));
+    const preview = await createPreview({ openDriver: () => new BunSqliteDriver(), samples: await readSamples(), version: VERSION, client: NO_CLIENT });
+    const token = await install.addToken("a reader");
+    const shown = (sites: readonly Listed[]): unknown[] =>
+      sites
+        .map(({ name, access, public_name, title, title_typed, embeddable, expires, state }) => ({ name, access, public_name, title, title_typed, embeddable, runsOut: expires !== "never", state }))
+        .sort((one, other) => one.name.localeCompare(other.name));
+    const read = async (answer: Response | Promise<Response>): Promise<readonly Listed[]> => ((await (await answer).json()) as { sites: readonly Listed[] }).sites;
+    const lists = ["false", "true"].map(async (trash) => ({
+      install: shown(await read(install.fetch(`${install.server}/api/sites?trash=${trash}&limit=100`, { headers: { Authorization: `Bearer ${token}` } }))),
+      demo: shown((await read(preview.fetch(new Request(`http://127.0.0.1:4400/api/sites?trash=${trash}&limit=100`, { headers: { Authorization: `Bearer ${preview.token()}` } })))).filter((site) => site.name !== SEED_ALONE)),
+    }));
+    const [live, trash] = await Promise.all(lists);
+
+    expect([live?.install, trash?.install]).toEqual([live?.demo, trash?.demo]);
+    expect([live?.install.length, trash?.install.length]).toEqual([PUBLISHED.length + 1, BINNED.length]);
+  });
+
+  // Drift: the demo's links lead where this file says. A site left out sends a visitor to the demo's own copy; one in the trash, or one that runs out within the day, sends them to a page that is gone.
+  test("the demo a reset publishes holds the address of every sample site outside the trash, as the install lists it, of no other, and each in the form the demo takes", async () => {
+    const install = await openSqlInstall();
+    const files: string[] = [];
+
+    await reset(install, await install.addToken("a reset"), {
+      fetch: async (input, init) => {
+        if (!input.includes(REAL_SITES_PATH)) return install.fetch(input, init);
+
+        const body = await new Response(init.body).text();
+        files.push(body);
+
+        return install.fetch(input, { ...init, body });
+      },
+    });
+    const listed = await install.fetch(`${install.server}/api/sites?limit=100`, { headers: { Authorization: `Bearer ${await install.addToken("a reader")}` } });
+    const { sites } = (await listed.json()) as { sites: readonly Listed[] };
+    const addresses = Object.fromEntries(sites.filter((site) => site.name !== "demo").map((site) => [site.name, `${new URL(site.url).origin}/`]));
+
+    expect(files.map((file) => JSON.parse(file))).toEqual([addresses]);
+    expect(files.map((file) => readRealSites(JSON.parse(file)))).toEqual([addresses]);
+    expect(Object.keys(addresses).sort()).toEqual(PUBLISHED);
   });
 
   test("an answer of too many requests is waited out for as long as it asks, and the reset goes on", async () => {
@@ -179,7 +268,7 @@ describe("the reset of the test install, against a local fake", () => {
 
     // The request that was told to wait is asked again, and both are counted.
     expect({ ended, pauses, left: await left(install) }).toEqual({
-      ended: { removed: 2, trashed: 1, published: SAMPLE_NAMES, demo: "published", operations: FIRST_RESET + 1 },
+      ended: { ...PUT, removed: 2, trashed: 1, demo: "published", operations: FIRST_RESET + 1 },
       pauses: [7000],
       left: resetState(1),
     });

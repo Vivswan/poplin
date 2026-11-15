@@ -119,7 +119,7 @@ function siteEntries(places: ReadonlyMap<string, Place>): Entry[] {
     { group, name: "Public, under a public name", path: page("lisbon-trip") },
     { group, name: "Unlisted, no frames, renamed since it was made", path: page("pricing") },
     { group, name: "Expires in two days", path: page("checkout") },
-    { group, name: "Expired", path: page("spring-offer") },
+    { group, name: "Expired", path: page("winter-offer") },
     { group, name: "No such site", path: NO_PLACE.page },
     { group: visitors, name: "Sales report, private, as the admin", path: served("sales-report") },
     { group: visitors, name: "Sales report, private, as a stranger who came around the login", path: `${served("sales-report")}?as=visitor`, status: 404 },
@@ -132,8 +132,8 @@ function siteEntries(places: ReadonlyMap<string, Place>): Entry[] {
     { group: visitors, name: "A file the site does not have", path: `${served("launch-deck")}nothing.html`, status: 404 },
     { group: visitors, name: "A site in the trash, as the admin", path: served("old-notes"), status: 404 },
     { group: visitors, name: "A site in the trash, as a stranger", path: `${served("old-notes")}?as=visitor`, status: 404 },
-    { group: visitors, name: "An expired site, as the admin", path: served("spring-offer"), status: 404 },
-    { group: visitors, name: "An expired site, as a stranger", path: `${served("spring-offer")}?as=visitor`, status: 404 },
+    { group: visitors, name: "An expired site, as the admin", path: served("winter-offer"), status: 404 },
+    { group: visitors, name: "An expired site, as a stranger", path: `${served("winter-offer")}?as=visitor`, status: 404 },
     { group: visitors, name: "A public name no site holds, as a stranger", path: `${NO_PLACE.served}?as=visitor`, status: 404 },
   ];
 }

@@ -7,6 +7,7 @@ import type { SqlJsStatic } from "sql.js";
 import type { ClientFiles } from "../../../app/src/console/shell";
 import { insidePath } from "../preview/base";
 import { createPreview } from "../preview/preview";
+import type { RealSites } from "../preview/real-sites";
 import type { Samples } from "../preview/seed";
 import { KeptStore, type SavedStore } from "./kept-store";
 import { SqlJsDriver } from "./sqljs-driver";
@@ -51,6 +52,9 @@ interface KeptHost {
 
   /** What an earlier demo's `save` handed out; left out, the demo starts from the seed. */
   readonly saved?: SavedDemo;
+
+  /** The real address of each sample site, where the host of the demo's files has them. */
+  readonly real?: RealSites;
 }
 
 /** A running demo. */
@@ -120,6 +124,7 @@ export async function openKeptDemo(host: KeptHost): Promise<KeptDemo> {
     client: host.client,
     reasonAt: REASON_AT,
     resumed: saved !== undefined,
+    real: host.real,
     openDriver,
     openStore: () => held(now.stores, new KeptStore(left.stores.shift())),
   });

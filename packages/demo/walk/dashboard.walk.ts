@@ -13,8 +13,8 @@ const VIEWPORTS = [
 /** The schemes a browser asks for. The dashboard follows the browser until a theme is chosen in the account's menu. */
 const SCHEMES = ["light", "dark"] as const;
 
-/** What the sample data holds that the walk opens: an unlisted site, a site by its title for the graph, a person who is not the visitor, a token, and a login that waits. */
-const SAMPLE = { site: "pricing", graphed: "Team handbook", person: "jonas@example.com", token: "design-laptop", login: "build-server" } as const;
+/** What the sample data holds that the walk opens: an unlisted site by its title, a site by its title for the graph, a person who is not the visitor, a token, and a login that waits. */
+const SAMPLE = { site: "Pricing", graphed: "Team handbook", person: "jonas@example.com", token: "design-laptop", login: "build-server" } as const;
 
 /** Where the notes of a newer version are read: the page of the project's releases. */
 const RELEASES = "https://github.com/Vivswan/poplin/releases";

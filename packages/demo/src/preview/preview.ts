@@ -29,6 +29,7 @@ import { type Entry, galleryOf, STAGES } from "./gallery";
 import { rebased, unbased } from "./base";
 import { ADMIN_ORIGIN, askMount, type Mount, previewValue, SERVED_PREFIX, siteOrigin } from "./mount";
 import { galleryPage, loginPage, missingPage, plainPage } from "./own-pages";
+import { type RealSites, realAddresses } from "./real-sites";
 import { keepLoginsWaiting, type Samples, seedWorld } from "./seed";
 import { ADDRESSES, openWorld, type World } from "./world";
 
@@ -111,6 +112,9 @@ export interface Host {
 
   /** Where a person finds why a request failed, as the answer to that request says it; the terminal when left out. */
   readonly reasonAt?: string;
+
+  /** The real address of each sample site on an install that holds the same sites: the links of the seeded dashboard lead there. None when left out. */
+  readonly real?: RealSites;
 }
 
 /** The whole preview: the handler of every request, the admin token of the seeded install, and the gallery's links. */
@@ -289,6 +293,13 @@ function mountOf(scene: Scene, path: string): Mount | undefined {
   return siteMount(scene.seeded, decodeURIComponent(label));
 }
 
+/** Ask one mounted piece, with the real addresses of the sample sites at hand. A site's own pages link relatively and name no site's address, so none is looked up for them. */
+async function askPiece(request: Request, mount: Mount, scene: Scene, host: Host): Promise<Response> {
+  const real = mount.holds === "site" ? undefined : await realAddresses(scene.seeded, host.real);
+
+  return askMount(request, mount, { origin: new URL(request.url).origin, framed: plainPage, real });
+}
+
 /** A redirect of the preview's own, to a path from its root: a base, where there is one, is put on it on the way out. */
 function goTo(path: string, status: 302 | 303 | 308): Response {
   return new Response(null, { status, headers: { Location: path } });
@@ -325,7 +336,7 @@ export async function createPreview(host: Host): Promise<Preview> {
     }
 
     const mount = mountOf(scene, url.pathname);
-    if (mount !== undefined) return askMount(request, mount, { origin: url.origin, framed: plainPage });
+    if (mount !== undefined) return askPiece(request, mount, scene, host);
 
     if (url.pathname === "/gallery" && host.gallery === true) return own(await galleryPage({ entries: await entries(), token: scene.token, origin: url.origin }));
 

@@ -6,6 +6,8 @@
 //   404.html        sends an address inside the demo through the first page, on a host that answers a missing path with it
 //   assets/         the dashboard's client: its script, its stylesheet, and its fonts, which the worker reads from the host as a browser asks for each
 //
+//   sites.json      no build writes it: a host that also holds the sample sites as real ones puts the address of each here, and the dashboard's links then lead to them
+//
 //   bun scripts/build.ts --out <folder>   another folder
 
 import { mkdtempDisposableSync } from "node:fs";
