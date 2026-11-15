@@ -726,6 +726,7 @@ describe("the admin hostname", () => {
     const tally = { calls: 0 };
     const worker = instance(w);
     await ask(worker, `${ADMIN}/api/whoami`, {}, countedBindings(tally));
+    const site = await publish(worker, await tokenOf(w, "admin"), { name: "report" }, [page("<h1>report</h1>")]);
     const session = { Cookie: cookieOf(await logIn(worker, w)) };
     const asked = async (path: string): Promise<readonly [status: number, queries: number]> => {
       tally.calls = 0;
@@ -736,9 +737,24 @@ describe("the admin hostname", () => {
 
     expect({
       "an address that asks nothing but who is there": await asked("/data/public-address?name=docs"),
+      "the people, who are in the settings the session read": await asked("/data/people"),
+      "one site: the site, its views, and who published it": await asked(`/data/sites/${site.label}`),
     }).toEqual({
       "an address that asks nothing but who is there": [200, 1],
+      "the people, who are in the settings the session read": [200, 1],
+      "one site: the site, its views, and who published it": [200, 4],
     });
+  });
+
+  // Drift: a read is answered from the settings its own request read on the way in. Kept any longer than the request, a setting changed a moment ago would be shown as it was.
+  test("a setting changed through the dashboard is what the very next read shows, on the same instance and on another", async () => {
+    const [worker, other] = [instance(w), instance(w)];
+    const session = { Cookie: cookieOf(await logIn(worker, w)) };
+    const people = async (from: ReturnType<typeof instance>): Promise<unknown> => (await (await ask(from, `${ADMIN}/data/people`, { headers: session })).json<{ logins: string[] }>()).logins;
+    const before = [await people(worker), await people(other)];
+    const added = await send(worker, `${ADMIN}/data/people/add`, { login: "bo@example.com" }, session);
+
+    expect([before, added.status, await people(worker), await people(other)]).toEqual([[[OWNER], [OWNER]], 200, [OWNER, "bo@example.com"], [OWNER, "bo@example.com"]]);
   });
 
   // Drift: the dashboard's client rides inside the Worker's one file. Built without it, or handed out behind the session, the page would load and draw nothing; without the header a browser would fetch two megabytes again at every visit.

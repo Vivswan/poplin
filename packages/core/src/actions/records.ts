@@ -2,6 +2,7 @@
 
 import type { Database } from "../database/database";
 import type { PublicName, ReservedNames } from "../names/names";
+import type { SettingValues } from "../records/settings";
 import type { Site } from "../records/site";
 import type { SiteLabel } from "../sites/labels";
 import type { ObjectStore } from "../storage/storage";
@@ -25,6 +26,9 @@ export interface Install {
 
   /** The public names the address layout keeps for itself: no site may hold one. */
   readonly reservedNames: ReservedNames;
+
+  /** The settings one request read on its way in, given only to a request that changes nothing: its actions take them as read. Absent, an action reads the database. */
+  readonly knownSettings?: SettingValues;
 }
 
 /** An action that was not done: nothing was changed and no audit entry was written. `about` names the argument, limit, or path the code is about. */
@@ -32,6 +36,15 @@ export interface Refused<Code extends string> {
   readonly ok: false;
   readonly code: Code;
   readonly about?: string;
+}
+
+/**
+ * Read the install's settings: the ones its request already read, or else the stored ones.
+ *
+ * @returns the settings, or `undefined` before setup stored them
+ */
+export async function settingsOf(install: Pick<Install, "database" | "knownSettings">): Promise<SettingValues | undefined> {
+  return install.knownSettings ?? (await install.database.readSettings());
 }
 
 /**

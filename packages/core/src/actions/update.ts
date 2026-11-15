@@ -5,7 +5,7 @@ import * as v from "valibot";
 
 import { isPlainVersion, UPDATE_NEWS, type UpdateCheck, type UpdateNews } from "../records/update";
 import type { SettingValues } from "../records/settings";
-import type { Install } from "./records";
+import { type Install, settingsOf } from "./records";
 
 /** A release newer than the running version, as an answer holds it. */
 export const UPDATE_NOTICE = v.object({
@@ -50,8 +50,8 @@ export function newerRelease(check: Pick<UpdateCheck, "news"> | undefined, curre
  * @param known - the settings, from a caller that has read them already; read here when left out
  * @returns the newer release, or `undefined` when none is known, the newest known is not strictly newer, either version is not of the form `1.2.3`, or `update_check` is off
  */
-export async function updateOf(install: Pick<Install, "database">, current: string, known?: Pick<SettingValues, "update_check">): Promise<Update | undefined> {
-  const settings = known ?? (await install.database.readSettings());
+export async function updateOf(install: Pick<Install, "database" | "knownSettings">, current: string, known?: Pick<SettingValues, "update_check">): Promise<Update | undefined> {
+  const settings = known ?? (await settingsOf(install));
   if (settings?.update_check !== true) return undefined;
 
   const newer = newerRelease(await install.database.readUpdateCheck(), current);

@@ -6,7 +6,7 @@ import { parsePublicName } from "../names/names";
 import type { SettingValues } from "../records/settings";
 import type { Site } from "../records/site";
 import { siteReference } from "../sites/labels";
-import { type Install, type Refused, refuse } from "./records";
+import { type Install, type Refused, refuse, settingsOf } from "./records";
 
 /** What an action starts from: the settings, and the signature its changes carry. */
 interface Entered {
@@ -49,7 +49,7 @@ function isOpenToAll(site: Site, now: number): boolean {
  * @returns the settings and the signature of the actor at the clock's time, or `not_set_up` before setup stored the settings
  */
 export async function enterInstall(install: Install, actor: Actor): Promise<Entered | Refused<"not_set_up">> {
-  const settings = await install.database.readSettings();
+  const settings = await settingsOf(install);
   if (settings === undefined) return refuse("not_set_up");
 
   return { ok: true, settings, signed: { by: actor.holder, at: install.now() } };

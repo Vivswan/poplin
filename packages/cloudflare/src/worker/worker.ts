@@ -10,8 +10,8 @@
 // An instance starts on its first request, and every request that arrives meanwhile waits on that one start.
 // Only a start that succeeded is kept. A failed one is answered to the requests that waited on it, and the next request starts again.
 //
-// A site request trusts settings and logins read up to a minute ago. The login and the dashboard read them anew,
-// so a removed login loses the dashboard at once and the private sites within the minute.
+// A site request trusts settings and logins read up to a minute ago. The login and the dashboard read them anew on every request,
+// so a removed login loses the dashboard at once and the private sites within the minute. A dashboard request that only reads uses that one read for all it answers.
 // The session cookie is the dashboard's alone: "sign everyone out" ends the dashboard's sessions, and a private site's login is Access's own.
 
 import { createConsole } from "@poplin/app/src/console/console";
@@ -92,8 +92,10 @@ async function answerDashboard(request: Request, instance: Instance, held: Held)
   const now = instance.install.now();
   // As the API does: every listing of the bucket this request makes is counted against the day, and written down once.
   const meter = meterStore(instance.install.store, { database: instance.install.database, now: instance.install.now });
+  // A request that changes nothing takes the settings its session was just checked against. A change reads them itself, inside its own step.
+  const known = request.method === "GET" ? { knownSettings: held.settings } : {};
   const dashboard = createConsole({
-    install: { ...instance.install, store: meter.store },
+    install: { ...instance.install, store: meter.store, ...known },
     version: instance.version,
     readSession: (headers) => readSession(headers, { key: held.sessionKey, logins: held.logins, now }),
     loginPath: INSTALL_OBJECTS.loginPath,
