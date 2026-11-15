@@ -8,7 +8,7 @@ import { afterAll, afterEach, beforeEach } from "bun:test";
 import { GlobalRegistrator } from "@happy-dom/global-registrator";
 
 /** The start values every component test runs under. */
-const TEST_BOOT = { base: "/next", email: "mira@example.com", title: "poplin", version: "1.0.0", update: null, starts: false, demo: null, domain: true, domainNote: null };
+const TEST_BOOT = { base: "/next", email: "mira@example.com", title: "poplin", version: "1.0.0", update: null, starts: false, demo: null, domain: true, domainNote: null, recent: [], marks: { usage: null, domain: null, settings: null } };
 
 /** What of the runtime the page must not replace: the tests that run after it call these. */
 const OWN = { fetch: globalThis.fetch, Request: globalThis.Request, Response: globalThis.Response, Headers: globalThis.Headers };
