@@ -236,6 +236,28 @@ describe("the Visits block", () => {
     expect(rowsOf(within(document.body).getByRole("table", { name: "Visits by day" }))[0]).toEqual(["Day", "Handbook"]);
   });
 
+  // Drift: a line left alone would be drawn against the counts of a line that is hidden, flat at the foot, or a line of no visits would be placed by a count that is no number.
+  test.each([
+    ["all sites hidden, one site left", 1, ["all"], [SITES[0]?.id], true],
+    ["one site left that nobody opened", 3, ["all", SITES[0]?.id, SITES[1]?.id], [SITES[2]?.id], false],
+    ["every line hidden, which draws them all", 1, ["all", SITES[0]?.id], ["all", SITES[0]?.id], true],
+  ])("with %s, each line drawn is placed by numbers, on a scale of the drawn lines alone", async (_state, sites, hidden, drawn, reaches) => {
+    keep(sites, hidden as string[]);
+    await draw();
+    const paths = [...document.querySelectorAll("path[data-line]")].map((line) => (line.getAttribute("d") ?? "").split(/[ML]/).filter(Boolean));
+    // Every line of the sample has a day of no visits, which stands at the foot of the plot.
+    const heights = paths.flat().map((point) => Number(point.split(",")[1]));
+    const marks = [...document.querySelectorAll("svg .visx-axis-left text")].map((mark) => mark.textContent);
+
+    expect([lines(), paths.map((path) => path.length), heights.every(Number.isFinite), Math.min(...heights) < Math.max(...heights) / 2, marks.includes("NaN")]).toEqual([
+      [...drawn].sort(),
+      drawn.map(() => DAYS.length),
+      true,
+      reaches,
+      false,
+    ]);
+  });
+
   // Drift: a point that sums a week would be read as one day's count.
   test("names a step as a week where the server answers a count a week", async () => {
     await draw(ALL, "week");

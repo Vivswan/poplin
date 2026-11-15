@@ -665,6 +665,32 @@ test.describe("on a phone, on Usage", () => {
   });
 });
 
+for (const viewport of VIEWPORTS) {
+  test.describe(`on Usage, at ${viewport.width} pixels`, () => {
+    test.use({ viewport: { width: viewport.width, height: viewport.height } });
+
+    // Drift: the block would take its name from its heading's id again, and Firefox ends a page whose block is read by that name twice; or the one line left would not be drawn.
+    test("with one site compared and all sites switched off, the block is still read by its name, and the site's line alone is drawn", async ({ page }) => {
+      await arrive(page);
+      await toSection(page, "Usage");
+      const switches = page.getByRole("region", { name: "Visits", exact: true }).locator("button[aria-pressed]");
+      await tickSite(page);
+      await expect(switches).toHaveCount(2);
+
+      await switches.first().click();
+      await expect(page.locator("path[data-line]")).toHaveCount(1);
+
+      const after = await switches.evaluateAll((all) => all.map((one) => [one.getAttribute("aria-pressed"), (one as HTMLButtonElement).disabled]));
+      expect(after).toEqual([
+        ["false", false],
+        ["true", true],
+      ]);
+      const drawn = await page.locator("path[data-line]").evaluate((line) => (line.getAttribute("d") ?? "").split(/[ML,]/).filter(Boolean).map(Number));
+      expect(drawn.every(Number.isFinite) && drawn.length > 2).toBe(true);
+    });
+  });
+}
+
 test.describe("on a phone, in a question", () => {
   test.use({ viewport: PHONE });
 
