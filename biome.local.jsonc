@@ -292,6 +292,7 @@
                       "!sql.js",
                       "!sql.js/dist/sql-wasm-browser.js",
                       "!idb-keyval",
+                      "!uint8array-extras",
                       "!cookie",
                       "!hono/html",
                       "!htmlparser2",

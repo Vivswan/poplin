@@ -7,6 +7,7 @@
 // The dashboard's client is no part of this script: its files sit beside it on the host, and each is read from there the first time a page asks for it.
 
 import { createStore, del, get, set } from "idb-keyval";
+import { base64ToUint8Array } from "uint8array-extras";
 
 import type { ClientFiles } from "../../../app/src/console/shell";
 import type { Samples } from "../preview/seed";
@@ -142,11 +143,7 @@ async function clientFile(name: string): ReturnType<ClientFiles["file"]> {
 
 function samples(): Samples {
   const unpacked = Object.entries(PACKED_SAMPLES).map(([name, files]) => {
-    const read = files.map(([path, contentType, base64]) => ({
-      path,
-      contentType,
-      bytes: Uint8Array.from(atob(base64), (character) => character.charCodeAt(0)),
-    }));
+    const read = files.map(([path, contentType, base64]) => ({ path, contentType, bytes: base64ToUint8Array(base64) }));
 
     return [name, read] as const;
   });
