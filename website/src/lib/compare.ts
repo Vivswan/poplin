@@ -36,7 +36,7 @@ export const TOOLS: readonly { readonly name: string; readonly answers: Readonly
       samelink: "yes",
       rollback: "yes",
       newlink: "yes",
-      bots: "partly",
+      bots: "yes",
       source: "yes",
     },
   },
