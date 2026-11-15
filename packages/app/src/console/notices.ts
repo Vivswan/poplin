@@ -75,7 +75,7 @@ const ABOUT_REFUSALS: Readonly<Record<string, Readonly<Record<string, string>>>>
     other: "The copy does not fit a limit of the install: {about}. No copy was made.",
   },
   bad_argument: {
-    expires: "Deletes itself takes never, a span such as 7d, or a day such as 2026-12-01.",
+    expires: "Pick a day that is still ahead.",
     address: "That is not an update link of the host. Paste the whole link, starting with https://.",
     default_expires: "Use a whole number, 1 or more.",
     default_search_engines: "Use on or off.",

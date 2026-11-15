@@ -9,11 +9,12 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { FieldDescription } from "@/components/ui/field";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
-import { ACCESSES, type Access, addressParts, expiryOf, type Site, shortMoment, showCount, shownName, wholeMoment } from "@/lib/sites";
+import { ACCESSES, type Access, addressParts, type Site, shortMoment, showCount, shownName, wholeMoment } from "@/lib/sites";
 import { settingAddress } from "@/settings/setting-address";
 import { IconButton } from "@/shared/icon-button";
 import { PanelBlock, PanelFact, PanelFacts, PanelLoading, PanelSwitch, SidePanel } from "@/shared/side-panel";
 import { Who } from "@/shared/who";
+import { ExpiryRow } from "@/sites/expiry-row";
 import type { SiteActions } from "@/sites/site-actions";
 import { type Reveal, RevealButton, SiteLink } from "@/sites/site-columns";
 import { type Shown, useSite } from "@/sites/site-queries";
@@ -105,7 +106,7 @@ function FactsBlock({ site }: { readonly site: Site }): ReactNode {
         <PanelFact name="Updated">
           <time title={wholeMoment(site.updated)}>{shortMoment(site.updated)}</time>
         </PanelFact>
-        {site.state === "trash" ? null : <PanelFact name="Deletes itself">{expiryOf(site.expires)}</PanelFact>}
+        {site.state === "trash" ? null : <ExpiryRow site={site} />}
       </PanelFacts>
     </PanelBlock>
   );

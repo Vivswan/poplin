@@ -8,6 +8,7 @@ import { Fragment, type ReactNode } from "react";
 import { ACCESSES, type Access, type AddressParts, addressParts, expiryOf, type Site, shortMoment, showCount, wholeMoment } from "@/lib/sites";
 import { IconButton } from "@/shared/icon-button";
 import { type LoginNames, Who } from "@/shared/who";
+import { expiryMoment } from "@/sites/expiry";
 import { SITE_ORDERS } from "@/sites/sites-query";
 import type { ColumnSpec } from "@/table/data-table";
 
@@ -248,7 +249,7 @@ export function siteColumns(
       id: "expires",
       header: "Deletes itself",
       hidden: true,
-      cell: (site) => <span className="text-muted-foreground">{expiryOf(site.expires)}</span>,
+      cell: (site) => <span className="text-muted-foreground">{expiryMoment(site.expires)}</span>,
     },
   ];
 }

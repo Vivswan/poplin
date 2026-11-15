@@ -24,6 +24,9 @@ const SCHEMES = ["light", "dark"] as const;
 /** What the sample data holds that the walk opens: an unlisted site by its title, a site by its title for the graph, a person who is not the visitor, a token, and a login that waits. */
 const SAMPLE = { site: "Pricing", graphed: "Team handbook", person: "jonas@example.com", token: "design-laptop", login: "build-server" } as const;
 
+/** How a moment is written: the day with two figures, and the time to the minute. */
+const MOMENT = String.raw`\d{2} [A-Z][a-z]{2} \d{4}, \d{2}:\d{2}`;
+
 /** Where the notes of a newer version are read: the page of the project's releases. */
 const RELEASES = "https://github.com/Vivswan/poplin/releases";
 
@@ -958,4 +961,34 @@ test("two times of the same length take the same room in the face the dashboard 
   expect([measured.carried, measured.first]).toEqual([["loaded"], true]);
   expect(measured.shown[0]).toBe(measured.shown[1]);
   expect(measured.control[0]).not.toBe(measured.control[1]);
+});
+
+// Drift: a site could be told when to delete itself from a terminal alone, or the panel would show a span where the day it ends on is asked for.
+test("in a site's panel, a span is shown as the moment it ends before it is saved and after, Undo takes it away again, and a day is picked in a dialog that one Escape leaves", async ({ page }) => {
+  const fact = panel(page).locator("dd").filter({ has: page.getByRole("button", { name: "Change when it deletes itself", exact: true }) });
+  const change = panel(page).getByRole("button", { name: "Change when it deletes itself", exact: true });
+  await arrive(page);
+  await openPanel(page, SAMPLE.site);
+  await expect(fact).toHaveText("NeverChange");
+
+  await change.click();
+  await expect(page.getByRole("menuitem")).toHaveText([new RegExp(`^1 day${MOMENT}$`), new RegExp(`^7 days${MOMENT}$`), new RegExp(`^30 days${MOMENT}$`), "On a day...", "Never"]);
+  await page.getByRole("menuitem", { name: /^7 days/ }).click();
+  await expect(said(page, "Saved.")).toBeVisible();
+  await expect(fact).toHaveText(new RegExp(`^${MOMENT}ChangeThen its link stops working, and it moves to the trash\\.$`));
+
+  await lines(page).filter({ hasText: "Saved." }).getByRole("button", { name: "Undo", exact: true }).click();
+  await expect(said(page, "Put back.")).toBeVisible();
+  await expect(fact).toHaveText("NeverChange");
+
+  await change.click();
+  await page.getByRole("menuitem", { name: "On a day...", exact: true }).click();
+  const day = page.getByRole("dialog", { name: "Pick a day", exact: true });
+  await expect(day.getByRole("button", { name: "Save", exact: true })).toBeDisabled();
+  await day.getByRole("gridcell").getByRole("button", { disabled: false }).first().click();
+  await expect(day.getByText(/^Deletes itself \d{2} [A-Z][a-z]{2} \d{4}, 00:00$/)).toBeVisible();
+  await pressEscape(page);
+  await expect(day).toBeHidden();
+  await expect(change).toBeFocused();
+  await expect(fact).toHaveText("NeverChange");
 });
