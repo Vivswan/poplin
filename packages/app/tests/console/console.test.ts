@@ -1,6 +1,7 @@
 // The console's server side: the shell page and its policy, the client's files, the session on every data route, the guard on changes, and how a refusal reaches the client.
 
 import { describe, expect, test } from "bun:test";
+import { html } from "hono/html";
 
 import { openConsole } from "./support/console";
 import { readShell } from "./support/shell";
@@ -48,6 +49,19 @@ describe("the shell page", () => {
     expect(response.status).toBe(302);
     expect(response.headers.get("Location")).toBe("https://poplin.example.com/login?return=%2Fnext%2Fsites%2Fa-site%3Fq%3Dx");
   });
+});
+
+// Drift: a link that runs script under a scheme the reader does not know by its first letters counts as none, and a page that holds one passes for a page that runs nothing.
+test.each([
+  ["javascript:alert(1)", 1],
+  [" JaVaScRiPt:alert(1)", 1],
+  ["java\tscript:alert(1)", 1],
+  ["data:text/html,<script>alert(1)</script>", 1],
+  ["vbscript:msgbox(1)", 1],
+  ["sites/some-site", 0],
+  ["https://example.com/sites", 0],
+])("the reader of the page counts a link to %j as %d that do more than load a page", (href, runs) => {
+  expect(readShell(String(html`<a href="${href}">a link</a>`)).runs).toBe(runs);
 });
 
 describe("the client's files", () => {
