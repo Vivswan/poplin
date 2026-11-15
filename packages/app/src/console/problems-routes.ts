@@ -6,8 +6,6 @@
 
 import { vValidator } from "@hono/valibot-validator";
 import { listProblems } from "@poplin/core/src/actions/problems";
-import type { Install } from "@poplin/core/src/actions/records";
-import type { Actor } from "@poplin/core/src/auth/scopes";
 import { PROBLEM_WORDS, type Problem } from "@poplin/core/src/records/problem";
 import { Hono } from "hono";
 import * as v from "valibot";
@@ -22,9 +20,6 @@ const PROBLEMS_QUERY = v.strictObject({ days: v.pipe(v.picklist(RANGES), v.trans
 
 /** How far back a problem still marks its screen at the side, in milliseconds: a day. */
 const MARKED_MS = 86_400_000;
-
-/** How many UTC days hold every moment of the last day: today and yesterday. */
-const MARKED_DAYS = 2;
 
 /** The screens a problem can belong to. */
 type Home = (typeof PROBLEM_WORDS)[keyof typeof PROBLEM_WORDS]["home"];
@@ -63,15 +58,13 @@ function markOf(home: Home, recent: readonly ShownProblem[], also: readonly stri
 }
 
 /**
- * Read what the frame marks: the problems last seen within a day, and the count of each screen. It is one read of the database.
+ * Say what the frame marks, from the problems the frame's own read gave: those last seen within a day, and the count of each screen. It reads nothing.
  *
+ * @param problems - the problems of the UTC day of `now` and of the day before, the one last seen first
  * @param domain - whether the console has a Domain screen, and the sentence of what the domain needs, where it is an alarm: it marks the Domain screen as a problem there does, so one rule decides the mark
- * @returns nothing marked for anyone but an admin
  */
-export async function markedOf(install: Pick<Install, "database" | "now">, actor: Actor, domain: { readonly screen: boolean; readonly says: string | null }): Promise<Marked> {
-  const listed = await listProblems(install, actor, MARKED_DAYS);
-  const since = install.now() - MARKED_MS;
-  const seen = listed.ok ? listed.problems.filter((problem) => problem.last_at > since) : [];
+export function markedIn(problems: readonly Problem[], now: number, domain: { readonly screen: boolean; readonly says: string | null }): Marked {
+  const seen = problems.filter((problem) => problem.last_at > now - MARKED_MS);
   // A kind seen on both sides of midnight is one problem: its newest day stands for it.
   const recent = seen.filter((problem, at) => seen.findIndex((one) => one.kind === problem.kind) === at).map((problem) => shown(problem, domain.screen));
   const also = { usage: [], settings: [], domain: domain.says === null ? [] : [domain.says] };

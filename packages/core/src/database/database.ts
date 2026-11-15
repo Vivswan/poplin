@@ -200,12 +200,13 @@ export interface SettingsAndSite {
   readonly site: Site | undefined;
 }
 
-/** What the frame around every screen of the dashboard is drawn from, as one read gave it; each is `undefined` where its own read gives that. */
+/** What the frame around every screen of the dashboard is drawn from, as one read gave it; each is `undefined` where its own read gives that. `problems` are those of the UTC day of the reading and of the day before, the one last seen first. */
 export interface FrameRecords {
   readonly settings: SettingValues | undefined;
   readonly updateAddress: UpdateAddress | undefined;
   readonly domainCheck: RememberedCheck | undefined;
   readonly updateCheck: UpdateCheck | undefined;
+  readonly problems: readonly Problem[];
 }
 
 /** The change was made; `site` is the site after it. */
@@ -800,11 +801,12 @@ export interface Database {
   readSettings(): Promise<SettingValues | undefined>;
 
   /**
-   * Read what the dashboard's frame is drawn from, in one step: the settings, the address that starts a rebuild, the kept run of the domain, and the last asking for a newer version.
+   * Read what the dashboard's frame is drawn from, in one step: the settings, the address that starts a rebuild, the kept run of the domain, the last asking for a newer version, and the problems of two days.
    *
+   * @param now - the moment of the reading: the problems are those of its UTC day and of the day before, which hold every moment of the last 24 hours
    * @returns each as its own read gives it
    */
-  readFrame(): Promise<FrameRecords>;
+  readFrame(now: number): Promise<FrameRecords>;
 
   /**
    * Store the settings of a new install.

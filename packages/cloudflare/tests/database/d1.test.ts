@@ -109,7 +109,7 @@ const ROWS: Readonly<Record<string, readonly [read: number, written: number]>> =
   "keepDomainCheck": [2, 3],
   "keepDomainCheck, 200 pieces over the run before": [2, 3],
   "readDomainCheck": [1, 0],
-  "readFrame": [3, 0],
+  "readFrame": [4, 0],
   "noteProblem, the day's first": [1, 1],
   "noteProblem, the same hour": [1, 0],
   "noteProblem, a later hour": [1, 1],
@@ -813,7 +813,7 @@ describe("D1: the rows every operation of the database costs of a day's allowanc
     const pieces = Array.from({ length: 200 }, (_piece, at) => ({ piece: "Record", detail: `record ${at}`, part: "reach", state: "needs_repair" }) as const);
     await cost("keepDomainCheck, 200 pieces over the run before", () => database.keepDomainCheck({ ran_at: NOW + 1, by: BY_ADA.by, run: "repair", pieces }, { run: "repair" }));
     await cost("readDomainCheck", () => database.readDomainCheck());
-    await cost("readFrame", () => database.readFrame());
+    await cost("readFrame", () => database.readFrame(NOW));
 
     const note = { kind: "request_failed", count: 1, more: false, name: "TypeError", message: "m".repeat(200) } as const;
     const limit = { kind: "files_limit_reached", count: 1, more: false, name: null, message: null } as const;
