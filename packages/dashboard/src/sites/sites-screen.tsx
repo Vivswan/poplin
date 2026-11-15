@@ -158,10 +158,11 @@ function PhoneList({
             className="group/row relative flex min-h-16 items-center gap-2 border-b px-4 py-2 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring data-[state=selected]:bg-chosen"
           >
             {/* The row's own button lies under everything else in it: a press beside the title and the row's controls lands on it and opens the panel. */}
+            {/* It eases nothing: a closed panel gives it the focus back at once, while an eased change would still keep it out of sight. */}
             <Button
               variant="ghost"
               aria-label={`Details of ${shownName(site)}`}
-              className="absolute inset-0 h-auto rounded-none hover:bg-transparent focus-visible:ring-inset"
+              className="absolute inset-0 h-auto rounded-none transition-none hover:bg-transparent focus-visible:ring-inset"
               onClick={() => onOpen(site)}
             />
             <div className="flex min-w-0 flex-1 flex-col gap-0.5">

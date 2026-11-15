@@ -598,6 +598,30 @@ test.describe("on a phone, while a line says a result", () => {
   });
 });
 
+test.describe("on a phone, after a site's panel", () => {
+  test.use({ viewport: PHONE });
+
+  // Drift: the focus would land in the search again: the row's button is out of sight under the panel, and a button that eases its changes is still out of sight at the moment the closed panel gives the focus back.
+  test("the focus is back on the row's button that opened the panel, closed with Escape and with Close", async ({ page }) => {
+    await arrive(page);
+    const details = page.getByRole("button", { name: `Details of ${SAMPLE.site}`, exact: true });
+    const heading = panel(page).getByRole("heading", { name: SAMPLE.site, exact: true });
+
+    // A person closes the panel after the list under it has left sight, which is when its button can no longer take the focus.
+    await details.press("Enter");
+    await expect(heading).toBeFocused();
+    await expect(details).toBeHidden();
+    await pressEscape(page);
+    await expect(details).toBeFocused();
+
+    await details.press("Enter");
+    await expect(heading).toBeFocused();
+    await expect(details).toBeHidden();
+    await panel(page).getByRole("button", { name: "Close: back to sites", exact: true }).click();
+    await expect(details).toBeFocused();
+  });
+});
+
 test.describe("on a phone, in a question", () => {
   test.use({ viewport: PHONE });
 
