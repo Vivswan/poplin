@@ -16,7 +16,7 @@ import { parseArgs } from "node:util";
 import { gzipSync } from "node:zlib";
 
 import manifest from "../../cli/package.json" with { type: "json" };
-import { buildClient, readClient } from "./client";
+import { buildClient, readClient } from "../../dashboard/scripts/client-build";
 import { notFoundPage } from "./deep-links";
 import { readSamples } from "./samples";
 

@@ -14,7 +14,7 @@ import manifest from "../../cli/package.json" with { type: "json" };
 import type { ClientFiles } from "../../app/src/console/shell";
 import { BunSqliteDriver } from "../../core/tests/database/support/bun-sqlite-driver";
 import { createPreview } from "../src/preview/preview";
-import { buildClient, CLIENT as CONSOLE, readClient } from "./client";
+import { buildClient, CLIENT as CONSOLE, readClient } from "../../dashboard/scripts/client-build";
 import { readSamples } from "./samples";
 import { DEFAULT_PORT, HOST, markRunning, PID_PATH, pidFile, readFlags, stopRunning, unmarkRunning } from "./running";
 

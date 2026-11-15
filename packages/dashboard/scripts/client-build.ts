@@ -1,4 +1,4 @@
-// The dashboard's client as the demo's hosts take it: built into a folder of the caller's, and read back as the names of its files.
+// The dashboard's client as a host takes it: built into a folder of the caller's, and read back as the names of its files.
 //
 //   packages/dashboard  --its own build-->  the script, the stylesheet, and the fonts, each under a name that holds a hash of its content
 //   .vite/manifest.json                     which of them the page loads
@@ -6,8 +6,10 @@
 import { readdirSync } from "node:fs";
 import { join } from "node:path";
 
+import type { Manifest } from "vite";
+
 /** The folder of the dashboard's client. */
-export const CLIENT = join(import.meta.dir, "..", "..", "dashboard");
+export const CLIENT = join(import.meta.dir, "..");
 
 /** The manifest the client's build writes, from its folder, and the two entries of it that the page loads. */
 const [MANIFEST, SCRIPT, STYLE] = [join(".vite", "manifest.json"), "src/main.tsx", "style.css"];
@@ -24,7 +26,7 @@ interface BuiltClient {
  * @throws {Error} the client did not build
  */
 export async function buildClient(into: string): Promise<void> {
-  // The build is the one a visitor gets, whatever the caller runs as: a test's environment would build the client's libraries with their checks for developers.
+  // The build is the one an owner or a visitor gets, whatever the caller runs as: another environment would build the client's libraries with their checks for developers.
   const env = { ...process.env, NODE_ENV: "production" };
   const built = Bun.spawn([process.execPath, "run", "build", "--outDir", into, "--emptyOutDir"], { cwd: CLIENT, env, stdio: ["ignore", "ignore", "inherit"] });
   if ((await built.exited) !== 0) throw new Error("the dashboard's client did not build");
@@ -38,7 +40,7 @@ export async function buildClient(into: string): Promise<void> {
  * @throws {Error} the folder holds no manifest, or the manifest names no script or no stylesheet
  */
 export async function readClient(folder: string): Promise<BuiltClient> {
-  const manifest: Readonly<Record<string, { readonly file: string } | undefined>> = await Bun.file(join(folder, MANIFEST)).json();
+  const manifest: Partial<Manifest> =await Bun.file(join(folder, MANIFEST)).json();
   const [script, style] = [manifest[SCRIPT]?.file, manifest[STYLE]?.file];
   if (script === undefined || style === undefined) throw new Error("the manifest of the client's build names no script, or no stylesheet");
 
