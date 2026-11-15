@@ -21,28 +21,44 @@ import "@/usage/usage-screen";
 /** How long the test may take, in milliseconds: it draws every screen, which on a busy machine passes the five seconds a test gets. */
 const TEST_MS = 60_000;
 
+/** How long one address may take to draw its screen and make its reads, in milliseconds. */
+const SCREEN_MS = 10_000;
+
+/** Every kind of address, and what the page shows at it. A read an earlier address made already is kept, so each address lists only what it reads anew. */
+const ADDRESSES: readonly (readonly [string, Shown])[] = [
+  ["/?access=public&q=a+b", ["Sites", "Sites", ["/sites?access=public&q=a+b"]]],
+  ["/sites/a%20site?sort=name", ["Sites", "Sites", ["/sites/a%20site", "/sites?sort=name&dir=asc"]]],
+  ["/tokens", ["Access", "Access", ["/people"]]],
+  ["/tokens/list?sort=name&dir=desc", ["Access", "Access", ["/logins", "/tokens?sort=name&dir=desc"]]],
+  ["/tokens/review/login-1", ["Access", "Access", ["/logins/login-1", "/tokens?sort=allowed&dir=desc"]]],
+  ["/tokens/allow?code=ABCD-1234", ["Access", "Access", ["/logins/find?code=ABCD-1234"]]],
+  ["/activity?kind=sites", ["Activity", "Activity", ["/activity?kind=sites"]]],
+  ["/usage", ["Usage", "Usage", ["/usage", "/usage/visits?range=30"]]],
+  ["/settings", ["Settings", "Settings", ["/settings"]]],
+  ["/domain", ["Domain", "Domain", ["/domain"]]],
+  ["/nowhere/at/all", ["Not found", "Sites", []]],
+  ["/Settings", ["Not found", "Sites", []]],
+];
+
 /** The runtime's own `fetch`, put back after each test. */
 const OWN_FETCH = globalThis.fetch;
 
 /** Every read the screens made, as the address it asked. */
 const asked: string[] = [];
 
-/** Go to an address as a followed link does, and let the screen it names be loaded, drawn, and ask for its data. */
+/** What the page shows: the screen's title, the section marked at the side, and the reads the screen made. */
+type Shown = readonly [title: string | undefined, section: string | undefined, reads: readonly string[]];
+
+/** Go to an address as a followed link does. The reads of the address before it are forgotten, so a read that came late is counted against this one. */
 async function arrive(address: string): Promise<void> {
   asked.length = 0;
   await act(async () => {
     window.history.pushState(null, "", `${BOOT.base}${address}`);
-    await new Promise((resolve) => setTimeout(resolve, 20));
-  });
-  // A screen whose code is loaded when it is first opened shows rows meanwhile; its reads start once it is drawn.
-  await waitFor(() => expect(document.querySelector("[data-slot=waiting-rows]")).toBeNull());
-  await act(async () => {
-    await new Promise((resolve) => setTimeout(resolve, 20));
   });
 }
 
-/** What the page shows: the screen's title, the section marked at the side, and the reads the screen made. */
-function shown(): readonly [string | undefined, string | undefined, readonly string[]] {
+/** Read the page. */
+function shown(): Shown {
   return [
     document.querySelector("h1")?.textContent,
     document.querySelector("nav [aria-current=page]")?.textContent,
@@ -80,39 +96,10 @@ describe("an address of the console", () => {
   test("draws its screen, marks its section, and reads what its path and query name", async () => {
     draw();
 
-    const drawn: Record<string, ReturnType<typeof shown>> = {};
-    for (const address of [
-      "/?access=public&q=a+b",
-      "/sites/a%20site?sort=name",
-      "/tokens",
-      "/tokens/list?sort=name&dir=desc",
-      "/tokens/review/login-1",
-      "/tokens/allow?code=ABCD-1234",
-      "/activity?kind=sites",
-      "/usage",
-      "/settings",
-      "/domain",
-      "/nowhere/at/all",
-      "/Settings",
-    ]) {
+    // A screen whose code is loaded when it is first opened shows rows meanwhile, and its reads start once it is drawn: the page is read until it shows the whole of what the address names.
+    for (const [address, whole] of ADDRESSES) {
       await arrive(address);
-      drawn[address] = shown();
+      await waitFor(() => expect({ [address]: shown() }).toEqual({ [address]: whole }), { timeout: SCREEN_MS });
     }
-
-    // A read an earlier address made already is kept, so each address lists only what it reads anew.
-    expect(drawn).toEqual({
-      "/?access=public&q=a+b": ["Sites", "Sites", ["/sites?access=public&q=a+b"]],
-      "/sites/a%20site?sort=name": ["Sites", "Sites", ["/sites/a%20site", "/sites?sort=name&dir=asc"]],
-      "/tokens": ["Access", "Access", ["/people"]],
-      "/tokens/list?sort=name&dir=desc": ["Access", "Access", ["/logins", "/tokens?sort=name&dir=desc"]],
-      "/tokens/review/login-1": ["Access", "Access", ["/logins/login-1", "/tokens?sort=allowed&dir=desc"]],
-      "/tokens/allow?code=ABCD-1234": ["Access", "Access", ["/logins/find?code=ABCD-1234"]],
-      "/activity?kind=sites": ["Activity", "Activity", ["/activity?kind=sites"]],
-      "/usage": ["Usage", "Usage", ["/usage", "/usage/visits?range=30"]],
-      "/settings": ["Settings", "Settings", ["/settings"]],
-      "/domain": ["Domain", "Domain", ["/domain"]],
-      "/nowhere/at/all": ["Not found", "Sites", []],
-      "/Settings": ["Not found", "Sites", []],
-    });
   }, TEST_MS);
 });

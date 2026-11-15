@@ -169,7 +169,7 @@ describe("the address of one setting", () => {
   test("points its block out: the block is shaded and its control has the focus", async () => {
     const { to, hash } = settingAddress("trash_days");
     const page = await drawn(`${to}#${hash}`);
-    await waitFor(() => expect(document.activeElement).toBe(field(page, "Keep deleted sites")));
+    await waitFor(() => expect(document.activeElement === field(page, "Keep deleted sites")).toBe(true));
 
     expect([document.getElementById(hash)?.contains(document.activeElement), document.getElementById(hash)?.classList.contains("bg-muted/60")]).toEqual([true, true]);
   });

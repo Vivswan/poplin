@@ -136,7 +136,7 @@ describe("the dialog", () => {
     fireEvent.change(tokenBox(page), { target: { value: TOKEN } });
     await press(page, "Repair");
 
-    await waitFor(() => expect(page.queryByRole("dialog")).toBeNull());
+    await waitFor(() => expect(page.queryByRole("dialog") === null).toBe(true));
   });
 
   // Drift: Escape would take the dialog away while its run is on its way, so the result has nowhere to be said; or Cancel would not close it after.
@@ -153,6 +153,6 @@ describe("the dialog", () => {
     await press(page, "Cancel");
 
     expect(during).toBe(true);
-    await waitFor(() => expect(page.queryByRole("dialog")).toBeNull());
+    await waitFor(() => expect(page.queryByRole("dialog") === null).toBe(true));
   });
 });
