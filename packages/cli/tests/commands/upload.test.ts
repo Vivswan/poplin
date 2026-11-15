@@ -1,13 +1,19 @@
-import { afterEach, describe, expect, jest, test } from "bun:test";
-import { setImmediate } from "node:timers/promises";
+import { afterEach, describe, expect, spyOn, test } from "bun:test";
 
-import { type Bench, cleanUp, folderOf, jsonOf, openBench, runThroughPauses, stateOf } from "./support/harness";
+import type { Io } from "../../src/commands/records";
+import { type Bench, cleanUp, folderOf, jsonOf, openBench, stateOf } from "./support/harness";
 
 /** A site of one file, so that one lane sends and no call is on its way while that file waits to be sent again. */
 const ONE = { "index.html": "<h1>notes</h1>" };
 
 /** The shortest pause before each sending of a file again, in milliseconds: one second, doubled each time. */
 const SHORTEST_PAUSES = [1000, 2000, 4000];
+
+/** A terminal that shows the progress line. */
+const WATCHED = { asks: false, progress: true };
+
+/** No terminal: a pipe, which is sent no progress line. */
+const PIPED = { asks: false, progress: false };
 
 /** A site of six files: more than the four that are on their way at once. */
 const SIX = { "index.html": "<h1>notes</h1>", "a.css": "a{}", "b.css": "b{}", "c.css": "c{}", "d.css": "d{}", "e.css": "e{}" };
@@ -52,6 +58,23 @@ interface Fault {
   readonly code: number;
   readonly puts: number;
   readonly uploads: readonly string[];
+}
+
+/** What a publish whose file meets passing faults prints: its arguments after the folder, the terminal, and what it must come to with each pause stretched by half: every wait, every line that is no result, and how many lines the result has. */
+interface Told {
+  readonly faults: Fault["faults"];
+  readonly line: string;
+  readonly terminal: Io["terminal"];
+  readonly code: number;
+  readonly waits: readonly number[];
+  readonly status: readonly string[];
+  readonly err: readonly string[];
+  readonly out: number;
+}
+
+/** The line before a pause of so many seconds, after which the one file is sent for the `next` time. */
+function again(seconds: number, next: number): string {
+  return `the install did not take index.html: sending it again in ${seconds} s, ${next} of 4 (Ctrl-C stops)`;
 }
 
 function isPut(request: Request): boolean {
@@ -103,20 +126,20 @@ function dropped(): Promise<Response> {
 /**
  * Answer each sending of a file with the next fault, and let the install answer once they ran out.
  *
- * @returns when each file was sent, by the clock of the timers
+ * @returns what counts the files sent so far
  */
-function faulty(bench: Bench, faults: readonly (() => Response | Promise<Response>)[]): number[] {
-  const sentAt: number[] = [];
+function faulty(bench: Bench, faults: readonly (() => Response | Promise<Response>)[]): () => number {
+  let sent = 0;
 
   bench.hook = (request) => {
     if (!isPut(request)) return undefined;
 
-    sentAt.push(Date.now());
+    sent += 1;
 
-    return faults[sentAt.length - 1]?.();
+    return faults[sent - 1]?.();
   };
 
-  return sentAt;
+  return () => sent;
 }
 
 /** The uploads that are no site, as `kind state`, and their ids. */
@@ -128,7 +151,6 @@ async function unfinished(bench: Bench): Promise<{ readonly said: string[]; read
 }
 
 afterEach(() => {
-  jest.useRealTimers();
   cleanUp();
 });
 
@@ -283,23 +305,57 @@ describe("upload", () => {
   });
 
   // Drift: a file sent again at once meets the same fault, so a gateway that fails for a second fails the whole publish; one sent again after a refusal that stands, or without end, holds the person up for nothing.
+  // A pause on a timer of its own, not the command's one wait, is real time here: the shortest is a second, and the whole run is held to less.
   test.each<[string, Fault]>([
     ["meets one 502 is sent again after a pause, and the site is published", { faults: [badGateway], code: 0, puts: 2, uploads: ["create finished"] }],
-    ["meets three 502s in a row is sent a fourth time, after pauses of at least one, two, and four seconds", { faults: [badGateway, badGateway, badGateway], code: 0, puts: 4, uploads: ["create finished"] }],
+    ["meets three 502s in a row is sent a fourth time, after pauses of one, two, and four seconds, each stretched to twice as long at most", { faults: [badGateway, badGateway, badGateway], code: 0, puts: 4, uploads: ["create finished"] }],
     ["meets a dropped connection and then a 502 is sent a third time", { faults: [dropped, badGateway], code: 0, puts: 3, uploads: ["create finished"] }],
     ["meets four 502s in a row is given up", { faults: [badGateway, badGateway, badGateway, badGateway], code: 5, puts: 4, uploads: ["create abandoned"] }],
     ["is refused with a 400 is not sent again", { faults: [() => refusal(400, "size_mismatch", "1")], code: 1, puts: 1, uploads: ["create abandoned"] }],
     ["is refused with a page of status 403 is not sent again", { faults: [() => new Response("<html>no</html>", { status: 403 })], code: 5, puts: 1, uploads: ["create abandoned"] }],
   ])("a file that %s", async (_name, row) => {
     const bench = await openBench();
-    const sentAt = faulty(bench, row.faults);
+    const sent = faulty(bench, row.faults);
+    const began = performance.now();
 
-    const ran = await runThroughPauses(bench, folderOf("notes", ONE), () => sentAt.length > 0 && sentAt.length < row.puts);
+    const ran = await bench.run(folderOf("notes", ONE));
+    const took = performance.now() - began;
     const { uploads } = await bench.install.database.listUploads({ before: Number.MAX_SAFE_INTEGER, limit: 10 });
-    const pauses = sentAt.slice(1).map((at, index) => at - (sentAt[index] ?? 0));
 
-    expect([ran.code, sentAt.length, uploads.map((upload) => `${upload.plan.kind} ${upload.state}`)]).toEqual([row.code, row.puts, [...row.uploads]]);
-    expect(pauses.map((pause, index) => pause >= (SHORTEST_PAUSES[index] ?? 0))).toEqual(pauses.map(() => true));
+    expect([ran.code, sent(), uploads.map((upload) => `${upload.plan.kind} ${upload.state}`)]).toEqual([row.code, row.puts, [...row.uploads]]);
+    expect(ran.waits.map((wait, index) => wait >= (SHORTEST_PAUSES[index] ?? 0) && wait <= 2 * (SHORTEST_PAUSES[index] ?? 0))).toEqual(Array.from({ length: row.puts - 1 }, () => true));
+    expect(took).toBeLessThan(Math.min(...SHORTEST_PAUSES));
+  });
+
+  // Drift: a command that waits seconds and prints nothing looks frozen; a line a pipe is sent, or one more line on stdout, breaks whoever reads the result.
+  test.each<[string, Told]>([
+    [
+      "sent a third time says so before each pause, and the progress writes over it",
+      { faults: [badGateway, badGateway], line: "", terminal: WATCHED, code: 0, waits: [1500, 3000], status: [again(2, 2), again(3, 3), "uploading 1/1 files, 14 B of 14 B", ""], err: [], out: 3 },
+    ],
+    [
+      "given up says so before each of its three pauses, and then what it always said",
+      {
+        faults: [badGateway, badGateway, badGateway, badGateway],
+        line: "",
+        terminal: WATCHED,
+        code: 5,
+        waits: [1500, 3000, 6000],
+        status: [again(2, 2), again(3, 3), again(6, 4), ""],
+        err: ["the answer is not the install's: status 502", "the upload was given up and no site changed; is the address the one of your poplin install? poplin whoami shows it"],
+        out: 0,
+      },
+    ],
+    ["sent again with no terminal to watch pauses as long and writes no line", { faults: [badGateway], line: "", terminal: PIPED, code: 0, waits: [1500], status: [], err: [], out: 3 }],
+    ["sent again under --json pauses as long and writes no line", { faults: [badGateway], line: " --json", terminal: PIPED, code: 0, waits: [1500], status: [], err: [], out: 1 }],
+  ])("a file that is %s", async (_name, row) => {
+    const bench = await openBench();
+    faulty(bench, row.faults);
+    using _half = spyOn(Math, "random").mockReturnValue(0.5);
+
+    const ran = await bench.run(`${folderOf("notes", ONE)}${row.line}`, { terminal: row.terminal });
+
+    expect([ran.code, ran.waits, ran.status, ran.err, ran.out.length]).toEqual([row.code, [...row.waits], [...row.status], [...row.err], row.out]);
   });
 
   // Drift: a pause that does not hear the stop keeps the person waiting out seconds after Ctrl-C, and then sends the file again; a stop told as another file's refusal says the folder changed when the person stopped the command.
@@ -316,15 +372,11 @@ describe("upload", () => {
 
       return request.url.includes("a.css") ? refusal(400, "size_mismatch", "1") : badGateway();
     };
-    jest.useFakeTimers();
+    bench.paused = async () => "interrupted";
 
-    const running = bench.run(folderOf("notes", pages));
-    while (sent < puts) await setImmediate();
-    for (let turn = 0; turn < 10; turn += 1) await setImmediate();
-    bench.stop();
-    const stopped = await running;
+    const stopped = await bench.run(folderOf("notes", pages));
 
-    expect([stopped.code, stopped.err, sent]).toEqual([1, ["the command was stopped: the upload was given up and no site changed"], puts]);
+    expect([stopped.code, stopped.err, sent, stopped.waits.length]).toEqual([1, ["the command was stopped: the upload was given up and no site changed"], puts, 1]);
     expect((await unfinished(bench)).said).toEqual(["create abandoned"]);
   });
 
