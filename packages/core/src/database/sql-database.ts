@@ -1,4 +1,4 @@
-// The database interface over SQLite. Every SQL text poplin runs outside a migration step is in this file, and every row leaves it as a checked value.
+// The database interface over SQLite. Every statement poplin runs outside a migration step is built in this file from the schema `schema.ts` declares, and every row leaves it as a checked value.
 //
 // A change is one batch: the statement that changes a row carries its own condition, and each statement after it runs only when the one before it changed a row.
 // So a change and its audit entry are kept together or not at all, and nothing is decided from an earlier read.
@@ -54,7 +54,7 @@ import type {
 } from "./database";
 import type { SqlDriver, SqlValue, Statement, StatementResult } from "./driver";
 import { fileUnderKey, manifestFromText, manifestKey, manifestToText } from "./manifest";
-import { audit, declaredFiles, leftovers, logins, requestCounts, sites, tokens, totals, uploads, versions } from "./schema";
+import { audit, declaredFiles, leftovers, logins, requestCounts, secrets, settings, sites, sweepPlace, tokens, totals, updateCheck, uploads, versions } from "./schema";
 
 /** How many ids are tried for one site before giving up; an id is about 62 random bits, so a second try is already a rare event. */
 const MINT_ATTEMPTS = 5;
@@ -118,6 +118,15 @@ const A_VERSION = alias(versions, "v");
 /** The `versions` table as `k`, for the kept versions inside a subquery on `v`. */
 const A_KEPT_VERSION = alias(versions, "k");
 
+/** The `request_counts` table as `c`, joined to the days and the sites a read of views names. */
+const A_COUNT = alias(requestCounts, "c");
+
+/** The settings, as JSON text. */
+const READ_SETTINGS = built(BUILD.select({ value: settings.value }).from(settings).where(eq(settings.id, 1)));
+
+/** The signing key, as hex text. */
+const READ_SIGNING_KEY = built(BUILD.select({ value: secrets.value }).from(secrets).where(eq(secrets.name, "session_key")));
+
 /** The `sites` table under a second name, for a statement that asks about the other sites. */
 const OTHER = alias(sites, "other");
 
@@ -143,9 +152,6 @@ const SITE_FIELDS = {
 
 /** The id and the name of a site, as `getSiteNames` reads them. */
 const NAMED_SITE = v.object({ id: SITE_ID, name: SITE_NAME });
-
-/** An audit entry that goes with no change. */
-const AUDIT_NOTE = "INSERT INTO audit (at, actor, action, site_id, site_name, detail) VALUES (?1, ?2, ?3, ?4, ?5, ?6)";
 
 /** The place of each access in a listing sorted by access: from the most private to the most open. */
 const ACCESS_RANKS = { private: 0, unlisted: 1, public: 2 } as const;
@@ -176,92 +182,19 @@ function narrowing(query: SitesQuery): SQL[] {
   return conditions;
 }
 
-/** Where the sweep's walk stopped, as JSON text. */
-const READ_SWEEP_PLACE = "SELECT place FROM sweep_place WHERE id = 1";
-
-/** Where the sweep's walk stopped, in place of what was kept. */
-const KEEP_SWEEP_PLACE = "INSERT INTO sweep_place (id, place) VALUES (1, ?1) ON CONFLICT (id) DO UPDATE SET place = excluded.place";
-
-/** The sweep's place forgotten. */
-const FORGET_SWEEP_PLACE = "DELETE FROM sweep_place";
-
-/** When the newest release was last asked for, and the newest known, as JSON text or NULL. */
-const READ_UPDATE_CHECK = "SELECT checked_at, news FROM update_check WHERE id = 1";
-
-/** The last asking and its answer, in place of what was kept. */
-const KEEP_UPDATE_CHECK = "INSERT INTO update_check (id, checked_at, news) VALUES (1, ?1, ?2) ON CONFLICT (id) DO UPDATE SET checked_at = excluded.checked_at, news = excluded.news";
-
-/** The settings, as JSON text. */
-const READ_SETTINGS = "SELECT value FROM settings WHERE id = 1";
-
-/** The settings of a new install, only while none are stored. */
-const INSERT_SETTINGS = "INSERT INTO settings (id, value, updated_at) SELECT 1, ?1, ?2 WHERE NOT EXISTS (SELECT 1 FROM settings WHERE id = 1)";
-
-/** A merge patch: each key it names is replaced and every other key stays, in one statement, only when a value differs. */
-const PATCH_SETTINGS = "UPDATE settings SET value = json_patch(value, ?1), updated_at = ?2 WHERE id = 1 AND json(json_patch(value, ?1)) <> json(value)";
-
-/** The signing key, as hex text. */
-const READ_SIGNING_KEY = "SELECT value FROM secrets WHERE name = 'session_key'";
-
-/** A signing key, only while none is stored. */
-const INSERT_SIGNING_KEY =
-  "INSERT INTO secrets (name, value, created_at) SELECT 'session_key', ?1, ?2 WHERE NOT EXISTS (SELECT 1 FROM secrets WHERE name = 'session_key')";
-
-/** A signing key in place of the stored one, or as the first. */
-const REPLACE_SIGNING_KEY = `
-INSERT INTO secrets (name, value, created_at) VALUES ('session_key', ?1, ?2)
-ON CONFLICT (name) DO UPDATE SET value = excluded.value, created_at = excluded.created_at`;
-
-/** The address that starts a rebuild, with the moment it was saved. */
-const READ_UPDATE_ADDRESS = "SELECT value, created_at FROM secrets WHERE name = 'update_address'";
-
-/** An address that starts a rebuild in place of the stored one, or as the first. */
-const KEEP_UPDATE_ADDRESS = `
-INSERT INTO secrets (name, value, created_at) VALUES ('update_address', ?1, ?2)
-ON CONFLICT (name) DO UPDATE SET value = excluded.value, created_at = excluded.created_at`;
-
-/** No address that starts a rebuild. */
-const FORGET_UPDATE_ADDRESS = "DELETE FROM secrets WHERE name = 'update_address'";
-
-/** Whether any audit entry is a login. The scan runs from the oldest entry and stops at the first, which sits near the start of every log that has one. */
-const HAS_LOGIN = "SELECT EXISTS (SELECT 1 FROM audit WHERE action = 'login') AS found";
-
 /** The form of a day: a date such as `2026-11-13`, which sorts as text in the order of time. */
 const DAY_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 
 /** The site column of the row that counts all sites together; no site id is empty. */
 const ALL_SITES = "";
 
-/** The counts of every day before `?1`, dropped so the table holds seven days. */
-const DROP_EARLIER_DAYS = "DELETE FROM request_counts WHERE day < ?1";
-
-/** `?3` more requests on day `?1` for site `?2`, `?4` of them page views, and the count of requests after them. */
-const ADD_REQUESTS = `
-INSERT INTO request_counts (day, site, requests, views) VALUES (?1, ?2, ?3, ?4)
-ON CONFLICT (day, site) DO UPDATE SET requests = requests + excluded.requests, views = views + excluded.views
-RETURNING requests`;
-
-/** The page views of each site in the JSON list `?2` over the days in the JSON list `?1`, and those of day `?3` among them. Every row is found by its key. */
-const READ_VIEWS = `
-SELECT c.site AS site, SUM(c.views) AS week, SUM(CASE WHEN c.day = ?3 THEN c.views ELSE 0 END) AS today
-FROM json_each(?2) AS s CROSS JOIN json_each(?1) AS d
-JOIN request_counts AS c ON c.day = d.value AND c.site = s.value
-GROUP BY c.site`;
-
 /** The most sites one read of views takes: a page of a listing. */
 const MOST_VIEWED_SITES = 100;
-
-/** The count of day `?1` for site `?2`; no row when nothing was counted. */
-const READ_REQUESTS = "SELECT requests FROM request_counts WHERE day = ?1 AND site = ?2";
 
 /** What the builder gives for one statement. */
 interface BuiltQuery {
   readonly sql: string;
   readonly params: readonly unknown[];
-}
-
-function sql(text: string, ...params: SqlValue[]): Statement {
-  return { sql: text, params };
 }
 
 /**
@@ -475,6 +408,29 @@ function dropOldVersions(folder: SQL, keep: number): Statement {
 /** The audit entry of a change to no site, written only when the statement before it changed a row. */
 function auditPlain(signed: Signed, action: AuditAction, detail: Readonly<Record<string, unknown>>): Statement {
   return insertFrom(audit, PLAIN_AUDIT_COLUMNS, fragment`SELECT ${signed.at}, ${signed.by}, ${action}, ${JSON.stringify(detail)} WHERE ${CHANGED}`);
+}
+
+/** A secret in place of the stored one of its name, or as the first. */
+function keepSecret(name: "session_key" | "update_address", value: string, at: number): Statement {
+  const kept = { value: fragment`excluded.${bare(secrets.value)}`, created_at: fragment`excluded.${bare(secrets.created_at)}` };
+
+  return built(BUILD.insert(secrets).values({ name, value, created_at: at }).onConflictDoUpdate({ target: secrets.name, set: kept }));
+}
+
+/** More requests on a day for a site, some of them page views, and the count of requests after them. */
+function addRequests(day: string, site: string, requests: number, views: number): Statement {
+  const added = {
+    requests: fragment`${bare(requestCounts.requests)} + excluded.${bare(requestCounts.requests)}`,
+    views: fragment`${bare(requestCounts.views)} + excluded.${bare(requestCounts.views)}`,
+  };
+  const counted = BUILD.insert(requestCounts).values({ day, site, requests, views }).onConflictDoUpdate({ target: [requestCounts.day, requestCounts.site], set: added });
+
+  return built(counted.returning({ requests: requestCounts.requests }));
+}
+
+/** The count of a day for a site; no row when nothing was counted. */
+function requestsOf(day: string, site: string): Statement {
+  return built(BUILD.select({ requests: requestCounts.requests }).from(requestCounts).where(and(eq(requestCounts.day, day), eq(requestCounts.site, site))));
 }
 
 /** The token with the given id. */
@@ -1170,19 +1126,26 @@ export class SqlDatabase implements Database {
   }
 
   async readSweepPlace(): Promise<SweepPlace | undefined> {
-    const [read] = await this.#driver.batch([sql(READ_SWEEP_PLACE)]);
+    const [read] = await this.#driver.batch([built(BUILD.select({ place: sweepPlace.place }).from(sweepPlace).where(eq(sweepPlace.id, 1)))]);
 
     return placeIn(read);
   }
 
   async keepSweepPlace(place: SweepPlace | undefined): Promise<void> {
-    const kept = place === undefined ? sql(FORGET_SWEEP_PLACE) : sql(KEEP_SWEEP_PLACE, JSON.stringify(v.parse(SWEEP_PLACE, place)));
+    if (place === undefined) {
+      await this.#driver.batch([built(BUILD.delete(sweepPlace))]);
 
-    await this.#driver.batch([kept]);
+      return;
+    }
+
+    const stopped = { id: 1, place: JSON.stringify(v.parse(SWEEP_PLACE, place)) };
+    const kept = { place: fragment`excluded.${bare(sweepPlace.place)}` };
+    await this.#driver.batch([built(BUILD.insert(sweepPlace).values(stopped).onConflictDoUpdate({ target: sweepPlace.id, set: kept }))]);
   }
 
   async readUpdateCheck(): Promise<UpdateCheck | undefined> {
-    const [read] = await this.#driver.batch([sql(READ_UPDATE_CHECK)]);
+    const asked = BUILD.select({ checked_at: updateCheck.checked_at, news: updateCheck.news }).from(updateCheck).where(eq(updateCheck.id, 1));
+    const [read] = await this.#driver.batch([built(asked)]);
 
     return updateCheckIn(read);
   }
@@ -1190,21 +1153,24 @@ export class SqlDatabase implements Database {
   async keepUpdateCheck(check: UpdateCheck): Promise<void> {
     const { checked_at, news } = v.parse(UPDATE_CHECK, check);
 
-    await this.#driver.batch([sql(KEEP_UPDATE_CHECK, checked_at, news === null ? null : JSON.stringify(news))]);
+    const asked = { id: 1, checked_at, news: news === null ? null : JSON.stringify(news) };
+    const kept = { checked_at: fragment`excluded.${bare(updateCheck.checked_at)}`, news: fragment`excluded.${bare(updateCheck.news)}` };
+    await this.#driver.batch([built(BUILD.insert(updateCheck).values(asked).onConflictDoUpdate({ target: updateCheck.id, set: kept }))]);
   }
 
   async readSettings(): Promise<SettingValues | undefined> {
-    const [read] = await this.#driver.batch([sql(READ_SETTINGS)]);
+    const [read] = await this.#driver.batch([READ_SETTINGS]);
 
     return settingsIn(read);
   }
 
   async initSettings(values: SettingValues, signed: Signed): Promise<{ readonly kind: "done" | "already_set"; readonly values: SettingValues }> {
     const checked = v.parse(SETTING_VALUES, values);
+    const noneStored = fragment`NOT EXISTS (SELECT 1 FROM ${settings} WHERE ${settings.id} = 1)`;
     const [inserted, , read] = await this.#driver.batch([
-      sql(INSERT_SETTINGS, JSON.stringify(checked), signed.at),
+      insertFrom(settings, [settings.id, settings.value, settings.updated_at], fragment`SELECT 1, ${JSON.stringify(checked)}, ${signed.at} WHERE ${noneStored}`),
       auditPlain(signed, "settings_set", {}),
-      sql(READ_SETTINGS),
+      READ_SETTINGS,
     ]);
     const stored = settingsIn(read);
     if (stored === undefined) throw new Error("the settings were stored and are not there to read");
@@ -1217,19 +1183,21 @@ export class SqlDatabase implements Database {
     signed: Signed,
   ): Promise<{ readonly kind: "done" | "unchanged"; readonly values: SettingValues } | Refused<"not_set_up">> {
     const checked = v.parse(SETTING_CHANGES, changes);
-    const [patched, , read] = await this.#driver.batch([
-      sql(PATCH_SETTINGS, JSON.stringify(checked), signed.at),
+    // A merge patch: each key it names is replaced and every other key stays, only when a value differs.
+    const patched = fragment<string>`json_patch(${settings.value}, ${JSON.stringify(checked)})`;
+    const [updated, , read] = await this.#driver.batch([
+      built(BUILD.update(settings).set({ value: patched, updated_at: signed.at }).where(and(eq(settings.id, 1), fragment`json(${patched}) <> json(${settings.value})`))),
       auditPlain(signed, "settings_changed", checked),
-      sql(READ_SETTINGS),
+      READ_SETTINGS,
     ]);
     const values = settingsIn(read);
     if (values === undefined) return { kind: "not_set_up" };
 
-    return { kind: changed(patched) ? "done" : "unchanged", values };
+    return { kind: changed(updated) ? "done" : "unchanged", values };
   }
 
   async readSigningKey(): Promise<Uint8Array<ArrayBuffer> | undefined> {
-    const [read] = await this.#driver.batch([sql(READ_SIGNING_KEY)]);
+    const [read] = await this.#driver.batch([READ_SIGNING_KEY]);
 
     return signingKeyIn(read);
   }
@@ -1239,7 +1207,9 @@ export class SqlDatabase implements Database {
     const stored = await this.readSigningKey();
     if (stored !== undefined) return { kind: "kept", key: stored };
 
-    const [inserted, read] = await this.#driver.batch([sql(INSERT_SIGNING_KEY, text, at), sql(READ_SIGNING_KEY)]);
+    const noneStored = fragment`NOT EXISTS (SELECT 1 FROM ${secrets} WHERE ${secrets.name} = 'session_key')`;
+    const first = insertFrom(secrets, [secrets.name, secrets.value, secrets.created_at], fragment`SELECT 'session_key', ${text}, ${at} WHERE ${noneStored}`);
+    const [inserted, read] = await this.#driver.batch([first, READ_SIGNING_KEY]);
     const key = signingKeyIn(read);
     if (key === undefined) throw new Error("the signing key was stored and is not there to read");
 
@@ -1247,32 +1217,35 @@ export class SqlDatabase implements Database {
   }
 
   async rotateSigningKey(fresh: Uint8Array, signed: Signed): Promise<void> {
-    await this.#driver.batch([sql(REPLACE_SIGNING_KEY, signingKeyToText(fresh), signed.at), auditPlain(signed, "signed_everyone_out", {})]);
+    await this.#driver.batch([keepSecret("session_key", signingKeyToText(fresh), signed.at), auditPlain(signed, "signed_everyone_out", {})]);
   }
 
   async readUpdateAddress(): Promise<UpdateAddress | undefined> {
-    const [read] = await this.#driver.batch([sql(READ_UPDATE_ADDRESS)]);
+    const address = BUILD.select({ value: secrets.value, created_at: secrets.created_at }).from(secrets).where(eq(secrets.name, "update_address"));
+    const [read] = await this.#driver.batch([built(address)]);
     const row = read?.rows[0];
 
     return row === undefined ? undefined : updateAddressFromRow(row);
   }
 
   async keepUpdateAddress(address: string, signed: Signed): Promise<void> {
-    await this.#driver.batch([sql(KEEP_UPDATE_ADDRESS, address, signed.at), auditPlain(signed, "update_address_set", {})]);
+    await this.#driver.batch([keepSecret("update_address", address, signed.at), auditPlain(signed, "update_address_set", {})]);
   }
 
   async forgetUpdateAddress(signed: Signed): Promise<{ readonly kind: "done" | "unchanged" }> {
-    const [removed] = await this.#driver.batch([sql(FORGET_UPDATE_ADDRESS), auditPlain(signed, "update_address_removed", {})]);
+    const [removed] = await this.#driver.batch([built(BUILD.delete(secrets).where(eq(secrets.name, "update_address"))), auditPlain(signed, "update_address_removed", {})]);
 
     return { kind: changed(removed) ? "done" : "unchanged" };
   }
 
   async appendAudit(note: AuditNote, signed: Signed): Promise<void> {
-    await this.#driver.batch([sql(AUDIT_NOTE, signed.at, signed.by, note.action, note.site?.id ?? null, note.site?.name ?? null, JSON.stringify(note.detail))]);
+    const entry = fragment`VALUES (${signed.at}, ${signed.by}, ${note.action}, ${note.site?.id ?? null}, ${note.site?.name ?? null}, ${JSON.stringify(note.detail)})`;
+    await this.#driver.batch([insertFrom(audit, AUDIT_COLUMNS, entry)]);
   }
 
   async hasLoggedIn(): Promise<boolean> {
-    const [read] = await this.#driver.batch([sql(HAS_LOGIN)]);
+    // The scan runs from the oldest entry and stops at the first login, which sits near the start of every log that has one.
+    const [read] = await this.#driver.batch([written(fragment`SELECT EXISTS (SELECT 1 FROM ${audit} WHERE ${audit.action} = 'login') AS found`)]);
 
     return read?.rows[0]?.found === 1;
   }
@@ -1298,9 +1271,10 @@ export class SqlDatabase implements Database {
     if (!Number.isSafeInteger(views) || views < 0 || views > counted.requests) throw new RangeError(`views are counted in whole numbers from 0 to the requests, not ${views}`);
 
     const [, site, all] = await this.#driver.batch([
-      sql(DROP_EARLIER_DAYS, viewDays(counted.day)[0] ?? counted.day),
-      sql(ADD_REQUESTS, counted.day, counted.site, counted.requests, views),
-      sql(ADD_REQUESTS, counted.day, ALL_SITES, counted.requests, views),
+      // The days before the oldest one shown are dropped, so the table holds seven days.
+      built(BUILD.delete(requestCounts).where(lt(requestCounts.day, viewDays(counted.day)[0] ?? counted.day))),
+      addRequests(counted.day, counted.site, counted.requests, views),
+      addRequests(counted.day, ALL_SITES, counted.requests, views),
     ]);
 
     return { site: requestsIn(site), all: requestsIn(all) };
@@ -1314,7 +1288,11 @@ export class SqlDatabase implements Database {
     if (sites.length === 0) return views;
 
     // A site named twice is read once: its rows would be summed once for each naming.
-    const [read] = await this.#driver.batch([sql(READ_VIEWS, JSON.stringify(viewDays(day)), JSON.stringify([...views.keys()]), day)]);
+    // Every row is found by its key: each site named is joined to each day of the week.
+    const named = fragment`json_each(${JSON.stringify([...views.keys()])}) AS s CROSS JOIN json_each(${JSON.stringify(viewDays(day))}) AS d`;
+    const sums = fragment`${A_COUNT.site} AS site, SUM(${A_COUNT.views}) AS week, SUM(CASE WHEN ${A_COUNT.day} = ${day} THEN ${A_COUNT.views} ELSE 0 END) AS today`;
+    const counted = fragment`SELECT ${sums} FROM ${named} JOIN ${requestCounts} AS ${A_COUNT} ON ${A_COUNT.day} = d.value AND ${A_COUNT.site} = s.value GROUP BY ${A_COUNT.site}`;
+    const [read] = await this.#driver.batch([written(counted)]);
     for (const row of read?.rows ?? []) views.set(row.site as SiteId, { today: Number(row.today), week: Number(row.week) });
 
     return views;
@@ -1322,8 +1300,8 @@ export class SqlDatabase implements Database {
 
   async readRequests(day: string, site?: SiteId): Promise<RequestCounts> {
     requireDay(day);
-    const ofSite = site === undefined ? [] : [sql(READ_REQUESTS, day, site)];
-    const read = await this.#driver.batch([sql(READ_REQUESTS, day, ALL_SITES), ...ofSite]);
+    const ofSite = site === undefined ? [] : [requestsOf(day, site)];
+    const read = await this.#driver.batch([requestsOf(day, ALL_SITES), ...ofSite]);
 
     return { site: requestsIn(read[1]), all: requestsIn(read[0]) };
   }
