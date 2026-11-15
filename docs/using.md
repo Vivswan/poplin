@@ -159,6 +159,8 @@ An install begins five logins a minute for all computers together. In a minute t
 
 `poplin update` needs a Deploy Hook saved in the install once: [Install](install.md#update-the-install) shows how. It is read from `POPLIN_UPDATE_ADDRESS` in the environment, and no command prints it.
 
+An install made with the Deploy button has a build at Cloudflare to make the Deploy Hook for. One made from a terminal or with the OpenTofu module has none: with no URL saved it answers `no_update_address`, and updates as [Install](install.md#update-the-install) says.
+
 `poplin setup` reads the Cloudflare API token from `POPLIN_SETUP_TOKEN` in the environment. A new install needs `--domain` and `--login`. On an install that has them, `--login` alone corrects a first login that was mistyped. It needs no login, and it works only until the first login to the install. [Install](install.md#from-a-terminal-instead) shows where it fits.
 
 The settings `poplin config` takes:
@@ -199,9 +201,10 @@ nothing was changed
 | How often            | once a UTC day, by the install itself; a day with no answer is tried again the next day            |
 | What is sent         | a plain request for the file: no version, no id, and no address of the install is put in it        |
 | What Cloudflare adds | a `CF-Worker` header on every request a Worker sends, which names the install's domain             |
-| Where it shows       | the `update` row of `poplin doctor`, and `update` under `--json`; no row when nothing newer is out |
+| Where it shows       | the foot of the dashboard's side, on every page: `0.2.0 is out` and a link, What changed           |
+| Where else           | the `update` row of `poplin doctor`, and `update` under `--json`; no row when nothing newer is out |
 | Switching it off     | `poplin config update_check off`: nothing is asked, and a release learned before is not shown      |
-| Updating to it       | `poplin update`, once a Deploy Hook is saved in the install                                        |
+| Updating to it       | `poplin update`, once a Deploy Hook is saved; [Install](install.md#update-the-install) has the way of every kind of install |
 
 ## The last check of the domain
 
@@ -281,7 +284,7 @@ A refused command prints one sentence and often a hint. With `--json` it prints 
 
 | Code                 | Means                                                       | What to do                                                     |
 | -------------------- | ----------------------------------------------------------- | -------------------------------------------------------------- |
-| `no_update_address`  | the install has no Deploy Hook saved                        | put its URL in `POPLIN_UPDATE_ADDRESS`, then `poplin update --save-address` |
+| `no_update_address`  | the install has no Deploy Hook saved                        | put its URL in `POPLIN_UPDATE_ADDRESS`, then `poplin update --save-address`; an install with no Deploy Hook updates as [Install](install.md#update-the-install) says |
 | `no_address_to_save` | `POPLIN_UPDATE_ADDRESS` holds no URL                        | put the Deploy Hook's URL in it for this one command           |
 | `no_update`          | no newer version is known to the install                    | `poplin update --anyway` rebuilds all the same                 |
 | `update_refused`     | Cloudflare refused to start the build, with the status shown | make a new Deploy Hook and save it                             |

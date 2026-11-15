@@ -225,6 +225,31 @@ The Worker stores the first settings once, while it has none. After that the das
 
 The Domain tab's check and repair take two permissions more. Zone Settings: Read on the zone: they read whether the zone's own Always Use HTTPS is on, and write no redirect rule where it is. Access: Organizations, Identity Providers, and Groups: Read on the account: they read the team domain, and compare it and the application's audience tag with the Worker's `ACCESS` binding.
 
+## Update the install
+
+An install this module made updates by a new bundle and an apply. In a checkout of this repository, with `0.2.0` standing for the release:
+
+```sh
+git fetch --tags
+git checkout v0.2.0
+bun install
+bun run --cwd packages/cloudflare build
+```
+
+The build writes `packages/cloudflare/dist/worker.js`. Put that file where `worker_bundle_path` names, move `ref` in the module's `source` to the same tag, and apply:
+
+```sh
+tofu init -upgrade
+tofu apply
+```
+
+| On such an install                  | Does                                                                                           |
+| ----------------------------------- | ---------------------------------------------------------------------------------------------- |
+| the update notice                   | shows while `update_check` is true, where [Using](../../../docs/using.md#a-newer-version) says |
+| `poplin update --check`             | says which version is out, and whether a rebuild address is saved                              |
+| `poplin update`                     | answers `no_update_address` with no URL saved: the module makes no build and no Deploy Hook    |
+| the build variable `POPLIN_VERSION` | nothing: no build reads it. The tag you check out is the version                               |
+
 ## What it does not do
 
 | It does not | Instead |

@@ -284,7 +284,17 @@ $env:POPLIN_SETUP_TOKEN = "paste the token here"
 
 ## Update the install
 
-An update is one more build. Run in Cloudflare's build, poplin's deploy fetches a release of poplin from GitHub and deploys that, under the name, the bucket, and the database your copy's `wrangler.jsonc` names. Your copy on GitHub stays as it is, and nothing updates on its own.
+Nothing updates on its own. An install says when a newer version is out, and how it updates depends on how it was made.
+
+| The install was made      | It updates by                                                     | `poplin update`                        |
+| ------------------------- | ----------------------------------------------------------------- | -------------------------------------- |
+| with the button of step 2 | one more build at Cloudflare: in the browser, or with one command | starts that build, once a URL is saved |
+| from a terminal           | two commands in its folder: From a terminal, below                | answers `no_update_address`: no URL    |
+| with the OpenTofu module  | a new bundle and an apply: [With OpenTofu](#with-opentofu)        | answers `no_update_address`: no URL    |
+
+**The notice.** While the setting `update_check` is on, the install says when a newer version is out. [Using](using.md#a-newer-version) shows where. `poplin update --check` says the same on every kind of install.
+
+**A build at Cloudflare.** Run in Cloudflare's build, poplin's deploy fetches a release of poplin from GitHub and deploys that, under the name, the bucket, and the database your copy's `wrangler.jsonc` names. Your copy on GitHub stays as it is.
 
 ```text
 in the build's log:   poplin: deploying 0.3.1 (was asked for latest)
@@ -351,6 +361,8 @@ git -C poplin pull
 bun run --cwd poplin deploy
 ```
 
+Cloudflare builds neither an install made from a terminal nor one the OpenTofu module made, so neither has a Deploy Hook unless you connect a build of your own. With no URL saved, `poplin update` answers `no_update_address` and starts nothing.
+
 ## What is capped or protected
 
 Cloudflare has no hard spending cap on R2, the storage for your sites' files. Each month 10 GB stored, 1 million write operations, and 10 million read operations are free, and Cloudflare bills what goes past them. The limits and alerts below are the protection, and none of them is a cap on what Cloudflare bills.
@@ -390,3 +402,5 @@ module "poplin" {
   access_team_domain = "team.cloudflareaccess.com"
 }
 ```
+
+**To update it**, an install the module made takes a new bundle and an apply. [The module's page](../packages/cloudflare/tofu/README.md#update-the-install) has the steps.
