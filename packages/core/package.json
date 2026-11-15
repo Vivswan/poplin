@@ -44,6 +44,7 @@
     "./src/actions/upload-file": "./src/actions/upload-file.ts",
     "./src/actions/uploads": "./src/actions/uploads.ts",
     "./src/api/loopback": "./src/api/loopback.ts",
+    "./src/api/media-type": "./src/api/media-type.ts",
     "./src/api/routes": "./src/api/routes.ts",
     "./src/auth/computer-logins": "./src/auth/computer-logins.ts",
     "./src/auth/cookie": "./src/auth/cookie.ts",

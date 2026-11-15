@@ -4,6 +4,7 @@ import { hc } from "hono/client";
 import * as v from "valibot";
 
 import type { Api } from "../../../app/src/api/api";
+import { mediaTypeOf } from "../../../core/src/api/media-type";
 import { API_ERROR, type ApiError, STORED_TYPE_HEADER } from "../../../core/src/api/routes";
 import { textUpTo } from "../../../core/src/api/text-up-to";
 
@@ -22,6 +23,15 @@ const BYTE_COUNT = /^\d{1,15}$/;
 /** How long an answer asks its caller to wait, as `Retry-After` writes whole seconds. */
 const WAIT_SECONDS = /^\d{1,9}$/;
 
+/** The most characters kept of the line an answer in plain text says. */
+const MAX_SAID_LENGTH = 200;
+
+/** A control character, which no kept line holds: the line is printed on a terminal. */
+const CONTROL = /\p{Cc}/gu;
+
+/** The media type of an answer whose first line is kept. */
+const PLAIN_TEXT = "text/plain";
+
 /** The platform's `fetch`, or a stand-in for it. */
 export type Fetch = (input: string, init: RequestInit) => Promise<Response>;
 
@@ -31,6 +41,7 @@ export type Fetch = (input: string, init: RequestInit) => Promise<Response>;
  * `refused` is the API's own refusal, with its code. `unreachable` is a request that never got an answer, `timeout` one that took too long.
  * `stopped` is a call the person stopped the command before or during: the install may have had the request all the same.
  * `not-json` is an answer that is no JSON, such as a proxy's error page, and `unexpected` one that is JSON of a form the API never sends, or a redirect.
+ * `said` is the first line of a `not-json` answer in plain text: an install that cannot start says why in one.
  *
  * `retryAfter` is how many seconds an answer asked its caller to wait, when its `Retry-After` header names whole seconds.
  */
@@ -39,7 +50,7 @@ export type Failure =
   | { readonly kind: "unreachable" }
   | { readonly kind: "stopped" }
   | { readonly kind: "timeout"; readonly seconds: number }
-  | { readonly kind: "not-json"; readonly status: number; readonly retryAfter?: number }
+  | { readonly kind: "not-json"; readonly status: number; readonly said?: string; readonly retryAfter?: number }
   | { readonly kind: "unexpected"; readonly status: number; readonly retryAfter?: number };
 
 /** What a call answers: the route's answer, or why there is none. */
@@ -128,13 +139,23 @@ function waitOf(response: Raw): { readonly retryAfter?: number } {
   return WAIT_SECONDS.test(header) ? { retryAfter: Number(header) } : {};
 }
 
+/** The first line of an answer in plain text, under the key a failure keeps it; nothing for an answer of any other type, or one whose first line is empty. */
+function saidOf(response: Raw, text: string | undefined): { readonly said?: string } {
+  if (text === undefined || mediaTypeOf(response.headers.get("Content-Type")) !== PLAIN_TEXT) return {};
+
+  const [line = ""] = text.split("\n");
+  const said = line.replace(CONTROL, "").trim().slice(0, MAX_SAID_LENGTH);
+
+  return said === "" ? {} : { said };
+}
+
 /** Read an answer that is JSON into the value a done answer holds, or into the failure any other answer is. */
 async function readJson(response: Raw): Promise<Called<unknown>> {
   const { status } = response;
   const wait = waitOf(response);
   const text = await readText(response);
   const parsed = text === undefined ? undefined : parseJson(text);
-  if (parsed === undefined) return failed({ kind: "not-json", status, ...wait });
+  if (parsed === undefined) return failed({ kind: "not-json", status, ...saidOf(response, text), ...wait });
 
   if (status === 200) return { ok: true, value: parsed.value };
 

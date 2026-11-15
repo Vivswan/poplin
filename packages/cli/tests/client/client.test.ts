@@ -80,6 +80,24 @@ describe("client", () => {
     expect(JSON.stringify(called)).not.toContain(TOKEN);
   });
 
+  // Drift: an install that cannot start answers every path, the API's too, with one sentence in plain text. A client that dropped it would leave the person with a status and a hint about the address, which is right.
+  test.each<[string, string, string, unknown]>([
+    [
+      "the sentence of an install that cannot start",
+      "text/plain; charset=utf-8",
+      "This install's database is newer than its code: update poplin.\nmore",
+      { kind: "not-json", status: 503, said: "This install's database is newer than its code: update poplin." },
+    ],
+    ["a line with control characters, cut at 200", "TEXT/PLAIN", `\u001b[31m${"a".repeat(300)}\r\n`, { kind: "not-json", status: 503, said: `[31m${"a".repeat(196)}` }],
+    ["plain text that starts with an empty line", "text/plain", "\nlater", { kind: "not-json", status: 503 }],
+    ["a page", "text/html", "<html>This install cannot start.</html>", { kind: "not-json", status: 503 }],
+    ["text of another type", "text/plain+json", "other format", { kind: "not-json", status: 503 }],
+  ])("a call answered with %s keeps the first line of plain text and of nothing else", async (_name, type, body, failure) => {
+    const client = createClient({ server: ORIGIN, token: TOKEN, fetch: async () => new Response(body, { status: 503, headers: { "Content-Type": type } }) });
+
+    expect(await client.call(WHOAMI_ANSWER, (api) => api.whoami.$get())).toEqual({ ok: false, failure } as never);
+  });
+
   test("a download hands back the real API's file as a stream with its length and its stored type, and a refusal as its code: without this a file route would be read as JSON and capped at 16 MB", async () => {
     const install = await openApi();
     const type = "text/x-notes; charset=utf-8";

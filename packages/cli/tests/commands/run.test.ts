@@ -148,6 +148,22 @@ describe("run", () => {
     expect([none.code, none.out, bench.sent, await stateOf(bench)]).toEqual([1, [], ["GET /api/whoami", "GET /api/whoami", "GET /api/whoami"], before]);
   });
 
+  // Drift: an install that cannot start says why in plain text on every path. Printed as `not_json` with the hint about the address, the sentence is lost and the person checks an address that is right.
+  test("an install that cannot start is quoted: its sentence is printed with the status, and no hint puts the address in doubt", async () => {
+    const bench = await openBench();
+    const sentence = "This install's database was made by another build of poplin, so its records are not the ones this build reads. Deploy the build that made it, or delete the database and poplin makes it anew.";
+    bench.hook = () => new Response(`${sentence}\n`, { status: 503, headers: { "Content-Type": "text/plain; charset=utf-8" } });
+
+    const listed = await bench.run("list");
+    const json = await bench.run("doctor --json");
+    bench.hook = () => new Response("<html>502</html>", { status: 502, headers: { "Content-Type": "text/html" } });
+    const page = await bench.run("list");
+
+    expect([listed.code, listed.out, listed.err]).toEqual([5, [], [`the answer is plain text, status 503: ${sentence}`]]);
+    expect(jsonOf(json).error).toEqual({ code: "not_json", message: "the answer is plain text, status 503", about: sentence });
+    expect(page.err).toEqual(["the answer is not the install's: status 502", "is the address the one of your poplin install? poplin whoami shows it"]);
+  });
+
   // Drift: a person holds the address, not the label. Each form must ask the install for the same site by its label, and an address of another install must reach no install at all.
   test("a site named by its address is asked for by its label, and an address under another domain or port is refused before anything is sent", async () => {
     const { bench, label } = await withSite();

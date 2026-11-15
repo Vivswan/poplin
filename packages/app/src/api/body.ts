@@ -1,6 +1,7 @@
 // What a request carries, read under a cap: a JSON body and a file's bytes. Nothing is held past the cap.
 
 import { type Refused, refuse } from "@poplin/core/src/actions/records";
+import { mediaTypeOf } from "@poplin/core/src/api/media-type";
 
 /** The content type a JSON body is sent with. */
 const JSON_TYPE = "application/json";
@@ -13,11 +14,6 @@ export const WHOLE_PATTERN = /^(?:0|[1-9]\d{0,14})$/;
 
 /** Reads a JSON body as text, refusing bytes that are not UTF-8. */
 const UTF8 = new TextDecoder("utf-8", { fatal: true });
-
-/** The media type of a request's body, without its parameters, in lowercase. */
-function mediaType(request: Request): string {
-  return (request.headers.get("Content-Type") ?? "").split(";")[0]?.trim().toLowerCase() ?? "";
-}
 
 /** The length a request declares for its body, `undefined` when it declares none that is a whole number. */
 function declaredLength(request: Request): number | undefined {
@@ -34,7 +30,7 @@ function declaredLength(request: Request): number | undefined {
 export function hasContentType(request: Request, sends: "nothing" | "json" | "bytes"): boolean {
   if (sends === "nothing") return true;
 
-  return mediaType(request) === (sends === "json" ? JSON_TYPE : BYTES_TYPE);
+  return mediaTypeOf(request.headers.get("Content-Type")) === (sends === "json" ? JSON_TYPE : BYTES_TYPE);
 }
 
 /**

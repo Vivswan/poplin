@@ -172,6 +172,9 @@ export function problemOf(failure: Failure, call: "reads" | "changes" = "reads")
 
   if (failure.kind === "stopped") return problem("stopped", undefined, hint);
 
+  // An answer in plain text says in its own words what is wrong, as an install that cannot start does: the words are shown, and the address is not put in doubt.
+  if (failure.kind === "not-json" && failure.said !== undefined) return build("not_json", { sentence: `the answer is plain text, status ${failure.status}`, exit: LOCAL_ROWS.not_json.exit }, failure.said, hint);
+
   if (failure.kind !== "refused") return problem(FAILURE_CODES[failure.kind], `status ${failure.status}`, hint);
 
   const rows: Readonly<Record<string, Row>> = API_ROWS;
