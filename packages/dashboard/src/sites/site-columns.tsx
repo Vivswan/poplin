@@ -17,6 +17,9 @@ const ACCESS_ICONS = { private: LockIcon, unlisted: LinkIcon, public: GlobeIcon 
 /** The look of a button after a link in the table: quiet at rest, as a row's menu is, and whole when the row is pointed at or holds the focus. */
 const AFTER_LINK_LOOK = "size-6 shrink-0 opacity-60 group-hover/row:opacity-100 group-focus-within/row:opacity-100 pointer-coarse:opacity-100";
 
+/** The fewest letters of a site's name its link is cut to for a table's sake, where the name has as many. */
+const LEAST_NAME_LETTERS = 8;
+
 /** Which sites show the id in their link, and the switch of one. */
 export interface Reveal {
   /** Whether the site's id is shown. */
@@ -63,21 +66,26 @@ function HiddenId({ length }: { readonly length: number }): ReactNode {
  * @param address - the address to write; the site's link when left out
  * @param whole - `true` shows the id too; otherwise as many dots stand where it is, and Copy still gives the whole address
  * @param wraps - `true` goes on in the next line where the text is too long, and cuts nothing
+ * @param gives - `true` tells a table that the end of the name may be cut for the room's sake, down to the name's first letters and the mark that it is cut
  */
 export function SiteLink({
   site,
   address = site.url,
   whole = false,
   wraps = false,
+  gives = false,
   className,
 }: {
   readonly site: Pick<Site, "url" | "id">;
   readonly address?: string;
   readonly whole?: boolean;
   readonly wraps?: boolean;
+  readonly gives?: boolean;
   readonly className?: string;
 }): ReactNode {
   const { shared, before, hidden, after } = addressParts(address, site.id);
+  // The least is as wide as the letters that stay and the mark: a table reads it from the part's style.
+  const giving = gives ? { "data-gives": true, style: { minWidth: `${Math.min(before.length, LEAST_NAME_LETTERS + 1)}ch` } } : {};
   const masked = hidden !== "" && !whole;
 
   return (
@@ -85,7 +93,9 @@ export function SiteLink({
       className={cn("min-w-0 font-mono text-xs", wraps ? "break-all" : "inline-flex max-w-full overflow-hidden align-bottom", className)}
       title={masked ? "Part of the link is hidden here. Copy gives the whole link." : `${shared}${before}${hidden}${after}`}
     >
-      <span className={wraps ? undefined : "truncate"}>{before}</span>
+      <span className={wraps ? undefined : "truncate"} {...giving}>
+        {before}
+      </span>
       {hidden === "" ? null : (
         <span className={wraps ? undefined : "shrink-0"}>
           {masked ? <HiddenId length={hidden.length} /> : hidden}
@@ -146,7 +156,7 @@ export function siteColumns(
 ): readonly ColumnSpec<Site>[] {
   const linkCell = (site: Site): ReactNode => (
     <span className="flex min-w-0 items-center gap-1">
-      <SiteLink site={site} whole={reveal.shows(site)} className="text-muted-foreground" />
+      <SiteLink site={site} whole={reveal.shows(site)} gives className="text-muted-foreground" />
       <span className="flex shrink-0 items-center">
         {addressParts(site.url, site.id).hidden === "" ? null : <RevealButton site={site} reveal={reveal} className={AFTER_LINK_LOOK} />}
         <IconButton label="Copy the link" onClick={() => onCopy(site)} className={AFTER_LINK_LOOK}>

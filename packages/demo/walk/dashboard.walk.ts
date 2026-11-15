@@ -12,6 +12,9 @@ const VIEWPORTS = [
   { width: 390, height: 844, wide: false },
 ] as const;
 
+/** The narrowest screen the Sites table fits with no panel open. */
+const FITS_FROM = { width: 1024, height: 768 };
+
 /** The narrow one of them alone: a phone. */
 const PHONE = { width: VIEWPORTS[1].width, height: VIEWPORTS[1].height };
 
@@ -439,6 +442,26 @@ for (const { width, height, wide } of VIEWPORTS) {
     });
   }
 }
+
+test.describe("on a screen 1024 px wide", () => {
+  test.use({ viewport: FITS_FROM });
+
+  // Drift: the table would be a few pixels wider than its room again, so it would scroll sideways with the end of its last column under the rows' actions.
+  test("the sites fit their room with no panel open: a link gives the end of its name, and no cell lies under the rows' actions", async ({ page }) => {
+    await arrive(page);
+
+    // The table is measured again once the page's fonts are in, so its widths are read until they have come to rest.
+    await expect(async () => {
+      const widths = await page.getByRole("table", { name: "Sites", exact: true }).evaluate((table) => {
+        const [last, actions] = [...(table.querySelector("tbody tr")?.children ?? [])].slice(-2).map((cell) => cell.getBoundingClientRect());
+
+        return { table: table.scrollWidth, room: table.closest('[data-slot="scroll-area"]')?.clientWidth, underActions: (last?.right ?? Number.NaN) - (actions?.left ?? Number.NaN) };
+      });
+
+      expect(widths).toEqual({ table: widths.room, room: widths.room, underActions: 0 });
+    }).toPass();
+  });
+});
 
 test.describe("on a phone, while a line says a result", () => {
   test.use({ viewport: PHONE });

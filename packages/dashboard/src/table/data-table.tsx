@@ -1,6 +1,6 @@
 // The table every list of the dashboard is shown in. The server sorts and narrows the rows; the person arranges the columns: drags them into another order, drags an edge to resize, and chooses which are shown.
 // Every chosen column is drawn, as wide as its values need or as a person made it.
-// Where they do not fit the room the table scrolls sideways in its own area, between the first column and the rows' actions, which stay in place.
+// Where they do not fit the room, even with every value that gives cut to its shortest, the table scrolls sideways in its own area, between the first column and the rows' actions, which stay in place.
 
 import { ScrollArea as ScrollAreaParts } from "@base-ui/react/scroll-area";
 import {

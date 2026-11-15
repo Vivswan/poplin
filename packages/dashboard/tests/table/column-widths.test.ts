@@ -1,19 +1,27 @@
-// The widths a table is drawn with: what a person set, what the content needs, and where the room left over goes.
+// The widths a table is drawn with: what a person set, what the content needs, what a value gives to a room a little too narrow, and where the room left over goes.
 
 import { describe, expect, test } from "bun:test";
 
-import { type SizedColumn, widthsForRoom } from "@/table/column-widths";
+import { type Fitted, type SizedColumn, widthsForRoom } from "@/table/column-widths";
 
 /** The test table's columns: the first fixed. */
 const COLUMNS: readonly SizedColumn[] = [{ id: "name", fixed: true }, { id: "colour" }, { id: "weight" }, { id: "origin" }];
 
-/** The width each column's content needs. */
-const FITTED = new Map([
-  ["name", 120],
-  ["colour", 100],
-  ["weight", 80],
-  ["origin", 700],
-]);
+/** What each column's content needs, and the least it can be drawn at: the values of `colour` alone give, 40 pixels. */
+const FITTED: Fitted = {
+  needs: new Map([
+    ["name", 120],
+    ["colour", 100],
+    ["weight", 80],
+    ["origin", 700],
+  ]),
+  least: new Map([
+    ["name", 120],
+    ["colour", 60],
+    ["weight", 80],
+    ["origin", 700],
+  ]),
+};
 
 /** What the widths come to, as plain values. */
 function widthsOf(columns: readonly SizedColumn[], sizes: Readonly<Record<string, number>>, free: number): unknown {
@@ -37,8 +45,17 @@ describe("the widths of a table's columns", () => {
   });
 
   // Drift: a table too narrow for its columns would squeeze one or draw empty room between them again, where it is to scroll sideways.
-  test.each([420, 300, 619])("keep every column's own width and leave no room empty in a room of %d, which they do not fit", (free) => {
+  test.each([420, 300, 579])("keep every column's own width and leave no room empty in a room of %d, which they do not fit", (free) => {
     expect(widthsOf(COLUMNS, {}, free)).toEqual({ drawn: { name: 120, colour: 100, weight: 80, origin: 320 }, spare: 0 });
+  });
+
+  // Drift: a table a few pixels wider than its room would scroll sideways with a column cut under the rows' actions, where the end of one value was all it took to fit; or a width a person set would be taken back for the room's sake.
+  test.each([
+    ["by what a value gives, in a room a little too narrow", {}, 600, { name: 120, colour: 80, weight: 80, origin: 320 }],
+    ["by all a value gives, and no more", {}, 580, { name: 120, colour: 60, weight: 80, origin: 320 }],
+    ["by nothing where a person set the width of the column that gives", { colour: 100 }, 600, { name: 120, colour: 100, weight: 80, origin: 320 }],
+  ])("fit the room %s", (_, sizes, free, drawn) => {
+    expect(widthsOf(COLUMNS, sizes, free)).toEqual({ drawn, spare: 0 });
   });
 
   // Drift: a column whose values fill their cell would be left at its heading's width with the room empty beside it.
