@@ -34,6 +34,9 @@ const ABSOLUTE = /^(?:[/\\]|[A-Za-z]:|[a-z]+:\/\/)/;
 /** The folder of a person's account on macOS, Linux, or Windows, as a map's JSON would hold it. */
 const HOME_FOLDER = /[/\\]Users[/\\]|\/home\//;
 
+/** How long the test that copies a thousand files four times over may take, in milliseconds. */
+const COPY_MS = 120_000;
+
 /** The policy the dashboard goes out under: it runs its own script alone and reads this origin alone. */
 const POLICY = "default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self'; connect-src 'self'; img-src 'self' data:; form-action 'self'; frame-ancestors 'none'; base-uri 'none'";
 
@@ -804,12 +807,12 @@ describe("the audit log as a file", () => {
 });
 
 describe("a copy of a site", () => {
-  // Drift: the Free plan ends a request past 50 calls to the database and the bucket, and a request that starts an instance makes 4 before its route runs. A copy that counted its own calls alone passed 50 on a new instance.
+  // Drift: the Free plan ends a request past 50 queries of the database, 4 of them made by a request that starts an instance, and bounds the bucket apart. A copy that counts its own calls alone passes 50 on a new instance.
   test.each([
-    [10, 2, [24, 28]],
-    [1_001, 73, [36, 40]],
+    [130, 2, { database: [10, 14], bucket: [225, 225] }],
+    [1_001, 10, { database: [10, 14], bucket: [228, 228] }],
   ])(
-    "of %i files takes %i requests through the API, and the request that makes the most calls to the database and the bucket stays under 44, on an instance that runs and on one each request starts",
+    "of %i files takes %i requests through the API, and the request that makes the most calls stays under 44 to the database and 250 to the bucket, on an instance that runs and on one each request starts",
     async (count, requests, most) => {
       // The first request of an install stores its settings, which a publish reads.
       await ask(instance(w), `${ADMIN}/api/whoami`);
@@ -818,29 +821,31 @@ describe("a copy of a site", () => {
       const source = await publishSite(await installOf(w), { scope: "admin", holder: OWNER }, { name: "report", files });
       if (!source.ok) throw new Error(`the source was refused: ${source.code}`);
 
-      /** The calls of each request of one copy; `fresh` starts a new instance for every request. */
-      const costs = async (fresh: boolean): Promise<number[]> => {
-        const tally = { calls: 0 };
-        const spent: number[] = [];
-        let [worker, bindings] = [instance(w), countedBindings(tally)];
+      /** The most calls one request of a copy made to the database and to the bucket, and how many requests the copy took; `fresh` starts a new instance for every request. */
+      const costs = async (fresh: boolean): Promise<{ readonly database: number; readonly bucket: number; readonly requests: number }> => {
+        const [database, bucket] = [{ calls: 0 }, { calls: 0 }];
+        const counted = (): Bindings => ({ ...BINDINGS, DB: countedBindings(database).DB, SITES: countedBindings(bucket).SITES });
+        const most = { database: 0, bucket: 0, requests: 0 };
+        let [worker, bindings] = [instance(w), counted()];
         // An instance keeps the bindings of its first request, so the one that runs is started on the counted ones.
         if (!fresh) await ask(worker, `${ADMIN}/api/whoami`, {}, bindings);
 
-        for (let round: { site: unknown; copy?: { upload: string } } = { site: null }; round.site === null; ) {
-          if (fresh) [worker, bindings] = [instance(w), countedBindings(tally)];
+        for (let round: { site: unknown; copy?: { upload: string } } = { site: null }; round.site === null; most.requests += 1) {
+          if (fresh) [worker, bindings] = [instance(w), counted()];
 
-          const before = tally.calls;
+          const before = [database.calls, bucket.calls] as const;
           round = await done(await send(worker, `${ADMIN}/api/sites/${source.site.id}/duplicate`, round.copy === undefined ? {} : { upload: round.copy.upload }, { Authorization: `Bearer ${token}` }, bindings));
-          spent.push(tally.calls - before);
+          Object.assign(most, { database: Math.max(most.database, database.calls - before[0]), bucket: Math.max(most.bucket, bucket.calls - before[1]) });
         }
 
-        return spent;
+        return most;
       };
-      const measured = [await costs(false), await costs(true)];
+      const [warm, cold] = [await costs(false), await costs(true)];
 
-      expect([measured.map((spent) => spent.length), measured.map((spent) => Math.max(...spent))]).toEqual([[requests, requests], most]);
+      expect([warm.requests, cold.requests]).toEqual([requests, requests]);
+      expect({ database: [warm.database, cold.database], bucket: [warm.bucket, cold.bucket] }).toEqual(most);
     },
-    120_000,
+    COPY_MS,
   );
 });
 

@@ -16,7 +16,7 @@ const property = fuzzTarget(import.meta.file);
 const sources = fc.record({
   access: fc.constantFrom("private", "unlisted", "public"),
   expires: fc.constantFrom("never", "1s", "7d"),
-  pages: fc.integer({ min: 0, max: 40 }),
+  pages: fc.oneof(fc.integer({ min: 0, max: 40 }), fc.integer({ min: 120, max: 260 })),
   calls: fc.integer({ min: 1, max: 5 }),
 });
 
@@ -78,8 +78,8 @@ property(
   "the manifest of a copy is never longer than the one its source was published with, so a site that fitted the cap can be copied",
   fc.asyncProperty(fc.uniqueArray(declared, { selector: (one) => one.name.normalize("NFC"), maxLength: 6 }), async (extra) => {
     const world = await makeWorld();
-    // Sixteen pages besides: more than one call copies, so the first call finishes nothing and the copy's manifest is still there to measure. Their type is as short as one can be, so they hide no growth.
-    const pages = Array.from({ length: 16 }, (_page, at) => ({ ...file(`pages/${at}.html`, `<p>${at}</p>`), contentType: "-" }));
+    // 130 pages besides: more than one call copies, so the first call finishes nothing and the copy's manifest is still there to measure. Their type is as short as one can be, so they hide no growth.
+    const pages = Array.from({ length: 130 }, (_page, at) => ({ ...file(`pages/${at}.html`, `<p>${at}</p>`), contentType: "-" }));
     const files = [file("index.html", "<p>home</p>"), ...pages, ...extra.map((one) => ({ ...file(`files/${one.name}`, one.text), contentType: one.type }))];
     const made = await publishSite(world.install, OWNER, { name: "report", files });
     if (!made.ok) throw new Error(`the source was refused: ${made.code}`);
