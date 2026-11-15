@@ -19,6 +19,9 @@ const CLIENT: Parameters<typeof openKeptDemo>[0]["client"] = {
   file: async (name) => (name === "app-test.js" ? { body: "// the client", type: "text/javascript; charset=utf-8" } : undefined),
 };
 
+/** How long the test that seeds the demo twice may take, in milliseconds: a seed is work of the processor alone, and two of them on a busy machine pass the five seconds a test gets. */
+const SEED_MS = 30_000;
+
 type Demo = Awaited<ReturnType<typeof openKeptDemo>>;
 
 async function open(saved?: ReturnType<Demo["save"]>): Promise<Demo> {
@@ -53,7 +56,7 @@ test("a demo opened from a save goes on where the first was, takes a change from
   expect([sent.status, later.status]).toEqual([200, 200]);
   expect([trash.checkout, trash.handbook]).toEqual([seeded.checkout, seeded.handbook]);
   expect([again.checkout === undefined, again.checkout === seeded.checkout, Object.keys(await labels(third, "?view=trash")).includes("checkout")]).toEqual([false, false, false]);
-});
+}, SEED_MS);
 
 // Drift: the page the worker answers names the client's files under the demo's own folder, and the worker hands each out from its host. A page that named them at the origin's root would load no script on a host that keeps the demo under a path.
 test("the dashboard's page links the client's files under the demo's folder, and the demo answers them from what its host hands it", async () => {
