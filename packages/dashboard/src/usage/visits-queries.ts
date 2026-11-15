@@ -1,5 +1,6 @@
 // How the Usage screen's graph reads its data and keeps its choice: the page opens of each day, the sites that can be picked, and what one person last picked.
 
+import { MOST_SITES_COMPARED } from "@poplin/core/src/records/views";
 import { keepPreviousData, type UseQueryResult, useQuery } from "@tanstack/react-query";
 import type { InferResponseType } from "hono/client";
 import useLocalStorageState from "use-local-storage-state";
@@ -16,14 +17,14 @@ export const RANGES = [
   { value: "365", label: "1 year" },
 ] as const;
 
-/** The places a picked site's line can take, one for each of the theme's colours: as many as the server reads sites at once. */
-export const SLOTS = [0, 1, 2, 3, 4] as const;
+/** How many looks a picked site's line can take: each of the theme's five colours with each of five patterns of dashes. A site keeps its look while it is picked, and no two share one until all are taken. */
+export const LOOK_COUNT = 25;
 
-/** The most sites drawn beside all sites together. */
-export const MOST_PICKED = SLOTS.length;
+/** The most sites drawn beside all sites together: as many as the server reads at once. */
+export const MOST_PICKED = MOST_SITES_COMPARED;
 
 /** A picked site as the browser keeps it. */
-const PICKED = v.object({ id: v.string(), title: v.string(), slot: v.picklist(SLOTS) });
+const PICKED = v.object({ id: v.string(), title: v.string(), slot: v.pipe(v.number(), v.integer(), v.minValue(0), v.maxValue(LOOK_COUNT - 1)) });
 
 /** A choice as the browser keeps it. The lines switched off are at most all sites and every picked site. */
 const CHOICE = v.object({
@@ -44,7 +45,7 @@ export type Visits = InferResponseType<(typeof api.usage.visits)["$get"], 200>;
 /** A stretch of days. */
 export type Range = (typeof RANGES)[number]["value"];
 
-/** A site drawn beside all sites: its id, the words it is named with, and which of the theme's colours it keeps while it is picked. */
+/** A site drawn beside all sites: its id, the words it is named with, and which look its line keeps while it is picked. */
 export type Picked = Readonly<v.InferOutput<typeof PICKED>>;
 
 /** What one person chose to see: the stretch of days, the sites picked, and the lines switched off, each by its key. */

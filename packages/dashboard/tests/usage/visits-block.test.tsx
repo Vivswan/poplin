@@ -48,7 +48,10 @@ function sum(counts: readonly number[]): number {
 
 /** A choice as the browser keeps it: the first sites of the list, each in the place of its colour. */
 function keep(sites: number, hidden: readonly string[] = []): void {
-  localStorage.setItem(CHOICE_KEY, JSON.stringify({ range: "30", sites: SITES.slice(0, sites).map((site, slot) => ({ id: site.id, title: site.title, slot })), hidden }));
+  localStorage.setItem(
+    CHOICE_KEY,
+    JSON.stringify({ range: "30", sites: SITES.slice(0, sites).map((site, slot) => ({ id: site.id, title: site.title, slot })), hidden }),
+  );
 }
 
 function kept(): { readonly hidden: readonly string[]; readonly sites: readonly { readonly slot: number }[] } {
@@ -59,7 +62,8 @@ function kept(): { readonly hidden: readonly string[]; readonly sites: readonly 
 async function draw(all: readonly number[] = ALL, by = "day"): Promise<void> {
   globalThis.fetch = (async (input: Request | string | URL) => {
     const { pathname, search, searchParams } = new URL(input instanceof Request ? input.url : input, window.location.href);
-    if (pathname === `${BOOT.base}/data/sites`) return Response.json({ ok: true, sites: SITES.map(({ counts: _counts, ...site }) => site), next: null, logins: {} });
+    if (pathname === `${BOOT.base}/data/sites`)
+      return Response.json({ ok: true, sites: SITES.map(({ counts: _counts, ...site }) => site), next: null, logins: {} });
 
     asked.push(search);
     const ids = (searchParams.get("sites") ?? "").split(",");
@@ -141,7 +145,11 @@ describe("the Visits block", () => {
   test("says there are no visits yet, and draws no graph and no sum, while nothing was counted", async () => {
     await draw([0, 0, 0]);
 
-    const drawn = [document.querySelector("svg path[data-line]"), within(document.body).queryByRole("table"), within(document.body).queryByText(/^in 30 days$/)];
+    const drawn = [
+      document.querySelector("svg path[data-line]"),
+      within(document.body).queryByRole("table"),
+      within(document.body).queryByText(/^in 30 days$/),
+    ];
 
     expect([within(document.body).getByText("No visits yet.").tagName, ...drawn]).toEqual(["P", null, null, null]);
   });
@@ -166,28 +174,34 @@ describe("the Visits block", () => {
     ]);
   });
 
-  // Drift: a pick would not reach the server, a sixth site could be ticked and the server would refuse the whole graph, or the reason would not be said.
-  test("asks for a site once it is ticked, and with five ticked lets no other be ticked and says why", async () => {
+  // Drift: a pick would not reach the server, a small cap would come back and stop a sixth site, two picked sites would share a look, or every listed site could not be ticked or unticked at once.
+  test("asks for a site once it is ticked, lets a sixth be ticked, ticks every listed site at once with a look of its own each, and clears them all", async () => {
     keep(4);
     await draw();
     await doing(() => fireEvent.click(within(document.body).getByRole("combobox", { name: "Compare sites" })));
     const report = await within(document.body).findByRole("option", { name: /^Report/ });
     await doing(() => fireEvent.click(report));
     await waitFor(() => expect(asked.at(-1)).toContain(SITES[4]?.id ?? "none"));
-    await within(document.body).findByText("5 sites at most.");
     await settle();
-    const options = within(document.body).getAllByRole("option");
+    const free = within(document.body)
+      .getAllByRole("option")
+      .map((option) => [option.querySelector("span")?.textContent, option.getAttribute("aria-selected"), option.getAttribute("aria-disabled")]);
+    await doing(() => fireEvent.click(within(document.body).getByRole("button", { name: "Select all" })));
+    const all = kept().sites.map((site) => site.slot);
+    await settle();
+    const looks = [...within(document.body).getByRole("list", { name: "Lines" }).querySelectorAll("line")].map((line) => `${line.getAttribute("stroke")} ${line.getAttribute("stroke-dasharray")}`);
+    await doing(() => fireEvent.click(within(document.body).getByRole("button", { name: "Clear" })));
 
-    expect(options.map((option) => [option.querySelector("span")?.textContent, option.getAttribute("aria-selected"), option.getAttribute("aria-disabled")])).toEqual([
-      ["Handbook", "true", null],
-      ["Launch deck", "true", null],
-      ["Pricing", "true", null],
-      ["Notes", "true", null],
-      ["Report", "true", null],
-      ["Offer", "false", "true"],
-      ["Board", "false", "true"],
+    expect([free.slice(4), all, [looks.length, new Set(looks).size], kept().sites]).toEqual([
+      [
+        ["Report", "true", null],
+        ["Offer", "false", null],
+        ["Board", "false", null],
+      ],
+      [0, 1, 2, 3, 4, 5, 6],
+      [8, 8],
+      [],
     ]);
-    expect(kept().sites.map((site) => site.slot)).toEqual([0, 1, 2, 3, 4]);
   });
 
   // Drift: a big line would keep the small ones flat with no way to read them, the sum in the heading would go with its line, or the one line left could be switched off and leave an empty plot.

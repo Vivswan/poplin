@@ -1,9 +1,11 @@
-// The Visits block of the Usage screen: how often pages were opened over a stretch of days, all sites together and up to five picked sites beside them. The sum of all sites always stands in the heading.
+// The Visits block of the Usage screen: how often pages were opened over a stretch of days, all sites together and the picked sites beside them. The sum of all sites always stands in the heading.
 
 import { showViews } from "@poplin/core/src/records/views";
+import { ScrollArea as ScrollAreaParts } from "@base-ui/react/scroll-area";
 import { cn } from "cn";
 import { type ReactNode, useEffect } from "react";
 
+import { ScrollArea } from "@/components/ui/scroll-area";
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Toggle } from "@/components/ui/toggle";
@@ -18,14 +20,14 @@ const ALL = { key: "all", name: "All sites", color: "var(--foreground)", width: 
 /** How wide a picked site's line is drawn, in pixels. */
 const SITE_WIDTH = 2;
 
-/** The colour and the dashes of a picked site's line, by the place it keeps while it is picked. Each differs from the others, and from the whole line of all sites, without its colour. */
-const LOOKS: readonly { readonly color: string; readonly dashes: string }[] = [
-  { color: "var(--chart-1)", dashes: "1 4 1 4 9 4" },
-  { color: "var(--chart-2)", dashes: "7 5" },
-  { color: "var(--chart-3)", dashes: "1 5" },
-  { color: "var(--chart-4)", dashes: "12 5 1 5" },
-  { color: "var(--chart-5)", dashes: "3 4" },
-];
+/** The theme's colours of a picked site's line. */
+const COLORS = ["var(--chart-1)", "var(--chart-2)", "var(--chart-3)", "var(--chart-4)", "var(--chart-5)"] as const;
+
+/** The patterns of dashes of a picked site's line: each differs from the others, and from the whole line of all sites, without its colour. */
+const DASHES = ["1 4 1 4 9 4", "7 5", "1 5", "12 5 1 5", "3 4"] as const;
+
+/** From this many lines on the legend scrolls in a room of its own height, so the table under it stays where it is. */
+const LEGEND_SCROLLS_FROM = 9;
 
 /** Below this a sum says too little to name a number. */
 const FEWEST_NAMED = 10;
@@ -35,13 +37,25 @@ interface Counted extends Series {
   readonly total: number;
 }
 
+/**
+ * The colour and the dashes of a picked site's line, by the look it keeps while it is picked.
+ *
+ * The first five looks pair each colour with a pattern of its own; every five after that turn the patterns one on, so no two of the twenty-five share both.
+ */
+function lookOf(slot: number): { readonly color: string; readonly dashes: string } {
+  const [colour, turn] = [slot % COLORS.length, Math.floor(slot / COLORS.length)];
+
+  return { color: COLORS[colour] ?? COLORS[0], dashes: DASHES[(colour + turn) % DASHES.length] ?? DASHES[0] };
+}
+
 /** The lines of an answer: all sites first, then each picked site the server still knows, under the title it was picked with. */
 function linesOf(visits: Visits, choice: Choice): readonly Counted[] {
   const sites = visits.sites.flatMap((site) => {
     const picked = choice.sites.find((one) => one.id === site.id);
-    const look = LOOKS[picked?.slot ?? 0];
 
-    return picked === undefined || look === undefined ? [] : [{ key: site.id, name: picked.title, ...look, width: SITE_WIDTH, counts: site.counts, total: site.total }];
+    return picked === undefined
+      ? []
+      : [{ key: site.id, name: picked.title, ...lookOf(picked.slot), width: SITE_WIDTH, counts: site.counts, total: site.total }];
   });
 
   return [{ ...ALL, counts: visits.all.counts, total: visits.all.total }, ...sites];
@@ -76,8 +90,19 @@ interface LegendProps {
   readonly onSwitch: (key: string, on: boolean) => void;
 }
 
-/** The names of the lines under the graph, each a switch beside a piece of its line and the sum of its days. The last line drawn cannot be switched off. */
+/** The names of the lines under the graph, each a switch beside a piece of its line and the sum of its days. The last line drawn cannot be switched off. Many lines scroll in a room of a set height. */
 function Legend({ lines, shown, onSwitch }: LegendProps): ReactNode {
+  const names = <LegendNames lines={lines} shown={shown} onSwitch={onSwitch} />;
+  if (lines.length < LEGEND_SCROLLS_FROM) return names;
+
+  return (
+    <ScrollArea className="h-[92px]">
+      <ScrollAreaParts.Content>{names}</ScrollAreaParts.Content>
+    </ScrollArea>
+  );
+}
+
+function LegendNames({ lines, shown, onSwitch }: LegendProps): ReactNode {
   return (
     <ul aria-label="Lines" className="-mx-1.5 flex flex-wrap gap-x-2 gap-y-1">
       {lines.map((line) => {
@@ -90,7 +115,10 @@ function Legend({ lines, shown, onSwitch }: LegendProps): ReactNode {
               pressed={on}
               disabled={on && shown.length === 1}
               onPressedChange={(pressed) => onSwitch(line.key, pressed)}
-              className={cn("max-w-full gap-2 px-1.5 text-xs font-normal aria-pressed:bg-transparent aria-pressed:hover:bg-muted disabled:opacity-100", !on && "opacity-70")}
+              className={cn(
+                "max-w-full gap-2 px-1.5 text-xs font-normal aria-pressed:bg-transparent aria-pressed:hover:bg-muted disabled:opacity-100",
+                !on && "opacity-70",
+              )}
             >
               <LineSample line={line} />
               <span className="min-w-0 max-w-48 truncate">{line.name}</span>
@@ -103,32 +131,34 @@ function Legend({ lines, shown, onSwitch }: LegendProps): ReactNode {
   );
 }
 
-/** The same numbers as the graph, for a screen reader: a row a step, a column a line that is drawn. */
+/** The same numbers as the graph, for a screen reader: a row a step, a column a line that is drawn. A box around the table hides it, since a table grows past a width it is given. */
 function NumbersTable({ visits, lines }: { readonly visits: Visits; readonly lines: readonly Counted[] }): ReactNode {
   return (
-    <table className="sr-only">
-      <caption>Visits by {visits.by}</caption>
-      <thead>
-        <tr>
-          <th scope="col">{visits.by === "week" ? "Week" : "Day"}</th>
-          {lines.map((line) => (
-            <th key={line.key} scope="col">
-              {line.name}
-            </th>
-          ))}
-        </tr>
-      </thead>
-      <tbody>
-        {visits.days.map((day, at) => (
-          <tr key={day}>
-            <th scope="row">{stepWords(day, visits.by)}</th>
+    <div className="sr-only">
+      <table>
+        <caption>Visits by {visits.by}</caption>
+        <thead>
+          <tr>
+            <th scope="col">{visits.by === "week" ? "Week" : "Day"}</th>
             {lines.map((line) => (
-              <td key={line.key}>{showCount(line.counts[at] ?? 0)}</td>
+              <th key={line.key} scope="col">
+                {line.name}
+              </th>
             ))}
           </tr>
-        ))}
-      </tbody>
-    </table>
+        </thead>
+        <tbody>
+          {visits.days.map((day, at) => (
+            <tr key={day}>
+              <th scope="row">{stepWords(day, visits.by)}</th>
+              {lines.map((line) => (
+                <td key={line.key}>{showCount(line.counts[at] ?? 0)}</td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
   );
 }
 
@@ -199,7 +229,10 @@ export function VisitsBlock(): ReactNode {
           </p>
         ) : null}
         <div className="ml-auto flex items-center gap-2">
-          <VisitsPicker picked={choice.sites} onPick={(sites) => setChoice({ ...choice, sites, hidden: choice.hidden.filter((key) => key === ALL.key || sites.some((site) => site.id === key)) })} />
+          <VisitsPicker
+            picked={choice.sites}
+            onPick={(sites) => setChoice({ ...choice, sites, hidden: choice.hidden.filter((key) => key === ALL.key || sites.some((site) => site.id === key)) })}
+          />
           <RangeSelect range={choice.range} onChoose={(range) => setChoice({ ...choice, range })} />
         </div>
       </div>

@@ -27,6 +27,9 @@ const FIRST_WIDTH = 640;
 /** Under this width the days get three marks instead of five, in pixels. */
 const NARROW = 480;
 
+/** The most lines the numbers of a marked step name, each in a row of its own. */
+const MOST_ROWS = 10;
+
 /** How a count is written beside the plot: 1.2K. */
 const SHORT_COUNT = new Intl.NumberFormat("en", { notation: "compact", maximumFractionDigits: 1 });
 
@@ -147,8 +150,21 @@ function DayMark({ plot, series, day }: { readonly plot: Plot; readonly series: 
   );
 }
 
-/** The numbers of the marked step, beside it: its day, and each line's name and count. */
-function DayNumbers({ left, words, series, at }: { readonly left: number; readonly words: string; readonly series: readonly Series[]; readonly at: number }): ReactNode {
+/** The numbers of the marked step, beside it: its day, and each line's name and count, the largest count first. Past ten lines the rest are counted in one last row. */
+function DayNumbers({
+  left,
+  words,
+  series,
+  at,
+}: {
+  readonly left: number;
+  readonly words: string;
+  readonly series: readonly Series[];
+  readonly at: number;
+}): ReactNode {
+  const largestFirst = [...series].sort((one, other) => (other.counts[at] ?? 0) - (one.counts[at] ?? 0));
+  const more = largestFirst.length - MOST_ROWS;
+
   return (
     <TooltipWithBounds
       unstyled
@@ -159,13 +175,14 @@ function DayNumbers({ left, words, series, at }: { readonly left: number; readon
     >
       <p data-slot="day-numbers" className="flex flex-col gap-1">
         <span className="font-medium">{words}</span>
-        {series.map((line) => (
+        {largestFirst.slice(0, MOST_ROWS).map((line) => (
           <span key={line.key} className="flex items-center gap-2">
             <LineSample line={line} />
             <span className="min-w-0 max-w-40 flex-1 truncate">{line.name}</span>
             <span className="tabular-nums">{showCount(line.counts[at] ?? 0)}</span>
           </span>
         ))}
+        {more > 0 ? <span className="text-muted-foreground">+ {more} more</span> : null}
       </p>
     </TooltipWithBounds>
   );
@@ -209,7 +226,14 @@ export function VisitsChart({ days, by, series }: VisitsChartProps): ReactNode {
             />
           ))}
           {marked === undefined ? null : <DayMark plot={plot} series={series} day={marked} />}
-          <rect width={size.width} height={size.height} fill="transparent" onPointerMove={markAt} onPointerDown={markAt} onPointerLeave={() => setMarked(undefined)} />
+          <rect
+            width={size.width}
+            height={size.height}
+            fill="transparent"
+            onPointerMove={markAt}
+            onPointerDown={markAt}
+            onPointerLeave={() => setMarked(undefined)}
+          />
         </Group>
       </svg>
       <input
@@ -224,7 +248,9 @@ export function VisitsChart({ days, by, series }: VisitsChartProps): ReactNode {
         onBlur={() => setMarked(undefined)}
         className="sr-only"
       />
-      {marked === undefined ? null : <DayNumbers left={ROOM.left + plot.across(marked)} words={stepWords(days[marked] ?? "", by)} series={series} at={marked} />}
+      {marked === undefined ? null : (
+        <DayNumbers left={ROOM.left + plot.across(marked)} words={stepWords(days[marked] ?? "", by)} series={series} at={marked} />
+      )}
     </div>
   );
 }
