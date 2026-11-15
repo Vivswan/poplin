@@ -9,6 +9,7 @@ import { AllowanceSpent } from "@poplin/core/src/database/driver";
 import { siteReference } from "@poplin/core/src/sites/labels";
 import { Hono } from "hono";
 import { HTTPException } from "hono/http-exception";
+import { methodNotAllowed } from "hono/method-not-allowed";
 
 import type { Counters, Taken } from "../limits/limits";
 import { type Authenticated, authenticate, type ReadToken } from "./authenticate";
@@ -162,12 +163,11 @@ async function answer(name: Exclude<RouteName, OpenName>, { request, params, tok
  */
 export function createApi(deps: ApiDeps): { readonly fetch: (request: Request) => Promise<Response> } {
   const app = new Hono<Authenticated>();
-  const methods = new Map<string, string[]>();
   const live = authenticate(deps.readToken, deps.now);
 
-  for (const [name, route] of Object.entries(ROUTES) as [RouteName, (typeof ROUTES)[RouteName]][]) {
-    methods.set(route.pattern, [...(methods.get(route.pattern) ?? []), route.method]);
+  app.use(methodNotAllowed({ app, onMethodNotAllowed: (_context, allowed) => refusal("method_not_allowed", undefined, { Allow: allowed.join(", ") }) }));
 
+  for (const [name, route] of Object.entries(ROUTES) as [RouteName, (typeof ROUTES)[RouteName]][]) {
     if (isOpen(name)) {
       app.on(route.method, route.pattern, (context) => answerOpen(name, context.req.raw, deps));
       continue;
@@ -175,8 +175,6 @@ export function createApi(deps: ApiDeps): { readonly fetch: (request: Request) =
 
     app.on(route.method, route.pattern, live, (context) => answer(name, { request: context.req.raw, params: context.req.param(), token: context.get("token") }, deps));
   }
-
-  for (const [pattern, allowed] of methods) app.all(pattern, () => refusal("method_not_allowed", undefined, { Allow: allowed.join(", ") }));
 
   app.notFound(() => refusal("not_found", "route"));
   app.onError((error) => {

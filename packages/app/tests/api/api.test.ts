@@ -610,8 +610,10 @@ describe("the staged publish over HTTP", () => {
 describe("what the API refuses before any action runs", () => {
   // Drift: each row is a request the transport must stop itself; one that reached an action would be parsed, stored, or answered in a way no action was written for.
   test.each([
-    ["a method the route does not take", () => new Request(`${ORIGIN}/api/sites`, { method: "POST" }), 405, { code: "method_not_allowed" }, "GET"],
-    ["a preflight from another origin", () => new Request(`${ORIGIN}/api/sites`, { method: "OPTIONS", headers: PREFLIGHT }), 405, {}, "GET"],
+    ["a method the route does not take", () => new Request(`${ORIGIN}/api/sites`, { method: "POST" }), 405, { code: "method_not_allowed" }, "GET, HEAD"],
+    ["a method no route of a path with three takes", () => new Request(`${ORIGIN}/api/sites/${NO_SITE}`, { method: "PUT" }), 405, { code: "method_not_allowed" }, "GET, HEAD, PATCH, DELETE"],
+    ["a read of a path that only takes a post", () => new Request(`${ORIGIN}/api/logins`), 405, { code: "method_not_allowed" }, "POST"],
+    ["a preflight from another origin", () => new Request(`${ORIGIN}/api/sites`, { method: "OPTIONS", headers: PREFLIGHT }), 405, {}, "GET, HEAD"],
     ["a path that is no route", () => new Request(`${ORIGIN}/api/site`), 404, { code: "not_found", about: "route" }, null],
     ["a path outside the API", () => new Request(`${ORIGIN}/`), 404, { code: "not_found", about: "route" }, null],
     ["a JSON route sent a form", (install: ApiInstall) => asAdmin(install, "changeConfig", undefined, {}, "application/x-www-form-urlencoded"), 415, {}, null],
@@ -639,6 +641,17 @@ describe("what the API refuses before any action runs", () => {
     expect(answered.body.error).toMatchObject(error);
     expect([names.filter((name) => name.startsWith("access-control-")), answered.response.headers.get("Cache-Control"), answered.response.headers.get("X-Content-Type-Options")]).toEqual([[], "no-store", "nosniff"]);
     expect(await stateOf(install)).toEqual(before);
+  });
+
+  // Drift: `Allow` names `HEAD` beside every `GET`; a `HEAD` answered any other way than its `GET` would make the header promise a method the path does not take.
+  test("a HEAD is answered as the GET of its path without the body, and refused where the path takes no GET", async () => {
+    const install = await openApi();
+    const head = (path: string): Promise<Answered> => install.ask(raw(install, path, { method: "HEAD" }));
+
+    const [read, posted] = [await head("/api/whoami"), await head("/api/logins")];
+
+    expect([read.status, read.response.headers.get("Content-Type"), await read.response.text()]).toEqual([200, "application/json; charset=utf-8", ""]);
+    expect([posted.status, posted.response.headers.get("Allow"), await posted.response.text()]).toEqual([405, "POST", ""]);
   });
 
   // Drift: a body read whole before it is measured lets one request hold the Worker's memory; the cap must cut the stream where it is passed.
