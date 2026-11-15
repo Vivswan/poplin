@@ -135,7 +135,6 @@ export function UsageScreen(): ReactNode {
               />
             </div>
             <PhoneList lines={usage.lines} />
-            <p className="px-6 py-4 text-xs text-muted-foreground max-md:px-4">Requests today are an estimate. The day is counted in UTC.</p>
           </>
         )}
       </section>
