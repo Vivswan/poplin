@@ -3,7 +3,7 @@
 // A change is one batch: the statement that changes a row carries its own condition, and each statement after it runs only when the one before it changed a row.
 // So a change and its audit entry are kept together or not at all, and nothing is decided from an earlier read.
 
-import { and, asc, desc, eq, getTableName, isNotNull, isNull, lt, ne, notExists, or, type SQL, sql as fragment } from "drizzle-orm";
+import { and, asc, desc, eq, getTableName, gt, isNotNull, isNull, lt, ne, notExists, or, type SQL, sql as fragment } from "drizzle-orm";
 import { alias, type SQLiteColumn } from "drizzle-orm/sqlite-core";
 import { drizzle } from "drizzle-orm/sqlite-proxy";
 import * as v from "valibot";
@@ -53,7 +53,7 @@ import type {
   UploadsPage,
 } from "./database";
 import type { SqlDriver, SqlValue, Statement, StatementResult } from "./driver";
-import { audit, sites, versions } from "./schema";
+import { audit, sites, totals, uploads, versions } from "./schema";
 
 /** How many ids are tried for one site before giving up; an id is about 62 random bits, so a second try is already a rare event. */
 const MINT_ATTEMPTS = 5;
@@ -64,12 +64,6 @@ const MAX_PAGE = 100;
 /** A `before` that every audit entry is below. */
 const NEWEST = Number.MAX_SAFE_INTEGER;
 
-/** A site with its kept versions gathered into one JSON column, so one query gives the whole site. */
-const SELECT_SITE = `
-SELECT s.id, s.name, s.folder, s.access, s.public_name, s.title, s.page_title, s.search_engines, s.embeddable, s.expires_at, s.live_version, s.owner, s.created_at, s.updated_at, s.trashed_at,
-  (SELECT json_group_array(json_object('number', v.number, 'published_at', v.published_at, 'published_by', v.published_by, 'bytes', v.bytes, 'files', v.files)) FROM versions v WHERE v.folder = s.folder) AS versions
-FROM sites s`;
-
 /** Where statements are built from the declared schema. None is run here: each goes to the driver, in a batch. */
 const BUILD = drizzle(() => Promise.reject(new Error("a statement is run by the driver, in a batch")));
 
@@ -79,7 +73,7 @@ const CHANGED = fragment`changes() = 1`;
 /** The `sites` table under a second name, for a statement that asks about the other sites. */
 const OTHER = alias(sites, "other");
 
-/** The columns `SELECT_SITE` gives, as a built statement selects them. */
+/** A site with its kept versions gathered into one JSON column, so one statement gives the whole site. */
 const SITE_FIELDS = {
   id: sites.id,
   name: sites.name,
@@ -99,26 +93,8 @@ const SITE_FIELDS = {
   versions: versionsOfSite().as("versions"),
 };
 
-/** The site with id `?1`. */
-const SITE_BY_ID = `${SELECT_SITE} WHERE s.id = ?1`;
-
-/** The id and the name of every site whose id is in the JSON array `?1`. */
-const SITE_NAMES = "SELECT id, name FROM sites WHERE id IN (SELECT value FROM json_each(?1))";
-
-/** A row of `SITE_NAMES`. */
+/** The id and the name of a site, as `getSiteNames` reads them. */
 const NAMED_SITE = v.object({ id: SITE_ID, name: SITE_NAME });
-
-/** The site holding public name `?1`. */
-const SITE_BY_PUBLIC_NAME = `${SELECT_SITE} WHERE s.public_name = ?1`;
-
-/** The site whose files sit under folder `?1`. */
-const SITE_BY_FOLDER = `${SELECT_SITE} WHERE s.folder = ?1`;
-
-/** The site in the folder of upload `?1`. */
-const SITE_OF_UPLOAD = `${SELECT_SITE} WHERE s.folder = (SELECT folder FROM uploads WHERE id = ?1)`;
-
-/** Added to a lookup by address: the site is outside the trash and not past its expiry at `?2`. */
-const IS_SERVED = "AND s.trashed = 0 AND (s.expires_at IS NULL OR s.expires_at > ?2)";
 
 /** The audit entry of a change to the site now at id `?4`, written only when the statement before it changed a row. */
 const AUDIT_SITE =
@@ -234,12 +210,6 @@ WHERE id = ?1 AND trashed = 0 AND EXISTS (SELECT 1 FROM versions v WHERE v.folde
 const AUDIT_LIVE = `
 INSERT INTO audit (at, actor, action, site_id, site_name, detail)
 SELECT ?1, ?2, 'live_version', id, name, json_object('version', live_version) FROM sites WHERE id = ?3 AND changes() = 1`;
-
-/** The one row of running totals, which the schema keeps equal to the sums over every site and every kept version. */
-const READ_TOTALS = "SELECT sites, trashed_sites, bytes, files FROM totals WHERE id = 1";
-
-/** A page of every site in ascending order of id, from above `?1`. */
-const EXPORT_SITES = `${SELECT_SITE} WHERE s.id > ?1 ORDER BY s.id LIMIT ?2`;
 
 /** A site from a backup under the id it had, only while its id, its folder, and its public name are free, and upload `?16` is pending as the first version of its folder. The schema adds its live version with the row. */
 const IMPORT_SITE = `
@@ -617,9 +587,19 @@ function built(query: { toSQL(): BuiltQuery } | { getQuery(): BuiltQuery }): Sta
   return { sql: text, params: params as SqlValue[] };
 }
 
+/** The sites a condition holds for, each with its kept versions. */
+function sitesWhere(condition: SQL | undefined): Statement {
+  return built(BUILD.select(SITE_FIELDS).from(sites).where(condition));
+}
+
 /** The site with the given id, with its kept versions. */
 function siteById(id: SiteId): Statement {
-  return built(BUILD.select(SITE_FIELDS).from(sites).where(eq(sites.id, id)));
+  return sitesWhere(eq(sites.id, id));
+}
+
+/** Added to a lookup by address: the site is outside the trash and not past its expiry at `now`. */
+function isServed(now: number): SQL | undefined {
+  return and(eq(sites.trashed, 0), or(isNull(sites.expires_at), gt(sites.expires_at, now)));
 }
 
 /** A new access for a live site, only when it differs and the public name asked for is free: no other site has it as its public name, and no site as its id. */
@@ -909,33 +889,34 @@ export class SqlDatabase implements Database {
   }
 
   async getSite(id: SiteId): Promise<Site | undefined> {
-    const [found] = await this.#driver.batch([sql(SITE_BY_ID, id)]);
+    const [found] = await this.#driver.batch([siteById(id)]);
 
     return siteIn(found);
   }
 
   async getSiteNames(ids: readonly SiteId[]): Promise<ReadonlyMap<SiteId, SiteName>> {
-    const [found] = await this.#driver.batch([sql(SITE_NAMES, JSON.stringify(ids))]);
+    const names = BUILD.select({ id: sites.id, name: sites.name }).from(sites).where(fragment`${sites.id} IN (SELECT value FROM json_each(${JSON.stringify(ids)}))`);
+    const [found] = await this.#driver.batch([built(names)]);
     const named = (found?.rows ?? []).map((row) => v.parse(NAMED_SITE, row));
 
     return new Map(named.map(({ id, name }) => [id, name]));
   }
 
   async getSiteByPublicName(name: PublicName): Promise<Site | undefined> {
-    const [found] = await this.#driver.batch([sql(SITE_BY_PUBLIC_NAME, name)]);
+    const [found] = await this.#driver.batch([sitesWhere(eq(sites.public_name, name))]);
 
     return siteIn(found);
   }
 
   async getSiteByFolder(folder: Site["folder"]): Promise<Site | undefined> {
-    const [found] = await this.#driver.batch([sql(SITE_BY_FOLDER, folder)]);
+    const [found] = await this.#driver.batch([sitesWhere(eq(sites.folder, folder))]);
 
     return siteIn(found);
   }
 
   async findServed(address: Address, now: number): Promise<Site | undefined> {
-    const lookup = "id" in address ? sql(`${SITE_BY_ID} ${IS_SERVED}`, address.id, now) : sql(`${SITE_BY_PUBLIC_NAME} ${IS_SERVED}`, address.public_name, now);
-    const [found] = await this.#driver.batch([lookup]);
+    const addressed = "id" in address ? eq(sites.id, address.id) : eq(sites.public_name, address.public_name);
+    const [found] = await this.#driver.batch([sitesWhere(and(addressed, isServed(now)))]);
 
     return siteIn(found);
   }
@@ -1007,8 +988,8 @@ export class SqlDatabase implements Database {
       const [updated, , after, before] = await this.#driver.batch([
         sql(SET_ID, id, next),
         auditSite(signed, "new_id", next, { from: id }),
-        sql(SITE_BY_ID, next),
-        sql(SITE_BY_ID, id),
+        siteById(next),
+        siteById(id),
         sql(MOVE_COUNTS, id, next, JSON.stringify(viewDays(dayOf(signed.at)))),
       ]);
       if (changed(updated)) return done(after);
@@ -1021,21 +1002,21 @@ export class SqlDatabase implements Database {
   }
 
   async trashSite(id: SiteId, signed: Signed): Promise<Done | Refused<"not_found" | "in_trash">> {
-    const [updated, , after] = await this.#driver.batch([sql(TRASH, id, signed.at), auditSite(signed, "trash", id, {}), sql(SITE_BY_ID, id)]);
+    const [updated, , after] = await this.#driver.batch([sql(TRASH, id, signed.at), auditSite(signed, "trash", id, {}), siteById(id)]);
     if (changed(updated)) return done(after);
 
     return unreachable(siteIn(after)) ?? { kind: "not_found" };
   }
 
   async restoreSite(id: SiteId, signed: Signed): Promise<Done | Refused<"not_found" | "not_in_trash">> {
-    const [updated, , after] = await this.#driver.batch([sql(RESTORE, id, signed.at), auditSite(signed, "restore", id, {}), sql(SITE_BY_ID, id)]);
+    const [updated, , after] = await this.#driver.batch([sql(RESTORE, id, signed.at), auditSite(signed, "restore", id, {}), siteById(id)]);
     if (changed(updated)) return done(after);
 
     return { kind: siteIn(after) === undefined ? "not_found" : "not_in_trash" };
   }
 
   async deleteSite(id: SiteId, signed: Signed): Promise<Done | Refused<"not_found">> {
-    const [before, , deleted] = await this.#driver.batch([sql(SITE_BY_ID, id), sql(AUDIT_DELETE, signed.at, signed.by, id), sql(DELETE_SITE, id)]);
+    const [before, , deleted] = await this.#driver.batch([siteById(id), sql(AUDIT_DELETE, signed.at, signed.by, id), sql(DELETE_SITE, id)]);
     if (!changed(deleted)) return { kind: "not_found" };
 
     return done(before);
@@ -1058,7 +1039,7 @@ export class SqlDatabase implements Database {
   }
 
   async reserveVersion(id: SiteId): Promise<Reserved | Refused<"not_found" | "in_trash">> {
-    const [updated, reserved, after] = await this.#driver.batch([sql(RESERVE, id), sql(RESERVED, id), sql(SITE_BY_ID, id)]);
+    const [updated, reserved, after] = await this.#driver.batch([sql(RESERVE, id), sql(RESERVED, id), siteById(id)]);
     if (changed(updated)) return { kind: "reserved", number: Number(reserved?.rows[0]?.number) };
 
     return unreachable(siteIn(after)) ?? { kind: "not_found" };
@@ -1071,12 +1052,12 @@ export class SqlDatabase implements Database {
     requireCount("the number of files of a version", version.files);
 
     const [before, , updated, , , after] = await this.#driver.batch([
-      sql(SITE_BY_ID, id),
+      siteById(id),
       sql(INSERT_VERSION, id, version.number, signed.at, signed.by, version.bytes, version.files),
       sql(SET_LIVE_TO_NEW, id, version.number, signed.at),
       auditSite(signed, "publish", id, { version: version.number }),
       sql(DROP_OLD_VERSIONS, id, version.keep),
-      sql(SITE_BY_ID, id),
+      siteById(id),
     ]);
     if (!changed(updated)) return unreachable(siteIn(after)) ?? { kind: "stale_number" };
 
@@ -1093,7 +1074,7 @@ export class SqlDatabase implements Database {
     signed: Signed,
   ): Promise<Done | Unchanged | Refused<"not_found" | "in_trash" | "no_such_version">> {
     const update = target === "previous" ? sql(SET_LIVE_TO_PREVIOUS, id, signed.at) : sql(SET_LIVE, id, target, signed.at);
-    const [updated, , after] = await this.#driver.batch([update, sql(AUDIT_LIVE, signed.at, signed.by, id), sql(SITE_BY_ID, id)]);
+    const [updated, , after] = await this.#driver.batch([update, sql(AUDIT_LIVE, signed.at, signed.by, id), siteById(id)]);
     if (changed(updated)) return done(after);
 
     const site = siteIn(after);
@@ -1106,7 +1087,8 @@ export class SqlDatabase implements Database {
   }
 
   async readTotals(): Promise<Totals> {
-    const [read] = await this.#driver.batch([sql(READ_TOTALS)]);
+    const kept = { sites: totals.sites, trashed_sites: totals.trashed_sites, bytes: totals.bytes, files: totals.files };
+    const [read] = await this.#driver.batch([built(BUILD.select(kept).from(totals).where(eq(totals.id, 1)))]);
 
     return totalsFromRow(read?.rows[0]);
   }
@@ -1115,7 +1097,8 @@ export class SqlDatabase implements Database {
     requirePage(query.limit);
 
     // One row more than the page shows whether another page follows.
-    const [listed] = await this.#driver.batch([sql(EXPORT_SITES, query.after ?? "", query.limit + 1)]);
+    const page = BUILD.select(SITE_FIELDS).from(sites).where(gt(sites.id, query.after ?? "")).orderBy(asc(sites.id)).limit(query.limit + 1);
+    const [listed] = await this.#driver.batch([built(page)]);
     const listedSites = (listed?.rows ?? []).slice(0, query.limit).map(siteFromRow);
     const last = listedSites.at(-1);
     if (last === undefined || (listed?.rows.length ?? 0) <= query.limit) return { sites: listedSites };
@@ -1135,7 +1118,7 @@ export class SqlDatabase implements Database {
       sql(FINISH_UPLOAD, id),
       sql(IMPORT_VERSIONS, row.folder, JSON.stringify(row.versions)),
       sql(IMPORT_IS_HELD, row.id, row.folder),
-      sql(SITE_BY_ID, row.id),
+      siteById(row.id),
       sql(UPLOAD_BY_ID, id),
     ]);
     const [held, made, waiting] = results.slice(-3);
@@ -1220,7 +1203,7 @@ export class SqlDatabase implements Database {
       sql(AUDIT_UPLOADED_VERSION, signed.at, signed.by, id),
       sql(FINISH_UPLOADED_VERSION, id, version.keep),
       sql(DROP_BEHIND_UPLOAD, id, version.keep),
-      sql(SITE_OF_UPLOAD, id),
+      sitesWhere(fragment`${sites.folder} = (SELECT ${qualified(uploads.folder)} FROM ${uploads} WHERE ${qualified(uploads.id)} = ${id})`),
       sql(UPLOAD_BY_ID, id),
       sql(NAME_IS_HELD_BY_ANOTHER, id, publicName),
     ]);
@@ -1564,7 +1547,7 @@ WHERE folder = (SELECT folder FROM uploads WHERE id = ?1) AND (${differs.join(" 
         auditSite(signed, "create", id, detail),
         sql(FINISH_UPLOAD, upload ?? null),
         sql(NAME_IS_HELD, publicName),
-        sql(SITE_BY_ID, id),
+        siteById(id),
         sql(UPLOAD_BY_ID, upload ?? null),
       ]);
       if (changed(inserted)) return done(made);
@@ -1578,7 +1561,7 @@ WHERE folder = (SELECT folder FROM uploads WHERE id = ?1) AND (${differs.join(" 
   }
 
   async #unchanged(id: SiteId): Promise<Unchanged | Refused<"not_found" | "in_trash">> {
-    const [found] = await this.#driver.batch([sql(SITE_BY_ID, id)]);
+    const [found] = await this.#driver.batch([siteById(id)]);
 
     return this.#unchangedIn(found);
   }
