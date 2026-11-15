@@ -249,3 +249,20 @@ export const updateCheck = sqliteTable(
   },
   (table) => [check("update_check_one_row", sql`${table.id} = 1`), check("update_check_news", sql`${table.news} IS NULL OR json_valid(${table.news})`)],
 );
+
+/** The last check or repair of the domain: when it ran, who ran it, which of the two it was, and its pieces as a JSON list. Each run replaces the row. */
+export const domainCheck = sqliteTable(
+  "domain_check",
+  {
+    id: integer().notNull().primaryKey(),
+    ran_at: integer().notNull(),
+    ran_by: text().notNull(),
+    run: text({ enum: ["check", "repair"] }).notNull(),
+    pieces: text().notNull(),
+  },
+  (table) => [
+    check("domain_check_one_row", sql`${table.id} = 1`),
+    check("domain_check_run", sql`${table.run} IN ('check', 'repair')`),
+    check("domain_check_pieces", sql`json_valid(${table.pieces}) AND json_type(${table.pieces}) = 'array'`),
+  ],
+);

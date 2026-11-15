@@ -10,6 +10,7 @@ import type { Login } from "../auth/logins";
 import type { TokenId, TokenRecord } from "../auth/tokens";
 import type { PublicName, SiteName } from "../names/names";
 import type { AuditAction, AuditEntry } from "../records/audit";
+import type { DomainCheck } from "../records/domain-check";
 import type { Holder } from "../records/fields";
 import type { SiteId } from "../sites/ids";
 import type { UpdateAddress } from "../records/secret";
@@ -551,6 +552,18 @@ export interface Database {
    * @throws {Error} a value breaks its rule
    */
   keepUpdateCheck(check: UpdateCheck): Promise<void>;
+
+  /** The last check or repair of the domain: `undefined` before any run was kept, and for a kept run that cannot be read. */
+  readDomainCheck(): Promise<DomainCheck | undefined>;
+
+  /**
+   * Keep a check or repair of the domain in place of the one kept before, with one `domain_synced` audit entry, in one step: two rows written, however many pieces the run holds.
+   *
+   * @param check - the run; its `by` and `ran_at` sign the audit entry
+   * @param detail - what the audit entry says of the run
+   * @throws {Error} a value breaks its rule
+   */
+  keepDomainCheck(check: DomainCheck, detail: Readonly<Record<string, unknown>>): Promise<void>;
 
   /** The install's settings, `undefined` before setup stored them. */
   readSettings(): Promise<SettingValues | undefined>;

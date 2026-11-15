@@ -112,6 +112,7 @@ const BUDGET: Readonly<Record<RouteKey, number>> = {
   "PATCH /api/config": 2,
   "DELETE /api/sessions": 2,
   "GET /api/audit": 2,
+  "GET /api/domain": 2,
   "POST /api/update": 5,
   "GET /api/update/address": 2,
   "PUT /api/update/address": 2,
@@ -156,6 +157,7 @@ function samples(site: string, upload: string): Readonly<Record<TokenRoute, Send
     "PATCH /api/config": (api) => api.config.$patch({ json: { trash_days: 9 }, query: {} }),
     "DELETE /api/sessions": (api) => api.sessions.$delete({ query: {} }),
     "GET /api/audit": (api) => api.audit.$get({ query: {} }),
+    "GET /api/domain": (api) => api.domain.$get({ query: {} }),
     "POST /api/update": (api) => api.update.$post({ query: { anyway: "true" } }),
     "GET /api/update/address": (api) => api.update.address.$get({ query: {} }),
     "PUT /api/update/address": (api) => api.update.address.$put({ json: { address: REBUILD_ADDRESS }, query: {} }),
@@ -313,6 +315,16 @@ describe("createApi", () => {
     const key = await install.database.ensureSigningKey(new Uint8Array(32).fill(7), NOW);
     expect([(await done((api) => api.sessions.$delete({ query: {} }))).body, await install.database.readSigningKey()]).not.toEqual([{}, key.key]);
     expect(((await done((api) => api.audit.$get({ query: { limit: "3" } }))).body.entries as { action: string }[]).map((entry) => entry.action)).toEqual(["signed_everyone_out", "settings_changed", "restore"]);
+    // Drift: the note of the last check of the domain is what `poplin doctor` prints; an answer of another form is one the command cannot read, so it would report a failure of the install where a login is broken.
+    const ada = "ada@example.com" as Login;
+    const piece = { piece: "Login", detail: "the dashboard's login", part: "login", state: "needs_repair" } as const;
+    await install.database.keepDomainCheck({ ran_at: NOW, by: ada, run: "check", pieces: [piece] }, {});
+    expect((await done((api) => api.domain.$get({ query: {} }))).body).toEqual({
+      check: { ran_at: NOW, by: ada, run: "check", pieces: [piece] },
+      age: 0,
+      stale: false,
+      note: { code: "login_broken", about: "Login" },
+    });
     expect(part(await done((api) => api.sites[":site"].$delete({ param: { site: moved }, query: { forever: "true" } })), "before").id).toBe(moved);
     expect(part(await done((api) => api.import.settings.$post({ json: { format: 1, settings }, query: {} })), "values").trash_days).toBe(7);
     const files = manifest(PAGES).map((file) => ({ ...file, path: `v1/${file.path}` }));
@@ -492,6 +504,7 @@ describe("createApi", () => {
       ["PATCH /api/config", 403, "not_allowed"],
       ["DELETE /api/sessions", 403, "not_allowed"],
       ["GET /api/audit", 403, "not_allowed"],
+      ["GET /api/domain", 403, "not_allowed"],
       ["POST /api/update", 403, "not_allowed"],
       ["GET /api/update/address", 403, "not_allowed"],
       ["PUT /api/update/address", 403, "not_allowed"],

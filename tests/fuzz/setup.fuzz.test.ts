@@ -132,7 +132,7 @@ test("a domain under the cap as a program sends it and over it as a form is answ
 
 // Drift: a database that is spent for the day once answered "Something went wrong.", which named nothing. Its refusal is one more answer of the page, and it must be the one a plug's own refusal of the kind gets, with nothing typed in it.
 test("a run whose token is taken while the database takes no more for the day is answered the spent allowance and when to come back, as any other typed values would be", async () => {
-  const taken: DomainReading = { ok: true, rows: [{ object: "DNS record", state: "present", detail: "poplin.example.com" }], steps: [] };
+  const taken: DomainReading = { ok: true, rows: [{ object: "DNS record", state: "present", detail: "poplin.example.com", part: "reach" }], steps: [] };
   const typed = { ...PLAIN, token: `${TOKEN}-of-another-shape` };
   const answers = await Promise.all((["form", "call"] as const).map((by) => answerOf({ typed, by, run: "repair", nothingSet: false, refusal: "token" }, taken, SPENT_DATABASE)));
 
@@ -145,7 +145,7 @@ test("a run whose token is taken while the database takes no more for the day is
 
 // Control: the property would hold of a page that refused everything.
 test("a run the plug takes still shows its table, by the form and by a program's call", async () => {
-  const taken: DomainReading = { ok: true, rows: [{ object: "DNS record", state: "present", detail: "poplin.example.com" }], steps: [] };
+  const taken: DomainReading = { ok: true, rows: [{ object: "DNS record", state: "present", detail: "poplin.example.com", part: "reach" }], steps: [] };
   const [form, call] = [await answerOf({ typed: PLAIN, by: "form", run: "check", nothingSet: true, refusal: "token" }, taken), await answerOf({ typed: PLAIN, by: "call", run: "check", nothingSet: true, refusal: "token" }, taken)];
 
   expect([form.startsWith("[200,"), form.includes("<td>DNS record</td>"), call.startsWith("[200,"), call.includes('\\"object\\":\\"DNS record\\"')]).toEqual([true, true, true, true]);

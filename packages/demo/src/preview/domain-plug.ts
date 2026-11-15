@@ -12,14 +12,14 @@ import type { DomainPlug, DomainReading, DomainRow, DomainState } from "../../..
 export const PLUG_STATES = ["fresh", "partial", "access-off", "done", "token-refused", "unreachable"] as const;
 
 /** The objects of the sample install, as a provider would name them. */
-const OBJECTS: readonly (readonly [object: string, detail: string])[] = [
-  ["DNS record", "every site"],
-  ["DNS record", "the dashboard"],
-  ["Route", "every site"],
-  ["Route", "the dashboard"],
-  ["Login application", "the dashboard's login"],
-  ["Login policy", "the logins of the settings"],
-  ["Rate rule", "sample-rate-rule"],
+const OBJECTS: readonly (readonly [object: string, detail: string, part: DomainRow["part"]])[] = [
+  ["DNS record", "every site", "reach"],
+  ["DNS record", "the dashboard", "reach"],
+  ["Route", "every site", "reach"],
+  ["Route", "the dashboard", "reach"],
+  ["Login application", "the dashboard's login", "login"],
+  ["Login policy", "the logins of the settings", "login"],
+  ["Rate rule", "sample-rate-rule", "rest"],
 ];
 
 /** The rights the preview's token form names: every one its link carries. */
@@ -52,7 +52,7 @@ export type PlugState = (typeof PLUG_STATES)[number];
 
 /** Every object in one state, but the rows `others` names by their place. */
 function rows(state: DomainState, others: Readonly<Record<number, DomainState>> = {}): DomainRow[] {
-  return OBJECTS.map(([object, detail], place) => ({ object, detail, state: others[place] ?? state }));
+  return OBJECTS.map(([object, detail, part], place) => ({ object, detail, part, state: others[place] ?? state }));
 }
 
 function table(found: readonly DomainRow[], steps: readonly (typeof ACCESS_STEP)[] = []): DomainReading {

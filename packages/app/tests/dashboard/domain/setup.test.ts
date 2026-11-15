@@ -36,7 +36,7 @@ interface Options {
 function guardedPlug(): FakePlug {
   return fakePlug((run, token) =>
     token === OWN
-      ? { ok: true, rows: [{ object: "DNS record", state: run === "check" ? "missing" : "created", detail: "poplin.example.com" }], steps: [] }
+      ? { ok: true, rows: [{ object: "DNS record", state: run === "check" ? "missing" : "created", detail: "poplin.example.com", part: "reach" }], steps: [] }
       : { ok: false, refusal: "token" },
   );
 }
@@ -50,7 +50,7 @@ async function openSetup(options: Options = {}) {
 
   // The page's own view of the database: every read of the settings is counted, and an install with none has none.
   const watched = {
-    appendAudit: (...written: Parameters<typeof database.appendAudit>) => database.appendAudit(...written),
+    keepDomainCheck: (...kept: Parameters<typeof database.keepDomainCheck>) => database.keepDomainCheck(...kept),
     hasLoggedIn: () => database.hasLoggedIn(),
     changeSettings: (...changed: Parameters<typeof database.changeSettings>) => database.changeSettings(...changed),
     readSettings: async () => {
@@ -162,6 +162,13 @@ test("the token of the install's own account opens the table; a repair writes on
     ["repair", OWN],
   ]);
   expect((await opened.audit()).length).toBe(before + 1);
+  // Drift: the first Repair is run here, before anyone can log in. Were it not kept, the dashboard a person then opens would call a repaired install "not checked yet".
+  expect(await opened.install.database.readDomainCheck()).toEqual({
+    ran_at: opened.install.now(),
+    by: opened.owner,
+    run: "repair",
+    pieces: [{ piece: "DNS record", detail: "poplin.example.com", part: "reach", state: "ok" }],
+  });
   expect((await opened.audit())[0]).toMatchObject({
     action: "domain_synced",
     by: opened.owner,
@@ -174,7 +181,7 @@ test("the token of the install's own account opens the table; a repair writes on
 test("a plug that hands the token back or throws it leaks nothing through the setup page", async () => {
   const echoing: DomainReading = {
     ok: true,
-    rows: [{ object: OWN, state: "failed", detail: `Bearer ${OWN}` }],
+    rows: [{ object: OWN, state: "failed", detail: `Bearer ${OWN}`, part: "rest" }],
     steps: [{ text: OWN, address: `https://dash.example.com/${OWN}` }],
   };
   const plugs = [
@@ -294,7 +301,7 @@ test("a program's call is answered as JSON by the same run, the same count of tr
   const fifth = await call("check", own);
   const sixth = await call("check", own);
 
-  expect([checked.status, await checked.json()]).toEqual([200, { ok: true, rows: [{ object: "DNS record", state: "missing", detail: "poplin.example.com" }], steps: [], expects: "owner@example.com" }]);
+  expect([checked.status, await checked.json()]).toEqual([200, { ok: true, rows: [{ object: "DNS record", state: "missing", detail: "poplin.example.com", part: "reach" }], steps: [], expects: "owner@example.com" }]);
   expect([refused.status, await refused.json()]).toEqual([403, { ok: false, refusal: "token" }]);
   expect([noToken.status, asForm.status, unknown.status, fifth.status]).toEqual([403, 415, 404, 200]);
   expect([sixth.status, await sixth.json()]).toEqual([429, { ok: false, refusal: "too_many_tries" }]);

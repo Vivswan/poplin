@@ -502,3 +502,23 @@ test("the bots setting's note names the switch that can lock the owner's own too
 
   expect(plug.guardNotes.block_bots).toContain("Bot Fight Mode, which can block the command line from cloud hosts");
 });
+
+// Drift: the install remembers each row by what its object is for, and raises "private sites may be locked" for the login's alone. An Access row filed under the rest would turn that alarm into "a piece is missing".
+test("every row says what its object is for, and a row refused for a missing right carries the right's name beside its sentence", async () => {
+  const account = emptyAccount();
+
+  await withAccount(account, async (plug) => {
+    const made = await plug.repair(TOKEN, SETTINGS);
+    account.refuse = "GET /zones/zone-1/workers/routes";
+    const checked = await plug.check(TOKEN, SETTINGS);
+    const rows = [made, checked].flatMap((reading) => (reading.ok ? reading.rows : []));
+
+    const objectsOf = (part: string): string[] => [...new Set(rows.filter((row) => row.part === part).map((row) => row.object))];
+
+    expect([objectsOf("login"), objectsOf("reach")]).toEqual([
+      ["Access application", "Access policy", "Worker variable"],
+      ["DNS record", "Worker route"],
+    ]);
+    expect(rows.filter((row) => row.right !== undefined).map((row) => [row.object, row.state, row.right])).toEqual([["Worker route", "failed", "Workers Routes: Edit"]]);
+  });
+});

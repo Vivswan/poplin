@@ -134,6 +134,23 @@ describe("the setup page", () => {
     expect((await (await installOf(w)).database.listAudit({ limit: 10 })).map((entry) => [entry.action, entry.detail.from])).toEqual([["domain_synced", "setup"], ["settings_set", undefined]]);
   });
 
+  // Drift: the install keeps each run as the last check of its domain, and a refused call's answer can quote the token back. A kept row with the token in it would hold the account's key for as long as nobody checks again.
+  test("a check that Cloudflare refuses one piece of is kept as the last check of the domain, with the right that piece lacked and nothing of the token", async () => {
+    const worker = instance(w, cloudflareOf(account, asked));
+    account.refuse = "GET /zones/zone-1/workers/routes";
+    const checked = await run(worker, `${ADMIN}/setup`, "check", TOKEN);
+    const kept = await (await installOf(w)).database.readDomainCheck();
+    const row = await BINDINGS.DB.prepare("SELECT ran_by, run, pieces FROM domain_check").all<{ ran_by: string; run: string; pieces: string }>();
+
+    expect([checked.status, (await checked.text()).includes("Add this right to the token: Workers Routes: Edit"), writes()]).toEqual([200, true, []]);
+    expect([kept?.by, kept?.run, kept?.pieces.filter((piece) => piece.state === "unread")]).toEqual([
+      OWNER,
+      "check",
+      [{ piece: "Worker route", detail: expect.stringContaining("[token]"), part: "reach", state: "unread", reason: "missing_right", right: "Workers Routes: Edit" }],
+    ]);
+    expect([row.results.length, row.results[0]?.pieces.includes("[token]"), (await stored()).includes(TOKEN)]).toEqual([1, true, false]);
+  });
+
   // Drift: a first login mistyped at setup was the only email Cloudflare's login let in and the only one the Worker took, with no way left to change either.
   test("an email sent with the account's token replaces the first login, in the store and in Cloudflare's policy, so the old one gets in nowhere; a token of another account changes and learns nothing", async () => {
     const worker = instance(w, cloudflareOf(account, asked));

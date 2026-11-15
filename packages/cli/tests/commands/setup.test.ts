@@ -61,20 +61,27 @@ describe("poplin setup", () => {
   // Drift: a step is the one thing the install cannot do for the person, and `--json` is what a script reads: both must come through whole.
   test("a step only a person can do is printed with its address on its own line, and --json prints the run, the rows, and the steps as one value", async () => {
     const bench = await openBench();
-    const reading: DomainReading = { ok: true, rows: [{ object: "Login", state: "missing", detail: "the login is off for the account" }], steps: [{ text: "Switch the login on.", address: "https://provider.example.com/login" }] };
+    const reading: DomainReading = { ok: true, rows: [{ object: "Login", state: "missing", detail: "the login is off for the account", part: "login" }], steps: [{ text: "Switch the login on.", address: "https://provider.example.com/login" }] };
     withSetup(bench, fakePlug(() => reading));
 
     const plain = await bench.run(SETUP, { env: ENV });
     const json = await bench.run(`${SETUP} --json`, { env: ENV });
 
     expect([plain.code, plain.out]).toEqual([1, ["missing  Login  the login is off for the account", "the login is set to expect ada@example.com", "Switch the login on.", "https://provider.example.com/login", "1 not done"]]);
-    expect([json.code, jsonOf(json)]).toEqual([1, { run: "repair", rows: reading.rows, steps: reading.steps, expects: "ada@example.com" }]);
+    expect([json.code, jsonOf(json)]).toEqual([1, { run: "repair", rows: [{ object: "Login", state: "missing", detail: "the login is off for the account" }], steps: reading.steps, expects: "ada@example.com" }]);
   });
 
   // Drift: a repair that goes on past a refused piece makes rows beside it, and a script that read the exit code alone would take the install for complete.
   test("a repair with a refused row beside the ones it made exits as a failure and says how many are not done", async () => {
     const bench = await openBench();
-    const reading: DomainReading = { ok: true, rows: [{ object: "Record", state: "created", detail: "poplin.example.com" }, { object: "Rule", state: "failed", detail: "refused. Add this right to the token: Rule: Edit" }], steps: [] };
+    const reading: DomainReading = {
+      ok: true,
+      rows: [
+        { object: "Record", state: "created", detail: "poplin.example.com", part: "reach" },
+        { object: "Rule", state: "failed", detail: "refused. Add this right to the token: Rule: Edit", part: "rest" },
+      ],
+      steps: [],
+    };
     withSetup(bench, fakePlug(() => reading));
 
     const ended = await bench.run(SETUP, { env: ENV });
@@ -135,7 +142,7 @@ describe("poplin setup", () => {
     bench.hook = async (request) => {
       bodies.push(`${request.url} ${await request.clone().text()}`);
 
-      return Response.json({ ok: true, rows: [{ object: "DNS record", state: "created", detail: `made with ${TOKEN}` }], steps: [{ text: TOKEN, address: `https://example.com/?t=${TOKEN}` }] });
+      return Response.json({ ok: true, rows: [{ object: "DNS record", state: "created", detail: `made with ${TOKEN}`, part: "reach" }], steps: [{ text: TOKEN, address: `https://example.com/?t=${TOKEN}` }] });
     };
 
     const plain = await bench.run(SETUP, { env: ENV });

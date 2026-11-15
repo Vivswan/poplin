@@ -3,6 +3,7 @@ import { existsSync } from "node:fs";
 import { join } from "node:path";
 
 import type { Code } from "../../../app/src/api/respond";
+import type { Login as Email } from "../../../core/src/auth/logins";
 import { answered, INSTALL_VERSION, NOW, ORIGIN, REBUILD_ADDRESS } from "../../../app/tests/api/support/install";
 import { saveLogin } from "../../src/local/login-file";
 import type { Login } from "../../src/local/login";
@@ -487,6 +488,27 @@ describe("run", () => {
     expect([report.code, report.out[2]]).toEqual([0, `ok  update    7.9.0 is out (this install runs ${INSTALL_VERSION}): https://example.com/changelog/#v7-9-0`]);
     expect(jsonOf(await bench.run("doctor --json"))).toMatchObject({ update: { current: INSTALL_VERSION, newest: "7.9.0", notes: "https://example.com/changelog/#v7-9-0" } });
     expect(jsonOf(await bench.run("whoami --json"))).toMatchObject({ update: { newest: "7.9.0" } });
+  });
+
+  // Drift: the install remembers what its last check of the domain left broken, and this row is where a person at a terminal hears of it. A row with nothing to say would teach them to skip it, and a missing one would leave locked private sites unsaid.
+  test.each([
+    { name: "a broken login", state: "needs_repair", part: "login", ago: 0, line: "The login for private sites is missing or changed, so private sites may be locked. Open Domain and press Repair.", code: "login_broken" },
+    { name: "a broken record", state: "needs_repair", part: "reach", ago: 0, line: "A record or route of the domain is missing or changed, so sites may not open. Open Domain and press Repair.", code: "sites_unreachable" },
+    { name: "another broken piece", state: "needs_repair", part: "rest", ago: 0, line: "A piece of the domain is missing or changed. Open Domain and press Repair.", code: "needs_repair" },
+    { name: "a broken login found 31 days ago", state: "needs_repair", part: "login", ago: 31, line: "The last check of the domain is over 30 days old. Open Domain and press Check.", code: "check_again" },
+    { name: "every piece ok", state: "ok", part: "login", ago: 0, line: undefined, code: undefined },
+  ] as const)("doctor says what the last check of the domain left to act on, in one row and not as a failure: $name", async ({ state, part, ago, line, code }) => {
+    const bench = await openBench();
+    const before = jsonOf(await bench.run("doctor --json"));
+    const ran_at = bench.install.clock.now - ago * 86_400_000;
+    await bench.install.database.keepDomainCheck({ ran_at, by: "ada@example.com" as Email, run: "check", pieces: [{ piece: "Sample piece", detail: "sample", part, state }] }, {});
+
+    const report = await bench.run("doctor");
+    const asPublisher = await bench.run("doctor", { env: { POPLIN_SERVER: ORIGIN, POPLIN_TOKEN: bench.install.tokens.owner } });
+    const rows = (out: readonly string[]): string[] => out.filter((row) => row.split(/ {2,}/)[1] === "domain");
+
+    expect([before.domain, report.code, rows(report.out), rows(asPublisher.out)]).toEqual(["none", 0, line === undefined ? [] : [`ok  domain    ${line}`], []]);
+    expect(jsonOf(await bench.run("doctor --json")).domain).toEqual(code === undefined ? "none" : { code, about: code === "check_again" ? null : "Sample piece" });
   });
 
   test("doctor exits 1 when a check fails, with its report still printed: without this a script reads a failed check as health", async () => {

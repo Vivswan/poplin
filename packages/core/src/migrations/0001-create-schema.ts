@@ -14,6 +14,7 @@
 // leftovers    the folders of removed sites, each until its files are gone from the bucket
 // sweep_place  one row while a walk of the scheduled sweep is under way: where its last run stopped
 // update_check one row once the install has asked for the newest release: when it asked, and the newest it knows
+// domain_check one row once the domain was checked or repaired: when, by whom, and how each piece stood
 
 import type { Step } from "./migrate";
 
@@ -180,6 +181,16 @@ CREATE TABLE update_check (
   news TEXT CHECK (news IS NULL OR json_valid(news))
 ) STRICT`;
 
+/** The last check or repair of the domain: when it ran, who ran it, which of the two it was, and its pieces as a JSON list. Each run replaces the row. */
+const DOMAIN_CHECK = `
+CREATE TABLE domain_check (
+  id INTEGER NOT NULL PRIMARY KEY CHECK (id = 1),
+  ran_at INTEGER NOT NULL,
+  ran_by TEXT NOT NULL,
+  run TEXT NOT NULL CHECK (run IN ('check', 'repair')),
+  pieces TEXT NOT NULL CHECK (json_valid(pieces) AND json_type(pieces) = 'array')
+) STRICT`;
+
 /** A site that is removed leaves its folder to be emptied, whatever removed it. */
 const REMOVED_SITE_LEAVES_ITS_FOLDER = `
 CREATE TRIGGER sites_delete_leaves_the_folder AFTER DELETE ON sites
@@ -272,7 +283,7 @@ BEGIN SELECT RAISE(ABORT, 'the audit log is append-only'); END`;
 /** Creates every table, index, and trigger of the first schema. */
 export const CREATE_SCHEMA: Step = {
   number: 1,
-  description: "create the sites, versions, tokens, settings, secrets, totals, audit, request_counts, declared_files, uploads, logins, leftovers, sweep_place, and update_check tables",
+  description: "create the sites, versions, tokens, settings, secrets, totals, audit, request_counts, declared_files, uploads, logins, leftovers, sweep_place, update_check, and domain_check tables",
   statements: [
     SITES,
     VERSIONS,
@@ -289,6 +300,7 @@ export const CREATE_SCHEMA: Step = {
     LEFTOVERS,
     SWEEP_PLACE,
     UPDATE_CHECK,
+    DOMAIN_CHECK,
     "CREATE INDEX sites_by_change ON sites (trashed, updated_at DESC, id DESC)",
     "CREATE INDEX sites_by_owner ON sites (owner, trashed, updated_at DESC, id DESC)",
     "CREATE INDEX tokens_by_creation ON tokens (created_at DESC, id DESC)",

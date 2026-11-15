@@ -6,6 +6,7 @@
 // The dashboard knows no provider: whoever builds it hands the plug in, and with none there is no Domain tab.
 
 import type { Login } from "@poplin/core/src/auth/logins";
+import type { CheckedPiece } from "@poplin/core/src/records/domain-check";
 import type { SettingValues } from "@poplin/core/src/records/settings";
 
 /** The settings the provider's side is made to match. */
@@ -20,11 +21,18 @@ export type GuardKey = Exclude<keyof DomainSettings, "logins">;
 /** How one object stands. The first five are what a check finds; a repair also says what it did, where it failed, and what it never reached. `optional` is one the token has no right for and the install works without: no failure, and nothing to repair. */
 export type DomainState = "present" | "missing" | "differs" | "left-out" | "optional" | "created" | "changed" | "removed" | "failed" | "not-run";
 
-/** One object of the install at the provider. `detail` names it, and says why it was left out, why it failed, or which right would switch it on. */
+/**
+ * One object of the install at the provider. `detail` names it, and says why it was left out, why it failed, or which right would switch it on.
+ *
+ * `part` is what the object is for: `login` guards private sites, `reach` makes a site answer at its address, and `rest` is everything else.
+ * `right` is on a row that failed because the token lacked a right, and names that right.
+ */
 export interface DomainRow {
   readonly object: string;
   readonly state: DomainState;
   readonly detail: string;
+  readonly part: CheckedPiece["part"];
+  readonly right?: string;
 }
 
 /** Something only a person can do, at the provider's own pages: what to do there, and the address to open. */

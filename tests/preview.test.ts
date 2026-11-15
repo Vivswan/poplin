@@ -143,6 +143,27 @@ describe("the local preview", () => {
     expect(again).toContain(page);
   });
 
+  // Drift: the note of the last check of the domain can only be looked at where an install remembers one. A seed with none, or one a Check could not change, would leave the healthy and the broken state unseen.
+  test("the seeded install remembers a healthy domain, a Check on the Domain tab leaves a broken login to act on, and a reset brings the healthy one back", async () => {
+    const preview = await openPreview(false);
+    const note = async (): Promise<unknown> => {
+      const answer = await preview.fetch(new Request(`${ORIGIN}/api/domain`, { headers: { Authorization: `Bearer ${preview.token()}` } }));
+      const { check, note: raised } = (await answer.json()) as { check: { run: string; pieces: unknown[] } | null; note: unknown };
+
+      return [answer.status, check?.run, check?.pieces.length, raised];
+    };
+    const seeded = await note();
+    await open(preview, "/state/domain/check");
+    const checked = await note();
+    await preview.fetch(new Request(`${ORIGIN}/reset`, { method: "POST" }));
+
+    expect([seeded, checked, await note()]).toEqual([
+      [200, "check", 7, "none"],
+      [200, "check", 7, { code: "login_broken", about: "Login policy" }],
+      [200, "check", 7, "none"],
+    ]);
+  });
+
   test("clicking on from the home page reaches only pages that answer and name no hostname of the install: without this a click leaves for a hostname that does not exist", async () => {
     const preview = await openPreview(false);
     const stated = new Map((await preview.entries()).map((entry) => [entry.path, entry.status ?? 200]));

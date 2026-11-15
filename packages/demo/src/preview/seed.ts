@@ -1,4 +1,6 @@
-// The sample data of the demo, made through the product's own actions: tokens, sites published from the sample sites the host hands in, a site in the trash, settings above a free limit, logins, and the day's requests.
+// The sample data of the demo, made through the product's own actions: tokens, sites published from the sample sites the host hands in, a site in the trash, settings above a free limit, logins, the day's requests, and a check of the domain.
+//
+// The check finds every piece in place, so the install remembers a healthy domain. A Check on the Domain tab finds pieces to repair and replaces that memory; a reset brings the healthy one back.
 //
 // Every name and address is invented. The actions write the audit log themselves, so the Activity tab shows what a real install would.
 
@@ -9,8 +11,10 @@ import { deleteSite } from "../../../core/src/actions/delete";
 import { listSites } from "../../../core/src/actions/list";
 import { issueToken } from "../../../core/src/actions/manage-tokens";
 import { publishSite } from "../../../core/src/actions/publish";
+import { runDomain } from "../../../app/src/dashboard/domain/domain-run";
 import { updateSite } from "../../../core/src/actions/set";
 import type { Actor } from "../../../core/src/auth/scopes";
+import { previewPlug } from "./domain-plug";
 import type { World } from "./world";
 
 /** The milliseconds of one day. */
@@ -24,6 +28,9 @@ const PUBLISHERS = ["report agent", "travel agent"] as const;
 
 /** The note of the admin token the terminal prints. An admin token runs out, so it is issued last, at the present moment. */
 const ADMIN_TOKEN = "local preview";
+
+/** The token the seed's check of the domain is run with. The preview's plug takes any, and nothing keeps it. */
+const DOMAIN_TOKEN = "sample-token";
 
 /** The settings laid over the defaults: a second login, and a day's requests above the provider's free limit, so its warning shows. */
 const SETTINGS = { logins: ["mira@example.com", "jonas@example.com"], requests_per_day: 250_000 };
@@ -157,6 +164,14 @@ async function countRequests(world: World, start: number): Promise<void> {
   }
 }
 
+/** Check the domain once as the admin, over a plug that finds every piece in place. */
+async function checkDomain(world: World): Promise<void> {
+  const settings = await world.install.database.readSettings();
+  if (settings === undefined) throw new Error("the demo's seed lost its settings");
+
+  await runDomain(previewPlug("done"), world.install, { run: "check", token: DOMAIN_TOKEN, settings: async () => settings, by: world.admin.holder, from: "dashboard" });
+}
+
 /**
  * Fill a fresh demo install with the sample data.
  *
@@ -182,6 +197,7 @@ export async function seedWorld(world: World, samples: Samples): Promise<Seeded>
 
   world.clock.held = undefined;
   await countRequests(world, start);
+  await checkDomain(world);
   done(await beginLogin(world.install, { scope: "publisher", computer: "studio-laptop" }, "preview"), "the waiting login");
   const issued = done(await issueToken(world.install, world.admin, { note: ADMIN_TOKEN, scope: "admin" }), "the admin token");
 

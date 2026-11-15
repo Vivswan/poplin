@@ -76,6 +76,7 @@ const EVERY_ROUTE: { readonly [Path in keyof Routes]: { readonly [Method in keyo
   "/api/config": { $get: (calls) => calls.config.$get({ query: {} }), $patch: (calls) => calls.config.$patch({ query: {}, json: UNREAD }) },
   "/api/sessions": { $delete: (calls) => calls.sessions.$delete({ query: {} }) },
   "/api/audit": { $get: (calls) => calls.audit.$get({ query: SITE.param }) },
+  "/api/domain": { $get: (calls) => calls.domain.$get({ query: {} }) },
   "/api/update": { $post: (calls) => calls.update.$post({ query: {} }) },
   "/api/update/address": {
     $get: (calls) => calls.update.address.$get({ query: {} }),

@@ -1,10 +1,13 @@
 // The commands about this machine's login and about the install as a whole: whoami, logout, config, and doctor.
 
+import type * as v from "valibot";
+
+import { DOMAIN_SENTENCES, DOMAIN_STATE } from "../../../core/src/actions/domain-state";
 import { LISTED_SITES } from "../../../core/src/actions/list";
 import { REVOKED_TOKEN, WHOAMI_ANSWER } from "../../../core/src/actions/manage-tokens";
 import { SETTINGS_ANSWER } from "../../../core/src/actions/store-settings";
 import { settingsToText } from "../../../core/src/records/settings";
-import type { Failure } from "../client/client";
+import type { Called, Failure } from "../client/client";
 import { clearLogin } from "../local/login-file";
 import { VERSION } from "../poplin";
 import { readSetting } from "./install-settings";
@@ -26,6 +29,9 @@ type InstallRequest = RequestOf<"whoami" | "logout" | "config" | "doctor">;
 
 /** `config` showing every setting, showing one, or changing one. */
 type ConfigAction = RequestOf<"config">["action"];
+
+/** What the install remembers of its domain needing, as the API answers it. */
+type DomainNote = v.InferOutput<typeof DOMAIN_STATE>["note"];
 
 /** One line of a doctor's report. */
 interface Check {
@@ -131,6 +137,18 @@ function updateCheck(update: { readonly current: string; readonly newest: string
   return { check: "update", ok: true, detail: `${update.newest} is out (this install runs ${update.current}): ${update.notes}` };
 }
 
+/**
+ * What the last check of the domain left to act on: the note for `--json`, `null` when it was not read, and its line of the report.
+ * There is no line while nothing is left, and none for a token that is no admin's. It is a finding, not a failure: it is what that check found, not the state now.
+ */
+function domainFinding(domain: Called<{ readonly note: DomainNote }>): { readonly note: DomainNote | null; readonly checks: Check[] } {
+  if (!domain.ok) return { note: null, checks: domain.failure.kind === "refused" && domain.failure.code === "not_allowed" ? [] : [checkOf("domain", domain.failure, "")] };
+
+  const { note } = domain.value;
+
+  return { note, checks: note === "none" ? [] : [{ check: "domain", ok: true, detail: DOMAIN_SENTENCES[note.code] }] };
+}
+
 /** Report on the install with calls that only read: who the token is, the settings, and the sites. Nothing is changed. */
 async function doctor({ client, server, source }: Session): Promise<Outcome> {
   const who = await client.call(WHOAMI_ANSWER, (api) => api.whoami.$get());
@@ -140,6 +158,7 @@ async function doctor({ client, server, source }: Session): Promise<Outcome> {
   const settings = await client.call(SETTINGS_ANSWER, (api) => api.config.$get());
   const sites = await client.call(LISTED_SITES, (api) => api.sites.$get());
   const trash = await client.call(LISTED_SITES, (api) => api.sites.$get({ query: { trash: "true" } }));
+  const domain = domainFinding(await client.call(DOMAIN_STATE, (api) => api.domain.$get()));
   const kept = settings.ok ? `${Object.keys(settings.value.values).length} settings read` : "";
   const live = sites.ok ? `${countText(sites.value.sites.length, "site")}${sites.value.next === undefined ? "" : " and more"}` : "";
   const trashed = trash.ok ? `${countText(trash.value.sites.length, "site")}${trash.value.next === undefined ? "" : " and more"}` : "";
@@ -151,10 +170,11 @@ async function doctor({ client, server, source }: Session): Promise<Outcome> {
     checkOf("settings", settings.ok ? undefined : settings.failure, kept),
     checkOf("sites", sites.ok ? undefined : sites.failure, live),
     checkOf("trash", trash.ok ? undefined : trash.failure, trashed),
+    ...domain.checks,
   ];
   const lines = columns(checks.map((check) => [check.ok ? "ok" : "failed", check.check, check.detail]));
 
-  const outcome: Outcome = { ok: true, value: { server, version, poplin: VERSION, update: update ?? null, token, checks }, lines: [...lines, "nothing was changed"] };
+  const outcome: Outcome = { ok: true, value: { server, version, poplin: VERSION, update: update ?? null, domain: domain.note, token, checks }, lines: [...lines, "nothing was changed"] };
 
   return checks.every((check) => check.ok) ? outcome : { ...outcome, found: "failed" };
 }

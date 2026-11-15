@@ -108,6 +108,22 @@ const RIGHTS = {
   "D1 database": [RIGHT.database],
 } as const satisfies Readonly<Record<keyof typeof INSTALL_PIECES.repair, readonly Right[]>>;
 
+/** What each object is for: the login guards private sites, a record or a route makes a site answer at its address. A piece with no row here does not compile. */
+const PART: Readonly<Record<Piece | "Public word", DomainRow["part"]>> = {
+  Zone: "rest",
+  "DNS record": "reach",
+  "Worker route": "reach",
+  "Access application": "login",
+  "Access policy": "login",
+  "Worker variable": "login",
+  "Redirect rule": "rest",
+  "WAF rule": "rest",
+  "Rate rule": "rest",
+  "Bot settings": "rest",
+  "D1 database": "rest",
+  "Public word": "rest",
+};
+
 /** Where Cloudflare's form for a new token is. The link asks for every account and every zone, the one scope a link can carry: the person narrows it on the form. */
 const TOKEN_FORM = "https://dash.cloudflare.com/profile/api-tokens";
 
@@ -155,6 +171,9 @@ type Placed = Pick<PlugParts, "script" | "layout" | "first"> & { readonly accoun
 /** An object the table names. */
 type Piece = keyof typeof RIGHTS;
 
+/** A row before it says what its object is for. */
+type Found = Omit<DomainRow, "part" | "object"> & { readonly object: Piece | "Public word" };
+
 /** A piece that stopped: what was done before, the step that failed and the ones never reached, and whichever of Cloudflare's answer or the piece's own message says why. */
 interface Stopped {
   readonly ok: false;
@@ -172,7 +191,7 @@ type Outcome = { readonly ok: true; readonly report: Report } | Stopped;
 
 /** The rows of a run so far, and whether a failure has stopped it. */
 interface Progress {
-  readonly rows: DomainRow[];
+  readonly rows: Found[];
   readonly steps: DomainStep[];
   stopped: boolean;
 }
@@ -218,7 +237,7 @@ function failedDetail(stopped: Stopped, object: Piece): string {
 }
 
 /** The rows of a piece that stopped. One that changed nothing for want of an optional permission is not set up, the steps it never reached with it, which is no failure. */
-function stoppedRows(stopped: Stopped, objectOf: (subject: string) => Piece): DomainRow[] {
+function stoppedRows(stopped: Stopped, objectOf: (subject: string) => Piece): Found[] {
   const failed = stopped.failed ?? "";
   const object = objectOf(failed);
   const unrun = stopped.unrun ?? [];
@@ -231,13 +250,15 @@ function stoppedRows(stopped: Stopped, objectOf: (subject: string) => Piece): Do
     return named.map((subject) => ({ object: objectOf(subject), state: "optional", detail: `${subject}: ${how}` }));
   }
 
-  return [{ object, state: "failed", detail: failedDetail(stopped, object) }, ...unrun.map((subject): DomainRow => ({ object: objectOf(subject), state: "not-run", detail: subject }))];
+  const lacked = lacksRight(stopped) ? { right: right.name } : {};
+
+  return [{ object, state: "failed", detail: failedDetail(stopped, object), ...lacked }, ...unrun.map((subject): Found => ({ object: objectOf(subject), state: "not-run", detail: subject }))];
 }
 
-function rowsOf(outcome: Outcome, mode: Mode, objectOf: (subject: string) => Piece): DomainRow[] {
+function rowsOf(outcome: Outcome, mode: Mode, objectOf: (subject: string) => Piece): Found[] {
   const { report } = outcome;
   const states = STATES[mode];
-  const row = (subject: string, state: DomainState, detail = subject): DomainRow => ({ object: objectOf(subject), state, detail });
+  const row = (subject: string, state: DomainState, detail = subject): Found => ({ object: objectOf(subject), state, detail });
   const rows = [
     ...report.left.map((subject) => row(subject, "present")),
     ...report.created.map((subject) => row(subject, states.created)),
@@ -277,7 +298,7 @@ function accessObject(subject: string): Piece {
 }
 
 // The application's row names what it stands in front of, and a policy that differs says how: it lets other emails through than the settings list.
-function accessDetail(row: DomainRow, covered: string): DomainRow {
+function accessDetail(row: Found, covered: string): Found {
   if (row.detail === INSTALL_OBJECTS.accessApplication) return { ...row, detail: `${row.detail}: ${covered}` };
 
   if (row.object === "Access policy" && row.state === "differs") return { ...row, detail: `${row.detail}: ${OTHER_LOGINS}` };
@@ -383,7 +404,7 @@ async function read(parts: PlugParts, mode: Mode, token: string, readSettings: R
   const { layout } = parts;
   const { plan } = zone;
   // The public word is a fact of the install, set once: its row only shows it.
-  const word: DomainRow = { object: "Public word", state: "present", detail: `${layout.publicWord} (public sites answer at <name>-${layout.publicWord}.${layout.domain})` };
+  const word: Found = { object: "Public word", state: "present", detail: `${layout.publicWord} (public sites answer at <name>-${layout.publicWord}.${layout.domain})` };
   const progress: Progress = { rows: [word], steps: [], stopped: false };
 
   const dns = await piece(
@@ -436,7 +457,7 @@ async function read(parts: PlugParts, mode: Mode, token: string, readSettings: R
     () => syncDatabase(connection, placed.accountId, mode),
   );
 
-  return { ok: true, rows: progress.rows, steps: progress.steps };
+  return { ok: true, rows: progress.rows.map((row) => ({ ...row, part: PART[row.object] })), steps: progress.steps };
 }
 
 // The form reads the permissions as a JSON list of `{ key, type }`.

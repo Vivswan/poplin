@@ -8,6 +8,7 @@ import { mintToken, type TokenId, type TokenRecord } from "../../../src/auth/tok
 import type { Database, NewSite, NewUpload, NewVersion, Signed } from "../../../src/database/database";
 import type { PublicName, SiteName } from "../../../src/names/names";
 import type { AuditAction, AuditEntry } from "../../../src/records/audit";
+import type { DomainCheck } from "../../../src/records/domain-check";
 import { defaultSettings } from "../../../src/records/settings";
 import { mintSiteFolder, type Site } from "../../../src/records/site";
 import type { Totals } from "../../../src/records/sizes";
@@ -1413,6 +1414,38 @@ function updateCheck(label: string, makeDatabase: DatabaseFactory): void {
   });
 }
 
+function domainCheck(label: string, makeDatabase: DatabaseFactory): void {
+  describe(`${label}: the last check of the domain`, () => {
+    // Drift: the note that says what needs fixing is derived from this one record. A piece that read back in another state, or a run that left the one before it beside it, would show a healthy install as broken or a broken one as healthy.
+    test("a kept run reads back as it was, the next one replaces it, and each writes one audit entry signed by whoever ran it", async () => {
+      const database = await opened(makeDatabase);
+      const first: DomainCheck = {
+        ran_at: NOW,
+        by: ADA,
+        run: "check",
+        pieces: [
+          { piece: "Record", detail: "every site", part: "reach", state: "needs_repair" },
+          { piece: "Login", detail: "the dashboard's login", part: "login", state: "unread", reason: "missing_right", right: "Login: Edit" },
+          { piece: "Rule", detail: "left out: the plan has none", part: "rest", state: "not_set_up" },
+          { piece: "Database", detail: "", part: "rest", state: "unread", reason: "not_run" },
+        ],
+      };
+      const second: DomainCheck = { ran_at: NOW + 5, by: ADA, run: "repair", pieces: [{ piece: "Record", detail: "every site", part: "reach", state: "ok" }] };
+      const before = await database.readDomainCheck();
+
+      await database.keepDomainCheck(first, { run: "check", from: "dashboard" });
+      const kept = await database.readDomainCheck();
+      await database.keepDomainCheck(second, { run: "repair", from: "setup" });
+
+      expect([before, kept, await database.readDomainCheck()]).toEqual([undefined, first, second]);
+      expect((await auditTrail(database)).map(({ action, by, at, detail }) => ({ action, by, at, detail }))).toEqual([
+        { action: "domain_synced", by: ADA, at: NOW, detail: { run: "check", from: "dashboard" } },
+        { action: "domain_synced", by: ADA, at: NOW + 5, detail: { run: "repair", from: "setup" } },
+      ]);
+    });
+  });
+}
+
 function computerLogins(label: string, makeDatabase: DatabaseFactory): void {
   describe(`${label}: the logins of computers`, () => {
     // Drift: the record `mintComputerLogin` makes is what a presented secret is checked against, and the code is what an admin is shown; a field lost on the way through a row would refuse every login.
@@ -2087,6 +2120,7 @@ export function describeDatabase(label: string, makeDatabase: DatabaseFactory): 
   loginRoom(label, makeDatabase);
   sweepPlace(label, makeDatabase);
   updateCheck(label, makeDatabase);
+  domainCheck(label, makeDatabase);
   requestCounts(label, makeDatabase);
   uploads(label, makeDatabase);
   uploadFiles(label, makeDatabase);

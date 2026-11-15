@@ -10,6 +10,7 @@ import { SITE_CHANGES, type SiteChanges } from "@poplin/core/src/actions/changes
 import { type LOGIN_REQUEST, LOGIN_SECRET, redeemLogin } from "@poplin/core/src/actions/computer-logins";
 import { changeConfig, readConfig } from "@poplin/core/src/actions/config";
 import { DELETE_OPTIONS, deleteSite } from "@poplin/core/src/actions/delete";
+import { domainState } from "@poplin/core/src/actions/domain-state";
 import { DUPLICATE_REQUEST, duplicateSite } from "@poplin/core/src/actions/duplicate";
 import { EXPORT_FILE_QUERY, EXPORT_FILES_QUERY, EXPORT_QUERY, EXPORT_SITE_QUERY, exportFile, exportFiles, exportSettings, exportSite, exportSites } from "@poplin/core/src/actions/export";
 import { finishPublish } from "@poplin/core/src/actions/finish-publish";
@@ -148,6 +149,7 @@ function routesOf(deps: ApiDeps) {
     .patch("/config", token, json, noQuery, sent<Partial<SettingValues>>(JSON_BYTES), async (context) => respond(await changeConfig(deps, context.var.actor, context.req.valid("json"))))
     .delete("/sessions", token, noQuery, async (context) => respond(await signEveryoneOut(deps, context.var.actor)))
     .get("/audit", token, queried(AUDIT_QUERY), async (context) => respond(await listAudit(deps, context.var.actor, context.req.valid("query"))))
+    .get("/domain", token, noQuery, async (context) => respond(await domainState(deps, context.var.actor)))
 
     .post("/update", token, queried(START_OPTIONS), async (context) => {
       return respond(await startUpdate(deps, context.var.actor, { ...context.req.valid("query"), version: deps.version }, rebuilding));

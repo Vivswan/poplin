@@ -84,7 +84,7 @@ test("a repair shows what it did and writes one audit entry that names what chan
   });
 
   const settled = await openDashboard(
-    fakePlug(() => ({ ok: true, rows: [{ object: "DNS record", state: "present", detail: "poplin.example.com" }], steps: [] })),
+    fakePlug(() => ({ ok: true, rows: [{ object: "DNS record", state: "present", detail: "poplin.example.com", part: "reach" }], steps: [] })),
   );
 
   expect(NOTICE.exec(await (await settled.post("/domain/repair", { token: TOKEN })).text())?.slice(1)).toEqual(["done", "Nothing to repair."]);
@@ -97,9 +97,9 @@ test("a repair that left optional pieces not set up is a success: they are no pa
     ok: true,
     steps: [],
     rows: [
-      { object: "DNS record", state: "created", detail: "poplin.example.com" },
-      { object: "Rate rule", state: "optional", detail: "The provider stops floods first. To switch this on, add this right to the token and press Repair: Rules: Edit" },
-      { object: "Bot settings", state: "optional", detail: "To switch this on, add this right to the token and press Repair: Bots: Edit" },
+      { object: "DNS record", state: "created", detail: "poplin.example.com", part: "reach" },
+      { object: "Rate rule", state: "optional", detail: "The provider stops floods first. To switch this on, add this right to the token and press Repair: Rules: Edit", part: "rest" },
+      { object: "Bot settings", state: "optional", detail: "To switch this on, add this right to the token and press Repair: Bots: Edit", part: "rest" },
     ],
   };
   const opened = await openDashboard(fakePlug(() => calm));
@@ -123,8 +123,8 @@ test("a repair that went on past a failed row counts that row alone as not done,
     ok: true,
     steps: [],
     rows: [
-      { object: "Redirect rule", state: "failed", detail: "refused with status 403. Add this right to the token: Redirect: Edit" },
-      { object: "Database", state: "created", detail: "poplin" },
+      { object: "Redirect rule", state: "failed", detail: "refused with status 403. Add this right to the token: Redirect: Edit", part: "rest" },
+      { object: "Database", state: "created", detail: "poplin", part: "rest" },
     ],
   };
   const opened = await openDashboard(fakePlug(() => went));
@@ -138,9 +138,9 @@ test("a repair that stopped half way counts the failed row and the ones never re
     ok: true,
     steps: [],
     rows: [
-      { object: "DNS record", state: "created", detail: "poplin.example.com" },
-      { object: "Worker route", state: "failed", detail: "poplin.example.com/*: refused with status 403" },
-      { object: "Access application", state: "not-run", detail: "" },
+      { object: "DNS record", state: "created", detail: "poplin.example.com", part: "reach" },
+      { object: "Worker route", state: "failed", detail: "poplin.example.com/*: refused with status 403", part: "reach" },
+      { object: "Access application", state: "not-run", detail: "", part: "login" },
     ],
   };
   const opened = await openDashboard(fakePlug(() => stopped));
@@ -178,7 +178,7 @@ test("a refused token and a provider that did not answer show one line each, no 
 test("the pasted token is in no answer, header, or audit entry, even when the plug hands it back in every text or throws it", async () => {
   const echoing = fakePlug((_run, token) => ({
     ok: true,
-    rows: [{ object: `object ${token}`, state: "failed", detail: `refused for Bearer ${token}` }],
+    rows: [{ object: `object ${token}`, state: "failed", detail: `refused for Bearer ${token}`, part: "rest" }],
     steps: [{ text: `open with ${token}`, address: `https://dash.example.com/?key=${token}` }],
   }));
   const throwing = fakePlug((_run, token) => {

@@ -6,7 +6,7 @@ const HOSTILE = `"><script>alert(1)</script>`;
 const ESCAPED = "&quot;&gt;&lt;script&gt;alert(1)&lt;/script&gt;";
 
 test("a row, a step, a right, the token form's address, and the form's token reach the page escaped, in text and inside an attribute", async () => {
-  const reading = { ok: true, rows: [{ object: HOSTILE, state: "missing", detail: HOSTILE }], steps: [{ text: HOSTILE, address: HOSTILE }] } as const;
+  const reading = { ok: true, rows: [{ object: HOSTILE, state: "missing", detail: HOSTILE, part: "rest" }], steps: [{ text: HOSTILE, address: HOSTILE }] } as const;
   const body = String(await domainBody({ csrf: HOSTILE, tokenLabel: HOSTILE, tokenRights: [HOSTILE], tokenLink: HOSTILE, tokenOptional: [{ right: HOSTILE, adds: HOSTILE }], tokenNote: HOSTILE, path: "/domain", ran: { run: "check", reading } }));
 
   expect(body).toContain(`<td>${ESCAPED}</td>`);

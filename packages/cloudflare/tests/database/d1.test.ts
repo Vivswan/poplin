@@ -76,6 +76,9 @@ const ROWS: Readonly<Record<string, readonly [read: number, written: number]>> =
   "forgetUpdateAddress, none kept": [1, 0],
   "keepUpdateCheck": [1, 1],
   "readUpdateCheck": [1, 0],
+  "keepDomainCheck": [2, 3],
+  "keepDomainCheck, 200 pieces over the run before": [2, 3],
+  "readDomainCheck": [1, 0],
   "keepSweepPlace": [1, 1],
   "readSweepPlace": [1, 0],
   "keepSweepPlace, forgotten": [0, 1],
@@ -595,6 +598,12 @@ describe("D1: the rows every operation of the database costs of a day's allowanc
     await cost("refused: revokeToken, none", () => database.revokeToken(admin.id, BY_ADA));
     await cost("refused: decideComputerLogin, none waits", () => database.decideComputerLogin(login.code, { state: "denied", by: ADMIN, at: NOW + 4 }));
     await cost("refused: redeemComputerLogin, none allowed", () => database.redeemComputerLogin(login.id, redeemed));
+
+    // Last, so that the two audit entries they write are read by no page of the log above.
+    await cost("keepDomainCheck", () => database.keepDomainCheck({ ran_at: NOW, by: BY_ADA.by, run: "check", pieces: [] }, {}));
+    const pieces = Array.from({ length: 200 }, (_piece, at) => ({ piece: "Record", detail: `record ${at}`, part: "reach", state: "needs_repair" }) as const);
+    await cost("keepDomainCheck, 200 pieces over the run before", () => database.keepDomainCheck({ ran_at: NOW + 1, by: BY_ADA.by, run: "repair", pieces }, { run: "repair" }));
+    await cost("readDomainCheck", () => database.readDomainCheck());
 
     expect(costs).toEqual(ROWS);
   });

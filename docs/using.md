@@ -195,6 +195,22 @@ ok  update    0.2.0 is out (this install runs 0.1.0): https://example.com/change
 | Switching it off     | `poplin config update_check off`: nothing is asked, and a release learned before is not shown      |
 | Updating to it       | `poplin update`, once a Deploy Hook is saved in the install                                        |
 
+## The last check of the domain
+
+```text
+$ poplin doctor
+ok  domain    The login for private sites is missing or changed, so private sites may be locked. Open Domain and press Repair.
+```
+
+| Question          | Answer                                                                                                   |
+| ----------------- | -------------------------------------------------------------------------------------------------------- |
+| What is kept      | the last Check or Repair of the Domain tab: when it ran, who ran it, and how each piece stood            |
+| What is not kept  | the token, which is used for the one request                                                             |
+| What the row says | the most serious thing to act on: the login first, then records and routes, then any other piece         |
+| When there is one | only when that run left something to act on, and only for an admin; `domain` under `--json` has the same |
+| After 30 days     | the row only asks for a new Check: the install does not look at the domain between runs                  |
+| Optional pieces   | a rule that was left out, or that only lacks an optional right, raises no row                            |
+
 ## The agent tools
 
 `poplin mcp` runs the MCP server on this computer. An agent starts it and calls these tools:

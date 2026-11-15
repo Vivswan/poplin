@@ -12,6 +12,7 @@ import type { ComputerLogin, LoginId, PendingLogin, UserCode } from "../auth/com
 import type { TokenId, TokenRecord } from "../auth/tokens";
 import type { PublicName, SiteName } from "../names/names";
 import { type AuditAction, type AuditEntry, auditFromRow } from "../records/audit";
+import type { DomainCheck } from "../records/domain-check";
 import { computerLoginFromRow } from "../records/computer-login";
 import { SITE_ID, SITE_NAME } from "../records/fields";
 import { SETTING_CHANGES, SETTING_VALUES, type SettingValues } from "../records/settings";
@@ -52,6 +53,7 @@ import type {
   UploadRoom,
   UploadsPage,
 } from "./database";
+import { domainCheckAsked, domainCheckIn, domainCheckKept } from "./domain-check";
 import type { SqlDriver, SqlValue, Statement, StatementResult } from "./driver";
 import { fileUnderKey, manifestFromText, manifestKey, manifestToText } from "./manifest";
 import { audit, declaredFiles, leftovers, logins, requestCounts, secrets, settings, sites, sweepPlace, tokens, totals, updateCheck, uploads, versions } from "./schema";
@@ -1156,6 +1158,16 @@ export class SqlDatabase implements Database {
     const asked = { id: 1, checked_at, news: news === null ? null : JSON.stringify(news) };
     const kept = { checked_at: fragment`excluded.${bare(updateCheck.checked_at)}`, news: fragment`excluded.${bare(updateCheck.news)}` };
     await this.#driver.batch([built(BUILD.insert(updateCheck).values(asked).onConflictDoUpdate({ target: updateCheck.id, set: kept }))]);
+  }
+
+  async readDomainCheck(): Promise<DomainCheck | undefined> {
+    const [read] = await this.#driver.batch([domainCheckAsked()]);
+
+    return domainCheckIn(read);
+  }
+
+  async keepDomainCheck(check: DomainCheck, detail: Readonly<Record<string, unknown>>): Promise<void> {
+    await this.#driver.batch([domainCheckKept(check), auditPlain({ by: check.by, at: check.ran_at }, "domain_synced", detail)]);
   }
 
   async readSettings(): Promise<SettingValues | undefined> {
