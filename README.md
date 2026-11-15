@@ -11,7 +11,11 @@ Agent:  Published. It is private: only you can open it, after you log in.
 
 You:    Give me a link I can send to my team.
 
-Agent:  Done. Anyone who has this link can open it.
+Agent:  I can make it unlisted: anyone who has the link opens it, with no login. Shall I?
+
+You:    Yes.
+
+Agent:  Done. The link is a new one:
 
         https://report--k3f9x2ab71qz-u-poplin.example.com
 ```
@@ -26,7 +30,9 @@ Paste this line into an agent that can run commands on your computer, such as Cl
 Look at https://github.com/Vivswan/poplin, read its skill, and help me set up poplin.
 ```
 
-The agent sets poplin up with you: it tells you what to click in your browser, checks each step, and does the rest. It acts as you, with the login saved on your computer.
+The agent sets poplin up with you: it tells you what to click in your browser, checks each step, and does the rest. It acts as you, with the login the setup saves on your computer.
+
+Have ready what [What you need](docs/start/by-hand.md#what-you-need) lists; a first install takes about an hour and twenty minutes. [With an agent](docs/start/with-an-agent.md) shows who does what.
 
 | You have       | The agent                                                                      |
 | -------------- | ------------------------------------------------------------------------------ |
