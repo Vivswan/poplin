@@ -3,7 +3,7 @@
 import { clearPage } from "../lib/support/page";
 
 import { afterAll, afterEach, describe, expect, test } from "bun:test";
-import { act, cleanup, fireEvent, render, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, waitFor, within } from "@testing-library/react";
 import { toast } from "sonner";
 
 import { DownloadMenu } from "@/activity/download-menu";
@@ -13,6 +13,9 @@ import { BOOT } from "@/lib/boot";
 
 /** The runtime's own `fetch` and the way a link is pressed, put back after each test. */
 const OWN = { fetch: globalThis.fetch, click: HTMLAnchorElement.prototype.click };
+
+/** How long a result whose button was pressed takes to leave the page, with room to spare, in milliseconds. */
+const LEFT_MS = 500;
 
 /** What a menu did: the questions it asked of the server, and the addresses it had the browser save. */
 interface Done {
@@ -109,6 +112,51 @@ describe("the Download menu", () => {
         saved: [`${BOOT.base}/data/activity/download?format=csv${kept}&after=900&part=1`, `${BOOT.base}/data/activity/download?format=csv${kept}&after=150&part=2`],
       },
     ]);
+  });
+
+  // Drift: an older result would keep its own way to the next file, which saves the last file twice once the log is done.
+  // A result pressed for the next file would take the newer result away with it, or the focus would be lost with the button that saved the last file.
+  test.each([
+    ["the toolbar", "Next 2,000"],
+    ["the result", "Download the next 2,000"],
+  ])("with the second file asked for from %s, keeps one result with a way to the next file at a time, none once the last file is saved, and then gives the focus to Download", async (_from, second) => {
+    const menu = drawn(false, ["150", "300", null], "after=40");
+    const ways = (): number => within(document.body).queryAllByRole("button", { name: "Download the next 2,000" }).length;
+    const press = async (name: string, settleMs: number): Promise<void> => {
+      const button = within(document.body).getByRole("button", { name });
+      button.focus();
+      await act(async () => {
+        fireEvent.click(button);
+        await new Promise((resolve) => setTimeout(resolve, settleMs));
+      });
+    };
+    await choose("CSV");
+    await said("Downloaded 2,000.");
+
+    // A result that was pressed leaves a moment after the press: the count is taken once it has left.
+    await press(second, LEFT_MS);
+    const afterSecond = [menu.saved.length, ways()];
+    await press("Next 2,000", 0);
+    await said("Downloaded the last part.");
+    await waitFor(() => expect(ways()).toBe(0));
+
+    expect([afterSecond, menu.saved.map((address) => new URL(address, window.location.href).searchParams.get("part")), document.activeElement?.getAttribute("aria-label")]).toEqual([
+      [2, 1],
+      ["1", "2", "3"],
+      "Download",
+    ]);
+  });
+
+  // Drift: a result would outlive the screen it was said on, and a download begun after coming back would stand beside it, two ways to a next file at once.
+  test("takes its result with the way to the next file away when the screen is left", async () => {
+    drawn(false, ["150"], "after=40");
+    await choose("CSV");
+    await said("Downloaded 2,000.");
+    const shown = toast.getToasts().length;
+
+    cleanup();
+
+    expect([shown, toast.getToasts().length]).toEqual([1, 0]);
   });
 
   // Drift: a refusal of the server would be followed by a file that holds the refusal, saved under the log's name.
