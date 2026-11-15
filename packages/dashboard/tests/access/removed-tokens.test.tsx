@@ -21,6 +21,7 @@ const TOKENS = [
   ended("00000000000000a1", "old laptop", {}),
   ended("00000000000000a2", "intern laptop", { by: "00000000000000cc" }),
   ended("00000000000000a3", "nightly build", { by: "00000000000000a3" }),
+  ended("00000000000000a4", "old server", { by: "00000000000000dd" }),
   ended("00000000000000a5", "first setup", { scope: "admin", how: "ran_out", by: undefined }),
 ];
 
@@ -54,7 +55,7 @@ afterEach(() => {
 afterAll(clearPage);
 
 describe("the removed tokens", () => {
-  // Drift: the words of an end are joined here from the answer's `how` and `by` and the shared writer of who did a thing. A token that gave itself back would read as removed by its own name.
+  // Drift: the words of an end are joined here from the answer's `how` and `by` and the shared writer of who did a thing. A token that gave itself back would read as removed by its own name, or a remover with no name left would be written as an id.
   test("open into the shared table, each saying how it ended: by whom it was removed, that it logged out, or that it ran out", () => {
     drawn({ tokens: TOKENS, more: false });
     fireEvent.click(opener());
@@ -63,6 +64,7 @@ describe("the removed tokens", () => {
       ["old laptop", "Removed by mira@example.com"],
       ["intern laptop", "Removed by report agent"],
       ["nightly build", "Logged out"],
+      ["old server", "Removed by a token"],
       ["first setup", "Ran out"],
     ]);
   });

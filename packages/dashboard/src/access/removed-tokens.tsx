@@ -50,7 +50,7 @@ function How({ token, names }: Row): ReactNode {
 
   return (
     <>
-      Removed by <Who by={token.by} logins={names} />
+      Removed by <Who by={token.by} logins={names} unnamed="a token" />
     </>
   );
 }

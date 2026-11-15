@@ -7,13 +7,23 @@ import type { ReactNode } from "react";
 /** The name of each login that has one, by the login's id. */
 export type LoginNames = Readonly<Record<string, string>>;
 
-/**
- * Write who did something: a person's email, or a login's name behind the mark of a login.
- *
- * @param by - an email, or a login's id
- * @param logins - the names of the logins there are; a login with no name, or one that was removed, is written by its id
- */
-export function Who({ by, logins, className }: { readonly by: string; readonly logins: LoginNames; readonly className?: string }): ReactNode {
+/** What a `Who` is drawn from. */
+interface WhoProps {
+  /** An email, or a login's id. */
+  readonly by: string;
+
+  /** The names of the logins there are. */
+  readonly logins: LoginNames;
+
+  /** What stands for a login with no name left, such as "a token". Left out, such a login is written by its id. */
+  readonly unnamed?: string;
+
+  /** Classes laid over its own. */
+  readonly className?: string;
+}
+
+/** Write who did something: a person's email, or a login's name behind the mark of a login. */
+export function Who({ by, logins, unnamed, className }: WhoProps): ReactNode {
   if (by.includes("@")) {
     return (
       <span className={className} title={by}>
@@ -22,12 +32,12 @@ export function Who({ by, logins, className }: { readonly by: string; readonly l
     );
   }
 
-  const name = logins[by];
+  const words = logins[by] ?? unnamed;
 
   return (
-    <span className={cn("inline-flex max-w-full items-center gap-1.5 align-bottom", className)} title={name ?? `Token ${by}`}>
+    <span className={cn("inline-flex max-w-full items-center gap-1.5 align-bottom", className)} title={words ?? `Token ${by}`}>
       <KeyRoundIcon className="size-3.5 shrink-0 text-faint" aria-label="Token" />
-      {name === undefined ? <span className="truncate font-mono text-xs">{by}</span> : <span className="truncate">{name}</span>}
+      <span className={cn("truncate", words === undefined && "font-mono text-xs")}>{words ?? by}</span>
     </span>
   );
 }
