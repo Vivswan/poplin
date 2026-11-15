@@ -2,7 +2,7 @@
 
 import { expect, type Page } from "@playwright/test";
 
-import { arrive, FIRST_LOAD_MS, openPanel, said, screenHeading, siteName, siteNames, TRASH, test, trash, WHAT_IT_IS } from "./visit";
+import { arrive, FIRST_LOAD_MS, openPanel, RESET_MS, said, screenHeading, siteName, siteNames, TRASH, test, trash, WHAT_IT_IS } from "./visit";
 
 /** The policy every page of the dashboard is answered with. */
 const POLICY =
@@ -219,7 +219,7 @@ test("the Reset at the top starts over", async ({ page }) => {
   await trash(page, victim);
   await page.getByRole("button", { name: "Reset", exact: true }).click();
 
-  await expect(said(page, "Sample data reset.")).toBeVisible();
+  await expect(said(page, "Sample data reset.")).toBeVisible({ timeout: RESET_MS });
   await expect(siteName(page, victim)).toBeVisible();
 });
 

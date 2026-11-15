@@ -4,7 +4,7 @@ import { readFile } from "node:fs/promises";
 
 import { expect, type Locator, type Page } from "@playwright/test";
 
-import { arrive, openPanel, said, screenHeading, siteName, test } from "./visit";
+import { arrive, openPanel, RESET_MS, said, screenHeading, siteName, test } from "./visit";
 
 /** The screens the walk is taken on. A wide one shows tables and the side navigation; a narrow one shows lists, and the sections behind a button. */
 const VIEWPORTS = [
@@ -271,6 +271,7 @@ const STOPS: readonly Stop[] = [
     name: "a reset of the sample data, which keeps the screen it was pressed on",
     open: (page) => page.getByRole("button", { name: "Reset", exact: true }).click(),
     shows: (page) => [said(page, "Sample data reset."), screenHeading(page, "Access")],
+    within: RESET_MS,
   },
 ];
 
@@ -287,6 +288,9 @@ interface Stop {
 
   /** What is on the screen once the place is reached. */
   readonly shows: (page: Page, wide: boolean) => readonly Locator[];
+
+  /** How long the place may take to show, in milliseconds; left out, as long as any wait gets. */
+  readonly within?: number;
 
   /** Leaves the place without changing anything; what it showed is then gone. Left out, the place stays open for the next stop. */
   readonly close?: (page: Page) => Promise<void>;
@@ -414,7 +418,7 @@ for (const { width, height, wide } of VIEWPORTS) {
         for (const stop of STOPS.filter((each) => each.only === undefined || (each.only === "wide") === wide)) {
           await test.step(stop.name, async () => {
             await stop.open(page, wide);
-            for (const shown of stop.shows(page, wide)) await expect(shown).toBeVisible();
+            for (const shown of stop.shows(page, wide)) await expect(shown).toBeVisible({ timeout: stop.within });
 
             expect.soft(problems.splice(0), stop.name).toEqual([]);
             if (stop.close === undefined) return;

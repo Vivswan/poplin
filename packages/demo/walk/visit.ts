@@ -8,6 +8,9 @@ export const WHAT_IT_IS = "Your agent publishes a folder as a website, in your o
 /** How long the first load may take, in milliseconds: the worker installs, SQLite loads, and the seed runs. */
 export const FIRST_LOAD_MS = 30_000;
 
+/** How long a Reset may take to say that it is done, in milliseconds: the worker seeds both installs again and the open screen reads its data again before the line shows, which on a busy machine passes the five seconds a wait gets. */
+export const RESET_MS = 30_000;
+
 /** The address of the Sites screen when it shows the trash. */
 export const TRASH = "./?view=trash";
 
