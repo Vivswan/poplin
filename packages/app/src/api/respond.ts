@@ -94,6 +94,18 @@ const FILE_HEADERS = { ...HEADERS, "Content-Type": "application/octet-stream", "
 /** Every code a response may carry. */
 export type Code = keyof typeof STATUS;
 
+/** Every HTTP status a refusal of the API goes out with, each once. */
+export const REFUSAL_STATUSES: readonly number[] = [...new Set<number>(Object.values(STATUS))];
+
+/**
+ * Read the HTTP status of a refusal's code, for anything that answers a refusal outside the API and must send the status the API sends.
+ *
+ * @returns `undefined` for a code the API never answers
+ */
+export function statusOf(code: string): (typeof STATUS)[Code] | undefined {
+  return Object.hasOwn(STATUS, code) ? STATUS[code as Code] : undefined;
+}
+
 /** What a handler answers: a done action, or a refusal with one of the codes. */
 export type Result<Done> = ({ readonly ok: true } & Done) | Refused<Code>;
 

@@ -110,7 +110,7 @@ describe("starting an update", () => {
     const response = await opened.change("/data/update", {});
     const refusal = (await response.json()) as { readonly sentence: string };
 
-    expect([response.status, refusal]).toMatchObject([400, { ok: false, code }]);
+    expect([response.status, refusal]).toMatchObject([409, { ok: false, code }]);
     expect(refusal.sentence).not.toBe("The request was refused.");
     expect(opened.rebuilds).toEqual([]);
   });

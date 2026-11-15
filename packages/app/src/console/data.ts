@@ -7,19 +7,20 @@ import type { Actor } from "@poplin/core/src/auth/scopes";
 import type { Context, TypedResponse } from "hono";
 import * as v from "valibot";
 
+import { REFUSAL_STATUSES, statusOf } from "../api/respond";
 import type { DomainPlug } from "./domain/records";
 import { refusalSentence } from "./notices";
 import type { FreeLimits } from "./settings/free-limits";
 
-/** The status a refusal goes out with, for the codes that are no plain bad request. */
-const STATUSES: Readonly<Record<string, 403 | 404 | 413 | 415 | 429>> = {
-  not_found: 404,
+/** The status of the refusals only the console answers. Every other code goes out with the status the API gives it. */
+const OWN_STATUSES: Readonly<Record<string, 404 | 415 | 429>> = {
   no_page: 404,
-  not_allowed: 403,
-  too_large: 413,
   not_json: 415,
   too_many_tries: 429,
 };
+
+/** Every HTTP status a refusal of the console goes out with, each once: the API's, the console's own, and 400 for a code neither names. */
+export const CONSOLE_REFUSAL_STATUSES: readonly number[] = [...new Set<number>([...REFUSAL_STATUSES, ...Object.values(OWN_STATUSES), 400])];
 
 /** A change that carries no values: its body is an empty JSON object. */
 export const NOTHING = v.object({});
@@ -79,17 +80,22 @@ interface RefusalBody {
 /** What a schema's check of a request answered. */
 type Checked = { readonly success: true } | { readonly success: false; readonly issues: readonly [v.BaseIssue<unknown>, ...v.BaseIssue<unknown>[]] };
 
+/** The status a refusal goes out with: the console's own for a code only it answers, the API's for a code the API answers too, and 400 for any other refusal of an action. */
+function statusFor(code: string): (typeof OWN_STATUSES)[string] | NonNullable<ReturnType<typeof statusOf>> | 400 {
+  if (Object.hasOwn(OWN_STATUSES, code)) return OWN_STATUSES[code] ?? 400;
+
+  return statusOf(code) ?? 400;
+}
+
 /**
  * Answer a refusal.
  *
- * @returns status 404 for a thing that is not there, 403 for a request not allowed, 429 for too many tries, 400 for any other refusal of an action
+ * @returns the status the API answers the same code with, so a refusal reads the same wherever it is met; the console's own for the codes only it answers; 400 for any other code
  */
-export function refused(context: Context<Shared>, refusal: Refusal): Response & TypedResponse<RefusalBody, 400 | 403 | 404 | 413 | 415 | 429, "json"> {
-  const status = Object.hasOwn(STATUSES, refusal.code) ? STATUSES[refusal.code] : undefined;
-
+export function refused(context: Context<Shared>, refusal: Refusal): Response & TypedResponse<RefusalBody, ReturnType<typeof statusFor>, "json"> {
   return context.json(
     { ok: false as const, code: refusal.code, about: refusal.about ?? null, sentence: refusalSentence(refusal.code, refusal.about) },
-    status ?? 400,
+    statusFor(refusal.code),
   );
 }
 

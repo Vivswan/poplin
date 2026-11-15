@@ -6,13 +6,15 @@
 import { expect, test } from "bun:test";
 import fc from "fast-check";
 
+import { CONSOLE_REFUSAL_STATUSES } from "../../packages/app/src/console/data";
 import { openConsole } from "../../packages/app/tests/console/support/console";
 import { readShell } from "../../packages/app/tests/console/support/shell";
 import { ORIGIN } from "../../packages/app/tests/console/support/install";
 import { fuzzTarget } from "./config";
 import { hostile } from "./hostile";
 
-const ANSWERS = [200, 302, 400, 401, 403, 404, 415, 429];
+// A published answer is a page, a redirect to the login, the answer of a session that ended, or a refusal with a status the console's own table can give. A failure of the server (500 and up) is never one, whatever the table holds.
+const ANSWERS = [200, 302, 401, ...CONSOLE_REFUSAL_STATUSES.filter((status) => status < 500)];
 const METHODS = ["GET", "HEAD", "POST", "POST", "POST", "POST", "POST", "PUT", "DELETE", "OPTIONS"];
 const JSON_TYPE = "application/json";
 const FORM = "application/x-www-form-urlencoded";

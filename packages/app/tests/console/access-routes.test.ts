@@ -130,6 +130,18 @@ describe("the people", () => {
     expect((await read(await opened.get("/data/people"))).logins).toEqual([opened.base.owner]);
   });
 
+  // Drift: the console would answer a refusal under another status than the API answers the same code with, so one refusal would read as a bad request here and as a conflict there.
+  test.each([
+    ["add", "owner", 409, "already_a_login"],
+    ["remove", "nobody@example.com", 404, "not_a_login"],
+    ["remove", "owner", 409, "no_working_login"],
+  ])("a refused %s of %s goes out with the status the API gives its code", async (change, who, status, code) => {
+    const opened = await openConsole();
+    const response = await opened.change(`/data/people/${change}`, { login: who === "owner" ? opened.base.owner : who });
+
+    expect([response.status, (await read(response)).code]).toEqual([status, code]);
+  });
+
   // Drift: a person added or taken out would leave no trace in the log, or a refused change would leave one.
   test("each person added or taken out is one entry of the audit log, and a refused change is none", async () => {
     const opened = await openConsole();

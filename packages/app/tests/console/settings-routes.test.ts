@@ -102,18 +102,18 @@ describe("a save", () => {
 
   // Drift: a refused save would write the settings before the refused one, or name the wrong field.
   test.each([
-    ["text that is not in the setting's form", { versions_kept: "9", trash_days: "soon" }, "bad_argument", "trash_days"],
-    ["a number outside its range", { site_share_of_day: "140%" }, "bad_argument", "site_share_of_day"],
-    ["a setting changed where the domain is", { block_bots: "on" }, "bad_argument", "block_bots"],
-    ["a key that is no setting", { colour: "blue" }, "bad_argument", "colour"],
-    ["no setting at all", {}, "bad_argument", "settings"],
-    ["logins without the admin's own email", { logins: "jonas@example.com" }, "no_working_login", "logins"],
-  ])("refuses %s and changes nothing", async (_what, texts, code, about) => {
+    ["text that is not in the setting's form", { versions_kept: "9", trash_days: "soon" }, 400, "bad_argument", "trash_days"],
+    ["a number outside its range", { site_share_of_day: "140%" }, 400, "bad_argument", "site_share_of_day"],
+    ["a setting changed where the domain is", { block_bots: "on" }, 400, "bad_argument", "block_bots"],
+    ["a key that is no setting", { colour: "blue" }, 400, "bad_argument", "colour"],
+    ["no setting at all", {}, 400, "bad_argument", "settings"],
+    ["logins without the admin's own email", { logins: "jonas@example.com" }, 409, "no_working_login", "logins"],
+  ])("refuses %s and changes nothing", async (_what, texts, status, code, about) => {
     const opened = await openConsole();
     const before = await textsOf(opened);
     const response = await opened.change("/data/settings", { texts });
 
-    expect([response.status, await response.json()]).toMatchObject([400, { ok: false, code, about }]);
+    expect([response.status, await response.json()]).toMatchObject([status, { ok: false, code, about }]);
     expect(await textsOf(opened)).toEqual(before);
   });
 
