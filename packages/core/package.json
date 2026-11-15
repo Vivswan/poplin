@@ -23,6 +23,7 @@
     "./src/actions/finish-publish": "./src/actions/finish-publish.ts",
     "./src/actions/import-settings": "./src/actions/import-settings.ts",
     "./src/actions/list": "./src/actions/list.ts",
+    "./src/actions/logins": "./src/actions/logins.ts",
     "./src/actions/manage-tokens": "./src/actions/manage-tokens.ts",
     "./src/actions/new-link": "./src/actions/new-link.ts",
     "./src/actions/publish": "./src/actions/publish.ts",
