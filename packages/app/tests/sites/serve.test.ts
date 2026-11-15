@@ -303,12 +303,13 @@ describe("paths", () => {
   });
 
   const missing: readonly (readonly [string, readonly string[]])[] = [
-    ["/nothing", ["nothing", "nothing.html", "nothing/index.html"]],
-    ["/nothing.txt", ["nothing.txt"]],
-    ["/nothing/", ["nothing/index.html"]],
+    ["/nothing", ["nothing", "nothing.html", "nothing/index.html", "404.html"]],
+    ["/nothing.txt", ["nothing.txt", "404.html"]],
+    ["/nothing/", ["nothing/index.html", "404.html"]],
+    ["/404.html", ["404.html"]],
   ];
 
-  // Drift: a miss would cost more reads than the published bound, three for a path without an extension and one otherwise.
+  // Drift: a miss would cost more reads than the published bound: three for a path without an extension and one otherwise, then one for the site's own 404 page.
   test.each(missing)("%s is the 404 after reading only %j", async (path, keys) => {
     const before = world.install.keys.length;
     const response = await serve(ask(labelHost(world.report), path));
@@ -335,11 +336,11 @@ describe("paths", () => {
   ];
 
   // Drift: a path could name a key the store would refuse or resolve into another site's folder.
-  test.each(hostile)("%s is the 404 without a bucket read", async (_why, path) => {
+  test.each(hostile)("%s is the 404 after no read but the one for the site's own 404 page", async (_why, path) => {
     const before = world.install.keys.length;
     const response = await serve(ask(labelHost(world.report), path(world)));
 
-    expect({ ...(await whole(response)), keys: world.install.keys.slice(before) }).toEqual({ ...NO_FILE, keys: [] });
+    expect({ ...(await whole(response)), keys: world.install.keys.slice(before) }).toEqual({ ...NO_FILE, keys: [`${prefixOf(world.report)}404.html`] });
   });
 
   const climbing: readonly (readonly [string, (w: World) => string])[] = [
@@ -355,7 +356,168 @@ describe("paths", () => {
     const response = await serve(ask(labelHost(world.report), path(world)));
     const keys = world.install.keys.slice(before);
 
-    expect({ ...(await whole(response)), outside: keys.filter((key) => !key.startsWith(prefixOf(world.report))), reads: keys.length }).toEqual({ ...NO_FILE, outside: [], reads: 1 });
+    expect({ ...(await whole(response)), outside: keys.filter((key) => !key.startsWith(prefixOf(world.report))), reads: keys.length }).toEqual({ ...NO_FILE, outside: [], reads: 2 });
+  });
+});
+
+describe("a site's own 404 page", () => {
+  const LOST = "<h1>lost</h1>";
+  const OLDER_TAG = '"v0-lx2a"';
+  const PAGE_CACHE = "public, max-age=300, must-revalidate";
+
+  /** The sites of these cases: three that hold a `404.html`, one that holds none, and two that are no longer served. */
+  interface Lost {
+    readonly install: Install;
+    readonly guide: Site;
+    readonly store: Site;
+    readonly vault: Site;
+    readonly bare: Site;
+    readonly gone: Site;
+    readonly lapsed: Site;
+  }
+
+  type AskLost = (lost: Lost) => Request;
+
+  let lost: Lost;
+
+  const answer = (request: Request): Promise<Response> => serveSite(request, lost.install.serving);
+  const proven = (extra: Record<string, string> = {}): Record<string, string> => ({ ...lost.install.ownerProof, ...extra });
+  const byHead = (request: Request): Request => new Request(request.url, { method: "HEAD", headers: request.headers });
+  const moved = (typed: Site, to: "p" | "u"): unknown => ({ status: 302, body: "", headers: { ...PLAIN_HEADERS, location: `https://${typedHost(typed, to)}/nothing.txt` } });
+
+  /** What the site's 404 page goes out with: the headers of its home page, without the tag and the range offer, under the given cache rule. */
+  const lostHeaders = async (home: Request, cache: string): Promise<Record<string, string>> => {
+    const headers = fixedHeaders(await answer(home));
+    delete headers["accept-ranges"];
+
+    return { ...headers, "cache-control": cache, "content-length": String(LOST.length) };
+  };
+
+  beforeAll(async () => {
+    const install = await openInstall();
+    const files = { "index.html": ["home", HTML], "404.html": [LOST, HTML] } as const;
+
+    const guide = await install.publish({ name: "guide", access: "unlisted", files: { ...files, "about.html": ["about page", HTML] } });
+    const store = await install.publish({ name: "store", access: "public", search_engines: true, files });
+    const vault = await install.publish({ name: "vault", access: "private", files });
+    const bare = await install.publish({ name: "bare", access: "unlisted", files: { "index.html": ["home", HTML] } });
+    const gone = await install.publish({ name: "gone", access: "unlisted", files });
+    const lapsed = await install.publish({ name: "lapsed", access: "unlisted", expires: NOW - 1, files });
+    await install.database.trashSite(gone.id, { by: install.owner, at: NOW });
+
+    lost = { install, guide, store, vault, bare, gone, lapsed };
+  });
+
+  const shown: readonly (readonly [string, AskLost, AskLost, string])[] = [
+    ["an unlisted site", (l) => ask(labelHost(l.guide), "/nothing.txt"), (l) => ask(labelHost(l.guide), "/"), PAGE_CACHE],
+    ["an unlisted site, at a path with no extension", (l) => ask(labelHost(l.guide), "/nothing"), (l) => ask(labelHost(l.guide), "/"), PAGE_CACHE],
+    ["an unlisted site, at a path that is no file path", (l) => ask(labelHost(l.guide), "/docs%2fnothing"), (l) => ask(labelHost(l.guide), "/"), PAGE_CACHE],
+    ["an unlisted site, asked for a part of a file", (l) => ask(labelHost(l.guide), "/nothing.txt", { Range: "bytes=0-1" }), (l) => ask(labelHost(l.guide), "/"), PAGE_CACHE],
+    ["a public site at its label", (l) => ask(labelHost(l.store), "/nothing.txt"), (l) => ask(labelHost(l.store), "/"), PAGE_CACHE],
+    ["a public site at its public name", () => ask("store-page.example.com", "/nothing.txt"), () => ask("store-page.example.com", "/"), PAGE_CACHE],
+    ["a private site, under p with the owner's proof", (l) => ask(labelHost(l.vault), "/nothing.txt", proven()), (l) => ask(labelHost(l.vault), "/", proven()), "no-store"],
+  ];
+
+  // Drift: a visitor of a site with a 404 page would get the bare text, or the page would go out as a success, lose a page's hardening, or be kept past the publish that adds the file.
+  test.each(shown)("a missing file of %s is its 404.html with status 404, a page's headers, no tag, and the cache rule %4$s", async (_why, request, home, cache) => {
+    expect(await whole(await answer(request(lost)))).toEqual({ status: 404, body: LOST, headers: await lostHeaders(home(lost), cache) });
+  });
+
+  // Drift: a HEAD of a missing file would carry the page, cost a body read, or answer unlike the GET.
+  test.each(shown)("a HEAD for a missing file of %s is the same answer without its body, and opens no object", async (_why, request, home, cache) => {
+    const headers = await lostHeaders(home(lost), cache);
+    const before = lost.install.bodies.length;
+    const response = await answer(byHead(request(lost)));
+
+    expect({ ...(await whole(response)), opened: lost.install.bodies.length - before }).toEqual({ status: 404, body: "", headers, opened: 0 });
+  });
+
+  // Drift: a method a site refuses would be answered with its 404 page.
+  test("a refused method stays refused on a site with a 404 page", async () => {
+    const response = await answer(ask(labelHost(lost.guide), "/nothing.txt", {}, "POST"));
+
+    expect([response.status, await response.text()]).toEqual([405, "Method not allowed\n"]);
+  });
+
+  const hidden: readonly (readonly [string, AskLost, (lost: Lost) => unknown])[] = [
+    ["a private site under u", (l) => ask(typedHost(l.vault, "u"), "/nothing.txt"), (l) => moved(l.vault, "p")],
+    ["a private site under u, with the owner's proof", (l) => ask(typedHost(l.vault, "u"), "/nothing.txt", proven()), (l) => moved(l.vault, "p")],
+    ["a private site under p, without the proof", (l) => ask(labelHost(l.vault), "/nothing.txt"), () => NOT_FOUND],
+    ["an open site under p, without the proof", (l) => ask(typedHost(l.guide, "p"), "/nothing.txt"), () => NOT_FOUND],
+    ["an open site under p, with the owner's proof", (l) => ask(typedHost(l.guide, "p"), "/nothing.txt", proven()), (l) => moved(l.guide, "u")],
+    ["a site in the trash under u", (l) => ask(typedHost(l.gone, "u"), "/nothing.txt"), (l) => moved(l.gone, "p")],
+    ["a site in the trash under p, with the owner's proof", (l) => ask(typedHost(l.gone, "p"), "/nothing.txt", proven()), () => NOT_FOUND],
+    ["an expired site under u", (l) => ask(typedHost(l.lapsed, "u"), "/nothing.txt"), (l) => moved(l.lapsed, "p")],
+    ["an expired site under p, with the owner's proof", (l) => ask(typedHost(l.lapsed, "p"), "/nothing.txt", proven()), () => NOT_FOUND],
+    ["the public name of a site that is not public", () => ask("guide-page.example.com", "/nothing.txt"), () => NOT_FOUND],
+    ["a subrequest of a page that is no site of the install", (l) => ask(labelHost(l.guide), "/nothing.txt", CROSS_SITE_SUBREQUEST), () => ({ ...NOT_FOUND, status: 403, body: "Forbidden\n" })],
+  ];
+
+  // Drift: a 404 page would tell a visitor who may not open a site that it exists: a private, trashed, or expired site would answer unlike no site at all.
+  test.each(hidden)("%s answers as it does for a site without a 404 page, by GET and by HEAD, and reads nothing", async (_why, request, expected) => {
+    const before = lost.install.keys.length;
+    const got = await whole(await answer(request(lost)));
+    const head = await whole(await answer(byHead(request(lost))));
+
+    expect<unknown>({ got, head, reads: lost.install.keys.length - before }).toEqual({ got: expected(lost), head: { ...(expected(lost) as object), body: "" }, reads: 0 });
+  });
+
+  const real: readonly (readonly [string, string, string, readonly string[]])[] = [
+    ["the 404 page asked for by its name", "/404.html", LOST, ["404.html"]],
+    ["the 404 page asked for without its ending", "/404", LOST, ["404", "404.html"]],
+    ["a page asked for without its ending", "/about", "about page", ["about", "about.html"]],
+  ];
+
+  // Drift: the 404 page would stop being a file of its own, or would stand in for a file the clean address still finds.
+  test.each(real)("%s is a file like any other: 200 with a page's tag", async (_what, path, body, keys) => {
+    const before = lost.install.keys.length;
+    const response = await answer(ask(labelHost(lost.guide), path));
+
+    expect([response.status, response.headers.get("ETag"), await response.text(), lost.install.keys.slice(before)]).toEqual([
+      200,
+      expect.stringMatching(/^"v1-[0-9a-z]+"$/),
+      body,
+      keys.map((key) => `${prefixOf(lost.guide)}${key}`),
+    ]);
+  });
+
+  const reads: readonly (readonly [string, (lost: Lost) => Site, string, string, readonly string[]])[] = [
+    ["a site with a 404 page", (l) => l.guide, "GET", "/nothing", ["nothing", "nothing.html", "nothing/index.html", "404.html"]],
+    ["a site with a 404 page, by HEAD", (l) => l.guide, "HEAD", "/nothing.txt", ["nothing.txt", "404.html"]],
+    ["a site with a 404 page, at a path inside a folder",(l) => l.guide, "GET", "/docs/nothing.txt", ["docs/nothing.txt", "404.html"]],
+    ["a site without one, asked for a folder's 404 page", (l) => l.bare, "GET", "/docs/404.html", ["docs/404.html", "404.html"]],
+  ];
+
+  // Drift: a miss would cost more than one read past the file's own keys, or a folder's `404.html` would start to be looked for.
+  test.each(reads)("a miss on %s reads the file's keys and then the root 404.html once", async (_why, site, method, path, keys) => {
+    const before = lost.install.keys.length;
+    const response = await answer(ask(labelHost(site(lost)), path, {}, method));
+    await response.body?.cancel();
+
+    expect([response.status, lost.install.keys.slice(before)]).toEqual([404, keys.map((key) => `${prefixOf(site(lost))}${key}`)]);
+  });
+
+  const held: readonly (readonly [string, Record<string, string>, string, string | null])[] = [
+    ["a GET that holds another version", { "If-None-Match": OLDER_TAG }, "GET", '"cache"'],
+    ["a GET for a part of a file that holds another version", { "If-None-Match": OLDER_TAG, Range: "bytes=0-1" }, "GET", null],
+    ["a HEAD that holds another version", { "If-None-Match": OLDER_TAG }, "HEAD", null],
+    ["a GET that holds a tag that is no version", { "If-None-Match": '"memory-1"' }, "GET", null],
+  ];
+
+  // Drift: a visitor who holds a page the live version dropped would keep that version's styles beside the 404 page, or a request a found page tells nothing would be told to drop its cache.
+  test.each(held)("%s gets the 404 page and is told what a page would tell it", async (_what, sent, method, signal) => {
+    const response = await answer(ask(labelHost(lost.guide), "/nothing.txt", sent, method));
+
+    expect([response.status, response.headers.get("Clear-Site-Data")]).toEqual([404, signal]);
+  });
+
+  // Drift: a 404.html stored as something other than a page would tell a browser to drop its files, which that file found by its own name never does.
+  test("a 404.html that is no page is sent as stored, and tells a request that holds another version to drop nothing", async () => {
+    const install = await openInstall();
+    const site = await install.publish({ name: "plain", access: "unlisted", files: { "404.html": ["lost", "text/plain"] } });
+    const response = await serveSite(ask(labelHost(site), "/nothing.txt", { "If-None-Match": OLDER_TAG }), install.serving);
+
+    expect([response.status, response.headers.get("Content-Type"), response.headers.get("Clear-Site-Data"), await response.text()]).toEqual([404, "text/plain", null, "lost"]);
   });
 });
 

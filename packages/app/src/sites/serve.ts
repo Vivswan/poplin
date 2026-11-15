@@ -6,6 +6,7 @@
 //   the page's version tag     the request holds the live version         304, with no read of the bucket
 //   path -> one to three keys  no file path                              404, which a browser may keep on an open site
 //   one bucket read per key    the body goes out as the store gave it; three reads at most, for a path without an extension, and one for every other
+//   no key holds a file        one more read, of the site's own `404.html`   that page with status 404; the plain 404 for a site without one
 //                              a page for a request that holds another version carries `Clear-Site-Data`, so the browser drops that version's files
 //
 //   letter u, or none   the site is unlisted or public    the file
@@ -23,7 +24,7 @@ import type { Site } from "@poplin/core/src/records/site";
 import type { ByteRange, ObjectInfo, ObjectKey, ObjectStore, ReadResult } from "@poplin/core/src/storage/storage";
 import type { Addressed, SiteAddresses } from "./addresses";
 import { fileKeys } from "./file-keys";
-import { clearHeldFiles, HTTPS_ALONE, heldVersion, isPage, missingFileCache, siteHeaders, versionTag } from "./headers";
+import { clearHeldFiles, HTTPS_ALONE, heldVersion, isPage, missingFileCache, missingPageCache, siteHeaders, versionTag } from "./headers";
 import { parseRange } from "./range";
 
 /** The methods a site answers. */
@@ -52,6 +53,9 @@ const PLAIN_BODIES = {
   405: "Method not allowed\n",
   416: "Range not satisfiable\n",
 } as const;
+
+/** The path of the page a site shows in place of a file it does not hold: the one at its root. */
+const MISSING_PAGE = "/404.html";
 
 /** The verdict on an address that serves nothing. */
 const NOT_FOUND: Verdict = { kind: "none" };
@@ -186,9 +190,38 @@ function unchangedPage(site: Site, serving: Serving, tag: string): Response {
   return new Response(null, { status: 304, headers });
 }
 
-/** The 404 for a file a served site does not hold. Its headers come after the site was found and its letter matched, so they tell nothing a file of the site would not. */
-function missingFile(request: Request, served: Served): Response {
-  return plain(request, 404, { "Cache-Control": missingFileCache(served.site) });
+/** The headers of a site's own 404 page: a page's, with no tag, so no later request is answered 304 from it. */
+function missingPageHeaders(info: ObjectInfo, served: Served): Headers {
+  const headers = siteHeaders({ site: served.site, contentType: info.contentType, settings: served.serving.settings, addresses: served.serving.addresses });
+  headers.set("Cache-Control", missingPageCache(served.site));
+  headers.set("Content-Length", String(info.size));
+
+  return headers;
+}
+
+/** The 404 for a file a served site does not hold. It comes after the site was found and its letter matched, so it tells nothing a file of the site would not. */
+async function missingFile(request: Request, keys: readonly ObjectKey[], served: Served): Promise<Response> {
+  const without = plain(request, 404, { "Cache-Control": missingFileCache(served.site) });
+
+  const [key] = fileKeys(served.site, MISSING_PAGE);
+  // A request for the page itself has already found it missing.
+  if (key === undefined || keys.includes(key)) return without;
+
+  if (request.method === "HEAD") {
+    const result = await served.serving.store.head(key);
+    if (result.kind === "missing") return without;
+
+    return new Response(null, { status: 404, headers: missingPageHeaders(result.info, served) });
+  }
+
+  const result = await served.serving.store.read(key, {});
+  if (result.kind !== "found") return without;
+
+  const headers = missingPageHeaders(result.info, served);
+  // As with a page that is found: a request for a part of a file is told to drop nothing.
+  if (served.held === "other" && isPage(result.info.contentType) && requestedRange(request.headers) === undefined) clearHeldFiles(headers);
+
+  return new Response(result.body, { status: 404, headers });
 }
 
 async function answerRead(request: Request, result: Exclude<ReadResult, { kind: "missing" }>, served: Served, ranged: boolean): Promise<Response> {
@@ -225,7 +258,7 @@ async function answerGet(request: Request, keys: readonly ObjectKey[], served: S
     return answerRead(request, result, served, range !== undefined);
   }
 
-  return missingFile(request, served);
+  return missingFile(request, keys, served);
 }
 
 async function answerHead(request: Request, keys: readonly ObjectKey[], served: Served): Promise<Response> {
@@ -241,11 +274,11 @@ async function answerHead(request: Request, keys: readonly ObjectKey[], served: 
     return new Response(null, { status: 200, headers });
   }
 
-  return missingFile(request, served);
+  return missingFile(request, keys, served);
 }
 
 /**
- * Answer a visitor's request for a site of an install.
+ * Answer a visitor's request for a site of an install. A 404 for a file a served site does not hold carries the site's own `404.html` when it has one.
  *
  * @returns the file with its headers, its body the store's own stream; else 304 for what the request holds, 206 or 416 for a range, 403 for a subrequest of a page that is no site of the install, 302 to the same label under the other letter, 405, or 404
  * @throws whatever the database, the store, or the identity check rejects with; nothing else throws

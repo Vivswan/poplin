@@ -13,7 +13,7 @@ const HTML = "text/html; charset=utf-8";
 const FILES = { LICENSE: ["terms", "text/plain"], "index.html": ["home", HTML], "about.html": ["about", HTML], "docs/index.html": ["docs", HTML], "app.js": ["let a = 1;", "text/javascript"] } as const;
 const ANSWERS = [200, 206, 302, 304, 403, 404, 405, 416];
 const SHOWN = [200, 206, 304, 416];
-const MAX_READS = 3;
+const MAX_READS = 4;
 const AROUND_LOGIN = [404, 405];
 const MISSING_ID = "000000000000";
 const TYPED_NAMES = ["other", "abc", "a-b-c", "zzz9"];

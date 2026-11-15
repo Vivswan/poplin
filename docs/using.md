@@ -200,6 +200,7 @@ Every command that talks to the install also takes `--json`, for the answer as J
 | an unlisted or a public site                     | the site                                     |
 | a private site, logged in as you                 | the site                                     |
 | a private site, not logged in                    | the login                                    |
+| a page a site does not have                      | the `404.html` at the site's root; `Not found` for a site without one |
 | the `-poplin` address of a deleted or expired site, or one from before a new link | the login; `Not found` once logged in |
 | a public name no site holds                      | `Not found`                                  |
 | any site, too often in a minute                  | `Too many requests. Try again in 60 seconds.` |

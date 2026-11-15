@@ -3,6 +3,7 @@
 //   Cache-Control   a page (HTML)         5 minutes, then asked again; on a private site asked again every time
 //                   every other file      a day
 //                   a missing file        a day; no-store on a private site
+//                   the site's 404 page   as a page of an open site; no-store on a private site
 //                   a private site        `private` in place of `public`: a browser keeps it, a shared cache never
 //
 //   ETag            a page                the live version, so an unchanged page is answered without a read of the bucket
@@ -28,6 +29,9 @@ const NO_STORE = "no-store";
 
 /** How long a browser shows a page of an open site before it asks again, in seconds. */
 const PAGE_SECONDS = 5 * 60;
+
+/** The cache rule of a page of an open site. */
+const OPEN_PAGE_CACHE = `public, max-age=${PAGE_SECONDS}, must-revalidate`;
 
 /** How long a browser keeps every other file, and remembers that one is missing, in seconds. */
 const FILE_SECONDS = 24 * 60 * 60;
@@ -72,7 +76,7 @@ function cacheControl(facts: FileFacts): string {
   // Whoever may open a private site is still editing it, so its page is asked for again on every open.
   if (facts.site.access === "private") return "private, no-cache";
 
-  return `public, max-age=${PAGE_SECONDS}, must-revalidate`;
+  return OPEN_PAGE_CACHE;
 }
 
 /**
@@ -132,6 +136,17 @@ export function missingFileCache(site: Pick<Site, "access">): string {
   if (site.access === "private") return NO_STORE;
 
   return `public, max-age=${FILE_SECONDS}`;
+}
+
+/**
+ * Write the cache rule of a site's own 404 page, so a file published later shows as soon as a page would.
+ *
+ * @returns what a page of an open site gets, and `no-store` on a private site
+ */
+export function missingPageCache(site: Pick<Site, "access">): string {
+  if (site.access === "private") return NO_STORE;
+
+  return OPEN_PAGE_CACHE;
 }
 
 function frameRule(facts: FileFacts): string | undefined {
