@@ -169,7 +169,7 @@ describe("the setup page", () => {
     const kept = await (await installOf(w)).database.readDomainCheck();
     const row = await BINDINGS.DB.prepare("SELECT ran_by, run, pieces FROM domain_check").all<{ ran_by: string; run: string; pieces: string }>();
 
-    const failed = ["Worker route", "refused with status 403: 10000 Authentication error for Bearer [token]. Add this right to the token: Workers Routes: Edit"];
+    const failed = ["Worker route", "refused with status 403: 10000 Authentication error for Bearer [token]. Add this right to the account token: Workers Routes: Edit"];
 
     expect([checked.status, ran.rows.filter((row) => row.state === "failed").map((row) => [row.object, row.detail]), writes()]).toEqual([200, [failed], []]);
     expect([kept?.by, kept?.run, kept?.pieces.filter((piece) => piece.state === "unread")]).toEqual([

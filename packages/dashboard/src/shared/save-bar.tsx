@@ -3,6 +3,7 @@
 import type { ReactNode } from "react";
 
 import { Button } from "@/components/ui/button";
+import { MiddleColumn } from "@/shared/middle-column";
 
 /** What the bar is drawn from. */
 interface SaveBarProps {
@@ -24,17 +25,20 @@ export function SaveBar({ count, busy, onDiscard }: SaveBarProps): ReactNode {
     <section
       aria-label="Unsaved changes"
       data-slot="save-bar"
-      className="flex shrink-0 items-center justify-end gap-2 border-t bg-background px-6 py-2 max-md:px-4"
+      className="shrink-0 overflow-y-hidden border-t bg-background px-6 py-2 [scrollbar-gutter:stable] max-md:px-4"
     >
-      <p aria-live="polite" className="mr-2 min-w-0 truncate font-medium">
-        {count === 1 ? "1 unsaved change" : `${count} unsaved changes`}
-      </p>
-      <Button type="button" variant="ghost" disabled={busy} onClick={onDiscard}>
-        Discard
-      </Button>
-      <Button type="submit" disabled={busy}>
-        Save
-      </Button>
+      {/* The words and buttons end where the screen's own column ends: the bar keeps the room a scrollbar takes from the box over it. */}
+      <MiddleColumn className="flex items-center justify-end gap-2">
+        <p aria-live="polite" className="mr-2 min-w-0 truncate font-medium">
+          {count === 1 ? "1 unsaved change" : `${count} unsaved changes`}
+        </p>
+        <Button type="button" variant="ghost" disabled={busy} onClick={onDiscard}>
+          Discard
+        </Button>
+        <Button type="submit" disabled={busy}>
+          Save
+        </Button>
+      </MiddleColumn>
     </section>
   );
 }

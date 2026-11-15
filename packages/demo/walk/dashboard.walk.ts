@@ -129,8 +129,8 @@ const STOPS: readonly Stop[] = [
     name: "the token a repair asks for",
     open: (page) => page.getByRole("button", { name: "Repair", exact: true }).click(),
     shows: (page) => [
-      page.getByRole("dialog", { name: "Repair the domain", exact: true }).getByRole("button", { name: "Open the token form", exact: true }),
-      page.getByRole("dialog", { name: "Repair the domain", exact: true }).getByLabel("Token", { exact: true }),
+      page.getByRole("dialog", { name: "Repair the domain", exact: true }).getByRole("button", { name: "Open the account token form", exact: true }),
+      page.getByRole("dialog", { name: "Repair the domain", exact: true }).getByLabel("Account token", { exact: true }),
     ],
     close: (page) => page.getByRole("dialog", { name: "Repair the domain", exact: true }).getByRole("button", { name: "Cancel", exact: true }).click(),
   },
@@ -433,7 +433,7 @@ function domainLine(page: Page, says: string | RegExp): Locator {
 async function repair(page: Page): Promise<void> {
   const dialog = page.getByRole("dialog", { name: "Repair the domain", exact: true });
   await page.getByRole("button", { name: "Repair", exact: true }).click();
-  await dialog.getByLabel("Token", { exact: true }).fill("sample-token");
+  await dialog.getByLabel("Account token", { exact: true }).fill("sample-token");
   await dialog.getByRole("button", { name: "Repair", exact: true }).click();
 }
 
@@ -551,6 +551,62 @@ test.describe("on a screen 1024 px wide", () => {
   test("the sites fit their room with no panel open: a link gives the end of its name, and no cell lies under the rows' actions", async ({ page }) => {
     await arrive(page);
     await sitesFit(page);
+  });
+});
+
+test.describe("on a screen 1920 px wide", () => {
+  test.use({ viewport: { width: 1920, height: 1080 } });
+
+  // Drift: on a wide screen the settings, the users, the tokens, or the pieces of the domain would stretch from edge to edge again, or stand at the left beside an empty right half; or the bar that saves the settings would end at another edge than they do.
+  test("the settings, both tabs of Access, and the domain stand in the middle, and the words and buttons of the bar that saves the settings end where they end", async ({ page, browserName }) => {
+    await arrive(page);
+    // The room at the two sides of a column inside the box it stands in, without that box's own edges, padding, and scrollbar.
+    const room = (column: Locator): Promise<{ readonly left: number; readonly right: number }> =>
+      column.evaluate((at) => {
+        const around = at.parentElement as HTMLElement;
+        const [look, box] = [getComputedStyle(around), at.getBoundingClientRect()];
+        const start = around.getBoundingClientRect().left + around.clientLeft;
+
+        return {
+          left: Math.round(box.left - start - Number.parseFloat(look.paddingLeft)),
+          right: Math.round(start + around.clientWidth - Number.parseFloat(look.paddingRight) - box.right),
+        };
+      });
+    const column = page.locator("[data-slot='middle-column']");
+    const ways: readonly (readonly [string, () => Promise<void>, Locator])[] = [
+      ["Users", () => toSection(page, "Access"), rows(page, true, "Users")],
+      ["Tokens", () => page.getByRole("tab", { name: "Tokens", exact: true }).click(), rows(page, true, "Tokens")],
+      ["Domain", () => toSection(page, "Domain"), domainLine(page, "Nothing to repair")],
+      ["Settings", () => toSection(page, "Settings"), page.getByRole("heading", { name: "New sites", exact: true })],
+    ];
+    for (const [name, open, shown] of ways) {
+      await open();
+      await expect(shown).toBeVisible();
+      const { left, right } = await room(column.first());
+
+      expect.soft(Math.abs(left - right), name).toBeLessThanOrEqual(1);
+      // The control: a column as wide as its room would have equal margins too.
+      expect.soft(left, name).toBeGreaterThan(100);
+    }
+
+    await page.getByRole("switch", { name: "Show in search engines", exact: true }).click();
+    const bar = page.getByRole("region", { name: "Unsaved changes", exact: true });
+    await expect(bar).toBeVisible();
+    expect(await room(bar.locator(column))).toEqual(await room(column.first()));
+
+    // A scrollbar that takes room narrows the box the settings scroll in: the bar under it keeps the same room. One engine can be told to draw such a scrollbar from the page's start.
+    if (browserName !== "chromium") return;
+
+    await page.addInitScript(() => {
+      const wide = Object.assign(document.createElement("style"), { textContent: "::-webkit-scrollbar { width: 17px; }" });
+      document.addEventListener("DOMContentLoaded", () => document.head.append(wide));
+    });
+    await page.reload();
+    await page.getByRole("switch", { name: "Show in search engines", exact: true }).click();
+    await expect(bar).toBeVisible();
+    // The control: the scrollbar does take room from the box of the settings.
+    expect(await column.first().evaluate((at) => (at.parentElement?.offsetWidth ?? 0) - (at.parentElement?.clientWidth ?? 0))).toBeGreaterThan(0);
+    expect(await room(bar.locator(column))).toEqual(await room(column.first()));
   });
 });
 

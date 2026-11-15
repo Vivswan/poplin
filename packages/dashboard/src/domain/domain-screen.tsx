@@ -21,6 +21,7 @@ import { FRAME_KEY } from "@/lib/frame";
 import { sayDone, sayRefused } from "@/lib/notify";
 import { shortMoment, wholeMoment } from "@/lib/sites";
 import { useChosenTimeZone } from "@/lib/timezone";
+import { MiddleColumn } from "@/shared/middle-column";
 import { AppShell } from "@/shell/app-shell";
 
 /** What an install that remembers no run says in place of a count, and small beside it. */
@@ -118,7 +119,9 @@ export function DomainScreen(): ReactNode {
   if (data === undefined) {
     return (
       <AppShell current="domain" heading="Domain">
-        <Waiting failure={error?.message} onAgain={() => void refetch()} />
+        <MiddleColumn gutters>
+          <Waiting failure={error?.message} onAgain={() => void refetch()} />
+        </MiddleColumn>
       </AppShell>
     );
   }
@@ -130,25 +133,27 @@ export function DomainScreen(): ReactNode {
 
   return (
     <AppShell current="domain" heading="Domain">
-      <section aria-label="Domain" className="flex min-h-0 flex-1 flex-col">
-        <div className="flex shrink-0 flex-wrap items-center gap-x-4 gap-y-2 px-6 pb-3 max-md:px-4">
-          <StatusLine line={line} tone={tone} beside={read === undefined ? never : <LastRun last={read} />} />
-          <div className="ml-auto flex items-center gap-2">
-            <DialogTrigger handle={asks} payload="check" render={<Button variant="outline" />}>
-              Check
-            </DialogTrigger>
-            <DialogTrigger handle={asks} payload="repair" render={<Button variant={tone === "bad" ? "default" : "outline"} />}>
-              Repair
-            </DialogTrigger>
+      <MiddleColumn gutters className="flex min-h-0 flex-1 flex-col">
+        <section aria-label="Domain" className="flex min-h-0 flex-1 flex-col">
+          <div className="flex shrink-0 flex-wrap items-center gap-x-4 gap-y-2 px-6 pb-3 max-md:px-4">
+            <StatusLine line={line} tone={tone} beside={read === undefined ? never : <LastRun last={read} />} />
+            <div className="ml-auto flex items-center gap-2">
+              <DialogTrigger handle={asks} payload="check" render={<Button variant="outline" />}>
+                Check
+              </DialogTrigger>
+              <DialogTrigger handle={asks} payload="repair" render={<Button variant={tone === "bad" ? "default" : "outline"} />}>
+                Repair
+              </DialogTrigger>
+            </div>
           </div>
-        </div>
-        {ran === undefined || ran.steps.length === 0 ? null : (
-          <div className="shrink-0 px-6 pb-3 max-md:px-4">
-            <PersonSteps steps={ran.steps} />
-          </div>
-        )}
-        {rows === undefined ? null : <Pieces rows={rows} />}
-      </section>
+          {ran === undefined || ran.steps.length === 0 ? null : (
+            <div className="shrink-0 px-6 pb-3 max-md:px-4">
+              <PersonSteps steps={ran.steps} />
+            </div>
+          )}
+          {rows === undefined ? null : <Pieces rows={rows} />}
+        </section>
+      </MiddleColumn>
       <RunDialog handle={asks} form={data.form} onRun={run} />
     </AppShell>
   );

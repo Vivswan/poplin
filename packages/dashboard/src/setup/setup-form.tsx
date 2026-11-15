@@ -69,7 +69,7 @@ export function SetupForm({ form, boxes, onRepair }: SetupFormProps): ReactNode 
   return (
     <form ref={sheet} onSubmit={onSubmit} className="flex max-w-md flex-col gap-6" noValidate>
       <ol className="flex flex-col gap-6">
-        <Step number={1} title="Make a token">
+        <Step number={1} title="Make an account token">
           <TokenWay form={form} />
         </Step>
         <Step number={2} title={title}>

@@ -62,7 +62,7 @@ export function RunDialog({ handle, form, onRun }: RunDialogProps): ReactNode {
                 <DialogDescription>{words.does}</DialogDescription>
               </DialogHeader>
               <ol className="flex flex-col gap-5">
-                <Step number={1} title="Make a token">
+                <Step number={1} title="Make an account token">
                   <TokenWay form={form} />
                 </Step>
                 <Step number={2} title="Paste it">

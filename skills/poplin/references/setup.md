@@ -127,7 +127,7 @@ The last command opens Cloudflare in the user's browser to ask for access, then 
 
 ### c. Make a Cloudflare API token
 
-On the Setup page, under Make a token, the user presses Open the token form. Cloudflare's form opens in a new tab with eight permissions already chosen.
+On the Setup page, under Make an account token, the user presses Open the account token form. Cloudflare's form opens in a new tab with eight permissions already chosen.
 
 | On the form       | The user                                               |
 | ----------------- | ------------------------------------------------------ |
@@ -143,19 +143,19 @@ If the form opens empty, step 3 of the [install guide](https://github.com/Vivswa
 
 Back on the Setup page, under Fill in three boxes, the user fills each box and presses Repair.
 
-| Box        | Holds                                                     |
-| ---------- | --------------------------------------------------------- |
-| Domain     | their domain alone, with nothing before it: `example.com` |
-| Your email | an email whose inbox they can read: the first login       |
-| Token      | the token of part c                                       |
+| Box           | Holds                                                     |
+| ------------- | --------------------------------------------------------- |
+| Domain        | their domain alone, with nothing before it: `example.com` |
+| Your email    | an email whose inbox they can read: the first login       |
+| Account token | the token of part c                                       |
 
 Ask the user to copy you the lines the page shows above its table. They hold no token.
 
-| The lines say                                       | Means               | Next                                       |
-| --------------------------------------------------- | ------------------- | ------------------------------------------ |
-| a count that is repaired, or `Nothing to repair`    | the install is made | part e                                     |
-| a count that is not done, or that is to repair      | a row needs work    | ask for those rows, then the install guide |
-| one sentence and no table, such as `Token refused`  | the run was refused | the install guide                          |
+| The lines say                                              | Means               | Next                                       |
+| ---------------------------------------------------------- | ------------------- | ------------------------------------------ |
+| a count that is repaired, or `Nothing to repair`           | the install is made | part e                                     |
+| a count that is not done, or that is to repair             | a row needs work    | ask for those rows, then the install guide |
+| one sentence and no table, such as `Account token refused` | the run was refused | the install guide                          |
 
 For rows that need work, ask the user to copy each row whose State is failed, missing, differs, or not run, with its Detail, and any line with a link above the table. Look the words up in the table under step 4 of the [install guide](https://github.com/Vivswan/poplin/blob/main/docs/start/when-a-step-fails.md#step-4-the-page-shows-something-else).
 

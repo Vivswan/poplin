@@ -15,8 +15,8 @@ import { BrandMark } from "@/shell/app-shell";
 
 /** What the screen says first, by the boxes its form has. */
 const LEADS = {
-  first: "Make a token, fill in three boxes, press Repair.",
-  login: "Make a token, paste it, press Repair.",
+  first: "Make an account token, fill in three boxes, press Repair.",
+  login: "Make an account token, paste it, press Repair.",
 } as const;
 
 /** What a repair left: the line that counts the pieces, which logins the install expects, the steps only a person can do, and one row per piece. */
