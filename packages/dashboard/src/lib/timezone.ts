@@ -41,6 +41,20 @@ export function useChosenTimeZone(): void {
 }
 
 /**
+ * Write a moment as a column writes it whose heading names the time zone: the day and the time to the minute, in the chosen time zone, with no name after it.
+ *
+ * @param moment - milliseconds since the epoch
+ * @param choice - the time zone to write in; left out, the one a person chose
+ * @param own - the name of the browser's own time zone, such as `Europe/Berlin`; left out, the browser's
+ */
+export function unnamedMomentIn(moment: number, choice: TimeZoneChoice = shown, own?: string): string {
+  // The day and the time are written apart and joined here: what a browser puts between the two differs from one to the next.
+  const time = new Intl.DateTimeFormat("en-GB", { hour: "2-digit", minute: "2-digit", hourCycle: "h23", timeZone: timeZoneOf(choice, own) }).format(moment);
+
+  return `${dayIn(moment, choice, own)}, ${time}`;
+}
+
+/**
  * Write a moment whole: the day and the time to the minute, in the chosen time zone. UTC is named after the time; the browser's own time zone is not.
  *
  * @param moment - milliseconds since the epoch
@@ -48,10 +62,7 @@ export function useChosenTimeZone(): void {
  * @param own - the name of the browser's own time zone, such as `Europe/Berlin`; left out, the browser's
  */
 export function momentIn(moment: number, choice: TimeZoneChoice = shown, own?: string): string {
-  // The day and the time are written apart and joined here: what a browser puts between the two differs from one to the next.
-  const time = new Intl.DateTimeFormat("en-GB", { hour: "2-digit", minute: "2-digit", hourCycle: "h23", timeZone: timeZoneOf(choice, own) }).format(moment);
-
-  return `${dayIn(moment, choice, own)}, ${time}${choice === "utc" ? " UTC" : ""}`;
+  return `${unnamedMomentIn(moment, choice, own)}${choice === "utc" ? " UTC" : ""}`;
 }
 
 /**

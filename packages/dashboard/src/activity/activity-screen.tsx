@@ -193,11 +193,15 @@ export function ActivityScreen(): ReactNode {
   const { data: page, error, isPlaceholderData } = useActivityPage(query, size);
   // The last page tells the total by itself; before it, the total is read.
   const { data: total } = useActivityTotal(query, page !== undefined && page.next !== null);
-  const place = useShownPlace(`${size} ${query.toString()}`, page !== undefined && !isPlaceholderData);
+  // A page still shown from the address before is not the one the address asks for.
+  const there = page !== undefined && !isPlaceholderData;
+  const place = useShownPlace(`${size} ${query.toString()}`, there);
+  // Every page of one narrowing and order is the same list: the address without the place of a page.
+  const list = useShownPlace(logQuery(query, {}).toString(), there);
   const logins = page?.logins;
   // The screen reads the choice of time zone itself, so its rows are drawn again, in the new time zone, when the choice changes.
   const [timeZone, chooseTimeZone] = useTimeZoneChoice();
-  const columns = useMemo(() => activityColumns(logins ?? {}), [logins]);
+  const columns = useMemo(() => activityColumns(logins ?? {}, timeZone), [logins, timeZone]);
   const layout = useTableLayout("activity", columns);
   const showAll = (): void => void navigate({ to: PATH });
   const instead = insteadOfRows(error?.message, page, kind, site, showAll);
@@ -281,6 +285,7 @@ export function ActivityScreen(): ReactNode {
                 actions={rowActions}
                 after={pages}
                 page={place}
+                list={list}
               />
             </div>
             {page === undefined ? null : <PhoneList page={page} place={place} after={pages} />}

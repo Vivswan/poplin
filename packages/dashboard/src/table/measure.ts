@@ -76,25 +76,39 @@ function sameWidths(one: ReadonlyMap<string, number>, other: ReadonlyMap<string,
   return one.size === other.size && [...other].every(([id, width]) => one.get(id) === width);
 }
 
+/** The wider of two readings of each column: a column only one of them holds keeps that one. */
+function widerOf(one: ReadonlyMap<string, number>, other: ReadonlyMap<string, number>): ReadonlyMap<string, number> {
+  return new Map([...one, ...[...other].map(([id, width]) => [id, Math.max(width, one.get(id) ?? 0)] as const)]);
+}
+
 /**
  * The widths each column's heading and values need, measured when what the table shows changes, again once every font its text is drawn in has arrived, and when a person chooses another time zone, which makes a written time longer or shorter.
  *
  * @param shows - what the table shows, and whether it is in sight at all: a change of any of these is a reason to measure again; always the same count of them
+ * @param sameList - words that stay the same from page to page of one list drawn in the same columns: while they do, a column keeps the widest it was measured at, so its edges do not move with the page. Left out, each measuring stands alone
  * @returns the reference to give the table, and the widths, empty until the first measuring
  */
-export function useFitted(shows: readonly unknown[]): readonly [RefObject<HTMLTableElement | null>, Fitted] {
+export function useFitted(shows: readonly unknown[], sameList?: string): readonly [RefObject<HTMLTableElement | null>, Fitted] {
   const table = useRef<HTMLTableElement>(null);
   const [fitted, setFitted] = useState<Fitted>(UNMEASURED);
   const [timeZone] = useTimeZoneChoice();
-  // biome-ignore lint/correctness/useExhaustiveDependencies: the list is what the table shows, handed in by the table.
+  const measuredFor = useRef<string>(undefined);
   useLayoutEffect(() => {
     const element = table.current;
     if (element === null) return undefined;
 
+    // A time is as wide as its time zone writes it: the widths of one time zone do not hold in the other.
+    const list = sameList === undefined ? undefined : `${timeZone} ${sameList}`;
+    const keeps = list !== undefined && measuredFor.current === list;
+    measuredFor.current = list;
     const measure = (): void => {
-      const next = fittedWidths(element);
-      // The same widths as before are no change: a new map would draw the table again for nothing, over and over.
-      setFitted((before) => (sameWidths(before.needs, next.needs) && sameWidths(before.least, next.least) ? before : next));
+      const read = fittedWidths(element);
+      setFitted((before) => {
+        const next = keeps ? { needs: widerOf(before.needs, read.needs), least: widerOf(before.least, read.least) } : read;
+
+        // The same widths as before are no change: a new map would draw the table again for nothing, over and over.
+        return sameWidths(before.needs, next.needs) && sameWidths(before.least, next.least) ? before : next;
+      });
     };
     measure();
 
@@ -110,7 +124,7 @@ export function useFitted(shows: readonly unknown[]): readonly [RefObject<HTMLTa
     return () => {
       shown = false;
     };
-  }, [timeZone, ...shows]);
+  }, [timeZone, sameList, ...shows]);
 
   return [table, fitted];
 }

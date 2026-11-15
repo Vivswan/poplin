@@ -6,14 +6,19 @@ import type { ReactNode } from "react";
 
 import type { Entry } from "@/activity/activity-queries";
 import { shownName, wholeMoment } from "@/lib/sites";
+import { type TimeZoneChoice, unnamedMomentIn } from "@/lib/timezone";
 import { type LoginNames, Who } from "@/shared/who";
 import type { ColumnSpec } from "@/table/data-table";
 
-/** When an entry was written, to the minute, in the time zone a person chose. */
-export function When({ entry }: { readonly entry: Entry }): ReactNode {
+/**
+ * When an entry was written, to the minute, in the time zone a person chose.
+ *
+ * @param headed - `true` under a heading that names the time zone: the time then does not name it again
+ */
+export function When({ entry, headed = false }: { readonly entry: Entry; readonly headed?: boolean }): ReactNode {
   return (
     <time dateTime={new Date(entry.at).toISOString()} title={wholeMoment(entry.at)} className="text-muted-foreground tabular-nums">
-      {wholeMoment(entry.at)}
+      {headed ? unnamedMomentIn(entry.at) : wholeMoment(entry.at)}
     </time>
   );
 }
@@ -50,10 +55,11 @@ export function SiteThen({ entry }: { readonly entry: Entry }): ReactNode {
  * The columns of the Activity table.
  *
  * @param logins - the name of each login that has one, by the login's id
+ * @param timeZone - the time zone the times are written in: UTC is named once, in the heading of the times
  */
-export function activityColumns(logins: LoginNames): readonly ColumnSpec<Entry>[] {
+export function activityColumns(logins: LoginNames, timeZone: TimeZoneChoice): readonly ColumnSpec<Entry>[] {
   return [
-    { id: "when", header: "When", fixed: true, sortable: "desc", cell: (entry) => <When entry={entry} /> },
+    { id: "when", header: timeZone === "utc" ? "When (UTC)" : "When", fixed: true, sortable: "desc", cell: (entry) => <When entry={entry} headed /> },
     { id: "who", header: "Who", cell: (entry) => <Who by={entry.by} logins={logins} unnamed="a token" /> },
     { id: "what", header: "What", widest: 480, cell: (entry) => <span title={whatOf(entry)}>{whatOf(entry)}</span> },
     { id: "site", header: "Site", cell: (entry) => <SiteThen entry={entry} /> },

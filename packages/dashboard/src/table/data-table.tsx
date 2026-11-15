@@ -144,6 +144,9 @@ interface DataTableProps<Row> {
 
   /** Which page of a list the rows are, in any words that differ from page to page: when it changes, the list is shown from its first row. */
   readonly page?: string;
+
+  /** Which list the rows are a page of, in any words that differ from list to list: the column edges of one page then hold on the next, and move only for a value wider than any before. Left out, the columns fit the rows that are shown. */
+  readonly list?: string;
 }
 
 type Head = Header<typeof FEATURES, object, unknown>;
@@ -315,6 +318,45 @@ function BodyRow<Row>({
   );
 }
 
+/** The row of headings: one for each shown column, then the room the columns leave empty, then the place over the rows' actions. */
+function HeadRow<Row>({
+  headers,
+  specs,
+  movable,
+  sort,
+  onSort,
+  onNudge,
+  spare,
+  withActions,
+}: {
+  readonly headers: readonly Head[];
+  readonly specs: ReadonlyMap<string, ColumnSpec<Row>>;
+  readonly movable: readonly string[];
+  readonly sort: Sort;
+  readonly onSort: ((next: Sort | undefined) => void) | undefined;
+  readonly onNudge: (id: string, by: number) => void;
+  readonly spare: boolean;
+  readonly withActions: boolean;
+}): ReactNode {
+  return (
+    <tr>
+      <SortableContext items={[...movable]} strategy={horizontalListSortingStrategy}>
+        {headers.map((header) => {
+          const spec = specs.get(header.column.id);
+
+          return spec === undefined ? null : <HeadCell key={header.id} header={header} spec={spec} sort={sort} onSort={onSort} onNudge={onNudge} />;
+        })}
+      </SortableContext>
+      {spare ? <td className="h-9 border-b bg-background p-0" /> : null}
+      {withActions ? (
+        <th className="sticky right-0 h-9 border-b bg-background p-0">
+          <span className="sr-only">Actions</span>
+        </th>
+      ) : null}
+    </tr>
+  );
+}
+
 /** A row that stands in for one being read: the table's own height and columns, so nothing moves when the rows arrive. */
 function LoadingRow<Row>({
   cells,
@@ -467,15 +509,17 @@ export function DataTable<Row>({
   loading = false,
   after,
   page,
+  list,
 }: DataTableProps<Row>): ReactNode {
   const specs = useMemo(() => new Map(columns.map((column) => [column.id, column])), [columns]);
   const definitions = useMemo(() => columns.map(definitionOf), [columns]);
   const data = useMemo(() => [...rows] as object[], [rows]);
   const [frame, room] = useRoom();
-  const [sized, fitted] = useFitted([rows, columns, layout.order, layout.hidden, sort.key, loading, room > 0]);
+  const shown = layout.order.filter((id) => !layout.hidden.includes(id)).flatMap((id) => specs.get(id) ?? []);
+  const sameList = list === undefined ? undefined : `${list} ${shown.map((spec) => spec.id).join(" ")}`;
+  const [sized, fitted] = useFitted([rows, columns, layout.order, layout.hidden, sort.key, loading, room > 0], sameList);
   useTopOfPage(sized, page);
   const [dragged, setDragged] = useState<string>();
-  const shown = layout.order.filter((id) => !layout.hidden.includes(id)).flatMap((id) => specs.get(id) ?? []);
   const endWidth = actions === undefined ? 0 : actionsWidth;
   const widths = widthsForRoom(shown, fitted, layout.sizes, room - endWidth);
   const { drawn, spare } = widths;
@@ -536,21 +580,7 @@ export function DataTable<Row>({
           >
             <Widths shown={shown} widths={widths} endWidth={endWidth} />
             <thead className="sticky top-0 z-30">
-              <tr>
-                <SortableContext items={movable} strategy={horizontalListSortingStrategy}>
-                  {headers.map((header) => {
-                    const spec = specs.get(header.column.id);
-
-                    return spec === undefined ? null : <HeadCell key={header.id} header={header} spec={spec} sort={sort} onSort={onSort} onNudge={onNudge} />;
-                  })}
-                </SortableContext>
-                {spare === 0 ? null : <td className="h-9 border-b bg-background p-0" />}
-                {actions === undefined ? null : (
-                  <th className="sticky right-0 h-9 border-b bg-background p-0">
-                    <span className="sr-only">Actions</span>
-                  </th>
-                )}
-              </tr>
+              <HeadRow headers={headers} specs={specs} movable={movable} sort={sort} onSort={onSort} onNudge={onNudge} spare={spare > 0} withActions={actions !== undefined} />
             </thead>
             <tbody>
               {loading
