@@ -4,12 +4,14 @@
 import { reset } from "cloudflare:test";
 import type { Api } from "@poplin/app/src/api/api";
 import { settingsFromText } from "@poplin/core/src/records/settings";
+import { parse } from "es-module-lexer/js";
 import type { ExtractSchema } from "hono/types";
 import { hexToUint8Array, uint8ArrayToHex } from "uint8array-extras";
 import { beforeEach, describe, expect, test, vi } from "vitest";
 import manifest from "../../../cli/package.json?raw";
 import built from "../../dist/worker.js";
 import bundle from "../../dist/worker.js?raw";
+import bundleMap from "../../dist/worker.js.map?raw";
 import { DEFAULT_ICON } from "../../../app/src/sites/default-icon";
 import { readShell } from "../../../app/tests/console/support/shell";
 import type { Bindings } from "../../src/worker/bindings";
@@ -118,6 +120,15 @@ interface Begun {
   readonly verify_url: string;
 }
 
+/** What an answer says: its status, where it sends, its media type, how long it is kept, and its whole text. */
+interface Said {
+  readonly status: number;
+  readonly to: string | null;
+  readonly type: string | null;
+  readonly cache: string | null;
+  readonly text: string;
+}
+
 let w: World;
 
 function withBindings(changed: Partial<Record<keyof Bindings, unknown>>): Bindings {
@@ -202,6 +213,11 @@ async function gzippedBytes(text: string): Promise<number> {
   const gzipped = new Blob([text]).stream().pipeThrough(new CompressionStream("gzip"));
 
   return (await new Response(gzipped).arrayBuffer()).byteLength;
+}
+
+/** An answer as far as two Workers can be held against each other. */
+async function said(answer: Response): Promise<Said> {
+  return { status: answer.status, to: answer.headers.get("Location"), type: answer.headers.get("Content-Type"), cache: answer.headers.get("Cache-Control"), text: await answer.text() };
 }
 
 async function sha256(bytes: Uint8Array<ArrayBuffer>): Promise<string> {
@@ -934,24 +950,39 @@ describe("a computer's login", () => {
 });
 
 describe("the built bundle", () => {
-  const modules = [...bundle.matchAll(/^\/\/ (\S+\.[cm]?[jt]s)$/gm)].map(([, path = ""]) => path);
+  // The bundle is minified and names no file, so the files it was built from are read from the map written beside it.
+  const modules = (JSON.parse(bundleMap) as { sources: string[] }).sources;
 
   // Drift: the file the OpenTofu module uploads is built from the entry's imports, so one import of a test helper or a whole library would ship to every install.
   test("is one module of the entry and what it imports, under the size caps as it is and gzipped, with no test or fixture file in it", async () => {
-    expect(modules).toContain("packages/cloudflare/src/worker/worker.ts");
+    expect(modules).toContain("../src/worker/worker.ts");
     expect(modules.filter((path) => /(^|\/)tests\/|\.test\.|\/support\/|vitest|fixtures/.test(path))).toEqual([]);
-    expect([...bundle.matchAll(/^import .*$/gm)].map(([line]) => line)).toEqual([]);
+    expect(parse(bundle)[0].map((left) => left.n)).toEqual([]);
     expect(new TextEncoder().encode(bundle).byteLength).toBeLessThan(MOST_BUNDLE_BYTES);
     expect(await gzippedBytes(bundle)).toBeLessThan(MOST_BUNDLE_GZIP_BYTES);
   });
 
-  // Drift: a release writes its number into the package's manifest alone, so a bundle that held a number of its own would name an old release on every install.
-  test("answers with the version the released package's manifest states", async () => {
-    // The built Worker reads the runtime's own clock, so its token is issued at that time.
-    const token = await tokenOf({ ...w, clock: { now: Date.now() } }, "admin");
+  // Drift: every other test here runs the Worker's source, and the file an install runs is that source minified: a name the minifier changed that the code reads back would break that file alone.
+  // A release writes its number into the package's manifest alone, so a bundle that held a number of its own would name an old release on every install.
+  test("logs a person in, hands out the dashboard's page and its files, refuses a call with no token, and publishes and serves a site, each as the Worker's source does; a token is answered the version the released package's manifest states", async () => {
+    // The built Worker reads the runtime's own clock and `fetch`, so the tokens are live now and the team's keys come from the stand-in. It starts once, so this one test asks it everything.
+    const now = { ...w, clock: { now: Date.now() } };
+    using keys = vi.spyOn(globalThis, "fetch").mockImplementation((address, init) => w.certs.fetch(String(address), init as Parameters<typeof w.certs.fetch>[1]));
+    const session = { Cookie: cookieOf(await logIn(built, now)) };
+    const shell = await ask(built, `${ADMIN}/`, { headers: session });
+    const read = await readShell(await shell.text());
+    const token = await tokenOf(now, "publisher");
+    const site = await publish(built, token, { name: "report", access: "public", public_name: "yearly" }, [page("<h1>report</h1>")]);
     const answered = await done<{ version: string }>(await api(built, token).whoami.$get({ query: {} }));
 
+    const addresses = [`${ADMIN}/`, ...[...read.scripts, ...read.styles].map((path) => `${ADMIN}${path}`), `${ADMIN}/api/whoami`, "https://yearly-page.example.com/", "https://nothing-page.example.com/"];
+    const answers = (worker: typeof built): Promise<Said[]> => Promise.all(addresses.map(async (address) => said(await ask(worker, address))));
+    const fromBuilt = await answers(built);
+
+    expect([shell.status, (read.boot as { email: string }).email, site.addresses.public, keys.mock.calls.length]).toEqual([200, OWNER, "https://yearly-page.example.com", 1]);
     expect(answered.version).toBe((JSON.parse(manifest) as { version: string }).version);
+    expect(fromBuilt.map((answer) => answer.status)).toEqual([302, 200, 200, 401, 200, 404]);
+    expect(fromBuilt).toEqual(await answers(instance(now)));
   });
 });
 
