@@ -6,8 +6,11 @@ import { unitWord, wordsOf } from "@/settings/settings-words";
 /** How a number is written where it is only read: with separators between its thousands. */
 const COUNT_FORMAT = new Intl.NumberFormat("en-US");
 
-/** The two parts of a number's text: its count, which may be none, and the unit after it. The field lets in whole counts from 0 up alone. */
-const PARTS = /^([0-9]*)(.*)$/;
+/** How a count is written in a setting's text: in digits alone, a small fraction too, which a number written by itself would give an exponent. */
+const COUNT_TEXT = new Intl.NumberFormat("en-US", { useGrouping: false, maximumFractionDigits: 20 });
+
+/** The two parts of a number's text: its count, which may be none, and the unit after it. The field lets in counts from 0 up alone, and a fraction stays in the count as it was typed. */
+const PARTS = /^([0-9]*(?:\.[0-9]+)?)(.*)$/;
 
 /** A number's text taken apart. */
 interface Parts {
@@ -43,7 +46,7 @@ export function partsOf(row: Row, text: string): Parts {
  * @returns the count with its unit. No count is the word of no number where the row has one and no choice of its own for it, and otherwise the unit alone, which the server refuses
  */
 export function textOf(row: Row, { count, unit }: Parts): string {
-  if (count !== null) return `${count}${unit}`;
+  if (count !== null) return `${COUNT_TEXT.format(count)}${unit}`;
 
   return wordsOf(row.key).wordLabels === undefined ? (wordOf(row) ?? unit) : unit;
 }

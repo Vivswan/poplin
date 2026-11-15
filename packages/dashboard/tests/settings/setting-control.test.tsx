@@ -4,6 +4,7 @@ import { clearPage } from "../lib/support/page";
 
 import { afterAll, afterEach, describe, expect, test } from "bun:test";
 import { cleanup, fireEvent, render, within } from "@testing-library/react";
+import { type ReactNode, useState } from "react";
 
 import { CONTROL_KINDS } from "../../../app/src/console/setting-controls";
 
@@ -29,6 +30,17 @@ function drawn(row: Row, text = row.text): { readonly page: ReturnType<typeof wi
   render(<SettingControl row={row} id="the-control" text={text} onChange={(next) => sent.push(next)} refused={false} />);
 
   return { page: within(document.body), sent };
+}
+
+/** The control of a row over the text it sent last, as a row of the screen holds it. */
+function Held({ row, sent }: { readonly row: Row; readonly sent: string[] }): ReactNode {
+  const [text, setText] = useState(row.text);
+  const keep = (next: string): void => {
+    sent.push(next);
+    setText(next);
+  };
+
+  return <SettingControl row={row} id="the-control" text={text} onChange={keep} refused={false} />;
 }
 
 afterAll(clearPage);
@@ -63,6 +75,18 @@ describe("the control of a setting", () => {
     fireEvent.change(field, { target: { value: "12000" } });
 
     expect([shown, document.body.textContent, sent]).toEqual(["9,000", "MB", ["12000MB"]]);
+  });
+
+  // Drift: a count typed as 1.5 would become 2 when the field is left, and be saved as 2 with nothing said.
+  test("of a count typed with a fraction keeps it when the field is left, and sends it as typed", () => {
+    const sent: string[] = [];
+    render(<Held row={rowOf("max_total_size", { kind: "number", word: null }, "9000MB", "MB")} sent={sent} />);
+    const field = within(document.body).getByRole("textbox") as HTMLInputElement;
+    fireEvent.focus(field);
+    fireEvent.change(field, { target: { value: "1.5" } });
+    fireEvent.blur(field);
+
+    expect([field.value, sent.at(-1)]).toEqual(["1.5", "1.5MB"]);
   });
 
   // Drift: an emptied field of a setting that takes no number would send an empty text, which the server refuses, where empty has a meaning.

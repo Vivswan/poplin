@@ -18,8 +18,8 @@ const WIDE = "w-48";
 /** The two values of the choice before a number that can also be a word. */
 const WORD_CHOICE = { word: "word", number: "number" } as const;
 
-/** How a count is written in its field: whole, with separators between its thousands. */
-const WHOLE = { maximumFractionDigits: 0 } as const;
+/** How a count is written in its field: with separators between its thousands, and with the digits of a fraction that was typed, as many as the setting's text holds, so the field shows what Save sends. */
+const AS_TYPED = { maximumFractionDigits: 20 } as const;
 
 /** The fewest lines a list's field is tall. */
 const LEAST_LINES = 3;
@@ -101,7 +101,7 @@ function ChoiceControl(props: ControlProps): ReactNode {
   return <Choice id={id} labelledBy={`${id}-label`} items={items} value={text} onChoose={onChange} refused={refused} className={WIDE} />;
 }
 
-/** The field of a number, with its unit fixed at its right. It takes a whole count from 0 up: a minus or a letter is not let in, and a fraction is rounded when the field is left. Whether the count is one the setting takes is the server's to say. */
+/** The field of a number, with its unit fixed at its right. It takes a count from 0 up: a minus or a letter is not let in. Whether the count is one the setting takes is the server's to say, a fraction too. */
 function CountField({ row, id, text, onChange, refused, className }: ControlProps & { readonly className: string }): ReactNode {
   const parts = partsOf(row, text);
   const unit = unitWord(row.key, parts.unit);
@@ -112,7 +112,7 @@ function CountField({ row, id, text, onChange, refused, className }: ControlProp
       value={parts.count}
       onValueChange={(count) => onChange(textOf(row, { count, unit: parts.unit }))}
       min={0}
-      format={WHOLE}
+      format={AS_TYPED}
       locale="en-US"
       className={className}
     >
