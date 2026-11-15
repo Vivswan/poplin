@@ -796,6 +796,22 @@ test("no screen draws a rule between its header and what follows it", async ({ p
   }
 });
 
+// Drift: a group's heading would be set larger than the screen's own title again, so the page would read as if the group were the screen.
+test("no heading of a screen is larger than the screen's title", async ({ page }) => {
+  await arrive(page);
+  const larger: Record<string, (string | null)[]> = {};
+  for (const stop of screens()) {
+    await toScreen(page, stop);
+    larger[stop.screen] = await screenHeading(page, stop.screen).evaluate((title) => {
+      const size = (heading: Element): number => Number.parseFloat(getComputedStyle(heading).fontSize);
+
+      return [...document.querySelectorAll("h2, h3, h4")].filter((heading) => size(heading) > size(title)).map((heading) => heading.textContent);
+    });
+  }
+
+  expect(larger).toEqual(Object.fromEntries(screens().map((stop) => [stop.screen, []])));
+});
+
 // Drift: the filter at a row's end would search for a name again: the entries from before a new link or a rename would be gone, and those of another site of that name shown.
 test("on Activity, Only this site keeps the entries of the row's site, the first one from before its new link among them, under a mark that names the site, and the mark's button shows every site again", async ({ page }) => {
   await arrive(page);
