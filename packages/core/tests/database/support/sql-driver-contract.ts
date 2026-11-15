@@ -280,6 +280,41 @@ function migrations(label: string, makeDriver: DriverFactory): void {
       expect(await readStanding(inner, STEPS)).toEqual({ kind: "at", version: 0 });
     });
 
+    // Drift: a runner learns that a database is new from a read of the ledger that fails, and asks the schema why. Between the two another runner may have made the ledger: told as a failure, the first request of an install would be answered 503.
+    test("a runner that found no ledger while another runner made it reads the ledger again and ends current, with no step applied twice", async () => {
+      const inner = await makeDriver();
+      const raced = { yet: false };
+      const late: SqlDriver = {
+        batch: async (statements) => {
+          const asksSchema = statements.some((statement) => statement.sql.includes("sqlite_master"));
+          if (asksSchema && !raced.yet) {
+            raced.yet = true;
+            await migrate(inner, STEPS, NOW);
+          }
+
+          return inner.batch(statements);
+        },
+      };
+
+      expect([await migrate(late, STEPS, NOW), raced.yet]).toEqual([{ kind: "current", version: SCHEMA_VERSION, applied: [] }, true]);
+      expect(await rows(inner, "SELECT step FROM schema_steps")).toEqual(STEPS.map((step) => ({ step: step.number })));
+    });
+
+    // Drift: a read the day's allowance stopped says so itself. Asked of the schema instead, which may fail in its own way, the start would answer a fault where the wait is to midnight UTC.
+    test("a read of the ledger that the day's allowance stops is thrown as that, and the schema is not asked", async () => {
+      const asked: string[] = [];
+      const spent: SqlDriver = {
+        batch: (statements) => {
+          asked.push(...statements.map((statement) => statement.sql));
+
+          return Promise.reject(asked.length === 1 ? new AllowanceSpent("reading") : new Error("the database is away"));
+        },
+      };
+
+      await expect(readStanding(spent, STEPS)).rejects.toThrow(AllowanceSpent);
+      expect(asked).toHaveLength(1);
+    });
+
     test("opening an empty database applies every step and hands back a database that works", async () => {
       const opened = await openDatabase(await makeDriver(), NOW);
       if (opened.kind !== "open") throw new Error(`the database did not open: ${opened.kind}`);

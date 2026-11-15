@@ -253,6 +253,16 @@ describe("an instance's first request", () => {
     expect(opened.status).toBe(200);
   });
 
+  // Drift: Cloudflare starts a new instance whenever it likes, and every start is paid out of the 50 queries of the request that met it. A start that asked whether the ledger exists, then for its steps, then for the settings, then for the key, cost four.
+  test("an instance that starts on a set-up install asks the database two questions: the steps it is stamped with, and the settings with the key", async () => {
+    await ask(instance(w), `${ADMIN}/api/whoami`);
+    const tally = { calls: 0 };
+
+    const started = await ask(instance(w), `${ADMIN}/api/whoami`, {}, countedBindings(tally));
+
+    expect([started.status, tally.calls]).toEqual([401, 2]);
+  });
+
   // Drift: a later apply of the module changes FIRST_SETTINGS; an instance that read the binding again would overwrite what the dashboard set.
   test("an instance that starts on stored settings never reads FIRST_SETTINGS: it starts without the binding and leaves the settings as they are", async () => {
     await ask(instance(w), `${ADMIN}/api/whoami`);
@@ -301,7 +311,8 @@ describe("an instance's first request", () => {
     },
     { name: "first settings with no logins", broken: () => withBindings({ FIRST_SETTINGS: { trash_days: "9" } }), status: 503, says: "  FIRST_SETTINGS: missing at logins", hides: "9" },
     { name: "first settings whose login is no email", broken: () => withBindings({ FIRST_SETTINGS: { logins: "the-owner" } }), status: 503, says: "  FIRST_SETTINGS: bad-form at logins", hides: "the-owner" },
-    { name: "a schema step that fails", broken: () => withBindings({ DB: failingDatabase((batch) => batch === 2) }), status: 503, says: "could not be brought up to date. Try again.", hides: "away" },
+    // The third batch of a start on an empty database is the step: the first two find that no ledger is there.
+    { name: "a schema step that fails", broken: () => withBindings({ DB: failingDatabase((batch) => batch === 3) }), status: 503, says: "could not be brought up to date. Try again.", hides: "away" },
     { name: "a database that is away", broken: () => withBindings({ DB: failingDatabase(() => true) }), status: 503, says: "Something went wrong. Try again.", hides: "away" },
   ];
 
@@ -886,7 +897,7 @@ describe("the audit log as a file", () => {
   // The rows are pinned where no start is counted: an entry and its token's row, each read once.
   test.each([
     ["an instance that answered before", true, { calls: 4, read: 2 * FILE_ENTRIES + 4 }],
-    ["a new instance, its start counted with the file", false, { calls: 8 }],
+    ["a new instance, its start counted with the file", false, { calls: 6 }],
   ])("a file of 2,000 entries, each about its own site that is gone and by its own token, is read by %s in the queries of any other file, far under the Free plan's 50", async (_which, warm, cost) => {
     const session = { Cookie: cookieOf(await logIn(instance(w), w)) };
     const counted = "WITH RECURSIVE counted(entry) AS (SELECT 1 UNION ALL SELECT entry + 1 FROM counted WHERE entry < ?)";
@@ -917,10 +928,10 @@ describe("the audit log as a file", () => {
 });
 
 describe("a copy of a site", () => {
-  // Drift: the Free plan ends a request past 50 queries of the database, 4 of them made by a request that starts an instance, and bounds the bucket apart. A copy that counts its own calls alone passes 50 on a new instance.
+  // Drift: the Free plan ends a request past 50 queries of the database, 2 of them made by a request that starts an instance, and bounds the bucket apart. A copy that counts its own calls alone passes 50 on a new instance.
   test.each([
-    [130, 2, { database: [9, 13], bucket: [225, 225] }],
-    [1_001, 10, { database: [9, 13], bucket: [228, 228] }],
+    [130, 2, { database: [9, 11], bucket: [225, 225] }],
+    [1_001, 10, { database: [9, 11], bucket: [228, 228] }],
   ])(
     "of %i files takes %i requests through the API, and the request that makes the most calls stays under 44 to the database and 250 to the bucket, on an instance that runs and on one each request starts",
     async (count, requests, most) => {
