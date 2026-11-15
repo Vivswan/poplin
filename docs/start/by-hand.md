@@ -65,7 +65,7 @@ Two words the steps use: a **Worker** is the program Cloudflare runs for you, an
 
    **If the build fails**, [When a step fails](when-a-step-fails.md#step-2-the-build-fails) has the next step.
 
-3. **Make a Cloudflare API token.** One link opens Cloudflare's form with the eight permissions poplin needs already chosen. It worked if the form shows eight rows already filled. A zone is your domain. The setup page of step 4 has the same link, on its button Open the token form.
+3. **Make a Cloudflare API token.** One link opens Cloudflare's form with the eight permissions poplin needs already chosen. It worked if the form shows eight rows already filled. A zone is your domain. The setup page of step 4 has the same link, on its button Open the account token form.
 
    [Open the token form with the permissions chosen](https://dash.cloudflare.com/profile/api-tokens?permissionGroupKeys=%5B%7B%22key%22%3A%22zone%22%2C%22type%22%3A%22read%22%7D%2C%7B%22key%22%3A%22dns%22%2C%22type%22%3A%22edit%22%7D%2C%7B%22key%22%3A%22workers_routes%22%2C%22type%22%3A%22edit%22%7D%2C%7B%22key%22%3A%22access%22%2C%22type%22%3A%22edit%22%7D%2C%7B%22key%22%3A%22workers_scripts%22%2C%22type%22%3A%22edit%22%7D%2C%7B%22key%22%3A%22access_acct%22%2C%22type%22%3A%22read%22%7D%2C%7B%22key%22%3A%22zone_settings%22%2C%22type%22%3A%22read%22%7D%2C%7B%22key%22%3A%22d1%22%2C%22type%22%3A%22edit%22%7D%5D&accountId=%2A&zoneId=all&name=poplin%20setup)
 
@@ -86,11 +86,11 @@ Two words the steps use: a **Worker** is the program Cloudflare runs for you, an
 
 4. **Finish on the setup page.** Open the Worker's address from step 2, the one ending in `workers.dev`: it shows the setup page. Under Fill in three boxes, fill each box and press Repair (the first time it also makes everything).
 
-   | Box        | Put in                                                            |
-   | ---------- | ----------------------------------------------------------------- |
-   | Domain     | your domain alone, with no `https://` and no `www`: `example.com` |
-   | Your email | an email whose inbox you can read: the first login                |
-   | Token      | the token of step 3                                               |
+   | Box           | Put in                                                            |
+   | ------------- | ----------------------------------------------------------------- |
+   | Domain        | your domain alone, with no `https://` and no `www`: `example.com` |
+   | Your email    | an email whose inbox you can read: the first login                |
+   | Account token | the token of step 3                                               |
 
    The page lists what it made:
 
@@ -102,7 +102,7 @@ Two words the steps use: a **Worker** is the program Cloudflare runs for you, an
    DNS record           created    poplin.example.com
    Worker route         created    poplin.example.com/*
    Access application   created    poplin: poplin.example.com/login, *-p-poplin.example.com
-   WAF rule             optional   ... add this right to the token and press Repair: Zone WAF: Edit
+   WAF rule             optional   ... add this right to the account token and press Repair: Zone WAF: Edit
    ```
 
    **It worked when** the page says `The login is ready.` The sample shows a few of the rows, and your counts may differ. `repaired` counts the rows Repair made. The page calls a permission a right. The token is used for that one request and kept nowhere. Repair is safe to repeat.
