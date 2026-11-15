@@ -23,7 +23,7 @@ export const SITES: readonly Draft[] = [
   { ago: 12, name: "launch-deck", sample: "launch-deck", by: "mira", settings: { access: "unlisted", title: "Launch deck" } },
   { ago: 10, name: "team-site", sample: "checkout-prototype", beside: { deck: "launch-deck", report: "sales-report" }, by: "mira", settings: { title: "Team site" } },
   { ago: 9, name: "lisbon-trip", sample: "trip-summary", by: "travel agent", settings: { access: "public", public_name: "lisbon", title: "Lisbon, four days" } },
-  { ago: 6, name: "winter-offer", sample: "checkout-prototype", by: "mira", only: "seed", settings: { access: "unlisted", title: "Winter offer", expires: "1h" } },
+  { ago: 6, name: "winter-offer", sample: "checkout-prototype", by: "mira", settings: { access: "unlisted", title: "Winter offer", expires: "30d" } },
   { ago: 5, name: "pricing-draft", sample: "sales-report", by: "report agent", settings: { access: "unlisted", title: "Pricing", embeddable: false } },
   { ago: 4, name: "spring-offer", sample: "checkout-prototype", by: "mira", settings: { access: "unlisted", title: "Spring offer", expires: "7d" } },
   { ago: 2, name: "status-board", sample: "launch-deck", by: "mira", settings: { title: "Status board" } },
@@ -86,9 +86,6 @@ export interface Draft {
   /** Who publishes it. */
   readonly by: Who;
 
-  /** `seed` for a site of the demo's seed alone, such as one that has run out: an install that is put back to the samples holds none. */
-  readonly only?: "seed";
-
   /** The settings it is made with. */
   readonly settings: SiteChanges;
 }
@@ -121,16 +118,11 @@ export interface Standing {
 
   /** Whether it is in the trash. */
   readonly trashed: boolean;
-
-  /** `seed` for a site of the demo's seed alone. */
-  readonly only?: "seed";
 }
 
 /** A draft before anything happened to it: a private site with no settings, asked for the settings it is made with. */
 function made(draft: Draft): Standing {
-  const bare = { name: draft.name, sample: draft.sample, beside: draft.beside ?? {}, reach: { access: "private" as const }, settings: {}, publishes: 1, trashed: false };
-
-  return changed(draft.only === undefined ? bare : { ...bare, only: draft.only }, draft.settings);
+  return changed({ name: draft.name, sample: draft.sample, beside: draft.beside ?? {}, reach: { access: "private" }, settings: {}, publishes: 1, trashed: false }, draft.settings);
 }
 
 /** A site after settings were asked of it. The product's own reading of them decides its name, who may open it, and its public name. */
