@@ -1,6 +1,6 @@
 // What the Domain screen and the setup screen are answered after a run: every piece as a row to draw, one line that counts what is left, and the steps only a person can do. A run that read no table is answered as a refusal that names the box it is about.
 //
-//   2 to repair                          Paste the token again and press Repair.
+//   2 to repair
 //   Piece         State     Detail
 //   DNS record    missing   poplin.example.com
 //
@@ -54,15 +54,6 @@ const RUN_SENTENCES: Readonly<Record<string, string>> = {
 /** The box of the form each refusal is about. A refusal missing here is about no box. */
 const ABOUT: Readonly<Record<string, string>> = { token: "token", no_domain: "domain", bad_domain: "domain", bad_login: "login" };
 
-/** What is said after the count when a row failed. */
-const AFTER_FAILED = "Each failed row says why, or what to add. Then paste the token and press Repair again.";
-
-/** What is said after the count when rows wait for a repair: the token is never kept, so it is pasted again. */
-const AFTER_CHECK = "Paste the token again and press Repair.";
-
-/** What is said after the count of a remembered run that left work. */
-const AFTER_OPEN = "Paste a token and press Repair.";
-
 /** One piece as a screen draws it. */
 interface ShownRow {
   /** The kind of the piece, in the provider's words. */
@@ -85,12 +76,6 @@ interface Summary {
 
   /** Whether anything is left to do. */
   readonly tone: "good" | "bad";
-
-  /** What to do next, or `null` when nothing is left. */
-  readonly next: string | null;
-
-  /** What is said of the optional pieces that are not set up, or `null` when there is none. */
-  readonly optional: string | null;
 }
 
 /** A run that read its table, as a screen draws it. */
@@ -147,27 +132,18 @@ function count(rows: readonly DomainRow[], states: readonly DomainState[]): numb
   return rows.filter((row) => states.includes(row.state)).length;
 }
 
-/** An optional piece is no work left over: it is said apart from the count. */
-function optionalNote(rows: readonly DomainRow[]): string | null {
-  const optional = count(rows, ["optional"]);
-  if (optional === 0) return null;
-
-  return `${optional} optional, not set up. The install works without them. Each such row names the right that switches it on.`;
-}
-
-/** A run goes on past a row that failed for a right and stops at any other failure, and the rows alone do not say which: the line counts what is left and claims neither. */
+/** A run goes on past a row that failed for a right and stops at any other failure, and the rows alone do not say which: the line counts what is left and claims neither. An optional piece that is not set up is no work left over. */
 function summaryOf(run: DomainRun, rows: readonly DomainRow[]): Summary {
-  const optional = optionalNote(rows);
   const failed = count(rows, ["failed"]);
-  if (failed > 0) return { line: `${failed + count(rows, UNDONE)} not done`, tone: "bad", next: AFTER_FAILED, optional };
+  if (failed > 0) return { line: `${failed + count(rows, UNDONE)} not done`, tone: "bad" };
 
   const waiting = count(rows, TO_REPAIR);
-  if (waiting > 0) return { line: `${waiting} to repair`, tone: "bad", next: AFTER_CHECK, optional };
+  if (waiting > 0) return { line: `${waiting} to repair`, tone: "bad" };
 
   const repaired = count(rows, REPAIRED);
-  if (run === "repair" && repaired > 0) return { line: `${repaired} repaired`, tone: "good", next: null, optional };
+  if (run === "repair" && repaired > 0) return { line: `${repaired} repaired`, tone: "good" };
 
-  return { line: "Nothing to repair", tone: "good", next: null, optional };
+  return { line: "Nothing to repair", tone: "good" };
 }
 
 /**
@@ -180,10 +156,10 @@ export function keptAnswer(kept: Kept): Last | null {
   if (check === null) return null;
 
   const drawn = check.pieces.map((piece) => ({ piece, as: KEPT[piece.state === "unread" ? piece.reason : piece.state] }));
-  const counted = summaryOf("check", drawn.map(({ piece, as }) => ({ object: piece.piece, detail: piece.detail, part: piece.part, state: as.counts })));
+  const summary = summaryOf("check", drawn.map(({ piece, as }) => ({ object: piece.piece, detail: piece.detail, part: piece.part, state: as.counts })));
   const rows = drawn.map(({ piece, as }) => ({ piece: piece.piece, state: as.state, tone: as.tone, detail: piece.detail }));
 
-  return { ran_at: check.ran_at, by: check.by, run: check.run, stale, rows, summary: { ...counted, next: counted.next === null ? null : AFTER_OPEN } };
+  return { ran_at: check.ran_at, by: check.by, run: check.run, stale, rows, summary };
 }
 
 /**

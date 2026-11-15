@@ -16,7 +16,7 @@ import { readShell } from "./support/shell";
 interface Ran {
   readonly ok: true;
   readonly rows: readonly { readonly piece: string; readonly state: string; readonly tone: string; readonly detail: string }[];
-  readonly summary: { readonly line: string; readonly tone: string; readonly next: string | null; readonly optional: string | null };
+  readonly summary: { readonly line: string; readonly tone: string };
 }
 
 /** What a refused request answers. */
@@ -81,7 +81,7 @@ describe("what the screen opens with", () => {
         { piece: "Worker route", state: "present", tone: "good", detail: "poplin.example.com/*" },
         { piece: "Rate rule", state: "not set up", tone: "idle", detail: "rate rule: the domain has other hostnames" },
       ],
-      summary: { line: "1 to repair", tone: "bad", next: "Paste a token and press Repair.", optional: null },
+      summary: { line: "1 to repair", tone: "bad" },
     });
   });
 
@@ -124,7 +124,7 @@ describe("a run", () => {
       { piece: "Worker route", state: "present", tone: "good", detail: "poplin.example.com/*" },
       { piece: "Rate rule", state: "left out", tone: "idle", detail: "rate rule: the domain has other hostnames" },
     ]);
-    expect(ran.summary).toEqual({ line: "1 to repair", tone: "bad", next: "Paste the token again and press Repair.", optional: null });
+    expect(ran.summary).toEqual({ line: "1 to repair", tone: "bad" });
     expect(plug.calls).toMatchObject([{ run: "check", token: TOKEN, settings: { outside_pages: "blocked", logins: [opened.base.owner] } }]);
     expect((await opened.base.audit())[0]).toMatchObject({ action: "domain_synced", by: opened.base.owner, detail: { run: "check", from: "dashboard" } });
   });
@@ -185,26 +185,20 @@ describe("a run", () => {
   });
 });
 describe("the line that counts a run's rows", () => {
-  // Drift: the line would claim a repair that left work was done, count an optional piece as work, or tell a person the wrong next step.
+  // Drift: the line would claim a repair that left work was done, or count an optional piece as work.
   test.each([
-    ["check", rowsIn("present", "missing", "differs", "left-out"), "2 to repair", "bad", "Paste the token again and press Repair.", null],
-    ["repair", rowsIn("created", "changed", "removed", "present"), "3 repaired", "good", null, null],
-    ["repair", rowsIn("present", "present"), "Nothing to repair", "good", null, null],
-    ["check", rowsIn("present", "created"), "Nothing to repair", "good", null, null],
-    ["repair", rowsIn("created", "failed", "present"), "1 not done", "bad", "Each failed row says why, or what to add. Then paste the token and press Repair again.", null],
-    ["repair", rowsIn("failed", "not-run", "missing"), "3 not done", "bad", "Each failed row says why, or what to add. Then paste the token and press Repair again.", null],
-    [
-      "repair",
-      rowsIn("created", "optional", "optional"),
-      "1 repaired",
-      "good",
-      null,
-      "2 optional, not set up. The install works without them. Each such row names the right that switches it on.",
-    ],
-  ] as const)("after a %s of %p says %s", (run, rows, line, tone, next, optional) => {
+    ["check", rowsIn("present", "missing", "differs", "left-out"), "2 to repair", "bad"],
+    ["repair", rowsIn("created", "changed", "removed", "present"), "3 repaired", "good"],
+    ["repair", rowsIn("present", "present"), "Nothing to repair", "good"],
+    ["check", rowsIn("present", "created"), "Nothing to repair", "good"],
+    ["repair", rowsIn("created", "failed", "present"), "1 not done", "bad"],
+    ["repair", rowsIn("failed", "not-run", "missing"), "3 not done", "bad"],
+    ["repair", rowsIn("created", "optional", "optional"), "1 repaired", "good"],
+    ["check", rowsIn("present", "optional"), "Nothing to repair", "good"],
+  ] as const)("after a %s of %p says %s", (run, rows, line, tone) => {
     const reading: Extract<DomainReading, { ok: true }> = { ok: true, rows: [...rows], steps: [] };
 
-    expect(runDone(run, reading).summary).toEqual({ line, tone, next, optional });
+    expect(runDone(run, reading).summary).toEqual({ line, tone });
   });
 
   // Drift: an optional piece that is not set up would read as a failure.
@@ -217,7 +211,7 @@ describe("the line that counts a run's rows", () => {
 
 describe("the run the install remembers", () => {
   // Drift: the screen would open on a remembered run with the wrong count, or call a piece that was never read present.
-  test("is drawn with each piece's state, counted as a check, with the step for a screen that holds no token", () => {
+  test("is drawn with each piece's state, counted as a check", () => {
     const kept = keptAnswer({
       stale: true,
       check: {
@@ -244,7 +238,7 @@ describe("the run the install remembers", () => {
         { piece: "Rate rule", state: "not set up", tone: "idle", detail: "left out" },
         { piece: "Route", state: "not run", tone: "idle", detail: "never reached" },
       ],
-      summary: { line: "2 not done", tone: "bad", next: "Paste a token and press Repair.", optional: null },
+      summary: { line: "2 not done", tone: "bad" },
     });
     expect(keptAnswer({ check: null, stale: false })).toBeNull();
   });

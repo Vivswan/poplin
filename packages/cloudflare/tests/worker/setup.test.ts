@@ -27,7 +27,7 @@ interface Ran {
   readonly run: string;
   readonly rows: readonly { readonly piece: string; readonly state: string; readonly tone: string; readonly detail: string }[];
   readonly steps: readonly { readonly text: string; readonly address?: string }[];
-  readonly summary: { readonly line: string; readonly tone: string; readonly next: string | null };
+  readonly summary: { readonly line: string; readonly tone: string };
   readonly expects?: string | null;
 }
 
@@ -134,7 +134,7 @@ describe("the setup page", () => {
     const calls = asked.length;
     const other = await run(worker, `${OWN}/setup`, "check", { token: OTHER_TOKEN });
 
-    expect([checked.status, ran.run, ran.rows.some((row) => row.piece === "DNS record" && row.state === "missing"), ran.summary.next, writes()]).toEqual([200, "check", true, "Paste the token again and press Repair.", []]);
+    expect([checked.status, ran.run, ran.rows.some((row) => row.piece === "DNS record" && row.state === "missing"), ran.summary.tone, writes()]).toEqual([200, "check", true, "bad", []]);
     expect([other.status, await other.json(), [...new Set(asked.slice(calls).map((entry) => entry.path.split("?")[0]))]]).toEqual([403, TOKEN_REFUSED, ["/zones"]]);
   });
 

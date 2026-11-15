@@ -200,7 +200,7 @@ describe("a run", () => {
       run: "repair",
       rows: [{ piece: "DNS record", state: "created", tone: "good", detail: "poplin.example.com" }],
       steps: [],
-      summary: { line: "1 repaired", tone: "good", next: null, optional: null },
+      summary: { line: "1 repaired", tone: "good" },
       expects: opened.owner,
     });
     expect(body).not.toContain(TOKEN);
