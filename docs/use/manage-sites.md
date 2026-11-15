@@ -85,6 +85,18 @@ For a site that deletes itself, the panel then shows the day and time, and `Then
 
 The field Public name starts with the site's name. Under it, `Its link will be` shows the address the site gets for the name typed, such as `docs-page.example.com`.
 
+Duplicate, in the panel, makes a private copy of the site, with a new link.
+
+| After Duplicate               | You see                                                                           |
+| ----------------------------- | --------------------------------------------------------------------------------- |
+| at first                      | a question with the field Name, which starts with the site's name                 |
+| a Name that is refused        | why, at the field; what was typed stays                                           |
+| a small site                  | `Duplicated.`, with Open, which opens the copy's panel                            |
+| a site of more files          | `Duplicating. Ready in a few seconds.`, with Cancel, then `Duplicated.`           |
+| Cancel                        | `Cancelled. No copy was made.`, or `Duplicated.` if the copy was whole by then    |
+
+The copy goes on while you use other screens. A copy that stops half way, as when the tab is closed, makes no site, and its files are removed in about a day.
+
 For a site in the trash, the panel has Restore and Delete for good. Its row has Restore, and Delete for good in the menu after it.
 
 | Delete for good       | Does, or says                                                             |
