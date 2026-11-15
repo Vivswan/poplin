@@ -38,7 +38,7 @@ const REFUSALS: Readonly<Record<ActionCode | OwnCode, string>> = {
   upload_finished: "The copy is finished already: it is a site of its own now, in the list of sites.",
   stale_version: "A newer publish went live first.",
   id_taken: "A site here already has that id.",
-  not_confirmed: "Tick the box first.",
+  not_confirmed: "Type the last letters of the code first.",
   not_json: "The request was not sent as JSON, so nothing was changed.",
   too_large: "The request was too large, so nothing was changed.",
   no_page: "There is no such page.",

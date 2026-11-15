@@ -45,10 +45,10 @@ A refused command prints one sentence and often a hint. With `--json` it prints 
 | Code                    | Means                                                       | What to do                                                    |
 | ----------------------- | ----------------------------------------------------------- | ------------------------------------------------------------- |
 | `no_setup_server`       | `poplin setup` was given no address                         | `poplin setup --server https://poplin.your-name.workers.dev`  |
-| `no_setup_token`        | `POPLIN_SETUP_TOKEN` holds no token                         | put the token of [by hand](../start/by-hand.md#the-steps), step 3, in it |
-| `setup_token_refused`   | the token was refused, or it is of another account          | make one with the rights [step 3](../start/when-a-step-fails.md#step-3-the-form-opens-empty) lists, in the install's account |
+| `no_setup_token`        | `POPLIN_SETUP_TOKEN` holds no account token                 | put the token of [by hand](../start/by-hand.md#the-steps), step 3, in it |
+| `setup_token_refused`   | the account token was refused, or it is of another account  | make one with the rights [step 3](../start/when-a-step-fails.md#step-3-the-form-opens-empty) lists, in the install's account |
 | `setup_provider_silent` | Cloudflare gave the install no answer, or asked it to wait  | try again in a minute                                         |
-| `setup_no_domain`       | the token shows no such domain                              | give `--domain` a domain that is Active in the token's account |
+| `setup_no_domain`       | the account token shows no such domain                      | give `--domain` a domain that is Active in the token's account |
 | `setup_bad_domain`      | `--domain` holds more than a domain, or one over 50 characters | the domain alone: `--domain example.com`                   |
 | `setup_bad_login`       | `--login` holds no email address                            | a new install needs both: `--domain <domain> --login <email>` |
 | `setup_closed`          | nothing at that address takes a setup                       | after the first login, use the dashboard's Domain screen      |

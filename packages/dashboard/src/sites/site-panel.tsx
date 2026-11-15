@@ -1,4 +1,4 @@
-// One site, beside the table: its link, who can open it, its facts and versions, the settings it is seldom given, and what is done to the whole of it.
+// One site, over the end of the table: its link, who can open it, its facts and versions, the settings it is seldom given, and what is done to the whole of it.
 
 import { showBytes } from "@poplin/core/src/records/settings";
 import { Link } from "@tanstack/react-router";
@@ -40,6 +40,9 @@ interface SitePanelProps {
 
   /** Closes the panel. */
   readonly onClose: () => void;
+
+  /** Finds the row of the site in the list: it takes the focus when the panel closes. */
+  readonly opener: () => HTMLElement | undefined;
 
   /** Called when a change gave the site another label, with the site as it then is: its panel is at another address. */
   readonly onMoved: (site: Site) => void;
@@ -183,7 +186,7 @@ function TrashBlock({ site, onRestore, onGone }: { readonly site: Site; readonly
 }
 
 /** Draw the panel of one site. It reads the site when it opens and after every change. */
-export function SitePanel({ label, actions, reveal, onAsk, closeLink, onClose, onMoved }: SitePanelProps): ReactNode {
+export function SitePanel({ label, actions, reveal, onAsk, closeLink, onClose, opener, onMoved }: SitePanelProps): ReactNode {
   const { data, error, isFetching } = useSite(label);
   const failure = error?.message;
 
@@ -193,7 +196,7 @@ export function SitePanel({ label, actions, reveal, onAsk, closeLink, onClose, o
     if (moved !== undefined) onMoved(moved);
   }, [moved, onMoved]);
 
-  const frame = { closeLink, onClose, back: "Back to sites" };
+  const frame = { closeLink, onClose, opener, back: "Back to sites" };
   const site = data?.site;
   if (site === undefined || data === undefined) {
     return (

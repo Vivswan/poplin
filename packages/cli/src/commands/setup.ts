@@ -1,4 +1,4 @@
-// `poplin setup`: the install's own setup page, run from a terminal. The install checks and repairs its side at its provider; this command sends it the token and prints its rows.
+// `poplin setup`: the install's own setup page, run from a terminal. The install checks and repairs its side at its provider; this command sends it the account token and prints its rows.
 //
 //   POPLIN_SETUP_TOKEN  ->  POST <server>/setup/api/repair  ->  the rows, the steps only a person can do, and what is left
 //

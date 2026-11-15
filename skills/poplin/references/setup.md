@@ -175,14 +175,14 @@ For rows that need work, ask the user to copy each row whose State is failed, mi
 
 Repair is safe to repeat. The page empties the token's box after every run and keeps the other two, so the user pastes the token again before they press it.
 
-**The same from a terminal.** `poplin setup` does what the page does, and reads the token from `POPLIN_SETUP_TOKEN` in the environment alone. The user runs it in a terminal of their own, where you do not see the token:
+**The same from a terminal.** `poplin setup` does what the page does, and reads the account token from `POPLIN_SETUP_TOKEN` in the environment alone. The user runs it in a terminal of their own, where you do not see the token:
 
 ```sh
-export POPLIN_SETUP_TOKEN="paste the token here"
+export POPLIN_SETUP_TOKEN="paste the account token here"
 npx poplin setup --server https://poplin.your-name.workers.dev --domain example.com --login you@example.com
 ```
 
-In PowerShell the first line is `$env:POPLIN_SETUP_TOKEN = "paste the token here"`.
+In PowerShell the first line is `$env:POPLIN_SETUP_TOKEN = "paste the account token here"`.
 
 Ask the user to copy you what the second line printed: the token is not in it.
 

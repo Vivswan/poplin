@@ -82,12 +82,20 @@ interface TokensTabProps {
   readonly onRetry: () => void;
 }
 
+/** The name of a row. A waiting login chose its own, which nobody checked: it stands in quotes, as the words of the login and not of the page, and its review shows it whole. */
 function Name({ row }: { readonly row: TokenRow }): ReactNode {
   const name = computerName(row.name);
+  if (row.kind === "allowed" || !name.given) {
+    return (
+      <span className="font-medium" title={name.whole}>
+        {name.shown}
+      </span>
+    );
+  }
 
   return (
-    <span className="font-medium" title={name.whole}>
-      {name.shown}
+    <span className="font-medium">
+      "<bdi>{name.shown}</bdi>"
     </span>
   );
 }
@@ -239,16 +247,16 @@ export function TokensTab({ tokens, ended, waiting, failure, waitingFailure, sor
     );
 
   const actionOf = (row: TokenRow): ReactNode => {
-    const { shown } = computerName(row.name);
+    // A waiting login chose its own name, which nobody checked: the button that opens it is named by the page alone.
     if (row.kind === "waiting") {
       return (
-        <Button variant="outline" size="sm" aria-label={`Review ${shown}`} onClick={() => onReview(row.login)}>
+        <Button variant="outline" size="sm" onClick={() => onReview(row.login)}>
           Review
         </Button>
       );
     }
 
-    return <RowMenu name={shown} onRemove={() => setLeaving(row.token)} />;
+    return <RowMenu name={computerName(row.name).shown} onRemove={() => setLeaving(row.token)} />;
   };
   const answer = (yes: boolean): void => {
     if (yes && leaving !== undefined) void actions.removeToken(leaving);

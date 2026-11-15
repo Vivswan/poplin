@@ -1,10 +1,10 @@
-// The Sites screen: every site in one table, searched and narrowed by the server, with one site's panel beside it; or the trash.
+// The Sites screen: every site in one table, searched and narrowed by the server, with one site's panel over its end; or the trash.
 
 import { useQueryClient } from "@tanstack/react-query";
 import { Link, linkOptions, useNavigate, useParams } from "@tanstack/react-router";
 import { cn } from "cn";
 import { CopyIcon, ExternalLinkIcon, PlusIcon } from "lucide-react";
-import { type ReactNode, type RefObject, useCallback, useMemo, useRef, useState } from "react";
+import { type ReactNode, type RefObject, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyTitle } from "@/components/ui/empty";
@@ -18,7 +18,7 @@ import { useChosenTimeZone } from "@/lib/timezone";
 import { IconButton } from "@/shared/icon-button";
 import { PAGE_WAY, Pages, queryWith, useFirstRowFocus, useShownPlace, useTopOfPlace } from "@/shared/pages";
 import { SearchBox } from "@/shared/search-box";
-import { useStandsBeside } from "@/shared/side-panel";
+import { useLiesOver } from "@/shared/side-panel";
 import type { LoginNames } from "@/shared/who";
 import { AppShell } from "@/shell/app-shell";
 import { siteActions } from "@/sites/site-actions";
@@ -49,7 +49,7 @@ const PUBLISH_COMMAND = "npx poplin ./my-folder";
 function FilterSelect({ filter, onChoose }: { readonly filter: Filter; readonly onChoose: (filter: Filter) => void }): ReactNode {
   return (
     <Select items={FILTERS} value={filter} onValueChange={(value) => onChoose(value as Filter)}>
-      <SelectTrigger aria-label="Which sites" className="w-36 shrink-0 max-md:w-32 @max-md:w-25">
+      <SelectTrigger aria-label="Which sites" className="w-36 shrink-0 max-md:w-32">
         <SelectValue />
       </SelectTrigger>
       <SelectContent alignItemWithTrigger={false} align="start">
@@ -162,6 +162,7 @@ function PhoneList({
             <Button
               variant="ghost"
               aria-label={`Details of ${shownName(site)}`}
+              data-opens={site.label}
               className="absolute inset-0 h-auto rounded-none transition-none hover:bg-transparent focus-visible:ring-inset"
               onClick={() => onOpen(site)}
             />
@@ -255,7 +256,7 @@ function NoRows(props: NoRowsProps): ReactNode {
   );
 }
 
-/** What sits above the table: the search, the filter, the order on a phone, the columns' menu, and how a new site is made. Search and order keep an open panel open; another filter closes it. */
+/** What sits above the table: the search, the filter, the order on a phone, the columns' menu, and how a new site is made. */
 function Toolbar({
   query,
   filter,
@@ -416,6 +417,28 @@ function useQuestion(): {
   return { asked, asker, ask, leave };
 }
 
+/** The row or the row's button that opens the panel of the site with a label, whichever is in sight. */
+function openerOf(label: string): HTMLElement | undefined {
+  return [...document.querySelectorAll<HTMLElement>(`[data-opens="${CSS.escape(label)}"]`)].find((opener) => opener.getClientRects().length > 0);
+}
+
+/**
+ * Keep the focus on the screen. A panel that closed with the focus in it leaves the focus on nothing: the row of its site takes it. A site that left the list, or a panel that closed over a row that is gone, leaves it to the search.
+ *
+ * @param opened - the label of the site whose panel is open
+ * @returns the handlers of the screen's region
+ */
+function useKeptFocus(opened: string | undefined): ReturnType<typeof useFocusHome> {
+  const before = useRef(opened);
+  const kept = useFocusHome(() => (opened === undefined && before.current !== undefined ? openerOf(before.current) : undefined));
+  // The look for a lost focus comes first, in the hook above: it still reads the label of the panel that has just closed.
+  useEffect(() => {
+    before.current = opened;
+  }, [opened]);
+
+  return kept;
+}
+
 /** Draw the Sites screen for the address: the table, and the panel of the site the path names. */
 export function SitesScreen(): ReactNode {
   useChosenTimeZone();
@@ -424,12 +447,13 @@ export function SitesScreen(): ReactNode {
   const { label: opened } = useParams({ strict: false });
   const filter = filterOf(query);
   const search = query.get("q") ?? "";
-  const beside = useStandsBeside();
+  const over = useLiesOver();
   const { data: page, error, isPending, isPlaceholderData, refetch, place } = useShownSites(query);
 
   const { toTable, toSite, stay } = useSitePlaces(query);
   const follow = useCallback((site: Pick<Site, "label">): void => void navigate({ ...toSite(site), replace: true }), [navigate, toSite]);
   const actions = useSiteChanges(opened, follow);
+  const kept = useKeptFocus(opened);
   const open = useCallback((site: Site): void => void navigate(site.label === opened ? toTable : toSite(site)), [navigate, opened, toTable, toSite]);
   const copy = useCallback((site: Site): void => void actions.copyLink(site), [actions]);
   const reveal = useReveal(opened);
@@ -451,16 +475,14 @@ export function SitesScreen(): ReactNode {
   );
   const nothing = error !== null || (!isPending && sites.length === 0);
   const firstRow = useFirstRowFocus(place);
-  // A site that left the list, or a panel that closed over a row that is gone, leaves the focus on nothing: the search takes it.
-  const kept = useFocusHome();
 
   return (
     <AppShell current="sites" heading="Sites">
-      <div {...kept} className={cn("grid min-h-0 flex-1 grid-cols-1", opened !== undefined && beside && "grid-cols-[minmax(0,1fr)_440px]")}>
-        {/* Where the panel has the row to itself the list keeps its place under it, out of sight and out of reach, so it is found as it was left. */}
+      <div {...kept} className="relative grid min-h-0 flex-1 grid-cols-1">
+        {/* The list keeps its width under an open panel. Where the panel has the row to itself the list is out of sight and out of reach, and is found as it was left. */}
         <section
           aria-label="Sites"
-          className={cn("@container col-start-1 row-start-1 flex min-h-0 min-w-0 flex-col", opened !== undefined && !beside && "invisible")}
+          className={cn("@container col-start-1 row-start-1 flex min-h-0 min-w-0 flex-col", opened !== undefined && !over && "invisible")}
           {...firstRow}
         >
           <Toolbar query={query} filter={filter} search={search} columns={<ColumnsMenu columns={columns} layout={layout} />} onStay={stay} />
@@ -500,12 +522,14 @@ export function SitesScreen(): ReactNode {
         </section>
         {opened === undefined ? null : (
           <SitePanel
+            key={opened}
             label={opened}
             actions={actions}
             reveal={reveal}
             onAsk={ask}
             closeLink={<Link {...toTable} />}
             onClose={() => void navigate(toTable)}
+            opener={() => openerOf(opened)}
             onMoved={follow}
           />
         )}
