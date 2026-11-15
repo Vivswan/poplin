@@ -434,7 +434,7 @@ function queryPlans(label: string, makeDriver: DriverFactory): void {
       await database.exportSites({ limit: 10 });
       await database.readSigningKey();
       await database.readSettingsAndKey();
-      await database.readFrame();
+      await database.readFrame(NOW);
       await database.ensureSigningKey(FIRST_KEY, NOW);
       await database.rotateSigningKey(SECOND_KEY, BY_ADA);
       const moved = await database.giveNewId(site.id, BY_ADA);
