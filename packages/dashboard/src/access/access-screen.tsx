@@ -68,10 +68,13 @@ export function AccessScreen(): ReactNode {
   const ended = useEndedTokens(sort, tab === "tokens");
   const kept = listQuery(query);
   const opener = useRef<HTMLElement | null>(null);
+  // The login whose Review was pressed here. A review the address alone opened was not asked for on this screen: anyone can send its address.
+  const pressed = useRef<string | undefined>(undefined);
   // A user, a token, or a waiting login that left its list leaves the focus on nothing: the tab that is open takes it.
   const keptFocus = useFocusHome();
   const openReview = (id: string): void => {
     opener.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    pressed.current = id;
     void navigate({ to: "/tokens/review/$login", params: { login: id }, search: searchOf(kept) });
   };
 
@@ -107,6 +110,7 @@ export function AccessScreen(): ReactNode {
       </MiddleColumn>
       <ReviewDialog
         login={asked === undefined ? undefined : review.data}
+        byLink={asked?.by === "code" || (asked?.by === "id" && asked.id !== pressed.current)}
         actions={actions}
         onClose={() => void navigate({ to: TOKENS_PATH, search: searchOf(kept), replace: true })}
         returnTo={opener}

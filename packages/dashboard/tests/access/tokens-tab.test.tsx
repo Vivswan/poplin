@@ -76,7 +76,7 @@ describe("the rows of the tokens", () => {
     render(<Tab />);
 
     expect(row("build-server").getByText("Waiting")).toBeDefined();
-    expect(row("build-server").getByRole("button", { name: "Review build-server" })).toBeDefined();
+    expect(row("build-server").getByRole("button", { name: "Review" })).toBeDefined();
     expect(row("build-server").queryByRole("button", { name: /^More for/ })).toBeNull();
 
     expect(row("report agent").queryByText("Waiting")).toBeNull();
@@ -87,7 +87,7 @@ describe("the rows of the tokens", () => {
   // Drift: Review would open nothing, or the review of another login.
   test("Review asks for the review of the row's own login", () => {
     render(<Tab />);
-    fireEvent.click(row("build-server").getByRole("button", { name: "Review build-server" }));
+    fireEvent.click(row("build-server").getByRole("button", { name: "Review" }));
 
     expect(asked.reviewed).toEqual([WAITING_LOGIN.id]);
   });
@@ -98,14 +98,14 @@ describe("a waiting login with no token beside it", () => {
   test("it is listed where no token is", () => {
     render(<Tab tokens={[]} />);
 
-    expect(row("build-server").getByRole("button", { name: "Review build-server" })).toBeDefined();
+    expect(row("build-server").getByRole("button", { name: "Review" })).toBeDefined();
   });
 
   // Drift: a refused read of the tokens would take the waiting logins off the screen, though they were read, and nobody could allow one.
   test("it is listed where the tokens could not be read, with the refusal said under it", () => {
     render(<Tab tokens={null} failure="The tokens were not read." />);
 
-    expect(row("build-server").getByRole("button", { name: "Review build-server" })).toBeDefined();
+    expect(row("build-server").getByRole("button", { name: "Review" })).toBeDefined();
     expect(within(document.body).getAllByText("The tokens were not read.").length).toBeGreaterThan(0);
   });
 });

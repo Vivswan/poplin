@@ -22,8 +22,8 @@ const MAX_COMPUTER_LENGTH = 100;
 /** The longest secret that is read at all, in characters: longer than any secret a login is given. */
 const MAX_SECRET_LENGTH = 200;
 
-/** A name on one line: no control character. */
-const ONE_LINE = /^\P{Cc}*$/u;
+/** What no name holds, so that a name reads as it is written, on one line: a control character, a line or paragraph separator, half of a pair, and a character that is not drawn, which is how text is hidden or turned around. */
+const NOT_PLAIN = /[\p{Cc}\p{Cf}\p{Cs}\p{Zl}\p{Zp}]/gu;
 
 /** The most logins that may wait at one moment: three of one visitor, so no visitor holds the places of the rest, and fifty of all. */
 const ROOM = { perVisitor: 3, all: 50 } as const;
@@ -43,14 +43,30 @@ const UNNAMED = "poplin login";
 /** What a login is asked with: the scope of the token it wants, and the name the computer gives itself. */
 export const LOGIN_REQUEST = v.strictObject({
   scope: v.picklist(["publisher", "admin"]),
-  computer: v.pipe(v.string(), v.maxLength(MAX_COMPUTER_LENGTH), v.regex(ONE_LINE)),
+  computer: v.pipe(
+    v.string(),
+    v.check((name) => plainComputerName(name) === name),
+  ),
 });
 
 /** What a terminal asks for its token with. */
 export const LOGIN_SECRET = v.strictObject({ secret: v.pipe(v.string(), v.maxLength(MAX_SECRET_LENGTH)) });
 
-/** What an admin decides about the login under a code. `scope` is what an allowed computer becomes; left out, what it asked to be. */
-const LOGIN_DECISION = v.strictObject({ code: v.string(), allow: v.boolean(), scope: v.optional(v.picklist(["publisher", "admin"])) });
+/** What an admin decides about the login under a code. `scope` is what an allowed computer becomes: it is named each time, so no computer is let in with a scope nobody chose. */
+const LOGIN_DECISION = v.variant("allow", [
+  v.strictObject({ code: v.string(), allow: v.literal(false) }),
+  v.strictObject({ code: v.string(), allow: v.literal(true), scope: v.picklist(["publisher", "admin"]) }),
+]);
+
+/**
+ * Write a text as a name a login takes: every character no name holds is left out, and what is left is cut to 100 characters.
+ *
+ * @returns the name, which `beginLogin` takes as it is; a name `beginLogin` takes comes back unchanged
+ */
+export function plainComputerName(text: string): string {
+  // A cut can leave half of a pair at the end, which is left out too.
+  return text.replace(NOT_PLAIN, "").slice(0, MAX_COMPUTER_LENGTH).replace(NOT_PLAIN, "");
+}
 
 /** A login begun: the code to show a person, the secret to keep, the seconds until the login runs out, and the seconds to wait between two questions. */
 const BEGUN_LOGIN = v.object({ code: v.string(), secret: v.string(), expires_in: v.number(), interval: v.number() });
@@ -108,7 +124,7 @@ async function waitingLogin(install: Install, typed: string): Promise<ComputerLo
  *
  * No login is refused for the ones that wait. A visitor's fourth takes the place of their oldest, and the fifty-first of all that of the oldest one of the visitor with the most. One that lost its place answers `expired`.
  *
- * @param request - the scope and the computer's name; anything is taken and checked
+ * @param request - the scope and the computer's name, which is at most 100 characters that are all drawn, on one line; anything is taken and checked
  * @param visitor - the key the entry counts the asking visitor by, which the visitor cannot choose
  * @returns the code to show a person, the secret to keep, the seconds until the login runs out, and the seconds to wait between two questions
  * @throws {Error} the database failed
@@ -163,8 +179,8 @@ export async function showLogin(install: Install, actor: Actor, code: string): P
  *
  * An admin may allow a computer for less than it asked, never for more: a login that asked to be an admin may be allowed as a publisher.
  *
- * @param decision - the code as typed, whether the computer is let in, and the scope it is let in with; anything is taken and checked
- * @returns the login as it was decided, `not_allowed` for anyone but an admin behind a session, `bad_argument` about `scope` for an admin's scope on a login that asked for a publisher's, or `no_such_login` as in `showLogin`
+ * @param decision - the code as typed, whether the computer is let in, and for one that is, the scope it is let in with; anything is taken and checked
+ * @returns the login as it was decided, `not_allowed` for anyone but an admin behind a session, `bad_argument` about `scope` for an allowed login with no scope or with more than it asked, or `no_such_login` as in `showLogin`
  * @throws {Error} the database failed
  */
 export async function decideLogin(
@@ -178,11 +194,12 @@ export async function decideLogin(
   const asked = v.safeParse(LOGIN_DECISION, decision);
   if (!asked.success) return refuse("bad_argument", v.getDotPath(asked.issues[0])?.split(".")[0] ?? "decision");
 
-  const { allow, scope } = asked.output;
+  const allow = asked.output.allow;
+  const scope = asked.output.allow ? asked.output.scope : undefined;
   const code = parseUserCode(asked.output.code);
   if (code === undefined) return refuse("no_such_login");
 
-  if (allow && scope === "admin") {
+  if (scope === "admin") {
     const login = await waitingLogin(install, code);
     if (login === undefined) return refuse("no_such_login");
 

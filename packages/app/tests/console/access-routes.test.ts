@@ -68,12 +68,14 @@ describe("the waiting logins", () => {
 });
 
 describe("a decision", () => {
-  // Drift: a computer would be let in without the word that the codes match, or with more than it asked; or a lowered scope would not reach the token.
+  // Drift: a computer would be let in without the word that the codes match, with more than it asked, or with what it asked because the caller named no scope; or a lowered scope would not reach the token.
   test.each([
-    ["allowed with the box ticked", "publisher", { allow: true, confirm: true }, { ok: true, allowed: true, scope: "publisher" }, 0],
+    ["allowed with the box ticked", "publisher", { allow: true, confirm: true, scope: "publisher" }, { ok: true, allowed: true, scope: "publisher" }, 0],
     ["allowed for less than it asked", "admin", { allow: true, confirm: true, scope: "publisher" }, { ok: true, allowed: true, scope: "publisher" }, 0],
-    ["allowed for all it asked", "admin", { allow: true, confirm: true }, { ok: true, allowed: true, scope: "admin" }, 0],
-    ["allowed without the box ticked", "publisher", { allow: true }, { ok: false, code: "not_confirmed", about: "confirm" }, 1],
+    ["allowed for all it asked, by name", "admin", { allow: true, confirm: true, scope: "admin" }, { ok: true, allowed: true, scope: "admin" }, 0],
+    ["allowed with no scope named, when it asked for everything", "admin", { allow: true, confirm: true }, { ok: false, code: "bad_argument", about: "scope" }, 1],
+    ["allowed with no scope named, when it asked to publish", "publisher", { allow: true, confirm: true }, { ok: false, code: "bad_argument", about: "scope" }, 1],
+    ["allowed without the box ticked", "publisher", { allow: true, scope: "publisher" }, { ok: false, code: "not_confirmed", about: "confirm" }, 1],
     ["allowed for more than it asked", "publisher", { allow: true, confirm: true, scope: "admin" }, { ok: false, code: "bad_argument", about: "scope" }, 1],
     ["denied, which needs no tick", "publisher", { allow: false }, { ok: true, allowed: false }, 0],
   ] as const)("%s", async (_case, asked, decision, answer, waiting) => {

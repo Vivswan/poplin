@@ -7,7 +7,7 @@
 
 import type * as v from "valibot";
 
-import { BEGUN_LOGIN_ANSWER, REDEEMED_LOGIN } from "../../../core/src/actions/computer-logins";
+import { BEGUN_LOGIN_ANSWER, plainComputerName, REDEEMED_LOGIN } from "../../../core/src/actions/computer-logins";
 import { type Client, createClient, type Failure } from "../client/client";
 import { isServer, parseLogin } from "../local/login";
 import { readLoginFile, saveLogin } from "../local/login-file";
@@ -26,12 +26,6 @@ const INTERVAL_BOUNDS = { min: 1, max: 60 } as const;
 
 /** How often a login the install asks to wait is begun again before the refusal stands. */
 const BEGIN_RESTS = 5;
-
-/** The longest name a computer gives itself, in characters. */
-const MAX_COMPUTER_LENGTH = 100;
-
-/** A control character, which no name on one line holds. */
-const CONTROL = /\p{Cc}/gu;
 
 /** The variables that hold a login of their own, which every command uses before the saved one. */
 const LOGIN_VARIABLES = ["POPLIN_SERVER", "POPLIN_TOKEN"];
@@ -104,7 +98,7 @@ async function begin(client: Client, asked: { readonly scope: "publisher" | "adm
   }
 }
 
-/** Tell the person where to go: with `--json` one line an agent can pass on, otherwise the address and the code, each alone on a line. */
+/** Tell the person where to go: with `--json` one line an agent can pass on, otherwise the address and the code, each alone on a line. The page asks for the code's last letters, which only this output shows. */
 function announce(page: string, begun: Begun, json: boolean, io: Io): void {
   if (json) {
     io.out(JSON.stringify({ verify_url: page, code: begun.code, expires_in: begun.expires_in }));
@@ -113,7 +107,7 @@ function announce(page: string, begun: Begun, json: boolean, io: Io): void {
   }
 
   const minutes = Math.round(begun.expires_in / SECONDS_PER_MINUTE);
-  for (const line of ["open this address, and allow this computer there:", `  ${page}`, "allow it only if the page shows this code:", `  ${begun.code}`, `the code works for ${minutes} minutes`]) io.out(line);
+  for (const line of ["open this address, and allow this login there:", `  ${page}`, "the page asks for the last 4 letters of this code:", `  ${begun.code}`, `the code works for ${minutes} minutes`]) io.out(line);
 }
 
 /** Ask for the token once: the token, the reason to stop, or the seconds to wait before the next question. */
@@ -182,7 +176,7 @@ export async function logIn(request: RequestOf<"login">, io: Io): Promise<Outcom
   if (typeof server !== "string") return refused(server);
 
   const client = createClient({ server, fetch: io.fetch, timeoutMs: io.timeoutMs, stopped: io.stopped });
-  const computer = request.computer ?? io.computer.replace(CONTROL, "").slice(0, MAX_COMPUTER_LENGTH);
+  const computer = request.computer ?? plainComputerName(io.computer);
   const begun = await begin(client, { scope: request.publisher ? "publisher" : "admin", computer }, io);
   if (io.terminal.progress) io.status("");
 
