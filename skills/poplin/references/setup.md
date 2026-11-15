@@ -27,6 +27,8 @@ Something like this, in your own words:
 
 If the user says no, stop.
 
+Your own tool may ask the user to approve each command you run, such as `node --version`. Say so with the question: those prompts are expected, and they are apart from this one yes.
+
 A yes here covers the setup and nothing else. It is no permission to publish, share, or delete anything.
 
 ## 2. Check what exists
@@ -37,6 +39,8 @@ npx poplin whoami
 ```
 
 The first line prints the version of Node.js, which must be 24 or higher. When it prints an error or a lower version, ask the user to run the LTS installer from <https://nodejs.org> and to tell you when it is done. Then run both lines again: do not install it yourself.
+
+If the new Node.js is still not found, your terminal is older than the install: ask the user to restart you, the way step 5 has it.
 
 | `npx poplin whoami` prints                      | Means                      | Next                                             |
 | ----------------------------------------------- | -------------------------- | ------------------------------------------------ |
@@ -94,7 +98,7 @@ Ask the user to open <https://dash.cloudflare.com> and log in.
 | Zero Trust, in the left menu                | pick a team name and the Free plan |
 | Storage & databases, then R2, then Overview | finish the checkout it shows       |
 
-The team name can be any word. Each is done when Cloudflare shows its overview instead of the sign-up. While one still shows the sign-up, ask what the page asks for, and have the user finish it.
+The team name can be any word. Each sign-up asks for the payment method and names its price. Each is done when Cloudflare shows its overview instead of the sign-up. While one still shows the sign-up, ask what the page asks for, and have the user finish it.
 
 ### b. Make the Worker
 
@@ -104,13 +108,20 @@ Ask the user to open this address and sign in to GitHub when asked:
 https://deploy.workers.cloudflare.com/?url=https://github.com/Vivswan/poplin
 ```
 
-Where the form asks for an account, they pick their own. They change nothing else: the project stays `poplin`, the bucket `poplin-sites`, the database `poplin`. Then they press the last button of the form.
+Where the form asks for an account, they pick their own. They change nothing else: the project stays `poplin`, the bucket `poplin-sites`, the database `poplin`. Then they press the button at the bottom of the form, the one that starts the deploy.
 
-After a few minutes a page opens with the Worker's own address at its top, the one ending in `workers.dev`. Ask for it, and keep it:
+| The form or GitHub asks                           | The user                                                     |
+| ------------------------------------------------- | ------------------------------------------------------------ |
+| whether Cloudflare may reach their GitHub account | allows it: Cloudflare puts the copy there and builds from it |
+| whether the copy is private or public             | picks either. The copy holds poplin's code and no token      |
+
+The user keeps the tab open. After a few minutes it shows the Worker's page, with the Worker's own address on it, the one ending in `workers.dev`. Ask for it, and keep it:
 
 ```text
 https://poplin.your-name.workers.dev
 ```
+
+If the tab was closed or shows no address, the user opens <https://dash.cloudflare.com>, goes to Workers & Pages, and selects the Worker `poplin`: its page names the address.
 
 Check: ask the user to open that address.
 
@@ -134,8 +145,11 @@ On the Setup page, under Make a token, the user presses Open the token form. Clo
 | the eight rows    | leaves them                                            |
 | Account Resources | chooses Include, then their account                    |
 | Zone Resources    | chooses Include, then Specific zone, then their domain |
+| every other field | leaves it as it is                                     |
 | the bottom        | presses Continue to summary, then Create Token         |
 | the next page     | copies the token: it is shown once                     |
+
+The install never stores the token. After part e the user either keeps it where they keep passwords, or deletes it at Cloudflare, under My Profile, then API Tokens: the install keeps working. Only Check and Repair on the dashboard's Domain screen ask for a token again, and the same form makes a new one.
 
 If the form opens empty, step 3 of the [install guide](https://github.com/Vivswan/poplin/blob/main/docs/start/when-a-step-fails.md#step-3-the-form-opens-empty) has the clicks that add the eight permissions by hand.
 
@@ -232,6 +246,14 @@ npx poplin doctor
 The server has one name, `poplin`, one command, `npx`, and two arguments, `poplin mcp`. [`mcp-server.md`](mcp-server.md) says how each kind of agent adds it.
 
 Edit your own configuration only, and only after the yes of step 1. The tools may not appear until you are restarted: if so, tell the user, and do step 6 with the command.
+
+Before a restart, tell the user three things, since the chat may not come back:
+
+| Tell the user      | In words like                                           |
+| ------------------ | ------------------------------------------------------- |
+| what is done       | the install is made and this computer is logged in      |
+| how to restart you | close the agent, then start it again in the same folder |
+| what to say next   | `Go on with the poplin setup.`                          |
 
 ## 6. Confirm, and tell the user
 

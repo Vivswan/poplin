@@ -66,7 +66,7 @@ after every run:   the token's box is empty    paste the token again
 | still have the token's text | choose Edit, add the permission, save. Paste the same text and press Repair          |
 | no longer have it           | choose Roll. Roll makes a new token text. Add the permission, and paste the new text |
 
-A right's name is the form's second box, then its third: `Zone WAF: Edit` is Zone WAF, then Edit. Its first box is in the table of [step 3](#step-3-the-form-opens-empty), or of [the optional part](../run/domain.md#optional-block-junk-traffic-and-crawlers).
+A right's name holds two of the form's three boxes. `Zone WAF: Edit` means Zone WAF in the second box and Edit in the third. The first box is in the table of [step 3](#step-3-the-form-opens-empty), or of [the optional part](../run/domain.md#optional-block-junk-traffic-and-crawlers).
 
 ## Step 5: no code arrives
 
