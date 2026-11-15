@@ -2,10 +2,11 @@
 
 import { describe, expect, test } from "bun:test";
 
-import { countAudit, listAuditForFile, nextAuditFile } from "../../src/actions/audit-log";
+import { countAudit, listAudit, listAuditForFile, listAuditForScreen, nextAuditFile } from "../../src/actions/audit-log";
 import { changeConfig } from "../../src/actions/config";
 import { updateSite } from "../../src/actions/set";
-import { ADMIN, made, makeWorld, OWNER } from "./support/actions-fixture";
+import { AUDIT_WINDOW } from "../../src/database/database";
+import { ADMIN, made, makeWorld, NOW, OWNER } from "./support/actions-fixture";
 
 describe("countAudit", () => {
   // Drift: the Activity screen's total is this count under the screen's own filters; a kind counted by other actions than it lists by would show a total its pages never reach.
@@ -74,6 +75,50 @@ describe("listAuditForFile", () => {
       { ok: false, code: "not_allowed" },
       { ok: false, code: "bad_argument", about: "entries" },
       { ok: false, code: "bad_argument", about: "entries" },
+    ]);
+  });
+});
+
+describe("a narrowed reading of a log longer than its window", () => {
+  // Drift: the screen, a file of the log and the API all go on from `stopped_at`. Left out, a rare site's history would end at the window; set on a full page or at the log's end, it would offer a search with nothing behind it.
+  test("answers what its window holds and where it stopped, the count and the file's end stop with it, and the screen's reading takes a page of 201", async () => {
+    const world = await makeWorld();
+    await made(world, ADMIN, "report");
+    for (let count = 0; count < AUDIT_WINDOW + 5; count += 1) await world.install.database.appendAudit({ action: "login", detail: {} }, { by: ADMIN.holder, at: NOW });
+    await made(world, ADMIN, "docs");
+    const told = (read: Awaited<ReturnType<typeof listAudit>>): unknown => (read.ok ? [read.entries.map((entry) => entry.site?.name ?? entry.action), Object.keys(read)] : read);
+    const screen = await listAuditForScreen(world.install, ADMIN, { limit: 201, kind: "access" });
+
+    expect([
+      told(await listAudit(world.install, ADMIN, { site: "o", limit: 2 })),
+      told(await listAudit(world.install, ADMIN, { site: "o", after: 9 })),
+      told(await listAudit(world.install, ADMIN, { site: "o", limit: 1 })),
+      told(await listAudit(world.install, ADMIN, { site: "nowhere" })),
+      told(await listAudit(world.install, ADMIN, { limit: 1 })),
+      told(await listAuditForFile(world.install, ADMIN, { site: "o" })),
+      await countAudit(world.install, ADMIN, { site: "o" }),
+      await countAudit(world.install, ADMIN),
+      await nextAuditFile(world.install, ADMIN, { entries: 2000, site: "o" }),
+      await nextAuditFile(world.install, ADMIN, { entries: 2000, site: "o", after: 9 }),
+      await nextAuditFile(world.install, ADMIN, { entries: 2000, kind: "access" }),
+      screen.ok && screen.entries.length,
+      await listAuditForScreen(world.install, ADMIN, { limit: 202 }),
+      await listAuditForScreen(world.install, OWNER, { limit: 1 }),
+    ]).toEqual([
+      [["docs"], ["ok", "entries", "stopped_at"]],
+      [["report"], ["ok", "entries"]],
+      [["docs"], ["ok", "entries"]],
+      [[], ["ok", "entries", "stopped_at"]],
+      [["docs"], ["ok", "entries"]],
+      [["docs"], ["ok", "entries", "stopped_at"]],
+      { ok: true, count: 1, whole: false },
+      { ok: true, count: AUDIT_WINDOW + 8, whole: true },
+      { ok: true, after: 9 },
+      { ok: true, after: null },
+      { ok: true, after: AUDIT_WINDOW - 1992 },
+      201,
+      { ok: false, code: "bad_argument", about: "limit" },
+      { ok: false, code: "not_allowed" },
     ]);
   });
 });

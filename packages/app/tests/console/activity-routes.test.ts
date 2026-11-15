@@ -5,6 +5,7 @@ import { describe, expect, test } from "bun:test";
 import { deleteSite } from "@poplin/core/src/actions/delete";
 import { issueToken } from "@poplin/core/src/actions/manage-tokens";
 import { updateSite } from "@poplin/core/src/actions/set";
+import { AUDIT_WINDOW } from "@poplin/core/src/database/database";
 import { siteLabel } from "@poplin/core/src/sites/labels";
 
 import { openConsole } from "./support/console";
@@ -20,6 +21,7 @@ interface Page {
   readonly logins: Readonly<Record<string, string>>;
   readonly next: string | null;
   readonly previous: string | null;
+  readonly stopped: boolean;
 }
 
 /** An install with a renamed site, a site deleted for good, and a named token: one entry of each kind of site, and one of access. */
@@ -305,5 +307,64 @@ describe("the log as a file", () => {
     const opened = await openConsole();
 
     expect([(await opened.getLoggedOut("/data/activity/download")).status, (await opened.getLoggedOut("/data/activity/download/next")).status]).toEqual([401, 401]);
+  });
+});
+
+describe("a narrowed log longer than one reading looks at", () => {
+  /** An install whose log holds an entry about the site `report`, then five logins more than a narrowed reading looks at, then an entry about `docs`: nine entries lie behind the newest reading's window. */
+  async function openWithLongLog(): Promise<Awaited<ReturnType<typeof openConsole>>> {
+    const opened = await openConsole();
+    const { install, owner, clock, publish } = opened.base;
+    await publish("report");
+    for (let count = 0; count < AUDIT_WINDOW + 5; count += 1) await install.database.appendAudit({ action: "login", detail: {} }, { by: owner, at: clock.now });
+    await publish("docs");
+
+    return opened;
+  }
+
+  const names = (page: Page): unknown[] => page.entries.map((entry) => entry.site?.name);
+
+  // Drift: a page that stopped looking would pass for the log's last, and hide a rare site's older history; a page gone back to across the stop would lose the way to the page it came from.
+  test("a page says that it stopped and goes on from there, in both directions, and the total counts no further than the page looked", async () => {
+    const opened = await openWithLongLog();
+    const first = await pageOf(opened, "?site=o");
+    const second = await pageOf(opened, `?site=o&after=${first.next}`);
+    const back = await pageOf(opened, `?site=o&back=${second.previous}`);
+    const again = await pageOf(opened, `?site=o&back=${back.previous}`);
+    const total = await (await opened.get("/data/activity/total?site=o")).json();
+
+    expect([first, second, back, again].map((page) => [names(page), page.stopped, page.previous, page.next])).toEqual([
+      [["docs"], true, null, "9"],
+      [["report"], false, "2", null],
+      [[], true, String(AUDIT_WINDOW + 2), "3"],
+      [["docs"], false, null, String(AUDIT_WINDOW + 8)],
+    ]);
+    expect(total).toEqual({ ok: true, total: 1, whole: false });
+  });
+
+  // Drift: a page with no entry names the place beside the one it was asked with; at the log's first entry that is no place an address can name, and following it would be refused.
+  test("a page with no entry at the log's start offers no way the address could not name", async () => {
+    const opened = await openConsole();
+    const [on, back] = [await pageOf(opened, "?site=o&after=1"), await pageOf(opened, "?site=o&dir=asc&back=1")];
+
+    expect([on.entries, on.previous, on.next, back.entries, back.previous, back.next]).toEqual([[], null, null, [], null, null]);
+  });
+
+  // Drift: a file that stopped looking would end like the whole log, and the entries behind the stop would be in no file; a next file from another place than the stop would repeat or skip entries.
+  test("a file ends where its reading stopped and says the log holds more, and the next file goes on from that place to the log's end", async () => {
+    const opened = await openWithLongLog();
+    const next = await (await opened.get("/data/activity/download/next?site=o")).json();
+    const files = [await opened.get("/data/activity/download?site=o&format=jsonl&part=1"), await opened.get("/data/activity/download?site=o&format=jsonl&part=2&after=9")];
+    const lines = await Promise.all(files.map(async (file) => (await file.text()).trimEnd().split("\n")));
+    const end = await (await opened.get("/data/activity/download/next?site=o&after=9")).json();
+
+    expect([next, end]).toEqual([
+      { ok: true, after: "9" },
+      { ok: true, after: null },
+    ]);
+    expect(lines.map((file) => file.map((line) => (JSON.parse(line) as { readonly site?: string; readonly note?: string }).site ?? line))).toEqual([
+      ["docs", `{"note":"Searched ${AUDIT_WINDOW.toLocaleString("en-US")} entries of the log. It holds more: download the next part."}`],
+      ["report"],
+    ]);
   });
 });

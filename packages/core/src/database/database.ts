@@ -23,6 +23,9 @@ import type { VersionContents } from "../records/version-contents";
 import type { ManifestFile, Upload, UploadId, UploadPlan } from "../records/upload";
 import type { DailyViews, SiteViews } from "../records/views";
 
+/** How many entries of the audit log, counted by `seq`, one narrowed reading looks at before it stops. */
+export const AUDIT_WINDOW = 5000;
+
 /** Who makes a change and when, in milliseconds since the epoch. */
 export interface Signed {
   readonly by: Holder;
@@ -286,12 +289,24 @@ export interface AuditQuery {
 
   /** The direction: `desc`, the newest first, when absent; `asc` is the oldest first. */
   readonly dir?: "asc" | "desc";
+}
 
+/** Which entries of the audit log a narrowed reading asks for: a page of those a narrowing keeps. */
+export interface AuditSearch extends AuditQuery {
   /** Only the entries of these actions; every entry when absent. */
   readonly actions?: readonly AuditAction[];
 
   /** Only the entries about a site whose name then held this text; every entry when absent. */
   readonly site?: string;
+}
+
+/** What a narrowed reading of the audit log found. */
+export interface AuditFound {
+  /** The entries the narrowing keeps, in the direction asked. */
+  readonly entries: readonly AuditEntry[];
+
+  /** Where the reading stopped with fewer entries than asked and the log going on: the `after` the next reading takes. `undefined` for a full page, and where the log ends. */
+  readonly stoppedAt: number | undefined;
 }
 
 /** Which entries of the audit log a count is of, and how far into the log it reads. */
@@ -313,12 +328,6 @@ export interface AuditPartQuery {
 
   /** The `seq` of the entry the part before ended on; absent for the first part. */
   readonly after?: number;
-
-  /** Only the entries of these actions; every entry when absent. */
-  readonly actions?: readonly AuditAction[];
-
-  /** Only the entries about a site whose name then held this text; every entry when absent. */
-  readonly site?: string;
 }
 
 /** How many entries of the audit log a count found. */
@@ -745,10 +754,19 @@ export interface Database {
    * One page of the audit log, the newest entry first, or the oldest first when `dir` is `asc`.
    *
    * @param query - how many entries, from 1 to 1,000, and `after`, the `seq` of the entry the page before ended on: only entries behind that one in the direction asked are answered. A `seq` is a cursor taken from an entry, never a count
-   * @returns the page; narrowed by `actions` or `site`, it reads every entry from where it starts to the page's last
+   * @returns the page; it reads no row but the page's own
    * @throws {RangeError} `limit` is not a whole number from 1 to 1,000
    */
   listAudit(query: AuditQuery): Promise<readonly AuditEntry[]>;
+
+  /**
+   * One page of the entries a narrowing keeps, looked for among no more than `AUDIT_WINDOW` entries of the log from where the reading starts, so a rare match costs a window and not the log.
+   *
+   * @param query - what `listAudit` takes, and the narrowing: `actions`, `site`, or both
+   * @returns the entries found, and where the reading stopped when the window ended before the page was full and the log goes on behind it
+   * @throws {RangeError} `limit` is not a whole number from 1 to 1,000
+   */
+  searchAudit(query: AuditSearch): Promise<AuditFound>;
 
   /**
    * Count the entries of the audit log a narrowing keeps, reading no further back than the newest `most` entries, so a long log costs no more than `most` rows.

@@ -22,7 +22,8 @@ import type { UploadId } from "@poplin/core/src/records/upload";
 import type { SiteId } from "@poplin/core/src/sites/ids";
 import { describeDatabase } from "@poplin/core/tests/database/support/database-contract";
 import { BY_ADA, begunFiles, begunSite, begunVersion, draft, numberedFiles, pendingLogin, publish, storedBack } from "@poplin/core/tests/database/support/database-fixtures";
-import { describeSqlDriver, sqlDatabaseOver } from "@poplin/core/tests/database/support/sql-driver-contract";
+import { AUDIT_WINDOW } from "@poplin/core/src/database/database";
+import { describeSqlDriver, LONG_LOG, sqlDatabaseOver } from "@poplin/core/tests/database/support/sql-driver-contract";
 
 import type { Bindings } from "../../src/worker/bindings";
 import { D1Driver } from "../../src/database/d1";
@@ -164,12 +165,11 @@ const ROWS: Readonly<Record<string, readonly [read: number, written: number]>> =
   "changeDetails": [6, 4],
   "changeDetails, the same": [6, 0],
   "listAudit": [20, 0],
-  "listAudit, one kind, the sites named with a text": [45, 0],
+  "searchAudit, one kind, the sites named with a text": [49, 0],
   "listAudit, the oldest first": [20, 0],
-  "listAudit, the oldest first, the next page of one kind": [25, 0],
+  "searchAudit, the oldest first, the next page of one kind": [27, 0],
   "listAudit, a reading for a file": [45, 0],
   "endOfAuditPart, of twenty entries": [21, 0],
-  "endOfAuditPart, of one kind, past the log's end": [45, 0],
   "countAudit": [45, 0],
   "countAudit, one kind, the sites named with a text": [45, 0],
   "countAudit, no further back than five entries": [5, 0],
@@ -371,7 +371,7 @@ describe("D1: the rows a listing, a change to a site, and a page of the audit lo
       "a detail that changes": await cost(() => database.changeDetails(second, { title: "Report" }, BY_ADA)),
       "the same detail again": await cost(() => database.changeDetails(second, { title: "Report" }, BY_ADA)),
       "a page of twenty entries": await cost(() => database.listAudit({ limit: 20 })),
-      "a page of the entries of one kind for one site": await cost(() => database.listAudit({ limit: 20, actions: ["create"], site: "site-1" })),
+      "a page of the entries of one kind for one site": await cost(() => database.searchAudit({ limit: 20, actions: ["create"], site: "site-1" })),
       "a page by name": await cost(() => database.listSites({ trash: false, limit: 10, sort: "name" })),
       "the page by name after it": await cost(() => database.listSites({ trash: false, limit: 10, sort: "name", ...(named.next === undefined ? {} : { after: named.next }) })),
       "a page by title": await cost(() => database.listSites({ trash: false, limit: 10, sort: "title" })),
@@ -389,7 +389,7 @@ describe("D1: the rows a listing, a change to a site, and a page of the audit lo
       "a detail that changes": [6, 4],
       "the same detail again": [6, 0],
       "a page of twenty entries": [20, 0],
-      "a page of the entries of one kind for one site": [32, 0],
+      "a page of the entries of one kind for one site": [36, 0],
       "a page by name": [33, 0],
       "the page by name after it": [34, 0],
       "a page by title": [33, 0],
@@ -397,6 +397,38 @@ describe("D1: the rows a listing, a change to a site, and a page of the audit lo
       "a page by access, the most open first": [32, 0],
       "a page of the sites that never expire": [32, 0],
       "a page of the trash": [1, 0],
+    });
+  });
+});
+
+describe("D1: the rows a narrowed page of a long audit log costs of a day's allowance", () => {
+  // Drift: a narrowing is a text inside a name, which no index serves, so the engine reads every entry it passes. A page that looked on until it was full would read the whole log for a rare site, each row charged.
+  test("a log of five entries more than a window, and two about sites: a narrowed page reads its window and five rows more for where the log starts and ends, never the log", async () => {
+    const { driver, rows } = await meteredDatabase();
+    const opened = await openDatabase(driver, NOW);
+    if (opened.kind !== "open") throw new Error(`the database did not open: ${opened.kind}`);
+
+    const database = new SqlDatabase(driver);
+    await driver.batch([{ sql: LONG_LOG, params: [] }]);
+    const cost = async (run: () => Promise<unknown>): Promise<number> => {
+      rows.read = 0;
+      await run();
+
+      return rows.read;
+    };
+
+    expect({
+      "the newest page of a rare site": await cost(() => database.searchAudit({ limit: 51, site: "o" })),
+      "the page that goes on from where it stopped": await cost(() => database.searchAudit({ limit: 51, site: "o", after: 8 })),
+      "the oldest page of a rare site": await cost(() => database.searchAudit({ limit: 51, site: "o", dir: "asc" })),
+      "a page that fills at once": await cost(() => database.searchAudit({ limit: 51, actions: ["login"] })),
+      "a count under a narrowing": await cost(() => database.countAudit({ most: AUDIT_WINDOW, site: "o" })),
+    }).toEqual({
+      "the newest page of a rare site": AUDIT_WINDOW + 5,
+      "the page that goes on from where it stopped": 9,
+      "the oldest page of a rare site": AUDIT_WINDOW + 5,
+      "a page that fills at once": 56,
+      "a count under a narrowing": AUDIT_WINDOW,
     });
   });
 });
@@ -616,12 +648,11 @@ describe("D1: the rows every operation of the database costs of a day's allowanc
     await cost("changeDetails", () => database.changeDetails(sixth.id, { title: "Report", search_engines: true }, BY_ADA));
     await cost("changeDetails, the same", () => database.changeDetails(sixth.id, { title: "Report", search_engines: true }, BY_ADA));
     await cost("listAudit", () => database.listAudit({ limit: 20 }));
-    await cost("listAudit, one kind, the sites named with a text", () => database.listAudit({ limit: 20, actions: ["create"], site: "site-1" }));
+    await cost("searchAudit, one kind, the sites named with a text", () => database.searchAudit({ limit: 20, actions: ["create"], site: "site-1" }));
     await cost("listAudit, the oldest first", () => database.listAudit({ limit: 20, dir: "asc" }));
-    await cost("listAudit, the oldest first, the next page of one kind", () => database.listAudit({ limit: 20, dir: "asc", after: 20, actions: ["create"] }));
+    await cost("searchAudit, the oldest first, the next page of one kind", () => database.searchAudit({ limit: 20, dir: "asc", after: 20, actions: ["create"] }));
     await cost("listAudit, a reading for a file", () => database.listAudit({ limit: 1000 }));
     await cost("endOfAuditPart, of twenty entries", () => database.endOfAuditPart({ entries: 20 }));
-    await cost("endOfAuditPart, of one kind, past the log's end", () => database.endOfAuditPart({ entries: 2000, actions: ["create"] }));
     await cost("countAudit", () => database.countAudit({ most: 10_000 }));
     await cost("countAudit, one kind, the sites named with a text", () => database.countAudit({ most: 10_000, actions: ["create"], site: "site-1" }));
     await cost("countAudit, no further back than five entries", () => database.countAudit({ most: 5, actions: ["create"] }));

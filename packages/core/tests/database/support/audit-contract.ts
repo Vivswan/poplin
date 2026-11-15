@@ -183,16 +183,17 @@ export function auditLog(label: string, makeDatabase: DatabaseFactory): void {
       await database.trashSite(docs.id, { by: BO, at: NOW + 3 });
       const told = (entries: readonly AuditEntry[]): unknown[] => entries.map((entry) => [entry.action, entry.site?.name ?? null]);
       const narrowed = { actions: ["trash", "create"], site: "o" } as const;
-      const first = await database.listAudit({ limit: 2, ...narrowed });
+      const found = async (query: Parameters<Database["searchAudit"]>[0]): Promise<unknown[]> => told((await database.searchAudit(query)).entries);
+      const first = await database.searchAudit({ limit: 2, ...narrowed });
 
       expect([
-        told(await database.listAudit({ limit: 100, actions: ["trash", "login"] })),
-        told(await database.listAudit({ limit: 100, site: REPORT })),
-        told(first),
-        told(await database.listAudit({ limit: 3, ...narrowed, after: first.at(-1)?.seq })),
-        told(await database.listAudit({ limit: 100, site: "%" })),
-        told(await database.listAudit({ limit: 100, site: "\0" })),
-        told(await database.listAudit({ limit: 100, actions: [] })),
+        await found({ limit: 100, actions: ["trash", "login"] }),
+        await found({ limit: 100, site: REPORT }),
+        told(first.entries),
+        await found({ limit: 3, ...narrowed, after: first.entries.at(-1)?.seq }),
+        await found({ limit: 100, site: "%" }),
+        await found({ limit: 100, site: "\0" }),
+        await found({ limit: 100, actions: [] }),
       ]).toEqual([
         [
           ["trash", DOCS],
@@ -235,7 +236,7 @@ export function auditLog(label: string, makeDatabase: DatabaseFactory): void {
     });
 
     // Drift: the next file of the log goes on after this place; one entry too early repeats an entry in two files, one too late drops one, and a place where the log has ended offers an empty file.
-    test("a part of the log ends on its last entry when an entry lies behind it, under the narrowing of a page, and nowhere when the log ends with it", async () => {
+    test("a part of the log ends on its last entry when an entry lies behind it, and nowhere when the log ends with it", async () => {
       const database = await opened(makeDatabase);
       const report = await made(database, draft(REPORT));
       await database.appendAudit({ action: "login", detail: {} }, { by: BO, at: NOW });
@@ -243,9 +244,8 @@ export function auditLog(label: string, makeDatabase: DatabaseFactory): void {
       await database.trashSite(report.id, { by: BO, at: NOW + 1 });
 
       const parts = [{ entries: 1 }, { entries: 3 }, { entries: 4 }, { entries: 2, after: 3 }, { entries: 1, after: 3 }] as const;
-      const narrowed = [{ entries: 1, actions: ["create"] }, { entries: 2, actions: ["create"] }, { entries: 2, site: REPORT }, { entries: 1, site: REPORT }] as const;
 
-      expect(await Promise.all([...parts, ...narrowed].map((query) => database.endOfAuditPart(query)))).toEqual([4, 2, undefined, undefined, 2, 3, undefined, undefined, 4]);
+      expect(await Promise.all(parts.map((query) => database.endOfAuditPart(query)))).toEqual([4, 2, undefined, undefined, 2]);
       await expect(database.endOfAuditPart({ entries: 0 })).rejects.toThrow(RangeError);
     });
 
@@ -272,7 +272,9 @@ export function auditLog(label: string, makeDatabase: DatabaseFactory): void {
       let after: number | undefined;
 
       do {
-        const page = await database.listAudit({ limit: 2, dir, ...narrowed, after });
+        const asked = { limit: 2, dir, ...narrowed, after };
+        // A short log lies inside one window, so a narrowed reading never stops short of its end here.
+        const page = "actions" in narrowed || "site" in narrowed ? (await database.searchAudit(asked)).entries : await database.listAudit(asked);
         read.push(page.map((entry) => (entry.site === null ? entry.action : `${entry.action} ${entry.site.name}`)));
         after = page.at(-1)?.seq;
       } while (read.at(-1)?.length === 2);

@@ -5,7 +5,7 @@ import { describe, expect, test } from "bun:test";
 
 import type { Login } from "../../../src/auth/logins";
 import { mintToken } from "../../../src/auth/tokens";
-import type { Database } from "../../../src/database/database";
+import { AUDIT_WINDOW, type Database } from "../../../src/database/database";
 import { AllowanceSpent, type SqlDriver, type SqlValue, type Statement, type StatementResult } from "../../../src/database/driver";
 import { openDatabase } from "../../../src/database/open";
 import { SqlDatabase } from "../../../src/database/sql-database";
@@ -75,6 +75,20 @@ const AWKWARD_MANIFESTS: readonly (readonly [name: string, paths: readonly strin
 ];
 
 type DriverFactory = () => SqlDriver | Promise<SqlDriver>;
+
+/** How many entries the long log holds: one about `report`, then five logins more than a window holds, then one about `docs`. */
+const LONG_LOG_ENTRIES = AUDIT_WINDOW + 7;
+
+/** Writes the long log in one statement: its first entry is about the site `report`, its last about `docs`, and every one between is a login. */
+export const LONG_LOG = `
+INSERT INTO audit (at, actor, action, site_id, site_name, detail)
+WITH RECURSIVE entry(n) AS (SELECT 1 UNION ALL SELECT n + 1 FROM entry WHERE n < ${LONG_LOG_ENTRIES})
+SELECT 1700000000000, '00000000000000aa',
+  CASE WHEN n IN (1, ${LONG_LOG_ENTRIES}) THEN 'create' ELSE 'login' END,
+  CASE n WHEN 1 THEN 'aaaaaaaaaaaa' WHEN ${LONG_LOG_ENTRIES} THEN 'bbbbbbbbbbbb' END,
+  CASE n WHEN 1 THEN 'report' WHEN ${LONG_LOG_ENTRIES} THEN 'docs' END,
+  '{}'
+FROM entry`;
 
 /** A driver that passes every batch on and keeps the statements, so a test can ask the engine how it runs each one. */
 class RecordingDriver implements SqlDriver {
@@ -436,7 +450,9 @@ function queryPlans(label: string, makeDriver: DriverFactory): void {
       await database.listAudit({ limit: 10, dir: "asc" });
       await database.listAudit({ limit: 10, dir: "asc", after: 1 });
       await database.countAudit({ most: 10, actions: ["login"], site: "report" });
-      await database.endOfAuditPart({ entries: 2, after: 9, actions: ["login"], site: "report" });
+      await database.endOfAuditPart({ entries: 2, after: 9 });
+      await database.searchAudit({ limit: 10, actions: ["login"], site: "report" });
+      await database.searchAudit({ limit: 10, dir: "asc", after: 3, site: "report" });
       const created = await begunSite(database, draft(REPORT));
       const updated = await begunVersion(database, imported.kind === "done" ? imported.site : site);
       await database.getUpload(created.id);
@@ -490,6 +506,40 @@ function queryPlans(label: string, makeDriver: DriverFactory): void {
         'SCAN newest <- select count(*) as "seen", coalesce(sum("kept"), 0) as "found" from (select ("audit"."action" in (?) and instr("audit"."site_name", ?) > 0) as "kept" from "audit" order by "audit"."seq" desc limit ?) "newest"',
         'SCAN logins USING INDEX logins_by_visitor <- delete from "logins" where "logins"."expires_at" <= ?',
         "SCAN schema_steps <- SELECT * FROM schema_steps ORDER BY step",
+      ]);
+    });
+  });
+}
+
+function auditWindow(label: string, makeDriver: DriverFactory): void {
+  describe(`${label}: a narrowed reading of a log longer than its window`, () => {
+    // Drift: a narrowed page that read on until it was full would walk the whole log for a rare site, a row charged for each entry; one that stopped without saying so would show the log as ended where it only stopped looking.
+    test("looks at one window from where it starts, says where it stopped while the log goes on, and finds the rest from there", async () => {
+      const driver = await migrated(makeDriver);
+      const database = new SqlDatabase(driver);
+      await rows(driver, LONG_LOG);
+      const told = async (query: Parameters<Database["searchAudit"]>[0]): Promise<unknown> => {
+        const { entries, stoppedAt } = await database.searchAudit(query);
+
+        return [entries.map((entry) => entry.site?.name ?? entry.action), stoppedAt];
+      };
+
+      expect([
+        await told({ limit: 2, site: "o" }),
+        await told({ limit: 2, site: "o", after: 8 }),
+        await told({ limit: 2, site: "o", dir: "asc" }),
+        await told({ limit: 2, site: "o", dir: "asc", after: AUDIT_WINDOW }),
+        await told({ limit: 1, site: "o" }),
+        await told({ limit: 2, actions: ["login"] }),
+        await told({ limit: 2, site: "nowhere", after: 9 }),
+      ]).toEqual([
+        [["docs"], 8],
+        [["report"], undefined],
+        [["report"], AUDIT_WINDOW],
+        [["docs"], undefined],
+        [["docs"], undefined],
+        [["login", "login"], undefined],
+        [[], undefined],
       ]);
     });
   });
@@ -611,6 +661,7 @@ export function describeSqlDriver(label: string, makeDriver: DriverFactory): voi
   schemaRules(label, makeDriver);
   storedRows(label, makeDriver);
   queryPlans(label, makeDriver);
+  auditWindow(label, makeDriver);
   requestCountRows(label, makeDriver);
   manifestRows(label, makeDriver);
 }

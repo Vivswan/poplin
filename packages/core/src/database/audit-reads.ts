@@ -1,36 +1,71 @@
-// The statements that count the audit log and find where a part of it ends, and what each answers. Both read no further than they are told, since the provider charges every row a statement reads.
+// The statements that search the audit log, count it and find where a part of it ends, and what each answers. Each reads no further than it is told, since the provider charges every row a statement reads.
 
-import { and, count, desc, inArray, lt, type SQL, sql as fragment, sum } from "drizzle-orm";
-import { drizzle } from "drizzle-orm/sqlite-proxy";
+import { and, asc, count, desc, inArray, lt, type SQL, sql as fragment, sum } from "drizzle-orm";
 import * as v from "valibot";
 
 import type { AuditAction } from "../records/audit";
 import { COUNT, POSITIVE } from "../records/fields";
-import type { AuditCount, AuditCountQuery, AuditPartQuery } from "./database";
-import type { SqlValue, Statement, StatementResult } from "./driver";
+import { AUDIT_WINDOW, type AuditCount, type AuditCountQuery, type AuditPartQuery, type AuditSearch } from "./database";
+import type { Statement, StatementResult } from "./driver";
 import { audit } from "./schema";
-
-/** Where the statements are built from the declared schema. None is run here: each goes to the driver, in a batch. */
-const BUILD = drizzle(() => Promise.reject(new Error("a statement is run by the driver, in a batch")));
+import { BUILD, built, written } from "./statements";
 
 /** What a count of the audit log answers: the entries it read, and those among them the narrowing keeps. */
 const AUDIT_COUNT_ROW = v.object({ seen: COUNT, found: COUNT });
 
-/** A built statement as the driver takes it. */
-function built(query: { toSQL(): { sql: string; params: unknown[] } }): Statement {
-  const { sql: text, params } = query.toSQL();
-
-  return { sql: text, params: params as SqlValue[] };
-}
+/** The oldest and the newest `seq` of the log, as the statement of its ends answers them: both `null` for an empty log. */
+const AUDIT_ENDS_ROW = v.object({ oldest: v.nullable(POSITIVE), newest: v.nullable(POSITIVE) });
 
 /** The condition an entry of the audit log meets to be of some actions; `undefined` when none is asked. The actions are named one by one: a list read from JSON is charged as rows of its own. */
-export function auditAmong(actions: readonly AuditAction[] | undefined): SQL | undefined {
+function auditAmong(actions: readonly AuditAction[] | undefined): SQL | undefined {
   return actions === undefined ? undefined : inArray(audit.action, [...actions]);
 }
 
 /** The condition an entry of the audit log meets to be about a site whose name then held a text; `undefined` when no text is asked. */
-export function auditAbout(site: string | undefined): SQL | undefined {
+function auditAbout(site: string | undefined): SQL | undefined {
   return site === undefined ? undefined : fragment`instr(${audit.site_name}, ${site}) > 0`;
+}
+
+/** Build the statement that reads the oldest and the newest `seq` of the log: two rows read, whatever the log's length. */
+export function auditEndsAsked(): Statement {
+  return written(fragment`SELECT (SELECT min(${audit.seq}) FROM ${audit}) AS oldest, (SELECT max(${audit.seq}) FROM ${audit}) AS newest`);
+}
+
+/**
+ * Build the statement that reads one page of the entries a narrowing keeps, among the `AUDIT_WINDOW` entries behind the place it starts from.
+ *
+ * A reading with no page before it starts from the log's own end, which the statement asks the log for.
+ */
+export function auditSearchAsked(query: AuditSearch): Statement {
+  const newestFirst = query.dir !== "asc";
+  const end = newestFirst ? fragment`(SELECT max(${audit.seq}) + 1 FROM ${audit})` : fragment`(SELECT min(${audit.seq}) - 1 FROM ${audit})`;
+  const start = query.after === undefined ? end : fragment`${query.after}`;
+  const within = newestFirst
+    ? fragment`${audit.seq} < ${start} AND ${audit.seq} >= ${start} - ${AUDIT_WINDOW}`
+    : fragment`${audit.seq} > ${start} AND ${audit.seq} <= ${start} + ${AUDIT_WINDOW}`;
+  const kept = and(within, auditAmong(query.actions), auditAbout(query.site));
+
+  return built(BUILD.select().from(audit).where(kept).orderBy(newestFirst ? desc(audit.seq) : asc(audit.seq)).limit(query.limit));
+}
+
+/**
+ * Read where a narrowed reading that came back short stopped, from what the statement of the log's ends answered.
+ *
+ * @returns the last `seq` its window took in, which the next reading goes on after; `undefined` when the window reached the log's end, so nothing lies behind it
+ */
+export function auditStopIn(ends: StatementResult | undefined, query: AuditSearch): number | undefined {
+  const { oldest, newest } = v.parse(AUDIT_ENDS_ROW, ends?.rows[0]);
+  if (oldest === null || newest === null) return undefined;
+
+  if (query.dir === "asc") {
+    const last = (query.after ?? oldest - 1) + AUDIT_WINDOW;
+
+    return last < newest ? last : undefined;
+  }
+
+  const last = (query.after ?? newest + 1) - AUDIT_WINDOW;
+
+  return last > oldest ? last : undefined;
 }
 
 /**
@@ -63,9 +98,7 @@ export function auditCountIn(result: StatementResult | undefined, most: number):
 export function auditPartEndAsked(query: AuditPartQuery, start: number): Statement {
   if (!Number.isSafeInteger(query.entries) || query.entries < 1) throw new RangeError(`a part of the log holds at least 1 entry, not ${query.entries}`);
 
-  const kept = and(lt(audit.seq, query.after ?? start), auditAmong(query.actions), auditAbout(query.site));
-
-  return built(BUILD.select({ seq: audit.seq }).from(audit).where(kept).orderBy(desc(audit.seq)).limit(2).offset(query.entries - 1));
+  return built(BUILD.select({ seq: audit.seq }).from(audit).where(lt(audit.seq, query.after ?? start)).orderBy(desc(audit.seq)).limit(2).offset(query.entries - 1));
 }
 
 /** Read what the part's statement answered: the `seq` of the part's last entry when an entry lies behind it, which says that the log goes on. */

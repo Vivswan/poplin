@@ -26,12 +26,14 @@ import { endedTokenFromRow, tokenFromRow } from "../records/token";
 import { type ManifestFile, type Upload, type UploadId, uploadFromRow } from "../records/upload";
 import type { VersionContents } from "../records/version-contents";
 import { type DailyViews, dayOf, daysUpTo, KEPT_DAYS, MOST_SITES_COMPARED, type SiteViews, viewDays } from "../records/views";
-import { auditAbout, auditAmong, auditCountAsked, auditCountIn, auditPartEndAsked, auditPartEndIn } from "./audit-reads";
+import { auditCountAsked, auditCountIn, auditEndsAsked, auditPartEndAsked, auditPartEndIn, auditSearchAsked, auditStopIn } from "./audit-reads";
 import type {
   AuditCount,
   AuditCountQuery,
+  AuditFound,
   AuditPartQuery,
   AuditQuery,
+  AuditSearch,
   Address,
   AuditNote,
   CountedRequests,
@@ -231,6 +233,10 @@ function requestsOf(day: string, site: string): Statement {
 
 function requirePage(limit: number): void {
   if (!Number.isSafeInteger(limit) || limit < 1 || limit > MAX_PAGE) throw new RangeError(`a page holds 1 to ${MAX_PAGE} rows, not ${limit}`);
+}
+
+function requireAuditPage(limit: number): void {
+  if (!Number.isSafeInteger(limit) || limit < 1 || limit > MAX_AUDIT_PAGE) throw new RangeError(`a reading of the log holds 1 to ${MAX_AUDIT_PAGE} entries, not ${limit}`);
 }
 
 function requireCount(what: string, count: number): void {
@@ -1108,19 +1114,24 @@ export class SqlDatabase implements Database {
   }
 
   async listAudit(query: AuditQuery): Promise<readonly AuditEntry[]> {
-    if (!Number.isSafeInteger(query.limit) || query.limit < 1 || query.limit > MAX_AUDIT_PAGE) throw new RangeError(`a reading of the log holds 1 to ${MAX_AUDIT_PAGE} entries, not ${query.limit}`);
+    requireAuditPage(query.limit);
 
     const dir = query.dir ?? "desc";
     const start = query.after ?? AUDIT_START[dir];
-    const conditions = [
-      dir === "desc" ? lt(audit.seq, start) : gt(audit.seq, start),
-      auditAmong(query.actions),
-      auditAbout(query.site),
-    ];
-    const page = BUILD.select().from(audit).where(and(...conditions)).orderBy(dir === "desc" ? desc(audit.seq) : asc(audit.seq)).limit(query.limit);
+    const behind = dir === "desc" ? lt(audit.seq, start) : gt(audit.seq, start);
+    const page = BUILD.select().from(audit).where(behind).orderBy(dir === "desc" ? desc(audit.seq) : asc(audit.seq)).limit(query.limit);
     const [listed] = await this.#driver.batch([built(page)]);
 
     return (listed?.rows ?? []).map(auditFromRow);
+  }
+
+  async searchAudit(query: AuditSearch): Promise<AuditFound> {
+    requireAuditPage(query.limit);
+
+    const [ends, found] = await this.#driver.batch([auditEndsAsked(), auditSearchAsked(query)]);
+    const entries = (found?.rows ?? []).map(auditFromRow);
+
+    return { entries, stoppedAt: entries.length < query.limit ? auditStopIn(ends, query) : undefined };
   }
 
   async countAudit(query: AuditCountQuery): Promise<AuditCount> {
