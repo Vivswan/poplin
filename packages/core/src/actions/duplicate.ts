@@ -6,6 +6,7 @@
 //
 // Until that step the copy is an upload: no address serves it and no listing holds it. An upload that is never finished goes as every upload does, with its files.
 
+import pMap from "p-map";
 import * as v from "valibot";
 
 import type { Actor } from "../auth/scopes";
@@ -48,6 +49,9 @@ const GIVE_UP_CALLS = 2;
 
 /** The calls to the store one copied file costs: a read and a write. Both are counted against the day's writes, when the copy begins. */
 export const COPY_CALLS = 2;
+
+/** How many files of a copy are on their way at once: as many connections as a host lets one request hold open. */
+const COPIES_AT_ONCE = 6;
 
 /** The list pages spared beyond the count a version's files need, for a store that hands out short pages. */
 const SPARE_PAGES = 2;
@@ -201,37 +205,70 @@ async function resumeCopy(install: Install, actor: Actor, asked: { readonly site
   return { ok: true, upload: { ...upload, plan }, missing };
 }
 
+/** How the files of one call that are on their way ended, once one is missing or fails: none is begun after. A failure outranks a missing file. */
+interface Batch {
+  ended?: { readonly kind: "missing" } | { readonly kind: "failed"; readonly failure: unknown };
+}
+
+/** End a batch at a failure. The first one is the one told. */
+function failBatch(batch: Batch, failure: unknown): void {
+  if (batch.ended?.kind !== "failed") batch.ended = { kind: "failed", failure };
+}
+
 /**
- * Copy files of the source's version to the copy's folder, each with the media type the source holds.
+ * Copy one file of the source's version to the copy's folder, with the media type the source holds.
  *
- * @returns `false` when the source no longer holds one of them, which leaves the rest uncopied
- * @throws {Error} the store failed. A write it did not keep is counted against the day first, and noted where it takes the day past its limit: a host bills it, and the call that goes on with the copy writes the file again
+ * A source that no longer holds it ends the batch, and so does a write the store did not keep. A host bills that write: it is counted against the day, and noted where it takes the day past its limit.
  */
-async function copyFiles(install: Install, upload: CopyUpload, paths: readonly string[]): Promise<boolean> {
-  const { store } = install;
+async function copyFile(install: Install, upload: CopyUpload, path: string, batch: Batch): Promise<void> {
   const { from: source } = upload.plan;
+  const from = fileKey(source.folder, source.number, path);
+  const to = uploadKey(upload, path);
+  if (!from.ok || !to.ok) throw new Error(`${JSON.stringify(path)} is no key of upload ${upload.id}`);
 
-  for (const path of paths) {
-    const from = fileKey(source.folder, source.number, path);
-    const to = uploadKey(upload, path);
-    if (!from.ok || !to.ok) throw new Error(`${JSON.stringify(path)} is no key of upload ${upload.id}`);
+  const read = await install.store.read(from.key);
+  if (read.kind !== "found") {
+    batch.ended ??= { kind: "missing" };
 
-    const read = await store.read(from.key);
-    if (read.kind !== "found") return false;
+    return;
+  }
+
+  try {
+    await install.store.write(to.key, { stream: read.body, size: read.info.size }, { contentType: read.info.contentType });
+  } catch (error) {
+    // The batch ends before the count is written, so no file is begun meanwhile.
+    failBatch(batch, error);
 
     try {
-      await store.write(to.key, { stream: read.body, size: read.info.size }, { contentType: read.info.contentType });
-    } catch (error) {
       const day = dayOf(install.now());
       await install.database.addStorageWrites(day, 1);
       const counted = await install.database.readStorageWrites(day);
       if (counted !== undefined && counted.writes > counted.most) await noteProblem(install, "writes_limit_reached");
-
-      throw error;
+    } catch (uncounted) {
+      // A count that fails is the failure told: a billed write went uncounted.
+      batch.ended = { kind: "failed", failure: uncounted };
     }
   }
+}
 
-  return true;
+/**
+ * Copy files of the source's version to the copy's folder, a few at once and in no order.
+ *
+ * @returns `false` when the source no longer holds one of them, which leaves others uncopied
+ * @throws {Error} the store or the database failed, once every file on its way has ended, so nothing is written after it
+ */
+async function copyFiles(install: Install, upload: CopyUpload, paths: readonly string[]): Promise<boolean> {
+  const batch: Batch = {};
+  const copy = async (path: string): Promise<void> => {
+    if (batch.ended !== undefined) return;
+
+    await copyFile(install, upload, path, batch).catch((error: unknown) => failBatch(batch, error));
+  };
+
+  await pMap(paths, copy, { concurrency: COPIES_AT_ONCE });
+  if (batch.ended?.kind === "failed") throw batch.ended.failure;
+
+  return batch.ended === undefined;
 }
 
 /** Reach the source, and the upload of its copy: a new one, or the one `upload` names. */
