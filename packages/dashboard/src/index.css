@@ -151,16 +151,6 @@
   }
 }
 
-/* Where a line is said: near the top of a wide screen, and under the header on a phone. */
-:root {
-  --toast-top: 12px;
-}
-@media (max-width: 767.98px) {
-  :root {
-    --toast-top: 64px;
-  }
-}
-
 /* On a phone every control is tall enough for a finger. The rule sits outside the layers, so it holds whatever size a screen gave the control. */
 @media (max-width: 767.98px) {
   [data-slot="button"],
