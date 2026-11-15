@@ -19,7 +19,7 @@ import {
   SunIcon,
   TriangleAlertIcon,
 } from "lucide-react";
-import { type ReactNode, useState } from "react";
+import { type ReactNode, useEffect, useState } from "react";
 import { toast } from "sonner";
 
 import { useTheme } from "@/components/theme-provider";
@@ -38,6 +38,7 @@ import { Sheet, SheetContent, SheetDescription, SheetTitle, SheetTrigger } from 
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { api } from "@/lib/api";
 import { BOOT } from "@/lib/boot";
+import { useScreenFocus } from "@/lib/focus";
 import { useFrame, useStarted } from "@/lib/frame";
 import { useMedia } from "@/lib/media";
 import { sayDone, sayRefused, send } from "@/lib/notify";
@@ -59,6 +60,9 @@ const SECTIONS = [
 
 /** The name at the top of the side, the same on every install. */
 const NAME = "poplin";
+
+/** The look of the way past the sections: over the page's corner, and in sight only while it holds the focus after a key. */
+const SKIP_LOOK = "pointer-events-none absolute top-2 left-2 z-50 opacity-0 focus-visible:pointer-events-auto focus-visible:opacity-100";
 
 /** What the browser matches while the system asks for the dark look. */
 const SYSTEM_DARK = "(prefers-color-scheme: dark)";
@@ -351,7 +355,7 @@ function PhoneSections({ current, offer, started }: { readonly current: Section;
  * Draw the frame around one screen.
  *
  * @param current - the section the screen belongs to
- * @param heading - the screen's title
+ * @param heading - the screen's title, which the page's own title starts with
  * @param tools - what sits on the title's line, before the demo's tag
  */
 export function AppShell({
@@ -361,16 +365,24 @@ export function AppShell({
   children,
 }: {
   readonly current: Section;
-  readonly heading: ReactNode;
+  readonly heading: string;
   readonly tools?: ReactNode;
   readonly children: ReactNode;
 }): ReactNode {
   const { offer, started, question } = useOffer();
   // The frame is drawn before the screen inside it, so every time of the screen is written in the time zone a person chose.
   useChosenTimeZone();
+  const title = useScreenFocus(heading);
+  useEffect(() => {
+    document.title = `${heading} - ${NAME}`;
+  }, [heading]);
 
   return (
     <div className="grid h-svh grid-cols-[232px_minmax(0,1fr)] max-md:grid-cols-1">
+      {/* The first stop of the Tab key, in sight only while it holds the focus: it leads past the sections to the screen. */}
+      <Button variant="outline" size="sm" className={SKIP_LOOK} onClick={() => title.ref.current?.focus()}>
+        Skip to the content
+      </Button>
       <aside className="flex min-h-0 flex-col gap-4 border-r bg-sidebar px-3 pt-4 pb-3 max-md:hidden">
         <Link to="/" {...NO_OWN_MARK} className="flex h-8 items-center gap-2 rounded-md px-2.5 outline-none focus-visible:ring-2 focus-visible:ring-ring">
           <BrandMark />
@@ -390,7 +402,9 @@ export function AppShell({
       <main className="flex min-h-0 min-w-0 flex-col">
         <header className="flex h-14 shrink-0 items-center gap-3 px-6 max-md:gap-2 max-md:px-4">
           <PhoneSections current={current} offer={offer} started={started} />
-          <h1 className="min-w-0 truncate text-base font-bold">{heading}</h1>
+          <h1 {...title} className="min-w-0 truncate text-base font-bold outline-none">
+            {heading}
+          </h1>
           <div className="ml-auto flex items-center gap-2">
             {tools}
             <DemoTag />
