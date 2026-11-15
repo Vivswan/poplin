@@ -6,6 +6,7 @@ import { type ReactElement, type ReactNode, useEffect } from "react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { FieldDescription } from "@/components/ui/field";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { ACCESSES, type Access, addressParts, expiryOf, shortMoment, showCount, shownName, type Site, wholeMoment } from "@/lib/sites";
 import { IconButton } from "@/shared/icon-button";
@@ -212,6 +213,7 @@ export function SitePanel({ label, actions, reveal, onAsk, closeLink, onClose, o
           on={site.search_engines}
           onChange={(on) => actions.setSetting(site, "search_engines", on)}
         />
+        {site.access === "public" ? null : <FieldDescription className="-mt-1 text-[13px] leading-5">Only a public site is listed.</FieldDescription>}
         <PanelSwitch
           id="site-embeddable"
           label="Other websites may embed it"
