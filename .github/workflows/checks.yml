@@ -149,4 +149,13 @@ jobs:
         working-directory: packages/demo
         run: bunx playwright install --with-deps chromium
       - name: Walk the demo in Chromium
-        run: bun run --cwd packages/demo test:browser chromium
+        run: bun run --cwd packages/demo test:browser --project chromium
+      - name: Keep the traces and screenshots of the tests that failed
+        if: failure() || cancelled()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: demo-walk
+          path: packages/demo/.cache/walk/
+          # The folder's name starts with a dot, and hidden paths are left out unless asked for.
+          include-hidden-files: true
+          if-no-files-found: ignore
