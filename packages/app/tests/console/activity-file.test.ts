@@ -6,7 +6,7 @@ import { FILE_WRITERS, type FileEntry } from "../../src/console/activity-file";
 
 /** An entry with one field set, the rest plain. */
 function entryWith(field: Partial<FileEntry>): FileEntry {
-  return { when: "2026-11-14T09:30:00.000Z", who: "mira@example.com", what: "Logged in", site: "", action: "login", detail: {}, ...field };
+  return { when: "2026-11-14T09:30:00.000Z", who: "mira@example.com", what: "Logged in", site: "", title: "", action: "login", detail: {}, ...field };
 }
 
 describe("the comma-separated file", () => {
@@ -26,6 +26,6 @@ describe("the comma-separated file", () => {
     ["a sign inside", "a=b-c", "a=b-c"],
     ["nothing", "", ""],
   ])("writes a field with %s so it is read back as it was", (_what, text, written) => {
-    expect(FILE_WRITERS.csv.line(entryWith({ what: text }))).toBe(`2026-11-14T09:30:00.000Z,mira@example.com,${written},,login\r\n`);
+    expect(FILE_WRITERS.csv.line(entryWith({ what: text }))).toBe(`2026-11-14T09:30:00.000Z,mira@example.com,${written},,,login\r\n`);
   });
 });

@@ -4,7 +4,7 @@
 export const MOST_IN_FILE = 2000;
 
 /** The headings of the comma-separated file, in the order of an entry's fields. */
-const HEADINGS = ["When (UTC)", "Who", "What", "Site", "Action"] as const;
+const HEADINGS = ["When (UTC)", "Who", "What", "Site", "Title", "Action"] as const;
 
 /** What ends a line of the comma-separated file. */
 const LINE_END = "\r\n";
@@ -28,6 +28,9 @@ export interface FileEntry {
 
   /** The name the site had then; empty for an action on no site. */
   readonly site: string;
+
+  /** The title the site has now, which the screen shows it by; empty for a site with none, a site that is gone, and an action on no site. */
+  readonly title: string;
 
   /** The action's own name in the log. */
   readonly action: string;
@@ -67,7 +70,7 @@ export const FILE_WRITERS = {
   csv: {
     type: "text/csv; charset=utf-8",
     head: csvLine(HEADINGS),
-    line: (entry) => csvLine([entry.when, entry.who, entry.what, entry.site, entry.action]),
+    line: (entry) => csvLine([entry.when, entry.who, entry.what, entry.site, entry.title, entry.action]),
     cut: (note) => csvLine([note]),
   },
   jsonl: {

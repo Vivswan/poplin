@@ -5,6 +5,7 @@
 //                         a narrowed page looks at 5,000 entries of the log and no more: one that stopped there says so, and its place goes on from where it stopped
 //   GET /activity/total   how many entries the log holds, counted no further back than the newest 10,000, or the newest 5,000 under ?kind=, ?site= and ?of=
 //   GET /activity/download        the entries under ?kind=, ?site= and ?of= as a file, the newest first and 2,000 at the most, in ?format=csv or jsonl; ?after= goes on after the file before, and ?part= numbers the file's name
+//                                 each site by the name it had then and the title it has now
 //   GET /activity/download/next   the place the file after one goes on from, or none when the log ends with it, and the place the file itself is read from: a first file is asked with that as ?after=
 
 import { vValidator } from "@hono/valibot-validator";
@@ -94,6 +95,12 @@ interface SiteNow {
   readonly title: string | null;
 }
 
+/** What the entries of one reading name, as it is now: each login's name by its id, and each site by the id an entry holds. */
+interface Named {
+  readonly logins: Readonly<Record<string, string>>;
+  readonly sites: ReadonlyMap<string, SiteNow>;
+}
+
 /** Who asks, and of which install. */
 type Asker = Shared["Variables"]["asker"];
 
@@ -160,13 +167,14 @@ function placesAround({ after, back, along, ends: [first, last], beyond, stopped
   return { previous: first?.seq ?? beside(after + along), next };
 }
 
-/** One entry as a file holds it: the moment in UTC, the name of a login that has one, and the sentence the screen shows. */
-function fileEntryOf(entry: Entry, logins: Readonly<Record<string, string>>): FileEntry {
+/** One entry as a file holds it: the moment in UTC, the name of a login that has one, the sentence the screen shows, and the site by the name it had then and the title it has now. */
+function fileEntryOf(entry: Entry, { logins, sites }: Named): FileEntry {
   return {
     when: new Date(entry.at).toISOString(),
     who: logins[entry.by] ?? entry.by,
     what: whatOf(entry),
     site: entry.site?.name ?? "",
+    title: (entry.site === null ? undefined : sites.get(entry.site.id)?.title) ?? "",
     action: entry.action,
     detail: entry.detail,
   };
@@ -209,7 +217,7 @@ function fileOf(
   asker: Asker,
   narrowing: Narrowing,
   first: Read,
-  writer: { readonly head: string; readonly lineOf: (entry: Entry, logins: Readonly<Record<string, string>>) => string; readonly cut: string; readonly stopped: string },
+  writer: { readonly head: string; readonly lineOf: (entry: Entry, named: Named) => string; readonly cut: string; readonly stopped: string },
 ): ReadableStream<Uint8Array> {
   const encoder = new TextEncoder();
   const state = { reading: first, written: 0 };
@@ -220,9 +228,9 @@ function fileOf(
     },
     async pull(controller) {
       const { entries: reading } = state.reading;
-      // Each reading names its own logins, so a file reads the logins it writes and no others.
-      const logins = await loginNames(asker, reading.map((entry) => entry.by));
-      if (reading.length > 0) controller.enqueue(encoder.encode(reading.map((entry) => writer.lineOf(entry, logins)).join("")));
+      // Each reading names its own logins and sites, so a file reads those it writes and no others.
+      const [logins, sites] = await Promise.all([loginNames(asker, reading.map((entry) => entry.by)), sitesNow(asker.install, reading, undefined)]);
+      if (reading.length > 0) controller.enqueue(encoder.encode(reading.map((entry) => writer.lineOf(entry, { logins, sites })).join("")));
 
       state.written += reading.length;
       const ending = await endingOf(asker, narrowing, state, writer);
@@ -292,7 +300,7 @@ export const activityRoutes = new Hono<Shared>()
 
     const writer = FILE_WRITERS[format];
     const day = new Date(asker.install.now()).toISOString().slice(0, DAY_LENGTH);
-    const lineOf = (entry: Entry, logins: Readonly<Record<string, string>>): string => writer.line(fileEntryOf(entry, logins));
+    const lineOf = (entry: Entry, named: Named): string => writer.line(fileEntryOf(entry, named));
     const body = fileOf(asker, narrowing, first, { head: writer.head, lineOf, cut: writer.cut(CUT_NOTE), stopped: writer.cut(STOPPED_NOTE) });
 
     const name = part === undefined ? day : `${day}-${part}`;

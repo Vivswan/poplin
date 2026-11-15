@@ -357,7 +357,7 @@ async function saveLog(page: Page): Promise<void> {
   const [file] = await Promise.all([page.waitForEvent("download"), page.getByRole("menuitem", { name: "CSV", exact: true }).click()]);
   const [first] = (await readFile(await file.path(), "utf8")).split("\r\n");
 
-  expect([file.suggestedFilename(), first]).toEqual([expect.stringMatching(/^poplin-activity-\d{4}-\d{2}-\d{2}\.csv$/), "When (UTC),Who,What,Site,Action"]);
+  expect([file.suggestedFilename(), first]).toEqual([expect.stringMatching(/^poplin-activity-\d{4}-\d{2}-\d{2}\.csv$/), "When (UTC),Who,What,Site,Title,Action"]);
 }
 
 /** Go to a section by its entry at the side, which a narrow screen keeps behind a button. */

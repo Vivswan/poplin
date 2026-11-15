@@ -162,7 +162,7 @@ describe("a page of the log", () => {
       { ok: true, total: 3, whole: true },
       { ok: true, total: 0, whole: true },
       { ok: true, from: "9", after: null },
-      ["When (UTC),Who,What,Site,Action", ...["Made a new link,trip-notes,new_id", "Changed the site's settings,trip-notes,details", "Made the site,field-notes,create"].map((end) => `${when},${owner},${end}`), ""].join("\r\n"),
+      ["When (UTC),Who,What,Site,Title,Action", ...["Made a new link,trip-notes,,new_id", "Changed the site's settings,trip-notes,,details", "Made the site,field-notes,,create"].map((end) => `${when},${owner},${end}`), ""].join("\r\n"),
     ]);
   });
 
@@ -197,7 +197,7 @@ describe("a page of the log", () => {
     const file = await (await opened.get("/data/activity/download?site=by-a")).text();
 
     expect(answers.map((answer) => (answer as Page).logins)).toEqual(Array.from({ length: 3 }, () => ({ [token]: "the laptop" })));
-    expect(file.split("\r\n")[1]?.split(",").slice(1)).toEqual(["the laptop", "Made the site", "by-a-login", "create"]);
+    expect(file.split("\r\n")[1]?.split(",").slice(1)).toEqual(["the laptop", "Made the site", "by-a-login", "", "create"]);
     expect(named.mock.calls.map(([ids]) => [...ids].sort())).toEqual([[token, unnamed.record.id].sort(), [token, unnamed.record.id].sort(), [token], [token]]);
   });
 
@@ -326,8 +326,8 @@ async function fillLog(opened: Awaited<ReturnType<typeof openConsole>>, entries:
 describe("the log as a file", () => {
   // Drift: the file would hold other entries than the screen's filters show, name a token by its id where the screen names it by its note, or say something else was done than the screen says.
   test.each([
-    ["?kind=access", ['"Added the token ""the laptop""",,token_added']],
-    ["?site=notes", ["Changed the site's settings,trip-notes,details", "Made the site,field-notes,create"]],
+    ["?kind=access", ['"Added the token ""the laptop""",,,token_added']],
+    ["?site=notes", ["Changed the site's settings,trip-notes,,details", "Made the site,field-notes,,create"]],
     ["?kind=access&site=notes", []],
   ])("under %p holds a heading and the entries of that narrowing, the newest first, in the screen's words", async (query, ends) => {
     const { opened } = await openWithHistory();
@@ -335,7 +335,22 @@ describe("the log as a file", () => {
     const response = await opened.get(`/data/activity/download${query}`);
     const when = new Date(clock.now).toISOString();
 
-    expect([response.status, await response.text()]).toEqual([200, ["When (UTC),Who,What,Site,Action", ...ends.map((end) => `${when},${owner},${end}`), ""].join("\r\n")]);
+    expect([response.status, await response.text()]).toEqual([200, ["When (UTC),Who,What,Site,Title,Action", ...ends.map((end) => `${when},${owner},${end}`), ""].join("\r\n")]);
+  });
+
+  // Drift: the screen shows a site by its title and the file would hold its name alone, so a reader could not match a line of the file to a row of the screen.
+  test("holds the title a site has now beside the name it had then, in both formats, and no title for a site that is gone", async () => {
+    const { opened } = await openWithHistory();
+    const { install, owner } = opened.base;
+    const [kept] = (await install.database.listSites({ trash: false, limit: 10 })).sites;
+    await updateSite(install, { scope: "admin", holder: owner }, { site: kept?.id ?? "", title: "Trip notes, 2026" });
+    const csv = (await (await opened.get("/data/activity/download?kind=sites")).text()).split("\r\n").map((line) => line.split(",").slice(3).join(","));
+    const json = (await (await opened.get("/data/activity/download?kind=sites&format=jsonl")).text()).trimEnd().split("\n").map((line) => Object.keys(JSON.parse(line) as object).join(" "));
+
+    expect([csv, [...new Set(json)]]).toEqual([
+      ["Site,Title,Action", 'trip-notes,"Trip notes, 2026",details', "old-draft,,delete", 'trip-notes,"Trip notes, 2026",details', "old-draft,,create", 'field-notes,"Trip notes, 2026",create', ""],
+      ["when who what site title action detail"],
+    ]);
   });
 
   // Drift: a browser would show the file instead of saving it, save it under a name with no date or the wrong ending, or keep a copy of the log in its cache.
@@ -358,7 +373,7 @@ describe("the log as a file", () => {
 
     expect([lines.length, JSON.parse(lines[0] ?? "null")]).toEqual([
       2,
-      { when: new Date(opened.base.clock.now).toISOString(), who: opened.base.owner, what: 'Added the token "the laptop"', site: "", action: "token_added", detail: { token, scope: "publisher", note: "the laptop" } },
+      { when: new Date(opened.base.clock.now).toISOString(), who: opened.base.owner, what: 'Added the token "the laptop"', site: "", title: "", action: "token_added", detail: { token, scope: "publisher", note: "the laptop" } },
     ]);
   });
 
