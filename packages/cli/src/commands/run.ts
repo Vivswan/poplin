@@ -63,9 +63,9 @@ function written(value: unknown, tokens: ReadonlySet<string>): string {
   });
 }
 
-/** The same ends, with every token taken out of the progress line and of a question. */
+/** The same ends, with every token taken out of what a command writes while it runs: a line on stderr, the progress line, and a question. */
 function guarded(io: Io, tokens: ReadonlySet<string>): Io {
-  return { ...io, status: (text) => io.status(hide(text, tokens)), ask: (question) => io.ask(hide(question, tokens)) };
+  return { ...io, err: (line) => io.err(hide(line, tokens)), status: (text) => io.status(hide(text, tokens)), ask: (question) => io.ask(hide(question, tokens)) };
 }
 
 /**
@@ -265,7 +265,7 @@ function mcpHost(io: Io): Host {
   const quiet: Io = { ...io, out: io.err, status: () => undefined, terminal: { asks: false, progress: false } };
 
   return {
-    session: () => connect({}, quiet),
+    session: async () => connect({}, guarded(quiet, await knownTokens(io))),
     stopped: io.stopped,
     withoutTokens: async (value) => textsHidden(value, await knownTokens(io)),
     log: io.err,

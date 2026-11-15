@@ -168,8 +168,11 @@ describe("publish", () => {
     const failed = await bench.run(`${folder} --site ${label} --public --json`);
 
     expect(failed.code).toBe(code);
-    expect(failed.err[0]).toBe(sentence);
-    expect(failed.err[1]).toStartWith("the upload was given up and no site changed");
+    // A pipe is sent one line for each pause before a file is sent again; what the publish came to follows them.
+    const said = failed.err.slice(failed.waits.length);
+
+    expect(said[0]).toBe(sentence);
+    expect(said[1]).toStartWith("the upload was given up and no site changed");
     expect(jsonOf(failed)).toMatchObject({ error: { message: sentence.split(":")[0] } });
     expect(bench.sent.at(-1)).toStartWith("DELETE /api/uploads/");
     expect(await stateOf(bench)).toEqual(before);
@@ -356,7 +359,7 @@ describe("publish", () => {
 
     const failed = await bench.run(folder);
 
-    expect([failed.code, failed.err[0], failed.waits]).toEqual([code, line, waits]);
+    expect([failed.code, failed.err.slice(0, waits.length), failed.err[waits.length], failed.waits]).toEqual([code, waits.map((wait) => `the install asks for a pause: going on in ${wait / 1000} s`), line, waits]);
     expect(bench.sent.filter((line) => line.startsWith("PUT")).length).toBe(puts);
     expect(bench.sent.at(-1)).toStartWith("DELETE /api/uploads/");
     expect(await stateOf(bench)).toEqual(before);

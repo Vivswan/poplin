@@ -48,8 +48,8 @@ const MS_PER_SECOND = 1000;
 /** The answer to a finished upload. */
 export type Published = v.InferOutput<typeof PUBLISHED_SITE>;
 
-/** What a rest needs of the machine's ends. */
-type Resting = Pick<Io, "pause" | "status" | "terminal">;
+/** What a wait needs of the machine's ends. */
+type Resting = Pick<Io, "pause" | "status" | "err" | "terminal">;
 
 /** What the lanes of one upload share: where every wait of it is waited out, and the stop after which no file is sent again. */
 interface Lanes {
@@ -69,7 +69,7 @@ export interface Sending<File> {
   /** Called once for each file the install took. */
   readonly arrived: (file: File) => void;
 
-  /** Where every wait is waited out, and told on the progress line when there is one; after its stop no file is sent again. */
+  /** Where every wait is waited out and told: on the progress line when there is one, else in a line on stderr. After its stop no file is sent again. */
   readonly io: Resting & Pick<Io, "stopped">;
 }
 
@@ -130,11 +130,13 @@ class Pace {
     this.#io = io;
   }
 
-  /** Wait on the command's one clock, with the reason on the progress line where there is one. */
+  /** Wait on the command's one clock, and say why first: on the progress line where there is one, else in one line on stderr, so whatever runs the command in a pipe sees why it waits. */
   async #pause(ms: number, reason: string): Promise<void> {
     if (this.#io.terminal.progress) {
       this.#io.status(`${reason} (Ctrl-C stops)`);
       this.#told = true;
+    } else {
+      this.#io.err(reason);
     }
 
     if ((await this.#io.pause(ms)) === "interrupted") this.#stopped = { kind: "stopped" };
@@ -173,7 +175,7 @@ class Pace {
   }
 
   /**
-   * Pause before a file is sent again, and say on the progress line which file and which sending of it comes.
+   * Pause before a file is sent again, and say which file and which sending of it comes.
    *
    * @param sendings - how often the file was sent so far
    * @returns whether the file is to be sent again: not once the person stopped the command, during this pause or before it
@@ -350,9 +352,9 @@ export async function giveUpUpload(session: Pick<Session, "client" | "afterStop"
 /**
  * Send the files of a begun upload and finish it.
  *
- * Four files go at once; one the install fails on or does not answer is sent again after a pause told on the progress line, up to three times more. While the install lacks files, it is asked which, sent those, and finished again, three times at most.
+ * Four files go at once; one the install fails on or does not answer is sent again after a pause it tells, up to three times more. While the install lacks files, it is asked which, sent those, and finished again, three times at most.
  *
- * An answer of "too many requests" to any call here counts as none of those: the upload rests as long as the answer asks, says so on the progress line, and makes the call again, up to six rests a call.
+ * An answer of "too many requests" to any call here counts as none of those: the upload rests as long as the answer asks, says so, and makes the call again, up to six rests a call.
  * The answer after the sixth rest is the failure. Once the person stops the command, during a rest or a call, the failure is `stopped` and no call is made after it.
  *
  * @returns the install's answer to the finish, or the first failure; the upload is then still there to be given up

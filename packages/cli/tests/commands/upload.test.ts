@@ -72,9 +72,14 @@ interface Told {
   readonly out: number;
 }
 
-/** The line before a pause of so many seconds, after which the one file is sent for the `next` time. */
+/** The line before a pause of so many seconds, after which the one file is sent for the `next` time, as a pipe is sent it. */
+function againPiped(seconds: number, next: number): string {
+  return `the install did not take index.html: sending it again in ${seconds} s, ${next} of 4`;
+}
+
+/** The same line as a terminal's progress line shows it. */
 function again(seconds: number, next: number): string {
-  return `the install did not take index.html: sending it again in ${seconds} s, ${next} of 4 (Ctrl-C stops)`;
+  return `${againPiped(seconds, next)} (Ctrl-C stops)`;
 }
 
 function isPut(request: Request): boolean {
@@ -327,7 +332,7 @@ describe("upload", () => {
     expect(took).toBeLessThan(Math.min(...SHORTEST_PAUSES));
   });
 
-  // Drift: a command that waits seconds and prints nothing looks frozen; a line a pipe is sent, or one more line on stdout, breaks whoever reads the result.
+  // Drift: a command that waits seconds and prints nothing looks frozen, to a person and to the agent that runs it in a pipe; a control sequence in a pipe, or one more line on stdout, breaks whoever reads the result.
   test.each<[string, Told]>([
     [
       "sent a third time says so before each pause, and the progress writes over it",
@@ -346,8 +351,8 @@ describe("upload", () => {
         out: 0,
       },
     ],
-    ["sent again with no terminal to watch pauses as long and writes no line", { faults: [badGateway], line: "", terminal: PIPED, code: 0, waits: [1500], status: [], err: [], out: 3 }],
-    ["sent again under --json pauses as long and writes no line", { faults: [badGateway], line: " --json", terminal: PIPED, code: 0, waits: [1500], status: [], err: [], out: 1 }],
+    ["sent again with no terminal to watch says so in one plain line on stderr", { faults: [badGateway], line: "", terminal: PIPED, code: 0, waits: [1500], status: [], err: [againPiped(2, 2)], out: 3 }],
+    ["sent again under --json says so on stderr, and stdout holds the one result", { faults: [badGateway], line: " --json", terminal: PIPED, code: 0, waits: [1500], status: [], err: [againPiped(2, 2)], out: 1 }],
   ])("a file that is %s", async (_name, row) => {
     const bench = await openBench();
     faulty(bench, row.faults);
@@ -373,11 +378,42 @@ describe("upload", () => {
       return request.url.includes("a.css") ? refusal(400, "size_mismatch", "1") : badGateway();
     };
     bench.paused = async () => "interrupted";
+    using _half = spyOn(Math, "random").mockReturnValue(0.5);
 
     const stopped = await bench.run(folderOf("notes", pages));
 
-    expect([stopped.code, stopped.err, sent, stopped.waits.length]).toEqual([1, ["the command was stopped: the upload was given up and no site changed"], puts, 1]);
+    expect([stopped.code, stopped.err, sent, stopped.waits]).toEqual([1, [againPiped(2, 2), "the command was stopped: the upload was given up and no site changed"], puts, [1500]]);
     expect((await unfinished(bench)).said).toEqual(["create abandoned"]);
+  });
+
+  // Drift: the line of a pause is written while the command runs, past the place that takes the tokens out of what a command comes to; a file named after the token would put it into a log.
+  test("a file whose name holds the token is named in the line of its pause with the token taken out", async () => {
+    const bench = await openBench();
+    const named = `${bench.install.tokens.admin}.txt`;
+    let met = false;
+    bench.hook = (request) => {
+      if (met || !isPut(request) || !request.url.includes(named)) return undefined;
+
+      met = true;
+
+      return badGateway();
+    };
+    using _half = spyOn(Math, "random").mockReturnValue(0.5);
+
+    const ran = await bench.run(folderOf("notes", { ...ONE, [named]: "x" }));
+
+    expect([ran.code, ran.err]).toEqual([0, ["the install did not take [token].txt: sending it again in 2 s, 2 of 4"]]);
+  });
+
+  // Drift: an agent that runs a publish in a pipe sees nothing for as long as the install asks it to rest, and takes the command for hung.
+  test("a rest with no terminal to watch is told in one plain line on stderr, and stdout holds the one result", async () => {
+    const bench = await openBench();
+    const refusals = [refusal(429, "too_many_requests", "3")];
+    bench.hook = (request) => (isPut(request) ? refusals.shift() : undefined);
+
+    const ran = await bench.run(`${folderOf("notes", SIX)} --json`);
+
+    expect([ran.code, ran.waits, ran.status, ran.err, ran.out.length]).toEqual([0, [3000], [], ["the install asks for a pause: going on in 3 s"], 1]);
   });
 
   // Drift: the line of a rest is written over by the upload's progress; a start that is refused after its rest has no progress, and its refusal would be printed onto the end of that line.
