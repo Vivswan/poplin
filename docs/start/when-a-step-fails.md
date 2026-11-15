@@ -85,5 +85,6 @@ No code arrives when the email differs from the one in step 4. Go back to the se
 | `no token was sent, or it expired`                         | the login ran out: it lasts 30 days                  | `npx poplin login`, and allow it again                    |
 | `the install could not be reached`                         | the address is mistyped, or the network is down      | check the address after `--server`                        |
 | a line of `poplin doctor` that starts with `failed`        | that one read failed; the rest of the line says why  | fix what it names, then run `npx poplin doctor` again     |
+| `failed  problems`, then kinds                             | something went wrong in the install today            | [Problems](../run/problems.md#what-is-noted) has each kind |
 
 Any other sentence is a refusal: [When poplin refuses](../use/when-poplin-refuses.md) has each.
