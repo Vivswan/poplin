@@ -158,7 +158,6 @@ describe("the one page", () => {
         ["New sites", "Search engines", "Keep deleted sites"],
         ["Storage", "All sites together"],
         ["Updates", "Check for new versions", "Update channel", "Update link"],
-        ["Sessions", "Sign everyone out"],
       ],
       false,
     ]);

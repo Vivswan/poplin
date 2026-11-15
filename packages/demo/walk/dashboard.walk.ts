@@ -73,12 +73,6 @@ const STOPS: readonly Stop[] = [
     ],
   },
   {
-    name: "the question before everyone is signed out",
-    open: (page) => page.getByRole("button", { name: "Sign everyone out", exact: true }).click(),
-    shows: (page) => [question(page, "Sign everyone out?")],
-    close: leaveBy("Cancel"),
-  },
-  {
     name: "Domain, from the side",
     open: (page) => toSection(page, "Domain"),
     shows: (page) => [screenHeading(page, "Domain"), page.getByRole("heading", { name: "First, make a token", exact: true })],

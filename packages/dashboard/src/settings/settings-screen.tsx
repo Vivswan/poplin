@@ -4,16 +4,12 @@ import { Link, useLocation } from "@tanstack/react-router";
 import { cn } from "cn";
 import { type FormEvent, type ReactNode, useEffect, useState } from "react";
 
-import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { api } from "@/lib/api";
-import { send } from "@/lib/notify";
-import { Confirm } from "@/shared/confirm";
+import { useChosenZone } from "@/lib/time-zone";
 import { LeaveGuard } from "@/shared/leave-guard";
 import { SAVE_BAR_ROOM, SaveBar } from "@/shared/save-bar";
 import { type AddressDraft, useAddressDraft } from "@/settings/address-draft";
 import { settingAnchor, settingOfAnchor } from "@/settings/setting-address";
-import { SettingFrame } from "@/settings/setting-frame";
 import { controlId, SettingRow } from "@/settings/setting-row";
 import { useDraft } from "@/settings/settings-draft";
 import { type Settings, useSettings } from "@/settings/settings-queries";
@@ -27,19 +23,8 @@ const HEADING = "mt-12 text-lg leading-7 font-bold";
 /** The first heading stands closer under the page's opening sentence. */
 const FIRST_HEADING = "mt-7";
 
-/** The id of the button that ends every session. */
-const SIGN_OUT_BUTTON = "sign-everyone-out";
-
 /** How long a block an address names stays shaded, in milliseconds. */
 const MARKED_FOR = 2000;
-
-/** The question before every session is ended. */
-const SIGN_OUT = {
-  title: "Sign everyone out?",
-  says: "Every browser logged in to this dashboard, this one included, has to log in again.",
-  yes: "Sign everyone out",
-  removes: true,
-} as const;
 
 /** The waiting changes of the settings, as the blocks need them. */
 type Draft = ReturnType<typeof useDraft>;
@@ -57,35 +42,7 @@ function RepairNote(): ReactNode {
   );
 }
 
-/** The last group of the page: the button that ends every session, behind a question. */
-function Sessions(): ReactNode {
-  const [asking, setAsking] = useState(false);
-
-  const signOut = async (yes: boolean): Promise<void> => {
-    setAsking(false);
-    if (!yes) return;
-
-    const done = await send(api.settings["sign-everyone-out"].$post({ json: {} }));
-    // This session ended too: the page is asked for again, which leads to the login.
-    if (done !== undefined) window.location.reload();
-  };
-
-  return (
-    <section aria-labelledby="sessions">
-      <h2 id="sessions" className={HEADING}>
-        Sessions
-      </h2>
-      <SettingFrame name="Sign everyone out" controlId={SIGN_OUT_BUTTON} says="Every browser logs in again, this one too.">
-        <Button id={SIGN_OUT_BUTTON} type="button" variant="destructive" onClick={() => setAsking(true)}>
-          Sign everyone out
-        </Button>
-      </SettingFrame>
-      <Confirm question={asking ? SIGN_OUT : undefined} onAnswer={(yes) => void signOut(yes)} />
-    </section>
-  );
-}
-
-/** The blocks of the page: every group of settings under its heading, the update link at the end of Updates, and the sign-out last. */
+/** The blocks of the page: every group of settings under its heading, and the update link at the end of Updates. */
 function Groups({
   settings,
   draft,
@@ -118,7 +75,6 @@ function Groups({
           {block.id === UPDATES ? <UpdateAddressRow state={settings.updateAddress} draft={address} /> : null}
         </section>
       ))}
-      <Sessions />
     </>
   );
 }
@@ -170,6 +126,7 @@ function useNamedSetting(drawn: boolean): string | undefined {
 
 /** Draw the Settings screen. */
 export function SettingsScreen(): ReactNode {
+  useChosenZone();
   const { data: settings, error } = useSettings();
   // A refused setting may be out of sight: its field takes the focus.
   const draft = useDraft(settings?.rows ?? [], (key) => focus(controlId(key)));
