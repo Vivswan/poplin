@@ -28,7 +28,6 @@ on:
       - "!brand/**"
       - "!skills/**"
       - "!*.md"
-      - "!.githooks/**"
       - "!.github/**"
       - ".github/workflows/live-checks.yml"
       - ".github/actions/setup/**"
@@ -45,6 +44,7 @@ on:
       - "!biome.json"
       - "!biome.local.jsonc"
       - "!knip.json"
+      - "!lefthook.yml"
       - "!.release-please-manifest.json"
       - "!release-please-config.json"
   # Midnight UTC. A schedule runs the default branch's own file and nothing a pull request or a fork wrote; a fork's

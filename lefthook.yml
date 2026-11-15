@@ -1,0 +1,55 @@
+# The pre-commit checks. Check-only: nothing here stages, commits, installs, or reaches the network.
+#
+#   staged path                -> tests run
+#   packages/app/...           -> its tests, the Cloudflare package's tests, the Worker's in the Workers runtime, the fuzz tests, and the layout guard
+#   packages/cli/...           -> its tests, the fuzz tests, and the layout guard
+#   packages/cloudflare/...    -> its tests, the Worker's in the Workers runtime, and the layout guard
+#   packages/demo/...          -> its tests and the layout guard
+#   anything else              -> every test, the Worker's included: the other packages depend on core
+#
+# A job runs when a staged file is left after its `glob` and `exclude`. The jobs run in order, and the first that fails stops the rest.
+
+# The hook runs the copy in node_modules ahead of one found on the PATH.
+lefthook: bun node_modules/.bin/lefthook
+
+# A run only checks: it never writes the hooks again when this file changes.
+no_auto_install: true
+
+pre-commit:
+  piped: true
+  jobs:
+    - name: lint
+      run: bun node_modules/.bin/biome lint --staged --no-errors-on-unmatched
+
+    - name: typecheck
+      run: bun run typecheck
+
+    - name: worker tests
+      exclude:
+        - "packages/cli/**"
+        - "packages/demo/**"
+      run: bun run test:worker
+
+    - name: every test
+      exclude:
+        - "packages/app/**"
+        - "packages/cli/**"
+        - "packages/cloudflare/**"
+        - "packages/demo/**"
+      run: bun run test
+
+    - name: app tests
+      glob: "packages/app/**"
+      run: bun run test ./packages/app/ ./packages/cloudflare/ ./tests/fuzz/ ./tests/layout.test.ts
+
+    - name: cli tests
+      glob: "packages/cli/**"
+      run: bun run test ./packages/cli/ ./tests/fuzz/ ./tests/layout.test.ts
+
+    - name: cloudflare tests
+      glob: "packages/cloudflare/**"
+      run: bun run test ./packages/cloudflare/ ./tests/layout.test.ts
+
+    - name: demo tests
+      glob: "packages/demo/**"
+      run: bun run test ./packages/demo/ ./tests/layout.test.ts

@@ -29,8 +29,8 @@ Live Checks workflow
 | `.github/workflows/live-checks.yml`, `.github/actions/setup/**`, `.gitattributes`            | run               |
 | a file no `!` line of the workflow's `paths` list names                                       | run               |
 | only `website/**`, `docs/**`, `brand/**`, `skills/**`, `*.md` at the root                    | no run            |
-| only the rest of `.github/**`, `.githooks/**`, the root test guards, `tests/{fuzz,release-pipeline,support}/**` | no run |
-| only the settings of lint, review, and release tools at the root                             | no run            |
+| only the rest of `.github/**`, the root test guards, `tests/{fuzz,release-pipeline,support}/**` | no run       |
+| only the settings of lint, review, hook, and release tools at the root                       | no run            |
 
 The `paths` list of `.github/workflows/live-checks.yml` holds every row. The files are those of the one push, first commit to last. GitHub reads the first 3,000 changed files of a push, and a push of more than 1,000 commits always starts a run.
 

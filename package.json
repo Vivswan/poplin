@@ -19,6 +19,7 @@
     "live": "POPLIN_LIVE=1 bun test ./tests/live/live.test.ts",
     "knip": "knip --treat-config-hints-as-errors",
     "links": "lychee '**/*.md'",
+    "hooks": "lefthook install",
     "deploy": "bun run --cwd packages/cloudflare deploy",
     "preview": "bun run --cwd packages/demo preview",
     "preview:stop": "bun run --cwd packages/demo preview:stop",
@@ -26,6 +27,11 @@
     "demo:build": "bun run --cwd packages/demo build",
     "demo:stop": "bun run --cwd packages/demo demo:stop"
   },
+  "trustedDependencies": [
+    "esbuild",
+    "sharp",
+    "workerd"
+  ],
   "devDependencies": {
     "@actions/core": "3.0.1",
     "@biomejs/biome": "2.6.4",
@@ -33,6 +39,7 @@
     "@types/semver": "7.8.0",
     "fast-check": "4.10.2",
     "knip": "6.35.1",
+    "lefthook": "2.2.2",
     "semver": "7.8.6",
     "typescript": "7.0.2"
   }
