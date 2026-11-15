@@ -22,15 +22,15 @@ const OBJECTS: readonly (readonly [object: string, detail: string])[] = [
   ["Rate rule", "sample-rate-rule"],
 ];
 
-/** The rights the preview's token form names; the last is one its link does not carry. */
-const RIGHTS = ["Records: Edit", "Routes: Edit", "Login: Edit", "Rules: Edit"];
+/** The rights the preview's token form names: every one its link carries. */
+const RIGHTS = ["Records: Edit", "Routes: Edit", "Login: Edit"];
 
 /** What the preview says of its token and of the form that makes one. */
 const TOKEN_FORM = {
   tokenLabel: "Provider token",
   tokenRights: RIGHTS,
   tokenLink: "https://provider.example/tokens/new",
-  tokenByHand: RIGHTS.slice(-1),
+  tokenOptional: [{ right: "Rules: Edit", adds: "The provider stops floods before they reach a site." }],
   tokenNote: "On the form, choose the account and the domain the token is for.",
 };
 

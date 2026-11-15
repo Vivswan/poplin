@@ -6,9 +6,14 @@ import { mkdtempDisposableSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { convergeInstall } from "../../packages/cloudflare/scripts/live/converge";
+import type { DomainRow } from "../../packages/app/src/dashboard/domain/records";
+import type { Login } from "../../packages/core/src/auth/logins";
+import { convergeInstall, needOf } from "../../packages/cloudflare/scripts/live/converge";
 import { openRun } from "../../packages/cloudflare/scripts/live/util";
+import { createDomainPlug } from "../../packages/cloudflare/src/zone/zone-plug";
 import { withFake } from "../../packages/cloudflare/tests/zone/support/fake-cloudflare";
+import { ACCOUNT as INSTALL_ACCOUNT, answer as answerInstall, emptyAccount, TOKEN } from "../../packages/cloudflare/tests/zone/support/fake-install";
+import { LAYOUT } from "../../packages/cloudflare/tests/zone/support/layouts";
 import { type Asked, page, refusal, reply } from "../../packages/cloudflare/tests/zone/support/replies";
 import { catchStep } from "./support/step";
 
@@ -126,5 +131,47 @@ describe("the script that makes the test install, against a local fake account",
 
     expect(read.length).toBeGreaterThan(0);
     expect(read.filter((name) => !written.includes(name))).toEqual([]);
+  });
+});
+
+/** The calls Cloudflare refuses a token made from the link on the setup page, which carries eight rights and none of the three optional ones. */
+const REFUSED_WITH_EIGHT_RIGHTS = [
+  "GET /zones/zone-1/rulesets/phases/http_request_dynamic_redirect/entrypoint",
+  "GET /zones/zone-1/rulesets/phases/http_request_firewall_custom/entrypoint",
+  "GET /zones/zone-1/rulesets/phases/http_ratelimit/entrypoint",
+  "GET /zones/zone-1/bot_management",
+];
+
+describe("the zone's repair with the eight rights of the token link alone, against a local fake account", () => {
+  // Drift: the install page says the link's token is enough, so a run that called its rows a failure would turn the test install red for the very token a reader is told to make.
+  test("every row the repair did not settle is a lack the suite skips for, never a failure, and every object an install answers with is made", async () => {
+    const account = { ...emptyAccount(), refuse: REFUSED_WITH_EIGHT_RIGHTS };
+    let rows: readonly DomainRow[] = [];
+
+    await withFake(
+      (asked) => answerInstall(account, asked),
+      async (connection) => {
+        const plug = createDomainPlug({ accountId: INSTALL_ACCOUNT, script: "poplin", layout: LAYOUT, baseUrl: connection.baseUrl });
+        const reading = await plug.repair(TOKEN, async () => ({ logins: ["owner@example.com" as Login], outside_pages: "blocked", search_engines_allowed: false, block_bots: "auto" }));
+        rows = reading.ok ? reading.rows : [];
+      },
+    );
+
+    const unsettled = rows.filter((row) => row.state !== "present" && row.state !== "created");
+
+    expect(unsettled.map((row) => [row.object, row.state, needOf(row)])).toEqual([
+      ["Redirect rule", "optional", "the token permission for the Redirect rule"],
+      ["WAF rule", "optional", "the token permission for the WAF rule"],
+      ["Rate rule", "optional", "the token permission for the Rate rule"],
+      ["Bot settings", "optional", "the token permission for the Bot settings"],
+    ]);
+    expect([...new Set(rows.filter((row) => row.state === "created").map((row) => row.object))]).toEqual([
+      "DNS record",
+      "Worker route",
+      "Access application",
+      "Access policy",
+      "Worker variable",
+      "D1 database",
+    ]);
   });
 });

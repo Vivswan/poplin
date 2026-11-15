@@ -17,10 +17,10 @@ export type ReadSettings = () => Promise<DomainSettings>;
 /** A setting the Domain tab changes and a repair carries to the provider. */
 export type GuardKey = Exclude<keyof DomainSettings, "logins">;
 
-/** How one object stands. The first four are what a check finds; a repair also says what it did, where it failed, and what it never reached. */
-export type DomainState = "present" | "missing" | "differs" | "left-out" | "created" | "changed" | "removed" | "failed" | "not-run";
+/** How one object stands. The first five are what a check finds; a repair also says what it did, where it failed, and what it never reached. `optional` is one the token has no right for and the install works without: no failure, and nothing to repair. */
+export type DomainState = "present" | "missing" | "differs" | "left-out" | "optional" | "created" | "changed" | "removed" | "failed" | "not-run";
 
-/** One object of the install at the provider. `detail` names it, and says why it was left out or why it failed. */
+/** One object of the install at the provider. `detail` names it, and says why it was left out, why it failed, or which right would switch it on. */
 export interface DomainRow {
   readonly object: string;
   readonly state: DomainState;
@@ -48,14 +48,14 @@ export interface DomainPlug {
   /** What the token field is called, such as the provider's own name for the key. */
   readonly tokenLabel: string;
 
-  /** Every right a token needs for a check and a repair, each in the provider's own name for it. */
+  /** Every right a token needs for an install to work, each in the provider's own name for it. */
   readonly tokenRights: readonly string[];
 
-  /** The address of the provider's form for a new token, with as many of the rights already chosen as a link can carry. */
+  /** The address of the provider's form for a new token, with every one of those rights already chosen. */
   readonly tokenLink: string;
 
-  /** The rights the link cannot carry: the person adds them on the form. */
-  readonly tokenByHand: readonly string[];
+  /** The rights an install works without: the provider's name for each, and in one line what a token that has it adds. */
+  readonly tokenOptional: readonly { readonly right: string; readonly adds: string }[];
 
   /** What else the provider's form asks of the person, in one sentence, such as which account the token is for. */
   readonly tokenNote: string;
@@ -66,12 +66,12 @@ export interface DomainPlug {
   /** Read every object and say what a repair would do. It changes nothing at the provider, and reads the settings only once the token is proven. */
   check(token: string, settings: ReadSettings): Promise<DomainReading>;
 
-  /** Make every object match, in order. It goes on past an object the token has no permission for, and stops at any other failure: the rows say what was done, what failed, and what was never reached. */
+  /** Make every object match, in order. It goes on past an object the token has no right for, `optional` where the right is, and stops at any other failure: the rows say what was done, what failed, and what was never reached. */
   repair(token: string, settings: ReadSettings): Promise<DomainReading>;
 }
 
 /** What the provider's form for a new token is and asks for, as both pages show it. */
-export type TokenFacts = Pick<DomainPlug, "tokenLabel" | "tokenRights" | "tokenLink" | "tokenByHand" | "tokenNote">;
+export type TokenFacts = Pick<DomainPlug, "tokenLabel" | "tokenRights" | "tokenLink" | "tokenOptional" | "tokenNote">;
 
 /** The provider's side of an install with nothing set yet: no plug exists before a person names the domain and the first login. */
 export interface FirstRun extends TokenFacts {

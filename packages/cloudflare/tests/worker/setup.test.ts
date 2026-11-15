@@ -271,6 +271,8 @@ describe("the Domain tab", () => {
 
     expect([stranger.status, stranger.headers.get("Location")]).toEqual([302, `${ADMIN}/login?return=${encodeURIComponent("/domain")}`]);
     expect([tab.includes('href="/domain"'), tab.includes("<li>Workers Scripts: Edit</li>"), tab.includes("<li>Zone Settings: Read</li>")]).toEqual([true, true, true]);
+    // Drift: the link carries eight rights, so a right the plug holds optional that the page listed among the needed ones sends a person back to adding it by hand.
+    expect([tab.includes("<li>Zone WAF: Edit</li>"), tab.includes("<li>Zone WAF: Edit. Cloudflare stops"), tab.includes("by hand")]).toEqual([false, true, false]);
     expect([checked.status, none, repaired.status, account.applications.length, (await stored()).includes(TOKEN)]).toEqual([200, [], 200, 1, false]);
   });
 });

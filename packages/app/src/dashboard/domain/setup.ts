@@ -207,8 +207,8 @@ async function runFor(parts: SetupParts, run: DomainRun, sent: Sent): Promise<Do
  */
 export function createSetup(parts: SetupParts): Setup {
   const csrfKey = importCsrfKey(parts.csrfSecret);
-  const { tokenLabel, tokenRights, tokenLink, tokenByHand, tokenNote } = parts.domain;
-  const asks = { tokenLabel, tokenRights, tokenLink, tokenByHand, tokenNote };
+  const { tokenLabel, tokenRights, tokenLink, tokenOptional, tokenNote } = parts.domain;
+  const asks = { tokenLabel, tokenRights, tokenLink, tokenOptional, tokenNote };
   const boxes = "plugFor" in parts.domain ? "first" : "login";
 
   // Said only after a run the plug took, so only to a token proven for the install's own account.

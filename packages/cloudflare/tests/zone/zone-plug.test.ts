@@ -131,6 +131,11 @@ test("a login added to the settings: the check says the Access policy lets other
   });
 });
 
+/** Every right the plug names, the ones an install needs and the optional ones. */
+function everyRight(plug: ReturnType<typeof createDomainPlug>): string[] {
+  return [...plug.tokenRights, ...plug.tokenOptional.map((entry) => entry.right)].sort();
+}
+
 /** The right each call of a repair needs, by the start of its path after the account or the zone. */
 const RIGHT_OF: readonly (readonly [path: RegExp, right: string])[] = [
   [/^\/zones\?/, "Zone: Read"],
@@ -146,12 +151,12 @@ const RIGHT_OF: readonly (readonly [path: RegExp, right: string])[] = [
   [/^\/accounts\/[^/]+\/d1\/database/, "D1: Edit"],
 ];
 
-test("the rights the page asks a token for are the rights a repair's calls need, no more and no fewer: a call added without its right is refused on every real install", async () => {
+test("the rights the page names, needed and optional, are the rights a repair's calls use, no more and no fewer: a call added without its right is refused on every real install", async () => {
   await withAccount(emptyAccount(), async (plug, asked) => {
     await plug.repair(TOKEN, SETTINGS);
     const needed = asked.map((entry) => RIGHT_OF.find(([path]) => path.test(entry.path))?.[1] ?? `no right is known for ${entry.method} ${entry.path}`);
 
-    expect([...new Set(needed)].sort()).toEqual([...plug.tokenRights].sort());
+    expect([...new Set(needed)].sort()).toEqual(everyRight(plug));
   });
 });
 
@@ -182,28 +187,29 @@ const SCOPE_OF: Readonly<Record<string, "Account" | "Zone">> = {
   "D1: Edit": "Account",
 };
 
-// Drift: the form drops a key it does not know without a word, so a right that is in neither the link nor the by-hand list is a token that fails at a repair with nothing on the page having asked for it.
-test("every right is in the link to the token form under Cloudflare's own key for it, or in the list to add by hand, and in no case both", () => {
+// Drift: the form drops a key it does not know without a word, so a needed right the link does not carry is a token that fails at a repair with nothing on the page having asked for it.
+test("every right an install needs is in the link to the token form under Cloudflare's own key for it, and the three the link cannot carry are optional, each with what it adds", () => {
   const plug = createDomainPlug({ accountId: ACCOUNT, script: "poplin", layout: LAYOUT });
   const link = new URL(plug.tokenLink);
   const chosen = JSON.parse(link.searchParams.get("permissionGroupKeys") ?? "[]") as { key: string; type: string }[];
-  const linked = plug.tokenRights.filter((right) => !plug.tokenByHand.includes(right));
 
-  expect<unknown>(chosen.map(({ key, type }) => [key, type])).toEqual(linked.map((right) => KEY_OF[right] ?? [`no key is documented for ${right}`]));
-  expect([...plug.tokenByHand].sort()).toEqual(["Bot Management: Edit", "Single Redirect: Edit", "Zone WAF: Edit"]);
+  expect<unknown>(chosen.map(({ key, type }) => [key, type])).toEqual(plug.tokenRights.map((right) => KEY_OF[right] ?? [`no key is documented for ${right}`]));
+  expect(plug.tokenOptional.map((entry) => entry.right).sort()).toEqual(["Bot Management: Edit", "Single Redirect: Edit", "Zone WAF: Edit"]);
   expect([`${link.origin}${link.pathname}`, link.searchParams.get("accountId"), link.searchParams.get("zoneId"), plug.tokenLink.includes(ACCOUNT)]).toEqual(["https://dash.cloudflare.com/profile/api-tokens", "*", "all", false]);
 });
 
 // Drift: the form has three boxes for a permission and the page names each, so a row whose boxes are not Cloudflare's own scope, name, and level is a permission nobody finds on the form.
-test("the install page gives the plug's own link to the token form, and names the three boxes of every right: all of them in the table for an empty form, and exactly the ones the link cannot carry in the table to add by hand", () => {
+// A right the plug holds optional that the steps asked for would send every reader back to the by-hand step the link spares them.
+test("the install page gives the plug's own link to the token form, and names the three boxes of every right: the needed ones in the steps' table for an empty form, and the optional ones only in the part after the steps", () => {
   const page = readFileSync(join(import.meta.dir, "..", "..", "..", "..", "docs", "install.md"), "utf8");
-  const rows = [...page.matchAll(/^ *\| (Account|Zone) +\| (.+?) +\| (Edit|Read) +\|(.*)$/gm)].map(([, first, second, third, rest = ""]) => ({ boxes: `${first} / ${second}: ${third}`, more: rest !== "" }));
+  const [steps = "", optional = ""] = page.split("\n## Optional: block junk traffic and crawlers\n");
+  const boxes = (text: string): string[] => [...text.matchAll(/^ *\| (Account|Zone) +\| (.+?) +\| (Edit|Read) +\|/gm)].map(([, first, second, third]) => `${first} / ${second}: ${third}`).sort();
   const plug = createDomainPlug({ accountId: ACCOUNT, script: "poplin", layout: LAYOUT });
   const boxed = (rights: readonly string[]): string[] => rights.map((right) => `${SCOPE_OF[right] ?? "no scope is known"} / ${right}`).sort();
 
-  expect(rows.filter((row) => row.more).map((row) => row.boxes).sort()).toEqual(boxed(plug.tokenRights));
-  expect(rows.filter((row) => !row.more).map((row) => row.boxes).sort()).toEqual(boxed(plug.tokenByHand));
-  expect(page.includes(`(${plug.tokenLink})`)).toBe(true);
+  expect(boxes(steps)).toEqual(boxed(plug.tokenRights));
+  expect(boxes(optional)).toEqual(boxed(plug.tokenOptional.map((entry) => entry.right)));
+  expect(steps.includes(`(${plug.tokenLink})`)).toBe(true);
 });
 
 test("one object taken away and one changed by hand: the check names exactly those two, and the repair changes exactly those two", async () => {
@@ -299,35 +305,73 @@ test("a repair that fails half way, for another reason than a permission, stops:
   });
 });
 
-/** The calls Cloudflare refuses a token without each of the three permissions the link to the token form cannot carry, and the rows those calls belong to. */
-const BY_HAND = {
+/** The calls Cloudflare refuses a token without each of the three optional permissions, and the rows those calls belong to. */
+const OPTIONAL = {
   "Single Redirect: Edit": { calls: ["GET /zones/zone-1/rulesets/phases/http_request_dynamic_redirect/entrypoint"], rows: ["Redirect rule"] },
   "Zone WAF: Edit": { calls: ["GET /zones/zone-1/rulesets/phases/http_request_firewall_custom/entrypoint", "GET /zones/zone-1/rulesets/phases/http_ratelimit/entrypoint"], rows: ["WAF rule", "Rate rule"] },
   "Bot Management: Edit": { calls: ["GET /zones/zone-1/bot_management"], rows: ["Bot settings"] },
 } as const;
 
 /** Each of those three permissions alone, and all three, which is the token the link alone makes. */
-const lacking: readonly { readonly name: string; readonly rights: readonly (keyof typeof BY_HAND)[] }[] = [
-  ...Object.keys(BY_HAND).map((right) => ({ name: right, rights: [right as keyof typeof BY_HAND] })),
+const lacking: readonly { readonly name: string; readonly rights: readonly (keyof typeof OPTIONAL)[] }[] = [
+  ...Object.keys(OPTIONAL).map((right) => ({ name: right, rights: [right as keyof typeof OPTIONAL] })),
   { name: "all three", rights: ["Single Redirect: Edit", "Zone WAF: Edit", "Bot Management: Edit"] },
 ];
 
-// Drift: one refused piece used to stop the run, so a token with the eight linked rights left four rows never tried, the database among them, and the page looked broken.
-test.each(lacking)("a repair with a token without $name goes on past each refused piece: every other object is made, the database among them, and each refused row names its right", async ({ rights }) => {
-  const account = { ...emptyAccount(), refuse: rights.flatMap((right) => BY_HAND[right].calls) };
-  const refused = rights.flatMap((right) => BY_HAND[right].rows.map((object) => `${object} | failed | refused with status 403: 10000 Authentication error for Bearer ${TOKEN}. Add this right to the token: ${right}`));
-  const made = table({ all: "created", bots: "changed" }).filter((row) => !refused.some((other) => row.split(" | ")[0] === other.split(" | ")[0]));
+// Drift: the install page tells a person the link's eight rights are enough, so a piece that fails without an optional right, or stops the run, makes that page false for every reader who followed it.
+test.each(lacking)("a repair with a token without $name fails nothing: every other object is made, the database among them, and each piece that needs the right is optional and names it", async ({ rights }) => {
+  const account = { ...emptyAccount(), refuse: rights.flatMap((right) => OPTIONAL[right].calls) };
+  const optional = rights.flatMap((right) => OPTIONAL[right].rows.map((object) => [object, right] as const));
+  const made = table({ all: "created", bots: "changed" }).filter((row) => !optional.some(([object]) => row.startsWith(`${object} | `)));
 
-  await withAccount(account, async (plug) => {
+  await withAccount(account, async (plug, asked) => {
     const reading = await plug.repair(TOKEN, SETTINGS);
     const rows = shown(reading);
+    const calm = (row: string): boolean => row.includes(" | optional | ");
+    const named = (found: readonly string[]): string[] => found.filter(calm).map((row) => `${row.split(" | ")[0]}: ${row.slice(row.indexOf("add this right"))}`).sort();
+    const expected = optional.map(([object, right]) => `${object}: add this right to the token and press Repair: ${right}`).sort();
 
-    expect(rows.filter((row) => row.includes(" | failed | ")).sort()).toEqual([...refused].sort());
-    expect(rows.filter((row) => !row.includes(" | failed | "))).toEqual(made);
+    expect(named(rows)).toEqual(expected);
+    expect(rows.filter((row) => !calm(row))).toEqual(made);
+    expect(rows.join().includes(TOKEN)).toBe(false);
     expect(reading).toMatchObject({ steps: [{ address: "https://poplin.example.com" }] });
     expect(account.databases.length).toBe(1);
-    // The install is not complete while a row is refused: a check after it still lists each one.
-    expect(shown(await plug.check(TOKEN, SETTINGS)).filter((row) => row.includes(" | failed | ")).sort()).toEqual([...refused].sort());
+
+    // A check after it finds every made object present and the optional ones as they were, and a second repair sends no change.
+    const sent = asked.length;
+    const again = [...shown(await plug.check(TOKEN, SETTINGS)), ...shown(await plug.repair(TOKEN, SETTINGS))];
+
+    expect([...new Set(again.map((row) => row.split(" | ")[1]))].sort()).toEqual(["optional", "present"]);
+    expect(named(again)).toEqual([...expected, ...expected].sort());
+    expect(writes(asked.slice(sent))).toEqual([]);
+  });
+});
+
+// Drift: a token may read the rules and not change them, so a rule never reached behind an optional refusal used to stay not run, with no word of the right, and count as work left over.
+test("a token that may read the guard rules and not make them leaves both rules optional, each naming the right, and the run goes on", async () => {
+  const account = { ...emptyAccount(), refuse: "POST /zones/zone-1/rulesets" };
+
+  await withAccount(account, async (plug) => {
+    const rows = shown(await plug.repair(TOKEN, SETTINGS));
+    const guards = rows.filter((row) => row.startsWith("WAF rule | ") || row.startsWith("Rate rule | ") || row.startsWith("Redirect rule | "));
+
+    expect(guards.map((row) => row.split(" | ")[1])).toEqual(["optional", "optional", "optional", "optional"]);
+    expect(guards.filter((row) => !row.includes("add this right to the token and press Repair: "))).toEqual([]);
+    expect(rows.at(-1)).toBe("D1 database | created | poplin");
+  });
+});
+
+// Drift: a row that is optional is a promise that nothing is wrong, so it may stand only for a refusal that is a missing permission and nothing else.
+test.each([
+  { name: "a failure of Cloudflare's own", refuseAs: { status: 500, code: 10000 } },
+  { name: "a refusal for another reason than a permission", refuseAs: { status: 403, code: 9109 } },
+])("$name on a piece that needs an optional right is a failed row, never an optional one", async ({ refuseAs }) => {
+  const account = { ...emptyAccount(), refuse: OPTIONAL["Zone WAF: Edit"].calls[0], refuseAs };
+
+  await withAccount(account, async (plug) => {
+    const states = shown(await plug.repair(TOKEN, SETTINGS)).filter((row) => row.startsWith("WAF rule | ")).map((row) => row.split(" | ")[1]);
+
+    expect(states).toEqual(["failed"]);
   });
 });
 
@@ -369,23 +413,24 @@ const NEEDS: readonly (readonly [right: string, call: string])[] = [
 ];
 
 // Drift: a refused row used to quote Cloudflare's status alone, and the person had to guess which of eleven rows their token lacked.
-test.each(NEEDS)("a token without %s gets one failed row, which names that right in the words of the token form", async (right, call) => {
+test.each(NEEDS)("a token without %s gets one row that names that right in the words of the token form: failed for a right an install needs, optional for one it works without", async (right, call) => {
   const account = emptyAccount();
 
   await withAccount(account, async (plug) => {
     await plug.repair(TOKEN, SETTINGS);
     account.refuse = call;
-    const failed = shown(await plug.check(TOKEN, SETTINGS)).filter((row) => row.includes(" | failed | "));
+    const naming = shown(await plug.check(TOKEN, SETTINGS)).filter((row) => row.includes("dd this right"));
+    const needed = plug.tokenRights.includes(right);
 
-    expect(failed.map((row) => row.slice(row.indexOf("Add this right")))).toEqual([`Add this right to the token: ${right}`]);
-    expect(plug.tokenRights).toContain(right);
+    expect(naming.map((row) => row.split(" | ")[1])).toEqual([needed ? "failed" : "optional"]);
+    expect(naming.map((row) => row.slice(row.indexOf("dd this right")))).toEqual([needed ? `dd this right to the token: ${right}` : `dd this right to the token and press Repair: ${right}`]);
   });
 });
 
-test("the rows of that table and the list of zones are every right the plug asks for: a right with no row here is one no refusal names", () => {
+test("the rows of that table and the list of zones are every right the plug names: a right with no row here is one no refusal names", () => {
   const plug = createDomainPlug({ accountId: ACCOUNT, script: "poplin", layout: LAYOUT });
 
-  expect(["Zone: Read", ...NEEDS.map(([right]) => right)].sort()).toEqual([...plug.tokenRights].sort());
+  expect(["Zone: Read", ...NEEDS.map(([right]) => right)].sort()).toEqual(everyRight(plug));
 });
 
 const otherwise: readonly { readonly name: string; readonly refused: Partial<Account> }[] = [

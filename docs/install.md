@@ -58,19 +58,11 @@ Two words the steps use: a **Worker** is the program Cloudflare runs for you, an
    https://poplin.your-name.workers.dev
    ```
 
-3. **Make a Cloudflare API token.** One link opens Cloudflare's form with eight of the eleven permissions already chosen. It worked if the form shows eight rows already filled. A zone is your domain.
+3. **Make a Cloudflare API token.** One link opens Cloudflare's form with the eight permissions poplin needs already chosen. It worked if the form shows eight rows already filled. A zone is your domain.
 
    [Open the token form with the permissions chosen](https://dash.cloudflare.com/profile/api-tokens?permissionGroupKeys=%5B%7B%22key%22%3A%22zone%22%2C%22type%22%3A%22read%22%7D%2C%7B%22key%22%3A%22dns%22%2C%22type%22%3A%22edit%22%7D%2C%7B%22key%22%3A%22workers_routes%22%2C%22type%22%3A%22edit%22%7D%2C%7B%22key%22%3A%22access%22%2C%22type%22%3A%22edit%22%7D%2C%7B%22key%22%3A%22workers_scripts%22%2C%22type%22%3A%22edit%22%7D%2C%7B%22key%22%3A%22access_acct%22%2C%22type%22%3A%22read%22%7D%2C%7B%22key%22%3A%22zone_settings%22%2C%22type%22%3A%22read%22%7D%2C%7B%22key%22%3A%22d1%22%2C%22type%22%3A%22edit%22%7D%5D&accountId=%2A&zoneId=all&name=poplin%20setup)
 
-   Add the other three by hand. For each, press Add more and choose in its three boxes:
-
-   | First box | Second box      | Third box |
-   | --------- | --------------- | --------- |
-   | Zone      | Zone WAF        | Edit      |
-   | Zone      | Single Redirect | Edit      |
-   | Zone      | Bot Management  | Edit      |
-
-   Then finish the form, from top to bottom:
+   Add nothing. Finish the form, from top to bottom:
 
    | On the form       | Do                                                                               |
    | ----------------- | -------------------------------------------------------------------------------- |
@@ -79,7 +71,7 @@ Two words the steps use: a **Worker** is the program Cloudflare runs for you, an
    | the bottom        | press Continue to summary, then Create Token                                     |
    | the next page     | The token is shown once: paste it into a note now; you need it in the next step. |
 
-   **If the form opens empty**, press Create Token, choose Create Custom Token, and add all eleven the same way:
+   **If the form opens empty**, press Create Token, then Create Custom Token. For each row below, press Add more and choose in its three boxes:
 
    | First box | Second box                                            | Third box | For                                         |
    | --------- | ----------------------------------------------------- | --------- | ------------------------------------------- |
@@ -91,9 +83,8 @@ Two words the steps use: a **Worker** is the program Cloudflare runs for you, an
    | Zone      | DNS                                                   | Edit      | the addresses                               |
    | Zone      | Workers Routes                                        | Edit      | sending the addresses to the Worker         |
    | Zone      | Zone Settings                                         | Read      | seeing whether the domain redirects already |
-   | Zone      | Zone WAF                                              | Edit      | the rules against unwanted traffic          |
-   | Zone      | Single Redirect                                       | Edit      | sending http to https                       |
-   | Zone      | Bot Management                                        | Edit      | blocking AI crawlers                        |
+
+   Then finish the form as in the table above.
 
 4. **Finish on the setup page.** Open the Worker's address from step 2: it shows the setup page. Fill its three boxes and press Repair (the first time it also makes everything).
 
@@ -106,17 +97,24 @@ Two words the steps use: a **Worker** is the program Cloudflare runs for you, an
    The page lists what it made:
 
    ```text
-   16 repaired
+   11 repaired
+   4 optional, not set up. The install works without them. Each such row names the right that switches it on.
    The login is ready. Open your dashboard and log in: https://poplin.example.com
 
-   DNS record           created   poplin.example.com
-   Worker route         created   poplin.example.com/*
-   Access application   created   poplin: poplin.example.com/login, *-p-poplin.example.com
+   DNS record           created                poplin.example.com
+   Worker route         created                poplin.example.com/*
+   Access application   created                poplin: poplin.example.com/login, *-p-poplin.example.com
+   WAF rule             not set up: optional   ... add this right to the token and press Repair: Zone WAF: Edit
    ```
 
-   The token is used for that one request and kept nowhere. **A row that says failed** says why. For a permission the token lacks it ends with `Add this right to the token` and the permission's name. Repair is safe to repeat.
+   The sample shows a few of the rows. `repaired` counts the rows Repair made. The page calls a permission a right. The token is used for that one request and kept nowhere. Repair is safe to repeat.
 
-   Your tokens are listed on the page step 3's link opened (in Cloudflare: My Profile, then API Tokens).
+   | A row says             | Means                                                                                                                                    |
+   | ---------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+   | `not set up: optional` | nothing is wrong. The row waits on one of three optional permissions: see [the optional part](#optional-block-junk-traffic-and-crawlers) |
+   | `failed`               | it says why. For a permission the token lacks it ends with `Add this right to the token` and the permission's name                       |
+
+   **Only when a row says failed for a permission**, add it to the token. Your tokens are listed on the page step 3's link opened (in Cloudflare: My Profile, then API Tokens).
 
    | You                         | Do, in the token's menu                                                              |
    | --------------------------- | ------------------------------------------------------------------------------------ |
@@ -149,6 +147,24 @@ Two words the steps use: a **Worker** is the program Cloudflare runs for you, an
 
 Your install is ready. Paste the line from [the README](../README.md#use-it-from-an-ai-agent) into your agent (an AI assistant that can run commands for you), or see [Using](using.md).
 
+## Optional: block junk traffic and crawlers
+
+The install works without this part. Three more permissions on the token let Cloudflare stop unwanted requests before they reach the Worker. Add any of them, on any day.
+
+| First box | Second box      | Third box | With it, Cloudflare                                                           | Without it                                                                                  |
+| --------- | --------------- | --------- | ----------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
+| Zone      | Zone WAF        | Edit      | stops verified bots, scanner paths, pages of other domains, and floods        | they reach the Worker. It refuses pages of other domains while `outside_pages` is `blocked` |
+| Zone      | Single Redirect | Edit      | sends http to https                                                           | the Worker sends the same redirect                                                          |
+| Zone      | Bot Management  | Edit      | blocks AI crawlers on the whole domain, as the Domain tab's `block_bots` says | poplin switches no such block on                                                            |
+
+| Step | Where                              | Do                                                                          |
+| ---- | ---------------------------------- | --------------------------------------------------------------------------- |
+| 1    | Cloudflare, My Profile, API Tokens | in the token's menu choose Edit, or Roll when you no longer have its text   |
+| 2    | the token's form                   | for each row above, press Add more and choose in its three boxes; then save |
+| 3    | the dashboard, Domain              | paste the token and press Repair                                            |
+
+A row that said `not set up: optional` now says what Repair did, such as `created`. The Domain tab's three settings, `outside_pages`, `search_engines_allowed`, and `block_bots`, save without these permissions. What Cloudflare does for each starts once you press Repair, in step 3 of this table.
+
 ## Add a login
 
 A second person needs two steps, because Cloudflare's login page keeps its own list.
@@ -175,14 +191,14 @@ The dashboard's Settings tab changes the same settings.
 
 ## What the install is made of
 
-| In your Cloudflare account | Does                                                           | Made by |
-| -------------------------- | -------------------------------------------------------------- | ------- |
-| one Worker                 | serves every site, the dashboard, the login, and the API       | step 2  |
-| one R2 bucket              | holds every site's files                                       | step 2  |
-| one D1 database            | holds the list of sites, the logins, and the settings          | step 2  |
-| an Access application      | the login screen in front of the dashboard and private sites   | step 4  |
-| DNS records and routes     | send your sites' addresses, and the dashboard's, to the Worker | step 4  |
-| rules on the domain        | slow down and stop unwanted traffic before the Worker          | step 4  |
+| In your Cloudflare account | Does                                                           | Made by           |
+| -------------------------- | -------------------------------------------------------------- | ----------------- |
+| one Worker                 | serves every site, the dashboard, the login, and the API       | step 2            |
+| one R2 bucket              | holds every site's files                                       | step 2            |
+| one D1 database            | holds the list of sites, the logins, and the settings          | step 2            |
+| an Access application      | the login screen in front of the dashboard and private sites   | step 4            |
+| DNS records and routes     | send your sites' addresses, and the dashboard's, to the Worker | step 4            |
+| rules on the domain        | slow down and stop unwanted traffic before the Worker          | the optional part |
 
 ## From a terminal instead
 

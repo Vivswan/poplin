@@ -11,7 +11,7 @@ import { html } from "hono/html";
 
 import { csrfField } from "../page/frame";
 import type { Html } from "../records";
-import type { DomainReading, DomainRow, DomainState, DomainStep } from "./records";
+import type { DomainPlug, DomainReading, DomainRow, DomainState, DomainStep } from "./records";
 import type { DomainRun } from "./domain-run";
 
 /** The label of each state and the colour it is read in: `good` stands, `bad` needs work, `idle` was not touched. */
@@ -20,6 +20,7 @@ const STATES: Readonly<Record<DomainState, { readonly label: string; readonly to
   missing: { label: "missing", tone: "bad" },
   differs: { label: "differs", tone: "bad" },
   "left-out": { label: "left out", tone: "idle" },
+  optional: { label: "not set up: optional", tone: "idle" },
   created: { label: "created", tone: "good" },
   changed: { label: "changed", tone: "good" },
   removed: { label: "removed", tone: "good" },
@@ -57,11 +58,11 @@ interface Shown {
   /** The rights the token needs, in the provider's own names. */
   readonly tokenRights: readonly string[];
 
-  /** The address of the provider's form for a new token, with rights already chosen. */
+  /** The address of the provider's form for a new token, with those rights already chosen. */
   readonly tokenLink: string;
 
-  /** The rights that link cannot carry. */
-  readonly tokenByHand: readonly string[];
+  /** The rights an install works without, and what each adds. */
+  readonly tokenOptional: DomainPlug["tokenOptional"];
 
   /** What else the provider's form asks of the person. */
   readonly tokenNote: string;
@@ -97,6 +98,14 @@ function summary(run: DomainRun, rows: readonly DomainRow[]): Html {
   return html`<p class="notice done" role="status">Nothing to repair.</p>`;
 }
 
+// A row that is optional is no work left over: it is said apart from the count.
+function optionalNote(rows: readonly DomainRow[]): Html {
+  const optional = count(rows, ["optional"]);
+  if (optional === 0) return html``;
+
+  return html`<p class="hint">${optional} optional, not set up. The install works without them. Each such row names the right that switches it on.</p>`;
+}
+
 function stepList(steps: readonly DomainStep[]): Html {
   if (steps.length === 0) return html``;
 
@@ -115,6 +124,7 @@ function result(ran: Shown["ran"], expects: Shown["expects"]): Html {
   if (!ran.reading.ok) return html`<p class="notice refused" role="status">${REFUSALS[ran.reading.refusal]}</p>`;
 
   return html`${summary(ran.run, ran.reading.rows)}
+${optionalNote(ran.reading.rows)}
 ${expects === undefined ? html`` : html`<p class="hint">The login is set to expect: ${expects}</p>`}
 ${stepList(ran.reading.steps)}
 <div class="scroll" role="region" aria-label="Domain" tabindex="0"><table>
@@ -148,17 +158,18 @@ function firstFields(boxes: Shown["boxes"]): Html {
 </div>`;
 }
 
-function byHand(rights: readonly string[]): Html {
+function optionalRights(rights: Shown["tokenOptional"]): Html {
   if (rights.length === 0) return html``;
 
-  return html`<p class="hint">Add these on the form by hand:</p>
-<ul class="hint">${rights.map((right) => html`<li>${right}</li>`)}</ul>`;
+  return html`<p class="hint">Optional: block junk traffic and crawlers. Add any of these to the token on the form, then press Repair:</p>
+<ul class="hint">${rights.map((entry) => html`<li>${entry.right}. ${entry.adds}</li>`)}</ul>`;
 }
 
 /**
  * Build the result of the last run and the form for the next one.
  *
- * @returns the summary, the steps only a person can do, and the table, when a run was just answered; then one form with an empty token field, the two boxes of an install with nothing set, the way to a token with its rights, and the two buttons
+ * @returns the summary, the steps only a person can do, and the table, when a run was just answered; then one form:
+ * an empty token field, the two boxes of an install with nothing set, the way to a token with its rights, the optional rights, and the two buttons
  */
 export function domainBody(shown: Shown): Html {
   return html`${result(shown.ran, shown.expects)}
@@ -169,11 +180,11 @@ ${firstFields(shown.boxes)}
 <label for="token">${shown.tokenLabel}</label>
 <input type="password" id="token" name="token" autocomplete="off" required>
 <p class="hint">Used for this one request. Never kept.</p>
-<p class="hint"><a href="${shown.tokenLink}" rel="noreferrer">Make the token: the form opens with the rights chosen.</a></p>
-${byHand(shown.tokenByHand)}
+<p class="hint"><a href="${shown.tokenLink}" rel="noreferrer">Make the token: the form opens with every right it needs chosen.</a></p>
 <p class="hint">${shown.tokenNote}</p>
 <p class="hint">If the form opens empty, add every one of these rights:</p>
 <ul class="hint">${shown.tokenRights.map((right) => html`<li>${right}</li>`)}</ul>
+${optionalRights(shown.tokenOptional)}
 </div>
 <button type="submit">${shown.ran === undefined ? "Check" : "Check again"}</button>
 <button type="submit" formaction="${shown.path}/repair">Repair</button>

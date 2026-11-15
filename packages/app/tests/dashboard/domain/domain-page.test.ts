@@ -91,6 +91,32 @@ test("a repair shows what it did and writes one audit entry that names what chan
   expect((await settled.audit())[0]?.detail).toEqual({ run: "repair", from: "dashboard" });
 });
 
+// Drift: the token link carries only the rights an install needs, so a page that counted a piece behind an optional right as work left over would tell every person who followed the link that their install is broken.
+test("a repair that left optional pieces not set up is a success: they are no part of the count, each is shown calm with its detail, and one line says the install works without them", async () => {
+  const calm: DomainReading = {
+    ok: true,
+    steps: [],
+    rows: [
+      { object: "DNS record", state: "created", detail: "poplin.example.com" },
+      { object: "Rate rule", state: "optional", detail: "The provider stops floods first. To switch this on, add this right to the token and press Repair: Rules: Edit" },
+      { object: "Bot settings", state: "optional", detail: "To switch this on, add this right to the token and press Repair: Bots: Edit" },
+    ],
+  };
+  const opened = await openDashboard(fakePlug(() => calm));
+  const repaired = await opened.post("/domain/repair", { token: TOKEN });
+  const page = await repaired.text();
+  const checked = await (await opened.post("/domain/check", { token: TOKEN })).text();
+
+  expect([repaired.status, NOTICE.exec(page)?.slice(1)]).toEqual([200, ["done", "1 repaired"]]);
+  expect(page).toContain('<p class="hint">2 optional, not set up. The install works without them. Each such row names the right that switches it on.</p>');
+  expect(rows(page).map((row) => row.slice(0, 3))).toEqual([
+    ["DNS record", "good", "created"],
+    ["Rate rule", "idle", "not set up: optional"],
+    ["Bot settings", "idle", "not set up: optional"],
+  ]);
+  expect(NOTICE.exec(checked)?.slice(1)).toEqual(["done", "Nothing to repair."]);
+});
+
 // Drift: a repair goes on past a row refused for a permission, so a notice that said the run had stopped was false beside rows made after the failed one.
 test("a repair that went on past a failed row counts that row alone as not done, and claims no stop", async () => {
   const went: DomainReading = {

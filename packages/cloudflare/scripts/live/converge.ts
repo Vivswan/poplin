@@ -203,14 +203,20 @@ async function deployWorker(run: Run, config: Record<string, unknown>): Promise<
   }
 }
 
-/** What a row the repair did not settle needs, in words that quote nothing Cloudflare said; `undefined` for a failure that is no lack of the account or the token. */
-function needOf(row: DomainRow): string | undefined {
+/**
+ * Say what a row the repair did not settle needs, in words that quote nothing Cloudflare said.
+ *
+ * @returns the lack of the account or the token, or `undefined` for a failure that is neither; an object the token has no optional permission for is a lack, never a failure
+ */
+export function needOf(row: DomainRow): string | undefined {
   if (row.state === "not-run") return "the repair to reach it: an earlier object was skipped";
 
   if (row.state === "left-out") return `the zone to allow it: ${row.detail.slice(row.detail.indexOf(": ") + 2)}`;
 
   // The Worker's login variable is read from the Access application, so it is missing wherever the application is.
   if (row.state === "missing" && (row.object.startsWith("Access") || row.object === "Worker variable")) return ACCESS_OFF;
+
+  if (row.state === "optional") return `the token permission for the ${row.object}`;
 
   // Cloudflare refuses the bot settings of a plan that has none through the API, whatever the token may do.
   if (row.object === "Bot settings" && REFUSAL_STATUS.test(row.detail)) return "a plan whose bot settings the API can change";

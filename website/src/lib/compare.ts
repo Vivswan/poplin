@@ -37,7 +37,7 @@ export const TOOLS: readonly { readonly name: string; readonly answers: Readonly
       samelink: ["yes", "An update keeps the site's address"],
       rollback: ["yes", "Earlier versions are kept"],
       newlink: ["yes", "A new address, and the old one stops"],
-      bots: ["yes", "A firewall rule, a crawler block, and a rate limit"],
+      bots: ["partly", "You choose: a firewall rule, a crawler block, and a rate limit, on with three optional token permissions"],
       source: ["yes", "Public, under the Individual and Small Organization License"],
     },
   },

@@ -4,6 +4,7 @@
 //
 // A token proves itself by showing the install's own zone inside the install's own account; any other token is refused before anything is read.
 // A check is the repair's own code with the changes left unsent, so the two cannot disagree on what a repair would do.
+// The link to the token form carries every permission an install needs. A piece that needs one of the others is no failure without it: its row says which to add.
 
 import type { DomainPlug, DomainReading, DomainRow, DomainSettings, DomainState, DomainStep, ReadSettings, TokenFacts } from "@poplin/app/src/dashboard/domain/records";
 import { type Login, parseLogins } from "@poplin/core/src/auth/logins";
@@ -35,9 +36,9 @@ const UNREACHABLE: DomainReading = { ok: false, refusal: "unreachable" };
 
 /** What each setting the Domain tab changes does on Cloudflare. */
 const GUARD_NOTES: DomainPlug["guardNotes"] = {
-  outside_pages: "Pages of other domains framing a site or loading its files.",
-  search_engines_allowed: "Search engines reach public sites.",
-  block_bots: "auto blocks AI bots unless your domain has other hostnames. on adds Bot Fight Mode, which can block the command line from cloud hosts.",
+  outside_pages: "Pages of other domains framing a site or loading its files. While it is blocked poplin refuses them itself; with Zone WAF: Edit on the token, Cloudflare also stops them first.",
+  search_engines_allowed: "Search engines reach public sites. While it is off poplin marks every site noindex; with Zone WAF: Edit on the token, Cloudflare also stops their crawlers.",
+  block_bots: "auto blocks AI bots unless your domain has other hostnames. on adds Bot Fight Mode, which can block the command line from cloud hosts. Applied only with Bot Management: Edit on the token.",
 };
 
 /** What the WAF rule that stops verified bots also stops on a site hostname, as its row says. */
@@ -70,10 +71,13 @@ const NOT_PERMITTED = { status: 403, code: 10000 } as const;
 /** What a row says after a refusal for a missing permission, before the permission's name. */
 const ADD_RIGHT = "Add this right to the token";
 
+/** What the row of a piece that needs an optional permission says before the permission's name, after what the piece adds. */
+const SWITCH_ON = "To switch this on, add this right to the token and press Repair";
+
 /** What a repair that wrote the variable tells the person to do next. */
 const LOGIN_READY = "The login is ready. Open your dashboard and log in:";
 
-/** Every permission a token needs, in Cloudflare's own name. One has a link key only where Cloudflare's page on token template links names it: the form drops an unknown key without a word. */
+/** Every permission the plug's calls use, in Cloudflare's own name: one an install needs, with its key as Cloudflare's page on token template links names it, or an optional one, which that page names no key for. */
 const RIGHT = {
   zone: { name: "Zone: Read", key: "zone", type: "read" },
   dns: { name: "DNS: Edit", key: "dns", type: "edit" },
@@ -81,14 +85,14 @@ const RIGHT = {
   access: { name: "Access: Apps and Policies: Edit", key: "access", type: "edit" },
   team: { name: "Access: Organizations, Identity Providers, and Groups: Read", key: "access_acct", type: "read" },
   scripts: { name: "Workers Scripts: Edit", key: "workers_scripts", type: "edit" },
-  redirect: { name: "Single Redirect: Edit" },
+  redirect: { name: "Single Redirect: Edit", adds: "Cloudflare sends http to https before poplin runs. Without it poplin sends the same redirect itself." },
   zoneSettings: { name: "Zone Settings: Read", key: "zone_settings", type: "read" },
-  waf: { name: "Zone WAF: Edit" },
-  bots: { name: "Bot Management: Edit" },
+  waf: { name: "Zone WAF: Edit", adds: "Cloudflare stops verified bots, scanner paths, pages of other domains, and floods before they reach poplin." },
+  bots: { name: "Bot Management: Edit", adds: "Cloudflare blocks AI crawlers on the whole domain, as the block_bots setting says." },
   database: { name: "D1: Edit", key: "d1", type: "edit" },
 } as const satisfies Readonly<Record<string, Right>>;
 
-/** The permissions the calls of each object need, the one its changes need first. A piece with no row here does not compile. */
+/** The permissions the calls of each object use, the one its changes use first. A piece with no row here does not compile. */
 const RIGHTS = {
   Zone: [RIGHT.zone],
   "DNS record": [RIGHT.dns],
@@ -141,8 +145,8 @@ type PlugParts = Known & {
   readonly fetch?: Connection["fetch"];
 };
 
-/** One permission of a token: its name alone for one ticked on the form by hand, or with its key and level in a link to the form. */
-type Right = { readonly name: string } | { readonly name: string; readonly key: string; readonly type: "read" | "edit" };
+/** One permission of a token: one an install needs, with its key and level in a link to the form, or an optional one, with what it adds. */
+type Right = { readonly name: string; readonly key: string; readonly type: "read" | "edit" } | { readonly name: string; readonly adds: string };
 
 /** The parts once the account is known. */
 type Placed = Pick<PlugParts, "script" | "layout" | "first"> & { readonly accountId: string };
@@ -212,6 +216,23 @@ function failedDetail(stopped: Stopped, object: Piece): string {
   return lacksRight(stopped) ? `${why}. ${ADD_RIGHT}: ${lackedRight(object, failed).name}` : why;
 }
 
+/** The rows of a piece that stopped. One that changed nothing for want of an optional permission is not set up, the steps it never reached with it, which is no failure. */
+function stoppedRows(stopped: Stopped, objectOf: (subject: string) => Piece): DomainRow[] {
+  const failed = stopped.failed ?? "";
+  const object = objectOf(failed);
+  const unrun = stopped.unrun ?? [];
+  const right = lackedRight(object, failed);
+  if ("adds" in right && lacksRight(stopped) && stopped.report.changedNothing) {
+    const how = `${right.adds} ${SWITCH_ON}: ${right.name}`;
+    const named = [failed, ...unrun].filter((subject) => subject !== "");
+    if (named.length === 0) return [{ object, state: "optional", detail: how }];
+
+    return named.map((subject) => ({ object: objectOf(subject), state: "optional", detail: `${subject}: ${how}` }));
+  }
+
+  return [{ object, state: "failed", detail: failedDetail(stopped, object) }, ...unrun.map((subject): DomainRow => ({ object: objectOf(subject), state: "not-run", detail: subject }))];
+}
+
 function rowsOf(outcome: Outcome, mode: Mode, objectOf: (subject: string) => Piece): DomainRow[] {
   const { report } = outcome;
   const states = STATES[mode];
@@ -224,11 +245,7 @@ function rowsOf(outcome: Outcome, mode: Mode, objectOf: (subject: string) => Pie
     ...report.skipped.map((skip) => row(skip.subject, "left-out", `${skip.subject}: ${skip.reason}`)),
   ];
 
-  if (!outcome.ok) {
-    const failed = outcome.failed ?? "";
-    rows.push(row(failed, "failed", failedDetail(outcome, objectOf(failed))));
-    rows.push(...(outcome.unrun ?? []).map((subject) => row(subject, "not-run")));
-  }
+  if (!outcome.ok) rows.push(...stoppedRows(outcome, objectOf));
 
   return rows.sort((left, right) => (left.detail < right.detail ? -1 : 1));
 }
@@ -249,9 +266,7 @@ async function piece<Answer extends Outcome>(
 
   const outcome = await run();
   progress.rows.push(...rowsOf(outcome, mode, objectOf));
-  const { created, changed, removed } = outcome.report;
-  const untouched = created.length + changed.length + removed.length === 0;
-  if (!outcome.ok && !(untouched && lacksRight(outcome))) progress.stopped = true;
+  if (!outcome.ok && !(outcome.report.changedNothing && lacksRight(outcome))) progress.stopped = true;
 
   return outcome;
 }
@@ -424,8 +439,8 @@ async function read(parts: PlugParts, mode: Mode, token: string, readSettings: R
 }
 
 // The form reads the permissions as a JSON list of `{ key, type }`.
-function tokenLink(rights: readonly Right[]): string {
-  const chosen = rights.flatMap((right) => ("key" in right ? [{ key: right.key, type: right.type }] : []));
+function tokenLink(rights: readonly Extract<Right, { readonly key: string }>[]): string {
+  const chosen = rights.map((right) => ({ key: right.key, type: right.type }));
 
   return `${TOKEN_FORM}?permissionGroupKeys=${encodeURIComponent(JSON.stringify(chosen))}&accountId=%2A&zoneId=all&name=${encodeURIComponent(TOKEN_NAME)}`;
 }
@@ -433,16 +448,18 @@ function tokenLink(rights: readonly Right[]): string {
 /**
  * Say what Cloudflare's form for a new token is and asks for.
  *
- * @returns the token's name, every permission it needs, the link that opens the form with the ones a link can carry, and the ones to add by hand
+ * @returns the token's name, every permission an install needs, the link that opens the form with all of them chosen, and the optional ones with what each adds
  */
 export function tokenFacts(): TokenFacts {
-  const needed: readonly Right[] = [...new Set(Object.values(RIGHTS).flat())];
+  const used: readonly Right[] = [...new Set(Object.values(RIGHTS).flat())];
+  const needed = used.flatMap((right) => ("key" in right ? [right] : []));
+  const optional = used.flatMap((right) => ("adds" in right ? [{ right: right.name, adds: right.adds }] : []));
 
   return {
     tokenLabel: "Cloudflare API token",
     tokenRights: needed.map((right) => right.name),
     tokenLink: tokenLink(needed),
-    tokenByHand: needed.filter((right) => !("key" in right)).map((right) => right.name),
+    tokenOptional: optional,
     tokenNote: TOKEN_SCOPE,
   };
 }

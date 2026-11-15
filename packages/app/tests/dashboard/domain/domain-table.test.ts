@@ -7,7 +7,7 @@ const ESCAPED = "&quot;&gt;&lt;script&gt;alert(1)&lt;/script&gt;";
 
 test("a row, a step, a right, the token form's address, and the form's token reach the page escaped, in text and inside an attribute", async () => {
   const reading = { ok: true, rows: [{ object: HOSTILE, state: "missing", detail: HOSTILE }], steps: [{ text: HOSTILE, address: HOSTILE }] } as const;
-  const body = String(await domainBody({ csrf: HOSTILE, tokenLabel: HOSTILE, tokenRights: [HOSTILE], tokenLink: HOSTILE, tokenByHand: [HOSTILE], tokenNote: HOSTILE, path: "/domain", ran: { run: "check", reading } }));
+  const body = String(await domainBody({ csrf: HOSTILE, tokenLabel: HOSTILE, tokenRights: [HOSTILE], tokenLink: HOSTILE, tokenOptional: [{ right: HOSTILE, adds: HOSTILE }], tokenNote: HOSTILE, path: "/domain", ran: { run: "check", reading } }));
 
   expect(body).toContain(`<td>${ESCAPED}</td>`);
   expect(body).toContain(`<td class="wrap">${ESCAPED}</td>`);
@@ -15,6 +15,7 @@ test("a row, a step, a right, the token form's address, and the form's token rea
   expect(body).toContain(`name="csrf" value="${ESCAPED}"`);
   expect(body).toContain(`<label for="token">${ESCAPED}</label>`);
   expect(body).toContain(`<ul class="hint"><li>${ESCAPED}</li></ul>`);
+  expect(body).toContain(`<ul class="hint"><li>${ESCAPED}. ${ESCAPED}</li></ul>`);
   expect(body).toContain(`<a href="${ESCAPED}" rel="noreferrer">Make the token`);
   expect(body).toContain(`<p class="hint">${ESCAPED}</p>`);
   expect(body).not.toContain("<script>");

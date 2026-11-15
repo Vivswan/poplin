@@ -69,9 +69,9 @@ What a private site costs:
 | Switch for search engines | Set on | Off, the default | On |
 | --- | --- | --- | --- |
 | `search_engines` | one public site | its files carry `X-Robots-Tag: noindex` | they do not |
-| `search_engines_allowed` | the install | the bots rule at Cloudflare's edge stops the crawlers Cloudflare has verified | the rule lets the crawlers of search engines pass |
+| `search_engines_allowed` | the install | every site's files carry `X-Robots-Tag: noindex`; the bots rule at Cloudflare's edge stops the crawlers Cloudflare has verified | the rule lets the crawlers of search engines pass |
 
-A search engine's crawler reads a public site without `noindex` only when both are on, where the zone holds the bots rule.
+A public site is without `noindex` only when both are on. The bots rule is one of the [optional edge rules](#optional-edge-rules).
 
 ## Who holds which credential
 
@@ -107,7 +107,7 @@ What guards each address:
 
 One Access application covers the login path and every address that ends in `-p-poplin.<domain>`. It is made once at install, never per site.
 
-Every site hostname answers GET and HEAD only. A rule at Cloudflare's edge blocks every other method there, and the Worker refuses one that still arrives.
+Every site hostname answers GET and HEAD only. The Worker refuses every other method, and the optional bots rule at Cloudflare's edge blocks it before the Worker.
 
 ## No enumeration
 
@@ -146,9 +146,19 @@ A `-p-` address is answered by Cloudflare's login before the Worker sees it. A r
 | the dashboard | a strict Content-Security-Policy; it may never be framed |
 | content | the Worker never reads, parses, or rewrites a site's files |
 | the activity log | the dashboard's Activity tab shows every action, 50 a page, with an Older link: publish, state change, delete, login, token issued |
-| plain http | the Worker sends every request over `http` to the same address over `https`, with a 308, before it reads anything of the install; a rule at Cloudflare's edge does the same before the Worker runs, where the token had the permission for it. Every answer of a site and of the dashboard tells the browser to use `https` alone for 180 days. The zone's other hostnames are left as they are |
-| junk requests | a rule at Cloudflare's edge blocks, on the site hostnames, every method but GET and HEAD and the paths scanners ask for: `*.php`, `/.env`, `/.env.*`, `/.git/`, `/wp-admin/`, `/cgi-bin/`, `/phpmyadmin` |
-| junk hostnames | Cloudflare routes to the Worker only the hostnames that end in `-poplin` or the public word, so no other hostname under the domain reaches it; a rate rule limits each address to 300 requests per 10 seconds. Setup skips it when other rules hold every rate rule the plan allows, or when a Free plan zone has hostnames of its own; the OpenTofu module, which owns the zone's rate rules, stops with a message in that second case |
+| plain http | the Worker sends every request over `http` to the same address over `https`, with a 308, before it reads anything of the install; an optional rule at Cloudflare's edge does the same before the Worker runs. Every answer of a site and of the dashboard tells the browser to use `https` alone for 180 days. The zone's other hostnames are left as they are |
+| junk requests | the optional bots rule at Cloudflare's edge blocks, on the site hostnames, every method but GET and HEAD and the paths scanners ask for: `*.php`, `/.env`, `/.env.*`, `/.git/`, `/wp-admin/`, `/cgi-bin/`, `/phpmyadmin` |
+| junk hostnames | Cloudflare routes to the Worker only the hostnames that end in `-poplin` or the public word, so no other hostname under the domain reaches it; an optional rate rule limits each address to 300 requests per 10 seconds. Setup skips it when other rules hold every rate rule the plan allows, or when a Free plan zone has hostnames of its own; the OpenTofu module, which owns the zone's rate rules, stops with a message in that second case |
+
+## Optional edge rules
+
+The install's setup token needs eight permissions. Three more are optional, and each switches on rules at Cloudflare's edge. [Install](install.md#optional-block-junk-traffic-and-crawlers) says how to add them.
+
+| Permission | Switches on | Without it |
+| --- | --- | --- |
+| Zone WAF: Edit | the bots rule, the outside pages rule, and the rate rule | such requests reach the Worker. It refuses a page of another domain while `outside_pages` is `blocked`, and sends `noindex` as the two switches say |
+| Single Redirect: Edit | the redirect of plain http | the Worker sends the same redirect |
+| Bot Management: Edit | the block of AI crawlers that `block_bots` asks for | `block_bots` is stored and nothing applies it |
 
 ## Between sites
 

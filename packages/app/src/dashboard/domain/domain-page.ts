@@ -44,7 +44,7 @@ function guardsForm(visit: Visit, values: SettingValues, notes: DomainPlug["guar
 ${csrfField(visit)}
 ${keys.map((key) => guardRow(key, texts[key], notes[key]))}
 <button type="submit">Save</button>
-<p class="hint">Repair applies them.</p>
+<p class="hint">Save stores them. Repair applies them at the provider. A row that says not set up: optional is a guard the provider does not apply until its right is on the token and Repair is pressed.</p>
 </form>`;
 }
 
@@ -57,8 +57,8 @@ ${keys.map((key) => guardRow(key, texts[key], notes[key]))}
  * @throws {Error} the plug or the database failed
  */
 export async function showDomain(visit: Visit, plug: DomainPlug, asked?: Asked): Promise<Page> {
-  const { tokenLabel, tokenRights, tokenLink, tokenByHand, tokenNote } = plug;
-  const asks = { csrf: visit.csrf, tokenLabel, tokenRights, tokenLink, tokenByHand, tokenNote, path: "/domain" } as const;
+  const { tokenLabel, tokenRights, tokenLink, tokenOptional, tokenNote } = plug;
+  const asks = { csrf: visit.csrf, tokenLabel, tokenRights, tokenLink, tokenOptional, tokenNote, path: "/domain" } as const;
   const place = { tab: "domain", heading: "Domain" } as const;
   const config = await readConfig(visit.install, visit.actor);
   if (!config.ok) return refusedPage(place, config);

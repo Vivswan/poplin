@@ -18,9 +18,9 @@ const NOTES = { outside_pages: "A note on outside pages.", search_engines_allowe
 /** What the fake says of its token and of the form that makes one. */
 const TOKEN_FORM = {
   tokenLabel: "Provider token",
-  tokenRights: ["Records: Edit", "Rules: Edit"],
+  tokenRights: ["Records: Edit", "Routes: Edit"],
   tokenLink: "https://provider.example/tokens/new",
-  tokenByHand: ["Rules: Edit"],
+  tokenOptional: [{ right: "Rules: Edit", adds: "The provider stops floods first." }],
   tokenNote: "Choose what the token is for.",
 };
 
