@@ -1,10 +1,9 @@
-// The live workflow's own filter, lanes, and wait, read beside the tree.
-// A push that reaches the install and starts no run, a midnight reset that takes a waiting run's place, or a wait that a job after the gate turns red would show on a real run alone.
+// The live workflow's own filter, lanes, and wait step, read beside the tree.
+// A push that reaches the install and starts no run, a midnight reset that takes a waiting run's place, or a wait that no test drives would show on a real run alone.
 
 import { describe, expect, test } from "bun:test";
-import { chmodSync, mkdtempDisposableSync, readFileSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { delimiter, join } from "node:path";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 
 /** The workflow, parsed. */
 const WORKFLOW = Bun.YAML.parse(readFileSync(join(import.meta.dir, "..", "..", ".github", "workflows", "live-checks.yml"), "utf8")) as Workflow;
@@ -17,41 +16,6 @@ const LANE = { group: "live-checks", "cancel-in-progress": false, queue: "max" }
 
 /** The step of the `live` job that waits for the commit's gate. */
 const WAIT = WORKFLOW.jobs.live?.steps.find((step) => step.name?.startsWith("Wait for")) as Step;
-
-/** The stand-ins first on the PATH of the wait. A `gh` that answers each asking with the line of its turn, fails on a `!` line, and knows no `gh run watch`. A `sleep` that ends the turn at once. */
-const STAND_IN_FILES: Readonly<Record<string, string>> = {
-  gh: `#!/bin/sh
-turn=$(( $(wc -c < "$STAND_INS/turns") + 1 ))
-case "$1 $2" in
-  "run list") answers=runs ;;
-  "api --paginate") answers=gates ;;
-  *) exit 1 ;;
-esac
-echo "$*" >> "$STAND_INS/asked"
-answer=$(sed -n "\${turn}p" "$STAND_INS/$answers")
-[ "$answer" = "!" ] && exit 1
-[ -z "$answer" ] || echo "$answer"
-`,
-  sleep: `#!/bin/sh
-printf x >> "$STAND_INS/turns"
-`,
-};
-
-/** What GitHub answers on each turn of the wait, and how the wait ends: `runs` is the CI run of the commit, `gates` the end of its `all-green` job. */
-const WAIT_CASES: readonly (readonly [what: string, answers: Answers, ends: Ending])[] = [
-  ["the gate is green while later jobs of the run still work", { runs: ["7 in_progress"], gates: ["success"] }, { code: 0, turns: 0 }],
-  ["the gate is green and a job after it turned the whole run red", { runs: ["7 completed"], gates: ["success"] }, { code: 0, turns: 0 }],
-  ["the gate is red", { runs: ["7 completed"], gates: ["failure"] }, { code: 1, turns: 0, says: "::error::all-green ended failure in CI run 7" }],
-  ["the gate was cancelled", { runs: ["7 completed"], gates: ["cancelled"] }, { code: 1, turns: 0, says: "::error::all-green ended cancelled in CI run 7" }],
-  [
-    "no run yet, then a run with no gate yet, then a gate that works, then a green gate",
-    { runs: ["", "7 queued", "7 in_progress", "7 in_progress"], gates: ["", "", "pending", "success"] },
-    { code: 0, turns: 3 },
-  ],
-  ["GitHub fails to answer twice, then the gate is green", { runs: ["!", "7 in_progress", "7 in_progress"], gates: ["", "!", "success"] }, { code: 0, turns: 2 }],
-  ["the run ended and holds no gate", { runs: ["7 completed"], gates: [""] }, { code: 1, turns: 0, says: "::error::CI run 7 of abc ended with no all-green check" }],
-  ["the ceiling is reached", { runs: [], gates: [], ceiling: "0" }, { code: 1, turns: 0, says: "::error::all-green of abc did not end within 0 minutes" }],
-];
 
 /** The files of one push, and whether GitHub starts a run for them. */
 const PUSH_CASES: readonly (readonly [what: string, changed: readonly string[], starts: boolean])[] = [
@@ -96,20 +60,6 @@ interface Workflow {
   readonly jobs: Readonly<Record<string, Job>>;
 }
 
-/** What the stand-in `gh` answers, one line a turn. */
-interface Answers {
-  readonly runs: readonly string[];
-  readonly gates: readonly string[];
-  readonly ceiling?: string;
-}
-
-/** How the wait ends: its exit code, the turns it slept, and the start of the line it stops with. */
-interface Ending {
-  readonly code: number;
-  readonly turns: number;
-  readonly says?: string;
-}
-
 /** Whether a step is handed a secret. */
 function holdsSecret(step: Step): boolean {
   return Object.values(step.env ?? {}).some((value) => String(value).includes("secrets."));
@@ -120,37 +70,6 @@ function starts(path: string): boolean {
   const last = PATHS.filter((line) => new Bun.Glob(line.replace(/^!/, "")).match(path)).at(-1);
 
   return last !== undefined && !last.startsWith("!");
-}
-
-/** Runs the wait's own script as GitHub does, against the stand-ins, and reads how it ended and what it asked `gh`. */
-function wait(answers: Answers): Ending & { readonly asked: string } {
-  using folder = mkdtempDisposableSync(join(tmpdir(), "poplin-live-wait-"));
-  const files = { ...STAND_IN_FILES, runs: answers.runs.join("\n"), gates: answers.gates.join("\n"), turns: "", asked: "" };
-
-  for (const [name, text] of Object.entries(files)) {
-    writeFileSync(join(folder.path, name), text);
-    chmodSync(join(folder.path, name), 0o755);
-  }
-
-  const ran = Bun.spawnSync(["bash", "-e", "-c", WAIT.run ?? ""], {
-    env: {
-      PATH: `${folder.path}${delimiter}${process.env.PATH}`,
-      STAND_INS: folder.path,
-      GITHUB_SHA: "abc",
-      GITHUB_REPOSITORY: "example/poplin",
-      CEILING_SECONDS: answers.ceiling ?? String(WAIT.env?.CEILING_SECONDS),
-    },
-  });
-
-  return {
-    code: ran.exitCode,
-    turns: readFileSync(join(folder.path, "turns"), "utf8").length,
-    says: ran.stdout
-      .toString()
-      .split("\n")
-      .find((line) => line.startsWith("::error::")),
-    asked: readFileSync(join(folder.path, "asked"), "utf8"),
-  };
 }
 
 describe("the files of a push that start the live checks", () => {
@@ -181,19 +100,8 @@ describe("the lanes of the live workflow", () => {
 });
 
 describe("the wait for the commit's gate", () => {
-  // Two green commits missed their deploy: a job after the gate failed on one and was cancelled on the other, and the wait followed the whole run.
-  test.each(WAIT_CASES)("%s", (_what, answers, ends) => {
-    const { code, turns, says } = wait(answers);
-
-    expect({ code, turns, says: says?.slice(0, ends.says?.length) }).toEqual({ code: ends.code, turns: ends.turns, says: ends.says });
-  });
-
-  test("the gate is the `all-green` job of the run that the commit's push to main started, so no other job and no other run of the commit decides", () => {
-    const [run, gate] = wait({ runs: ["7 in_progress"], gates: ["success"] }).asked.split("\n");
-
-    expect({ run: run?.startsWith("run list --workflow ci.yml --event push --branch main --commit abc --limit 1 "), gate }).toEqual({
-      run: true,
-      gate: 'api --paginate repos/example/poplin/actions/runs/7/jobs?per_page=100 --jq .jobs[] | select(.name == "all-green") | .conclusion // "pending"',
-    });
+  // The platform's shell check turns CI red on a loop written into a step, and a wait written there again is one no test here drives.
+  test("the step hands the whole wait to the script that the tests of the gate drive, and holds no loop of its own", () => {
+    expect({ run: WAIT.run?.trim(), loops: /\b(?:while|case|until|for)\b/.test(WAIT.run ?? "") }).toEqual({ run: "bun packages/cloudflare/scripts/live/gate.ts", loops: false });
   });
 });

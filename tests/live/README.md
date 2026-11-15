@@ -11,7 +11,7 @@ The checks of a deployed install: a stranger's requests over HTTPS, and a token 
 ```text
 Live Checks workflow
   the `paths` list of the workflow                the files of the push -> a run, or none
-  the `all-green` check of the commit's CI       it ended green, or the run stops red; a job after it stops nothing
+  packages/cloudflare/scripts/live/gate.ts       the `all-green` check of the commit's CI: it ended green, or the run stops red; a job after it stops nothing
   build the Worker bundle
   packages/cloudflare/scripts/live/converge.ts   the account's plans, bucket, database, login, wrangler deploy, the Domain tab's repair, the caps
   packages/cloudflare/scripts/live/suite.ts      a token for the run -> bun test tests/live/live.test.ts -> the token removed

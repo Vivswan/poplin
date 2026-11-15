@@ -88,45 +88,13 @@ jobs:
           persist-credentials: false
       - uses: ./.github/actions/setup
       # The gate is the `all-green` job of the commit's own CI run, the one a push to main started. A job after the gate stops nothing here.
-      # The step's own timeout is above the ceiling, so the wait ends with its own line.
+      # The step's own timeout is above the script's ceiling of 30 minutes, so the wait ends with its own line.
       - name: Wait for this commit's all-green check
         if: github.event_name == 'push'
         timeout-minutes: 32
         env:
           GH_TOKEN: ${{ github.token }}
-          CEILING_SECONDS: 1800
-        run: |
-          while (( SECONDS < CEILING_SECONDS )); do
-            ci="$(gh run list --workflow ci.yml --event push --branch main --commit "$GITHUB_SHA" --limit 1 --json databaseId,status --jq '.[] | "\(.databaseId) \(.status)"')" || ci=""
-            gate="unread"
-
-            if [[ -n "$ci" ]]; then
-              gate="$(gh api --paginate "repos/$GITHUB_REPOSITORY/actions/runs/${ci%% *}/jobs?per_page=100" --jq '.jobs[] | select(.name == "all-green") | .conclusion // "pending"')" || gate="unread"
-            fi
-
-            case "$gate" in
-              success)
-                echo "all-green ended success in CI run ${ci%% *}"
-                exit 0
-                ;;
-              unread | pending) ;;
-              "")
-                if [[ "$ci" == *" completed" ]]; then
-                  echo "::error::CI run ${ci%% *} of $GITHUB_SHA ended with no all-green check: nothing deployed"
-                  exit 1
-                fi
-                ;;
-              *)
-                echo "::error::all-green ended $gate in CI run ${ci%% *} of $GITHUB_SHA: nothing deployed"
-                exit 1
-                ;;
-            esac
-
-            sleep 30
-          done
-
-          echo "::error::all-green of $GITHUB_SHA did not end within $(( CEILING_SECONDS / 60 )) minutes: nothing deployed"
-          exit 1
+        run: bun packages/cloudflare/scripts/live/gate.ts
       - name: Build the Worker bundle
         run: bun run --cwd packages/cloudflare build
       - name: Make the test install match the commit
