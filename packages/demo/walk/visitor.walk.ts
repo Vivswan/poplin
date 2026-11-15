@@ -157,6 +157,25 @@ test("a press on a site's row beside its title opens the site's panel", async ({
   await expect(page.getByRole("dialog").getByRole("button", { name: "Open the site", exact: true })).toBeVisible();
 });
 
+test("the dashboard links poplin's icon under the demo's folder, and the page can draw it", async ({ page, baseURL }) => {
+  await arrive(page);
+  // The page loads it itself, as a picture: the worker answers what a page of the demo asks for, and the page's policy has its say.
+  const icon = await page.evaluate(async () => {
+    const link = document.querySelector<HTMLLinkElement>('link[rel="icon"]');
+    const picture = new Image();
+    const drawn = new Promise<boolean>((done) => {
+      picture.onload = () => done(true);
+      picture.onerror = () => done(false);
+    });
+    picture.src = link?.href ?? "";
+
+    return [link?.href, link?.type, await drawn];
+  });
+
+  expect(String(icon[0]).startsWith(new URL("assets/icon-", baseURL).href)).toBe(true);
+  expect(icon.slice(1)).toEqual(["image/svg+xml", true]);
+});
+
 test("a page outside the demo's folder stays the host's own", async ({ page, context }) => {
   await arrive(page);
   // In a tab of its own: the demo's last tab leaving the demo would end the visit.

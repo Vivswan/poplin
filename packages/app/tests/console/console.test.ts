@@ -3,6 +3,8 @@
 import { describe, expect, test } from "bun:test";
 import { html } from "hono/html";
 
+import { ICON_FILE } from "../../src/console/shell";
+import { DEFAULT_ICON } from "../../src/sites/default-icon";
 import { openConsole } from "./support/console";
 import { readShell } from "./support/shell";
 
@@ -30,6 +32,7 @@ describe("the shell page", () => {
     expect(response.status).toBe(200);
     expect(page).toContain('<link rel="stylesheet" href="/next/assets/app-9d2e.css">');
     expect(page).toContain('<script type="module" src="/next/assets/app-4f1c.js"></script>');
+    expect(page).toContain(`<link rel="icon" type="image/svg+xml" href="/next/assets/${ICON_FILE}">`);
     expect(response.headers.get("Cache-Control")).toBe("no-store");
   });
 
@@ -73,6 +76,17 @@ describe("the client's files", () => {
     expect([script.status, script.headers.get("Content-Type"), await script.text()]).toEqual([200, "text/javascript; charset=utf-8", "// the client"]);
     expect(script.headers.get("Cache-Control")).toBe("public, max-age=31536000, immutable");
     expect((await opened.getLoggedOut("/assets/other.js")).status).toBe(404);
+  });
+
+  // Drift: the tab would show a browser's placeholder beside the dashboard's name, the icon would need a session the login page's visitor has none of, or a redrawn icon would keep the name a browser holds the old one under for good.
+  test("hold poplin's icon under a name with the hash of its content, kept for good, and under the name a browser asks for unbidden, kept a day", async () => {
+    const opened = await openConsole("/next");
+    const [named, unbidden] = [await opened.getLoggedOut(`/assets/${ICON_FILE}`), await opened.getLoggedOut("/favicon.ico")];
+    const hash = new Bun.CryptoHasher("sha256").update(DEFAULT_ICON).digest("hex").slice(0, 8);
+
+    expect([named.status, named.headers.get("Content-Type"), named.headers.get("Cache-Control"), await named.text()]).toEqual([200, "image/svg+xml", "public, max-age=31536000, immutable", DEFAULT_ICON]);
+    expect([unbidden.status, unbidden.headers.get("Content-Type"), unbidden.headers.get("Cache-Control"), await unbidden.text()]).toEqual([200, "image/svg+xml", "public, max-age=86400", DEFAULT_ICON]);
+    expect(ICON_FILE).toBe(`icon-${hash}.svg`);
   });
 });
 

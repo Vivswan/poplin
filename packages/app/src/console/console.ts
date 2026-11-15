@@ -1,6 +1,7 @@
 // The console: the dashboard as an application in the browser. One shell page loads the client's script and stylesheet, and the client reads and changes the install through JSON routes under the same session.
 //
-//   GET  <base>/assets/<file>   the client's script, stylesheet, and fonts, each under a name that holds a hash of its content; no session, and a browser keeps them for good
+//   GET  <base>/assets/<file>   the console's icon and the client's script, stylesheet, and fonts, each under a name that holds a hash of its content; no session, and a browser keeps them for good
+//   GET  <base>/favicon.ico      the same icon under the name a browser asks for unbidden; no session
 //   GET  <base>/data/...        what a screen shows, as JSON; each screen's routes are in its own `*-routes.ts`, chained on in `routes.ts`
 //   POST <base>/data/...        one change, as JSON
 //   GET  <base>/...             the shell page, whatever the path: the client draws the screen the path names
@@ -23,7 +24,7 @@ import { type CodeTries, takesCode } from "../limits/code-tries";
 import { refused, type Shared } from "./data";
 import { frameOf } from "./frame-routes";
 import { dataRoutes } from "./routes";
-import { type ClientFiles, KEPT_FOR_GOOD, shellPage } from "./shell";
+import { assetOf, type ClientFiles, ICON, KEPT_A_DAY, KEPT_FOR_GOOD, shellPage } from "./shell";
 import { isSpent, spentAnswer } from "./spent";
 
 /** The title of every page of the dashboard, the same on every install. */
@@ -139,11 +140,14 @@ export function createConsole(parts: ConsoleParts): Console {
 
   // The client's files hold nothing of the install, so they are answered before the session is asked for.
   app.get("/assets/:name", async (context) => {
-    const asset = await parts.client.file(context.req.param("name"));
+    const asset = await assetOf(parts.client, context.req.param("name"));
     if (asset === undefined) return context.notFound();
 
     return context.body(asset.body, 200, { "Content-Type": asset.type, "Cache-Control": KEPT_FOR_GOOD });
   });
+
+  // A browser asks for this name unbidden, before any page says where the icon is: it gets the icon, not the page.
+  app.get("/favicon.ico", (context) => context.body(ICON.body, 200, { "Content-Type": ICON.type, "Cache-Control": KEPT_A_DAY }));
 
   app.use(noStore, sessionCheck(parts));
   app.post("*", bodyLimit({ maxSize: MOST_BODY_BYTES, onError: (context) => refused(context, { code: "too_large" }) }), csrf(), jsonOnly);

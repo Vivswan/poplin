@@ -1,13 +1,24 @@
-// The console's one page: it links the client's stylesheet and script and carries what the client starts from. Beside it, how a host hands the client's built files out.
+// The console's one page: it links poplin's icon and the client's stylesheet and script, and carries what the client starts from. Beside it, how a host hands the client's built files out.
 
 import type { Update } from "@poplin/core/src/actions/update";
 import { html, raw } from "hono/html";
+
+import { DEFAULT_ICON, DEFAULT_ICON_TYPE } from "../sites/default-icon";
 
 /** The characters that would end the data block, each as JSON's own escape. */
 const UNSAFE: Readonly<Record<string, string>> = { "<": "\\u003c", ">": "\\u003e", "&": "\\u0026" };
 
 /** How long a browser may keep a file of the client: for good, as a build puts a hash of the content into the file's name. */
 export const KEPT_FOR_GOOD = "public, max-age=31536000, immutable";
+
+/** The name the console's icon is asked for under. It holds the start of a hash of the icon's content, as a file of the client does, so a browser may keep it for good. */
+export const ICON_FILE = "icon-ed1e2ec2.svg";
+
+/** How long a browser may keep the answer to `/favicon.ico`, the name it asks for unbidden: a day, as that name holds no hash. */
+export const KEPT_A_DAY = "public, max-age=86400";
+
+/** The console's icon as a file. */
+export const ICON = { body: DEFAULT_ICON, type: DEFAULT_ICON_TYPE } as const;
 
 /** The names of the two files the page loads, as the client's build named them. */
 interface Entry {
@@ -58,6 +69,16 @@ export interface Boot {
 }
 
 /**
+ * Read one file a page of the console loads.
+ *
+ * @param name - the file's name under `assets/`, such as `app-4f1c.js`
+ * @returns the console's own icon under its name, a file of the client's build under any other, or `undefined` for a name that is neither
+ */
+export async function assetOf(client: ClientFiles, name: string): ReturnType<ClientFiles["file"]> {
+  return name === ICON_FILE ? ICON : client.file(name);
+}
+
+/**
  * Build the shell page.
  *
  * @param entry - the names of the script and the stylesheet, as the client's build named them
@@ -74,6 +95,7 @@ export function shellPage(boot: Boot, entry: Entry): ReturnType<typeof html> {
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="light dark">
 <title>${boot.title}</title>
+<link rel="icon" type="${DEFAULT_ICON_TYPE}" href="${boot.base}/assets/${ICON_FILE}">
 <link rel="stylesheet" href="${boot.base}/assets/${entry.style}">
 <script type="application/json" id="boot">${start}</script>
 <script type="module" src="${boot.base}/assets/${entry.script}"></script>

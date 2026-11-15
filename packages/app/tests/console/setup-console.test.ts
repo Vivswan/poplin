@@ -4,6 +4,8 @@
 import { describe, expect, test } from "bun:test";
 
 import { createSetupConsole } from "../../src/console/setup-console";
+import { ICON_FILE } from "../../src/console/shell";
+import { DEFAULT_ICON } from "../../src/sites/default-icon";
 import type { Counters } from "../../src/limits/limits";
 import { MemoryCounters } from "../../src/limits/memory-counters";
 import { type FakePlug, fakePlug, firstRunOf, TOKEN } from "./support/fake-plug";
@@ -135,13 +137,16 @@ describe("the page", () => {
     expect([page.includes(opened.owner), page.includes(host), reads.count, plug.calls]).toEqual([false, false, 0, []]);
   });
 
-  // Drift: a host that mounts the screen under a path of its own would link the client's files and send its run to the wrong place, or the page before a login would load the whole script again at every visit.
-  test("links its files by the names the build gave them, for a browser to keep for good, and takes its run under the path it is given", async () => {
+  // Drift: a host that mounts the screen under a path of its own would link the client's files and send its run to the wrong place, the page before a login would load the whole script again at every visit, or its tab would show no icon.
+  test("links its files and its icon by their names, for a browser to keep for good, and takes its run under the path it is given", async () => {
     const { get, run } = await openSetup({ at: "/next/setup/first" });
     const page = await (await get("/next/setup/first")).text();
     const script = await get("/next/setup/first/assets/app-4f1c.js");
+    const icon = await get(`/next/setup/first/assets/${ICON_FILE}`);
 
     expect(page).toContain('<link rel="stylesheet" href="/next/setup/first/assets/app-9d2e.css">');
+    expect(page).toContain(`<link rel="icon" type="image/svg+xml" href="/next/setup/first/assets/${ICON_FILE}">`);
+    expect([icon.status, icon.headers.get("Content-Type"), icon.headers.get("Cache-Control"), await icon.text()]).toEqual([200, "image/svg+xml", "public, max-age=31536000, immutable", DEFAULT_ICON]);
     expect([script.status, script.headers.get("Cache-Control")]).toEqual([200, "public, max-age=31536000, immutable"]);
     expect((await run({ token: TOKEN })).status).toBe(200);
   });
