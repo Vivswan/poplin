@@ -1,0 +1,29 @@
+# This file is repo-owned, seeded once by the fleet sync and never overwritten by a later sync.
+
+name: npm Build
+description: |
+  Builds this repository's npm package for the fleet's publish.
+
+  It runs as the npm-build hook of ci.yml's `npm-next` and `npm-latest` legs, on the judged commit, after the fleet
+  stamped the version into package.json and before it runs `npm publish`. It does not run when there is nothing to
+  publish.
+
+  The contract and examples are the fleet's docs/modules/npm.md.
+
+inputs:
+  version:
+    description: The version being published, already in package.json, for a build that bakes it in and a check of what was built
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - uses: ./.github/actions/setup
+    # The build bakes in the version packages/cli/package.json carries, so the last line fails the job on a command
+    # that prints any other version than the one about to be published. `npm publish` builds once more, in prepack.
+    - shell: bash
+      working-directory: packages/cli
+      env: { VERSION: "${{ inputs.version }}" }
+      run: |
+        bun run build
+        test "$(node dist/bin.mjs --version)" = "$VERSION"

@@ -37,10 +37,9 @@ jobs:
         run: bun run test:worker
 
   # The product's tests and the three tree guards on every OS a user publishes from. The runtime is the bun that
-  # .bun-version pins: the tests import bun:test, which no other runtime provides. The release pipeline's tests run in
-  # `check` alone: that pipeline runs on ubuntu and nowhere else. The fuzz tests run in `check` alone. The Worker's tests
-  # run in `check` alone too: they need the Workers runtime, and the root `test` script this job calls leaves the
-  # Workers-runtime tests of `packages/cloudflare` out.
+  # .bun-version pins: the tests import bun:test, which no other runtime provides. The fuzz tests run in `check` alone.
+  # The Worker's tests run in `check` alone too: they need the Workers runtime, and the root `test` script this job
+  # calls leaves the Workers-runtime tests of `packages/cloudflare` out.
   matrix:
     name: test / ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
