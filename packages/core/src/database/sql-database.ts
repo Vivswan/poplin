@@ -53,7 +53,8 @@ import type {
   UploadsPage,
 } from "./database";
 import type { SqlDriver, SqlValue, Statement, StatementResult } from "./driver";
-import { audit, leftovers, requestCounts, sites, totals, uploads, versions } from "./schema";
+import { fileUnderKey, manifestFromText, manifestKey, manifestToText } from "./manifest";
+import { audit, declaredFiles, leftovers, requestCounts, sites, totals, uploads, versions } from "./schema";
 
 /** How many ids are tried for one site before giving up; an id is about 62 random bits, so a second try is already a rare event. */
 const MINT_ATTEMPTS = 5;
@@ -78,6 +79,38 @@ const AUDIT_COLUMNS = [audit.at, audit.actor, audit.action, audit.site_id, audit
 
 /** The columns a version is written with. */
 const VERSION_COLUMNS = [versions.folder, versions.number, versions.published_at, versions.published_by, versions.bytes, versions.files];
+
+/** Every column of an upload but its manifest. */
+const UPLOAD_FIELDS = {
+  id: uploads.id,
+  folder: uploads.folder,
+  number: uploads.number,
+  owner: uploads.owner,
+  state: uploads.state,
+  plan: uploads.plan,
+  bytes: uploads.bytes,
+  files: uploads.files,
+  dropped: uploads.dropped,
+  created_at: uploads.created_at,
+};
+
+/** The bytes of every pending upload and every kept version together. */
+const BYTES_HELD = fragment`((SELECT COALESCE(SUM(${uploads.bytes}), 0) FROM ${uploads} WHERE ${uploads.state} = 'pending') + (SELECT ${totals.bytes} FROM ${totals} WHERE ${totals.id} = 1))`;
+
+/** The sites there are and the ones the pending uploads would make. Only a new site's upload has number 1. */
+const SITES_HELD = fragment`((SELECT COALESCE(SUM(${uploads.number} = 1), 0) FROM ${uploads} WHERE ${uploads.state} = 'pending') + (SELECT ${totals.sites} FROM ${totals} WHERE ${totals.id} = 1))`;
+
+/** The `uploads` table as `u`, for a subquery inside a statement on the same table. In the template an alias stands for its short name alone, so a FROM names the table before it. */
+const AN_UPLOAD = alias(uploads, "u");
+
+/** The `sites` table as `s`. */
+const ITS_SITE = alias(sites, "s");
+
+/** The `versions` table as `v`. */
+const A_VERSION = alias(versions, "v");
+
+/** The `versions` table as `k`, for the kept versions inside a subquery on `v`. */
+const A_KEPT_VERSION = alias(versions, "k");
 
 /** The `sites` table under a second name, for a statement that asks about the other sites. */
 const OTHER = alias(sites, "other");
@@ -139,165 +172,6 @@ function narrowing(query: SitesQuery): SQL[] {
 
   return conditions;
 }
-
-/** A site from a backup under the id it had, only while its id, its folder, and its public name are free, and upload `?16` is pending as the first version of its folder. The schema adds its live version with the row. */
-const IMPORT_SITE = `
-INSERT INTO sites (id, name, folder, access, public_name, title, search_engines, embeddable, expires_at, live_version, next_version, owner, created_at, updated_at, trashed_at, page_title)
-SELECT ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?17
-WHERE NOT EXISTS (SELECT 1 FROM sites WHERE id = ?1)
-  AND NOT EXISTS (SELECT 1 FROM sites WHERE public_name = ?1)
-  AND NOT EXISTS (SELECT 1 FROM sites WHERE folder = ?3)
-  AND (?5 IS NULL OR (?5 <> ?1 AND NOT EXISTS (SELECT 1 FROM sites WHERE public_name = ?5) AND NOT EXISTS (SELECT 1 FROM sites WHERE id = ?5)))
-  AND EXISTS (SELECT 1 FROM uploads WHERE id = ?16 AND state = 'pending' AND folder = ?3 AND number = 1)`;
-
-/** Every version of the list `?2` kept under folder `?1`, only when the site's audit entry was written. The live one is there already and takes its exported values. */
-const IMPORT_VERSIONS = `
-INSERT INTO versions (folder, number, published_at, published_by, bytes, files)
-SELECT ?1, j.value ->> 'number', j.value ->> 'published_at', j.value ->> 'published_by', j.value ->> 'bytes', j.value ->> 'files'
-FROM json_each(?2) j WHERE changes() = 1
-ON CONFLICT (folder, number) DO UPDATE SET published_at = excluded.published_at, published_by = excluded.published_by, bytes = excluded.bytes, files = excluded.files`;
-
-/** Whether a site already holds an imported site's id `?1`, as its id or its public name, and whether one holds its folder `?2`. */
-const IMPORT_IS_HELD = `
-SELECT (EXISTS (SELECT 1 FROM sites WHERE id = ?1) OR EXISTS (SELECT 1 FROM sites WHERE public_name = ?1)) AS id_held,
-  EXISTS (SELECT 1 FROM sites WHERE folder = ?2) AS folder_held`;
-
-/** Every column of an upload but its manifest. */
-const UPLOAD_COLUMNS = "id, folder, number, owner, state, plan, bytes, files, dropped, created_at";
-
-/** How many pending uploads holder `?4` began. */
-const PENDING_OF_OWNER = "(SELECT COUNT(*) FROM uploads WHERE state = 'pending' AND owner = ?4)";
-
-/** The bytes folder `?2` would hold: what its pending uploads declare, and the `?5` newest kept versions of its site. */
-const BYTES_IN_FOLDER = `((SELECT COALESCE(SUM(bytes), 0) FROM uploads WHERE state = 'pending' AND folder = ?2)
-  + (SELECT COALESCE(SUM(bytes), 0) FROM versions WHERE folder = ?2 AND number IN (SELECT number FROM versions WHERE folder = ?2 ORDER BY number DESC LIMIT ?5)))`;
-
-/** The bytes of every kept version and every pending upload together. */
-const BYTES_HELD = "((SELECT COALESCE(SUM(bytes), 0) FROM uploads WHERE state = 'pending') + (SELECT bytes FROM totals WHERE id = 1))";
-
-/** The sites there are and the ones the pending uploads would make. Only a new site's upload has number 1. */
-const SITES_HELD = "((SELECT COALESCE(SUM(number = 1), 0) FROM uploads WHERE state = 'pending') + (SELECT sites FROM totals WHERE id = 1))";
-
-/** The files the uploads begun on day `?15` declared so far. */
-const FILES_OF_DAY = "(SELECT COALESCE(SUM(files), 0) FROM declared_files WHERE day = ?15)";
-
-/** What a new upload of holder `?4` under folder `?2` is measured against, read before it is recorded. */
-const UPLOAD_ROOM = `SELECT ?1 AS id, ?3 AS number, ${PENDING_OF_OWNER} AS own, ${BYTES_IN_FOLDER} AS folder_bytes, ${BYTES_HELD} AS total_bytes, ${SITES_HELD} AS sites`;
-
-/** A new upload, pending, only while it fits: its owner's count under `?11`, its folder's bytes within `?12`, all bytes within `?13`, the sites under `?14` unless that is NULL, and the files of day `?15` within `?16`. */
-const INSERT_UPLOAD = `
-INSERT INTO uploads (id, folder, number, owner, plan, manifest, bytes, files, created_at)
-SELECT ?1, ?2, ?3, ?4, ?6, ?7, ?8, ?9, ?10
-WHERE ${PENDING_OF_OWNER} < ?11 AND ${BYTES_IN_FOLDER} + ?8 <= ?12 AND ${BYTES_HELD} + ?8 <= ?13 AND (?14 IS NULL OR ${SITES_HELD} < ?14)
-  AND ${FILES_OF_DAY} + ?9 <= ?16`;
-
-/** The count of every day before the one before `?1`, dropped. Yesterday's stays: an upload that began just before midnight is still counted against it. */
-const DROP_EARLIER_FILE_DAYS = "DELETE FROM declared_files WHERE day < date(?1, '-1 day')";
-
-/** `?2` more files declared on day `?1`, only when the statement before it recorded the upload. */
-const ADD_DECLARED_FILES = "INSERT INTO declared_files (day, files) SELECT ?1, ?2 WHERE changes() = 1 ON CONFLICT (day) DO UPDATE SET files = files + excluded.files";
-
-/** The upload with id `?1`, without its manifest. */
-const UPLOAD_BY_ID = `SELECT ${UPLOAD_COLUMNS} FROM uploads WHERE id = ?1`;
-
-/** Where the 32-bit FNV-1a hash starts, as the signed number those bits are: an engine keeps a hash that starts as one in whole-number arithmetic. */
-const FNV_OFFSET = 0x811c9dc5 | 0;
-
-/** What the 32-bit FNV-1a hash multiplies by at every character. */
-const FNV_PRIME = 0x01000193;
-
-/** How many paths of a manifest are hashed side by side. */
-const HASHED_ABREAST = 4;
-
-/** The base a manifest key's digits are written in. */
-const HEX = 16;
-
-/** The digits of that base. */
-const HEX_DIGITS = "0123456789abcdef";
-
-/** How many bits one such digit stands for. */
-const HEX_DIGIT_BITS = 4;
-
-/** Where a key ends in a manifest written as a flat list: the quote and comma between its last digit and its files. A quote inside a text follows a backslash, so no path and no type holds this. */
-const KEY_END = /(?<=[0-9a-f])",\[\[/g;
-
-/** The upload with id `?1` and its whole manifest, as stored. */
-const UPLOAD_WITH_MANIFEST = `SELECT ${UPLOAD_COLUMNS}, manifest FROM uploads WHERE id = ?1`;
-
-/** The upload with id `?1` and the files its manifest holds under key `?2`. The engine reads one value out of the row: it walks no entry of the manifest. */
-const UPLOAD_WITH_FILE = `SELECT ${UPLOAD_COLUMNS}, json_extract(manifest, '$.' || ?2) AS file FROM uploads WHERE id = ?1`;
-
-/** An upload marked finished and its manifest dropped, only when the statement before it changed a row. */
-const FINISH_UPLOAD = "UPDATE uploads SET state = 'finished', manifest = '{}' WHERE id = ?1 AND changes() = 1";
-
-/** Whether upload `?1` can be made its site's next version: it is pending, its site is live, and its number was reserved and is above every kept one. */
-const UPLOAD_CAN_PUBLISH = `
-EXISTS (SELECT 1 FROM uploads u JOIN sites s ON s.folder = u.folder
-  WHERE u.id = ?1 AND u.state = 'pending' AND s.trashed = 0 AND u.number < s.next_version
-    AND u.number > (SELECT MAX(v.number) FROM versions v WHERE v.folder = s.folder))`;
-
-/** The access asked with upload `?1`, set by the rule of `setAccess`, only while the upload can be published. */
-const SET_ACCESS_WITH_UPLOAD = `
-UPDATE sites SET access = ?2, public_name = ?3
-WHERE folder = (SELECT folder FROM uploads WHERE id = ?1) AND (access <> ?2 OR public_name IS NOT ?3)
-  AND (?3 IS NULL OR (NOT EXISTS (SELECT 1 FROM sites o WHERE o.public_name = ?3 AND o.folder <> sites.folder) AND NOT EXISTS (SELECT 1 FROM sites o WHERE o.id = ?3)))
-  AND ${UPLOAD_CAN_PUBLISH}`;
-
-/** The audit entry of a change made with upload `?4` to its site, written only when the statement before it changed a row. */
-const AUDIT_WITH_UPLOAD = `
-INSERT INTO audit (at, actor, action, site_id, site_name, detail)
-SELECT ?1, ?2, ?3, id, name, ?5 FROM sites WHERE folder = (SELECT folder FROM uploads WHERE id = ?4) AND changes() = 1`;
-
-/** Whether the site of upload `?1` has access `?2` under public name `?3`; true when no access is asked, which is a `?2` of NULL. */
-const UPLOAD_HAS_ACCESS = `
-(?2 IS NULL OR EXISTS (SELECT 1 FROM sites WHERE folder = (SELECT folder FROM uploads WHERE id = ?1) AND access = ?2 AND public_name IS ?3))`;
-
-/** Whether a site other than the one of upload `?1` has `?2` as its public name, or any site has it as its id. */
-const NAME_IS_HELD_BY_ANOTHER = `
-SELECT (EXISTS (SELECT 1 FROM sites WHERE public_name = ?2 AND folder <> (SELECT folder FROM uploads WHERE id = ?1))
-  OR EXISTS (SELECT 1 FROM sites WHERE id = ?2)) AS held`;
-
-/** The version of upload `?1` with the size its manifest declared, only while the upload can be published and its site has the access asked with it. */
-const INSERT_UPLOADED_VERSION = `
-INSERT INTO versions (folder, number, published_at, published_by, bytes, files)
-SELECT u.folder, u.number, ?4, ?5, u.bytes, u.files FROM uploads u
-WHERE u.id = ?1 AND ${UPLOAD_HAS_ACCESS} AND ${UPLOAD_CAN_PUBLISH}`;
-
-/** The version just kept for upload `?1` made live, with `?3` as the title of its entry page. */
-const SET_LIVE_TO_UPLOADED = `
-UPDATE sites SET live_version = (SELECT number FROM uploads WHERE id = ?1), page_title = ?3, updated_at = ?2
-WHERE folder = (SELECT folder FROM uploads WHERE id = ?1) AND changes() = 1`;
-
-/** The audit entry of the publish of upload `?3`, naming the version the site is at now. */
-const AUDIT_UPLOADED_VERSION = `
-INSERT INTO audit (at, actor, action, site_id, site_name, detail)
-SELECT ?1, ?2, 'publish', s.id, s.name, json_object('version', s.live_version) FROM sites s
-WHERE s.folder = (SELECT folder FROM uploads WHERE id = ?3) AND changes() = 1`;
-
-/** Upload `?1` marked finished with the versions beyond the `?2` highest, which the next statement drops. */
-const FINISH_UPLOADED_VERSION = `
-UPDATE uploads SET state = 'finished', manifest = '{}', dropped = (
-  SELECT json_group_array(v.number) FROM versions v
-  WHERE v.folder = uploads.folder AND v.number NOT IN (SELECT k.number FROM versions k WHERE k.folder = uploads.folder ORDER BY k.number DESC LIMIT ?2))
-WHERE id = ?1 AND changes() = 1`;
-
-/** The versions beyond the `?2` highest dropped from the site of upload `?1`, only after its publish. */
-const DROP_BEHIND_UPLOAD = `
-DELETE FROM versions
-WHERE changes() = 1 AND folder = (SELECT folder FROM uploads WHERE id = ?1)
-  AND number NOT IN (SELECT number FROM versions WHERE folder = (SELECT folder FROM uploads WHERE id = ?1) ORDER BY number DESC LIMIT ?2)`;
-
-/** The dropped versions of finished upload `?1` that still have files, as a JSON list. */
-const SET_DROPPED = "UPDATE uploads SET dropped = ?2 WHERE id = ?1 AND state = 'finished'";
-
-/** A pending upload given up, and its manifest dropped. */
-const ABANDON_UPLOAD = "UPDATE uploads SET state = 'abandoned', manifest = '{}' WHERE id = ?1 AND state = 'pending'";
-
-/** The record of an upload that takes no more files, removed. */
-const DELETE_UPLOAD = "DELETE FROM uploads WHERE id = ?1 AND state <> 'pending'";
-
-/** A page of the uploads begun before `?1`, the oldest first, from after the upload begun at `?2` with id `?3`. */
-const LIST_UPLOADS = `SELECT ${UPLOAD_COLUMNS} FROM uploads WHERE created_at < ?1 AND (created_at, id) > (?2, ?3) ORDER BY created_at, id LIMIT ?4`;
 
 /** Every column of a token. */
 const SELECT_TOKEN = "SELECT id, hash, scope, note, created_at, expires_at FROM tokens";
@@ -444,40 +318,10 @@ const MOST_VIEWED_SITES = 100;
 /** The count of day `?1` for site `?2`; no row when nothing was counted. */
 const READ_REQUESTS = "SELECT requests FROM request_counts WHERE day = ?1 AND site = ?2";
 
-/** The column each site detail is stored in, and its stored value. */
-const DETAIL_COLUMNS: { readonly [Key in keyof Required<SiteDetails>]: (value: Required<SiteDetails>[Key]) => readonly [column: string, stored: SqlValue] } = {
-  name: (name) => ["name", name],
-  title: (title) => ["title", title],
-  search_engines: (allowed) => ["search_engines", allowed ? 1 : 0],
-  embeddable: (allowed) => ["embeddable", allowed ? 1 : 0],
-  expires: (expires) => ["expires_at", expires === "never" ? null : expires],
-};
-
 /** What the builder gives for one statement. */
 interface BuiltQuery {
   readonly sql: string;
   readonly params: readonly unknown[];
-}
-
-/** One file as a stored manifest holds it: its path, size, type, and place in the manifest. */
-type StoredFile = readonly [path: string, size: number, type: string, place: number];
-
-/** The `SET` and the differs-from condition of each detail given, with each stored value added to `params` and named by its place there. */
-function detailColumns(given: SiteDetails, params: SqlValue[]): { readonly sets: string[]; readonly differs: string[] } {
-  const sets: string[] = [];
-  const differs: string[] = [];
-
-  for (const key of ["name", "title", "search_engines", "embeddable", "expires"] as const) {
-    const value = given[key];
-    if (value === undefined) continue;
-
-    const [column, stored] = (DETAIL_COLUMNS[key] as (value: unknown) => readonly [string, SqlValue])(value);
-    params.push(stored);
-    sets.push(`${column} = ?${params.length}`);
-    differs.push(`${column} IS NOT ?${params.length}`);
-  }
-
-  return { sets, differs };
 }
 
 function sql(text: string, ...params: SqlValue[]): Statement {
@@ -570,6 +414,29 @@ function auditOfSite(signed: Signed, action: AuditAction, id: SiteId, detail: Re
   return insertFrom(audit, AUDIT_COLUMNS, entry);
 }
 
+/** The upload with the given id, without its manifest; none for no id. */
+function uploadById(id: UploadId | null): Statement {
+  return built(BUILD.select(UPLOAD_FIELDS).from(uploads).where(fragment`${uploads.id} = ${id}`));
+}
+
+/** An upload marked finished and its manifest dropped, only when the statement before it changed a row. */
+function finishUpload(id: UploadId | null): Statement {
+  return built(BUILD.update(uploads).set({ state: "finished", manifest: "{}" }).where(and(fragment`${uploads.id} = ${id}`, CHANGED)));
+}
+
+/** How many pending uploads a holder began. */
+function pendingOf(owner: string): SQL {
+  return fragment`(SELECT COUNT(*) FROM ${uploads} WHERE ${uploads.state} = 'pending' AND ${uploads.owner} = ${owner})`;
+}
+
+/** The bytes a folder would hold: what its pending uploads declare, and the `staying` newest kept versions of its site. */
+function bytesIn(folder: string, staying: number): SQL {
+  const pending = fragment`(SELECT COALESCE(SUM(${uploads.bytes}), 0) FROM ${uploads} WHERE ${uploads.state} = 'pending' AND ${uploads.folder} = ${folder})`;
+  const newest = fragment`(SELECT ${versions.number} FROM ${versions} WHERE ${versions.folder} = ${folder} ORDER BY ${versions.number} DESC LIMIT ${staying})`;
+
+  return fragment`(${pending} + (SELECT COALESCE(SUM(${versions.bytes}), 0) FROM ${versions} WHERE ${versions.folder} = ${folder} AND ${versions.number} IN ${newest}))`;
+}
+
 /** Whether no site has a name as its id, and none as its public name. */
 function isFree(name: string): SQL | undefined {
   return and(notExists(BUILD.select(ONE).from(OTHER).where(eq(OTHER.id, name))), notExists(BUILD.select(ONE).from(OTHER).where(eq(OTHER.public_name, name))));
@@ -599,14 +466,46 @@ function insertSite(id: SiteId, site: v.InferOutput<typeof NEW_SITE>, signed: Si
   const expires = site.expires === "never" ? null : site.expires;
   const identity = fragment`${id}, ${site.name}, ${site.folder}, ${site.access}, ${publicName}, ${site.title}, ${site.search_engines ? 1 : 0}, ${expires}`;
   const values = fragment`${identity}, 1, 2, ${owner}, ${signed.at}, ${signed.at}, ${site.embeddable ? 1 : 0}, ${site.page_title ?? null}`;
-  const pending = and(eq(uploads.id, upload ?? ""), eq(uploads.state, "pending"), eq(uploads.folder, site.folder), eq(uploads.number, 1));
-  const conditions = and(
-    isFree(id),
-    publicName === null ? undefined : and(fragment`${publicName} <> ${id}`, isFree(publicName)),
-    upload === undefined ? undefined : exists(BUILD.select(ONE).from(uploads).where(pending)),
-  );
+  const conditions = and(isFree(id), publicNameIsFree(publicName, id), upload === undefined ? undefined : isFirstPending(upload, site.folder));
 
   return insertFrom(sites, columns, fragment`SELECT ${values} WHERE ${conditions}`);
+}
+
+/** Whether a public name, when one is asked, is not the site's own id and is free. */
+function publicNameIsFree(publicName: PublicName | null, id: SiteId): SQL | undefined {
+  return publicName === null ? undefined : and(fragment`${publicName} <> ${id}`, isFree(publicName));
+}
+
+/** Whether an upload is pending as the first version of a folder. */
+function isFirstPending(upload: UploadId, folder: SiteFolder): SQL {
+  return exists(BUILD.select(ONE).from(uploads).where(and(eq(uploads.id, upload), eq(uploads.state, "pending"), eq(uploads.folder, folder), eq(uploads.number, 1))));
+}
+
+/** The folder of an upload, as a subquery. */
+function folderOf(upload: UploadId): SQL {
+  return fragment`(SELECT ${uploads.folder} FROM ${uploads} WHERE ${uploads.id} = ${upload})`;
+}
+
+/** Whether an upload can be made its site's next version: it is pending, its site is live, and its number was set aside and is above every kept one. */
+function canPublish(upload: UploadId): SQL {
+  const above = fragment`(SELECT MAX(${A_VERSION.number}) FROM ${versions} ${A_VERSION} WHERE ${A_VERSION.folder} = ${ITS_SITE.folder})`;
+  const ready = fragment`${AN_UPLOAD.id} = ${upload} AND ${AN_UPLOAD.state} = 'pending' AND ${ITS_SITE.trashed} = 0 AND ${AN_UPLOAD.number} < ${ITS_SITE.next_version} AND ${AN_UPLOAD.number} > ${above}`;
+
+  return fragment`EXISTS (SELECT 1 FROM ${uploads} ${AN_UPLOAD} JOIN ${sites} ${ITS_SITE} ON ${ITS_SITE.folder} = ${AN_UPLOAD.folder} WHERE ${ready})`;
+}
+
+/** Whether the site of an upload has the access asked with it, under the public name asked; true when no access is asked. */
+function hasAccess(upload: UploadId, access: string | null, publicName: string | null): SQL {
+  const asked = fragment`${sites.folder} = ${folderOf(upload)} AND ${sites.access} = ${access} AND ${sites.public_name} IS ${publicName}`;
+
+  return fragment`(${access} IS NULL OR EXISTS (SELECT 1 FROM ${sites} WHERE ${asked}))`;
+}
+
+/** The audit entry of a change made with an upload to its site, written only when the statement before it changed a row. */
+function auditWithUpload(signed: Signed, action: AuditAction, upload: UploadId, detail: Readonly<Record<string, unknown>>): Statement {
+  const entry = fragment`SELECT ${signed.at}, ${signed.by}, ${action}, ${sites.id}, ${sites.name}, ${JSON.stringify(detail)} FROM ${sites} WHERE ${sites.folder} = ${folderOf(upload)} AND ${CHANGED}`;
+
+  return insertFrom(audit, AUDIT_COLUMNS, entry);
 }
 
 /** A kept version of a site, as a subquery of a statement on `sites` asks for it. */
@@ -630,9 +529,8 @@ function moveLive(id: SiteId, target: number | "previous", at: number): Statemen
   return built(BUILD.update(sites).set({ live_version: target, updated_at: at }).where(and(live, ne(sites.live_version, target), kept)));
 }
 
-/** The versions of the site with the given id beyond the `keep` highest dropped, only after a publish. */
-function dropOldVersions(id: SiteId, keep: number): Statement {
-  const folder = fragment`(SELECT ${sites.folder} FROM ${sites} WHERE ${sites.id} = ${id})`;
+/** The versions under a folder beyond the `keep` highest dropped, only after a publish. */
+function dropOldVersions(folder: SQL, keep: number): Statement {
   const highest = fragment`(SELECT ${versions.number} FROM ${versions} WHERE ${versions.folder} = ${folder} ORDER BY ${versions.number} DESC LIMIT ${keep})`;
 
   return built(BUILD.delete(versions).where(fragment`${CHANGED} AND ${versions.folder} = ${folder} AND ${versions.number} NOT IN ${highest}`));
@@ -686,130 +584,6 @@ function unreachable(site: Site | undefined): Refused<"not_found" | "in_trash"> 
   if (site.state === "trash") return { kind: "in_trash" };
 
   return undefined;
-}
-
-/** Carry a 32-bit FNV-1a hash on over a path, from one of its UTF-16 units to its end. */
-function hashOn(hash: number, path: string, from: number): number {
-  let carried = hash;
-  for (let at = from; at < path.length; at += 1) carried = Math.imul(carried ^ path.charCodeAt(at), FNV_PRIME);
-
-  return carried;
-}
-
-/** The 32-bit FNV-1a hash of a path, taken over its UTF-16 units. */
-function pathHash(path: string): number {
-  return hashOn(FNV_OFFSET, path, 0) >>> 0;
-}
-
-/**
- * The hash of every path of a manifest, as `pathHash` gives it, in the manifest's order.
- * Four paths are hashed side by side: each step of a hash waits on the one before it, and four hashes that wait at once take little longer than one.
- */
-function pathHashes(manifest: readonly ManifestFile[]): Uint32Array {
-  const hashes = new Uint32Array(manifest.length);
-  const abreast = manifest.length - (manifest.length % HASHED_ABREAST);
-
-  for (let place = 0; place < abreast; place += HASHED_ABREAST) {
-    const first = (manifest[place] as ManifestFile).path;
-    const second = (manifest[place + 1] as ManifestFile).path;
-    const third = (manifest[place + 2] as ManifestFile).path;
-    const fourth = (manifest[place + 3] as ManifestFile).path;
-    const shared = Math.min(first.length, second.length, third.length, fourth.length);
-    let one = FNV_OFFSET;
-    let two = FNV_OFFSET;
-    let three = FNV_OFFSET;
-    let four = FNV_OFFSET;
-
-    for (let at = 0; at < shared; at += 1) {
-      one = Math.imul(one ^ first.charCodeAt(at), FNV_PRIME);
-      two = Math.imul(two ^ second.charCodeAt(at), FNV_PRIME);
-      three = Math.imul(three ^ third.charCodeAt(at), FNV_PRIME);
-      four = Math.imul(four ^ fourth.charCodeAt(at), FNV_PRIME);
-    }
-
-    hashes[place] = hashOn(one, first, shared);
-    hashes[place + 1] = hashOn(two, second, shared);
-    hashes[place + 2] = hashOn(three, third, shared);
-    hashes[place + 3] = hashOn(four, fourth, shared);
-  }
-
-  for (let place = abreast; place < manifest.length; place += 1) hashes[place] = pathHash((manifest[place] as ManifestFile).path);
-
-  return hashes;
-}
-
-/**
- * The key a file has in a stored manifest, made from the hash of its path.
- *
- * @param hash - what `pathHash` gave for the path
- * @returns a letter and the hash's hex digits, which is one plain step of a JSON path whatever the path holds. Two paths may share a key
- */
-function manifestKey(hash: number): string {
-  const last = HEX_DIGITS[hash % HEX] as string;
-  const rest = hash >>> HEX_DIGIT_BITS;
-
-  // An engine writes a small whole number in hex several times faster than one past 31 bits.
-  return rest === 0 ? `f${last}` : `f${rest.toString(HEX)}${last}`;
-}
-
-/**
- * The manifest as the JSON object its row holds: under each key the files whose paths have it, each as its path, size, type, and place in the manifest.
- *
- * @throws {Error} two files share a path
- */
-function manifestToText(manifest: readonly ManifestFile[]): string {
-  const hashes = pathHashes(manifest);
-  const sharing = new Map<number, StoredFile[]>();
-  const keyed: (string | StoredFile[])[] = [];
-
-  for (let place = 0; place < manifest.length; place += 1) {
-    const { path, size, content_type: type } = manifest[place] as ManifestFile;
-    const hash = hashes[place] as number;
-    const held = sharing.get(hash);
-
-    if (held === undefined) {
-      const files: StoredFile[] = [[path, size, type, place]];
-      sharing.set(hash, files);
-      keyed.push(manifestKey(hash), files);
-      continue;
-    }
-
-    if (held.some(([other]) => other === path)) throw new Error("two files of an upload share a path");
-
-    held.push([path, size, type, place]);
-  }
-
-  // One call writes every key and its files as a flat list, which costs a long manifest a fraction of what an object with as many keys does.
-  const listed = JSON.stringify(keyed);
-
-  return `{${listed.slice(1, -1).replace(KEY_END, '":[[')}}`;
-}
-
-/** `manifestToText` is the one writer of a stored file, so its fields are read as written, unchecked. */
-function declaredFile([path, size, type]: StoredFile): ManifestFile {
-  return { path, size, content_type: type };
-}
-
-/**
- * Read a stored manifest back as the list it was declared as.
- *
- * @param text - what `manifestToText` wrote, or the `{}` of an upload that takes no more files
- * @throws {Error} the places are not 0 to one less than the count of files, each once
- */
-function manifestFromText(text: string): ManifestFile[] {
-  const stored: Readonly<Record<string, readonly StoredFile[]>> = JSON.parse(text);
-  const manifest: (ManifestFile | undefined)[] = [];
-  let files = 0;
-
-  for (const sharing of Object.values(stored)) {
-    for (const file of sharing) manifest[file[3]] = declaredFile(file);
-
-    files += sharing.length;
-  }
-
-  if (manifest.length !== files || manifest.includes(undefined)) throw new Error("a stored manifest does not hold each place once");
-
-  return manifest as ManifestFile[];
 }
 
 function uploadIn(result: StatementResult | undefined): Upload | undefined {
@@ -1070,7 +844,7 @@ export class SqlDatabase implements Database {
       insertFrom(versions, VERSION_COLUMNS, entry),
       built(BUILD.update(sites).set({ live_version: version.number, updated_at: signed.at }).where(and(eq(sites.id, id), CHANGED))),
       auditOfSite(signed, "publish", id, { version: version.number }),
-      dropOldVersions(id, version.keep),
+      dropOldVersions(fragment`(SELECT ${sites.folder} FROM ${sites} WHERE ${sites.id} = ${id})`, version.keep),
       siteById(id),
     ]);
     if (!changed(updated)) return unreachable(siteIn(after)) ?? { kind: "stale_number" };
@@ -1124,17 +898,45 @@ export class SqlDatabase implements Database {
   async importUploadAsSite(id: UploadId, site: Site, signed: Signed): Promise<Done | Refused<"id_taken" | "folder_taken" | "name_taken" | "not_pending">> {
     const row = siteToRow(site);
     const nextVersion = Math.max(...row.versions.map((version) => version.number)) + 1;
-    const identity: SqlValue[] = [row.id, row.name, row.folder, row.access, row.public_name, row.title, row.search_engines, row.embeddable, row.expires_at, row.live_version, nextVersion];
+    const columns = [
+      sites.id,
+      sites.name,
+      sites.folder,
+      sites.access,
+      sites.public_name,
+      sites.title,
+      sites.search_engines,
+      sites.embeddable,
+      sites.expires_at,
+      sites.live_version,
+      sites.next_version,
+      sites.owner,
+      sites.created_at,
+      sites.updated_at,
+      sites.trashed_at,
+      sites.page_title,
+    ];
+    const identity = fragment`${row.id}, ${row.name}, ${row.folder}, ${row.access}, ${row.public_name}, ${row.title}, ${row.search_engines}, ${row.embeddable}, ${row.expires_at}`;
+    const values = fragment`${identity}, ${row.live_version}, ${nextVersion}, ${row.owner}, ${row.created_at}, ${row.updated_at}, ${row.trashed_at}, ${row.page_title}`;
+    const folderIsFree = notExists(BUILD.select(ONE).from(OTHER).where(eq(OTHER.folder, row.folder)));
+    const free = and(isFree(row.id), folderIsFree, publicNameIsFree(row.public_name, row.id), isFirstPending(id, row.folder));
+    // The live version is there already, made with the site, and takes its exported values.
+    const exported = [versions.number, versions.published_at, versions.published_by, versions.bytes, versions.files];
+    const listed = fragment.join(exported.map((column) => fragment`j.value ->> ${fragment.raw(`'${column.name}'`)}`), fragment`, `);
+    const taken = fragment.join(exported.slice(1).map((column) => fragment`${bare(column)} = excluded.${bare(column)}`), fragment`, `);
+    const kept = fragment`SELECT ${row.folder}, ${listed} FROM json_each(${JSON.stringify(row.versions)}) j WHERE ${CHANGED} ON CONFLICT (${bare(versions.folder)}, ${bare(versions.number)}) DO UPDATE SET ${taken}`;
+    const idIsHeld = fragment`(EXISTS (SELECT 1 FROM ${sites} WHERE ${sites.id} = ${row.id}) OR EXISTS (SELECT 1 FROM ${sites} WHERE ${sites.public_name} = ${row.id}))`;
+    const isHeld = fragment`SELECT ${idIsHeld} AS id_held, EXISTS (SELECT 1 FROM ${sites} WHERE ${sites.folder} = ${row.folder}) AS folder_held`;
 
     // The upload is finished straight after the audit entry, so each statement up to the versions sees the one row the statement before it wrote.
     const results = await this.#driver.batch([
-      sql(IMPORT_SITE, ...identity, row.owner, row.created_at, row.updated_at, row.trashed_at, id, row.page_title),
+      insertFrom(sites, columns, fragment`SELECT ${values} WHERE ${free}`),
       auditOfSite(signed, "imported", row.id, { versions: row.versions.length }),
-      sql(FINISH_UPLOAD, id),
-      sql(IMPORT_VERSIONS, row.folder, JSON.stringify(row.versions)),
-      sql(IMPORT_IS_HELD, row.id, row.folder),
+      finishUpload(id),
+      insertFrom(versions, VERSION_COLUMNS, kept),
+      written(isHeld),
       siteById(row.id),
-      sql(UPLOAD_BY_ID, id),
+      uploadById(id),
     ]);
     const [held, made, waiting] = results.slice(-3);
     if (changed(results[0])) return done(made);
@@ -1155,28 +957,39 @@ export class SqlDatabase implements Database {
     const bytes = upload.manifest.reduce((sum, file) => sum + file.size, 0);
     const row = { ...upload, state: "pending", plan: JSON.stringify(upload.plan), bytes, files: upload.manifest.length, dropped: "[]" };
     const checked = uploadFromRow(row);
-    const named: SqlValue[] = [checked.id, checked.folder, checked.number, checked.owner, room.staying];
+    const own = pendingOf(checked.owner);
+    const folderBytes = bytesIn(checked.folder, room.staying);
+    const dayFiles = fragment`(SELECT COALESCE(SUM(${declaredFiles.files}), 0) FROM ${declaredFiles} WHERE ${declaredFiles.day} = ${room.day})`;
+    // What the upload is measured against is read before it is recorded, so a refusal can say which room is full.
+    const held = fragment`SELECT ${checked.id} AS id, ${checked.number} AS number, ${own} AS own, ${folderBytes} AS folder_bytes, ${BYTES_HELD} AS total_bytes, ${SITES_HELD} AS sites`;
+    const bytesFit = fragment`${folderBytes} + ${checked.bytes} <= ${room.folderBytes} AND ${BYTES_HELD} + ${checked.bytes} <= ${room.totalBytes}`;
+    const fits = fragment`${own} < ${room.own} AND ${bytesFit} AND (${room.sites} IS NULL OR ${SITES_HELD} < ${room.sites}) AND ${dayFiles} + ${checked.files} <= ${room.dayFiles}`;
+    const columns = [uploads.id, uploads.folder, uploads.number, uploads.owner, uploads.plan, uploads.manifest, uploads.bytes, uploads.files, uploads.created_at];
+    const record = fragment`SELECT ${checked.id}, ${checked.folder}, ${checked.number}, ${checked.owner}, ${row.plan}, ${manifest}, ${checked.bytes}, ${checked.files}, ${checked.created_at} WHERE ${fits}`;
+    const files = bare(declaredFiles.files);
+    const counted = fragment`SELECT ${room.day}, ${checked.files} WHERE ${CHANGED} ON CONFLICT (${bare(declaredFiles.day)}) DO UPDATE SET ${files} = ${files} + excluded.${files}`;
 
     const [before, , inserted] = await this.#driver.batch([
-      sql(UPLOAD_ROOM, ...named),
-      sql(DROP_EARLIER_FILE_DAYS, room.day),
-      sql(INSERT_UPLOAD, ...named, row.plan, manifest, checked.bytes, checked.files, checked.created_at, room.own, room.folderBytes, room.totalBytes, room.sites, room.day, room.dayFiles),
-      sql(ADD_DECLARED_FILES, room.day, checked.files),
+      written(held),
+      // Yesterday's count stays: an upload that began just before midnight is still counted against it.
+      built(BUILD.delete(declaredFiles).where(fragment`${declaredFiles.day} < date(${room.day}, '-1 day')`)),
+      insertFrom(uploads, columns, record),
+      insertFrom(declaredFiles, [declaredFiles.day, declaredFiles.files], counted),
     ]);
     if (changed(inserted)) return { kind: "done" };
 
-    const held = before?.rows[0];
-    if (Number(held?.own) >= room.own) return { kind: "own_full" };
+    const measured = before?.rows[0];
+    if (Number(measured?.own) >= room.own) return { kind: "own_full" };
 
-    if (Number(held?.folder_bytes) + checked.bytes > room.folderBytes) return { kind: "folder_full" };
+    if (Number(measured?.folder_bytes) + checked.bytes > room.folderBytes) return { kind: "folder_full" };
 
-    if (Number(held?.total_bytes) + checked.bytes > room.totalBytes) return { kind: "total_full" };
+    if (Number(measured?.total_bytes) + checked.bytes > room.totalBytes) return { kind: "total_full" };
 
-    return { kind: room.sites !== null && Number(held?.sites) >= room.sites ? "sites_full" : "day_full" };
+    return { kind: room.sites !== null && Number(measured?.sites) >= room.sites ? "sites_full" : "day_full" };
   }
 
   async getUpload(id: UploadId): Promise<{ readonly upload: Upload; readonly manifest: readonly ManifestFile[] } | undefined> {
-    const [found] = await this.#driver.batch([sql(UPLOAD_WITH_MANIFEST, id)]);
+    const [found] = await this.#driver.batch([built(BUILD.select({ ...UPLOAD_FIELDS, manifest: uploads.manifest }).from(uploads).where(eq(uploads.id, id)))]);
     const upload = uploadIn(found);
     if (upload === undefined) return undefined;
 
@@ -1184,17 +997,16 @@ export class SqlDatabase implements Database {
   }
 
   async getUploadFile(id: UploadId, path: string): Promise<{ readonly upload: Upload; readonly file: ManifestFile | undefined } | undefined> {
-    const [found] = await this.#driver.batch([sql(UPLOAD_WITH_FILE, id, manifestKey(pathHash(path)))]);
+    // The engine reads one value out of the row: it walks no entry of the manifest.
+    const file = fragment<string | null>`json_extract(${uploads.manifest}, '$.' || ${manifestKey(path)})`.as("file");
+    const [found] = await this.#driver.batch([built(BUILD.select({ ...UPLOAD_FIELDS, file }).from(uploads).where(eq(uploads.id, id)))]);
     const upload = uploadIn(found);
     if (upload === undefined) return undefined;
 
     const stored = found?.rows[0]?.file;
     if (typeof stored !== "string") return { upload, file: undefined };
 
-    const sharing: readonly StoredFile[] = JSON.parse(stored);
-    const file = sharing.find(([held]) => held === path);
-
-    return { upload, file: file === undefined ? undefined : declaredFile(file) };
+    return { upload, file: fileUnderKey(stored, path) };
   }
 
   publishUploadAsSite(id: UploadId, draft: NewSite, signed: Signed): Promise<Done | Refused<"name_taken" | "not_pending">> {
@@ -1211,16 +1023,26 @@ export class SqlDatabase implements Database {
     const access = version.access?.access ?? null;
     const publicName = version.access === undefined ? null : publicNameOf(version.access);
     const settings = [...this.#accessWith(id, version.access, signed), ...this.#detailsWith(id, { access, publicName, details: version.details }, signed)];
+    const inFolder = fragment`${sites.folder} = ${folderOf(id)}`;
+    // The version takes the size its upload declared, only while the upload can be published and its site has the access asked with it.
+    const publishable = fragment`${AN_UPLOAD.id} = ${id} AND ${hasAccess(id, access, publicName)} AND ${canPublish(id)}`;
+    const uploaded = fragment`SELECT ${AN_UPLOAD.folder}, ${AN_UPLOAD.number}, ${signed.at}, ${signed.by}, ${AN_UPLOAD.bytes}, ${AN_UPLOAD.files} FROM ${uploads} ${AN_UPLOAD} WHERE ${publishable}`;
+    const number = fragment<number>`(SELECT ${uploads.number} FROM ${uploads} WHERE ${uploads.id} = ${id})`;
+    const entry = fragment`SELECT ${signed.at}, ${signed.by}, 'publish', ${sites.id}, ${sites.name}, json_object('version', ${sites.live_version}) FROM ${sites} WHERE ${inFolder} AND ${CHANGED}`;
+    // The upload is finished with the versions beyond the highest kept, which the statement after it drops.
+    const highest = fragment`(SELECT ${A_KEPT_VERSION.number} FROM ${versions} ${A_KEPT_VERSION} WHERE ${A_KEPT_VERSION.folder} = ${uploads.folder} ORDER BY ${A_KEPT_VERSION.number} DESC LIMIT ${version.keep})`;
+    const dropped = fragment<string>`(SELECT json_group_array(${A_VERSION.number}) FROM ${versions} ${A_VERSION} WHERE ${A_VERSION.folder} = ${uploads.folder} AND ${A_VERSION.number} NOT IN ${highest})`;
+    const isHeld = fragment`SELECT (EXISTS (SELECT 1 FROM ${sites} WHERE ${sites.public_name} = ${publicName} AND ${sites.folder} <> ${folderOf(id)}) OR EXISTS (SELECT 1 FROM ${sites} WHERE ${sites.id} = ${publicName})) AS held`;
     const results = await this.#driver.batch([
       ...settings,
-      sql(INSERT_UPLOADED_VERSION, id, access, publicName, signed.at, signed.by),
-      sql(SET_LIVE_TO_UPLOADED, id, signed.at, version.page_title ?? null),
-      sql(AUDIT_UPLOADED_VERSION, signed.at, signed.by, id),
-      sql(FINISH_UPLOADED_VERSION, id, version.keep),
-      sql(DROP_BEHIND_UPLOAD, id, version.keep),
-      sitesWhere(fragment`${sites.folder} = (SELECT ${qualified(uploads.folder)} FROM ${uploads} WHERE ${qualified(uploads.id)} = ${id})`),
-      sql(UPLOAD_BY_ID, id),
-      sql(NAME_IS_HELD_BY_ANOTHER, id, publicName),
+      insertFrom(versions, VERSION_COLUMNS, uploaded),
+      built(BUILD.update(sites).set({ live_version: number, page_title: version.page_title ?? null, updated_at: signed.at }).where(and(inFolder, CHANGED))),
+      insertFrom(audit, AUDIT_COLUMNS, entry),
+      built(BUILD.update(uploads).set({ state: "finished", manifest: "{}", dropped }).where(and(eq(uploads.id, id), CHANGED))),
+      dropOldVersions(folderOf(id), version.keep),
+      sitesWhere(inFolder),
+      uploadById(id),
+      written(isHeld),
     ]);
     const [inserted, , , , , after, finished, held] = results.slice(settings.length);
     const upload = uploadIn(finished);
@@ -1235,17 +1057,19 @@ export class SqlDatabase implements Database {
   }
 
   async setUploadDropped(id: UploadId, dropped: readonly number[]): Promise<void> {
-    await this.#driver.batch([sql(SET_DROPPED, id, JSON.stringify(dropped))]);
+    const finished = and(eq(uploads.id, id), eq(uploads.state, "finished"));
+    await this.#driver.batch([built(BUILD.update(uploads).set({ dropped: JSON.stringify(dropped) }).where(finished))]);
   }
 
   async abandonUpload(id: UploadId): Promise<boolean> {
-    const [abandoned] = await this.#driver.batch([sql(ABANDON_UPLOAD, id)]);
+    const pending = and(eq(uploads.id, id), eq(uploads.state, "pending"));
+    const [abandoned] = await this.#driver.batch([built(BUILD.update(uploads).set({ state: "abandoned", manifest: "{}" }).where(pending))]);
 
     return changed(abandoned);
   }
 
   async removeUpload(id: UploadId): Promise<boolean> {
-    const [removed] = await this.#driver.batch([sql(DELETE_UPLOAD, id)]);
+    const [removed] = await this.#driver.batch([built(BUILD.delete(uploads).where(and(eq(uploads.id, id), ne(uploads.state, "pending"))))]);
 
     return changed(removed);
   }
@@ -1254,12 +1078,14 @@ export class SqlDatabase implements Database {
     requirePage(query.limit);
 
     // One row more than the page shows whether another page follows.
-    const [listed] = await this.#driver.batch([sql(LIST_UPLOADS, query.before, query.after?.created_at ?? -1, query.after?.id ?? "", query.limit + 1)]);
-    const uploads = (listed?.rows ?? []).slice(0, query.limit).map(uploadFromRow);
-    const last = uploads.at(-1);
-    if (last === undefined || (listed?.rows.length ?? 0) <= query.limit) return { uploads };
+    const beyond = fragment`(${uploads.created_at}, ${uploads.id}) > (${query.after?.created_at ?? -1}, ${query.after?.id ?? ""})`;
+    const page = BUILD.select(UPLOAD_FIELDS).from(uploads).where(and(lt(uploads.created_at, query.before), beyond)).orderBy(asc(uploads.created_at), asc(uploads.id)).limit(query.limit + 1);
+    const [listed] = await this.#driver.batch([built(page)]);
+    const listedUploads = (listed?.rows ?? []).slice(0, query.limit).map(uploadFromRow);
+    const last = listedUploads.at(-1);
+    if (last === undefined || (listed?.rows.length ?? 0) <= query.limit) return { uploads: listedUploads };
 
-    return { uploads, next: { created_at: last.created_at, id: last.id } };
+    return { uploads: listedUploads, next: { created_at: last.created_at, id: last.id } };
   }
 
   async addToken(token: TokenRecord, signed: Signed): Promise<{ readonly kind: "done" } | Refused<"id_taken">> {
@@ -1518,11 +1344,16 @@ export class SqlDatabase implements Database {
   #accessWith(id: UploadId, access: SiteAccess | undefined, signed: Signed): Statement[] {
     if (access === undefined) return [];
 
-    const detail = { access: access.access, public_name: publicNameOf(access) };
+    const publicName = publicNameOf(access);
+    // A public name is free for a site when no site in another folder has it, and none has it as its id.
+    const freeFor = (name: PublicName): SQL | undefined =>
+      and(notExists(BUILD.select(ONE).from(OTHER).where(and(eq(OTHER.public_name, name), ne(OTHER.folder, sites.folder)))), notExists(BUILD.select(ONE).from(OTHER).where(eq(OTHER.id, name))));
+    const differs = or(ne(sites.access, access.access), fragment`${sites.public_name} IS NOT ${publicName}`);
+    const asked = and(fragment`${sites.folder} = ${folderOf(id)}`, differs, publicName === null ? undefined : freeFor(publicName), canPublish(id));
 
     return [
-      sql(SET_ACCESS_WITH_UPLOAD, id, access.access, publicNameOf(access)),
-      sql(AUDIT_WITH_UPLOAD, signed.at, signed.by, "access", id, JSON.stringify(detail)),
+      built(BUILD.update(sites).set({ access: access.access, public_name: publicName }).where(asked)),
+      auditWithUpload(signed, "access", id, { access: access.access, public_name: publicName }),
     ];
   }
 
@@ -1533,15 +1364,14 @@ export class SqlDatabase implements Database {
     signed: Signed,
   ): Statement[] {
     const given = v.parse(SITE_DETAILS, asked.details);
-    const params: SqlValue[] = [id, asked.access, asked.publicName];
-    const { sets, differs } = detailColumns(given, params);
-    if (sets.length === 0) return [];
+    const stored = storedDetails(given);
+    const columns = Object.keys(stored) as (keyof typeof stored)[];
+    if (columns.length === 0) return [];
 
-    const text = `
-UPDATE sites SET ${sets.join(", ")}
-WHERE folder = (SELECT folder FROM uploads WHERE id = ?1) AND (${differs.join(" OR ")}) AND ${UPLOAD_HAS_ACCESS} AND ${UPLOAD_CAN_PUBLISH}`;
+    const differs = or(...columns.map((column) => fragment`${sites[column]} IS NOT ${stored[column] ?? null}`));
+    const ready = and(fragment`${sites.folder} = ${folderOf(id)}`, differs, hasAccess(id, asked.access, asked.publicName), canPublish(id));
 
-    return [sql(text, ...params), sql(AUDIT_WITH_UPLOAD, signed.at, signed.by, "details", id, JSON.stringify(given))];
+    return [built(BUILD.update(sites).set(stored).where(ready)), auditWithUpload(signed, "details", id, given)];
   }
 
   /** Make a site under a fresh id; with `upload`, only while that upload is pending, and marking it finished in the same step. */
@@ -1559,10 +1389,10 @@ WHERE folder = (SELECT folder FROM uploads WHERE id = ?1) AND (${differs.join(" 
         insertSite(id, site, signed, upload),
         built(size),
         auditOfSite(signed, "create", id, detail),
-        sql(FINISH_UPLOAD, upload ?? null),
+        finishUpload(upload ?? null),
         written(held),
         siteById(id),
-        sql(UPLOAD_BY_ID, upload ?? null),
+        uploadById(upload ?? null),
       ]);
       if (changed(inserted)) return done(made);
 
