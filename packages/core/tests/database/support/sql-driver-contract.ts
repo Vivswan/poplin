@@ -417,6 +417,7 @@ function queryPlans(label: string, makeDriver: DriverFactory): void {
       await database.getSiteByPublicName(DOCS);
       await database.findServed({ id: site.id }, NOW);
       await database.findServed({ public_name: DOCS }, NOW);
+      await database.findServedWith({ public_name: DOCS }, NOW, { counts: { day: "2026-11-13", site: site.id }, settingsAndKey: true });
       await database.listSites({ trash: false, limit: 10 });
       await database.listShownSites({ trash: false, limit: 10, sort: "title" }, { day: "2026-11-13", publishers: true });
       await database.listSites({ trash: true, owner: ADA, limit: 10, after: { updated_at: NOW, id: site.id } });

@@ -54,6 +54,8 @@ import type {
   RequestCounts,
   Reserved,
   ServedSite,
+  ServedAlso,
+  ServedLookup,
   SettingsAndKey,
   SettingsAndSite,
   ShownSitesPage,
@@ -470,10 +472,24 @@ export class SqlDatabase implements Database {
   }
 
   async findServed(address: Address, now: number): Promise<ServedSite | undefined> {
-    const addressed = "id" in address ? eq(sites.id, address.id) : eq(sites.public_name, address.public_name);
-    const [found] = await this.#driver.batch([servedSite(addressed, now)]);
+    return (await this.findServedWith(address, now, {})).served;
+  }
 
-    return servedIn(found);
+  async findServedWith(address: Address, now: number, also: ServedAlso): Promise<ServedLookup> {
+    if (also.counts !== undefined) requireDay(also.counts.day);
+
+    const addressed = "id" in address ? eq(sites.id, address.id) : eq(sites.public_name, address.public_name);
+    const counts = also.counts === undefined ? [] : [requestsOf(also.counts.day, ALL_SITES), requestsOf(also.counts.day, also.counts.site)];
+    const held = also.settingsAndKey === true ? [READ_SETTINGS, READ_SIGNING_KEY] : [];
+    const [found, ...beside] = await this.#driver.batch([servedSite(addressed, now), ...counts, ...held]);
+    const [all, ofSite] = counts.length === 0 ? [] : beside;
+    const [stored, key] = held.length === 0 ? [] : beside.slice(counts.length);
+
+    return {
+      served: servedIn(found),
+      ...(counts.length === 0 ? {} : { counts: { site: requestsIn(ofSite), all: requestsIn(all) } }),
+      ...(held.length === 0 ? {} : { settingsAndKey: { settings: settingsIn(stored), key: signingKeyIn(key) } }),
+    };
   }
 
   async listSites(query: SitesQuery): Promise<SitesPage> {

@@ -121,6 +121,8 @@ const ROWS: Readonly<Record<string, readonly [read: number, written: number]>> =
   "findServed, by id": [2, 0],
   "findServed, by public name": [2, 0],
   "findServed, a site that keeps two versions": [2, 0],
+  "findServedWith, the day's counts": [2, 0],
+  "findServedWith, the day's counts, the settings and the key": [4, 0],
   "readTotals": [1, 0],
   "exportSites": [18, 0],
   "exportSites, after": [18, 0],
@@ -676,6 +678,8 @@ describe("D1: the rows every operation of the database costs of a day's allowanc
     await database.setLiveVersion(first.id, 3, BY_ADA);
     await cost("setLiveVersion, previous", () => database.setLiveVersion(first.id, "previous", BY_ADA));
     await cost("findServed, a site that keeps two versions", () => database.findServed({ id: first.id }, NOW));
+    await cost("findServedWith, the day's counts", () => database.findServedWith({ id: first.id }, NOW, { counts: { day: DAY, site: first.id } }));
+    await cost("findServedWith, the day's counts, the settings and the key", () => database.findServedWith({ id: first.id }, NOW, { counts: { day: DAY, site: first.id }, settingsAndKey: true }));
     await cost("trashSite", () => database.trashSite(third.id, BY_ADA));
     await cost("trashSite, in the trash", () => database.trashSite(third.id, BY_ADA));
     await cost("restoreSite", () => database.restoreSite(third.id, BY_ADA));

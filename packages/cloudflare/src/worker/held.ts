@@ -4,8 +4,11 @@
 
 import { importSessionKey } from "@poplin/core/src/auth/cookie";
 import { type Logins, parseLogins } from "@poplin/core/src/auth/logins";
-import type { Database } from "@poplin/core/src/database/database";
+import type { Database, SettingsAndKey } from "@poplin/core/src/database/database";
 import type { SettingValues } from "@poplin/core/src/records/settings";
+
+/** How long a site request trusts the settings and the logins an instance read. */
+export const SETTINGS_LIFETIME_MS = 60_000;
 
 /** What marks the key made for the visitor limit. A new label would start every visitor's minute anew and break nothing. */
 const VISITOR_LABEL = "poplin visitor key";
@@ -31,6 +34,27 @@ export interface Held {
   readonly visitorSecret: CryptoKey;
 }
 
+/** The settings and keys a site request is answered with, as its instance holds them. */
+export interface SiteHeld {
+  /** What the instance read within the minute; `undefined` once that ran out. */
+  readonly current: () => Promise<Held> | undefined;
+
+  /** Reads the settings and the key anew, unless the instance read them within the minute. */
+  readonly read: () => Promise<Held>;
+
+  /** What the request holds from a lookup that reads the settings and the key beside its site; the instance keeps it too, unless it has read since `at`, the moment the lookup began. It rejects as a read of them or as the lookup does. */
+  readonly fromLookup: (read: Promise<SettingsAndKey | undefined>, at: number) => Promise<Held>;
+}
+
+/** What one instance holds of the database between reads, and how a request gets at it. */
+interface Holding {
+  /** What the instance holds, read anew when it is older than `lifetime` milliseconds. */
+  readonly held: (database: Database, lifetime: number) => Promise<Held>;
+
+  /** The same for a site request, which trusts a read of the last minute and may bring a newer one itself. */
+  readonly ofSite: (database: Database) => SiteHeld;
+}
+
 /** How a secret is derived from the signing key: HKDF with SHA-256, no salt, and the label as its info. */
 function derivation(label: string): HkdfParams {
   return { name: "HKDF", hash: "SHA-256", salt: new Uint8Array(), info: ENCODER.encode(label) };
@@ -49,16 +73,68 @@ export async function derivedSecret(key: Uint8Array<ArrayBuffer>): Promise<Pick<
 }
 
 /**
- * Read the settings and the signing key, as one question to the database.
+ * Make what an instance holds from the settings and the signing key one read gave.
  *
- * @throws {Error} the install holds no settings or no signing key, or the database failed
+ * @throws {Error} the install holds no settings or no signing key, or its logins are refused
  */
-export async function readHeld(database: Pick<Database, "readSettingsAndKey">): Promise<Held> {
-  const { settings, key } = await database.readSettingsAndKey();
+async function heldFrom({ settings, key }: SettingsAndKey): Promise<Held> {
   if (settings === undefined || key === undefined) throw new Error("the install holds no settings or no signing key");
 
   const logins = parseLogins(settings.logins);
   if (!logins.ok) throw new Error(`the stored logins are refused: ${logins.refusal}`);
 
   return { settings, logins: logins.value, sessionKey: await importSessionKey(key), ...(await derivedSecret(key)) };
+}
+
+/**
+ * Read the settings and the signing key, as one question to the database.
+ *
+ * @throws {Error} the install holds no settings or no signing key, or the database failed
+ */
+async function readHeld(database: Pick<Database, "readSettingsAndKey">): Promise<Held> {
+  return heldFrom(await database.readSettingsAndKey());
+}
+
+/**
+ * Make what one instance holds between reads.
+ *
+ * @param now - the clock, in milliseconds since the epoch
+ * @param lost - told when a read fails: the install may have lost its settings or its key, and nothing is held any more
+ */
+export function createHolding(now: () => number, lost: () => void): Holding {
+  let holding: { readonly at: number; readonly value: Promise<Held> } | undefined;
+
+  async function kept(read: Promise<Held>): Promise<Held> {
+    try {
+      return await read;
+    } catch (error) {
+      holding = undefined;
+      lost();
+
+      throw error;
+    }
+  }
+
+  function held(database: Database, lifetime: number): Promise<Held> {
+    const at = now();
+    if (holding === undefined || at - holding.at >= lifetime) holding = { at, value: kept(readHeld(database)) };
+
+    return holding.value;
+  }
+
+  // What a lookup brings is as old as the moment the lookup began, and never takes the place of a later read.
+  function keep(database: Database, read: Promise<SettingsAndKey | undefined>, at: number): Promise<Held> {
+    const value = kept(read.then((brought) => (brought === undefined ? readHeld(database) : heldFrom(brought))));
+    if (holding === undefined || at > holding.at) holding = { at, value };
+
+    return value;
+  }
+
+  const ofSite = (database: Database): SiteHeld => ({
+    current: () => (holding !== undefined && now() - holding.at < SETTINGS_LIFETIME_MS ? holding.value : undefined),
+    read: () => held(database, SETTINGS_LIFETIME_MS),
+    fromLookup: (read, at) => keep(database, read, at),
+  });
+
+  return { held, ofSite };
 }

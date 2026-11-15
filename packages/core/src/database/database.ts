@@ -82,6 +82,27 @@ export interface ServedSite {
   readonly contents: VersionContents;
 }
 
+/** What a lookup for serving reads beside the site, in its own step. */
+export interface ServedAlso {
+  /** The site and the UTC day whose request counts are read. */
+  readonly counts?: { readonly day: string; readonly site: SiteId };
+
+  /** Whether the settings and the signing key are read. */
+  readonly settingsAndKey?: boolean;
+}
+
+/** What a lookup for serving found, and what it read beside the site. */
+export interface ServedLookup {
+  /** The site the address serves, as `findServed` gives it. */
+  readonly served: ServedSite | undefined;
+
+  /** The day's counts as `readRequests` gives them, when they were asked for. */
+  readonly counts?: RequestCounts;
+
+  /** The settings and the signing key as `readSettingsAndKey` gives them, when they were asked for. */
+  readonly settingsAndKey?: SettingsAndKey;
+}
+
 /** Where a visitor's hostname points: a site's id, or a public name. */
 export type Address = { readonly id: SiteId } | { readonly public_name: PublicName };
 
@@ -504,6 +525,13 @@ export interface Database {
    * @returns the site with its live version alone, and what that version holds; `undefined` for an address of no site, of a site in the trash, or of a site past its expiry
    */
   findServed(address: Address, now: number): Promise<ServedSite | undefined>;
+
+  /**
+   * Find the site an address serves and, in the same one step, read what a request for it needs beside it: a day's request counts, the settings and the signing key, or neither.
+   *
+   * @throws {RangeError} the day of the counts is not a date such as `2026-11-13`
+   */
+  findServedWith(address: Address, now: number, also: ServedAlso): Promise<ServedLookup>;
 
   /**
    * One page of the sites, or of the trash.

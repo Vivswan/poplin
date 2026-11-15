@@ -125,9 +125,25 @@ export class CloudflareCounters implements Counters {
     return { ok: true };
   }
 
+  /**
+   * Whether the day's counts of a site are ones the instance still trusts: the database answered for them within the half minute, so `readDay` asks it nothing.
+   * Nothing is remembered of a site the instance holds no count of.
+   */
+  isDayFresh(window: DayWindow, now: number): boolean {
+    const seen = this.#days.get(window.day)?.sites.get(window.site)?.at;
+
+    return seen !== undefined && now - seen < FRESH_MS;
+  }
+
+  /** Take in the day's counts of a site that a read made beside another brought, as `readDay` takes in its own. */
+  learnDay(window: DayWindow, counts: RequestCounts, now: number): void {
+    this.#day(window.day);
+    this.#learn(window, counts, now);
+  }
+
   async readDay(window: DayWindow, now: number): Promise<RequestCounts> {
-    const seen = this.#site(this.#day(window.day), window.site, now).at;
-    if (seen === undefined || now - seen >= FRESH_MS) this.#learn(window, await this.#database.readRequests(window.day, window.site), now);
+    this.#site(this.#day(window.day), window.site, now);
+    if (!this.isDayFresh(window, now)) this.#learn(window, await this.#database.readRequests(window.day, window.site), now);
 
     const day = this.#day(window.day);
 

@@ -17,8 +17,10 @@ import type { Install } from "@poplin/core/src/actions/records";
 import type { Rebuilding } from "@poplin/core/src/actions/start-update";
 import { parseLogins } from "@poplin/core/src/auth/logins";
 import type { Database } from "@poplin/core/src/database/database";
+import type { PublicName } from "@poplin/core/src/names/names";
 import { openDatabase } from "@poplin/core/src/database/open";
 import { defaultSettings, SETTING_VALUES, settingsFromText, settingsToText } from "@poplin/core/src/records/settings";
+import type { SiteId } from "@poplin/core/src/sites/ids";
 import * as v from "valibot";
 import { version } from "../../../cli/package.json";
 import { D1Driver } from "../database/d1";
@@ -95,7 +97,10 @@ export interface Instance {
   readonly addresses: Addresses;
 
   /** The request counts of the limits. */
-  readonly counters: Counters;
+  readonly counters: CloudflareCounters;
+
+  /** The id of the site each public name last served, which a request by that name reads the day's counts by. An instance learns one at the name's first view and holds a thousand. */
+  readonly servedByName: Map<PublicName, SiteId>;
 
   /** Answers every path under `/api`. */
   readonly api: ReturnType<typeof createApi>;
@@ -311,6 +316,7 @@ export async function startInstance(env: Bindings, outside: Outside, visitorOf: 
     install,
     addresses,
     counters,
+    servedByName: new Map(),
     api,
     identify: access.ok ? accessIdentity({ keys: accessKeys({ teamDomain: access.value.teamDomain, fetch: outside.fetch }), audience: access.value.audience }) : NOBODY,
     domain: createDomainPlug({ ...own.value, layout, fetch: outside.cloudflare }),
