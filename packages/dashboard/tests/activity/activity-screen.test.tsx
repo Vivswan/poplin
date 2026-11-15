@@ -212,16 +212,17 @@ describe("the pages of the log", () => {
   });
 
   // Drift: a search for a rare site whose newest entry lies deep in the log would read "No activity" as if the log held none, with Download shut and no way to look further.
-  test("a narrowed page with no entry that stopped looking keeps Download open and offers Search further under its words, which goes on from where it stopped", async () => {
+  test("a narrowed page with no entry that stopped looking keeps Download open, says how far it looked in place of the words of an empty log, and offers Search further, which goes on from where it stopped", async () => {
     answered.page = STOPPED_PAGE;
-    await draw("/activity?site=o", cacheOf(), 'No activity for "o"');
+    await draw("/activity?site=o", cacheOf(), "Nothing in the newest 5,000 entries.");
     const download = within(document.body).getByRole("button", { name: "Download" }) as HTMLButtonElement;
-    const words = within(document.body).queryAllByText("Searched the newest 5,000 entries.");
+    const said = [within(document.body).queryAllByText("Nothing in the newest 5,000 entries.").length, within(document.body).queryByText('No activity for "o"')];
+    const ways = within(document.body).getAllByRole("button", { name: /^(Search further|Show all activity)$/ }).map((way) => way.textContent);
     const before = asked.length;
     fireEvent.click(within(document.body).getAllByRole("button", { name: "Search further" })[0] as HTMLElement);
-    await readAfter(before, 'No activity for "o"');
+    await readAfter(before, "Nothing in the newest 5,000 entries.");
 
-    expect([download.disabled, words.length, asked.at(-1), window.location.search]).toEqual([false, 1, "?site=o&after=9", "?site=o&after=9&from=1"]);
+    expect([download.disabled, said, ways, asked.at(-1), window.location.search]).toEqual([false, [1, null], ["Search further", "Show all activity"], "?site=o&after=9", "?site=o&after=9&from=1"]);
   });
 
   // Drift: a size would be kept and never asked of the server, or a page of the new size would be read from a place among pages of the old one.

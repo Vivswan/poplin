@@ -95,7 +95,7 @@ describe("the foot of the log", () => {
     ["a page gone back to that stopped within a page of the list's start", "site=o&back=2&from=3", pageOf(3, "3", "5002", true), {}, ["50 to 52", ["First page", "Next page", "Search further"], {}]],
   ] as const)("on %s the foot says how far it searched, and Search further is the one way on in the direction it was read", (_what, query, page, more, [says, ways, place]) => {
     const foot = drawn(query, page, more);
-    const words = within(document.body).queryByText("Searched the newest 5,000 entries.");
+    const words = within(document.body).queryByText(/^(Searched the|Nothing in the) newest 5,000 entries\.$/);
     const offered = buttons();
     fireEvent.click(within(document.body).getByRole("button", { name: "Search further" }));
 

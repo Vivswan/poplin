@@ -7,6 +7,7 @@ import type { Page, Total } from "@/activity/activity-queries";
 import { FROM_KEY } from "@/activity/activity-words";
 import { PAGE_SIZES, type PageSize } from "@/activity/page-size";
 import { Button } from "@/components/ui/button";
+import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyTitle } from "@/components/ui/empty";
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { showCount } from "@/lib/sites";
 import { PAGE_WAY } from "@/shared/pages";
@@ -39,6 +40,9 @@ interface ActivityFootProps {
 
   /** Whether the page shown is being replaced: the ways wait, and no entries are named, since the address is ahead of them. */
   readonly busy?: boolean;
+
+  /** Shows every entry of the log: offered as the second way where a page stopped looking with none found. */
+  readonly onShowAll?: () => void;
 }
 
 /** What the three ways are drawn from: the page, whether it is being replaced, which way a page that stopped looking goes on, and where each press leads. */
@@ -100,6 +104,28 @@ function SearchedSoFar({ busy, onSearch }: { readonly busy: boolean; readonly on
   );
 }
 
+/** Say that a narrowed page stopped looking with no entry found: this is what the page holds, with the way to look further first and the way to every entry beside it. */
+function NothingSoFar({ busy, onSearch, onShowAll }: { readonly busy: boolean; readonly onSearch: () => void; readonly onShowAll?: (() => void) | undefined }): ReactNode {
+  return (
+    <Empty className="flex-none py-16">
+      <EmptyHeader>
+        <EmptyTitle>{`Nothing in the newest ${SEARCHED} entries.`}</EmptyTitle>
+        <EmptyDescription>Older entries are not searched yet.</EmptyDescription>
+      </EmptyHeader>
+      <EmptyContent className="flex-row justify-center max-sm:flex-col">
+        <Button disabled={busy} onClick={onSearch} {...PAGE_WAY}>
+          Search further
+        </Button>
+        {onShowAll === undefined ? null : (
+          <Button variant="outline" onClick={onShowAll}>
+            Show all activity
+          </Button>
+        )}
+      </EmptyContent>
+    </Empty>
+  );
+}
+
 /** Draw the three ways to the pages around the one shown. One that leads nowhere is dimmed, and so is the one a page that stopped looking leaves to Search further. */
 function Ways({ page, busy, stopped, onFirst, onBack, onOn }: WaysProps): ReactNode {
   return (
@@ -118,7 +144,7 @@ function Ways({ page, busy, stopped, onFirst, onBack, onOn }: WaysProps): ReactN
 }
 
 /** Draw the foot. The three ways stand first and keep their places on every page, so a pointer that rests on one stays on it; a way that leads nowhere is dimmed. */
-export function ActivityFoot({ query, page, total, size, onSize, onMove, busy = false }: ActivityFootProps): ReactNode {
+export function ActivityFoot({ query, page, total, size, onSize, onMove, busy = false, onShowAll }: ActivityFootProps): ReactNode {
   const rows = page.entries.length;
   const step = Number(size);
   const from = firstEntryOf(query, page, step);
@@ -132,8 +158,10 @@ export function ActivityFoot({ query, page, total, size, onSize, onMove, busy = 
   };
   // A page that stopped looking goes on in the direction it was read, by Search further alone: the page's own way there is dimmed.
   const stopped = stoppedWay(query, page);
-  const searched = stopped === undefined ? null : <SearchedSoFar busy={busy} onSearch={stopped === "back" ? back : on} />;
-  if (rows === 0) return searched;
+  const further = stopped === "back" ? back : on;
+  if (rows === 0) return stopped === undefined ? null : <NothingSoFar busy={busy} onSearch={further} onShowAll={onShowAll} />;
+
+  const searched = stopped === undefined ? null : <SearchedSoFar busy={busy} onSearch={further} />;
 
   const of = to === undefined ? undefined : totalWords(page, to, total);
   const paged = page.previous !== null || page.next !== null;

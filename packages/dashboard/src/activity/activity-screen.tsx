@@ -161,7 +161,8 @@ function insteadOfRows(failure: string | undefined, page: Page | undefined, kind
     );
   }
 
-  if (page.entries.length > 0) return undefined;
+  // A page that stopped looking with none found is not the log's end: no words of an empty log stand for it.
+  if (page.entries.length > 0 || page.stopped) return undefined;
 
   const words = emptyWords(kind, site);
 
@@ -198,7 +199,8 @@ export function ActivityScreen(): ReactNode {
   const [timeZone, chooseTimeZone] = useTimeZoneChoice();
   const columns = useMemo(() => activityColumns(logins ?? {}), [logins]);
   const layout = useTableLayout("activity", columns);
-  const instead = insteadOfRows(error?.message, page, kind, site, () => void navigate({ to: PATH }));
+  const showAll = (): void => void navigate({ to: PATH });
+  const instead = insteadOfRows(error?.message, page, kind, site, showAll);
   const move = (changes: Readonly<Record<string, string>>, replace = false): void =>
     void navigate({ to: PATH, search: searchOf(logQuery(query, changes)), replace });
   // A page of another size is read from the list's start: the place of the page before is a place among pages of the old size.
@@ -208,8 +210,10 @@ export function ActivityScreen(): ReactNode {
   };
 
   const pages =
-    page === undefined ? null : <ActivityFoot query={query} page={page} total={total} size={size} onSize={chooseSize} onMove={move} busy={isPlaceholderData} />;
+    page === undefined ? null : <ActivityFoot query={query} page={page} total={total} size={size} onSize={chooseSize} onMove={move} busy={isPlaceholderData} onShowAll={showAll} />;
 
+  // A page that stopped looking with none found is its foot alone, which says so and leads on.
+  const nothingSoFar = page?.stopped === true && page.entries.length === 0 ? pages : undefined;
   // A page with no entry says the log is empty only when it is the log's first page.
   const paged = query.get("after") !== null || query.get("back") !== null;
   // A page still shown from the address before says nothing of the log the address now asks for.
@@ -263,7 +267,7 @@ export function ActivityScreen(): ReactNode {
             <DownloadMenu query={query} fitsOne={fitsOne} empty={page === undefined || (!paged && page.entries.length === 0 && !page.stopped)} />
           </span>
         </div>
-        {instead ?? (
+        {instead ?? nothingSoFar ?? (
           <>
             <div className="flex min-h-0 flex-1 flex-col max-md:hidden">
               <DataTable
@@ -282,8 +286,6 @@ export function ActivityScreen(): ReactNode {
             {page === undefined ? null : <PhoneList page={page} place={place} after={pages} />}
           </>
         )}
-        {/* A page with no entry that stopped looking is not the log's end: the way to look further stands under its words. */}
-        {instead !== undefined && page?.stopped === true ? pages : null}
       </section>
     </AppShell>
   );
