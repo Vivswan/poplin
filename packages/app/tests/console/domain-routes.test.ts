@@ -1,4 +1,4 @@
-// The Domain screen's data routes: what the screen opens with, the two runs with the token in the body, the three settings, and the words a run is answered in.
+// The Domain screen's data routes: what the screen opens with, the two runs with the token in the body, and the words a run is answered in.
 
 import { describe, expect, test } from "bun:test";
 
@@ -43,11 +43,10 @@ function rowsIn(...states: DomainState[]): DomainRow[] {
 }
 
 describe("what the screen opens with", () => {
-  // Drift: the screen would show a token form of its own invention, settings other than the stored ones, or a remembered run where the install remembers none.
-  test("is the plug's own token facts, the three stored settings under the plug's notes, and no remembered run; opening it runs nothing", async () => {
+  // Drift: the screen would show a token form of its own invention, or a remembered run where the install remembers none.
+  test("is the plug's own token facts and no remembered run; opening it runs nothing", async () => {
     const plug = usualPlug();
     const opened = await openConsole("", plug);
-    await opened.change("/data/domain/settings", { outside_pages: "allowed", block_bots: "off" });
     const answer = await opened.get("/data/domain");
 
     expect(answer.status).toBe(200);
@@ -59,10 +58,6 @@ describe("what the screen opens with", () => {
         tokenLink: "https://provider.example/tokens/new",
         tokenOptional: [{ right: "Rules: Edit", adds: "The provider stops floods first." }],
         tokenNote: "Choose what the token is for.",
-      },
-      guards: {
-        values: { outside_pages: "allowed", search_engines_allowed: false, block_bots: "off" },
-        notes: { outside_pages: "A note on outside pages.", search_engines_allowed: "A note on search engines.", block_bots: "A note on bots." },
       },
       last: null,
     });
@@ -95,13 +90,11 @@ describe("what the screen opens with", () => {
     ["GET", "/data/domain", undefined],
     ["POST", "/data/domain/check", { token: TOKEN }],
     ["POST", "/data/domain/repair", { token: TOKEN }],
-    ["POST", "/data/domain/settings", { search_engines_allowed: true }],
   ])("is not there without a plug: %s %s", async (method, path, body) => {
     const opened = await openConsole();
     const answer = method === "GET" ? await opened.get(path) : await opened.change(path, body);
 
     expect([answer.status, ((await answer.json()) as Refusal).code]).toEqual([404, "no_page"]);
-    expect((await opened.base.install.database.readSettings())?.search_engines_allowed).toBe(false);
   });
 
   // Drift: the shell would show a Domain section that leads nowhere, or hide the one that works.
@@ -191,28 +184,6 @@ describe("a run", () => {
     expect([asForm.status, fromElsewhere.status, plug.calls]).toEqual([415, 403, []]);
   });
 });
-
-describe("the three settings", () => {
-  // Drift: a flipped switch would not be stored, or the route would let the Domain screen change a setting that is not one of the three.
-  test.each([
-    [{ search_engines_allowed: true }, 200, { outside_pages: "blocked", search_engines_allowed: true, block_bots: "auto" }],
-    [{ block_bots: "on", outside_pages: "allowed" }, 200, { outside_pages: "allowed", search_engines_allowed: false, block_bots: "on" }],
-    [{ block_bots: "sometimes" }, 400, undefined],
-    [{ logins: ["other@example.com"] }, 400, undefined],
-    [{}, 400, undefined],
-  ])("store %p: status %i", async (change, status, values) => {
-    const opened = await openConsole("", usualPlug());
-    const answer = await opened.change("/data/domain/settings", change);
-    const stored = await opened.base.install.database.readSettings();
-
-    expect(answer.status).toBe(status);
-    expect<unknown>({ outside_pages: stored?.outside_pages, search_engines_allowed: stored?.search_engines_allowed, block_bots: stored?.block_bots }).toEqual(
-      values ?? { outside_pages: "blocked", search_engines_allowed: false, block_bots: "auto" },
-    );
-    expect(stored?.logins).toEqual([opened.base.owner]);
-  });
-});
-
 describe("the line that counts a run's rows", () => {
   // Drift: the line would claim a repair that left work was done, count an optional piece as work, or tell a person the wrong next step.
   test.each([
