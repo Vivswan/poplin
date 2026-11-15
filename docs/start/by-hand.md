@@ -121,7 +121,7 @@ Two words the steps use: a **Worker** is the program Cloudflare runs for you, an
    https://poplin.example.com
    ```
 
-   After the code, the dashboard opens on its Sites tab, which says `No sites yet. An agent or the command below publishes the first.`
+   After the code, the dashboard opens on Sites, which says `No sites yet`.
 
    This first login closes the setup page for good. Step 6 is for the computer that publishes.
 

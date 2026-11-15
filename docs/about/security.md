@@ -88,7 +88,7 @@ A token the Worker issues is never a Cloudflare API key. It has one of two scope
 
 | Scope | Given to | May |
 | --- | --- | --- |
-| publisher | a computer or a script that should only publish, such as a build server or a shared machine: a person logs it in with `poplin login --publisher` and allows it on the dashboard's Tokens tab | publish, and manage its own sites |
+| publisher | a computer or a script that should only publish, such as a build server or a shared machine: a person logs it in with `poplin login --publisher` and allows it in the dashboard, under Access | publish, and manage its own sites |
 | admin | a person on the list of allowed logins; the dashboard's cookie carries the same rights | everything: every site, the settings, the tokens |
 
 A site belongs to the token that created it, or to the admin's email when it was duplicated on the dashboard. A publisher token updates and manages only the sites it created.
@@ -144,7 +144,7 @@ A `-p-` address is answered by Cloudflare's login before the Worker sees it. A r
 | page views | a site shows about how often its pages were opened, from a sampled count per site and UTC day kept seven days; it counts opens, not people: no address, cookie, or browser name of a visitor is stored |
 | the dashboard | a strict Content-Security-Policy; it may never be framed |
 | content | the Worker never reads, parses, or rewrites a site's files |
-| the activity log | the dashboard's Activity tab shows every action, 50 a page, with an Older link: publish, state change, delete, login, token issued |
+| the activity log | the dashboard shows every action under Activity, 50 a page, with a Next page button: publish, state change, delete, login, token issued |
 | plain http | the Worker sends every request over `http` to the same address over `https`, with a 308, before it reads anything of the install; an optional rule at Cloudflare's edge does the same before the Worker runs. Every answer of a site and of the dashboard tells the browser to use `https` alone for 180 days. The zone's other hostnames are left as they are |
 | junk requests | the optional bots rule at Cloudflare's edge blocks, on the site hostnames, every method but GET and HEAD and the paths scanners ask for: `*.php`, `/.env`, `/.env.*`, `/.git/`, `/wp-admin/`, `/cgi-bin/`, `/phpmyadmin` |
 | junk hostnames | Cloudflare routes to the Worker only the hostnames that end in `-poplin` or the public word, so no other hostname under the domain reaches it; an optional rate rule limits each address to 300 requests per 10 seconds. Setup skips it when other rules hold every rate rule the plan allows, or when a Free plan zone has hostnames of its own; the OpenTofu module, which owns the zone's rate rules, stops with a message in that second case |
