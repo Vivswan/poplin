@@ -138,27 +138,48 @@ jobs:
           bun run --cwd website build
 
   # The dashboard demo as a visitor meets it: built as static files, served under a path of a static host, and walked
-  # in a real browser. Chromium alone: the one engine in which the walk can stop the demo's worker and
-  # reload a page around it.
+  # in a real browser, one job per engine. Each job builds the demo itself: the build takes about a second. The test
+  # that stops the demo's worker runs in Chromium alone, as the walk's own config sets. The WebKit here is Playwright's
+  # build of the engine for Linux, not Safari itself.
   demo:
+    name: demo / ${{ matrix.engine }}
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        engine: [chromium, firefox, webkit]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
       - uses: ./.github/actions/setup
-      - name: Install Chromium
+      - name: Read the Playwright version the lockfile installed
+        id: playwright
         working-directory: packages/demo
-        run: bunx playwright install --with-deps chromium
-      - name: Walk the demo in Chromium
-        run: bun run --cwd packages/demo test:browser --project chromium
+        run: echo "version=$(bunx playwright --version | cut -d ' ' -f 2)" >> "$GITHUB_OUTPUT"
+      - name: Keep the engine's browser between runs
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ matrix.engine }}-${{ steps.playwright.outputs.version }}
+      # With the browser already kept, this installs the system libraries it needs and downloads no browser.
+      - name: Install the browser
+        working-directory: packages/demo
+        env:
+          ENGINE: ${{ matrix.engine }}
+        run: bunx playwright install --with-deps "$ENGINE"
+      - name: Walk the demo
+        env:
+          ENGINE: ${{ matrix.engine }}
+        run: bun run --cwd packages/demo test:browser --project "$ENGINE"
       - name: Keep the traces and screenshots of the tests that failed
         if: failure() || cancelled()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: demo-walk
+          name: demo-walk-${{ matrix.engine }}
           path: packages/demo/.cache/walk/
           # The folder's name starts with a dot, and hidden paths are left out unless asked for.
           include-hidden-files: true
           if-no-files-found: ignore
+          retention-days: 7
