@@ -2,7 +2,7 @@
 // Without this either side could change a mark or a name alone, and one tool would refuse, repoint, or remove what the other made.
 
 import { describe, expect, test } from "bun:test";
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { parseLogins } from "@poplin/core/src/auth/logins";
 import { syncAccess } from "../../src/zone/access/access";
@@ -32,7 +32,10 @@ const HOSTNAMES = `${SITE_TERMS} or http.host eq "poplin.example.com"`;
 const BOTS = `${SITES} and not starts_with(http.request.uri.path, "/cdn-cgi/") and (cf.client.bot or ${NEVER_A_SITES})`;
 const LIMIT = { characteristics: ["cf.colo.id", "ip.src"], period: 10, requests_per_period: 300, mitigation_timeout: 10 };
 
-type SharedKey = keyof typeof INSTALL_OBJECTS;
+type SharedKey = Exclude<keyof typeof INSTALL_OBJECTS, (typeof PLUG_ALONE)[number]>;
+
+/** The names the setup client writes and the module does not declare. */
+const PLUG_ALONE = ["keyBinding"] as const satisfies readonly (keyof typeof INSTALL_OBJECTS)[];
 
 /** Where the module writes each shared value: the file, and the text around it. `%v` stands for the value as HCL writes it, `%i` for the value inside a longer HCL text, and `%l` for a list written one entry a line. */
 const WRITTEN: Readonly<Record<SharedKey, readonly [file: string, around: string]>> = {
@@ -197,7 +200,8 @@ const FREE = { layout: LAYOUT, plan: "free", sharesZone: false, rateRule: "zone"
 const WHOLE_ZONE = 'starts_with(http.request.uri.path, "/")';
 
 describe("the values the setup client shares with the OpenTofu module", () => {
-  const rows = Object.entries(INSTALL_OBJECTS).map(([key, value]) => ({ key: key as SharedKey, value }));
+  const alone: readonly string[] = PLUG_ALONE;
+  const rows = Object.entries(INSTALL_OBJECTS).flatMap(([key, value]) => (alone.includes(key) ? [] : [{ key: key as SharedKey, value }]));
 
   test.each(rows)("$key is written the same in the module: an object made by one tool must be the other's own too", ({ key, value }) => {
     const [file, around] = WRITTEN[key];
@@ -209,6 +213,17 @@ describe("the values the setup client shares with the OpenTofu module", () => {
     const inner = typeof value === "string" ? value.replaceAll('"', '\\"') : hcl(value);
 
     expect(moduleText(file)).toContain(around.replace("%v", hcl(value)).replace("%i", inner));
+  });
+});
+
+describe("the names the setup client writes alone", () => {
+  const files = readdirSync(MODULE).filter((file) => file.endsWith(".tf"));
+
+  // Drift: a name left in this list after the module declares it would be compared with nothing, and the two tools could then write it apart.
+  test.each(PLUG_ALONE)("%s is in no file of the module: once the module writes it, it is a row of the table above", (key) => {
+    const holding = files.filter((file) => moduleText(file).includes(hcl(INSTALL_OBJECTS[key])));
+
+    expect([files.length > 0, holding]).toEqual([true, []]);
   });
 });
 

@@ -1,4 +1,4 @@
-// The Worker's environment. The first three names are the `binding` names of wrangler.jsonc; the rest are variables set on the Worker.
+// The Worker's environment. The first three names are the `binding` names of wrangler.jsonc; the rest are variables set on the Worker, and one secret.
 
 /** What Cloudflare hands the Worker on every request. */
 export interface Bindings {
@@ -25,4 +25,7 @@ export interface Bindings {
 
   /** The Worker's own name, unchecked: the name its routes name and its variables are written under. */
   readonly WORKER_NAME: unknown;
+
+  /** The key poplin keeps for the Cloudflare API, unchecked: a secret of the Worker, which no deploy names and none removes. A Worker without it holds no key. */
+  readonly KEPT_KEY: unknown;
 }

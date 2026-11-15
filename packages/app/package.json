@@ -15,6 +15,7 @@
     "./src/console/settings/free-limits": "./src/console/settings/free-limits.ts",
     "./src/console/domain/records": "./src/console/domain/records.ts",
     "./src/console/domain/setup": "./src/console/domain/setup.ts",
+    "./src/console/key/records": "./src/console/key/records.ts",
     "./src/limits/limits": "./src/limits/limits.ts",
     "./src/limits/refusal": "./src/limits/refusal.ts",
     "./src/limits/visitor-key": "./src/limits/visitor-key.ts",

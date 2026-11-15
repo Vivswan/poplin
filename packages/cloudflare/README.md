@@ -8,3 +8,5 @@ The Worker that runs a poplin install on Cloudflare, the setup client for a zone
 | deploy the Worker | `bun run deploy`, at the repository's root | the Worker and its source map in the Cloudflare account wrangler is logged in to, with its bucket and its database made the first time |
 
 The Worker's configuration is `wrangler.jsonc` at the repository's root. It holds no value of any install: setup writes `ZONE`, `FIRST_SETTINGS`, `ACCOUNT_ID`, and `ACCESS` onto the deployed Worker. [By hand](../../docs/start/by-hand.md) has the steps.
+
+The Worker reads one secret, `KEPT_KEY`: the Cloudflare API token poplin keeps. No file names it, and a deploy leaves it as it is.
