@@ -5,7 +5,9 @@ import { describe, expect, test } from "bun:test";
 import type { SiteName } from "../../../src/names/names";
 import type { Login } from "../../../src/auth/logins";
 import { mintToken, type TokenRecord } from "../../../src/auth/tokens";
+import type { ProblemNote } from "../../../src/database/problems";
 import type { DomainCheck } from "../../../src/records/domain-check";
+import { dayOf } from "../../../src/records/views";
 import type { SiteId } from "../../../src/sites/ids";
 import { auditLog, everLoggedIn } from "./audit-contract";
 import {
@@ -32,6 +34,12 @@ import {
 import { computerLogins, loginRoom, signingKey, tokensAndSettings } from "./login-contract";
 import { backups, sites, sizes, versionContents, versions } from "./site-contract";
 import { declaredFiles, storageWrites, uploadFiles, uploads } from "./upload-contract";
+
+/** The milliseconds of one hour and of one day. */
+const [HOUR_MS, DAY_MS] = [3_600_000, 86_400_000];
+
+/** A midnight UTC, where an hour of the clock and a day both begin. */
+const DAY_START = 1_699_920_000_000;
 
 function emptyInstall(label: string, makeDatabase: DatabaseFactory): void {
   describe(`${label}: an empty install`, () => {
@@ -172,6 +180,55 @@ function updateCheck(label: string, makeDatabase: DatabaseFactory): void {
       const each = { settings: await database.readSettings(), updateAddress: await database.readUpdateAddress(), domainCheck: await database.readDomainCheck(), updateCheck: await database.readUpdateCheck() };
 
       expect([empty, Object.values(each).includes(undefined), await database.readFrame()]).toEqual([{ settings: undefined, updateAddress: undefined, domainCheck: undefined, updateCheck: undefined }, false, each]);
+    });
+  });
+}
+
+function problems(label: string, makeDatabase: DatabaseFactory): void {
+  describe(`${label}: what went wrong`, () => {
+    // Drift: the once-an-hour rule is the statement's own. A store that added to the row on every note would let a storm of failures spend the day's written rows, and one that never added would show a kind that fails all day as one failure.
+    test("a kind is written once per hour of the clock and UTC day: a note in the same hour changes nothing, a later hour adds to the row, and the next day starts a row", async () => {
+      const database = await opened(makeDatabase);
+      const note = (at: number, more: Partial<ProblemNote> = {}): ProblemNote => ({ kind: "request_failed", at, count: 1, more: false, name: "TypeError", message: "the first", ...more });
+      const written = [
+        await database.noteProblem(note(DAY_START)),
+        await database.noteProblem(note(DAY_START + HOUR_MS - 1, { message: "never kept" })),
+        await database.noteProblem(note(DAY_START + HOUR_MS, { count: 4, more: true, name: null, message: "the latest" })),
+        await database.noteProblem(note(DAY_START + HOUR_MS + 1, { kind: "sweep_failed", name: null, message: null })),
+        await database.noteProblem(note(DAY_START + DAY_MS)),
+      ];
+
+      expect(written).toEqual([true, false, true, true, true]);
+      expect(await database.listProblems(dayOf(DAY_START))).toEqual([
+        { day: dayOf(DAY_START + DAY_MS), kind: "request_failed", count: 1, more: false, first_at: DAY_START + DAY_MS, last_at: DAY_START + DAY_MS, name: "TypeError", message: "the first" },
+        { day: dayOf(DAY_START), kind: "sweep_failed", count: 1, more: false, first_at: DAY_START + HOUR_MS + 1, last_at: DAY_START + HOUR_MS + 1, name: null, message: null },
+        { day: dayOf(DAY_START), kind: "request_failed", count: 5, more: true, first_at: DAY_START, last_at: DAY_START + HOUR_MS, name: null, message: "the latest" },
+      ]);
+      expect((await database.listProblems(dayOf(DAY_START + DAY_MS))).map((problem) => problem.day)).toEqual([dayOf(DAY_START + DAY_MS)]);
+    });
+
+    // Drift: a limit of a day stays reached until midnight, and every refusal after the first would otherwise write a row an hour to say so again.
+    test("a kind noted once has one row a day whose count stays 1, however many hours it is noted in", async () => {
+      const database = await opened(makeDatabase);
+      const note = (at: number): ProblemNote => ({ kind: "files_limit_reached", at, count: 1, more: false, name: null, message: null });
+      const written = [await database.noteProblem(note(DAY_START)), await database.noteProblem(note(DAY_START + 5 * HOUR_MS)), await database.noteProblem(note(DAY_START + DAY_MS))];
+
+      expect(written).toEqual([true, false, true]);
+      expect((await database.listProblems(dayOf(DAY_START))).map(({ day, count, last_at }) => [day, count, last_at])).toEqual([
+        [dayOf(DAY_START + DAY_MS), 1, DAY_START + DAY_MS],
+        [dayOf(DAY_START), 1, DAY_START],
+      ]);
+    });
+
+    // Drift: nothing else removes a problem. A sweep that kept every day would grow the table for ever, and one that took a day too many would empty the list a person reads.
+    test("the sweep forgets the problems of the days before the 30 kept, and keeps the thirtieth", async () => {
+      const database = await opened(makeDatabase);
+      const note = (at: number): ProblemNote => ({ kind: "api_failed", at, count: 1, more: false, name: null, message: null });
+      for (const at of [DAY_START, DAY_START + DAY_MS, DAY_START + 30 * DAY_MS]) await database.noteProblem(note(at));
+
+      await database.sweepRunOut(DAY_START + 30 * DAY_MS + HOUR_MS);
+
+      expect((await database.listProblems(dayOf(DAY_START))).map((problem) => problem.day)).toEqual([dayOf(DAY_START + 30 * DAY_MS), dayOf(DAY_START + DAY_MS)]);
     });
   });
 }
@@ -506,6 +563,7 @@ export function describeDatabase(label: string, makeDatabase: DatabaseFactory): 
   sweepPlace(label, makeDatabase);
   updateCheck(label, makeDatabase);
   domainCheck(label, makeDatabase);
+  problems(label, makeDatabase);
   requestCounts(label, makeDatabase);
   uploads(label, makeDatabase);
   uploadFiles(label, makeDatabase);

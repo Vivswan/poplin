@@ -12,6 +12,7 @@ import type { PublicName, SiteName } from "../names/names";
 import type { AuditAction, AuditEntry } from "../records/audit";
 import type { DomainCheck, RememberedCheck } from "../records/domain-check";
 import type { Holder } from "../records/fields";
+import type { Problem } from "../records/problem";
 import type { SiteId } from "../sites/ids";
 import type { UpdateAddress } from "../records/secret";
 import type { SettingValues } from "../records/settings";
@@ -22,6 +23,7 @@ import type { AutoStart, UpdateCheck } from "../records/update";
 import type { VersionContents } from "../records/version-contents";
 import type { ManifestFile, Upload, UploadId, UploadPlan } from "../records/upload";
 import type { DailyViews, SiteViews } from "../records/views";
+import type { ProblemNote } from "./problems";
 
 /** How many entries of the audit log, counted by `seq`, one narrowed reading looks at before it stops. */
 export const AUDIT_WINDOW = 5000;
@@ -779,11 +781,26 @@ export interface Database {
   redeemComputerLogin(id: LoginId, token: TokenRecord): Promise<{ readonly kind: "done" } | Refused<"not_allowed">>;
 
   /**
-   * Remove every login that ran out at or before a moment, whatever its state.
+   * Remove what ran out, in one step: every login of a computer that ran out at or before a moment, whatever its state, and every problem of a day before the 30 that are kept.
    *
-   * @returns how many were removed
+   * @returns how many logins were removed
    */
-  sweepComputerLogins(now: number): Promise<number>;
+  sweepRunOut(now: number): Promise<number>;
+
+  /**
+   * Note a problem on the UTC day of its moment: the day's row of its kind is made, or added to when it was last written in an earlier hour of the clock.
+   *
+   * @returns whether a row was written: `false` in the same hour, in whichever instance the row was written, and for a limit of a day whose day has a row
+   * @throws {Error} a value breaks its rule
+   */
+  noteProblem(note: ProblemNote): Promise<boolean>;
+
+  /**
+   * List the problems from a UTC day on, the kind last seen first.
+   *
+   * @param since - the first day listed, such as `2026-11-13`
+   */
+  listProblems(since: string): Promise<readonly Problem[]>;
 
   /** Where the scheduled sweep's walk stopped: `undefined` before a run kept a place, once a walk ended, and for a kept place no walk can go on from. */
   readSweepPlace(): Promise<SweepPlace | undefined>;
