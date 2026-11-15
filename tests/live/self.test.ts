@@ -100,17 +100,40 @@ const CASES: readonly Case[] = [
 ];
 
 /** How a line ends on the fake, whose edge sees one address: once in each lane of the burst and once at the end. */
-const ONE_ADDRESS = "the edge saw addresses x1 (IPv4) in samples x21";
+const ONE_SEEN = "the edge saw addresses x1 (IPv4) in samples x21";
 
-/** One fake install, what the check of the rate rule comes to on it, and the one line it says of the runner's path: printed on a pass, and the failure's own words otherwise. */
-type BurstCase = readonly [what: string, switches: FakeSwitches, result: Outcome["result"], answers: string, through: string];
+/** How the reason starts of a check of the rate rule skipped for no data center past the limit, before its line. */
+const NOT_PROVEN = "one data center that takes more than 300 of the runner's requests in ten seconds";
 
-/** The check of the rate rule on a fake whose rule blocks, and on one whose visitor no data center counts past the rule's limit. */
+/** How the reason starts of a check of the rate rule skipped for a runner at several addresses, before its line. */
+const ONE_ADDRESS = "a runner whose requests leave from one address";
+
+/** One fake install, what the check of the rate rule comes to on it, and the parts of the one line it says: printed on a pass, the failure's own words, or a skip's reason. */
+type BurstCase = readonly [what: string, switches: FakeSwitches, result: Outcome["result"], line: readonly string[]];
+
+/** The check of the rate rule on a fake whose rule blocks, on one with no rule, and on ones where the rule was never due: no data center past its limit, or a visitor at several addresses. */
 const BURST_CASES: readonly BurstCase[] = [
-  ["a burst the rate rule blocks says through which data center it went", {}, "passed", "320 requests in 0 ms were answered: 302 x120, 429 of the install x180, 429 of the rate rule x20", "AAA x320 (most in ten seconds x320)"],
-  ["a burst the rate rule does not block, spread over four data centers, says how few each one held", { spread: true }, "failed",
-    "1140 requests in 20000 ms were answered: 302 x120, 429 of the install x1020",
-    "AAA x285 (most in ten seconds x185), BBB x285 (most in ten seconds x184), CCC x285 (most in ten seconds x184), DDD x285 (most in ten seconds x184)",
+  ["a burst the rate rule blocks says through which data center it went", {}, "passed",
+    ["320 requests in 0 ms were answered: 302 x120, 429 of the install x180, 429 of the rate rule x20", "through AAA x320 (most in ten seconds x320)", ONE_SEEN],
+  ],
+  ["requests spread over two data centers are blocked once one of them has seen more than the limit", { spread: 2 }, "passed",
+    ["603 requests in 3156 ms were answered: 302 x120, 429 of the install x480, 429 of the rate rule x3", "through AAA x302 (most in ten seconds x302), BBB x301 (most in ten seconds x301)", ONE_SEEN],
+  ],
+  ["one data center past the limit for five seconds, with no rule to block, fails", { noRateRule: true }, "failed",
+    ["757 requests in 5004 ms were answered: 302 x120, 429 of the install x637", "through AAA x757 (most in ten seconds x757)", ONE_SEEN],
+  ],
+  ["two data centers past the limit for five seconds, with no rule to block, fail before the requests end", { noRateRule: true, spread: 2 }, "failed",
+    ["1020 requests in 8160 ms were answered: 302 x120, 429 of the install x900", "through AAA x510 (most in ten seconds x510), BBB x510 (most in ten seconds x510)", ONE_SEEN],
+  ],
+  ["requests spread over four data centers, none past the limit, prove nothing and are skipped", { spread: 4 }, "skipped",
+    [
+      `${NOT_PROVEN}: 1140 requests in 9600 ms were answered: 302 x120, 429 of the install x1020`,
+      "through AAA x285 (most in ten seconds x285), BBB x285 (most in ten seconds x285), CCC x285 (most in ten seconds x285), DDD x285 (most in ten seconds x285)",
+      ONE_SEEN,
+    ],
+  ],
+  ["requests from four addresses, none past the limit though their data center is, prove nothing and are skipped", { manyAddresses: true }, "skipped",
+    [`${ONE_ADDRESS}: 757 requests in 5004 ms were answered: 302 x120, 429 of the install x637`, "through AAA x757 (most in ten seconds x757)", "the edge saw addresses x4 (IPv4) in samples x21"],
   ],
 ];
 
@@ -178,7 +201,7 @@ describe("the live checks, against a local fake", () => {
   }, RUN_MS);
 
   // A failure that said only the answers left it open whether the rule was gone or the requests never met in one count; a line that held the address the edge saw would put it in a public log.
-  test.each(BURST_CASES)("%s", async (_what, switches, result, answers, through) => {
+  test.each(BURST_CASES)("%s", async (_what, switches, result, line) => {
     const fake = await openFake(switches);
     const said: string[] = [];
     const { bench, close } = openBench({
@@ -200,7 +223,9 @@ describe("the live checks, against a local fake", () => {
     // A failure's words are the line and then what was expected of it.
     const outcome = await runCheck(bench, burst, (error) => said.push(...String(error).replace(/^Error: /, "").split("\n").slice(0, 1)));
 
-    expect({ result: outcome.result, said }).toEqual({ result, said: [`${answers}; through ${through}; ${ONE_ADDRESS}`] });
-    expect(said.join()).not.toMatch(/\d+\.\d+\.\d+|[0-9a-f]*:[0-9a-f]*:/);
+    const heard = outcome.result === "skipped" ? [outcome.reason] : said;
+
+    expect({ result: outcome.result, heard }).toEqual({ result, heard: [line.join("; ")] });
+    expect(heard.join()).not.toMatch(/\d+\.\d+\.\d+|[0-9a-f]*:[0-9a-f]*:/);
   }, RUN_MS);
 });

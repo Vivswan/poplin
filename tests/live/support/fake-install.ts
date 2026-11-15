@@ -43,13 +43,16 @@ const LAG_MS = 1000;
 /** How late a request enters the count of a rate rule whose count lags, in milliseconds. */
 const RULE_LAG_MS = 3000;
 
-/** The data centers the fake answers from: the first alone, or all in turn for a visitor whose requests are spread. */
+/** The data centers the fake answers from: the first alone, or the first two or all four in turn for a visitor whose requests are spread. */
 const CENTERS = ["AAA", "BBB", "CCC", "DDD"] as const;
+
+/** How many addresses the requests of a visitor with several leave from, in turn. */
+const ADDRESSES_IN_TURN = 4;
 
 /** The path on which the edge itself says what it saw of a request. */
 const TRACE_PATH = "/cdn-cgi/trace";
 
-/** The address the fake's edge sees every request come from: one kept for documents, which no computer has. */
+/** The address the fake's edge sees a visitor's requests come from: one kept for documents, which no computer has. A visitor with several has it with other last numbers. */
 const VISITOR = "192.0.2.7";
 
 /** The headers of the fake's own refusals. */
@@ -90,8 +93,11 @@ export interface FakeSwitches {
   /** A fault: the zone holds no rate rule, on a run not told so. */
   readonly noRateRule?: boolean;
 
-  /** One visitor's requests reach four data centers in turn, and the rate rule counts in each for itself, as the edge's does. */
-  readonly spread?: boolean;
+  /** One visitor's requests reach this many data centers in turn, and the rate rule counts in each for itself, as the edge's does. */
+  readonly spread?: 2 | 4;
+
+  /** One visitor's requests leave from four addresses in turn, and the rate rule counts each for itself, as the edge's does. */
+  readonly manyAddresses?: boolean;
 }
 
 /** A fake install: what sends a request to it, an admin's token, and the pause that moves its time on. */
@@ -104,6 +110,12 @@ interface Fake {
 
 /** A data center of the fake. */
 type Center = (typeof CENTERS)[number];
+
+/** How a request reached the fake's edge: through which data center, and from which address. */
+interface Path {
+  readonly center: Center;
+  readonly source: string;
+}
 
 /** The zone's redirect rule: plain http moves to https, on every hostname of the install. */
 function toHttps(url: URL): Response | undefined {
@@ -126,21 +138,22 @@ export async function openFake(switches: FakeSwitches = {}): Promise<Fake> {
   const settings = await install.database.readSettings();
   if (settings === undefined) throw new Error("the fake install has no settings");
 
-  // When each request the rules let through came, on the fake's own time, and through which data center.
-  const arrivals: { readonly at: number; readonly center: Center }[] = [];
+  // When each request the rules let through came, on the fake's own time, and by which path.
+  const arrivals: (Path & { readonly at: number })[] = [];
   let time = 0;
   let asked = 0;
 
-  // How many requests came in a stretch of time: through one data center, or through any.
-  const arrivedIn = (from: number, to: number, center?: Center): number =>
-    arrivals.filter((arrival) => arrival.at > from && arrival.at <= to && (center === undefined || arrival.center === center)).length;
+  // How many requests came in a stretch of time: by one path, or by any.
+  const arrivedIn = (from: number, to: number, path?: Path): number =>
+    arrivals.filter((arrival) => arrival.at > from && arrival.at <= to && (path === undefined || (arrival.center === path.center && arrival.source === path.source))).length;
 
-  // The data center a request comes through: the next in turn for a visitor whose requests are spread.
-  const route = (): Center => {
-    const turn = switches.spread === true ? asked % CENTERS.length : 0;
+  // The path a request comes by: the next data center in turn for a visitor whose requests are spread, and the next address for one with several.
+  const route = (): Path => {
+    const center = CENTERS[asked % (switches.spread ?? 1)] ?? CENTERS[0];
+    const source = switches.manyAddresses === true ? VISITOR.replace(/\d+$/, String(asked % ADDRESSES_IN_TURN)) : VISITOR;
     asked += 1;
 
-    return CENTERS[turn] ?? CENTERS[0];
+    return { center, source };
   };
 
   // How far each count runs behind the requests.
@@ -148,14 +161,14 @@ export async function openFake(switches: FakeSwitches = {}): Promise<Fake> {
   const ownLag = switches.lateCount === true ? LAG_MS : 0;
 
   // The zone's rules on a site hostname: the guard rule, the bot block, the rate rule. Then the install's own count of one visitor.
-  const edge = (request: Request, url: URL, center: Center): Response | undefined => {
+  const edge = (request: Request, url: URL, path: Path): Response | undefined => {
     const guarded = switches.noGuards !== true;
     if (guarded && (!READS.has(request.method) || SCANNER_PATHS.test(url.pathname))) return new Response("blocked", { status: 403 });
 
     if (CRAWLERS.test(request.headers.get("User-Agent") ?? "")) return new Response("blocked", { status: 403 });
 
-    arrivals.push({ at: time, center });
-    if (switches.noRateRule !== true && arrivedIn(time - ruleLag - RULE_WINDOW_MS, time - ruleLag, center) > RULE_LIMIT) return new Response("error code: 1015", { status: 429 });
+    arrivals.push({ at: time, ...path });
+    if (switches.noRateRule !== true && arrivedIn(time - ruleLag - RULE_WINDOW_MS, time - ruleLag, path) > RULE_LIMIT) return new Response("error code: 1015", { status: 429 });
 
     if (switches.noOwnLimit !== true && arrivedIn(time - OWN_WINDOW_MS, time - ownLag) > OWN_LIMIT) return refusal(429, "Too many requests. Try again in 60 seconds.\n", { "Retry-After": "60" });
 
@@ -170,10 +183,10 @@ export async function openFake(switches: FakeSwitches = {}): Promise<Fake> {
     return gated ? refusal(302, "", { Location: LOGIN_PAGE }) : undefined;
   };
 
-  const answerSite = async (request: Request, url: URL, center: Center): Promise<Response> => {
-    if (url.pathname === TRACE_PATH) return new Response(`ip=${VISITOR}\ncolo=${center}\n`);
+  const answerSite = async (request: Request, url: URL, path: Path): Promise<Response> => {
+    if (url.pathname === TRACE_PATH) return new Response(`ip=${path.source}\ncolo=${path.center}\n`);
 
-    const stopped = edge(request, url, center) ?? login(url);
+    const stopped = edge(request, url, path) ?? login(url);
     if (stopped !== undefined) return stopped;
 
     return serveSite(request, {
@@ -205,10 +218,10 @@ export async function openFake(switches: FakeSwitches = {}): Promise<Fake> {
     const reached = ADDRESSES.isSiteHost(url.hostname) && !(switches.noPublicRoute === true && !url.hostname.endsWith(`-poplin.${FAKE_DOMAIN}`));
     if (!reached) throw new TypeError("no server answers on this hostname");
 
-    const center = route();
-    const answer = await answerSite(request, url, center);
+    const path = route();
+    const answer = await answerSite(request, url, path);
     const marked = new Response(answer.body, answer);
-    marked.headers.set("cf-ray", `${asked.toString(16)}-${center}`);
+    marked.headers.set("cf-ray", `${asked.toString(16)}-${path.center}`);
 
     return marked;
   };

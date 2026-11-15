@@ -8,11 +8,17 @@ import { GHOST_ID, labelAddress } from "../util";
 /** The most requests the burst sends before the paced ones: past the rate rule's 300 in ten seconds. */
 const BURST = 340;
 
-/** The time from one request to the next after the burst, in milliseconds: 400 in ten seconds, so every ten seconds stay past the rule's 300. */
-const TAIL_PACE_MS = 25;
+/** The time from one request to the next after the burst, in milliseconds: 833 in ten seconds, so a data center that takes half of them still counts past the rule's 300. */
+const TAIL_PACE_MS = 12;
 
-/** The most requests sent after the burst: twenty seconds of them. The rule's count runs up to a few seconds behind the requests. */
+/** The most requests sent after the burst: 9.6 seconds of them. */
 const TAIL = 800;
+
+/** The most requests of one address the rate rule lets one data center count in its window. */
+const RULE_LIMIT = 300;
+
+/** How long a data center's count may stay past the limit with no block, in milliseconds: the rule's count runs up to a few seconds behind the requests. */
+const RULE_DELAY_MS = 5000;
 
 /** How many requests of the burst are in flight together. */
 const BURST_LANES = 20;
@@ -40,6 +46,12 @@ const RULE_WINDOW_MS = 10_000;
 
 /** The path on which the edge itself says which address it saw a request come from. */
 const TRACE_PATH = "cdn-cgi/trace";
+
+/** What the check of the rate rule needs when no data center's count stayed past the limit: the rule was not due to block, so nothing is proven. */
+const NOT_PROVEN = "one data center that takes more than 300 of the runner's requests in ten seconds";
+
+/** What the check of the rate rule needs when the edge saw the runner at more than one address: the rule counts each address for itself. */
+const ONE_ADDRESS = "a runner whose requests leave from one address";
 
 /** What stands for the data center of an answer whose `cf-ray` names none. */
 const UNNAMED = "no data center named";
@@ -70,6 +82,12 @@ interface Run {
   /** When each answer came, by the code of the data center its `cf-ray` ends in. */
   readonly centers: Map<string, number[]>;
 
+  /** Since when each data center's last ten seconds have held more answers than the rate rule's limit, without a break. */
+  readonly past: Map<string, number>;
+
+  /** A data center's count stayed past the limit for as long as the rule may take to block. */
+  overdue: boolean;
+
   /** What the edge said of where the requests come from; nothing, for a run that did not ask. */
   readonly seen: Seen;
 
@@ -77,8 +95,9 @@ interface Run {
   readonly started: number;
 }
 
-/** What a finished run met. `saw` is the one line said of it: the requests, the time, each answer's count, and the runner's path, with nothing an install wrote and no address. */
-interface Met extends Pick<Run, "own" | "rule"> {
+/** What a finished run met. `several` says the edge saw the runner at more than one address. `saw` is the one line said of it: the requests, the time, each answer's count, and the runner's path, with nothing an install wrote and no address. */
+interface Met extends Pick<Run, "own" | "rule" | "overdue"> {
+  readonly several: boolean;
   readonly saw: string;
 }
 
@@ -90,7 +109,7 @@ async function answersOk(bench: Bench, address: string): Promise<boolean> {
 }
 
 function openRun(bench: Bench, seen: Seen = { sources: new Set(), sampled: 0 }): Run {
-  return { own: false, rule: false, sent: 0, answers: new Map(), centers: new Map(), seen, started: bench.now() };
+  return { own: false, rule: false, sent: 0, answers: new Map(), centers: new Map(), past: new Map(), overdue: false, seen, started: bench.now() };
 }
 
 /** Ask the edge once which address it sees the runner at, and keep it for the count alone. An edge that does not say, or a request that fails, is no sample. */
@@ -133,7 +152,30 @@ function path({ centers: through, seen }: Run): string {
   return `through ${centers}; the edge saw addresses x${seen.sources.size} (${families}) in samples x${seen.sampled}`;
 }
 
-/** Ask once for a site that is not there, and keep which side answered. */
+/** How many of a data center's answers its ten seconds up to `at` hold. */
+function held(run: Run, center: string, at: number): number {
+  return (run.centers.get(center) ?? []).filter((time) => at - time < RULE_WINDOW_MS).length;
+}
+
+/**
+ * Keep that an answer came through a data center at `at`, and since when each data center's last ten seconds are past the rule's limit.
+ *
+ * Answers that name no data center are counted for the line alone: together they prove nothing of any one.
+ */
+function count(run: Run, center: string, at: number): void {
+  // Between two answers a count only falls, so one still past the limit before this answer never left it.
+  for (const watched of run.past.keys()) {
+    if (held(run, watched, at) <= RULE_LIMIT) run.past.delete(watched);
+  }
+
+  run.centers.set(center, [...(run.centers.get(center) ?? []), at]);
+  const passed = center !== UNNAMED && held(run, center, at) > RULE_LIMIT;
+  if (passed && !run.past.has(center)) run.past.set(center, at);
+
+  run.overdue ||= [...run.past.values()].some((since) => at - since >= RULE_DELAY_MS);
+}
+
+/** Ask once for a site that is not there, and keep which side answered and through which data center. */
 async function ask(bench: Bench, run: Run): Promise<void> {
   run.sent += 1;
   const response = await bench.visit(labelAddress(bench.domain, GHOST_ID, "u"));
@@ -147,7 +189,7 @@ async function ask(bench: Bench, run: Run): Promise<void> {
   run.answers.set(answer, (run.answers.get(answer) ?? 0) + 1);
 
   const center = /-([A-Z]{3})$/.exec(response.headers.get("cf-ray") ?? "")?.[1] ?? UNNAMED;
-  run.centers.set(center, [...(run.centers.get(center) ?? []), bench.now()]);
+  count(run, center, bench.now());
 }
 
 /** End a run whose last answer came at `ended`, and write the line of what it met. */
@@ -158,7 +200,7 @@ async function closeRun(bench: Bench, run: Run, ended: number = bench.now()): Pr
 
   const counts = [...run.answers].map(([answer, count]) => `${answer} x${count}`).join(", ");
 
-  return { own: run.own, rule: run.rule, saw: `${run.sent} requests in ${ms} ms were answered: ${counts}; ${path(run)}` };
+  return { own: run.own, rule: run.rule, overdue: run.overdue, several: run.seen.sources.size > 1, saw: `${run.sent} requests in ${ms} ms were answered: ${counts}; ${path(run)}` };
 }
 
 /** One request every `paceMs`, however long an answer takes, until the run has sent `most` or `met` says it is over. */
@@ -190,7 +232,7 @@ async function sendPaced(bench: Bench): Promise<Met> {
 }
 
 /**
- * Many requests at once, then paced ones that keep every ten seconds past the rule's limit, until the rate rule answers.
+ * Many requests at once, then paced ones, until the rate rule answers or one data center's count has been past the rule's limit for as long as a block may take.
  *
  * The rule's count runs behind the requests, so a burst that is over in a second or two may end before the rule's first block.
  * The rule counts in each data center for itself and by the address, so the run keeps which data center each answer came through, and asks the edge which address it sees.
@@ -209,7 +251,7 @@ async function sendBurst(bench: Bench): Promise<Met> {
   await Promise.all(Array.from({ length: BURST_LANES }, lane));
   if (!run.rule && bench.now() - run.started >= RULE_WINDOW_MS) throw new Skip("a runner that sends 300 requests inside ten seconds");
 
-  await pace(bench, run, { most: BURST + TAIL, paceMs: TAIL_PACE_MS, met: () => run.rule });
+  await pace(bench, run, { most: BURST + TAIL, paceMs: TAIL_PACE_MS, met: () => run.rule || run.overdue });
   const ended = bench.now();
   await sample(bench, seen);
 
@@ -313,10 +355,14 @@ export const EDGE_CHECKS: readonly Check[] = [
   },
   {
     id: "burst-rate-rule",
-    name: "a burst past 300 requests in ten seconds, kept up, is blocked by the rate rule",
+    name: "requests kept up until one data center has seen more than 300 in ten seconds are blocked by the rate rule",
     needs: ["rate-rule"],
     run: async (bench) => {
       const burst = await sendBurst(bench);
+      if (!burst.rule && burst.several) throw new Skip(`${ONE_ADDRESS}: ${burst.saw}`);
+
+      if (!burst.rule && !burst.overdue) throw new Skip(`${NOT_PROVEN}: ${burst.saw}`);
+
       expect(burst.rule, burst.saw).toBe(true);
       bench.say(burst.saw);
     },

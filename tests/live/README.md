@@ -121,6 +121,29 @@ a usual run                      about 50 (checks) + 112 (reset)
 
 A run starts after a green main that changed a file reaching the install, or by hand, so 40 a day is far above what happens. The count is the harness's own, one for each request that makes the install write or list; the install lists once more for every thousand files.
 
+```text
+burst-rate-rule, usual   about 850 requests to the Worker: the rule blocks a few seconds after one data center passed 300
+burst-rate-rule, worst   340 (burst) + 800 (paced, 12 ms apart) = 1,140: no block, and no data center past 300 for 5 seconds
+own-limit                about 700
+a run, at its worst      1,140 + 700 = 1,840
+the plan's day           100,000 requests to the Worker, reached at about 54 such runs
+```
+
+The runs of one day must stay under the plan's 100,000 requests to the Worker. The other checks send a few dozen more.
+
+## The check of the rate rule
+
+Cloudflare counts the rate rule in each data center for itself, and each address for itself. `burst-rate-rule` counts the same way, from the data center each answer names and the addresses the edge says it saw.
+
+| The run met                                                                     | Result  |
+| ------------------------------------------------------------------------------- | ------- |
+| a 429 of the rate rule                                                          | passed  |
+| no block, and the edge saw the runner at more than one address                  | skipped |
+| no block, and one data center held more than 300 in ten seconds for 5 seconds   | failed  |
+| no block, and no data center stayed past 300 that long                          | skipped |
+
+Each result comes with one line: the requests, the time, each answer's count, each data center's count, and how many addresses the edge saw. It never holds an address.
+
 ## What a run skips
 
 A check that cannot run is written to the step summary as skipped, with what it needs, and to the log as a warning. It never fails the run.
@@ -137,6 +160,8 @@ A run that cannot make the install answer, or cannot start the checks, fails: th
 | a public site named `demo`, which the reset publishes               | `demo`                                                                   |
 | a plan whose bot settings the API can change                        | `crawler`                                                                |
 | the guard rule, the redirect rule, or the rate rule on the zone     | `L8-method`, `L8-scanner`, `L8-http`, `burst-rate-rule`                  |
+| one data center that takes more than 300 of the runner's requests in ten seconds | `burst-rate-rule`                                           |
+| a runner whose requests leave from one address                      | `burst-rate-rule`                                                        |
 | a run started by hand with the many-files check switched on         | `L10`: two thousand uploads, so not on every green main                  |
 | a person in a browser                                               | `L2`, `L3`, `L4-in`, `L5b`, `L6`, `L7`, `L9`, `download`: the checklist below        |
 
