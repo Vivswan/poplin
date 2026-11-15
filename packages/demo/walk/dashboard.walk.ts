@@ -58,6 +58,7 @@ const FILLED = /(^| )bg-primary( |$)/;
 const STOPS: readonly Stop[] = [
   {
     name: "Sites, from the side",
+    screen: "Sites",
     open: (page) => toSection(page, "Sites"),
     shows: (page) => [screenHeading(page, "Sites"), siteName(page, SAMPLE.site)],
   },
@@ -69,6 +70,7 @@ const STOPS: readonly Stop[] = [
   },
   {
     name: "Access, from the side",
+    screen: "Access",
     open: (page) => toSection(page, "Access"),
     shows: (page, wide) => [screenHeading(page, "Access"), page.getByRole("tab", { name: "Users", selected: true }), rows(page, wide, "Users")],
   },
@@ -79,6 +81,7 @@ const STOPS: readonly Stop[] = [
   },
   {
     name: "Activity, from the side",
+    screen: "Activity",
     open: (page) => toSection(page, "Activity"),
     shows: (page, wide) => [screenHeading(page, "Activity"), rows(page, wide, "Activity")],
   },
@@ -94,6 +97,7 @@ const STOPS: readonly Stop[] = [
   },
   {
     name: "Usage, from the side",
+    screen: "Usage",
     open: (page) => toSection(page, "Usage"),
     shows: (page, wide) => [screenHeading(page, "Usage"), rows(page, wide, "Usage"), page.getByRole("heading", { name: "Visits", exact: true }), page.locator("path[data-line=all]")],
   },
@@ -105,6 +109,7 @@ const STOPS: readonly Stop[] = [
   },
   {
     name: "Settings, from the side",
+    screen: "Settings",
     open: (page) => toSection(page, "Settings"),
     shows: (page) => [
       screenHeading(page, "Settings"),
@@ -116,6 +121,7 @@ const STOPS: readonly Stop[] = [
   },
   {
     name: "Domain, from the side",
+    screen: "Domain",
     open: (page) => toSection(page, "Domain"),
     shows: (page) => [screenHeading(page, "Domain"), domainLine(page, "Nothing to repair")],
   },
@@ -338,6 +344,9 @@ interface Stop {
   /** What is opened, in the words a failure is reported under. */
   readonly name: string;
 
+  /** The screen the stop opens from the side, by its name there; left out for a place inside a screen. */
+  readonly screen?: string;
+
   /** The one width the stop exists at; left out, it exists at both. */
   readonly only?: "wide" | "narrow";
 
@@ -366,6 +375,17 @@ async function toSection(page: Page, label: string): Promise<void> {
   if (await behind.isVisible()) await behind.click();
 
   await page.getByRole("navigation", { name: "Sections", exact: true }).getByRole("link", { name: label, exact: true }).click();
+}
+
+/** The stops that open a screen from the side, each with the screen's name. */
+function screens(): readonly (Stop & { readonly screen: string })[] {
+  return STOPS.flatMap((stop) => (stop.screen === undefined ? [] : [{ ...stop, screen: stop.screen }]));
+}
+
+/** Open a screen of a wide page from the side, and wait for what it shows: what a screen draws while it is read is not the screen yet. */
+async function toScreen(page: Page, stop: Stop): Promise<void> {
+  await stop.open(page, true);
+  for (const shown of stop.shows(page, true)) await expect(shown).toBeVisible();
 }
 
 /** The rows of a screen: a table on a wide screen, a list on a narrow one, under the same name. */
@@ -739,6 +759,18 @@ test("a site's row that takes the focus from a key draws a ring on all four side
 
   const edges = await row.evaluate((focused) => [...focused.children].map((cell) => getComputedStyle(cell).boxShadow.split("inset").length - 1));
   expect({ first: edges.at(0), between: [...new Set(edges.slice(1, -1))], last: edges.at(-1) }).toEqual({ first: 3, between: [2], last: 3 });
+});
+
+// Drift: one screen would draw a rule under its header again where the others draw none, so the six would not start alike.
+test("no screen draws a rule between its header and what follows it", async ({ page }) => {
+  await arrive(page);
+  for (const stop of screens()) {
+    await toScreen(page, stop);
+    const header = page.locator("header").filter({ has: screenHeading(page, stop.screen) });
+
+    await expect.soft(header, stop.screen).toHaveCSS("border-bottom-width", "0px");
+    await expect.soft(header.locator("xpath=following-sibling::*[1]"), stop.screen).toHaveCSS("border-top-width", "0px");
+  }
 });
 
 // Drift: the filter at a row's end would search for a name again: the entries from before a new link or a rename would be gone, and those of another site of that name shown.

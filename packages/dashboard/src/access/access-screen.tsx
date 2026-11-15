@@ -76,7 +76,7 @@ export function AccessScreen(): ReactNode {
 
   return (
     <AppShell current="access" heading="Access">
-      <div {...keptFocus} className="flex min-h-0 flex-1 flex-col border-t">
+      <div {...keptFocus} className="flex min-h-0 flex-1 flex-col">
         <ScreenTabs label="Who has access" tabs={TABS} active={tab} onChoose={(chosen) => void navigate({ to: TAB_PATHS[chosen] })} />
         {asked !== undefined && review.error !== null ? (
           <div className="px-6 pt-3 max-md:px-4">
