@@ -27,7 +27,7 @@ const SAMPLE = { site: "Pricing", graphed: "Team handbook", person: "jonas@examp
 /** Where the notes of a newer version are read: the page of the project's releases. */
 const RELEASES = "https://github.com/Vivswan/poplin/releases";
 
-/** An email typed into the dialog that adds a user, and never sent. */
+/** An email typed into the dialog that adds a user: no user of the sample data has it. */
 const TYPED_EMAIL = "walk@example.com";
 
 /** A user the walk adds and then removes. */
@@ -602,6 +602,30 @@ test.describe("on a phone, in a question", () => {
     await expect(await upper()).toHaveText("Stay");
     await expect(await upper()).toHaveClass(FILLED);
   });
+});
+
+// Drift: a change would leave the focus on the page itself again, where no key reaches anything: the control that held it is gone once the change is done.
+test("after a change the focus is where the next key is of use: on the panel's heading, in the refused field, on the button that adds a user", async ({ page }) => {
+  await arrive(page);
+  await openPanel(page, SAMPLE.site);
+  await panel(page).getByRole("button", { name: "Make live", exact: true }).first().click();
+  await expect(page.getByText(/is live now/)).toBeVisible();
+  await expect(panel(page).getByRole("heading", { name: SAMPLE.site, exact: true })).toBeFocused();
+
+  await panel(page).getByRole("button", { name: "Edit", exact: true }).click();
+  const name = editDialog(page).getByRole("textbox", { name: "Name", exact: true });
+  await name.fill("a");
+  await editDialog(page).getByRole("button", { name: "Save", exact: true }).click();
+  await expect(name).toHaveAttribute("aria-invalid", "true");
+  await expect(name).toBeFocused();
+  await cancelDialog(page);
+
+  await toSection(page, "Access");
+  await page.getByRole("button", { name: "Add a user", exact: true }).click();
+  await addPerson(page).getByRole("textbox", { name: "Email", exact: true }).fill(TYPED_EMAIL);
+  await addPerson(page).getByRole("button", { name: "Add a user", exact: true }).click();
+  await expect(addPerson(page)).toBeHidden();
+  await expect(page.getByRole("button", { name: "Add a user", exact: true })).toBeFocused();
 });
 
 // Drift: Enter after typing would tick nothing again, or tick the first site of the list from before the typed text, which the text does not find.
