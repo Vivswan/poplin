@@ -44,15 +44,15 @@ import { sayDone, sayRefused, send } from "@/lib/notify";
 import { Confirm, type Question } from "@/shared/confirm";
 import { siteKey } from "@/sites/site-queries";
 
-/** The sections, in the order shown, each with the path of its screen. */
+/** The sections, in the order shown, each with the path of its screen: first what a person looks at, then, set apart by a gap, what a person sets up. */
 const SECTIONS = [
-  { key: "sites", label: "Sites", icon: LayoutListIcon, inside: "/" },
-  { key: "access", label: "Access", icon: KeyRoundIcon, inside: "/tokens" },
-  { key: "activity", label: "Activity", icon: ActivityIcon, inside: "/activity" },
-  { key: "usage", label: "Usage", icon: GaugeIcon, inside: "/usage" },
+  { key: "sites", label: "Sites", icon: LayoutListIcon, inside: "/", apart: false },
+  { key: "activity", label: "Activity", icon: ActivityIcon, inside: "/activity", apart: false },
+  { key: "usage", label: "Usage", icon: GaugeIcon, inside: "/usage", apart: false },
+  { key: "access", label: "Access", icon: KeyRoundIcon, inside: "/tokens", apart: true },
   // The Domain screen is there only in a dashboard built with the provider's side of the install.
-  ...(BOOT.domain ? ([{ key: "domain", label: "Domain", icon: GlobeIcon, inside: "/domain" }] as const) : []),
-  { key: "settings", label: "Settings", icon: SettingsIcon, inside: "/settings" },
+  ...(BOOT.domain ? ([{ key: "domain", label: "Domain", icon: GlobeIcon, inside: "/domain", apart: false }] as const) : []),
+  { key: "settings", label: "Settings", icon: SettingsIcon, inside: "/settings", apart: false },
 ] as const;
 
 /** The name at the top of the side, the same on every install. */
@@ -94,6 +94,7 @@ function SectionLink({ section, current }: { readonly section: (typeof SECTIONS)
   const look = cn(
     "flex h-8 items-center gap-2.5 rounded-md px-2.5 text-muted-foreground outline-none hover:bg-sidebar-accent/60 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring max-md:h-10",
     here && "bg-sidebar-accent font-bold text-foreground",
+    section.apart && "mt-3",
   );
 
   // The section's mark comes from the screen drawn. The router adds its own only at the link's exact address, where the two agree.
