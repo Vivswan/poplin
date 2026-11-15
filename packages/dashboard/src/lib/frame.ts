@@ -6,7 +6,7 @@ import type { InferResponseType } from "hono/client";
 import { answerOf, api } from "@/lib/api";
 import { BOOT } from "@/lib/boot";
 
-/** The key the frame's data is kept under. It sits under the settings' key: a saved setting, or a saved rebuild address, makes it stale with them. A run on the domain marks it stale by this key. */
+/** The key the frame's data is kept under. It sits under the settings' key: a saved setting, or a saved update link, makes it stale with them. A run on the domain marks it stale by this key. */
 export const FRAME_KEY = ["settings", "frame"] as const;
 
 /** The key it is kept under that an update was started from this page. */

@@ -260,7 +260,7 @@ function questionOf(newest: string, database: boolean): Question {
 }
 
 /**
- * Offer the start of an update where one can be started: a newer release is known and a rebuild address is saved.
+ * Offer the start of an update where one can be started: a newer release is known and an update link is saved.
  *
  * @returns the offer for the controls that show it, `undefined` where there is none or one was just started, and the question to draw once
  */

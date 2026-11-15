@@ -35,10 +35,10 @@ const WORDS: Readonly<Record<Exclude<Entry["action"], "domain_synced">, string>>
   settings_changed: "Changed the settings",
   signed_everyone_out: "Signed everyone out",
   login: "Logged in",
-  login_allowed: "Allowed a computer to log in",
-  login_denied: "Denied a computer's login",
-  update_address_set: "Saved the rebuild address",
-  update_address_removed: "Removed the rebuild address",
+  login_allowed: "Allowed a token",
+  login_denied: "Denied a token",
+  update_address_set: "Saved the update link",
+  update_address_removed: "Removed the update link",
   update_started: "Started an update",
 };
 
@@ -49,8 +49,8 @@ const WITH_DETAIL: Readonly<Partial<Record<Entry["action"], (detail: Entry["deta
   access: (detail) => (typeof detail.access === "string" ? `Made it ${detail.access}` : undefined),
   token_added: (detail) => named("Added the token", detail.note),
   token_revoked: (detail) => named("Removed the token", detail.note),
-  login_allowed: (detail) => named("Allowed the computer", detail.computer),
-  login_denied: (detail) => named("Denied the computer", detail.computer),
+  login_allowed: (detail) => named("Allowed the token", detail.computer),
+  login_denied: (detail) => named("Denied the token", detail.computer),
   update_started: (detail) => (typeof detail.to === "string" ? `Started an update to ${detail.to}${detail.automatic === true ? " by itself" : ""}` : undefined),
   domain_synced: domainWords,
 };
