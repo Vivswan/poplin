@@ -259,6 +259,9 @@ export function SitePanel({ label, actions, reveal, onAsk, closeLink, onClose, o
           <Button variant="outline" onClick={() => onAsk(site, { kind: "new-link" })}>
             New link
           </Button>
+          <Button variant="outline" onClick={() => onAsk(site, { kind: "duplicate" })}>
+            Duplicate
+          </Button>
           <Button variant="destructive" className="ml-auto" onClick={() => void remove()}>
             Delete
           </Button>

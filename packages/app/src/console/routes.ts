@@ -6,6 +6,7 @@ import { accessRoutes } from "./access-routes";
 import { activityRoutes } from "./activity-routes";
 import type { Shared } from "./data";
 import { domainRoutes } from "./domain-routes";
+import { duplicateRoutes } from "./duplicate-routes";
 import { frameRoutes } from "./frame-routes";
 import { problemsRoutes } from "./problems-routes";
 import { settingsRoutes } from "./settings-routes";
@@ -17,6 +18,7 @@ import { visitsRoutes } from "./visits-routes";
 export const dataRoutes = new Hono<Shared>()
   .route("/", frameRoutes)
   .route("/", siteRoutes)
+  .route("/", duplicateRoutes)
   .route("/", accessRoutes)
   .route("/", activityRoutes)
   .route("/", usageRoutes)
