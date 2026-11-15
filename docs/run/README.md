@@ -4,7 +4,7 @@ order: 3
 
 # Keep the install
 
-Updates, settings, the domain, and the limits of an install.
+Updates, settings, the domain, the limits, and the removal of an install.
 
 | Page                                      | What it covers                                                    |
 | ----------------------------------------- | ----------------------------------------------------------------- |
@@ -14,3 +14,4 @@ Updates, settings, the domain, and the limits of an install.
 | [Activity](activity.md)                   | the Activity screen: its pages, and the log saved as files        |
 | [Limits and cost](limits-and-cost.md)     | what can cost money; the limits; the graph of visits              |
 | [With OpenTofu](with-opentofu.md)         | installing with the module                                        |
+| [Remove](remove.md)                       | every piece an install made, and where each is removed by hand    |
