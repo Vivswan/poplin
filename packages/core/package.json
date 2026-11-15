@@ -66,6 +66,7 @@
     "./tests/storage/support/storage-contract": "./tests/storage/support/storage-contract.ts"
   },
   "dependencies": {
+    "jose": "6.2.17",
     "valibot": "1.5.0"
   }
 }

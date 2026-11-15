@@ -5,6 +5,7 @@ import { mintSessionCookie, readSession } from "../../src/login/session";
 
 const NOW = 1_700_000_000_000;
 const NAME = "__Secure-poplin-session";
+const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
 
 function loginOf(email: string): Login {
   const login = parseLogin(email);
@@ -38,7 +39,7 @@ describe("the session cookie", () => {
   // Drift: an attribute dropped here lets a script read the cookie or a cross-site post carry it, and a `Domain` added here sends the dashboard's session to every site of the install.
   test("it is written with exactly the attributes the browser must enforce, and for the hostname that set it alone", async () => {
     const key = await keyOf(1);
-    const value = await buildSession({ email: loginOf("owner@example.com"), issuedAt: NOW, key });
+    const value = await buildSession({ email: loginOf("owner@example.com"), issuedAt: NOW, maxAgeMs: THIRTY_DAYS_MS, key });
 
     const [pair, ...attributes] = (await mintSessionCookie({ email: loginOf("owner@example.com"), key, now: NOW })).split("; ");
 
@@ -60,6 +61,16 @@ describe("the session cookie", () => {
 
     expect(await readSession(headers, { key: await keyOf(1), logins, now: NOW })).toMatchObject({ ok: true });
     expect(await readSession(headers, { key: await keyOf(2), logins, now: NOW })).toEqual({ ok: false, refusal: "bad-signature" });
+  });
+
+  // Drift: the cookie's own `Max-Age` is advice to a browser; a copied value must end on the server at the same 30 days.
+  test.each([
+    ["one second short of 30 days", THIRTY_DAYS_MS - 1000, { ok: true, value: "owner@example.com" }],
+    ["at 30 days", THIRTY_DAYS_MS, { ok: false, refusal: "expired" }],
+  ] as const)("a cookie read %s", async (_name, age, outcome) => {
+    const key = await keyOf(1);
+
+    expect<unknown>(await readSession(cookieHeader(await minted(key)), { key, logins: loginsOf("owner@example.com"), now: NOW + age })).toEqual(outcome);
   });
 
   // Drift: a removed login would keep its session for the rest of the 30 days.

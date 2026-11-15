@@ -15,6 +15,7 @@ const HTML_STANDARD_EMAIL = /^[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-
 
 const KEY_BYTES = 32;
 const YEAR_2100_MS = 4_102_444_800_000;
+const LAST_DATE_MS = 8_640_000_000_000_000;
 const MAX_AGE_MS = 86_400_000;
 
 type Change = { readonly kind: "replace" | "insert" | "delete" | "nudge"; readonly at: number; readonly fromEnd: boolean; readonly character: string; readonly step: number };
@@ -32,11 +33,11 @@ const words = fc.stringMatching(/^[a-z0-9]{1,8}$/);
 const ordinaryEmails = fc.tuple(fc.array(words, { minLength: 1, maxLength: 3 }), fc.array(words, { minLength: 2, maxLength: 4 })).map(([local, domain]) => `${local.join(".")}@${domain.join(".")}`);
 const paddings = fc.constantFrom("", " ", "\t", "\n");
 const tokens = hostile(fc.stringMatching(/^poplin_[0-9a-f]{16}_[0-9a-f]{64}$/));
-const sessionValues = hostile(fc.stringMatching(/^[A-Za-z0-9_-]{4,40}\.(0|[1-9][0-9]{0,15})\.[A-Za-z0-9_-]{43}$/));
-const payloads = fc.oneof(fc.uint8Array({ maxLength: 300 }), emails.map((email) => new Uint8Array(Buffer.from(email))));
+const sessionValues = hostile(fc.stringMatching(/^eyJhbGciOiJIUzI1NiJ9\.[A-Za-z0-9_-]{4,80}\.[A-Za-z0-9_-]{43}$/));
+const subjects = fc.oneof(fc.string({ unit: "binary", maxLength: 300 }), emails);
 const keys = fc.uint8Array({ minLength: KEY_BYTES, maxLength: KEY_BYTES }).map((bytes) => new Uint8Array(bytes));
 const clocks = fc.oneof(fc.integer({ min: 0, max: YEAR_2100_MS }), fc.double());
-const issueTimes = fc.maxSafeNat();
+const issueTimes = fc.integer({ min: 0, max: LAST_DATE_MS - MAX_AGE_MS });
 const mintRequests = fc.record({ scope: fc.constantFrom("publisher" as const, "admin" as const), note: hostile(fc.constant("laptop")), now: fc.integer({ min: 0, max: YEAR_2100_MS }) });
 
 const changes: fc.Arbitrary<Change> = fc.record({
@@ -63,8 +64,11 @@ function changeOneCharacter(text: string, change: Change): string {
   return `${head}${change.character}${tail}`;
 }
 
-async function signedValue(payload: Uint8Array, issuedAt: number, key: CryptoKey): Promise<string> {
-  const signed = `${Buffer.from(payload).toString("base64url")}.${issuedAt}`;
+// A token signed with no help from the code under test, so a subject the builder would never be handed still arrives under a good signature.
+async function signedValue(subject: string, issuedAt: number, key: CryptoKey): Promise<string> {
+  const seconds = Math.floor(issuedAt / 1000);
+  const claims = JSON.stringify({ sub: subject, iat: seconds, exp: seconds + MAX_AGE_MS / 1000 });
+  const signed = `${Buffer.from(JSON.stringify({ alg: "HS256" })).toString("base64url")}.${Buffer.from(claims).toString("base64url")}`;
   const signature = await crypto.subtle.sign("HMAC", key, Buffer.from(signed));
 
   return `${signed}.${Buffer.from(signature).toString("base64url")}`;
@@ -107,45 +111,50 @@ property(
 );
 
 property(
-  "a hostile session value is refused without a throw under any clock and age limit",
-  fc.asyncProperty(sessionValues, keys, clocks, fc.double(), async (value, secret, now, maxAgeMs) => {
+  "a hostile session value is refused without a throw under any clock",
+  fc.asyncProperty(sessionValues, keys, clocks, async (value, secret, now) => {
     const key = await importSessionKey(secret);
 
-    expect((await verifySession(value, { key, now, maxAgeMs })).ok).toBe(false);
+    expect((await verifySession(value, { key, now })).ok).toBe(false);
   }),
 );
 
 property(
-  "a correctly signed value is accepted only when its payload is an address and byte for byte the email it names, so no second spelling of a login gets in",
-  fc.asyncProperty(payloads, issueTimes, keys, async (payload, issuedAt, secret) => {
+  "a correctly signed value is accepted only when its subject is an address and character for character the email it names, so no second spelling of a login gets in",
+  fc.asyncProperty(subjects, issueTimes, keys, async (subject, issuedAt, secret) => {
     const key = await importSessionKey(secret);
-    const session = await verifySession(await signedValue(payload, issuedAt, key), { key, now: issuedAt, maxAgeMs: MAX_AGE_MS });
+    const session = await verifySession(await signedValue(subject, issuedAt, key), { key, now: issuedAt });
     if (!session.ok) return;
 
-    expect(Buffer.from(session.value).equals(payload)).toBe(true);
+    expect<string>(session.value).toBe(subject);
     expect(session.value).toMatch(HTML_STANDARD_EMAIL);
   }),
 );
 
 property(
-  "a session names exactly the email it was built for, at any issue time a clock can give",
+  "a session names exactly the email it was built for until its lifetime is over, at any issue time a clock can give",
   fc.asyncProperty(logins, issueTimes, keys, async (email, issuedAt, secret) => {
     const key = await importSessionKey(secret);
-    const value = await buildSession({ email, issuedAt, key });
+    const value = await buildSession({ email, issuedAt, maxAgeMs: MAX_AGE_MS, key });
 
-    expect(await verifySession(value, { key, now: issuedAt, maxAgeMs: MAX_AGE_MS })).toEqual({ ok: true, value: email });
+    expect(await verifySession(value, { key, now: issuedAt })).toEqual({ ok: true, value: email });
+    expect(await verifySession(value, { key, now: issuedAt + MAX_AGE_MS })).toEqual({ ok: false, refusal: "expired" });
   }),
 );
 
 property(
-  "a session value with one character changed, added, or dropped no longer verifies",
+  "a session value with one character changed, added, or dropped never names another email and never outlives the original",
   fc.asyncProperty(logins, issueTimes, keys, changes, async (email, issuedAt, secret, change) => {
     const key = await importSessionKey(secret);
-    const value = await buildSession({ email, issuedAt, key });
+    const value = await buildSession({ email, issuedAt, maxAgeMs: MAX_AGE_MS, key });
     const changed = changeOneCharacter(value, change);
     fc.pre(changed !== value);
 
-    expect((await verifySession(changed, { key, now: issuedAt, maxAgeMs: MAX_AGE_MS })).ok).toBe(false);
+    // The signature's text has more than one spelling of the same bytes, so a change there may still verify: as the same session.
+    const session = await verifySession(changed, { key, now: issuedAt });
+    if (session.ok) expect(session.value).toBe(email);
+
+    expect((await verifySession(changed, { key, now: issuedAt + MAX_AGE_MS })).ok).toBe(false);
   }),
 );
 
@@ -153,9 +162,9 @@ property(
   "a session checked under another key fails its signature, so rotating the secret ends every session",
   fc.asyncProperty(logins, issueTimes, keys, keys, async (email, issuedAt, secret, otherSecret) => {
     fc.pre(!Buffer.from(secret).equals(otherSecret));
-    const value = await buildSession({ email, issuedAt, key: await importSessionKey(secret) });
+    const value = await buildSession({ email, issuedAt, maxAgeMs: MAX_AGE_MS, key: await importSessionKey(secret) });
 
-    expect(await verifySession(value, { key: await importSessionKey(otherSecret), now: issuedAt, maxAgeMs: MAX_AGE_MS })).toEqual({ ok: false, refusal: "bad-signature" });
+    expect(await verifySession(value, { key: await importSessionKey(otherSecret), now: issuedAt })).toEqual({ ok: false, refusal: "bad-signature" });
   }),
 );
 

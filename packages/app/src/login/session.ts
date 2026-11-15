@@ -1,6 +1,6 @@
 // The session cookie: written once after a login, read on every request after it.
 //
-// It binds an email and its issue time under the install's signing key, and nothing else: no address, no browser, no Access token.
+// It binds an email, its issue time, and its end time under the install's signing key, and nothing else: no address, no browser, no Access token.
 // It names no domain, so a browser sends it to the hostname that set it and to no other: the dashboard's.
 // A new signing key ends every session at once.
 
@@ -58,7 +58,7 @@ function candidates(header: string): string[] {
 }
 
 async function checkValue(value: string, check: SessionCheck): Promise<CheckedSession> {
-  const session = await verifySession(value, { key: check.key, now: check.now, maxAgeMs: MAX_AGE_SECONDS * 1000 });
+  const session = await verifySession(value, { key: check.key, now: check.now });
   if (!session.ok) return session;
 
   if (!isLogin(check.logins, session.value)) return { ok: false, refusal: "not-a-login" };
@@ -72,7 +72,7 @@ async function checkValue(value: string, check: SessionCheck): Promise<CheckedSe
  * @returns the cookie with `Secure; HttpOnly; SameSite=Lax; Path=/` and no `Domain`
  */
 export async function mintSessionCookie(session: NewSession): Promise<string> {
-  const value = await buildSession({ email: session.email, issuedAt: session.now, key: session.key });
+  const value = await buildSession({ email: session.email, issuedAt: session.now, maxAgeMs: MAX_AGE_SECONDS * 1000, key: session.key });
 
   return serialize(COOKIE_NAME, value, { secure: true, httpOnly: true, sameSite: "Lax", path: "/", maxAge: MAX_AGE_SECONDS });
 }
