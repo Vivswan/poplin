@@ -1,13 +1,14 @@
 // A computer logged in from the dashboard: a terminal asks, an admin allows or denies it under a code both see, and the terminal collects its token once.
 //
 //   beginLogin    anyone      a pending login: a code to show and a secret to keep. It grants nothing, and no visitor's logins keep another's out
+//   listLogins    an admin    every login that waits to be decided
 //   showLogin     an admin    what the login under a code asks for
 //   decideLogin   an admin    allowed or denied, once
 //   redeemLogin   the secret  pending, denied, expired, or the token, which is made at this moment and handed out once
 
 import * as v from "valibot";
 
-import { type ComputerLogin, holdsSecret, mintComputerLogin, parseLoginSecret, parseUserCode, showUserCode } from "../auth/computer-logins";
+import { type ComputerLogin, holdsSecret, type LoginId, mintComputerLogin, parseLoginSecret, parseUserCode, showUserCode } from "../auth/computer-logins";
 import type { Login } from "../auth/logins";
 import type { Actor } from "../auth/scopes";
 import { mintToken } from "../auth/tokens";
@@ -54,9 +55,10 @@ const LOGIN_DECISION = v.strictObject({ code: v.string(), allow: v.boolean() });
 /**
  * A pending login as an admin sees it: never its secret, nor the secret's hash. Times are milliseconds since the epoch.
  *
- * `code` is written as the terminal shows it, such as `WDJB-MJHT`. `computer` is what the computer called itself, which nobody checked.
+ * `id` names the login and proves nothing. `code` is written as the terminal shows it, such as `WDJB-MJHT`. `computer` is what the computer called itself, which nobody checked.
  */
 export interface LoginObject {
+  readonly id: LoginId;
   readonly code: string;
   readonly scope: ComputerLogin["scope"];
   readonly computer: string;
@@ -70,7 +72,7 @@ export type Redeemed =
   | { readonly state: "allowed"; readonly token: string; readonly record: TokenObject };
 
 function loginObject(login: ComputerLogin): LoginObject {
-  return { code: showUserCode(login.code), scope: login.scope, computer: login.computer, asked: login.createdAt, expires: login.expiresAt };
+  return { id: login.id, code: showUserCode(login.code), scope: login.scope, computer: login.computer, asked: login.createdAt, expires: login.expiresAt };
 }
 
 /** The email of an admin behind a session. A token allows no computer in, so no token outlives its own expiry through a login it allowed. */
@@ -118,6 +120,17 @@ export async function beginLogin(
   }
 
   throw new Error(`no free login code in ${MINT_ATTEMPTS} tries`);
+}
+
+/**
+ * List every login that waits to be allowed or denied, the newest first.
+ *
+ * @returns the logins, at most as many as may wait at one moment, or `not_allowed` for anyone but an admin behind a session
+ */
+export async function listLogins(install: Install, actor: Actor): Promise<{ readonly ok: true; readonly logins: readonly LoginObject[] } | Refused<"not_allowed">> {
+  if (personOf(actor) === undefined) return refuse("not_allowed");
+
+  return { ok: true, logins: (await install.database.listWaitingComputerLogins(install.now())).map(loginObject) };
 }
 
 /**

@@ -421,6 +421,7 @@ function queryPlans(label: string, makeDriver: DriverFactory): void {
       await database.addComputerLogin(denied, { perVisitor: 10, all: 10 });
       await database.getComputerLogin(login.id);
       await database.findComputerLogin(login.code);
+      await database.listWaitingComputerLogins(NOW);
       await database.decideComputerLogin(login.code, { state: "allowed", by: ADMIN, at: NOW + 1 });
       await database.decideComputerLogin(denied.code, { state: "denied", by: ADMIN, at: NOW + 1 });
       const redeemed = await database.redeemComputerLogin(login.id, (await mintToken({ scope: "publisher", note: "laptop", now: NOW + 2 })).record);

@@ -364,6 +364,9 @@ const DELETE_TOKEN = "DELETE FROM tokens WHERE id = ?1 AND changes() = 1";
 /** Every column of a login. */
 const SELECT_LOGIN = "SELECT id, code, hash, scope, computer, visitor, state, decided_by, created_at, expires_at FROM logins";
 
+/** Every login that waits at `?1`, pending and not run out, the newest first. */
+const SELECT_WAITING_LOGINS = `${SELECT_LOGIN} WHERE state = 'pending' AND expires_at > ?1 ORDER BY created_at DESC, id DESC`;
+
 /** Whether id `?1` and code `?2` are both free, so the login that brings them will be stored. */
 const LOGIN_IS_NEW = "NOT EXISTS (SELECT 1 FROM logins WHERE id = ?1 OR code = ?2)";
 
@@ -1188,6 +1191,12 @@ export class SqlDatabase implements Database {
     const [found] = await this.#driver.batch([sql(`${SELECT_LOGIN} WHERE code = ?1`, code)]);
 
     return loginIn(found);
+  }
+
+  async listWaitingComputerLogins(now: number): Promise<readonly PendingLogin[]> {
+    const [listed] = await this.#driver.batch([sql(SELECT_WAITING_LOGINS, now)]);
+
+    return (listed?.rows ?? []).map(computerLoginFromRow).filter((login) => login.state === "pending");
   }
 
   async decideComputerLogin(code: UserCode, decision: LoginDecision): Promise<{ readonly kind: "done"; readonly login: ComputerLogin } | Refused<"not_pending">> {

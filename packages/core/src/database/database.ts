@@ -474,6 +474,9 @@ export interface Database {
   /** The login a person sees under this code, whatever its state and whether or not it ran out. */
   findComputerLogin(code: UserCode): Promise<ComputerLogin | undefined>;
 
+  /** Every login that waits at a moment, pending and not run out, the newest first, and of logins begun at one moment the one with the greater id. */
+  listWaitingComputerLogins(now: number): Promise<readonly PendingLogin[]>;
+
   /**
    * Allow or deny the login under a code, only while it is pending and has not run out. It writes one `login_allowed` or `login_denied` audit entry, which holds the scope and the computer's name and nothing of the secret.
    *

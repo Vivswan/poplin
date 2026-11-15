@@ -1388,6 +1388,17 @@ function computerLogins(label: string, makeDatabase: DatabaseFactory): void {
       ]);
     });
 
+    // Drift: the list is what an admin is shown to choose from; a decided or stale login in it would offer a button that does nothing, and a wrong order would bury the login just begun.
+    test("the waiting logins are the pending ones that have not run out, the newest first", async () => {
+      const database = await opened(makeDatabase);
+      const [old, allowed, denied, stale, recent] = [await pendingLogin(NOW - 2), await pendingLogin(NOW - 1), await pendingLogin(NOW - 1), await pendingLogin(NOW - 10 * 60_000), await pendingLogin(NOW)];
+      for (const login of [old, allowed, denied, stale, recent]) await database.addComputerLogin(login, ROOM);
+      await database.decideComputerLogin(allowed.code, { state: "allowed", by: ADMIN, at: NOW });
+      await database.decideComputerLogin(denied.code, { state: "denied", by: ADMIN, at: NOW });
+
+      expect([await database.listWaitingComputerLogins(NOW), await database.listWaitingComputerLogins(old.expiresAt), await database.listWaitingComputerLogins(recent.expiresAt)]).toEqual([[recent, old], [recent], []]);
+    });
+
     // Drift: a decision is what turns a request into a token; one that could be made twice, after the login ran out, or without its audit entry would let a denied or stale request through unseen.
     test("a pending login is decided once and before it runs out, with one audit entry that names the scope and the computer", async () => {
       const database = await opened(makeDatabase);

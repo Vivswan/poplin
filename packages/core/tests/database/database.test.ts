@@ -479,6 +479,12 @@ class MemoryDatabase implements Database {
     return this.#loginUnder(code);
   }
 
+  async listWaitingComputerLogins(now: number): Promise<readonly PendingLogin[]> {
+    const waiting = [...this.#logins.values()].filter((login) => login.state === "pending").filter((login) => login.expiresAt > now);
+
+    return waiting.sort((one, other) => other.createdAt - one.createdAt || (one.id < other.id ? 1 : -1));
+  }
+
   async decideComputerLogin(code: UserCode, decision: LoginDecision): Promise<{ readonly kind: "done"; readonly login: ComputerLogin } | Refused<"not_pending">> {
     const pending = this.#loginUnder(code);
     if (pending?.state !== "pending" || pending.expiresAt <= decision.at) return { kind: "not_pending" };

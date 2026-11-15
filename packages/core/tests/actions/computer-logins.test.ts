@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
-import { beginLogin, decideLogin, redeemLogin, showLogin } from "../../src/actions/computer-logins";
+import { beginLogin, decideLogin, listLogins, redeemLogin, showLogin } from "../../src/actions/computer-logins";
 import { listTokens } from "../../src/actions/manage-tokens";
 import { sweepExpired } from "../../src/actions/sweep";
 import { parseUserCode } from "../../src/auth/computer-logins";
@@ -127,6 +127,35 @@ describe("beginLogin", () => {
   });
 });
 
+describe("listLogins", () => {
+  // Drift: the list is where an admin picks a login to review. One that held a decided or stale login would offer a dead end, and one a token could read would show it who is about to log in.
+  test("an admin behind a session is listed the logins that wait, the newest first, without a secret; a token and a publisher are listed none", async () => {
+    const world = await makeWorld();
+    const [first, denied, allowed] = [await begun(world, "admin"), await begun(world, "publisher", "another-visitor"), await begun(world, "publisher", "a-third-visitor")];
+    world.clock.now = NOW + MINUTE;
+    const recent = await begun(world, "publisher", "a-fourth-visitor");
+    await decideLogin(world.install, ADMIN, { code: denied.code, allow: false });
+    await decideLogin(world.install, ADMIN, { code: allowed.code, allow: true });
+
+    const listed = await listLogins(world.install, ADMIN);
+    world.clock.now = NOW + 10 * MINUTE;
+
+    expect(listed).toEqual({
+      ok: true,
+      logins: [
+        { id: expect.stringMatching(/^[0-9a-f]{16}$/), code: recent.code, scope: "publisher", computer: "laptop", asked: NOW + MINUTE, expires: NOW + 11 * MINUTE },
+        { id: expect.stringMatching(/^[0-9a-f]{16}$/), code: first.code, scope: "admin", computer: "laptop", asked: NOW, expires: NOW + 10 * MINUTE },
+      ],
+    });
+    expect(JSON.stringify(listed).includes(first.secret.slice(-64))).toBe(false);
+    expect([await listLogins(world.install, ADMIN), await listLogins(world.install, ADMIN_TOKEN), await listLogins(world.install, OWNER)]).toEqual([
+      { ok: true, logins: [expect.objectContaining({ code: recent.code })] },
+      { ok: false, code: "not_allowed" },
+      { ok: false, code: "not_allowed" },
+    ]);
+  });
+});
+
 describe("decideLogin", () => {
   // Drift: only a person behind a session lets a computer in. A token that could allow a login would mint itself a successor for ever, and a publisher that could would make itself an admin.
   test.each([
@@ -147,7 +176,7 @@ describe("decideLogin", () => {
   test("a code is found however it is typed, shows what it asks for, and is decided once", async () => {
     const world = await makeWorld();
     const { code } = await begun(world);
-    const shown: Awaited<ReturnType<typeof showLogin>> = { ok: true, login: { code, scope: "publisher", computer: "laptop", asked: NOW, expires: NOW + 10 * MINUTE } };
+    const shown: Awaited<ReturnType<typeof showLogin>> = { ok: true, login: { id: expect.any(String), code, scope: "publisher", computer: "laptop", asked: NOW, expires: NOW + 10 * MINUTE } };
 
     expect([await showLogin(world.install, ADMIN, code.toLowerCase()), await showLogin(world.install, ADMIN, ` ${code.replace("-", " ")} `), await showLogin(world.install, ADMIN, code.replace("-", ""))]).toEqual([
       shown,
