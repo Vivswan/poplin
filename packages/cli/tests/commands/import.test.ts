@@ -330,7 +330,7 @@ describe("import", () => {
     expect([one, byWideName].map((ran) => (ran.sites as Line[]).map((site) => site.label))).toEqual([[docs], [wide]]);
     expect([byId.imported, (byId.sites as Line[])[0]?.label]).toEqual([1, notes]);
     expect([absent.code, absent.err[0]]).toEqual([1, "the backup holds no such site: zzzzzzzzzzzz"]);
-    expect(into.sent.filter((sent) => !sent.includes(`/uploads/`))).toEqual(["POST /api/import/sites"]);
+    expect(into.sent.filter((sent) => !sent.includes("/uploads/"))).toEqual(["POST /api/import/sites"]);
   });
 
   test("the settings come back only with --settings and the logins only with --logins, and a one-site backup has none to give: without this an import could lock the admin of the new install out", async () => {

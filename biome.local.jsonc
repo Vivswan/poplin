@@ -22,7 +22,7 @@
       "trailingCommas": "all"
     }
   },
-  // noCommonJs: the tree is ES modules whole, and the patterns of noRestrictedImports read no `require` call.
+  // noCommonJs and noUnusedTemplateLiteral: the patterns of noRestrictedImports read no `require` call and no path written as a template, so the tree holds neither.
   "linter": {
     "rules": {
       "preset": "recommended",
@@ -32,6 +32,7 @@
       },
       "style": {
         "noCommonJs": "error",
+        "noUnusedTemplateLiteral": "error",
         "noNonNullAssertion": "error"
       }
     }

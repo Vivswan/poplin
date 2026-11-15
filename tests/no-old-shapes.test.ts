@@ -1,5 +1,5 @@
 // Scope: this catches accidental handling of an old stored shape in source under `packages/*/src` outside any `migrations/` folder, and a retired name written anywhere in the repository; deliberate hiding is out of scope.
-// An import of a `migrations/` folder is refused by the lint settings, which `bun run lint` applies to the tree; this file plants each such import. A path written as a template is out of scope: no rule reads it.
+// An import of a `migrations/` folder is refused by the lint settings, which `bun run lint` applies to the tree; this file plants each such import. A path written as a template is refused as a template, and its fix is the text the import rule reads.
 
 import { describe, expect, test } from "bun:test";
 import { mkdtempDisposableSync, readFileSync } from "node:fs";

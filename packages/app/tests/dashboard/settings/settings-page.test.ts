@@ -40,7 +40,7 @@ test("every ordinary setting has a labelled input holding its stored text and sh
   });
   expect(page).toContain("so they are changed on the Domain tab.");
   expect(page).toContain("<dt><code>outside_pages</code></dt><dd>blocked</dd><dt><code>search_engines_allowed</code></dt><dd>off</dd><dt><code>block_bots</code></dt><dd>auto</dd>");
-  expect(page).toContain(`<title>Settings - Ada&#39;s &quot;sites&quot; &lt;b&gt;</title>`);
+  expect(page).toContain("<title>Settings - Ada&#39;s &quot;sites&quot; &lt;b&gt;</title>");
 });
 
 test("a stored value above a free limit shows its warning beside its own field, on every visit, and no other field shows one", async () => {

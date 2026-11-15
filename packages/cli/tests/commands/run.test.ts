@@ -79,7 +79,7 @@ describe("run", () => {
 
     expect((await bench.run(`set ${label} --unlisted --search-engines on`)).out).toEqual([`unlisted  ${label}`, open, `address changed: ${url} is now ${open}`]);
     expect((await bench.run(`set ${label} --public --public-name docs`)).out).toEqual([`public  ${label}  public name "docs"`, "https://docs-page.example.com"]);
-    expect((await bench.run(`set docs --private`)).out).toEqual([`private  ${label}`, url, `address changed: ${open} is now ${url}`]);
+    expect((await bench.run("set docs --private")).out).toEqual([`private  ${label}`, url, `address changed: ${open} is now ${url}`]);
     expect((await bench.run(`delete ${label}`)).out).toEqual([`in the trash  ${label}  gone for good on 2023-11-21`, `to take it back: poplin restore ${label}`]);
     expect((await bench.run("list --trash")).out).toEqual([`${label}  gone for good on 2023-11-21  Report`]);
     expect((await bench.run(`restore ${label}`)).out).toEqual([`restored  ${label}  private`, url]);

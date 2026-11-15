@@ -15,7 +15,7 @@
 //
 // A JSX file is read as it is compiled, so a name only a type holds is unread there, and a find sits at the first line that writes it.
 //
-// Out of scope: what loads no module (a `declare module` block, a module a test replaces), and a path given to a loader that is no import (`import.meta.resolve`, a template).
+// Out of scope: what loads no module (a `declare module` block, a module a test replaces), and a path given to `import.meta.resolve`, which is no import.
 // A provider's package named that way is still no dependency of a portable package: the unused-code check names it as unlisted, and the manifest may not list it.
 
 import { describe, expect, test } from "bun:test";
@@ -318,6 +318,7 @@ describe("provider code stays out of the portable packages", () => {
       ["the deploy tool", 'const { unstable_dev } = await import("wrangler");', "noRestrictedImports", "wrangler"],
       ["the local runtime", 'import { Miniflare } from "miniflare";', "noRestrictedImports", "miniflare"],
       ["a require", 'const sdk = require("cloudflare");', "noCommonJs", "require"],
+      ["a path written as a template", "const tool = await import(`../../../cloudflare/src/worker/worker`);", "noUnusedTemplateLiteral", "`../../../cloudflare"],
       ["a require made for the file", 'import { createRequire } from "node:module";', "noRestrictedImports", "node:module"],
       ["a re-export", 'export { buildClient } from "../../../cloudflare/src/zone/client";', "noRestrictedImports", "../../../cloudflare/src/zone/client"],
       ["the Cloudflare package whole", 'import * as provider from "@poplin/cloudflare";', "noRestrictedImports", "@poplin/cloudflare"],
@@ -497,7 +498,7 @@ describe("provider code stays out of the portable packages", () => {
   test.each([
     ["the provider in a text", 'const label = "A Cloudflare API token";', "cloudflare"],
     ["the provider in a name", "const cloudflareToken = read();", "cloudflare"],
-    ["its hosts, after a `//` inside a template", `const address = \`\${scheme}://\${name}.example.workers.dev\`;`, "workers.dev"],
+    ["its hosts, after a `//` inside a template", "const address = \`\${scheme}://\${name}.example.workers.dev\`;", "workers.dev"],
     ["its bucket in a name", "const store = openR2(bucket);", "R2"],
     ["its bucket as a key", "const kinds = { r2: 1 };", "R2"],
     ["its database in a name", "const kinds = { d1Database: 2 };", "D1"],
@@ -593,7 +594,7 @@ describe("provider code stays out of the portable packages", () => {
       'const label = "the time zone";',
       "const share = total / count; // per Worker",
       "const ratio = total++ / count; // on Cloudflare",
-      `const address = \`\${origin}//\${path}\`; /* wrangler */`,
+      "const address = \`\${origin}//\${path}\`; /* wrangler */",
     ].join("\n");
     const namedOutsideSource = 'const label = "A Cloudflare Worker reads R2 and D1 in the zone.";\n';
     using tree = plantedRepository({

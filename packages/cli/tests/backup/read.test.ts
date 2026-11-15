@@ -91,7 +91,7 @@ const REFUSED: readonly (readonly [what: string, build: Build, reason: RegExp])[
   ["an entry of no backup", before("manifest.json", ["notes.txt", "hello"]), /^"notes\.txt" is no entry of a backup/],
   ["an entry beside a version's files", before("manifest.json", [`${FOLDER}/versions/1/notes.txt`, "hello"]), /is no entry of a backup/],
   ["a name that climbs out of its site", renamed("aa/x.css", `${VERSION_FILES}/../x.css`), /^it is not a zip that can be read: invalid relative path/],
-  ["a name that climbs out of the zip", renamed("aa/x.css", `../../../../../../../../../../../../../tmp/x.css`.padEnd(`${VERSION_FILES}/aa/x.css`.length, "s")), /^it is not a zip that can be read: invalid relative path/],
+  ["a name that climbs out of the zip", renamed("aa/x.css", "../../../../../../../../../../../../../tmp/x.css".padEnd(`${VERSION_FILES}/aa/x.css`.length, "s")), /^it is not a zip that can be read: invalid relative path/],
   ["an absolute name", renamed("aa/x.css", `/${VERSION_FILES.slice(1)}/aa/x.css`), /^it is not a zip that can be read: absolute path/],
   ["a name with a backslash", renamed("aa/x.css", `${VERSION_FILES}/aa\\x.css`), /^it is not a zip that can be read: invalid characters in fileName/],
   ["a path with a dot segment", renamed("a/x.css", `${VERSION_FILES}/./x.css`), /has a path no site can hold/],

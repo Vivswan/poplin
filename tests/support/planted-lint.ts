@@ -18,7 +18,7 @@ const SETTINGS = new Bun.Glob("{,**/}biome{.json,.jsonc,.local.jsonc}");
 const IGNORED: readonly string[] = ["node_modules/"];
 
 /** The rules that keep a place's imports and names apart, which a guard of the tree plants a leak for. */
-const GUARD_RULES: readonly string[] = ["noRestrictedImports", "noRestrictedTypes", "noRestrictedGlobals", "noNodejsModules", "noCommonJs"];
+const GUARD_RULES: readonly string[] = ["noRestrictedImports", "noRestrictedTypes", "noRestrictedGlobals", "noNodejsModules", "noCommonJs", "noUnusedTemplateLiteral"];
 
 /** One finding as the linter's `rdjson` report writes it. */
 interface Reported {
