@@ -815,6 +815,25 @@ test.describe("on a phone, after a site's panel", () => {
   });
 });
 
+// Drift: a move to another screen would leave the focus on the page itself again, where no key reaches anything and nothing is said; or every screen's tab would be named alike.
+test("a screen that follows another one gives its title the focus and names the tab, on a wide screen and from a phone's sections; the first Tab stop leads past the sections", async ({ page }) => {
+  await arrive(page);
+  for (const size of [VIEWPORTS[0], PHONE]) {
+    await page.setViewportSize(size);
+    for (const screen of ["Activity", "Settings", "Sites"]) {
+      await toSection(page, screen);
+      await expect(screenHeading(page, screen)).toBeFocused();
+      await expect(page).toHaveTitle(`${screen} - poplin`);
+    }
+  }
+
+  await page.reload();
+  await page.keyboard.press("Tab");
+  await expect(page.getByRole("button", { name: "Skip to the content", exact: true })).toBeFocused();
+  await page.keyboard.press("Enter");
+  await expect(screenHeading(page, "Sites")).toBeFocused();
+});
+
 // Drift: a group of the settings would take its name from its heading by an id again: Firefox ends the page when such a name is read once by the walk's own scripts and once among the page's.
 test("a group of the settings is found by its name twice, by a count and among the page's own scripts, and the page stays", async ({ page }) => {
   await arrive(page);

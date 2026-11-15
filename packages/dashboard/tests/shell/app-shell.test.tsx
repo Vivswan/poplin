@@ -98,6 +98,24 @@ describe("the sections of a phone", () => {
   });
 });
 
+describe("the screen's title", () => {
+  // Drift: every screen's tab would be named "poplin" alone again, so a list of tabs or a screen reader's first words would not tell one screen from another.
+  test("starts the page's own title, before the product's name", async () => {
+    await drawWith(null);
+
+    expect(document.title).toBe("Sites - poplin");
+  });
+
+  // Drift: the first stop of the Tab key would be the first of the sections again, with a dozen stops before the screen; or the way past them would lead nowhere.
+  test("takes the focus from the way past the sections, which is the first button of the page", async () => {
+    await drawWith(null);
+    const skip = screen.getAllByRole("button")[0] as HTMLElement;
+    fireEvent.click(skip);
+
+    expect([skip.textContent, document.activeElement?.tagName, document.activeElement?.textContent]).toEqual(["Skip to the content", "H1", "Sites"]);
+  });
+});
+
 describe("the switch of the look at the top", () => {
   // Drift: the look would be chosen only in a menu again, a press would not change it, or the button would name the look it already shows.
   test("turns the page dark on a press and then offers the way back, kept in the browser", async () => {
