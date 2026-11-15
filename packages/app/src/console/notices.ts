@@ -6,7 +6,7 @@ import type { decideLogin, showLogin } from "@poplin/core/src/actions/computer-l
 import type { changeConfig, readConfig } from "@poplin/core/src/actions/config";
 import type { deleteSite } from "@poplin/core/src/actions/delete";
 import type { duplicateSite } from "@poplin/core/src/actions/duplicate";
-import type { listSites } from "@poplin/core/src/actions/list";
+import type { listSitesWithNames } from "@poplin/core/src/actions/list";
 import type { addLogin, removeLogin } from "@poplin/core/src/actions/logins";
 import type { listTokens } from "@poplin/core/src/actions/manage-tokens";
 import type { newLink } from "@poplin/core/src/actions/new-link";
@@ -118,7 +118,7 @@ type CodeOf<Action extends (...asked: never[]) => Promise<unknown>> = Extract<Aw
 
 /** Every code the actions the dashboard calls may refuse with. */
 type ActionCode =
-  | CodeOf<typeof listSites>
+  | CodeOf<typeof listSitesWithNames>
   | CodeOf<typeof getSite>
   | CodeOf<typeof updateSite>
   | CodeOf<typeof rollbackSite>

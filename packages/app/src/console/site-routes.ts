@@ -10,7 +10,7 @@ import { vValidator } from "@hono/valibot-validator";
 import { SITE_CHANGES } from "@poplin/core/src/actions/changes";
 import { readConfig } from "@poplin/core/src/actions/config";
 import { deleteSite } from "@poplin/core/src/actions/delete";
-import { listSites } from "@poplin/core/src/actions/list";
+import { listSitesWithNames } from "@poplin/core/src/actions/list";
 import { newLink } from "@poplin/core/src/actions/new-link";
 import { restoreSite } from "@poplin/core/src/actions/restore";
 import { ROLLBACK_OPTIONS, rollbackSite } from "@poplin/core/src/actions/rollback";
@@ -57,10 +57,10 @@ const CHANGES = {
 };
 
 /** One site of a page. */
-type Row = Extract<Awaited<ReturnType<typeof listSites>>, { ok: true }>["sites"][number];
+type Row = Extract<Awaited<ReturnType<typeof listSitesWithNames>>, { ok: true }>["sites"][number];
 
 /** What the listing is asked. */
-type Listing = NonNullable<Parameters<typeof listSites>[2]>;
+type Listing = NonNullable<Parameters<typeof listSitesWithNames>[2]>;
 
 /** Read the place a page ended from the address: what the listing's own `after` takes under the table's order. A cursor of another order lacks what that order goes by, and the listing refuses it. */
 function placeOf(cursor: string | undefined, sort: Listing["sort"]): Pick<Listing, "after"> {
@@ -87,29 +87,28 @@ function publishersOf(site: Row): readonly string[] {
   return site.versions.map((version) => version.published_by);
 }
 
-/** One page of the table as its address asks for it: the sites in the listing's own order, and the cursor of the following page or `null`. */
+/** One page of the table as its address asks for it: the sites in the listing's own order, the cursor of the following page or `null`, and the names of the logins that published their versions. */
 async function sitesPage(
   { install, actor }: Shared["Variables"]["asker"],
   query: v.InferOutput<typeof PAGE_QUERY>,
 ): Promise<
-  { readonly ok: true; readonly sites: readonly Row[]; readonly next: string | null } | Extract<Awaited<ReturnType<typeof listSites>>, { ok: false }>
+  { readonly ok: true; readonly sites: readonly Row[]; readonly next: string | null; readonly logins: Readonly<Record<string, string>> } | Extract<Awaited<ReturnType<typeof listSitesWithNames>>, { ok: false }>
 > {
   const named = (query.q ?? "").trim().toLowerCase();
   const narrowed = { trash: query.view === "trash", ...(named === "" ? {} : { named }), ...(query.access === undefined ? {} : { access: query.access }) };
   const ordered = { ...(query.sort === undefined ? {} : { sort: query.sort }), ...(query.dir === undefined ? {} : { dir: query.dir }) };
-  const listed = await listSites(install, actor, { ...narrowed, ...ordered, ...placeOf(query.after, query.sort), limit: PAGE_SIZE });
+  const listed = await listSitesWithNames(install, actor, { ...narrowed, ...ordered, ...placeOf(query.after, query.sort), limit: PAGE_SIZE });
   if (!listed.ok) return listed;
 
-  return { ok: true, sites: listed.sites, next: listed.next === undefined ? null : cursorOf(listed.next) };
+  return { ok: true, sites: listed.sites, next: listed.next === undefined ? null : cursorOf(listed.next), logins: listed.names };
 }
 
 /** The Sites screen's data routes. Each change calls one action with the site's label from the address, and answers the site after it. */
 export const siteRoutes = new Hono<Shared>()
   .get("/sites", vValidator("query", PAGE_QUERY, refuseInvalid), async (context) => {
     const page = await sitesPage(context.get("asker"), context.req.valid("query"));
-    if (!page.ok) return refused(context, page);
 
-    return context.json({ ...page, logins: await loginNames(context.get("asker"), page.sites.flatMap(publishersOf)) });
+    return page.ok ? context.json(page) : refused(context, page);
   })
   .get("/sites/:site", vValidator("param", ONE_SITE, refuseInvalid), async (context) => {
     const { install, actor } = context.get("asker");

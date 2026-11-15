@@ -178,6 +178,8 @@ const ROWS: Readonly<Record<string, readonly [read: number, written: number]>> =
   "readDailyViews, a year": [2198, 0],
   "readDailyViews, a year, fifty sites": [18668, 0],
   "listSites": [18, 0],
+  "listShownSites, with the views and the publishers": [73, 0],
+  "listShownSites, with the views": [61, 0],
   "listSites, the next page": [18, 0],
   "listSites, by name, one holder, a text, an access": [23, 0],
   "listSites, by access": [18, 0],
@@ -422,6 +424,18 @@ describe("D1: the rows a listing, a change to a site, and a page of the audit lo
       "a page by access, the most open first": [32, 0],
       "a page of the sites that never expire": [32, 0],
       "a page of the trash": [1, 0],
+    });
+
+    // The trash is ordered by when a site went there, which the engine sorts every site of the trash for. What a screen shows beside a site is read for the sites of its page alone, never for each one sorted.
+    for (const id of ids.slice(0, 8)) await database.trashSite(id, BY_ADA);
+    const trash = { trash: true, limit: 3 } as const;
+
+    expect({
+      "a page of three of the eight in the trash": await cost(() => database.listSites(trash)),
+      "the same page as a screen lists it, with the settings, the views, and the publishers": await cost(() => database.listShownSites(trash, { day: DAY, publishers: true })),
+    }).toEqual({
+      "a page of three of the eight in the trash": [30, 0],
+      "the same page as a screen lists it, with the settings, the views, and the publishers": [67, 0],
     });
   });
 });
@@ -725,6 +739,8 @@ describe("D1: the rows every operation of the database costs of a day's allowanc
     await cost("readDailyViews, a year, fifty sites", () => database.readDailyViews(fifty, DAY, 365));
 
     const page = await cost("listSites", () => database.listSites({ trash: false, limit: 5 }));
+    await cost("listShownSites, with the views and the publishers", () => database.listShownSites({ trash: false, limit: 5 }, { day: DAY, publishers: true }));
+    await cost("listShownSites, with the views", () => database.listShownSites({ trash: false, limit: 5 }, { day: DAY, publishers: false }));
     await cost("listSites, the next page", () => database.listSites({ trash: false, limit: 5, ...(page.next === undefined ? {} : { after: page.next }) }));
     await cost("listSites, by name, one holder, a text, an access", () =>
       database.listSites({ trash: false, limit: 5, sort: "name", owner: BY_ADA.by, named: "site-1", access: "private", expires: "never" }),

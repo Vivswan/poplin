@@ -418,6 +418,7 @@ function queryPlans(label: string, makeDriver: DriverFactory): void {
       await database.findServed({ id: site.id }, NOW);
       await database.findServed({ public_name: DOCS }, NOW);
       await database.listSites({ trash: false, limit: 10 });
+      await database.listShownSites({ trash: false, limit: 10, sort: "title" }, { day: "2026-11-13", publishers: true });
       await database.listSites({ trash: true, owner: ADA, limit: 10, after: { updated_at: NOW, id: site.id } });
       await database.listSites({ trash: false, limit: 10, after: { updated_at: NOW, id: site.id } });
       await database.changeAccess(site.id, { access: "unlisted" }, BY_ADA);
@@ -500,11 +501,12 @@ function queryPlans(label: string, makeDriver: DriverFactory): void {
         const steps = plan.map((step) => String(step.detail));
         scans.push(
           ...steps
-            .filter((step) => /\bSCAN\b/.test(step) && !/\bSCAN (CONSTANT ROW|sqlite_master|j VIRTUAL TABLE|\(subquery-1\))/.test(step))
+            .filter((step) => /\bSCAN\b/.test(step) && !/\bSCAN (CONSTANT ROW|sqlite_master|j VIRTUAL TABLE|\(subquery-1\)|page\b|kept VIRTUAL TABLE)/.test(step))
             .map((step) => `${step} <- ${statement.sql.trim().split("\n")[0]}`),
         );
       }
 
+      // A screen's listing walks `page`, the page of sites it has cut already, and `kept`, the versions of one site of it: neither is a table.
       // The two token lists walk the tokens that were not removed, and the sweep walks the logins, which the room keeps few. An import walks the list of versions it was given, and a new login the visitors its own count gave: neither is a table.
       // The ledger holds one row a step. A count of the log walks its newest entries, as many as it is told, and then what it read of them.
       // A search of the log by a site reads the sites once: the log holds no title, and a text finds a site by the one it has now. Each earlier id is read once with them, through its index.

@@ -135,6 +135,27 @@ export interface SitesPage {
   readonly next?: SitesCursor;
 }
 
+/** What a screen that lists sites reads beside them. */
+export interface SitesShown {
+  /** The UTC day, such as `2026-11-13`, that the views of each site are read up to: that day and the six before it. */
+  readonly day: string;
+
+  /** Whether the note of each token that published a kept version is read. */
+  readonly publishers: boolean;
+}
+
+/** One page of sites with what a screen shows beside them. */
+export interface ShownSitesPage extends SitesPage {
+  /** The install's settings, `undefined` before setup stored them. */
+  readonly settings: SettingValues | undefined;
+
+  /** The page views of every site of the page, zeros where nothing was counted. */
+  readonly views: ReadonlyMap<SiteId, SiteViews>;
+
+  /** The note of each token that published a kept version of a site of the page and has a note, removed or not; empty when none were asked for. */
+  readonly publishers: ReadonlyMap<TokenId, string>;
+}
+
 /** One page of every site, the trash included, in ascending order of id. `next` is the id to pass as `after`, absent on the last page. */
 export interface ExportPage {
   readonly sites: readonly Site[];
@@ -490,6 +511,14 @@ export interface Database {
    * @throws {RangeError} `limit` is not a whole number from 1 to 100
    */
   listSites(query: SitesQuery): Promise<SitesPage>;
+
+  /**
+   * One page of the sites, or of the trash, with the settings, the views of each site, and who published its versions, all read in one step.
+   *
+   * @returns the page `listSites` gives for the query, and beside it what `readSettings`, `readViews`, and `getTokenNames` give
+   * @throws {RangeError} `limit` is not a whole number from 1 to 100, or `day` is not a date
+   */
+  listShownSites(query: SitesQuery, shown: SitesShown): Promise<ShownSitesPage>;
 
   /** Set who may open a site. Going public claims the public name; leaving public frees it. `name_taken` as in `createSite`. */
   changeAccess(id: SiteId, access: SiteAccess, signed: Signed): Promise<Done | Unchanged | Refused<"not_found" | "in_trash" | "name_taken">>;

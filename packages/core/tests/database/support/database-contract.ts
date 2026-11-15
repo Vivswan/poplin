@@ -4,6 +4,7 @@ import { describe, expect, test } from "bun:test";
 
 import type { SiteName } from "../../../src/names/names";
 import type { Login } from "../../../src/auth/logins";
+import { mintToken, type TokenRecord } from "../../../src/auth/tokens";
 import type { DomainCheck } from "../../../src/records/domain-check";
 import type { SiteId } from "../../../src/sites/ids";
 import { auditLog, everLoggedIn } from "./audit-contract";
@@ -385,6 +386,42 @@ function requestCounts(label: string, makeDatabase: DatabaseFactory): void {
         { site: 0, all: 19 },
         { site: 0, all: 9 },
       ]);
+    });
+
+    // Drift: a screen's page is one read that stands for four. One that gave a site other views than its own read, or lost the note of whoever published it, would show a table that its own panels deny.
+    test("the page a screen lists is the plain page and, beside it, the settings, each site's views, and the note of each token that published one: what the four reads give apart", async () => {
+      const database = await opened(makeDatabase);
+      await database.initSettings(SETTINGS, BY_ADA);
+      const minted = (note: string): Promise<TokenRecord> => mintToken({ scope: "publisher", note, now: NOW }).then((token) => token.record);
+      const [named, removed, unnamed] = [await minted("ci"), await minted("agent"), await minted("")];
+      for (const token of [named, removed, unnamed]) await database.addToken(token, BY_ADA);
+      await database.revokeToken(removed.id, BY_ADA);
+      const day = new Date(NOW).toISOString().slice(0, 10);
+      const before = new Date(NOW - 6 * 86_400_000).toISOString().slice(0, 10);
+      const sites = [];
+      for (const [at, by] of [named.id, removed.id, unnamed.id, ADA].entries()) sites.push(await made(database, draft(`site-${at}` as SiteName), { by, at: NOW + at }));
+      const [first, second] = sites.map((site) => site.id) as [SiteId, SiteId];
+      await database.addRequests({ day, site: first, requests: 9, views: 7 });
+      await database.addRequests({ day: before, site: first, requests: 5, views: 4 });
+      await database.addRequests({ day, site: second, requests: 2, views: 0 });
+      // Counted seven days back: the first day that a week ending today does not hold.
+      await database.addRequests({ day: new Date(NOW - 7 * 86_400_000).toISOString().slice(0, 10), site: second, requests: 3, views: 3 });
+      const query = { trash: false, limit: 3, sort: "name" } as const;
+      const plain = await database.listSites(query);
+      const ids = plain.sites.map((site) => site.id);
+
+      const shown = await database.listShownSites(query, { day, publishers: true });
+      const bare = await database.listShownSites({ ...query, ...(plain.next === undefined ? {} : { after: plain.next }) }, { day, publishers: false });
+
+      expect<unknown>([plain.sites.length, plain.next === undefined, { sites: shown.sites, next: shown.next }]).toEqual([3, false, plain]);
+      expect([shown.settings, [...shown.views], [...shown.publishers].sort()]).toEqual([SETTINGS, [...(await database.readViews(ids, day))], [...(await database.getTokenNames([named.id, removed.id, unnamed.id, ADA]))].sort()]);
+      expect([...shown.views.values()]).toEqual([
+        { today: 7, week: 11 },
+        { today: 0, week: 0 },
+        { today: 0, week: 0 },
+      ]);
+      expect<unknown>([bare.sites.map((site) => site.name), [...bare.views.values()], [...bare.publishers]]).toEqual([["site-3"], [{ today: 0, week: 0 }], []]);
+      await expect(database.listShownSites(query, { day: "tomorrow", publishers: true })).rejects.toThrow(RangeError);
     });
 
     // Drift: additions from several Worker instances land at once; one read back and written again would lose the others.

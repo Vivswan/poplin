@@ -36,6 +36,42 @@ export const LISTED_SITES = v.object({ sites: v.pipe(v.array(SITE_OBJECT), v.rea
 /** One page of sites, the one whose content changed last first: a publish and a version made live count, a setting does not. The trash shows the site deleted last first. `next` is what `after` takes to get the following page, and is absent on the last. */
 type Listed = { readonly ok: true } & Readonly<v.InferOutput<typeof LISTED_SITES>>;
 
+/** One page of sites, and the note of each token that published a kept version of one of them, by the token's id. */
+type ListedWithNames = Listed & { readonly names: Readonly<Record<string, string>> };
+
+/** Why a listing's query is refused, or the query as checked. */
+function checkedQuery(query: v.InferInput<typeof LIST_QUERY>): v.InferOutput<typeof LIST_QUERY> | Refused<"bad_argument"> {
+  const asked = v.safeParse(LIST_QUERY, query);
+  if (!asked.success) return refuse("bad_argument", v.getDotPath(asked.issues[0])?.split(".")[0] ?? "query");
+
+  const { after, sort } = asked.output;
+  if (after !== undefined && sort !== undefined && sort !== "updated" && after[sort] === undefined) return refuse("bad_argument", "after");
+
+  return asked.output;
+}
+
+/** Read one page with the settings, the views, and the publishers' notes when asked for, as one question to the database. */
+async function readPage(install: Install, actor: Actor, query: v.InferInput<typeof LIST_QUERY>, publishers: boolean): Promise<ListedWithNames | Refused<"not_set_up" | "bad_argument">> {
+  const asked = checkedQuery(query);
+  if ("ok" in asked) {
+    const entered = await enterInstall(install, actor);
+
+    return entered.ok ? asked : entered;
+  }
+
+  const at = install.now();
+  const owner = actor.scope === "admin" ? undefined : actor.holder;
+  const page = await install.database.listShownSites({ ...asked, owner }, { day: dayOf(at), publishers });
+  const settings = install.knownSettings ?? page.settings;
+  if (settings === undefined) return refuse("not_set_up");
+
+  const sites = page.sites.map((site) => siteObject(site, install, settings.trash_days, page.views.get(site.id) ?? null));
+  const names = Object.fromEntries(page.publishers);
+  if (page.next === undefined) return { ok: true, sites, names };
+
+  return { ok: true, sites, next: page.next, names };
+}
+
 /**
  * List the sites an actor may see, each with about how often its pages were opened: every site for an admin, its own for a publisher.
  *
@@ -47,23 +83,19 @@ type Listed = { readonly ok: true } & Readonly<v.InferOutput<typeof LISTED_SITES
  * @returns the page, or `bad_argument` naming the key that was refused: `after` for a cursor that does not carry what its `sort` goes by
  */
 export async function listSites(install: Install, actor: Actor, query: v.InferInput<typeof LIST_QUERY> = {}): Promise<Listed | Refused<"not_set_up" | "bad_argument">> {
-  const entered = await enterInstall(install, actor);
-  if (!entered.ok) return entered;
+  const read = await readPage(install, actor, query, false);
+  if (!read.ok) return read;
 
-  const asked = v.safeParse(LIST_QUERY, query);
-  if (!asked.success) return refuse("bad_argument", v.getDotPath(asked.issues[0])?.split(".")[0] ?? "query");
+  const { names: unasked, ...listed } = read;
 
-  const { after, sort } = asked.output;
-  if (after !== undefined && sort !== undefined && sort !== "updated" && after[sort] === undefined) return refuse("bad_argument", "after");
+  return listed;
+}
 
-  const owner = actor.scope === "admin" ? undefined : actor.holder;
-  const page = await install.database.listSites({ ...asked.output, owner });
-  const views = await install.database.readViews(
-    page.sites.map((site) => site.id),
-    dayOf(entered.signed.at),
-  );
-  const sites = page.sites.map((site) => siteObject(site, install, entered.settings.trash_days, views.get(site.id) ?? null));
-  if (page.next === undefined) return { ok: true, sites };
-
-  return { ok: true, sites, next: page.next };
+/**
+ * List the sites as `listSites` does and, for an admin, name whoever published their kept versions: what a screen writes where a token published something.
+ *
+ * @returns the page, with `names` holding the note of each such token that has one, by the token's id, removed or not; no name for anyone but an admin
+ */
+export async function listSitesWithNames(install: Install, actor: Actor, query: v.InferInput<typeof LIST_QUERY> = {}): Promise<ListedWithNames | Refused<"not_set_up" | "bad_argument">> {
+  return readPage(install, actor, query, actor.scope === "admin");
 }
