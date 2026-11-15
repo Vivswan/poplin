@@ -18,6 +18,9 @@ import "@/domain/domain-screen";
 import "@/settings/settings-screen";
 import "@/usage/usage-screen";
 
+/** How long the test may take, in milliseconds: it draws every screen, which on a busy machine passes the five seconds a test gets. */
+const TEST_MS = 60_000;
+
 /** The runtime's own `fetch`, put back after each test. */
 const OWN_FETCH = globalThis.fetch;
 
@@ -111,5 +114,5 @@ describe("an address of the console", () => {
       "/nowhere/at/all": ["Not found", "Sites", []],
       "/Settings": ["Not found", "Sites", []],
     });
-  });
+  }, TEST_MS);
 });

@@ -63,10 +63,7 @@ const LOADING_ROWS = 6;
 const OWN_CONTROLS = "a, button, input, [role^='menu'], [role='dialog']";
 
 /** The look of a heading's grip: it lies over the heading's far end, so it takes no room from the words, and shows when its heading is pointed at or it holds the focus. */
-const GRIP_LOOK = cn(
-  "absolute top-2 flex size-5 cursor-grab items-center justify-center rounded-sm bg-background text-faint opacity-0 outline-none active:cursor-grabbing",
-  "group-hover/head:opacity-100 focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-ring",
-);
+const GRIP_LOOK = "absolute top-1.5 cursor-grab bg-background text-faint opacity-0 group-hover/head:opacity-100 focus-visible:opacity-100 active:cursor-grabbing";
 
 /** The look of the table: columns of the widths it is told, and hairlines drawn by the cells. */
 const TABLE_LOOK = "mb-2.5 table-fixed border-separate border-spacing-0 text-sm";
@@ -222,23 +219,24 @@ function HeadCell<Row>({
         onPointerDown={fixed ? undefined : (listeners?.onPointerDown as PointerEventHandler | undefined)}
       >
         {sortable ? (
-          <button
+          <Button
             type="button"
+            variant="ghost"
+            size="xs"
             onClick={press}
-            className={cn(
-              "-mx-1 flex min-w-0 items-center gap-1 rounded-sm px-1 py-0.5 outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring",
-              sorted && "font-bold text-foreground",
-            )}
+            className={cn("-mx-1 min-w-0 shrink gap-1 px-1 font-normal", sorted && "font-bold text-foreground")}
           >
             {words}
             {sortArrow(sorted, sort.descending)}
-          </button>
+          </Button>
         ) : (
           words
         )}
         {fixed ? null : (
-          <button
+          <Button
             type="button"
+            variant="ghost"
+            size="icon-xs"
             {...attributes}
             {...listeners}
             aria-label={`Move the ${spec.header} column`}
@@ -246,7 +244,7 @@ function HeadCell<Row>({
             className={cn(GRIP_LOOK, spec.numeric === true ? "left-1" : "right-2.5")}
           >
             <GripVerticalIcon className="size-3.5" />
-          </button>
+          </Button>
         )}
       </div>
       <button

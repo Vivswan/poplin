@@ -33,7 +33,7 @@ const ORDERS = [
 /** The columns of the list. A waiting login has no day it was allowed and none it runs out. */
 const COLUMNS: readonly ColumnSpec<TokenRow>[] = [
   { id: "name", header: "Name", fixed: true, sortable: TOKEN_ORDERS.first.name, cell: (row) => <Name row={row} /> },
-  { id: "state", header: "State", cell: (row) => (row.kind === "waiting" ? <WaitingMark login={row.login} /> : null) },
+  { id: "state", header: "State", cell: (row) => (row.kind === "waiting" ? <WaitingMark login={row.login} /> : <span className="text-muted-foreground">Working</span>) },
   { id: "scope", header: "Can change", cell: (row) => <span className="text-muted-foreground">{SCOPE_WORDS[row.scope]}</span> },
   {
     id: "allowed",

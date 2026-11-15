@@ -11,6 +11,7 @@ import { TooltipWithBounds } from "@visx/tooltip";
 import { type PointerEvent, type ReactNode, useState } from "react";
 
 import { showCount } from "@/lib/sites";
+import { dayIn } from "@/lib/timezone";
 
 /** How tall the graph is, in pixels. */
 const HEIGHT = 220;
@@ -33,11 +34,8 @@ const MOST_ROWS = 10;
 /** How a count is written beside the plot: 1.2K. */
 const SHORT_COUNT = new Intl.NumberFormat("en", { notation: "compact", maximumFractionDigits: 1 });
 
-/** How a day is written under the plot: 14 Nov. */
-const SHORT_DAY = new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short", timeZone: "UTC" });
-
-/** How a day is written whole: 14 Nov 2026. */
-const WHOLE_DAY = new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" });
+/** How many characters of a day written whole are its day and month: 14 Nov. */
+const SHORT_DAY_LENGTH = 6;
 
 /** One line of the graph. */
 export interface Series {
@@ -87,9 +85,9 @@ function momentOf(day: string | undefined): number {
   return Date.parse(`${day}T00:00:00Z`);
 }
 
-/** Write the step that starts on a UTC day: 14 Nov 2026, or Week of 9 Nov 2026. */
+/** Write the step that starts on a UTC day: 14 Nov 2026, or Week of 09 Nov 2026. */
 export function stepWords(day: string, by: Step): string {
-  const written = WHOLE_DAY.format(momentOf(day));
+  const written = dayIn(momentOf(day), "utc");
 
   return by === "week" ? `Week of ${written}` : written;
 }
@@ -131,7 +129,7 @@ function Axes({ plot, days, marks }: { readonly plot: Plot; readonly days: reado
         tickValues={marks}
         hideTicks
         stroke="var(--border)"
-        tickFormat={(at) => SHORT_DAY.format(momentOf(days[Number(at)]))}
+        tickFormat={(at) => dayIn(momentOf(days[Number(at)]), "utc").slice(0, SHORT_DAY_LENGTH)}
         tickLabelProps={(at) => ({ fill: "var(--muted-foreground)", fontSize: 11, dy: 4, textAnchor: ends[Number(at)] ?? "middle" })}
       />
     </>
