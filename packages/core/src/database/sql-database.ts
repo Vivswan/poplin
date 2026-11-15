@@ -18,7 +18,7 @@ import { SWEEP_PLACE, type SweepPlace } from "../records/sweep-place";
 import { type Totals, totalsFromRow } from "../records/sizes";
 import { mintSiteId, type SiteId } from "../sites/ids";
 import { tokenFromRow } from "../records/token";
-import { type ManifestFile, MANIFEST_FILE, type Upload, type UploadId, uploadFromRow } from "../records/upload";
+import { type ManifestFile, type Upload, type UploadId, uploadFromRow } from "../records/upload";
 import { dayOf, type SiteViews, viewDays } from "../records/views";
 import type {
   Address,
@@ -648,15 +648,31 @@ function manifestToText(manifest: readonly ManifestFile[]): string {
   return `{${listed.slice(1, -1).replace(KEY_END, '":[[')}}`;
 }
 
-/**
- * Read one file of a stored manifest, and its place in the manifest.
- *
- * @throws {Error} the entry is no file
- */
-function placedFile(entry: unknown): { readonly file: ManifestFile; readonly place: number } {
-  const [path, size, type, place]: unknown[] = Array.isArray(entry) ? entry : [];
+/** `manifestToText` is the one writer of a stored file, so its fields are read as written, unchecked. */
+function declaredFile([path, size, type]: StoredFile): ManifestFile {
+  return { path, size, content_type: type };
+}
 
-  return { file: v.parse(MANIFEST_FILE, { path, size, content_type: type }), place: Number(place) };
+/**
+ * Read a stored manifest back as the list it was declared as.
+ *
+ * @param text - what `manifestToText` wrote, or the `{}` of an upload that takes no more files
+ * @throws {Error} the places are not 0 to one less than the count of files, each once
+ */
+function manifestFromText(text: string): ManifestFile[] {
+  const stored: Readonly<Record<string, readonly StoredFile[]>> = JSON.parse(text);
+  const manifest: (ManifestFile | undefined)[] = [];
+  let files = 0;
+
+  for (const sharing of Object.values(stored)) {
+    for (const file of sharing) manifest[file[3]] = declaredFile(file);
+
+    files += sharing.length;
+  }
+
+  if (manifest.length !== files || manifest.includes(undefined)) throw new Error("a stored manifest does not hold each place once");
+
+  return manifest as ManifestFile[];
 }
 
 function uploadIn(result: StatementResult | undefined): Upload | undefined {
@@ -996,11 +1012,7 @@ export class SqlDatabase implements Database {
     const upload = uploadIn(found);
     if (upload === undefined) return undefined;
 
-    const stored: Record<string, unknown[]> = JSON.parse(String(found?.rows[0]?.manifest));
-    const placed = Object.values(stored).flat().map(placedFile);
-    placed.sort((one, other) => one.place - other.place);
-
-    return { upload, manifest: placed.map(({ file }) => file) };
+    return { upload, manifest: manifestFromText(String(found?.rows[0]?.manifest)) };
   }
 
   async getUploadFile(id: UploadId, path: string): Promise<{ readonly upload: Upload; readonly file: ManifestFile | undefined } | undefined> {
@@ -1011,9 +1023,10 @@ export class SqlDatabase implements Database {
     const stored = found?.rows[0]?.file;
     if (typeof stored !== "string") return { upload, file: undefined };
 
-    const sharing: unknown[] = JSON.parse(stored);
+    const sharing: readonly StoredFile[] = JSON.parse(stored);
+    const file = sharing.find(([held]) => held === path);
 
-    return { upload, file: sharing.map(placedFile).find(({ file }) => file.path === path)?.file };
+    return { upload, file: file === undefined ? undefined : declaredFile(file) };
   }
 
   publishUploadAsSite(id: UploadId, draft: NewSite, signed: Signed): Promise<Done | Refused<"name_taken" | "not_pending">> {
