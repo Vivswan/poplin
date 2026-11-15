@@ -20,9 +20,6 @@ const AFTER_LINK_LOOK = "size-6 shrink-0 opacity-60 group-hover/row:opacity-100 
 /** The narrowest the Link column is drawn to stay in sight beside the columns before it, in pixels: the start of a site's name, its hidden id and what follows, and the two buttons. */
 const LINK_GIVES = 264;
 
-/** What stands for each character of a site's id that is left out: the dots are as wide as the id, so nothing moves when it is shown. */
-const MASK_MARK = String.fromCharCode(0x2022);
-
 /** Which sites show the id in their link, and the switch of one. */
 export interface Reveal {
   /** Whether the site's id is shown. */
@@ -40,6 +37,23 @@ export function AccessMark({ access, className }: { readonly access: Access; rea
     <span className={cn("inline-flex items-center gap-1.5 text-muted-foreground", className)}>
       <Icon className="size-3.5 shrink-0" aria-hidden="true" />
       {ACCESSES.find((entry) => entry.access === access)?.label}
+    </span>
+  );
+}
+
+/**
+ * What stands where a site's id is left out: one dot for each character, each as wide as a character, so nothing moves when the id is shown.
+ *
+ * The dots are drawn, not typed: a typed dot is taken from another font in some browsers, and comes out heavier there.
+ */
+function HiddenId({ length }: { readonly length: number }): ReactNode {
+  return (
+    <span aria-hidden="true" className="inline-flex h-[1em] align-middle text-faint">
+      {Array.from({ length }, (_, at) => at).map((at) => (
+        <span key={at} className="flex w-[1ch] items-center justify-center">
+          <span className="size-[3px] rounded-full bg-current" />
+        </span>
+      ))}
     </span>
   );
 }
@@ -74,7 +88,7 @@ export function SiteLink({
       <span className="truncate">{before}</span>
       {hidden === "" ? null : (
         <span className="shrink-0">
-          {masked ? <span className="text-faint select-none">{MASK_MARK.repeat(hidden.length)}</span> : hidden}
+          {masked ? <HiddenId length={hidden.length} /> : hidden}
           {after}
         </span>
       )}
