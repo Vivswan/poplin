@@ -128,7 +128,7 @@ A publish takes these flags too.
 | Example                                              | Does                                                          |
 | ---------------------------------------------------- | ------------------------------------------------------------- |
 | `poplin login --server https://poplin.example.com`   | logs this computer in: you allow it in your browser           |
-| `poplin login --publisher --name ci-runner`          | saves a login that manages only the sites it publishes        |
+| `poplin login --publisher --name ci-runner`          | saves a publisher's login, for a computer that should only publish            |
 | `poplin login --no-browser`                          | prints the address and opens no browser                       |
 | `poplin whoami`                                      | prints the install, the role, and when the login runs out     |
 | `poplin logout`                                      | revokes the login and forgets it                              |
@@ -142,7 +142,14 @@ $ poplin login --server https://poplin.example.com
 
 An install begins five logins a minute for all computers together. In a minute that is full, `poplin login` waits and asks again.
 
-`POPLIN_SERVER` and `POPLIN_TOKEN` in the environment stand in for a saved login.
+A computer keeps one saved login: a new `poplin login` replaces it. An agent on the computer uses that login and does not log in itself. `POPLIN_SERVER` and `POPLIN_TOKEN` in the environment stand in for a saved login.
+
+`--publisher` is for a computer or a script that should only publish, such as a build server or a shared machine.
+
+| A publisher's login | What                                                                                                                            |
+| ------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| can                 | publish, and for the sites it published: list, show, update, change who can open, roll back, re-link, copy, delete, and restore |
+| cannot              | reach a site another login published, or the install's settings, logins, backups, and updates                                   |
 
 ## The install
 

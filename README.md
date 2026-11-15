@@ -22,15 +22,13 @@ What gets published is a site: one HTML file, or a folder of files with an `inde
 
 **First time? Install first.** [Install](docs/install.md) shows how.
 
-The agent publishes to an install: your own copy of poplin, set up once in your Cloudflare account. The agent cannot make the install for you: it logs your computer in to one and adds poplin's tools to itself.
+The agent publishes to an install: your own copy of poplin, set up once in your Cloudflare account. The agent cannot make the install for you: it acts as you, with the login the install's last step saves on your computer, and adds poplin's tools to itself.
 
 Then paste this line into an agent that can run commands on your computer, such as Claude Code or Codex. A chat in a browser cannot.
 
 ```text
 Look at https://github.com/Vivswan/poplin, read its skill, and help me set up poplin.
 ```
-
-The agent asks for the address of your install. That is your dashboard's address: `https://poplin.example.com`.
 
 If you are the agent: the skill is [`skills/poplin/SKILL.md`](skills/poplin/SKILL.md).
 

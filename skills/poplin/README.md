@@ -10,7 +10,7 @@ Paste this line into your agent:
 Look at https://github.com/Vivswan/poplin, read its skill, and help me set up poplin.
 ```
 
-The agent asks before it logs this computer in and before it adds poplin's tools to its own configuration.
+The agent acts as you, with the login saved on this computer, and asks before it adds poplin's tools to its own configuration.
 
 ## What It Does
 

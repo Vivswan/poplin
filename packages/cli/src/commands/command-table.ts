@@ -144,7 +144,7 @@ export const COMMANDS = [
     about: "log this machine in: you allow it on the dashboard",
     arguments: [],
     flags: [
-      { name: "--publisher", about: "save a publisher's token, for an agent" },
+      { name: "--publisher", about: "save a publisher's token: only its own sites" },
       { name: "--name", value: "<name>", about: "what the dashboard calls this machine" },
       { name: "--no-browser", about: "print the address, and open no browser" },
       ...installFlags("the address and the code, then the login"),

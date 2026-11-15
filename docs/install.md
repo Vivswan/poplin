@@ -200,9 +200,7 @@ Your install is ready, and it publishes two ways.
 | by asking an agent | paste the line of [the README](../README.md#use-it-from-an-ai-agent) into Claude Code, Codex, or another agent that runs commands |
 | by a command       | `npx poplin ./report`: see [Using](using.md)                                                                                      |
 
-The agent asks for the address of your install. Give it your dashboard's, `https://poplin.example.com`, not the one ending in `workers.dev`.
-
-The agent then asks before it logs in, and before it adds poplin's tools to its own configuration as an MCP server, which is how an agent gets tools. A chat in a browser cannot run commands, so it cannot publish.
+The agent acts as you, with the login step 6 saved on this computer: it does not log in itself, and it needs no address from you. It asks before it adds poplin's tools to its own configuration as an MCP server, which is how an agent gets tools. A chat in a browser cannot run commands, so it cannot publish.
 
 ## Optional: block junk traffic and crawlers
 
