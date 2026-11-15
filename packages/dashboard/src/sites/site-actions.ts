@@ -75,7 +75,12 @@ export function siteActions(onChanged: (before: Site, after: Site | null) => voi
     },
     setAccess: (site, access) =>
       run(site, send(routes.access.$post({ param: at(site), json: { access } })), ACCESSES.find((entry) => entry.access === access)?.now ?? "Saved."),
-    setSetting: (site, setting, on) => run(site, send(routes.settings.$post({ param: at(site), json: { [setting]: on } })), "Saved."),
+    setSetting: (site, setting, on) => {
+      // Undo stores what the switch showed before, and says so: as a switch of the Settings screen does.
+      const back = (): void => void run(site, send(routes.settings.$post({ param: at(site), json: { [setting]: !on } })), "Put back.");
+
+      return run(site, send(routes.settings.$post({ param: at(site), json: { [setting]: on } })), "Saved.", back);
+    },
     newLink: (site) => run(site, send(routes["new-link"].$post({ param: at(site), json: {} })), "The site has a new link. The old link stopped working."),
     remove: async (site) => {
       const back = (): void => void restore(site);

@@ -18,6 +18,7 @@ const COLLECTED_AFTER_MS = 6000;
 const PEOPLE_SAID = {
   added: "Added. One more step before this person can log in: open Settings, then Domain, paste a token, and press Repair.",
   removed: "Removed. That person can no longer log in.",
+  gone: "That person was removed already.",
 } as const;
 
 /** What a decision about a login asks for. */
@@ -68,9 +69,19 @@ function decisionWords(login: Review, decision: Decision): string {
  * @param onChanged - called after every done change, and after a login turned out to be gone, so the lists read again
  */
 export function accessActions(onChanged: () => void): AccessActions {
+  // A person someone else took out meanwhile is gone as asked: that is said plainly, and is no refusal.
   const removePerson: AccessActions["removePerson"] = async (email) => {
-    const done = await send(api.people.remove.$post({ json: { login: email } }));
-    if (done === undefined) return;
+    try {
+      await answerOf(api.people.remove.$post({ json: { login: email } }));
+    } catch (error) {
+      if (!(error instanceof Refused)) throw error;
+
+      if (error.code !== "not_a_login") return sayRefused(error.message);
+
+      onChanged();
+
+      return sayDone(PEOPLE_SAID.gone);
+    }
 
     onChanged();
     sayDone(PEOPLE_SAID.removed);

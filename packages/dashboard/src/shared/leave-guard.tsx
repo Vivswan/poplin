@@ -11,6 +11,7 @@ const LEAVE = {
   says: "What you typed on this screen is not saved. Leaving drops it.",
   yes: "Leave",
   no: "Stay",
+  rather: true,
 } as const;
 
 /** Say whether a move leaves the screen. A move to another query of the same screen does not. */

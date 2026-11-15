@@ -14,6 +14,9 @@ import { Screens } from "@/screens";
 /** How long a pointer rests on a control before its hint shows, in milliseconds. */
 const HINT_AFTER_MS = 400;
 
+/** How far under the top of the screen a line is said, as the stylesheet sets it: under the header on a phone, so it covers neither a screen's title nor a panel's Close. */
+const LINE_TOP = "var(--toast-top)";
+
 /** Where every screen's data is kept. A refused read is not asked again by itself: the refusal is shown. */
 const QUERIES = new QueryClient({ defaultOptions: { queries: { retry: false } } });
 
@@ -27,7 +30,7 @@ if (root !== null) {
         <ThemeProvider storageKey="poplin.theme">
           <TooltipProvider delay={HINT_AFTER_MS}>
             <Screens />
-            <Toaster position="top-center" offset={{ top: 12 }} mobileOffset={{ top: 12, left: 12, right: 12 }} />
+            <Toaster position="top-center" offset={{ top: LINE_TOP }} mobileOffset={{ top: LINE_TOP, left: 12, right: 12 }} />
           </TooltipProvider>
         </ThemeProvider>
       </QueryClientProvider>

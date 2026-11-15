@@ -5,7 +5,7 @@ import { type ReactNode, useId } from "react";
 
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
-import { DOMAIN_KEY, type Domain } from "@/domain/domain-queries";
+import { DOMAIN_KEY, DOMAIN_SAVES_KEY, type Domain } from "@/domain/domain-queries";
 import { answerOf, api } from "@/lib/api";
 import { sayDone, sayRefused } from "@/lib/notify";
 import { RowFrame } from "@/settings/row-frame";
@@ -19,9 +19,6 @@ const BOTS = [
 
 /** What every save of the three settings shares: they are sent one after another, in the order they were made, so the last choice is the one stored. */
 const IN_ORDER = { id: "domain-guards" } as const;
-
-/** The key the saves are counted under, so the last one of a run of them is known. */
-const SAVES_KEY = [...DOMAIN_KEY, "guards"] as const;
 
 /** The three settings as they are stored. */
 type Values = Domain["guards"]["values"];
@@ -44,11 +41,11 @@ export function Guards({ guards }: { readonly guards: Domain["guards"] }): React
   };
   const saving = useMutation({
     scope: IN_ORDER,
-    mutationKey: SAVES_KEY,
+    mutationKey: DOMAIN_SAVES_KEY,
     mutationFn: (change: Partial<Values>) => answerOf(api.domain.settings.$post({ json: change })),
     onError: (refused) => sayRefused(refused.message),
     // What is stored is read again once the last save of a run of them has its answer: a read made earlier would undo, on the screen, a change that is still on its way.
-    onSettled: () => (client.isMutating({ mutationKey: SAVES_KEY }) === 1 ? client.invalidateQueries({ queryKey: DOMAIN_KEY }) : undefined),
+    onSettled: () => (client.isMutating({ mutationKey: DOMAIN_SAVES_KEY }) === 1 ? client.invalidateQueries({ queryKey: DOMAIN_KEY }) : undefined),
   });
 
   const save = (change: Partial<Values>): void => {
@@ -56,7 +53,12 @@ export function Guards({ guards }: { readonly guards: Domain["guards"] }): React
     const stored = client.getQueryData<Domain>(DOMAIN_KEY)?.guards.values ?? values;
     const before = Object.fromEntries(Object.keys(change).map((key) => [key, stored[key as keyof Values]])) as Partial<Values>;
     shown(change);
-    saving.mutate(change, { onSuccess: () => sayDone("Saved. The next Repair carries it to the domain.", { run: () => save(before) }) });
+    // Undo stores the values from before and says so, with no Undo of its own: as a switch of the Settings screen does.
+    const putBack = (): void => {
+      shown(before);
+      saving.mutate(before, { onSuccess: () => sayDone("Put back.") });
+    };
+    saving.mutate(change, { onSuccess: () => sayDone("Saved. The next Repair carries it to the domain.", { run: putBack }) });
   };
 
   return (

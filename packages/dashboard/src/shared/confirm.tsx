@@ -29,6 +29,16 @@ export interface Question {
 
   /** `true` for a change that removes something: the button is drawn as one. */
   readonly removes?: boolean;
+
+  /** `true` where not doing it is the answer to lead with: the button that does not is the filled one. */
+  readonly rather?: boolean;
+}
+
+/** The look of the button that does it: a removal's own, quiet where not doing it leads, and the filled one otherwise. */
+function actionLook(question: Question | undefined): "destructive" | "outline" | "default" {
+  if (question?.removes === true) return "destructive";
+
+  return question?.rather === true ? "outline" : "default";
 }
 
 /**
@@ -52,8 +62,8 @@ export function Confirm({ question, onAnswer }: { readonly question: Question | 
           <AlertDialogDescription>{shown?.says}</AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
-          <AlertDialogCancel>{shown?.no ?? "Cancel"}</AlertDialogCancel>
-          <AlertDialogAction variant={shown?.removes === true ? "destructive" : "default"} onClick={() => onAnswer(true)}>
+          <AlertDialogCancel variant={shown?.rather === true ? "default" : "outline"}>{shown?.no ?? "Cancel"}</AlertDialogCancel>
+          <AlertDialogAction variant={actionLook(shown)} onClick={() => onAnswer(true)}>
             {shown?.yes}
           </AlertDialogAction>
         </AlertDialogFooter>

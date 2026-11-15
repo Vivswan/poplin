@@ -119,7 +119,7 @@ function VersionsBlock({ shown, onMakeLive }: { readonly shown: Shown; readonly 
     <PanelBlock label="Versions">
       <ul className="flex flex-col">
         {newestFirst.map((version) => (
-          <li key={version.number} className="flex h-9 items-center gap-3">
+          <li key={version.number} className="flex h-9 items-center gap-3 max-md:h-11">
             <span className="w-7 font-mono text-xs">v{version.number}</span>
             <time title={wholeMoment(version.published)} className="w-24 shrink-0 text-muted-foreground">
               {shortMoment(version.published)}

@@ -12,7 +12,7 @@ import { sayDone, sayRefused } from "@/lib/notify";
 import { RowFrame } from "@/settings/row-frame";
 import { SettingControl } from "@/settings/setting-control";
 import { readOf, sentOf, shownOf } from "@/settings/setting-values";
-import { type Row, SETTINGS_KEY, type Settings } from "@/settings/settings-queries";
+import { type Row, SETTINGS_KEY, SETTINGS_SAVES_KEY, type Settings } from "@/settings/settings-queries";
 import { type Group, wordsOf } from "@/settings/settings-words";
 
 /** What a save says once the logins changed: the login page learns of them only by a repair. */
@@ -24,9 +24,6 @@ const FAULT = "That did not work. Try again.";
 
 /** What every save of a setting shares: they are sent one after another, in the order they were made, so the last value is the one stored. */
 const IN_ORDER = { id: "settings-saves" } as const;
-
-/** The key the saves are counted under, so the last one of a run of them is known. */
-const SAVES_KEY = [...SETTINGS_KEY, "save"] as const;
 
 /** The texts of some settings, by key. */
 type Texts = Readonly<Record<string, string>>;
@@ -71,14 +68,14 @@ function showStored(client: QueryClient, texts: Texts): void {
 
 /** Read the rows again once the last save of a run of them has its answer: a read made earlier would undo, on the screen, a change that is still on its way. */
 function readAfterLast(client: QueryClient): Promise<void> | undefined {
-  return client.isMutating({ mutationKey: SAVES_KEY }) === 1 ? client.invalidateQueries({ queryKey: SETTINGS_KEY }) : undefined;
+  return client.isMutating({ mutationKey: SETTINGS_SAVES_KEY }) === 1 ? client.invalidateQueries({ queryKey: SETTINGS_KEY }) : undefined;
 }
 
 /** Take a done save back: store the texts from before it, in its turn among the saves, and say so. A refusal is said as a line. The line's Undo may be pressed after its group is gone, so the save is the page's and no group's. */
 function putBack(client: QueryClient, texts: Texts): void {
   const undo = new MutationObserver(client, {
     scope: IN_ORDER,
-    mutationKey: SAVES_KEY,
+    mutationKey: SETTINGS_SAVES_KEY,
     mutationFn: sendSave,
     onSuccess: () => sayDone("Put back."),
     onError: (error) => sayRefused(error instanceof Refused ? error.message : FAULT),
@@ -185,7 +182,7 @@ function useSaves(refuse: (error: Error) => void, onStored: (texts: Texts) => vo
 
   const saving = useMutation({
     scope: IN_ORDER,
-    mutationKey: SAVES_KEY,
+    mutationKey: SETTINGS_SAVES_KEY,
     mutationFn: (save: { readonly texts: Texts; readonly before: Texts }) => sendSave(save.texts),
     onError: refuse,
     // The stored texts show before the save stops counting as on its way, so no field is compared with a value from before it.
@@ -198,7 +195,7 @@ function useSaves(refuse: (error: Error) => void, onStored: (texts: Texts) => vo
   });
   const switching = useMutation({
     scope: IN_ORDER,
-    mutationKey: SAVES_KEY,
+    mutationKey: SETTINGS_SAVES_KEY,
     mutationFn: sendSave,
     onError: refuse,
     onSettled: () => readAfterLast(client),
