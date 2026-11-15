@@ -151,13 +151,38 @@ describe("settingsFromText and settingsToText", () => {
     ["logins", "ada@example.com,ADA@example.com", "out-of-range"],
     ["default_access", "public", "unknown-key"],
   ])("refuses %s %j as %s", (key, text, refusal) => {
-    expect<unknown>(settingsFromText({ ...PUBLISHED_DEFAULTS, [key]: text })).toEqual({ ok: false, key, refusal });
+    expect<unknown>(settingsFromText({ ...PUBLISHED_DEFAULTS, [key]: text })).toEqual({ ok: false, key, refusal, every: [{ key, refusal }] });
+  });
+
+  // Drift: a person who typed four refused values would be told of one at each try. The first named stays the one a caller that shows one refusal already shows: a text not in its form before a value outside its range.
+  test("names every refused setting at once, in the order of the settings, and first a text that is not in its form", () => {
+    const texts = { ...PUBLISHED_DEFAULTS, trash_days: "0", max_total_size: "9gb", site_share_of_day: "150%", visitor_requests_per_minute: "" };
+
+    expect<unknown>(settingsFromText(texts)).toEqual({
+      ok: false,
+      key: "max_total_size",
+      refusal: "bad-form",
+      every: [
+        { key: "trash_days", refusal: "out-of-range" },
+        { key: "max_total_size", refusal: "bad-form" },
+        { key: "site_share_of_day", refusal: "out-of-range" },
+        { key: "visitor_requests_per_minute", refusal: "bad-form" },
+      ],
+    });
+  });
+
+  // Drift: a caller that shows one refusal, such as the import of a backup, would name another key than before for the same texts.
+  test("names first a setting that is left out or not in its form, whichever comes first in the order of the settings", () => {
+    const { auto_update: _, ...rest } = PUBLISHED_DEFAULTS;
+    const read = settingsFromText({ ...rest, trash_days: "" });
+
+    expect<unknown>(read.ok ? undefined : [read.key, read.refusal]).toEqual(["trash_days", "bad-form"]);
   });
 
   test("drift: a change is checked against every key, so a setting left out is named instead of silently keeping an unknown value", () => {
     const { trash_days: _, ...rest } = PUBLISHED_DEFAULTS;
 
-    expect<unknown>(settingsFromText(rest)).toEqual({ ok: false, key: "trash_days", refusal: "missing" });
+    expect<unknown>(settingsFromText(rest)).toEqual({ ok: false, key: "trash_days", refusal: "missing", every: [{ key: "trash_days", refusal: "missing" }] });
   });
 });
 

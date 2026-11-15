@@ -123,10 +123,14 @@ interface Install {
 /** Why settings text was refused: a key that is no setting, a setting left out, text not in the key's form, or a value outside its range. */
 type SettingRefusal = "unknown-key" | "missing" | "bad-form" | "out-of-range";
 
-/** The typed settings, or the first key that was refused and why. */
-export type CheckedSettings =
-  | { readonly ok: true; readonly values: SettingValues }
-  | { readonly ok: false; readonly key: string; readonly refusal: SettingRefusal };
+/** One key that was refused, and why. */
+interface RefusedSetting {
+  readonly key: string;
+  readonly refusal: SettingRefusal;
+}
+
+/** The typed settings, or the first key that was refused and why, with every refused key beside it in `every`, in the order of the settings. */
+export type CheckedSettings = { readonly ok: true; readonly values: SettingValues } | ({ readonly ok: false; readonly every: readonly RefusedSetting[] } & RefusedSetting);
 
 function amountSchema<Table extends Units>(units: Table, least: number): v.GenericSchema<unknown, Amount<keyof Table>> {
   const unitNames = Object.keys(units) as (keyof Table & string)[];
@@ -286,32 +290,42 @@ export function settingsToText(values: SettingValues): Record<SettingKey, string
   return texts;
 }
 
+function refusedAlone(refused: RefusedSetting): CheckedSettings {
+  return { ok: false, ...refused, every: [refused] };
+}
+
 /**
  * Read every setting from its text form.
  *
  * @param texts - one text for every key; to change one setting, print the current ones and replace that key
- * @returns the typed values, or the first refused key
+ * @returns the typed values, or the first refused key: a key that is no setting; else, in the order of the settings, the first that is left out or whose text is not in its form; else the first value outside its range.
+ *   `every` holds each text not in its form and each value outside its range, in the order of the settings; for a key that is no setting or is left out, that key alone
  */
 export function settingsFromText(texts: Readonly<Record<string, string>>): CheckedSettings {
   const unknown = Object.keys(texts).find((key) => !Object.hasOwn(VALUES, key));
-  if (unknown !== undefined) return { ok: false, key: unknown, refusal: "unknown-key" };
+  if (unknown !== undefined) return refusedAlone({ key: unknown, refusal: "unknown-key" });
 
   const values: Record<string, unknown> = {};
+  const unread: RefusedSetting[] = [];
 
   for (const key of SETTING_KEYS) {
     const text = texts[key];
-    if (text === undefined) return { ok: false, key, refusal: "missing" };
-
-    const value = FORMS[key].read(text);
-    if (value === undefined) return { ok: false, key, refusal: "bad-form" };
-
-    values[key] = value;
+    const value = text === undefined ? undefined : FORMS[key].read(text);
+    if (value === undefined) unread.push({ key, refusal: text === undefined ? "missing" : "bad-form" });
+    else values[key] = value;
   }
+
+  const [first] = unread;
+  if (first?.refusal === "missing") return refusedAlone(first);
 
   const checked = v.safeParse(SETTING_VALUES, values);
   if (checked.success) return { ok: true, values: checked.output };
 
-  const [issue] = checked.issues;
+  // A text that was not read leaves its key out of the values, which the schema names too: such a key is told once, by its form.
+  const named = checked.issues.map((issue) => v.getDotPath(issue)?.split(".")[0] ?? "");
+  const outside = [...new Set(named)].filter((key) => !unread.some((refused) => refused.key === key)).map((key): RefusedSetting => ({ key, refusal: "out-of-range" }));
+  const order = (refused: RefusedSetting): number => SETTING_KEYS.indexOf(refused.key as SettingKey);
+  const every = [...unread.filter((refused) => refused.refusal === "bad-form"), ...outside].sort((left, right) => order(left) - order(right));
 
-  return { ok: false, key: v.getDotPath(issue)?.split(".")[0] ?? "", refusal: "out-of-range" };
+  return { ok: false, ...(first ?? every[0] ?? { key: "", refusal: "out-of-range" }), every };
 }
