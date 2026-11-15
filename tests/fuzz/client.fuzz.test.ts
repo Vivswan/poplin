@@ -7,7 +7,9 @@ import { join } from "node:path";
 import fc from "fast-check";
 
 import { type Called, type Client, createClient } from "../../packages/cli/src/client/client";
+import type { Io } from "../../packages/cli/src/commands/records";
 import { run } from "../../packages/cli/src/commands/run";
+import { throughPauses } from "../../packages/cli/tests/commands/support/harness";
 import { ABANDONED_UPLOAD } from "../../packages/core/src/actions/abandon-publish";
 import { BEGUN_LOGIN_ANSWER, REDEEMED_LOGIN } from "../../packages/core/src/actions/computer-logins";
 import { DELETED_SITE } from "../../packages/core/src/actions/delete";
@@ -190,7 +192,7 @@ property(
   "whatever an address answers, every command ends in a declared exit code with nothing thrown, no crash, and no token printed",
   fc.asyncProperty(fc.constantFrom(...COMMAND_LINES), fc.array(answers, { minLength: 1, maxLength: 8 }), async (line, script) => {
     const printed: string[] = [];
-    const code = await run(line, {
+    const io: Io = {
       out: (text) => printed.push(text),
       err: (text) => printed.push(text),
       status: (text) => printed.push(text),
@@ -207,7 +209,13 @@ property(
       open: () => undefined,
       pause: async () => "over",
       stopped: new AbortController().signal,
-    });
+    };
+
+    // A file the address fails on is sent again after pauses of seconds. Every answer here comes at once, so no call is on its way while the clock moves.
+    const code = await throughPauses(
+      () => run(line, io),
+      () => true,
+    );
     const text = printed.join("\n");
 
     expect(EXIT_CODES).toContain(code);
