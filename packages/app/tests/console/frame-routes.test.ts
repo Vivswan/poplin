@@ -9,6 +9,9 @@ import { readShell } from "./support/shell";
 /** A release newer than the test console's version. */
 const NEWER = { version: "1.1.0", released: "2026-12-01", notes: "https://example.com/changelog/", database: false };
 
+/** What the frame holds of the problems of an install where nothing went wrong. */
+const NOTHING_MARKED = { recent: [], marks: { usage: null, domain: null, settings: null } };
+
 /** A day, in milliseconds. */
 const DAY_MS = 86_400_000;
 
@@ -30,12 +33,13 @@ describe("the frame", () => {
     await learnRelease(opened);
     await opened.change("/data/settings/update-address", { address: ADDRESS });
 
-    expect(before).toEqual({ ok: true, update: null, starts: false, domainNote: null });
+    expect(before).toEqual({ ok: true, update: null, starts: false, domainNote: null, ...NOTHING_MARKED });
     expect(await (await opened.get("/data/frame")).json()).toEqual({
       ok: true,
       update: { current: "1.0.0", newest: "1.1.0", released: NEWER.released, notes: NEWER.notes, database: false },
       starts: true,
       domainNote: null,
+      ...NOTHING_MARKED,
     });
   });
 

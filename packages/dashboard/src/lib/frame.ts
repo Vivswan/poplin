@@ -1,4 +1,4 @@
-// What the frame around every screen shows of the install: the newer release it knows of, whether an update can be started, and what its domain needs.
+// What the frame around every screen shows of the install: the newer release it knows of, whether an update can be started, what its domain needs, and what went wrong within a day.
 
 import { type DefinedUseQueryResult, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { InferResponseType } from "hono/client";
@@ -16,7 +16,7 @@ const STARTED_KEY = ["update", "started"] as const;
 type Frame = InferResponseType<typeof api.frame.$get, 200>;
 
 /** The frame as the page started with it: nothing is asked until a change makes it stale. */
-const AT_START: Frame = { ok: true, update: BOOT.update, starts: BOOT.starts, domainNote: BOOT.domainNote };
+const AT_START: Frame = { ok: true, update: BOOT.update, starts: BOOT.starts, domainNote: BOOT.domainNote, recent: BOOT.recent, marks: BOOT.marks };
 
 /** Read the frame's data. It starts from the page's own values and is read again after a setting changes. */
 export function useFrame(): DefinedUseQueryResult<Frame> {
