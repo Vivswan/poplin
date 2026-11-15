@@ -60,8 +60,20 @@ describe("the control of a setting", () => {
 });
 
 describe("the rows", () => {
-  // Drift: a row would lose its default or its warnings, a new setting would be left out, or the logins, which the Access screen changes, would come back as a row.
-  test("hold every setting of the rule book but the logins, each with its text, its default, and its warnings, one for each limit", async () => {
+  // Drift: a size's limit would be counted in bytes beside a field typed in MB, or in MB beside one typed in KB, so the screen's mark would follow another number than the typed one.
+  test.each([
+    ["typed in MB", {}, [{ over: 10_000, unit: "MB" }]],
+    ["typed in KB, and in the MB of the default that Reset puts back", { max_total_size: "500KB" }, [{ over: 10_000_000, unit: "KB" }, { over: 10_000, unit: "MB" }]],
+  ])("count a size's free limit in the unit its text is %s", async (_what, texts, counts) => {
+    const opened = await openConsole();
+    if (Object.keys(texts).length > 0) await opened.change("/data/settings", { texts });
+    const row = (await settingsOf(opened)).rows.find((one) => one.key === "max_total_size") as unknown as { readonly limits: readonly unknown[] };
+
+    expect(row.limits).toEqual(counts.map((count) => ({ ...count, warning: "all sites are above the free 10 GB" })));
+  });
+
+  // Drift: a row would lose its default or its limits, a new setting would be left out, or the logins, which the Access screen changes, would come back as a row.
+  test("hold every setting of the rule book but the logins, each with its text, its default, and the free limits it can be put above", async () => {
     const opened = await openConsole();
     const changed = await opened.change("/data/settings", { texts: { requests_per_day: "250000", site_share_of_day: "40%" } });
     const { rows } = await settingsOf(opened);
@@ -76,11 +88,14 @@ describe("the rows", () => {
         text: "250000",
         unit: "",
         fallback: "100000",
-        warnings: ["above the free 10,000,000 reads a month", "above the free 100,000 requests a day"],
+        limits: [
+          { over: 102_526, unit: "", warning: "above the free 10,000,000 reads a month" },
+          { over: 100_000, unit: "", warning: "above the free 100,000 requests a day" },
+        ],
         repair: false,
       },
-      { key: "site_share_of_day", control: { kind: "number", word: null }, text: "40%", unit: "%", fallback: "25%", warnings: [], repair: false },
-      { key: "block_bots", control: { kind: "choice", options: ["auto", "on", "off"] }, text: "auto", unit: "", fallback: "auto", warnings: [], repair: false },
+      { key: "site_share_of_day", control: { kind: "number", word: null }, text: "40%", unit: "%", fallback: "25%", limits: [], repair: false },
+      { key: "block_bots", control: { kind: "choice", options: ["auto", "on", "off"] }, text: "auto", unit: "", fallback: "auto", limits: [], repair: false },
     ]);
   });
 
@@ -133,6 +148,17 @@ describe("a save", () => {
 
     expect([response.status, await response.json()]).toMatchObject([400, { ok: false, code, about }]);
     expect(await textsOf(opened)).toEqual(before);
+  });
+
+  // Drift: a save of several refused values would name one of them, so the screen would mark one field a press and Save would be pressed once for each.
+  test("is refused about every setting whose text it refuses, each with its own sentence, and about the first as any refusal is", async () => {
+    const opened = await openConsole();
+    const texts = { trash_days: "", max_files_per_publish: "20000", site_share_of_day: "150%", visitor_requests_per_minute: "0" };
+    const response = await opened.change("/data/settings", { texts });
+    const refusal = (await response.json()) as { readonly about: string; readonly sentence: string; readonly each: readonly { readonly about: string; readonly sentence: string }[] };
+
+    expect([response.status, refusal.each.map((one) => one.about), refusal.each[0]]).toEqual([400, Object.keys(texts), { about: refusal.about, sentence: refusal.sentence }]);
+    expect(new Set(refusal.each.map((one) => one.sentence)).size).toBeGreaterThan(1);
   });
 
   // Drift: a setting would be refused in the general sentence, which names its key and no rule; or a number's sentence would tell another range than core's rule has.

@@ -1,7 +1,7 @@
 // The data of the Settings screen: every setting as a row, a save of some of them, the address that starts a rebuild, and the sign-out of every browser.
 //
-//   GET  /settings                         every setting with its control, its text, its default, and its warnings; and whether a rebuild address is saved
-//   POST /settings                         save some settings together, each as the text it is typed in: all of them, or on a refusal none
+//   GET  /settings                         every setting with its control, its text, its default, and the free limits it can be put above; and whether a rebuild address is saved
+//   POST /settings                         save some settings together, each as the text it is typed in: all of them, or on a refusal none; a refusal names every refused setting
 //   POST /settings/update-address          save the address that starts a rebuild
 //   POST /settings/update-address/remove   remove it
 //   POST /settings/sign-everyone-out       end every session, this one included
@@ -10,12 +10,12 @@ import { vValidator } from "@hono/valibot-validator";
 import { changeConfig, readConfig } from "@poplin/core/src/actions/config";
 import { signEveryoneOut } from "@poplin/core/src/actions/sign-out";
 import { removeUpdateAddress, saveUpdateAddress, UPDATE_ADDRESS_REQUEST, updateAddressState } from "@poplin/core/src/actions/update-address";
-import { defaultSettings, SETTING_VALUES, type SettingValues, settingsFromText, settingsToText } from "@poplin/core/src/records/settings";
+import { defaultSettings, SETTING_VALUES, type SettingValues, settingsFromText, settingsToText, sizeBytes } from "@poplin/core/src/records/settings";
 import { Hono } from "hono";
 import * as v from "valibot";
 
 import { ACCESS_SETTINGS, DOMAIN_SETTINGS } from "./settings/constants";
-import { type FreeLimits, freeLimitWarnings } from "./settings/free-limits";
+import { type FreeLimits, type FreeMark, freeLimitMarks } from "./settings/free-limits";
 import { NOTHING, refused, refuseInvalid, type Shared } from "./data";
 import { type Control, controlOf, screenText, unitOf } from "./setting-controls";
 
@@ -42,8 +42,8 @@ interface Row {
   /** Its default, in the form of `text`. */
   readonly fallback: string;
 
-  /** The host's sentences for a value above limits of its free plan, one for each limit; empty for a value within them. */
-  readonly warnings: readonly string[];
+  /** The free limits of the host the setting can be put above: the largest count that earns no warning, the unit that count is typed in, and the host's sentence for a count above it. A size has each once for its text's unit and once for its default's. */
+  readonly limits: readonly (FreeMark & { readonly unit: string })[];
 
   /** `true` for a setting that also changes rules on the domain, in a dashboard that has the Domain screen: the domain's own rules follow at the next repair. */
   readonly repair: boolean;
@@ -58,6 +58,22 @@ function screenTexts(values: SettingValues): Readonly<Record<Key, string>> {
 }
 
 /**
+ * The marks of a setting on the count it is typed with, for each unit a text of the row can have: its own, and its default's, which Reset puts into the field.
+ *
+ * A size's bytes become a count of the unit, rounded down, so a typed count is above the mark exactly when its bytes are.
+ */
+function limitsOf(marks: readonly FreeMark[], value: SettingValues[Key], texts: readonly string[]): Row["limits"] {
+  const units = [...new Set(texts.map((text) => text.replace(/^\d+/, "")))];
+  const size = typeof value === "object" && !Array.isArray(value);
+
+  return units.flatMap((unit) => {
+    const one = size ? sizeBytes({ count: 1, unit } as SettingValues["max_total_size"]) : 1;
+
+    return marks.map((mark) => ({ over: Math.floor(mark.over / one), unit, warning: mark.warning }));
+  });
+}
+
+/**
  * The rows of the screen.
  *
  * @param facts - the host's free limits, and whether the dashboard has the Domain screen
@@ -66,7 +82,7 @@ function rowsOf(values: SettingValues, facts: { readonly freeLimits: FreeLimits;
   const texts = screenTexts(values);
   const [installer] = values.logins;
   const defaults = installer === undefined ? texts : screenTexts(defaultSettings({ installer }));
-  const warnings = freeLimitWarnings(values, facts.freeLimits);
+  const marks = freeLimitMarks(values, facts.freeLimits);
   const shown = (Object.keys(texts) as Key[]).filter((key) => !ACCESS_SETTINGS.includes(key));
 
   return shown.map((key) => {
@@ -78,7 +94,7 @@ function rowsOf(values: SettingValues, facts: { readonly freeLimits: FreeLimits;
       text: texts[key],
       unit: control.kind === "number" ? unitOf(SETTING_VALUES.entries[key], texts[key]) : "",
       fallback: defaults[key],
-      warnings: warnings.get(key) ?? [],
+      limits: limitsOf(marks[key] ?? [], values[key], [texts[key], defaults[key]]),
       repair: facts.domain && DOMAIN_SETTINGS.includes(key),
     };
   });
@@ -111,7 +127,8 @@ export const settingsRoutes = new Hono<Shared>()
 
     // A setting is read from its text beside every other one, so the settings the save leaves out go along as they are stored and are not sent on.
     const read = settingsFromText({ ...current, ...texts });
-    if (!read.ok) return refused(context, { code: "bad_argument", about: read.key });
+    // Every refused text is answered at once, so the screen marks each field at the first Save.
+    if (!read.ok) return refused(context, { code: "bad_argument", about: read.key, each: read.every.map((refusal) => refusal.key) });
 
     const changed = await changeConfig(install, actor, Object.fromEntries(held.map((key) => [key, read.values[key]])));
     if (!changed.ok) return refused(context, changed);

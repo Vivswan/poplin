@@ -18,8 +18,18 @@ const SIZE: Row = {
   text: "9000MB",
   unit: "MB",
   fallback: "9000MB",
-  warnings: [],
+  limits: [],
   repair: false,
+};
+
+/** The same size with two limits of the host: 10,000 MB and 20,000 MB. */
+const BOUNDED: Row = {
+  ...SIZE,
+  limits: [
+    { over: 10_000, unit: "MB", warning: WARNINGS[0] ?? "" },
+    { over: 20_000, unit: "MB", warning: WARNINGS[1] ?? "" },
+    { over: 10_000_000, unit: "KB", warning: WARNINGS[0] ?? "" },
+  ],
 };
 
 /** Draw the row over a text, and collect every text it sends. */
@@ -67,9 +77,25 @@ describe("the row of a setting", () => {
 
   // Drift: a warning would have no mark after the control, or two warnings would run together as one paragraph.
   test("holds the host's warnings behind the mark after the control, each sentence a line of its own", () => {
-    const { page } = drawn({ ...SIZE, warnings: WARNINGS });
+    const { page } = drawn(BOUNDED, "20001MB");
     fireEvent.click(page.getByRole("button", { name: "Warning" }));
 
     expect(opened("Warning")).toEqual(WARNINGS);
+  });
+
+  // Drift: the mark would follow the stored value, so a count typed above a free limit would show no warning until it was saved, and one typed back under it would keep its mark.
+  test.each([
+    ["at the first limit", "10000MB", null],
+    ["above the first limit", "10001MB", [WARNINGS[0]]],
+    ["above both", "20001MB", WARNINGS],
+    ["with no count", "MB", null],
+    ["in another unit, under its own mark", "10001KB", null],
+    ["in another unit, above its own mark", "10000001KB", [WARNINGS[0]]],
+  ])("marks the text its control holds, saved or not: %s", (_what, text, warnings) => {
+    const { page } = drawn(BOUNDED, text);
+    const mark = page.queryByRole("button", { name: "Warning" });
+    if (mark !== null) fireEvent.click(mark);
+
+    expect(mark === null ? null : opened("Warning")).toEqual(warnings);
   });
 });

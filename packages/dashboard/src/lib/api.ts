@@ -14,11 +14,18 @@ const UNREACHED = "The dashboard did not answer. Check the connection and try ag
 /** What is shown when the server answered with a failure of its own. */
 const FAILED = "Something went wrong on the server. Try again in a moment.";
 
-/** A refusal as a route answers it. */
+/** One field a request was refused about, and the sentence to show at it. */
+interface RefusedField {
+  readonly about: string;
+  readonly sentence: string;
+}
+
+/** A refusal as a route answers it. `each` is there only where a request was refused about several fields. */
 interface RefusalBody {
   readonly code: string;
   readonly about: string | null;
   readonly sentence: string;
+  readonly each?: readonly RefusedField[];
 }
 
 /** The answer to a call of `api`, before its body is read. */
@@ -35,10 +42,14 @@ export class Refused extends Error {
   /** The field, setting, or limit the refusal is about. */
   readonly about: string | null;
 
+  /** Every field of a request that was refused about several, each with its own sentence; empty for any other refusal. */
+  readonly each: readonly RefusedField[];
+
   constructor(body: RefusalBody) {
     super(body.sentence);
     this.code = body.code;
     this.about = body.about;
+    this.each = body.each ?? [];
   }
 }
 
@@ -54,7 +65,7 @@ function isRefusal(data: unknown): data is RefusalBody {
 /** What a failed call is told as: the server's refusal where it gave one, one sentence for a failure of the server's own, and one for a call that got no answer. */
 function refusalOf(error: unknown): Refused {
   const data: unknown = error instanceof DetailedError ? (error.detail as { readonly data?: unknown } | undefined)?.data : undefined;
-  if (isRefusal(data)) return new Refused({ code: data.code, about: data.about ?? null, sentence: data.sentence });
+  if (isRefusal(data)) return new Refused({ code: data.code, about: data.about ?? null, sentence: data.sentence, ...(data.each === undefined ? {} : { each: data.each }) });
 
   return new Refused(
     error instanceof DetailedError ? { code: "failed", about: null, sentence: FAILED } : { code: "unreached", about: null, sentence: UNREACHED },

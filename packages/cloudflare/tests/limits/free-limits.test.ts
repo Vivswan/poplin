@@ -1,15 +1,24 @@
-import { freeLimitWarnings } from "@poplin/app/src/console/settings/free-limits";
+import { freeLimitMarks } from "@poplin/app/src/console/settings/free-limits";
 import type { Login } from "@poplin/core/src/auth/logins";
 import { MOST_STORE_CALLS } from "@poplin/app/src/sites/serve";
 import { COPY_CALLS } from "@poplin/core/src/actions/duplicate";
 import { SWEEP_SPARE_WRITES } from "@poplin/core/src/actions/sweep";
-import { defaultSettings } from "@poplin/core/src/records/settings";
+import { defaultSettings, sizeBytes } from "@poplin/core/src/records/settings";
 import { expect, test } from "vitest";
 
 import { FREE_LIMITS } from "../../src/limits/free-limits";
 
 const settings = defaultSettings({ installer: "owner@example.com" as Login });
-const warned = (changed: Partial<typeof settings>): string[] => [...freeLimitWarnings({ ...settings, ...changed }, FREE_LIMITS).keys()];
+/** The warnings of each setting that is above a mark of the free plan, by its key: a size counted in bytes, the logins as how many there are. */
+function told(changed: Partial<typeof settings>): Map<string, string[]> {
+  const values = { ...settings, ...changed };
+  const counts: Readonly<Record<string, unknown>> = { ...values, max_total_size: sizeBytes(values.max_total_size), max_site_size: sizeBytes(values.max_site_size), logins: values.logins.length };
+  const above = Object.entries(freeLimitMarks(values, FREE_LIMITS)).map(([key, marks]) => [key, marks.filter((mark) => Number(counts[key]) > mark.over).map((mark) => mark.warning)] as const);
+
+  return new Map(above.filter(([, warnings]) => warnings.length > 0));
+}
+
+const warned = (changed: Partial<typeof settings>): string[] => [...told(changed).keys()];
 
 // Drift: the defaults are core's and the free plan's numbers are this package's. A default raised past one of them would put a new install outside the free plan, warning and all, on its first day.
 test("a new install's settings are within every free limit; a day of 32,258 files is the last within the free month, and a publish of 5,001 files is above the free processing time", () => {
@@ -38,7 +47,5 @@ test.each([
 
 // Drift: two limits are compared with `requests_per_day`. One warning kept by the setting's key would say that nothing more is served, and leave out that the reads are billed on a paid plan.
 test("a day of requests above both the free requests and the free month of reads is told both", () => {
-  const told = freeLimitWarnings({ ...settings, requests_per_day: 110_000 }, FREE_LIMITS).get("requests_per_day");
-
-  expect(told).toEqual([FREE_LIMITS.storageReadsPerMonth.warning, FREE_LIMITS.requestsPerDay.warning]);
+  expect(told({ requests_per_day: 110_000 }).get("requests_per_day")).toEqual([FREE_LIMITS.storageReadsPerMonth.warning, FREE_LIMITS.requestsPerDay.warning]);
 });

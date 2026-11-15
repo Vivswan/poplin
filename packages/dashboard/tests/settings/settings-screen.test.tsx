@@ -42,15 +42,15 @@ const sentTo: string[] = [];
 const held: (() => void)[] = [];
 
 function rowOf(key: string, control: Row["control"], unit = ""): Row {
-  return { key: key as Row["key"], control, text: stored[key] ?? "", unit, fallback: stored[key] ?? "", warnings: [], repair: false };
+  return { key: key as Row["key"], control, text: stored[key] ?? "", unit, fallback: stored[key] ?? "", limits: [], repair: false };
 }
 
 /**
- * Answer as the server does: the rows as stored, and every save done, or refused about `refusedKey`.
+ * Answer as the server does: the rows as stored, and every save done, or refused about `refusedKey`, or about each of `refusedKeys` at once.
  *
  * @param holds - whether a save waits until a test lets it through
  */
-function serve({ refusedKey, holds = false }: { readonly refusedKey?: string; readonly holds?: boolean } = {}): void {
+function serve({ refusedKey, refusedKeys = [], holds = false }: { readonly refusedKey?: string; readonly refusedKeys?: readonly string[]; readonly holds?: boolean } = {}): void {
   globalThis.fetch = (async (input: Request | string | URL, init?: RequestInit) => {
     const { pathname } = new URL(input instanceof Request ? input.url : input, window.location.href);
     if (pathname === `${BOOT.base}/data/frame`) return Response.json({ ok: true, title: "poplin", update: null, starts: false, domainNote: null });
@@ -73,6 +73,9 @@ function serve({ refusedKey, holds = false }: { readonly refusedKey?: string; re
     if (holds) await new Promise<void>((resolve) => held.push(resolve));
 
     if (refusedKey !== undefined) return Response.json({ ok: false, code: "bad_argument", about: refusedKey, sentence: RULE }, { status: 400 });
+
+    const each = refusedKeys.map((about) => ({ about, sentence: `${RULE} (${about})` }));
+    if (each.length > 0) return Response.json({ ok: false, code: "bad_argument", about: each[0]?.about, sentence: each[0]?.sentence, each }, { status: 400 });
 
     Object.assign(stored, texts);
 
@@ -197,6 +200,25 @@ describe("the one Save", () => {
     await waitFor(() => expect(page.getByRole("alert").textContent).toBe(RULE));
 
     expect([field(page, "All sites together").getAttribute("aria-invalid"), field(page, "All sites together").value, bar(page), stored.max_total_size]).toEqual(["true", "0", "1 unsaved change", "9000MB"]);
+  });
+
+  // Drift: a save refused about several settings would mark one of them a press, so Save would be pressed once for each; or the focus would go to another field than the first refused one.
+  test("says every refusal of one save at its own field, with the focus in the first, and takes one away when its field is typed in again", async () => {
+    serve({ refusedKeys: ["trash_days", "max_total_size"] });
+    const page = await drawn();
+    type(page, "Keep deleted sites", "0");
+    type(page, "All sites together", "0");
+    await press(page.getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(page.queryAllByRole("alert").length).toBe(2));
+    const said = page.getAllByRole("alert").map((alert) => alert.textContent);
+    await waitFor(() => expect(document.activeElement === field(page, "Keep deleted sites")).toBe(true));
+    type(page, "Keep deleted sites", "9");
+
+    expect([said, page.getAllByRole("alert").map((alert) => alert.textContent), bar(page)]).toEqual([
+      [`${RULE} (trash_days)`, `${RULE} (max_total_size)`],
+      [`${RULE} (max_total_size)`],
+      "2 unsaved changes",
+    ]);
   });
 
   // Drift: Discard would leave a change counted that no control shows, so one flip of a switch after it would count as two changes, or it would send what it drops.

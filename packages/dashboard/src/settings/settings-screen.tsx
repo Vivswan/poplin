@@ -25,6 +25,9 @@ const GROUP = "mt-5 border-t pt-5 first-of-type:mt-0 first-of-type:border-t-0 fi
 /** The look of a group's heading: larger than a setting's name. */
 const HEADING = "mb-1 text-lg leading-7 font-bold";
 
+/** The setting that starts updates by itself, and what its row says while no update link is saved: the switch then starts nothing. */
+const [AUTO_UPDATE, NEEDS_LINK] = ["auto_update", "Needs an update link to work."] as const;
+
 /** How long a block an address names stays shaded, in milliseconds. */
 const MARKED_FOR = 2000;
 
@@ -69,9 +72,10 @@ function Groups({
               key={row.key}
               row={row}
               text={draft.shown(row)}
-              refusal={draft.refusal?.key === row.key ? draft.refusal.sentence : undefined}
+              refusal={draft.refusals[row.key]}
               onChange={(text) => draft.change(row, text)}
               marked={marked === row.key}
+              note={row.key === AUTO_UPDATE && !settings.updateAddress.set ? NEEDS_LINK : undefined}
             />
           ))}
           {block.id === UPDATES ? <UpdateAddressRow state={settings.updateAddress} draft={address} /> : null}
