@@ -52,6 +52,12 @@ const INSTALL_ADDRESS = /(?:href|action|formaction)="[^"]*example\.com[^"]*"/g;
 /** The one link of a dashboard page that leaves the preview on purpose: the notes of the newer release its side names, opened beside the page with no referrer. */
 const NOTES_LINK = /<a href="https:\/\/example\.com\/changelog\/" target="_blank" rel="noreferrer">/g;
 
+/** The hidden field of a form that holds its signed token. */
+const FORM_TOKEN = /name="csrf" value="([^"]+)"/;
+
+/** The headers a browser puts on a form it sends to the page's own origin. */
+const FORM_HEADERS = { Origin: ORIGIN, "Sec-Fetch-Site": "same-origin", "Content-Type": "application/x-www-form-urlencoded" };
+
 /** What the demo's source in a repository names of one runtime, and what it imports from outside the places it may, each as `[file, what]`; `files` counts the files read. */
 async function demoReach(root: string): Promise<{ files: number; runtime: string[][]; imports: string[][] }> {
   const files = repositoryFiles(root).filter((path) => DEMO_SOURCE.match(path));
@@ -165,16 +171,7 @@ describe("the local preview", () => {
     expect(again).toContain(page);
   });
 
-  test("the bar's scheme switch on the answer to a form comes back to a page that can be opened: without this a change of scheme after a check lands on an address only a form reaches", async () => {
-    const preview = await openPreview(false);
-    const answer = await (await open(preview, "/state/domain/check")).text();
-    const [, back = ""] = /href="(\/theme\/dark\?to=[^"]*)"/.exec(answer) ?? [];
-
-    expect(decodeURIComponent(back)).toBe("/theme/dark?to=/state/domain/check");
-    expect((await open(preview, back)).status).toBe(200);
-  });
-
-  test("clicking on from the home page reaches only pages that answer, carry the bar, and name no hostname of the install: without this a click leaves for a hostname that does not exist, or ends where nothing leads back", async () => {
+  test("clicking on from the home page reaches only pages that answer and name no hostname of the install: without this a click leaves for a hostname that does not exist", async () => {
     const preview = await openPreview(false);
     const stated = new Map((await preview.entries()).map((entry) => [entry.path, entry.status ?? 200]));
     const seen = new Map<string, { readonly status: number; readonly text: string; readonly type: string }>();
@@ -185,7 +182,7 @@ describe("the local preview", () => {
       const page = { status: response.status, type: response.headers.get("Content-Type") ?? "", text: await response.text() };
       const links = Array.from(page.text.matchAll(LOCAL_LINK), ([, link = ""]) => link.replaceAll("&amp;", "&"));
       seen.set(path, page);
-      waiting.push(...links.filter((link) => !seen.has(link) && !waiting.includes(link) && !link.startsWith("/theme/")));
+      waiting.push(...links.filter((link) => !seen.has(link) && !waiting.includes(link)));
     }
 
     const pages = [...seen];
@@ -193,8 +190,7 @@ describe("the local preview", () => {
 
     expect(pages.filter(([path, page]) => page.status !== (stated.get(path) ?? 200) && !isHonest(path, page.status)).map(([path, page]) => [path, page.status])).toEqual([]);
     expect(html.flatMap(([path, page]) => (page.text.replace(NOTES_LINK, "").match(INSTALL_ADDRESS) ?? []).map((found) => [path, found]))).toEqual([]);
-    expect(html.filter(([, page]) => !page.text.includes('id="preview-bar"')).map(([path]) => path)).toEqual([]);
-    expect(["/", "/tokens", "/settings", "/activity", "/usage", "/domain", "/setup/fresh", "/state/allow/waiting", "/?view=trash"].filter((path) => !seen.has(path))).toEqual([]);
+    expect(["/", "/tokens", "/settings", "/activity", "/usage", "/domain", "/?view=trash"].filter((path) => !seen.has(path))).toEqual([]);
     expect([...seen.keys()].filter((path) => path.startsWith("/gallery"))).toEqual([]);
     expect((await open(preview, "/gallery")).status).toBe(404);
     expect(pages.filter(([path]) => path.startsWith("/served/")).length).toBeGreaterThan(8);
@@ -238,24 +234,38 @@ describe("the local preview", () => {
     expect(shown.every((link) => /^<span class="lk">[a-z0-9.:-]+\/served\/[a-z0-9-]+--<span class="mask"[^>]*>\*+<\/span>-u-poplin\/<\/span>$/.test(link))).toBe(true);
   });
 
-  test("a form sent from a preview page changes the install, and a reset brings the sample data back: without this the forms are pictures", async () => {
+  test.each([
+    ["the seeded install", "/", "/reset"],
+    ["the install that holds nothing", "/empty/", "/empty/reset"],
+  ])("a form sent from a preview page changes the install, and the Reset at the top of the dashboard of %s brings the sample data back: without this the forms are pictures", async (_, dashboard, reset) => {
     const preview = await openPreview(false);
     const page = (await preview.entries()).find((entry) => entry.name.startsWith("Private, three versions"))?.path ?? "";
-    const [, csrf = ""] = /name="csrf" value="([^"]+)"/.exec(await (await open(preview, page)).text()) ?? [];
-    const sent = await preview.fetch(
-      new Request(`${ORIGIN}${page}/delete`, {
-        method: "POST",
-        headers: { Origin: ORIGIN, "Sec-Fetch-Site": "same-origin", "Content-Type": "application/x-www-form-urlencoded" },
-        body: new URLSearchParams({ csrf }).toString(),
-      }),
-    );
+    const [, csrf = ""] = FORM_TOKEN.exec(await (await open(preview, page)).text()) ?? [];
+    const sent = await preview.fetch(new Request(`${ORIGIN}${page}/delete`, { method: "POST", headers: FORM_HEADERS, body: new URLSearchParams({ csrf }).toString() }));
+    const [, shown = ""] = /<div class="demo">.*?<form method="post" action="([^"]*)"/.exec(await (await open(preview, dashboard)).text()) ?? [];
 
     expect([sent.status, sent.headers.get("Location")]).toEqual([303, `/?done=trashed&site=${page.slice("/sites/".length)}`]);
     expect(await (await open(preview, "/?view=trash")).text()).toContain("sales-report");
+    expect(shown).toBe(reset);
 
-    await preview.fetch(new Request(`${ORIGIN}/reset`, { method: "POST" }));
+    const started = await preview.fetch(new Request(`${ORIGIN}${reset}`, { method: "POST", headers: FORM_HEADERS }));
 
+    expect([started.status, started.headers.get("Location")]).toEqual([303, "/"]);
     expect(await (await open(preview, "/?view=trash")).text()).not.toContain("sales-report");
+  });
+
+  test("a choice of scheme made on a preview page is kept by the browser, and the session cookie of a login is not: without this the Theme buttons of the dashboard do nothing here", async () => {
+    const preview = await openPreview(false);
+    const [, csrf = ""] = FORM_TOKEN.exec(await (await open(preview, "/settings")).text()) ?? [];
+    const body = new URLSearchParams({ csrf, theme: "dark", back: "/settings" }).toString();
+    const chosen = await preview.fetch(new Request(`${ORIGIN}/theme`, { method: "POST", headers: FORM_HEADERS, body }));
+    const kept = chosen.headers.getSetCookie().map((cookie) => cookie.slice(0, cookie.indexOf(";")));
+    const login = await preview.fetch(new Request(`${ORIGIN}/login?preview-login=admin`));
+    const shown = async (cookie: string): Promise<boolean> => (await (await preview.fetch(new Request(`${ORIGIN}/settings`, { headers: { Cookie: cookie } }))).text()).includes('<html lang="en" data-theme="dark">');
+
+    expect([chosen.status, chosen.headers.get("Location"), kept]).toEqual([303, "/settings", ["theme=dark"]]);
+    expect([login.status, login.headers.getSetCookie()]).toEqual([302, []]);
+    expect([await shown(kept.join("; ")), await shown("")]).toEqual([true, false]);
   });
 
   test("the API takes the seeded admin token and writes addresses of the preview: without this the printed token and the listed addresses are of no use", async () => {

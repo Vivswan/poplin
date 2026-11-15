@@ -38,10 +38,13 @@ const COPY_NAME = "walk-copy";
 /** What the product's pages say when a form was refused. */
 const REFUSED = "Not done";
 
-/** The declaration a page follows the system's scheme with, until the bar forces one. */
-const FOLLOWS_SYSTEM = "color-scheme: light dark";
+/** A dashboard page whose browser chose the dark scheme. */
+const SHOWN_DARK = 'html[data-theme="dark"]';
 
-/** The sentence a stranger reads first. */
+/** The line at the top of a dashboard page that says it is a demo, with its Reset. */
+const DEMO_LINE = "main .demo";
+
+/** The sentence a stranger reads where the demo cannot run. */
 const WHAT_IT_IS = "Your agent publishes a folder as a website, in your own account.";
 
 /** How long the first load may take, in milliseconds: the worker installs, SQLite loads, and the seed runs. */
@@ -77,7 +80,7 @@ async function firstVisit(walk: Walk, page: Page): Promise<void> {
   await page.waitForSelector(SITE_LINK, { timeout: FIRST_LOAD_MS });
   const names = await siteNames(page);
   check("the first visit lands on the dashboard with sample sites", page.url() === demo && names.length >= 5, names.join(", "));
-  check("the first screen says what the product is", ((await page.locator("#preview-bar").textContent()) ?? "").includes(WHAT_IT_IS));
+  check("the first screen says at its top that it is a demo", ((await page.locator(DEMO_LINE).textContent()) ?? "").includes("sample data, resets"));
 
   const settings = await page.goto(`${demo}settings`);
   const policy = settings?.headers()["content-security-policy"] ?? "";
@@ -188,31 +191,30 @@ async function stopAndReload(walk: Walk, context: BrowserContext, page: Page, vi
   await page.goto(`${demo}activity`);
   await page.evaluate(() => document.documentElement.setAttribute("data-before-reload", ""));
   await devtools.send("Page.reload", { ignoreCache: true });
-  await page.waitForFunction(() => !document.documentElement.hasAttribute("data-before-reload") && document.querySelector("#preview-bar") !== null, undefined, { timeout: FIRST_LOAD_MS });
+  await page.waitForFunction(() => !document.documentElement.hasAttribute("data-before-reload") && document.querySelector("main .demo") !== null, undefined, { timeout: FIRST_LOAD_MS });
   const back = page.url() === `${demo}activity` && (await page.title()).startsWith("Activity");
   check("a forced reload of a deep page, around the worker, comes back to it", back, `${page.url().slice(walk.origin.length)}: "${await page.title()}"`);
 }
 
-/** The bar's scheme switch and Reset, and a new visit. */
+/** The dashboard's choice of scheme, the demo's Reset, and a new visit. */
 async function startOver(walk: Walk, context: BrowserContext, opened: Page, victim: string): Promise<void> {
   const { check, demo } = walk;
   await opened.goto(demo);
-  await opened.click('#preview-bar a[href*="/theme/dark"]');
+  await opened.click('form[action$="/theme"] button[value="dark"]');
   await opened.waitForLoadState();
   await opened.goto(`${demo}tokens`);
-  const dark = (await opened.locator("#preview-bar").count()) === 1 && !(await opened.content()).includes(FOLLOWS_SYSTEM);
-  check("the scheme switch holds on the next page: the worker keeps the cookie", dark);
+  check("the choice of scheme holds on the next page: the worker keeps the cookie", (await opened.locator(SHOWN_DARK).count()) === 1);
 
   await opened.close();
   const page = await context.newPage();
   await page.goto(demo);
   await page.waitForSelector(SITE_LINK, { timeout: FIRST_LOAD_MS });
-  check("a new visit starts over from the seed", (await siteNames(page)).includes(victim) && (await page.content()).includes(FOLLOWS_SYSTEM));
+  check("a new visit starts over from the seed", (await siteNames(page)).includes(victim) && (await page.locator(SHOWN_DARK).count()) === 0);
 
   await trash(page, demo, victim);
-  await page.click('#preview-bar form[action$="/reset"] button');
+  await page.click(`${DEMO_LINE} form[action$="/reset"] button`);
   await page.waitForSelector(SITE_LINK);
-  check("the bar's Reset starts over", (await siteNames(page)).includes(victim));
+  check("the Reset at the top starts over", (await siteNames(page)).includes(victim));
 }
 
 /** A browser that never saw the demo opens a page inside it, and one that has no Service Workers opens the demo. */
@@ -221,10 +223,10 @@ async function strangers(walk: Walk): Promise<void> {
   const fresh = await walk.open();
   const deep = await fresh.newPage();
   await deep.goto(`${demo}activity?page=1#content`);
-  await deep.waitForSelector("#preview-bar", { timeout: FIRST_LOAD_MS }).catch(() => undefined);
+  await deep.waitForSelector(DEMO_LINE, { timeout: FIRST_LOAD_MS }).catch(() => undefined);
   check(
     "a deep link on a first visit reaches its page, query and fragment kept, through the host's 404 page",
-    deep.url() === `${demo}activity?page=1#content` && (await deep.locator("#preview-bar").count()) === 1,
+    deep.url() === `${demo}activity?page=1#content` && (await deep.locator(DEMO_LINE).count()) === 1,
     deep.url().slice(walk.origin.length),
   );
   await fresh.close();

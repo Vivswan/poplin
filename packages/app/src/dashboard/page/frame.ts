@@ -8,6 +8,7 @@ import { COPY_SCRIPT_PATH } from "./copy-script";
 import { BRAND_MARK, ICONS } from "./icons";
 import { type Notice, refusalSentence } from "./notices";
 import { STYLE } from "./style";
+import { THEMES, type Theme } from "./theme";
 
 /** The sections of the side, in the order shown: the path each opens, and the pages that sit under it. A section of more than one page shows them as tabs. */
 const SECTIONS: readonly Section[] = [
@@ -58,6 +59,12 @@ interface Look {
   /** The version of poplin the install runs, and the newer release it knows of. Shown at the foot of the side. */
   readonly running?: { readonly version: string; readonly update?: Update };
 
+  /** The scheme this browser chose, and the path the page can be opened at again, which a new choice comes back to. Without it the page follows the system and the side shows no choice. */
+  readonly theme?: { readonly chosen: Theme; readonly back: string };
+
+  /** Set by a host whose install is a demo over sample data: the address its form posts to, to start the data over. A real install has none, and shows nothing of it. */
+  readonly demo?: { readonly reset: string };
+
   /** What is shown beside the pages every dashboard has: `domain` adds the Domain tab, and `none` shows no side at all, as on the setup page. */
   readonly tabs?: "domain" | "none";
 }
@@ -75,15 +82,29 @@ function sectionLink(section: Section, current: Tab, tabs: Look["tabs"]): Html {
   return html`<li><a href="${section.path}" aria-current="${own.length === 1 ? "page" : "true"}">${ICONS[section.icon]}${section.label}</a></li>`;
 }
 
-/** The foot of the side: the version the install runs, and above it the newer release, with the way to what changed in it. The link leaves the dashboard, so it opens beside it and carries no referrer. */
+/** The choice of scheme: one form whose pressed button is the choice in force. */
+function themeChoice(look: Look): Html {
+  const { theme, csrf } = look;
+  if (theme === undefined || csrf === undefined) return html``;
+
+  const choices = Object.entries(THEMES).map(([name, label]) => html`<button type="submit" name="theme" value="${name}" aria-pressed="${name === theme.chosen ? "true" : "false"}">${label}</button>`);
+
+  return html`<form class="seg" method="post" action="/theme" aria-label="Theme">${csrfField({ csrf })}<input type="hidden" name="back" value="${theme.back}">${choices}</form>`;
+}
+
+/** The newer release the install knows of, with the way to what changed in it. The link leaves the dashboard, so it opens beside it and carries no referrer. */
+function news(look: Look): Html {
+  const update = look.running?.update;
+  if (update === undefined) return html``;
+
+  return html`<p class="news"><b>${update.newest} is out</b> <a href="${update.notes}" target="_blank" rel="noreferrer">What changed</a></p>`;
+}
+
+/** The foot of the side: the newer release, the choice of scheme, and the version the install runs. */
 function sideFoot(look: Look): Html {
-  const { running } = look;
-  if (running === undefined) return html``;
+  if (look.running === undefined) return html``;
 
-  const update = running.update;
-  const news = update === undefined ? html`` : html`<p class="news"><b>${update.newest} is out</b> <a href="${update.notes}" target="_blank" rel="noreferrer">What changed</a></p>`;
-
-  return html`\n<div class="about">${news}<p>poplin ${running.version}</p></div>`;
+  return html`\n<div class="about">${news(look)}${themeChoice(look)}<p>poplin ${look.running.version}</p></div>`;
 }
 
 function side(current: Tab, look: Look): Html {
@@ -122,6 +143,13 @@ function copyScript(look: Look): Html {
   return look.tabs === "none" ? html`` : html`\n<script src="${COPY_SCRIPT_PATH}" defer></script>`;
 }
 
+/** The line that says the install is a demo, with the one press that starts its data over. */
+function demoLine(look: Look): Html {
+  if (look.demo === undefined) return html``;
+
+  return html`<div class="demo"><b>Demo</b><span>sample data, resets</span><form method="post" action="${look.demo.reset}"><button type="submit" class="txt">Reset</button></form></div>\n`;
+}
+
 function heading(page: Page): Html {
   if (page.panel === undefined) return html`<h1>${page.heading}</h1>`;
 
@@ -158,7 +186,7 @@ export function framePage(page: Page, look: Look): Html {
   const classes = `app${look.tabs === "none" ? " bare" : ""}${page.panel === undefined ? "" : " has-panel"}`;
 
   return html`<!doctype html>
-<html lang="en">
+<html lang="en" data-theme="${look.theme?.chosen ?? "system"}">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -171,7 +199,7 @@ export function framePage(page: Page, look: Look): Html {
 <div class="${classes}">
 ${side(page.tab, look)}
 <main id="content">
-<div class="title">${heading(page)}${page.beside ?? html``}</div>
+${demoLine(look)}<div class="title">${heading(page)}${page.beside ?? html``}</div>
 ${tabList(page.tab, look.tabs)}
 ${page.body}
 ${page.panel?.body ?? html``}

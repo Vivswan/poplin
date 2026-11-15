@@ -46,7 +46,41 @@ test("every page renders for an admin, under the install's title, and names its 
     expect(page).toContain(`<title>${heading} - poplin.example.com</title>`);
     expect(page).toMatch(new RegExp(`<h1>(<a href="/">)?${heading}(</a>)?</h1>`));
     expect(page).toMatch(new RegExp(`aria-current="page">(<svg.*?</svg>)?${tab}</a>`));
+    expect(page).not.toContain('class="demo"');
   }
+});
+
+// Drift: the choice lives in one browser's cookie and nowhere else, so nothing but these lines says that a press is kept, shown, and led back from.
+test("a choice of scheme is kept in a cookie, marks the document and the pressed button, and comes back to the page it was made on, without that page's query; any other value is the system's, and any other place the first page", async () => {
+  const opened = await openDashboard();
+  const choices = [
+    ["dark", "/activity", "dark", "/activity"],
+    ["light", "/settings", "light", "/settings"],
+    ["system", "//example.org/", "system", "/"],
+    ["<b>", "https://example.org/", "system", "/"],
+  ] as const;
+
+  for (const [theme, back, kept, landed] of choices) {
+    const answer = await opened.post("/theme", { theme, back });
+    const page = await (await opened.get(landed, { Cookie: `${opened.cookie}; theme=${kept}` })).text();
+
+    const cookies = answer.headers.getSetCookie().map((cookie) => cookie.slice(0, cookie.indexOf(";")));
+
+    expect([theme, answer.status, answer.headers.get("Location"), cookies]).toEqual([theme, 303, landed, [`theme=${kept}`]]);
+    expect(page).toContain(`<html lang="en" data-theme="${kept}">`);
+    expect(await attributesOf(page, '.side form[action="/theme"] button[aria-pressed="true"]', "value")).toEqual([kept]);
+    expect(await attributesOf(page, '.side form[action="/theme"] input[name="back"]', "value")).toEqual([landed]);
+  }
+
+  const unsigned = await opened.post("/theme", { theme: "dark", back: "/" }, { csrf: null });
+  const hostile = await (await opened.get("/", { Cookie: `${opened.cookie}; theme=<b>` })).text();
+  const afterForm = await (await opened.post("/settings/no-such-change", {})).text();
+  const asked = await (await opened.get("/tokens/allow?code=ABCD-EFGH")).text();
+
+  expect([unsigned.status, unsigned.headers.getSetCookie()]).toEqual([403, []]);
+  expect(hostile).toContain('<html lang="en" data-theme="system">');
+  expect(await attributesOf(afterForm, 'form[action="/theme"] input[name="back"]', "value")).toEqual(["/settings"]);
+  expect(await attributesOf(asked, 'form[action="/theme"] input[name="back"]', "value")).toEqual(["/tokens/allow"]);
 });
 
 test("without a session every request, a page that does not exist included, is answered by the way to the login alone", async () => {
@@ -198,7 +232,7 @@ test("the side ends in the version the install runs, and names a newer release o
   const opened = await openDashboard();
   const quiet = await (await opened.get("/")).text();
 
-  expect(await textsOf(quiet, ".side .about")).toEqual([`poplin ${VERSION}`]);
+  expect(await textsOf(quiet, ".side .about p")).toEqual([`poplin ${VERSION}`]);
 
   await opened.install.database.keepUpdateCheck({ checked_at: opened.clock.now, news: { version: "1.1.0", released: "2026-12-01", notes: "https://example.com/changelog/", database: false } });
   const told = await (await opened.get("/settings")).text();

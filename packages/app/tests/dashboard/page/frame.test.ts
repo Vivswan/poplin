@@ -39,6 +39,16 @@ test("the frame marks exactly one link as the current page, the page's own, and 
   }
 });
 
+// Drift: only a demo's host hands the frame this part. On a real install a "Demo" line would tell an owner that their sites reset.
+test("the frame shows the demo's line and its Reset above the title when it is handed the part, and nothing of it otherwise", async () => {
+  const page = { tab: "sites", heading: "Heading", body: html`` } as const;
+  const real = String(await framePage(page, { title: "Title", nonce: "n" }));
+  const demo = String(await framePage(page, { title: "Title", nonce: "n", demo: { reset: HOSTILE } }));
+  const line = `<div class="demo"><b>Demo</b><span>sample data, resets</span><form method="post" action="${ESCAPED}"><button type="submit" class="txt">Reset</button></form></div>`;
+
+  expect(demo).toContain(`<main id="content">\n${line}\n<div class="title"><h1>Heading</h1></div>`);
+  expect([real.includes('class="demo"'), real.includes("Reset"), real.includes('<main id="content">\n<div class="title">')]).toEqual([false, false, true]);
+});
 
 test("a refused page says the table's sentence and never the code's own text, and the token field escapes its value", async () => {
   const page = refusedPage({ tab: "sites", heading: "Site", status: 404 }, { code: "<b>not_a_code</b>", about: HOSTILE });

@@ -8,8 +8,9 @@
 // A site's place is its whole first host label, so the mount knows nothing of how a label is built.
 //
 // Only addresses are rewritten: in an HTML page, in the `Location` header, and the install's own origins in a JSON answer.
-// Every HTML page also gets the preview's bar before its `</body>`, and a refusal in plain text is shown inside a page of the preview that says so.
+// A refusal in plain text is shown inside a page of the preview that says so.
 
+import { THEME_COOKIE } from "../../../app/src/dashboard/page/theme";
 import { ADMIN_LABEL } from "../../../core/src/names/hostname";
 import { ADDRESSES, DOMAIN } from "./world";
 
@@ -40,18 +41,6 @@ const PREVIEW_KEYS = { as: "Preview-As", "preview-visitor": "Preview-Visitor", "
 /** The query key of a login address that names where to go back to. */
 const RETURN_KEY = "return";
 
-/** A dark-scheme media query of a stylesheet. */
-const DARK_QUERY = /@media\s*\(prefers-color-scheme:\s*dark\)/g;
-
-/** The declaration that lets a page follow the system's scheme. */
-const BOTH_SCHEMES = /color-scheme:\s*light dark/g;
-
-/** The nonce a page's policy allows its one style element under. */
-const STYLE_NONCE = /<style nonce="([^"]*)"/;
-
-/** Where the bar's markup names the nonce of its own style element. */
-export const NONCE_SLOT = "%nonce%";
-
 /** The headers a rewritten body no longer matches. */
 const BODY_HEADERS = ["Content-Length", "ETag", "Accept-Ranges"];
 
@@ -73,21 +62,15 @@ export interface Mount {
   readonly answer: (request: Request) => Promise<Response>;
 }
 
-/** A body the mount rewrites: a page, a stylesheet, JSON, or a refusal in plain text. */
-type Kind = "html" | "css" | "json" | "plain";
+/** A body the mount rewrites: a page, JSON, or a refusal in plain text. */
+type Kind = "html" | "json" | "plain";
 
 /** How a preview request asks its pages to look. */
 interface Look {
-  /** The scheme every page is forced to; the system's own when absent. */
-  readonly theme: "light" | "dark" | undefined;
-
   /** The origin the browser asked. */
   readonly origin: string;
 
-  /** The bar's markup, with `NONCE_SLOT` where its style element's nonce goes. */
-  readonly bar: string;
-
-  /** Draws a page of the preview around a refusal the app answers as plain text, so the bar leads back from it. */
+  /** Draws a page of the preview around a refusal the app answers as plain text, which leads back to the dashboard. */
   readonly framed: (text: string, status: number) => string;
 }
 
@@ -135,15 +118,6 @@ export function localAddress(address: string, here: Pick<Mount, "prefix" | "orig
   return `${servedPath(url.hostname)}${url.pathname}${rest}`;
 }
 
-/**
- * Make a stylesheet, or a page that holds one, show one scheme whatever the system says.
- *
- * @returns the text with its scheme declaration and its dark-scheme media queries decided
- */
-export function forceTheme(text: string, theme: "light" | "dark"): string {
-  return text.replace(BOTH_SCHEMES, `color-scheme: ${theme}`).replace(DARK_QUERY, theme === "dark" ? "@media all" : "@media not all");
-}
-
 /** Every address of the install a text holds outside an attribute, written as the preview's own: what a person reads and copies is what works here. */
 function localText(text: string, origin: string): string {
   const host = origin.replace(/^https?:\/\//, "");
@@ -158,31 +132,18 @@ function localText(text: string, origin: string): string {
   return written.replaceAll(ADMIN_ORIGIN, origin).replaceAll(ADMIN_HOSTNAME, host);
 }
 
-function withBar(page: string, bar: string): string {
-  const [, nonce = ""] = STYLE_NONCE.exec(page) ?? [];
-  const end = page.lastIndexOf("</body>");
-  if (end === -1) return page;
-
-  return `${page.slice(0, end)}${bar.replaceAll(NONCE_SLOT, nonce)}${page.slice(end)}`;
-}
-
 function rewriteBody(text: string, kind: Kind, here: Mount, look: Look, status: number): string {
   if (kind === "json") return localText(text, look.origin);
 
   if (kind === "plain") return look.framed(text, status);
 
-  const themed = look.theme === undefined ? text : forceTheme(text, look.theme);
-  if (kind === "css") return themed;
+  const linked = text.replace(ADDRESS_ATTRIBUTE, (...[, name, address]: string[]) => `${name}="${localAddress(address ?? "", here)}"`);
 
-  if (here.holds === "site") return withBar(themed, look.bar);
-
-  const linked = themed.replace(ADDRESS_ATTRIBUTE, (...[, name, address]: string[]) => `${name}="${localAddress(address ?? "", here)}"`);
-
-  return withBar(localText(linked, look.origin), look.bar);
+  return localText(linked, look.origin);
 }
 
 /** Which kind of text a response holds that this mount rewrites; none for a body that goes out as it is. */
-function rewrittenKind(response: Response, here: Mount, look: Look): Kind | undefined {
+function rewrittenKind(response: Response, here: Mount): Kind | undefined {
   const type = response.headers.get("Content-Type") ?? "";
   if (response.body === null || response.status === 206) return undefined;
 
@@ -190,11 +151,10 @@ function rewrittenKind(response: Response, here: Mount, look: Look): Kind | unde
 
   if (here.holds === "json") return undefined;
 
-  if (type.startsWith("text/html")) return "html";
+  // A site's own page links relatively, so it goes out as it is.
+  if (type.startsWith("text/html")) return here.holds === "site" ? undefined : "html";
 
-  if (type.startsWith("text/plain") && response.status >= 400) return "plain";
-
-  return type.startsWith("text/css") && look.theme !== undefined ? "css" : undefined;
+  return type.startsWith("text/plain") && response.status >= 400 ? "plain" : undefined;
 }
 
 /** The request as the piece expects it: at its own origin, with its own origin as the sender, and the preview's keys moved into headers. */
@@ -231,7 +191,7 @@ export function previewValue(headers: { readonly get: (name: string) => string |
  * Ask one mounted piece a preview request and answer the browser in the preview's own addresses.
  *
  * @param request - a request whose path starts with the mount's prefix
- * @returns the piece's response with its addresses rewritten and the bar on its pages; a body that is no page, stylesheet, or JSON goes out as the piece's own stream
+ * @returns the piece's response with its addresses rewritten; a site's page, and a body that is no page or JSON, goes out as the piece's own stream
  */
 export async function askMount(request: Request, here: Mount, look: Look): Promise<Response> {
   const response = await here.answer(await appRequest(request, here));
@@ -239,10 +199,11 @@ export async function askMount(request: Request, here: Mount, look: Look): Promi
   const location = headers.get("Location");
   if (location !== null) headers.set("Location", localAddress(location, here));
 
-  // The session cookie is made for the install's own domain, which no local origin is.
+  // The session cookie is made for the install's own domain, which no local origin is. The choice of scheme names no domain, and is kept.
   headers.delete("Set-Cookie");
+  for (const cookie of response.headers.getSetCookie().filter((one) => one.startsWith(`${THEME_COOKIE}=`))) headers.append("Set-Cookie", cookie);
 
-  const kind = rewrittenKind(response, here, look);
+  const kind = rewrittenKind(response, here);
   if (kind === undefined) return new Response(response.body, { status: response.status, headers });
 
   for (const name of BODY_HEADERS) headers.delete(name);

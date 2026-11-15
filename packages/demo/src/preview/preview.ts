@@ -7,7 +7,7 @@
 //   /empty/...               the dashboard of an install that holds nothing
 //   /gallery                 every page and every state of it, as a link; only when the host asks for it, and linked from nowhere
 //   /state/<name>            a page reached only by a form, shown at an address of its own
-//   /theme/<scheme>, /reset  the preview's own switches
+//   /reset                   starts the sample data over; the dashboard's "Demo" line posts to it
 //
 // Every piece is the product's own handler, asked at the hostname it expects; `mount.ts` maps the addresses both ways.
 
@@ -24,9 +24,9 @@ import type { SqlDriver } from "../../../core/src/database/driver";
 import type { ObjectStore } from "../../../core/src/storage/storage";
 import { PLUG_STATES, type PlugState, previewPlug } from "./domain-plug";
 import { type Entry, galleryOf, STAGES } from "./gallery";
-import { insidePath, rebased, unbased } from "./base";
-import { ADMIN_ORIGIN, askMount, forceTheme, type Mount, previewValue, SERVED_PREFIX, siteOrigin } from "./mount";
-import { galleryPage, loginPage, plainPage, previewBar, shell } from "./own-pages";
+import { rebased, unbased } from "./base";
+import { ADMIN_ORIGIN, askMount, type Mount, previewValue, SERVED_PREFIX, siteOrigin } from "./mount";
+import { galleryPage, loginPage, plainPage, shell } from "./own-pages";
 import { type Samples, seedWorld } from "./seed";
 import { ADDRESSES, openWorld, type World } from "./world";
 
@@ -61,26 +61,17 @@ const SHUT = "shut";
 /** The visitor whose every counted try is refused, so the pages of a full minute can be seen. */
 const FLOODED = "flooded";
 
-/** The cookie that holds the forced scheme. */
-const THEME_COOKIE = "preview-theme";
-
-/** The schemes the bar can force. */
-const THEMES = ["light", "dark"] as const;
-
 /** The first part of every path the preview answers itself: none of them is a path of the dashboard. */
-const OWN_PATHS = ["/gallery", "/state", "/theme", "/reset", "/setup", "/served"];
+const OWN_PATHS = ["/gallery", "/state", "/reset", "/setup", "/served"];
 
-/** The request header in which a stage names its own address to the form it sends. */
-const SHOWN_AT = "Preview-Shown-At";
+/** Where the dashboard's "Demo" line posts to start the data over. */
+const RESET_PATH = "/reset";
+
+/** Every address a reset is posted to: the mount of the empty install writes its own prefix before the path its dashboard names. */
+const RESET_PATHS = [RESET_PATH, `${EMPTY_PREFIX}${RESET_PATH}`];
 
 /** The headers of the preview's own answers. */
 const OWN_HEADERS = { "Cache-Control": "no-store", "Content-Type": "text/html; charset=utf-8" } as const;
-
-/** The pages of the dashboard that lead on to a place the product has no link for: a computer's login is begun on the computer, and the setup page is open only before the first login. */
-const HINTS: Readonly<Record<string, readonly (readonly [words: string, path: string])[]>> = {
-  "/tokens": [["A computer is asking to log in", "/state/allow/waiting"]],
-  "/domain": [["The first-run setup page", "/setup/fresh"]],
-};
 
 /** What the host that runs the demo brings. */
 export interface Host {
@@ -175,7 +166,17 @@ async function answerLogin(request: Request, world: World): Promise<Response> {
 }
 
 function dashboardMount(world: World, prefix: string, version: string): Mount {
-  const dashboard = createDashboard({ install: world.install, version, readSession: sessionOf(world), loginPath: "/login", csrfSecret: world.csrfSecret, domain: previewPlug("partial"), freeLimits: FREE_LIMITS, ...countsOf(world) });
+  const dashboard = createDashboard({
+    install: world.install,
+    version,
+    readSession: sessionOf(world),
+    loginPath: "/login",
+    csrfSecret: world.csrfSecret,
+    domain: previewPlug("partial"),
+    freeLimits: FREE_LIMITS,
+    demo: { reset: RESET_PATH },
+    ...countsOf(world),
+  });
   const answer: Mount["answer"] = (request) => (new URL(request.url).pathname === "/login" ? answerLogin(request, world) : dashboard.fetch(request));
 
   return { prefix, origin: ADMIN_ORIGIN, base: "", holds: "pages", answer };
@@ -234,17 +235,6 @@ async function openScene(host: Host, resumed: boolean): Promise<Scene> {
   return { seeded, token, dashboard: dashboardMount(seeded, "", host.version), mounts: [dashboardMount(empty, EMPTY_PREFIX, host.version), apiMount(seeded, host.version), ...setups] };
 }
 
-function themeOf(request: Request): (typeof THEMES)[number] | undefined {
-  const cookie = request.headers.get("Cookie") ?? "";
-
-  return THEMES.find((theme) => cookie.split(";").some((pair) => pair.trim() === `${THEME_COOKIE}=${theme}`));
-}
-
-/** A page of the preview's own in the scheme the request forces, or as it is. */
-function themed(page: string, theme: ReturnType<typeof themeOf>): string {
-  return theme === undefined ? page : forceTheme(page, theme);
-}
-
 /** The stage a path names; none for every other path. */
 function stageAt(path: string): (typeof STAGES)[string] | undefined {
   return Object.hasOwn(STAGES, path) ? STAGES[path] : undefined;
@@ -267,33 +257,19 @@ function mountOf(scene: Scene, path: string): Mount | undefined {
   return siteMount(scene.seeded, decodeURIComponent(label));
 }
 
-/** The address a page can be opened at again, where a change of scheme comes back to. A form's answer has none of its own: it is the stage that sent the form, or the page the form was on, one step up. */
-function shownAt(request: Request, url: URL): string {
-  if (request.method === "GET" || request.method === "HEAD") return `${url.pathname}${url.search}`;
-
-  return request.headers.get(SHOWN_AT) ?? url.pathname.slice(0, url.pathname.lastIndexOf("/"));
-}
-
 /** A redirect of the preview's own, to a path from its root: a base, where there is one, is put on it on the way out. */
 function goTo(path: string, status: 302 | 303 | 308): Response {
   return new Response(null, { status, headers: { Location: path } });
 }
 
-/** The preview's own redirects: a site's address without its slash, the setup page named by a query, and the scheme switch. */
+/** The preview's own redirects: a site's address without its slash, and the setup page named by a query. */
 function redirectOf(url: URL): Response | undefined {
   // A site's pages link relatively, so its address ends in a slash.
   if (isUnder(url.pathname, SERVED_PREFIX) && url.pathname !== SERVED_PREFIX) return goTo(`${url.pathname}/${url.search}`, 308);
 
   if (url.pathname === "/setup") return goTo(`/setup/${encodeURIComponent(url.searchParams.get("state") ?? "fresh")}`, 302);
 
-  if (!isUnder(url.pathname, "/theme")) return undefined;
-
-  const [, , chosen = ""] = url.pathname.split("/");
-
-  const chosenAt = goTo(insidePath(url.searchParams.get("to") ?? "/", "/") ?? "/", 303);
-  chosenAt.headers.set("Set-Cookie", `${THEME_COOKIE}=${encodeURIComponent(chosen)}; Path=/; SameSite=Lax`);
-
-  return chosenAt;
+  return undefined;
 }
 
 /**
@@ -309,29 +285,26 @@ export async function createPreview(host: Host): Promise<Preview> {
 
   async function answer(request: Request): Promise<Response> {
     const url = new URL(request.url);
-    const theme = themeOf(request);
-    const bar = previewBar({ theme, here: shownAt(request, url), hints: HINTS[url.pathname] ?? [] });
-    const own = (page: string, status = 200): Response => new Response(themed(page, theme), { status, headers: OWN_HEADERS });
-    const mount = mountOf(scene, url.pathname);
-    const framed = (text: string, status: number): string => themed(plainPage(text, status, bar), theme);
-    if (mount !== undefined) return askMount(request, mount, { theme, origin: url.origin, bar, framed });
-
-    if (url.pathname === "/gallery" && host.gallery === true) return own(galleryPage({ entries: await entries(), token: scene.token, origin: url.origin, bar }));
-
-    const redirect = redirectOf(url);
-    if (redirect !== undefined) return redirect;
-
-    if (url.pathname === "/reset" && request.method === "POST") {
+    const own = (page: string, status = 200): Response => new Response(page, { status, headers: OWN_HEADERS });
+    if (request.method === "POST" && RESET_PATHS.includes(url.pathname)) {
       scene = await openScene(host, false);
 
       return goTo("/", 303);
     }
 
-    const stage = stageAt(url.pathname);
-    if (stage === undefined) return own(shell("Not found", "<h1>Not found</h1><p>The preview has no such page.</p>", bar), 404);
+    const mount = mountOf(scene, url.pathname);
+    if (mount !== undefined) return askMount(request, mount, { origin: url.origin, framed: plainPage });
 
-    // A stage asks the preview itself, as the browser that opened it: with its cookie, and with the stage's address as the place its answer is shown at.
-    const carried = { Cookie: request.headers.get("Cookie") ?? "", [SHOWN_AT]: url.pathname };
+    if (url.pathname === "/gallery" && host.gallery === true) return own(galleryPage({ entries: await entries(), token: scene.token, origin: url.origin }));
+
+    const redirect = redirectOf(url);
+    if (redirect !== undefined) return redirect;
+
+    const stage = stageAt(url.pathname);
+    if (stage === undefined) return own(shell("Not found", "<h1>Not found</h1><p>The preview has no such page.</p>"), 404);
+
+    // A stage asks the preview itself, as the browser that opened it: with its cookie.
+    const carried = { Cookie: request.headers.get("Cookie") ?? "" };
 
     return stage({ world: scene.seeded, origin: url.origin, ask: (path, init) => answer(new Request(`${url.origin}${path}`, { ...init, headers: { ...carried, ...init?.headers } })) });
   }

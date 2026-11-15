@@ -59,7 +59,9 @@ export const PALETTE = {
 /** The stylesheet. Rows are 44px on a wide screen and controls 28px in a row, 32px in a form; under 760px the side folds to a bar at the bottom and every control is 44px tall. */
 export const STYLE = `
 :root { color-scheme: light dark; ${variables(PALETTE.light)} --nav: 232px; --pad: 24px; --row: 44px; --h: 28px; --hf: 32px; --panel: 440px; --rc: 6px; --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace; }
-@media (prefers-color-scheme: dark) { :root { ${variables(PALETTE.dark)} } }
+:root[data-theme="light"] { color-scheme: light; }
+:root[data-theme="dark"] { color-scheme: dark; ${variables(PALETTE.dark)} }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { ${variables(PALETTE.dark)} } }
 *, *::before, *::after { box-sizing: border-box; }
 html { background: var(--lift); color: var(--ink); font: 400 14px/20px "Helvetica Neue", Arial, sans-serif; -webkit-text-size-adjust: 100%; }
 body { margin: 0; font-variant-numeric: tabular-nums; }
@@ -93,6 +95,10 @@ svg { width: 16px; height: 16px; flex: none; fill: none; stroke: currentColor; s
 .side .about .news { margin: 0 -8px 8px; padding: 8px; border: 1px solid var(--line); border-radius: var(--rc); background: var(--lift); color: var(--soft); }
 .side .about .news b { display: block; color: var(--ink); }
 .side .about .news a { color: var(--link); font-weight: 700; }
+.side .about .seg { display: grid; margin: 0 -8px 8px; font-size: 12px; }
+.demo { display: flex; align-items: center; gap: 8px; margin: -8px 0 4px; color: var(--faint); font-size: 12px; }
+.demo b { padding: 0 6px; border: 1px solid var(--line); border-radius: var(--rc); color: var(--soft); line-height: 18px; }
+.demo .txt { font-size: 12px; }
 main { position: relative; min-width: 0; padding: 20px var(--pad) 64px; }
 .title { display: flex; align-items: center; gap: 8px; min-height: 32px; }
 .title .end, .end { margin-left: auto; }
@@ -192,7 +198,7 @@ details.menu > summary:hover, details.menu[open] > summary { background: var(--t
 .seg { display: inline-grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 2px; height: var(--hf); padding: 2px; border-radius: 8px; background: var(--tone); font-weight: 700; font-size: 13px; }
 .seg > form { display: grid; }
 .seg a, .seg button, .seg span { display: flex; align-items: center; justify-content: center; gap: 6px; height: auto; margin: 0; padding: 0 12px; border: 0; border-radius: var(--rc); background: none; color: var(--soft); white-space: nowrap; }
-.seg [aria-current] { background: var(--lift); color: var(--ink); }
+.seg [aria-current], .seg [aria-pressed="true"] { background: var(--lift); color: var(--ink); }
 .ask { display: grid; gap: 8px; margin-top: 10px; padding: 10px; border-radius: var(--rc); background: var(--askTint); font-size: 13px; }
 .facts { display: grid; grid-template-columns: 112px minmax(0, 1fr); gap: 0 12px; }
 .facts dt { color: var(--faint); font-size: 13px; }
@@ -262,7 +268,7 @@ meter { display: block; width: 100%; max-width: 20rem; height: 12px; }
   .sites > li > .name { display: flex; align-items: center; gap: 8px; grid-area: n; }
   .sites > li > .lkc { display: block; grid-area: l; }
   .sites > li > .acts { display: flex; grid-area: a; }
-  .has-panel main > :not(.panel):not(.title) { display: none; }
+  .has-panel main > :not(.panel):not(.title):not(.demo) { display: none; }
   .panel { position: static; width: auto; padding: 0; border: 0; box-shadow: none; }
   .panel .close { display: none; }
   .has-panel h1 a::before { content: "\\2039\\00a0"; color: var(--faint); }

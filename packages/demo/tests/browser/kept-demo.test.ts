@@ -16,8 +16,8 @@ const HOME = "https://example.com/poplin/demo";
 /** The hidden field of a form that holds its signed token. */
 const FORM_TOKEN = /name="csrf" value="([^"]+)"/;
 
-/** A demo's own pages follow the system's scheme with this declaration, until a scheme is forced. */
-const FOLLOWS_SYSTEM = "color-scheme: light dark";
+/** What a dashboard page carries once its browser chose the dark scheme. */
+const SHOWN_DARK = 'data-theme="dark"';
 
 type Demo = Awaited<ReturnType<typeof openKeptDemo>>;
 
@@ -37,8 +37,8 @@ async function sitePage(demo: Demo, name: string): Promise<string> {
 }
 
 /** Send a form as a browser hands it to a worker: with no `Origin` and no `Cookie`. */
-function send(demo: Demo, path: string, token: string): Promise<Response> {
-  const body = new URLSearchParams({ csrf: token }).toString();
+function send(demo: Demo, path: string, token: string, fields: Readonly<Record<string, string>> = {}): Promise<Response> {
+  const body = new URLSearchParams({ ...fields, csrf: token }).toString();
 
   return demo.fetch(new Request(`${HOME}${path}`, { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body }));
 }
@@ -49,7 +49,7 @@ test("a demo opened from a save goes on where the first was, and one saved after
   const kept = await sitePage(first, "handbook");
   const [, token = ""] = FORM_TOKEN.exec(await page(first, kept)) ?? [];
   const sent = await send(first, `${trashed}/delete`, FORM_TOKEN.exec(await page(first, trashed))?.[1] ?? "");
-  const switched = await first.fetch(new Request(`${HOME}/theme/dark?to=%2F`));
+  const switched = await send(first, "/theme", token, { theme: "dark", back: "/" });
 
   const second = await open(first.save());
   const later = await send(second, `${kept}/delete`, token);
@@ -63,7 +63,7 @@ test("a demo opened from a save goes on where the first was, and one saved after
   expect([switched.status, switched.headers.get("Location")]).toEqual([303, "/poplin/demo/"]);
   expect([later.status, later.headers.get("Location")]).toEqual([303, `/poplin/demo/?done=trashed&site=${kept.slice("/sites/".length)}`]);
   expect([trash.includes(trashed), trash.includes(kept)]).toEqual([true, true]);
-  expect([(await page(first, "/")).includes(FOLLOWS_SYSTEM), dark.includes(FOLLOWS_SYSTEM)]).toEqual([false, false]);
+  expect([(await page(first, "/")).includes(SHOWN_DARK), dark.includes(SHOWN_DARK)]).toEqual([true, true]);
   expect(await sitePage(third, "checkout")).not.toBe("");
   expect(await page(third, "/?view=trash")).not.toContain("/sites/checkout--");
   expect(new Set((await page(third, "/")).match(/\/sites\/handbook--[a-z0-9]+/g)).size).toBe(1);
@@ -108,15 +108,14 @@ test.each([
   const tricky = fc.array(piece, { maxLength: 8 }).map((pieces) => pieces.join(""));
 
   await fc.assert(
-    fc.asyncProperty(fc.constantFrom("/", "/theme/dark"), fc.oneof(fc.string(), tricky, tricky.map((text) => `/${text}`)), async (path, to) => {
-      expect(await escapes(path, to)).toBeUndefined();
+    fc.asyncProperty(fc.oneof(fc.string(), tricky, tricky.map((text) => `/${text}`)), async (to) => {
+      expect(await escapes("/", to)).toBeUndefined();
     }),
     { numRuns: 400 },
   );
 
   // The control: a redirect is given at all, so the property above is not about a demo that never redirects.
   expect((await demo.fetch(new Request(`${origin}${base}/?to=%2Fsettings`))).headers.get("Location")).toBe(`${base}/settings`);
-  expect((await demo.fetch(new Request(`${origin}${base}/theme/dark?to=%2Fsettings`))).headers.get("Location")).toBe(`${base}/settings`);
 });
 
 test("a served page's `Clear-Site-Data` stays inside the demo: without this the demo tells a browser to drop the cache of the whole origin, which holds the website's own pages", async () => {

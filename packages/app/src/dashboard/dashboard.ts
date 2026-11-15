@@ -11,6 +11,7 @@
 //   POST /settings/<change>        save, sign-everyone-out
 //   GET  /activity                 the audit log
 //   GET  /usage                    the totals and the day's requests
+//   POST /theme                    this browser's choice of scheme, kept in a cookie
 //   GET  /domain                   the token form and the domain's settings; only with a domain plug
 //   POST /domain/<change>          check, repair, save
 //
@@ -27,10 +28,12 @@ import { bodyLimit } from "hono/body-limit";
 import { NONCE, secureHeaders } from "hono/secure-headers";
 
 import type { Counters } from "../limits/limits";
+import { safeReturn } from "../login/return-path";
 import { showActivity } from "./activity/activity-page";
 import { COPY_SCRIPT, COPY_SCRIPT_PATH } from "./page/copy-script";
 import { framePage, refusedPage } from "./page/frame";
 import { noticeIn, refusalSentence } from "./page/notices";
+import { themeCookie, themeOf } from "./page/theme";
 import type { Change, Form, Page, Visit } from "./records";
 import { importCsrfKey, mintCsrfToken } from "./security/csrf";
 import { readOwnForm } from "./security/own-form";
@@ -103,6 +106,9 @@ interface DashboardParts {
   /** The host's free plan, which the Settings tab warns a value above. */
   readonly freeLimits: FreeLimits;
 
+  /** Set by a host whose install is a demo over sample data: `reset` is the address, outside the dashboard's own, that a form posts to, to start the data over. Left out, as on every real install, no page says "Demo". */
+  readonly demo?: { readonly reset: string };
+
   /** Where the tries at a login's code are counted, a minute at a time. */
   readonly counters: Pick<Counters, "takeMinute">;
 
@@ -112,7 +118,7 @@ interface DashboardParts {
 
 /** What the handlers of one request share. `tabs` says whether the frame shows the Domain tab. */
 interface Shared {
-  Variables: { visit: Visit; form: Form; tabs: "domain" | undefined; version: string };
+  Variables: { visit: Visit; form: Form; tabs: "domain" | undefined; version: string; demo: DashboardParts["demo"] };
 }
 
 /** Something that answers a request, as a Worker's `fetch` does. */
@@ -139,6 +145,14 @@ function loginAddress(loginPath: string, url: URL, back: string): string {
   return login.href;
 }
 
+/** The path a page can be opened at again, without its query, which may hold a login's code. The answer to a form has none of its own: it is the page the form was on, one step up. */
+function shownAt(context: Context<Shared>): string {
+  const { pathname } = context.get("visit").url;
+  if (context.req.method === "GET" || context.req.method === "HEAD") return pathname;
+
+  return pathname.slice(0, pathname.lastIndexOf("/")) || "/";
+}
+
 async function respond(context: Context<Shared>, page: Page): Promise<Response> {
   const visit = context.get("visit");
   const config = await readConfig(visit.install, visit.actor);
@@ -146,7 +160,9 @@ async function respond(context: Context<Shared>, page: Page): Promise<Response> 
   const notice = page.ownNotice === true ? undefined : noticeIn(visit.url);
   const version = context.get("version");
   const running = { version, update: await updateOf(visit.install, version, config.ok ? config.values : undefined) };
-  const document = await framePage(page, { title, nonce: context.get("secureHeadersNonce") ?? "", notice, csrf: visit.csrf, tabs: context.get("tabs"), running });
+  const theme = { chosen: themeOf(context.req.header("Cookie")), back: shownAt(context) };
+  const look = { title, nonce: context.get("secureHeadersNonce") ?? "", notice, csrf: visit.csrf, tabs: context.get("tabs"), running, theme, demo: context.get("demo") };
+  const document = await framePage(page, look);
 
   return context.html(document, page.status ?? 200);
 }
@@ -174,6 +190,14 @@ async function change<Subject extends string[]>(context: Context<Shared>, change
   if (wanted === undefined) return context.notFound();
 
   return context.redirect(await wanted(context.get("visit"), ...subject, context.get("form")), 303);
+}
+
+/** Keep the scheme a form chose in the browser's cookie, and send the browser back to the page the form was on. */
+function chooseTheme(context: Context<Shared>): Response {
+  const form = context.get("form");
+  context.header("Set-Cookie", themeCookie(form.get("theme")));
+
+  return context.redirect(safeReturn(form.get("back")), 303);
 }
 
 /** Count one try at a login's code against its visitor's minute, and say whether it fits. A counter that cannot answer refuses the try. */
@@ -212,6 +236,7 @@ export function createDashboard(parts: DashboardParts): Dashboard {
     context.set("visit", { install: parts.install, actor, url, csrf, login: loginAddress(parts.loginPath, url, "/") });
     context.set("tabs", parts.domain === undefined ? undefined : "domain");
     context.set("version", parts.version);
+    context.set("demo", parts.demo);
 
     return next();
   };
@@ -263,6 +288,7 @@ export function createDashboard(parts: DashboardParts): Dashboard {
   app.post("/settings/:change", (context) => change(context, SETTINGS_CHANGES, context.req.param("change")));
   app.get("/activity", async (context) => respond(context, await showActivity(context.get("visit"))));
   app.get("/usage", async (context) => respond(context, await showUsage(context.get("visit"))));
+  app.post("/theme", chooseTheme);
 
   const { domain } = parts;
   if (domain !== undefined) {
