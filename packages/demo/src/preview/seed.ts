@@ -259,7 +259,8 @@ async function decideComputer(world: World, cast: Cast, moment: Extract<Moment, 
   const { install, clock } = world;
   const asked = done(await beginLogin(install, { scope: "publisher", computer: moment.computer }, "preview"), `the login of ${moment.computer}`);
   clock.held = install.now() + MINUTE_MS;
-  done(await decideLogin(install, made(cast.actors, moment.by), { code: asked.code, allow: moment.allow, scope: "publisher" }), `the decision on ${moment.computer}`);
+  const decision = moment.allow ? ({ code: asked.code, allow: true, scope: "publisher" } as const) : ({ code: asked.code, allow: false } as const);
+  done(await decideLogin(install, made(cast.actors, moment.by), decision), `the decision on ${moment.computer}`);
   if (moment.allow) done(await redeemLogin(install, { secret: asked.secret }), `the token of ${moment.computer}`);
 }
 

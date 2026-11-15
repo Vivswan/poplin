@@ -26,17 +26,15 @@ interface Decision {
   /** Whether the computer is let in. */
   readonly allow: boolean;
 
-  /** Whether the box that says the codes match is ticked. */
+  /** Whether the person typed the code's last letters, which says the login is their own. */
   readonly confirm: boolean;
 
   /** What an allowed computer may change. */
   readonly scope: Review["scope"];
 }
 
-/**
- * How a decision ended. `box` is a refusal to say at the tick box, with its sentence; `gone` a login that no longer waits; `refused` any other refusal. The last two were said in a line.
- */
-export type Decided = { readonly kind: "done" | "gone" | "refused" } | { readonly kind: "box"; readonly sentence: string };
+/** How a decision ended: `gone` is a login that no longer waits, `refused` any other refusal. Both were said in a line. */
+export type Decided = { readonly kind: "done" | "gone" | "refused" };
 
 /** The changes of the Access screen. */
 export interface AccessActions {
@@ -98,11 +96,9 @@ export function accessActions(onChanged: () => void, onUsersChanged: () => void)
       const { allow, confirm, scope } = decision;
 
       try {
-        await answerOf(api.logins.decide.$post({ json: { code: login.code, allow, confirm, ...(allow ? { scope } : {}) } }));
+        await answerOf(api.logins.decide.$post({ json: allow ? { code: login.code, allow, confirm, scope } : { code: login.code, allow } }));
       } catch (error) {
         if (!(error instanceof Refused)) throw error;
-
-        if (error.code === "not_confirmed") return { kind: "box", sentence: error.message };
 
         sayRefused(error.message);
         if (error.code !== "no_such_login") return { kind: "refused" };
