@@ -498,7 +498,8 @@ describe("provider code stays out of the portable packages", () => {
   test.each([
     ["the provider in a text", 'const label = "A Cloudflare API token";', "cloudflare"],
     ["the provider in a name", "const cloudflareToken = read();", "cloudflare"],
-    ["its hosts, after a `//` inside a template", "const address = \`\${scheme}://\${name}.example.workers.dev\`;", "workers.dev"],
+    // biome-ignore lint/suspicious/noTemplateCurlyInString: the planted line is a template literal of the scanned file, holes included
+    ["its hosts, after a `//` inside a template", "const address = `${scheme}://${name}.example.workers.dev`;", "workers.dev"],
     ["its bucket in a name", "const store = openR2(bucket);", "R2"],
     ["its bucket as a key", "const kinds = { r2: 1 };", "R2"],
     ["its database in a name", "const kinds = { d1Database: 2 };", "D1"],
@@ -594,7 +595,8 @@ describe("provider code stays out of the portable packages", () => {
       'const label = "the time zone";',
       "const share = total / count; // per Worker",
       "const ratio = total++ / count; // on Cloudflare",
-      "const address = \`\${origin}//\${path}\`; /* wrangler */",
+      // biome-ignore lint/suspicious/noTemplateCurlyInString: the planted line is a template literal of the scanned file, holes included
+      "const address = `${origin}//${path}`; /* wrangler */",
     ].join("\n");
     const namedOutsideSource = 'const label = "A Cloudflare Worker reads R2 and D1 in the zone.";\n';
     using tree = plantedRepository({
