@@ -159,14 +159,20 @@ const SITE_FIELDS = {
   versions: versionsOfSite().as("versions"),
 };
 
+/** A site as a listing reads it: with the key a listing by title goes by. */
+const LISTED_FIELDS = { ...SITE_FIELDS, title_key: sites.title_key };
+
+/** What a listing by title goes by, as the `title_key` column of a row holds it. */
+const TITLE_KEY = v.object({ title_key: v.string() });
+
 /** The id and the name of a site, as `getSiteNames` reads them. */
 const NAMED_SITE = v.object({ id: SITE_ID, name: SITE_NAME });
 
 /** The place of each access in a listing sorted by access, as the `access_rank` column of a site holds it: from the most private to the most open. */
 const ACCESS_RANKS = { private: 0, unlisted: 1, public: 2 } as const;
 
-/** The direction a listing takes when none is asked: the last change first, a name and an access from the start. */
-const DEFAULT_DIRECTIONS = { updated: "desc", name: "asc", access: "asc" } as const;
+/** The direction a listing takes when none is asked: the last change first, a name, an access and a title from the start. */
+const DEFAULT_DIRECTIONS = { updated: "desc", name: "asc", access: "asc", title: "asc" } as const;
 
 /**
  * A site whose name holds a text, or whose title does: the typed one, else the page's own, which is the one a listing shows.
@@ -518,12 +524,17 @@ function requirePage(limit: number): void {
   if (!Number.isSafeInteger(limit) || limit < 1 || limit > MAX_PAGE) throw new RangeError(`a page holds 1 to ${MAX_PAGE} rows, not ${limit}`);
 }
 
-/** A cursor carries what its listing goes by: a listing by name the last site's name, one by access its access. */
+/** A cursor carries what its listing goes by: a listing by name the last site's name, one by access its access, one by title the title it stands under. */
 function requireCursor(query: SitesQuery): void {
   const { after, sort } = query;
-  if (after === undefined || (sort !== "name" && sort !== "access")) return;
+  if (after === undefined || sort === undefined || sort === "updated") return;
 
   if (after[sort] === undefined) throw new RangeError(`a page after another of a listing by ${sort} names the ${sort} of that page's last site`);
+}
+
+/** What a cursor holds of the column its listing goes by; `requireCursor` has seen that it holds it. */
+function cursorPlace(after: NonNullable<SitesQuery["after"]>, sort: NonNullable<SitesQuery["sort"]>): string | number {
+  return { updated: after.updated_at, name: after.name ?? "", access: ACCESS_RANKS[after.access ?? "private"], title: after.title ?? "" }[sort];
 }
 
 function requireCount(what: string, count: number): void {
@@ -685,23 +696,21 @@ export class SqlDatabase implements Database {
     const moment = query.trash ? sites.trashed_at : sites.updated_at;
     const sort = query.sort ?? "updated";
     const descending = (query.dir ?? DEFAULT_DIRECTIONS[sort]) === "desc";
-    const column = { updated: fragment`${moment}`, name: fragment`${sites.name}`, access: fragment`${sites.access_rank}` }[sort];
+    const column = { updated: fragment`${moment}`, name: fragment`${sites.name}`, access: fragment`${sites.access_rank}`, title: fragment`${sites.title_key}` }[sort];
     const conditions = narrowing(query);
 
-    if (query.after !== undefined) {
-      const { after } = query;
-      const place = { updated: after.updated_at, name: after.name ?? "", access: ACCESS_RANKS[after.access ?? "private"] }[sort];
-      conditions.push(fragment`(${column}, ${sites.id}) ${descending ? fragment`<` : fragment`>`} (${place}, ${after.id})`);
-    }
+    if (query.after !== undefined) conditions.push(fragment`(${column}, ${sites.id}) ${descending ? fragment`<` : fragment`>`} (${cursorPlace(query.after, sort)}, ${query.after.id})`);
 
     // One row more than the page shows whether another page follows.
-    const page = BUILD.select(SITE_FIELDS).from(sites).where(and(...conditions)).orderBy(descending ? desc(column) : asc(column), descending ? desc(sites.id) : asc(sites.id)).limit(query.limit + 1);
+    const page = BUILD.select(LISTED_FIELDS).from(sites).where(and(...conditions)).orderBy(descending ? desc(column) : asc(column), descending ? desc(sites.id) : asc(sites.id)).limit(query.limit + 1);
     const [listed] = await this.#driver.batch([built(page)]);
-    const listedSites = (listed?.rows ?? []).slice(0, query.limit).map(siteFromRow);
+    const rows = (listed?.rows ?? []).slice(0, query.limit);
+    const listedSites = rows.map(siteFromRow);
     const last = listedSites.at(-1);
     if (last === undefined || (listed?.rows.length ?? 0) <= query.limit) return { sites: listedSites };
 
-    const listedBy = { updated: {}, name: { name: last.name }, access: { access: last.access } }[sort];
+    // The key is read as the engine holds it: cut and lowered here, it could differ from the one the order goes by.
+    const listedBy = { updated: {}, name: { name: last.name }, access: { access: last.access }, title: { title: v.parse(TITLE_KEY, rows.at(-1)).title_key } }[sort];
 
     return { sites: listedSites, next: { updated_at: last.state === "trash" ? last.trashed_at : last.updated_at, id: last.id, ...listedBy } };
   }

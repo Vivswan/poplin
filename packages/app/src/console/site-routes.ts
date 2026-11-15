@@ -22,8 +22,8 @@ import { loginNames, NOTHING, refused, refuseInvalid, type Shared } from "./data
 /** How many sites one page of the table holds. */
 const PAGE_SIZE = 25;
 
-/** The place a page of the list ended, as the address carries it: the change time, a dash, the id, and after a tilde the name or the access of a table ordered by one. */
-const CURSOR_PATTERN = /^([0-9]{1,16})-([0-9a-z]{12})(?:~(.{1,40}))?$/;
+/** The place a page of the list ended, as the address carries it: the change time, a dash, the id, and after a tilde the name, the access, or the key of the title of a table ordered by one; that key may be empty. */
+const CURSOR_PATTERN = /^([0-9]{1,16})-([0-9a-z]{12})(?:~([\s\S]{0,40}))?$/u;
 
 /** The accesses a table can be narrowed to, from the most private on. */
 const ACCESSES = ["private", "unlisted", "public"] as const;
@@ -33,7 +33,7 @@ const PAGE_QUERY = v.object({
   view: v.optional(v.picklist(["trash"])),
   q: v.optional(v.string()),
   access: v.optional(v.picklist(ACCESSES)),
-  sort: v.optional(v.picklist(["updated", "name", "access"])),
+  sort: v.optional(v.picklist(["updated", "name", "access", "title"])),
   dir: v.optional(v.picklist(["asc", "desc"])),
   after: v.optional(v.pipe(v.string(), v.regex(CURSOR_PATTERN))),
 });
@@ -62,14 +62,15 @@ function placeOf(cursor: string | undefined, sort: Listing["sort"]): Pick<Listin
 
   const named = sort === "name" && by !== undefined ? { name: by } : {};
   const narrowed = sort === "access" && by !== undefined ? { access: by as (typeof ACCESSES)[number] } : {};
+  const titled = sort === "title" && by !== undefined ? { title: by } : {};
 
   // The id is checked by the listing itself, which refuses one that is none.
-  return { after: { updated_at: Number(updated), id, ...named, ...narrowed } as Listing["after"] };
+  return { after: { updated_at: Number(updated), id, ...named, ...narrowed, ...titled } as Listing["after"] };
 }
 
 /** Write the place a page ended as the address carries it. */
 function cursorOf(next: NonNullable<Listing["after"]>): string {
-  const by = next.name ?? next.access;
+  const by = next.name ?? next.access ?? next.title;
 
   return by === undefined ? `${next.updated_at}-${next.id}` : `${next.updated_at}-${next.id}~${by}`;
 }

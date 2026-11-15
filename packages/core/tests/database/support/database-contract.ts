@@ -109,6 +109,19 @@ export function draft(name: SiteName, access: NewSite["access"] = "private", pub
   return { ...fields, access };
 }
 
+/** The names of every page of a listing outside the trash unless asked, two sites a page, each page asked with the `next` of the one before. */
+async function pagedNames(database: Database, query: Partial<SitesQuery>): Promise<string[][]> {
+  const pages: string[][] = [];
+  let after: SitesPage["next"];
+  do {
+    const page = await database.listSites({ trash: false, limit: 2, ...query, ...(after === undefined ? {} : { after }) });
+    pages.push(page.sites.map((site) => site.name));
+    after = page.next;
+  } while (after !== undefined);
+
+  return pages;
+}
+
 /** A publish of the fixture size under a reserved number. */
 export function publish(number: number, keep: number): NewVersion {
   return { number, keep, ...SIZE };
@@ -803,17 +816,7 @@ function sites(label: string, makeDatabase: DatabaseFactory): void {
 
         return database;
       };
-      const walked = async (database: Database, query: Partial<SitesQuery>): Promise<string[][]> => {
-        const pages: string[][] = [];
-        let after: SitesPage["next"];
-        do {
-          const page = await database.listSites({ trash: false, limit: 2, sort: "name", ...query, ...(after === undefined ? {} : { after }) });
-          pages.push(page.sites.map((site) => site.name));
-          after = page.next;
-        } while (after !== undefined);
-
-        return pages;
-      };
+      const walked = (database: Database, query: Partial<SitesQuery>): Promise<string[][]> => pagedNames(database, { sort: "name", ...query });
 
       test.each([
         ["a name and two titles, paged in the order of the names", { named: "report" }, [["draft", "notes"], ["report"]]],
@@ -835,6 +838,67 @@ function sites(label: string, makeDatabase: DatabaseFactory): void {
         ["the trash, which holds one site the text is in", { named: "report", trash: true }, [["old"]]],
       ] as const)("%s", async (_what, query, pages) => {
         expect<unknown>(await walked(await stocked(), query)).toEqual(pages);
+      });
+    });
+
+    // Drift: a listed site shows its title, or its name when it has none, and a table's first heading sorts by that. An order by the name alone would sort by a line nobody sees, and a cursor without its place in this order would repeat or skip sites.
+    describe("a listing by title goes by what each site is listed with: its typed title, else its page's, else its name", () => {
+      const LONG = "m".repeat(40);
+      const stocked = async (): Promise<Database> => {
+        const database = await opened(makeDatabase, mintFrom("aaaaaaaaaaaa", "bbbbbbbbbbbb", "cccccccccccc", "dddddddddddd", "eeeeeeeeeeee", "ffffffffffff", "gggggggggggg", "hhhhhhhhhhhh", "iiiiiiiiiiii"));
+        const drafts: readonly (readonly [name: string, title: string | null, pageTitle?: string])[] = [
+          ["zeta", "apple"],
+          ["banana", null],
+          ["yak", null, "Cherry"],
+          ["xray", "Apple"],
+          ["wolf", "date", "Aardvark"],
+          ["cherry", null],
+          ["vole", `${LONG} b`],
+          ["tern", `${LONG} a`],
+          ["old", "Banana"],
+        ];
+        for (const [index, [name, title, pageTitle]] of drafts.entries()) {
+          const site = { ...draft(name as SiteName, index === 1 ? "unlisted" : "private"), title, ...(pageTitle === undefined ? {} : { page_title: pageTitle }) };
+          await made(database, site, { by: ADA, at: NOW + index });
+        }
+        await database.trashSite("iiiiiiiiiiii" as SiteId, { by: ADA, at: NOW + 9 });
+
+        return database;
+      };
+
+      test.each([
+        ["from the start: capitals count for nothing, sites alike follow their ids, and a typed title hides the page's", {}, [["zeta", "xray"], ["banana", "yak"], ["cherry", "wolf"], ["vole", "tern"]]],
+        ["from the end", { dir: "desc" }, [["tern", "vole"], ["wolf", "cherry"], ["yak", "banana"], ["xray", "zeta"]]],
+        ["narrowed by a text", { named: "e" }, [["zeta", "xray"], ["yak", "cherry"], ["wolf", "vole"], ["tern"]]],
+        ["narrowed by an access", { access: "private", dir: "desc" }, [["tern", "vole"], ["wolf", "cherry"], ["yak", "xray"], ["zeta"]]],
+        ["the trash", { trash: true }, [["old"]]],
+      ] as const)("%s", async (_what, query, pages) => {
+        expect<unknown>(await pagedNames(await stocked(), { sort: "title", ...query })).toEqual(pages);
+      });
+
+      test("a page's `next` holds the place of its last site in this order, at most 40 characters of it, and a cursor without one is refused by a throw", async () => {
+        const database = await stocked();
+        const first = await database.listSites({ trash: false, limit: 2, sort: "title" });
+        const last = await database.listSites({ trash: false, limit: 7, sort: "title" });
+
+        expect<unknown>([first.next, last.next]).toEqual([
+          { updated_at: NOW + 3, id: "dddddddddddd", title: "apple" },
+          { updated_at: NOW + 6, id: "gggggggggggg", title: LONG },
+        ]);
+        await expect(database.listSites({ trash: false, limit: 1, sort: "title", after: { updated_at: NOW, id: "aaaaaaaaaaaa" as SiteId, name: REPORT } })).rejects.toThrow(RangeError);
+      });
+
+      // Drift: the engine cuts a text at a NUL, so a title that begins with one is ordered by nothing. A cursor that could not say so would end the listing at that site.
+      test("a title that begins with a NUL leads the listing, and the page after it goes on from an empty place", async () => {
+        const database = await opened(makeDatabase, mintFrom("aaaaaaaaaaaa", "bbbbbbbbbbbb", "cccccccccccc"));
+        await made(database, { ...draft("delta" as SiteName), title: "\u0000x" });
+        await made(database, draft("alpha" as SiteName));
+        await made(database, draft("bravo" as SiteName));
+
+        const first = await database.listSites({ trash: false, limit: 1, sort: "title" });
+        const rest = await database.listSites({ trash: false, limit: 2, sort: "title", ...(first.next === undefined ? {} : { after: first.next }) });
+
+        expect<unknown>([first.sites.map((site) => site.name), first.next?.title, rest.sites.map((site) => site.name)]).toEqual([["delta"], "", ["alpha", "bravo"]]);
       });
     });
 

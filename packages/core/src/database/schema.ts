@@ -8,7 +8,7 @@ import { check, index, integer, primaryKey, sqliteTable, text, unique } from "dr
 /** The form a day is stored in. */
 const DAY_FORM = "[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]";
 
-/** One row per site; `id` is the key and the link, `folder` is where its files are and never changes. `access_rank` is the place of its access in a listing by access, from the most private to the most open. */
+/** One row per site; `id` is the key and the link, `folder` is where its files are and never changes. `access_rank` places its access in a listing by access, from the most private on, and `title_key` its listed title in a listing by title. */
 export const sites = sqliteTable(
   "sites",
   {
@@ -30,6 +30,7 @@ export const sites = sqliteTable(
     trashed_at: integer(),
     trashed: integer().generatedAlwaysAs(sql`(trashed_at IS NOT NULL)`, { mode: "virtual" }),
     access_rank: integer().generatedAlwaysAs(sql`(CASE access WHEN 'private' THEN 0 WHEN 'unlisted' THEN 1 WHEN 'public' THEN 2 END)`, { mode: "virtual" }),
+    title_key: text().generatedAlwaysAs(sql`(lower(substr(coalesce(title, page_title, name), 1, 40)))`, { mode: "virtual" }),
   },
   (table) => [
     check("sites_access", sql`${table.access} IN ('private', 'unlisted', 'public')`),
@@ -42,6 +43,7 @@ export const sites = sqliteTable(
     index("sites_by_owner").on(table.owner, table.trashed, sql`${table.updated_at} DESC`, sql`${table.id} DESC`),
     index("sites_by_name").on(table.trashed, table.name, table.id),
     index("sites_by_access").on(table.trashed, table.access_rank, table.id),
+    index("sites_by_title").on(table.trashed, table.title_key, table.id),
   ],
 );
 

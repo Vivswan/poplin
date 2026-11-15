@@ -70,13 +70,15 @@ export type Address = { readonly id: SiteId } | { readonly public_name: PublicNa
 /**
  * Where a page of a listing ended: the id of its last site, and the moment it is listed by. For a site that is when its content last changed, by a publish or by another version made live; for one in the trash, when it went there.
  *
- * A listing sorted by name also carries the last site's `name`, and one sorted by access its `access`: the page after it starts behind that, and a listing asked without it throws `RangeError`.
+ * A listing sorted by name also carries the last site's `name`, one sorted by access its `access`, and one sorted by title, as `title`, the key that site is ordered by.
+ * The page after it starts behind that, and a listing asked without it throws `RangeError`.
  */
 interface SitesCursor {
   readonly updated_at: number;
   readonly id: SiteId;
   readonly name?: string;
   readonly access?: SiteAccess["access"];
+  readonly title?: string;
 }
 
 /** Which sites a listing holds. */
@@ -102,10 +104,10 @@ export interface SitesQuery {
   /** Only the sites that delete themselves on a set day, or only those that never do; every site when absent. */
   readonly expires?: "set" | "never";
 
-  /** What the listing is ordered by: the moment of the last change when absent, the name, or the access from private to public. Sites alike in it follow their ids. */
-  readonly sort?: "updated" | "name" | "access";
+  /** What the listing is ordered by: the last change when absent, the name, the access from private to public, or the listed title (typed, else the page's, else the name) by its first 40 characters, capitals aside. Sites alike follow their ids. */
+  readonly sort?: "updated" | "name" | "access" | "title";
 
-  /** The direction: `desc` for the last change when absent, `asc` for a name and an access. */
+  /** The direction: `desc` for the last change when absent, `asc` for a name, an access and a title. */
   readonly dir?: "asc" | "desc";
 }
 

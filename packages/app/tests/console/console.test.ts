@@ -94,7 +94,7 @@ describe("the data routes", () => {
   });
 
   // Drift: a table ordered by a column would end at its first page, or its second page would repeat or skip sites.
-  test.each(["?sort=name&dir=asc", "?sort=access&dir=asc", ""])("go on to the following page in the order of %p", async (query) => {
+  test.each(["?sort=name&dir=asc", "?sort=access&dir=asc", "?sort=title&dir=asc", ""])("go on to the following page in the order of %p", async (query) => {
     const opened = await openConsole();
     const accesses = ["private", "unlisted", "public"] as const;
     for (let index = 0; index < 27; index += 1) await opened.base.publish(`site-${String(index).padStart(2, "0")}`, accesses[index % 3] ?? "private");
@@ -106,6 +106,21 @@ describe("the data routes", () => {
 
     expect([first.sites.length, second.sites.length, second.next, new Set(names).size]).toEqual([25, 2, null, 27]);
     if (query.includes("sort=name")) expect(names).toEqual([...names].sort());
+  });
+
+  // Drift: the engine cuts a title at a NUL, so one that begins with it is ordered by nothing. A cursor refused for holding nothing after its tilde would end a table by title at its first page.
+  test("go on to the following page from a title the order holds nothing of", async () => {
+    const opened = await openConsole();
+    for (let index = 0; index < 26; index += 1) await opened.base.publish(`site-${String(index).padStart(2, "0")}`, "private");
+
+    const { database } = opened.base.install;
+    const all = await database.listSites({ trash: false, limit: 100 });
+    for (const site of all.sites) await database.changeDetails(site.id, { title: "\u0000" }, { by: opened.base.owner, at: opened.base.clock.now });
+
+    const first = (await (await opened.get("/data/sites?sort=title")).json()) as Listed;
+    const second = (await (await opened.get(`/data/sites?sort=title&after=${encodeURIComponent(first.next ?? "")}`)).json()) as Listed;
+
+    expect([first.sites.length, first.next?.endsWith("~"), second.sites.length, second.next]).toEqual([25, true, 1, null]);
   });
 
   // Drift: a cursor kept from another order would be read as a place in this one, and the page would start somewhere it never ended.

@@ -12,7 +12,7 @@ import { SITE_OBJECT, siteObject } from "./site-object";
 /** The most sites one page holds, and how many a page holds when no limit is asked. */
 const MAX_PAGE = 100;
 
-/** The most characters a listing looks for in a name or a title, and a cursor carries as a name: no site name is longer. */
+/** The most characters a listing looks for in a name or a title, and a cursor carries as a name or as the key of a title: no site name is longer, and a listing by title goes by no more. */
 const MAX_NAMED = 40;
 
 /** An access a site has. */
@@ -22,11 +22,11 @@ const ACCESS = v.picklist(["private", "unlisted", "public"]);
 export const LIST_QUERY = v.strictObject({
   trash: v.optional(v.boolean(), false),
   limit: v.optional(v.pipe(POSITIVE, v.maxValue(MAX_PAGE)), MAX_PAGE),
-  after: v.optional(v.strictObject({ updated_at: MOMENT, id: SITE_ID, name: v.optional(v.pipe(v.string(), v.maxLength(MAX_NAMED))), access: v.optional(ACCESS) })),
+  after: v.optional(v.strictObject({ updated_at: MOMENT, id: SITE_ID, name: v.optional(v.pipe(v.string(), v.maxLength(MAX_NAMED))), access: v.optional(ACCESS), title: v.optional(v.pipe(v.string(), v.maxCodePoints(MAX_NAMED))) })),
   named: v.optional(v.pipe(v.string(), v.minLength(1), v.maxLength(MAX_NAMED))),
   access: v.optional(ACCESS),
   expires: v.optional(v.picklist(["set", "never"])),
-  sort: v.optional(v.picklist(["updated", "name", "access"])),
+  sort: v.optional(v.picklist(["updated", "name", "access", "title"])),
   dir: v.optional(v.picklist(["asc", "desc"])),
 });
 
@@ -42,7 +42,8 @@ type Listed = { readonly ok: true } & Readonly<v.InferOutput<typeof LISTED_SITES
  * @param query - `trash` lists the trash instead; `limit` is 1 to 100; `after` is the `next` of the page before, asked under the same `sort`.
  *   `named` keeps the sites whose name or title holds that text, the letters A to Z in either case and no sign read as a pattern; the title is the one a site is listed with.
  *   `access` keeps those of that access, and `expires` those that delete themselves on a set day (`set`) or never do (`never`).
- *   `sort` orders by the last change (`updated`, the newest first), by `name`, or by `access` from private to public, and `dir` turns the order around
+ *   `sort` orders by the last change (`updated`, the newest first), by `name`, by `access` from private to public,
+ *   or by `title`: what a site is listed with, its title or else its name, by the first 40 characters and with A to Z in either case alike. `dir` turns the order around
  * @returns the page, or `bad_argument` naming the key that was refused: `after` for a cursor that does not carry what its `sort` goes by
  */
 export async function listSites(install: Install, actor: Actor, query: v.InferInput<typeof LIST_QUERY> = {}): Promise<Listed | Refused<"not_set_up" | "bad_argument">> {
@@ -53,7 +54,7 @@ export async function listSites(install: Install, actor: Actor, query: v.InferIn
   if (!asked.success) return refuse("bad_argument", v.getDotPath(asked.issues[0])?.split(".")[0] ?? "query");
 
   const { after, sort } = asked.output;
-  if (after !== undefined && ((sort === "name" && after.name === undefined) || (sort === "access" && after.access === undefined))) return refuse("bad_argument", "after");
+  if (after !== undefined && sort !== undefined && sort !== "updated" && after[sort] === undefined) return refuse("bad_argument", "after");
 
   const owner = actor.scope === "admin" ? undefined : actor.holder;
   const page = await install.database.listSites({ ...asked.output, owner });

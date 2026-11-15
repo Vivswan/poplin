@@ -419,6 +419,12 @@ describe("createApi", () => {
     const lastByName = await listed(install, { sort: "name", limit: "2", ...after(byName.body.next) });
 
     expect([names(byName), names(lastByName), names(await listed(install, { sort: "name", dir: "desc", limit: "1" }))]).toEqual([["one", "three"], ["two"], ["two"]]);
+
+    // Drift: a listing by title carries the place of a title under a key of its own; a client that did not send it back would be refused the second page.
+    const byTitle = await listed(install, { sort: "title", limit: "2" });
+    const lastByTitle = await listed(install, { sort: "title", limit: "2", ...after(byTitle.body.next) });
+
+    expect([names(byTitle), (byTitle.body.next as { title: string }).title, names(lastByTitle)]).toEqual([["one", "three"], "three", ["two"]]);
     expect((older.body.entries as { seq: number }[]).map((entry) => entry.seq)).toEqual([(entries[0]?.seq ?? 0) - 2, (entries[0]?.seq ?? 0) - 3]);
 
     const oldest = await answered(install.routes.audit.$get({ query: { limit: "2", dir: "asc" } }));

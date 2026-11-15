@@ -89,8 +89,8 @@ const ROWS: Readonly<Record<string, readonly [read: number, written: number]>> =
   "keepSweepPlace": [1, 1],
   "readSweepPlace": [1, 0],
   "keepSweepPlace, forgotten": [0, 1],
-  "createSite": [10, 15],
-  "createSite, public": [11, 15],
+  "createSite": [10, 16],
+  "createSite, public": [11, 16],
   "createSite, name taken": [4, 0],
   "getSite": [3, 0],
   "getSite, none": [0, 0],
@@ -102,31 +102,31 @@ const ROWS: Readonly<Record<string, readonly [read: number, written: number]>> =
   "readTotals": [1, 0],
   "exportSites": [18, 0],
   "exportSites, after": [18, 0],
-  "giveNewId": [22, 8],
+  "giveNewId": [22, 9],
   "reserveVersion": [5, 1],
   "addVersion": [24, 5],
   "addVersion, one dropped": [29, 7],
   "setLiveVersion, a number": [10, 3],
   "setLiveVersion, the same": [7, 0],
   "setLiveVersion, previous": [11, 3],
-  "trashSite": [7, 8],
+  "trashSite": [7, 9],
   "trashSite, in the trash": [6, 0],
-  "restoreSite": [7, 8],
+  "restoreSite": [7, 9],
   "deleteSite": [13, 7],
   "listLeftovers": [1, 0],
-  "storedBack: addUpload, importUploadAsSite, abandonUpload, removeUpload": [29, 25],
+  "storedBack: addUpload, importUploadAsSite, abandonUpload, removeUpload": [29, 26],
   "forgetLeftover": [1, 1],
   "addUpload, a new site": [9, 6],
   "getUpload": [1, 0],
   "getUploadFile": [1, 0],
   "getUploadFile, no such file": [1, 0],
   "listUploads": [1, 0],
-  "publishUploadAsSite": [15, 17],
+  "publishUploadAsSite": [15, 18],
   "publishUploadAsSite, not pending": [6, 0],
   "setUploadDropped": [1, 1],
   "removeUpload": [1, 1],
   "reserveVersion and addUpload, a version": [15, 7],
-  "publishUploadAsVersion, with access and details": [67, 17],
+  "publishUploadAsVersion, with access and details": [67, 18],
   "publishUploadAsVersion, plain": [45, 9],
   "addUpload, 500 files": [9, 6],
   "abandonUpload": [2, 2],
@@ -156,7 +156,7 @@ const ROWS: Readonly<Record<string, readonly [read: number, written: number]>> =
   "changeAccess": [8, 5],
   "changeAccess, the same": [7, 0],
   "changeAccess, name taken": [7, 0],
-  "changeDetails": [6, 3],
+  "changeDetails": [6, 4],
   "changeDetails, the same": [6, 0],
   "listAudit": [20, 0],
   "listAudit, one kind, the sites named with a text": [46, 0],
@@ -310,8 +310,8 @@ describe("D1: the rows a publish costs of a day's allowance", () => {
   });
 
   // Drift: a day allows 5,000,000 rows read and 100,000 written, and every query fails once either is spent; a publish whose cost grew faster than its files would spend a day in one go.
-  test.each([50, 200])("a whole publish of %d files reads one row a file and 30 more, and writes 24: four read and one written are the count of the listing that checks its files", async (files) => {
-    expect(await publishCost(files)).toEqual({ read: files + 30, written: 24 });
+  test.each([50, 200])("a whole publish of %d files reads one row a file and 30 more, and writes 25: four read and one written are the count of the listing that checks its files", async (files) => {
+    expect(await publishCost(files)).toEqual({ read: files + 30, written: 25 });
   });
 });
 
@@ -348,6 +348,7 @@ describe("D1: the rows a listing, a change to a site, and a page of the audit lo
     };
     const page = await database.listSites({ trash: false, limit: 10 });
     const named = await database.listSites({ trash: false, limit: 10, sort: "name" });
+    const titled = await database.listSites({ trash: false, limit: 10, sort: "title" });
 
     expect({
       "the first page": await cost(() => database.listSites({ trash: false, limit: 10 })),
@@ -362,6 +363,8 @@ describe("D1: the rows a listing, a change to a site, and a page of the audit lo
       "a page of the entries of one kind for one site": await cost(() => database.listAudit({ limit: 20, actions: ["create"], site: "site-1" })),
       "a page by name": await cost(() => database.listSites({ trash: false, limit: 10, sort: "name" })),
       "the page by name after it": await cost(() => database.listSites({ trash: false, limit: 10, sort: "name", ...(named.next === undefined ? {} : { after: named.next }) })),
+      "a page by title": await cost(() => database.listSites({ trash: false, limit: 10, sort: "title" })),
+      "the page by title after it": await cost(() => database.listSites({ trash: false, limit: 10, sort: "title", ...(titled.next === undefined ? {} : { after: titled.next }) })),
       "a page by access, the most open first": await cost(() => database.listSites({ trash: false, limit: 10, sort: "access", dir: "desc" })),
       "a page of the sites that never expire": await cost(() => database.listSites({ trash: false, limit: 10, expires: "never" })),
       "a page of the trash": await cost(() => database.listSites({ trash: true, limit: 10 })),
@@ -372,12 +375,14 @@ describe("D1: the rows a listing, a change to a site, and a page of the audit lo
       "an access that changes": [8, 5],
       "the same access again": [7, 0],
       "a public name that is taken": [7, 0],
-      "a detail that changes": [6, 3],
+      "a detail that changes": [6, 4],
       "the same detail again": [6, 0],
       "a page of twenty entries": [20, 0],
       "a page of the entries of one kind for one site": [33, 0],
       "a page by name": [33, 0],
       "the page by name after it": [34, 0],
+      "a page by title": [33, 0],
+      "the page by title after it": [34, 0],
       "a page by access, the most open first": [32, 0],
       "a page of the sites that never expire": [32, 0],
       "a page of the trash": [1, 0],

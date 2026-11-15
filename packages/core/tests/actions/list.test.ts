@@ -126,6 +126,29 @@ describe("listSites", () => {
     expect(await names(world, ADMIN, { sort: "size" as "name" })).toMatchObject({ ok: false, code: "bad_argument", about: "sort" });
   });
 
+  // Drift: a table's first heading sorts by the title each row shows; an order by the name alone would sort by a line nobody sees, and a `next` the action's own `after` refused would end the table at its first page.
+  test("`sort: title` orders every page by what each site is listed with, and its cursor names the title it stopped at", async () => {
+    const world = await makeWorld();
+    const drafts = [
+      ["zeta", { title: "apple" }],
+      ["banana", {}],
+      ["yak", { page_title: "Cherry" }],
+      ["xray", { title: "Avocado" }],
+      ["wolf", { title: "date", page_title: "Aardvark" }],
+    ] as const;
+    for (const [at, [name, settings]] of drafts.entries()) {
+      world.clock.now = NOW + at;
+      await made(world, OWNER, name, settings);
+    }
+    const shown = async (query: Parameters<typeof listSites>[2]): Promise<unknown> => (await pagesOf(world, OWNER, query)).map((page) => page.map((site) => site.title ?? site.name));
+    const first = await listSites(world.install, OWNER, { sort: "title", limit: 2 });
+
+    expect(await shown({ sort: "title" })).toEqual([["apple", "Avocado"], ["banana", "Cherry"], ["date"]]);
+    expect(await shown({ sort: "title", dir: "desc" })).toEqual([["date", "Cherry"], ["banana", "Avocado"], ["apple"]]);
+    expect(first.ok && first.next).toMatchObject({ title: "avocado" });
+    expect(await names(world, OWNER, { sort: "title", after: { updated_at: NOW, id: "aaaaaaaaaaaa" as never, name: "zeta" } })).toMatchObject({ ok: false, code: "bad_argument", about: "after" });
+  });
+
   // Drift: the dashboard's search box and its filter hand these two keys over; one read as a pattern, or dropped, would list sites nobody asked for.
   test("`named` keeps the sites whose name holds the text as typed, and `access` those of one access", async () => {
     const world = await makeWorld();
