@@ -181,3 +181,14 @@
 [data-slot="sheet-overlay"] {
   backdrop-filter: none;
 }
+
+/* A scroll area's bar is the one sign that a table goes on sideways: its thumb is darker than a hairline, darker still under the pointer, and lies over a table's pinned headings. */
+[data-slot="scroll-area-scrollbar"] {
+  z-index: 40;
+}
+[data-slot="scroll-area-thumb"] {
+  background-color: color-mix(in srgb, var(--input) 60%, transparent);
+}
+[data-slot="scroll-area-scrollbar"]:hover [data-slot="scroll-area-thumb"] {
+  background-color: var(--input);
+}

@@ -1,5 +1,6 @@
 // What every data route of the console shares: who asks, how a refusal is answered, and how a request that fails its schema is refused.
 
+import { listTokens } from "@poplin/core/src/actions/manage-tokens";
 import type { Install } from "@poplin/core/src/actions/records";
 import type { Rebuilding } from "@poplin/core/src/actions/start-update";
 import type { Actor } from "@poplin/core/src/auth/scopes";
@@ -91,6 +92,18 @@ export function refused(context: Context<Shared>, refusal: Refusal): Response & 
     { ok: false as const, code: refusal.code, about: refusal.about ?? null, sentence: refusalSentence(refusal.code, refusal.about) },
     status ?? 400,
   );
+}
+
+/**
+ * Read the name of each login that has one, by the login's id: what a screen writes where a login published or changed something.
+ *
+ * It is one read however many rows name a login. A login that was removed has no name here.
+ */
+export async function loginNames({ install, actor }: Asker): Promise<Record<string, string>> {
+  const listed = await listTokens(install, actor);
+  if (!listed.ok) return {};
+
+  return Object.fromEntries(listed.tokens.filter((token) => token.note !== "").map((token) => [token.id, token.note]));
 }
 
 /**

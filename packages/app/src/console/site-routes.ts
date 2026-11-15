@@ -1,14 +1,14 @@
 // The data of the Sites screen: one page of the table, one site, and each change of a site.
 //
 //   GET  /sites                    one page; ?view=trash, ?q=, ?access=, ?sort= with ?dir=, ?after=
-//   GET  /sites/<label>            one site, with the names of the tokens that published its versions
+//   GET  /sites/<label>            one site
+//                                  both with the names of the logins there are, for whoever published a version
 //   POST /sites/<label>/<change>   rename, access, settings, delete, restore, new-link, make-live
 
 import { vValidator } from "@hono/valibot-validator";
 import { SITE_CHANGES } from "@poplin/core/src/actions/changes";
 import { deleteSite } from "@poplin/core/src/actions/delete";
 import { listSites } from "@poplin/core/src/actions/list";
-import { listTokens } from "@poplin/core/src/actions/manage-tokens";
 import { newLink } from "@poplin/core/src/actions/new-link";
 import { restoreSite } from "@poplin/core/src/actions/restore";
 import { ROLLBACK_OPTIONS, rollbackSite } from "@poplin/core/src/actions/rollback";
@@ -17,7 +17,7 @@ import { getSite } from "@poplin/core/src/actions/show";
 import { Hono } from "hono";
 import * as v from "valibot";
 
-import { NOTHING, refused, refuseInvalid, type Shared } from "./data";
+import { loginNames, NOTHING, refused, refuseInvalid, type Shared } from "./data";
 
 /** How many sites one page of the table holds. */
 const PAGE_SIZE = 25;
@@ -94,8 +94,9 @@ async function sitesPage(
 export const siteRoutes = new Hono<Shared>()
   .get("/sites", vValidator("query", PAGE_QUERY, refuseInvalid), async (context) => {
     const page = await sitesPage(context.get("asker"), context.req.valid("query"));
+    if (!page.ok) return refused(context, page);
 
-    return page.ok ? context.json(page) : refused(context, page);
+    return context.json({ ...page, logins: await loginNames(context.get("asker")) });
   })
   .get("/sites/:site", vValidator("param", ONE_SITE, refuseInvalid), async (context) => {
     const { install, actor } = context.get("asker");
@@ -103,12 +104,7 @@ export const siteRoutes = new Hono<Shared>()
     // An address that names no site in a form a site's label can have is told as a site that is not there: both are an old or mistyped link.
     if (!shown.ok) return refused(context, shown.code === "bad_argument" && shown.about === "site" ? { code: "not_found" } : shown);
 
-    const tokens = await listTokens(install, actor);
-    const publishers: Record<string, string> = Object.fromEntries(
-      tokens.ok ? tokens.tokens.filter((token) => token.note !== "").map((token) => [token.id, token.note]) : [],
-    );
-
-    return context.json({ ok: true as const, site: shown.site, publishers });
+    return context.json({ ok: true as const, site: shown.site, logins: await loginNames(context.get("asker")) });
   })
   .post("/sites/:site/rename", vValidator("param", ONE_SITE, refuseInvalid), vValidator("json", CHANGES.rename, refuseInvalid), async (context) => {
     const { install, actor } = context.get("asker");

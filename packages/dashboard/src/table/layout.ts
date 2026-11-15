@@ -1,6 +1,6 @@
 // A table's layout as one person arranged it: the order of its columns, which are hidden, and how wide each is. It is kept in the browser, under the table's own key.
 
-import { useCallback, useMemo, useState } from "react";
+import { useMemo } from "react";
 import useLocalStorageState from "use-local-storage-state";
 
 /** What of a column the layout needs to know. */
@@ -35,12 +35,6 @@ export interface TableLayout {
   /** Keeps the changed widths. */
   readonly setSizes: (sizes: Readonly<Record<string, number>>) => void;
 
-  /** The ids of the chosen columns the table has no room for at its width: they are chosen still, and not drawn. */
-  readonly noRoom: readonly string[];
-
-  /** Told by the table which chosen columns it has no room for. This is not kept: it follows the table's width. */
-  readonly setNoRoom: (ids: readonly string[]) => void;
-
   /** Whether anything differs from the layout the table starts with. */
   readonly changed: boolean;
 
@@ -72,7 +66,7 @@ function startOf(columns: readonly LayoutColumn[]): Kept {
   };
 }
 
-/** Keep of what the browser kept only what the table's columns still allow: a column that is gone is dropped, a new one goes last, and the fixed one stays first and shown. Anything that is no layout is the layout the table starts with. */
+/** Keep of what the browser kept only what the table's columns still allow: a column that is gone is dropped, a new one goes last as the table starts it, and the fixed one stays first and shown. No layout at all is the table's own start. */
 function allowedOf(stored: unknown, columns: readonly LayoutColumn[]): Kept {
   const start = startOf(columns);
   const { order, hidden, sizes } = (typeof stored === "object" && stored !== null ? stored : {}) as { readonly [Part in keyof Kept]?: unknown };
@@ -85,9 +79,15 @@ function allowedOf(stored: unknown, columns: readonly LayoutColumn[]): Kept {
     (entry): entry is [string, number] => known.has(entry[0]) && typeof entry[1] === "number" && entry[1] >= NARROWEST && entry[1] <= WIDEST,
   );
 
+  // A column the kept layout has never seen starts as the table starts it: hidden where it is hidden until chosen.
+  const unseen = start.order.filter((id) => !fixed.has(id) && !order.includes(id));
+
   return {
-    order: [...start.order.filter((id) => fixed.has(id)), ...kept, ...start.order.filter((id) => !fixed.has(id) && !kept.includes(id))],
-    hidden: hidden.filter((id): id is string => known.has(id) && !fixed.has(id)),
+    order: [...start.order.filter((id) => fixed.has(id)), ...kept, ...unseen],
+    hidden: [
+      ...hidden.filter((id): id is string => known.has(id) && !fixed.has(id)),
+      ...unseen.filter((id) => start.hidden.includes(id) && !hidden.includes(id)),
+    ],
     sizes: Object.fromEntries(widths),
   };
 }
@@ -104,9 +104,6 @@ export function useTableLayout(key: string, columns: readonly LayoutColumn[]): T
   const [stored, keep, { removeItem }] = useLocalStorageState<unknown>(`${KEY_PREFIX}${key}`);
   const kept = useMemo(() => allowedOf(stored, columns), [stored, columns]);
   const start = useMemo(() => startOf(columns), [columns]);
-  const [noRoom, keepNoRoom] = useState<readonly string[]>([]);
-  // The same ids told again are the same list, so a table that draws again does not draw its screen again.
-  const setNoRoom = useCallback((ids: readonly string[]) => keepNoRoom((told) => (told.join(" ") === ids.join(" ") ? told : ids)), []);
 
   return {
     ...kept,
@@ -114,8 +111,6 @@ export function useTableLayout(key: string, columns: readonly LayoutColumn[]): T
     setHidden: (id, hidden) =>
       keep({ ...kept, hidden: hidden ? [...kept.hidden.filter((other) => other !== id), id] : kept.hidden.filter((other) => other !== id) }),
     setSizes: (sizes) => keep({ ...kept, sizes }),
-    noRoom,
-    setNoRoom,
     changed: JSON.stringify(kept) !== JSON.stringify(start),
     reset: removeItem,
   };

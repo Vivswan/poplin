@@ -1,8 +1,8 @@
 // One site, beside the table: its link, who can open it, its facts and versions, the settings it is seldom given, and what is done to the whole of it.
 
 import { showBytes } from "@poplin/core/src/records/settings";
-import { CopyIcon, ExternalLinkIcon, EyeIcon, EyeOffIcon, PencilIcon } from "lucide-react";
-import { type ReactElement, type ReactNode, useEffect, useState } from "react";
+import { CopyIcon, ExternalLinkIcon, PencilIcon } from "lucide-react";
+import { type ReactElement, type ReactNode, useEffect } from "react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -11,7 +11,8 @@ import { ACCESSES, type Access, addressParts, expiryOf, shortMoment, showCount, 
 import { IconButton } from "@/shared/icon-button";
 import { PanelBlock, PanelFact, PanelFacts, PanelLoading, PanelSwitch, SidePanel } from "@/shared/side-panel";
 import type { SiteActions } from "@/sites/site-actions";
-import { SiteLink } from "@/sites/site-columns";
+import { Who } from "@/shared/who";
+import { type Reveal, RevealButton, SiteLink } from "@/sites/site-columns";
 import { type Shown, useSite } from "@/sites/site-queries";
 import type { Ask } from "@/sites/site-questions";
 
@@ -22,6 +23,9 @@ interface SitePanelProps {
 
   /** The changes of a site. */
   readonly actions: SiteActions;
+
+  /** Which sites show the id in their link, and the switch of one. */
+  readonly reveal: Reveal;
 
   /** Asks a question about the site before a change: the screen draws it. */
   readonly onAsk: (site: Site, ask: Ask) => void;
@@ -37,8 +41,8 @@ interface SitePanelProps {
 }
 
 /** The site's link: its id is left out until it is shown, with Copy and Open beside it. A public site's other address is written the same way, under the one eye. */
-function LinkBlock({ site, actions }: { readonly site: Site; readonly actions: SiteActions }): ReactNode {
-  const [whole, setWhole] = useState(false);
+function LinkBlock({ site, actions, reveal }: { readonly site: Site; readonly actions: SiteActions; readonly reveal: Reveal }): ReactNode {
+  const whole = reveal.shows(site);
   const also = site.addresses.public === null ? undefined : site.addresses.site;
   const hides = [site.url, ...(also === undefined ? [] : [also])].some((address) => addressParts(address, site.id).hidden !== "");
 
@@ -46,14 +50,10 @@ function LinkBlock({ site, actions }: { readonly site: Site; readonly actions: S
     <PanelBlock label="Link">
       <div className="flex items-center gap-1 rounded-md border bg-muted/40 py-1 pr-1 pl-2.5">
         <SiteLink site={site} whole={whole} />
-        {hides ? (
-          <IconButton label={whole ? "Hide the whole link" : "Show the whole link"} onClick={() => setWhole(!whole)}>
-            {whole ? <EyeOffIcon /> : <EyeIcon />}
-          </IconButton>
-        ) : null}
         <IconButton label="Copy the link" onClick={() => void actions.copyLink(site)}>
           <CopyIcon />
         </IconButton>
+        {hides ? <RevealButton site={site} reveal={reveal} /> : null}
         <IconButton label="Open the site" link={<a href={site.url} target="_blank" rel="noreferrer" />}>
           <ExternalLinkIcon />
         </IconButton>
@@ -110,11 +110,10 @@ function FactsBlock({ site }: { readonly site: Site }): ReactNode {
   );
 }
 
-/** The kept versions, the newest first. A person is named by email and a token by its name, never by its id. */
+/** The kept versions, the newest first, each with who published it. */
 function VersionsBlock({ shown, onMakeLive }: { readonly shown: Shown; readonly onMakeLive: (version: number) => void }): ReactNode {
-  const { site, publishers } = shown;
+  const { site, logins } = shown;
   const newestFirst = [...site.versions].sort((left, right) => right.number - left.number);
-  const publisherOf = (by: string): string => publishers[by] ?? (by.includes("@") ? by : "A token");
 
   return (
     <PanelBlock label="Versions">
@@ -125,7 +124,9 @@ function VersionsBlock({ shown, onMakeLive }: { readonly shown: Shown; readonly 
             <time title={wholeMoment(version.published)} className="w-24 shrink-0 text-muted-foreground">
               {shortMoment(version.published)}
             </time>
-            <span className="min-w-0 flex-1 truncate text-muted-foreground">{publisherOf(version.published_by)}</span>
+            <span className="min-w-0 flex-1 truncate text-muted-foreground">
+              <Who by={version.published_by} logins={logins} />
+            </span>
             {version.number === site.live_version ? (
               <Badge variant="secondary">Live</Badge>
             ) : (
@@ -155,7 +156,7 @@ function TrashBlock({ site, onRestore }: { readonly site: Site; readonly onResto
 }
 
 /** Draw the panel of one site. It reads the site when it opens and after every change. */
-export function SitePanel({ label, actions, onAsk, closeLink, onClose, onMoved }: SitePanelProps): ReactNode {
+export function SitePanel({ label, actions, reveal, onAsk, closeLink, onClose, onMoved }: SitePanelProps): ReactNode {
   const { data, error, isFetching } = useSite(label);
   const failure = error?.message;
 
@@ -201,7 +202,7 @@ export function SitePanel({ label, actions, onAsk, closeLink, onClose, onMoved }
 
   return (
     <SidePanel title={site.name} beside={renameButton} {...frame}>
-      <LinkBlock site={site} actions={actions} />
+      <LinkBlock site={site} actions={actions} reveal={reveal} />
       <AccessBlock site={site} onChoose={choose} />
       <FactsBlock site={site} />
       <VersionsBlock shown={data} onMakeLive={(number) => void actions.makeLive(site, number)} />

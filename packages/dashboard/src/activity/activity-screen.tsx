@@ -4,17 +4,18 @@ import { useNavigate } from "@tanstack/react-router";
 import { ListFilterIcon } from "lucide-react";
 import { type ReactNode, useMemo } from "react";
 
-import { activityColumns, SiteThen, When, Who } from "@/activity/activity-columns";
+import { activityColumns, SiteThen, When } from "@/activity/activity-columns";
 import { type Entry, useActivityPage } from "@/activity/activity-queries";
-import { activityQuery, emptyWords, KINDS, type Kind, kindOf, sortedQuery, sortOf, whatOf } from "@/activity/activity-words";
+import { emptyWords, KINDS, type Kind, kindOf, sortedQuery, sortOf, whatOf } from "@/activity/activity-words";
 import { Button } from "@/components/ui/button";
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyTitle } from "@/components/ui/empty";
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { searchOf, useAddressQuery } from "@/lib/address";
 import { IconButton } from "@/shared/icon-button";
-import { Pages } from "@/shared/pages";
+import { Pages, queryWith } from "@/shared/pages";
 import { SearchBox } from "@/shared/search-box";
+import { Who } from "@/shared/who";
 import { AppShell } from "@/shell/app-shell";
 import { ColumnsMenu, DataTable } from "@/table/data-table";
 import { useTableLayout } from "@/table/layout";
@@ -73,29 +74,32 @@ function OrderSelect({ descending, onChoose }: { readonly descending: boolean; r
   );
 }
 
-/** The log on a phone: one row an entry, what was done and to which site over who did it and when. */
-function PhoneList({ page }: { readonly page: Page }): ReactNode {
+/** The log on a phone: one row an entry, what was done and to which site over who did it and when, and after the last row what follows the list. */
+function PhoneList({ page, after }: { readonly page: Page; readonly after: ReactNode }): ReactNode {
   return (
-    <ul aria-label="Activity" className="min-h-0 flex-1 overflow-y-auto border-t md:hidden">
-      {page.entries.map((entry) => (
-        <li key={entry.seq} className="flex min-h-16 flex-col justify-center gap-0.5 border-b px-4 py-2">
-          <span className="flex min-w-0 items-baseline gap-2">
-            <span className="truncate">{whatOf(entry)}</span>
-            <span className="min-w-0 shrink-0 truncate">
-              <SiteThen entry={entry} />
+    <div className="min-h-0 flex-1 overflow-y-auto md:hidden">
+      <ul aria-label="Activity" className="border-t">
+        {page.entries.map((entry) => (
+          <li key={entry.seq} className="flex min-h-16 flex-col justify-center gap-0.5 border-b px-4 py-2">
+            <span className="flex min-w-0 items-baseline gap-2">
+              <span className="truncate">{whatOf(entry)}</span>
+              <span className="min-w-0 shrink-0 truncate">
+                <SiteThen entry={entry} />
+              </span>
             </span>
-          </span>
-          <span className="flex min-w-0 items-center gap-2 text-xs text-muted-foreground">
-            <span className="min-w-0 truncate">
-              <Who entry={entry} tokenNames={page.tokenNames} />
+            <span className="flex min-w-0 items-center gap-2 text-xs text-muted-foreground">
+              <span className="min-w-0 truncate">
+                <Who by={entry.by} logins={page.logins} />
+              </span>
+              <span className="shrink-0">
+                <When entry={entry} />
+              </span>
             </span>
-            <span className="shrink-0">
-              <When entry={entry} />
-            </span>
-          </span>
-        </li>
-      ))}
-    </ul>
+          </li>
+        ))}
+      </ul>
+      {after}
+    </div>
   );
 }
 
@@ -143,13 +147,14 @@ export function ActivityScreen(): ReactNode {
   const kind = kindOf(query);
   const site = query.get("site") ?? "";
   const { data: page, error, isPlaceholderData } = useActivityPage(query);
-  const tokenNames = page?.tokenNames;
-  const next = page?.next;
-  const columns = useMemo(() => activityColumns(tokenNames ?? {}), [tokenNames]);
+  const logins = page?.logins;
+  const columns = useMemo(() => activityColumns(logins ?? {}), [logins]);
   const layout = useTableLayout("activity", columns);
   const instead = insteadOfRows(error?.message, page, kind, site, () => void navigate({ to: PATH }));
   const move = (changes: Readonly<Record<string, string>>, replace = false): void =>
-    void navigate({ to: PATH, search: searchOf(activityQuery(query, changes)), replace });
+    void navigate({ to: PATH, search: searchOf(queryWith(query, changes)), replace });
+
+  const pages = <Pages query={query} rows={page?.entries.length ?? 0} next={page?.next} onMove={move} busy={isPlaceholderData} />;
 
   const rowActions = (entry: Entry): ReactNode => {
     const name = entry.site?.name;
@@ -200,14 +205,10 @@ export function ActivityScreen(): ReactNode {
                 sort={sortOf(query)}
                 onSort={(order) => void navigate({ to: PATH, search: searchOf(sortedQuery(query, order)) })}
                 actions={rowActions}
+                after={pages}
               />
             </div>
-            {page === undefined ? null : <PhoneList page={page} />}
-            <Pages
-              onFirst={query.get("after") === null ? undefined : () => move({})}
-              onNext={next == null ? undefined : () => move({ after: next })}
-              busy={isPlaceholderData}
-            />
+            {page === undefined ? null : <PhoneList page={page} after={pages} />}
           </>
         )}
       </section>

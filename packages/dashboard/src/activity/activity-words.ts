@@ -1,6 +1,7 @@
 // The words of the Activity screen: what each entry of the log says was done, the kinds the log is narrowed to, the order it is read in, and what an empty page says.
 
 import type { Entry } from "@/activity/activity-queries";
+import { queryWith } from "@/shared/pages";
 import type { Sort } from "@/table/data-table";
 import { type Orders, sortIn, sortKeys } from "@/table/sort";
 
@@ -90,29 +91,12 @@ export function whatOf(entry: Pick<Entry, "action" | "detail">): string {
 }
 
 /**
- * Write the query that keeps the log as it is shown, with some of it changed.
- *
- * @param changes - the keys to set; an empty value takes a key away. A change that names no `after` starts at the first page
- */
-export function activityQuery(query: URLSearchParams, changes: Readonly<Record<string, string>>): URLSearchParams {
-  const next = new URLSearchParams(query);
-  if (!("after" in changes)) next.delete("after");
-
-  for (const [key, value] of Object.entries(changes)) {
-    if (value === "") next.delete(key);
-    else next.set(key, value);
-  }
-
-  return next;
-}
-
-/**
  * Write the query of the log from its first page, in another order.
  *
  * @param next - the order a press on a heading leads to; `undefined` for none, which is the newest first
  */
 export function sortedQuery(query: URLSearchParams, next: Sort | undefined): URLSearchParams {
-  return activityQuery(query, sortKeys(next, ACTIVITY_ORDERS));
+  return queryWith(query, sortKeys(next, ACTIVITY_ORDERS));
 }
 
 /** The words of a page that holds no entry. */

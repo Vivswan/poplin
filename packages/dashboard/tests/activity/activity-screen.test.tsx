@@ -20,7 +20,7 @@ const OWN_FETCH = globalThis.fetch;
 const PAGE = {
   ok: true,
   entries: [{ seq: 12, at: 1_700_000_000_000, by: "mira@example.com", action: "login", detail: {}, site: null }],
-  tokenNames: {},
+  logins: {},
   next: "12",
 };
 
@@ -54,7 +54,8 @@ async function draw(address: string): Promise<void> {
 /** Press a button of the page by its name, and let the screen read what the press asks for. */
 async function press(name: string): Promise<void> {
   const before = asked.length;
-  fireEvent.click(within(document.body).getByRole("button", { name }));
+  // The ways under the list are drawn under the table and under a phone's list: either leads the same way.
+  fireEvent.click(within(document.body).getAllByRole("button", { name })[0] as HTMLElement);
   await readAfter(before);
 }
 
@@ -94,7 +95,7 @@ describe("the order of the log", () => {
     expect({ first, turned, next, back }).toEqual({
       first: ["?kind=access&after=40", "descending"],
       turned: ["?kind=access&sort=when&dir=asc", "?kind=access&dir=asc", "ascending"],
-      next: ["?kind=access&sort=when&dir=asc&after=12", "?kind=access&dir=asc&after=12"],
+      next: ["?kind=access&sort=when&dir=asc&after=12&from=2", "?kind=access&dir=asc&after=12"],
       back: ["?kind=access", "?kind=access", "descending"],
     });
   });

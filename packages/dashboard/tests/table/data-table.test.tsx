@@ -155,16 +155,12 @@ describe("the table", () => {
     ]);
   });
 
-  // Drift: a table too narrow for its columns would draw one cut off at its edge, or drop the fixed one, or tell the columns' menu nothing of what it left out.
-  test.each([
-    ["every chosen column where they fit", 600, ["Name", "Colour", "Weight", "Actions"], []],
-    ["no last column where one does not fit", 400, ["Name", "Colour", "Actions"], ["weight"]],
-    ["the fixed column alone where nothing else fits", 200, ["Name", "Actions"], ["colour", "weight"]],
-  ])("draws %s", (_what, width, drawn, noRoom) => {
-    roomOf(width);
+  // Drift: a table too narrow for its columns would leave a chosen one out again, which the owner ruled out: it scrolls sideways.
+  test("draws every chosen column however narrow its room", () => {
+    roomOf(200);
     render(<Harness />);
 
-    expect([headings(), seen.layout?.noRoom]).toEqual([drawn, noRoom]);
+    expect(headings()).toEqual(["Name", "Colour", "Weight", "Actions"]);
   });
 
   // Drift: a press on a row's own button would also open the row.
@@ -193,7 +189,7 @@ describe("a table's layout", () => {
     });
   });
 
-  // Drift: what an older version kept, or what someone typed into the browser's store, would hide the fixed column, move it, or name a column that is gone.
+  // Drift: what an older version kept, or what someone typed into the browser's store, would hide the fixed column, move it, name a column that is gone, or show a new column nobody chose.
   test.each([
     [
       "the fixed column moved and hidden",
@@ -201,9 +197,9 @@ describe("a table's layout", () => {
       ["Name", "Colour", "Weight", "Origin", "Actions"],
     ],
     [
-      "a column that is gone, and one that is new",
+      "a column that is gone, and two that are new, one of them hidden until chosen",
       { order: ["name", "gone", "weight"], hidden: ["gone"], sizes: { gone: 300 } },
-      ["Name", "Weight", "Colour", "Origin", "Actions"],
+      ["Name", "Weight", "Colour", "Actions"],
     ],
     ["no layout at all", "not a layout", ["Name", "Colour", "Weight", "Actions"]],
   ])("read from the browser with %s still holds", (_case, kept, expected) => {

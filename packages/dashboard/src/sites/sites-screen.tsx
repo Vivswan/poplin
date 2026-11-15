@@ -13,17 +13,18 @@ import { Select, SelectContent, SelectGroup, SelectItem, SelectSeparator, Select
 import { searchOf, useAddressQuery } from "@/lib/address";
 import type { Site } from "@/lib/sites";
 import { IconButton } from "@/shared/icon-button";
-import { Pages } from "@/shared/pages";
+import { Pages, queryWith } from "@/shared/pages";
 import { SearchBox } from "@/shared/search-box";
 import { useStandsBeside } from "@/shared/side-panel";
 import { AppShell } from "@/shell/app-shell";
 import { siteActions } from "@/sites/site-actions";
-import { AccessMark, SiteLink, siteColumns, trashColumns } from "@/sites/site-columns";
+import type { LoginNames } from "@/shared/who";
+import { AccessMark, type Reveal, SiteLink, siteColumns, trashColumns } from "@/sites/site-columns";
 import { SitePanel } from "@/sites/site-panel";
 import { SITES_KEY, useSitesPage } from "@/sites/site-queries";
 import { type Ask, type Asked, SiteQuestions } from "@/sites/site-questions";
 import { SiteRowActions } from "@/sites/site-row-actions";
-import { emptyWords, FILTERS, type Filter, filteredQuery, filterOf, queryWith, SORTS, sameQuery, sortedQuery, sortOf } from "@/sites/sites-query";
+import { emptyWords, FILTERS, type Filter, filteredQuery, filterOf, SORTS, sortedQuery, sortOf } from "@/sites/sites-query";
 import { ColumnsMenu, DataTable } from "@/table/data-table";
 import { useTableLayout } from "@/table/layout";
 
@@ -35,6 +36,9 @@ const NAME_LOOK = "-mx-1 rounded-sm px-1 py-0.5 font-medium outline-none hover:u
 
 /** The width of the last column of the trash, whose rows end with a worded button. */
 const RESTORE_WIDTH = 104;
+
+/** The names of the logins while the page is being read. */
+const NO_LOGINS: LoginNames = {};
 
 /** The command that publishes a folder as a new site. */
 const PUBLISH_COMMAND = "npx poplin ./my-folder";
@@ -103,42 +107,47 @@ function NewSite(): ReactNode {
   );
 }
 
-/** The sites on a phone: one row each, the name over who can open it and the link. */
+/** The sites on a phone: one row each, the name over who can open it and the link, and after the last row what follows the list. */
 function PhoneList({
   sites,
   opened,
   nameCell,
   rowActions,
   onCopy,
+  after,
 }: {
   readonly sites: readonly Site[];
   readonly opened: string | undefined;
   readonly nameCell: (site: Site) => ReactNode;
   readonly rowActions: (site: Site) => ReactNode;
   readonly onCopy: (site: Site) => void;
+  readonly after: ReactNode;
 }): ReactNode {
   return (
-    <ul aria-label="Sites" className="min-h-0 flex-1 overflow-y-auto border-t md:hidden">
-      {sites.map((site) => (
-        <li
-          key={site.label}
-          data-state={site.label === opened ? "selected" : undefined}
-          className="group/row flex min-h-16 items-center gap-2 border-b px-4 py-2 data-[state=selected]:bg-chosen"
-        >
-          <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-            <span className="truncate">{nameCell(site)}</span>
-            <span className="flex min-w-0 items-center gap-2">
-              <AccessMark access={site.access} className="shrink-0" />
-              <SiteLink site={site} className="text-faint" />
-              <IconButton label="Copy the link" onClick={() => onCopy(site)} className="-my-2 shrink-0">
-                <CopyIcon />
-              </IconButton>
-            </span>
-          </div>
-          {rowActions(site)}
-        </li>
-      ))}
-    </ul>
+    <div className="min-h-0 flex-1 overflow-y-auto md:hidden">
+      <ul aria-label="Sites" className="border-t">
+        {sites.map((site) => (
+          <li
+            key={site.label}
+            data-state={site.label === opened ? "selected" : undefined}
+            className="group/row flex min-h-16 items-center gap-2 border-b px-4 py-2 data-[state=selected]:bg-chosen"
+          >
+            <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+              <span className="truncate">{nameCell(site)}</span>
+              <span className="flex min-w-0 items-center gap-2">
+                <AccessMark access={site.access} className="shrink-0" />
+                <SiteLink site={site} className="text-faint" />
+                <IconButton label="Copy the link" onClick={() => onCopy(site)} className="-my-2 shrink-0">
+                  <CopyIcon />
+                </IconButton>
+              </span>
+            </div>
+            {rowActions(site)}
+          </li>
+        ))}
+      </ul>
+      {after}
+    </div>
   );
 }
 
@@ -271,7 +280,7 @@ function useSiteChanges(opened: string | undefined, follow: (site: Pick<Site, "l
  */
 function useSitePlaces(query: URLSearchParams) {
   const navigate = useNavigate();
-  const kept = useMemo(() => searchOf(sameQuery(query)), [query]);
+  const kept = useMemo(() => searchOf(query), [query]);
   const toTable = useMemo(() => linkOptions({ to: "/", search: kept }), [kept]);
   const toSite = useCallback((site: Pick<Site, "label">) => linkOptions({ to: "/sites/$label", params: { label: site.label }, search: kept }), [kept]);
   const stay = (next: URLSearchParams, replace = false): void => void navigate({ to: ".", search: searchOf(next), replace });
@@ -279,30 +288,13 @@ function useSitePlaces(query: URLSearchParams) {
   return { toTable, toSite, stay };
 }
 
-/** The table the filter shows: the sites, or the trash, each with its own columns, kept layout, and width for a row's actions. */
-function useShownTable(filter: Filter, nameCell: (site: Site) => ReactNode, onCopy: (site: Site) => void) {
-  const trash = filter === "trash";
-  const columns = useMemo(() => (trash ? trashColumns(nameCell) : siteColumns(nameCell, onCopy)), [trash, nameCell, onCopy]);
-  const layout = useTableLayout(trash ? "trash" : "sites", columns);
-
-  return { columns, layout, label: trash ? "Sites in the trash" : "Sites", actionsWidth: trash ? RESTORE_WIDTH : undefined };
-}
-
-/** Draw the Sites screen for the address: the table, and the panel of the site the path names. */
-export function SitesScreen(): ReactNode {
-  const navigate = useNavigate();
-  const query = useAddressQuery();
-  const { label: opened } = useParams({ strict: false });
-  const filter = filterOf(query);
-  const search = query.get("q") ?? "";
-  const beside = useStandsBeside();
-  const { data: page, error, isPending, refetch } = useSitesPage(query);
-
-  const { toTable, toSite, stay } = useSitePlaces(query);
-  const follow = useCallback((site: Pick<Site, "label">): void => void navigate({ ...toSite(site), replace: true }), [navigate, toSite]);
-  const actions = useSiteChanges(opened, follow);
-  const open = useCallback((site: Site): void => void navigate(site.label === opened ? toTable : toSite(site)), [navigate, opened, toTable, toSite]);
-  const nameCell = useCallback(
+/** How a site's name is drawn in its row: a link that opens the site's panel. */
+function useNameCell(
+  opened: string | undefined,
+  toTable: ReturnType<typeof useSitePlaces>["toTable"],
+  toSite: ReturnType<typeof useSitePlaces>["toSite"],
+): (site: Site) => ReactNode {
+  return useCallback(
     (site: Site): ReactNode => {
       const shown = { title: site.name, "aria-expanded": site.label === opened, className: NAME_LOOK };
 
@@ -319,8 +311,74 @@ export function SitesScreen(): ReactNode {
     },
     [opened, toTable, toSite],
   );
+}
+
+/**
+ * Which sites show the id in their link. Nothing of it is kept: a site shows its id until its eye is pressed again, the panel closes or opens for another site, or the screen is left.
+ *
+ * @param opened - the label of the site whose panel is open
+ */
+function useReveal(opened: string | undefined): Reveal {
+  const [held, setHeld] = useState<{ readonly beside: string | undefined; readonly ids: readonly string[] }>({ beside: opened, ids: [] });
+  // What was shown beside another panel, or beside none, is forgotten: it stays hidden when that panel opens again.
+  if (held.beside !== opened) setHeld({ beside: opened, ids: [] });
+
+  return useMemo(() => {
+    const ids = held.beside === opened ? held.ids : [];
+
+    return {
+      shows: (site) => ids.includes(site.id),
+      toggle: (site) => setHeld({ beside: opened, ids: ids.includes(site.id) ? ids.filter((id) => id !== site.id) : [...ids, site.id] }),
+    };
+  }, [held, opened]);
+}
+
+/** What the table's columns are drawn with. */
+interface ColumnParts {
+  /** Draws the Name column, which opens the site. */
+  readonly nameCell: (site: Site) => ReactNode;
+
+  /** Copies a site's whole link. */
+  readonly onCopy: (site: Site) => void;
+
+  /** Which sites show the id in their link. */
+  readonly reveal: Reveal;
+
+  /** The name of each login that has one, by the login's id. */
+  readonly logins: LoginNames;
+}
+
+/** The table the filter shows: the sites, or the trash, each with its own columns, kept layout, and width for a row's actions. */
+function useShownTable(filter: Filter, { nameCell, onCopy, reveal, logins }: ColumnParts) {
+  const trash = filter === "trash";
+  const columns = useMemo(
+    () => (trash ? trashColumns(nameCell, logins) : siteColumns(nameCell, onCopy, reveal, logins)),
+    [trash, nameCell, onCopy, reveal, logins],
+  );
+  const layout = useTableLayout(trash ? "trash" : "sites", columns);
+
+  return { columns, layout, label: trash ? "Sites in the trash" : "Sites", actionsWidth: trash ? RESTORE_WIDTH : undefined };
+}
+
+/** Draw the Sites screen for the address: the table, and the panel of the site the path names. */
+export function SitesScreen(): ReactNode {
+  const navigate = useNavigate();
+  const query = useAddressQuery();
+  const { label: opened } = useParams({ strict: false });
+  const filter = filterOf(query);
+  const search = query.get("q") ?? "";
+  const beside = useStandsBeside();
+  const { data: page, error, isPending, isPlaceholderData, refetch } = useSitesPage(query);
+
+  const { toTable, toSite, stay } = useSitePlaces(query);
+  const follow = useCallback((site: Pick<Site, "label">): void => void navigate({ ...toSite(site), replace: true }), [navigate, toSite]);
+  const actions = useSiteChanges(opened, follow);
+  const open = useCallback((site: Site): void => void navigate(site.label === opened ? toTable : toSite(site)), [navigate, opened, toTable, toSite]);
+  const nameCell = useNameCell(opened, toTable, toSite);
   const copy = useCallback((site: Site): void => void actions.copyLink(site), [actions]);
-  const { columns, layout, label, actionsWidth } = useShownTable(filter, nameCell, copy);
+  const reveal = useReveal(opened);
+  const logins = page?.logins ?? NO_LOGINS;
+  const { columns, layout, label, actionsWidth } = useShownTable(filter, { nameCell, onCopy: copy, reveal, logins });
   const [asked, setAsked] = useState<Asked>();
   const ask = useCallback((site: Site, about: Ask): void => setAsked({ site, ask: about }), []);
   const rowActions = (site: Site): ReactNode => (
@@ -328,9 +386,17 @@ export function SitesScreen(): ReactNode {
   );
   const sites = page?.sites ?? [];
   const later = query.get("after") !== null;
-  const next = page?.next;
+  const pages = (
+    <Pages
+      query={query}
+      rows={sites.length}
+      next={page?.next}
+      onMove={(place) => void navigate({ to: "/", search: searchOf(queryWith(query, place)) })}
+      busy={isPlaceholderData}
+    />
+  );
   const nothing = error !== null || (!isPending && sites.length === 0);
-  const toFirst = (): void => void navigate({ to: "/", search: searchOf(queryWith(query)) });
+  const toFirst = (): void => void navigate({ to: "/", search: searchOf(queryWith(query, {})) });
 
   return (
     <AppShell current="sites" heading="Sites">
@@ -363,18 +429,23 @@ export function SitesScreen(): ReactNode {
                   actions={rowActions}
                   actionsWidth={actionsWidth}
                   loading={isPending}
+                  after={pages}
                 />
               </div>
-              <PhoneList sites={sites} opened={opened} nameCell={nameCell} rowActions={rowActions} onCopy={copy} />
-              <Pages
-                onFirst={later ? toFirst : undefined}
-                onNext={next == null ? undefined : () => void navigate({ to: "/", search: searchOf(queryWith(query, { after: next })) })}
-              />
+              <PhoneList sites={sites} opened={opened} nameCell={nameCell} rowActions={rowActions} onCopy={copy} after={pages} />
             </>
           )}
         </section>
         {opened === undefined ? null : (
-          <SitePanel label={opened} actions={actions} onAsk={ask} closeLink={<Link {...toTable} />} onClose={() => void navigate(toTable)} onMoved={follow} />
+          <SitePanel
+            label={opened}
+            actions={actions}
+            reveal={reveal}
+            onAsk={ask}
+            closeLink={<Link {...toTable} />}
+            onClose={() => void navigate(toTable)}
+            onMoved={follow}
+          />
         )}
       </div>
       {/* The questions stand outside the panel, so each dims the whole page as every other dialog does. */}

@@ -9,10 +9,10 @@ import { filterOf, sortOf } from "@/sites/sites-query";
 /** The first part of every key the sites' data is kept under: a change of a site marks all of it stale, so the table and the panel read again. */
 export const SITES_KEY = ["sites"] as const;
 
-/** One page of the table as the server answers it: the sites, and the cursor of the following page or `null`. */
+/** One page of the table as the server answers it: the sites, the name of each login by its id, and the cursor of the following page or `null`. */
 type Page = InferResponseType<typeof api.sites.$get, 200>;
 
-/** One site as the server answers it: the site, and the names of the tokens that published its versions, by token id. */
+/** One site as the server answers it: the site, and the name of each login by its id. */
 export type Shown = InferResponseType<(typeof api.sites)[":site"]["$get"], 200>;
 
 /** What the table's address asks of the server, with only the keys and values the server knows. */

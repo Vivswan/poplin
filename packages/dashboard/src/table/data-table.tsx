@@ -1,5 +1,5 @@
 // The table every list of the dashboard is shown in. The server sorts and narrows the rows; the person arranges the columns: drags them into another order, drags an edge to resize, and chooses which are shown.
-// The first column stays in place, and the table scrolls sideways in its own area once its columns are at their narrowest.
+// Every chosen column is drawn. Once all are at their narrowest the table scrolls sideways in its own area, between the first column and the rows' actions, which stay in place.
 
 import {
   type Announcements,
@@ -24,6 +24,7 @@ import {
   tableFeatures,
   useTable,
 } from "@tanstack/react-table";
+import { ScrollArea as ScrollAreaParts } from "@base-ui/react/scroll-area";
 import { cn } from "cn";
 import { ArrowDownIcon, ArrowUpIcon, ChevronsUpDownIcon, Columns3Icon, GripVerticalIcon } from "lucide-react";
 import {
@@ -38,7 +39,6 @@ import {
   useState,
 } from "react";
 
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -50,6 +50,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
 import { Skeleton } from "@/components/ui/skeleton";
 import type { TableLayout } from "@/table/layout";
 
@@ -64,9 +65,6 @@ const [NARROWEST, NARROWEST_FIXED] = [96, 160];
 
 /** The width of the last column where a row's actions are one icon, and how far one press of an arrow key moves a column's edge. */
 const [ICON_ACTIONS_WIDTH, NUDGE] = [56, 16];
-
-/** What the columns' menu says of the chosen columns the table has no room for. */
-const NO_ROOM_SAYS = "A chosen column with no room shows again when the table is wider.";
 
 /** How many rows stand in for the rows being read. */
 const LOADING_ROWS = 6;
@@ -103,7 +101,7 @@ export interface ColumnSpec<Row> {
   /** The narrowest it is drawn, in pixels: wide enough for its shortest whole value. Left out, a general narrowest. */
   readonly minSize?: number;
 
-  /** Whether it takes the width the other columns leave over: for the one column whose values are long. Like the fixed column it is drawn however little room there is. */
+  /** Whether it takes the width the other columns leave over: for the one column whose values are long. */
   readonly grows?: boolean;
 
   /** The direction a first press on its heading asks for, for a column the server can order the rows by; left out for any other column. */
@@ -162,6 +160,9 @@ interface DataTableProps<Row> {
 
   /** Whether the rows are being read for the first time: rows of the table's own shape stand in for them. */
   readonly loading?: boolean;
+
+  /** What follows the last row, such as the way to the next page: it scrolls up and down with the rows, and stays in place when they scroll sideways. */
+  readonly after?: ReactNode;
 }
 
 type Head = Header<typeof FEATURES, object, unknown>;
@@ -330,7 +331,7 @@ function LoadingRow<Row>({ cells, withActions }: { readonly cells: readonly Colu
   );
 }
 
-/** The width of the frame a table is drawn in, measured again whenever it changes: 0 until it is first measured. */
+/** The width of the area a table scrolls in, measured again whenever it changes: 0 until it is first measured. */
 function useRoom(): readonly [RefObject<HTMLDivElement | null>, number] {
   const frame = useRef<HTMLDivElement>(null);
   const [room, setRoom] = useState(0);
@@ -396,25 +397,6 @@ function widthsForRoom<Row>(shown: readonly ColumnSpec<Row>[], sizes: Readonly<R
 }
 
 /**
- * The columns there is room for, each at its narrowest or wider: a table shows no column cut off at its edge.
- *
- * Where the room is short the last column gives way first, then the one before it. The fixed column and the one that grows always stay.
- *
- * @param free - the room for the columns, in pixels; 0 before the frame is first measured, when every column counts as fitting
- */
-function columnsWithRoom<Row>(shown: readonly ColumnSpec<Row>[], free: number): readonly ColumnSpec<Row>[] {
-  const kept = [...shown];
-  while (free > 0 && kept.reduce((sum, spec) => sum + narrowestOf(spec), 0) > free) {
-    const last = kept.findLastIndex((spec) => spec.fixed !== true && spec.grows !== true);
-    if (last === -1) break;
-
-    kept.splice(last, 1);
-  }
-
-  return kept;
-}
-
-/**
  * Keep what a person changed of the widths the table library was told.
  *
  * Only a width that changed is kept, and one the library took away (a double press on an edge) is forgotten: the rest stay free to fit the room.
@@ -451,22 +433,15 @@ function announcementsOf<Row>(specs: ReadonlyMap<string, ColumnSpec<Row>>): Anno
  * The menu that chooses a table's columns.
  *
  * It lists the fixed column as always shown, the others in the order they stand, and the way back to the layout the table starts with.
- * A chosen column the table has no room for is counted on the button and marked in the list: it comes back when the table gets wider.
  */
 export function ColumnsMenu<Row>({ columns, layout }: { readonly columns: readonly ColumnSpec<Row>[]; readonly layout: TableLayout }): ReactNode {
   const ordered = layout.order.flatMap((id) => columns.filter((column) => column.id === id));
-  const chosenCount = ordered.length - layout.hidden.length;
 
   return (
     <DropdownMenu>
       <DropdownMenuTrigger render={<Button variant="outline" />}>
         <Columns3Icon data-icon="inline-start" />
         Columns
-        {layout.noRoom.length === 0 ? null : (
-          <Badge variant="secondary" className="-mr-1 tabular-nums" title={NO_ROOM_SAYS}>
-            {chosenCount - layout.noRoom.length} of {chosenCount}
-          </Badge>
-        )}
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-52">
         <DropdownMenuGroup>
@@ -479,11 +454,9 @@ export function ColumnsMenu<Row>({ columns, layout }: { readonly columns: readon
               onCheckedChange={(shown) => layout.setHidden(column.id, !shown)}
             >
               {column.header}
-              {layout.noRoom.includes(column.id) ? <span className="ml-auto pl-3 text-xs text-muted-foreground">No room</span> : null}
             </DropdownMenuCheckboxItem>
           ))}
         </DropdownMenuGroup>
-        {layout.noRoom.length === 0 ? null : <p className="px-2 py-1.5 text-xs text-muted-foreground">{NO_ROOM_SAYS}</p>}
         <DropdownMenuSeparator />
         <DropdownMenuItem disabled={!layout.changed} onClick={layout.reset}>
           Reset the layout
@@ -493,7 +466,7 @@ export function ColumnsMenu<Row>({ columns, layout }: { readonly columns: readon
   );
 }
 
-/** Draw a table: headings that sort, move, and resize, the first column held in place, and one row per item with its actions at the end. */
+/** Draw a table: headings that sort, move, and resize, the first column and the rows' actions held in place, and one row per item. */
 export function DataTable<Row>({
   label,
   columns,
@@ -507,25 +480,16 @@ export function DataTable<Row>({
   actions,
   actionsWidth = ICON_ACTIONS_WIDTH,
   loading = false,
+  after,
 }: DataTableProps<Row>): ReactNode {
   const specs = useMemo(() => new Map(columns.map((column) => [column.id, column])), [columns]);
   const definitions = useMemo(() => columns.map(definitionOf), [columns]);
   const data = useMemo(() => [...rows] as object[], [rows]);
   const [frame, room] = useRoom();
   const [dragged, setDragged] = useState<string>();
-  const chosen = layout.order.filter((id) => !layout.hidden.includes(id)).flatMap((id) => specs.get(id) ?? []);
+  const shown = layout.order.filter((id) => !layout.hidden.includes(id)).flatMap((id) => specs.get(id) ?? []);
   const endWidth = actions === undefined ? 0 : actionsWidth;
-  const shown = columnsWithRoom(chosen, room - endWidth);
-  const noRoom = chosen.filter((spec) => !shown.includes(spec)).map((spec) => spec.id);
   const drawn = widthsForRoom(shown, layout.sizes, room - endWidth);
-  // The layout is told which chosen columns have no room, so the columns' menu can say so. The table that goes takes its word back.
-  const { setNoRoom } = layout;
-  const without = noRoom.join(" ");
-  useLayoutEffect(() => {
-    setNoRoom(without === "" ? [] : without.split(" "));
-
-    return () => setNoRoom([]);
-  }, [setNoRoom, without]);
   // The table library is told the widths as drawn, so an edge that is dragged starts from where it is seen.
   const sizing = Object.fromEntries(drawn);
   const table = useTable({
@@ -536,7 +500,7 @@ export function DataTable<Row>({
     columnResizeMode: "onChange",
     state: {
       columnOrder: [...layout.order],
-      columnVisibility: Object.fromEntries([...layout.hidden, ...noRoom].map((id) => [id, false])),
+      columnVisibility: Object.fromEntries(layout.hidden.map((id) => [id, false])),
       columnSizing: sizing,
       sorting: [{ id: sort.key, desc: sort.descending }],
     },
@@ -574,13 +538,14 @@ export function DataTable<Row>({
       onDragEnd={onDragEnd}
       accessibility={{ announcements: announcementsOf(specs) }}
     >
-      <div className="relative flex min-h-0 flex-1 flex-col">
-        <div ref={frame} className="min-h-0 flex-1 overflow-auto overscroll-contain">
+      {/* The library's scroll area draws its bars whenever the table is longer or wider than its room, also where the system hides its own. Its content part tells it when the table's size changes. */}
+      <ScrollArea ref={frame} className="min-h-0 flex-1">
+        <ScrollAreaParts.Content>
           <table
             aria-label={label}
             aria-busy={loading}
             style={{ width }}
-            className={cn("table-fixed border-separate border-spacing-0 text-sm", resizing && "cursor-col-resize select-none")}
+            className={cn("mb-2.5 table-fixed border-separate border-spacing-0 text-sm", resizing && "cursor-col-resize select-none")}
           >
             <colgroup>
               {shown.map((spec) => (
@@ -612,8 +577,15 @@ export function DataTable<Row>({
                   ))}
             </tbody>
           </table>
-        </div>
-      </div>
+          {/* As wide as the room, so it stays in view however far the table is scrolled sideways. */}
+          {after === undefined ? null : (
+            <div className="sticky left-0" style={{ width: room }}>
+              {after}
+            </div>
+          )}
+        </ScrollAreaParts.Content>
+        <ScrollBar orientation="horizontal" />
+      </ScrollArea>
       <DragOverlay dropAnimation={null}>
         {dragged === undefined ? null : (
           <div className="flex h-9 w-fit cursor-grabbing items-center rounded-md border bg-popover px-3 text-xs text-foreground shadow-md">

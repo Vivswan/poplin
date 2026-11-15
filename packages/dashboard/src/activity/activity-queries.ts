@@ -6,7 +6,7 @@ import type { InferResponseType } from "hono/client";
 import { kindOf, sortOf } from "@/activity/activity-words";
 import { answerOf, api } from "@/lib/api";
 
-/** One page of the log as the server answers it: the entries, the note of each token by its id, and the place the next page goes on from or `null`. */
+/** One page of the log as the server answers it: the entries, the name of each login by its id, and the place the next page goes on from or `null`. */
 type Page = InferResponseType<typeof api.activity.$get, 200>;
 
 /** One entry of the log. `site.name` is the name the site had then; `site.label` is the one it has now, `null` once it is no site. */

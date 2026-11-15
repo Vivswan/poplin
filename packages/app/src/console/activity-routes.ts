@@ -4,13 +4,12 @@
 
 import { vValidator } from "@hono/valibot-validator";
 import { AUDIT_QUERY, listAudit } from "@poplin/core/src/actions/audit-log";
-import { listTokens } from "@poplin/core/src/actions/manage-tokens";
 import type { Install } from "@poplin/core/src/actions/records";
 import { siteLabel } from "@poplin/core/src/sites/labels";
 import { Hono } from "hono";
 import * as v from "valibot";
 
-import { refused, refuseInvalid, type Shared } from "./data";
+import { loginNames, refused, refuseInvalid, type Shared } from "./data";
 
 /** How many entries one page of the log holds. */
 const PAGE_SIZE = 50;
@@ -45,16 +44,13 @@ export const activityRoutes = new Hono<Shared>().get("/activity", vValidator("qu
   if (!listed.ok) return refused(context, listed);
 
   const page = listed.entries.slice(0, PAGE_SIZE);
-  const [labels, tokens] = await Promise.all([labelsOf(install, page), listTokens(install, actor)]);
+  const [labels, logins] = await Promise.all([labelsOf(install, page), loginNames(context.get("asker"))]);
   const entries = page.map(({ site, ...entry }) => ({
     ...entry,
     // The name is the one the site had then; the label is the one it has now, and `null` once it is no site.
     site: site === null ? null : { name: site.name, label: labels.get(site.id) ?? null },
   }));
-  const tokenNames: Record<string, string> = Object.fromEntries(
-    tokens.ok ? tokens.tokens.filter((token) => token.note !== "").map((token) => [token.id, token.note]) : [],
-  );
   const last = page.at(-1);
 
-  return context.json({ ok: true as const, entries, tokenNames, next: listed.entries.length <= PAGE_SIZE || last === undefined ? null : String(last.seq) });
+  return context.json({ ok: true as const, entries, logins, next: listed.entries.length <= PAGE_SIZE || last === undefined ? null : String(last.seq) });
 });

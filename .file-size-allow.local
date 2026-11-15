@@ -9,6 +9,7 @@ packages/dashboard/src/components/ui/field.tsx # written by the UI library's own
 packages/dashboard/src/components/ui/input-group.tsx # written by the UI library's own tool and kept as it wrote it, class lists and all
 packages/dashboard/src/components/ui/input.tsx # written by the UI library's own tool and kept as it wrote it, class lists and all
 packages/dashboard/src/components/ui/popover.tsx # written by the UI library's own tool and kept as it wrote it, class lists and all
+packages/dashboard/src/components/ui/scroll-area.tsx # written by the UI library's own tool and kept as it wrote it, class lists and all
 packages/dashboard/src/components/ui/select.tsx # written by the UI library's own tool and kept as it wrote it, class lists and all
 packages/dashboard/src/components/ui/sheet.tsx # written by the UI library's own tool and kept as it wrote it, class lists and all
 packages/dashboard/src/components/ui/switch.tsx # written by the UI library's own tool and kept as it wrote it, class lists and all

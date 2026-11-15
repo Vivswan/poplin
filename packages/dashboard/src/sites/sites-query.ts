@@ -1,5 +1,6 @@
 // What the address asks of the Sites table: its filter, its search, its order, and its page.
 
+import { queryWith } from "@/shared/pages";
 import type { Sort } from "@/table/data-table";
 import { firstSort, type Orders, sortIn, sortKeys } from "@/table/sort";
 
@@ -38,29 +39,6 @@ export function filterOf(query: URLSearchParams): Filter {
 /** Read the order the address names; the default for a column the server does not order by. */
 export function sortOf(query: URLSearchParams): Sort {
   return sortIn(query, SITE_ORDERS);
-}
-
-/**
- * Write the query that keeps the table as it is shown, with some of it changed.
- *
- * @param changes - the keys to set; an empty value takes a key away. A change that names no `after` starts at the first page
- * @returns a new query
- */
-export function queryWith(query: URLSearchParams, changes: Readonly<Record<string, string>> = {}): URLSearchParams {
-  const next = new URLSearchParams(query);
-  if (!("after" in changes)) next.delete("after");
-
-  for (const [key, value] of Object.entries(changes)) {
-    if (value === "") next.delete(key);
-    else next.set(key, value);
-  }
-
-  return next;
-}
-
-/** The query of the table on the page it is on. */
-export function sameQuery(query: URLSearchParams): URLSearchParams {
-  return queryWith(query, { after: query.get("after") ?? "" });
 }
 
 /**

@@ -11,8 +11,13 @@ import { openConsole } from "./support/console";
 
 /** What the route answers. */
 interface Page {
-  readonly entries: readonly { readonly seq: number; readonly by: string; readonly action: string; readonly site: { readonly name: string; readonly label: string | null } | null }[];
-  readonly tokenNames: Readonly<Record<string, string>>;
+  readonly entries: readonly {
+    readonly seq: number;
+    readonly by: string;
+    readonly action: string;
+    readonly site: { readonly name: string; readonly label: string | null } | null;
+  }[];
+  readonly logins: Readonly<Record<string, string>>;
   readonly next: string | null;
 }
 
@@ -65,11 +70,12 @@ describe("a page of the log", () => {
     ]);
   });
 
-  // Drift: an entry by a token would show only its id, with nothing a person named it.
-  test("gives the note of each token that has one, by the token's id", async () => {
-    const { opened, token } = await openWithHistory();
+  // Drift: one screen would write a login by its name and another by its id: the log, the Sites table, and a site's panel answer the same names.
+  test("gives the name of each login that has one, by the login's id, as the Sites table and a site do", async () => {
+    const { opened, keptLabel, token } = await openWithHistory();
+    const answers = await Promise.all(["/data/activity", "/data/sites", `/data/sites/${keptLabel}`].map(async (path) => (await opened.get(path)).json()));
 
-    expect((await pageOf(opened)).tokenNames).toEqual({ [token]: "the laptop" });
+    expect(answers.map((answer) => (answer as Page).logins)).toEqual(Array.from({ length: 3 }, () => ({ [token]: "the laptop" })));
   });
 
   // Drift: a second page would repeat or skip entries, go on against the order it is read in, or a last page would offer a page after it.

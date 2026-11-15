@@ -2,7 +2,7 @@
 
 import { describe, expect, test } from "bun:test";
 
-import { activityQuery, emptyWords, kindOf, sortedQuery, sortOf, whatOf } from "../../src/activity/activity-words";
+import { emptyWords, kindOf, sortedQuery, sortOf, whatOf } from "../../src/activity/activity-words";
 
 describe("what an entry says", () => {
   // Drift: an entry would say less than it holds, name a token by its secret-looking id, or call a failed repair a repair.
@@ -25,17 +25,6 @@ describe("what an entry says", () => {
 });
 
 describe("the log's address", () => {
-  // Drift: a new filter would keep the place of the page before, and show an empty or a wrong page.
-  test.each([
-    ["kind=sites&after=40", { site: "notes" }, "kind=sites&site=notes"],
-    ["kind=sites&site=notes", { kind: "" }, "site=notes"],
-    ["kind=sites", { after: "40" }, "kind=sites&after=40"],
-    ["kind=sites&after=40", {}, "kind=sites"],
-    ["sort=when&dir=asc&after=40", { kind: "access" }, "sort=when&dir=asc&kind=access"],
-  ])("%s changed by %j is %s", (from, changes, to) => {
-    expect(activityQuery(new URLSearchParams(from), changes).toString()).toBe(to);
-  });
-
   // Drift: a turned order would go on from a place of the order before, which skips every entry between; or the log's own order would leave keys in a shared link.
   test.each([
     ["kind=sites&after=40", { key: "when", descending: false }, "kind=sites&sort=when&dir=asc"],
