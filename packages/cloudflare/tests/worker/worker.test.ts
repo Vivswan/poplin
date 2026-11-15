@@ -374,7 +374,7 @@ describe("the product, from a token to an opened site", () => {
     expect({ status: opened.status, cache: opened.headers.get("Cache-Control"), text: await opened.text() }).toEqual({ status: 200, cache: "private, no-cache", text: "<h1>report</h1>" });
     expect({ status: file.status, type: file.headers.get("Content-Type"), text: await file.text() }).toEqual({ status: 200, type: "text/csv", text: "a,b\n1,2\n" });
     expect({ status: login.status, to: login.headers.get("Location"), cache: login.headers.get("Cache-Control") }).toEqual({ status: 302, to: "/", cache: "no-store" });
-    expect(login.headers.get("Set-Cookie")).toMatch(/^__Secure-poplin-session=[^;]+; Max-Age=\d+; Path=\/; HttpOnly; Secure; SameSite=Lax$/);
+    expect(login.headers.get("Set-Cookie")).toMatch(/^__Host-poplin-session=[^;]+; Max-Age=\d+; Path=\/; HttpOnly; Secure; SameSite=Lax$/);
     expect(shown.site.addresses.public).toBe("https://yearly-page.example.com");
     expect({ status: named.status, text: await named.text() }).toEqual({ status: 200, text: "<h1>report</h1>" });
     expect({ status: stale.status, to: stale.headers.get("Location") }).toEqual({ status: 302, to: `${under(site, "u")}/data/table.csv?x=1` });
@@ -656,7 +656,7 @@ describe("a request over plain http", () => {
     const answers = [];
     for (const method of ["GET", "POST"]) {
       for (const bindings of [countedBindings(tally), { ...countedBindings(tally), ZONE: undefined, ACCOUNT_ID: undefined } as Bindings]) {
-        const answer = await ask(instance(w), address, { method, headers: { Cookie: "__Secure-poplin-session=x" } }, bindings);
+        const answer = await ask(instance(w), address, { method, headers: { Cookie: "__Host-poplin-session=x" } }, bindings);
         answers.push([answer.status, answer.headers.get("Location"), answer.headers.get("Set-Cookie"), await answer.text()]);
       }
     }

@@ -47,7 +47,7 @@ const knownPaths = fc.oneof(
 );
 const changePaths = fc.constantFrom("/data/sites/shop/new-link", "/data/sites/shop/delete", "/data/sites/shop/restore", "/data/sites/shop/settings", "/data/sites/shop/naming", "/data/settings", "/data/settings/sign-everyone-out", "/data/people/add");
 const paths = fc.oneof({ arbitrary: changePaths, weight: 3 }, { arbitrary: knownPaths, weight: 3 }, { arbitrary: hostile(knownPaths), weight: 2 });
-const cookies = fc.constantFrom(base.cookie, base.cookie, base.cookie, base.cookie, base.cookie, base.cookie, `${base.cookie}x`, "__Secure-poplin-session=", "theme=dark", undefined);
+const cookies = fc.constantFrom(base.cookie, base.cookie, base.cookie, base.cookie, base.cookie, base.cookie, `${base.cookie}x`, "__Host-poplin-session=", "theme=dark", undefined);
 const words = fc.constantFrom("private", "unlisted", "public", "previous", "1", "2", "yes", "on", "off", "never", "7d", "2030-01-01", "9GB", "50GB", "docs", "gallery", "<script>alert(1)</script>", "next@example.com", ...LABELS);
 const values = fc.oneof({ arbitrary: words, weight: 3 }, { arbitrary: hostile(words), weight: 1 }, { arbitrary: fc.string(), weight: 1 }, { arbitrary: fc.constantFrom(true, false, 1, null), weight: 1 });
 const fields = fc.dictionary(
