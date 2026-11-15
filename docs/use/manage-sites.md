@@ -85,7 +85,7 @@ For a site that deletes itself, the panel then shows the day and time, and `Then
 
 The field Public name starts with the site's name. Under it, `Its link will be` shows the address the site gets for the name typed, such as `docs-page.example.com`.
 
-For a site in the trash, the panel has Restore and Delete for good. Its row has Restore, and Delete for good in the menu after it.
+For a site in the trash, the panel has Restore and Delete for good. Its row has Restore alone.
 
 | Delete for good       | Does, or says                                                             |
 | --------------------- | ------------------------------------------------------------------------- |

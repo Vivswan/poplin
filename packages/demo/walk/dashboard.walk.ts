@@ -178,21 +178,6 @@ const STOPS: readonly Stop[] = [
     close: pressEscape,
   },
   {
-    name: "the title and the name, from a row's menu",
-    open: (page) => fromRowMenu(page, SAMPLE.site, "Edit"),
-    shows: (page) => [
-      editDialog(page).getByRole("textbox", { name: "Title", exact: true }),
-      editDialog(page).getByRole("textbox", { name: "Name", exact: true }),
-    ],
-    close: cancelDialog,
-  },
-  {
-    name: "New link, from a row's menu",
-    open: (page) => fromRowMenu(page, SAMPLE.site, "New link"),
-    shows: (page) => [question(page, "Make a new link?")],
-    close: leaveBy("Cancel"),
-  },
-  {
     name: "a site's panel",
     open: (page) => openPanel(page, SAMPLE.site),
     shows: (page) => [
@@ -203,7 +188,7 @@ const STOPS: readonly Stop[] = [
   {
     name: "the title and the name, from the panel",
     open: (page) => panel(page).getByRole("button", { name: "Edit", exact: true }).click(),
-    shows: (page) => [editDialog(page).getByRole("textbox", { name: "Name", exact: true })],
+    shows: (page) => [editDialog(page).getByRole("textbox", { name: "Title", exact: true }), editDialog(page).getByRole("textbox", { name: "Name", exact: true })],
     close: cancelDialog,
   },
   {
@@ -750,8 +735,9 @@ test.describe("on a screen 1440 px wide, under a site's panel", () => {
   // Drift: the focus would go under the panel and out of sight again: the end of each row lies under the panel, and a row's controls keep the panel open.
   test("a focus that reaches a row's control under the panel closes the panel and stays there; one on a row's control beside the panel keeps it open", async ({ page }) => {
     await arrive(page);
-    const beside = page.getByRole("row").getByRole("button", { name: `Details of ${SAMPLE.graphed}`, exact: true });
-    const under = page.getByRole("row").getByRole("button", { name: `More for ${SAMPLE.graphed}`, exact: true });
+    const row = page.getByRole("row").filter({ has: page.getByRole("button", { name: `Details of ${SAMPLE.graphed}`, exact: true }) });
+    const beside = row.getByRole("button", { name: `Details of ${SAMPLE.graphed}`, exact: true });
+    const under = row.getByRole("button", { name: "Open the site", exact: true });
 
     await openPanel(page, SAMPLE.site);
     await beside.focus();
@@ -953,7 +939,8 @@ test.describe("on a phone, in a question", () => {
       return (first?.y ?? Number.NaN) < (second?.y ?? Number.NaN) ? buttons.first() : buttons.last();
     };
 
-    await fromRowMenu(page, SAMPLE.site, "New link");
+    await openPanel(page, SAMPLE.site);
+    await panel(page).getByRole("button", { name: "New link", exact: true }).click();
     await expect(await upper()).toHaveText("Make a new link");
     await expect(await upper()).toHaveClass(FILLED);
     await leaveBy("Cancel")(page);
@@ -1089,7 +1076,8 @@ test("no heading of a screen is larger than the screen's title", async ({ page }
 // Drift: the filter at a row's end would search for a name again: the entries from before a new link or a rename would be gone, and those of another site of that name shown.
 test("on Activity, Only this site keeps the entries of the row's site, the first one from before its new link among them, under a mark that names the site, and the mark's button shows every site again", async ({ page }) => {
   await arrive(page);
-  await fromRowMenu(page, SAMPLE.site, "New link");
+  await openPanel(page, SAMPLE.site);
+  await panel(page).getByRole("button", { name: "New link", exact: true }).click();
   await question(page, "Make a new link?").getByRole("button", { name: "Make a new link", exact: true }).click();
   await expect(said(page, "The site has a new link. The old link stopped working.")).toBeVisible();
 
@@ -1214,7 +1202,9 @@ test("a site in the trash is deleted for good only once its name is typed, with 
   const remove = asks.getByRole("button", { name: "Delete for good", exact: true });
   await arrive(page);
   await page.goto(TRASH);
-  await fromRowMenu(page, TRASHED.title, "Delete for good");
+  // The way out for good is in the site's panel, which the row's own button opens.
+  await page.getByRole("row").getByRole("button", { name: `Details of ${TRASHED.title}`, exact: true }).press("Enter");
+  await page.getByRole("dialog", { name: TRASHED.title, exact: true }).getByRole("button", { name: "Delete for good", exact: true }).click();
   await expect(asks.getByRole("button", { name: "Cancel", exact: true })).toBeFocused();
   await expect(remove).toBeDisabled();
 

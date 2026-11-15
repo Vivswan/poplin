@@ -178,7 +178,7 @@ function TrashBlock({ site, onRestore, onGone }: { readonly site: Site; readonly
       <div className="flex items-center gap-2">
         <Button onClick={onRestore}>Restore</Button>
         <span className="ml-auto">
-          <DeleteForGood site={site} look="button" onGone={onGone} />
+          <DeleteForGood site={site} onGone={onGone} />
         </span>
       </div>
     </PanelBlock>
