@@ -44,6 +44,8 @@ export const sites = sqliteTable(
     index("sites_by_name").on(table.trashed, table.name, table.id),
     index("sites_by_access").on(table.trashed, table.access_rank, table.id),
     index("sites_by_title").on(table.trashed, table.title_key, table.id),
+    index("sites_by_expiry").on(table.expires_at, table.id).where(sql`expires_at IS NOT NULL AND trashed_at IS NULL`),
+    index("sites_by_trashing").on(table.trashed_at, table.id).where(sql`trashed_at IS NOT NULL`),
   ],
 );
 

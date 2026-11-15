@@ -407,6 +407,35 @@ export function sites(label: string, makeDatabase: DatabaseFactory): void {
       expect((await database.findServed({ public_name: DOCS }, NOW))?.site).toEqual(site);
     });
 
+    // Drift: the sweep acts on a list that is a moment old, with nobody watching. A list that held a site not due would cost a row each run for nothing.
+    // A move or a removal that trusted the list would trash a site its owner had just renewed, or delete for good one just restored.
+    test("the sites due are listed the longest due first and no other, and each is moved or removed only while it is still due, in the step that checks it", async () => {
+      const database = await opened(makeDatabase);
+      const [early, late, never, later, sat, fresh] = await Promise.all(["early", "late", "never", "later", "sat", "fresh"].map((name) => made(database, draft(name as SiteName)))) as [Site, Site, Site, Site, Site, Site];
+      for (const [site, expires] of [[early, NOW + 5], [late, NOW + 10], [later, NOW + 20]] as const) await database.changeDetails(site.id, { expires }, BY_ADA);
+      await database.trashSite(sat.id, { by: ADA, at: NOW + 1 });
+      await database.trashSite(fresh.id, { by: ADA, at: NOW + 50 });
+      const sweeper = { by: BO, at: NOW + 10 };
+
+      const expired = [await database.listDueSites({ expiredBy: NOW + 10 }, 10), await database.listDueSites({ expiredBy: NOW + 10 }, 1), await database.listDueSites({ expiredBy: NOW + 4 }, 10)];
+      await database.changeDetails(early.id, { expires: NOW + 30 }, BY_ADA);
+      const moved = [];
+      for (const site of [early, late, late, never, later, sat]) moved.push((await database.trashExpiredSite(site.id, sweeper)).kind);
+      moved.push((await database.trashExpiredSite(NO_SITE, sweeper)).kind);
+      const satOut = [await database.listDueSites({ trashedBy: NOW + 10 }, 10), await database.listDueSites({ trashedBy: NOW }, 10)];
+      await database.restoreSite(late.id, { by: ADA, at: NOW + 11 });
+      const removed = [];
+      for (const site of [late, fresh, never, sat, sat]) removed.push((await database.deleteSatOutSite(site.id, sweeper, NOW + 10)).kind);
+
+      expect(expired).toEqual([[early.id, late.id], [early.id], []]);
+      expect(moved).toEqual(["not_due", "done", "not_due", "not_due", "not_due", "not_due", "not_due"]);
+      expect(satOut).toEqual([[sat.id, late.id], []]);
+      expect(removed).toEqual(["not_due", "not_due", "not_due", "done", "not_due"]);
+      expect<unknown>((await everySite(database)).map((site) => [site.name, site.state]).sort()).toEqual([["early", "live"], ["fresh", "trash"], ["late", "live"], ["later", "live"], ["never", "live"]]);
+      expect<unknown>((await auditTrail(database)).filter((entry) => entry.by === BO).map((entry) => [entry.action, entry.site?.name])).toEqual([["trash", "late"], ["delete", "sat"]]);
+      await expect(database.listDueSites({ expiredBy: NOW }, 101)).rejects.toThrow(RangeError);
+    });
+
     // Drift: a site restored with an expiry already behind it would be live in the answer and served to nobody, and the sweep would trash it again.
     test.each([
       ["an expiry before the restore", NOW + 1, "never"],
