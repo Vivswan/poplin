@@ -217,8 +217,9 @@ test("every right an install needs is in the link to the token form under Cloudf
 // Drift: the form has three boxes for a permission and the page names each, so a row whose boxes are not Cloudflare's own scope, name, and level is a permission nobody finds on the form.
 // A right the plug holds optional that the steps asked for would send every reader back to the by-hand step the link spares them.
 test("the install page gives the plug's own link to the token form, and names the three boxes of every right: the needed ones in the steps' table for an empty form, and the optional ones only in the part after the steps", () => {
-  const page = readFileSync(join(import.meta.dir, "..", "..", "..", "..", "docs", "install.md"), "utf8");
-  const [steps = "", optional = ""] = page.split("\n## Optional: block junk traffic and crawlers\n");
+  const page = (...path: string[]): string => readFileSync(join(import.meta.dir, "..", "..", "..", "..", "docs", ...path), "utf8");
+  const steps = `${page("start", "by-hand.md")}${page("start", "when-a-step-fails.md")}`;
+  const [, optional = ""] = page("run", "domain.md").split("\n## Optional: block junk traffic and crawlers\n");
   const boxes = (text: string): string[] => [...text.matchAll(/^ *\| (Account|Zone) +\| (.+?) +\| (Edit|Read) +\|/gm)].map(([, first, second, third]) => `${first} / ${second}: ${third}`).sort();
   const plug = createDomainPlug({ accountId: ACCOUNT, script: "poplin", layout: LAYOUT });
   const boxed = (rights: readonly string[]): string[] => rights.map((right) => `${SCOPE_OF[right] ?? "no scope is known"} / ${right}`).sort();

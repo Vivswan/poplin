@@ -1,7 +1,7 @@
-// Scope: the pages a person reads name only commands, flags, tools, tool inputs, refusal codes, settings, and module inputs that exist. What the prose says, and where its links lead, is out of scope.
+// Scope: the pages a person reads name only commands, flags, tools, tool inputs, refusal codes, settings, and module inputs that exist, and every link into the guide leads to a page and a heading of it. What the prose says is out of scope.
 
 import { describe, expect, test } from "bun:test";
-import { join } from "node:path";
+import { dirname, join, normalize } from "node:path";
 
 import { COMMANDS, type CommandSpec } from "../packages/cli/src/commands/command-table";
 import { SETTING_SAMPLES } from "../packages/cli/src/commands/install-settings";
@@ -14,11 +14,26 @@ import { readPage } from "./support/markdown-page";
 /** The repository this file sits in. */
 const ROOT = join(import.meta.dir, "..");
 
-/** The pages a person reads, as paths from the root. */
-const PAGES: readonly string[] = ["README.md", "docs/README.md", "docs/using.md", "docs/install.md", "docs/security.md", "packages/cli/README.md"];
+/** The folder of the guide, from the root. */
+const GUIDE_PLACE = "docs/";
 
-/** The page that lists every command, tool, and refusal. */
-const USING_PAGE = "docs/using.md";
+/** The pages of the guide, as paths from the root: a new page is read without being added here. */
+const GUIDE_PAGES: readonly string[] = [...new Bun.Glob(`${GUIDE_PLACE}**/*.md`).scanSync({ cwd: ROOT })].sort();
+
+/** The pages a person reads, as paths from the root. */
+const PAGES: readonly string[] = ["README.md", ...GUIDE_PAGES, "packages/cli/README.md"];
+
+/** The pages outside the guide that link into it. */
+const LINKING_PAGES: readonly string[] = ["README.md", "packages/cloudflare/README.md", "packages/cloudflare/tofu/README.md", "skills/poplin/references/setup.md"];
+
+/** How a page that is read outside the repository writes the address of a guide page: the page on GitHub. */
+const GUIDE_ON_GITHUB = "https://github.com/Vivswan/poplin/blob/main/";
+
+/** The page that lists every tool. */
+const TOOLS_PAGE = "docs/use/agent-tools.md";
+
+/** The page that lists every refusal. */
+const REFUSALS_PAGE = "docs/use/when-poplin-refuses.md";
 
 /** The heading the tables of refusals follow on that page. */
 const REFUSALS_HEADING = "When poplin refuses";
@@ -27,7 +42,7 @@ const REFUSALS_HEADING = "When poplin refuses";
 const MODULE_FILES: readonly string[] = ["packages/cloudflare/tofu/variables.tf", "packages/cloudflare/tofu/outputs.tf"];
 
 /** The pages that name the module's inputs and outputs. On every other page a word spelled like one must be a tool, an input of a tool, a setting, or a code. */
-const MODULE_PAGES: readonly string[] = ["docs/install.md"];
+const MODULE_PAGES: readonly string[] = ["docs/run/limits-and-cost.md", "docs/run/with-opentofu.md"];
 
 /** The words written with an underscore that are none of the above: a folder that is never uploaded. */
 const OTHER_WORDS: readonly string[] = ["node_modules"];
@@ -127,6 +142,27 @@ function isCode(word: string): boolean {
   }
 }
 
+/** The file a link of a page leads to, as a path from the root, with its anchor; nothing for a link that leaves the repository. */
+function linkTarget(path: string, link: string): { file: string; anchor: string } | undefined {
+  const [place = "", anchor = ""] = link.split("#");
+  if (place.startsWith(GUIDE_ON_GITHUB)) return { file: place.slice(GUIDE_ON_GITHUB.length), anchor };
+  if (/^[a-z]+:/.test(place)) return undefined;
+
+  return { file: place === "" ? path : normalize(join(dirname(path), place)), anchor };
+}
+
+/** Why a link of a page leads nowhere: its file is missing, or the page it names has no such heading. Empty for a link that leads somewhere. */
+async function deadLink(root: string, path: string, link: string): Promise<string[]> {
+  const target = linkTarget(path, link);
+  if (target === undefined) return [];
+
+  const file = Bun.file(join(root, target.file));
+  if (!(await file.exists())) return [`no file ${target.file}`];
+  if (target.anchor === "" || !target.file.endsWith(".md")) return [];
+
+  return readPage(await file.text()).headings.some((heading) => heading.anchor === target.anchor) ? [] : [`no heading ${target.anchor}`];
+}
+
 /** The inputs a tool's example passes that the tool does not take. */
 function unknownInputs(tool: string, example: string): string[] {
   const taken: readonly string[] = Object.hasOwn(TOOLS, tool) ? Object.keys(TOOLS[tool as keyof typeof TOOLS].parameters) : [];
@@ -138,9 +174,11 @@ describe("the pages a person reads", () => {
   test("every command line in the pages is one the CLI takes: without this a renamed command or flag stays in an example a person copies", async () => {
     const refusals: string[] = [];
 
+    let read = 0;
+
     for (const path of PAGES) {
       const lines = commandLines(await parse(ROOT, path));
-      expect(lines.length).toBeGreaterThan(0);
+      read += lines.length;
 
       for (const line of lines.filter((written) => !namesCommand(written))) {
         const parsed = parseCommand(words(line), NOW);
@@ -148,6 +186,7 @@ describe("the pages a person reads", () => {
       }
     }
 
+    expect(read).toBeGreaterThan(0);
     expect(refusals).toEqual([]);
     expect(["poplin new-link", "poplin no-such-command", "poplin new-link --no-such-flag"].filter(namesCommand)).toEqual(["poplin new-link"]);
     expect(commandLines({ spans: ["poplin list --trash", "poplin.example.com"], blocks: ["$ npx poplin ./report --site report   # new content\n"] })).toEqual([
@@ -156,8 +195,9 @@ describe("the pages a person reads", () => {
     ]);
   });
 
-  test("the using page runs every command of the CLI in an example: without this a new command is never shown to the person who would run it", async () => {
-    const run = new Set<string>(commandLines(await parse(ROOT, USING_PAGE)).map((line) => parseCommand(words(line), NOW).kind));
+  test("the guide runs every command of the CLI in an example: without this a new command is never shown to the person who would run it", async () => {
+    const lines = (await Promise.all(GUIDE_PAGES.map((path) => parse(ROOT, path)))).flatMap(commandLines);
+    const run = new Set<string>(lines.map((line) => parseCommand(words(line), NOW).kind));
 
     expect(COMMANDS.map((spec: CommandSpec) => spec.name).filter((name) => !run.has(name))).toEqual([]);
   });
@@ -195,8 +235,8 @@ describe("the pages a person reads", () => {
     expect(unique(set).filter((name) => !inputs.includes(name))).toEqual([]);
   });
 
-  test("the using page names every tool, and each example passes only inputs its tool takes: without this a new tool is never shown, and a renamed input stays in an example", async () => {
-    const { spans } = await parse(ROOT, USING_PAGE);
+  test("the page of the agent tools names every tool, and each example passes only inputs its tool takes: without this a new tool is never shown, and a renamed input stays in an example", async () => {
+    const { spans } = await parse(ROOT, TOOLS_PAGE);
     const examples = spans.flatMap((span, at) => (JSON_SPAN.test(span) ? [{ tool: spans[at - 1] ?? "", input: span }] : []));
 
     expect(Object.keys(TOOLS).filter((tool) => !spans.includes(tool))).toEqual([]);
@@ -206,7 +246,7 @@ describe("the pages a person reads", () => {
   });
 
   test("every code in the tables of refusals is one the CLI answers with: without this a renamed code stays in the table a person looks a refusal up in", async () => {
-    const { headings, rows } = readPage(await read(ROOT, USING_PAGE));
+    const { headings, rows } = readPage(await read(ROOT, REFUSALS_PAGE));
     const above = 1 + headings.findIndex((heading) => heading.text === REFUSALS_HEADING);
     const cells = rows.flatMap((row) => (above > 0 && row.below >= above ? (row.cells[0] ?? []) : []));
     const codes = cells.flatMap((cell) => (BETWEEN_CODES.test(cell.rest) ? cell.spans : []));
@@ -214,5 +254,20 @@ describe("the pages a person reads", () => {
     expect(codes.length).toBeGreaterThan(0);
     expect(codes.filter((code) => code !== USAGE_CODE && !isCode(code))).toEqual([]);
     expect(["constructor", "no_such_code"].filter(isCode)).toEqual([]);
+  });
+
+  test("every link of the guide, and every link into it, leads to a file, and its anchor to a heading of that page: without this a page moved to another folder leaves a link that opens nothing", async () => {
+    const dead: string[] = [];
+
+    for (const path of [...GUIDE_PAGES, ...LINKING_PAGES]) {
+      for (const link of readPage(await read(ROOT, path)).links) dead.push(...(await deadLink(ROOT, path, link)).map((why) => `${path}: ${link}: ${why}`));
+    }
+
+    expect(dead).toEqual([]);
+    expect(await deadLink(ROOT, "docs/README.md", "start/by-hand.md#the-steps")).toEqual([]);
+    expect(await deadLink(ROOT, "docs/README.md", "start/by-hand.md#no-such-heading")).toEqual(["no heading no-such-heading"]);
+    expect(await deadLink(ROOT, "docs/start/by-hand.md", "install.md")).toEqual(["no file docs/start/install.md"]);
+    expect(await deadLink(ROOT, "skills/poplin/references/setup.md", `${GUIDE_ON_GITHUB}docs/install.md`)).toEqual(["no file docs/install.md"]);
+    expect(await deadLink(ROOT, "docs/README.md", "https://example.com/docs/install.md")).toEqual([]);
   });
 });
