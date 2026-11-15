@@ -3,6 +3,7 @@
 import type * as v from "valibot";
 
 import { DOMAIN_SENTENCES, DOMAIN_STATE } from "../../../core/src/actions/domain-state";
+import { PROBLEMS_LISTED } from "../../../core/src/actions/problems";
 import { LISTED_SITES } from "../../../core/src/actions/list";
 import { REVOKED_TOKEN, WHOAMI_ANSWER } from "../../../core/src/actions/manage-tokens";
 import { SETTINGS_ANSWER } from "../../../core/src/actions/store-settings";
@@ -149,7 +150,30 @@ function domainFinding(domain: Called<{ readonly note: DomainNote }>): { readonl
   return { note, checks: note === "none" ? [] : [{ check: "domain", ok: true, detail: DOMAIN_SENTENCES[note.code] }] };
 }
 
-/** Report on the install with calls that only read: who the token is, the settings, and the sites. Nothing is changed. */
+/**
+ * What went wrong in the install's last week: the kinds of today and of the week for `--json`, `null` when they were not read, and their line of the report.
+ * A kind noted today is a failure; one of an earlier day is a finding.
+ */
+function problemsFinding(listed: Called<v.InferOutput<typeof PROBLEMS_LISTED>>): { readonly problems: { readonly today: string[]; readonly week: string[] } | null; readonly checks: Check[] } {
+  if (!listed.ok) return { problems: null, checks: [checkOf("problems", listed.failure, "")] };
+
+  const week = [...new Set(listed.value.problems.map((problem) => problem.kind))];
+  const today = [...new Set(listed.value.problems.filter((problem) => problem.day === listed.value.today).map((problem) => problem.kind))];
+  if (today.length > 0) return { problems: { today, week }, checks: [{ check: "problems", ok: false, detail: `${countText(today.length, "kind")} today: ${today.join(", ")}` }] };
+
+  const detail = week.length === 0 ? "none in 7 days" : `none today; in 7 days: ${week.join(", ")}`;
+
+  return { problems: { today, week }, checks: [{ check: "problems", ok: true, detail }] };
+}
+
+/** Read what went wrong, for an admin's token. Any other token is not asked, so a refusal of that read is never its failure, and its report has no such line. */
+async function notedProblems(client: Session["client"], scope: string): Promise<ReturnType<typeof problemsFinding>> {
+  if (scope !== "admin") return { problems: null, checks: [] };
+
+  return problemsFinding(await client.call(PROBLEMS_LISTED, (api) => api.problems.$get()));
+}
+
+/** Report on the install with calls that only read: who the token is, the settings, the sites, and what it noted of its domain and of what went wrong. Nothing is changed. */
 async function doctor({ client, server, source }: Session): Promise<Outcome> {
   const who = await client.call(WHOAMI_ANSWER, (api) => api.whoami.$get());
   if (!who.ok) return failed(who.failure);
@@ -159,6 +183,7 @@ async function doctor({ client, server, source }: Session): Promise<Outcome> {
   const sites = await client.call(LISTED_SITES, (api) => api.sites.$get());
   const trash = await client.call(LISTED_SITES, (api) => api.sites.$get({ query: { trash: "true" } }));
   const domain = domainFinding(await client.call(DOMAIN_STATE, (api) => api.domain.$get()));
+  const noted = await notedProblems(client, token.scope);
   const kept = settings.ok ? `${Object.keys(settings.value.values).length} settings read` : "";
   const live = sites.ok ? `${countText(sites.value.sites.length, "site")}${sites.value.next === undefined ? "" : " and more"}` : "";
   const trashed = trash.ok ? `${countText(trash.value.sites.length, "site")}${trash.value.next === undefined ? "" : " and more"}` : "";
@@ -171,10 +196,11 @@ async function doctor({ client, server, source }: Session): Promise<Outcome> {
     checkOf("sites", sites.ok ? undefined : sites.failure, live),
     checkOf("trash", trash.ok ? undefined : trash.failure, trashed),
     ...domain.checks,
+    ...noted.checks,
   ];
   const lines = columns(checks.map((check) => [check.ok ? "ok" : "failed", check.check, check.detail]));
 
-  const outcome: Outcome = { ok: true, value: { server, version, poplin: VERSION, update: update ?? null, domain: domain.note, token, checks }, lines: [...lines, "nothing was changed"] };
+  const outcome: Outcome = { ok: true, value: { server, version, poplin: VERSION, update: update ?? null, domain: domain.note, problems: noted.problems, token, checks }, lines: [...lines, "nothing was changed"] };
 
   return checks.every((check) => check.ok) ? outcome : { ...outcome, found: "failed" };
 }

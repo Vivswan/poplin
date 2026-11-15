@@ -114,6 +114,7 @@ const BUDGET: Readonly<Record<RouteKey, number>> = {
   "DELETE /api/sessions": 2,
   "GET /api/audit": 2,
   "GET /api/domain": 2,
+  "GET /api/problems": 2,
   "POST /api/update": 5,
   "GET /api/update/address": 2,
   "PUT /api/update/address": 2,
@@ -162,6 +163,7 @@ function samples(site: string, upload: string): Readonly<Record<TokenRoute, Send
     "DELETE /api/sessions": (api) => api.sessions.$delete({ query: {} }),
     "GET /api/audit": (api) => api.audit.$get({ query: {} }),
     "GET /api/domain": (api) => api.domain.$get({ query: {} }),
+    "GET /api/problems": (api) => api.problems.$get({ query: {} }),
     "POST /api/update": (api) => api.update.$post({ query: { anyway: "true" } }),
     "GET /api/update/address": (api) => api.update.address.$get({ query: {} }),
     "PUT /api/update/address": (api) => api.update.address.$put({ json: { address: REBUILD_ADDRESS }, query: {} }),
@@ -339,6 +341,13 @@ describe("createApi", () => {
       stale: false,
       waits: false,
       note: { code: "login_broken", about: "Login" },
+    });
+    // Drift: `poplin doctor` reads what went wrong from this route and tells today's problems from the week's by the day the install answers. An answer of another form is one the command cannot read.
+    await install.database.noteProblem({ kind: "sweep_failed", at: NOW - 8 * DAY, count: 1, more: false, name: null, message: null });
+    await install.database.noteProblem({ kind: "request_failed", at: NOW, count: 2, more: true, name: "TypeError", message: "the store did not answer" });
+    expect((await done((api) => api.problems.$get({ query: {} }))).body).toEqual({
+      today: dayOf(NOW),
+      problems: [{ day: dayOf(NOW), kind: "request_failed", count: 2, more: true, first_at: NOW, last_at: NOW, name: "TypeError", message: "the store did not answer" }],
     });
     // Drift: `poplin config logins` replaces the users through this route. A change that left no mark would have the domain say nobody waits while the added user cannot log in.
     const users = [ada, "bo@example.com" as Login];
@@ -537,6 +546,7 @@ describe("createApi", () => {
       ["DELETE /api/sessions", 403, "not_allowed"],
       ["GET /api/audit", 403, "not_allowed"],
       ["GET /api/domain", 403, "not_allowed"],
+      ["GET /api/problems", 403, "not_allowed"],
       ["POST /api/update", 403, "not_allowed"],
       ["GET /api/update/address", 403, "not_allowed"],
       ["PUT /api/update/address", 403, "not_allowed"],
