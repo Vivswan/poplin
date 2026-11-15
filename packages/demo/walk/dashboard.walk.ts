@@ -795,6 +795,18 @@ test("on Activity, Only this site keeps the entries of the row's site, the first
   await expect(log.getByRole("row").filter({ hasNot: ofSite })).not.toHaveCount(0);
 });
 
+// Drift: the list would follow the sites' names again, which it shows second and in grey, so its titles would stand in no order a person can see.
+test("the list that picks the sites of the graph stands in the order of the titles it shows first", async ({ page }) => {
+  await arrive(page);
+  await toSection(page, "Usage");
+  await page.getByRole("combobox", { name: "Compare sites", exact: true }).click();
+  await expect(page.getByRole("option").first()).toBeVisible();
+
+  const titles = await page.getByRole("option").evaluateAll((options) => options.map((option) => option.firstElementChild?.textContent ?? ""));
+  expect(titles).toContain(SAMPLE.graphed);
+  expect(titles).toEqual([...titles].sort((left, right) => (left.toLowerCase() < right.toLowerCase() ? -1 : 1)));
+});
+
 // Drift: Enter after typing would tick nothing again, or tick the first site of the list from before the typed text, which the text does not find.
 test("in the list that picks the sites of the graph, Enter ticks the site the typed text finds, and none of the list before it", async ({ page }) => {
   await arrive(page);
