@@ -123,3 +123,14 @@ test("a served page's `Clear-Site-Data` stays inside the demo: without this the 
   expect((await control.fetch(new Request("https://example.com/served/lisbon-page/", { headers: stale }))).headers.get("Clear-Site-Data")).toBe('"cache"');
   expect((await demo.fetch(new Request(`${HOME}/served/lisbon-page/`, { headers: stale }))).headers.get("Clear-Site-Data")).toBeNull();
 });
+
+// Drift: WebKit would move the dashboard's page out of the process its worker runs in, and end that process when memory runs short: a request in flight then gets the host's answer.
+test("no answer of the demo carries `Cross-Origin-Opener-Policy`, which the dashboard outside the demo sends", async () => {
+  const control = await createPreview({ openDriver: () => new SqlJsDriver(SQLITE), samples: await readSamples(), version: VERSION, client: CLIENT });
+  const demo = await open();
+  const policies = async (ask: (path: string) => Promise<Response>): Promise<(string | null)[]> =>
+    Promise.all(["/", "/settings", "/data/sites", "/empty/"].map(async (path) => (await ask(path)).headers.get("Cross-Origin-Opener-Policy")));
+
+  expect(await policies((path) => control.fetch(new Request(`https://example.com${path}`)))).toEqual(["same-origin", "same-origin", "same-origin", "same-origin"]);
+  expect(await policies((path) => demo.fetch(new Request(`${HOME}${path}`)))).toEqual([null, null, null, null]);
+});

@@ -18,6 +18,9 @@ const INSTALLS = 2;
 /** The header a served site sends to make a browser drop what it holds of the site's origin. */
 const ORIGIN_WIDE_HEADER = "Clear-Site-Data";
 
+/** The header that sets a page's opener policy, which the host's first page has none of. */
+const OPENER_POLICY_HEADER = "Cross-Origin-Opener-Policy";
+
 /** The query key under which the host's 404 page hands a deep link to the demo's first page. */
 const DEEP_LINK_KEY = "to";
 
@@ -137,6 +140,8 @@ export async function openKeptDemo(host: KeptHost): Promise<KeptDemo> {
       const response = await preview.fetch(request);
       // The header speaks for the whole origin, which a static host shares with pages that are not the demo's.
       response.headers.delete(ORIGIN_WIDE_HEADER);
+      // A policy the host's first page lacks moves the dashboard's page out of the worker's process in WebKit, which ends a process with no page when memory runs short.
+      response.headers.delete(OPENER_POLICY_HEADER);
 
       return response;
     },
