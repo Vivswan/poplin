@@ -13,7 +13,7 @@ import { PeopleTab } from "@/access/people-tab";
 const PEOPLE = { ok: true as const, logins: ["mira@example.com", "jonas@example.com"], you: "mira@example.com" };
 
 /** What the server says of an email that is none. */
-const NOT_AN_EMAIL = "That is not an email address. Type one, such as name@example.com.";
+const NOT_AN_EMAIL = "Type an email address, such as name@example.com.";
 
 /** What the tab asked the screen to change. */
 const done: { removed: string[]; added: string[]; signedOut: number } = { removed: [], added: [], signedOut: 0 };

@@ -25,7 +25,7 @@ const PUBLISHER = {
 const ADMIN = { ...PUBLISHER, id: "0cbb997f737c56ae", scope: "admin", computer: "build-server" } as Review;
 
 /** What the server says when Allow comes without the tick. */
-const NOT_TICKED = "The box was not ticked, so nothing was changed.";
+const NOT_TICKED = "Tick the box first.";
 
 /** Every decision the dialog sent. */
 const sent: Parameters<AccessActions["decide"]>[1][] = [];

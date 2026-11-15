@@ -103,8 +103,8 @@ describe("the people", () => {
   // Drift: a text that is no email, or one already listed in other capitals, would be stored, and the login page would hold a login nobody can use or the same one twice.
   test.each([
     ["an email", "Jonas@Example.com", { ok: true, login: "jonas@example.com" }, 2],
-    ["a text that is no email", "jonas at example", { ok: false, code: "bad_argument", about: "login", sentence: "That is not an email address. Type one, such as name@example.com." }, 1],
-    ["nothing", "", { ok: false, code: "bad_argument", about: "login", sentence: "That is not an email address. Type one, such as name@example.com." }, 1],
+    ["a text that is no email", "jonas at example", { ok: false, code: "bad_argument", about: "login", sentence: "Type an email address, such as name@example.com." }, 1],
+    ["nothing", "", { ok: false, code: "bad_argument", about: "login", sentence: "Type an email address, such as name@example.com." }, 1],
   ])("adding %s", async (_case, login, answer, count) => {
     const opened = await openConsole();
     const added = await read(await opened.change("/data/people/add", { login }));
