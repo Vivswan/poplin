@@ -4,6 +4,9 @@ import { expect, type Page } from "@playwright/test";
 
 import { arrive, FIRST_LOAD_MS, screenHeading, siteName, siteNames, TRASH, test, trash } from "./visit";
 
+/** A sample computer whose login waits to be allowed. */
+const WAITING = "build-server";
+
 /** Stop the demo's worker, as a browser does to an idle one. */
 async function stopWorker(page: Page): Promise<void> {
   const devtools = await page.context().newCDPSession(page);
@@ -33,6 +36,18 @@ test("a saved demo survives a stop of the worker and a reload", async ({ page })
   await page.reload();
 
   await expect(siteName(page, victim)).toBeVisible();
+});
+
+// Drift: the worker that starts again would begin its sample logins anew, and the one the screen lists would no longer wait.
+test("a login listed before the browser stops the worker can still be reviewed after it", async ({ page }) => {
+  await arrive(page);
+  await page.goto("tokens/list");
+  const review = page.getByRole("button", { name: `Review ${WAITING}`, exact: true });
+  await expect(review).toBeVisible();
+  await stopWorker(page);
+  await review.click();
+
+  await expect(page.getByRole("dialog", { name: `Allow ${WAITING}?`, exact: true }).getByRole("checkbox", { name: "The codes match", exact: true })).toBeVisible();
 });
 
 test("a forced reload of a deep page, around the worker, comes back to it", async ({ page, baseURL }) => {

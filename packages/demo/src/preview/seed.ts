@@ -115,6 +115,15 @@ const EARLIER: readonly Moment[] = Array.from({ length: EARLIER_DAYS }, (_day, i
   return index % CHECK_EVERY === 0 ? { ago, does: "domain", by: "mira", run: "check" } : { ago, does: "login", by: "mira" };
 });
 
+/** The computers that stand behind the sample logins of one demo install. */
+interface SampleComputers {
+  /** A step to run before a page is answered: it collects the tokens of the logins a visitor allowed, and keeps a login waiting. */
+  readonly keep: () => Promise<void>;
+
+  /** The secret of each sample computer that has not collected its token yet. A host that saves the demo saves them too. */
+  readonly secrets: () => readonly string[];
+}
+
 /** One file of a sample site, read whole by the host. */
 interface SampleFile {
   /** Where the file sits in its site: segments joined by `/`. */
@@ -331,19 +340,17 @@ async function collectTokens(world: World, secrets: readonly string[]): Promise<
 /**
  * Keep a login waiting in a demo install, however long ago it was seeded, and let an allowed one collect its token: no computer stands behind a sample login to do it.
  *
- * @returns a step to run before a page is answered. It begins the sample logins when none waits, and looks again only once the last waiting login has run out, so logins a visitor just decided do not come back at once
+ * @param held - the secrets the sample computers of a demo saved before this one held, so the logins it left waiting are still theirs; none for a demo from the seed
+ * @returns the sample computers. `keep` begins the sample logins when none waits, and looks again only once the last waiting login has run out, so logins a visitor just decided do not come back at once
  */
-export function keepLoginsWaiting(world: World): () => Promise<void> {
+export function keepLoginsWaiting(world: World, held: readonly string[]): SampleComputers {
   let lookAgain = Number.NEGATIVE_INFINITY;
-  let secrets: readonly string[] | undefined;
+  let secrets = held;
   let last: Promise<void> = Promise.resolve();
 
   const step = async (): Promise<void> => {
     const now = world.install.now();
-    // The logins a demo opened before left behind have lost their sample computers, so none could collect its token: they go, and new ones are begun.
-    if (secrets === undefined) await world.install.database.sweepComputerLogins(now + LOGIN_LIFE_MS);
-
-    secrets = await collectTokens(world, secrets ?? []);
+    secrets = await collectTokens(world, secrets);
     if (now < lookAgain) return;
 
     lookAgain = now + LOGIN_LIFE_MS;
@@ -358,11 +365,13 @@ export function keepLoginsWaiting(world: World): () => Promise<void> {
   };
 
   // One step at a time, each after the one before it: a page asked while tokens are being collected is answered after them.
-  return () => {
+  const keep = (): Promise<void> => {
     last = last.then(step, step);
 
     return last;
   };
+
+  return { keep, secrets: () => secrets };
 }
 
 /** Check the domain once as the admin, over a plug that finds every piece in place. */

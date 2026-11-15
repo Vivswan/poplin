@@ -134,3 +134,22 @@ test("no answer of the demo carries `Cross-Origin-Opener-Policy`, which the dash
   expect(await policies((path) => control.fetch(new Request(`https://example.com${path}`)))).toEqual(["same-origin", "same-origin", "same-origin", "same-origin"]);
   expect(await policies((path) => demo.fetch(new Request(`${HOME}${path}`)))).toEqual([null, null, null, null]);
 });
+
+// Drift: a demo opened from a save would begin its sample logins anew, so a visitor who presses Review on a login listed before the browser stopped the worker is told that it no longer waits.
+test("a login that waits is still there to review after a demo is opened from a save, and one allowed then still gets its token", async () => {
+  type Listed = { readonly logins: readonly { readonly id: string; readonly computer: string }[] };
+  const read = async <Body>(demo: Demo, path: string): Promise<Body> => (await demo.fetch(new Request(`${HOME}${path}`))).json() as Promise<Body>;
+  const first = await open();
+  const before = await read<Listed>(first, "/data/logins");
+  const second = await open(first.save());
+  const after = await read<Listed>(second, "/data/logins");
+  const [waiting] = after.logins;
+  const reviewed = await read<{ readonly login?: { readonly code: string } }>(second, `/data/logins/${waiting?.id}`);
+  const decision = { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ code: reviewed.login?.code, allow: true, confirm: true }) };
+  const decided = await second.fetch(new Request(`${HOME}/data/logins/decide`, decision));
+  const third = await open(second.save());
+  const { tokens } = await read<{ readonly tokens: readonly { readonly note: string }[] }>(third, "/data/tokens");
+
+  expect([before.logins.length, after.logins]).toEqual([2, before.logins]);
+  expect([decided.status, tokens.filter((token) => token.note === waiting?.computer).length]).toEqual([200, 1]);
+});

@@ -1,6 +1,6 @@
 // The demo as a host keeps it that can be stopped at any moment: everything it holds is handed out by `save`, and a demo opened from that goes on where the first one was.
 //
-//   what a save holds   the two installs' databases and their stored files
+//   what a save holds   the two installs' databases, their stored files, and the secret of each sample computer that has not collected its token
 
 import type { SqlJsStatic } from "sql.js";
 
@@ -34,6 +34,9 @@ export interface SavedDemo {
 
   /** The stored objects of each install. */
   readonly stores: readonly SavedStore[];
+
+  /** The secret of each sample computer of the seeded install that has not collected its token. */
+  readonly secrets: readonly string[];
 }
 
 /** What a demo is opened from. */
@@ -127,6 +130,7 @@ export async function openKeptDemo(host: KeptHost): Promise<KeptDemo> {
     client: host.client,
     reasonAt: REASON_AT,
     resumed: saved !== undefined,
+    secrets: saved?.secrets,
     real: host.real,
     openDriver,
     openStore: () => held(now.stores, new KeptStore(left.stores.shift())),
@@ -148,6 +152,7 @@ export async function openKeptDemo(host: KeptHost): Promise<KeptDemo> {
     save: () => ({
       databases: now.databases.map((driver) => driver.save()),
       stores: now.stores.map((store) => store.save()),
+      secrets: preview.secrets(),
     }),
   };
 }

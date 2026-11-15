@@ -107,6 +107,9 @@ export interface Host {
   /** Whether the first drivers and stores the host opens already hold a demo: nothing is seeded into them, and the preview knows no admin token. */
   readonly resumed?: boolean;
 
+  /** The secrets the sample computers of that demo held, as its `secrets` handed them out: the logins it left waiting are then still theirs. None when left out. */
+  readonly secrets?: readonly string[];
+
   /** The path the demo sits under at its origin, such as `/poplin/demo`; the root when left out. */
   readonly base?: string;
 
@@ -117,11 +120,12 @@ export interface Host {
   readonly real?: RealSites;
 }
 
-/** The whole preview: the handler of every request, the admin token of the seeded install, and the gallery's links. */
+/** The whole preview: the handler of every request, the admin token of the seeded install, the gallery's links, and the secrets its sample computers hold now. */
 export interface Preview {
   readonly fetch: (request: Request) => Promise<Response>;
   readonly token: () => string;
   readonly entries: () => Promise<readonly Entry[]>;
+  readonly secrets: () => readonly string[];
 }
 
 /** The two installs and the pieces built over them. A reset makes all of it anew. */
@@ -131,6 +135,9 @@ interface Scene {
 
   /** The admin token of that install, for the API. */
   readonly token: string;
+
+  /** The secrets the sample computers of that install hold now. */
+  readonly secrets: () => readonly string[];
 
   /** The dashboard of the seeded install, which answers every path no other piece does. */
   readonly dashboard: Mount;
@@ -259,16 +266,17 @@ async function openScene(host: Host, resumed: boolean): Promise<Scene> {
   if (!resumed) await checkForUpdate(seeded.install, { fetch: sampleLatest(host.version) });
   if (!resumed) await seeded.install.database.keepUpdateAddress(SAMPLE_REBUILD, { by: seeded.admin.holder, at: seeded.install.now() });
   const pages = dashboardMount(seeded, "", host);
-  const keepWaiting = keepLoginsWaiting(seeded);
+  const computers = keepLoginsWaiting(seeded, resumed ? (host.secrets ?? []) : []);
   // A login runs out ten minutes after the seed: a visitor who comes later still finds one to review.
   const answer: Mount["answer"] = async (request) => {
-    await keepWaiting();
+    await computers.keep();
 
     return pages.answer(request);
   };
   const screens = ([...PLUG_STATES, SHUT, FIRST] as const).map((state) => setupScreenMount(seeded, state, host));
+  const mounts = [dashboardMount(empty, EMPTY_PREFIX, host), apiMount(seeded, host.version), ...screens];
 
-  return { seeded, token, dashboard: { ...pages, answer }, mounts: [dashboardMount(empty, EMPTY_PREFIX, host), apiMount(seeded, host.version), ...screens] };
+  return { seeded, token, secrets: computers.secrets, dashboard: { ...pages, answer }, mounts };
 }
 
 /** The stage a path names; none for every other path. */
@@ -352,6 +360,7 @@ export async function createPreview(host: Host): Promise<Preview> {
   return {
     token: () => scene.token,
     entries,
+    secrets: () => scene.secrets(),
     fetch: async (request) => {
       try {
         if (base === "") return await answer(request);
