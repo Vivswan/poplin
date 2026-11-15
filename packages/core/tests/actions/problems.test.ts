@@ -1,6 +1,8 @@
 import { describe, expect, spyOn, test } from "bun:test";
 
-import { listProblems, noteProblem } from "../../src/actions/problems";
+import { removeFiles } from "../../src/actions/files";
+import { listProblems, meterNoted, noteProblem } from "../../src/actions/problems";
+import { AllowanceSpent } from "../../src/database/driver";
 import { dayOf } from "../../src/records/views";
 import { ADMIN, DAY, makeWorld, OWNER } from "./support/actions-fixture";
 
@@ -65,6 +67,14 @@ describe("noteProblem", () => {
     ]);
   });
 
+  // Drift: a database whose day is used up refuses the note too, so asking it would be one more failing statement for every failing request.
+  test("a failure that is the database's spent day is not noted, and the database is not asked", async () => {
+    const world = await worldAtMidnight();
+    await noteProblem(world.install, "api_failed", new AllowanceSpent("writing"));
+
+    expect([world.asked(), await world.install.database.listProblems(dayOf(DAY_START))]).toEqual([0, []]);
+  });
+
   // Drift: a note is written while something else is already failing. A note that threw would turn a request that was about to be answered into one that is not.
   test("a database that refuses the note is not heard of, and is not asked again in that hour", async () => {
     const world = await worldAtMidnight();
@@ -96,6 +106,19 @@ describe("noteProblem", () => {
     await noteProblem(world.install, "writes_limit_reached");
 
     expect([refusing.mock.calls.length, (await world.install.database.listProblems(dayOf(DAY_START))).map(({ count, more }) => ({ count, more }))]).toEqual([2, [{ count: 1, more: false }]]);
+  });
+});
+
+describe("meterNoted", () => {
+  // Drift: the removal of files takes a listing refused at the day's bound as files left for later, so nothing above it ever learns that the day's limit was reached. Only the meter knows, and it must say so.
+  test("a listing the day has no room for is noted as the day's limit reached, also where the removal of files swallows the refusal", async () => {
+    const world = await makeWorld({ max_storage_writes_per_day: 1 });
+    await meterNoted(world.install).store.list({ prefix: "none/" });
+
+    const left = await removeFiles(meterNoted(world.install).store, ["none/"]);
+
+    expect(left).toEqual(["none/"]);
+    expect((await world.install.database.listProblems(dayOf(world.clock.now))).map(({ kind, count }) => [kind, count])).toEqual([["writes_limit_reached", 1]]);
   });
 });
 

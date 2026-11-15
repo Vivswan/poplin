@@ -669,6 +669,8 @@ describe("the staged publish over HTTP", () => {
     expect([copy.status, copy.body, copy.response.headers.get("Retry-After")]).toEqual([503, spent, "6400"]);
     expect([refused.status, refused.body, refused.response.headers.get("Retry-After")]).toEqual([503, spent, "6400"]);
     expect([removed.status, (removed.body.left as string[]).length, (await api.sites[":site"].$get({ param: { site }, query: {} })).status, (await install.keys()).length]).toEqual([200, 1, 404, 2]);
+    // The limit is noted as one problem of the day it was reached, by the copy that did not fit and by the listing that was refused alike.
+    expect((await install.database.listProblems(dayOf(NOW))).map(({ day, kind, count }) => [day, kind, count])).toEqual([[dayOf(NOW), "writes_limit_reached", 1]]);
   });
 
   // Drift: each row is a way a publish ends without going live; files left in the bucket under no site would fill it unseen, and a half-sent file would be served.
@@ -990,6 +992,7 @@ describe("what the API refuses before any action runs", () => {
 
     expect([answer.status, answer.body]).toEqual([500, { error: { code: "internal", message: "the install failed to do that" } }]);
     expect(install.reported.map(String)).toEqual(["Error: the database is down"]);
+    expect((await install.database.listProblems(dayOf(NOW))).map(({ kind, count, name, message }) => ({ kind, count, name, message }))).toEqual([{ kind: "api_failed", count: 1, name: "Error", message: "the database is down" }]);
   });
 
   // Drift: a caller that reads only "the install failed" tries again at once, all day; the code and the wait are what tell it the database is spent until midnight UTC.
@@ -1005,7 +1008,7 @@ describe("what the API refuses before any action runs", () => {
       "6400",
       { error: { code: "allowance_spent", message: "a day's allowance of the install is used up: ask again after midnight UTC", about: "writing" } },
     ]);
-    expect(install.reported.length).toBe(1);
+    expect([install.reported.length, await install.database.listProblems(dayOf(NOW))]).toEqual([1, []]);
   });
 
   // Drift: a route that takes no token counts its visitor first, and a count that cannot be had is read as a full minute; a spent database told as "wait a minute" sends a terminal back sixty seconds later, all day.

@@ -4,12 +4,14 @@ import { checkForUpdate } from "../../src/actions/check-update";
 import { exportSettings, exportSites } from "../../src/actions/export";
 import { type Rebuilding, startUpdate } from "../../src/actions/start-update";
 import { removeUpdateAddress, saveUpdateAddress, updateAddressState } from "../../src/actions/update-address";
+import { dayOf } from "../../src/records/views";
 import { ADMIN, makeWorld, NOW, OWNER, type World } from "./support/actions-fixture";
 
 const HOST = "builds.provider.example";
 const ADDRESS = `https://${HOST}/hooks/3f9c2a7e5b`;
 const RELEASE = { version: "0.2.0", released: "2026-12-01", notes: "https://example.com/changelog/#v0-2-0", database: false };
 const SET = { by: ADMIN.holder, action: "update_address_set", site: null, detail: {} };
+const [ANSWERED, NO_ANSWER] = ["the request for a rebuild was answered", "the request for a rebuild got no answer"];
 
 /** A provider that takes the addresses of one host, counts the starts of each minute up to the limit it is asked with, and records every request it is sent. */
 function provider(answer: (address: string) => Promise<Response> = async () => Response.json({ success: true })): Rebuilding & { readonly sent: unknown[][] } {
@@ -128,7 +130,7 @@ describe("startUpdate", () => {
   const post = [ADDRESS, { method: "POST", redirect: "manual", signal: "a signal" }];
   const started = { by: ADMIN.holder, action: "update_started", site: null, detail: { from: "0.1.0", to: "0.2.0" } };
 
-  // Drift: the one request leaves the install for the provider. Each row is what a press of the button must come to, what was sent, and what the log then says.
+  // Drift: the one request leaves the install for the provider. Each row is what a press of the button must come to, what was sent, what the log then says, and the problem the install notes of a start that failed, which never holds the address.
   test.each([
     { name: "a newer version is out", version: "0.1.0", answer: { ok: true, started: true, from: "0.1.0", to: "0.2.0" }, sent: [post], audit: [SET, started] },
     { name: "no newer version is known", version: "0.2.0", answer: { ok: false, code: "no_update" }, sent: [], audit: [SET] },
@@ -141,11 +143,11 @@ describe("startUpdate", () => {
       audit: [SET, { ...started, detail: { from: "0.2.0", to: null } }],
     },
     { name: "a 200 whose body cannot be let go", version: "0.1.0", stuck: true, answer: { ok: true, started: true, from: "0.1.0", to: "0.2.0" }, sent: [post], audit: [SET, started] },
-    { name: "the provider refuses", version: "0.1.0", status: 404, answer: { ok: false, code: "update_refused", about: "404" }, sent: [post], audit: [SET] },
-    { name: "the provider redirects, and is not followed", version: "0.1.0", status: 302, answer: { ok: false, code: "update_refused", about: "302" }, sent: [post], audit: [SET] },
-    { name: "the provider never answers", version: "0.1.0", silent: true, answer: { ok: false, code: "update_unreachable" }, sent: [post], audit: [SET] },
-    { name: "the provider cannot be reached", version: "0.1.0", down: true, answer: { ok: false, code: "update_unreachable" }, sent: [post], audit: [SET] },
-  ])("$name", async ({ version, anyway, status, silent, down, stuck, answer, sent, audit }) => {
+    { name: "the provider refuses", version: "0.1.0", status: 404, answer: { ok: false, code: "update_refused", about: "404" }, sent: [post], audit: [SET], noted: `${ANSWERED} 404` },
+    { name: "the provider redirects, and is not followed", version: "0.1.0", status: 302, answer: { ok: false, code: "update_refused", about: "302" }, sent: [post], audit: [SET], noted: `${ANSWERED} 302` },
+    { name: "the provider never answers", version: "0.1.0", silent: true, answer: { ok: false, code: "update_unreachable" }, sent: [post], audit: [SET], noted: NO_ANSWER },
+    { name: "the provider cannot be reached", version: "0.1.0", down: true, answer: { ok: false, code: "update_unreachable" }, sent: [post], audit: [SET], noted: NO_ANSWER },
+  ])("$name", async ({ version, anyway, status, silent, down, stuck, answer, sent, audit, noted }) => {
     const rebuilding = provider(async (address) => {
       if (silent === true) return new Promise<Response>(() => undefined);
 
@@ -158,6 +160,7 @@ describe("startUpdate", () => {
     const world = await ready(rebuilding);
 
     expect<unknown>({ answer: await startUpdate(world.install, ADMIN, { version, anyway }, rebuilding), sent: rebuilding.sent, audit: await entries(world) }).toEqual({ answer, sent, audit });
+    expect((await world.install.database.listProblems(dayOf(NOW))).map(({ kind, count, message }) => [kind, count, message])).toEqual(noted === undefined ? [] : [["update_failed", 1, noted]]);
   });
 
   test("with no address saved nothing is sent", async () => {

@@ -3,6 +3,7 @@
 //   the Access token  ->  an email in the logins  ->  the dashboard's session cookie, and the way back to a dashboard path
 
 import { logIn } from "@poplin/app/src/login/login";
+import { noteProblem } from "@poplin/core/src/actions/problems";
 import type { Login } from "@poplin/core/src/auth/logins";
 import type { Database } from "@poplin/core/src/database/database";
 import type { Held } from "./held";
@@ -29,6 +30,7 @@ async function record(database: Database, email: Login, now: number): Promise<vo
     if (!(await database.hasLoggedIn())) throw error;
 
     console.warn("poplin: a login was not written to the audit log", error);
+    await noteProblem({ database, now: () => now }, "login_unwritten", error);
   }
 }
 
@@ -52,7 +54,11 @@ export async function answerLogin(request: Request, instance: Instance, held: He
 
   if (!outcome.ok && outcome.refusal === NO_ACCESS) return plain(request, 503, "The login is not set up yet. Finish the setup of this install first.");
 
-  if (!outcome.ok && outcome.refusal === "keys-unavailable") return plain(request, 503, "The login cannot be checked right now. Try again.", { "Retry-After": "60" });
+  if (!outcome.ok && outcome.refusal === "keys-unavailable") {
+    await noteProblem(instance.install, "login_unchecked");
+
+    return plain(request, 503, "The login cannot be checked right now. Try again.", { "Retry-After": "60" });
+  }
 
   if (!outcome.ok) {
     console.warn(`poplin: a login was refused: ${outcome.refusal}`);

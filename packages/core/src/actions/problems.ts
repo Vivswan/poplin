@@ -12,9 +12,11 @@ import * as v from "valibot";
 
 import type { Actor } from "../auth/scopes";
 import type { Database } from "../database/database";
+import { AllowanceSpent } from "../database/driver";
 import { PROBLEM_DAYS_KEPT, type Problem, type ProblemKind } from "../records/problem";
 import { problemDetail } from "../records/problem-detail";
 import { dayOf, daysUpTo } from "../records/views";
+import { meterStore } from "../storage/metered";
 import { type Install, type Refused, refuse } from "./records";
 
 /** The milliseconds of one hour. */
@@ -37,9 +39,12 @@ interface Noted {
  *
  * It asks the database at most once per kind and hour of the clock, and writes at most one row then.
  *
- * @param failure - whatever was thrown, where something was: its name and its cleaned message are kept, and nothing else of it
+ * @param failure - whatever was thrown, where something was: its name and its cleaned message are kept, and nothing else of it. A day's allowance of the database used up is no problem to note
  */
 export async function noteProblem(install: Pick<Install, "database" | "now">, kind: ProblemKind, failure?: unknown): Promise<void> {
+  // A database that takes no more for the day takes no note either.
+  if (failure instanceof AllowanceSpent) return;
+
   const at = install.now();
   const hour = Math.floor(at / HOUR_MS);
   const kinds = NOTED.get(install.database) ?? new Map<ProblemKind, Noted>();
@@ -64,6 +69,27 @@ export async function noteProblem(install: Pick<Install, "database" | "now">, ki
   if (written || since?.hour !== hour) return;
 
   kinds.set(kind, { hour, missed: since.missed + 1 + missed });
+}
+
+/**
+ * Wrap an install's store so its listings are counted against the day's bound, as `meterStore` does, and what goes wrong with the count is noted.
+ *
+ * @param spare - how many listings beyond the setting's bound are taken; 0 when left out
+ * @returns the store, which notes the day's limit as reached before it refuses a listing, and `settle`, which notes a count that could not be written and then throws what the database rejected it with
+ */
+export function meterNoted(install: Pick<Install, "database" | "store" | "now">, spare = 0): ReturnType<typeof meterStore> {
+  const meter = meterStore(install.store, { database: install.database, now: install.now, spare, refused: () => noteProblem(install, "writes_limit_reached") });
+  const settle = async (): Promise<void> => {
+    try {
+      await meter.settle();
+    } catch (error) {
+      await noteProblem(install, "count_unwritten", error);
+
+      throw error;
+    }
+  };
+
+  return { store: meter.store, settle };
 }
 
 /**
