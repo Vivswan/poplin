@@ -43,7 +43,7 @@ const page = (): ReturnType<typeof within> => within(document.body);
 
 /** The row of the table that holds an email. */
 function row(email: string): ReturnType<typeof within> {
-  const found = within(page().getByRole("table", { name: "People" }))
+  const found = within(page().getByRole("table", { name: "Users" }))
     .getAllByRole("row")
     .find((entry) => within(entry).queryByText(email) !== null);
   if (found === undefined) throw new Error(`no row holds ${email}`);
@@ -97,19 +97,19 @@ describe("adding a person", () => {
   // Drift: a refused email would close the dialog or empty the field, and the person would type it all again.
   test("a refused email is said at the field, which keeps what was typed; a good one is sent", async () => {
     render(<Tab />);
-    fireEvent.click(page().getByRole("button", { name: "Add a person" }));
+    fireEvent.click(page().getByRole("button", { name: "Add a user" }));
     const dialog = within(page().getByRole("dialog"));
     const field = dialog.getByLabelText("Email") as HTMLInputElement;
 
     fireEvent.change(field, { target: { value: "jonas" } });
-    fireEvent.click(dialog.getByRole("button", { name: "Add a person" }));
+    fireEvent.click(dialog.getByRole("button", { name: "Add a user" }));
     await waitFor(() => expect(dialog.queryByText(NOT_AN_EMAIL) === null).toBe(false));
 
     expect(field.value).toBe("jonas");
     expect(done.added).toEqual([]);
 
     fireEvent.change(field, { target: { value: "ada@example.com" } });
-    fireEvent.click(dialog.getByRole("button", { name: "Add a person" }));
+    fireEvent.click(dialog.getByRole("button", { name: "Add a user" }));
     await waitFor(() => expect(done.added).toEqual(["ada@example.com"]));
   });
 });

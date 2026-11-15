@@ -1,4 +1,4 @@
-// The People tab of Access: the people who can log in, one row each, the way to add one and to take one out, and the sign-out of every browser. The person who is logged in here has no Remove.
+// The Users tab of Access: the people who can log in, one row each, the way to add one and to take one out, and the sign-out of every browser. The person who is logged in here has no Remove.
 
 import { LogOutIcon, PlusIcon } from "lucide-react";
 import { type ReactNode, useMemo, useRef, useState } from "react";
@@ -60,10 +60,10 @@ interface PeopleTabProps {
 function leavingQuestion(person: Person | undefined): Question | undefined {
   if (person === undefined) return undefined;
 
-  return { title: `Remove ${person.email}?`, says: "This person can no longer log in.", yes: "Remove", no: "Keep", removes: true };
+  return { title: `Remove ${person.email}?`, says: "This user can no longer log in.", yes: "Remove", no: "Keep", removes: true };
 }
 
-/** Draw the People tab. */
+/** Draw the Users tab. */
 export function PeopleTab({ people, failure, actions, onRetry }: PeopleTabProps): ReactNode {
   // Each opening of the dialog has its own number: an add that answers after its dialog was left closes nothing that was opened since.
   const [adding, setAdding] = useState<number>();
@@ -93,10 +93,10 @@ export function PeopleTab({ people, failure, actions, onRetry }: PeopleTabProps)
   };
 
   return (
-    <section aria-label="People" className="flex min-h-0 min-w-0 flex-1 flex-col">
+    <section aria-label="Users" className="flex min-h-0 min-w-0 flex-1 flex-col">
       <div className="flex shrink-0 flex-wrap items-center gap-2 px-6 py-3 max-md:px-4">
         <p className="min-w-0 flex-1 truncate text-[13px] text-muted-foreground max-md:basis-full max-md:whitespace-normal">
-          People can log in here and change everything.
+          Users can log in here and change everything.
         </p>
         <div className="ml-auto flex items-center gap-2">
           <Button variant="ghost" onClick={() => setSigningOut(true)}>
@@ -105,17 +105,17 @@ export function PeopleTab({ people, failure, actions, onRetry }: PeopleTabProps)
           </Button>
           <Button variant="outline" onClick={openAdding}>
             <PlusIcon data-icon="inline-start" />
-            Add a person
+            Add a user
           </Button>
         </div>
       </div>
       {failure !== undefined && people === undefined ? (
-        <Unread title="The people could not be read" failure={failure} onRetry={onRetry} />
+        <Unread title="The users could not be read" failure={failure} onRetry={onRetry} />
       ) : (
         <>
           <div className="flex min-h-0 flex-1 flex-col max-md:hidden">
             <DataTable
-              label="People"
+              label="Users"
               columns={COLUMNS}
               rows={rows}
               rowId={(person) => person.email}
@@ -126,7 +126,7 @@ export function PeopleTab({ people, failure, actions, onRetry }: PeopleTabProps)
             />
           </div>
           <div className="min-h-0 flex-1 overflow-y-auto md:hidden">
-            <ul aria-label="People" className="border-t">
+            <ul aria-label="Users" className="border-t">
               {rows.map((person) => (
                 <li key={person.email} className="group/row flex h-11 items-center gap-2 border-b px-4">
                   <span className="min-w-0 flex-1 truncate" title={person.email}>
@@ -143,13 +143,13 @@ export function PeopleTab({ people, failure, actions, onRetry }: PeopleTabProps)
         key={adding}
         open={adding !== undefined}
         onOpenChange={(open) => setAdding((now) => (open || now !== adding ? now : undefined))}
-        title="Add a person"
-        says="This person can log in here and change everything."
+        title="Add a user"
+        says="This user can log in here and change everything."
         label="Email"
         hint="Such as name@example.com."
         initial=""
         maxLength={LONGEST_EMAIL}
-        submit="Add a person"
+        submit="Add a user"
         onSubmit={actions.addPerson}
       />
       <Confirm question={leavingQuestion(leaving)} onAnswer={answerLeaving} />

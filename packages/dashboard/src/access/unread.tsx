@@ -7,7 +7,7 @@ import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyTitle } from "
 
 /** What the place is drawn from. */
 interface UnreadProps {
-  /** What could not be read, such as "The people could not be read". */
+  /** What could not be read, such as "The users could not be read". */
   readonly title: string;
 
   /** The sentence of the read that was refused. */

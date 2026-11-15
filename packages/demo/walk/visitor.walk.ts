@@ -11,7 +11,7 @@ const POLICY =
 /** The screens of the dashboard, as paths under the demo: the heading of each, and the thing on it that shows only once its data was read. */
 const SCREENS = [
   { path: "", heading: "Sites", holds: { role: "table", name: "Sites" } },
-  { path: "tokens", heading: "Access", holds: { role: "table", name: "People" } },
+  { path: "tokens", heading: "Access", holds: { role: "table", name: "Users" } },
   { path: "tokens/list", heading: "Access", holds: { role: "table", name: "Tokens" } },
   { path: "activity", heading: "Activity", holds: { role: "table", name: "Activity" } },
   { path: "usage", heading: "Usage", holds: { role: "table", name: "Usage" } },

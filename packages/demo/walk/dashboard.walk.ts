@@ -19,7 +19,7 @@ const SAMPLE = { site: "Pricing", graphed: "Team handbook", person: "jonas@examp
 /** Where the notes of a newer version are read: the page of the project's releases. */
 const RELEASES = "https://github.com/Vivswan/poplin/releases";
 
-/** An email typed into the dialog that adds a person, and never sent. */
+/** An email typed into the dialog that adds a user, and never sent. */
 const TYPED_EMAIL = "walk@example.com";
 
 /** The kinds of file whose refusal breaks a screen. */
@@ -44,7 +44,7 @@ const STOPS: readonly Stop[] = [
   {
     name: "Access, from the side",
     open: (page) => toSection(page, "Access"),
-    shows: (page, wide) => [screenHeading(page, "Access"), page.getByRole("tab", { name: "People", selected: true }), rows(page, wide, "People")],
+    shows: (page, wide) => [screenHeading(page, "Access"), page.getByRole("tab", { name: "Users", selected: true }), rows(page, wide, "Users")],
   },
   {
     name: "Tokens, the second tab of Access",
@@ -187,23 +187,23 @@ const STOPS: readonly Stop[] = [
     close: leaveBy("Cancel"),
   },
   {
-    name: "the dialog that adds a person, with an email typed",
+    name: "the dialog that adds a user, with an email typed",
     open: async (page) => {
       await toSection(page, "Access");
-      await page.getByRole("button", { name: "Add a person", exact: true }).click();
+      await page.getByRole("button", { name: "Add a user", exact: true }).click();
       await addPerson(page).getByRole("textbox", { name: "Email", exact: true }).fill(TYPED_EMAIL);
     },
-    shows: (page) => [addPerson(page).getByRole("button", { name: "Add a person", exact: true, disabled: false })],
+    shows: (page) => [addPerson(page).getByRole("button", { name: "Add a user", exact: true, disabled: false })],
     close: (page) => addPerson(page).getByRole("button", { name: "Cancel", exact: true }).click(),
   },
   {
-    name: "the question before everyone is signed out, from the people",
+    name: "the question before everyone is signed out, from the users",
     open: (page) => page.getByRole("button", { name: "Sign everyone out", exact: true }).click(),
     shows: (page) => [question(page, "Sign everyone out?")],
     close: leaveBy("Cancel"),
   },
   {
-    name: "the question before a person is removed",
+    name: "the question before a user is removed",
     open: (page) => fromRowMenu(page, SAMPLE.person, "Remove"),
     shows: (page) => [question(page, `Remove ${SAMPLE.person}?`)],
     close: leaveBy("Keep"),
@@ -289,7 +289,7 @@ async function fromRowMenu(page: Page, row: string, entry: string): Promise<void
 
 /** The dialog that adds a person. */
 function addPerson(page: Page): Locator {
-  return page.getByRole("dialog", { name: "Add a person", exact: true });
+  return page.getByRole("dialog", { name: "Add a user", exact: true });
 }
 
 /** Tick or untick the graphed sample site in the list that picks the sites of the graph, and close the list. */

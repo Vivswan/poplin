@@ -13,7 +13,7 @@ export type Access = Site["access"];
 
 /** The accesses, from the most private on, with what each means. */
 export const ACCESSES: readonly { readonly access: Access; readonly label: string; readonly means: string; readonly now: string }[] = [
-  { access: "private", label: "Private", means: "Only people who can log in here.", now: "Private now." },
+  { access: "private", label: "Private", means: "Only users who can log in here.", now: "Private now." },
   { access: "unlisted", label: "Unlisted", means: "Anyone with the link. No login.", now: "Unlisted now." },
   { access: "public", label: "Public", means: "Everyone, at a public link.", now: "Public now." },
 ];

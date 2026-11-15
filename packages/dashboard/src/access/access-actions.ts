@@ -17,8 +17,8 @@ const COLLECTED_AFTER_MS = 6000;
 /** What a person's change says once it is done. */
 const PEOPLE_SAID = {
   added: "Added. Next, open Domain and press Repair.",
-  removed: "Removed. That person can no longer log in.",
-  gone: "That person was removed already.",
+  removed: "Removed. That user can no longer log in.",
+  gone: "That user was removed already.",
 } as const;
 
 /** What a decision about a login asks for. */

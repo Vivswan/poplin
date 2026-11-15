@@ -25,7 +25,7 @@ const TAB_PATHS = { people: PEOPLE_PATH, tokens: TOKENS_PATH } as const;
 
 /** The tabs of the screen, in the order shown. */
 const TABS = [
-  { id: "people", label: "People" },
+  { id: "people", label: "Users" },
   { id: "tokens", label: "Tokens" },
 ] as const;
 
