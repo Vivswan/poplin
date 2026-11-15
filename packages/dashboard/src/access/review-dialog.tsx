@@ -142,11 +142,11 @@ function ReviewForm({
         />
         <FieldContent>
           <FieldLabel htmlFor={id} className="font-normal">
-            The code matches the one in my terminal
+            The codes match
           </FieldLabel>
           <div className="min-h-5 max-md:min-h-10">
             {refusal === undefined ? (
-              <FieldDescription className="text-[13px]">Allow needs this box ticked.</FieldDescription>
+              <FieldDescription className="text-[13px]">Tick this to allow.</FieldDescription>
             ) : (
               <FieldError className="text-[13px]">{refusal}</FieldError>
             )}

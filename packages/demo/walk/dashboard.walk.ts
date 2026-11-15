@@ -220,7 +220,7 @@ const STOPS: readonly Stop[] = [
     shows: (page) => [
       page
         .getByRole("dialog", { name: `Allow ${SAMPLE.login}?`, exact: true })
-        .getByRole("checkbox", { name: "The code matches the one in my terminal", exact: true }),
+        .getByRole("checkbox", { name: "The codes match", exact: true }),
     ],
     close: (page) =>
       page

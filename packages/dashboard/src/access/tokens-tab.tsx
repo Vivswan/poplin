@@ -104,13 +104,17 @@ function Allowed({ token }: { readonly token: Token }): ReactNode {
   );
 }
 
-/** The command that logs a computer in at this dashboard, with the way to copy it. The address is the one this page was answered from. */
+/** The command that logs a computer in at this dashboard, with the way to copy it. The address is the one this page was answered from. The space between its two parts is text, so a selection copies the command whole. */
 function LoginCommand({ onCopy }: { readonly onCopy: AccessActions["copyCommand"] }): ReactNode {
-  const command = `npx poplin login --server ${window.location.origin}`;
+  const [run, server] = ["npx poplin login", `--server ${window.location.origin}`];
+  const command = `${run} ${server}`;
 
   return (
     <span className="flex min-w-0 items-center gap-1">
-      <code className="min-w-0 flex-1 rounded-md border bg-muted/40 px-2.5 py-1.5 text-left font-mono text-xs wrap-anywhere">{command}</code>
+      <code className="flex min-w-0 flex-1 flex-wrap rounded-md border bg-muted/40 px-2.5 py-1.5 text-left font-mono text-xs" title={command}>
+        <span className="whitespace-pre">{run} </span>
+        <span className="min-w-0 wrap-anywhere">{server}</span>
+      </code>
       <IconButton label="Copy the command" onClick={() => void onCopy(command)} className="shrink-0">
         <CopyIcon />
       </IconButton>
@@ -122,7 +126,7 @@ function LoginCommand({ onCopy }: { readonly onCopy: AccessActions["copyCommand"
 function AddToken({ onCopy }: { readonly onCopy: AccessActions["copyCommand"] }): ReactNode {
   return (
     <Popover>
-      <PopoverTrigger render={<Button variant="outline" />}>
+      <PopoverTrigger render={<Button variant="outline" className="max-md:min-h-10" />}>
         <PlusIcon data-icon="inline-start" />
         Add a token
       </PopoverTrigger>
@@ -132,7 +136,7 @@ function AddToken({ onCopy }: { readonly onCopy: AccessActions["copyCommand"] })
           <PopoverDescription>Run this on the computer or agent:</PopoverDescription>
         </PopoverHeader>
         <LoginCommand onCopy={onCopy} />
-        <p className="text-[13px] text-muted-foreground">It then waits here. Press Review to allow it.</p>
+        <p className="text-[13px] text-muted-foreground">It then waits here: press Review to allow it.</p>
       </PopoverContent>
     </Popover>
   );
@@ -288,7 +292,7 @@ export function TokensTab({ tokens, waiting, failure, waitingFailure, sort, onSo
           A token lets a computer or an agent publish.
         </p>
         <div className="ml-auto flex items-center gap-2">
-          <OrderSelect sort={sort} onSort={onSort} />
+          {tokens === undefined || tokens.length < 2 ? null : <OrderSelect sort={sort} onSort={onSort} />}
           <AddToken onCopy={actions.copyCommand} />
         </div>
       </div>
