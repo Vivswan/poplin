@@ -2,7 +2,7 @@
 
 import { describe, expect, test } from "bun:test";
 
-import { SETTING_VALUES } from "@poplin/core/src/records/settings";
+import { MOST_FILES_PER_PUBLISH, SETTING_VALUES } from "@poplin/core/src/records/settings";
 import * as v from "valibot";
 
 import type { DomainPlug } from "../../src/console/domain/records";
@@ -12,7 +12,7 @@ import { openConsole, REBUILD_HOST } from "./support/console";
 /** One setting as the route answers it. */
 interface Row {
   readonly key: string;
-  readonly control: { readonly kind: string; readonly least?: number | null; readonly most?: number | null; readonly word?: string | null };
+  readonly control: { readonly kind: string; readonly word?: string | null };
   readonly text: string;
   readonly unit: string;
   readonly fallback: string;
@@ -43,12 +43,12 @@ describe("the control of a setting", () => {
   test.each([
     ["update_check", { kind: "switch" }],
     ["block_bots", { kind: "choice", options: ["auto", "on", "off"] }],
-    ["trash_days", { kind: "number", least: 1, most: null, word: null }],
-    ["site_share_of_day", { kind: "number", least: 1, most: 100, word: null }],
+    ["trash_days", { kind: "number", word: null }],
+    ["site_share_of_day", { kind: "number", word: null }],
     ["logins", { kind: "lines" }],
-    ["max_sites", { kind: "number", least: 1, most: null, word: "none" }],
-    ["max_total_size", { kind: "number", least: 1, most: null, word: null }],
-    ["default_expires", { kind: "number", least: 1, most: null, word: "never" }],
+    ["max_sites", { kind: "number", word: "none" }],
+    ["max_total_size", { kind: "number", word: null }],
+    ["default_expires", { kind: "number", word: "never" }],
   ] as const)("%s is changed with its own control", (key, control) => {
     expect(controlOf(SETTING_VALUES.entries[key])).toEqual(control);
   });
@@ -72,14 +72,14 @@ describe("the rows", () => {
     expect([byKey.requests_per_day, byKey.site_share_of_day, byKey.block_bots]).toEqual([
       {
         key: "requests_per_day",
-        control: { kind: "number", least: 1, most: null, word: null },
+        control: { kind: "number", word: null },
         text: "250000",
         unit: "",
         fallback: "100000",
         warnings: ["above the free 10,000,000 reads a month", "above the free 100,000 requests a day"],
         repair: false,
       },
-      { key: "site_share_of_day", control: { kind: "number", least: 1, most: 100, word: null }, text: "40%", unit: "%", fallback: "25%", warnings: [], repair: false },
+      { key: "site_share_of_day", control: { kind: "number", word: null }, text: "40%", unit: "%", fallback: "25%", warnings: [], repair: false },
       { key: "block_bots", control: { kind: "choice", options: ["auto", "on", "off"] }, text: "auto", unit: "", fallback: "auto", warnings: [], repair: false },
     ]);
   });
@@ -135,25 +135,23 @@ describe("a save", () => {
     expect(await textsOf(opened)).toEqual(before);
   });
 
-  // Drift: a setting would be refused in the general sentence, which names its key and no rule, or a number's sentence would tell a range its schema no longer has.
-  test("is refused in a sentence that tells the setting's rule and not its key, a number's with the range of its schema", async () => {
+  // Drift: a setting would be refused in the general sentence, which names its key and no rule; or a number's sentence would tell another range than core's rule has.
+  test("is refused in a sentence that tells the setting's rule and not its key", async () => {
     const opened = await openConsole();
-    const saved = (await settingsOf(opened)).rows;
     const told: [string, string][] = [];
-    for (const row of saved) {
+    for (const row of (await settingsOf(opened)).rows) {
       const refusal = (await (await opened.change("/data/settings", { texts: { [row.key]: "" } })).json()) as { readonly sentence: string };
       told.push([row.key, refusal.sentence]);
     }
-    const rangeOf = ({ least, most, word }: Row["control"]): string => {
-      if (most !== null) return `Use a whole number from ${least} to ${most}.`;
-
-      return word === "none" ? `Use a whole number, ${least} or more, or leave it empty for no limit.` : `Use a whole number, ${least} or more.`;
-    };
-    const ranges = new Map(saved.filter((row) => row.control.kind === "number").map((row) => [row.key, rangeOf(row.control)]));
 
     expect(told.filter(([key, sentence]) => sentence.includes(key) || sentence.includes("is not one it takes"))).toEqual([]);
-    expect(told.filter(([key]) => ranges.has(key))).toEqual([...ranges]);
-    expect(Object.fromEntries(told)).toMatchObject({ trash_days: "Use a whole number, 1 or more.", max_total_size: "Use a whole number, 1 or more." });
+    expect(Object.fromEntries(told)).toMatchObject({
+      trash_days: "Use a whole number, 1 or more.",
+      max_total_size: "Use a whole number, 1 or more.",
+      max_sites: "Use a whole number, 1 or more, or leave it empty for no limit.",
+      max_files_per_publish: `Use a whole number from 1 to ${MOST_FILES_PER_PUBLISH}.`,
+      site_share_of_day: "Use a whole number from 1 to 100.",
+    });
   });
 });
 

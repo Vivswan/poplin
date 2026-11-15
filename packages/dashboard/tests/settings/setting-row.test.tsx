@@ -14,7 +14,7 @@ const WARNINGS = ["The host stores 10 GB for free.", "The host bills storage pas
 /** A size above its default, with the host's warnings. */
 const SIZE: Row = {
   key: "max_total_size",
-  control: { kind: "number", least: 1, most: null, word: null },
+  control: { kind: "number", word: null },
   text: "12000MB",
   unit: "MB",
   fallback: "9000MB",

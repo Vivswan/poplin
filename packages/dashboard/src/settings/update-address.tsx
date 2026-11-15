@@ -1,4 +1,4 @@
-// The line of the address that starts a rebuild of the install. It is a credential: it is typed into a field that hides it, it waits for the screen's Save like a setting, and once saved the line says only that one is set, and since when.
+// The line of the update link, the address that starts an update of the install. It is a credential: it is pasted into a field that hides it, it waits for the screen's Save like a setting, and once saved the line says only that one is set, and since when.
 
 import { useQueryClient } from "@tanstack/react-query";
 import { type ReactNode, useState } from "react";
@@ -16,22 +16,22 @@ import { SETTINGS_KEY, type UpdateAddress } from "@/settings/settings-queries";
 /** The id of the field the address is typed into. */
 export const ADDRESS_FIELD = "update-address";
 
-/** What the line's question mark says of the address. */
-const MEANING = "A secret address from your host that starts an update.";
+/** What the line's question mark says of the link. */
+const MEANING = "Lets poplin update itself.";
 
-/** The question before the address is removed: it cannot be read back, so nothing puts it back. */
+/** The question before the link is removed: it cannot be read back, so nothing puts it back. */
 const REMOVE = {
-  title: "Remove the rebuild address?",
-  says: "The install can no longer start its own update until an address is saved again. The address cannot be read back from here.",
+  title: "Remove the update link?",
+  says: "Poplin can no longer update itself until a link is saved again. The link cannot be read back from here.",
   yes: "Remove",
   removes: true,
 } as const;
 
 /**
- * Draw the line of the rebuild address.
+ * Draw the line of the update link.
  *
- * @param state - whether an address is saved, and since when
- * @param draft - the address while it is typed
+ * @param state - whether a link is saved, and since when
+ * @param draft - the link while it is pasted
  */
 export function UpdateAddressRow({ state, draft }: { readonly state: UpdateAddress; readonly draft: AddressDraft }): ReactNode {
   const client = useQueryClient();
@@ -51,41 +51,42 @@ export function UpdateAddressRow({ state, draft }: { readonly state: UpdateAddre
 
   return (
     <RowLine
-      label="Rebuild address"
+      label="Update link"
       controlId={ADDRESS_FIELD}
       about={() => <p>{MEANING}</p>}
-      help={since === null ? "None saved" : `Saved ${wholeMoment(since)}`}
+      help={since === null ? "Not set" : `Set ${wholeMoment(since)}`}
       refusal={draft.refusal}
     >
-      {since !== null && !draft.replacing && draft.typed === "" ? (
+      {draft.open || draft.typed !== "" ? null : (
         <>
-          <Button type="button" variant="outline" onClick={draft.replace}>
-            Replace
+          <Button type="button" variant="outline" onClick={draft.show}>
+            {since === null ? "Add" : "Replace"}
           </Button>
-          <Button type="button" variant="ghost" onClick={() => setAsking(true)}>
-            Remove
-          </Button>
+          {since === null ? null : (
+            <Button type="button" variant="ghost" onClick={() => setAsking(true)}>
+              Remove
+            </Button>
+          )}
         </>
-      ) : (
+      )}
+      {draft.open || draft.typed !== "" ? (
         <>
           <Input
             id={ADDRESS_FIELD}
             type="password"
             value={draft.typed}
             onChange={(event) => draft.type(event.target.value)}
-            placeholder="https://"
+            placeholder="Paste the update link"
             autoComplete="off"
             spellCheck={false}
             aria-invalid={draft.refusal !== undefined}
             className="w-64 min-w-0 max-md:w-auto max-md:flex-1"
           />
-          {since === null ? null : (
-            <Button type="button" variant="ghost" onClick={draft.discard}>
-              Cancel
-            </Button>
-          )}
+          <Button type="button" variant="ghost" onClick={draft.discard}>
+            Cancel
+          </Button>
         </>
-      )}
+      ) : null}
       <Confirm question={asking ? REMOVE : undefined} onAnswer={(yes) => void remove(yes)} />
     </RowLine>
   );

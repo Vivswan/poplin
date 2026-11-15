@@ -21,7 +21,7 @@ import { drawAt } from "../lib/support/router";
 const RULE = "Use a whole number, 1 or more.";
 
 /** A count with no word for none. */
-const COUNT = { kind: "number", least: 1, most: null, word: null } as const;
+const COUNT = { kind: "number", word: null } as const;
 
 /** The runtime's own `fetch`, put back after each test. */
 const OWN_FETCH = globalThis.fetch;
@@ -157,7 +157,7 @@ describe("the one page", () => {
       [
         ["New sites", "Show in search engines", "Keep deleted sites"],
         ["Storage", "All sites together"],
-        ["Updates", "Check for new versions", "Update channel", "Rebuild address"],
+        ["Updates", "Check for new versions", "Update channel", "Update link"],
         ["Sessions"],
       ],
       false,

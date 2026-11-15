@@ -13,7 +13,7 @@ const BLOCKS = [
   { id: "updates", heading: "Updates" },
 ] as const;
 
-/** The block that is always drawn: it also holds the rebuild address. */
+/** The block that is always drawn: it also holds the update link. */
 export const UPDATES = "updates";
 
 /** What the units of a number's text are called beside its field. A unit missing here is shown as it is, such as `MB` or `%`. */
@@ -53,7 +53,7 @@ const WORDS: Readonly<Record<string, Words>> = {
   site_requests_per_minute: { block: "traffic", label: "One site per minute", about: "", unit: "requests" },
   visitor_requests_per_minute: { block: "traffic", label: "One visitor per minute", about: "", unit: "requests" },
   update_check: { block: "updates", label: "Check for new versions", about: "Asks the project's website once a day." },
-  auto_update: { block: "updates", label: "Update automatically", about: "Needs the check above and a rebuild address." },
+  auto_update: { block: "updates", label: "Update automatically", about: "Needs the check above and an update link." },
 };
 
 /** A block's id. */

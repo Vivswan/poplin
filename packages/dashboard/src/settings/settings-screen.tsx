@@ -85,7 +85,7 @@ function Sessions(): ReactNode {
   );
 }
 
-/** The lines of the page: every block of settings under its heading, the rebuild address at the end of Updates, and the sign-out last. */
+/** The lines of the page: every block of settings under its heading, the update link at the end of Updates, and the sign-out last. */
 function Rows({
   settings,
   draft,

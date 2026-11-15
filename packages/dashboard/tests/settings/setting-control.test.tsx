@@ -14,7 +14,7 @@ import type { Row } from "@/settings/settings-queries";
 const BY_KIND: Readonly<Record<string, { readonly row: Row; readonly role: string }>> = {
   switch: { row: rowOf("update_check", { kind: "switch" }, "on"), role: "switch" },
   choice: { row: rowOf("block_bots", { kind: "choice", options: ["auto", "on", "off"] }, "auto"), role: "combobox" },
-  number: { row: rowOf("trash_days", { kind: "number", least: 1, most: null, word: null }, "7"), role: "textbox" },
+  number: { row: rowOf("trash_days", { kind: "number", word: null }, "7"), role: "textbox" },
   lines: { row: rowOf("a_new_list", { kind: "lines" }, "one,two"), role: "textbox" },
   text: { row: rowOf("a_new_text", { kind: "text" }, "as it is"), role: "textbox" },
 };
@@ -57,7 +57,7 @@ describe("the control of a setting", () => {
 
   // Drift: a size would be typed with its unit again, or shown as the count of GB it was stored in beside a fixed MB.
   test("of a size is a number with MB fixed beside it, shown with separators and sent with its unit", () => {
-    const { page, sent } = drawn(rowOf("max_total_size", { kind: "number", least: 1, most: null, word: null }, "9000MB", "MB"));
+    const { page, sent } = drawn(rowOf("max_total_size", { kind: "number", word: null }, "9000MB", "MB"));
     const field = page.getByRole("textbox") as HTMLInputElement;
     const shown = field.value;
     fireEvent.change(field, { target: { value: "12000" } });
@@ -67,7 +67,7 @@ describe("the control of a setting", () => {
 
   // Drift: an emptied field of a setting that takes no number would send an empty text, which the server refuses, where empty has a meaning.
   test("of a count that may be none says what empty means and sends the word for an emptied field", () => {
-    const { page, sent } = drawn(rowOf("max_sites", { kind: "number", least: 1, most: null, word: "none" }, "40"));
+    const { page, sent } = drawn(rowOf("max_sites", { kind: "number", word: "none" }, "40"));
     const field = page.getByRole("textbox") as HTMLInputElement;
     fireEvent.change(field, { target: { value: "" } });
 
@@ -76,7 +76,7 @@ describe("the control of a setting", () => {
 
   // Drift: Never would be a word typed into a field again, or the days would stay on the screen while Never is chosen.
   test("of a span that may be never is a choice, with the field of days only while a span is chosen", () => {
-    const expires = rowOf("default_expires", { kind: "number", least: 1, most: null, word: "never" }, "never", "d");
+    const expires = rowOf("default_expires", { kind: "number", word: "never" }, "never", "d");
     const never = drawn(expires);
     const chosenNever = [never.page.getByRole("combobox").textContent?.includes("Never"), never.page.queryByRole("textbox")];
     cleanup();

@@ -2,7 +2,7 @@
 //
 //   boolean                        switch
 //   picklist                       choice of its options
-//   number                         number, with the range its schema gives
+//   number                         number
 //   a count with a unit            number, typed in the one unit the screen has for its kind
 //   one word, or one of the above  that control, with the word that stands for no number
 //   array                          lines, one entry on each
@@ -43,25 +43,18 @@ interface ScreenAmount {
   readonly count: (amount: Amount) => number;
 }
 
-/** A setting's schema: its type, with the options of a picklist or a union, the word of a literal, the fields of an amount, and the checks of a pipe. */
+/** A setting's schema: its type, with the options of a picklist or a union, the word of a literal, and the fields of an amount. */
 type SettingSchema = v.GenericSchema & {
   readonly options?: unknown;
   readonly literal?: unknown;
   readonly entries?: Readonly<Record<string, v.GenericSchema>>;
-  readonly pipe?: readonly { readonly type: string; readonly requirement?: unknown }[];
 };
 
-/** A control and what it needs to be drawn: a choice its options; a number the least and the most it takes, `null` where the schema bounds neither, and the word its text is when it holds no number, `null` where it always holds one. */
+/** A control and what it needs to be drawn: a choice its options; a number the word its text is when it holds no number, `null` where it always holds one. */
 export type Control =
   | { readonly kind: "switch" | "lines" | "text" }
   | { readonly kind: "choice"; readonly options: readonly string[] }
-  | { readonly kind: "number"; readonly least: number | null; readonly most: number | null; readonly word: string | null };
-
-function boundOf(schema: SettingSchema, check: "min_value" | "max_value"): number | null {
-  const requirement = schema.pipe?.find((step) => step.type === check)?.requirement;
-
-  return typeof requirement === "number" ? requirement : null;
-}
+  | { readonly kind: "number"; readonly word: string | null };
 
 /** The kind of amount a schema holds: the one whose screen unit is among the units the schema takes. None for a schema that is no amount, or an amount of a kind the screen has no unit for. */
 function screenAmountOf(schema: SettingSchema): ScreenAmount | undefined {
@@ -80,14 +73,9 @@ function wordOr(schema: SettingSchema): { readonly word: string; readonly rest: 
   return { word: word.literal, rest };
 }
 
-/** The number control of a schema that holds a plain number or an amount; none for any other. */
-function numberOf(schema: SettingSchema): Extract<Control, { kind: "number" }> | undefined {
-  if (schema.type === "number") return { kind: "number", least: boundOf(schema, "min_value"), most: boundOf(schema, "max_value"), word: null };
-
-  const { count }: { readonly count?: SettingSchema } = schema.entries ?? {};
-  if (count === undefined || screenAmountOf(schema) === undefined) return undefined;
-
-  return { kind: "number", least: boundOf(count, "min_value"), most: boundOf(count, "max_value"), word: null };
+/** Whether a schema holds a number the screen has a field for: a plain number, or an amount of a kind the screen has a unit for. */
+function isNumber(schema: SettingSchema): boolean {
+  return schema.type === "number" || screenAmountOf(schema) !== undefined;
 }
 
 /**
@@ -104,10 +92,8 @@ export function controlOf(schema: v.GenericSchema): Control {
   if (kind !== "number") return { kind };
 
   const either = wordOr(typed);
-  const number = numberOf(either?.rest ?? typed);
-  if (number === undefined) return { kind: "text" };
 
-  return { ...number, word: either?.word ?? null };
+  return isNumber(either?.rest ?? typed) ? { kind, word: either?.word ?? null } : { kind: "text" };
 }
 
 /**
