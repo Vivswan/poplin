@@ -154,7 +154,7 @@ describe("the zone's own wildcard record", () => {
         records: [proxied("f1", "*.example.com", "A"), proxied("f2", "*.example.com", "AAAA")],
         refusal: undefined,
         steps: [
-          { kind: "skip", subject: "*.example.com", reason: ZONE_WILDCARD },
+          { kind: "leave", subject: `*.example.com: ${ZONE_WILDCARD}` },
           { kind: "create", subject: "poplin.example.com" },
         ],
       },
@@ -164,7 +164,7 @@ describe("the zone's own wildcard record", () => {
         refusal: undefined,
         steps: [
           { kind: "remove", subject: "*.example.com", id: "p0" },
-          { kind: "skip", subject: "*.example.com", reason: ZONE_WILDCARD },
+          { kind: "leave", subject: `*.example.com: ${ZONE_WILDCARD}` },
           { kind: "create", subject: "poplin.example.com" },
         ],
       },

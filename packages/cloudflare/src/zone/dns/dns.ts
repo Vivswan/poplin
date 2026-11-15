@@ -18,7 +18,7 @@ const HOLDING_TYPES: ReadonlySet<string> = new Set([...ADDRESS_TYPES, "NS"]);
 // Why a desired name is skipped: another kind of record holds it.
 const OCCUPIED = "a record poplin did not create holds this name";
 
-// Why the wildcard is skipped: a second record beside the zone's would answer for the zone's other names in turn with it.
+// Why poplin makes no wildcard of its own: a second record beside the zone's would answer for the zone's other names in turn with it.
 const ZONE_WILDCARD = "the zone's own proxied wildcard record already carries the site hostnames to Cloudflare";
 
 /** A record as the zone has it now. */
@@ -140,7 +140,8 @@ export function sharesZone(records: readonly ZoneRecord[]): boolean {
  * Compute the record changes a layout needs.
  *
  * @param records - every record of a zone `refusedRecords` passed, as it is now
- * @returns a removal for each record poplin created that the layout no longer uses, first so no later change collides with one, then one step per desired name
+ * @returns a removal for each record poplin created that the layout no longer uses, first so no later change collides with one, then one step per desired name.
+ *   A wildcard the zone's own proxied record carries is left, its subject saying so after the name
  */
 export function planDns(layout: DomainLayout, records: readonly ZoneRecord[]): DnsStep[] {
   const wildcard = wildcardName(layout);
@@ -153,7 +154,8 @@ export function planDns(layout: DomainLayout, records: readonly ZoneRecord[]): D
 
   return [
     ...stale.map((record): DnsStep => ({ kind: "remove", subject: record.name, id: record.id })),
-    ...(carried ? [{ kind: "skip", subject: wildcard, reason: ZONE_WILDCARD } as const] : []),
+    // The site hostnames resolve, so the record stands: its step is a `leave` that says whose record it is, where a `skip` would read as a record that is missing.
+    ...(carried ? [{ kind: "leave", subject: `${wildcard}: ${ZONE_WILDCARD}` } as const] : []),
     ...names.map((name) => planName(layout, name, records)),
   ];
 }

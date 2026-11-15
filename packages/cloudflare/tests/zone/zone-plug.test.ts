@@ -70,6 +70,22 @@ test("a check of an account with nothing in it names every object as missing and
   });
 });
 
+// Drift: a domain with a proxied wildcard of its own needs none of poplin's, and its sites answer. Shown as left out, that healthy record read as one poplin could not make.
+test("a domain whose own proxied wildcard carries the site hostnames: the wildcard's row stands as present and says whose record it is", async () => {
+  const account = emptyAccount();
+  account.records.push({ id: "theirs", name: "*.example.com", type: "A", content: "192.0.2.1", proxied: true });
+
+  await withAccount(account, async (plug) => {
+    await plug.repair(TOKEN, SETTINGS);
+    const rows = shown(await plug.check(TOKEN, SETTINGS));
+
+    expect(rows.filter((row) => row.startsWith("DNS record"))).toEqual([
+      "DNS record | present | *.example.com: the zone's own proxied wildcard record already carries the site hostnames to Cloudflare",
+      "DNS record | present | poplin.example.com",
+    ]);
+  });
+});
+
 test("a repair makes every object, a check then finds all present, and a second repair sends no change", async () => {
   const account = emptyAccount();
 
