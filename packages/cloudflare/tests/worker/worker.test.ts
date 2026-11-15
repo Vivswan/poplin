@@ -721,6 +721,55 @@ describe("the admin hostname", () => {
     expect([out.status, signedOut.map((answer) => answer.status), privately.status]).toEqual([200, [302, 401], 200]);
   });
 
+  // Drift: D1 answers one invocation 50 queries, a batch being one. Reads that left their batch would cost every request of the dashboard a query more each, unseen until a long request ran out of them.
+  test("a request of the dashboard on a warm instance asks the database as few questions as its row says, the session's read among them", async () => {
+    const tally = { calls: 0 };
+    const worker = instance(w);
+    await ask(worker, `${ADMIN}/api/whoami`, {}, countedBindings(tally));
+    const token = await tokenOf(w, "admin");
+    const site = await publish(worker, token, { name: "report" }, [page("<h1>report</h1>")]);
+    const session = { Cookie: cookieOf(await logIn(worker, w)) };
+    const counted = async (answer: () => Promise<Response>): Promise<readonly [status: number, queries: number]> => {
+      tally.calls = 0;
+
+      return [(await answer()).status, tally.calls];
+    };
+    const asked = (path: string): Promise<readonly [status: number, queries: number]> => counted(() => ask(worker, `${ADMIN}${path}`, { headers: session }));
+
+    expect({
+      "an address that asks nothing but who is there": await asked("/data/public-address?name=docs"),
+      "the people, who are in the settings the session read": await asked("/data/people"),
+      "a page of the dashboard: the session, then all its frame shows": await asked("/"),
+      "the frame alone": await asked("/data/frame"),
+      "the sites, each with its views and who published it": await asked("/data/sites"),
+      "the sites through the API: the token, then the settings with the sites and their views": await counted(() => ask(worker, `${ADMIN}/api/sites`, { headers: { Authorization: `Bearer ${token}` } })),
+      "one site: the site, its views, and who published it": await asked(`/data/sites/${site.label}`),
+      "a change to one site: the session, the settings with the site, the change": await counted(() => send(worker, `${ADMIN}/data/sites/${site.label}/naming`, { title: "Report" }, session)),
+      "one site through the API: the token, the settings with the site, its views": await counted(() => ask(worker, `${ADMIN}/api/sites/${site.id}`, { headers: { Authorization: `Bearer ${token}` } })),
+    }).toEqual({
+      "an address that asks nothing but who is there": [200, 1],
+      "the people, who are in the settings the session read": [200, 1],
+      "a page of the dashboard: the session, then all its frame shows": [200, 2],
+      "the frame alone": [200, 2],
+      "the sites, each with its views and who published it": [200, 2],
+      "the sites through the API: the token, then the settings with the sites and their views": [200, 2],
+      "one site: the site, its views, and who published it": [200, 4],
+      "a change to one site: the session, the settings with the site, the change": [200, 3],
+      "one site through the API: the token, the settings with the site, its views": [200, 3],
+    });
+  });
+
+  // Drift: a read is answered from the settings its own request read on the way in. Kept any longer than the request, a setting changed a moment ago would be shown as it was.
+  test("a setting changed through the dashboard is what the very next read shows, on the same instance and on another", async () => {
+    const [worker, other] = [instance(w), instance(w)];
+    const session = { Cookie: cookieOf(await logIn(worker, w)) };
+    const people = async (from: ReturnType<typeof instance>): Promise<unknown> => (await (await ask(from, `${ADMIN}/data/people`, { headers: session })).json<{ logins: string[] }>()).logins;
+    const before = [await people(worker), await people(other)];
+    const added = await send(worker, `${ADMIN}/data/people/add`, { login: "bo@example.com" }, session);
+
+    expect([before, added.status, await people(worker), await people(other)]).toEqual([[[OWNER], [OWNER]], 200, [OWNER, "bo@example.com"], [OWNER, "bo@example.com"]]);
+  });
+
   // Drift: the dashboard's client rides inside the Worker's one file. Built without it, or handed out behind the session, the page would load and draw nothing; without the header a browser would fetch two megabytes again at every visit.
   test("the dashboard's page names a script and a stylesheet under /assets/, and each is answered to anyone by its media type, for a browser to keep for good; a name the build did not write is not found", async () => {
     const worker = instance(w);
@@ -739,7 +788,7 @@ describe("the admin hostname", () => {
 
 describe("the audit log as a file", () => {
   // Drift: the log is only ever added to, so its file is the one answer of the dashboard that grows with it. Built whole, read a listing's page at a time, or with no bound, it would pass what the Free plan gives one request.
-  test("a log longer than a file holds is sent a reading at a time, 2,000 entries in 5 queries and a row read an entry, and says that the log holds more; where the next file goes on costs 3 queries and the same rows", async () => {
+  test("a log longer than a file holds is sent a reading at a time, 2,000 entries in 4 queries and a row read an entry, and says that the log holds more; where the next file goes on costs 3 queries and the same rows", async () => {
     const session = { Cookie: cookieOf(await logIn(instance(w), w)) };
     await BINDINGS.DB.prepare(
       "WITH RECURSIVE counted(entry) AS (SELECT 1 UNION ALL SELECT entry + 1 FROM counted WHERE entry < ?) INSERT INTO audit (at, actor, action, detail) SELECT ?, ?, 'login', '{}' FROM counted",
@@ -766,17 +815,17 @@ describe("the audit log as a file", () => {
     expect(pieces.map((piece) => piece.split("\r\n").length - 1)).toEqual([1, 1000, 1000, 1]);
     expect(pieces.at(-1)).toBe('"2,000 entries. The log holds more: download the next part."\r\n');
     expect([file, await next.json(), { calls: tally.calls - start.calls - file.calls, read: rows.read - start.read - file.read }]).toEqual([
-      { calls: 5, read: FILE_ENTRIES + 3 },
+      { calls: 4, read: FILE_ENTRIES + 3 },
       { ok: true, from: expect.stringMatching(/^[1-9]\d*$/), after: expect.stringMatching(/^[1-9]\d*$/) },
-      { calls: 4, read: FILE_ENTRIES + 4 },
+      { calls: 3, read: FILE_ENTRIES + 4 },
     ]);
   });
 
   // Drift: a reading that named its sites and its tokens by lookups of a hundred ids each would take 47 queries for such a file, and 51 as an instance's first request: one more than the Free plan gives, so the download would break off.
   // The rows are pinned where no start is counted: an entry and its token's row, each read once.
   test.each([
-    ["an instance that answered before", true, { calls: 5, read: 2 * FILE_ENTRIES + 4 }],
-    ["a new instance, its start counted with the file", false, { calls: 9 }],
+    ["an instance that answered before", true, { calls: 4, read: 2 * FILE_ENTRIES + 4 }],
+    ["a new instance, its start counted with the file", false, { calls: 8 }],
   ])("a file of 2,000 entries, each about its own site that is gone and by its own token, is read by %s in the queries of any other file, far under the Free plan's 50", async (_which, warm, cost) => {
     const session = { Cookie: cookieOf(await logIn(instance(w), w)) };
     const counted = "WITH RECURSIVE counted(entry) AS (SELECT 1 UNION ALL SELECT entry + 1 FROM counted WHERE entry < ?)";
@@ -809,8 +858,8 @@ describe("the audit log as a file", () => {
 describe("a copy of a site", () => {
   // Drift: the Free plan ends a request past 50 queries of the database, 4 of them made by a request that starts an instance, and bounds the bucket apart. A copy that counts its own calls alone passes 50 on a new instance.
   test.each([
-    [130, 2, { database: [10, 14], bucket: [225, 225] }],
-    [1_001, 10, { database: [10, 14], bucket: [228, 228] }],
+    [130, 2, { database: [9, 13], bucket: [225, 225] }],
+    [1_001, 10, { database: [9, 13], bucket: [228, 228] }],
   ])(
     "of %i files takes %i requests through the API, and the request that makes the most calls stays under 44 to the database and 250 to the bucket, on an instance that runs and on one each request starts",
     async (count, requests, most) => {

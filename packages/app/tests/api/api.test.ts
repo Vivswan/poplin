@@ -955,7 +955,7 @@ describe("what the API refuses before any action runs", () => {
   // Drift: a store or a database that fails mid-request must not take the Worker down with it, nor tell the caller what failed inside.
   test("a failure of the database is answered 500 with the code alone, and reported once", async () => {
     const install = await openApi();
-    install.database.readSettings = () => Promise.reject(new Error("the database is down"));
+    install.database.listShownSites = () => Promise.reject(new Error("the database is down"));
 
     const answer = await listed(install);
 
@@ -966,7 +966,7 @@ describe("what the API refuses before any action runs", () => {
   // Drift: a caller that reads only "the install failed" tries again at once, all day; the code and the wait are what tell it the database is spent until midnight UTC.
   test("a database whose day's allowance is used up is answered 503 with the code, what ran out, and the seconds to midnight UTC", async () => {
     const install = await openApi();
-    install.database.readSettings = () => Promise.reject(new AllowanceSpent("writing"));
+    install.database.listShownSites = () => Promise.reject(new AllowanceSpent("writing"));
 
     const answer = await listed(install);
 

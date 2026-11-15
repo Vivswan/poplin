@@ -198,7 +198,8 @@ describe("a page of the log", () => {
 
     expect(answers.map((answer) => (answer as Page).logins)).toEqual(Array.from({ length: 3 }, () => ({ [token]: "the laptop" })));
     expect(file.split("\r\n")[1]?.split(",").slice(1)).toEqual(["the laptop", "Made the site", "by-a-login", "", "create"]);
-    expect(named.mock.calls.map(([ids]) => [...ids].sort())).toEqual([[token, unnamed.record.id].sort(), [token]]);
+    // The Sites table reads its names with its page, in the one statement that lists it.
+    expect(named.mock.calls.map(([ids]) => [...ids].sort())).toEqual([[token]]);
   });
 
   // Drift: a second page would repeat or skip entries, go on against the order it is read in, or a last page would offer a page after it.

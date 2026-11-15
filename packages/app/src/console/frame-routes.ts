@@ -4,12 +4,10 @@
 //   POST /update   start the update: one request to the saved address
 
 import { vValidator } from "@hono/valibot-validator";
-import { readConfig } from "@poplin/core/src/actions/config";
-import { DOMAIN_SENTENCES, domainState } from "@poplin/core/src/actions/domain-state";
+import { DOMAIN_SENTENCES, domainStateOf } from "@poplin/core/src/actions/domain-state";
 import type { Install } from "@poplin/core/src/actions/records";
 import { startUpdate } from "@poplin/core/src/actions/start-update";
-import { type Update, updateOf } from "@poplin/core/src/actions/update";
-import { updateAddressState } from "@poplin/core/src/actions/update-address";
+import { type Update, updateIn } from "@poplin/core/src/actions/update";
 import type { Actor } from "@poplin/core/src/auth/scopes";
 import { Hono } from "hono";
 
@@ -51,10 +49,12 @@ interface Asked {
   readonly domain: boolean;
 }
 
-/** Read the note on the domain from what the install remembers of its last check. It asks the provider nothing. */
-async function domainNoteOf(install: Install, actor: Actor): Promise<DomainNote | null> {
-  const state = await domainState(install, actor);
-  if (!state.ok || state.note === "none") return null;
+/** A frame that shows nothing of the install. */
+const NO_FRAME: Frame = { update: null, starts: false, domainNote: null };
+
+/** Word the note on the domain from what the install remembers of its last check. */
+function domainNoteOf(state: ReturnType<typeof domainStateOf>): DomainNote | null {
+  if (state.note === "none") return null;
 
   const { code } = state.note;
   if (code === "check_again") return { label: CHECK_IS_OLD, sentence: DOMAIN_SENTENCES[code], quiet: true };
@@ -63,18 +63,21 @@ async function domainNoteOf(install: Install, actor: Actor): Promise<DomainNote 
 }
 
 /**
- * Read what the frame shows.
+ * Read what the frame shows, as one question to the database. It asks the provider nothing.
  *
  * @returns the frame of an install whose settings cannot be read has no release, no start, and no note
  */
 export async function frameOf(install: Install, actor: Actor, asked: Asked): Promise<Frame> {
-  const config = await readConfig(install, actor);
-  if (!config.ok) return { update: null, starts: false, domainNote: null };
+  if (actor.scope !== "admin") return NO_FRAME;
 
-  const address = await updateAddressState(install, actor);
-  const domainNote = asked.domain ? await domainNoteOf(install, actor) : null;
+  const read = await install.database.readFrame();
+  // A request that brought the settings answers all it shows from those.
+  const settings = install.knownSettings ?? read.settings;
+  if (settings === undefined) return NO_FRAME;
 
-  return { update: (await updateOf(install, asked.version, config.values)) ?? null, starts: address.ok && address.set, domainNote };
+  const domainNote = asked.domain ? domainNoteOf(domainStateOf(read.domainCheck, install.now())) : null;
+
+  return { update: updateIn({ settings, updateCheck: read.updateCheck }, asked.version) ?? null, starts: read.updateAddress !== undefined, domainNote };
 }
 
 /** The frame's data routes. */
