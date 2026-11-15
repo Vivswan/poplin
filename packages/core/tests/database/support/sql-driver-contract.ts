@@ -490,7 +490,10 @@ function queryPlans(label: string, makeDriver: DriverFactory): void {
       await database.decideComputerLogin(login.code, { state: "allowed", by: ADMIN, at: NOW + 1 });
       await database.decideComputerLogin(denied.code, { state: "denied", by: ADMIN, at: NOW + 1 });
       const redeemed = await database.redeemComputerLogin(login.id, (await mintToken({ scope: "publisher", note: "laptop", now: NOW + 2 })).record);
-      const swept = await database.sweepComputerLogins(denied.expiresAt);
+      const swept = await database.sweepRunOut(denied.expiresAt);
+      await database.noteProblem({ kind: "request_failed", at: NOW, count: 1, more: false, name: null, message: null });
+      await database.noteProblem({ kind: "files_limit_reached", at: NOW, count: 1, more: false, name: null, message: null });
+      await database.listProblems("2023-11-01");
       await database.listLeftovers({ limit: 10, after: gone.folder });
       await database.forgetLeftover(gone.folder);
       await readStanding(driver, STEPS);
