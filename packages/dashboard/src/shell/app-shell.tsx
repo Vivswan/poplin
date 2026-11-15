@@ -72,7 +72,7 @@ interface Offer {
 }
 
 /** A section's key. */
-type Section = (typeof SECTIONS)[number]["key"];
+export type Section = (typeof SECTIONS)[number]["key"];
 
 /** The product's mark. */
 export function BrandMark(): ReactNode {

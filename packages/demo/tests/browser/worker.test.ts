@@ -9,7 +9,7 @@ import { buildDemo } from "../../scripts/build";
 /** The most the worker's script may weigh as a host sends it, in bytes: it holds the product's code and the sample sites, and nothing of the dashboard's client, which the host serves beside it. */
 const SCRIPT_BUDGET = 220_000;
 
-/** The most every file of the built demo may weigh together, in bytes gzipped. The dashboard's client is about 446,000 of it, and a first visit loads about 907,000: the worker, SQLite, and of the client its script, its stylesheet, and one font. */
+/** The most every file of the built demo may weigh together, in bytes gzipped. The client is about 460,000 of it, and a first visit loads about 845,000: the worker, SQLite, and the client's first scripts, stylesheet, and one font. */
 const TOTAL_BUDGET = 1_100_000;
 
 /** A file of the dashboard's client as the build names it: the name holds a hash of the file's content. */
@@ -32,7 +32,7 @@ test("the built demo stays inside its budget, ships the dashboard's client as fi
   const client = Object.keys(weights).filter((name) => name.startsWith("assets/"));
 
   expect(Object.keys(weights).filter((name) => !client.includes(name))).toEqual(["index.html", "sw.js", "sql-wasm.wasm", "404.html"]);
-  expect([client.filter((name) => !CLIENT_FILE.test(name)), client.filter((name) => name.endsWith(".js")).length, client.filter((name) => name.endsWith(".css")).length]).toEqual([[], 1, 1]);
+  expect([client.filter((name) => !CLIENT_FILE.test(name)), client.filter((name) => name.endsWith(".css")).length]).toEqual([[], 1]);
   expect(client.filter((name) => !script.includes(name.slice("assets/".length)) || !existsSync(join(first.path, name)))).toEqual([]);
   expect(weights["sw.js"]).toBeLessThan(SCRIPT_BUDGET);
   expect(Object.values(weights).reduce((sum, weight) => sum + weight, 0)).toBeLessThan(TOTAL_BUDGET);

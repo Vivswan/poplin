@@ -6,7 +6,7 @@ import { type ReactNode, useMemo, useRef, useState } from "react";
 import type { AccessActions } from "@/access/access-actions";
 import type { People } from "@/access/access-queries";
 import { RowMenu } from "@/access/row-menu";
-import { Unread } from "@/access/unread";
+import { Unread } from "@/shared/unread";
 import { Button } from "@/components/ui/button";
 import { AskDialog } from "@/shared/ask-dialog";
 import { Confirm, type Question } from "@/shared/confirm";

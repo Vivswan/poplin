@@ -9,7 +9,7 @@ import { computerName, SCOPE_WORDS, TOKEN_ORDERS } from "@/access/access-values"
 import { RemovedTokens } from "@/access/removed-tokens";
 import { RowMenu } from "@/access/row-menu";
 import { type TokenRow, tokenRows } from "@/access/token-rows";
-import { Unread } from "@/access/unread";
+import { Unread } from "@/shared/unread";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyTitle } from "@/components/ui/empty";

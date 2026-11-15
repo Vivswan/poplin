@@ -1,6 +1,6 @@
 // Write the dashboard's client into the Worker's sources as one module: `src/worker/built-client.js`, which no commit holds.
 //
-//   packages/dashboard  --its own build, into a folder made for this run-->  the script, the stylesheet, the fonts, and the build's manifest
+//   packages/dashboard  --its own build, into a folder made for this run-->  the scripts, the stylesheet, the fonts, and the build's manifest
 //   the manifest        -->  the names of the script and the stylesheet, each of which holds a hash of its content
 //   each file           -->  its media type, and its content as text, or as base64 when it is no text
 //

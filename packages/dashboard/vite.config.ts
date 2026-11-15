@@ -1,4 +1,5 @@
-// Build the dashboard's client into `dist/`: one script, one stylesheet, and the font files, each under a name that holds a hash of its content, and a manifest that says which is which.
+// Build the dashboard's client into `dist/`: the script the page loads, the script of each screen that is loaded when it is opened, one stylesheet, and the fonts.
+// All lie in one folder, each under a name that holds a hash of its content, beside a manifest that says which is which.
 //
 // Under `bun run preview --dev` the same config runs the dev server: it serves the client's own source, hot, and sends every other request to the preview server.
 
@@ -28,7 +29,13 @@ export default defineConfig({
     manifest: true,
     rollupOptions: {
       input: resolve(import.meta.dirname, "src/main.tsx"),
-      output: { entryFileNames: "app-[hash].js", assetFileNames: (asset) => (asset.names.some((name) => name.endsWith(".css")) ? "app-[hash].css" : "[name]-[hash][extname]") },
+      output: {
+        entryFileNames: "app-[hash].js",
+        chunkFileNames: "[name]-[hash].js",
+        // What more than one screen needs is one file, loaded with the first screen; each screen but the first is a file of its own.
+        codeSplitting: { groups: [{ name: "shared", minShareCount: 2 }] },
+        assetFileNames: (asset) => (asset.names.some((name) => name.endsWith(".css")) ? "app-[hash].css" : "[name]-[hash][extname]"),
+      },
     },
   },
 });

@@ -1,6 +1,6 @@
 // The dashboard's client as a host takes it: built into a folder of the caller's, and read back as the names of its files.
 //
-//   packages/dashboard  --its own build-->  the script, the stylesheet, and the fonts, each under a name that holds a hash of its content
+//   packages/dashboard  --its own build-->  the script the page loads, one script more for each screen, the stylesheet, and the fonts, each under a name that holds a hash of its content
 //   .vite/manifest.json                     which of them the page loads
 
 import { readdirSync } from "node:fs";

@@ -4,12 +4,19 @@ import { clearPage } from "./lib/support/page";
 
 import { afterAll, afterEach, describe, expect, test } from "bun:test";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { act, cleanup, render } from "@testing-library/react";
+import { act, cleanup, render, waitFor } from "@testing-library/react";
 
 import { ThemeProvider } from "@/components/theme-provider";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { BOOT } from "@/lib/boot";
 import { Screens } from "@/screens";
+
+// The code of every screen is loaded with this file, so an address draws its screen as soon as the router asks for it: the tests are about addresses, not about loading.
+import "@/access/access-screen";
+import "@/activity/activity-screen";
+import "@/domain/domain-screen";
+import "@/settings/settings-screen";
+import "@/usage/usage-screen";
 
 /** The runtime's own `fetch`, put back after each test. */
 const OWN_FETCH = globalThis.fetch;
@@ -17,11 +24,16 @@ const OWN_FETCH = globalThis.fetch;
 /** Every read the screens made, as the address it asked. */
 const asked: string[] = [];
 
-/** Go to an address as a followed link does, and let the screen it names be drawn and ask for its data. */
+/** Go to an address as a followed link does, and let the screen it names be loaded, drawn, and ask for its data. */
 async function arrive(address: string): Promise<void> {
   asked.length = 0;
   await act(async () => {
     window.history.pushState(null, "", `${BOOT.base}${address}`);
+    await new Promise((resolve) => setTimeout(resolve, 20));
+  });
+  // A screen whose code is loaded when it is first opened shows rows meanwhile; its reads start once it is drawn.
+  await waitFor(() => expect(document.querySelector("[data-slot=waiting-rows]")).toBeNull());
+  await act(async () => {
     await new Promise((resolve) => setTimeout(resolve, 20));
   });
 }

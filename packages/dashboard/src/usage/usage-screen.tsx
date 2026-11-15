@@ -7,10 +7,10 @@ import { ArrowUpRightIcon } from "lucide-react";
 import { type ReactNode, useMemo } from "react";
 
 import { Progress } from "@/components/ui/progress";
-import { Skeleton } from "@/components/ui/skeleton";
 import { showCount } from "@/lib/sites";
 import { settingAddress } from "@/settings/setting-address";
 import { IconButton } from "@/shared/icon-button";
+import { WaitingRows } from "@/shared/waiting-rows";
 import { AppShell } from "@/shell/app-shell";
 import { type ColumnSpec, DataTable } from "@/table/data-table";
 import { useTableLayout } from "@/table/layout";
@@ -112,15 +112,7 @@ export function UsageScreen(): ReactNode {
       <section aria-label="Usage" className="flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto">
         <VisitsBlock />
         {error === null ? null : <p className="px-6 py-8 text-muted-foreground max-md:px-4">{error.message}</p>}
-        {usage === undefined && error === null ? (
-          <div className="flex flex-col border-t" aria-busy="true">
-            {[0, 1, 2, 3, 4].map((row) => (
-              <div key={row} className="flex h-11 items-center border-b px-6 max-md:px-4">
-                <Skeleton className="h-4 w-full max-w-3xl" />
-              </div>
-            ))}
-          </div>
-        ) : null}
+        {usage === undefined && error === null ? <WaitingRows /> : null}
         {usage === undefined ? null : (
           <>
             <div className="shrink-0 max-md:hidden">
