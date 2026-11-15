@@ -129,8 +129,8 @@ const STOPS: readonly Stop[] = [
     name: "the token a repair asks for",
     open: (page) => page.getByRole("button", { name: "Repair", exact: true }).click(),
     shows: (page) => [
-      page.getByRole("dialog", { name: "Repair the domain", exact: true }).getByRole("button", { name: "Open the token form", exact: true }),
-      page.getByRole("dialog", { name: "Repair the domain", exact: true }).getByLabel("Token", { exact: true }),
+      page.getByRole("dialog", { name: "Repair the domain", exact: true }).getByRole("button", { name: "Open the account token form", exact: true }),
+      page.getByRole("dialog", { name: "Repair the domain", exact: true }).getByLabel("Account token", { exact: true }),
     ],
     close: (page) => page.getByRole("dialog", { name: "Repair the domain", exact: true }).getByRole("button", { name: "Cancel", exact: true }).click(),
   },
@@ -433,7 +433,7 @@ function domainLine(page: Page, says: string | RegExp): Locator {
 async function repair(page: Page): Promise<void> {
   const dialog = page.getByRole("dialog", { name: "Repair the domain", exact: true });
   await page.getByRole("button", { name: "Repair", exact: true }).click();
-  await dialog.getByLabel("Token", { exact: true }).fill("sample-token");
+  await dialog.getByLabel("Account token", { exact: true }).fill("sample-token");
   await dialog.getByRole("button", { name: "Repair", exact: true }).click();
 }
 

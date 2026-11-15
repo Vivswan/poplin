@@ -12,7 +12,7 @@ const FORM = {
   tokenRights: ["Records: Edit", "Routes: Edit"],
   tokenLink: "https://provider.example/tokens/new",
   tokenOptional: [{ right: "Rules: Edit", adds: "The provider stops floods first." }],
-  tokenNote: "Choose what the token is for.",
+  tokenNote: "Choose what the account token is for.",
 };
 
 afterEach(cleanup);
@@ -22,7 +22,7 @@ describe("the way to a token", () => {
   // Drift: the link would take the typed values with it, or tell the provider where it came from.
   test("is one link that opens the provider's form in a new tab", () => {
     render(<TokenWay form={FORM} />);
-    const link = within(document.body).getByText("Open the token form").closest("a") as HTMLAnchorElement;
+    const link = within(document.body).getByText("Open the account token form").closest("a") as HTMLAnchorElement;
 
     expect([link.href, link.target, link.rel]).toEqual(["https://provider.example/tokens/new", "_blank", "noreferrer"]);
   });
@@ -31,7 +31,7 @@ describe("the way to a token", () => {
   test.each(["javascript:alert(1)", "http://provider.example/tokens/new", "tokens/new", ""])("is no link for the address %p", (tokenLink) => {
     render(<TokenWay form={{ ...FORM, tokenLink }} />);
 
-    expect([within(document.body).queryByText("Open the token form"), document.querySelectorAll("a").length]).toEqual([null, 0]);
+    expect([within(document.body).queryByText("Open the account token form"), document.querySelectorAll("a").length]).toEqual([null, 0]);
   });
 
   // Drift: the rights would stand on the page at rest again, or the help would open on rights of the page's own invention.
@@ -40,14 +40,14 @@ describe("the way to a token", () => {
     const page = within(document.body);
     const before = document.body.textContent?.includes("Records: Edit");
     await act(async () => {
-      fireEvent.click(page.getByRole("button", { name: "Token help" }));
+      fireEvent.click(page.getByRole("button", { name: "Account token help" }));
     });
     const help = page.getByRole("dialog").textContent;
 
     expect(before).toBe(false);
     expect(help).toContain("Add these 2 rights by hand:");
     expect(FORM.tokenRights.every((right) => help?.includes(right))).toBe(true);
-    expect(help).toContain("Choose what the token is for.");
+    expect(help).toContain("Choose what the account token is for.");
     expect(help).toContain("Rules: EditThe provider stops floods first.");
   });
 });

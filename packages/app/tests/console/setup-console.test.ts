@@ -128,7 +128,7 @@ describe("the page", () => {
           tokenRights: ["Records: Edit", "Routes: Edit"],
           tokenLink: "https://provider.example/tokens/new",
           tokenOptional: [{ right: "Rules: Edit", adds: "The provider stops floods first." }],
-          tokenNote: "Choose what the token is for.",
+          tokenNote: "Choose what the account token is for.",
         },
       },
     });
@@ -187,7 +187,7 @@ describe("a run", () => {
       ok: false,
       code: "token",
       about: "token",
-      sentence: "Token refused: paste the whole token, made for this account and this domain.",
+      sentence: "Account token refused: paste the whole account token, made for this account and this domain.",
     });
     expect([reads.count, (await opened.audit()).length - before, body.includes(FOREIGN), body.includes("other@example.com")]).toEqual([0, 0, false, false]);
   });

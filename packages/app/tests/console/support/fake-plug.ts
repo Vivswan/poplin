@@ -17,7 +17,7 @@ const TOKEN_FORM = {
   tokenRights: ["Records: Edit", "Routes: Edit"],
   tokenLink: "https://provider.example/tokens/new",
   tokenOptional: [{ right: "Rules: Edit", adds: "The provider stops floods first." }],
-  tokenNote: "Choose what the token is for.",
+  tokenNote: "Choose what the account token is for.",
 };
 
 /** A plug and the calls it received. */

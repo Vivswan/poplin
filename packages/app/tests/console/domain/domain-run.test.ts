@@ -16,7 +16,7 @@ const EVERY_STATE: readonly DomainRow[] = [
   { object: "Rate rule", state: "left-out", detail: "rate rule: the plan has none", part: "rest" },
   { object: "Route", state: "left-out", detail: "every site: another application holds it", part: "reach" },
   { object: "Bot settings", state: "optional", detail: "To switch this on, add this right: Bots: Edit", part: "rest" },
-  { object: "Bots rule", state: "failed", detail: "refused. Add this right to the token: Rules: Edit", part: "rest", right: "Rules: Edit" },
+  { object: "Bots rule", state: "failed", detail: "refused. Add this right to the account token: Rules: Edit", part: "rest", right: "Rules: Edit" },
   { object: "Redirect", state: "failed", detail: "no answer", part: "rest" },
   { object: "Database", state: "not-run", detail: "", part: "rest" },
 ];
@@ -57,7 +57,7 @@ test("a run is kept as the last check of the domain: when, by whom, which run, a
         { piece: "Rate rule", detail: "rate rule: the plan has none", part: "rest", state: "not_set_up" },
         { piece: "Route", detail: "every site: another application holds it", part: "reach", state: "needs_repair" },
         { piece: "Bot settings", detail: "To switch this on, add this right: Bots: Edit", part: "rest", state: "not_set_up" },
-        { piece: "Bots rule", detail: "refused. Add this right to the token: Rules: Edit", part: "rest", state: "unread", reason: "missing_right", right: "Rules: Edit" },
+        { piece: "Bots rule", detail: "refused. Add this right to the account token: Rules: Edit", part: "rest", state: "unread", reason: "missing_right", right: "Rules: Edit" },
         { piece: "Redirect", detail: "no answer", part: "rest", state: "unread", reason: "failed" },
         { piece: "Database", detail: "", part: "rest", state: "unread", reason: "not_run" },
       ],

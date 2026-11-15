@@ -14,7 +14,7 @@ const FORM = {
   tokenRights: ["Records: Edit", "Routes: Edit"],
   tokenLink: "https://provider.example/tokens/new",
   tokenOptional: [],
-  tokenNote: "Choose what the token is for.",
+  tokenNote: "Choose what the account token is for.",
 };
 
 /** The token the tests paste. */
@@ -43,7 +43,7 @@ function box(page: ReturnType<typeof within>, label: string): HTMLInputElement {
 async function repairFilled(page: ReturnType<typeof within>): Promise<void> {
   fireEvent.change(box(page, "Domain"), { target: { value: "example.com" } });
   fireEvent.change(box(page, "Your email"), { target: { value: "mira@example.com" } });
-  fireEvent.change(box(page, "Token"), { target: { value: TOKEN } });
+  fireEvent.change(box(page, "Account token"), { target: { value: TOKEN } });
   await act(async () => {
     fireEvent.click(page.getByRole("button", { name: "Repair" }));
   });
@@ -59,13 +59,13 @@ describe("the boxes", () => {
   // Drift: an empty box would send a repair and take the pasted token with it.
   test("send nothing while the domain is empty, say so under it, and leave the pasted token", async () => {
     const page = drawn("first");
-    fireEvent.change(box(page, "Token"), { target: { value: TOKEN } });
+    fireEvent.change(box(page, "Account token"), { target: { value: TOKEN } });
     await act(async () => {
       fireEvent.click(page.getByRole("button", { name: "Repair" }));
     });
     const domain = box(page, "Domain");
 
-    expect([repairs, box(page, "Token").value, document.activeElement === domain]).toEqual([[], TOKEN, true]);
+    expect([repairs, box(page, "Account token").value, document.activeElement === domain]).toEqual([[], TOKEN, true]);
     expect(domain.closest('[data-slot="field"]')?.querySelector('[role="alert"]')?.textContent).toBe("Type the domain first.");
   });
 });
@@ -73,7 +73,7 @@ describe("the boxes", () => {
 describe("a refusal", () => {
   // Drift: a refusal would be said away from the box it is about, or the box to correct would not hold the focus.
   test.each([
-    ["token", "Token", "Token refused: paste the whole token, made for this account and this domain."],
+    ["token", "Account token", "Account token refused: paste the whole account token, made for this account and this domain."],
     ["domain", "Domain", "Type a domain alone, such as example.com."],
     ["login", "Your email", "Type an email address, such as name@example.com."],
   ])("about %s is said at its box, which takes the focus", async (about, label, sentence) => {
@@ -92,6 +92,6 @@ describe("a refusal", () => {
 
     expect(page.getByRole("alert").textContent).toBe("Too many tries. Wait a minute.");
     expect(repairs).toEqual([{ token: TOKEN, domain: "example.com", login: "mira@example.com" }]);
-    expect([box(page, "Domain").value, box(page, "Your email").value, box(page, "Token").value]).toEqual(["example.com", "mira@example.com", ""]);
+    expect([box(page, "Domain").value, box(page, "Your email").value, box(page, "Account token").value]).toEqual(["example.com", "mira@example.com", ""]);
   });
 });

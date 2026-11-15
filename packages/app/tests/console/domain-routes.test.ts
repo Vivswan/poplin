@@ -56,7 +56,7 @@ describe("what the screen opens with", () => {
         tokenRights: ["Records: Edit", "Routes: Edit"],
         tokenLink: "https://provider.example/tokens/new",
         tokenOptional: [{ right: "Rules: Edit", adds: "The provider stops floods first." }],
-        tokenNote: "Choose what the token is for.",
+        tokenNote: "Choose what the account token is for.",
       },
       last: null,
     });
@@ -176,7 +176,7 @@ describe("a run", () => {
 
   // Drift: a refusal would lose its status, its sentence, or the box it belongs at, or would write an audit entry for a run that read nothing.
   test.each([
-    ["token", 403, "token", "Token refused: paste the whole token, made for this account and this domain."],
+    ["token", 403, "token", "Account token refused: paste the whole account token, made for this account and this domain."],
     ["unreachable", 502, null, "No answer from the provider. Try again."],
     ["allowance_spent", 503, null, "The database takes no more today: its free allowance for the day is used up. Try again after midnight UTC."],
   ] as const)("that reads no table is the refusal %s: status %i, about %p", async (refusal, status, about, sentence) => {

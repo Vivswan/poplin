@@ -33,7 +33,7 @@ const TOKEN_FORM = {
   tokenRights: RIGHTS,
   tokenLink: "https://provider.example/tokens/new",
   tokenOptional: [{ right: "Rules: Edit", adds: "The provider stops floods before they reach a site." }],
-  tokenNote: "On the form, choose the account and the domain the token is for.",
+  tokenNote: "On the form, choose the account and the domain the account token is for.",
 };
 
 /** The one thing a person does by hand in the `access-off` state. */
@@ -55,13 +55,13 @@ const BROKEN = [
 const LACKING_TOKEN = "lacking";
 
 /** The piece the lacking token cannot change, and the right it lacks. */
-const LACKED = { place: 5, right: "Login: Edit", detail: "your users only: the token lacks a right. Add this right to the token: Login: Edit" } as const;
+const LACKED = { place: 5, right: "Login: Edit", detail: "your users only: the account token lacks a right. Add this right to the account token: Login: Edit" } as const;
 
 /** The place of the optional piece among the objects, and what its row says while the token lacks its right. */
-const OPTIONAL_ROW = { place: 6, detail: "sample-rate-rule: add this right to the token and press Repair: Rules: Edit" } as const;
+const OPTIONAL_ROW = { place: 6, detail: "sample-rate-rule: add this right to the account token and press Repair: Rules: Edit" } as const;
 
 /** What the row a repair of the `partial` state fails at says: the piece, why, and what to add. */
-const FAILED_DETAIL = "the dashboard: the provider refused the change. Add this right to the token: Routes: Edit";
+const FAILED_DETAIL = "the dashboard: the provider refused the change. Add this right to the account token: Routes: Edit";
 
 /** One state of the preview's plug. */
 export type PlugState = (typeof PLUG_STATES)[number];

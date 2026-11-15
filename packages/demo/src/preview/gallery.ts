@@ -27,7 +27,7 @@ const SETUP_WORDS: Readonly<Record<PlugState, string>> = {
   partial: "some pieces missing or changed",
   "access-off": "a step only a person can do",
   done: "every piece stands",
-  "token-refused": "the token is refused",
+  "token-refused": "the account token is refused",
   unreachable: "the provider does not answer",
 };
 

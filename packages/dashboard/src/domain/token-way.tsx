@@ -20,7 +20,7 @@ function httpsLink(address: string): string | undefined {
 function FormHelp({ form }: { readonly form: Domain["form"] }): ReactNode {
   return (
     <Popover>
-      <PopoverTrigger render={<Button type="button" variant="link" className="h-auto px-0 text-link" />}>Token help</PopoverTrigger>
+      <PopoverTrigger render={<Button type="button" variant="link" className="h-auto px-0 text-link" />}>Account token help</PopoverTrigger>
       <PopoverContent side="bottom" align="start" className="max-h-(--available-height) w-80 overflow-y-auto">
         <p>{form.tokenNote}</p>
         <PopoverHeader>
@@ -68,10 +68,10 @@ export function TokenWay({ form }: { readonly form: Domain["form"] }): ReactNode
       {link === undefined ? null : (
         <>
           <Button variant="outline" nativeButton={false} render={<a href={link} target="_blank" rel="noreferrer" />}>
-            Open the token form
+            Open the account token form
             <ExternalLinkIcon data-icon="inline-end" />
           </Button>
-          <p className="text-muted-foreground">The rights are already ticked. Create the token, then copy it.</p>
+          <p className="text-muted-foreground">The rights are already ticked. Create the account token, then copy it.</p>
         </>
       )}
       <FormHelp form={form} />

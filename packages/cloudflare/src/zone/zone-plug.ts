@@ -63,10 +63,10 @@ const TEAM_DOMAIN = "the team's domain";
 const NOT_PERMITTED = { status: 403, code: 10000 } as const;
 
 /** What a row says after a refusal for a missing permission, before the permission's name. */
-const ADD_RIGHT = "Add this right to the token";
+const ADD_RIGHT = "Add this right to the account token";
 
 /** What the row of a piece that needs an optional permission says before the permission's name, after what the piece adds. */
-const SWITCH_ON = "To switch this on, add this right to the token and press Repair";
+const SWITCH_ON = "To switch this on, add this right to the account token and press Repair";
 
 /** What a repair that wrote the variable tells the person to do next. */
 const LOGIN_READY = "The login is ready. Open your dashboard and log in:";
@@ -121,7 +121,7 @@ const PART: Readonly<Record<Piece | "Public word", DomainRow["part"]>> = {
 const TOKEN_FORM = "https://dash.cloudflare.com/profile/api-tokens";
 
 /** What the form still asks of the person once its permissions are chosen. */
-const TOKEN_SCOPE = "On the form, choose your account under Account Resources and your domain under Zone Resources, then create the token and copy it.";
+const TOKEN_SCOPE = "On the form, choose your account under Account Resources and your domain under Zone Resources, then create the account token and copy it.";
 
 /** The name the form suggests for the token. */
 const TOKEN_NAME = "poplin setup";

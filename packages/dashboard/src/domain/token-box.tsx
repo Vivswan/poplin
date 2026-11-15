@@ -16,7 +16,7 @@ export function TokenBox({ refusal }: { readonly refusal: string | undefined }):
 
   return (
     <Field data-invalid={refusal !== undefined}>
-      <FieldLabel htmlFor={id}>Token</FieldLabel>
+      <FieldLabel htmlFor={id}>Account token</FieldLabel>
       <Input id={id} name="token" type="password" autoComplete="off" required aria-invalid={refusal !== undefined} aria-describedby={saysId} />
       {refusal === undefined ? (
         <FieldDescription id={saysId}>Used once. Not stored.</FieldDescription>

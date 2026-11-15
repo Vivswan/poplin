@@ -6,7 +6,7 @@ import type { DomainRun } from "@/domain/domain-queries";
 import type { Refused } from "@/lib/api";
 
 /** The name of the token's box, and what it says when a run is asked with nothing in it. */
-const TOKEN = { name: "token", empty: "Paste a token first." } as const;
+const TOKEN = { name: "token", empty: "Paste an account token first." } as const;
 
 /** What is said at a box: the box's name, or `null` for a refusal about none, and the sentence. */
 type Said = Pick<Refused, "about" | "message">;

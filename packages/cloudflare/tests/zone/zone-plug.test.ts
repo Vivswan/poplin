@@ -346,7 +346,7 @@ test.each(lacking)("a repair with a token without $name fails nothing: every oth
     const rows = shown(reading);
     const calm = (row: string): boolean => row.includes(" | optional | ");
     const named = (found: readonly string[]): string[] => found.filter(calm).map((row) => `${row.split(" | ")[0]}: ${row.slice(row.indexOf("add this right"))}`).sort();
-    const expected = optional.map(([object, right]) => `${object}: add this right to the token and press Repair: ${right}`).sort();
+    const expected = optional.map(([object, right]) => `${object}: add this right to the account token and press Repair: ${right}`).sort();
 
     expect(named(rows)).toEqual(expected);
     expect(rows.filter((row) => !calm(row))).toEqual(made);
@@ -373,7 +373,7 @@ test("a token that may read the guard rules and not make them leaves both rules 
     const guards = rows.filter((row) => row.startsWith("WAF rule | ") || row.startsWith("Rate rule | ") || row.startsWith("Redirect rule | "));
 
     expect(guards.map((row) => row.split(" | ")[1])).toEqual(["optional", "optional", "optional", "optional"]);
-    expect(guards.filter((row) => !row.includes("add this right to the token and press Repair: "))).toEqual([]);
+    expect(guards.filter((row) => !row.includes("add this right to the account token and press Repair: "))).toEqual([]);
     expect(rows.at(-1)).toBe("D1 database | created | poplin");
   });
 });
@@ -440,7 +440,7 @@ test.each(NEEDS)("a token without %s gets one row that names that right in the w
     const needed = plug.tokenRights.includes(right);
 
     expect(naming.map((row) => row.split(" | ")[1])).toEqual([needed ? "failed" : "optional"]);
-    expect(naming.map((row) => row.slice(row.indexOf("dd this right")))).toEqual([needed ? `dd this right to the token: ${right}` : `dd this right to the token and press Repair: ${right}`]);
+    expect(naming.map((row) => row.slice(row.indexOf("dd this right")))).toEqual([needed ? `dd this right to the account token: ${right}` : `dd this right to the account token and press Repair: ${right}`]);
   });
 });
 
