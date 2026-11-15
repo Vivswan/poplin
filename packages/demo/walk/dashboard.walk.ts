@@ -1142,3 +1142,28 @@ test("a site in the trash is deleted for good only once its name is typed, with 
   await toSection(page, "Activity");
   await expect(page.locator(':text-is("Deleted for good"):visible').first()).toBeVisible();
 });
+
+// Drift: a copy could only be made from a terminal; or the dashboard's copy would keep the source's access, drop a refused name, or leave no way to the new site.
+test("a site is duplicated from its panel: a refused name stays in its field, the copy is said as done with the way to its own panel, and it is a private site of its own in the list", async ({ page }) => {
+  const asks = page.getByRole("dialog", { name: `Duplicate ${SAMPLE.site}?`, exact: true });
+  const name = asks.getByRole("textbox", { name: "Name", exact: true });
+  await arrive(page);
+  await openPanel(page, SAMPLE.site);
+  await panel(page).getByRole("button", { name: "Duplicate", exact: true }).click();
+  await expect(asks).toContainText("The copy starts private.");
+  await expect(name).toHaveValue("pricing");
+
+  await name.fill("Pricing Copy");
+  await asks.getByRole("button", { name: "Duplicate", exact: true }).click();
+  await expect(asks.getByText(/^The name breaks the rules/)).toBeVisible();
+  await expect(name).toHaveValue("Pricing Copy");
+
+  await name.fill("pricing-copy");
+  await asks.getByRole("button", { name: "Duplicate", exact: true }).click();
+  await expect(said(page, "Duplicated.")).toBeVisible();
+  await expect(siteName(page, SAMPLE.site)).toHaveCount(2);
+
+  await lines(page).getByRole("button", { name: "Open", exact: true }).click();
+  await expect(page).toHaveURL(/\/sites\/pricing-copy--[0-9a-z]{12}$/);
+  await expect(panel(page).getByRole("button", { name: "Private", exact: true })).toHaveAttribute("aria-pressed", "true");
+});
