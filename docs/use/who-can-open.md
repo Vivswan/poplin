@@ -1,0 +1,77 @@
+---
+title: Who can open a site
+order: 20
+---
+
+# Who can open a site
+
+The three kinds of access, the address each gives a site, and what a visitor sees; [Security](../about/security.md) says what each access protects.
+
+**Who can open what you publish:**
+
+| Access                | Who can open it            | Address                                                               |
+| --------------------- | -------------------------- | --------------------------------------------------------------------- |
+| private (the default) | only you, after a login    | `report--k3f9x2ab71qz-p-poplin.example.com`                           |
+| unlisted              | anyone who has the address | `report--k3f9x2ab71qz-u-poplin.example.com`                           |
+| public                | everyone                   | the unlisted one, and a name the site claims: `docs-page.example.com` |
+
+| Access   | Who can open it         | Set it with                                |
+| -------- | ----------------------- | ------------------------------------------ |
+| private  | only you, after a login | `poplin set report--k3f9x2ab71qz --private`  |
+| unlisted | anyone who has the link | `poplin set report--k3f9x2ab71qz --unlisted` |
+| public   | everyone                | `poplin set report--k3f9x2ab71qz --public`   |
+
+| Example                                                 | Does                                                   |
+| ------------------------------------------------------- | ------------------------------------------------------ |
+| `poplin set report--k3f9x2ab71qz --public`              | public at its own name: `report-page.example.com`      |
+| `poplin set report--k3f9x2ab71qz --public --public-name docs` | public at another name: `docs-page.example.com`  |
+
+- **You** is every login of the install: yourself, and anyone [Add a login](../run/settings.md#add-a-login) adds.
+- **To or from private changes the address:** the letter before `-poplin` turns from `p` to `u`, or back. The old address sends visitors on.
+- **A public site keeps its unlisted address too.**
+- **Leaving public gives the public name up.** That address stops working.
+
+**The address:**
+
+```text
+report--k3f9x2ab71qz-p-poplin.example.com
+|       |            | |
+|       |            | the marker: always -poplin
+|       |            the letter: p for a private site, u for an unlisted or a public one
+|       the id: 12 random characters, hard to guess; it is the link
+the name: a label of 3 to 40 characters; several sites may share it
+
+docs-page.example.com
+|    |
+|    the public word: page
+the public name: a name one public site claims
+```
+
+| What changes                           | What happens to the address                           |
+| -------------------------------------- | ----------------------------------------------------- |
+| private to unlisted or public, or back | the letter changes; the old address sends visitors on |
+| unlisted to public, or back            | nothing; a public site also answers at its public name |
+| new content, a rollback                | nothing                                               |
+
+Only the id finds a site. Any name before it, or none, opens the same site: `k3f9x2ab71qz-u-poplin.example.com` works too. Commands take the label without the letter: `report--k3f9x2ab71qz`.
+
+```text
+poplin new-link report--k3f9x2ab71qz   ->  the site gets a new id; the old address stops at once
+```
+
+The owner's private page that lists every site is the dashboard, at `poplin.example.com`. [Security](../about/security.md#what-unlisted-covers) says what an unlisted site's address covers.
+
+## What a visitor sees
+
+| A visitor opens                                  | Sees                                         |
+| ------------------------------------------------ | -------------------------------------------- |
+| an unlisted or a public site                     | the site                                     |
+| a private site, logged in as you                 | the site                                     |
+| a private site, not logged in                    | the login                                    |
+| a page a site does not have                      | the `404.html` at the site's root; `Not found` for a site without one |
+| the `-poplin` address of a deleted or expired site, or one from before a new link | the login; `Not found` once logged in |
+| a public name no site holds                      | `Not found`                                  |
+| any site, too often in a minute                  | `Too many requests. Try again in 60 seconds.` |
+| any site, once the day's free allowance of the database for reading is used up | `This site is paused until midnight UTC.` |
+
+A site whose files without an extension have over 16,384 characters of names between them answers `Not found` for a missing page without an extension, even when it has a `404.html`.

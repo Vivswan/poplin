@@ -246,7 +246,7 @@ tofu apply
 
 | On such an install                  | Does                                                                                           |
 | ----------------------------------- | ---------------------------------------------------------------------------------------------- |
-| the update notice                   | shows while `update_check` is true, where [Using](../../../docs/using.md#a-newer-version) says |
+| the update notice                   | shows while `update_check` is true, where [Update](../../../docs/run/update.md#a-newer-version) says |
 | `poplin update --check`             | says which version is out, and whether a rebuild address is saved                              |
 | `poplin update`                     | answers `no_update_address` with no URL saved: the module makes no build and no Deploy Hook    |
 | the build variable `POPLIN_VERSION` | nothing: no build reads it. The tag you check out is the version                               |

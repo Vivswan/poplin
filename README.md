@@ -33,7 +33,7 @@ The agent sets poplin up with you: it tells you what to click in your browser, c
 | no install yet | takes you through making one: your own copy of poplin, in your Cloudflare account |
 | an install     | connects itself to it, and adds poplin's tools to itself                       |
 
-Installing by hand: [Install](docs/install.md) has the same steps.
+Installing by hand: [By hand](docs/start/by-hand.md) has the same steps.
 
 If you are the agent: the skill is [`skills/poplin/SKILL.md`](skills/poplin/SKILL.md).
 
@@ -69,8 +69,8 @@ In your own Cloudflare account, on the Free plan. You need the account and a dom
 
 ## Read more
 
-| Page                         | What it covers                                       |
-| ---------------------------- | ---------------------------------------------------- |
-| [Using](docs/using.md)       | every command, every agent tool, and every error     |
-| [Install](docs/install.md)   | getting your own install                             |
-| [Security](docs/security.md) | what poplin protects against and what it does not    |
+| Page                                      | What it covers                                       |
+| ----------------------------------------- | ---------------------------------------------------- |
+| [The guide](docs/README.md)               | every command, every agent tool, and every error     |
+| [Install](docs/start/by-hand.md)          | getting your own install                             |
+| [Security](docs/about/security.md)        | what poplin protects against and what it does not    |

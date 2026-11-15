@@ -1,7 +1,6 @@
 ---
 title: Security
-order: 50
-group: Reference
+order: 10
 ---
 
 # Security
@@ -152,65 +151,10 @@ A `-p-` address is answered by Cloudflare's login before the Worker sees it. A r
 
 ## Optional edge rules
 
-The install's setup token needs eight permissions. Three more are optional, and each switches on rules at Cloudflare's edge. [Install](install.md#optional-block-junk-traffic-and-crawlers) says how to add them.
+The install's setup token needs eight permissions. Three more are optional, and each switches on rules at Cloudflare's edge. [The Domain tab](../run/domain.md#optional-block-junk-traffic-and-crawlers) says how to add them.
 
 | Permission | Switches on | Without it |
 | --- | --- | --- |
 | Zone WAF: Edit | the bots rule, the outside pages rule, and the rate rule | such requests reach the Worker. It refuses a page of another domain while `outside_pages` is `blocked`, and sends `noindex` as the two switches say |
 | Single Redirect: Edit | the redirect of plain http | the Worker sends the same redirect |
 | Bot Management: Edit | the block of AI crawlers that `block_bots` asks for | `block_bots` is stored and nothing applies it |
-
-## Between sites
-
-Each site is its own origin, so a page's scripts cannot read another site or its cookie. The dashboard's cookie is sent to the dashboard alone.
-
-| Switch | Set on | Values |
-| --- | --- | --- |
-| `embeddable` | one site | on, the default; off: no page may show the site in a frame |
-| `outside_pages` | the install | `blocked`, the default; `allowed` |
-
-| A page asks for | Another site of the install | A page of another domain, `blocked` | A page of another domain, `allowed` |
-| --- | --- | --- | --- |
-| a link to a site | works | works | works |
-| a site's images, styles, and classic scripts | works | refused with 403 | works |
-| a site in a frame, `embeddable` on | works | refused | works |
-| a site in a frame, `embeddable` off | refused | refused | refused |
-| a site's files, read by its script | refused | refused | refused |
-
-- **A private site needs the viewer's login in every row.** A browser sends Access's cookie only to the private site it was set for, and not with a request that a page of another domain makes.
-- **No script reads another site's files.** No response carries a header that lets another origin's script read it.
-- **A frame rule goes out with every file** unless the site is `embeddable` and `outside_pages` is `allowed`. For an `embeddable` site under `blocked` it names every hostname under the install's domain.
-
-The Worker decides from the request's `Sec-Fetch-Site`, `Sec-Fetch-Mode`, `Sec-Fetch-Dest`, `Origin`, and `Referer` headers and reads no content. Opening an address as the top-level page always passes, and so does a request with no `Sec-Fetch-Site` header.
-
-| Under `blocked`, a page under the install's domain that is not a site | Result |
-| --- | --- |
-| its request names it in `Origin`, or in `Referer` when `Origin` holds no address | refused with 403 |
-| its request names no page | passes |
-
-**What a page's scripts can still do:** spend requests against the day's quota. The rate limit per visitor bounds that per address.
-
-## What can cost money
-
-```text
-billed by use on an install        R2, the storage that holds the sites' files
-everything else an install uses    a free plan with a limit, until the account's owner buys another plan
-```
-
-Cloudflare's pricing page for R2 names what a month takes for free: 10 GB stored, 1,000,000 writes and listings, 10,000,000 reads. Past that, on an account with a payment method, Cloudflare bills. Cloudflare has no setting that stops R2 at an amount.
-
-The other way to a bill is a plan the account's owner buys. Poplin, its setup, and its OpenTofu module buy nothing and change no plan.
-
-**What poplin does.** Three settings bound what an install asks of R2, and poplin refuses what would pass one: `max_total_size`, `max_storage_writes_per_day`, and `requests_per_day`. [What is capped or protected](install.md#what-is-capped-or-protected) lists every limit and what happens at it.
-
-On the free Workers plan, a month at the settings a new install starts with stays inside R2's free writes, listings, and reads. [The install](using.md#the-install) has the arithmetic.
-
-**What poplin cannot do.** It cannot stop Cloudflare from billing. Every limit is a refusal by the Worker, from poplin's own count, and Cloudflare's count decides the bill. Outside poplin's count:
-
-- the files of an upload that was given up, until the sweep removes them
-- a setting raised above a free allowance: it is taken, with a warning beside it
-- what reaches the storage without the Worker
-
-Cloudflare's changelog of 2026-11-13 describes spend limits for Workers and Durable Objects. It does not name R2, and it says recorded spend can exceed a limit.
-
-**Your own safety net** is Cloudflare's budget alert: Manage Account, then Billing, then Billable Usage, then Create budget alert. It sends an email when the account's usage-based charges pass the amount you name. It pauses nothing.

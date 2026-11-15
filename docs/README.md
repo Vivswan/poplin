@@ -15,48 +15,50 @@ Agent:  Published. It is private: only you can open it, after you log in.
         https://report--k3f9x2ab71qz-p-poplin.example.com
 ```
 
-**The pages:**
+**Start: get your own install**
 
-| Page                    | What it covers                                     |
-| ----------------------- | -------------------------------------------------- |
-| [Using](using.md)       | every command, every agent tool, and every error   |
-| [Install](install.md)   | getting your own install                           |
-| [Security](security.md) | what poplin protects against and what it does not  |
+| Page                                              | What it covers                                           |
+| ------------------------------------------------- | -------------------------------------------------------- |
+| [With an agent](start/with-an-agent.md)           | paste the prompt; the agent leads the steps              |
+| [By hand](start/by-hand.md)                       | the six steps                                            |
+| [From a terminal](start/from-a-terminal.md)       | the terminal form of two of the steps                    |
+| [When a step fails](start/when-a-step-fails.md)   | each failure and its next step                           |
 
-**Who can open what you publish:**
+**Use: publish and share**
 
-| Access                | Who can open it            | Address                                                               |
-| --------------------- | -------------------------- | --------------------------------------------------------------------- |
-| private (the default) | only you, after a login    | `report--k3f9x2ab71qz-p-poplin.example.com`                           |
-| unlisted              | anyone who has the address | `report--k3f9x2ab71qz-u-poplin.example.com`                           |
-| public                | everyone                   | the unlisted one, and a name the site claims: `docs-page.example.com` |
-
-**The address:**
-
-```text
-report--k3f9x2ab71qz-p-poplin.example.com
-|       |            | |
-|       |            | the marker: always -poplin
-|       |            the letter: p for a private site, u for an unlisted or a public one
-|       the id: 12 random characters, hard to guess; it is the link
-the name: a label of 3 to 40 characters; several sites may share it
-
-docs-page.example.com
-|    |
-|    the public word: page
-the public name: a name one public site claims
-```
-
-| What changes                           | What happens to the address                           |
-| -------------------------------------- | ----------------------------------------------------- |
-| private to unlisted or public, or back | the letter changes; the old address sends visitors on |
-| unlisted to public, or back            | nothing; a public site also answers at its public name |
-| new content, a rollback                | nothing                                               |
-
-Only the id finds a site. Any name before it, or none, opens the same site: `k3f9x2ab71qz-u-poplin.example.com` works too. Commands take the label without the letter: `report--k3f9x2ab71qz`.
+| Page                                                | What it covers                                                  |
+| --------------------------------------------------- | --------------------------------------------------------------- |
+| [Publish](use/publish.md)                           | publish, name, and update a site                                |
+| [Who can open a site](use/who-can-open.md)          | private, unlisted, public, the address, a new link              |
+| [Manage sites](use/manage-sites.md)                 | show, list, go back, copy, delete, restore, the other settings  |
+| [Back up](use/back-up.md)                           | export and import                                               |
+| [The agent tools](use/agent-tools.md)               | the tools an agent gets                                         |
+| [When poplin refuses](use/when-poplin-refuses.md)   | every refusal and what to do                                    |
 
 ```text
-poplin new-link report--k3f9x2ab71qz   ->  the site gets a new id; the old address stops at once
+You:    Put this report online.           ->  the agent calls publish_site
+You:    Share it with anyone I send it.   ->  the agent calls update_site, access unlisted
+You:    Take it down.                     ->  the agent calls delete_site
 ```
 
-The owner's private page that lists every site is the dashboard, at `poplin.example.com`. [Security](security.md) says what an unlisted site's address covers.
+An agent uses the tools. A person uses the commands. Both do the same things.
+
+The examples write `poplin`. Type `npx poplin` in its place, as [By hand](start/by-hand.md) does, unless poplin is installed on the computer. `example.com` stands for your own domain.
+
+**Run: keep the install**
+
+| Page                                          | What it covers                                                    |
+| --------------------------------------------- | ----------------------------------------------------------------- |
+| [Update](run/update.md)                       | how each kind of install updates; the notice of a newer version   |
+| [Settings](run/settings.md)                   | the install's settings, who can log in, this computer's login     |
+| [Domain](run/domain.md)                       | the Domain tab, Repair, the last check, the optional rules        |
+| [Limits and cost](run/limits-and-cost.md)     | what is capped or protected; what can cost money                  |
+| [With OpenTofu](run/with-opentofu.md)         | installing with the module                                        |
+
+**About**
+
+| Page                                            | What it covers                                      |
+| ----------------------------------------------- | --------------------------------------------------- |
+| [Security](about/security.md)                   | what poplin protects against and what it does not   |
+| [Between sites](about/between-sites.md)         | what one site's pages can ask of another            |
+| [How it is built](about/how-it-is-built.md)     | what an install is made of                          |

@@ -117,9 +117,9 @@ Check: ask the user to open that address.
 | a page headed Setup | part c                                                                      |
 | anything else       | ask for its words; have the user wait a minute and reload, then check again |
 
-If the build fails, no page with the address opens and Cloudflare shows the build's log. Ask for its last lines, and look them up under step 2 of the [install guide](https://github.com/Vivswan/poplin/blob/main/docs/install.md#the-steps).
+If the build fails, no page with the address opens and Cloudflare shows the build's log. Ask for its last lines, and look them up under step 2 of the [install guide](https://github.com/Vivswan/poplin/blob/main/docs/start/when-a-step-fails.md#step-2-the-build-fails).
 
-**Without a GitHub account**, you run part b yourself: the three commands under From a terminal instead, in the [install guide](https://github.com/Vivswan/poplin/blob/main/docs/install.md#from-a-terminal-instead). First run `git --version` and `bun --version`: with either missing, the user installs it or takes the GitHub way.
+**Without a GitHub account**, you run part b yourself: the three commands under From a terminal instead, in the [install guide](https://github.com/Vivswan/poplin/blob/main/docs/start/from-a-terminal.md). First run `git --version` and `bun --version`: with either missing, the user installs it or takes the GitHub way.
 
 The last command opens Cloudflare in the user's browser to ask for access, then deploys and prints the Worker's address. Go on from the check above.
 
@@ -135,7 +135,7 @@ On the Setup page, the user clicks the link that starts with Make the token. Clo
 | the bottom        | presses Continue to summary, then Create Token         |
 | the next page     | copies the token: it is shown once                     |
 
-If the form opens empty, step 3 of the [install guide](https://github.com/Vivswan/poplin/blob/main/docs/install.md#the-steps) has the clicks that add the eight permissions by hand.
+If the form opens empty, step 3 of the [install guide](https://github.com/Vivswan/poplin/blob/main/docs/start/when-a-step-fails.md#step-3-the-form-opens-empty) has the clicks that add the eight permissions by hand.
 
 ### d. Finish on the setup page
 
@@ -156,7 +156,7 @@ Ask the user to copy you the lines the page shows above its table. They hold no 
 | a count that is not done, or that is to repair      | a row needs work    | ask for those rows, then the install guide |
 | one sentence and no table, such as `Token refused.` | the run was refused | the install guide                          |
 
-For rows that need work, ask the user to copy each row whose State is failed, missing, differs, or not run, with its Detail, and any line with a link above the table. Look the words up in the table under step 4 of the [install guide](https://github.com/Vivswan/poplin/blob/main/docs/install.md#the-steps).
+For rows that need work, ask the user to copy each row whose State is failed, missing, differs, or not run, with its Detail, and any line with a link above the table. Look the words up in the table under step 4 of the [install guide](https://github.com/Vivswan/poplin/blob/main/docs/start/when-a-step-fails.md#step-4-the-page-shows-something-else).
 
 Repair is safe to repeat. The page empties its boxes after every run, so the user fills all three again before they press it.
 

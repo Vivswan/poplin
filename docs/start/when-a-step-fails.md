@@ -1,0 +1,67 @@
+---
+title: When a step fails
+order: 40
+---
+
+# When a step fails
+
+Each failure of [the six steps](by-hand.md#the-steps) and what to do next; the steps themselves are not repeated here.
+
+## Step 2: the build fails
+
+**If the build fails**, no page with the Worker's address opens: Cloudflare shows the build's log, and its last lines say why.
+
+| The log                                                                 | Do                              |
+| ----------------------------------------------------------------------- | ------------------------------- |
+| has a line that starts with `poplin:` and holds `Nothing was deployed.` | what the rest of that line says |
+| names R2                                                                | finish the R2 row of step 1     |
+
+Then build again, with the browser steps of [Update the install](../run/update.md#update-the-install).
+
+## Step 3: the form opens empty
+
+**If the form opens empty**, press Create Token, then Create Custom Token. For each row below, press Add more and choose in its three boxes:
+
+| First box | Second box                                            | Third box | For                                         |
+| --------- | ----------------------------------------------------- | --------- | ------------------------------------------- |
+| Account   | Workers Scripts                                       | Edit      | giving the Worker its values                |
+| Account   | D1                                                    | Edit      | the database                                |
+| Account   | Access: Apps and Policies                             | Edit      | the login                                   |
+| Account   | Access: Organizations, Identity Providers, and Groups | Read      | your team's name                            |
+| Zone      | Zone                                                  | Read      | finding your domain                         |
+| Zone      | DNS                                                   | Edit      | the addresses                               |
+| Zone      | Workers Routes                                        | Edit      | sending the addresses to the Worker         |
+| Zone      | Zone Settings                                         | Read      | seeing whether the domain redirects already |
+
+Then finish the form as in the table of [step 3](by-hand.md#the-steps).
+
+## Step 4: the page shows something else
+
+**When the page shows something else**, the table has it. Fix the cause and press Repair again: what is already made stays.
+
+| The page says                                                            | Means                                                               | Do                                                                         |
+| ------------------------------------------------------------------------ | ------------------------------------------------------------------- | -------------------------------------------------------------------------- |
+| `Token refused.`                                                         | Cloudflare does not take the token, or it does not reach the domain | paste the whole text of step 3; check its Account and Zone Resources       |
+| `The token shows no domain of that name.`                                | the domain is mistyped, not Active, or not the token's zone         | correct the Domain box, or edit the token's Zone Resources                 |
+| `The domain is no domain. Type it alone, such as example.com.`           | the box holds more than a domain, or one over 50 characters long    | type the domain alone; a longer domain cannot hold an install              |
+| `The email is no email address.`                                         | the email is mistyped                                               | type it again                                                              |
+| `No answer from the provider. Try again.`                                | Cloudflare gave no answer, or asked to wait                         | press Repair again in a minute                                             |
+| `Too many tries. Wait a minute.`                                         | the page takes five tries a minute                                  | wait a minute                                                              |
+| `The database takes no more today`, and when to try again                | the day's free allowance of the database is used up                 | try again after midnight UTC                                               |
+| `Open Zero Trust and pick a plan (Free works): that switches Access on.` | Zero Trust is not switched on: the first row of step 1              | open the link beside that line, pick the Free plan, then press Repair      |
+| a row `not set up: optional`                                             | nothing is wrong: an optional permission is not on the token        | nothing, or [the optional part](../run/domain.md#optional-block-junk-traffic-and-crawlers) |
+| a row `failed` that ends with `Add this right to the token` and a name   | the token lacks the permission of that name                         | add it to the token: the table below                                       |
+| a row `failed` with other words, and rows `not run`                      | that one step failed, and the row says why                          | do what the row asks, if it asks; then press Repair again                  |
+
+`poplin setup` prints the same rows, and answers the first five lines of the table with a code each. The table Setting up an install of [When poplin refuses](../use/when-poplin-refuses.md) lists the codes.
+
+**Only when a row says failed for a permission**, add it to the token. Your tokens are listed on the page step 3's link opened (in Cloudflare: My Profile, then API Tokens). Each token's row ends in a menu.
+
+| You                         | Do, in the token's menu                                                              |
+| --------------------------- | ------------------------------------------------------------------------------------ |
+| still have the token's text | choose Edit, add the permission, save. Paste the same text and press Repair          |
+| no longer have it           | choose Roll. Roll makes a new token text. Add the permission, and paste the new text |
+
+## Step 5: no code arrives
+
+No code arrives when the email differs from the one in step 4: go back to the setup page, type the right email with the token, and press Repair.
