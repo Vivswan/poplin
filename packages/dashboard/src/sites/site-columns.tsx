@@ -15,7 +15,7 @@ import type { ColumnSpec } from "@/table/data-table";
 /** The mark of each access. */
 const ACCESS_ICONS = { private: LockIcon, unlisted: LinkIcon, public: GlobeIcon } as const;
 
-/** The look of a button after a link in the table: quiet at rest, as a row's menu is, and whole when the row is pointed at or holds the focus. */
+/** The look of a button after a link in the table: quiet at rest, and whole when the row is pointed at or holds the focus. */
 const AFTER_LINK_LOOK = "size-6 shrink-0 opacity-60 group-hover/row:opacity-100 group-focus-within/row:opacity-100 pointer-coarse:opacity-100";
 
 /** The fewest letters of a site's name its link is cut to for a table's sake, where the name has as many. */

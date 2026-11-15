@@ -26,7 +26,6 @@ import { AccessMark, type Reveal, RevealButton, SiteLink, siteColumns, trashColu
 import { SitePanel } from "@/sites/site-panel";
 import { SITES_KEY, useSitesPage } from "@/sites/site-queries";
 import { type Ask, type Asked, SiteQuestions } from "@/sites/site-questions";
-import { SiteRowActions } from "@/sites/site-row-actions";
 import { emptyWords, FILTERS, type Filter, filteredQuery, filterOf, SORTS, sortedQuery, sortOf } from "@/sites/sites-query";
 import { ColumnsMenu, DataTable } from "@/table/data-table";
 import { useTableLayout } from "@/table/layout";
@@ -37,8 +36,8 @@ const MAX_SEARCH = 40;
 /** How a site's name looks in its row. */
 const NAME_LOOK = "rounded-sm py-0.5 font-medium outline-none hover:underline focus-visible:ring-2 focus-visible:ring-ring";
 
-/** The width of the last column of the trash, whose rows end with a worded button and a menu. */
-const RESTORE_WIDTH = 140;
+/** The width of the last column of the trash, whose rows end with a worded button. */
+const RESTORE_WIDTH = 104;
 
 /** The names of the logins while the page is being read. */
 const NO_LOGINS: LoginNames = {};
@@ -125,12 +124,23 @@ function NewSite(): ReactNode {
   );
 }
 
-/** The sites on a phone: one row each, the site's title and who can open it over its link, written as the table writes it, with the ways to show, copy and open it, and after the last row what follows the list. */
+/** The way back from the trash, at the end of a trashed site's row. A row that still shows a site of the list before, while the trash is read, has none. */
+function RestoreButton({ site, onRestore }: { readonly site: Site; readonly onRestore: () => void }): ReactNode {
+  if (site.state !== "trash") return null;
+
+  return (
+    <Button variant="outline" size="sm" onClick={onRestore}>
+      Restore
+    </Button>
+  );
+}
+
+/** The sites on a phone: one row each, the site's title and who can open it over its link, written as the table writes it, with the ways to show, copy and open it, in the trash the way back, and after the last row what follows the list. */
 function PhoneList({
   sites,
   opened,
   onOpen,
-  rowActions,
+  restore,
   onCopy,
   reveal,
   place,
@@ -139,7 +149,7 @@ function PhoneList({
   readonly sites: readonly Site[];
   readonly opened: string | undefined;
   readonly onOpen: (site: Site) => void;
-  readonly rowActions: (site: Site) => ReactNode;
+  readonly restore: ((site: Site) => ReactNode) | undefined;
   readonly onCopy: (site: Site) => void;
   readonly reveal: Reveal;
   readonly place: string;
@@ -185,7 +195,7 @@ function PhoneList({
                 )}
               </span>
             </div>
-            <span className="relative">{rowActions(site)}</span>
+            {restore === undefined ? null : <span className="relative">{restore(site)}</span>}
           </li>
         ))}
       </ul>
@@ -465,9 +475,8 @@ export function SitesScreen(): ReactNode {
   const logins = page?.logins ?? NO_LOGINS;
   const { columns, layout, label, actionsWidth } = useShownTable(filter, { onCopy: copy, reveal, logins });
   const { asked, asker, ask, leave } = useQuestion();
-  const rowActions = (site: Site): ReactNode => (
-    <SiteRowActions site={site} actions={actions} onAsk={ask} onRemoved={(gone) => (gone.label === opened ? void navigate(toTable) : undefined)} />
-  );
+  // Every change of a site is made in its panel. A row of the trash alone ends with a button: the way back, at one press.
+  const restore = filter === "trash" ? (site: Site): ReactNode => <RestoreButton site={site} onRestore={() => void actions.restore(site)} /> : undefined;
   const sites = page?.sites ?? [];
   const pages = (
     <Pages
@@ -514,14 +523,14 @@ export function SitesScreen(): ReactNode {
                   onSort={(next) => stay(sortedQuery(query, next))}
                   selected={opened}
                   opens={opens}
-                  actions={rowActions}
+                  actions={restore}
                   actionsWidth={actionsWidth}
                   loading={isPending}
                   page={place}
                   after={pages}
                 />
               </div>
-              <PhoneList sites={sites} opened={opened} onOpen={opens.open} rowActions={rowActions} onCopy={copy} reveal={reveal} place={place} after={pages} />
+              <PhoneList sites={sites} opened={opened} onOpen={opens.open} restore={restore} onCopy={copy} reveal={reveal} place={place} after={pages} />
             </>
           )}
         </section>
