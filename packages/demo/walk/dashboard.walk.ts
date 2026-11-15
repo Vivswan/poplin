@@ -18,6 +18,12 @@ const FITS_FROM = { width: 1024, height: 768 };
 /** The narrow one of them alone: a phone. */
 const PHONE = { width: VIEWPORTS[1].width, height: VIEWPORTS[1].height };
 
+/** Two small phones: one lying on its side, too short for the sections' sheet to show all it holds at once, and one upright, where the sheet fits. */
+const SMALL_PHONES = [
+  { width: 667, height: 390 },
+  { width: 390, height: 667 },
+] as const;
+
 /** The schemes a browser asks for. The dashboard follows the browser until a theme is chosen with the switch at the top. */
 const SCHEMES = ["light", "dark"] as const;
 
@@ -888,6 +894,24 @@ test.describe("on a phone, on Activity", () => {
     await expect(page.getByRole("button", { name: "Only this site", exact: true })).toHaveCount(0);
   });
 });
+
+for (const viewport of SMALL_PHONES) {
+  test.describe(`on a phone of ${viewport.width}x${viewport.height}, in the sections`, () => {
+    test.use({ viewport });
+
+    // Drift: the sheet of the sections would not scroll again, and on a screen shorter than what it holds the start of an update would lie under its edge, out of reach.
+    test("the start of an update can be reached and pressed, by scrolling where the sheet is too short", async ({ page }) => {
+      await arrive(page);
+      await page.getByRole("button", { name: "Sections", exact: true }).click();
+      const start = page.getByRole("dialog").getByRole("button", { name: "Update now", exact: true });
+
+      await start.scrollIntoViewIfNeeded();
+      await expect(start).toBeInViewport({ ratio: 1 });
+      await start.click();
+      await expect(question(page, /^Update to /)).toBeVisible();
+    });
+  });
+}
 
 test.describe("on a phone, in a question", () => {
   test.use({ viewport: PHONE });
