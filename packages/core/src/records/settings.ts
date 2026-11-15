@@ -58,6 +58,7 @@ const VALUES = {
   site_requests_per_minute: POSITIVE,
   visitor_requests_per_minute: POSITIVE,
   update_check: v.boolean(),
+  auto_update: v.boolean(),
 };
 
 /** Every setting, as the settings are stored and read. */
@@ -90,6 +91,7 @@ const FORMS: { readonly [Key in SettingKey]: TextForm<SettingValues[Key]> } = {
   site_requests_per_minute: whole(),
   visitor_requests_per_minute: whole(),
   update_check: onOff(),
+  auto_update: onOff(),
 };
 
 /** The suffix of each unit of an amount and how many base units it holds. */
@@ -267,6 +269,7 @@ export function defaultSettings(install: Install): SettingValues {
     site_requests_per_minute: 6000,
     visitor_requests_per_minute: 600,
     update_check: true,
+    auto_update: false,
   };
 }
 

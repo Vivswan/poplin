@@ -1516,7 +1516,40 @@ function updateCheck(label: string, makeDatabase: DatabaseFactory): void {
       const none = await database.readUpdateCheck();
       await database.keepUpdateCheck({ checked_at: NOW + 1, news: release });
 
-      expect([before, none, await database.readUpdateCheck()]).toEqual([undefined, { checked_at: NOW, news: null }, { checked_at: NOW + 1, news: release }]);
+      expect([before, none, await database.readUpdateCheck()]).toEqual([
+        undefined,
+        { checked_at: NOW, news: null, seen_at: null, auto: null },
+        { checked_at: NOW + 1, news: release, seen_at: NOW + 1, auto: null },
+      ]);
+    });
+
+    // Drift: the install starts a release by itself only some days after it first learned of its version. A moment that moved with every asking would never let the wait end, and one that stayed over a new version would start that one at once.
+    test("the moment a version was first learned of stays while later askings name it, moves when they name another, and goes when they name none", async () => {
+      const database = await opened(makeDatabase);
+      const release = { version: "0.2.0", released: "2026-12-01", notes: "https://example.com/changelog/#v0-2-0", database: false };
+      const kept = [];
+
+      for (const news of [release, { ...release, notes: "https://example.com/changelog/" }, { ...release, version: "0.3.0" }, null, release]) {
+        const written = await database.keepUpdateCheck({ checked_at: NOW + kept.length, news });
+        kept.push([written.seen_at, (await database.readUpdateCheck())?.seen_at]);
+      }
+
+      expect(kept).toEqual([[NOW, NOW], [NOW, NOW], [NOW + 2, NOW + 2], [null, null], [NOW + 4, NOW + 4]]);
+    });
+
+    // Drift: one version is started by the install once. A try that an asking wiped, or one kept with no row to hold it, would be made again.
+    test("a try to start by itself reads back, stays over the askings after it, and is not kept before the first asking", async () => {
+      const database = await opened(makeDatabase);
+      const start = { version: "0.2.0", at: NOW, taken: null };
+
+      await database.keepAutoStart(start);
+      const before = await database.readUpdateCheck();
+      await database.keepUpdateCheck({ checked_at: NOW, news: null });
+      await database.keepAutoStart(start);
+      await database.keepAutoStart({ ...start, taken: "0.2.0" });
+      const written = await database.keepUpdateCheck({ checked_at: NOW + 1, news: null });
+
+      expect([before, written, await database.readUpdateCheck()]).toEqual([undefined, { checked_at: NOW + 1, news: null, seen_at: null, auto: { ...start, taken: "0.2.0" } }, written]);
     });
   });
 }

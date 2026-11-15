@@ -25,6 +25,11 @@ const WORDS: Readonly<Record<string, Words>> = {
     label: "Check for a newer version",
     meaning: "Once a day the install asks the project's website which version is the newest.",
   },
+  auto_update: {
+    group: "updates",
+    label: "Update by itself",
+    meaning: "Three days after a newer version is first seen, the install starts the update. One that changes the database always waits for you.",
+  },
   max_total_size: { group: "storage", label: "Storage, all sites", meaning: "The most all sites hold together, such as 9GB." },
   max_site_size: { group: "storage", label: "Storage, one site", meaning: "The most one site holds, such as 200MB." },
   max_sites: { group: "storage", label: "Sites", meaning: "The most sites, or none for no limit." },

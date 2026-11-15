@@ -29,8 +29,23 @@ export const UPDATE_NEWS = v.strictObject({
   database: v.boolean(),
 });
 
-/** The last time the install asked for the newest release, and the newest it has learned of; `null` while no release is known. */
-export const UPDATE_CHECK = v.strictObject({ checked_at: MOMENT, news: v.nullable(UPDATE_NEWS) });
+/** What the install keeps of the updates it starts by itself: the version and the moment of its last try, and the newest version the provider took a start for, `null` while it took none. */
+export const AUTO_START = v.strictObject({ version: UPDATE_NEWS.entries.version, at: MOMENT, taken: v.nullable(UPDATE_NEWS.entries.version) });
+
+/** What the install knows of the newest release, as one row keeps it. */
+export const UPDATE_CHECK = v.strictObject({
+  /** When the install last asked for the newest release. */
+  checked_at: MOMENT,
+
+  /** The newest release it has learned of; `null` while none is known. */
+  news: v.nullable(UPDATE_NEWS),
+
+  /** When it first learned of that release's version; `null` while none is known. */
+  seen_at: v.nullable(MOMENT),
+
+  /** What it keeps of the updates it started by itself; `null` before the first try. */
+  auto: v.nullable(AUTO_START),
+});
 
 /** The file the website publishes, as JSON text: a release, or a `version` of `null` before the first one. `database: true` says updating to the release changes the database, and a file without the key says it does not. */
 const LATEST_FILE = v.pipe(
@@ -44,6 +59,9 @@ export type UpdateNews = v.InferOutput<typeof UPDATE_NEWS>;
 
 /** When the install last asked, and what it knows. */
 export type UpdateCheck = v.InferOutput<typeof UPDATE_CHECK>;
+
+/** What the install keeps of the updates it starts by itself. */
+export type AutoStart = v.InferOutput<typeof AUTO_START>;
 
 /**
  * Read the text of the website's `latest.json` as the newest release.

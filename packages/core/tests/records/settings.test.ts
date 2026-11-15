@@ -27,6 +27,7 @@ const PUBLISHED_DEFAULTS = {
   site_requests_per_minute: "6000",
   visitor_requests_per_minute: "600",
   update_check: "on",
+  auto_update: "off",
 };
 const CHANGED = {
   default_expires: "7d",
@@ -48,6 +49,7 @@ const CHANGED = {
   site_requests_per_minute: "1",
   visitor_requests_per_minute: "2",
   update_check: "off",
+  auto_update: "on",
 };
 const CHANGED_VALUES = {
   default_expires: { count: 7, unit: "d" },
@@ -69,6 +71,7 @@ const CHANGED_VALUES = {
   site_requests_per_minute: 1,
   visitor_requests_per_minute: 2,
   update_check: false,
+  auto_update: true,
 };
 
 describe("defaultSettings", () => {

@@ -136,7 +136,7 @@ async function answerAdmin(request: Request, instance: Instance, ways: Ways): Pr
 
 /** Run the scheduled sweep of a started instance. A Worker with nothing set has no site to sweep; any other start that failed is thrown. */
 async function sweep(started: Started, latest: Outside["latest"]): Promise<void> {
-  if (started.ok) return runSweep(started.instance.install, latest);
+  if (started.ok) return runSweep(started.instance.install, latest, started.instance);
 
   const { failure } = started;
   if (failure.kind !== "unset") throw new Error(`the sweep did not run. ${failureText(failure)}`);

@@ -191,6 +191,7 @@ The first settings. The names and text forms are those of `poplin config`:
 | `site_requests_per_minute` | number | `6000` | limit: one site |
 | `visitor_requests_per_minute` | number | `600` | limit: one visitor |
 | `update_check` | bool | `true` | whether the install asks the project's website, once a day, which version is the newest |
+| `auto_update` | bool | `false` | whether the install starts an update by itself, three days after it first knew of the version; never one that changes the database |
 
 The Worker stores the first settings once, while it has none. After that the dashboard is the authority: changing one of these inputs and applying again changes no stored setting.
 

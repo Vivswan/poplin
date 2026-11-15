@@ -3,7 +3,7 @@
 import gt from "semver/functions/gt";
 import * as v from "valibot";
 
-import { isPlainVersion, UPDATE_NEWS } from "../records/update";
+import { isPlainVersion, UPDATE_NEWS, type UpdateCheck, type UpdateNews } from "../records/update";
 import type { SettingValues } from "../records/settings";
 import type { Install } from "./records";
 
@@ -29,6 +29,21 @@ export const UPDATE_NOTICE = v.object({
 export type Update = Readonly<v.InferOutput<typeof UPDATE_NOTICE>>;
 
 /**
+ * Pick the release of a kept check that is newer than the running version. Nothing is read.
+ *
+ * @param current - the version the install runs
+ * @returns the release, or `undefined` when none is known, the newest known is not strictly newer, or either version is not of the form `1.2.3`
+ */
+export function newerRelease(check: Pick<UpdateCheck, "news"> | undefined, current: string): UpdateNews | undefined {
+  const news = check?.news ?? null;
+  if (news === null) return undefined;
+
+  if (!isPlainVersion(news.version) || !isPlainVersion(current) || !gt(news.version, current)) return undefined;
+
+  return news;
+}
+
+/**
  * Say whether a newer poplin than the running one is out, from what the install last learned. Nothing is fetched: it reads the database, twice at most.
  *
  * @param current - the version the install runs
@@ -39,11 +54,8 @@ export async function updateOf(install: Pick<Install, "database">, current: stri
   const settings = known ?? (await install.database.readSettings());
   if (settings?.update_check !== true) return undefined;
 
-  const check = await install.database.readUpdateCheck();
-  if (check === undefined || check.news === null) return undefined;
+  const newer = newerRelease(await install.database.readUpdateCheck(), current);
+  if (newer === undefined) return undefined;
 
-  const { version, released, notes, database } = check.news;
-  if (!isPlainVersion(version) || !isPlainVersion(current) || !gt(version, current)) return undefined;
-
-  return { current, newest: version, released, notes, database };
+  return { current, newest: newer.version, released: newer.released, notes: newer.notes, database: newer.database };
 }

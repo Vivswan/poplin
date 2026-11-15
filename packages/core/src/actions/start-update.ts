@@ -6,7 +6,7 @@
 //   a start in this minute already               too_many_requests       nothing is sent
 //   the request fails, or takes too long         update_unreachable
 //   any answer but a 2xx, a redirect included    update_refused, about its status
-//   a 2xx                                        started, and one `update_started` audit entry
+//   a 2xx                                        started, and one `update_started` audit entry, which says `automatic` for a start nobody asked for
 //
 // The request is a POST with no body and no header of the install's. No redirect is followed, so nothing is ever sent to a host the provider did not accept.
 
@@ -55,6 +55,9 @@ export interface Rebuilding {
 interface Asked extends v.InferOutput<typeof START_OPTIONS> {
   /** The version the install runs. */
   readonly version: string;
+
+  /** Whether the install starts it by itself, with nobody asking. */
+  readonly automatic?: true;
 }
 
 /** A rebuild the provider took: the version the install runs, and the newer one it knows of, `null` for a rebuild asked for with none known. */
@@ -88,7 +91,7 @@ async function askProvider(address: string, rebuilding: Rebuilding): Promise<num
 /**
  * Start an update of the install, for an admin. At most one start a minute is sent, all callers together, and a start that the provider refused counts as that one.
  *
- * @param asked - the running version, and `anyway` to rebuild while no newer version is known
+ * @param asked - the running version, `anyway` to rebuild while no newer version is known, and `automatic` for a start the install makes by itself
  * @returns `started`, or the refusal the table above names; no answer holds the address
  * @throws {Error} the database failed; a request that was sent stays sent
  */
@@ -116,7 +119,8 @@ export async function startUpdate(
   if (status < 200 || status > 299) return refuse("update_refused", String(status));
 
   const to = update?.newest ?? null;
-  await install.database.appendAudit({ action: "update_started", detail: { from: asked.version, to } }, { by: actor.holder, at: install.now() });
+  const detail = asked.automatic === true ? { from: asked.version, to, automatic: true } : { from: asked.version, to };
+  await install.database.appendAudit({ action: "update_started", detail }, { by: actor.holder, at: install.now() });
 
   return { ok: true, started: true, from: asked.version, to };
 }

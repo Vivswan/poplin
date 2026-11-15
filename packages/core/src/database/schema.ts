@@ -254,15 +254,22 @@ export const sweepPlace = sqliteTable(
   (table) => [check("sweep_place_one_row", sql`${table.id} = 1`), check("sweep_place_place", sql`json_valid(${table.place})`)],
 );
 
-/** When the install last asked for the newest release, and the newest it has learned of, as JSON. */
+/** When the install last asked for the newest release, the newest it has learned of, as JSON, when it first learned of that version, and its last try to start an update by itself, as JSON. */
 export const updateCheck = sqliteTable(
   "update_check",
   {
     id: integer().notNull().primaryKey(),
     checked_at: integer().notNull(),
     news: text(),
+    seen_at: integer(),
+    auto: text(),
   },
-  (table) => [check("update_check_one_row", sql`${table.id} = 1`), check("update_check_news", sql`${table.news} IS NULL OR json_valid(${table.news})`)],
+  (table) => [
+    check("update_check_one_row", sql`${table.id} = 1`),
+    check("update_check_news", sql`${table.news} IS NULL OR json_valid(${table.news})`),
+    check("update_check_seen", sql`(${table.news} IS NULL) = (${table.seen_at} IS NULL)`),
+    check("update_check_auto", sql`${table.auto} IS NULL OR json_valid(${table.auto})`),
+  ],
 );
 
 /** The last check or repair of the domain: when it ran, who ran it, which of the two it was, and its pieces as a JSON list. Each run replaces the row. */

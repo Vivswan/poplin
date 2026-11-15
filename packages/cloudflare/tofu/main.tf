@@ -163,5 +163,6 @@ locals {
     site_requests_per_minute    = tostring(var.site_requests_per_minute)
     visitor_requests_per_minute = tostring(var.visitor_requests_per_minute)
     update_check                = var.update_check ? "on" : "off"
+    auto_update                 = var.auto_update ? "on" : "off"
   }
 }

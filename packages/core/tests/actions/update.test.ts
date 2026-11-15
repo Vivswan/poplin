@@ -59,7 +59,7 @@ describe("checkForUpdate and updateOf", () => {
   ])("$name", async ({ asking, update, news }) => {
     const world = await makeWorld();
 
-    expect(await learned(world, asking)).toEqual({ update, kept: { checked_at: NOW, news } });
+    expect(await learned(world, asking)).toEqual({ update, kept: { checked_at: NOW, news, seen_at: news === null ? null : NOW, auto: null } });
   });
 
   // Drift: versions compared as text put 0.10.0 below 0.9.0, and an install on 0.9.0 would never hear of it.

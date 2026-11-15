@@ -9,6 +9,7 @@
     "./actions": "./src/actions.ts",
     "./src/actions/abandon-publish": "./src/actions/abandon-publish.ts",
     "./src/actions/audit-log": "./src/actions/audit-log.ts",
+    "./src/actions/auto-update": "./src/actions/auto-update.ts",
     "./src/actions/begin-import": "./src/actions/begin-import.ts",
     "./src/actions/begin-publish": "./src/actions/begin-publish.ts",
     "./src/actions/changes": "./src/actions/changes.ts",

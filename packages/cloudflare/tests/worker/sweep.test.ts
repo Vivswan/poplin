@@ -138,6 +138,46 @@ describe("the scheduled run", () => {
     expect(after).toMatchObject({ newest: "999.0.0", released: "2026-12-01", notes: release.notes, database: true });
   });
 
+  // Drift: nothing but the scheduled run starts an update with nobody asking. A handler that did not hand it the version or the build's fetch would leave the switch dead.
+  // A start that cost more queries than counted here could pass what D1 answers one invocation.
+  test("with auto_update on, the run three days after a release was first seen starts one build inside a Free invocation, six database calls above a day's first run, and no later run starts another", async () => {
+    const built: string[] = [];
+    const tally = { calls: 0 };
+    const hook = "https://api.cloudflare.com/client/v4/workers/builds/deploy_hooks/a1b2c3d4-e5f6-7890-abcd-ef1234567890";
+    const latest = { fetch: async (): Promise<Response> => Response.json({ version: "999.0.0", released: "2026-12-01", notes: "https://example.com/changelog/#v999-0-0", database: false }) };
+    const rebuild = async (address: string): Promise<Response> => {
+      built.push(address);
+
+      return new Response(null, { status: 204 });
+    };
+    const run = async (): Promise<number> => {
+      tally.calls = 0;
+      await sweep(instance(w, undefined, latest, rebuild), w, freePlanBindings(tally));
+
+      return tally.calls;
+    };
+    await ask(instance(w), `${ADMIN}/api/whoami`);
+    const { database } = await installOf(w);
+    await database.changeSettings({ auto_update: true }, { by: OWNER, at: w.clock.now });
+    await database.keepUpdateAddress(hook, { by: OWNER, at: w.clock.now });
+    w.clock.now = Math.ceil(w.clock.now / DAY_MS) * DAY_MS;
+
+    await run();
+    wait(w, 3 * 24 - 0.25);
+    await run();
+    const early = built.length;
+    wait(w, 0.25);
+    const starting = await run();
+    wait(w, 0.25);
+    await run();
+    wait(w, 24);
+    const dayAfter = await run();
+    const started = (await database.listAudit({ limit: 100 })).filter((entry) => entry.action === "update_started").map(({ by, detail }) => ({ by, detail }));
+
+    expect([early, built, starting - dayAfter]).toEqual([0, [hook], 6]);
+    expect(started).toEqual([{ by: "sweep@poplin.invalid", detail: { from: "0.0.0", to: "999.0.0", automatic: true } }]);
+  });
+
   // Drift: a login nobody allowed or collected leaves the table by the sweep alone; a run that never reached the end of the walk would keep every one for good.
   test("a login that ran out is removed by the run that ends the walk, and one still waiting stays", async () => {
     const worker = instance(w);

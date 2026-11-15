@@ -259,6 +259,7 @@ run "worker_bindings" {
       site_requests_per_minute    = "6000"
       visitor_requests_per_minute = "600"
       update_check                = "on"
+      auto_update                 = "off"
     }
     error_message = "The first settings carry every setting the Worker stores, and no other key, each in the text form `poplin config` takes."
   }

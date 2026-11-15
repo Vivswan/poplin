@@ -338,3 +338,9 @@ variable "update_check" {
   type        = bool
   default     = true
 }
+
+variable "auto_update" {
+  description = "Whether the install starts an update by itself, three days after it first knew of the version. It never starts one that changes the database."
+  type        = bool
+  default     = false
+}

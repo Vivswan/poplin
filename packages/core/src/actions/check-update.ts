@@ -5,11 +5,14 @@
 //   an answer that names a release, or none    kept, with the moment it was asked
 //   no answer that can be read                 the release known before stays, and the moment is kept: the next try is the next UTC day
 //
+// The database keeps, beside the release, the moment the install first learned of its version: a later day that names the same version leaves that moment as it was.
+//
 // The request carries nothing of the install: no version, no id, and no address is put in its URL or its headers.
 
 import { homepage } from "../../../cli/package.json";
 import { textUpTo } from "../api/text-up-to";
-import { publishedRelease, type UpdateNews } from "../records/update";
+import type { SettingValues } from "../records/settings";
+import { publishedRelease, type UpdateCheck, type UpdateNews } from "../records/update";
 import type { Install } from "./records";
 import { DAY_MS } from "./site-object";
 
@@ -37,6 +40,18 @@ export interface Asking {
   readonly patienceMs?: number;
 }
 
+/** What a call that asked knows afterwards. */
+export interface Learned {
+  /** The row it kept. */
+  readonly check: UpdateCheck;
+
+  /** The settings it read on the way. */
+  readonly settings: SettingValues;
+
+  /** Whether the website answered this call: `false` when the kept release is only the one known before. */
+  readonly answered: boolean;
+}
+
 /** Ask for the newest release once. `null` is a website that names none yet; `undefined` is no answer that can be read, for whatever reason. */
 async function newestRelease(asking: Asking): Promise<UpdateNews | null | undefined> {
   try {
@@ -62,17 +77,19 @@ async function newestRelease(asking: Asking): Promise<UpdateNews | null | undefi
  * It costs one read of the database when today's question was asked, two when `update_check` is off, and two reads, one request, and one row written on the one call a day that asks.
  * A website that is down, slow, or answers anything but the file is never an error: the day counts as asked.
  *
+ * @returns what the one call a day that asks kept, whether the website answered or not; `undefined` from every other call
  * @throws {Error} the database failed; nothing was kept, and the next call asks again
  */
-export async function checkForUpdate(install: Pick<Install, "database" | "now">, asking: Asking): Promise<void> {
+export async function checkForUpdate(install: Pick<Install, "database" | "now">, asking: Asking): Promise<Learned | undefined> {
   const now = install.now();
   const last = await install.database.readUpdateCheck();
-  if (last !== undefined && Math.floor(last.checked_at / DAY_MS) === Math.floor(now / DAY_MS)) return;
+  if (last !== undefined && Math.floor(last.checked_at / DAY_MS) === Math.floor(now / DAY_MS)) return undefined;
 
   const settings = await install.database.readSettings();
-  if (settings?.update_check !== true) return;
+  if (settings?.update_check !== true) return undefined;
 
   const newest = await newestRelease(asking);
+  const check = await install.database.keepUpdateCheck({ checked_at: now, news: newest === undefined ? (last?.news ?? null) : newest });
 
-  await install.database.keepUpdateCheck({ checked_at: now, news: newest === undefined ? (last?.news ?? null) : newest });
+  return { check, settings, answered: newest !== undefined };
 }

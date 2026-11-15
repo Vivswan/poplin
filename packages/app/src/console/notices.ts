@@ -94,6 +94,7 @@ const ABOUT_REFUSALS: Readonly<Record<string, Readonly<Record<string, string>>>>
     site_requests_per_minute: "Use a whole number, 1 or more.",
     visitor_requests_per_minute: "Use a whole number, 1 or more.",
     update_check: "Use on or off.",
+    auto_update: "Use on or off.",
   },
   not_found: {
     upload: "That copy can no longer be gone on with: it was cancelled, or its day to finish ran out. Unless the list of sites shows it, duplicate the site again.",

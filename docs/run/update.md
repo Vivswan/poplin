@@ -7,7 +7,7 @@ order: 10
 
 How each kind of install updates, and the notice of a newer version; the steps it names are those of [By hand](../start/by-hand.md#the-steps).
 
-Nothing updates on its own. An install says when a newer version is out, and how it updates depends on how it was made.
+Nothing updates on its own while the setting `auto_update` is off, as it is in a new install. An install says when a newer version is out, and how it updates depends on how it was made.
 
 | The install was made      | It updates by                                                       |
 | ------------------------- | ------------------------------------------------------------------- |
@@ -83,6 +83,35 @@ https://api.cloudflare.com/client/v4/workers/builds/deploy_hooks/<DEPLOY_HOOK_ID
 
 Cloudflare builds neither an install made from a terminal nor one the OpenTofu module made, so neither has a Deploy Hook unless you connect a build of your own. With no URL saved, `poplin update` answers `no_update_address` and starts nothing.
 
+## Optional: update by itself
+
+With the setting `auto_update` on, the install starts that build itself. It is off in a new install.
+
+```sh
+npx poplin config auto_update on
+```
+
+| It starts an update when all of these hold               | Otherwise                                             |
+| -------------------------------------------------------- | ----------------------------------------------------- |
+| `auto_update` and `update_check` are both on             | nothing starts by itself                              |
+| the project's website answered that day                  | nothing starts that day                               |
+| a version newer than the install's is out                | nothing starts                                        |
+| the release does not change the database                 | it never starts by itself: you start it               |
+| 3 days passed since the install first knew of the version | it waits                                             |
+| a Deploy Hook is saved                                   | nothing starts                                        |
+| it has not started that version, or a newer one, before  | it never starts one version twice                     |
+
+| Question                 | Answer                                                                                                 |
+| ------------------------ | ------------------------------------------------------------------------------------------------------ |
+| When it looks            | once a UTC day, right after it asked which version is the newest: a start comes 3 to 4 days after the version was first seen |
+| A release that changes the database | waits for you: press Update now in the dashboard, or run `poplin update`                    |
+| A start Cloudflare did not take     | tried again the next UTC day, once a day at most                                            |
+| A start with no answer from Cloudflare | not started again by itself, since it may have been taken: run `poplin update`           |
+| A build that failed after it started | not started again by itself: build again, or run `poplin update`                           |
+| Which version is built   | the newest release at the moment the build runs, as every build of the install: [Choose the version](#choose-the-version) |
+| Where it shows           | under Activity in the dashboard: an update started by `sweep@poplin.invalid`, whose entry holds `automatic` |
+| Switching it off         | `poplin config auto_update off`                                                                        |
+
 ## Choose the version
 
 The build reads one build variable, `POPLIN_VERSION`. Cloudflare's documentation puts build variables in your Worker's Settings, under Build, in Build variables and secrets.
@@ -114,7 +143,7 @@ ok  install   https://poplin.example.com answers
 ok  version   install 0.1.0, this poplin 0.1.0
 ok  update    0.2.0 is out (this install runs 0.1.0): https://example.com/changelog/#v0-2-0
 ok  login     admin token 3f9a1c07b2d84e65, saved on this machine, expires 2026-12-15
-ok  settings  19 settings read
+ok  settings  20 settings read
 ok  sites     4 sites
 ok  trash     0 sites
 nothing was changed

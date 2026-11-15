@@ -18,7 +18,7 @@ import type { SettingValues } from "../records/settings";
 import type { Site, SiteAccess, SiteFolder } from "../records/site";
 import type { SweepPlace } from "../records/sweep-place";
 import type { Totals } from "../records/sizes";
-import type { UpdateCheck } from "../records/update";
+import type { AutoStart, UpdateCheck } from "../records/update";
 import type { VersionContents } from "../records/version-contents";
 import type { ManifestFile, Upload, UploadId, UploadPlan } from "../records/upload";
 import type { SiteViews } from "../records/views";
@@ -578,9 +578,19 @@ export interface Database {
   /**
    * Keep when the install asked for the newest release and what it knows, in place of what was kept. No audit entry is written.
    *
+   * `seen_at` is set here: the moment of this asking for a release whose version differs from the one kept before, and the moment kept before for the same version. The last try to start by itself stays as it was.
+   *
+   * @returns the whole row as it is kept now
    * @throws {Error} a value breaks its rule
    */
-  keepUpdateCheck(check: UpdateCheck): Promise<void>;
+  keepUpdateCheck(check: Pick<UpdateCheck, "checked_at" | "news">): Promise<UpdateCheck>;
+
+  /**
+   * Keep what the install knows of the updates it starts by itself, in place of what was kept. Nothing is kept before the install first asked for the newest release. No audit entry is written.
+   *
+   * @throws {Error} a value breaks its rule
+   */
+  keepAutoStart(start: AutoStart): Promise<void>;
 
   /** The last check or repair of the domain: `undefined` before any run was kept, and for a kept run that cannot be read. */
   readDomainCheck(): Promise<DomainCheck | undefined>;

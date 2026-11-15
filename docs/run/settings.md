@@ -48,6 +48,7 @@ The settings `poplin config` takes:
 | `max_storage_writes_per_day`                                                            | how many times a day the storage is written to or listed |
 | `requests_per_day`, `site_share_of_day`, `site_requests_per_minute`, `visitor_requests_per_minute` | request limits                                |
 | `update_check`                                                                          | whether the install asks which version is the newest     |
+| `auto_update`                                                                           | whether the install starts an update by itself: off in a new install, [Update](update.md#optional-update-by-itself) |
 
 Every command that talks to the install also takes `--json`, for the answer as JSON, and `--server`, to name the install.
 

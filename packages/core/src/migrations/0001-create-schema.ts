@@ -13,7 +13,7 @@
 // logins       the computers asking to be logged in: pending, then allowed or denied, and gone once used or ten minutes old
 // leftovers    the folders of removed sites, each until its files are gone from the bucket
 // sweep_place  one row while a walk of the scheduled sweep is under way: where its last run stopped
-// update_check one row once the install has asked for the newest release: when it asked, and the newest it knows
+// update_check one row once the install has asked for the newest release: when it asked, the newest it knows, since when, and its last try to start an update by itself
 // domain_check one row once the domain was checked or repaired: when, by whom, and how each piece stood
 
 import type { Step } from "./migrate";
@@ -177,12 +177,15 @@ CREATE TABLE sweep_place (
   place TEXT NOT NULL CHECK (json_valid(place))
 ) STRICT`;
 
-/** When the install last asked for the newest release, and the newest it has learned of, as JSON; `news` is NULL while no release is known. */
+/** When the install last asked for the newest release, the newest it has learned of, as JSON, when it first learned of that version, and its last try to start an update by itself, as JSON; `news` and `seen_at` are NULL while no release is known. */
 const UPDATE_CHECK = `
 CREATE TABLE update_check (
   id INTEGER NOT NULL PRIMARY KEY CHECK (id = 1),
   checked_at INTEGER NOT NULL,
-  news TEXT CHECK (news IS NULL OR json_valid(news))
+  news TEXT CHECK (news IS NULL OR json_valid(news)),
+  seen_at INTEGER,
+  auto TEXT CHECK (auto IS NULL OR json_valid(auto)),
+  CHECK ((news IS NULL) = (seen_at IS NULL))
 ) STRICT`;
 
 /** The last check or repair of the domain: when it ran, who ran it, which of the two it was, and its pieces as a JSON list. Each run replaces the row. */

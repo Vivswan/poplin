@@ -20,7 +20,7 @@ import { SETTING_CHANGES, SETTING_VALUES, type SettingValues } from "../records/
 import { signingKeyFromRow, signingKeyToText, type UpdateAddress, updateAddressFromRow } from "../records/secret";
 import { NEW_SITE, SITE_DETAILS, SITE_FOLDER, type Site, type SiteAccess, type SiteFolder, siteFromRow, siteToRow } from "../records/site";
 import { SWEEP_PLACE, type SweepPlace } from "../records/sweep-place";
-import { UPDATE_CHECK, type UpdateCheck } from "../records/update";
+import { AUTO_START, type AutoStart, UPDATE_CHECK, type UpdateCheck } from "../records/update";
 import { type Totals, totalsFromRow } from "../records/sizes";
 import { mintSiteId, type SiteId } from "../sites/ids";
 import { tokenFromRow } from "../records/token";
@@ -585,7 +585,8 @@ function updateCheckIn(result: StatementResult | undefined): UpdateCheck | undef
   if (row === undefined) return undefined;
 
   const news: unknown = typeof row.news === "string" ? JSON.parse(row.news) : null;
-  const check = v.safeParse(UPDATE_CHECK, { checked_at: row.checked_at, news });
+  const auto: unknown = typeof row.auto === "string" ? JSON.parse(row.auto) : null;
+  const check = v.safeParse(UPDATE_CHECK, { checked_at: row.checked_at, news, seen_at: row.seen_at, auto });
 
   return check.success ? check.output : undefined;
 }
@@ -1202,18 +1203,34 @@ export class SqlDatabase implements Database {
   }
 
   async readUpdateCheck(): Promise<UpdateCheck | undefined> {
-    const asked = BUILD.select({ checked_at: updateCheck.checked_at, news: updateCheck.news }).from(updateCheck).where(eq(updateCheck.id, 1));
+    const asked = BUILD.select({ checked_at: updateCheck.checked_at, news: updateCheck.news, seen_at: updateCheck.seen_at, auto: updateCheck.auto }).from(updateCheck).where(eq(updateCheck.id, 1));
     const [read] = await this.#driver.batch([built(asked)]);
 
     return updateCheckIn(read);
   }
 
-  async keepUpdateCheck(check: UpdateCheck): Promise<void> {
-    const { checked_at, news } = v.parse(UPDATE_CHECK, check);
+  async keepUpdateCheck(check: Pick<UpdateCheck, "checked_at" | "news">): Promise<UpdateCheck> {
+    const { checked_at, news } = v.parse(v.pick(UPDATE_CHECK, ["checked_at", "news"]), check);
 
-    const asked = { id: 1, checked_at, news: news === null ? null : JSON.stringify(news) };
-    const kept = { checked_at: fragment`excluded.${bare(updateCheck.checked_at)}`, news: fragment`excluded.${bare(updateCheck.news)}` };
-    await this.#driver.batch([built(BUILD.insert(updateCheck).values(asked).onConflictDoUpdate({ target: updateCheck.id, set: kept }))]);
+    const asked = { id: 1, checked_at, news: news === null ? null : JSON.stringify(news), seen_at: news === null ? null : checked_at };
+    const sameVersion = fragment`json_extract(${qualified(updateCheck.news)}, '$.version') IS json_extract(excluded.${bare(updateCheck.news)}, '$.version')`;
+    const kept = {
+      checked_at: fragment`excluded.${bare(updateCheck.checked_at)}`,
+      news: fragment`excluded.${bare(updateCheck.news)}`,
+      seen_at: fragment`CASE WHEN ${sameVersion} THEN ${qualified(updateCheck.seen_at)} ELSE excluded.${bare(updateCheck.seen_at)} END`,
+    };
+    const row = { checked_at: updateCheck.checked_at, news: updateCheck.news, seen_at: updateCheck.seen_at, auto: updateCheck.auto };
+    const [written] = await this.#driver.batch([built(BUILD.insert(updateCheck).values(asked).onConflictDoUpdate({ target: updateCheck.id, set: kept }).returning(row))]);
+    const now = updateCheckIn(written);
+    if (now === undefined) throw new Error("the kept update check did not read back");
+
+    return now;
+  }
+
+  async keepAutoStart(start: AutoStart): Promise<void> {
+    const auto = JSON.stringify(v.parse(AUTO_START, start));
+
+    await this.#driver.batch([built(BUILD.update(updateCheck).set({ auto }).where(eq(updateCheck.id, 1)))]);
   }
 
   async readDomainCheck(): Promise<DomainCheck | undefined> {

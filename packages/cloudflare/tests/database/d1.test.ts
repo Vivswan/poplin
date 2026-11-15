@@ -80,8 +80,9 @@ const ROWS: Readonly<Record<string, readonly [read: number, written: number]>> =
   "readUpdateAddress": [1, 0],
   "forgetUpdateAddress": [2, 3],
   "forgetUpdateAddress, none kept": [1, 0],
-  "keepUpdateCheck": [1, 1],
+  "keepUpdateCheck": [2, 1],
   "readUpdateCheck": [1, 0],
+  "keepAutoStart": [1, 1],
   "keepDomainCheck": [2, 3],
   "keepDomainCheck, 200 pieces over the run before": [2, 3],
   "readDomainCheck": [1, 0],
@@ -419,15 +420,17 @@ describe("D1: the rows a scheduled sweep costs of a day's allowance", () => {
         return Response.json({ version: "0.2.0", released: "2026-12-01", notes: "https://example.com/changelog/", database: false });
       },
     };
+    const unbuilt = { accepts: () => false, fetch: () => Promise.reject(new Error("the test asked for a build")), counters: { takeMinute: async () => ({ ok: true as const }) } };
+    const running = { version: "0.1.0", rebuilding: unbuilt };
     await install.database.initSettings(defaultSettings({ installer: "ada@example.com" as Login }), { by: PUBLISHER.holder, at: NOW });
     rows.read = 0;
     rows.written = 0;
-    await runSweep(install, latest);
+    await runSweep(install, latest, running);
     const first = { ...rows };
 
     rows.read = 0;
     rows.written = 0;
-    await runSweep(install, latest);
+    await runSweep(install, latest, running);
     const idle = { ...rows };
 
     await publishSite(install, PUBLISHER, { name: "report", files: [{ path: "index.html", size: 4, contentType: "text/html", open: () => new Blob(["page"]).stream() }] });
@@ -435,10 +438,10 @@ describe("D1: the rows a scheduled sweep costs of a day's allowance", () => {
     await beginLogin(install, { scope: "publisher", computer: "laptop" }, "visitor-1");
     rows.read = 0;
     rows.written = 0;
-    await runSweep(install, latest);
+    await runSweep(install, latest, running);
 
     expect([first, idle, rows, website.asked]).toEqual([
-      { read: 12, written: 1 },
+      { read: 13, written: 1 },
       { read: 10, written: 0 },
       { read: 12, written: 0 },
       1,
@@ -492,6 +495,7 @@ describe("D1: the rows every operation of the database costs of a day's allowanc
     await cost("forgetUpdateAddress, none kept", () => database.forgetUpdateAddress(BY_ADA));
     await cost("keepUpdateCheck", () => database.keepUpdateCheck({ checked_at: NOW, news: null }));
     await cost("readUpdateCheck", () => database.readUpdateCheck());
+    await cost("keepAutoStart", () => database.keepAutoStart({ version: "0.2.0", at: NOW, taken: "0.2.0" }));
     await cost("keepSweepPlace", () => database.keepSweepPlace({ trash: false }));
     await cost("readSweepPlace", () => database.readSweepPlace());
     await cost("keepSweepPlace, forgotten", () => database.keepSweepPlace(undefined));
