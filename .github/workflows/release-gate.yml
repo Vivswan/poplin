@@ -4,16 +4,30 @@
 #
 # This file is repo-owned, seeded once by the fleet sync and never overwritten by a later sync.
 #
-# Replace the no-op job with this repository's tiers; the caller grants no secrets and caps at contents: read.
+# The caller grants no secrets and caps at contents: read.
 
 name: Release Gate
 
 on:
   workflow_call:
 
+permissions:
+  contents: read
+
 jobs:
-  noop:
+  # An install made and filled by the last release must open, read, serve, and take every command under the code about
+  # to be released, and no schema step that release shipped may have changed (tests/upgrade/README.md). On the release
+  # PR the last release is the one before the version being cut. The checks workflow runs the same tests on every push.
+  upgrade:
+    name: upgrade from the last release
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 10
     steps:
-      - run: echo "release-gate hook - nothing configured"
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          # The last release is the highest version tag among the ancestors, and its code is read from the history.
+          fetch-depth: 0
+      - uses: ./.github/actions/setup
+      - name: Upgrade an install of the last release, and hold its schema steps as shipped
+        run: bun test ./tests/upgrade/ ./tests/frozen-steps.test.ts
