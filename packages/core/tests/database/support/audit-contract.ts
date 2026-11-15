@@ -235,6 +235,38 @@ export function auditLog(label: string, makeDatabase: DatabaseFactory): void {
       expect([pages, counts]).toEqual([[["create", "new_id", "details"], ["create", "new_id", "details"], ["create", "new_id"], ["create"], []], [3, 3, 2, 1, 0]]);
     });
 
+    // Drift: "Only this site" on the Activity screen is this condition. Narrowed by the name then, it would show another site of that name and lose the entries from before a rename; by the id alone, those from before a new link.
+    test("an id finds the entries of the one site that has it or had it, through a rename and two new links; a site of the same name stays out, a site gone for good keeps the entries that hold the id, and the count agrees", async () => {
+      const database = await opened(makeDatabase);
+      const report = await made(database, draft(REPORT));
+      const twin = await made(database, draft(REPORT));
+      const moved = await database.giveNewId(report.id, BY_ADA);
+      if (moved.kind !== "done") throw new Error("no new id was given");
+
+      await database.changeDetails(moved.site.id, { name: "figures" as SiteName }, BY_ADA);
+      const again = await database.giveNewId(moved.site.id, BY_ADA);
+      const docs = await made(database, draft(DOCS));
+      const gone = await database.giveNewId(docs.id, BY_ADA);
+      if (again.kind !== "done" || gone.kind !== "done") throw new Error("no new id was given");
+
+      await database.deleteSite(gone.site.id, BY_ADA);
+      const asked = [
+        { of: report.id },
+        { of: moved.site.id },
+        { of: again.site.id },
+        { of: again.site.id, actions: ["new_id", "delete"] },
+        { of: twin.id },
+        { of: docs.id },
+        { of: gone.site.id },
+        { of: NO_SITE },
+      ] as const;
+      const pages = await Promise.all(asked.map(async (query) => (await database.searchAudit({ limit: 100, dir: "asc", ...query })).entries.map((entry) => entry.action)));
+      const counts = await Promise.all(asked.map(async (query) => (await database.countAudit({ most: 100, ...query })).count));
+      const whole = ["create", "new_id", "details", "new_id"];
+
+      expect<unknown>([pages, counts]).toEqual([[whole, whole, whole, ["new_id", "new_id"], ["create"], ["create"], ["new_id", "delete"], []], [4, 4, 4, 2, 1, 1, 2, 0]]);
+    });
+
     // Drift: the total the Activity screen shows is this count; one that counted past its bound would read a long log whole, and one that called a cut count exact would show a wrong total.
     test("a count keeps the narrowing of a page and reads no further back than it is told, saying when the log goes on", async () => {
       const database = await opened(makeDatabase);

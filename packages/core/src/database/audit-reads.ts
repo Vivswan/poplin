@@ -5,6 +5,7 @@ import * as v from "valibot";
 
 import type { AuditAction } from "../records/audit";
 import { COUNT, POSITIVE } from "../records/fields";
+import type { SiteId } from "../sites/ids";
 import { AUDIT_WINDOW, type AuditCount, type AuditCountQuery, type AuditPartQuery, type AuditSearch } from "./database";
 import type { Statement, StatementResult } from "./driver";
 import { audit, earlierIds, sites } from "./schema";
@@ -37,6 +38,22 @@ function auditAbout(site: string | undefined): SQL | undefined {
   return fragment`(instr(${audit.site_name}, lower(${site})) > 0 OR ${audit.site_id} IN ${now} OR ${audit.site_id} IN ${before})`;
 }
 
+/**
+ * The condition an entry of the audit log meets to be of the one site an id names; `undefined` when no id is asked.
+ *
+ * A site keeps its folder through every new link: the id names the site that has it now or had it once, and the entries are those that hold any id of that site. An id of no site keeps the entries that hold it.
+ * The site and its earlier ids are read once for the statement, each by a key.
+ */
+function auditOf(id: SiteId | undefined): SQL | undefined {
+  if (id === undefined) return undefined;
+
+  const folder = fragment`coalesce((SELECT ${sites.folder} FROM ${sites} WHERE ${sites.id} = ${id}), (SELECT ${earlierIds.folder} FROM ${earlierIds} WHERE ${earlierIds.id} = ${id}))`;
+  const now = BUILD.select({ id: sites.id }).from(sites).where(eq(sites.folder, folder));
+  const before = BUILD.select({ id: earlierIds.id }).from(earlierIds).where(eq(earlierIds.folder, folder));
+
+  return fragment`(${audit.site_id} = ${id} OR ${audit.site_id} IN ${now} OR ${audit.site_id} IN ${before})`;
+}
+
 /** Build the statement that reads the oldest and the newest `seq` of the log: two rows read, whatever the log's length. */
 export function auditEndsAsked(): Statement {
   return written(fragment`SELECT (SELECT min(${audit.seq}) FROM ${audit}) AS oldest, (SELECT max(${audit.seq}) FROM ${audit}) AS newest`);
@@ -54,7 +71,7 @@ export function auditSearchAsked(query: AuditSearch): Statement {
   const within = newestFirst
     ? fragment`${audit.seq} < ${start} AND ${audit.seq} >= ${start} - ${AUDIT_WINDOW}`
     : fragment`${audit.seq} > ${start} AND ${audit.seq} <= ${start} + ${AUDIT_WINDOW}`;
-  const kept = and(within, auditAmong(query.actions), auditAbout(query.site));
+  const kept = and(within, auditAmong(query.actions), auditAbout(query.site), auditOf(query.of));
 
   return built(BUILD.select().from(audit).where(kept).orderBy(newestFirst ? desc(audit.seq) : asc(audit.seq)).limit(query.limit));
 }
@@ -87,10 +104,10 @@ export function auditStopIn(ends: StatementResult | undefined, query: AuditSearc
 export function auditCountAsked(query: AuditCountQuery): Statement {
   if (!Number.isSafeInteger(query.most) || query.most < 1) throw new RangeError(`a count reads at least 1 entry, not ${query.most}`);
 
-  // A text finds a site among the sites, and the engine charges that look once an entry inside a reading that is counted from: under a text the entries are counted where they are narrowed, by their place in the log.
-  if (query.site !== undefined) {
+  // A text or an id finds a site among the sites, and the engine charges that look once an entry inside a reading that is counted from: under either the entries are counted where they are narrowed, by their place in the log.
+  if (query.site !== undefined || query.of !== undefined) {
     const newestSeq = fragment`(SELECT max(${audit.seq}) FROM ${audit})`;
-    const kept = and(fragment`${audit.seq} > ${newestSeq} - ${query.most}`, auditAmong(query.actions), auditAbout(query.site));
+    const kept = and(fragment`${audit.seq} > ${newestSeq} - ${query.most}`, auditAmong(query.actions), auditAbout(query.site), auditOf(query.of));
     const found = BUILD.select({ found: count().as("found") }).from(audit).where(kept);
 
     return written(fragment`SELECT min(${query.most}, coalesce(${newestSeq} - (SELECT min(${audit.seq}) FROM ${audit}) + 1, 0)) AS seen, ${found} AS found`);

@@ -38,6 +38,9 @@ const NOW = 1_700_000_000_000;
 /** How many sites the log that is searched by a site is about. */
 const SEARCHED_SITES = 60;
 
+/** How many new links each of the first sites of that log got; the sites after them got none. */
+const NEW_LINKS = [3, 1, 1];
+
 /** Writes a window of entries, each about one of the sites there are, under a name none of them has. */
 const LOG_ABOUT_SITES = `
 INSERT INTO audit (at, actor, action, site_id, site_name, detail)
@@ -418,16 +421,25 @@ describe("D1: the rows a listing, a change to a site, and a page of the audit lo
 
 describe("D1: the rows a search of the audit log by a site costs of a day's allowance", () => {
   // Drift: a text finds a site by the title it has now, which the log does not hold, so the sites are read. Read once an entry, a search would cost the window several times over, each row charged.
-  test("a window of entries about sixty sites, three of them given a new link: a search reads the window, each site once, and each earlier id once", async () => {
+  // An id finds its site by a key: read by a look through the sites, "Only this site" would cost what a text costs.
+  test("a window of entries about sixty sites, three of them given a new link, one of those three times: a search by a text reads the window, each site once, and each earlier id once; one by an id reads the window and that site", async () => {
     const { driver, rows } = await meteredDatabase();
     const opened = await openDatabase(driver, NOW);
     if (opened.kind !== "open") throw new Error(`the database did not open: ${opened.kind}`);
 
     const database = new SqlDatabase(driver);
+    const first: SiteId[] = [];
     for (let index = 0; index < SEARCHED_SITES; index += 1) {
       const site = { ...draft(`site-${index}` as SiteName), title: `Title ${index}`, folder: `fold${String(index).padStart(12, "0")}` as SiteFolder };
       const made = await database.createSite(site, { ...BY_ADA, at: NOW + index });
-      if (made.kind === "done" && index < 3) await database.giveNewId(made.site.id, BY_ADA);
+      if (made.kind !== "done") throw new Error(`no site was made: ${made.kind}`);
+
+      first.push(made.site.id);
+      let id = made.site.id;
+      for (let link = 0; link < (NEW_LINKS[index] ?? 0); link += 1) {
+        const given = await database.giveNewId(id, BY_ADA);
+        if (given.kind === "done") id = given.site.id;
+      }
     }
     await driver.batch([{ sql: LOG_ABOUT_SITES, params: [] }]);
     const cost = async (run: () => Promise<unknown>): Promise<number> => {
@@ -442,13 +454,25 @@ describe("D1: the rows a search of the audit log by a site costs of a day's allo
       "a page for a title one site has": await cost(() => database.searchAudit({ limit: 51, site: "title 59" })),
       "a count for a title no site has": await cost(() => database.countAudit({ most: AUDIT_WINDOW, site: "Nowhere" })),
       "a count for a title every site has": await cost(() => database.countAudit({ most: AUDIT_WINDOW, site: "TITLE" })),
+      "a page of the site an id names": await cost(() => database.searchAudit({ limit: 51, of: first[59] })),
+      "a count of the site an id names": await cost(() => database.countAudit({ most: AUDIT_WINDOW, of: first[59] })),
+      "a count of the site that gave an id up, after one new link": await cost(() => database.countAudit({ most: AUDIT_WINDOW, of: first[1] })),
+      "a count of the site that gave an id up, after three new links": await cost(() => database.countAudit({ most: AUDIT_WINDOW, of: first[0] })),
+      "a count of an id no site has": await cost(() => database.countAudit({ most: AUDIT_WINDOW, of: NOBODY })),
     }).toEqual({
-      // The window, the sites once, and a few rows more: where the log starts and ends, and the three earlier ids, each with its site.
-      "a page for a title no site has": AUDIT_WINDOW + SEARCHED_SITES + 11,
+      // The window, the sites once, and a few rows more: where the log starts and ends, and the five earlier ids, each with its site.
+      "a page for a title no site has": AUDIT_WINDOW + SEARCHED_SITES + 15,
       // A page is full at its 51st entry and one more: this site's entries are one in sixty.
-      "a page for a title one site has": 3092,
-      "a count for a title no site has": AUDIT_WINDOW + SEARCHED_SITES + 9,
+      "a page for a title one site has": 3096,
+      "a count for a title no site has": AUDIT_WINDOW + SEARCHED_SITES + 13,
       "a count for a title every site has": AUDIT_WINDOW + SEARCHED_SITES + 3,
+      // An id names its site by a key, never by a look through the sites.
+      "a page of the site an id names": 3029,
+      // The window and where the log starts and ends, then the site: three rows to find it by its id and its folder, and one more for each id it gave up.
+      "a count of the site an id names": AUDIT_WINDOW + 3 + 3,
+      "a count of the site that gave an id up, after one new link": AUDIT_WINDOW + 3 + 5,
+      "a count of the site that gave an id up, after three new links": AUDIT_WINDOW + 3 + 7,
+      "a count of an id no site has": AUDIT_WINDOW + 3,
     });
   });
 });

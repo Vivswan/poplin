@@ -18,9 +18,10 @@ interface Page {
     readonly seq: number;
     readonly by: string;
     readonly action: string;
-    readonly site: { readonly name: string; readonly label: string | null; readonly title: string | null } | null;
+    readonly site: { readonly id: string; readonly name: string; readonly label: string | null; readonly title: string | null } | null;
   }[];
   readonly logins: Readonly<Record<string, string>>;
+  readonly of: { readonly title: string | null; readonly name: string | null } | null;
   readonly next: string | null;
   readonly previous: string | null;
   readonly stopped: boolean;
@@ -43,6 +44,11 @@ async function openWithHistory(): Promise<{ readonly opened: Awaited<ReturnType<
 
 async function pageOf(opened: Awaited<ReturnType<typeof openConsole>>, query = ""): Promise<Page> {
   return (await (await opened.get(`/data/activity${query}`)).json()) as Page;
+}
+
+/** What each entry of a page says of its site, but for the id the entry holds. */
+function sitesOf(page: Page): unknown[] {
+  return page.entries.map((entry) => (entry.site === null ? null : { name: entry.site.name, label: entry.site.label, title: entry.site.title }));
 }
 
 describe("a page of the log", () => {
@@ -72,13 +78,13 @@ describe("a page of the log", () => {
     await updateSite(install, { scope: "admin", holder: owner }, { site: kept?.id ?? "", title: "Trip notes" });
     const after = await pageOf(opened, "?kind=sites&site=notes");
 
-    expect(before.entries.map((entry) => entry.site)).toEqual([
+    expect(sitesOf(before)).toEqual([
       { name: "old-draft", label: null, title: null },
       { name: "trip-notes", label: keptLabel, title: null },
       { name: "old-draft", label: null, title: null },
       { name: "field-notes", label: keptLabel, title: null },
     ]);
-    expect(after.entries.map((entry) => entry.site)).toEqual([
+    expect(sitesOf(after)).toEqual([
       { name: "trip-notes", label: keptLabel, title: "Trip notes" },
       { name: "trip-notes", label: keptLabel, title: "Trip notes" },
       { name: "field-notes", label: keptLabel, title: "Trip notes" },
@@ -105,6 +111,58 @@ describe("a page of the log", () => {
         ["details", label],
         ["create", label],
       ],
+    ]);
+  });
+
+  // Drift: "Only this site" would show another site that has the name this one had, lose the entries from before a rename or a new link, or count and save other entries than it lists.
+  test("under ?of= holds the entries of the one site that has the id or had it, each with the id it holds, says what the site is called, and counts and saves the same entries", async () => {
+    const { opened } = await openWithHistory();
+    const { install, owner, publish, clock } = opened.base;
+    const actor = { scope: "admin", holder: owner } as const;
+    const [kept] = (await install.database.listSites({ trash: false, limit: 10 })).sites;
+    const twin = await publish("field-notes");
+    const moved = await newLink(install, actor, kept?.id ?? "");
+    const [first, now] = [kept?.id ?? "", moved.ok ? moved.site.id : ""];
+    const all = await pageOf(opened);
+    const gone = all.entries.find((entry) => entry.action === "delete")?.site?.id ?? "";
+    const told = async (of: string): Promise<unknown> => {
+      const page = await pageOf(opened, `?of=${of}`);
+
+      return [page.entries.map((entry) => [entry.action, entry.site?.id]), page.of, page.next];
+    };
+    const when = new Date(clock.now).toISOString();
+    const whole = [
+      ["new_id", now],
+      ["details", first],
+      ["create", first],
+    ];
+
+    expect([now === "" || gone === "", all.of, await told(first), await told(now), await told(twin.id), await told(gone), await told("zzzzzzzzzzzz")]).toEqual([
+      false,
+      null,
+      [whole, { title: null, name: "trip-notes" }, null],
+      [whole, { title: null, name: "trip-notes" }, null],
+      [[["create", twin.id]], { title: null, name: "field-notes" }, null],
+      [
+        [
+          ["delete", gone],
+          ["create", gone],
+        ],
+        { title: null, name: "old-draft" },
+        null,
+      ],
+      [[], { title: null, name: null }, null],
+    ]);
+    expect([
+      await (await opened.get(`/data/activity/total?of=${first}`)).json(),
+      await (await opened.get(`/data/activity/total?of=${first}&kind=access`)).json(),
+      await (await opened.get(`/data/activity/download/next?of=${first}`)).json(),
+      await (await opened.get(`/data/activity/download?of=${first}`)).text(),
+    ]).toEqual([
+      { ok: true, total: 3, whole: true },
+      { ok: true, total: 0, whole: true },
+      { ok: true, after: null },
+      ["When (UTC),Who,What,Site,Action", ...["Made a new link,trip-notes,new_id", "Changed the site's settings,trip-notes,details", "Made the site,field-notes,create"].map((end) => `${when},${owner},${end}`), ""].join("\r\n"),
     ]);
   });
 
@@ -184,6 +242,8 @@ describe("a page of the log", () => {
     ["?dir=up", "dir"],
     ["?kind=everything", "kind"],
     [`?site=${"a".repeat(41)}`, "site"],
+    ["?of=notes", "of"],
+    ["?of=zzzzzzzzzzzz&site=notes", "of"],
   ])("refuses %s by the key alone", async (query, about) => {
     const opened = await openConsole();
     const response = await opened.get(`/data/activity${query}`);
@@ -241,6 +301,7 @@ describe("the total of the log", () => {
     ["?kind=access&site=notes", { ok: true, total: 0, whole: true }, 200],
     ["?kind=everything", { ok: false, code: "bad_argument", about: "kind", sentence: "The value of kind is not one it takes." }, 400],
     ["?after=3", { ok: false, code: "bad_argument", about: "after", sentence: "The value of after is not one it takes." }, 400],
+    ["?of=zzzzzzzzzzzz&site=notes", { ok: false, code: "bad_argument", about: "of", sentence: "The value of of is not one it takes." }, 400],
   ])("under %p is %j", async (query, answer, status) => {
     const { opened } = await openWithHistory();
     const response = await opened.get(`/data/activity/total${query}`);
@@ -313,6 +374,18 @@ describe("the log as a file", () => {
     const next = await (await opened.get("/data/activity/download/next")).json();
 
     expect([text.slice(0, 2000).length, said.note ?? said.action, next]).toEqual([2000, last, { ok: true, after }]);
+  });
+
+  // Drift: a full file of one site's entries would end with no word of more, though the place after it says the log goes on: its reader would take the file for the site's whole history.
+  test("of one site by its id, with more entries than a file holds, says in its last line that the log holds more", async () => {
+    const opened = await openConsole();
+    const { install, owner, publish } = opened.base;
+    const site = await publish("field-notes");
+    for (let count = 0; count < 2000; count += 1) await updateSite(install, { scope: "admin", holder: owner }, { site: site.id, title: `Notes ${count}` });
+    const text = (await (await opened.get(`/data/activity/download?format=jsonl&of=${site.id}`)).text()).trimEnd().split("\n");
+    const next = await (await opened.get(`/data/activity/download/next?of=${site.id}`)).json();
+
+    expect([text.length, text.at(-1), next]).toEqual([2001, '{"note":"2,000 entries. The log holds more: download the next part."}', { ok: true, after: "3" }]);
   });
 
   // Drift: a file cut by a failure would end like a whole one, and be read as the whole log; a browser reports a failed download only when the answer breaks off.

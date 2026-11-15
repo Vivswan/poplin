@@ -10,7 +10,7 @@ import { ADMIN, made, makeWorld, NOW, OWNER } from "./support/actions-fixture";
 
 describe("countAudit", () => {
   // Drift: the Activity screen's total is this count under the screen's own filters; a kind counted by other actions than it lists by would show a total its pages never reach.
-  test("an admin counts the log whole, by kind, and by a site's name; anyone else, and a key it does not take, is refused", async () => {
+  test("an admin counts the log whole, by kind, by a site's name, and by a site's id; anyone else, a key it does not take, and a name beside an id is refused, and a reading of the API takes no id", async () => {
     const world = await makeWorld();
     const site = await made(world, ADMIN, "report");
     await changeConfig(world.install, ADMIN, { versions_kept: 10 });
@@ -24,6 +24,13 @@ describe("countAudit", () => {
       await countAudit(world.install, OWNER),
       await countAudit(world.install, ADMIN, { site: "" }),
       await countAudit(world.install, ADMIN, { limit: 5 } as never),
+      await countAudit(world.install, ADMIN, { of: site }),
+      await countAudit(world.install, ADMIN, { of: "report" }),
+      await countAudit(world.install, ADMIN, { of: site, site: "epo" }),
+      await listAuditForScreen(world.install, ADMIN, { limit: 1, of: site, site: "epo" }),
+      await listAuditForFile(world.install, ADMIN, { of: site, site: "epo" }),
+      await nextAuditFile(world.install, ADMIN, { entries: 3, of: site, site: "epo" }),
+      await listAudit(world.install, ADMIN, { of: site } as never),
     ]).toEqual([
       { ok: true, count: 4, whole: true },
       { ok: true, count: 2, whole: true },
@@ -32,6 +39,8 @@ describe("countAudit", () => {
       { ok: false, code: "not_allowed" },
       { ok: false, code: "bad_argument", about: "site" },
       { ok: false, code: "bad_argument", about: "limit" },
+      { ok: true, count: 2, whole: true },
+      ...Array.from({ length: 6 }, () => ({ ok: false as const, code: "bad_argument" as const, about: "of" })),
     ]);
   });
 });

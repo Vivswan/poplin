@@ -21,16 +21,20 @@ const PAGE = {
   ok: true,
   entries: [{ seq: 12, at: 1_700_000_000_000, by: "mira@example.com", action: "login", detail: {}, site: null }],
   logins: {},
+  of: null,
   next: "12",
   previous: null,
   stopped: false,
 };
 
+/** A page with one entry about a site, under the id the entry holds. */
+const SITE_PAGE = { ...PAGE, entries: [{ ...PAGE.entries[0], action: "create", site: { id: "abcdefghijkl", name: "field-notes", label: "field-notes-abcdefghijkl", title: "Field notes" } }] };
+
 /** A narrowed page that found no entry among those it looked at, and stopped with the log going on behind place 9. */
 const STOPPED_PAGE = { ...PAGE, entries: [], next: "9", stopped: true };
 
 /** What the log answers a read with; a test swaps the page, and it is put back after each. */
-const answered = { page: PAGE as typeof PAGE | typeof STOPPED_PAGE };
+const answered = { page: PAGE as typeof PAGE | typeof STOPPED_PAGE | typeof SITE_PAGE };
 
 /** How many entries the log holds, as the server answers it. */
 const TOTAL = { ok: true, total: 1240, whole: true };
@@ -141,6 +145,39 @@ describe("the order of the log", () => {
       ["Site", null],
       ["Actions", null],
     ]);
+  });
+});
+
+describe("the log of one site", () => {
+  // Drift: the row's filter would search for the name the site had then, which finds other sites and misses a renamed one, or keep a text beside the id, which the server refuses.
+  test("Only this site asks for the entries of the id the row holds and drops the text; the mark names the site, and its button shows every site again", async () => {
+    answered.page = SITE_PAGE;
+    await draw("/activity?kind=sites&site=notes&after=40");
+
+    await press("Only this site");
+    const only = [window.location.search, asked.at(-1), within(document.body).getByText("Only Field notes").textContent, within(document.body).queryAllByRole("button", { name: "Only this site" }).length];
+
+    await press("Show every site");
+    const every = [window.location.search, asked.at(-1), within(document.body).queryAllByText("Only Field notes").length];
+
+    expect({ only, every }).toEqual({
+      only: ["?kind=sites&of=abcdefghijkl", "?kind=sites&of=abcdefghijkl", "Only Field notes", 0],
+      every: ["?kind=sites", "?kind=sites", 0],
+    });
+  });
+
+  // Drift: a text and an id would be sent together, from an address that holds both or from a text typed over a log of one site, and the server refuses the two together.
+  test("a text takes the place of the id: in an address that holds both, and typed into the search", async () => {
+    await draw("/activity?of=abcdefghijkl&site=notes");
+    const both = asked.at(-1);
+    cleanup();
+
+    await draw("/activity?of=abcdefghijkl");
+    const before = asked.length;
+    fireEvent.change(within(document.body).getByRole("searchbox"), { target: { value: "trip" } });
+    await readAfter(before);
+
+    expect([both, window.location.search, asked.at(-1)]).toEqual(["?site=notes", "?site=trip", "?site=trip"]);
   });
 });
 

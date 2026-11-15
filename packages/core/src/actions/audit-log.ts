@@ -5,7 +5,7 @@ import * as v from "valibot";
 import type { Actor } from "../auth/scopes";
 import { AUDIT_WINDOW, type AuditFound, type AuditSearch } from "../database/database";
 import { AUDIT_KINDS, type AuditEntry, actionsOf } from "../records/audit";
-import { POSITIVE } from "../records/fields";
+import { POSITIVE, SITE_ID } from "../records/fields";
 import { type Install, type Refused, refuse } from "./records";
 
 /** The most entries one page holds, and how many a page holds when no limit is asked. */
@@ -35,20 +35,29 @@ export const AUDIT_QUERY = v.strictObject({
   site: v.optional(v.pipe(v.string(), v.minLength(1), v.maxLength(MAX_NAME))),
 });
 
-/** What a reading of the log for the screen may ask for: what any reading asks, with a page as large as the screen's largest. */
-export const AUDIT_SCREEN_QUERY = v.strictObject({ ...AUDIT_QUERY.entries, limit: v.pipe(POSITIVE, v.maxValue(MAX_SCREEN_PAGE)) });
+/** What refuses a question that narrows the log to a site in both ways. */
+const BOTH_ASKED = "the log is narrowed by a text or by an id, not both";
 
-/** What a count of the log may ask for: the narrowing of a reading. */
-export const AUDIT_COUNT_QUERY = v.strictObject({ kind: AUDIT_QUERY.entries.kind, site: AUDIT_QUERY.entries.site });
+/** How the screen narrows the log: as a reading does, or with `of` to the one site that has an id or once had it. No route of the API takes `of`. */
+export const AUDIT_NARROWING = { kind: AUDIT_QUERY.entries.kind, site: AUDIT_QUERY.entries.site, of: v.optional(v.pipe(v.string(), SITE_ID)) };
 
-/** What a reading of the log for a file may ask for: the narrowing of a page, and the place the reading before ended. */
-export const AUDIT_FILE_QUERY = v.strictObject({ kind: AUDIT_QUERY.entries.kind, site: AUDIT_QUERY.entries.site, after: AUDIT_QUERY.entries.after });
+/** What a reading of the log for the screen may ask for: what any reading asks and `of`, with a page as large as the screen's largest. */
+export const AUDIT_SCREEN_QUERY = v.pipe(v.strictObject({ ...AUDIT_QUERY.entries, ...AUDIT_NARROWING, limit: v.pipe(POSITIVE, v.maxValue(MAX_SCREEN_PAGE)) }), v.forward(v.check((asked) => narrowsOnce(asked), BOTH_ASKED), ["of"]));
+
+/** What a count of the log may ask for: the narrowing of the screen. */
+export const AUDIT_COUNT_QUERY = v.pipe(v.strictObject(AUDIT_NARROWING), v.forward(v.check((asked) => narrowsOnce(asked), BOTH_ASKED), ["of"]));
+
+/** What a reading of the log for a file may ask for: the narrowing of the screen, and the place the reading before ended. */
+export const AUDIT_FILE_QUERY = v.pipe(v.strictObject({ ...AUDIT_NARROWING, after: AUDIT_QUERY.entries.after }), v.forward(v.check((asked) => narrowsOnce(asked), BOTH_ASKED), ["of"]));
 
 /** What a question about where a file of the log ends may ask: what the file's readings ask, and how many entries the file holds. */
-export const AUDIT_FILE_END_QUERY = v.strictObject({ ...AUDIT_FILE_QUERY.entries, entries: v.pipe(POSITIVE, v.maxValue(MOST_FILE_ENTRIES)) });
+export const AUDIT_FILE_END_QUERY = v.pipe(v.strictObject({ ...AUDIT_NARROWING, after: AUDIT_QUERY.entries.after, entries: v.pipe(POSITIVE, v.maxValue(MOST_FILE_ENTRIES)) }), v.forward(v.check((asked) => narrowsOnce(asked), BOTH_ASKED), ["of"]));
+
+/** The two ways the screen narrows the log to a site, of which a question takes one. */
+type OneNarrowing = Pick<AuditSearch, "site" | "of">;
 
 /** What a reading asks once it is checked: how many entries, from where, in which direction, and the narrowing as the address names it. */
-type Asked = Pick<AuditSearch, "limit" | "after" | "dir" | "site"> & { readonly kind?: (typeof AUDIT_KINDS)[number] | undefined };
+type Asked = Pick<AuditSearch, "limit" | "after" | "dir" | "site" | "of"> & { readonly kind?: (typeof AUDIT_KINDS)[number] | undefined };
 
 /**
  * What a reading of the log answers.
@@ -57,9 +66,14 @@ type Asked = Pick<AuditSearch, "limit" | "after" | "dir" | "site"> & { readonly 
  */
 type Reading = { readonly ok: true; readonly entries: readonly AuditEntry[]; readonly stopped_at?: number };
 
+/** Whether a question narrows the log to a site in one way at the most: to the sites a text finds, or to the one site of an id. */
+function narrowsOnce(asked: OneNarrowing): boolean {
+  return asked.site === undefined || asked.of === undefined;
+}
+
 /** Read entries of the log: any entry by a listing, and those a narrowing keeps by a search, which looks at no more than its window. */
 async function found(install: Install, { kind, ...asked }: Asked): Promise<AuditFound> {
-  if (kind === undefined && asked.site === undefined) return { entries: await install.database.listAudit(asked), stoppedAt: undefined };
+  if (kind === undefined && asked.site === undefined && asked.of === undefined) return { entries: await install.database.listAudit(asked), stoppedAt: undefined };
 
   return install.database.searchAudit({ ...asked, actions: kind === undefined ? undefined : actionsOf(kind) });
 }
@@ -119,11 +133,11 @@ export async function countAudit(
   const asked = v.safeParse(AUDIT_COUNT_QUERY, query);
   if (!asked.success) return refuse("bad_argument", v.getDotPath(asked.issues[0]) ?? "query");
 
-  const { kind, site } = asked.output;
+  const { kind, site, of } = asked.output;
   const actions = kind === undefined ? undefined : actionsOf(kind);
-  const most = kind === undefined && site === undefined ? MOST_COUNTED : AUDIT_WINDOW;
+  const most = kind === undefined && site === undefined && of === undefined ? MOST_COUNTED : AUDIT_WINDOW;
 
-  return { ok: true, ...(await install.database.countAudit({ most, actions, site })) };
+  return { ok: true, ...(await install.database.countAudit({ most, actions, site, of })) };
 }
 
 /**
@@ -184,7 +198,7 @@ export async function nextAuditFile(
   if (!asked.success) return refuse("bad_argument", v.getDotPath(asked.issues[0]) ?? "query");
 
   const { entries, ...narrowed } = asked.output;
-  if (narrowed.kind !== undefined || narrowed.site !== undefined) return { ok: true, after: await endOfNarrowedFile(install, narrowed, entries) };
+  if (narrowed.kind !== undefined || narrowed.site !== undefined || narrowed.of !== undefined) return { ok: true, after: await endOfNarrowedFile(install, narrowed, entries) };
 
   return { ok: true, after: (await install.database.endOfAuditPart({ entries, after: narrowed.after })) ?? null };
 }

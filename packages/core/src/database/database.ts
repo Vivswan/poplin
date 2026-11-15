@@ -313,6 +313,9 @@ export interface AuditSearch extends AuditQuery {
 
   /** Only the entries about a site this text finds: one whose name then held it, or that holds it now in its name, its listed title, or its public name, whatever the case of its letters A to Z; every entry when absent. */
   readonly site?: string;
+
+  /** Only the entries of the one site that has this id or once had it, those from before a new link among them; of a site gone for good, the entries that hold this very id. Every entry when absent. */
+  readonly of?: SiteId;
 }
 
 /** What a narrowed reading of the audit log found. */
@@ -334,6 +337,9 @@ export interface AuditCountQuery {
 
   /** Only the entries about a site this text finds: one whose name then held it, or that holds it now in its name, its listed title, or its public name, whatever the case of its letters A to Z; every entry when absent. */
   readonly site?: string;
+
+  /** Only the entries of the one site that has this id or once had it, those from before a new link among them; of a site gone for good, the entries that hold this very id. Every entry when absent. */
+  readonly of?: SiteId;
 }
 
 /** Which part of the audit log is asked about: the entries behind a place, the newest first, as many as a file of the log holds. */

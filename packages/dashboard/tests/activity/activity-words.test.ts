@@ -2,7 +2,7 @@
 
 import { describe, expect, test } from "bun:test";
 
-import { emptyWords, kindOf, sortedQuery, sortOf } from "../../src/activity/activity-words";
+import { emptyWords, kindOf, siteIn, sortedQuery, sortOf } from "../../src/activity/activity-words";
 
 describe("the log's address", () => {
   // Drift: a turned order would go on from a place of the order before, which skips every entry between; or the log's own order would leave keys in a shared link.
@@ -36,9 +36,9 @@ describe("an empty page", () => {
   test.each([
     ["all", "", "No activity yet"],
     ["access", "", "No activity of this kind"],
-    ["all", "notes", 'No activity for "notes"'],
-    ["sites", "notes", 'No activity for "notes"'],
-  ] as const)("under %s and the search %j is titled %s", (kind, site, title) => {
-    expect(emptyWords(kind, site).title).toBe(title);
+    ["all", "site=notes", 'No activity for "notes"'],
+    ["sites", "site=notes", 'No activity for "notes"'],
+  ] as const)("under %s and the address %j is titled %s", (kind, query, title) => {
+    expect(emptyWords(kind, siteIn(new URLSearchParams(query))).title).toBe(title);
   });
 });

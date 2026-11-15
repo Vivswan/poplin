@@ -455,6 +455,8 @@ function queryPlans(label: string, makeDriver: DriverFactory): void {
       await database.endOfAuditPart({ entries: 2, after: 9 });
       await database.searchAudit({ limit: 10, actions: ["login"], site: "report" });
       await database.searchAudit({ limit: 10, dir: "asc", after: 3, site: "report" });
+      await database.searchAudit({ limit: 10, actions: ["login"], of: site.id });
+      await database.countAudit({ most: 10, of: site.id });
       const created = await begunSite(database, draft(REPORT));
       const updated = await begunVersion(database, imported.kind === "done" ? imported.site : site);
       await database.getUpload(created.id);

@@ -9,8 +9,9 @@ import { type ReactNode, useMemo } from "react";
 import { activityColumns, SiteThen, When } from "@/activity/activity-columns";
 import { ActivityFoot } from "@/activity/activity-foot";
 import { type Entry, type Page, useActivityPage, useActivityTotal } from "@/activity/activity-queries";
-import { emptyWords, KINDS, type Kind, kindOf, logQuery, sortedQuery, sortOf } from "@/activity/activity-words";
+import { emptyWords, KINDS, type Kind, kindOf, logQuery, siteIn, sortedQuery, sortOf } from "@/activity/activity-words";
 import { DownloadMenu } from "@/activity/download-menu";
+import { OnlySite } from "@/activity/only-site";
 import { usePageSize } from "@/activity/page-size";
 import { Button } from "@/components/ui/button";
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyTitle } from "@/components/ui/empty";
@@ -144,7 +145,7 @@ function PhoneList({ page, place, after }: { readonly page: Page; readonly place
 }
 
 /** What stands where the rows would: the refusal of the read, the rows being read, or the words of an empty page with the way back to every entry. `undefined` when there are rows to draw. */
-function insteadOfRows(failure: string | undefined, page: Page | undefined, kind: Kind, site: string, onShowAll: () => void): ReactNode {
+function insteadOfRows(failure: string | undefined, page: Page | undefined, kind: Kind, site: ReturnType<typeof siteIn>, onShowAll: () => void): ReactNode {
   if (failure !== undefined) return <p className="px-6 py-8 text-muted-foreground max-md:px-4">{failure}</p>;
 
   if (page === undefined) {
@@ -169,7 +170,7 @@ function insteadOfRows(failure: string | undefined, page: Page | undefined, kind
         <EmptyTitle>{words.title}</EmptyTitle>
         <EmptyDescription>{words.says}</EmptyDescription>
       </EmptyHeader>
-      {kind === "all" && site === "" ? null : (
+      {kind === "all" && site.text === "" && site.of === "" ? null : (
         <EmptyContent>
           <Button variant="outline" onClick={onShowAll}>
             Show all activity
@@ -185,7 +186,7 @@ export function ActivityScreen(): ReactNode {
   const navigate = useNavigate();
   const query = useAddressQuery();
   const kind = kindOf(query);
-  const site = query.get("site") ?? "";
+  const site = siteIn(query);
   const [size, keepSize] = usePageSize();
   const { data: page, error, isPlaceholderData } = useActivityPage(query, size);
   // The last page tells the total by itself; before it, the total is read.
@@ -214,13 +215,14 @@ export function ActivityScreen(): ReactNode {
   const whole = page !== undefined && !isPlaceholderData && page.next === null && page.previous === null;
   const fitsOne = whole || (!isPlaceholderData && total?.whole === true && total.total <= MOST_IN_FILE);
 
+  // A log narrowed to one site already shows that site alone. The id finds the site's entries; a text is not kept beside it.
   const rowActions = (entry: Entry): ReactNode => {
-    const name = entry.site?.name;
-    if (name === undefined || name === site) return null;
+    const id = entry.site?.id;
+    if (id === undefined || site.of !== "") return null;
 
     return (
       <span className="inline-flex opacity-60 group-focus-within/row:opacity-100 group-hover/row:opacity-100 pointer-coarse:opacity-100">
-        <IconButton label="Only this site" onClick={() => move({ site: name })}>
+        <IconButton label="Only this site" onClick={() => move({ of: id, site: "" })}>
           <ListFilterIcon />
         </IconButton>
       </span>
@@ -233,14 +235,15 @@ export function ActivityScreen(): ReactNode {
         <div className="flex shrink-0 flex-wrap items-center gap-2 px-6 pb-3 max-md:px-4">
           <div className="max-md:order-1 max-md:flex max-md:min-w-0 max-md:flex-1">
             <SearchBox
-              sent={site}
-              onSearch={(text) => move({ site: text }, true)}
+              sent={site.text}
+              onSearch={(text) => move({ site: text, of: "" }, true)}
               placeholder="Find by site"
               label="Find activity by a site's title or name"
               maxLength={MAX_SEARCH}
             />
           </div>
-          <div className="flex min-w-0 flex-1 items-center gap-2 max-md:order-3 max-md:basis-full">
+          {site.of === "" ? null : <OnlySite of={site.of} page={page} current={!isPlaceholderData} onShowEvery={() => move({ of: "" })} />}
+          <div className="flex min-w-0 flex-1 items-center gap-2 max-md:order-4 max-md:basis-full">
             <KindSelect kind={kind} onChoose={(chosen) => move({ kind: chosen === "all" ? "" : chosen })} />
             <div className="ml-auto flex items-center gap-2 max-md:ml-0 max-md:min-w-0 max-md:flex-[2]">
               <OrderSelect

@@ -1,5 +1,7 @@
 // The words of the Activity screen: the kinds the log is narrowed to, the order it is read in, and what an empty page says.
 
+import { parseSiteId } from "@poplin/core/src/sites/ids";
+
 import { queryWith } from "@/shared/pages";
 import type { Sort } from "@/table/data-table";
 import { type Orders, sortIn, sortKeys } from "@/table/sort";
@@ -26,6 +28,18 @@ export function kindOf(query: URLSearchParams): Kind {
   return KINDS.find((entry) => entry.value === query.get("kind"))?.value ?? "all";
 }
 
+/**
+ * Read which site the address narrows the log to: the sites a text finds, or the one site of an id, never both.
+ *
+ * @returns `text` and `of`, each empty when the address names none; a text takes the place of an id, and an id of another form is none
+ */
+export function siteIn(query: URLSearchParams): { readonly text: string; readonly of: string } {
+  const text = (query.get("site") ?? "").trim();
+  const of = query.get("of") ?? "";
+
+  return { text, of: text === "" && parseSiteId(of).ok ? of : "" };
+}
+
 /** Read the order the address names; the newest first for anything but the oldest first. */
 export function sortOf(query: URLSearchParams): Sort {
   return sortIn(query, ACTIVITY_ORDERS);
@@ -50,13 +64,19 @@ export function sortedQuery(query: URLSearchParams, next: Sort | undefined): URL
   return logQuery(query, sortKeys(next, ACTIVITY_ORDERS));
 }
 
-/** The words of a page that holds no entry. */
-export function emptyWords(kind: Kind, site: string): { readonly title: string; readonly says: string } {
-  if (site !== "")
+/**
+ * The words of a page that holds no entry.
+ *
+ * @param site - what the page is narrowed to, as `siteIn` reads it
+ */
+export function emptyWords(kind: Kind, site: ReturnType<typeof siteIn>): { readonly title: string; readonly says: string } {
+  if (site.text !== "")
     return {
-      title: `No activity for "${site}"`,
+      title: `No activity for "${site.text}"`,
       says: kind === "all" ? "Check the spelling, or clear the search." : "Clear the search, or choose All activity.",
     };
+
+  if (site.of !== "") return { title: "No activity for this site", says: kind === "all" ? "Show all activity to see every entry." : "Choose All activity to see every entry of it." };
 
   if (kind === "all") return { title: "No activity yet", says: "Every change of a site, a token, or a setting is listed here." };
 

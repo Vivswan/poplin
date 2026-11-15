@@ -628,6 +628,28 @@ test("after a change the focus is where the next key is of use: on the panel's h
   await expect(page.getByRole("button", { name: "Add a user", exact: true })).toBeFocused();
 });
 
+// Drift: the filter at a row's end would search for a name again: the entries from before a new link or a rename would be gone, and those of another site of that name shown.
+test("on Activity, Only this site keeps the entries of the row's site, the first one from before its new link among them, under a mark that names the site, and the mark's button shows every site again", async ({ page }) => {
+  await arrive(page);
+  await fromRowMenu(page, SAMPLE.site, "New link");
+  await question(page, "Make a new link?").getByRole("button", { name: "Make a new link", exact: true }).click();
+  await expect(said(page, "The site has a new link. The old link stopped working.")).toBeVisible();
+
+  await toSection(page, "Activity");
+  const log = rows(page, true, "Activity").locator("tbody");
+  const mark = page.getByText(`Only ${SAMPLE.site}`, { exact: true });
+  const ofSite = page.getByRole("link", { name: SAMPLE.site, exact: true });
+  await log.getByRole("row").filter({ hasText: "Made a new link", has: ofSite }).getByRole("button", { name: "Only this site", exact: true }).click();
+  await expect(mark).toBeVisible();
+  await expect(log.getByRole("row").filter({ hasText: "Made the site" })).toHaveCount(1);
+  await expect(log.getByRole("row").filter({ hasNot: ofSite })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Only this site", exact: true })).toHaveCount(0);
+
+  await page.getByRole("button", { name: "Show every site", exact: true }).click();
+  await expect(mark).toBeHidden();
+  await expect(log.getByRole("row").filter({ hasNot: ofSite })).not.toHaveCount(0);
+});
+
 // Drift: Enter after typing would tick nothing again, or tick the first site of the list from before the typed text, which the text does not find.
 test("in the list that picks the sites of the graph, Enter ticks the site the typed text finds, and none of the list before it", async ({ page }) => {
   await arrive(page);

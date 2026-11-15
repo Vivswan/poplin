@@ -13,7 +13,7 @@ The dashboard's Activity screen lists every change of a site, a token, or a sett
 | ------------------------------------ | ---------------------------------------------------------------------------- |
 | All activity                         | narrows the list to Sites, Access, or Settings                               |
 | Find by site                         | keeps the entries about the sites the text finds: [the search](#find-by-site) |
-| Only this site, at the end of a row  | searches for the name that row's site had then                               |
+| Only this site, at the end of a row  | shows that site's entries, also those from before a rename or a new link    |
 | UTC, Your time                       | writes every time in UTC, or in the browser's time zone                      |
 | When                                 | a press on the heading puts the oldest first                                 |
 | `1 to 50 of 1,234`                   | at the foot: which entries the page shows, of how many                       |

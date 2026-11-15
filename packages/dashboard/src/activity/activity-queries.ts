@@ -4,7 +4,7 @@ import { keepPreviousData, type UseQueryResult, useQuery, useQueryClient } from 
 import type { InferResponseType } from "hono/client";
 import { useEffect } from "react";
 
-import { kindOf, sortOf } from "@/activity/activity-words";
+import { kindOf, siteIn, sortOf } from "@/activity/activity-words";
 import { PAGE_SIZES, type PageSize } from "@/activity/page-size";
 import { answerOf, api } from "@/lib/api";
 
@@ -17,15 +17,15 @@ export type Page = InferResponseType<typeof api.activity.$get, 200>;
 /** How many entries the log holds under a narrowing: `total` is exact when `whole`, and otherwise the least it can be. */
 export type Total = InferResponseType<typeof api.activity.total.$get, 200>;
 
-/** One entry of the log. `site.name` is the name the site had then; `site.label` is the one it has now, `null` once it is no site. */
+/** One entry of the log. `site.id` is the id the entry holds and `site.name` the name the site had then; `site.label` is the one it has now, `null` once it is no site. */
 export type Entry = Page["entries"][number];
 
 /** What the address narrows the log to, with only the keys and values the server knows. */
 export function narrowingOf(query: URLSearchParams): NonNullable<Parameters<typeof api.activity.total.$get>[0]>["query"] {
   const kind = kindOf(query);
-  const site = (query.get("site") ?? "").trim();
+  const { text, of } = siteIn(query);
 
-  return { ...(kind === "all" ? {} : { kind }), ...(site === "" ? {} : { site }) };
+  return { ...(kind === "all" ? {} : { kind }), ...(text === "" ? {} : { site: text }), ...(of === "" ? {} : { of }) };
 }
 
 /** What the log's address asks of the server for a page of a size. */

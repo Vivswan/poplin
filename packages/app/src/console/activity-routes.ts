@@ -1,14 +1,14 @@
 // The data of the Activity screen: one page of the audit log, the newest entry first, or the oldest first when asked, and how many entries the log holds.
 //
 //   GET /activity         one page; ?kind= keeps one kind of action, ?site= the entries about a site the text finds, by the name it had then or by the name or the title it has now, ?dir=asc the oldest first, ?size= how many entries it holds,
-//                         ?after= goes on after a page in that direction, ?back= goes back to the page ahead of one
+//                         ?of= keeps the entries of the one site that has the id or once had it, and takes the place of ?site=; ?after= goes on after a page in that direction, ?back= goes back to the page ahead of one
 //                         a narrowed page looks at 5,000 entries of the log and no more: one that stopped there says so, and its place goes on from where it stopped
-//   GET /activity/total   how many entries the log holds, counted no further back than the newest 10,000, or the newest 5,000 under ?kind= and ?site=
-//   GET /activity/download        the entries under ?kind= and ?site= as a file, the newest first and 2,000 at the most, in ?format=csv or jsonl; ?after= goes on after the file before, and ?part= numbers the file's name
+//   GET /activity/total   how many entries the log holds, counted no further back than the newest 10,000, or the newest 5,000 under ?kind=, ?site= and ?of=
+//   GET /activity/download        the entries under ?kind=, ?site= and ?of= as a file, the newest first and 2,000 at the most, in ?format=csv or jsonl; ?after= goes on after the file before, and ?part= numbers the file's name
 //   GET /activity/download/next   the place the file after one goes on from, or none when the log ends with it
 
 import { vValidator } from "@hono/valibot-validator";
-import { AUDIT_COUNT_QUERY, AUDIT_FILE_PAGE, AUDIT_QUERY, countAudit, listAudit, listAuditForFile, listAuditForScreen, nextAuditFile } from "@poplin/core/src/actions/audit-log";
+import { AUDIT_COUNT_QUERY, AUDIT_FILE_PAGE, AUDIT_NARROWING, AUDIT_QUERY, countAudit, listAuditForFile, listAuditForScreen, nextAuditFile } from "@poplin/core/src/actions/audit-log";
 import type { Install } from "@poplin/core/src/actions/records";
 import { AUDIT_WINDOW } from "@poplin/core/src/database/database";
 import type { SiteId } from "@poplin/core/src/sites/ids";
@@ -39,7 +39,7 @@ const STOPPED_NOTE = `Searched ${AUDIT_WINDOW.toLocaleString("en-US")} entries o
 const PLACE = v.optional(v.pipe(v.string(), v.regex(/^[1-9][0-9]{0,15}$/), v.transform(Number)));
 
 /** Which entries a file of the log holds: the narrowing of a page, and the place the file before ended. */
-const FILE_PLACE = { kind: AUDIT_QUERY.entries.kind, site: AUDIT_QUERY.entries.site, after: PLACE };
+const FILE_PLACE = { ...AUDIT_NARROWING, after: PLACE };
 
 /** What a file of the log may be asked with: its entries, its format, comma-separated when none is named, and the number its name carries when the log takes more files than one. */
 const FILE_QUERY = v.strictObject({
@@ -50,8 +50,7 @@ const FILE_QUERY = v.strictObject({
 
 /** What the log's address may ask for, and nothing else: a key it does not know is refused, as the log itself refuses it. */
 const PAGE_QUERY = v.strictObject({
-  kind: AUDIT_QUERY.entries.kind,
-  site: AUDIT_QUERY.entries.site,
+  ...AUDIT_NARROWING,
   after: PLACE,
   back: PLACE,
   dir: AUDIT_QUERY.entries.dir,
@@ -59,7 +58,7 @@ const PAGE_QUERY = v.strictObject({
 });
 
 /** What a reading of the log answers. */
-type Listed = Awaited<ReturnType<typeof listAudit>>;
+type Listed = Awaited<ReturnType<typeof listAuditForScreen>>;
 
 /** One entry of the log. */
 type Entry = Extract<Listed, { ok: true }>["entries"][number];
@@ -88,11 +87,18 @@ interface Turn {
   readonly stopped: number | undefined;
 }
 
+/** What a site is now: its name, its label, and the title it is listed under. */
+interface SiteNow {
+  readonly name: string;
+  readonly label: string;
+  readonly title: string | null;
+}
+
 /** Who asks, and of which install. */
 type Asker = Shared["Variables"]["asker"];
 
 /** Which entries of the log a file is narrowed to. */
-type Narrowing = Pick<v.InferOutput<typeof FILE_QUERY>, "kind" | "site">;
+type Narrowing = Pick<v.InferOutput<typeof FILE_QUERY>, "kind" | "site" | "of">;
 
 /** Read what the database knows of some ids, as many at a time as one reading takes. */
 async function ofAll<Found>(ids: readonly SiteId[], read: (some: readonly SiteId[]) => Promise<ReadonlyMap<SiteId, Found>>): Promise<Map<SiteId, Found>> {
@@ -105,18 +111,33 @@ async function ofAll<Found>(ids: readonly SiteId[], read: (some: readonly SiteId
 }
 
 /**
- * What each site the entries name is now, by the id an entry holds: its label, and the title it is listed under, `null` for a site with none. A site that is gone is left out.
+ * What each site the entries name is now, by the id an entry holds: its name, its label, and the title it is listed under, `null` for a site with none. A site that is gone is left out.
  * An entry from before a new link holds an id the site gave up: it is named as the site is now. The ids are read 100 to a query, and those that are no site's the same way.
+ *
+ * @param of - the id the page is narrowed to, named with the entries' own
  */
-async function sitesNow(install: Install, entries: readonly Entry[]): Promise<ReadonlyMap<string, { readonly label: string; readonly title: string | null }>> {
-  const ids = [...new Set(entries.flatMap((entry) => (entry.site === null ? [] : [entry.site.id])))];
+async function sitesNow(install: Install, entries: readonly Entry[], of: SiteId | undefined): Promise<ReadonlyMap<string, SiteNow>> {
+  const ids = [...new Set([...(of === undefined ? [] : [of]), ...entries.flatMap((entry) => (entry.site === null ? [] : [entry.site.id]))])];
   const names = await ofAll(ids, (some) => install.database.getSiteNames(some));
-  const now = new Map(Array.from(names, ([id, { name, title }]) => [id as string, { label: siteLabel(name, id), title }]));
+  const now = new Map(Array.from(names, ([id, { name, title }]) => [id as string, { name, label: siteLabel(name, id), title }]));
   const given = ids.filter((id) => !names.has(id));
   const later = await ofAll(given, (some) => install.database.getLaterSites(some));
-  for (const [earlier, site] of later) now.set(earlier, { label: siteLabel(site.name, site.id), title: site.title });
+  for (const [earlier, site] of later) now.set(earlier, { name: site.name, label: siteLabel(site.name, site.id), title: site.title });
 
   return now;
+}
+
+/**
+ * What the one site a page is narrowed to is called: by the title and the name it has now, and once it is gone by the name the page's first entry holds, `null` on a page with none.
+ *
+ * @returns `null` for a page that is narrowed to no one site
+ */
+function siteOf(of: SiteId | undefined, now: ReadonlyMap<string, SiteNow>, first: Entry | undefined): { readonly title: string | null; readonly name: string | null } | null {
+  if (of === undefined) return null;
+
+  const site = now.get(of);
+
+  return site === undefined ? { title: null, name: first?.site?.name ?? null } : { title: site.title, name: site.name };
 }
 
 /** A place beside the one a page was asked with; none where that would be before the first place an address can name. */
@@ -153,7 +174,7 @@ function fileEntryOf(entry: Entry, logins: Readonly<Record<string, string>>): Fi
 
 /** Whether the log holds an entry behind the last one a full file holds, or may: a narrowed reading that stopped short with the log going on has not seen its end. */
 async function goesOn({ install, actor }: Asker, narrowing: Narrowing, after: number): Promise<boolean> {
-  const beyond = await listAudit(install, actor, { ...narrowing, after, limit: 1 });
+  const beyond = await listAuditForScreen(install, actor, { ...narrowing, after, limit: 1 });
 
   return beyond.ok && (beyond.entries.length > 0 || beyond.stopped_at !== undefined);
 }
@@ -236,11 +257,11 @@ export const activityRoutes = new Hono<Shared>()
 
     const page = back === undefined ? read.entries.slice(0, size) : read.entries.slice(0, size).reverse();
     const beyond = read.entries.length > size;
-    const [now, logins] = await Promise.all([sitesNow(asker.install, page), loginNames(asker, page.map((entry) => entry.by))]);
+    const [now, logins] = await Promise.all([sitesNow(asker.install, page, narrowing.of), loginNames(asker, page.map((entry) => entry.by))]);
     const entries = page.map(({ site, ...entry }) => ({
       ...entry,
-      // The name is the one the site had then; the label and the title are the ones it has now, each `null` once it is no site.
-      site: site === null ? null : { name: site.name, label: now.get(site.id)?.label ?? null, title: now.get(site.id)?.title ?? null },
+      // The id is the one the entry holds and the name the one the site had then; the label and the title are the ones it has now, each `null` once it is no site.
+      site: site === null ? null : { id: site.id, name: site.name, label: now.get(site.id)?.label ?? null, title: now.get(site.id)?.title ?? null },
     }));
     const { previous, next } = placesAround({ after, back, along: narrowing.dir === "asc" ? 1 : -1, ends: [page.at(0), page.at(-1)], beyond, stopped: read.stopped_at });
 
@@ -248,6 +269,7 @@ export const activityRoutes = new Hono<Shared>()
       ok: true as const,
       entries,
       logins,
+      of: siteOf(narrowing.of, now, page.at(0)),
       next: next === undefined ? null : String(next),
       previous: previous === undefined ? null : String(previous),
       // A narrowed page that stopped short with the log going on: its place in the direction it was read goes on from where it stopped.
