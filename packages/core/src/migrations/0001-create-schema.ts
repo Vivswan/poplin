@@ -7,7 +7,7 @@
 // secrets      what the install must keep and never show, such as the key that signs sessions
 // totals       one row: how many sites there are and how much their kept versions hold
 // audit        what was done, by whom, and when; rows are only ever added
-// request_counts   one row per UTC day and site, and one more per day under the empty site for all sites together; seven days are kept
+// request_counts   one row per UTC day and site, and one more per day under the empty site for all sites together; a year is kept
 // declared_files   one row per UTC day: the files the uploads begun on it declared, and the times the store was written to or listed on it; the newest day and the one before it are kept
 // uploads      the staged publishes: begun, taking files, then live or given up
 // logins       the computers asking to be logged in: pending, then allowed or denied, and gone once used or ten minutes old
@@ -113,7 +113,7 @@ CREATE TABLE audit (
   CHECK ((site_id IS NULL) = (site_name IS NULL))
 ) STRICT`;
 
-/** A day's requests, and how many of them opened a page. A row lives seven days, so it does not refer to the sites table. */
+/** A day's requests, and how many of them opened a page. A row lives a year, so it does not refer to the sites table. */
 const REQUEST_COUNTS = `
 CREATE TABLE request_counts (
   day TEXT NOT NULL CHECK (day GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]'),

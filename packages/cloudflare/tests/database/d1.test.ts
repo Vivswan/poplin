@@ -102,7 +102,7 @@ const ROWS: Readonly<Record<string, readonly [read: number, written: number]>> =
   "readTotals": [1, 0],
   "exportSites": [18, 0],
   "exportSites, after": [18, 0],
-  "giveNewId": [22, 9],
+  "giveNewId": [738, 9],
   "reserveVersion": [5, 1],
   "addVersion": [24, 5],
   "addVersion, one dropped": [29, 7],
@@ -149,6 +149,8 @@ const ROWS: Readonly<Record<string, readonly [read: number, written: number]>> =
   "readRequests": [2, 0],
   "readRequests, all sites": [1, 0],
   "readViews": [42, 0],
+  "readDailyViews, 30 days": [188, 0],
+  "readDailyViews, a year": [2198, 0],
   "listSites": [18, 0],
   "listSites, the next page": [18, 0],
   "listSites, by name, one holder, a text, an access": [23, 0],
@@ -163,7 +165,7 @@ const ROWS: Readonly<Record<string, readonly [read: number, written: number]>> =
   "listAudit, the oldest first": [20, 0],
   "listAudit, the oldest first, the next page of one kind": [26, 0],
   "no site: getSiteByPublicName": [0, 0],
-  "no site: giveNewId": [16, 0],
+  "no site: giveNewId": [732, 0],
   "no site: reserveVersion": [0, 0],
   "no site: addVersion": [3, 0],
   "no site: setLiveVersion": [1, 0],
@@ -171,7 +173,7 @@ const ROWS: Readonly<Record<string, readonly [read: number, written: number]>> =
   "no site: restoreSite": [1, 0],
   "no site: deleteSite": [1, 0],
   "in the trash: findServed": [1, 0],
-  "in the trash: giveNewId": [20, 0],
+  "in the trash: giveNewId": [736, 0],
   "in the trash: reserveVersion": [5, 0],
   "in the trash: changeAccess": [6, 0],
   "in the trash: changeDetails": [6, 0],
@@ -586,6 +588,8 @@ describe("D1: the rows every operation of the database costs of a day's allowanc
     await cost("readRequests", () => database.readRequests(DAY, first.id));
     await cost("readRequests, all sites", () => database.readRequests(DAY));
     await cost("readViews", () => database.readViews(sites.slice(0, 5).map((made) => made.id), DAY));
+    await cost("readDailyViews, 30 days", () => database.readDailyViews(sites.slice(0, 5).map((made) => made.id), DAY, 30));
+    await cost("readDailyViews, a year", () => database.readDailyViews(sites.slice(0, 5).map((made) => made.id), DAY, 365));
 
     const page = await cost("listSites", () => database.listSites({ trash: false, limit: 5 }));
     await cost("listSites, the next page", () => database.listSites({ trash: false, limit: 5, ...(page.next === undefined ? {} : { after: page.next }) }));

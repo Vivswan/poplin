@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
-import { dayOf, showViews, viewDays } from "../../src/records/views";
+import { dayOf, daysUpTo, showViews, viewDays } from "../../src/records/views";
 
 describe("views", () => {
   // Drift: a sampled count shown as it is stored reads as an exact number; every face words a count here, so one wrong rounding is wrong everywhere.
@@ -23,6 +23,14 @@ describe("views", () => {
     ["2028-03-01", ["2028-02-24", "2028-02-25", "2028-02-26", "2028-02-27", "2028-02-28", "2028-02-29", "2028-03-01"]],
   ])("the seven days ending on %s are that day and the six before it", (day, days) => {
     expect(viewDays(day)).toEqual(days);
+  });
+
+  // Drift: the first day of a year's run is the day the counts are dropped before; a day off deletes a kept day or keeps a row for ever.
+  test("a run of days ends on its day and starts as many days before, a leap day counted, and is at most a year long", () => {
+    const year = daysUpTo("2028-03-01", 365);
+
+    expect([daysUpTo("2026-11-13", 1), year.length, year[0], year.at(-1)]).toEqual([["2026-11-13"], 365, "2027-03-03", "2028-03-01"]);
+    for (const count of [0, 366, 1.5]) expect(() => daysUpTo("2026-11-13", count)).toThrow(RangeError);
   });
 
   test("a moment falls on its UTC day, up to the last millisecond before midnight", () => {

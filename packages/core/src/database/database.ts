@@ -21,7 +21,7 @@ import type { Totals } from "../records/sizes";
 import type { AutoStart, UpdateCheck } from "../records/update";
 import type { VersionContents } from "../records/version-contents";
 import type { ManifestFile, Upload, UploadId, UploadPlan } from "../records/upload";
-import type { SiteViews } from "../records/views";
+import type { DailyViews, SiteViews } from "../records/views";
 
 /** Who makes a change and when, in milliseconds since the epoch. */
 export interface Signed {
@@ -325,7 +325,7 @@ export interface CountedRequests {
   readonly views?: number;
 }
 
-/** The one doorway to stored sites, tokens, pending logins, settings, the signing key, the audit log, and the request counts of the last seven days. */
+/** The one doorway to stored sites, tokens, pending logins, settings, the signing key, the audit log, and the request counts of the last year. */
 export interface Database {
   /**
    * Make a site under a fresh id, with version 1 as its only version and its live one: published at `signed.at` by `signed.by`, of the draft's `bytes` and `files`.
@@ -374,7 +374,7 @@ export interface Database {
    */
   changeDetails(id: SiteId, details: SiteDetails, signed: Signed): Promise<Done | Unchanged | Refused<"not_found" | "in_trash">>;
 
-  /** Give a site a new id. The old id names no site from then on; the public name, the folder, the request counts of the seven days up to `signed.at`, and everything else stay with the site. */
+  /** Give a site a new id. The old id names no site from then on; the public name, the folder, the request counts of the year up to `signed.at`, and everything else stay with the site. */
   giveNewId(id: SiteId, signed: Signed): Promise<Done | Refused<"not_found" | "in_trash">>;
 
   /** Move a site into the trash. It keeps its public name. */
@@ -694,7 +694,7 @@ export interface Database {
   listAudit(query: AuditQuery): Promise<readonly AuditEntry[]>;
 
   /**
-   * Add requests, and the page views among them, to a day's count of one site and of all sites together, and drop the counts of every day before the six ahead of it. No audit entry is written.
+   * Add requests, and the page views among them, to a day's count of one site and of all sites together, and drop the counts of every day more than a year before it. No audit entry is written.
    *
    * @returns both request counts after the addition
    * @throws {RangeError} `day` is not a date such as `2026-11-13`, `requests` is not a whole number of at least 1, or `views` is not a whole number from 0 to `requests`
@@ -746,4 +746,15 @@ export interface Database {
    * @throws {RangeError} `day` is not such a date, or more than 100 sites are asked for
    */
   readViews(sites: readonly SiteId[], day: string): Promise<ReadonlyMap<SiteId, SiteViews>>;
+
+  /**
+   * The page views counted day by day, for all sites together and for some sites. It is one query, and every row is read by its key.
+   *
+   * @param sites - the sites to read beside all sites together, at most 5
+   * @param day - the last day read, a UTC date such as `2026-11-13`
+   * @param count - how many days are read, that day included: a whole number from 1 to 365
+   * @returns a count for every day, 0 where nothing was counted
+   * @throws {RangeError} `day` is not such a date, `count` is not such a number, or more than 5 sites are asked for
+   */
+  readDailyViews(sites: readonly SiteId[], day: string, count: number): Promise<DailyViews>;
 }

@@ -1938,7 +1938,7 @@ function requestCounts(label: string, makeDatabase: DatabaseFactory): void {
     });
 
     // Drift: a site's views are a sum over seven UTC days read by day and site; a day too many, a day of another month sorted wrongly, or another site's rows would show opens that never were.
-    test("views add up per site over the day and the six before it, across a month's end, apart from the requests, and a count older than that is dropped with the next addition", async () => {
+    test("views add up per site over the day and the six before it, across a month's end, apart from the requests, and a count is dropped with the first addition a year after its day", async () => {
       const database = await opened(makeDatabase);
       const counted = [
         { day: "2026-10-25", site: NO_SITE, requests: 9, views: 9 },
@@ -1955,13 +1955,56 @@ function requestCounts(label: string, makeDatabase: DatabaseFactory): void {
         [OTHER_SITE, { today: 7, week: 7 }],
         ["bbbbbbbbbbbb" as SiteId, { today: 0, week: 0 }],
       ]);
-      expect([...(await database.readViews([NO_SITE], "2026-10-31"))]).toEqual([[NO_SITE, { today: 3, week: 53 }]]);
+      expect([...(await database.readViews([NO_SITE], "2026-10-31"))]).toEqual([[NO_SITE, { today: 3, week: 62 }]]);
       expect([await database.readViews([], "2026-11-01"), await database.readRequests("2026-11-01", NO_SITE)]).toEqual([new Map(), { site: 15, all: 22 }]);
 
-      await database.addRequests({ day: "2026-11-02", site: OTHER_SITE, requests: 1 });
+      await database.addRequests({ day: "2027-10-25", site: OTHER_SITE, requests: 1 });
+      const kept = await database.readViews([NO_SITE], "2026-11-01");
+      await database.addRequests({ day: "2027-10-26", site: OTHER_SITE, requests: 1 });
 
-      expect([...(await database.readViews([NO_SITE], "2026-11-01"))]).toEqual([[NO_SITE, { today: 2, week: 5 }]]);
+      expect([[...kept], [...(await database.readViews([NO_SITE], "2026-11-01"))]]).toEqual([[[NO_SITE, { today: 2, week: 55 }]], [[NO_SITE, { today: 2, week: 5 }]]]);
       await expect(database.readViews([NO_SITE], "tomorrow")).rejects.toThrow(RangeError);
+    });
+
+    // Drift: a graph draws one point a day; a day with no row left out, a count put on its neighbour, or all sites summed from the sites asked for would draw a trend that never was.
+    test("views are read day by day, the earliest day first: all sites together and each site asked for, 0 where nothing was counted, across a month's end", async () => {
+      const database = await opened(makeDatabase);
+      const counted = [
+        { day: "2026-10-29", site: NO_SITE, requests: 9, views: 9 },
+        { day: "2026-10-31", site: NO_SITE, requests: 4, views: 3 },
+        { day: "2026-10-31", site: OTHER_SITE, requests: 6, views: 6 },
+        { day: "2026-11-01", site: OTHER_SITE, requests: 7, views: 7 },
+        { day: "2026-11-01", site: NO_SITE, requests: 5 },
+        { day: "2026-11-02", site: NO_SITE, requests: 8, views: 8 },
+      ];
+      for (const one of counted) await database.addRequests(one);
+      const unseen = "bbbbbbbbbbbb" as SiteId;
+
+      const read = await database.readDailyViews([OTHER_SITE, unseen], "2026-11-01", 4);
+      const alone = await database.readDailyViews([], "2026-11-02", 1);
+
+      expect([read.days, read.all, [...read.sites], alone]).toEqual([
+        ["2026-10-29", "2026-10-30", "2026-10-31", "2026-11-01"],
+        [9, 0, 9, 7],
+        [
+          [OTHER_SITE, [0, 0, 6, 7]],
+          [unseen, [0, 0, 0, 0]],
+        ],
+        { days: ["2026-11-02"], all: [8], sites: new Map() },
+      ]);
+    });
+
+    // Drift: a read day by day costs a row for every day of every site; one that took any number of either would spend the database's rows of a day on a single page.
+    test.each([
+      ["a day that is no date", [], "tomorrow", 30],
+      ["no days", [], "2026-11-01", 0],
+      ["half a day", [], "2026-11-01", 1.5],
+      ["a day more than a year", [], "2026-11-01", 366],
+      ["six sites", ["a", "b", "c", "d", "e", "f"], "2026-11-01", 30],
+    ])("a read day by day of %s is refused", async (_what, sites, day, count) => {
+      const database = await opened(makeDatabase);
+
+      await expect(database.readDailyViews(sites as SiteId[], day, count)).rejects.toThrow(RangeError);
     });
 
     // Drift: the counts are kept under a site's id, and a new link changes the id; counts left under the old one would show a site nobody ever opened, and free its share of the day.
@@ -1970,7 +2013,7 @@ function requestCounts(label: string, makeDatabase: DatabaseFactory): void {
       const site = await made(database, draft("report" as SiteName));
       const other = await made(database, draft("notes" as SiteName));
       const day = new Date(NOW).toISOString().slice(0, 10);
-      const old = new Date(NOW - 7 * 86_400_000).toISOString().slice(0, 10);
+      const old = new Date(NOW - 365 * 86_400_000).toISOString().slice(0, 10);
       await database.addRequests({ day, site: site.id, requests: 15, views: 12 });
       await database.addRequests({ day, site: other.id, requests: 4, views: 3 });
       // Counted last, so no later count drops it: only the move could take it along.

@@ -489,11 +489,11 @@ function queryPlans(label: string, makeDriver: DriverFactory): void {
 
 function requestCountRows(label: string, makeDriver: DriverFactory): void {
   describe(`${label}: the rows of the day's request counts`, () => {
-    // Drift: the table is meant to hold seven days; rows of earlier days left behind would grow it by a row per site every day.
-    test("the table holds the newest seven days alone: a row per day and counted site with its views, and one under the empty site for all of them", async () => {
+    // Drift: the table is meant to hold a year; rows of earlier days left behind would grow it by a row per site every day.
+    test("the table holds the newest year alone: a row per day and counted site with its views, and one under the empty site for all of them", async () => {
       const driver = await migrated(makeDriver);
       const database = new SqlDatabase(driver);
-      await database.addRequests({ day: "2026-11-07", site: NO_SITE, requests: 9, views: 9 });
+      await database.addRequests({ day: "2025-11-14", site: NO_SITE, requests: 9, views: 9 });
       await database.addRequests({ day: TODAY, site: NO_SITE, requests: 50, views: 20 });
       await database.addRequests({ day: TODAY, site: OTHER_SITE, requests: 1 });
       await database.addRequests({ day: TOMORROW, site: OTHER_SITE, requests: 2, views: 2 });
@@ -515,6 +515,7 @@ function requestCountRows(label: string, makeDriver: DriverFactory): void {
       await database.addRequests({ day: TODAY, site: NO_SITE, requests: 1 });
       await database.readRequests(TODAY, NO_SITE);
       await database.readViews([NO_SITE, OTHER_SITE], TODAY);
+      await database.readDailyViews([NO_SITE, OTHER_SITE], TODAY, 365);
       const scans: string[] = [];
 
       for (const statement of driver.statements) {
@@ -523,7 +524,7 @@ function requestCountRows(label: string, makeDriver: DriverFactory): void {
         scans.push(...plan.map((step) => String(step.detail)).filter((step) => /\bSCAN\b/.test(step) && !step.includes("VIRTUAL TABLE")));
       }
 
-      expect([driver.statements.length, scans]).toEqual([6, []]);
+      expect([driver.statements.length, scans]).toEqual([7, []]);
     });
   });
 }

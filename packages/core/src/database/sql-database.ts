@@ -26,7 +26,7 @@ import { mintSiteId, type SiteId } from "../sites/ids";
 import { tokenFromRow } from "../records/token";
 import { type ManifestFile, type Upload, type UploadId, uploadFromRow } from "../records/upload";
 import type { VersionContents } from "../records/version-contents";
-import { dayOf, type SiteViews, viewDays } from "../records/views";
+import { type DailyViews, dayOf, daysUpTo, KEPT_DAYS, MOST_SITES_COMPARED, type SiteViews, viewDays } from "../records/views";
 import type {
   AuditQuery,
   Address,
@@ -750,7 +750,7 @@ export class SqlDatabase implements Database {
   async giveNewId(id: SiteId, signed: Signed): Promise<Done | Refused<"not_found" | "in_trash">> {
     for (let attempt = 0; attempt < MINT_ATTEMPTS; attempt += 1) {
       const next = this.#mintId();
-      const days = JSON.stringify(viewDays(dayOf(signed.at)));
+      const days = JSON.stringify(daysUpTo(dayOf(signed.at), KEPT_DAYS));
       const [updated, , after, before] = await this.#driver.batch([
         built(BUILD.update(sites).set({ id: next }).where(and(eq(sites.id, id), eq(sites.trashed, 0), isFree(next)))),
         auditOfSite(signed, "new_id", next, { from: id }),
@@ -1425,8 +1425,8 @@ export class SqlDatabase implements Database {
     if (!Number.isSafeInteger(views) || views < 0 || views > counted.requests) throw new RangeError(`views are counted in whole numbers from 0 to the requests, not ${views}`);
 
     const [, site, all] = await this.#driver.batch([
-      // The days before the oldest one shown are dropped, so the table holds seven days.
-      built(BUILD.delete(requestCounts).where(lt(requestCounts.day, viewDays(counted.day)[0] ?? counted.day))),
+      // The days before the oldest one kept are dropped, so the table holds a year.
+      built(BUILD.delete(requestCounts).where(lt(requestCounts.day, daysUpTo(counted.day, KEPT_DAYS)[0] ?? counted.day))),
       addRequests(counted.day, counted.site, counted.requests, views),
       addRequests(counted.day, ALL_SITES, counted.requests, views),
     ]);
@@ -1450,6 +1450,23 @@ export class SqlDatabase implements Database {
     for (const row of read?.rows ?? []) views.set(row.site as SiteId, { today: Number(row.today), week: Number(row.week) });
 
     return views;
+  }
+
+  async readDailyViews(sites: readonly SiteId[], day: string, count: number): Promise<DailyViews> {
+    requireDay(day);
+    if (sites.length > MOST_SITES_COMPARED) throw new RangeError(`the views of at most ${MOST_SITES_COMPARED} sites are read day by day at once, not of ${sites.length}`);
+
+    const days = daysUpTo(day, count);
+    const place = new Map(days.map((one, at) => [one, at]));
+    const counts = new Map<string, number[]>([ALL_SITES, ...sites].map((site) => [site, days.map(() => 0)]));
+
+    // Every row is found by its key: all sites together and each site named are joined to each day.
+    const named = fragment`json_each(${JSON.stringify([...counts.keys()])}) AS s CROSS JOIN json_each(${JSON.stringify(days)}) AS d`;
+    const counted = fragment`SELECT ${A_COUNT.day} AS day, ${A_COUNT.site} AS site, ${A_COUNT.views} AS views FROM ${named} JOIN ${requestCounts} AS ${A_COUNT} ON ${A_COUNT.day} = d.value AND ${A_COUNT.site} = s.value`;
+    const [read] = await this.#driver.batch([written(counted)]);
+    for (const row of read?.rows ?? []) (counts.get(String(row.site)) ?? [])[place.get(String(row.day)) ?? 0] = Number(row.views);
+
+    return { days, all: counts.get(ALL_SITES) ?? [], sites: new Map(sites.map((site) => [site, counts.get(site) ?? []])) };
   }
 
   async readRequests(day: string, site?: SiteId): Promise<RequestCounts> {
