@@ -130,6 +130,8 @@ function dashboardEntries(): Entry[] {
     { group: "Dashboard", name: "Sites: the public ones, by name", path: "/?access=public&sort=name&dir=asc" },
     { group: "Dashboard", name: "Activity: what happened to sites", path: "/activity?kind=sites" },
     { group: "Dashboard", name: "Activity: a long log, searched in parts", path: "/state/activity/long" },
+    { group: "Dashboard", name: "Usage: the problems of the last 30 days", path: "/usage?days=30" },
+    { group: "Dashboard", name: "Usage: the panel of a problem that is not in the list", path: "/usage?problem=2026-01-01.request_failed" },
     { group: "Dashboard", name: "No such screen", path: "/nothing" },
     { group: "Access: allow this computer", name: "Waiting for a decision", path: "/state/allow/waiting" },
     { group: "Access: allow this computer", name: "Code not found, decided, or run out", path: `/tokens/allow?code=${NO_CODE}` },
