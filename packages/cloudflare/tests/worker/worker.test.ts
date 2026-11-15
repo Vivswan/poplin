@@ -21,10 +21,10 @@ import {
   PATHS, type Published, page, publish, send, spentDatabase, tokenOf, type World, under, wait, world,
 } from "./support/install";
 
-/** The largest bundle that passes, so a library pulled in whole fails here. The bundle is about 2,263,000 bytes: the dashboard's built client rides in it as strings. */
+/** This repository's own guard against a library pulled in whole: Cloudflare takes a Worker of up to 64 MiB as it is, on every plan. The bundle is about 1,812,000 bytes, the dashboard's built client in it as strings. */
 const MOST_BUNDLE_BYTES = 3_000_000;
 
-/** The largest bundle that passes once it is gzipped, which is how Cloudflare measures it: 3 MB on the free Workers plan. The bundle, client and all, is about 619,000 bytes then. */
+/** This repository's own guard on the gzipped bundle: Cloudflare sets no limit on that size. The bundle is about 630,000 bytes then. */
 const MOST_BUNDLE_GZIP_BYTES = 800_000;
 
 /** The policy the dashboard goes out under: it runs its own script alone and reads this origin alone. */
