@@ -12,6 +12,21 @@ async function names(world: World, actor: typeof ADMIN, query: Parameters<typeof
   return listed.ok ? listed.sites.map((site) => site.name) : listed;
 }
 
+/** Every page of a listing, two sites a page, each asked with the `next` of the one before. */
+async function pagesOf(world: World, actor: typeof ADMIN, query: Parameters<typeof listSites>[2]): Promise<Extract<Awaited<ReturnType<typeof listSites>>, { ok: true }>["sites"][]> {
+  const pages = [];
+  let after: Parameters<typeof listSites>[2] = {};
+  do {
+    const page = await listSites(world.install, actor, { ...query, limit: 2, ...after });
+    if (!page.ok) throw new Error(`the listing was refused: ${page.code}`);
+
+    pages.push(page.sites);
+    after = page.next === undefined ? {} : { after: page.next };
+  } while (after.after !== undefined);
+
+  return pages;
+}
+
 describe("listSites", () => {
   // Drift: the listing is where a publisher would first see another's site; the owner filter is the only thing between them.
   test("an admin lists every site and a publisher only its own, the trash apart, the site changed last first", async () => {
@@ -97,19 +112,7 @@ describe("listSites", () => {
       ids.push(await made(world, actor, name, settings));
     }
 
-    const walked = async (query: Parameters<typeof listSites>[2]): Promise<{ name: string; access: string }[]> => {
-      const all = [];
-      let after: Parameters<typeof listSites>[2] = {};
-      do {
-        const page = await listSites(world.install, ADMIN, { ...query, limit: 2, ...after });
-        if (!page.ok) throw new Error(`the listing was refused: ${page.code}`);
-
-        all.push(...page.sites.map(({ name, access }) => ({ name, access })));
-        after = page.next === undefined ? {} : { after: page.next };
-      } while (after.after !== undefined);
-
-      return all;
-    };
+    const walked = async (query: Parameters<typeof listSites>[2]): Promise<{ name: string; access: string }[]> => (await pagesOf(world, ADMIN, query)).flat();
     const named = async (query: Parameters<typeof listSites>[2]): Promise<string[]> => (await walked(query)).map((site) => site.name);
     const byAccess = await walked({ sort: "access" });
 
@@ -138,6 +141,59 @@ describe("listSites", () => {
     expect(await names(world, OWNER, { access: "public" })).toEqual([]);
     expect(await names(world, OWNER, { named: "" })).toMatchObject({ ok: false, code: "bad_argument", about: "named" });
     expect(await names(world, OWNER, { access: "open" as "public" })).toMatchObject({ ok: false, code: "bad_argument", about: "access" });
+  });
+
+  // Drift: a listed site shows its title above its name; a search of the name alone would miss the site a person reads, and one of a title the listing hides would list a site with no hit to see.
+  describe("`named` finds a site by its name or by the title it is listed with", () => {
+    const PAGE_TITLE = "Report 50%_done's";
+    const stocked = async (): Promise<World> => {
+      const world = await makeWorld();
+      const drafts = [
+        ["report", {}],
+        ["notes", { title: "Quarterly Report" }],
+        ["draft", { page_title: PAGE_TITLE }],
+        ["plans", { title: "Budget", page_title: "Report" }],
+        ["misc", {}],
+        ["old", { title: "Report archive" }],
+      ] as const;
+      for (const [at, [name, settings]] of drafts.entries()) {
+        world.clock.now = NOW + at;
+        const id = await made(world, OWNER, name, settings);
+        if (name === "old") await deleteSite(world.install, OWNER, { site: id });
+      }
+
+      return world;
+    };
+    const walked = async (world: World, query: Parameters<typeof listSites>[2]): Promise<unknown[][]> =>
+      (await pagesOf(world, OWNER, { sort: "name", ...query })).map((page) => page.map((site) => [site.name, site.title]));
+    const REPORTS = [
+      [
+        ["draft", PAGE_TITLE],
+        ["notes", "Quarterly Report"],
+      ],
+      [["report", null]],
+    ];
+    const OLDEST_FIRST = [
+      [
+        ["report", null],
+        ["notes", "Quarterly Report"],
+      ],
+      [["draft", PAGE_TITLE]],
+    ];
+
+    test.each([
+      ["a name, a typed title and a page's title, across two pages", { named: "report" }, REPORTS],
+      ["capitals typed, paged from the oldest change", { named: "REPORT", sort: "updated", dir: "asc" }, OLDEST_FIRST],
+      ["a typed title, which hides the page's own", { named: "budget" }, [[["plans", "Budget"]]]],
+      ["signs of a pattern and a quote, as they stand", { named: "50%_done's" }, [[["draft", PAGE_TITLE]]]],
+      ["signs that only a pattern would match", { named: "5_%" }, [[]]],
+      ["a site with neither title", { named: "misc" }, [[["misc", null]]]],
+      ["a text in no name and no title", { named: "ledger" }, [[]]],
+      ["the trash", { named: "archive", trash: true }, [[["old", "Report archive"]]]],
+      ["a title of the trash, looked for outside it", { named: "archive" }, [[]]],
+    ] as const)("%s", async (_what, query, pages) => {
+      expect<unknown>(await walked(await stocked(), query)).toEqual(pages);
+    });
   });
 
   // Drift: the query comes from a request as sent; one passed on unchecked would reach the database as a thrown error instead of an answer.

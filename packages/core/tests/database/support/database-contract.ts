@@ -5,7 +5,7 @@ import { describe, expect, test } from "bun:test";
 import { type LoginId, mintComputerLogin, type PendingLogin } from "../../../src/auth/computer-logins";
 import type { Login } from "../../../src/auth/logins";
 import { mintToken, type TokenId, type TokenRecord } from "../../../src/auth/tokens";
-import type { Database, NewSite, NewUpload, NewVersion, Signed, SitesPage } from "../../../src/database/database";
+import type { Database, NewSite, NewUpload, NewVersion, Signed, SitesPage, SitesQuery } from "../../../src/database/database";
 import type { PublicName, SiteName } from "../../../src/names/names";
 import type { AuditAction, AuditEntry } from "../../../src/records/audit";
 import type { DomainCheck } from "../../../src/records/domain-check";
@@ -781,6 +781,61 @@ function sites(label: string, makeDatabase: DatabaseFactory): void {
       // Drift: a cursor that lacks what its order goes by has no place in that order; started from the top instead, the page would repeat its sites.
       await expect(database.listSites({ trash: false, limit: 1, sort: "name", after: { updated_at: NOW, id: "aaaaaaaaaaaa" as SiteId } })).rejects.toThrow(RangeError);
       await expect(database.listSites({ trash: false, limit: 1, sort: "access", after: { updated_at: NOW, id: "aaaaaaaaaaaa" as SiteId, name: REPORT } })).rejects.toThrow(RangeError);
+    });
+
+    // Drift: a listed site shows its title above its name. A search of the name alone would miss the site a person reads, and one of a title the listing hides would list a site with no hit to see.
+    describe("a text finds a site by its name or by the title it is listed with", () => {
+      const stocked = async (): Promise<Database> => {
+        const database = await opened(makeDatabase, mintFrom("aaaaaaaaaaaa", "bbbbbbbbbbbb", "cccccccccccc", "dddddddddddd", "eeeeeeeeeeee", "ffffffffffff"));
+        const drafts: readonly (readonly [name: string, title: string | null, pageTitle?: string])[] = [
+          ["report", null],
+          ["notes", "Quarterly Report"],
+          ["draft", null, `Report 50%_done's "final"`],
+          ["plans", "Budget \u03a9", "Report"],
+          ["misc", null],
+          ["old", "Report archive"],
+        ];
+        for (const [index, [name, title, pageTitle]] of drafts.entries()) {
+          const site = { ...draft(name as SiteName), title, ...(pageTitle === undefined ? {} : { page_title: pageTitle }) };
+          await made(database, site, { by: ADA, at: NOW + index });
+        }
+        await database.trashSite("ffffffffffff" as SiteId, { by: ADA, at: NOW + 9 });
+
+        return database;
+      };
+      const walked = async (database: Database, query: Partial<SitesQuery>): Promise<string[][]> => {
+        const pages: string[][] = [];
+        let after: SitesPage["next"];
+        do {
+          const page = await database.listSites({ trash: false, limit: 2, sort: "name", ...query, ...(after === undefined ? {} : { after }) });
+          pages.push(page.sites.map((site) => site.name));
+          after = page.next;
+        } while (after !== undefined);
+
+        return pages;
+      };
+
+      test.each([
+        ["a name and two titles, paged in the order of the names", { named: "report" }, [["draft", "notes"], ["report"]]],
+        ["the same, paged from the oldest change", { named: "report", sort: "updated", dir: "asc" }, [["report", "notes"], ["draft"]]],
+        ["capitals typed, for a name and for a title", { named: "REPORT" }, [["draft", "notes"], ["report"]]],
+        ["a typed title", { named: "quarterly" }, [["notes"]]],
+        ["a typed title, which hides the page's own", { named: "budget" }, [["plans"]]],
+        ["a letter outside ASCII, as it is typed", { named: "\u03a9" }, [["plans"]]],
+        ["a page's title, with a percent sign and an underscore", { named: "50%_D" }, [["draft"]]],
+        ["a percent sign, which stands for itself", { named: "%" }, [["draft"]]],
+        ["an underscore, which stands for itself", { named: "_" }, [["draft"]]],
+        ["signs that only a pattern would match", { named: "5_%" }, [[]]],
+        ["a single quote", { named: "done's" }, [["draft"]]],
+        ["double quotes", { named: '"final"' }, [["draft"]]],
+        ["a site with neither title, by its name", { named: "misc" }, [["misc"]]],
+        ["a text in no name and no title", { named: "ledger" }, [[]]],
+        ["a title of the trash, looked for outside it", { named: "archive" }, [[]]],
+        ["a title of the trash", { named: "archive", trash: true }, [["old"]]],
+        ["the trash, which holds one site the text is in", { named: "report", trash: true }, [["old"]]],
+      ] as const)("%s", async (_what, query, pages) => {
+        expect<unknown>(await walked(await stocked(), query)).toEqual(pages);
+      });
     });
 
     // Drift: the place of an access is held by the schema, which orders the listing, and by the cursor, which starts the next page. Were the two to differ, or the order to follow the spelling, a page would repeat or skip sites.

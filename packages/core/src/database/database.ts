@@ -93,7 +93,7 @@ export interface SitesQuery {
   /** The `next` of the page before; absent for the first page. */
   readonly after?: SitesCursor;
 
-  /** Only the sites whose name holds this text; every site when absent. */
+  /** Only the sites whose name holds this text, or whose title does: the typed one, else the page's own. Every site when absent. */
   readonly named?: string;
 
   /** Only the sites of this access; every site when absent. */

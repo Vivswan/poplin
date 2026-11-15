@@ -168,14 +168,21 @@ const ACCESS_RANKS = { private: 0, unlisted: 1, public: 2 } as const;
 /** The direction a listing takes when none is asked: the last change first, a name and an access from the start. */
 const DEFAULT_DIRECTIONS = { updated: "desc", name: "asc", access: "asc" } as const;
 
+/**
+ * A site whose name holds a text, or whose title does: the typed one, else the page's own, which is the one a listing shows.
+ * The text is looked for as it stands, with no sign read as a pattern. Only the letters A to Z match either case: the engine's `lower` changes no other.
+ */
+function holding(text: string): SQL {
+  return fragment`(instr(${sites.name}, lower(${text})) > 0 OR instr(lower(coalesce(${sites.title}, ${sites.page_title})), lower(${text})) > 0)`;
+}
+
 /** The conditions that narrow a listing to what its query asks for: the trash or not, and each filter given. */
 function narrowing(query: SitesQuery): SQL[] {
   const conditions: SQL[] = [eq(sites.trashed, query.trash ? 1 : 0)];
 
   if (query.owner !== undefined) conditions.push(eq(sites.owner, query.owner));
 
-  // The text is looked for as it stands, with no sign read as a pattern. A name holds no capital, so one typed with capitals is looked for without.
-  if (query.named !== undefined) conditions.push(fragment`instr(${sites.name}, ${query.named.toLowerCase()}) > 0`);
+  if (query.named !== undefined) conditions.push(holding(query.named));
 
   if (query.access !== undefined) conditions.push(eq(sites.access, query.access));
 
