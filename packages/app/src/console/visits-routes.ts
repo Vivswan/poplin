@@ -1,6 +1,6 @@
 // The data of the Usage screen's graph: how often pages were opened over a stretch of days, all sites together and the sites picked beside them.
 //
-//   GET /usage/visits   ?range= the days read, today the last; ?sites= up to five site ids, set apart by commas
+//   GET /usage/visits   ?range= the days read, today the last; ?sites= up to fifty site ids, set apart by commas
 //
 // A stretch of up to 90 days answers a count a day. A longer one answers a count a week, so a year is 53 points and not 365.
 

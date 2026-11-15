@@ -74,7 +74,7 @@ test.each([
   ["no range", "sites=", "range"],
   ["a range the graph does not offer", "range=31", "range"],
   ["a range longer than a year", "range=366", "range"],
-  ["six sites", "range=30&sites=aaaaaaaaaaa1,aaaaaaaaaaa2,aaaaaaaaaaa3,aaaaaaaaaaa4,aaaaaaaaaaa5,aaaaaaaaaaa6", "sites"],
+  ["fifty-one sites", `range=30&sites=${Array.from({ length: 51 }, (_site, at) => `aaaaaaaaaa${String(at).padStart(2, "0")}`).join(",")}`, "sites"],
   ["a text that is no site id", "range=30&sites=field-notes", "sites"],
   ["a key it does not know", "range=30&days=30", "days"],
 ])("refuses %s", async (_what, query, about) => {

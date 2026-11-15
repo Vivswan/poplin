@@ -2000,7 +2000,7 @@ function requestCounts(label: string, makeDatabase: DatabaseFactory): void {
       ["no days", [], "2026-11-01", 0],
       ["half a day", [], "2026-11-01", 1.5],
       ["a day more than a year", [], "2026-11-01", 366],
-      ["six sites", ["a", "b", "c", "d", "e", "f"], "2026-11-01", 30],
+      ["fifty-one sites", Array.from({ length: 51 }, (_site, at) => `site-${at}`), "2026-11-01", 30],
     ])("a read day by day of %s is refused", async (_what, sites, day, count) => {
       const database = await opened(makeDatabase);
 

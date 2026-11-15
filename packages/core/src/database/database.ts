@@ -750,11 +750,11 @@ export interface Database {
   /**
    * The page views counted day by day, for all sites together and for some sites. It is one query, and every row is read by its key.
    *
-   * @param sites - the sites to read beside all sites together, at most 5
+   * @param sites - the sites to read beside all sites together, at most 50
    * @param day - the last day read, a UTC date such as `2026-11-13`
    * @param count - how many days are read, that day included: a whole number from 1 to 365
    * @returns a count for every day, 0 where nothing was counted
-   * @throws {RangeError} `day` is not such a date, `count` is not such a number, or more than 5 sites are asked for
+   * @throws {RangeError} `day` is not such a date, `count` is not such a number, or more than 50 sites are asked for
    */
   readDailyViews(sites: readonly SiteId[], day: string, count: number): Promise<DailyViews>;
 }

@@ -14,8 +14,8 @@ const VIEW_DAYS = 7;
 /** How many UTC days the counts are kept, today included: the longest stretch a read day by day spans. */
 export const KEPT_DAYS = 365;
 
-/** The most sites one read day by day names. */
-export const MOST_SITES_COMPARED = 5;
+/** The most sites one read day by day names: a read of a year then finds under twenty thousand rows by their keys. */
+export const MOST_SITES_COMPARED = 50;
 
 /** How many milliseconds a day holds. */
 const DAY_MS = 86_400_000;

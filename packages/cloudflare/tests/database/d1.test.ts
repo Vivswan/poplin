@@ -151,6 +151,7 @@ const ROWS: Readonly<Record<string, readonly [read: number, written: number]>> =
   "readViews": [42, 0],
   "readDailyViews, 30 days": [188, 0],
   "readDailyViews, a year": [2198, 0],
+  "readDailyViews, a year, fifty sites": [18668, 0],
   "listSites": [18, 0],
   "listSites, the next page": [18, 0],
   "listSites, by name, one holder, a text, an access": [23, 0],
@@ -590,6 +591,9 @@ describe("D1: the rows every operation of the database costs of a day's allowanc
     await cost("readViews", () => database.readViews(sites.slice(0, 5).map((made) => made.id), DAY));
     await cost("readDailyViews, 30 days", () => database.readDailyViews(sites.slice(0, 5).map((made) => made.id), DAY, 30));
     await cost("readDailyViews, a year", () => database.readDailyViews(sites.slice(0, 5).map((made) => made.id), DAY, 365));
+    // Fifty ids, the most one read takes: the sites there are, and ids no site has.
+    const fifty = [...sites.map((made) => made.id), ...Array.from({ length: 50 - SITES }, (_none, at) => `none${String(at).padStart(8, "0")}` as SiteId)];
+    await cost("readDailyViews, a year, fifty sites", () => database.readDailyViews(fifty, DAY, 365));
 
     const page = await cost("listSites", () => database.listSites({ trash: false, limit: 5 }));
     await cost("listSites, the next page", () => database.listSites({ trash: false, limit: 5, ...(page.next === undefined ? {} : { after: page.next }) }));
