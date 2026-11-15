@@ -75,18 +75,30 @@ interface TokenFormProps {
   readonly onRun: (run: Ran["run"], sent: Sent) => Promise<Refused | undefined>;
 }
 
+/** Read an address a link may lead to: a whole one that starts with https. Anything else is no link, so no text that reaches the page is run by a press. */
+function httpsLink(address: string): string | undefined {
+  if (!URL.canParse(address)) return undefined;
+
+  const parsed = new URL(address);
+
+  return parsed.protocol === "https:" ? parsed.href : undefined;
+}
+
 /** The way to a token: one link to the provider's form with every needed right chosen, and behind a quiet line the rights an install works without. */
 function MakeToken({ form }: { readonly form: Domain["form"] }): ReactNode {
   const needed = form.tokenRights.length;
+  const link = httpsLink(form.tokenLink);
 
   return (
     <div className="flex min-w-0 flex-col gap-3">
       <h2 className="font-medium">First, make a token</h2>
       <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
-        <Button variant="outline" nativeButton={false} render={<a href={form.tokenLink} target="_blank" rel="noreferrer" />}>
-          Open the token form
-          <ExternalLinkIcon data-icon="inline-end" />
-        </Button>
+        {link === undefined ? null : (
+          <Button variant="outline" nativeButton={false} render={<a href={link} target="_blank" rel="noreferrer" />}>
+            Open the token form
+            <ExternalLinkIcon data-icon="inline-end" />
+          </Button>
+        )}
         <Popover>
           <PopoverTrigger render={<Button variant="link" className="h-auto px-0 text-link" />}>The form opened empty?</PopoverTrigger>
           <PopoverContent align="start" className="w-80">

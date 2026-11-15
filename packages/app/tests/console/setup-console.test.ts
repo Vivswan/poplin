@@ -13,7 +13,9 @@ import { CSRF_SECRET, ORIGIN, openDashboard } from "../dashboard/support/install
 const FOREIGN = "token-of-another-account-0123456789";
 
 /** The files the test screen answers as its client's build. */
-const ASSETS: Readonly<Record<string, { readonly body: string; readonly type: string }>> = { "app.js": { body: "// the client", type: "text/javascript; charset=utf-8" } };
+const ASSETS: Readonly<Record<string, { readonly body: string; readonly type: string }>> = {
+  "app.js": { body: "// the client", type: "text/javascript; charset=utf-8" },
+};
 
 /** How a test's setup screen differs from the usual one. */
 interface Options {
@@ -111,7 +113,7 @@ describe("the page", () => {
       starts: false,
       demo: null,
       domain: false,
-    domainNote: null,
+      domainNote: null,
       setup: {
         boxes,
         form: {
@@ -123,7 +125,9 @@ describe("the page", () => {
         },
       },
     });
-    expect([page.includes(opened.owner), page.includes("example.com/"), reads.count, plug.calls]).toEqual([false, false, 0, []]);
+    // The install's own host, as the test opened it: the page names it nowhere.
+    const host = new URL(ORIGIN).hostname;
+    expect([page.includes(opened.owner), page.includes(host), reads.count, plug.calls]).toEqual([false, false, 0, []]);
   });
 
   // Drift: a host that mounts the screen under a path of its own would link the client's files and send its runs to the wrong place.
@@ -151,7 +155,9 @@ describe("the page", () => {
   // Drift: `poplin setup` posts to these two paths; the new page in front of them would cut the command off.
   test("leaves a program's call to the setup page's own handler, in its own shape", async () => {
     const { fetch } = await openSetup();
-    const answer = await fetch(new Request(`${ORIGIN}/setup/api/check`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ token: FOREIGN }) }));
+    const answer = await fetch(
+      new Request(`${ORIGIN}/setup/api/check`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ token: FOREIGN }) }),
+    );
 
     expect([answer.status, await answer.json()]).toEqual([403, { ok: false, refusal: "token" }]);
   });
@@ -166,7 +172,12 @@ describe("a run", () => {
     const body = await answer.text();
 
     expect(answer.status).toBe(403);
-    expect(JSON.parse(body)).toEqual({ ok: false, code: "token", about: "token", sentence: "Token refused. Paste the whole token, made for this account and this domain." });
+    expect(JSON.parse(body)).toEqual({
+      ok: false,
+      code: "token",
+      about: "token",
+      sentence: "Token refused. Paste the whole token, made for this account and this domain.",
+    });
     expect([reads.count, (await opened.audit()).length - before, body.includes(FOREIGN), body.includes("other@example.com")]).toEqual([0, 0, false, false]);
   });
 

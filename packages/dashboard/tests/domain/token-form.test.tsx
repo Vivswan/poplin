@@ -24,13 +24,13 @@ const TOKEN = "planted-token-0123456789";
 const runs: { run: string; sent: Sent }[] = [];
 
 /** Draw the block over a run that answers `refusal`, and hand back the page's queries. */
-function drawn(refusal?: Refused, boxes?: "first" | "login") {
+function drawn(refusal?: Refused, boxes?: "first" | "login", form = FORM) {
   const onRun = async (run: "check" | "repair", sent: Sent): Promise<Refused | undefined> => {
     runs.push({ run, sent });
 
     return refusal;
   };
-  render(<TokenForm form={FORM} boxes={boxes} onRun={onRun} />);
+  render(<TokenForm form={form} boxes={boxes} onRun={onRun} />);
 
   return within(document.body);
 }
@@ -142,6 +142,13 @@ describe("the way to a token", () => {
     expect(document.body.textContent).toContain(
       "It opens in a new tab with the 2 rights chosen. Add nothing, and create the token. Choose what the token is for.",
     );
+  });
+
+  // Drift: an address that is no https link would become a link all the same, and a press on it would run what the address holds.
+  test.each(["javascript:alert(1)", "http://provider.example/tokens/new", "tokens/new", ""])("is no link for the address %p", (tokenLink) => {
+    const page = drawn(undefined, undefined, { ...FORM, tokenLink });
+
+    expect([page.queryByText("Open the token form"), document.querySelectorAll("a").length]).toEqual([null, 0]);
   });
 
   // Drift: the optional rights would stand before the required boxes again, or their line would open on nothing.
