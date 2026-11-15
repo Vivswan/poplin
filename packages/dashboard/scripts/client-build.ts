@@ -23,13 +23,14 @@ interface BuiltClient {
 /**
  * Build the client into a folder, which holds nothing else afterwards.
  *
- * @throws {Error} the client did not build
+ * @throws {Error} the client did not build, or its build was stopped before it ended
  */
 export async function buildClient(into: string): Promise<void> {
   // The build is the one an owner or a visitor gets, whatever the caller runs as: another environment would build the client's libraries with their checks for developers.
   const env = { ...process.env, NODE_ENV: "production" };
   const built = Bun.spawn([process.execPath, "run", "build", "--outDir", into, "--emptyOutDir"], { cwd: CLIENT, env, stdio: ["ignore", "ignore", "inherit"] });
-  if ((await built.exited) !== 0) throw new Error("the dashboard's client did not build");
+  if ((await built.exited) === 0) return;
+  throw new Error(built.signalCode === null ? "the dashboard's client did not build" : `the build of the dashboard's client was stopped by ${built.signalCode} before it ended`);
 }
 
 /**
