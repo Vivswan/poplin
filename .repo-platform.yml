@@ -1,4 +1,4 @@
-modules: [bun, release-please, npm, pr-title, site, nightly, fuzzer]
+modules: [bun, release-please, npm, pr-title, site, nightly, fuzzer, autofix]
 project:
   name: Poplin
   slug: poplin
@@ -7,3 +7,8 @@ npm:
   path: packages/cli
 site:
   vars: [DEMO_URL]
+# What a fix-lint label may commit back (the platform's docs/modules/autofix.md); the hook is .github/actions/autofix.
+autofix:
+  # Every kind of file biome reads: the hook runs `bun run lint:fix`, which changes no other.
+  label:
+    paths: ["**/*.{ts,tsx,mts,cts,js,jsx,mjs,cjs,astro,css,html,svg,json,jsonc,md,yml,yaml}"]
