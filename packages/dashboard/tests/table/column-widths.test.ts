@@ -2,7 +2,7 @@
 
 import { describe, expect, test } from "bun:test";
 
-import { type Fitted, type SizedColumn, widthsForRoom } from "@/table/column-widths";
+import { type Fitted, type SizedColumn, widthsForRoom, withEdgeInReach } from "@/table/column-widths";
 
 /** The test table's columns: the first fixed. */
 const COLUMNS: readonly SizedColumn[] = [{ id: "name", fixed: true }, { id: "colour" }, { id: "weight" }, { id: "origin" }];
@@ -65,6 +65,14 @@ describe("the widths of a table's columns", () => {
     expect(widthsOf(columns, {}, 1000)).toMatchObject({ drawn: { weight: 460 }, spare: 0 });
     expect(widthsOf(columns, { weight: 90 }, 1000)).toMatchObject({ drawn: { weight: 90, origin: 690 }, spare: 0 });
     expect(widthsOf(columns, { name: 100, colour: 100, weight: 90, origin: 300 }, 1000)).toMatchObject({ drawn: { weight: 90, origin: 710 }, spare: 0 });
+  });
+
+  // Drift: the fixed column dragged down to the narrowest of any column would show one letter of each name, with its edge under its heading's own button, where no pointer reaches it to drag the column wide again.
+  test("draw the fixed column of a table a person resizes no narrower than its heading and the start of a name need, whatever width was kept for it, and any other column down to the narrowest", () => {
+    expect(widthsOf(COLUMNS.map(withEdgeInReach), { name: 48, weight: 48 }, 2000)).toMatchObject({ drawn: { name: 120, weight: 48 } });
+    expect(widthsOf(COLUMNS, { name: 48, weight: 48 }, 2000)).toMatchObject({ drawn: { name: 48, weight: 48 } });
+    // In a room too narrow for every column, the columns that give do not take the fixed one under its least.
+    expect(widthsForRoom([{ id: "name", fixed: true, narrowest: 120 }, { id: "colour" }], { needs: new Map([["name", 70], ["colour", 100]]), least: new Map([["name", 70], ["colour", 100]]) }, {}, 170).drawn.get("name")).toBe(120);
   });
 
   // Drift: a fixed column dragged very wide would cover every other column, with no way to reach them.
