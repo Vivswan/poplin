@@ -320,7 +320,7 @@ a run, at its worst      1,140 + 700 + 72 + 181 = 2,093
 the plan's day           100,000 requests to the Worker, reached at about 47 such runs
 ```
 
-The runs of one day must stay under the plan's 100,000 requests to the Worker. The other checks send a few dozen more, and a reset that keeps the samples reads each of their files, about 130 requests.
+The runs of one day must stay under the plan's 100,000 requests to the Worker. The other checks send a few dozen more, and a reset that keeps the samples reads each of their files, about 130 requests. A stranger's request that gets no answer and is asked again is counted once here, though it may have reached the Worker each time.
 
 ```text
 the install without a domain
@@ -466,10 +466,16 @@ Each result comes with one line: the requests, the time, each answer's count, ea
 
 The edge closes a connection it kept open, and a request sent on it then gets no answer. A client sends a read again by itself, and no other request. So every request of a run that is no read opens a connection of its own, in `send.ts`; reads keep the open ones.
 
-The edge's rules block with an answer: a 403. A stranger's request whose connection closes before any answer says nothing of a rule or of the install. The run sends it once more and reads the second answer, and the log holds one line for it. A request that is cut off twice reaches its check as cut off, and so does a change asked of the API, which is never sent twice.
+The edge's rules block with an answer: a 403. A stranger's request that gets no answer, its connection closed or its 30 seconds run out, says nothing of a rule or of the install. The run asks it again, and the log holds one line for each asking.
+
+| A stranger's request | Asked again |
+| --- | --- |
+| gets an answer, of any status | never: a wrong status fails its check |
+| gets no answer | twice at most, after 1 second and then 2; the third failure reaches its check |
+| is a change asked of the API | never: it is not sent twice |
 
 ```text
-a stranger's request was cut off before any answer, and was sent once more
+a stranger's request got no answer, asked again: 1
 ```
 
 ## What a run skips

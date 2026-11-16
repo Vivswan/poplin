@@ -64,8 +64,14 @@ const RUN_MS = 30_000;
 /** The rows a run of every check counts on an install behind a login, which skips none but a person's and the many-files publish: what the README states of a usual run. */
 const CHECKS_ROWS = 866;
 
-/** What a run says when it sends a stranger's request a second time. */
-const SENT_AGAIN = "a stranger's request was cut off before any answer, and was sent once more";
+/** What a run says each time it asks a stranger's request again, before the count of its askings so far. */
+const ASKED_AGAIN = "a stranger's request got no answer, asked again";
+
+/** The first line of the failure of a connection a test cuts off. */
+const CUT = "TypeError: The socket connection was closed unexpectedly";
+
+/** The first line of the failure of a request whose time a test lets run out. */
+const TIMED_OUT = "TimeoutError: The operation timed out.";
 
 /** The benches a test opened, closed after it. */
 const OPENED: (() => void)[] = [];
@@ -182,13 +188,13 @@ const BURST_CASES: readonly BurstCase[] = [
     ["320 requests in 0 ms were answered: 302 x120, 429 of the install x180, 429 of the rate rule x20", "through AAA x320 (most in ten seconds x320)", ONE_SEEN],
   ],
   ["requests spread over two data centers are blocked once one of them has seen more than the limit", { spread: 2 }, "passed",
-    ["604 requests in 3168 ms were answered: 302 x120, 429 of the install x480, 429 of the rate rule x4", "through AAA x302 (most in ten seconds x302), BBB x302 (most in ten seconds x302)", ONE_SEEN],
+    ["606 requests in 3192 ms were answered: 302 x120, 429 of the install x480, 429 of the rate rule x6", "through AAA x303 (most in ten seconds x303), BBB x303 (most in ten seconds x303)", ONE_SEEN],
   ],
   ["one data center past the limit for five seconds, with no rule to block, fails", { noRateRule: true }, "failed",
     ["757 requests in 5004 ms were answered: 302 x120, 429 of the install x637", "through AAA x757 (most in ten seconds x757)", ONE_SEEN],
   ],
   ["two data centers past the limit for five seconds, with no rule to block, fail before the requests end", { noRateRule: true, spread: 2 }, "failed",
-    ["1021 requests in 8172 ms were answered: 302 x120, 429 of the install x901", "through AAA x511 (most in ten seconds x511), BBB x510 (most in ten seconds x510)", ONE_SEEN],
+    ["1023 requests in 8196 ms were answered: 302 x120, 429 of the install x903", "through AAA x512 (most in ten seconds x512), BBB x511 (most in ten seconds x511)", ONE_SEEN],
   ],
   ["requests spread over four data centers, none past the limit, prove nothing and are skipped", { spread: 4 }, "skipped",
     [
@@ -434,29 +440,43 @@ describe("the live checks, against a local fake", () => {
     expect({ result: outcome.result, said, sent, named: said.join().includes("example.") }).toEqual({ result, said: lines, sent: lines.flatMap(() => ["GET", "GET"]), named: false });
   }, RUN_MS);
 
-  // Drift: the edge's rule blocks with an answer, a 403, and a connection that closes before any answer says nothing of the rule.
-  // A check that took such a failure for the block would pass with the rule gone; one that failed on it fails a run for the network's sake.
-  test.each<[string, string, number, Outcome["result"], string[]]>([
-    ["a changing method to a site's address, cut off once, is sent once more, said so, and passes on the answer it then gets", "L8-method", 1, "passed", [SENT_AGAIN]],
-    ["a changing method to a site's address, cut off twice, fails", "L8-method", 2, "failed", [SENT_AGAIN]],
-    ["a computer's login asked of the API, cut off once, is not sent again, and fails", "L11", 1, "failed", []],
-  ])("%s", async (_what, id, cuts, result, lines) => {
+  // Drift: a request that gets no answer says nothing of a rule or of the install. A check that failed on it fails a run for the network's sake.
+  // One that asked again after an answer would hide a wrong status, and one that lost the failure it met would say nothing of why it failed.
+  test.each<[string, string, { readonly method: string; readonly meets: "cut" | "timeout" | "answer"; readonly times: number }, Outcome["result"], number[], string]>([
+    ["a changing method to a site's address, cut off once, is asked again, said so, and passes on the answer it then gets", "L8-method", { method: "POST", meets: "cut", times: 1 }, "passed", [1], ""],
+    ["the same, cut off twice, is asked a third time after a longer pause, and passes", "L8-method", { method: "POST", meets: "cut", times: 2 }, "passed", [1, 2], ""],
+    ["the same, cut off three times, fails with the failure it met: it is asked three times and no more", "L8-method", { method: "POST", meets: "cut", times: 3 }, "failed", [1, 2], CUT],
+    ["a read whose time runs out once is asked again, said so, and passes", "no-site", { method: "GET", meets: "timeout", times: 1 }, "passed", [1], ""],
+    ["a read whose time runs out three times fails with the failure it met", "no-site", { method: "GET", meets: "timeout", times: 3 }, "failed", [1, 2], TIMED_OUT],
+    ["a read that is answered with a wrong status is never asked again, and fails", "no-site", { method: "GET", meets: "answer", times: 1 }, "failed", [], "Error: expect(received).toBe(expected)"],
+    ["a computer's login asked of the API, cut off once, is not sent again, and fails", "L11", { method: "POST", meets: "cut", times: 1 }, "failed", [], CUT],
+  ])("%s", async (_what, id, fault, result, askings, failure) => {
     const fake = await openFake();
     const said: string[] = [];
-    let cut = 0;
-    const cutting: Fetch = async (input, init) => {
-      if (init.method !== "POST" || cut >= cuts) return fake.fetch(input, init);
+    const paused: number[] = [];
+    let met = 0;
+    const faulty: Fetch = async (input, init) => {
+      if ((init.method ?? "GET") !== fault.method || met >= fault.times) return fake.fetch(input, init);
 
-      cut += 1;
-      throw Object.assign(new TypeError("The socket connection was closed unexpectedly"), { code: "ECONNRESET" });
+      met += 1;
+      if (fault.meets === "answer") return new Response("a failure of the edge", { status: 500 });
+
+      throw fault.meets === "cut" ? Object.assign(new TypeError("The socket connection was closed unexpectedly"), { code: "ECONNRESET" }) : new DOMException("The operation timed out.", "TimeoutError");
     };
-    const { bench, close } = openBench({ addresses: fake.addresses, token: fake.token, run: "selftest", missing: {}, fetch: cutting, pause: fake.pause, now: fake.now, say: (text) => said.push(text), manyFiles: MANY_FILES, largeCopy: LARGE_COPY });
+    let reported = "";
+    const report = (error: unknown): void => {
+      [reported = ""] = String(error).split("\n");
+    };
+    const parts = { addresses: fake.addresses, token: fake.token, run: "selftest", missing: {}, fetch: faulty, now: fake.now, manyFiles: MANY_FILES, largeCopy: LARGE_COPY };
+    const { bench, close } = openBench({ ...parts, pause: async (ms) => void paused.push(ms), say: (text) => said.push(text) });
     OPENED.push(close);
 
     const check = CHECKS.find((one) => one.id === id);
     if (check === undefined) throw new Error(`the checks hold no ${id}`);
 
-    expect({ result: (await runCheck(bench, check)).result, said }).toEqual({ result, said: lines });
+    const outcome = await runCheck(bench, check, report);
+
+    expect({ result: outcome.result, said, paused, reported }).toEqual({ result, said: askings.map((asking) => `${ASKED_AGAIN}: ${asking}`), paused: askings.map((asking) => asking * 1000), reported: failure });
   }, RUN_MS);
 
   // A failure that said only the answers left it open whether the rule was gone or the requests never met in one count; a line that held the address the edge saw would put it in a public log.

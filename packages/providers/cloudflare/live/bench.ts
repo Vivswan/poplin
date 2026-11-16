@@ -4,6 +4,8 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
+import pRetry from "p-retry";
+
 import { createClient, type Fetch } from "../../../cli/src/client/client";
 import type { Io } from "../../../cli/src/commands/records";
 import { DELETED_SITE } from "../../../core/src/actions/delete";
@@ -29,8 +31,14 @@ const CONNECTION_RESET = "ECONNRESET";
 /** Where the API answers: a request there that is no read may count against a minute's allowance, so it is never sent twice. */
 const API = "/api/";
 
-/** What a run says when it sends a stranger's request a second time. */
-const SENT_AGAIN = "a stranger's request was cut off before any answer, and was sent once more";
+/** The name of the failure of a request whose time ran out before any answer. */
+const TIMED_OUT = "TimeoutError";
+
+/** How often a stranger's request that got no answer is asked again, and the pause before the first of them, in milliseconds; each pause after it is as much longer. */
+const AGAIN = { times: 2, pauseMs: 1_000 } as const;
+
+/** What a run says each time it asks a stranger's request again, before the count of its askings so far. */
+const ASKED_AGAIN = "a stranger's request got no answer, asked again";
 
 /** The first status that is a refusal or a failure. */
 const REFUSED_FROM = 400;
@@ -107,6 +115,13 @@ interface OpenBench {
   readonly close: () => void;
 }
 
+/** A stranger's request that got no answer, with the failure it met: what a check reads once no asking is left. */
+class Unanswered extends Error {
+  constructor(readonly met: unknown) {
+    super("a request got no answer");
+  }
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
@@ -119,9 +134,11 @@ function printed(lines: readonly string[]): Record<string, unknown> {
   return value;
 }
 
-/** Whether a request failed because its connection was closed before any answer: it says nothing of what the edge or the install would answer. */
-function isReset(error: unknown): boolean {
-  return error instanceof Error && "code" in error && error.code === CONNECTION_RESET;
+/** Whether a request failed with no answer at all, its connection closed or its time run out: it says nothing of what the edge or the install would answer. */
+function gotNoAnswer(error: unknown): boolean {
+  if (!(error instanceof Error)) return false;
+
+  return error.name === TIMED_OUT || ("code" in error && error.code === CONNECTION_RESET);
 }
 
 /** Whether a stranger's request is safe to send twice: a read, or any method to an address outside the API, where an install takes reads alone and changes nothing. */
@@ -255,18 +272,31 @@ export function openBench(parts: BenchParts): OpenBench {
     return made;
   };
 
-  // A request that was cut off and is safe to repeat is sent again: once, and the second answer is the one a check reads.
+  // The library asks no TypeError again but a network error of its own list, and the runtime's cut connection is none of them: hence the class.
   const visit: Bench["visit"] = async (address, init = {}) => {
     const send = (): Promise<Response> => parts.fetch(address, { redirect: "manual", signal: AbortSignal.timeout(VISIT_TIMEOUT_MS), ...init });
+    if (!isRepeatable(address, init)) return send();
+
+    const attempt = async (): Promise<Response> => {
+      try {
+        return await send();
+      } catch (error) {
+        throw gotNoAnswer(error) ? new Unanswered(error) : error;
+      }
+    };
+    const again = async ({ error, attemptNumber }: { readonly error: Error; readonly attemptNumber: number }): Promise<boolean> => {
+      if (!(error instanceof Unanswered)) return false;
+
+      parts.say(`${ASKED_AGAIN}: ${attemptNumber}`);
+      await parts.pause(AGAIN.pauseMs * attemptNumber);
+
+      return true;
+    };
 
     try {
-      return await send();
+      return await pRetry(attempt, { retries: AGAIN.times, minTimeout: 0, shouldRetry: again });
     } catch (error) {
-      if (!isReset(error) || !isRepeatable(address, init)) throw error;
-
-      parts.say(SENT_AGAIN);
-
-      return send();
+      throw error instanceof Unanswered ? error.met : error;
     }
   };
 
