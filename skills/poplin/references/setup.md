@@ -245,6 +245,10 @@ npx poplin install cloudflare --domain example.com --login you@example.com --yes
 | `ready` is true, and `answers` is false | 1         | the install is made, and its new address does not answer yet: wait a few minutes, then step 4. If it still does not answer: the repair of part f |
 | `ready` is false, and no `problem`      | 1         | not all was made: tell the user each entry of `blocked`, each row that did not come to make, change, or leave, and each entry of `steps`. There may be no rows. Then part f |
 
+Where `next.step` is `repair` and its `command` holds `--add-user`, the install kept the users its database holds, and the email of `--login` is none of them. Tell the user who logs in, as the row `First login` names them.
+
+Run that `command` as it is written, in place of step 4 and of the repair of part f: it mends what is undone, and lets the email in. Without the option the email stays out.
+
 A run that stopped is looked up in the [install guide](https://github.com/Vivswan/poplin/blob/main/docs/fix/an-install-step-fails.md#part-way), by the words of its rows.
 
 **When the user runs it**, the line has no `--dry-run`, no `--yes`, and no `--json`. It asks for the token again: the user copies it from Cloudflare's page a second time, or rolls it, as part d has it. It prints a row for each thing it makes, and ends:
@@ -256,6 +260,8 @@ Log this computer in now?
 ```
 
 Tell the user to answer yes: that is the login of step 4, in their own terminal. Their browser opens Cloudflare's login, which sends a code to their email, and then the question `Allow this login?`. Tell them the two choices of Can change first, as step 4 has them. Then run the check of step 4.
+
+A run that kept a database's users and did not use the email of `--login` asks no such question. Its last line is `To let` the email `log in too:` and a repair with `--add-user`: the user runs that line.
 
 The command stores the token nowhere. Afterwards the user either keeps it where they keep passwords, or deletes it at Cloudflare, under My Profile, then API Tokens: the install keeps working.
 

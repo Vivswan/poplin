@@ -208,7 +208,7 @@ The new install takes its users and its settings from the kept database:
 | no users yet            | the email you give for `--login`  | used                                                                               |
 | records this poplin cannot read | the email you give for `--login` | used, and the row of the database says that its users were not read          |
 
-To let one more person in afterwards: `npx poplin doctor --repair --add-user you@example.com`, with their email. The row names that line too.
+To let one more person in afterwards: `npx poplin doctor --repair --add-user you@example.com`, with their email. Where the email of `--login` is none of the kept users, the run ends with that line, and offers no login of this computer.
 
 A dry run with `--keep-data` lists the same. The kept bucket and database stay in your account as they are: [What can cost money](cost/what-can-cost-money.md) says what stored files count toward.
 

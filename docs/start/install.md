@@ -165,7 +165,7 @@ Log this computer in now?
 
 **It worked when** it says that the address `answers`, and then `poplin 0.1.0 is installed.`, with the version of the day. The sample shows a few of the rows. A new address can take a few minutes: the command waits up to five.
 
-**Where the address does not answer in that time**, the run says `poplin 0.1.0 is made, and its address does not answer yet.` and exits with 1. Under it are two lines: the login to run once the address answers, and `npx poplin doctor --repair` for an address that still does not.
+**Where the address does not answer in that time**, the run says `poplin 0.1.0 is made, and its address does not answer yet.` and exits with 1. Under it are two lines: the login to run once the address answers, and `npx poplin doctor --repair` for an address that still does not. After a run that did not use `--login`, one line stands there: the repair with `--add-user`.
 
 | A row starts with | Means                                                                   |
 | ----------------- | ----------------------------------------------------------------------- |
@@ -365,7 +365,7 @@ npx poplin install cloudflare --no-domain --login you@example.com --yes
 | `--log-in`    | logs this computer in when the install is made; `--no-log-in` does not, and does not ask |
 | `--no-wait`   | does not wait for the new install to answer                                              |
 
-A run that asks nothing logs no computer in unless `--log-in` says so. It ends by printing the login line.
+A run that asks nothing logs no computer in unless `--log-in` says so. It ends by printing the login line. A run that kept the users of a database and did not use the email of `--login` logs no computer in. It ends with the line that lets that email in, also where its address does not answer yet.
 
 With `--json`, the value of a run, and of a run that stopped, names what to run next in `next`: a `step`, and its `command` without the answers your line gave. Where `next` names the same command again, the `command` keeps `--dry-run` of a dry run that stopped or is not ready, and a removal's keeps `--keep-data`.
 
@@ -374,7 +374,7 @@ A repair that found kept data and no install names `npx poplin install cloudflar
 | `next.step` | Run next                                                                    |
 | ----------- | --------------------------------------------------------------------------- |
 | `install`   | `npx poplin install cloudflare`, with the same answers                      |
-| `repair`    | the repair, as `command` writes it: `npx poplin doctor --repair`, or the newest poplin's |
+| `repair`    | the repair, as `command` writes it: `npx poplin doctor --repair`, the newest poplin's, or with `--add-user` after an install that kept its users and did not use `--login` |
 | `login`     | `npx poplin login`, with `--server` and the install's address               |
 | `uninstall` | `npx poplin uninstall cloudflare`: a removal's dry run, or one that left a kind |
 | `none`      | nothing                                                                     |

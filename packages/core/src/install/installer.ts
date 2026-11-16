@@ -132,6 +132,7 @@ export interface Step {
  * `release` is the version a run uploads, and `address` where the install's dashboard is; each is absent from a run that was blocked before it knew. Whether the install answers there yet is the command's to ask.
  * `release` is absent too from a run that went on with code that was there before it, and uploaded none.
  * `proof` says how the token's rights were proven: each object's first read was allowed, which a write then proves.
+ * `unused` is the first login a person gave, where the install keeps the users its records hold and that login is none of them: nobody lets that person in but a repair that adds them.
  * The second shape is a run that could not start its work: the provider or the project's website gave no answer.
  */
 export type Installed =
@@ -144,6 +145,7 @@ export type Installed =
       readonly address: string | undefined;
       readonly ready: boolean;
       readonly proof: "reads";
+      readonly unused: Login | undefined;
     }
   | { readonly ok: false; readonly why: "unreachable"; readonly words: string };
 
