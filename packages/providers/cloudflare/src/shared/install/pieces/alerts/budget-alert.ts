@@ -1,10 +1,17 @@
 // The account's budget alert: Cloudflare emails the install's first user once the account's usage charges for the billing period reach one dollar.
 // An alert tells and stops nothing. Cloudflare keeps no mark on a notification policy, so poplin's is the one with its fixed name.
 // The SDK sends this alert type and its filter as given, and its types name neither yet.
+//
+//   a repair, with a token that holds the right    makes the alert, or changes one that differs
+//   the install, with the key it keeps             the same, at a change of the users and on the run that begins a UTC day
+//
+// The key holds "Notifications Write" on an install of either kind, so no token is pasted for an alert the account lacks.
 
 import { BasePolicies, type PolicyCreateParams } from "cloudflare/resources/alerting/policies";
+import type { Keyed } from "@poplin/app/src/console/key/records";
 import * as v from "valibot";
 import { type CloudflareResult, type Connection, callCloudflare } from "../../client";
+import { type KeptKey, keyed } from "../../key/kept-key";
 import { applySteps, type Mode, reportOf, type Synced } from "../../sync";
 
 /** The name of poplin's policy, which is also what its row names. */
@@ -15,6 +22,9 @@ const ALERT_TYPE = "billing_budget_alert";
 
 /** The charges, in whole US dollars, at which the alert is sent: the filter takes exactly one value, as text. */
 const DOLLARS = "1";
+
+/** Cloudflare's name of the right the alert is read and written under with the kept key. */
+const KEY_RIGHT = "Notifications Write";
 
 /** What the policy says of itself in Cloudflare's list. */
 const DESCRIPTION = "The account's usage charges for the billing period reached 1 US dollar.";
@@ -71,22 +81,18 @@ function alertBody(accountId: string, email: string): PolicyCreateParams {
 }
 
 /**
- * Send poplin's budget alert to one address, on an account that has the alert: none is made here.
+ * Keep poplin's budget alert with the key the install keeps: one the account lacks is made, and one that differs, or goes to another address, is written as poplin writes it.
  *
- * @returns `true` once the alert goes to that address alone, which it may have done already, and `false` on an account with no such alert, where nothing is written
+ * @param key - the kept key, or `undefined` on an install that holds none, which answers `no_key` and calls nothing
+ * @param email - the install's first user, whom the alert goes to
+ * @returns the alert's name where it was made or changed, and nothing for one that stood; or the key's refusal. It throws for nothing Cloudflare answers, and no answer holds the key
  */
-export async function sendBudgetAlertTo(connection: Connection, accountId: string, email: string): Promise<CloudflareResult<boolean>> {
-  const listed = await callCloudflare(connection, (api) => Array.fromAsync(new BasePolicies(api).list({ account_id: accountId })));
-  if (!listed.ok) return listed;
+export function keepBudgetAlert(key: KeptKey | undefined, accountId: string, email: string): Promise<Keyed<readonly string[]>> {
+  return keyed(key, KEY_RIGHT, async (connection): Promise<CloudflareResult<readonly string[]>> => {
+    const synced = await syncBudgetAlert(connection, accountId, email, "apply");
 
-  const [step] = planBudgetAlert(listed.value, email);
-  if (step === undefined || step.kind === "create") return { ok: true, value: false };
-
-  if (step.kind === "leave") return { ok: true, value: true };
-
-  const written = await callCloudflare(connection, (api) => new BasePolicies(api).update(step.id, alertBody(accountId, email)));
-
-  return written.ok ? { ok: true, value: true } : written;
+    return synced.ok ? { ok: true, value: [...synced.report.created, ...synced.report.changed] } : synced;
+  });
 }
 
 /**

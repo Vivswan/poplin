@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import { BUDGET_ALERT, planBudgetAlert, syncBudgetAlert } from "../../../../../src/shared/install/pieces/alerts/budget-alert";
+import { readKeptKey } from "../../../../../src/shared/install/key/kept-key";
+import { BUDGET_ALERT, keepBudgetAlert, planBudgetAlert, syncBudgetAlert } from "../../../../../src/shared/install/pieces/alerts/budget-alert";
 import { withFake } from "../../support/fake-cloudflare";
 import { page, refusal, reply } from "../../support/replies";
 
@@ -27,6 +28,54 @@ describe("planBudgetAlert", () => {
 
   test.each(cases)("$name: the one step names poplin's policy and no other, and leaves it only as written, or the email would go nowhere, late, or to the wrong person unseen", ({ policies, steps }) => {
     expect<unknown>(planBudgetAlert(policies, EMAIL)).toEqual(steps);
+  });
+});
+
+describe("keepBudgetAlert", () => {
+  /** A key in the form the reader takes, and nothing like one Cloudflare makes. */
+  const KEY = "kept-key-of-the-test";
+
+  // Drift: where the scheduled run asks for the alert itself, it writes into Activity what this names, and nothing for an alert that stood. One named on every day's run would fill Activity with a change nobody made.
+  test("an account with no alert gets one with the key, named as made; the next keeping names nothing and sends no change; and an install with no key asks nothing", async () => {
+    const policies: Record<string, unknown>[] = [];
+
+    await withFake(
+      (asked) => {
+        if (asked.method === "GET") return page(asked, policies);
+
+        policies.push({ id: "p1", ...(asked.body as object) });
+
+        return reply({ id: "p1" });
+      },
+      async (connection, asked) => {
+        const key = readKeptKey(KEY, { baseUrl: connection.baseUrl });
+
+        expect([await keepBudgetAlert(key, "account-a", EMAIL), await keepBudgetAlert(key, "account-a", EMAIL)]).toEqual([
+          { ok: true, value: [BUDGET_ALERT] },
+          { ok: true, value: [] },
+        ]);
+        expect(asked.map((entry) => `${entry.method} ${entry.key}`)).toEqual([`GET Bearer ${KEY}`, `POST Bearer ${KEY}`, `GET Bearer ${KEY}`]);
+
+        const before = asked.length;
+
+        expect([await keepBudgetAlert(undefined, "account-a", EMAIL), asked.length - before]).toEqual([{ ok: false, refusal: "no_key" }, 0]);
+      },
+    );
+  });
+
+  // Drift: each answer is one of the refusals every screen knows, and none holds what Cloudflare said: its words may name the account, and the key travels in the request.
+  test.each([
+    ["a key that lacks the right", 403, { ok: false, refusal: "lacks_right", right: "Notifications Write" }],
+    ["a key Cloudflare no longer knows", 401, { ok: false, refusal: "key_refused" }],
+  ] as const)("%s ends as the key's own refusal, with the right it lacks, and nothing is written", async (_name, status, ends) => {
+    await withFake(
+      () => refusal(status, 10000, `Authentication error ${KEY}`),
+      async (connection, asked) => {
+        const kept = await keepBudgetAlert(readKeptKey(KEY, { baseUrl: connection.baseUrl }), "account-a", EMAIL);
+
+        expect([kept, asked.map((entry) => entry.method), JSON.stringify(kept).includes(KEY)]).toEqual([ends, ["GET"], false]);
+      },
+    );
   });
 });
 

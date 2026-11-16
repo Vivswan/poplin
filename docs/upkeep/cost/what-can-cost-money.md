@@ -31,9 +31,15 @@ Cloudflare's changelog of 2026-11-13 describes spend limits for Workers and Dura
 ```text
 when     the account's usage charges for the billing period reach 1 US dollar
 who      Cloudflare emails your first user
-made by  Repair, with an account token that also holds Notifications: Edit
+made by  the install, with the key it keeps: when the users change, and once a day
+sooner   Repair, with an account token that also holds Notifications: Edit
 ```
 
-An install of either kind, under a domain or without one, gets the alert once you add the permission to the account token and press Repair: [Domain](../../dashboard/domain.md#optional-an-email-when-charges-reach-1-dollar).
+An install of either kind, under a domain or without one, holds [its key](../../about/security.md#the-kept-key) from its first Repair, and makes the alert with it. No permission is added for that.
 
-Without the permission, Repair makes no alert and fails nothing. You can also make one by hand: Manage Account, then Billing, then Billable Usage, then Create budget alert.
+| The token of a Repair | The alert |
+| --- | --- |
+| holds Notifications: Edit | is made by that Repair |
+| does not | is made by the key within a day, or sooner when a user is added or removed |
+
+An install with no key, or with one Cloudflare no longer takes, makes none until a Repair makes a new key. [Domain](../../dashboard/domain.md#optional-an-email-when-charges-reach-1-dollar) has the permission's three boxes. You can also make an alert by hand: Manage Account, then Billing, then Billable Usage, then Create budget alert.

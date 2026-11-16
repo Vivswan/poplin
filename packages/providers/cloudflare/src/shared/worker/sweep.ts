@@ -3,7 +3,7 @@
 //                        database calls                                                        other calls           in all
 //   the run's start       1: the last asking, the settings, and the walk's place, read together  0                      1
 //   the day's first run   2: that, and the answer written                                        1: the website asked   3
-//   the login repaired    8: the users carried anew where their policy was written, an audit entry, a problem noted, on the run that begins a UTC day   24: 14 and that carry's 10, and one for each further page of a list   32
+//   the login repaired    8: the users carried anew where their policy was written, an audit entry, a problem noted, on the run that begins a UTC day   26: 14, the 2 of the budget alert, and that carry's 10, and one for each further page of a list   34
 //   users or rules wait   1: the kept run of the domain read, on an install that holds a key           0                      1
 //   either carried        6 for the users, 5 for the rules: that read once, then 2 x (the mark set with what is stored read, the settling), a problem noted   10 each: 2 x 5 to Cloudflare   16, 15
 //   an update             5: the try, the audit entry, and the try taken back or a problem      11: the release read,   16
@@ -34,6 +34,7 @@ import { SWEEP_SPARE_WRITES, sweepExpired } from "@poplin/core/src/actions/sweep
 import { SWEEPER } from "@poplin/core/src/auth/scopes";
 import type { SettingValues } from "@poplin/core/src/records/settings";
 import { followUsers, type UsersFollow } from "@poplin/app/src/console/access/users-follow";
+import type { Keyed } from "@poplin/app/src/console/key/records";
 import { followRules, type RulesFollow } from "@poplin/app/src/console/settings/rules-follow";
 
 import type { LoginRepair } from "../install/pieces/access/login-repair";
@@ -57,6 +58,9 @@ const CLOSING_CALLS = 2;
 /** The calls to Cloudflare one carrying of the users makes at most, before any the SDK sends again: the policies listed in two calls, the alerts in one, and each of the two written, for a list and for one that changed meanwhile. */
 const FOLLOW_CALLS = 10;
 
+/** The calls to Cloudflare one keeping of the budget alert makes at most, before any the SDK sends again: the alerts listed, and the one made or changed. */
+const ALERT_CALLS = 2;
+
 /** The calls to Cloudflare one carrying of the settings to the guard rules makes at most, before any the SDK sends again: the rules written, for the settings and for ones that changed meanwhile. */
 const RULES_CALLS = 2 * RULES_PUSH_CALLS;
 
@@ -75,12 +79,13 @@ const START: NonNullable<Place> = { trash: false };
 /** Where the walk stands, as the database keeps it between two runs; `undefined` once it reached its end. */
 type Place = Awaited<ReturnType<Install["database"]["readSweepPlace"]>>;
 
-/** The version the install runs, what updates it, and the login's, the users', and the guard rules' side at Cloudflare. */
+/** The version the install runs, what updates it, and the login's, the users', the budget alert's, and the guard rules' side at Cloudflare. */
 interface Running {
   readonly version: string;
   readonly updating: Updating;
   readonly login: LoginRepair;
   readonly follow: UsersFollow;
+  readonly keepAlert: (email: string) => Promise<Keyed<readonly string[]>>;
   readonly rules: RulesFollow;
 }
 
@@ -122,25 +127,43 @@ function beginsDay(now: number): boolean {
 }
 
 /**
- * Put the login in front of the install back, where the install holds a key to do it with: what is missing or differs is written, and a login that stands costs reads alone.
- * What was written is kept as an audit entry the sweep signs.
- * A repair that stopped is noted as a problem, but for one Cloudflare gave no answer to: the next day's run tries again.
+ * Keep the budget alert for the install's first user.
  *
- * @param logins - the users the login is made to let through, as the run read them
- * @returns whether a repair came through, which leaves the login standing
+ * @param first - the first user as the run read the users, or `undefined` on an install with none, which is asked nothing
+ * @returns the alert's name where this call made or changed it
  */
-async function repairLogin(install: Install, running: Pick<Running, "login" | "follow">, tally: Tally, logins: SettingValues["logins"]): Promise<boolean> {
+async function keptAlert(running: Pick<Running, "keepAlert">, tally: Tally, first: string | undefined): Promise<readonly string[]> {
+  if (first === undefined) return [];
+
+  tally.web += ALERT_CALLS;
+  const kept = await running.keepAlert(first);
+
+  return kept.ok ? kept.value : [];
+}
+
+/**
+ * Put the login in front of the install back, and keep the budget alert, where the install holds a key to do it with: what is missing or differs is written, and what stands costs reads alone.
+ * What the two wrote is kept as an audit entry the sweep signs; an alert the carry of the users made after them is in none.
+ * A repair of the login that stopped is noted as a problem, but for one Cloudflare gave no answer to: the next day's run tries again.
+ * An alert that was not kept is noted nowhere: the Domain screen's check reads the alert with the same key, and its row says what to press.
+ *
+ * @param logins - the users the login is made to let through, as the run read them; the alert goes to the first
+ * @returns whether a repair of the login came through, which leaves the login standing, whatever became of the alert
+ */
+async function repairLogin(install: Install, running: Pick<Running, "login" | "follow" | "keepAlert">, tally: Tally, logins: SettingValues["logins"]): Promise<boolean> {
   if (!running.login.holdsKey()) return false;
 
   const { wrote, users, calls, refusal } = await running.login.repair(logins);
   tally.web += calls;
-  // The users may have changed since the run read them: where their policy was written, they are carried anew, as stored now.
+  // A key Cloudflare refuses, and a Cloudflare that does not answer, would say the same of the alert.
+  const alert = refusal === "key_refused" || refusal === "unreachable" ? [] : await keptAlert(running, tally, logins[0]);
+  // The users may have changed since the run read them: where their policy was written, they are carried anew, as stored now, and the alert goes to the first of them in that carry.
   if (users) {
     tally.web += FOLLOW_CALLS;
     await followUsers(install, running.follow);
   }
 
-  if (wrote.length > 0) await install.database.appendAudit({ action: "domain_synced", detail: { run: "repair", from: "sweep", changed: [...wrote] } }, signedBy(SWEEPER, install.now()));
+  if (wrote.length + alert.length > 0) await install.database.appendAudit({ action: "domain_synced", detail: { run: "repair", from: "sweep", changed: [...wrote, ...alert] } }, signedBy(SWEEPER, install.now()));
 
   if (refusal !== undefined && refusal !== "unreachable") await noteProblem(install, "login_not_repaired", new Error(refusal));
 

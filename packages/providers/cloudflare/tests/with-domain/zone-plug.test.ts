@@ -1187,7 +1187,9 @@ describe("a check the install makes with the key it holds", () => {
     redirect: "Cloudflare sends http to https before poplin runs. Without it poplin sends the same redirect itself. To switch this on, add this right to the account token and press Repair: Single Redirect: Edit",
     waf: "Cloudflare stops verified bots, scanner paths, pages of other domains, and floods before they reach poplin. To switch this on, add this right to the account token and press Repair: Zone WAF: Edit",
     bots: "Cloudflare blocks AI crawlers on the whole domain, as the block_bots setting says. To switch this on, add this right to the account token and press Repair: Bot Management: Edit",
-    alert: "Cloudflare emails your first user when the account's usage charges for the billing period reach 1 US dollar. To switch this on, add this right to the account token and press Repair: Notifications: Edit",
+    alert:
+      "Cloudflare emails your first user when the account's usage charges for the billing period reach 1 US dollar. " +
+      "An install whose key Cloudflare takes makes it by itself within a day. To make it now, add this right to the account token and press Repair: Notifications: Edit",
   } as const;
 
   /** The database's row in such a check, which no call reads. */

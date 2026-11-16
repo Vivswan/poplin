@@ -14,7 +14,7 @@
 import { createApi } from "@poplin/app/src/api/api";
 import type { Counters } from "@poplin/app/src/limits/limits";
 import type { DomainPlug, FirstRun } from "@poplin/app/src/console/domain/records";
-import type { InstallKey } from "@poplin/app/src/console/key/records";
+import type { InstallKey, Keyed } from "@poplin/app/src/console/key/records";
 import type { UsersFollow } from "@poplin/app/src/console/access/users-follow";
 import type { RulesFollow } from "@poplin/app/src/console/settings/rules-follow";
 import type { UsageHost } from "@poplin/app/src/console/usage/records";
@@ -43,6 +43,7 @@ import { createEndLogins } from "../install/key/logins-end";
 import { isSettled, readUploadKey } from "../install/key/upload-key";
 import { createUsersFollow } from "../install/key/users-follow";
 import { createLoginRepair, type LoginRepair } from "../install/pieces/access/login-repair";
+import { keepBudgetAlert } from "../install/pieces/alerts/budget-alert";
 import { CloudflareCounters } from "../limits/counters";
 import { createUsageHost } from "../usage/usage-host";
 import { goBack } from "../release/update/go-back";
@@ -143,6 +144,9 @@ export interface Instance {
 
   /** The login's own pieces at Cloudflare: a scheduled run puts back with the kept key what is missing or differs. */
   readonly login: LoginRepair;
+
+  /** Keeps the account's budget alert with the kept key, sent to the given first user: a scheduled run makes one the account lacks. */
+  readonly keepAlert: (email: string) => Promise<Keyed<readonly string[]>>;
 
   /** The guard rules' side at Cloudflare: a change of a setting they are written from is carried there with the kept key. */
   readonly rules: RulesFollow;
@@ -434,6 +438,7 @@ export async function startInstance(env: Bindings, outside: Outside, visitorOf: 
     key,
     ...carried,
     login: createLoginRepair(kept, { ...own.value, adminHost: hosts.adminHost, privateSites: hosts.privateSites }),
+    keepAlert: (email) => keepBudgetAlert(kept, own.value.accountId, email),
     usage: createUsageHost({ accountId: own.value.accountId, unwrittenRows: (day) => driver.heldRows(day), databaseBytes: () => driver.heldBytes(), workflow: workflowNameOf(own.value.script), key: kept }),
     version: VERSION,
     jobs: workflowJobs(env.JOBS),
