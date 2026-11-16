@@ -33,19 +33,21 @@ const GUIDE_ON_GITHUB = "https://github.com/Vivswan/poplin/blob/main/";
 /** The folders of the guide in the order a reader meets them, each with the rank its own page carries. */
 const FOLDER_RANKS: readonly (readonly [folder: string, order: number])[] = [
   ["start", 1],
-  ["use", 2],
-  ["run", 3],
-  ["about", 4],
+  ["sites", 2],
+  ["dashboard", 3],
+  ["upkeep", 4],
+  ["fix", 5],
+  ["about", 6],
 ];
 
 /** The front matter of a page: the YAML between the two rules the file opens with. */
 const FRONT_MATTER = /^---\n([\s\S]*?)\n---\n/;
 
 /** The page that lists every tool. */
-const TOOLS_PAGE = "docs/use/agent-tools.md";
+const TOOLS_PAGE = "docs/sites/agent-tools.md";
 
 /** The page that lists every refusal. */
-const REFUSALS_PAGE = "docs/use/when-poplin-refuses.md";
+const REFUSALS_PAGE = "docs/fix/poplin-refuses.md";
 
 /** The heading the tables of refusals follow on that page. */
 const REFUSALS_HEADING = "When poplin refuses";
@@ -54,7 +56,7 @@ const REFUSALS_HEADING = "When poplin refuses";
 const MODULE_FILES: readonly string[] = ["packages/cloudflare/tofu/variables.tf", "packages/cloudflare/tofu/outputs.tf"];
 
 /** The pages that name the module's inputs and outputs. On every other page a word spelled like one must be a tool, an input of a tool, a setting, or a code. */
-const MODULE_PAGES: readonly string[] = ["docs/run/limits-and-cost.md", "docs/run/with-opentofu.md"];
+const MODULE_PAGES: readonly string[] = ["docs/upkeep/cost/limits.md", "docs/start/with-opentofu.md"];
 
 /** The words written with an underscore that are none of the above: a folder that is never uploaded. */
 const OTHER_WORDS: readonly string[] = ["node_modules"];
@@ -293,7 +295,7 @@ describe("the pages a person reads", () => {
     expect(await deadLink(ROOT, "docs/README.md", "https://example.com/docs/install.md")).toEqual([]);
   });
 
-  test("every folder of the guide carries its rank, Start, Use, Run, About: without this a new folder lands in the sidebar by its letter, ahead of the page a reader starts on", async () => {
+  test("every folder of the guide carries its rank, Start, Sites, Dashboard, Upkeep, Fix, About: without this a new folder lands in the sidebar by its letter, ahead of the page a reader starts on", async () => {
     const folders = unique(GUIDE_PAGES.flatMap((path) => path.slice(GUIDE_PLACE.length).split("/").slice(0, -1).slice(0, 1)));
     const ranks = await Promise.all(folders.map(async (folder) => [folder, await folderRank(ROOT, folder)] as const));
 

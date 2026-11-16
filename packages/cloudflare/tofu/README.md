@@ -40,7 +40,7 @@ bun run --cwd packages/cloudflare build   # writes packages/cloudflare/dist/work
 | Access policy and application | one login, allowing exactly `logins`, in front of the whole dashboard hostname and of every private site's address, `*-p-poplin.example.com`; a login lasts 30 days |
 | Access open paths | a second application and its policy, which let everyone past the login on two paths of the dashboard's hostname: `/api`, where the Worker checks a caller's own token, and `/setup`, the setup page |
 | Redirect rule | sends a request over `http` to one of the install's hostnames to `https`, with a 301, before the Worker runs |
-| Rate rule | blocks an address for 10 seconds after 300 requests in 10 seconds, [counted in each data center](../../../docs/run/limits-and-cost.md#where-a-limit-is-counted) |
+| Rate rule | blocks an address for 10 seconds after 300 requests in 10 seconds, [counted in each data center](../../../docs/upkeep/cost/limits.md#where-a-limit-is-counted) |
 | Guard rules | two custom rules that block a request to a site hostname before the Worker runs: one from a page of another domain; one from a verified bot, with a method other than GET and HEAD, or for a scanner path |
 | Bot settings | the zone's AI bot block, on a zone with no hostnames of its own |
 
@@ -251,7 +251,7 @@ tofu apply
 
 | On such an install                  | Does                                                                                           |
 | ----------------------------------- | ---------------------------------------------------------------------------------------------- |
-| the update notice                   | shows while `update_check` is true, where [Update](../../../docs/run/update.md#a-newer-version) says |
+| the update notice                   | shows while `update_check` is true, where [Update](../../../docs/upkeep/update.md#a-newer-version) says |
 | `poplin update --check`             | says which version is out, and whether an update link is saved                                 |
 | `poplin update`                     | answers `no_update_address` with no update link saved: the module makes no build to call |
 | the build variable `POPLIN_VERSION` | nothing: no build reads it. The tag you check out is the version                               |
@@ -261,7 +261,7 @@ tofu apply
 
 | It does not | Instead |
 | --- | --- |
-| warn when the account's charges reach 1 US dollar | the dashboard's Repair makes that budget alert, with an account token that holds Notifications: Edit: [Domain](../../../docs/run/domain.md#optional-an-email-when-charges-reach-1-dollar). The provider's resource does not take the alert type |
+| warn when the account's charges reach 1 US dollar | the dashboard's Repair makes that budget alert, with an account token that holds Notifications: Edit: [Domain](../../../docs/dashboard/domain.md#optional-an-email-when-charges-reach-1-dollar). The provider's resource does not take the alert type |
 | stop a write once R2's free allowance is used | Cloudflare has no spending cap on R2. The limits the Worker enforces, `max_total_size` and `max_files_per_day` among them, bound what a publish stores and declares, and the usage alerts, once `usage_alert_percents` is set, tell the logins at the shares it names |
 | delete the files of a dropped version or of a site past its days in the trash | the Worker's sweep does. Every site keeps its files under a folder of random letters, live or dropped alike, so no bucket rule can tell the two apart |
 | read the zone's plan without a warning | the provider marks the zone's `plan` as deprecated, so every plan and apply prints one warning that names `data.cloudflare_zone.this.plan`. The module reads it for the Free plan check, the rate rule, and Bot Fight Mode. The provider's other source of the plan, `cloudflare_zone_subscription`, takes Billing: Read on the account, a permission the module does not ask for |

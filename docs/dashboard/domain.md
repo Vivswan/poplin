@@ -1,6 +1,6 @@
 ---
 title: Domain
-order: 30
+order: 50
 ---
 
 # Domain
@@ -16,7 +16,7 @@ After the first login, Domain does what the setup page did.
 | Repair              | fixes every piece that needs it                                                                |
 | the table           | one row per piece, in the columns Piece, State, and Detail                                     |
 
-Cloudflare's login page keeps its own list of users. After a user is added or removed, under Access or [another way](settings.md#add-a-user), poplin writes the new list there by itself, with [the key it keeps](../about/security.md#the-kept-key).
+Cloudflare's login page keeps its own list of users. After a user is added or removed, under Access or [another way](access.md#add-a-user), poplin writes the new list there by itself, with [the key it keeps](../about/security.md#the-kept-key).
 
 On an install that holds no key, the line says `Users changed. Press Repair.` until a Repair. Where a piece is to repair or was not done, the line counts those first.
 
@@ -87,4 +87,4 @@ One more permission on the account token lets Repair make a budget alert in your
 | --------- | ------------- | --------- | ------------------------------------------------------------------------------------------------ | ------------------ |
 | Account   | Notifications | Edit      | emails your first user when the account's usage charges for the billing period reach 1 US dollar | Repair makes no alert, and leaves one it made |
 
-The alert is named `poplin: usage charges reached 1 dollar`, under Notifications in Cloudflare. It counts the whole account's charges, and it stops nothing. [Limits and cost](limits-and-cost.md#what-can-cost-money) says what can cost money.
+The alert is named `poplin: usage charges reached 1 dollar`, under Notifications in Cloudflare. It counts the whole account's charges, and it stops nothing. [Limits and cost](../upkeep/cost/what-can-cost-money.md) says what can cost money.

@@ -15,11 +15,13 @@ Agent:  Published. It is private: only you can open it, after you log in.
         https://report--k3f9x2ab71qz-p-poplin.example.com
 ```
 
-| Folder                     | What it holds          |
-| -------------------------- | ---------------------- |
-| [Start](start/README.md)   | get your own install   |
-| [Use](use/README.md)       | publish and share      |
-| [Run](run/README.md)       | keep the install       |
-| [About](about/README.md)   | security and the build |
+| Folder                              | What it holds              |
+| ----------------------------------- | -------------------------- |
+| [Start](start/README.md)            | get your own install       |
+| [Sites](sites/README.md)            | publish and share          |
+| [Dashboard](dashboard/README.md)    | the screens, one by one    |
+| [Upkeep](upkeep/README.md)          | keep the install           |
+| [Fix](fix/README.md)                | when something fails       |
+| [About](about/README.md)            | security and the build     |
 
 The examples write `poplin`. Type `npx poplin` in its place, as [By hand](start/by-hand.md) does, unless poplin is installed on the computer. `example.com` stands for your own domain.

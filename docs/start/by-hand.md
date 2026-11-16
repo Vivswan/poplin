@@ -5,7 +5,7 @@ order: 20
 
 # Install poplin by hand
 
-The six steps to an install, done by hand; [your agent can lead them](with-an-agent.md) instead, and [When a step fails](when-a-step-fails.md) has each failure.
+The six steps to an install, done by hand; [your agent can lead them](with-an-agent.md) instead, and [When a step fails](../fix/an-install-step-fails.md) has each failure.
 
 An install is your own copy of poplin, in your own Cloudflare account. You make it once. After that, your agent and your computers publish to it.
 
@@ -29,7 +29,7 @@ Two words the steps use: a **Worker** is the program Cloudflare runs for you, an
 | a Cloudflare account            | the Free plan is enough                                                                                  |
 | a domain on that account        | every site gets an address under it. It is on the account when Cloudflare's home page lists it as Active |
 | an email inbox you can read     | Cloudflare's login sends its code there in step 5                                                        |
-| a payment method on the account | step 1 asks for one. [What can cost money](../run/limits-and-cost.md#what-can-cost-money) says when it is charged      |
+| a payment method on the account | step 1 asks for one. [What can cost money](../upkeep/cost/what-can-cost-money.md) says when it is charged      |
 | a GitHub account                | free. Step 2 puts a copy of poplin's code there                                                          |
 | Node.js, on your own computer   | version 24 or higher, for step 6 alone                                                                   |
 | an agent, to publish by asking  | an AI tool that runs in a terminal on your computer, such as Claude Code or Codex. You install it yourself, it may cost money, and poplin brings none. A chat in a browser cannot run commands |
@@ -38,7 +38,7 @@ Two words the steps use: a **Worker** is the program Cloudflare runs for you, an
 
 ## The steps
 
-1. **Switch on two things in Cloudflare.** Open the address below and log in. Each asks for a payment method, and each shows a price of 0: Zero Trust's Free plan, and R2, which bills by use past its free allowance. [What can cost money](../run/limits-and-cost.md#what-can-cost-money) says what poplin does to stay inside it, and what it cannot do.
+1. **Switch on two things in Cloudflare.** Open the address below and log in. Each asks for a payment method, and each shows a price of 0: Zero Trust's Free plan, and R2, which bills by use past its free allowance. [What can cost money](../upkeep/cost/what-can-cost-money.md) says what poplin does to stay inside it, and what it cannot do.
 
    ```text
    https://dash.cloudflare.com
@@ -70,7 +70,7 @@ Two words the steps use: a **Worker** is the program Cloudflare runs for you, an
 
    **To find the address again**, open `https://dash.cloudflare.com`, go to Workers & Pages, and select the Worker `poplin`: its page names the address.
 
-   **If the build fails**, [When a step fails](when-a-step-fails.md#step-2-the-build-fails) has the next step.
+   **If the build fails**, [When a step fails](../fix/an-install-step-fails.md#step-2-the-build-fails) has the next step.
 
 3. **Make a Cloudflare API token.** One link opens Cloudflare's form with the nine permissions poplin needs already chosen. It worked if the form shows nine rows already filled. A zone is your domain. The setup page of step 4 has the same link, on its button Open the account token form.
 
@@ -94,9 +94,9 @@ Two words the steps use: a **Worker** is the program Cloudflare runs for you, an
    | keep the token       | keep its note where you keep passwords, such as a password manager                           |
    | delete it            | at Cloudflare, My Profile, then API Tokens. The install and every site keep working          |
 
-   A token is asked for again only by Check and Repair on the dashboard's [Domain](../run/domain.md) screen, such as after you add a user or a permission. With none left, make a new one with the same link. If you lose the note, Cloudflare makes the token's text anew: [Roll](when-a-step-fails.md#step-4-the-page-shows-something-else).
+   A token is asked for again only by Check and Repair on the dashboard's [Domain](../dashboard/domain.md) screen, such as after you add a user or a permission. With none left, make a new one with the same link. If you lose the note, Cloudflare makes the token's text anew: [Roll](../fix/an-install-step-fails.md#step-4-the-page-shows-something-else).
 
-   **If the form opens empty**, [When a step fails](when-a-step-fails.md#step-3-the-form-opens-empty) has the rows to add by hand.
+   **If the form opens empty**, [When a step fails](../fix/an-install-step-fails.md#step-3-the-form-opens-empty) has the rows to add by hand.
 
 4. **Finish on the setup page.** Open the Worker's address from step 2, the one ending in `workers.dev`: it shows the setup page. Under Fill in three boxes, fill each box and press Repair (the first time it also makes everything).
 
@@ -130,9 +130,9 @@ Two words the steps use: a **Worker** is the program Cloudflare runs for you, an
 
    With the nine permissions, Repair adds a DNS record, routes, a login of poplin's own, and the key poplin keeps. It removes only a record that carries poplin's mark and a route that names poplin's Worker. A website or a mailbox on the domain stays as it is.
 
-   Three permissions of [the optional part](../run/domain.md#optional-block-junk-traffic-and-crawlers) switch the optional rows on, now or at any time. One permission can hold more than one row.
+   Three permissions of [the optional part](../dashboard/domain.md#optional-block-junk-traffic-and-crawlers) switch the optional rows on, now or at any time. One permission can hold more than one row.
 
-   **When the page shows something else**, [When a step fails](when-a-step-fails.md#step-4-the-page-shows-something-else) has each line and what to do.
+   **When the page shows something else**, [When a step fails](../fix/an-install-step-fails.md#step-4-the-page-shows-something-else) has each line and what to do.
 
 5. **Open your dashboard and log in.** Cloudflare's login asks for your email, the one of step 4, and sends a code to its inbox. A new address can take a few minutes to answer: until then the browser says it cannot find the site; wait a few minutes and reload.
 
@@ -140,7 +140,7 @@ Two words the steps use: a **Worker** is the program Cloudflare runs for you, an
    https://poplin.example.com
    ```
 
-   **If no code arrives**, [When a step fails](when-a-step-fails.md#step-5-no-code-arrives) has the fix.
+   **If no code arrives**, [When a step fails](../fix/an-install-step-fails.md#step-5-no-code-arrives) has the fix.
 
    After the code, the dashboard opens on Sites, which says `No sites yet`.
 
@@ -183,14 +183,14 @@ Two words the steps use: a **Worker** is the program Cloudflare runs for you, an
    nothing was changed
    ```
 
-   The login lasts 30 days: after that, `npx poplin login` makes a new one. **If a line differs**, [When a step fails](when-a-step-fails.md#step-6-the-computer-is-not-logged-in) has it.
+   The login lasts 30 days: after that, `npx poplin login` makes a new one. **If a line differs**, [When a step fails](../fix/an-install-step-fails.md#step-6-the-computer-is-not-logged-in) has it.
 
 Your install is ready, and it publishes two ways.
 
 | Publish            | Do                                                                                                                                |
 | ------------------ | --------------------------------------------------------------------------------------------------------------------------------- |
 | by asking an agent | set the agent up once, with the line of [With an agent](with-an-agent.md). Then say `Put this report online.`                     |
-| by a command       | `npx poplin ./report`: see [Publish](../use/publish.md)                                                                           |
+| by a command       | `npx poplin ./report`: see [Publish](../sites/publish.md)                                                                           |
 
 `./report` is a folder named `report` inside the folder the terminal is in. A folder that is somewhere else is named by its whole path:
 
@@ -208,4 +208,4 @@ Mac:      npx poplin ~/"Desktop/my report" --name my-report
 Windows:  npx poplin "C:\Users\user\Desktop\my report" --name my-report
 ```
 
-To take an install down, see [Remove](../run/remove.md).
+To take an install down, see [Remove](../upkeep/remove.md).
