@@ -5,12 +5,13 @@
 
 import { type Login, parseLogin } from "../../../core/src/auth/logins";
 import type { Found, Question, Token } from "../../../core/src/install/installer";
+import { TOKEN_VARIABLES } from "../local/current-login";
 import type { Screen } from "../local/screen";
 import type { GivenToken, InstallEnds, InstallRequest, Plan, Provider, Stop } from "./records";
 import { factsLines } from "./report";
 
 /** The variable the account token is read from. */
-export const TOKEN_VARIABLE = "POPLIN_INSTALL_TOKEN";
+export const TOKEN_VARIABLE = TOKEN_VARIABLES.install;
 
 /** The lines of a help text that say where the account token is read from. */
 export const TOKEN_HELP: readonly string[] = [`The account token is read from ${TOKEN_VARIABLE}, or from standard input`, "with --token-stdin, or asked for without being shown. It is used for the run", "and stored nowhere."];

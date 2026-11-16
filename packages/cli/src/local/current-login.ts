@@ -3,8 +3,14 @@
 import { type Login, parseLogin } from "./login";
 import { type Machine, readLoginFile, thisMachine } from "./login-file";
 
+/** The variables of the environment a command reads a token from: the login's, and the account token of `poplin setup` and of the install commands. */
+export const TOKEN_VARIABLES = { login: "POPLIN_TOKEN", setup: "POPLIN_SETUP_TOKEN", install: "POPLIN_INSTALL_TOKEN" } as const;
+
+/** The variable the install's address is read from. */
 const SERVER = "POPLIN_SERVER";
-const TOKEN = "POPLIN_TOKEN";
+
+/** The variable the login's token is read from. */
+const TOKEN = TOKEN_VARIABLES.login;
 
 /** Who the command is talking to. `source` says where a login came from; `refused` carries a message that names the fix. */
 type CurrentLogin =
