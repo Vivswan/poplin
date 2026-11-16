@@ -361,7 +361,7 @@ export async function startInstance(env: Bindings, outside: Outside, visitorOf: 
     readToken: (id) => database.getToken(id),
     limits: API_LIMITS,
     version: VERSION,
-    publicWord: layout.publicWord,
+    layout: { kind: "hostname", public_word: layout.publicWord },
     report: (error) => logFault("an API request failed", error),
     counters,
     visitorOf: (request) => visitorOf(request, database),

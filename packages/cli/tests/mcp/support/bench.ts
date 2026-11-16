@@ -4,7 +4,7 @@ import { PassThrough } from "node:stream";
 import type { Client } from "@modelcontextprotocol/client";
 import { type JSONRPCMessage, parseJSONRPCMessage } from "@modelcontextprotocol/server";
 
-import { type ApiInstall, ORIGIN, openApi } from "../../../../app/tests/api/support/install";
+import { type ApiInstall, type LayoutInput, ORIGIN, openApi } from "../../../../app/tests/api/support/install";
 import type { Io } from "../../../src/commands/records";
 import { sendUnlessAborted } from "../../commands/support/harness";
 import { openSession } from "./session";
@@ -60,10 +60,10 @@ function assertNoToken(bench: McpBench, tokens: readonly string[]): void {
  *
  * @param env - the environment, in place of the admin's login
  * @param home - the home folder the saved login is looked for under
- * @param publicWord - the word the install's public addresses end in, in place of `page`
+ * @param layout - how the install says its site addresses are laid out, in place of hostnames that end in `page`
  */
-export async function openMcp(home: string, env?: Readonly<Record<string, string | undefined>>, publicWord?: string): Promise<McpBench> {
-  const install = await openApi(undefined, undefined, publicWord);
+export async function openMcp(home: string, env?: Readonly<Record<string, string | undefined>>, layout?: LayoutInput): Promise<McpBench> {
+  const install = await openApi(undefined, undefined, layout);
   const login = env ?? { POPLIN_SERVER: ORIGIN, POPLIN_TOKEN: install.tokens.admin };
   const tokens = [...Object.values(install.tokens), login.POPLIN_TOKEN ?? ""].filter((token) => token !== "");
   const input = new PassThrough();

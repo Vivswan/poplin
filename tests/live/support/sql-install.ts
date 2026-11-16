@@ -72,7 +72,7 @@ export async function openSqlInstall(): Promise<SqlInstall> {
     readToken: (id) => database.getToken(id),
     limits: LIMITS,
     version: VERSION,
-    publicWord: DEFAULT_PUBLIC_WORD,
+    layout: { kind: "hostname", public_word: DEFAULT_PUBLIC_WORD },
     counters,
     visitorOf: async () => "one-visitor",
     rebuild: { accepts: () => false, fetch: async () => Promise.reject(new Error("the fake starts no build")) },

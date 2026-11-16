@@ -5,12 +5,14 @@ import { mintToken } from "@poplin/core/src/auth/tokens";
 import type { Database } from "@poplin/core/src/database/database";
 import type { SqlDriver, Statement, StatementResult } from "@poplin/core/src/database/driver";
 import { openDatabase } from "@poplin/core/src/database/open";
-import { DEFAULT_PUBLIC_WORD, parsePublicWord } from "@poplin/core/src/names/marker";
+import { DEFAULT_PUBLIC_WORD } from "@poplin/core/src/names/marker";
 import { defaultSettings } from "@poplin/core/src/records/settings";
+import { ADDRESS_LAYOUT } from "@poplin/core/src/sites/address-layout";
 import { MemoryStore } from "@poplin/core/src/storage/memory";
 import type { ObjectStore } from "@poplin/core/src/storage/storage";
 import { BunSqliteDriver } from "@poplin/core/tests/database/support/bun-sqlite-driver";
 import { type ClientRequestOptions, hc } from "hono/client";
+import * as v from "valibot";
 
 import { type Api, type ApiLimits, createApi } from "../../../src/api/api";
 import { MemoryCounters } from "../../../src/limits/memory-counters";
@@ -36,6 +38,12 @@ export const REBUILD_ADDRESS = "https://builds.provider.example/hooks/3f9c2a7e5b
 
 /** The admin whose settings the install starts with. */
 const INSTALLER = "ada@example.com" as Login;
+
+/** The layout an install answers unless a test gives another. */
+const DEFAULT_LAYOUT: LayoutInput = { kind: "hostname", public_word: DEFAULT_PUBLIC_WORD };
+
+/** A layout as a test writes it, before it is checked. */
+export type LayoutInput = v.InferInput<typeof ADDRESS_LAYOUT>;
 
 /** The routes of the API as a client typed from them calls them: `routes.sites[":site"].$get({ param, query })`. */
 export type ApiClient = ReturnType<typeof hc<Api>>["api"];
@@ -143,9 +151,9 @@ export async function answered(sent: Promise<Pick<Response, "status" | "headers"
  * Open a fresh install with default settings, laid over by `overrides`, and its three tokens.
  *
  * @param limits - what one request can carry, in place of the small caps of `LIMITS`
- * @param publicWord - the word the install's public addresses end in, in place of `page`
+ * @param layout - how the install says its site addresses are laid out, in place of hostnames that end in `page`; the addresses it answers stay hostnames
  */
-export async function openApi(overrides: Partial<ReturnType<typeof defaultSettings>> = {}, limits: ApiLimits = LIMITS, publicWord: string = DEFAULT_PUBLIC_WORD): Promise<ApiInstall> {
+export async function openApi(overrides: Partial<ReturnType<typeof defaultSettings>> = {}, limits: ApiLimits = LIMITS, layout: LayoutInput = DEFAULT_LAYOUT): Promise<ApiInstall> {
   const calls = { database: 0, store: 0 };
   const driver = new CountingDriver(calls);
   const opened = await openDatabase(driver, NOW);
@@ -167,10 +175,8 @@ export async function openApi(overrides: Partial<ReturnType<typeof defaultSettin
   const counters = new MemoryCounters();
   const provider: ApiInstall["provider"] = { status: 200, sent: [] };
   const users: ApiInstall["users"] = { takes: false, pushed: [] };
-  const word = parsePublicWord(publicWord);
-  if (word === undefined) throw new Error(`the test's public word was refused: ${publicWord}`);
-
-  const addresses = addressesUnder(word);
+  const said = v.parse(ADDRESS_LAYOUT, layout);
+  const addresses = addressesUnder(said.kind === "hostname" ? said.public_word : DEFAULT_PUBLIC_WORD);
   const api = createApi({
     database,
     store: counted(store, calls),
@@ -181,7 +187,7 @@ export async function openApi(overrides: Partial<ReturnType<typeof defaultSettin
     readToken: (id) => database.getToken(id),
     limits,
     version: INSTALL_VERSION,
-    publicWord: word,
+    layout: said,
     report: (error) => reported.push(error),
     // Found anew on every request, so a test that swaps the method in is heard.
     counters: { takeMinute: (window, now) => counters.takeMinute(window, now) },

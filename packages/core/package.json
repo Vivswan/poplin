@@ -76,6 +76,7 @@
     "./src/records/upload": "./src/records/upload.ts",
     "./src/records/version-contents": "./src/records/version-contents.ts",
     "./src/records/views": "./src/records/views.ts",
+    "./src/sites/address-layout": "./src/sites/address-layout.ts",
     "./src/sites/ids": "./src/sites/ids.ts",
     "./src/sites/labels": "./src/sites/labels.ts",
     "./src/storage/memory": "./src/storage/memory.ts",

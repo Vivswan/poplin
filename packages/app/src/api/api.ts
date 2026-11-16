@@ -31,8 +31,8 @@ import { signEveryoneOut } from "@poplin/core/src/actions/sign-out";
 import { type Rebuilding, START_OPTIONS, startUpdate } from "@poplin/core/src/actions/start-update";
 import { removeUpdateAddress, type UPDATE_ADDRESS_REQUEST, updateAddressState } from "@poplin/core/src/actions/update-address";
 import { AllowanceSpent } from "@poplin/core/src/database/driver";
-import type { PublicWord } from "@poplin/core/src/names/marker";
 import type { SettingValues } from "@poplin/core/src/records/settings";
+import type { AddressLayout } from "@poplin/core/src/sites/address-layout";
 import { WritesSpent } from "@poplin/core/src/storage/metered";
 import { Hono } from "hono";
 import { HTTPException } from "hono/http-exception";
@@ -78,8 +78,8 @@ export interface ApiDeps extends Install, Gate {
   /** The version of poplin the install runs, as its build stated it. */
   readonly version: string;
 
-  /** The word every public-name address of the install ends in, chosen once at install. A client reads a public site's address with it. */
-  readonly publicWord: PublicWord;
+  /** How the install's site addresses are laid out. A client reads a typed address with it. */
+  readonly layout: AddressLayout;
 
   /** Told of every failure a request ends in, before the request is answered 500. */
   readonly report?: (error: unknown) => void;
