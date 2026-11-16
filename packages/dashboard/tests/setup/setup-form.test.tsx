@@ -37,7 +37,7 @@ function Held({ start, onRepair }: { readonly start: Start; readonly onRepair: (
 }
 
 /** Draw the form of one install over a repair that answers `refusal`, and hand back the page's queries. */
-function drawn(boxes: "first" | "login", refusal?: Refused): Within {
+function drawn(boxes: "first" | "login" | "repair", refusal?: Refused): Within {
   const onRepair = async (sent: Sent): Promise<Refused | undefined> => {
     repairs.push(sent);
 
@@ -80,6 +80,20 @@ describe("the boxes", () => {
 
     expect([repairs, box(page, "Account token").value, document.activeElement === domain]).toEqual([[], TOKEN, true]);
     expect(domain.closest('[data-slot="field"]')?.querySelector('[role="alert"]')?.textContent).toBe("Type the domain first.");
+  });
+});
+
+describe("the form of an install somebody has logged in to", () => {
+  // Drift: the server reads the email to add under the name `login`; a box of another name would repair and add nobody, with no word of it.
+  test("sends the email typed into Add a user as the login, beside the token", async () => {
+    const page = drawn("repair");
+    fireEvent.change(box(page, "Account token"), { target: { value: TOKEN } });
+    fireEvent.change(box(page, "Add a user"), { target: { value: "mira@example.com" } });
+    await act(async () => {
+      fireEvent.click(page.getByRole("button", { name: "Repair" }));
+    });
+
+    expect(repairs).toEqual([{ token: TOKEN, login: "mira@example.com" }]);
   });
 });
 

@@ -86,6 +86,7 @@ async function openSetup(options: Options = {}) {
     keepDomainCheck: (...kept: Parameters<typeof database.keepDomainCheck>) => (options.store === "spent" ? Promise.reject(new AllowanceSpent("writing")) : database.keepDomainCheck(...kept)),
     hasLoggedIn: () => database.hasLoggedIn(),
     changeSettings: (...changed: Parameters<typeof database.changeSettings>) => database.changeSettings(...changed),
+    addLogin: (...added: Parameters<typeof database.addLogin>) => database.addLogin(...added),
     readSettings: async () => {
       reads.count += 1;
 
@@ -275,22 +276,40 @@ test.each([
 });
 
 // Drift: with the login in front of the whole dashboard, a setup shut after the first login leaves no door when that login breaks; and one that did more than repair would be a second dashboard behind a token.
-test("once somebody has logged in, a repair with the install's own token still runs and is kept, a check is a 404 the plug never sees, and an email beside the token is not read", async () => {
+test("once somebody has logged in, a repair with the install's own token still runs and is kept, and a check is a 404 the plug never sees", async () => {
   const { opened, plug, call, logins } = await openSetup({ loggedIn: async () => true });
   const checked = [await call("check", { token: OWN }), await call("check", "x".repeat(20_000)), await call("check", "", "text/plain")];
-  const repaired = await call("repair", { token: OWN, login: "nobody" });
-  const pasted = await call("repair", { token: OWN, login: `${OWN}@example.com` });
+  const repaired = await call("repair", { token: OWN });
 
   expect(await Promise.all(checked.map(told))).toEqual(checked.map(() => NOT_FOUND));
-  expect([await told(repaired), pasted.status]).toEqual([[200, { ok: true, rows: [{ ...PIECE, state: "created" }], steps: [], expects: opened.owner }], 200]);
-  expect<unknown>([plug.calls.map((made) => [made.run, made.settings?.logins]), await logins()]).toEqual([
-    [
-      ["repair", [opened.owner]],
-      ["repair", [opened.owner]],
-    ],
-    [opened.owner],
-  ]);
+  expect(await told(repaired)).toEqual([200, { ok: true, rows: [{ ...PIECE, state: "created" }], steps: [], expects: opened.owner }]);
+  expect<unknown>([plug.calls.map((made) => [made.run, made.settings?.logins]), await logins()]).toEqual([[["repair", [opened.owner]]], [opened.owner]]);
   expect((await opened.audit())[0]).toMatchObject({ action: "domain_synced", by: opened.owner, detail: { run: "repair", from: "setup" } });
+});
+
+// Drift: a user whose mailbox is lost gets no code, so no login and no dashboard to add another email from; and an add that replaced the logins, as the first login's correction does, would hand a used install to whoever holds a token.
+test("once somebody has logged in, a repair with the install's own token and an email adds it beside every stored login, for the plug and for the store, says so, and writes it to the audit log", async () => {
+  const { opened, plug, call, logins } = await openSetup({ loggedIn: async () => true });
+  const added = await call("repair", { token: OWN, login: ` ${MEANT} ` });
+  const again = await call("repair", { token: OWN, login: MEANT });
+  const entries = await opened.audit();
+
+  expect([added.status, ((await added.json()) as { expects: string }).expects, again.status, await logins()]).toEqual([200, `${opened.owner}, ${MEANT}`, 200, [opened.owner, MEANT]]);
+  expect<unknown>(plug.calls.map((made) => made.settings?.logins)).toEqual([
+    [opened.owner, MEANT],
+    [opened.owner, MEANT],
+  ]);
+  expect(entries.filter((entry) => entry.action === "settings_changed" && entry.by === MEANT).map((entry) => entry.detail)).toEqual([{ logins: [opened.owner, MEANT] }]);
+});
+
+// Drift: the door is open to anyone, so an email that reached the store before the token was judged, or by a token of another account, would let a stranger make themselves a user.
+test.each(unchanged.filter(({ run }) => run === "repair"))("once somebody has logged in, $name adds no user and says nothing of the stored ones", async ({ token, login, status }) => {
+  const { opened, plug, call, logins } = await openSetup({ loggedIn: async () => true });
+  const answer = await call("repair", { token, login });
+  const text = (await answer.text()).toLowerCase();
+
+  expect([answer.status, await logins(), plug.calls.flatMap((made) => (made.settings === undefined ? [] : [made.settings.logins]))]).toEqual([status, [opened.owner], []]);
+  expect([text.includes(opened.owner), text.includes(login.toLowerCase())]).toEqual([false, false]);
 });
 
 // Drift: the door that stays open after the first login is found by anyone; it must keep each guard of the first-run page, or it is the weakest way into an install that is in use.

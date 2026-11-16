@@ -48,7 +48,7 @@ interface SetupShared {
 /** What a token must hold and where one is made, as the page shows it. */
 type ShownForm = Omit<TokenFacts, "tokenFor">;
 
-/** What a run carries: the token, and beside it the first login of an install with nothing set, with its domain where it has one, or an email that corrects the first login. */
+/** What a run carries: the token, and beside it the first login of an install with nothing set, with its domain where it has one, or on a set install an email that corrects the first login or is added as a user. */
 interface Sent {
   readonly token: string;
   readonly domain?: string;

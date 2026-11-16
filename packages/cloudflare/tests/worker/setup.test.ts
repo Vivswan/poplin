@@ -81,7 +81,7 @@ afterEach(() => {
 describe("the setup page", () => {
   // Drift: the page is the one way in before anyone can log in, and the one way back in when the login in front of the dashboard breaks.
   // Shut after the first login it leaves no door; open as more than a repair it is a second dashboard behind a token.
-  test("answers on both addresses before and after the first login; after it the form takes a token alone and names nothing of the install, the account's token repairs, and a check and another account's token get nothing", async () => {
+  test("answers on both addresses before and after the first login; after it the form only repairs and names nothing of the install, the account's token repairs, and a check and another account's token get nothing", async () => {
     const worker = instance(w, cloudflareOf(account, asked));
     const before = [await ask(worker, `${ADMIN}/setup`), await ask(worker, `${OWN}/setup`), await ask(worker, `${OWN}/`)];
     const opened = await readShell((await before[1]?.text()) ?? "");
@@ -215,6 +215,23 @@ describe("the setup page", () => {
     expect(between).toEqual([[OWNER], true, false]);
     expect([corrected.status, (await corrected.json<{ expects?: string }>()).expects, await logins()]).toEqual([200, meant, [meant]]);
     expect([JSON.stringify(account.policies).includes(OWNER), JSON.stringify(account.policies).includes(meant), old.status]).toEqual([false, true, 403]);
+  });
+
+  // Drift: a user whose mailbox is lost gets no code from Cloudflare, and no page behind the login to add another email from: the store and Cloudflare's policy must both take the one typed beside a proven token, and neither for any other token.
+  test("after the first login a repair with the account's token and an email adds that user, in the store and in Cloudflare's policy, beside the stored ones; a token of another account adds nobody", async () => {
+    const worker = instance(w, cloudflareOf(account, asked));
+    const logins = async (): Promise<readonly string[] | undefined> => (await (await installOf(w)).database.readSettings())?.logins;
+    const other = "other@example.com";
+    await repair(worker, `${ADMIN}/setup`, { token: TOKEN });
+    await logIn(worker, w);
+
+    const stranger = await repair(worker, `${OWN}/setup`, { token: OTHER_TOKEN, login: other });
+    const between = [await logins(), JSON.stringify(account.policies).includes(other)];
+    const added = await repair(worker, `${OWN}/setup`, { token: TOKEN, login: other });
+    const policy = JSON.stringify(account.policies);
+
+    expect([stranger.status, between]).toEqual([403, [[OWNER], false]]);
+    expect([added.status, (await added.json<Ran>()).expects, await logins(), policy.includes(OWNER), policy.includes(other)]).toEqual([200, `${OWNER}, ${other}`, [OWNER, other], true, true]);
   });
 
   // Drift: the page takes a secret from anyone who finds it, so its only guard against guessing is the count of tries.

@@ -70,7 +70,7 @@ const DAY_MS = 86_400_000;
 /** Where the dashboard of the install that holds nothing is mounted. */
 const EMPTY_PREFIX = "/empty";
 
-/** The setup state of an install somebody has logged in to, beside the states of the plug: its page takes a token alone. */
+/** The setup state of an install somebody has logged in to, beside the states of the plug: its page only repairs. */
 const REPAIR = "repair";
 
 /** The setup state of an install with nothing set, which the setup screen asks its domain and first login. */

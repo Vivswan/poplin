@@ -1,6 +1,6 @@
 // The form of the setup screen, one column read top to bottom: make a token, fill in the boxes, press Repair.
 // An install with nothing set first asks its kind: under a domain of the person's own, which it is then asked with the first login, or with none, which asks the first login alone.
-// One nobody has logged in to takes an email that corrects the first login, and one somebody has logged in to takes the token alone.
+// One nobody has logged in to takes an email that corrects the first login, and one somebody has logged in to an email to add as a user.
 
 import type { FormEvent, ReactNode } from "react";
 
@@ -27,12 +27,15 @@ const FIRST_LOGIN = { name: "login", label: "Your email", hint: "Your login code
 /** The box of an email that corrects the first login, which may stay empty. */
 const OTHER_LOGIN = { name: "login", label: "Your email", hint: "Leave empty to keep the first login.", inputMode: "email", autoComplete: "email" } as const;
 
+/** The box of an email to add as a user, which may stay empty: for a person whose own mailbox is lost. */
+const ADDED_LOGIN = { name: "login", label: "Add a user", hint: "Only if your own email no longer gets the code. Else leave empty.", inputMode: "email", autoComplete: "email" } as const;
+
 /** Each form: what its second step is called, and its boxes before and after the token's. Where the email only corrects a login the token's box comes first. */
 const FORMS = {
   domain: { title: "Fill in three boxes", before: [DOMAIN, FIRST_LOGIN], after: [] },
   "no-domain": { title: "Fill in two boxes", before: [FIRST_LOGIN], after: [] },
   login: { title: "Paste it", before: [], after: [OTHER_LOGIN] },
-  repair: { title: "Paste it", before: [], after: [] },
+  repair: { title: "Paste it", before: [], after: [ADDED_LOGIN] },
 } as const satisfies Readonly<Record<Boxes, object>>;
 
 /** The kinds of install a person chooses from, in the words of the choice. */
@@ -42,7 +45,7 @@ const KINDS: readonly { readonly kind: Kind; readonly label: string }[] = [
 ];
 
 /** One box beside the token's. */
-type Box = typeof DOMAIN | typeof FIRST_LOGIN | typeof OTHER_LOGIN;
+type Box = typeof DOMAIN | typeof FIRST_LOGIN | typeof OTHER_LOGIN | typeof ADDED_LOGIN;
 
 /** What the form is drawn from. */
 interface SetupFormProps {
