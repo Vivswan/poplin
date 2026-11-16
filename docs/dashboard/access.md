@@ -25,6 +25,8 @@ The line that follows says how the change went:
 
 The change is saved in every case. `poplin config logins` shows the same list.
 
+**When no user can log in**, one more email is let in from a terminal, with an account token: `npx poplin doctor --repair --add-user new@example.com`. [I cannot log in](../fix/cannot-log-in.md#the-steps) has the steps.
+
 To remove another user, choose Remove in the menu at the end of that user's row, and press Remove when asked. That user is out of the dashboard at once, and out of private sites within a minute. Your own email cannot be the one you remove.
 
 Every token that user allowed stops working in the same step: the logins of their computers, their agents, and their build servers. The question before the removal says how many. Adding the user again brings none of them back.

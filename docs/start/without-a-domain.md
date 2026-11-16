@@ -73,6 +73,8 @@ Optional:
   Notifications: Edit: Cloudflare emails your first user when the account's usage charges for the billing period reach 1 US dollar.
 This link opens the form with each one chosen that a link can choose:
   https://dash.cloudflare.com/profile/api-tokens?permissionGroupKeys=...
+On the form, choose your account under Account Resources, then create the account token and copy it. The link does not choose this permission, so choose it on the form yourself: Workers R2 Storage: Edit.
+Account token (not shown):
 ```
 
 The link opens Cloudflare's form with five rows filled, and none of a domain. The install needs six permissions: the link cannot choose Workers R2 Storage, so add that one yourself.
@@ -88,7 +90,7 @@ The link opens Cloudflare's form with five rows filled, and none of a domain. Th
 | the bottom        | press Continue to summary, then Create Token                                         |
 | the next page     | the token is shown once: copy it, paste it at the command's question, and press Enter. Its letters do not show |
 
-One permission is optional here: Notifications: Edit, which the command lists with what it adds. With it, the install makes [an email when charges reach 1 dollar](../dashboard/domain.md#optional-an-email-when-charges-reach-1-dollar). The other optional permissions are all of a domain.
+One permission is optional here: Notifications: Edit, which the command lists with what it adds. With it, the run makes [an email when charges reach 1 dollar](../dashboard/domain.md#optional-an-email-when-charges-reach-1-dollar) at once. Without it, the install makes that email by itself within a day, with the key it keeps. The other optional permissions are all of a domain.
 
 ## What it prints
 
@@ -127,3 +129,12 @@ The command's last question logs this computer in, as [step 5 of Install](instal
 npx poplin login --server https://poplin.your-name.workers.dev
 npx poplin doctor
 ```
+
+## Afterwards
+
+The commands that mend and remove an install take `--no-domain` too:
+
+| To                                 | Run                                           | Page                                       |
+| ---------------------------------- | --------------------------------------------- | ------------------------------------------ |
+| get back in when nobody can log in | `npx poplin doctor --repair --no-domain`, with `--add-user` for a lost mailbox | [I cannot log in](../fix/cannot-log-in.md) |
+| take the install down              | `npx poplin uninstall cloudflare --no-domain` | [Remove](../upkeep/remove.md)              |

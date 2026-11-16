@@ -50,13 +50,17 @@ On an install [without a domain](../start/without-a-domain.md), the control of `
 | `poplin doctor`                                                      | checks that the install answers, and prints its version beside this poplin's, as `install 0.1.0, this poplin 0.1.0`; changes nothing |
 | `poplin update`                                                      | starts an update of the install to the newest version; `--dry-run` says what it would do |
 | `poplin update --to 0.2.0`                                           | takes that version in place of the newest: a lower one [goes back](../upkeep/update.md#go-back) |
-| `poplin install cloudflare --domain example.com --login you@example.com` | makes a new install under a domain; `--no-domain` makes one without |
+| `poplin install cloudflare --domain example.com --login you@example.com` | makes a new install under a domain; `--no-domain` makes one without. Where an install is, it says so and changes nothing: [Install](../start/install.md) |
 | `poplin install cloudflare --no-domain --login you@example.com --dry-run` | lists what that would make, with the same options; changes nothing |
+| `poplin doctor --repair`                                             | mends the install at Cloudflare, the way back in when nobody can log in; `--dry-run` lists what it would change: [I cannot log in](../fix/cannot-log-in.md) |
+| `poplin doctor --repair --add-user new@example.com`                  | the same, and lets one more email log in          |
+| `poplin uninstall cloudflare --domain example.com --dry-run`         | lists what a removal would remove; changes nothing |
+| `poplin uninstall cloudflare --no-domain`                            | removes the install, after you type its address; `--keep-data` leaves the sites' files and the database: [Remove](../upkeep/remove.md) |
 | `poplin help rollback`                                               | shows the help of one command                     |
 
 `poplin update` works on an install that holds its key: [Update the install](../upkeep/update.md#with-the-kept-key) shows what it does. An install that holds none answers `no_key`, and updates as [Update the install](../upkeep/update.md#update-the-install) says.
 
-`poplin install` makes an install and needs no login: it reads an account token from `POPLIN_INSTALL_TOKEN`, or asks for it without showing it. Where an install already is, it says so and changes nothing. [Install](../start/install.md) has every option.
+`poplin install`, `poplin doctor --repair`, and `poplin uninstall` work at Cloudflare and need no login of poplin. Each asks for an account token, without showing it; a script gives it in `POPLIN_INSTALL_TOKEN`. `poplin doctor` without `--repair` works with this computer's login, and only reads.
 
 The settings `poplin config` takes:
 
@@ -73,4 +77,4 @@ The settings `poplin config` takes:
 | `update_check`                                                                          | whether the install asks which version is the newest     |
 | `auto_update`                                                                           | whether the install starts an update by itself: off in a new install, [Update](../upkeep/update.md#optional-update-by-itself) |
 
-Every command that talks to the install also takes `--json`, for the answer as JSON, and `--server`, to name the install.
+Every command that talks to the install also takes `--json`, for the answer as JSON, and `--server`, to name the install. The three that work at Cloudflare take `--json` and no `--server`.

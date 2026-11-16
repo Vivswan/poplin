@@ -10,7 +10,7 @@ import { problem } from "../packages/cli/src/commands/problems";
 import { TOOLS } from "../packages/cli/src/mcp/tools";
 import { PROBLEM_KINDS } from "../packages/core/src/records/problem";
 import { words } from "../packages/cli/tests/commands/support/command-line";
-import { INSTALL_FLAGS, INSTALL_WORDS, providerRefusal } from "./support/install-words";
+import { INSTALL_FLAGS, INSTALL_WORDS, PROVIDER_COMMAND_NAMES, providerRefusal } from "./support/install-words";
 import { readPage } from "./support/markdown-page";
 
 /** The repository this file sits in. */
@@ -143,6 +143,13 @@ function refusalOf(line: string): string | undefined {
   return parsed.kind === "usage-error" ? parsed.message : undefined;
 }
 
+/** The command a line runs: a word of the CLI's table, or of a command that works at a provider, where `repair` is `doctor` with `--repair`. */
+function commandOf(line: string): string {
+  const parsed = parseCommand(words(line), NOW);
+
+  return parsed.kind === "provider" ? parsed.command : parsed.kind;
+}
+
 /** Whether the CLI's table holds the code: the table is not exported, and a code it lacks has no sentence, or throws. */
 function isCode(word: string): boolean {
   try {
@@ -216,11 +223,13 @@ describe("the pages a person reads", () => {
     ]);
   });
 
-  test("the guide runs every command of the CLI in an example: without this a new command is never shown to the person who would run it", async () => {
+  test("the guide runs every command of the CLI in an example, the ones that work at a provider and a repair among them: without this a new command is never shown to the person who would run it", async () => {
     const lines = (await Promise.all(GUIDE_PAGES.map((path) => parse(ROOT, path)))).flatMap(commandLines);
-    const run = new Set<string>(lines.map((line) => parseCommand(words(line), NOW).kind));
+    const run = new Set<string>(lines.map(commandOf));
+    const commands: readonly string[] = [...COMMANDS.map((spec: CommandSpec) => spec.name), ...PROVIDER_COMMAND_NAMES];
 
-    expect(COMMANDS.map((spec: CommandSpec) => spec.name).filter((name) => !run.has(name))).toEqual([]);
+    expect(commands.filter((name) => !run.has(name))).toEqual([]);
+    expect(["poplin doctor", "poplin doctor --repair --no-domain", "poplin uninstall cloudflare --dry-run"].map(commandOf)).toEqual(["doctor", "repair", "uninstall"]);
   });
 
   test("every flag a page names on its own is one a command takes: without this a removed flag stays in a sentence", async () => {

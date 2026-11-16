@@ -9,6 +9,8 @@ description: Use when the user asks to publish, share, host, or put online an HT
 
 **Not set up yet, or asked to set poplin up?** Follow [`references/setup.md`](references/setup.md). It makes a first install with the user when they have none, with one command, `npx poplin install cloudflare`. It uses the login saved on this computer, and adds the tools after the user's yes.
 
+**The user cannot log in, or wants the install removed?** The same page has the two commands: `npx poplin doctor --repair` and `npx poplin uninstall cloudflare`. Both take the user's account token, which never passes through the chat.
+
 ## When to Apply
 
 - The user asks to publish, share, host, or put online a page, a report, a chart, a dashboard, or a folder of static files
@@ -135,6 +137,6 @@ Two rules hold for every refusal. A refusal about the login (`no_login`, `not_lo
 
 | Open                                                               | When                                                                    |
 | ------------------------------------------------------------------ | ----------------------------------------------------------------------- |
-| [`references/setup.md`](references/setup.md)                       | the user asks to set poplin up, or there are no tools and no login      |
+| [`references/setup.md`](references/setup.md)                       | the user asks to set poplin up, cannot log in, or asks to remove the install; or there are no tools and no login |
 | [`references/mcp-server.md`](references/mcp-server.md)             | you add the MCP server to your own configuration, during the setup      |
 | [`references/refusals.md`](references/refusals.md)                 | a tool or a command answers with a refusal `code`                       |

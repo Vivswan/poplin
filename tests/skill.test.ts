@@ -30,8 +30,8 @@ const READ_ON = Date.UTC(2026, 0, 1);
 /** Every input a tool takes, as its schema names it. */
 const INPUTS: readonly string[] = Object.values(TOOL_INPUTS).flatMap((input) => Object.keys(input.entries));
 
-/** The words in code font that are no tool, input, or code: what an answer and `whoami` name, the three values of `access`, the two words of the server's entry, a folder that is never uploaded, and the keys of the value the install command prints. */
-const OTHER_WORDS: readonly string[] = ["url", "code", "install", "role", "token", "expires", "private", "unlisted", "public", "poplin", "npx", "node_modules", "ok", "ready", "answers", "address", "found", "steps", "problem"];
+/** The words in code font that are no tool, input, or code: what an answer and `whoami` name, the three values of `access`, the two words of the server's entry, a folder that is never uploaded, and the keys of the value an install and a repair print. */
+const OTHER_WORDS: readonly string[] = ["url", "code", "install", "role", "token", "expires", "private", "unlisted", "public", "poplin", "npx", "node_modules", "ok", "ready", "answers", "address", "found", "steps", "problem", "changes"];
 
 /** One lowercase word, or several joined by underscores: the way tools, their inputs, and refusal codes are written. */
 const WORD = /^[a-z]+(?:_[a-z]+)*$/;

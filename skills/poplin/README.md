@@ -24,6 +24,6 @@ With no install yet, the agent makes one with you: it asks for a domain or none 
 | Page                                                   | Holds                                                       |
 | ------------------------------------------------------ | ----------------------------------------------------------- |
 | [`SKILL.md`](SKILL.md)                                 | the tools, the publish steps, and the rules with reasons    |
-| [`references/setup.md`](references/setup.md)           | the setup, step by step                                     |
+| [`references/setup.md`](references/setup.md)           | the setup, step by step; the repair and the removal         |
 | [`references/mcp-server.md`](references/mcp-server.md) | how each kind of agent adds the MCP server                  |
 | [`references/refusals.md`](references/refusals.md)     | the refusal codes an agent meets and what to do about each  |

@@ -16,6 +16,8 @@ After the first login, Domain does what the setup page did.
 | Repair              | fixes every piece that needs it                                                                |
 | the table           | one row per piece, in the columns Piece, State, and Detail                                     |
 
+With no login, the same repair runs from a terminal, as `npx poplin doctor --repair`: [I cannot log in](../fix/cannot-log-in.md).
+
 ## Check needs no token
 
 An install that holds [its key](../about/security.md#the-kept-key) reads every piece with it. The screen shows the pieces with no press and no token:
