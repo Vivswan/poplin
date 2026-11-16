@@ -27,6 +27,7 @@
   "dependencies": {
     "@poplin/app": "workspace:*",
     "@poplin/core": "workspace:*",
+    "aws4fetch": "1.0.20",
     "cloudflare": "7.3.0",
     "jose": "6.2.17",
     "uint8array-extras": "1.6.0",

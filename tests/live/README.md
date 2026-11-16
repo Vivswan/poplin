@@ -20,6 +20,7 @@ Live Checks workflow
                                                  without a domain, in the repair's place: the two forwarders and the key
                                                  `Worker: deployed` in its log: Cloudflare took the built bundle and the source map beside it in one upload
                                                  `Key: created` or `Key: present` in its log: the Worker has its key as a secret, and Cloudflare lists an active token of the key's name
+                                                 `Upload key: created` or `Upload key: present`: the same for the key that sends files straight to the bucket
   packages/cloudflare/scripts/live/suite.ts      a token for the run -> bun test tests/live/live.test.ts -> the token removed
   packages/cloudflare/scripts/live/reset.ts      a token for the reset -> the install put back -> every token removed
   packages/cloudflare/scripts/live/orphans.ts    after the reset: the files of the bucket no record of the database names, removed
@@ -323,6 +324,19 @@ backup-drill: 3 sites, 5 files, 119 bytes put back and exported the same; passed
 
 The line holds no name and no address. One drill is 69 requests when none is sent again.
 
+## The check of the way a file goes
+
+`direct-upload` watches the run's first publish, of one page, and says which way its file went. It publishes nothing of its own.
+
+| The file went | The run knows | The check |
+| --- | --- | --- |
+| straight to the bucket | anything | passes: `the upload key is used` |
+| through the install | the install holds no upload key | passes, and says so |
+| through the install | this run made the key | passes: the bucket takes a key two and a half minutes after it is made |
+| through the install, or refused by the bucket first | the key was there before the run | fails |
+
+The first run after a key is made sends its files through the install: that is a pass. The line holds no address and no part of a key.
+
 ## The check of the users
 
 `users-follow` proves that a change of the users reaches Cloudflare's login list by itself, with the key the install keeps and no Repair.
@@ -400,7 +414,7 @@ A run that cannot make the install answer, or cannot start the checks, fails: th
 | Access: Organizations, Identity Providers, and Groups: Read | the account | the team domain the Worker checks a login against |
 | Billing: Read                                               | the account | reading that every subscription is at a price of 0 |
 | Notifications: Edit                                         | the account | the budget alert                                  |
-| Account API Tokens: Edit                                    | the account | the key the install keeps                         |
+| Account API Tokens: Edit                                    | the account | the two keys the install keeps                    |
 
 The token of the account without a domain needs the rows whose scope is the account, without Notifications: Edit, and none of the zone. Workers Scripts: Edit also reads the account's free address and makes the two forwarders.
 

@@ -20,7 +20,7 @@ Cloudflare's free plan     one request: 50 database queries
 | Open the Sites screen | 1 | 2 | 651 | 0 | 0 | 0 |
 | Open the Access screen | 3 | 6 | 258 | 0 | 0 | 0 |
 | Open the Activity screen | 2 | 4 | 607 | 0 | 0 | 0 |
-| Open the Usage screen | 3 | 8 | 37,778 | 0 | 0 | 0 |
+| Open the Usage screen | 3 | 8 | 37,808 | 0 | 0 | 0 |
 | Open the Settings screen | 1 | 2 | 3 | 0 | 0 | 0 |
 | Open the Domain screen | 1 | 2 | 3 | 0 | 0 | 0 |
 | Copy a site of 112 files | 1 | 8 | 31 | 21 | 112 | 114 |
@@ -28,6 +28,7 @@ Cloudflare's free plan     one request: 50 database queries
 
 - **A screen** counts its own requests. The frame around every screen is one more, of 2 queries.
 - **A publish** is three requests: its start, its one file, its finish. One of more than 100 files adds a request for every 100 files, which reads 2 rows and writes none.
+- **With the upload key** a file is no request to the install: a publish of 5 files is 2 requests in place of 7, and one of 500 files is 7 in place of 507. The bucket's writes stay the same, and the read before each write goes.
 - **A copy** of up to 112 files is one request. A larger one goes on in rounds, each with a read and a write for every file it copies and a listing for every 1,000 files of the site.
 - **A search or a sort** reads every row it passes over, so a list reads more rows on an install with more sites.
 - **A page view** is measured on a Worker that served the site a moment before. A request for a site after a minute without one costs up to 3 queries.

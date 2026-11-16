@@ -36,7 +36,7 @@ const LIMIT = { characteristics: ["cf.colo.id", "ip.src"], period: 10, requests_
 type SharedKey = Exclude<keyof typeof INSTALL_OBJECTS, (typeof PLUG_ALONE)[number]>;
 
 /** What the module does not declare: the names the setup client writes alone. */
-const PLUG_ALONE = ["keyBinding", "keyName"] as const satisfies readonly (keyof typeof INSTALL_OBJECTS)[];
+const PLUG_ALONE = ["keyBinding", "keyName", "uploadKeyBinding", "uploadKeyName"] as const satisfies readonly (keyof typeof INSTALL_OBJECTS)[];
 
 /** Where the module writes each shared value: the file, and the text around it. `%v` stands for the value as HCL writes it, `%i` for the value inside a longer HCL text, and `%l` for a list written one entry a line. */
 const WRITTEN: Readonly<Record<SharedKey, readonly [file: string, around: string]>> = {
@@ -94,6 +94,7 @@ const WRITTEN: Readonly<Record<SharedKey, readonly [file: string, around: string
   firstSettingsBinding: ["worker.tf", 'name = %v\n type = "json"\n json = jsonencode(local.first_settings)'],
   accountBinding: ["worker.tf", 'name = %v\n type = "plain_text"\n text = var.account_id'],
   workerBinding: ["worker.tf", 'name = %v\n type = "plain_text"\n text = var.worker_name'],
+  bucketBinding: ["worker.tf", 'name = %v\n type = "r2_bucket"'],
   sweepCron: ["worker.tf", "schedules = [{ cron = %v }]"],
   logsKept: ["worker.tf", "observability = {\n enabled = %v\n"],
   logsShare: ["worker.tf", "head_sampling_rate = %v\n logs = {\n enabled = true\n"],

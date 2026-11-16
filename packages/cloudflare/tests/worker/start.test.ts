@@ -3,11 +3,12 @@
 
 import { reset } from "cloudflare:test";
 import { beforeEach, describe, expect, test, vi } from "vitest";
+import { sha256Of } from "@poplin/core/src/storage/storage";
 import { type Outside, startInstance } from "../../src/worker/start";
 import { emptyAccount, KEY_VALUE_START, TOKEN } from "../zone/support/fake-install";
 import type { Asked } from "../zone/support/replies";
 import { EXAMPLE_ACCOUNT } from "./support/example-bindings";
-import { ADMIN, accessHeaders, ask, BINDINGS, cloudflareOf, instance, send, tokenOf, type World, world } from "./support/install";
+import { ADMIN, accessHeaders, api, ask, BINDINGS, cloudflareOf, done, instance, page, send, tokenOf, type World, world } from "./support/install";
 
 /** A key in the form the reader takes, and nothing like one Cloudflare makes. */
 const KEY = "kept-key-of-the-test";
@@ -77,7 +78,7 @@ describe("the kept key of an instance", () => {
   });
 
   // Drift: the way to a new key is wired at the start, beside the plug. One built over another account, Worker, or fetch would make a key for an install that is not this one.
-  test("an instance with no key is given one with a pasted token: the key is made in the Worker's own account, written onto this Worker as its secret, and no word of the answer or the log holds it", async () => {
+  test("an instance with no key is given both with a pasted token: the keys are made in the Worker's own account, written onto this Worker as its secrets, and no word of the answer or the log holds one", async () => {
     const prints = PRINTS.map((name) => vi.spyOn(console, name).mockImplementation(() => undefined));
     const account = emptyAccount();
     const asked: Asked[] = [];
@@ -89,9 +90,18 @@ describe("the kept key of an instance", () => {
 
     for (const print of prints) print.mockRestore();
 
-    expect(given).toEqual({ ok: true, rows: [{ object: "Key", state: "created", detail: "poplin kept key", part: "rest" }], steps: [] });
-    expect([account.tokens.map((token) => token.name), account.bindings.filter((binding) => binding.type === "secret_text")]).toEqual([["poplin kept key"], [{ name: "KEPT_KEY", type: "secret_text" }]]);
-    expect(asked.filter((entry) => entry.method !== "GET").map((entry) => `${entry.method} ${entry.path}`)).toEqual([`POST /accounts/${EXAMPLE_ACCOUNT}/tokens`, `PATCH /accounts/${EXAMPLE_ACCOUNT}/workers/scripts/poplin/settings`]);
+    const made = ["Key | poplin kept key", "Upload key | poplin upload key"].map((row) => ({ object: row.split(" | ")[0], state: "created", detail: row.split(" | ")[1], part: "rest" }));
+
+    expect<unknown>(given).toEqual({ ok: true, rows: made, steps: [] });
+    expect([account.tokens.map((token) => token.name), account.bindings.filter((binding) => binding.type === "secret_text").map((binding) => binding.name)]).toEqual([
+      ["poplin kept key", "poplin upload key"],
+      ["KEPT_KEY", "UPLOAD_KEY"],
+    ]);
+    expect(asked.filter((entry) => entry.method !== "GET").map((entry) => `${entry.method} ${entry.path}`)).toEqual([
+      `POST /accounts/${EXAMPLE_ACCOUNT}/tokens`,
+      `POST /accounts/${EXAMPLE_ACCOUNT}/tokens`,
+      `PATCH /accounts/${EXAMPLE_ACCOUNT}/workers/scripts/poplin/settings`,
+    ]);
     expect([JSON.stringify(given), ...printed].filter((text) => text.includes(KEY_VALUE_START))).toEqual([]);
   });
 
@@ -147,5 +157,36 @@ describe("a schema step that fails at the start", () => {
     expect(started).toEqual({ ok: false, failure: { kind: "failed" } });
     expect(printed.map((line) => line.split("\n")[0])).toEqual(["Error: poplin: step 1 of the database's schema failed and nothing of it was kept (RangeError)"]);
     expect(printed.filter((line) => line.includes(stored) || line.includes("UNIQUE"))).toEqual([]);
+  });
+});
+
+describe("the upload key of an instance", () => {
+  /** The secret part of the key every case here holds: no answer may carry it. */
+  const SECRET = "5".repeat(64);
+
+  /** The upload key as the Worker keeps it, made so long before the clock's time. */
+  const keyMade = (agoMs: number): string => JSON.stringify({ id: "0123456789abcdef0123456789abcdef", secret: SECRET, bucket: "poplin-sites", minted_at: w.clock.now - agoMs });
+
+  const ages: readonly { readonly name: string; readonly secret: () => unknown; readonly direct: boolean }[] = [
+    { name: "no upload key", secret: () => undefined, direct: false },
+    { name: "a secret that is no upload key", secret: () => "kept-key-of-the-test", direct: false },
+    { name: "an upload key made one second short of two and a half minutes ago", secret: () => keyMade(149_000), direct: false },
+    { name: "an upload key made two and a half minutes ago", secret: () => keyMade(150_000), direct: true },
+    { name: "an upload key the clock dates to a moment that is still to come", secret: () => keyMade(-60_000), direct: false },
+  ];
+
+  // Drift: the bucket refuses a new key for about two minutes. An install that signed with it at once would hand out tickets the bucket refuses, on the first publish after every setup and every repair.
+  test.each(ages)("$name: a begun publish is handed tickets $direct for the bucket, and no answer holds the key's secret", async ({ secret, direct }) => {
+    const worker = instance(w);
+    const token = await tokenOf(w, "admin");
+    const file = page("<p>a page</p>");
+    const files = [{ path: file.path, size: file.body.byteLength, content_type: file.type, sha256: await sha256Of(file.body) }];
+    const calls = api(worker, token, (input, init) => ask(worker, input, init, { ...BINDINGS, UPLOAD_KEY: secret() }));
+    const begun = await calls.uploads.$post({ query: {}, json: { name: "report", files } });
+    const text = await begun.clone().text();
+    const { upload, tickets } = await done<{ upload: { id: string }; tickets: { url: string }[] }>(begun);
+    const places = tickets.map((ticket) => (URL.canParse(ticket.url) ? new URL(ticket.url).origin : ticket.url.replace(upload.id, ":upload")));
+
+    expect([places, text.includes(SECRET)]).toEqual([[direct ? `https://${EXAMPLE_ACCOUNT}.r2.cloudflarestorage.com` : "/api/uploads/:upload/file?path=index.html"], false]);
   });
 });

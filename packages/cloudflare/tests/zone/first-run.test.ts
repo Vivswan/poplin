@@ -37,7 +37,7 @@ async function withFirstRun(account: Account, domain: string, run: (plug: NonNul
 }
 
 // Drift: an install with nothing set has no account to act on but the one the token shows; a Worker left with half its values would start as neither a new install nor a working one.
-test("one repair gives a deployed Worker its domain, its first login, its account, its login facts, and its key in one change, keeps every other binding, and fits what one request may send", async () => {
+test("one repair gives a deployed Worker its domain, its first login, its account, its login facts, and its two keys in one change, keeps every other binding, and fits what one request may send", async () => {
   const account = deployed();
 
   await withFirstRun(account, "example.com", async (plug, asked) => {
@@ -63,14 +63,15 @@ test("one repair gives a deployed Worker its domain, its first login, its accoun
       { name: "ACCOUNT_ID", type: "plain_text", text: ACCOUNT },
       { name: "ACCESS", type: "json", json: { team_domain: TEAM, audience: account.applications.find((application) => application.name === "poplin")?.aud } },
       { name: "KEPT_KEY", type: "secret_text" },
+      { name: "UPLOAD_KEY", type: "secret_text" },
     ]);
-    // The key goes in that one change and nowhere else, and no row or step repeats it.
+    // The kept key goes in that one change and nowhere else, and no row or step repeats it.
     expect(asked.filter((entry) => JSON.stringify(entry.body ?? "").includes(KEY_VALUE_START)).map((entry) => entry.method)).toEqual(["PATCH"]);
-    expect([shown(repaired).filter((row) => row.startsWith("Key")), JSON.stringify(repaired).includes(KEY_VALUE_START)]).toEqual([["Key | created | poplin kept key"], false]);
+    expect([shown(repaired).filter((row) => row.includes("ey | ")), JSON.stringify(repaired).includes(KEY_VALUE_START)]).toEqual([["Key | created | poplin kept key", "Upload key | created | poplin upload key"], false]);
     // Every call but the search for the zone goes under the zone and the account the token showed the domain in, and under no other.
     expect(asked.slice(before).map((entry) => entry.path).filter((path) => !path.startsWith("/zones?") && !path.startsWith("/zones/zone-1/") && !path.startsWith(`/accounts/${ACCOUNT}/`))).toEqual([]);
     expect(asked.length - before).toBeLessThanOrEqual(CALLS_A_FREE_PLAN_REQUEST_MAY_SEND);
-    expect(asked.length - before).toBe(40);
+    expect(asked.length - before).toBe(41);
   });
 });
 
@@ -104,13 +105,13 @@ test("on an account whose Access is off the Worker still gets its domain, its fi
   await withFirstRun(account, "example.com", async (plug) => {
     const repaired = await plug.repair(TOKEN, SETTINGS);
 
-    expect(account.bindings.map((binding) => binding.name)).toEqual(["SITES", "DB", "WORKER_NAME", "ZONE", "FIRST_SETTINGS", "ACCOUNT_ID", "KEPT_KEY"]);
+    expect(account.bindings.map((binding) => binding.name)).toEqual(["SITES", "DB", "WORKER_NAME", "ZONE", "FIRST_SETTINGS", "ACCOUNT_ID", "KEPT_KEY", "UPLOAD_KEY"]);
     expect(repaired).toMatchObject({ steps: [{ text: "Open Zero Trust and pick a plan (Free works): that switches Access on." }] });
   });
 });
 
 // Drift: an install without a domain has no zone to find its account by. Set up by any account the token shows, or from a hostname that is not the Worker's own free address, the install's values would be written to a Worker it does not answer at.
-test("with no domain, one repair from the Worker's own free address gives the Worker the account's name in that address, its first login, its account, its login facts, and its key in one change; any other hostname gets no plug", async () => {
+test("with no domain, one repair from the Worker's own free address gives the Worker the account's name in that address, its first login, its account, its login facts, and its two keys in one change; any other hostname gets no plug", async () => {
   const account = deployed();
 
   await withFake(
@@ -130,6 +131,7 @@ test("with no domain, one repair from the Worker's own free address gives the Wo
         { name: "ACCOUNT_ID", type: "plain_text", text: ACCOUNT },
         { name: "ACCESS", type: "json", json: { team_domain: TEAM, audience: account.applications.find((application) => application.name === "poplin")?.aud } },
         { name: "KEPT_KEY", type: "secret_text" },
+        { name: "UPLOAD_KEY", type: "secret_text" },
       ]);
       // The account is found among the ones the token shows, and every other call goes under it.
       expect(asked.map((entry) => entry.path).filter((path) => !path.startsWith("/accounts?") && path !== "/accounts" && !path.startsWith(`/accounts/${ACCOUNT}/`))).toEqual([]);

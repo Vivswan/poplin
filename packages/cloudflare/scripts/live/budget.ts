@@ -3,11 +3,11 @@
 //   PUT    /api/uploads/:upload/file     a write         GET    /api/uploads/:upload              a list
 //   POST   /api/uploads/:upload/finish   a list          DELETE /api/uploads/:upload              a list
 //   DELETE /api/sites/:site              a list          POST   /api/sites/:site/duplicate        a list
-//   POST   /api/uploads/:upload/tickets  a list          GET    /api/export/sites/:site/files     a list
+//   PUT    any path outside the API      a write         GET    /api/export/sites/:site/files     a list
 //
-// Each such request counts as one, before it is sent. A request past the ceiling is not sent, and every one after it: each is answered here as refused.
-// The refusal is a 403, which the CLI does not send again: a request that got no answer is one it sends again after a pause.
-// The count is the harness's own, not the bucket's: the install lists once more for every thousand files, and a move to the trash lists nothing.
+// Each such request counts as one before it is sent; a file the bucket itself refused, outside the API, is taken off the count again: the bucket bills no request it refuses.
+// A request past the ceiling is not sent, and every one after it: each is answered here as refused.
+// The refusal is a 403, which the CLI does not send again: a request that got no answer is one it sends again after a pause. The count is the harness's own: the install lists once more for every thousand files, and a move to the trash lists nothing.
 
 import type { Api } from "@poplin/app/src/api/api";
 import type { ExtractSchema } from "hono/types";
@@ -17,7 +17,6 @@ import type { Fetch } from "../../../cli/src/client/client";
 /** The routes whose every request makes the install write to the bucket or list it. One the app does not declare does not compile. */
 const SPENDING = [
   { method: "PUT", path: "/api/uploads/:upload/file" },
-  { method: "POST", path: "/api/uploads/:upload/tickets" },
   { method: "GET", path: "/api/uploads/:upload" },
   { method: "POST", path: "/api/uploads/:upload/finish" },
   { method: "DELETE", path: "/api/uploads/:upload" },
@@ -26,11 +25,20 @@ const SPENDING = [
   { method: "GET", path: "/api/export/sites/:site/files" },
 ] as const satisfies readonly Declared[];
 
+/** The routes a run sends beside its files that spend nothing at the bucket: handing out tickets makes no call to the store. */
+const FREE = [{ method: "POST", path: "/api/uploads/:upload/tickets" }] as const satisfies readonly Declared[];
+
 /** The method and the path of each spending route, as a request is matched against them. */
 const MATCHERS = SPENDING.map(({ method, path }) => ({ method, path: new URLPattern({ pathname: path }) }));
 
+/** The same of each route that spends nothing. */
+const FREE_MATCHERS = FREE.map(({ method, path }) => ({ method, path: new URLPattern({ pathname: path }) }));
+
 /** The most bucket writes and lists each step of a run may ask for: the checks, those with the job's copy, those with two thousand files, and the reset. `orphans`: the most lists and deletes a run asks Cloudflare for to remove files no record names. */
 export const CEILINGS = { checks: 150, jobCopy: 300, manyFiles: 2300, reset: 150, orphans: 300 } as const;
+
+/** Where the API answers. */
+const API = "/api/";
 
 /** The status a held-back request is answered with. */
 const HELD_BACK = 403;
@@ -56,10 +64,26 @@ interface Meter {
   readonly stopped: () => string | undefined;
 }
 
+/** Whether a request is a file on its way to the bucket itself: no site and no page of the install takes a PUT, so one outside the API is. */
+function isSentAway(input: string, init: RequestInit): boolean {
+  return init.method === "PUT" && !new URL(input).pathname.startsWith(API);
+}
+
 function spends(input: string, init: RequestInit): boolean {
   const method = init.method ?? "GET";
 
   return MATCHERS.some((matcher) => matcher.method === method && matcher.path.test(input));
+}
+
+/**
+ * Say whether a request is one the install answers without a call to the bucket, whatever another request on its way meanwhile makes the bucket do.
+ *
+ * @returns `true` for a request to a route of `FREE`
+ */
+export function spendsNothing(input: string, init: RequestInit): boolean {
+  const method = init.method ?? "GET";
+
+  return FREE_MATCHERS.some((matcher) => matcher.method === method && matcher.path.test(input));
 }
 
 /**
@@ -74,7 +98,8 @@ export function meterBucket(fetch: Fetch, ceiling: number): Meter {
 
   return {
     fetch: async (input, init) => {
-      if (!spends(input, init)) return fetch(input, init);
+      const away = isSentAway(input, init);
+      if (!away && !spends(input, init)) return fetch(input, init);
 
       if (spent >= ceiling) {
         over = true;
@@ -82,9 +107,12 @@ export function meterBucket(fetch: Fetch, ceiling: number): Meter {
         return Response.json({ error: { code: "forbidden", message: `Held back: past the ceiling of ${ceiling} bucket writes and lists.` } }, { status: HELD_BACK });
       }
 
+      // Counted before it is sent, so requests on their way together cannot pass the ceiling between them; a file the bucket refused is taken off again.
       spent += 1;
+      const answer = await fetch(input, init);
+      if (away && !answer.ok) spent -= 1;
 
-      return fetch(input, init);
+      return answer;
     },
     spent: () => spent,
     stopped: () => (over ? `passed its ceiling of ${ceiling} bucket writes and lists` : undefined),

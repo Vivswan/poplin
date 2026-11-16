@@ -7,6 +7,7 @@
 //   poplin.example.com/...           with no login in front, the install's own refusal: 401 as JSON under /data/, a 403 anywhere else
 //   *-poplin.example.com             the edge's rules, the install's own count of one visitor, then the real serving
 //   *-page.example.com               the same, on an install whose routes reach the public word
+//   store.example.com/<upload>       the store the install's tickets name: it takes a file as the install's own route does, or refuses every one
 //   any other hostname               no answer
 //
 // With `noDomain`, the fake is an install on an account's free address, and no rule of a zone stands in front of it:
@@ -41,6 +42,9 @@ const FAKE_ACCOUNT = "example";
 
 /** The three hostnames of the fake of an install without a domain. */
 const FREE_HOSTS = { admin: `poplin.${FAKE_ACCOUNT}.workers.dev`, sites: `poplin-sites.${FAKE_ACCOUNT}.workers.dev`, private: `poplin-private.${FAKE_ACCOUNT}.workers.dev` } as const;
+
+/** The hostname of the store the fake's tickets name. */
+const STORE_HOST = `store.${FAKE_DOMAIN}`;
 
 /** What the install says to a request to its dashboard that no login stands behind. */
 const NO_LOGIN = "No login was checked for this request. Open the dashboard's address again.";
@@ -142,6 +146,15 @@ export interface FakeSwitches {
 
   /** The install's provider runs no job, on a run not told so: each request that asks after a copy copies its next files, and the provider holds no job to read. */
   readonly noJobs?: boolean;
+
+  /** The install holds no upload key: it hands out tickets of its own route alone. */
+  readonly noUploadKey?: boolean;
+
+  /** A fault: the store refuses every ticket the install hands out for it. */
+  readonly storeRefuses?: boolean;
+
+  /** The store fails on the first file it is sent, as a store that is busy for a moment does, and takes every one after it. */
+  readonly storeStumbles?: boolean;
 }
 
 /** A fake install: what sends a request to it, its addresses as a stranger types them, an admin's token, the login list and the jobs its provider holds, and the pause that moves its time on. */
@@ -266,6 +279,7 @@ function freeAddressPlace(install: ApiInstall, jobs: Jobs | undefined): Place {
     },
     update: { holdsKey: () => false, ready: async () => ({ ok: false, code: "no_key" }) },
     ...(jobs === undefined ? {} : { jobs }),
+    direct: () => install.direct.tickets,
   });
 
   return { adminHost: FREE_HOSTS.admin, sites, api, typed: liveAddresses({ kind: "account address", account: FAKE_ACCOUNT }), privateHost: FREE_HOSTS.private };
@@ -303,6 +317,35 @@ export async function openFake(switches: FakeSwitches = {}): Promise<Fake> {
   // The fake's provider takes every change of the users, unless a fault says the install holds no key: its list is then the one of the first settings for good.
   install.users.takes = switches.noKey !== true;
   const loginList = async (): Promise<readonly string[]> => (install.users.takes ? (install.users.pushed.at(-1) ?? settings.logins) : settings.logins);
+
+  // The fake's upload key: each ticket names the store, with the headers of the install's own route, which the store hands the file on to.
+  if (switches.noUploadKey !== true) {
+    install.direct.tickets = {
+      issue: async (upload, files) =>
+        files.map(({ file }) => {
+          const url = `https://${STORE_HOST}/${upload.id}?${new URLSearchParams({ path: file.path })}`;
+
+          return { path: file.path, url, method: "PUT", headers: { "Content-Type": "application/octet-stream", "Content-Length": String(file.size) }, expires: upload.expires };
+        }),
+    };
+  }
+
+  // The store takes a file sent with no login, as a signed address is: it hands the bytes to the install's own route under the fake's own token.
+  let stumbled = switches.storeStumbles !== true;
+  const answerStore = (request: Request, url: URL): Promise<Response> | Response => {
+    if (!stumbled) {
+      stumbled = true;
+
+      return new Response("<Error><Code>ServiceUnavailable</Code></Error>", { status: 503 });
+    }
+
+    if (switches.storeRefuses === true || request.headers.has("Authorization")) return new Response("<Error><Code>AccessDenied</Code></Error>", { status: 403 });
+
+    const headers = new Headers(request.headers);
+    headers.set("Authorization", `Bearer ${install.tokens.admin}`);
+
+    return place.api.fetch(new Request(`https://${place.adminHost}/api/uploads${url.pathname}/file${url.search}`, { method: request.method, headers, body: request.body, duplex: "half" } as RequestInit));
+  };
 
   // When each request the rules let through came, on the fake's own time, and by which path.
   const arrivals: (Path & { readonly at: number })[] = [];
@@ -395,6 +438,8 @@ export async function openFake(switches: FakeSwitches = {}): Promise<Fake> {
 
     // The fault of an install that lets an origin read its answers is in the install's own alone: the login's are none of its.
     if (url.hostname === place.adminHost) return stoppedAtLogin(request, url) ?? granting(await answerAdmin(request, url), grantedOf(request));
+
+    if (url.hostname === STORE_HOST) return answerStore(request, url);
 
     const reached = place.sites.isSiteHost(url.hostname) && !(switches.noPublicRoute === true && !url.hostname.endsWith(`-poplin.${FAKE_DOMAIN}`));
     if (!reached) throw new TypeError("no server answers on this hostname");

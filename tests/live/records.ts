@@ -4,7 +4,7 @@ import type { JobRun } from "../../packages/cloudflare/scripts/live/job-run";
 import type { LiveAddresses } from "./addresses";
 
 /** Something a check needs that an install, its account, or a run may lack. `person` is always lacking: such a check is done by hand. */
-type Capability = "token" | "letters" | "access" | "guard-rules" | "https-redirect" | "rate-rule" | "bot-block" | "many-files" | "login-list" | "kept-key" | "jobs" | "job-copy" | "person";
+type Capability = "token" | "letters" | "access" | "guard-rules" | "https-redirect" | "rate-rule" | "bot-block" | "many-files" | "login-list" | "kept-key" | "upload-key" | "settled-upload-key" | "jobs" | "job-copy" | "person";
 
 /** Why each lacking capability is lacking, in words that name no host and no account. */
 export type Missing = Partial<Record<Capability, string>>;
@@ -65,6 +65,9 @@ export interface Bench {
 
   /** How many requests the token holder's commands and tools have sent so far. */
   readonly asked: () => number;
+
+  /** How many files those commands have sent so far, by where each sending went: to the install itself, or `away`, to another place a ticket named. A file sent twice counts twice. */
+  readonly sentFiles: () => { readonly install: number; readonly away: number };
 
   /** Calls one tool of the MCP server as the token holder and answers its structured content. */
   readonly mcp: (tool: string, input: Record<string, unknown>) => Promise<Record<string, unknown>>;

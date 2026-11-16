@@ -1,4 +1,4 @@
-// The Worker's environment. The first four names are the `binding` names of wrangler.jsonc; the rest are variables set on the Worker, and one secret.
+// The Worker's environment. The first four names are the `binding` names of wrangler.jsonc; the rest are variables set on the Worker, and two secrets.
 
 import type { Job } from "@poplin/core/src/jobs/jobs";
 
@@ -33,4 +33,7 @@ export interface Bindings {
 
   /** The key poplin keeps for the Cloudflare API, unchecked: a secret of the Worker, which no deploy names and none removes. A Worker without it holds no key. */
   readonly KEPT_KEY: unknown;
+
+  /** The key that reaches the objects of the bucket from outside the Worker, unchecked: a second secret, kept as the first is. A Worker without it takes every file of an upload itself. */
+  readonly UPLOAD_KEY: unknown;
 }

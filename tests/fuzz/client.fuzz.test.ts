@@ -31,7 +31,7 @@ const SERVER = "https://poplin.example.com";
 const TOKEN = `poplin_${"0".repeat(16)}_${"a".repeat(64)}`;
 const CRASHED = "poplin failed in a way it has no word for";
 const EXIT_CODES = [0, 1, 5];
-const STATUSES = [200, 201, 204, 301, 302, 304, 400, 401, 403, 404, 409, 413, 429, 500, 502, 503];
+const STATUSES = [200, 201, 204, 301, 302, 304, 400, 401, 403, 404, 409, 412, 413, 429, 500, 502, 503];
 const SCRATCH = mkdtempSync(join(tmpdir(), "poplin-fuzz-"));
 const FOLDER = join(SCRATCH, "report");
 const SITE = {
@@ -225,7 +225,7 @@ property(
 );
 
 property(
-  "a file sent by its ticket is taken only for a status in the 200s, whatever the body, anything else is a failure and never a throw, and the token leaves for no origin but the one of the install",
+  "a file sent by its ticket is taken only for a status in the 200s, or a 412 of another place, anything else is a failure and never a throw, the token leaves for no origin but the one of the install, and no word of another place is kept",
   fc.asyncProperty(answers, hostile(fc.constantFrom(TICKET.url, `${SERVER}${TICKET.url}`, "https://files.example.net/drop?leave=1", "//files.example.net/drop", "https://")), async (answer, url) => {
     const answering = scripted([answer]);
     const withToken: string[] = [];
@@ -239,9 +239,20 @@ property(
 
     // The token goes with a file only to the install's own origin, whatever address a ticket names.
     expect(withToken.filter((address) => new URL(address).origin !== SERVER)).toEqual([]);
+
+    // What another place answers is never read: its refusal is known by its status alone, as an answer nobody expected, and none of its words is kept.
+    const away = URL.canParse(url, SERVER) && new URL(url, SERVER).origin !== SERVER;
+    if (away && !sent.ok && "status" in sent.failure) {
+      const { failure } = sent;
+
+      expect("said" in failure).toBe(false);
+      expect(failure.kind).toBe("unexpected");
+    }
+
     if (!sent.ok) return;
 
-    expect("thrown" in answer ? undefined : answer.status >= 200 && answer.status < 300).toBe(true);
+    // Another place's 412 is a file it holds already or would not take: the finish of the upload tells which.
+    expect("thrown" in answer ? undefined : (answer.status >= 200 && answer.status < 300) || (away && answer.status === 412)).toBe(true);
   }),
 );
 

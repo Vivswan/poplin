@@ -1,6 +1,6 @@
 // The plug of an install without a domain: every object of an install on the account's free address read, or made to match, with a token that lives for the one call.
 //
-//   token -> the account whose free address the install answers under -> the two forwarders, Access, the Worker's own variables and its key, the database, the Workflow
+//   token -> the account whose free address the install answers under -> the two forwarders, Access, the Worker's own variables and its keys, the database, the Workflow
 //
 // With no zone to show, a token proves itself by the account: the one whose free address is the one in the install's own hostnames. Any other token is refused before anything is read.
 // Each piece is the one an install with a domain is made of. No record, route, or rule is read or written: the free address has none of them.
@@ -41,6 +41,9 @@ type PathParts = Known & {
 
   /** What sends a call; absent outside tests. */
   readonly fetch?: Connection["fetch"];
+
+  /** The clock a new upload key's moment of making is read from, in milliseconds since the epoch; absent outside tests. */
+  readonly now?: (() => number) | undefined;
 };
 
 /** The ids of the first accounts a token shows, from the first page of the list alone: no further page is asked for. */
@@ -81,7 +84,7 @@ async function prove(parts: PathParts, token: string): Promise<{ readonly connec
   const { layout } = parts;
   const firsts = firstValues(parts, { account_address: layout.account }, accountId);
 
-  return { connection, placed: { script: parts.script, accountId, zoneId: undefined, key: parts.key, adminHost: layout.adminHost, privateSites: layout.privateHost, firstValues: firsts } };
+  return { connection, placed: { script: parts.script, accountId, zoneId: undefined, key: parts.key, uploadKeyId: parts.uploadKeyId, now: parts.now, adminHost: layout.adminHost, privateSites: layout.privateHost, firstValues: firsts } };
 }
 
 /**
@@ -133,16 +136,16 @@ async function read(parts: PathParts, mode: Mode, token: string, readSettings: R
 }
 
 /**
- * Give an install without a domain a new key, made with a token a person pasted, and nothing else: no other object is read or changed.
+ * Give an install without a domain new keys, both made with a token a person pasted, and nothing else: no other object is changed.
  *
- * @param parts - the install; with `key`, a key the install holds is said to be replaced
- * @returns the key's one row, and a step for an older key that is still at Cloudflare; a token that does not prove itself is refused as a check refuses it
+ * @param parts - the install; with `key` or `uploadKeyId`, a key the install holds is said to be replaced
+ * @returns a row a key, and a step for an older key that is still at Cloudflare; a token that does not prove itself is refused as a check refuses it
  */
 export async function givePathKey(parts: Extract<PathParts, { readonly accountId: string }>, token: string): Promise<DomainReading> {
   const proven = await prove(parts, token);
   if ("ok" in proven) return proven;
 
-  return keyGiven(proven.connection, proven.placed, parts.key?.has() === true);
+  return keyGiven(proven.connection, proven.placed, { kept: parts.key?.has() === true, upload: parts.uploadKeyId !== undefined });
 }
 
 /**

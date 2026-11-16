@@ -54,6 +54,7 @@
     "./src/auth/logins": "./src/auth/logins.ts",
     "./src/auth/scopes": "./src/auth/scopes.ts",
     "./src/auth/tokens": "./src/auth/tokens.ts",
+    "./src/auth/util": "./src/auth/util.ts",
     "./src/database/database": "./src/database/database.ts",
     "./src/database/driver": "./src/database/driver.ts",
     "./src/database/open": "./src/database/open.ts",

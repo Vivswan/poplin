@@ -5,7 +5,7 @@ import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 import type { Fetch } from "../../packages/cli/src/client/client";
-import { CEILINGS, meterBucket } from "../../packages/cloudflare/scripts/live/budget";
+import { CEILINGS, meterBucket, spendsNothing } from "../../packages/cloudflare/scripts/live/budget";
 import { meterRows, ROW_CEILINGS } from "../../packages/cloudflare/scripts/live/rows";
 import { MemoryStore } from "../../packages/core/src/storage/memory";
 import { openBench } from "./bench";
@@ -21,6 +21,7 @@ const BY_HAND = ["L2", "L3", "L4-in", "L5b", "L6", "L7", "L9"];
 
 /** Every check that needs a token. */
 const WITH_TOKEN = [
+  "direct-upload",
   "private",
   "unlisted",
   "public",
@@ -131,6 +132,10 @@ const CASES: readonly Case[] = [
     {},
     { ...NO_LOGIN, private: "failed", duplicate: "failed", L5: "failed" },
   ],
+  ["an install with no upload key, on a run told so, sends its files through itself and passes", { noUploadKey: true }, { "upload-key": "the token permission for the Upload key" }, NO_LOGIN],
+  ["an install said to hold an upload key the bucket takes fails the check of the way a file goes when it hands out none of the bucket's tickets", { noUploadKey: true }, {}, { ...NO_LOGIN, "direct-upload": "failed" }],
+  ["a store that refuses the tickets of a key it should take: every publish goes through the install after all, and the check of the way a file goes fails", { storeRefuses: true }, {}, { ...NO_LOGIN, "direct-upload": "failed" }],
+  ["a store that refuses the tickets of a key the run itself made is no fault: a new key is refused for its first minutes", { storeRefuses: true }, { "settled-upload-key": "an upload key older than two and a half minutes" }, NO_LOGIN],
   ["an install that holds no key of its provider fails the check of the users: the login list never takes the one it added", { access: true, noKey: true }, {}, { "users-follow": "failed" }],
   ["a run with no key to read the provider's login list skips the check of the users", { access: true }, { "login-list": "a key of the provider" }, { "users-follow": "skipped" }],
   ["an install whose own count of a visitor lags behind a burst still shows its own limit", { lateCount: true }, {}, NO_LOGIN],
@@ -251,11 +256,11 @@ describe("the live checks, against a local fake", () => {
     using lists = spyOn(MemoryStore.prototype, "list");
     const uncounted: string[] = [];
 
-    // A request the store wrote or listed for, which the meter let through as free.
+    // A request the store wrote or listed for, which the meter let through as free. One that makes no call to the store is left out: what the store does while it is on its way is another lane's file.
     const watched: Fetch = async (input, init) => {
       const before = { store: writes.mock.calls.length + lists.mock.calls.length, spent: meter.spent() };
       const response = await meter.fetch(input, init);
-      const free = meter.spent() === before.spent && writes.mock.calls.length + lists.mock.calls.length > before.store;
+      const free = !spendsNothing(input, init) && meter.spent() === before.spent && writes.mock.calls.length + lists.mock.calls.length > before.store;
       if (free) uncounted.push(`${init.method ?? "GET"} ${new URL(input).pathname}`);
 
       return response;
@@ -338,6 +343,44 @@ describe("the live checks, against a local fake", () => {
     ["a drill whose removal at the end is refused fails, and says no line", { method: "DELETE", path: /^\/api\/sites\/[^/]+$/, nth: 4 }, /could not remove 1 of its 3 sites/, 1],
   ])("%s", async (_what, refusal, failure, left) => {
     expect(await drillOn(refusal)).toMatchObject({ said: [], result: "failed", failure: expect.stringMatching(failure), left });
+  }, RUN_MS);
+
+  // Drift: the line is how a person reading a run learns whether files went straight to the bucket. One that said "used" for a file that went through the install would hide a key the bucket refuses.
+  test.each<[string, FakeSwitches, Missing, Outcome["result"], string[]]>([
+    ["a file the store takes", {}, {}, "passed", ["a publish sent its file straight to the bucket by a signed ticket: the upload key is used"]],
+    ["a file the store takes at its second sending", { storeStumbles: true }, {}, "passed", ["a publish sent its file straight to the bucket by a signed ticket: the upload key is used"]],
+    [
+      "an install with no upload key, as the run was told",
+      { noUploadKey: true },
+      { "upload-key": "the token permission for the Upload key" },
+      "passed",
+      ["a publish sent its file through the install: a file goes straight to the bucket with the token permission for the Upload key"],
+    ],
+    [
+      "a key the run made, which the install does not sign with yet",
+      { noUploadKey: true },
+      { "settled-upload-key": "an upload key older than two and a half minutes" },
+      "passed",
+      ["a publish sent its file through the install: a file goes straight to the bucket with an upload key older than two and a half minutes"],
+    ],
+    [
+      "a key the run made, which the store refuses yet",
+      { storeRefuses: true },
+      { "settled-upload-key": "an upload key older than two and a half minutes" },
+      "passed",
+      ["the bucket refused the ticket of a publish's file, and the file went through the install: a file goes straight to the bucket with an upload key older than two and a half minutes"],
+    ],
+    ["a key the store should take and refuses", { storeRefuses: true }, {}, "failed", []],
+  ])("the check of the way a file goes, on %s, says one line that holds no address", async (_what, switches, missing, result, lines) => {
+    const fake = await openFake(switches);
+    const said: string[] = [];
+    const { bench, close } = openBench({ addresses: fake.addresses, token: fake.token, run: "selftest", missing, fetch: fake.fetch, pause: fake.pause, now: fake.now, say: (text) => said.push(text), manyFiles: MANY_FILES, largeCopy: LARGE_COPY });
+    OPENED.push(close);
+
+    const check = CHECKS.find((one) => one.id === "direct-upload");
+    if (check === undefined) throw new Error("the checks hold no direct-upload");
+
+    expect({ result: (await runCheck(bench, check)).result, said, named: said.join().includes("example.") }).toEqual({ result, said: lines, named: false });
   }, RUN_MS);
 
   // Drift: the edge's rule blocks with an answer, a 403, and a connection that closes before any answer says nothing of the rule.

@@ -8,7 +8,7 @@ import { TICKET, TICKETS_PER_CALL } from "../storage/tickets";
 import { type Install, type Refused, refuse } from "./records";
 import { isWithinReach, ticketsOf } from "./uploads";
 
-/** What asks for tickets: the paths of 1 to 100 files, each as the upload's manifest names it and none twice. */
+/** What asks for tickets: the paths of 1 to 100 files, each as the upload's manifest names it and none twice. With `through` the sender asks for tickets of the install's own route, after whatever else its tickets named refused them. */
 export const TICKETS_REQUEST = v.strictObject({
   paths: v.pipe(
     v.array(v.string()),
@@ -16,6 +16,7 @@ export const TICKETS_REQUEST = v.strictObject({
     v.maxLength(TICKETS_PER_CALL),
     v.check((paths) => new Set(paths).size === paths.length, "a path is named once"),
   ),
+  through: v.optional(v.literal("install")),
 });
 
 /** What asking for tickets answers: one ticket a path, in the order asked. */

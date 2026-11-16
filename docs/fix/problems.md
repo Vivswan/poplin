@@ -50,6 +50,7 @@ failed  problems  2 kinds today: request_failed, sweep_failed
 | `users_not_carried`      | A change of the users did not reach the login of the domain | open Domain and press Repair            |
 | `rules_not_carried`      | A changed setting did not reach every rule of the domain | open Domain and press Repair               |
 | `copy_failed`            | A copy of a site was not made                   | duplicate the site again                            |
+| `direct_upload_refused`  | The store refused files sent straight to it, so they went through the install | open Domain and press Repair |
 | `files_limit_reached`    | The daily limit of files was reached            | wait for midnight UTC, or raise `max_files_per_day` |
 | `writes_limit_reached`   | The daily limit of storage writes was reached   | wait for midnight UTC, or raise `max_storage_writes_per_day` |
 | `requests_limit_reached` | The daily limit of requests was reached         | wait for midnight UTC, or raise `requests_per_day`  |

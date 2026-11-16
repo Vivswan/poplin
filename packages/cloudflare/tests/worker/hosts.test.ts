@@ -236,6 +236,27 @@ describe("what a request costs, by the kind of install", () => {
   });
 });
 
+describe("the upload key, by the kind of install", () => {
+  // Drift: the upload key is read once at the start, whatever the kind. Handed to one kind alone, an install without a domain would send every file through its Worker with a key that works, or one with a domain would.
+  test.each([KINDS.domain, KINDS.account])("on an install with $kind, a begun publish is handed a ticket for the bucket where the Worker holds an upload key, and one of the install's own route where it holds none", async (at) => {
+    const token = await tokenOf(w, "publisher");
+    const file = page("<p>a page</p>");
+    const files = [{ path: file.path, size: file.body.byteLength, content_type: file.type, sha256: await sha256Of(file.body) }];
+    const secret = JSON.stringify({ id: "0123456789abcdef0123456789abcdef", secret: "5".repeat(64), bucket: "poplin-sites", minted_at: w.clock.now - 150_000 });
+    const places: string[] = [];
+
+    for (const [name, key] of [["report", secret], ["notes", undefined]] as const) {
+      // An instance reads its secrets once, as it starts: each case is an instance of its own.
+      const worker = instance(w);
+      const calls = api(worker, token, (input, init) => ask(worker, input, init, { ...at.bindings, UPLOAD_KEY: key }), at.admin);
+      const { tickets } = await done<{ tickets: { url: string }[] }>(await calls.uploads.$post({ query: {}, json: { name, files } }));
+      places.push(...tickets.map((ticket) => (URL.canParse(ticket.url) ? new URL(ticket.url).host : ticket.url.split("/").slice(0, 3).join("/"))));
+    }
+
+    expect(places).toEqual([`${at.bindings.ACCOUNT_ID}.r2.cloudflarestorage.com`, "/api/uploads"]);
+  });
+});
+
 describe("the screens of an install without a domain", () => {
   // Drift: the kind's words and its settings reach the screens through the one plug. Built from the other kind's, the dialog would say "the domain", a repair would be asked for settings it carries nowhere, and block_bots would look like it works.
   test("the Domain screen says there is no domain and names its runs by the install; Settings marks block_bots alone as needing a domain, and no setting for a repair", async () => {

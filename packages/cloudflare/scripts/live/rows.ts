@@ -11,6 +11,7 @@
 //   PATCH  /api/config                     6, and 3 where it names a setting of the guard rules
 //   POST   /api/logins 3                   DELETE /api/uploads/:upload 3
 //   GET    /api/uploads/:upload 1          GET /api/export/sites/:site/files 1
+//   POST   /api/uploads/:upload/tickets    1 where the sender turns back to the install, for the problem that notes it; else none
 //   GET    a page or a file of a site      2, once it is answered 200 or 304
 //
 // D1 counts an index entry and a row a trigger writes as rows, so one new site is 8 of them. Each price is the most its request writes for a site a run made, and is counted before the request is sent.
@@ -43,6 +44,9 @@ const IMPORTED_VERSION = 2;
 
 /** The row a site's entry in the index of expiries is: written when a site is told an expiry, and again when one that runs out leaves the trash. */
 const EXPIRY = 1;
+
+/** The row of the problem an install notes when a sender asks for tickets through the install, once an hour at most. */
+const TURNED_BACK = 1;
 
 /** The rows of a copy of a site: the request that begins it is counted as one that makes the copy whole, and each request that goes on with it as the one that finishes it. A round the install's own job runs writes one, beside the finish. */
 const COPIED = { begun: 21, goneOn: 16, jobRound: 1 } as const;
@@ -84,7 +88,7 @@ const HELD_BACK = 403;
 const PRICES = [
   { method: "POST", path: "/api/uploads", rows: (asked) => (asked.body.site === undefined ? NEW_SITE + inheritedExpiryRows(asked.body) : NEW_VERSION + changeRows(settingsOf(asked.body))) },
   { method: "POST", path: "/api/import/sites", rows: (asked) => IMPORTED_SITE + IMPORTED_VERSION * (versionsIn(asked.body) - 1) + importedExpiryRows(asked.body.site) },
-  { method: "POST", path: "/api/uploads/:upload/tickets", rows: () => 0 },
+  { method: "POST", path: "/api/uploads/:upload/tickets", rows: (asked) => (asked.body.through === undefined ? 0 : TURNED_BACK) },
   { method: "PUT", path: "/api/uploads/:upload/file", rows: () => 0 },
   { method: "POST", path: "/api/uploads/:upload/finish", rows: () => 0 },
   { method: "GET", path: "/api/uploads/:upload", rows: () => 1 },
