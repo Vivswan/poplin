@@ -28,6 +28,16 @@ function deployed(): Account {
   return { ...emptyAccount(), bindings: [{ name: "SITES", type: "r2_bucket", bucket_name: "poplin-sites" }, { name: "DB", type: "d1", id: "database-1" }, { name: "ZONE", type: "json", json: { account_address: "example" } }] };
 }
 
+/** The one optional right of the token, with what its piece's row says where the token lacks it. */
+const OPTIONAL = {
+  right: "Notifications: Edit",
+  adds: "Cloudflare emails your first user when the account's usage charges for the billing period reach 1 US dollar.",
+  how: "To switch this on, add this right to the account token and press Repair: Notifications: Edit",
+} as const;
+
+/** The budget alert's row where a token lacks the right, which may not read the alert's name, and where a check by the key finds none set up. */
+const NO_ALERT = { token: `Budget alert | optional | ${OPTIONAL.adds} ${OPTIONAL.how}`, key: `Budget alert | optional | poplin: usage charges reached 1 dollar: ${OPTIONAL.adds} ${OPTIONAL.how}` } as const;
+
 /** Every object of the install, in the order the table shows them, each in the state `states` gives its kind, or `all`. */
 function table(states: Readonly<Record<string, string>>): string[] {
   const state = (object: string): string => states[object] ?? states.all ?? "present";
@@ -44,6 +54,7 @@ function table(states: Readonly<Record<string, string>>): string[] {
     `Key | ${state("key")} | poplin kept key`,
     `Upload key | ${state("key")} | poplin upload key`,
     `D1 database | ${state("database")} | poplin`,
+    `Budget alert | ${state("alert")} | poplin: usage charges reached 1 dollar`,
     `Workflow | ${state("jobs")} | poplin-jobs`,
   ];
 }
@@ -67,7 +78,7 @@ async function withAccount(account: Account, run: (plug: ReturnType<typeof creat
 }
 
 // Drift: an install on the free address has no zone. A row of a record, a route, or a rule there would be one no repair can ever make, and a call under a zone would be refused for a right the token is never asked for.
-test("a check of an account with nothing in it names the two forwarders, the login, the variable, the key, the database, and the Workflow as missing, no piece of a zone, and sends no change and no call under a zone", async () => {
+test("a check of an account with nothing in it names the two forwarders, the login, the variable, the key, the database, the budget alert, and the Workflow as missing, no piece of a zone, and sends no change and no call under a zone", async () => {
   const account = deployed();
   const before = structuredClone(account);
 
@@ -80,12 +91,12 @@ test("a check of an account with nothing in it names the two forwarders, the log
 });
 
 // Drift: the count is what one request of a Worker spends on a repair: past 50 the setup page's one press could not finish on the free plan.
-test("a repair makes every object in 27 calls, the forwarders bound to the one Worker and the login over the dashboard and the whole private host; a check then finds all present, and a second repair sends no change", async () => {
+test("a repair makes every object in 29 calls, the forwarders bound to the one Worker and the login over the dashboard and the whole private host; a check then finds all present, and a second repair sends no change", async () => {
   const account = deployed();
 
   await withAccount(account, async (plug, asked) => {
     expect(shown(await plug.repair(TOKEN, SETTINGS))).toEqual(table({ all: "created" }));
-    expect(asked).toHaveLength(27);
+    expect(asked).toHaveLength(29);
     expect(account.workers).toEqual(
       ["poplin-sites", "poplin-private"].map((id) => ({ id, tags: ["poplin-forwarder"], bindings: [{ type: "service", name: "POPLIN", service: "poplin" }], enabled: true, previews_enabled: false })),
     );
@@ -224,11 +235,43 @@ test("a repair judges the upload key the Worker holds by its one right on the in
 });
 
 // Drift: the owner's list. A right of a zone on the form would ask a person with no domain for something their account cannot give.
-test("the token form asks for the five rights of an install without a domain and names no zone", async () => {
+test("the token form asks for the five rights of an install without a domain, names the one optional right with what it adds, and names no zone", async () => {
   const plug = createPathPlug({ accountId: ACCOUNT, script: "poplin", layout: ADDRESSES });
   const link = new URL(plug.tokenLink);
 
-  expect([[...plug.tokenRights].sort(), plug.tokenOptional, link.searchParams.has("zoneId"), plug.tokenNote.includes("Zone")]).toEqual([[...RIGHTS].sort(), [], false, false]);
+  expect([[...plug.tokenRights].sort(), plug.tokenOptional, link.searchParams.has("zoneId"), plug.tokenNote.includes("Zone")]).toEqual([[...RIGHTS].sort(), [{ right: OPTIONAL.right, adds: OPTIONAL.adds }], false, false]);
+});
+
+// Drift: the start page tells a person the link's five rights are enough. An alert that failed without its right, or stopped the run before the Workflow, would make that page false on this kind of install alone.
+test("a repair with a token without Notifications: Edit fails nothing: every other object is made, the alert's row is optional and names the right, and a check and a second repair leave it so", async () => {
+  const account = { ...deployed(), refuse: `GET /accounts/${ACCOUNT}/alerting/v3/policies` };
+  const rest = (states: Readonly<Record<string, string>>): string[] => table(states).map((row) => (row.startsWith("Budget alert") ? NO_ALERT.token : row));
+
+  await withAccount(account, async (plug, asked) => {
+    const reading = await plug.repair(TOKEN, SETTINGS);
+
+    expect(shown(reading)).toEqual(rest({ all: "created" }));
+    expect([asked.length, account.alerts, reading.ok ? runDone("repair", reading, false).summary : undefined]).toEqual([28, [], { line: "11 repaired", tone: "good" }]);
+
+    const sent = asked.length;
+
+    expect([shown(await plug.check(TOKEN, SETTINGS)), shown(await plug.repair(TOKEN, SETTINGS)), writes(asked.slice(sent))]).toEqual([rest({}), rest({}), []]);
+  });
+});
+
+// Drift: the alert is mailed to the first user. One made for another address, or left as it was after the users changed, would warn somebody who no longer holds the account.
+test("the alert a repair makes is the account's own, at 1 dollar, mailed to the first user alone, and a repair after the first user changed sends it to the new one", async () => {
+  const account = deployed();
+
+  await withAccount(account, async (plug) => {
+    await plug.repair(TOKEN, SETTINGS);
+    const first = structuredClone(account.alerts);
+    const moved = async (): Promise<DomainSettings> => ({ ...STORED, logins: ["second@example.com" as Login, "owner@example.com" as Login] });
+    const rows = shown(await plug.repair(TOKEN, moved));
+
+    expect(first).toMatchObject([{ name: "poplin: usage charges reached 1 dollar", alert_type: "billing_budget_alert", enabled: true, filters: { total_spend_dollars: ["1"] }, mechanisms: { email: [{ id: "owner@example.com" }] } }]);
+    expect([rows.filter((row) => row.startsWith("Budget alert")), account.alerts.map((alert) => alert.mechanisms)]).toEqual([["Budget alert | changed | poplin: usage charges reached 1 dollar"], [{ email: [{ id: "second@example.com" }] }]]);
+  });
 });
 
 /** Run a test against an account at the fake API, with the plug of an install that holds its key. */
@@ -246,7 +289,7 @@ async function withKey(account: Account, run: (plug: ReturnType<typeof createPat
 }
 
 // Drift: the count is what one request of a Worker spends each time the Domain screen opens on a check that is old. With no token to prove, a call for the account's free address, to the databases, or to the tokens is one the check has no use for.
-test("an install that holds its key checks with no token: every piece a repair made reads as present in 15 calls, each a read sent with the key, and the database's row says the install runs on it", async () => {
+test("an install that holds its key checks with no token: every piece a repair made reads as present in 16 calls, each a read sent with the key, and the database's row says the install runs on it", async () => {
   const account = deployed();
 
   await withKey(account, async (plug, own, asked) => {
@@ -256,7 +299,21 @@ test("an install that holds its key checks with no token: every piece a repair m
     const calls = asked.slice(sent);
 
     expect(rows).toEqual(table({}).map((row) => (row.startsWith("D1 database") ? "D1 database | present | poplin: the install is running on it" : row)));
-    expect([calls.length, [...new Set(calls.map((call) => `${call.method} ${call.key}`))], calls.filter((call) => /\/(d1|tokens|workers\/subdomain)(\/|\?|$)/.test(call.path))]).toEqual([15, [`GET Bearer ${KEPT}`], []]);
+    expect([calls.length, [...new Set(calls.map((call) => `${call.method} ${call.key}`))], calls.filter((call) => /\/(d1|tokens|workers\/subdomain)(\/|\?|$)/.test(call.path))]).toEqual([16, [`GET Bearer ${KEPT}`], []]);
+  });
+});
+
+// Drift: the key can see that the alert is absent, and no token says the person wants it. Read as missing, an install set up with the five rights alone would rest on a count to repair that a repair with its own token cannot clear.
+test("a check by the key of an account with no alert reads the alert as optional, in the words a token without its right is told, and sends nothing but reads", async () => {
+  const account = deployed();
+
+  await withKey(account, async (plug, own, asked) => {
+    await plug.repair(TOKEN, SETTINGS);
+    account.alerts.splice(0);
+    const sent = asked.length;
+    const rows = shown(await own());
+
+    expect([rows.filter((row) => row.startsWith("Budget alert")), writes(asked.slice(sent))]).toEqual([[NO_ALERT.key], []]);
   });
 });
 
@@ -274,6 +331,16 @@ test.each([
     ],
   },
   {
+    name: "lacks the right to read the budget alert fails that row alone and names the right",
+    refuse: `GET /accounts/${ACCOUNT}/alerting/v3/policies`,
+    as: undefined,
+    rows: [
+      "Key | differs | poplin kept key: the key the install holds lacks a right the install uses now",
+      "D1 database | present | poplin: the install is running on it",
+      "Budget alert | failed | the key the install holds lacks this right: Notifications Write. Press Repair.",
+    ],
+  },
+  {
     name: "Cloudflare refuses at the forwarders stops there",
     refuse: `GET /accounts/${ACCOUNT}/workers/scripts*`,
     as: { status: 401, code: 10000 },
@@ -284,6 +351,7 @@ test.each([
       "Key | differs | poplin kept key: Cloudflare refused the key the install holds",
       "Upload key | not-run | ",
       "D1 database | not-run | ",
+      "Budget alert | not-run | ",
       "Workflow | not-run | ",
     ],
   },

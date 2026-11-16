@@ -325,8 +325,8 @@ describe("a Worker with nothing set", () => {
       "poplin-sites: https://poplin-sites.example.workers.dev (unlisted and public sites)",
     ]);
     expect([account.bindings.find((binding) => binding.name === "ZONE"), account.workers.map((made) => made.id)]).toEqual([{ name: "ZONE", type: "json", json: { account_address: "example" } }, ["poplin-sites", "poplin-private"]]);
-    // One press: 29 calls to Cloudflare of the 50 a request of the Free plan may send, the search for the Workflow and its making among them.
-    expect(asked.length - unasked).toBe(29);
+    // One press: 31 calls to Cloudflare of the 50 a request of the Free plan may send, the search for the Workflow and its making among them, and the two of the budget alert.
+    expect(asked.length - unasked).toBe(31);
   });
 
   // Drift: the page takes a secret from anyone who finds the address, before the install has a domain or a login to tell them apart by.

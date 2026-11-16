@@ -69,6 +69,7 @@ const ROWS: Readonly<Record<keyof typeof KINDS, readonly string[]>> = {
     "Forwarder | make | poplin-private: https://poplin-private.example.workers.dev (private sites)",
     "Forwarder | make | poplin-sites: https://poplin-sites.example.workers.dev (unlisted and public sites)",
     ...shared("poplin.example.workers.dev", "poplin-private.example.workers.dev"),
+    "Budget alert | make | poplin: usage charges reached 1 dollar",
     "Workflow | make | poplin-jobs",
   ],
 };
@@ -76,7 +77,7 @@ const ROWS: Readonly<Record<keyof typeof KINDS, readonly string[]>> = {
 /** The calls each kind sends, pinned: to find an install, for a dry run, and for a run, with how many of the run's change something. */
 const CALLS: Readonly<Record<keyof typeof KINDS, { readonly find: number; readonly dry: number; readonly run: number; readonly writes: number }>> = {
   domain: { find: 6, dry: 19, run: 48, writes: 23 },
-  "no-domain": { find: 6, dry: 12, run: 35, writes: 17 },
+  "no-domain": { find: 6, dry: 13, run: 37, writes: 18 },
 };
 
 function loginOf(text: string): Login {
@@ -276,16 +277,19 @@ describe("what stops a run before it changes anything", () => {
   });
 
   // Drift: an optional piece the token has no permission for is no failure: the install works without it, and the run is whole.
-  test("a token without the optional permissions leaves those pieces out, in the dry run as in the run, and the run is ready", async () => {
+  test.each([
+    ["domain", ["Redirect rule", "WAF rule", "Rate rule", "Bot settings", "Budget alert"]],
+    ["no-domain", ["Budget alert"]],
+  ] as const)("a token without the optional permissions leaves those pieces out of a new install, %s, in the dry run as in the run, and the run is ready", async (kind, optional) => {
     const refuse = ["GET /zones/zone-1/rulesets*", `GET /accounts/${ACCOUNT}/alerting*`, "GET /zones/zone-1/bot_management"];
     const account = fresh({ refuse });
-    const dry = await installed(account, "domain", DRY);
-    const run = await installed(account, "domain", APPLY);
+    const dry = await installed(account, kind, DRY);
+    const run = await installed(account, kind, APPLY);
     const left = shown(run.done).filter((row) => row.includes(" | leave-out | ")).map((row) => row.split(" | ")[0]);
 
     const states = (done: Installed): string[][] => shown(done).map((row) => row.split(" | ").slice(0, 2));
 
-    expect([left, states(run.done), run.done.ok && run.done.ready]).toEqual([["Redirect rule", "WAF rule", "Rate rule", "Bot settings", "Budget alert"], states(dry.done), true]);
+    expect([left, states(run.done), run.done.ok && run.done.ready]).toEqual([[...optional], states(dry.done), true]);
   });
 });
 

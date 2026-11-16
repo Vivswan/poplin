@@ -271,7 +271,7 @@ async function settleFree(world: FreeWorld, runs = 1): Promise<{ readonly stops:
         const lines: string[] = [];
         const run = { ...openRun({ CLOUDFLARE_API_TOKEN: TOKEN, CLOUDFLARE_ACCOUNT_ID: INSTALL_ACCOUNT }), connection: { key: TOKEN, baseUrl: connection.baseUrl }, say: (line: string) => void lines.push(line) };
         const progress = { pieces: [], missing: {} };
-        told.stops.push(await settleFreeAddress(run, ADDRESSES, progress));
+        told.stops.push(await settleFreeAddress(run, ADDRESSES, "owner@example.com", progress));
         told.rows.push(lines);
         Object.assign(told.missing, progress.missing);
       }
@@ -380,20 +380,29 @@ describe("the script that makes the test install, against a local fake account",
 
 describe("the forwarders and the keys of an install without a domain, against a local fake account", () => {
   // Drift: the run makes them on every push. One that uploaded a forwarder or made a key each time would leave the account a new Worker version and a new token a run.
-  test("the first run makes both forwarders, both keys, and the Workflow, and a second run leaves all five", async () => {
+  test("the first run makes both forwarders, both keys, the budget alert, and the Workflow, and a second run leaves all six", async () => {
     const world: FreeWorld = { account: emptyAccount(), workers: [] };
     const told = await settleFree(world, 2);
 
     expect(told).toEqual({
       stops: [undefined, undefined],
       rows: [
-        ["Forwarders: created 2, changed 0, left 0, not poplin's 0", "Key: created", "Upload key: created", "Workflow: created"],
-        ["Forwarders: created 0, changed 0, left 2, not poplin's 0", "Key: present", "Upload key: present", "Workflow: present"],
+        ["Forwarders: created 2, changed 0, left 0, not poplin's 0", "Key: created", "Upload key: created", "Budget alert: created", "Workflow: created"],
+        ["Forwarders: created 0, changed 0, left 2, not poplin's 0", "Key: present", "Upload key: present", "Budget alert: present", "Workflow: present"],
       ],
       // The first run made the upload key, which the bucket refuses for its first minutes: the suite is told to count on no file sent straight to it.
       missing: { "settled-upload-key": "an upload key older than two and a half minutes (this run made the key, or could not read it, and the bucket refuses a new one for about two minutes)" },
     });
-    expect([world.workers.map((worker) => worker.id), world.account.tokens.length]).toEqual([["poplin-sites", "poplin-private"], 2]);
+    expect([world.workers.map((worker) => worker.id), world.account.tokens.length, world.account.alerts.map((alert) => alert.mechanisms)]).toEqual([["poplin-sites", "poplin-private"], 2, [{ email: [{ id: "owner@example.com" }] }]]);
+  });
+
+  // Drift: the alert is optional on both kinds. One that stopped the run on a token without its right would end every check of the second test install for a part no check reads.
+  test("an alert Cloudflare refuses is a lack that stops nothing: its row names the status and the permission, none of Cloudflare's words, and the Workflow is still made", async () => {
+    const world: FreeWorld = { account: emptyAccount(), workers: [], refuse: `GET /accounts/${INSTALL_ACCOUNT}/alerting/v3/policies` };
+    const told = await settleFree(world);
+
+    expect([told.stops, told.rows[0]?.slice(-2), world.account.alerts]).toEqual([[undefined], ["Budget alert: failed (refused with status 400): needs the token permission for the Budget alert", "Workflow: created"], []]);
+    expect(JSON.stringify(told)).not.toContain(REFUSED.message);
   });
 
   // Drift: the first runs meet the real provider for the first time. A stop that said only "refused" would not tell the upload from the address switch, and one that quoted Cloudflare would put the account's own names in a public log.
@@ -431,6 +440,7 @@ describe("the forwarders and the keys of an install without a domain, against a 
           "Forwarders: created 2, changed 0, left 0, not poplin's 0",
           "Key: failed (refused with status 403): needs the token permission for the Key",
           "Upload key: failed (refused with status 403): needs the token permission for the Upload key",
+          "Budget alert: created",
           "Workflow: created",
         ],
       ],

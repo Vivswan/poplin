@@ -18,7 +18,7 @@ Live Checks workflows, one for each kind of install
   build the Worker bundle
   packages/providers/cloudflare/scripts/live/start-over.ts a run by hand with `start_over` ticked: everything poplin made, removed
   packages/providers/cloudflare/scripts/live/converge.ts   the account's plans, bucket, database, login, wrangler deploy, the Domain screen's repair, the caps
-                                                           without a domain, in the repair's place: the two forwarders and the key
+                                                           without a domain, in the repair's place: the two forwarders, the key, the budget alert, and the Workflow
                                                            `Worker: deployed` in its log: Cloudflare took the built bundle and the source map beside it in one upload
                                                            `Key: created` or `Key: present` in its log: the Worker has its key as a secret, and Cloudflare lists an active token of the key's name
                                                            `Upload key: created` or `Upload key: present`: the same for the key that sends files straight to the bucket
@@ -84,7 +84,7 @@ On GitHub: Actions, the workflow of the install (`Live Checks`, or `Live Checks 
 
 The run removes the Worker, its Workflow, and its routes, poplin's DNS records, rules, two Access applications and their policies, the database, every file in the bucket, the budget alert, and the key. The bucket stays, and so does everything on the account that poplin did not make.
 
-On the account without a domain it removes the two forwarders first, then the Access applications and their policies, the Workflow, the Worker, the database, every file in the bucket, and the key. A Worker of a forwarder's name without poplin's tag stays.
+On the account without a domain it removes the two forwarders first, then the Access applications and their policies, the Workflow, the Worker, the database, every file in the bucket, the budget alert, and the key. A Worker of a forwarder's name without poplin's tag stays.
 
 A kind the token has no permission for stays too, and a warning names the permission. The run then makes the install from nothing and puts the samples and the demo back.
 
@@ -170,6 +170,7 @@ A second install, on the test account that holds no domain. It answers on the ac
 | the Worker              | `wrangler deploy`, with `ZONE` set to the account's name and the free address on | `Worker: deployed`                                  |
 | the two forwarders      | `syncForwarders`                                                         | `Forwarders: created 0, changed 0, left 2, not poplin's 0`  |
 | the key                 | `mintKey` and `syncVariables`, where the Worker holds no active key      | `Key: present`                                              |
+| the budget alert        | `syncBudgetAlert`, mailed to the run's login                             | `Budget alert: present`                                     |
 | the Workflow            | `syncJobs`, where the deploy left none                                   | `Workflow: present`                                         |
 
 A step Cloudflare refuses prints the step, the status, and the error codes, and nothing else Cloudflare said:
@@ -183,7 +184,6 @@ Forwarders: stopped at poplin-sites: Cloudflare refused with status 400 and code
 | no zone: no redirect rule, guard rule, rate rule, or bot switch  | `L8-method`, `L8-scanner`, `L8-http`, `crawler`, `assistant-fetch`, `burst-rate-rule` are skipped: needs a domain |
 | a site answers under a path                                      | `relative-file` also asks the address without its last slash, which moves to the one with it |
 | a site's address is no root of an origin                         | the demo gets no link to a sample site: `sites.json` is empty                   |
-| no budget alert                                                  | none is made, and a start-over removes none                                     |
 
 Every other check runs on both installs, at the addresses of each one's layout. No run logs in: the checks of a person stay skipped on both.
 
@@ -456,7 +456,7 @@ A run that cannot make the install answer, or cannot start the checks, fails: th
 | Notifications: Edit                                         | the account | the budget alert                                  |
 | Account API Tokens: Edit                                    | the account | the two keys the install keeps                    |
 
-The token of the account without a domain needs the rows whose scope is the account, without Notifications: Edit, and none of the zone. Workers Scripts: Edit also reads the account's free address and makes the two forwarders.
+The token of the account without a domain needs the rows whose scope is the account, and none of the zone. Workers Scripts: Edit also reads the account's free address and makes the two forwarders.
 
 ## What one request costs
 

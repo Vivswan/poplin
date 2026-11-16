@@ -2,10 +2,10 @@
 //
 //   where it answers -> the account's plans, all free -> bucket, database, made anew when another build made it -> the login application -> wrangler deploy of the built bundle
 //     with a domain      -> the zone plug's repair, which makes every object of the zone as the Domain screen does
-//     without a domain   -> the two forwarders -> the key the install keeps
+//     without a domain   -> the two forwarders -> the key the install keeps -> the budget alert -> the Workflow
 //     -> wait for the install to answer -> the test install's caps
 //
-// An install without a domain has no plug, so its forwarders, its login, and its key are made by the product's own sync of each.
+// An install without a domain is not repaired by its plug here, so its forwarders, its login, its key, its budget alert, and its Workflow are made by the product's own sync of each.
 // It holds no state: every step reads what is there and changes what differs. A token that lacks a permission, or an account with a switch off, stops the piece it belongs to.
 // Every piece is printed as it is settled. A piece Cloudflare refused is printed with the step it stopped at, the status, and the error codes, and with nothing else Cloudflare said.
 // A piece nothing answers without stops the run as an error, whether it failed or the token lacks its permission.
@@ -20,6 +20,7 @@ import { BaseBuckets } from "cloudflare/resources/r2/buckets/buckets";
 
 import { keepCopyConfig } from "../../src/shared/release/deploy/kept-config";
 import { isAccessOff, readLoginFacts, syncAccess } from "../../src/shared/install/pieces/access/access";
+import { syncBudgetAlert } from "../../src/shared/install/pieces/alerts/budget-alert";
 import type { AccountAddresses } from "../../src/without-domain/address-layout";
 import { type CloudflareFailure, callCloudflare } from "../../src/shared/install/client";
 import { syncDatabase } from "../../src/shared/install/pieces/database/database";
@@ -94,6 +95,9 @@ const ERROR_CODE = /\[code: (\d+)\]/g;
 
 /** The code Cloudflare refuses a token with that lacks a permission. */
 const NOT_AUTHENTICATED = "10000";
+
+/** The budget alert's piece, as a repair's row names it. */
+const ALERT = "Budget alert";
 
 /** What an install lacks whose Workflow was not made. */
 const NO_WORKFLOW = "the Worker's Workflow, which Cloudflare did not make";
@@ -385,6 +389,22 @@ async function ensureKeys(run: Run, progress: Progress): Promise<Stop | undefine
   return sortRows(run, progress, reading.rows);
 }
 
+/** Make the account's budget alert, mailed to the run's login, by the call a plug's repair makes. One that is not made is a lack, and stops no run: an install answers without it. */
+async function ensureAlert(run: Run, login: string, progress: Progress): Promise<void> {
+  const synced = await syncBudgetAlert(run.connection, run.accountId, login, "apply");
+  const { created, changed } = synced.report;
+  if (synced.ok) {
+    const kept = changed.length > 0 ? "changed" : "present";
+    note(run, progress, { piece: ALERT, result: created.length > 0 ? "created" : kept });
+
+    return;
+  }
+
+  // Only the status of a refusal is told: Cloudflare's words may name the account.
+  const refused = synced.failure === "refused" ? ` (refused with status ${synced.status})` : "";
+  note(run, progress, { piece: ALERT, result: `failed${refused}`, needs: `the token permission for the ${ALERT}` });
+}
+
 /** Make the Worker's Workflow where the deploy left none, by the call the zone plug's repair makes. One that is not made is a lack the suite skips for, and stops no run. */
 async function ensureJobs(run: Run, progress: Progress): Promise<void> {
   const synced = await syncJobs(run.connection, { accountId: run.accountId, script: SCRIPT }, "apply");
@@ -404,21 +424,25 @@ async function ensureJobs(run: Run, progress: Progress): Promise<void> {
 }
 
 /**
- * Make what an install without a domain adds to its deployed Worker: the two forwarders, the two keys it keeps, then its Workflow.
+ * Make what an install without a domain adds to its deployed Worker: the two forwarders, the two keys it keeps, the account's budget alert, then its Workflow.
  *
- *  progress - gathers a row for each, and the things only a zone gives, whose checks the suite is told to skip
- *  what stopped the run, or `undefined`; a token that may not make the key stops nothing, and neither does a Workflow that was not made
+ * @param login - the run's login, which the alert is mailed to
+ * @param progress - gathers a row for each, and the things only a zone gives, whose checks the suite is told to skip
+ * @returns what stopped the run, or `undefined`; a token that may not make the key stops nothing, and neither does an alert or a Workflow that was not made
  */
-export async function settleFreeAddress(run: Run, layout: AccountAddresses, progress: Progress): Promise<Stop | undefined> {
+export async function settleFreeAddress(run: Run, layout: AccountAddresses, login: string, progress: Progress): Promise<Stop | undefined> {
   const stopped = (await ensureForwarders(run, layout, progress)) ?? (await ensureKeys(run, progress));
-  if (stopped === undefined) await ensureJobs(run, progress);
+  if (stopped !== undefined) return stopped;
 
-  return stopped;
+  await ensureAlert(run, login, progress);
+  await ensureJobs(run, progress);
+
+  return undefined;
 }
 
 /** Make what the install's kind adds to its deployed Worker: the zone's objects by the Domain screen's repair, or the forwarders and the keys of an install without a domain. */
 function settleKind(run: Run, found: Found, login: string, progress: Progress): Promise<Stop | undefined> {
-  return found.kind === "domain" ? repairZone(run, found, login, progress) : settleFreeAddress(run, found.layout, progress);
+  return found.kind === "domain" ? repairZone(run, found, login, progress) : settleFreeAddress(run, found.layout, login, progress);
 }
 
 /**
