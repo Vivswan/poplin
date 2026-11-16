@@ -165,7 +165,7 @@ test("an install whose application covers the login path alone: the check says i
   await withAccount(account, async (plug, asked) => {
     await plug.repair(TOKEN, SETTINGS);
     const earlier = ["poplin.example.com/login", "*-p-poplin.example.com"].map((uri) => ({ type: "public", uri }));
-    account.applications = [{ ...guarded(), domain: "poplin.example.com/login", destinations: earlier }];
+    account.applications = [{ ...guarded(), id: "app-earlier", domain: "poplin.example.com/login", destinations: earlier }];
     account.policies = account.policies.filter((policy) => policy.name === "poplin logins");
     const [id, audience, sent] = [guarded()?.id, guarded()?.aud, asked.length];
 

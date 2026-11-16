@@ -171,12 +171,12 @@ function rules(account: Account, asked: Asked, parts: readonly string[]): Respon
 
 /** The account's Access applications. Access gives each an audience tag of 64 hexadecimal characters, here the count of tags given out, and a change keeps the tag. */
 function applications(account: Account, asked: Asked, id: string | undefined): Response {
-  const kept = new Map(account.applications.map((application) => [application.id, application.aud]));
+  const kept = asked.method === "PUT" ? account.applications.find((application) => application.id === id)?.aud : undefined;
   const answered = stored(account.applications, asked, id);
 
   for (const application of account.applications) {
     madeTags += 1;
-    application.aud ??= kept.get(application.id) ?? madeTags.toString(16).padStart(64, "0");
+    application.aud ??= kept ?? madeTags.toString(16).padStart(64, "0");
   }
 
   return answered;

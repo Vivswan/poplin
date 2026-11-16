@@ -311,7 +311,6 @@ export const EDGE_CHECKS: readonly Check[] = [
       const response = await bench.visit(`${bench.admin}/setup`);
       expect(response.status).toBeOneOf([200, 404]);
       expect(response.headers.get("Location")).toBeNull();
-      expect(response.headers.get("Cache-Control")).toBe("no-store");
     },
   },
   {

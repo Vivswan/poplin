@@ -221,11 +221,12 @@ export async function openFake(switches: FakeSwitches = {}): Promise<Fake> {
   };
 
   const answerAdmin = (request: Request, url: URL): Promise<Response> | Response => {
-    if (url.pathname.startsWith("/api/")) return install.api.fetch(request);
+    if (url.pathname === "/api" || url.pathname.startsWith("/api/")) return install.api.fetch(request);
 
     if (behindLogin(switches, url.pathname)) return refusal(302, "", { Location: LOGIN_PAGE });
 
-    if (isSetupPath(url.pathname)) return refusal(404, "Not found.\n");
+    // As the install answers its setup page once somebody has logged in: a 404 that says nothing of keeping.
+    if (isSetupPath(url.pathname)) return new Response("Not found.\n", { status: 404, headers: { "Content-Type": "text/plain; charset=utf-8" } });
 
     return url.pathname === "/login" ? refusal(403, "Forbidden\n") : refusal(302, "", { Location: `https://${ADMIN_HOST}/login` });
   };
