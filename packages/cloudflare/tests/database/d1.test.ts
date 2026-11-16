@@ -115,7 +115,7 @@ const ROWS: Readonly<Record<string, readonly [read: number, written: number]>> =
   "settleUsers, the stored logins carried": [4, 1],
   "settleUsers, a try whose outcome is unknown": [3, 1],
   "claimRules": [3, 1],
-  "settleRules, the stored settings carried": [3, 1],
+  "settleRules, the stored settings carried": [4, 1],
   "claimRules, nothing waits": [3, 0],
   "readFrame": [4, 0],
   "noteProblem, the day's first": [1, 1],

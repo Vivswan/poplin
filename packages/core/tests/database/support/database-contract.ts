@@ -444,17 +444,17 @@ function domainCheck(label: string, makeDatabase: DatabaseFactory): void {
       const oneDiffers = await changed({ outside_pages: "allowed", search_engines_allowed: !SETTINGS.search_engines_allowed }, 4);
       const claimed = await database.claimRules(NOW + 5);
       const rules = { outside_pages: "allowed", search_engines_allowed: !SETTINGS.search_engines_allowed } as const;
-      const stale = [await database.settleRules({ rules: { ...rules, outside_pages: "blocked" }, since: NOW + 5 }, NOW + 6), await waits()];
-      const overtaken = [await database.settleRules({ rules, since: NOW + 5 }, NOW + 6), await waits()];
-      const exact = [await database.settleRules({ rules, since: NOW + 7 }, NOW + 8), await waits()];
+      const stale = [(await database.settleRules({ rules: { ...rules, outside_pages: "blocked" }, since: NOW + 5 }, NOW + 6)).waits, await waits()];
+      const overtaken = [(await database.settleRules({ rules, since: NOW + 5 }, NOW + 6)).waits, await waits()];
+      const exact = [(await database.settleRules({ rules, since: NOW + 7 }, NOW + 8)).waits, await waits()];
       // An older try whose write landed after a newer one settled: the rules hold its values, so the change waits again.
-      const landedLate = [await database.settleRules({ rules: { ...rules, outside_pages: "blocked" }, since: NOW + 5 }, NOW + 9), await waits()];
+      const landedLate = [(await database.settleRules({ rules: { ...rules, outside_pages: "blocked" }, since: NOW + 5 }, NOW + 9)).waits, await waits()];
 
       expect([beforeAnyRun, otherSetting, sameValue, oneDiffers]).toEqual([[undefined, undefined], null, null, NOW + 4]);
       // A try begun while nothing waits sets no mark, so one the domain refuses leaves nothing waiting.
       expect(nothingWaits).toEqual([null, null]);
       expect([claimed.settings?.outside_pages, claimed.settings?.search_engines_allowed, claimed.mark]).toEqual(["allowed", rules.search_engines_allowed, NOW + 5]);
-      expect([stale, overtaken, exact, landedLate]).toEqual([[{ waits: true }, NOW + 6], [{ waits: true }, NOW + 7], [{ waits: false }, null], [{ waits: true }, NOW + 9]]);
+      expect([stale, overtaken, exact, landedLate]).toEqual([[true, NOW + 6], [true, NOW + 7], [false, null], [true, NOW + 9]]);
       // The mark of the users is another one, and is left alone.
       expect((await database.readDomainCheck())?.users_changed_at).toBeNull();
     });

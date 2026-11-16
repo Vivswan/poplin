@@ -185,6 +185,51 @@ describe("followRules, on an install that keeps its first run of the domain whil
   });
 });
 
+describe("followRules, when an older try ends after a newer one", () => {
+  // Drift: the older try wrote one rule and failed at the other, after the newer try had settled the change. A refusal that left the settled mark alone would leave the provider with half of the older rules, nothing waiting, and nothing noted.
+  test("an older try that the provider refused part of the way leaves the change waiting again", async () => {
+    const opened = await openOwned();
+    const rules = fakeRules(async () => {
+      await changed(opened, { outside_pages: "blocked" });
+      await followRules(opened.install, fakeRules());
+
+      return "unreachable" as const;
+    });
+    await changed(opened, { outside_pages: "allowed" });
+
+    expect([await followRules(opened.install, rules), await waits(opened)]).toEqual([{ carried: false, why: "unreachable" }, true]);
+  });
+
+  // Drift: the same order on an install that keeps no run of its domain, where no mark can say that a try's values are stale. A try that took the provider's answer for the end would leave the rules of the older values for good.
+  test("with no run kept, an older try the provider took after a newer save writes the stored values again", async () => {
+    const opened = await openOwned();
+    const rules = fakeRules(async (earlier) => {
+      if (earlier > 0) return undefined;
+
+      await opened.install.database.changeSettings({ outside_pages: "blocked" }, { by: opened.owner, at: opened.install.now() });
+      await followRules(opened.install, fakeRules());
+
+      return undefined;
+    });
+    await opened.install.database.changeSettings({ outside_pages: "allowed" }, { by: opened.owner, at: opened.install.now() });
+
+    expect([await followRules(opened.install, rules), rules.held?.outside_pages, rules.pushed.length, await problems(opened)]).toEqual([{ carried: true }, "blocked", 2, []]);
+  });
+
+  // Drift: there, a setting that is stale on every try has no row to wait in. Reported as carried, the rules would differ from the settings with nobody told.
+  test("with no run kept, values that are stale on every try are noted as a problem", async () => {
+    const opened = await openOwned();
+    const rules = fakeRules(async (earlier) => {
+      await opened.install.database.changeSettings({ search_engines_allowed: earlier === 0 }, { by: opened.owner, at: opened.install.now() });
+
+      return undefined;
+    });
+    await opened.install.database.changeSettings({ outside_pages: "allowed" }, { by: opened.owner, at: opened.install.now() });
+
+    expect([await followRules(opened.install, rules), rules.pushed.length, await problems(opened)]).toEqual([{ carried: false, why: "forgotten" }, 2, ["rules_not_carried"]]);
+  });
+});
+
 describe("a save on the Settings screen", () => {
   const settingsOf = async (opened: Awaited<ReturnType<typeof openConsole>>): Promise<readonly string[]> => {
     const answer = (await (await opened.get("/data/settings")).json()) as { readonly rows: readonly { readonly key: string; readonly repair: boolean }[] };
