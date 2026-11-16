@@ -30,11 +30,11 @@ test("Domain opens on its pieces with no press and no token; opened again once t
   await expect(screenHeading(page, "Settings")).toBeVisible();
   await page.clock.fastForward(PAST_FRESH);
   await toSection(page, "Domain");
-  await expect(domainLine(page, "2 to repair")).toBeVisible();
+  await expect(domainLine(page, "3 to repair")).toBeVisible();
   await expect(asked).toHaveCount(0);
 
   await page.getByRole("button", { name: "Check", exact: true }).click();
-  await expect(said(page, "2 to repair.")).toBeVisible();
+  await expect(said(page, "3 to repair.")).toBeVisible();
   await expect(asked).toHaveCount(0);
 });
 
@@ -47,7 +47,7 @@ test("a problem a repair mends stays through a check, and leaves the Domain scre
   await expect(problem).toBeVisible();
 
   await page.getByRole("button", { name: "Check", exact: true }).click();
-  await expect(said(page, "2 to repair.")).toBeVisible();
+  await expect(said(page, "3 to repair.")).toBeVisible();
   // The side counts what the check left to do beside the problem: once it says two, the screen holds what was read after the check.
   await expect(sections.getByRole("link", { name: "Domain 2 problems", exact: true })).toBeVisible();
   await expect(problem).toBeVisible();

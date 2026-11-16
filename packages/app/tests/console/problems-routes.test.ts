@@ -115,7 +115,7 @@ describe("what the problems of the Domain screen ask for", () => {
     await note(bare, "users_not_carried", HOUR_MS);
     const [raised, checked, checkedAsks, repaired] = [await asks(), await ran("check"), await asks(), await ran("repair")];
 
-    expect([quiet, raised, checked, checkedAsks, repaired, await asks(), await asks(bare)]).toEqual([null, { line: "2 to repair", tone: "bad" }, 200, { line: "2 to repair", tone: "bad" }, 200, null, null]);
+    expect([quiet, raised, checked, checkedAsks, repaired, await asks(), await asks(bare)]).toEqual([0, 2, 200, 2, 200, 0, 0]);
   });
 });
 
