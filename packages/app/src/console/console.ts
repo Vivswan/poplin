@@ -11,6 +11,7 @@
 // A change is JSON and nothing else, which a page of another origin cannot send unless this origin lets it, and it never does.
 
 import type { Install } from "@poplin/core/src/actions/records";
+import type { EndLogins } from "@poplin/core/src/actions/sign-out";
 import type { Rebuilding } from "@poplin/core/src/actions/start-update";
 import type { Login } from "@poplin/core/src/auth/logins";
 import type { Actor } from "@poplin/core/src/auth/scopes";
@@ -101,6 +102,9 @@ interface ConsoleParts extends CodeTries {
 
   /** The provider's side of the users: a change of them is carried there by itself. Without it a change waits for a repair on the Domain screen. */
   readonly follow?: UsersFollow;
+
+  /** Ends every login of the dashboard at the provider. Without it nobody can be signed out here. */
+  readonly endLogins?: EndLogins;
 }
 
 /** Something that answers a request, as a Worker's `fetch` does. */
@@ -118,6 +122,7 @@ function admitted(parts: ConsoleParts): MiddlewareHandler<Shared> {
       context.set("since", who.since);
       context.set("domain", parts.domain);
       context.set("follow", parts.follow);
+      context.set("endLogins", parts.endLogins);
       context.set("takesCode", () => takesCode(parts, context.req.raw, parts.install.now));
       context.set("host", { freeLimits: parts.freeLimits, rebuilding: { ...parts.rebuild, counters: parts.counters }, version: parts.version, usage: parts.usage });
 

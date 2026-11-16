@@ -1326,7 +1326,7 @@ describe("a database whose allowance for the day is used up", () => {
       await ask(paused, `${ADMIN}/data/sites`, { headers: session }, noReading),
       await ask(paused, `${ADMIN}/setup/api/check`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ token: "a-token-0123456789-abcdefgh" }) }, noReading),
       await ask(reading, `${ADMIN}${PATHS.tokens.$path()}`, { method: "POST", headers: { ...bearer, "Content-Type": "application/json" }, body: JSON.stringify({ scope: "publisher", note: "a test" }) }, noWriting),
-      await send(reading, `${ADMIN}/data/settings/sign-everyone-out`, {}, session, noWriting),
+      await send(reading, `${ADMIN}/data/people/add`, { login: "second@example.com" }, session, noWriting),
     ];
     const told = await Promise.all(answers.map(async (answer) => [answer.status, answer.headers.get("Retry-After"), answer.headers.get("Cache-Control"), await answer.text()]));
 

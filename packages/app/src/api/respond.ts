@@ -38,6 +38,7 @@ const STATUS = {
   too_many_requests: 429,
   internal: 500,
   update_refused: 502,
+  logins_not_ended: 502,
   allowance_spent: 503,
   update_unreachable: 504,
 } as const;
@@ -75,6 +76,7 @@ const MESSAGES: Readonly<Record<Code, string>> = {
   too_many_requests: "the install is asked too often: wait, then ask again",
   internal: "the install failed to do that",
   update_refused: "the install's provider refused to start the update, with this status",
+  logins_not_ended: "the install's provider did not end the dashboard's logins, or gave no answer",
   allowance_spent: "a day's allowance of the install is used up: ask again after midnight UTC",
   update_unreachable: "the install's provider did not answer the request to update",
 };

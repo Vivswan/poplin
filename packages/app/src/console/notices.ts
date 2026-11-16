@@ -61,9 +61,10 @@ const REFUSALS: Readonly<Record<ActionCode | OwnCode, string>> = {
   too_many_requests: "An update was started in this minute already. Wait a minute.",
   update_unreachable: "The update link did not answer. The update may have started all the same: wait a minute, then try again.",
   update_refused: "The update link refused the request, so no update was started. Check the link in Settings, under Updates.",
+  logins_not_ended: "This install has no way to end logins, so nobody was logged out.",
 };
 
-/** What a code says when what it is about gives it another meaning: `too_large` is a request that is too large, and about a limit a copy that does not fit it; `not_found` is a site, and about an upload a copy. `other` stands for any limit not named. */
+/** What a code says when what it is about gives it another meaning: `too_large` about a limit is a copy that does not fit it, `not_found` about an upload a copy, `logins_not_ended` the reason. `other` stands for any limit not named. */
 const ABOUT_REFUSALS: Readonly<Record<string, Readonly<Record<string, string>>>> = {
   too_large: {
     max_total_size: "The copy does not fit under max_total_size, which bounds all sites together, the trash and unfinished copies included. No copy was made.",
@@ -97,6 +98,13 @@ const ABOUT_REFUSALS: Readonly<Record<string, Readonly<Record<string, string>>>>
     outside_pages: "Use blocked or allowed.",
     search_engines_allowed: "Use on or off.",
     block_bots: "Use auto, on, or off.",
+  },
+  logins_not_ended: {
+    no_key: "poplin holds no key for the provider, so nobody was logged out. Repair makes one: open Domain and press Repair.",
+    key_refused: "The provider refused poplin's key, so nobody was logged out. Open Domain and press Repair.",
+    lacks_right: "poplin's key may not end logins at the provider, so nobody was logged out. Open Domain and press Repair.",
+    unreachable: "No answer from the provider, so the logins may not have ended. Try again.",
+    not_made: "The login in front of the dashboard is missing at the provider, so nobody was logged out. Open Domain and press Repair.",
   },
   not_found: {
     upload: "That copy can no longer be gone on with: it was cancelled, or its day to finish ran out. Unless the list of sites shows it, duplicate the site again.",

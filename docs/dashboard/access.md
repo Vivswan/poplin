@@ -29,7 +29,15 @@ To remove another user, choose Remove in the menu at the end of that user's row,
 
 A list changed with `poplin config logins`, or by `poplin import` with `--settings --logins`, is written to Cloudflare's list the same way. `poplin config logins` prints one more step where a Repair is still needed. The budget alert is mailed to the first user, and follows when another email becomes the first.
 
-Sign everyone out, on the same tab, replaces the install's stored key: every visitor's limit starts again, and nobody is logged out. [Security](../about/security.md#hardening) says what it ends and what it leaves.
+Sign everyone out, on the same tab, ends every login of the dashboard and of private sites: everyone logs in again at the next click, you too. It can take a few seconds. Tokens keep working. [Security](../about/security.md#hardening) says what it ends and what it leaves.
+
+| After the press | Means | What to do |
+| --- | --- | --- |
+| `Everyone is logged out. This can take a few seconds.` | Cloudflare ended every login | nothing: each browser meets the login page at its next click |
+| `... so nobody was logged out. Open Domain and press Repair.` | the install holds no key, Cloudflare refused it, or the login in front is missing | on Domain, press Repair with an account token, then press Sign everyone out again |
+| `... so the logins may not have ended. Try again.` | Cloudflare gave no answer | press it again |
+
+Without a kept key, Cloudflare ends the logins itself: in Zero Trust, open the Access application named poplin and revoke its existing tokens.
 
 ## This computer
 

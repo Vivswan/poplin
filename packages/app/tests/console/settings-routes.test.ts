@@ -214,13 +214,29 @@ describe("the update link", () => {
 });
 
 describe("the sign-out of everyone", () => {
-  // Drift: the press would be done with no entry of it, or would shut out the admin who pressed it, whose login is the provider's and not the stored key's.
-  test("writes one entry, and the admin who asked goes on working", async () => {
+  /** The entries of a sign-out in the audit log. */
+  const entriesOf = async (opened: Awaited<ReturnType<typeof openConsole>>): Promise<number> => (await opened.base.audit()).filter((entry) => entry.action === "signed_everyone_out").length;
+
+  // Drift: the press would be done with no entry of it, or with no word to the provider, where every login lives.
+  test("asks the provider once to end every login, and writes one entry", async () => {
     const opened = await openConsole();
     const done = await opened.change("/data/settings/sign-everyone-out", {});
-    const after = await opened.get("/data/settings");
 
-    expect([done.status, await done.json(), after.status]).toEqual([200, { ok: true }, 200]);
-    expect((await opened.base.audit()).filter((entry) => entry.action === "signed_everyone_out")).toHaveLength(1);
+    expect([done.status, await done.json(), opened.logins.asked, await entriesOf(opened)]).toEqual([200, { ok: true }, 1, 1]);
+  });
+
+  // Drift: a press the provider did not take would read as done; each sentence is the only place the person learns why, and what to press next.
+  test.each([
+    ["no_key", "poplin holds no key for the provider, so nobody was logged out. Repair makes one: open Domain and press Repair."],
+    ["key_refused", "The provider refused poplin's key, so nobody was logged out. Open Domain and press Repair."],
+    ["lacks_right", "poplin's key may not end logins at the provider, so nobody was logged out. Open Domain and press Repair."],
+    ["unreachable", "No answer from the provider, so the logins may not have ended. Try again."],
+    ["not_made", "The login in front of the dashboard is missing at the provider, so nobody was logged out. Open Domain and press Repair."],
+  ] as const)("a try the provider refuses as %s says so in one sentence, and writes no entry", async (refusal, sentence) => {
+    const opened = await openConsole();
+    opened.logins.answer = { ok: false, refusal };
+    const refused = await opened.change("/data/settings/sign-everyone-out", {});
+
+    expect([refused.status, await refused.json(), await entriesOf(opened)]).toEqual([502, { ok: false, code: "logins_not_ended", about: refusal, sentence }, 0]);
   });
 });

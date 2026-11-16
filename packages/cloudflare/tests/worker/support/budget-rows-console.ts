@@ -6,7 +6,7 @@ import type { hc, InferRequestType } from "hono/client";
 import { INSTALL_OBJECTS } from "../../../src/zone/install-objects";
 import { emptyAccount, TOKEN } from "../../zone/support/fake-install";
 import { ADMIN, cloudflareOf, done, OWNER } from "./install";
-import { type Budget, type BudgetRow, get, type Measured, post, sessionOf, sql, type Stage, unmeasured } from "./budget-stage";
+import { type Budget, type BudgetRow, endsLogins, get, type Measured, post, sessionOf, sql, type Stage, unmeasured } from "./budget-stage";
 import { endedTokens, manyEntries, manyProblems, manySites, manyTokens, newLinks, siteId, siteWithFiles, tokenId, waitingLogins } from "./budget-seeds";
 
 /** The group of every row here. */
@@ -596,9 +596,10 @@ export const CONSOLE_ROWS: readonly BudgetRow[] = [
     group,
     name: "Settings screen: sign everyone out",
     route: "POST /data/settings/sign-everyone-out",
-    // A new visitor key and one audit entry.
+    // One audit entry, once Cloudflare took the request made with the kept key: that call is none of the database's.
     arrange: async (stage) => {
       const session = await sessionOf(stage);
+      endsLogins(stage);
 
       return (measured) => post(measured, "/data/settings/sign-everyone-out", {}, session);
     },

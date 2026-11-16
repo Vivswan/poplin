@@ -1,6 +1,7 @@
 // What every data route of the console shares: who asks, how a refusal is answered, and how a request that fails its schema is refused.
 
 import type { Install } from "@poplin/core/src/actions/records";
+import type { EndLogins } from "@poplin/core/src/actions/sign-out";
 import type { Rebuilding } from "@poplin/core/src/actions/start-update";
 import type { Login } from "@poplin/core/src/auth/logins";
 import type { Actor } from "@poplin/core/src/auth/scopes";
@@ -65,6 +66,9 @@ export interface Shared {
 
     /** The provider's side of the users, where the console was built with one: a change of them is carried there by itself. */
     follow: UsersFollow | undefined;
+
+    /** Ends every login of the dashboard at the provider, where the console was built with a way to. */
+    endLogins: EndLogins | undefined;
 
     /** The host's part. */
     host: Host;
