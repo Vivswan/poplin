@@ -173,8 +173,9 @@ The database's free plan takes 100,000 rows written a day, every database of the
 | One request of a run                      | Rows, at most | Which are                                                                  |
 | ----------------------------------------- | ------------- | -------------------------------------------------------------------------- |
 | a new site, from its begin to its finish  | 19            | the site 8, the upload 6, the day's counts 2, the version 2, the log 1     |
-| a new site that is told an expiry         | 20            | its entry in the index of expiries; every site of the checks has one       |
+| a new site not told never to run out      | 20            | its entry in the index of expiries; one that names no expiry may take the install's |
 | a new version that drops no older one     | 13            | 17 where it drops one, and 2 for each further one it drops                 |
+| a new version that asks settings of its site |            | and what those settings cost as a change of the site, below                |
 | a site put back from a backup             | 19            | 2 for each version more, and 1 where it runs out                           |
 | a site removed for good                   | 13            | with three versions and a day's count; 6 to the trash, 6 out of it         |
 | a change of who may open a site           | 3             | any other setting 2, both at once 5, and 1 where it is told an expiry      |

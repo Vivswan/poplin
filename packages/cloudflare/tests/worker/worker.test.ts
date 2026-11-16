@@ -1225,11 +1225,16 @@ describe("the rows the live checks count", () => {
 
       return finish(await calls.import.sites.$post({ query: {}, json: { ...backup, files: paths.map((path) => ({ ...declared, path })) } }), paths);
     });
+    const report = { site: (await finish(await calls.uploads.$post({ query: {}, json: { name: "report", files: [declared] } }))).id };
+    await step("a new version that asks who may open the site and a title", async () => finish(await calls.uploads.$post({ query: {}, json: { ...report, access: "unlisted", title: "Report", files: [declared] } })));
+    await done(await calls.config.$patch({ query: {}, json: { default_expires: { count: 1, unit: "d" } } }));
+    await step("a new site that takes the install's own expiry", async () => finish(await calls.uploads.$post({ query: {}, json: { name: "inherits", files: [declared] } })));
     await step("a computer's login begun", async () => done(await api(worker, null, meter.fetch).logins.$post({ query: {}, json: { scope: "publisher", computer: "laptop" } })));
 
     expect({ pairs, stopped: meter.stopped() }).toEqual({
       pairs: {
-        "a new site": [19, 19],
+        // A new site that names no expiry is counted as if the install gave it one.
+        "a new site": [19, 20],
         "a copy of a site, whole in one request": [21, 21],
         // A copy that takes more requests is counted as whole at its first, which writes the upload alone.
         "a copy of 113 files begun": [6, 21],
@@ -1248,7 +1253,7 @@ describe("the rows the live checks count", () => {
         "removed for good, with three versions, an earlier id, and a day's count": [13, 13],
         "put back from a backup, with three versions": [23, 23],
         // An upload that is given up was counted with the finish it never had.
-        "an upload begun, asked what it lacks, and given up": [9, 23],
+        "an upload begun, asked what it lacks, and given up": [9, 24],
         // Three rows more are written where the logins change after a check of the domain: the mark that they changed, then the mark of the try at Cloudflare and its settling, or the problem noted where Cloudflare refused them.
         "a setting changed": [2, 5],
         "a fourth version, which drops two once the install keeps two": [19, 19],
@@ -1262,6 +1267,8 @@ describe("the rows the live checks count", () => {
         // A removal for good is counted with the three versions an install keeps: this site has one.
         "a site that runs out removed for good": [9, 13],
         "a site that runs out put back from a backup": [20, 20],
+        "a new version that asks who may open the site and a title": [18, 18],
+        "a new site that takes the install's own expiry": [20, 20],
         "a computer's login begun": [3, 3],
       },
       stopped: undefined,
