@@ -194,6 +194,18 @@ describe("a run", () => {
     expect([reads.count, (await opened.audit()).length - before, body.includes(FOREIGN), body.includes("other@example.com")]).toEqual([0, 0, false, false]);
   });
 
+  // Drift: a person who chose an install without a domain would be told to make the token for a domain.
+  test.each([
+    [{ domain: "example.com" }, "this account and this domain"],
+    [{}, "this account"],
+  ])("on an install with nothing set tells a refused token what it must be made for, by the kind that was sent: %p", async (sent, made) => {
+    const { fetch } = await openSetup({ first: true });
+    const body = JSON.stringify({ token: FOREIGN, login: "mira@example.com", ...sent });
+    const answer = await fetch(new Request("https://poplin.provider.example/setup/data/repair", { method: "POST", headers: { "Content-Type": "application/json" }, body }));
+
+    expect([answer.status, ((await answer.json()) as Refusal).sentence]).toEqual([403, `Account token refused: paste the whole account token, made for ${made}.`]);
+  });
+
   // Drift: a proven token's run would lose its rows, its count, or the line that says which logins the install expects.
   test("with the install's own token answers the rows, the count, and the logins it expects", async () => {
     const { opened, run } = await openSetup();

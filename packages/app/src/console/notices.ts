@@ -51,7 +51,7 @@ const REFUSALS: Readonly<Record<ActionCode | OwnCode, string>> = {
   allowance_spent: "The storage takes no more writes today: max_storage_writes_per_day is reached. It works again after midnight UTC.",
   no_more_writing: "The database takes no more changes today: its free allowance for writing is used up. Changes work again after midnight UTC.",
   no_more_reading: "The dashboard is paused: the free allowance of the database for reading is used up for today. It is back after midnight UTC.",
-  token: "Account token refused: paste the whole account token, made for this account and this domain.",
+  token: "Account token refused: paste the whole account token.",
   unreachable: "No answer from the provider. Try again.",
   no_domain: "The account token shows no domain of that name.",
   bad_domain: "Type a domain alone, such as example.com.",

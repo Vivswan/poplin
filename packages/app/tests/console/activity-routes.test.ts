@@ -11,6 +11,7 @@ import { AUDIT_WINDOW } from "@poplin/core/src/database/database";
 import { siteLabel } from "@poplin/core/src/sites/labels";
 
 import { openConsole } from "./support/console";
+import { TOKEN, usualPlug } from "./support/fake-plug";
 
 /** What the route answers. */
 interface Page {
@@ -18,6 +19,7 @@ interface Page {
     readonly seq: number;
     readonly by: string;
     readonly action: string;
+    readonly what: string;
     readonly site: { readonly id: string; readonly name: string; readonly label: string | null; readonly title: string | null } | null;
   }[];
   readonly logins: Readonly<Record<string, string>>;
@@ -66,6 +68,16 @@ describe("a page of the log", () => {
     const page = await pageOf(opened, query);
 
     expect(page.entries.map((entry) => entry.action)).toEqual(actions);
+  });
+
+  // Drift: the screen and the file would word an entry apart, or an install without a domain would read of a check of "the domain".
+  test("says of each entry what was done, and of a run at the provider by what the plug calls its side", async () => {
+    const opened = await openConsole("", { ...usualPlug(), words: { thing: "the install", line: null } });
+    await opened.change("/data/domain/check", { token: TOKEN });
+    const page = await pageOf(opened);
+    const [line] = (await (await opened.get("/data/activity/download?format=jsonl")).text()).split("\n");
+
+    expect([page.entries.map((entry) => entry.what), (JSON.parse(line ?? "null") as { readonly what: string }).what]).toEqual([["Checked the install", "Set the first settings"], "Checked the install"]);
   });
 
   // Drift: a site that is gone would be linked to a page that answers 404, a renamed one to the label it no longer has, or an entry would show a title the site has since lost.

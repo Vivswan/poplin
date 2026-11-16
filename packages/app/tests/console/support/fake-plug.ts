@@ -18,6 +18,7 @@ const TOKEN_FORM = {
   tokenLink: "https://provider.example/tokens/new",
   tokenOptional: [{ right: "Rules: Edit", adds: "The provider stops floods first." }],
   tokenNote: "Choose what the account token is for.",
+  tokenFor: "this account and this domain",
 };
 
 /** What the fake says of how it is named and of the settings: the ones of a provider that carries three of them to its rules. */
@@ -82,7 +83,7 @@ export function firstRunOf(plug: FakePlug): FirstRun & { readonly asked: FirstCh
 
   return {
     asked,
-    forms: { domain: TOKEN_FORM, "no-domain": { ...TOKEN_FORM, tokenRights: ["Login: Edit"] } },
+    forms: { domain: TOKEN_FORM, "no-domain": { ...TOKEN_FORM, tokenRights: ["Login: Edit"], tokenFor: "this account" } },
     plugFor: (first) => {
       asked.push({ ...first });
       if (first.kind === "no-domain") return first.host.endsWith(FREE_ADDRESS) ? plug : undefined;

@@ -4,7 +4,7 @@
 //   POST /update   start the update: the host takes the newest release and puts it in place
 
 import { vValidator } from "@hono/valibot-validator";
-import { DOMAIN_SENTENCES, domainStateOf } from "@poplin/core/src/actions/domain-state";
+import { domainSentence, domainStateOf } from "@poplin/core/src/actions/domain-state";
 import type { Install } from "@poplin/core/src/actions/records";
 import { startUpdate } from "@poplin/core/src/actions/start-update";
 import { type Update, updateIn } from "@poplin/core/src/actions/update";
@@ -46,8 +46,8 @@ interface Asked {
   /** The version the install runs. */
   readonly version: string;
 
-  /** Whether the console has a Domain screen. */
-  readonly domain: boolean;
+  /** What a sentence calls the install's side at the provider, as its Domain screen does; `undefined` for a console with no such screen. */
+  readonly domain: string | undefined;
 
   /** Whether a change of the users is carried to the domain with no person, so one that waits is nothing to act on. */
   readonly selfCarried: boolean;
@@ -60,13 +60,13 @@ interface Asked {
 const NO_FRAME: Frame = { update: null, starts: false, domainNote: null, ...NOTHING_MARKED };
 
 /** Word the note on the domain from what the install remembers of its last check. */
-function domainNoteOf(state: ReturnType<typeof domainStateOf>): DomainNote | null {
+function domainNoteOf(state: ReturnType<typeof domainStateOf>, thing: string): DomainNote | null {
   if (state.note === "none") return null;
 
-  const { code } = state.note;
-  if (code === "check_again") return { label: CHECK_IS_OLD, sentence: DOMAIN_SENTENCES[code], quiet: true };
+  const sentence = domainSentence(state.note, thing);
+  if (state.note.code === "check_again") return { label: CHECK_IS_OLD, sentence, quiet: true };
 
-  return { label: code === "users_changed" ? USERS_CHANGED : NEEDS_FIXING, sentence: DOMAIN_SENTENCES[code], quiet: false };
+  return { label: state.note.code === "users_changed" ? USERS_CHANGED : NEEDS_FIXING, sentence, quiet: false };
 }
 
 /**
@@ -84,9 +84,9 @@ export async function frameOf(install: Install, actor: Actor, asked: Asked): Pro
 
   // A change of the users that the install carries by itself is settled by a later try, and a try no later one mends is a problem of its own.
   const remembered = read.domainCheck !== undefined && asked.selfCarried ? { ...read.domainCheck, users_changed_at: null } : read.domainCheck;
-  const domainNote = asked.domain ? domainNoteOf(domainStateOf(remembered, install.now())) : null;
+  const domainNote = asked.domain === undefined ? null : domainNoteOf(domainStateOf(remembered, install.now()), asked.domain);
   // What the domain needs marks its screen as a problem there does. A check that is only old is a reminder, and marks nothing.
-  const marked = markedIn(read.problems, install.now(), { screen: asked.domain, says: domainNote === null || domainNote.quiet ? null : domainNote.sentence });
+  const marked = markedIn(read.problems, install.now(), { screen: asked.domain !== undefined, says: domainNote === null || domainNote.quiet ? null : domainNote.sentence });
 
   return { update: updateIn({ settings, updateCheck: read.updateCheck }, asked.version) ?? null, starts: asked.keyed, domainNote, ...marked };
 }
@@ -97,7 +97,7 @@ export const frameRoutes = new Hono<Shared>()
     const { install, actor } = context.get("asker");
 
     const { version, updating } = context.get("host");
-    const asked = { version, domain: context.get("domain") !== undefined, selfCarried: context.get("follow")?.holdsKey() === true, keyed: updating.self.holdsKey() };
+    const asked = { version, domain: context.get("domain")?.words.thing, selfCarried: context.get("follow")?.holdsKey() === true, keyed: updating.self.holdsKey() };
 
     return context.json({ ok: true as const, ...(await frameOf(install, actor, asked)) });
   })

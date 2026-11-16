@@ -1,6 +1,5 @@
 // How an entry of the log is drawn in the table: when, who, what, and the site it was done to.
 
-import { whatOf } from "@poplin/app/src/console/activity-what";
 import { Link } from "@tanstack/react-router";
 import type { ReactNode } from "react";
 
@@ -61,7 +60,7 @@ export function activityColumns(logins: LoginNames, timeZone: TimeZoneChoice): r
   return [
     { id: "when", header: timeZone === "utc" ? "When (UTC)" : "When", fixed: true, sortable: "desc", cell: (entry) => <When entry={entry} headed /> },
     { id: "who", header: "Who", cell: (entry) => <Who by={entry.by} logins={logins} unnamed="a token" /> },
-    { id: "what", header: "What", widest: 480, cell: (entry) => <span title={whatOf(entry)}>{whatOf(entry)}</span> },
+    { id: "what", header: "What", widest: 480, cell: (entry) => <span title={entry.what}>{entry.what}</span> },
     { id: "site", header: "Site", grows: true, cell: (entry) => <SiteThen entry={entry} /> },
   ];
 }

@@ -5,7 +5,7 @@ import { describe, expect, test } from "bun:test";
 import { whatOf } from "../../src/console/activity-what";
 
 describe("what an entry says", () => {
-  // Drift: an entry would say less than it holds, name a token by its secret-looking id, or call a failed repair a repair.
+  // Drift: an entry would say less than it holds, name a token by its secret-looking id, call a failed repair a repair, or speak of a domain on an install that has none.
   test.each([
     ["publish", { version: 3 }, "Published version 3"],
     ["publish", {}, "Published a version"],
@@ -20,10 +20,10 @@ describe("what an entry says", () => {
     ["login_allowed", { computer: "studio" }, 'Allowed the token "studio"'],
     ["update_started", { from: "1.0.0", to: "1.1.0" }, "Started an update to 1.1.0"],
     ["update_started", { from: "1.0.0", to: "1.1.0", automatic: true }, "Started an update to 1.1.0 by itself"],
-    ["domain_synced", { run: "check" }, "Checked the domain"],
-    ["domain_synced", { run: "repair", failed: [] }, "Repaired the domain"],
+    ["domain_synced", { run: "check" }, "Checked the install"],
+    ["domain_synced", { run: "repair", failed: [] }, "Repaired the install"],
     ["domain_synced", { run: "repair", failed: ["the login page: refused", "the rules: refused"] }, "Repair failed at the login page"],
   ] as const)("%s with %j says %s", (action, detail, words) => {
-    expect(whatOf({ action, detail })).toBe(words);
+    expect(whatOf({ action, detail }, "the install")).toBe(words);
   });
 });

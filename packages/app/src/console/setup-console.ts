@@ -12,7 +12,7 @@ import { mediaTypeOf } from "@poplin/core/src/api/media-type";
 import { type Context, Hono, type MiddlewareHandler } from "hono";
 import { secureHeaders } from "hono/secure-headers";
 
-import { createSetup } from "./domain/setup";
+import { createSetup, kindSent } from "./domain/setup";
 import type { DomainReading, FirstRun, TokenFacts } from "./domain/records";
 import { POLICY } from "./console";
 import { runDone, runRefusal } from "./domain-answers";
@@ -40,10 +40,13 @@ interface SetupConsoleParts extends SetupParts {
   readonly at?: string;
 }
 
-/** What the handlers of one request share: the setup's own handler, which runs a program's call. */
+/** What the handlers of one request share: the setup's own handler, which runs a program's call, and what a token for a run's body must be made for. */
 interface SetupShared {
-  Variables: { runs: (request: Request) => Promise<Response> };
+  Variables: { runs: (request: Request) => Promise<Response>; tokenFor: (body: unknown) => string };
 }
+
+/** What a token must hold and where one is made, as the page shows it. */
+type ShownForm = Omit<TokenFacts, "tokenFor">;
 
 /** What a run carries: the token, and beside it the first login of an install with nothing set, with its domain where it has one, or an email that corrects the first login. */
 interface Sent {
@@ -69,12 +72,12 @@ function notFound(): Response {
 }
 
 /** What a token must hold and where one is made, and nothing else of whatever carries it. */
-function formOf({ tokenRights, tokenLink, tokenOptional, tokenNote }: TokenFacts): TokenFacts {
+function formOf({ tokenRights, tokenLink, tokenOptional, tokenNote }: TokenFacts): ShownForm {
   return { tokenRights, tokenLink, tokenOptional, tokenNote };
 }
 
 /** What the page hands its client to start from: on an install with nothing set a token's form for each kind of install a person can choose, and on one nobody has logged in to the one form of its kind. */
-function startOf(domain: SetupParts["domain"]): { readonly boxes: "first"; readonly forms: FirstRun["forms"] } | { readonly boxes: "login"; readonly form: TokenFacts } {
+function startOf(domain: SetupParts["domain"]): { readonly boxes: "first"; readonly forms: Readonly<Record<keyof FirstRun["forms"], ShownForm>> } | { readonly boxes: "login"; readonly form: ShownForm } {
   if (!("plugFor" in domain)) return { boxes: "login", form: formOf(domain) };
 
   return { boxes: "first", forms: { domain: formOf(domain.forms.domain), "no-domain": formOf(domain.forms["no-domain"]) } };
@@ -82,6 +85,8 @@ function startOf(domain: SetupParts["domain"]): { readonly boxes: "first"; reado
 
 /** Send a repair to the setup's own handler as a program's call, and answer what it did as the screen draws it. */
 async function repaired(context: Context<SetupShared>) {
+  // The run reads the body itself. A copy is kept for the one refusal whose sentence hangs on what was sent.
+  const sent = context.req.raw.clone();
   const answered = await context.get("runs")(new Request(new URL(`${SETUP_PATH}/api/repair`, context.req.url), context.req.raw));
 
   // A page that is shut, or a failure, answers in plain words that say nothing: they go out as they are.
@@ -92,7 +97,10 @@ async function repaired(context: Context<SetupShared>) {
 
   const wait = answered.headers.get("Retry-After");
 
-  return context.json(runRefusal(read.refusal), answered.status as RefusedStatus, wait === null ? {} : { "Retry-After": wait });
+  // Only a run that read its body refuses the token, so the copy is read for that refusal alone.
+  const tokenFor = read.refusal === "token" ? context.get("tokenFor")(await sent.json().catch(() => undefined)) : "";
+
+  return context.json(runRefusal(read.refusal, tokenFor), answered.status as RefusedStatus, wait === null ? {} : { "Retry-After": wait });
 }
 
 /** The setup screen's one run. */
@@ -111,6 +119,8 @@ export function createSetupConsole(parts: SetupConsoleParts): { readonly fetch: 
   const setup = createSetup({ ...parts, open: async () => true });
   const at = parts.at ?? SETUP_PATH;
   const start = startOf(parts.domain);
+  const { domain } = parts;
+  const tokenFor = (body: unknown): string => ("plugFor" in domain ? domain.forms[kindSent(body)].tokenFor : domain.tokenFor);
   const app = new Hono<SetupShared>();
 
   const gate: MiddlewareHandler<SetupShared> = async (context, next) => {
@@ -121,6 +131,7 @@ export function createSetupConsole(parts: SetupConsoleParts): { readonly fetch: 
     if (!open) return notFound();
 
     context.set("runs", setup.fetch);
+    context.set("tokenFor", tokenFor);
     await next();
     // A file of the client says itself how long a browser keeps it; nothing else is kept.
     if (!context.res.headers.has("Cache-Control")) context.res.headers.set("Cache-Control", "no-store");

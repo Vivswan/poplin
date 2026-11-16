@@ -1,7 +1,6 @@
 // The Activity screen: the audit log in one table, the newest entry first or the oldest, narrowed by the kind of action and by a site.
 
 import { MOST_IN_FILE } from "@poplin/app/src/console/activity-file";
-import { whatOf } from "@poplin/app/src/console/activity-what";
 import { useNavigate } from "@tanstack/react-router";
 import { ListFilterIcon } from "lucide-react";
 import { type ReactNode, useMemo } from "react";
@@ -126,7 +125,7 @@ function PhoneList({ page, place, actions, after }: { readonly page: Page; reado
           <li key={entry.seq} tabIndex={-1} className="group/row flex min-h-16 items-center gap-2 border-b px-4 py-2 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring">
             <div className="flex min-w-0 flex-1 flex-col gap-0.5">
               <span className="flex min-w-0 flex-wrap items-baseline gap-x-2">
-                <span className="min-w-0 break-words">{whatOf(entry)}</span>
+                <span className="min-w-0 break-words">{entry.what}</span>
                 <span className="-mx-1 max-w-full min-w-0 truncate px-1">
                   <SiteThen entry={entry} />
                 </span>

@@ -14,7 +14,7 @@ import type { Install } from "@poplin/core/src/actions/records";
 import { AUDIT_WINDOW } from "@poplin/core/src/database/database";
 import type { SiteId } from "@poplin/core/src/sites/ids";
 import { siteLabel } from "@poplin/core/src/sites/labels";
-import { Hono } from "hono";
+import { type Context, Hono } from "hono";
 import * as v from "valibot";
 
 import { MOST_IN_FILE } from "./activity-file";
@@ -33,6 +33,9 @@ const CUT_NOTE = `${MOST_IN_FILE.toLocaleString("en-US")} entries. The log holds
 
 /** What a narrowed file says in its last line when a reading of it stopped short with the log going on. */
 const STOPPED_NOTE = `Searched ${AUDIT_WINDOW.toLocaleString("en-US")} entries of the log. It holds more: download the next part.`;
+
+/** What a run at the provider is said of in a console that holds no such side: no run is made from it, and the log may still hold one. */
+const NO_SIDE = "the install";
 
 /** The place a page or a file ended or began, as the address carries it: the `seq` of an entry. */
 const PLACE = v.optional(v.pipe(v.string(), v.regex(/^[1-9][0-9]{0,15}$/), v.transform(Number)));
@@ -126,12 +129,17 @@ function placesAround({ after, back, along, ends: [first, last], beyond, stopped
   return { previous: first?.entry.seq ?? beside(after + along), next };
 }
 
+/** What a sentence calls the install's side at the provider, as its Domain screen does. */
+function thingOf(context: Context<Shared>): string {
+  return context.get("domain")?.words.thing ?? NO_SIDE;
+}
+
 /** One entry as a file holds it: the moment in UTC, the name of a login that has one, the sentence the screen shows, and the site by the name it had then and the title it has now. */
-function fileEntryOf({ entry, site, tokenNote }: Entry): FileEntry {
+function fileEntryOf({ entry, site, tokenNote }: Entry, thing: string): FileEntry {
   return {
     when: new Date(entry.at).toISOString(),
     who: tokenNote ?? entry.by,
-    what: whatOf(entry),
+    what: whatOf(entry, thing),
     site: entry.site?.name ?? "",
     title: site?.title ?? "",
     action: entry.action,
@@ -222,8 +230,11 @@ export const activityRoutes = new Hono<Shared>()
 
     const page = back === undefined ? read.entries.slice(0, size) : read.entries.slice(0, size).reverse();
     const beyond = read.entries.length > size;
+    const thing = thingOf(context);
     const entries = page.map(({ entry: { site, ...entry }, site: now }) => ({
       ...entry,
+      // The sentence the screen shows: what was done, with what it set where the entry holds it.
+      what: whatOf(entry, thing),
       // The id is the one the entry holds and the name the one the site had then; the label and the title are the ones it has now, each `null` once it is no site.
       site: site === null ? null : { id: site.id, name: site.name, label: now === null ? null : siteLabel(now.name, now.id), title: now?.title ?? null },
     }));
@@ -257,7 +268,8 @@ export const activityRoutes = new Hono<Shared>()
 
     const writer = FILE_WRITERS[format];
     const day = new Date(asker.install.now()).toISOString().slice(0, DAY_LENGTH);
-    const linesOf = (entries: readonly Entry[]): string => writer.lines(entries.map(fileEntryOf));
+    const thing = thingOf(context);
+    const linesOf = (entries: readonly Entry[]): string => writer.lines(entries.map((entry) => fileEntryOf(entry, thing)));
     const body = fileOf(asker, narrowing, first, { head: writer.head, linesOf, cut: writer.cut(CUT_NOTE), stopped: writer.cut(STOPPED_NOTE) });
 
     const name = part === undefined ? day : `${day}-${part}`;

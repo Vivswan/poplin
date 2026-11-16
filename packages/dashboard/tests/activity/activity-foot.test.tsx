@@ -18,7 +18,7 @@ type Asked = Readonly<Record<string, string>> | PageSize;
 
 /** A page of as many entries, with the places the pages around it are reached from, and whether it is a narrowed page that stopped looking before the log's end. */
 function pageOf(rows: number, next: string | null, previous: string | null, stopped = false): Page {
-  const entries = Array.from({ length: rows }, (_entry, index) => ({ seq: 1000 - index, at: 1_700_000_000_000, by: "mira@example.com", action: "login" as const, detail: {}, site: null }));
+  const entries = Array.from({ length: rows }, (_entry, index) => ({ seq: 1000 - index, at: 1_700_000_000_000, by: "mira@example.com", action: "login" as const, what: "Logged in", detail: {}, site: null }));
 
   return { ok: true, entries, logins: {}, next, previous, stopped } as Page;
 }

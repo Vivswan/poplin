@@ -3,7 +3,7 @@
 //   never checked                      note none
 //   every needed piece ok              note none
 //   the login needs repair             login_broken        private sites may be locked
-//   a record or route needs repair     sites_unreachable   sites may not open
+//   a piece sites answer through       sites_unreachable   sites may not open; the sentence names the piece
 //   the users changed since a repair   users_changed       the domain's login still lets in the users of the last repair
 //   any other piece needs repair       needs_repair
 //   a piece could not be read          not_read
@@ -23,14 +23,14 @@ import { DAY_MS } from "./site-object";
 /** How old a remembered run may be and still raise its note: a domain changes only when a person changes it at the provider, and after a month the memory says too little of the state now to alarm anyone. */
 const STALE_AFTER_MS = 30 * DAY_MS;
 
-/** The sentence a person reads for each note. A code with no sentence does not compile. */
-export const DOMAIN_SENTENCES: Readonly<Record<DomainNote["code"], string>> = {
-  login_broken: "The login for private sites is missing or changed, so private sites may be locked. Open Domain and press Repair.",
-  sites_unreachable: "A record or route of the domain is missing or changed, so sites may not open. Open Domain and press Repair.",
-  users_changed: "Users changed. Open Domain and press Repair.",
-  needs_repair: "A piece of the domain is missing or changed. Open Domain and press Repair.",
-  not_read: "A piece of the domain could not be read. Open Domain and press Check.",
-  check_again: "The last check of the domain is over 30 days old. Open Domain and press Check.",
+/** The sentence a person reads for each note, from what the install's side at the provider is called and the piece the note is about. A code with no sentence does not compile. */
+const SENTENCES: Readonly<Record<DomainNote["code"], (thing: string, about: string | null) => string>> = {
+  login_broken: () => "The login for private sites is missing or changed, so private sites may be locked. Open Domain and press Repair.",
+  sites_unreachable: (_thing, about) => `The ${about} is missing or changed, so sites may not open. Open Domain and press Repair.`,
+  users_changed: () => "Users changed. Open Domain and press Repair.",
+  needs_repair: (thing) => `A piece of ${thing} is missing or changed. Open Domain and press Repair.`,
+  not_read: (thing) => `A piece of ${thing} could not be read. Open Domain and press Check.`,
+  check_again: (thing) => `The last check of ${thing} is over 30 days old. Open Domain and press Check.`,
 };
 
 /** The notes that outrank a change of the users: with one of them raised, private sites may be locked or sites may not open. */
@@ -66,6 +66,16 @@ function noteOf(pieces: readonly CheckedPiece[]): "none" | Extract<DomainNote, {
   const unread = pieces.find((piece) => piece.state === "unread");
 
   return unread === undefined ? "none" : { code: "not_read", about: unread.piece };
+}
+
+/**
+ * Word a note as the sentence a person reads.
+ *
+ * @param thing - what a sentence calls the install's side at the provider, such as `the domain`: whoever holds that side says it
+ * @returns what is wrong and what to press; a note about sites that may not open names its piece, in the provider's word for it
+ */
+export function domainSentence(note: DomainNote, thing: string): string {
+  return SENTENCES[note.code](thing, note.about);
 }
 
 /**
