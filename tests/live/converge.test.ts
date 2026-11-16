@@ -14,7 +14,7 @@ import { createDomainPlug } from "../../packages/cloudflare/src/zone/zone-plug";
 import { withFake } from "../../packages/cloudflare/tests/zone/support/fake-cloudflare";
 import { ACCOUNT as INSTALL_ACCOUNT, answer as answerInstall, emptyAccount, TOKEN } from "../../packages/cloudflare/tests/zone/support/fake-install";
 import { LAYOUT } from "../../packages/cloudflare/tests/zone/support/layouts";
-import { type Asked, page, refusal, reply } from "../../packages/cloudflare/tests/zone/support/replies";
+import { type Asked, bodyOf, page, refusal, reply } from "../../packages/cloudflare/tests/zone/support/replies";
 import { catchStep } from "./support/step";
 
 /** The workflow that runs the live scripts. */
@@ -50,8 +50,8 @@ const CLOUDFLARE = join(import.meta.dir, "..", "..", "packages", "cloudflare");
 /** The repository's own configuration of the Worker. */
 const OWN_CONFIG = join(CLOUDFLARE, "..", "..", "wrangler.jsonc");
 
-/** A Worker small enough to bundle in a moment, as source. */
-const SOURCE = { "worker.ts": 'export default { fetch: (): Response => new Response("ok") };\n' };
+/** A Worker small enough to bundle in a moment, as source. It exports the class the configuration binds a Workflow to: wrangler bundles no entry that lacks it. */
+const SOURCE = { "worker.ts": 'export class PoplinJobs {}\nexport default { fetch: (): Response => new Response("ok") };\n' };
 
 /** The same Worker as a file that is built already and names the map beside it. */
 const BUILT = { "worker.js": 'export default { fetch: () => new Response("ok") };\n//# sourceMappingURL=worker.js.map\n' };
@@ -62,8 +62,14 @@ const BUILT_MAP = { "worker.js.map": '{"version":3,"sources":["../src/worker.ts"
 /** How an upload starts the part that is the Worker's map: its name, then its type, which is not that of a module or of a file for visitors. */
 const MAP_PART = 'Content-Disposition: form-data; name="worker.js.map"; filename="worker.js.map"\r\nContent-Type: application/source-map\r\n';
 
-/** An upload that carries the Worker's map, names no folder of the machine, and publishes no file to visitors. */
-const WITH_MAP: Upload = { made: true, map: true, folder: false, assets: false };
+/** The Workflow's binding as an upload states it: the Workflow named after the Worker, and the class the Worker's entry exports. */
+const JOBS_BINDING = { type: "workflow", name: "JOBS", workflow_name: "poplin-jobs", class_name: "PoplinJobs" };
+
+/** An upload that carries the Worker's map and the Workflow's binding, names no folder of the machine, and publishes no file to visitors. */
+const WITH_MAP: Upload = { made: true, map: true, jobs: [JOBS_BINDING], folder: false, assets: false };
+
+/** An upload that was not made. */
+const NOT_MADE: Upload = { made: false, map: false, jobs: [], folder: false, assets: false };
 
 /** A sentence a Worker that cannot start answers. */
 const REASON = "This install's database is newer than its code: update poplin.";
@@ -82,6 +88,7 @@ type Case = readonly [what: string, account: FakeAccount, lines: readonly string
 interface Upload {
   readonly made: boolean;
   readonly map: boolean;
+  readonly jobs: readonly unknown[];
   readonly folder: boolean;
   readonly assets: boolean;
 }
@@ -191,6 +198,14 @@ function installConfig(): Promise<Record<string, unknown>> {
   return workerConfig({ accountId: ACCOUNT }, { layout: LAYOUT }, { databaseId: "2".repeat(32), access: { team_domain: "team.example.com", audience: "3".repeat(64) }, login: "owner@example.com" });
 }
 
+/** The Workflow bindings an upload's metadata states, read from the form as Cloudflare reads it. */
+async function workflowBindings(form: string): Promise<unknown[]> {
+  const boundary = form.slice(2, form.indexOf("\r\n"));
+  const sent = (await bodyOf(new Request("http://localhost", { method: "POST", headers: { "content-type": `multipart/form-data; boundary=${boundary}` }, body: form }))) as { metadata: { bindings: { type: string }[] } };
+
+  return sent.metadata.bindings.filter((binding) => binding.type === "workflow");
+}
+
 /**
  * Have wrangler make the upload of a configuration and write it to a file, with nothing sent: no token is handed over.
  * The Worker is the given files in a scratch folder, in place of the real entry, and the step that builds the dashboard is left out.
@@ -211,11 +226,11 @@ async function uploadOf(config: Record<string, unknown>, files: Readonly<Record<
     stderr: "ignore",
   });
   const made = (await wrangler.exited) === 0;
-  if (!made) return { made, map: false, folder: false, assets: false };
+  if (!made) return NOT_MADE;
 
   const text = readFileSync(body, "utf8");
 
-  return { made, map: text.includes(MAP_PART), folder: text.includes(basename(folder.path)), assets: text.includes('"assets"') };
+  return { made, map: text.includes(MAP_PART), jobs: await workflowBindings(text), folder: text.includes(basename(folder.path)), assets: text.includes('"assets"') };
 }
 
 /** Every string a parsed document holds, at any depth. */
@@ -264,10 +279,11 @@ describe("the configuration the built bundle is uploaded by", () => {
 describe("the upload wrangler makes, with nothing sent", () => {
   // Drift: an error in Cloudflare's log names a source file and its line only while every upload carries the map. A map that went missing would be left out with no word, on a deploy against the real account alone.
   // The map is a part of the upload with a type of its own, beside the Worker and not among files for visitors: the upload names none. A map that named the scratch folder would name any machine it is built on.
+  // An upload without the Workflow's binding leaves the install copying a large site by the page's requests, and one that names another Workflow than the Worker's own binds to one no repair and no start-over knows.
   test.each([
-    ["a deploy of the repository's own configuration bundles the Worker and sends its map", async () => Bun.JSONC.parse(readFileSync(OWN_CONFIG, "utf8")) as Record<string, unknown>, SOURCE, WITH_MAP],
-    ["the test install's upload of a built file sends the map beside it", installConfig, { ...BUILT, ...BUILT_MAP }, WITH_MAP],
-    ["the test install's upload of a built file whose map is missing stops", installConfig, BUILT, { made: false, map: false, folder: false, assets: false }],
+    ["a deploy of the repository's own configuration bundles the Worker and sends its map and the Workflow's binding", async () => Bun.JSONC.parse(readFileSync(OWN_CONFIG, "utf8")) as Record<string, unknown>, SOURCE, WITH_MAP],
+    ["the test install's upload of a built file sends the map beside it, and the same binding", installConfig, { ...BUILT, ...BUILT_MAP }, WITH_MAP],
+    ["the test install's upload of a built file whose map is missing stops", installConfig, BUILT, NOT_MADE],
   ])(
     "%s",
     async (_what, config, files, upload) => {

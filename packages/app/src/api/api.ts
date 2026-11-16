@@ -94,6 +94,7 @@ export interface ApiDeps extends Install, Gate {
 
   /** The host's background work, which runs the rounds of a copy after its first request's. Without it the client's own requests run them, one each. */
   readonly jobs?: Jobs;
+
   /** Ends every login of the dashboard at the provider. Without it nobody can be signed out here. */
   readonly endLogins?: EndLogins;
 

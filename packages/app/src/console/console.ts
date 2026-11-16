@@ -112,6 +112,7 @@ interface ConsoleParts extends CodeTries {
 
   /** The provider's side of the domain's rules: a change of a setting they are written from is carried there by itself. Without it such a change waits for a repair on the Domain screen. */
   readonly rules?: RulesFollow;
+
   /** The host's background work, which runs the rounds of a copy after its first request's. Without it the client's own requests run them, one each. */
   readonly jobs?: Jobs;
 }

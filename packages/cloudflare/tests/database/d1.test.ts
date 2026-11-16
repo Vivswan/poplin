@@ -119,8 +119,8 @@ const ROWS: Readonly<Record<string, readonly [read: number, written: number]>> =
   "noteProblem, a later hour": [1, 1],
   "noteProblem, once a day": [1, 1],
   "noteProblem, once a day and noted": [1, 0],
-  "listProblems, 7 days of 12 kinds": [84, 0],
-  "sweepRunOut, 14 problems past the days kept": [25, 14],
+  "listProblems, 7 days of 13 kinds": [91, 0],
+  "sweepRunOut, 15 problems past the days kept": [26, 15],
   "keepSweepPlace": [1, 1],
   "readSweepPlace": [1, 0],
   "keepSweepPlace, forgotten": [0, 1],
@@ -923,8 +923,8 @@ describe("D1: the rows every operation of the database costs of a day's allowanc
     for (const kind of PROBLEM_KINDS) {
       for (let day = 1; day <= 7; day += 1) await database.noteProblem({ ...note, kind, at: MIDNIGHT + day * 86_400_000 });
     }
-    await cost("listProblems, 7 days of 12 kinds", () => database.listProblems(dayOf(MIDNIGHT + 86_400_000)));
-    await cost("sweepRunOut, 14 problems past the days kept", () => database.sweepRunOut(MIDNIGHT + 31 * 86_400_000));
+    await cost("listProblems, 7 days of 13 kinds", () => database.listProblems(dayOf(MIDNIGHT + 86_400_000)));
+    await cost("sweepRunOut, 15 problems past the days kept", () => database.sweepRunOut(MIDNIGHT + 31 * 86_400_000));
     await cost("changeAccessAndDetails", () => database.changeAccessAndDetails(first.id, { access: "unlisted" }, { title: "Both" }, BY_ADA));
     await cost("changeAccessAndDetails, the same", () => database.changeAccessAndDetails(first.id, { access: "unlisted" }, { title: "Both" }, BY_ADA));
     const copy = await begunSite(database, site(900));
