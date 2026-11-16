@@ -120,7 +120,7 @@ function copiesPerCall(files: number): number {
   return Math.floor((STORE_BUDGET - CLEANUP_CALLS - pages - finishing) / COPY_CALLS);
 }
 
-/** The most calls to the database one request of a copy makes: the host's start, the caller's own, and the action's, which at most finishes the copy in the same call and gives it up when that fails. */
+/** The most calls to the database one request of a copy makes: the host's start, the caller's own, and the action's, which at most finishes the copy and gives it up if that fails. A call whose writes fail finishes nothing, and counts them in fewer. */
 function databaseCalls(asking: number): number {
   return START_CALLS + asking + STAGE_CALLS + COUNT_CALLS + FINISH_CALLS + GIVE_UP_CALLS;
 }
@@ -205,9 +205,10 @@ async function resumeCopy(install: Install, actor: Actor, asked: { readonly site
   return { ok: true, upload: { ...upload, plan }, missing };
 }
 
-/** How the files of one call that are on their way ended, once one is missing or fails: none is begun after. A failure outranks a missing file. */
+/** The files of one call that are on their way: how they ended, once one is missing or fails, after which none is begun, and how many writes the store did not keep. A failure outranks a missing file. */
 interface Batch {
   ended?: { readonly kind: "missing" } | { readonly kind: "failed"; readonly failure: unknown };
+  unkept: number;
 }
 
 /** End a batch at a failure. The first one is the one told. */
@@ -215,11 +216,7 @@ function failBatch(batch: Batch, failure: unknown): void {
   if (batch.ended?.kind !== "failed") batch.ended = { kind: "failed", failure };
 }
 
-/**
- * Copy one file of the source's version to the copy's folder, with the media type the source holds.
- *
- * A source that no longer holds it ends the batch, and so does a write the store did not keep. A host bills that write: it is counted against the day, and noted where it takes the day past its limit.
- */
+/** Copy one file of the source's version to the copy's folder, with the media type the source holds. A source that no longer holds it ends the batch, and so does a write the store did not keep. */
 async function copyFile(install: Install, upload: CopyUpload, path: string, batch: Batch): Promise<void> {
   const { from: source } = upload.plan;
   const from = fileKey(source.folder, source.number, path);
@@ -236,29 +233,31 @@ async function copyFile(install: Install, upload: CopyUpload, path: string, batc
   try {
     await install.store.write(to.key, { stream: read.body, size: read.info.size }, { contentType: read.info.contentType });
   } catch (error) {
-    // The batch ends before the count is written, so no file is begun meanwhile.
     failBatch(batch, error);
-
-    try {
-      const day = dayOf(install.now());
-      await install.database.addStorageWrites(day, 1);
-      const counted = await install.database.readStorageWrites(day);
-      if (counted !== undefined && counted.writes > counted.most) await noteProblem(install, "writes_limit_reached");
-    } catch (uncounted) {
-      // A count that fails is the failure told: a billed write went uncounted.
-      batch.ended = { kind: "failed", failure: uncounted };
-    }
+    batch.unkept += 1;
   }
+}
+
+/**
+ * Count the writes of one call that the store did not keep against the day, and note it where they take the day past its limit: a host bills each.
+ *
+ * They are counted together, so a call whose six files all fail asks the database no more than a call whose one file fails.
+ */
+async function countUnkept(install: Install, writes: number): Promise<void> {
+  const day = dayOf(install.now());
+  await install.database.addStorageWrites(day, writes);
+  const counted = await install.database.readStorageWrites(day);
+  if (counted !== undefined && counted.writes > counted.most) await noteProblem(install, "writes_limit_reached");
 }
 
 /**
  * Copy files of the source's version to the copy's folder, a few at once and in no order.
  *
  * @returns `false` when the source no longer holds one of them, which leaves others uncopied
- * @throws {Error} the store or the database failed, once every file on its way has ended, so nothing is written after it
+ * @throws {Error} the store or the database failed, once every file on its way has ended; a count that fails is the failure thrown
  */
 async function copyFiles(install: Install, upload: CopyUpload, paths: readonly string[]): Promise<boolean> {
-  const batch: Batch = {};
+  const batch: Batch = { unkept: 0 };
   const copy = async (path: string): Promise<void> => {
     if (batch.ended !== undefined) return;
 
@@ -266,6 +265,8 @@ async function copyFiles(install: Install, upload: CopyUpload, paths: readonly s
   };
 
   await pMap(paths, copy, { concurrency: COPIES_AT_ONCE });
+  if (batch.unkept > 0) await countUnkept(install, batch.unkept);
+
   if (batch.ended?.kind === "failed") throw batch.ended.failure;
 
   return batch.ended === undefined;

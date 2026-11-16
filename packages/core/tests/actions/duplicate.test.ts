@@ -23,6 +23,9 @@ const ASKING = 1;
 /** The most calls to the database the action itself may make after a caller's one: the 44 a request of a copy is held to, less the 2 a host may make to start, the caller's own, and the 2 that count the day's listings, which a host makes. */
 const OWN_DATABASE_CALLS = 39;
 
+/** The most calls a caller may make before the action and still be let in, and the calls to the database the action may then make itself: the 44, less the 2 of a host's start, the caller's 26, and the 2 that count the day's listings. */
+const [EDGE_ASKING, EDGE_CALLS] = [26, 14];
+
 /** The most calls to the store one call of the action may make. */
 const STORE_CALLS = 250;
 
@@ -245,23 +248,48 @@ describe("duplicateSite", () => {
     expect([counted, held >= 112 && held <= 117, next]).toMatchObject([before + 1, true, { ok: true, copy: { copied: held + 112, files: 300 } }]);
   });
 
-  // Drift: a write that fails is counted in the database before it is told, and the files begun during that wait would each be a billed write of a copy that is given up.
-  test("a call whose write fails begins no further file while the failure is counted", async () => {
+  // Drift: begun one after another while a write fails, the files of a call would each be a billed write of a copy that is given up.
+  test("a call whose write fails begins no further file", async () => {
     const world = await makeWorld();
     const source = await made(world, OWNER, "report");
     await publishSite(world.install, OWNER, { site: source, files: MANY });
-    const count = world.install.database.addStorageWrites.bind(world.install.database);
-    spyOn(world.install.database, "addStorageWrites").mockImplementation(async (...asked) => {
-      await new Promise((resolve) => setTimeout(resolve, 20));
-
-      return count(...asked);
-    });
     spyOn(world.install.store, "write").mockRejectedValueOnce(new Error("the store is down"));
     using reads = spyOn(world.install.store, "read");
 
     await expect(duplicateSite(world.install, OWNER, { site: source }, ASKING)).rejects.toThrow("the store is down");
 
     expect(reads.mock.calls.length).toBeLessThanOrEqual(6);
+  });
+
+  // Drift: six files fail at once, and each counted by itself asks the database ten times more than all counted together: a caller the action let in at the edge of its budget would pass 44.
+  test("a call whose six files all fail to be written counts them together and notes the day's limit once, inside the budget of a caller at its edge", async () => {
+    // The day's limit is what the two publishes and the copy's 600 writes come to, so the six that fail pass it.
+    const world = await makeWorld({ max_storage_writes_per_day: 902 });
+    const source = await made(world, OWNER, "report");
+    await publishSite(world.install, OWNER, { site: source, files: MANY });
+    const day = dayOf(world.clock.now);
+    // Every read answers a moment later, so six files are on their way when the first write fails, and every write fails.
+    const store = new Proxy(world.install.store, {
+      get(target, name) {
+        const method: unknown = Reflect.get(target, name);
+        if (typeof method !== "function") return method;
+
+        return async (...asked: unknown[]): Promise<unknown> => {
+          if (name === "read" || name === "write") await new Promise((resolve) => setTimeout(resolve, 0));
+
+          if (name === "write") throw new Error("the store is down");
+
+          return method.apply(target, asked);
+        };
+      },
+    });
+    using batches = spyOn(BunSqliteDriver.prototype, "batch");
+
+    await expect(duplicateSite({ ...world.install, store }, OWNER, { site: source }, EDGE_ASKING)).rejects.toThrow("the store is down");
+    const calls = batches.mock.calls.length;
+    const [counted, problems] = [await world.install.database.readStorageWrites(day), await world.install.database.listProblems(day)];
+
+    expect([counted?.writes, problems.map((problem) => problem.kind), calls <= EDGE_CALLS]).toEqual([908, ["writes_limit_reached"], true]);
   });
 
   // Drift: a billed write that the database did not count would be told as the store's failure alone, and whoever reads the failure would not learn that the day's count is short.
