@@ -41,7 +41,7 @@ export interface Step {
  *
  * `current`: the database is at the code's version; `applied` describes the steps this call ran, none when it was already there.
  *
- * `newer`: the database was written by a newer poplin; nothing was changed. `failed`: a step could not run; nothing of it was kept and the database is left at `stored`.
+ * `newer`: the database was written by a newer poplin; nothing was changed. `failed`: a step could not run; nothing of it was kept and the database is left at `stored`; `failure` is what the driver threw.
  *
  * `differs`: `step` was applied by another build of poplin, with other statements than this code's or with no fingerprint; nothing was changed.
  */
@@ -49,7 +49,7 @@ export type Migrated =
   | { readonly kind: "current"; readonly version: number; readonly applied: readonly string[] }
   | { readonly kind: "newer"; readonly stored: number; readonly current: number; readonly message: string }
   | { readonly kind: "differs"; readonly stored: number; readonly step: number; readonly message: string }
-  | { readonly kind: "failed"; readonly stored: number; readonly step: number; readonly message: string };
+  | { readonly kind: "failed"; readonly stored: number; readonly step: number; readonly message: string; readonly failure: unknown };
 
 /** Where a database stands before any step is applied: at a version this code can go on from, or one of the two it refuses. */
 type Standing = { readonly kind: "at"; readonly version: number } | Extract<Migrated, { kind: "newer" | "differs" }>;
@@ -154,7 +154,7 @@ export async function migrate(driver: SqlDriver, steps: readonly Step[], now: nu
 
       const message = `the database could not be brought up to date: step ${stepLabel(step)} (${step.description}) failed and nothing of it was kept: ${messageOf(error)}. Try again`;
 
-      return { kind: "failed", stored, step: step.number, message };
+      return { kind: "failed", stored, step: step.number, message, failure: error };
     }
   }
 
