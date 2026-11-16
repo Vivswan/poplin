@@ -9,7 +9,7 @@ What the dashboard's Domain screen shows and does, the last check it keeps, and 
 
 | On the screen       | What it is                                                                                     |
 | ------------------- | ---------------------------------------------------------------------------------------------- |
-| the line at the top | how the domain stands, such as `Nothing to repair` or `2 to repair`, then the last run and who made it |
+| the line at the top | how the domain stands, such as `Nothing to repair` or `2 to repair`, then the last run and who made it. The count is of everything on the screen a Repair ends: the rows that need repair, and each problem over the table that asks for a Repair |
 | Check               | lists every piece and changes nothing                                                          |
 | Repair              | fixes every piece that needs it                                                                |
 | the table           | one row per piece, in the columns Piece, State, and Detail                                     |
@@ -32,7 +32,7 @@ The check the screen opens on is a remembered one. Its State column has five wor
 | State          | Means                                                                                  |
 | -------------- | -------------------------------------------------------------------------------------- |
 | `Present`      | the piece stood as it should                                                           |
-| `Needs repair` | the piece was missing, or differed: press Repair                                       |
+| `Needs repair` | the piece was missing, or differed: press Repair. Detail of a remembered row ends in `missing or changed`: the install keeps no more of why |
 | `Optional`     | an optional piece the run left as it is: Detail says why. Nothing is wrong, and the install works without it |
 | `Failed`       | the run could not read the piece, or could not change it. Detail says why, such as a permission that is lacking |
 | `Not run`      | the run did not get to the piece: a piece it rests on stopped the run, or was not read |
@@ -55,7 +55,7 @@ An install that holds no key says `Not checked yet` before any run, and its Chec
 
 Cloudflare's login page keeps its own list of users. After a user is added or removed, under Access or [another way](access.md#add-a-user), poplin writes the new list there by itself, with [the key it keeps](../about/security.md#the-kept-key).
 
-On an install that holds no key, the line says `Users changed. Press Repair.` until a Repair. Where a piece is to repair or was not done, the line counts those first.
+On an install that holds no key, the line says `Users changed. Press Repair.` until a Repair. Where a piece is to repair or was not done, the line counts those first, such as `2 to repair` or `2 not done`.
 
 A saved `search_engines_allowed` or `outside_pages` is written into its WAF rule the same way, with the key, and makes a rule the domain lacks: [which rule is made when](#optional-block-junk-traffic-and-crawlers). `block_bots`, the DNS records, the routes, and the redirect change only when you press Repair.
 
