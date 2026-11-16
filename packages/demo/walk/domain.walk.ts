@@ -2,7 +2,7 @@
 
 import { expect, type Locator, type Page } from "@playwright/test";
 
-import { arrive, said, test, toSection } from "./visit";
+import { arrive, said, screenHeading, test, toSection } from "./visit";
 
 /** How far the reader's clock is moved on between two openings of the screen: past the 10 minutes a check is gone by. */
 const PAST_FRESH = "11:00";
@@ -26,6 +26,8 @@ test("Domain opens on its pieces with no press and no token; opened again once t
   await expect(asked).toHaveCount(0);
 
   await toSection(page, "Settings");
+  // Domain stays drawn until the code of Settings has loaded. A press on Domain before that opens nothing again.
+  await expect(screenHeading(page, "Settings")).toBeVisible();
   await page.clock.fastForward(PAST_FRESH);
   await toSection(page, "Domain");
   await expect(domainLine(page, "2 to repair")).toBeVisible();
