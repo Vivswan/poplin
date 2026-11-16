@@ -1,6 +1,6 @@
 // What marks an object at Cloudflare as poplin's, and what poplin writes into each.
 
-/** Every value the setup client writes. A record with a comment starting `recordMark` and a rule with one of the refs are poplin's. The last rows are the Worker's own: its Workflow, its variables, and its two keys. */
+/** Every value the setup client writes. A record with a comment starting `recordMark` and a rule with one of the refs are poplin's. The last rows are the Worker's own: its Workflow, its log, its variables, and its two keys. */
 export const INSTALL_OBJECTS = {
   recordMark: "poplin: ",
   wildcardComment: "poplin: every site",
@@ -17,6 +17,8 @@ export const INSTALL_OBJECTS = {
   accessHttpOnly: true,
   accessSameSite: "lax",
   database: "poplin",
+  databaseBinding: "DB",
+  bucket: "poplin-sites",
   rateRuleset: "poplin rate rule",
   rateRef: "poplin_rate",
   rateDescription: "poplin: 300 requests per 10 seconds per address",
@@ -55,10 +57,15 @@ export const INSTALL_OBJECTS = {
   jobsClass: "PoplinJobs",
   jobsSuffix: "-jobs",
   jobsNameLength: 64,
+  jobsBinding: "JOBS",
+  logsKept: true,
+  logsShare: 1,
+  requestRecords: false,
   accessBinding: "ACCESS",
   zoneBinding: "ZONE",
   firstSettingsBinding: "FIRST_SETTINGS",
   accountBinding: "ACCOUNT_ID",
+  worker: "poplin",
   workerBinding: "WORKER_NAME",
   bucketBinding: "SITES",
   keyBinding: "KEPT_KEY",

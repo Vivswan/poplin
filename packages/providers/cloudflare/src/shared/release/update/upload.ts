@@ -8,10 +8,16 @@
 // Every binding the Worker has is named `inherit`, so its bucket, its database, its variables, and its key stay as they are; one the release states whole is sent by value.
 // `strict` makes Cloudflare refuse the upload when it cannot keep a binding so named, in place of dropping it.
 // Cloudflare keeps no observability setting across an upload, so every upload states it: the release's, or else the Worker's own.
-// Every upload states one variable of its own, `LAST_UPDATE`: the version the install ran, the version it takes, the schema its database is at, and when.
+// Every update states one variable of its own, `LAST_UPDATE`: the version the install ran, the version it takes, the schema its database is at, and when.
 // It comes in with the code or not at all, so the new code reads which version it can go back to.
 // A release never states the key's own binding, nor that variable: one that does is refused, as one that names a binding the Worker lacks.
 // The upload is whole or not at all. Code that throws as it loads is refused by Cloudflare, and the Worker goes on running what it ran.
+//
+// An install is the first update: the same files and the same metadata, sent with a person's token to a Worker that does not exist yet.
+//
+//   PUT  .../workers/scripts/{name}                                  nothing to inherit, so each binding the release keeps by name is stated by its first value
+//
+// A first upload is no update, so it states no `LAST_UPDATE`: there is no version to go back to.
 
 import type { Keyed } from "@poplin/app/src/console/key/records";
 import { LAST_UPDATE, type LastUpdate } from "@poplin/core/src/records/update";
@@ -20,7 +26,7 @@ import { BaseScriptAndVersionSettings } from "cloudflare/resources/workers/scrip
 import { BaseScripts } from "cloudflare/resources/workers/scripts/scripts";
 import { MAP_FILE, MODULE_FILE } from "../deploy/bundle-manifest";
 import { type KeptKey, keyed } from "../../install/key/kept-key";
-import { type CloudflareResult, callCloudflare } from "../../install/client";
+import { type CloudflareResult, type Connection, callCloudflare } from "../../install/client";
 import { INSTALL_OBJECTS } from "../../install/install-objects";
 import * as v from "valibot";
 import type { CheckedBundle } from "./bundle-files";
@@ -28,7 +34,7 @@ import type { CheckedBundle } from "./bundle-files";
 /** Cloudflare's name of the right every call here needs. */
 const RIGHT = "Workers Scripts Write";
 
-/** The variable every upload states: the update it is. */
+/** The variable every update states: the update it is. */
 const LAST_UPDATE_BINDING = "LAST_UPDATE";
 
 /** The error code of an upload whose code throws as it loads. */
@@ -40,10 +46,20 @@ const NOT_ABOUT_CODE: ReadonlySet<number> = new Set([401, 403, 408, 429]);
 /** The first status that is a failure of Cloudflare's own. */
 const SERVER_FAILURE = 500;
 
-/** The bindings no release states: the key's, and the variable an upload states itself. */
+/** The bindings no release states: the key's, and the variable an update states itself. */
 const OWN_BINDINGS: ReadonlySet<string> = new Set([INSTALL_OBJECTS.keyBinding, LAST_UPDATE_BINDING]);
 
-/** The Worker that is replaced. */
+/** What the version an upload makes says made it, after the release's version. */
+const MADE_BY = { update: "by its own update", install: "by its install" } as const;
+
+/** The observability of a first upload whose release states none. */
+const FIRST_OBSERVABILITY = {
+  enabled: INSTALL_OBJECTS.logsKept,
+  head_sampling_rate: INSTALL_OBJECTS.logsShare,
+  logs: { enabled: INSTALL_OBJECTS.logsKept, invocation_logs: INSTALL_OBJECTS.requestRecords },
+};
+
+/** The Worker that is replaced, or made. */
 interface OwnWorker {
   readonly accountId: string;
   readonly script: string;
@@ -69,32 +85,68 @@ export interface Upload {
   readonly put: (bundle: CheckedBundle, update: LastUpdate) => Promise<Put>;
 }
 
-/** What one upload sends: the release's files, the update it is, and the Worker's cron list as it was read. */
+/** What one update sends: the release's files, the update it is, and the Worker's cron list as it was read. */
 interface Sending {
   readonly bundle: CheckedBundle;
   readonly update: LastUpdate;
   readonly crons: readonly string[];
 }
 
-/** The metadata of an upload, as JSON text, or `undefined` for a release that names a kept binding the Worker lacks, or states the key's own or the upload's own variable. */
-function metadataOf(sending: Pick<Sending, "bundle" | "update">, current: { readonly bindings: readonly string[]; readonly observability: unknown }): string | undefined {
-  const { deploy, version } = sending.bundle;
-  const released = deploy.bindings.flatMap((binding) => (binding.kind === "stated" ? [{ ...binding.binding, name: binding.name }] : []));
-  const lacking = deploy.bindings.some((binding) => binding.kind === "kept" && !current.bindings.includes(binding.name));
-  if (lacking || released.some((binding) => OWN_BINDINGS.has(binding.name))) return undefined;
+/** One binding as an upload sends it. */
+export type SentBinding = Readonly<Record<string, unknown>> & { readonly name: string };
 
-  const stated = [...released, { name: LAST_UPDATE_BINDING, type: "json", json: sending.update }];
-  const inherited = current.bindings.filter((name) => !stated.some((binding) => binding.name === name)).map((name) => ({ name, type: "inherit" }));
-  const observability = deploy.observability ?? current.observability ?? undefined;
+/** What an upload says beside the release's own values: every binding the release does not state, the observability where the release states none, and which of the two ways made it. */
+interface Beside {
+  readonly kept: readonly SentBinding[];
+  readonly observability: unknown;
+  readonly by: keyof typeof MADE_BY;
+}
+
+/** The bindings a release states whole, or `undefined` for one that states the key's own or an update's own variable. */
+function statedOf(bundle: CheckedBundle): readonly SentBinding[] | undefined {
+  const stated = bundle.deploy.bindings.flatMap((binding) => (binding.kind === "stated" ? [{ ...binding.binding, name: binding.name }] : []));
+
+  return stated.some((binding) => OWN_BINDINGS.has(binding.name)) ? undefined : stated;
+}
+
+/** The metadata of an upload, as JSON text: the one writer of an update and of an install. */
+function metadataOf(bundle: CheckedBundle, stated: readonly SentBinding[], beside: Beside): string {
+  const { deploy, version } = bundle;
+  const observability = deploy.observability ?? beside.observability ?? undefined;
 
   return JSON.stringify({
     main_module: deploy.main_module,
     compatibility_date: deploy.compatibility_date,
     compatibility_flags: deploy.compatibility_flags,
-    bindings: [...inherited, ...stated],
+    bindings: [...beside.kept, ...stated],
     ...(observability === undefined ? {} : { observability }),
-    annotations: { "workers/tag": version, "workers/message": `poplin ${version}, by its own update` },
+    annotations: { "workers/tag": version, "workers/message": `poplin ${version}, ${MADE_BY[beside.by]}` },
   });
+}
+
+/** The metadata of an update, where every binding the Worker has is kept by name; `undefined` for a release that names a kept binding the Worker lacks, or states the key's own or the update's own variable. */
+function updateMetadata(sending: Pick<Sending, "bundle" | "update">, current: { readonly bindings: readonly string[]; readonly observability: unknown }): string | undefined {
+  const { bundle } = sending;
+  const released = statedOf(bundle);
+  const lacking = bundle.deploy.bindings.some((binding) => binding.kind === "kept" && !current.bindings.includes(binding.name));
+  if (lacking || released === undefined) return undefined;
+
+  const stated = [...released, { name: LAST_UPDATE_BINDING, type: "json", json: sending.update }];
+  const inherited = current.bindings.filter((name) => !stated.some((binding) => binding.name === name)).map((name) => ({ name, type: "inherit" }));
+
+  return metadataOf(bundle, stated, { kept: inherited, observability: current.observability, by: "update" });
+}
+
+/** Send the one request that carries a release's files and its metadata. With `inherit`, Cloudflare refuses it when it cannot keep a binding the metadata names as kept. */
+function sendFiles(connection: Connection, worker: OwnWorker, bundle: CheckedBundle, sending: { readonly metadata: string; readonly inherit: boolean }): Promise<CloudflareResult<unknown>> {
+  const map = bundle.map === undefined ? {} : { [MAP_FILE]: new File([bundle.map], MAP_FILE, { type: "application/source-map" }) };
+  // Cloudflare reads the metadata from one form field of JSON text, and each file from a field of its own name. The SDK would spread a metadata object over a field per key, so the form's fields are handed over as the request's body.
+  const body = { metadata: sending.metadata, [MODULE_FILE]: new File([bundle.module], MODULE_FILE, { type: "application/javascript+module" }), ...map };
+  const inherit = sending.inherit ? ({ bindings_inherit: "strict" } as const) : {};
+
+  // The SDK names a content type of its own for this call. Unset, the form's own type goes out, with the boundary its parts are read by.
+  // The upload is sent once: a second try would name the bindings read before the first, and drop one added since.
+  return callCloudflare(connection, (api) => new BaseScripts(api).update(worker.script, { account_id: worker.accountId, ...inherit, metadata: {} }, { body, headers: { "Content-Type": null }, maxRetries: 0 }));
 }
 
 /** Read Cloudflare's answer to an upload: a refusal that is about the code sent is a value, and every other failure stays one. */
@@ -114,21 +166,10 @@ async function put(key: KeptKey | undefined, worker: OwnWorker, sending: Sending
   if (!settings.ok) return settings.refusal === "unreachable" ? { ok: false, refusal: "unread" } : settings;
 
   const bindings = (settings.value.bindings ?? []).map((binding) => binding.name);
-  const metadata = metadataOf(sending, { bindings, observability: settings.value.observability });
+  const metadata = updateMetadata(sending, { bindings, observability: settings.value.observability });
   if (metadata === undefined) return { ok: false, refusal: "needs_hand" };
 
-  const map = bundle.map === undefined ? {} : { [MAP_FILE]: new File([bundle.map], MAP_FILE, { type: "application/source-map" }) };
-  // Cloudflare reads the metadata from one form field of JSON text, and each file from a field of its own name. The SDK would spread a metadata object over a field per key, so the form's fields are handed over as the request's body.
-  const body = { metadata, [MODULE_FILE]: new File([bundle.module], MODULE_FILE, { type: "application/javascript+module" }), ...map };
-  const sent = await keyed(key, RIGHT, async (connection) =>
-    sentOf(
-      await callCloudflare(connection, (api) =>
-        // The SDK names a content type of its own for this call. Unset, the form's own type goes out, with the boundary its parts are read by.
-        // The upload is sent once: a second try would name the bindings read before the first, and drop one added since.
-        new BaseScripts(api).update(worker.script, { account_id: worker.accountId, bindings_inherit: "strict", metadata: {} }, { body, headers: { "Content-Type": null }, maxRetries: 0 }),
-      ),
-    ),
-  );
+  const sent = await keyed(key, RIGHT, async (connection) => sentOf(await sendFiles(connection, worker, bundle, { metadata, inherit: true })));
   if (!sent.ok) return sent;
 
   if (!sent.value.taken) return { ok: false, refusal: "version_refused", status: sent.value.status, load: sent.value.load };
@@ -136,11 +177,39 @@ async function put(key: KeptKey | undefined, worker: OwnWorker, sending: Sending
   const [wanted, current] = [new Set(bundle.deploy.crons), new Set(sending.crons)];
   if (wanted.size === current.size && [...wanted].every((cron) => current.has(cron))) return { ok: true };
 
-  const scheduled = await keyed(key, RIGHT, (connection) =>
-    callCloudflare(connection, (api) => new BaseSchedules(api).update(worker.script, { account_id: worker.accountId, body: [...wanted].map((cron) => ({ cron })) })),
-  );
+  const scheduled = await keyed(key, RIGHT, (connection) => putCrons(connection, worker, [...wanted]));
 
   return scheduled.ok ? { ok: true } : { ok: true, unset: "schedule" };
+}
+
+/**
+ * Read the cron list of a Worker.
+ *
+ * @returns each cron as it is written; a Worker that does not exist is refused, as Cloudflare answers it
+ */
+export async function readCrons(connection: Connection, worker: OwnWorker): Promise<CloudflareResult<readonly string[]>> {
+  const schedules = await callCloudflare(connection, (api) => new BaseSchedules(api).get(worker.script, { account_id: worker.accountId }));
+
+  return schedules.ok ? { ok: true, value: schedules.value.schedules.map((schedule) => schedule.cron) } : schedules;
+}
+
+/** Give a Worker its whole cron list, in place of the one it has. */
+export function putCrons(connection: Connection, worker: OwnWorker, crons: readonly string[]): Promise<CloudflareResult<unknown>> {
+  return callCloudflare(connection, (api) => new BaseSchedules(api).update(worker.script, { account_id: worker.accountId, body: crons.map((cron) => ({ cron })) }));
+}
+
+/**
+ * Send the first upload of a Worker that does not exist yet: a release's checked files, with every binding stated and none inherited.
+ *
+ * @param connection - a person's token
+ * @param first - the first value of each binding the release keeps by name
+ * @returns Cloudflare's answer to the one request; `needs-hand` for a release that states the key's own binding or an update's own variable, which is sent nowhere
+ */
+export async function putFirst(connection: Connection, worker: OwnWorker, bundle: CheckedBundle, first: readonly SentBinding[]): Promise<CloudflareResult<unknown> | { readonly ok: false; readonly failure: "needs-hand" }> {
+  const stated = statedOf(bundle);
+  if (stated === undefined) return { ok: false, failure: "needs-hand" };
+
+  return sendFiles(connection, worker, bundle, { metadata: metadataOf(bundle, stated, { kept: first, observability: FIRST_OBSERVABILITY, by: "install" }), inherit: false });
 }
 
 /**
@@ -150,16 +219,14 @@ async function put(key: KeptKey | undefined, worker: OwnWorker, sending: Sending
  * @returns what sends the upload, or the key's refusal: `lacks_right` names the right. Nothing is changed, and no answer holds the key or a text Cloudflare sent
  */
 export async function openUpload(key: KeptKey | undefined, worker: OwnWorker): Promise<Keyed<Upload>> {
-  const schedules = await keyed(key, RIGHT, (connection) => callCloudflare(connection, (api) => new BaseSchedules(api).get(worker.script, { account_id: worker.accountId })));
-  if (!schedules.ok) return schedules;
+  const crons = await keyed(key, RIGHT, (connection) => readCrons(connection, worker));
+  if (!crons.ok) return crons;
 
-  const crons = schedules.value.schedules.map((schedule) => schedule.cron);
-
-  return { ok: true, value: { put: (bundle, update) => put(key, worker, { bundle, update, crons }) } };
+  return { ok: true, value: { put: (bundle, update) => put(key, worker, { bundle, update, crons: crons.value }) } };
 }
 
 /**
- * Read the variable an upload states, as the Worker was handed it.
+ * Read the variable an update states, as the Worker was handed it.
  *
  * @param raw - the variable, unchecked
  * @returns the update the running code came in with, or `undefined` for a Worker whose code no update of its own put in place, or whose variable is no such record

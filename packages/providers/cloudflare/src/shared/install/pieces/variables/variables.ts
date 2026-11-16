@@ -4,7 +4,7 @@
 // Secrets go in that same change. Cloudflare reads none back, so one is written whenever it is handed over and is never compared.
 
 import { BaseScriptAndVersionSettings } from "cloudflare/resources/workers/scripts/script-and-version-settings";
-import { type Connection, callCloudflare } from "../../client";
+import { type CloudflareResult, type Connection, callCloudflare } from "../../client";
 import { type Mode, reportOf, type Synced } from "../../sync";
 
 /** A variable's whole value: a record of texts, kept as a JSON variable, or one text, kept as a plain one. */
@@ -24,6 +24,13 @@ interface WorkerBinding {
   readonly text?: unknown;
 }
 
+/** A binding as Cloudflare lists it: a bucket's names its bucket, and a database's its id. */
+export interface ListedBinding extends WorkerBinding {
+  readonly bucket_name?: string;
+  readonly jurisdiction?: string;
+  readonly id?: string;
+}
+
 /** One step of a variables plan; `subject` is the variable's name. */
 type VariableStep = { readonly kind: "create" | "change"; readonly subject: string; readonly value: Value } | { readonly kind: "leave"; readonly subject: string };
 
@@ -40,6 +47,32 @@ interface OwnWorker {
 
   /** The Worker's name. */
   readonly script: string;
+}
+
+/** The status Cloudflare answers for a Worker that does not exist. */
+const NO_WORKER = 404;
+
+/**
+ * Read a Worker as the account has it.
+ *
+ * @returns every binding of the Worker, or `undefined` for a Worker that does not exist
+ */
+export async function readWorker(connection: Connection, worker: OwnWorker): Promise<CloudflareResult<readonly ListedBinding[] | undefined>> {
+  const settings = await callCloudflare(connection, (api) => new BaseScriptAndVersionSettings(api).get(worker.script, { account_id: worker.accountId }));
+  if (settings.ok) return { ok: true, value: settings.value.bindings ?? [] };
+
+  return settings.failure === "refused" && settings.status === NO_WORKER ? { ok: true, value: undefined } : settings;
+}
+
+/**
+ * Read every binding of a Worker.
+ *
+ * @returns the bindings; a Worker that does not exist yet has none, as one that was just made has
+ */
+export async function readBindings(connection: Connection, worker: OwnWorker): Promise<CloudflareResult<readonly ListedBinding[]>> {
+  const read = await readWorker(connection, worker);
+
+  return read.ok ? { ok: true, value: read.value ?? [] } : read;
 }
 
 function read(json: unknown): unknown {
@@ -90,16 +123,16 @@ export function planVariables(desired: readonly DesiredVariable[], bindings: rea
 /**
  * Make the Worker's variables match.
  *
- * @param mode - `plan` reads the Worker's bindings and sends no change
+ * @param mode - `plan` reads the Worker's bindings and sends no change; a Worker that does not exist yet reads as one with no binding
  * @param secrets - secrets to write in the same change, in `apply` mode alone; the report never names one
  * @returns what was created, changed, and left. Every changed variable is sent in one change, which deploys the Worker anew with every other binding as it was.
  *   When it is refused nothing was written, and the failure names the first variable as the step that failed
  */
 export async function syncVariables(connection: Connection, worker: OwnWorker, desired: readonly DesiredVariable[], mode: Mode, secrets: readonly Secret[] = []): Promise<Synced> {
-  const settings = await callCloudflare(connection, (api) => new BaseScriptAndVersionSettings(api).get(worker.script, { account_id: worker.accountId }));
+  const settings = await readBindings(connection, worker);
   if (!settings.ok) return { ...settings, report: reportOf([]) };
 
-  const bindings: readonly WorkerBinding[] = settings.value.bindings ?? [];
+  const bindings = settings.value;
   const steps = planVariables(desired, bindings);
   const written = steps.flatMap((step) => (step.kind === "leave" ? [] : [step]));
   if (mode === "plan" || written.length + secrets.length === 0) return { ok: true, report: reportOf(steps) };

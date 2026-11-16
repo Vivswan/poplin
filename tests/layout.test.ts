@@ -29,6 +29,7 @@ const PARTS: readonly string[] = ["shared", "with-domain", "without-domain"];
 const PART = /^packages\/providers\/[^/]+\/src\/([^/]+)\//;
 
 const CHOOSERS: readonly (readonly [path: string, reason: string])[] = [
+  ["packages/providers/cloudflare/src/shared/install/first/installer.ts", "makes a new install of the kind a person chose, with that kind's plug"],
   ["packages/providers/cloudflare/src/shared/install/kind/first-run.ts", "makes the plug of the kind a person chose when nothing is set yet"],
   ["packages/providers/cloudflare/src/shared/install/kind/zone-binding.ts", "reads the `ZONE` binding, which holds the values of one kind or of the other"],
   ["packages/providers/cloudflare/src/shared/worker/hosts.ts", "builds where the install answers from the kind its `ZONE` binding names"],
@@ -55,7 +56,7 @@ const CEILINGS: readonly (readonly [folder: string, ceiling: number, holds: stri
   ["packages/cli/src", 9, "the CLI's entries and one folder for each concept"],
   ["packages/cli/src/commands", 24, "one file for each command, and the reading of the command line"],
   ["packages/cli/tests/commands", 12, "the tests of src/commands/, file for file"],
-  ["packages/core/src", 11, "the package's entry and one folder for each concept"],
+  ["packages/core/src", 12, "the package's entry and one folder for each concept"],
   ["packages/core/src/actions", 41, "one file for each action"],
   ["packages/core/src/database", 14, "the database: its statements, one file for each table"],
   ["packages/core/src/records", 20, "one file for each kind of record"],

@@ -55,12 +55,13 @@ async function firstAccounts(api: BaseCloudflare): Promise<string[]> {
 }
 
 /**
- * Find the account the install answers under: the install's own, or for an install with nothing set whichever account the token shows.
+ * Find the account the install answers under: the install's own, the one the token was already found in, or for an install with nothing set whichever account the token shows.
  *
  * @returns the id of the account whose free address is the install's; a token that shows no such account is refused, alike whatever it does show
  */
 async function findAccount(parts: PathParts, connection: Connection): Promise<string | DomainReading> {
-  const shown = parts.accountId === undefined ? await callCloudflare(connection, (api) => firstAccounts(api)) : ({ ok: true, value: [parts.accountId] } as const);
+  const known = parts.accountId ?? parts.first?.accountId;
+  const shown = known === undefined ? await callCloudflare(connection, (api) => firstAccounts(api)) : ({ ok: true, value: [known] } as const);
   if (!shown.ok) return shown.failure === "refused" ? REFUSED : UNREACHABLE;
 
   for (const id of shown.value) {

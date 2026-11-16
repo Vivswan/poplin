@@ -1,17 +1,57 @@
 // The package smoke test: packs the package, installs the tarball with npm into an empty project, and runs it under plain Node.
 //
 // It holds what no workspace test can see: the installed package runs with nothing the workspace has, under node alone.
+// It also holds how the package carries a provider: one built file per provider's package, loaded under node, within its size, and with none of its code in the package's other files.
 
 import { execFileSync, spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempDisposableSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempDisposableSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { basename, join } from "node:path";
+import { pathToFileURL } from "node:url";
 
+/** This package's folder. */
 const PACKAGE_DIR = join(import.meta.dir, "..");
+
+/** The package's name, and the command's. */
 const NAME = "poplin";
+
+/** The files npm's page and the license field point at. */
 const CARRIED = ["LICENSE.md", "README.md"];
+
+/** The manifest of the empty project the tarball is installed into. */
 const PROJECT_MANIFEST = { name: "smoke-project", private: true, type: "module" };
+
+/** What the command exits with when it is written wrong. */
 const USAGE_STATUS = 2;
+
+/** The files of the package that hold no provider's code. */
+const MAIN_FILES = ["bin.mjs", "poplin.mjs", "core.mjs"];
+
+/** The file of a provider's package that its built file is made from. */
+const INSTALLER = join("src", "shared", "install", "first", "installer.ts");
+
+/** The most bytes a provider's built file may have. It is loaded by an install alone, so no other command starts slower for it. */
+const MOST_PROVIDER_BYTES = 260_000;
+
+/** Run under node: a provider's built file loads, gives the provider it is named after, and none of its own words is in a main file. */
+const PROVIDER_PROBE = `
+import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+
+const [file, id, ...mains] = process.argv.slice(2);
+const { installer } = await import(file);
+
+assert.equal(process.versions.bun, undefined, "the probe runs under node, not bun");
+assert.equal(installer.id, id, "a provider's built file is named after the provider it gives");
+
+const own = [installer.about, installer.usage, ...installer.options.map((option) => option.about)];
+for (const main of mains) {
+  const text = readFileSync(main, "utf8");
+  for (const words of own) assert.equal(text.includes(words), false, main + " holds the provider's own words: " + words);
+}
+`;
+
+/** Run under node: the two library entries load, and say the installed version. */
 const PROBE = `
 import assert from "node:assert/strict";
 import { VERSION } from "poplin";
@@ -22,6 +62,8 @@ assert.equal(VERSION, process.argv[2]);
 assert.deepEqual(parseSiteName("field-notes"), { ok: true, value: "field-notes" });
 assert.deepEqual(parseSiteName("Field Notes"), { ok: false, refusal: "bad-character" });
 `;
+
+/** Run under node: the installed command serves a session and lists every tool. */
 const MCP_PROBE = `
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
@@ -93,6 +135,32 @@ function assertBin(project: string, version: string): void {
   }
 }
 
+/** Checks every provider's file of the installed package: one per provider's package and no other, each within its size, loaded under node, and its code in no main file. */
+function assertProviders(project: string, installed: string): string[] {
+  const packages = join(PACKAGE_DIR, "..", "providers");
+  const providers = readdirSync(packages).filter((folder) => existsSync(join(packages, folder, INSTALLER)));
+  const built = readdirSync(join(installed, "dist", "providers")).sort();
+  const mains = MAIN_FILES.map((name) => join(installed, "dist", name));
+
+  if (JSON.stringify(built) !== JSON.stringify(providers.map((folder) => `${folder}.mjs`).sort())) {
+    throw new Error(`the installed package carries ${JSON.stringify(built)} as its providers, and the workspace has ${JSON.stringify(providers)}`);
+  }
+
+  writeFileSync(join(project, "provider-probe.mjs"), PROVIDER_PROBE);
+
+  for (const name of built) {
+    const file = join(installed, "dist", "providers", name);
+    const id = basename(name, ".mjs");
+    const { size } = statSync(file);
+
+    if (size > MOST_PROVIDER_BYTES) throw new Error(`${name} has ${size} bytes, above the ${MOST_PROVIDER_BYTES} a provider's file may have`);
+
+    run(project, "node", "provider-probe.mjs", pathToFileURL(file).href, id, ...mains);
+  }
+
+  return built;
+}
+
 function smoke(): void {
   using scratch = mkdtempDisposableSync(join(tmpdir(), "poplin-smoke-"));
   const project = join(scratch.path, "project");
@@ -115,7 +183,10 @@ function smoke(): void {
   writeFileSync(join(project, "mcp-probe.mjs"), MCP_PROBE);
   run(project, "node", "mcp-probe.mjs", join(installed, "dist", "bin.mjs"), join(scratch.path, "config"));
 
-  console.log(`${NAME}@${version} installs, runs, and serves its MCP tools under node ${run(project, "node", "--version")}`);
+  // The installed package carries each provider as one file of its own, which runs under node with nothing of the workspace.
+  const providers = assertProviders(project, installed);
+
+  console.log(`${NAME}@${version} installs, runs, serves its MCP tools, and loads ${providers.join(", ")} under node ${run(project, "node", "--version")}`);
 }
 
 smoke();

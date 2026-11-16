@@ -60,6 +60,8 @@
     "./src/database/driver": "./src/database/driver.ts",
     "./src/database/open": "./src/database/open.ts",
     "./src/database/sql-database": "./src/database/sql-database.ts",
+    "./src/install/installer": "./src/install/installer.ts",
+    "./src/install/token-facts": "./src/install/token-facts.ts",
     "./src/jobs/inline-jobs": "./src/jobs/inline-jobs.ts",
     "./src/jobs/jobs": "./src/jobs/jobs.ts",
     "./src/jobs/run-job": "./src/jobs/run-job.ts",

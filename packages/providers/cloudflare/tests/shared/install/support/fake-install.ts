@@ -1,4 +1,4 @@
-// A whole account at the fake Cloudflare API, kept in memory: it answers every request the zone plug sends and applies each change, so a second run reads what the first one wrote.
+// A whole account at the fake Cloudflare API, kept in memory: it answers every request the zone plug and an install send and applies each change, so a second run reads what the first one wrote.
 
 import { EXAMPLE_ACCOUNT } from "../../worker/support/example-bindings";
 import { type Asked, page, refusal, reply } from "./replies";
@@ -96,6 +96,30 @@ export interface Account {
   /** The bindings of the install's Worker. */
   bindings: Row[];
 
+  /** Whether the account has no Worker named `poplin`: every read of it is then answered 404, until an upload makes it. */
+  noWorker?: boolean;
+
+  /** Every upload of the install's Worker, in order: its metadata, and the name of each file sent with it. */
+  uploads: Row[];
+
+  /** The versions of the install's Worker, the latest first, each with the annotations its upload stated. */
+  versions: Row[];
+
+  /** The cron list of the install's Worker. */
+  crons: string[];
+
+  /** The two address switches of the install's Worker. */
+  address: Row;
+
+  /** The account's R2 buckets. */
+  buckets: Row[];
+
+  /** Accounts the token shows beside its own. */
+  alsoShown?: Row[];
+
+  /** Whether the account never set the name of its free address: Cloudflare then answers the read of it with no name. */
+  noFreeAddress?: boolean;
+
   /** The account's other Workers, each with its tags, its bindings, and its two address switches. */
   workers: Row[];
 
@@ -143,6 +167,11 @@ export function emptyAccount(): Account {
       { name: "DB", type: "d1", id: "database-1" },
       { name: "ZONE", type: "json", json: { domain: "example.com" } },
     ],
+    uploads: [],
+    versions: [],
+    crons: [],
+    address: { enabled: false, previews_enabled: true },
+    buckets: [],
     workers: [],
     accessOff: false,
     tokens: [],
@@ -233,22 +262,65 @@ function otherWorker(account: Account, asked: Asked, parts: readonly string[]): 
   return reply({ enabled: current.enabled, previews_enabled: current.previews_enabled });
 }
 
-/** The account's Workers: the list, the settings of the Worker named `poplin`, and every other Worker. A change of those settings keeps a binding it names as inherited, takes each other as sent, and drops every binding it does not name. */
+/** The bindings of the install's Worker after a change: one it names as inherited is kept, each other is taken as sent, and every binding it does not name is dropped. A secret is kept and never read back, so its binding lists with no text. */
+function boundAfter(account: Account, sent: readonly Row[]): Row[] {
+  const taken = (binding: Row): Row => (binding.type === "secret_text" ? { name: binding.name, type: binding.type } : binding);
+
+  return sent.flatMap((binding) => (binding.type === "inherit" ? account.bindings.filter((kept) => kept.name === binding.name) : [taken(binding)]));
+}
+
+/** An upload of the install's Worker: it makes the Worker where there is none, with Cloudflare's first addresses, and a new latest version with the annotations sent. */
+function uploaded(account: Account, asked: Asked): Response {
+  const { metadata, ...files } = asked.body as { readonly metadata: { readonly bindings: Row[]; readonly annotations?: Row } };
+  if (account.noWorker === true) account.bindings = [];
+
+  account.noWorker = false;
+  account.bindings = boundAfter(account, metadata.bindings);
+  account.uploads.push({ metadata, files: Object.keys(files) });
+  account.versions.unshift({ id: `version-${account.versions.length + 1}`, number: account.versions.length + 1, annotations: metadata.annotations });
+
+  return reply({ id: "poplin" });
+}
+
+/** The account's Workers: the list, the Worker named `poplin` with its settings, its versions, its cron list, and its address switches, and every other Worker. */
 function worker(account: Account, asked: Asked, parts: readonly string[]): Response {
   if (parts[4] === undefined) return page(asked, [{ id: "poplin", tags: [] }, ...account.workers]);
 
   if (parts[4] !== "poplin") return otherWorker(account, asked, parts);
+
+  if (asked.method === "PUT" && parts[5] === undefined) return uploaded(account, asked);
+
+  if (account.noWorker === true) return refusal(404, 10007, "This Worker does not exist on your account.");
+
+  if (parts[5] === "versions") return reply({ items: account.versions });
+
+  if (parts[5] === "schedules") {
+    if (asked.method === "PUT") account.crons = (asked.body as { readonly cron: string }[]).map((schedule) => schedule.cron);
+
+    return reply({ schedules: account.crons.map((cron) => ({ cron })) });
+  }
+
+  if (parts[5] === "subdomain") {
+    if (asked.method === "POST") Object.assign(account.address, asked.body);
+
+    return reply(account.address);
+  }
 
   if (parts[5] !== "settings") return refusal(404, 10007, "This Worker does not exist on your account.");
 
   if (asked.method === "GET") return reply({ bindings: account.bindings });
 
   const { settings } = asked.body as { settings: { bindings: Row[] } };
-  // A secret is kept and never read back: its binding lists with no text.
-  const taken = (sent: Row): Row => (sent.type === "secret_text" ? { name: sent.name, type: sent.type } : sent);
-  account.bindings = settings.bindings.flatMap((sent) => (sent.type === "inherit" ? account.bindings.filter((kept) => kept.name === sent.name) : [taken(sent)]));
+  account.bindings = boundAfter(account, settings.bindings);
 
   return reply({ bindings: account.bindings });
+}
+
+/** The account's R2 buckets: the list, as one object that holds it, and a new bucket of the name sent. */
+function buckets(account: Account, asked: Asked): Response {
+  if (asked.method === "POST") account.buckets.push({ ...(asked.body as Row) });
+
+  return reply(asked.method === "POST" ? asked.body : { buckets: account.buckets });
 }
 
 /** The API tokens the account owns. A new one is active, and its value is answered this once and kept nowhere. No two tokens of a test run share an id. An expired one is listed only when the expired are asked for, as at Cloudflare. */
@@ -303,9 +375,11 @@ function inAccount(account: Account, asked: Asked, parts: readonly string[]): Re
 
   if (kind === "workers/scripts") return worker(account, asked, parts);
 
-  if (kind === "workers/subdomain") return reply({ subdomain: FREE_ADDRESSES[ACCOUNT] });
+  if (kind === "workers/subdomain") return reply({ subdomain: account.noFreeAddress === true ? null : FREE_ADDRESSES[ACCOUNT] });
 
   if (kind === "d1/database") return stored(account.databases, asked, parts[4], "uuid");
+
+  if (kind === "r2/buckets") return buckets(account, asked);
 
   if (kind === "alerting/v3") return stored(account.alerts, asked, parts[5]);
 
@@ -339,7 +413,7 @@ export function answer(account: Account, asked: Asked): Response {
       ZONES.filter((zone) => zone.account.id === owner),
     );
 
-  if (path === "/accounts") return page(asked, [{ id: owner, name: "An account" }]);
+  if (path === "/accounts") return page(asked, [{ id: owner, name: "An account" }, ...(owner === ACCOUNT ? (account.alsoShown ?? []) : [])]);
 
   // A token of another account reads its own free address, and reaches nothing of this account.
   if (owner !== ACCOUNT) return path === `/accounts/${owner}/workers/subdomain` ? reply({ subdomain: FREE_ADDRESSES[owner] }) : refusal(403, 10000, "Authentication error");

@@ -13,9 +13,9 @@
 import type { Keyed } from "@poplin/app/src/console/key/records";
 import { BasePermissionGroups } from "cloudflare/resources/accounts/tokens/permission-groups";
 import { BaseTokens } from "cloudflare/resources/accounts/tokens/tokens";
-import { BaseScriptAndVersionSettings } from "cloudflare/resources/workers/scripts/script-and-version-settings";
 import { type CloudflareFailure, type CloudflareResult, type Connection, callCloudflare } from "../client";
 import { INSTALL_OBJECTS } from "../install-objects";
+import { type ListedBinding, readBindings } from "../pieces/variables/variables";
 import { type Bucket, carriesRights, type KeyPlace, type KeyPolicies, keyPolicies, type ListedGroup, noGroup, uploadKeyPolicies } from "./rights";
 
 /** What the Worker's own key is said to have failed with when Cloudflare gave no usable answer about it. */
@@ -46,14 +46,6 @@ interface Sort {
 
 /** The Worker whose keys are read, and where the kept key acts. */
 type OwnWorker = KeyPlace & { readonly script: string };
-
-/** A binding as the Worker's settings list it. */
-interface ListedBinding {
-  readonly name: string;
-  readonly type: string;
-  readonly bucket_name?: string;
-  readonly jurisdiction?: string;
-}
 
 /** A token as the account lists it. */
 interface ListedToken {
@@ -113,12 +105,12 @@ function bucketOf(bindings: readonly ListedBinding[]): Bucket | undefined {
   return { name: bound.bucket_name, jurisdiction: bound.jurisdiction };
 }
 
-/** Whether the Worker has each key's secret, and which bucket it is bound to, as a person's token reads its bindings. */
+/** Whether the Worker has each key's secret, and which bucket it is bound to, as a person's token reads its bindings. A Worker that does not exist yet has neither key. */
 async function boundStates(connection: Connection, worker: OwnWorker): Promise<Standing> {
-  const settings = await callCloudflare(connection, (api) => new BaseScriptAndVersionSettings(api).get(worker.script, { account_id: worker.accountId }));
+  const settings = await readBindings(connection, worker);
   if (!settings.ok) return { kept: { ...settings, read: "bindings" }, upload: { ...settings, read: "bindings" } };
 
-  const bindings: readonly ListedBinding[] = settings.value.bindings ?? [];
+  const bindings = settings.value;
   const bound = (name: string): Stands => ({ ok: true, value: bindings.some((binding) => binding.name === name && binding.type === "secret_text") ? "present" : "missing" });
 
   return { kept: bound(INSTALL_OBJECTS.keyBinding), upload: bound(INSTALL_OBJECTS.uploadKeyBinding), bucket: bucketOf(bindings) };
@@ -173,10 +165,9 @@ function listedState(sort: Sort, tokens: readonly ListedToken[], groups: Cloudfl
  * @returns the bucket, `undefined` for a Worker bound to none, or the call Cloudflare refused or did not answer
  */
 export async function readBucket(connection: Connection, worker: OwnWorker): Promise<CloudflareResult<Bucket | undefined>> {
-  const settings = await callCloudflare(connection, (api) => new BaseScriptAndVersionSettings(api).get(worker.script, { account_id: worker.accountId }));
-  if (!settings.ok) return settings;
+  const settings = await readBindings(connection, worker);
 
-  return { ok: true, value: bucketOf(settings.value.bindings ?? []) };
+  return settings.ok ? { ok: true, value: bucketOf(settings.value) } : settings;
 }
 
 /**
