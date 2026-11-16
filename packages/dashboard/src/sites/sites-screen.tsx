@@ -12,7 +12,7 @@ import { Popover, PopoverContent, PopoverDescription, PopoverHeader, PopoverTitl
 import { Select, SelectContent, SelectGroup, SelectItem, SelectSeparator, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { searchOf, useAddressQuery } from "@/lib/address";
 import { copy } from "@/lib/notify";
-import { addressParts, type Site, shownName } from "@/lib/sites";
+import { addressParts, expiryOf, type Site, shownName } from "@/lib/sites";
 import { useChosenTimeZone } from "@/lib/timezone";
 import { IconButton, RefreshButton } from "@/shared/icon-button";
 import { PAGE_WAY, Pages, queryWith, useFirstRowFocus, useShownPlace, useTopOfPlace } from "@/shared/pages";
@@ -135,7 +135,7 @@ function RestoreButton({ site, onRestore }: { readonly site: Site; readonly onRe
   );
 }
 
-/** The sites on a phone, one row each: the site's title, who can open it and when it was updated, over its link and the ways to show, copy and open it. A row of the trash has the way back. What follows the list comes after the last row. */
+/** The sites on a phone, one row each: the title, who can open the site and when it was updated, over its link and the ways to show, copy and open it. A row of the trash has the way back and the day its site leaves. Then comes what follows the list. */
 function PhoneList({
   sites,
   opened,
@@ -194,6 +194,7 @@ function PhoneList({
                   <LinkButtons site={site} onCopy={onCopy} className="relative -my-2 shrink-0" />
                 </span>
               </span>
+              {site.state === "trash" && site.gone_on !== undefined ? <span className="text-xs text-muted-foreground">Leaves the trash on {expiryOf(site.gone_on)}</span> : null}
             </div>
             {restore === undefined ? null : <span className="relative">{restore(site)}</span>}
           </li>
