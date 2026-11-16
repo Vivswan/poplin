@@ -206,7 +206,7 @@ describe.each(Object.keys(KINDS) as (keyof typeof KINDS)[])("a new install, %s",
     const account = fresh({ refuse: `PUT /accounts/${ACCOUNT}/workers/scripts/poplin/schedules`, refuseAs: { status: 400, code: 10001 } });
     const stopped = await installed(account, kind, APPLY);
 
-    expect([shown(stopped.done).slice(2), stopped.done.ok && stopped.done.ready]).toEqual([[`Worker | make | poplin, runs ${RELEASE}`, "Sweep trigger | fail | */15 * * * *: refused with status 400"], false]);
+    expect([shown(stopped.done).slice(2), stopped.done.ok && stopped.done.ready]).toEqual([[`Worker | make | poplin, runs ${RELEASE}`, "Sweep trigger | fail | */15 * * * *: refused with status 400 and codes 10001"], false]);
 
     delete account.refuse;
     const again = await installed(account, kind, APPLY);
@@ -389,7 +389,7 @@ describe.each(Object.keys(KINDS) as (keyof typeof KINDS)[])("an install on the d
     };
     const stopped = await installed(refused, kind, APPLY);
 
-    expect([shown(stopped.done), stopped.done.ok && stopped.done.ready, refused.uploads.length]).toEqual([["D1 database | fail | poplin: refused with status 400"], false, 0]);
+    expect([shown(stopped.done), stopped.done.ok && stopped.done.ready, refused.uploads.length]).toEqual([["D1 database | fail | poplin: refused with status 400 and codes 7500"], false, 0]);
   });
 
   // Drift: a database that holds no settings is one the Worker stores its first ones in, so the first login is then the user, and no row says otherwise.
@@ -468,7 +468,7 @@ describe("what stops a run before it changes anything", () => {
     const { done } = await installed(fresh({ refuse: "GET /zones/zone-1/dns_records", refuseMessage: "Authentication error" }), "domain", DRY);
     const rows = shown(done).slice(6);
 
-    expect(rows[0]).toBe("DNS record | block | refused with status 403: 10000 Authentication error. Add this permission to the account token: DNS: Edit");
+    expect(rows[0]).toBe("DNS record | block | refused with status 403 and codes 10000. Add this permission to the account token: DNS: Edit");
     expect([...new Set(rows.slice(1).map((row) => row.split(" | ")[1]))]).toEqual(["not-run"]);
     expect(done).toMatchObject({ ok: true, ready: false, blocked: [{ what: "right_lacking", right: "DNS: Edit" }] });
   });

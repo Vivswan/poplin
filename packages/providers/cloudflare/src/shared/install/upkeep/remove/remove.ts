@@ -36,6 +36,7 @@ import { ApiRefused, apiDriver } from "../../../database/api-driver";
 import { workflowNameOf } from "../../../jobs/workflow-name";
 import { type CloudflareFailure, type CloudflareResult, callCloudflare, findZones } from "../../client";
 import { isOwn, type Place, type Where } from "../../first/find";
+import { failureWords } from "../../first/rows";
 import { BY_NAME, INSTALL_OBJECTS } from "../../install-objects";
 import { isAccessOff } from "../../pieces/access/access";
 import { BUDGET_ALERT } from "../../pieces/alerts/budget-alert";
@@ -141,13 +142,6 @@ function rightOf(object: Kind): string {
   return rightFor(object === "WAF ruleset" || object === "Rate ruleset" ? "WAF rule" : object);
 }
 
-/** Why a call failed, with nothing Cloudflare said but its status. */
-function whyOf(failure: CloudflareFailure): string {
-  if (failure.failure === "refused") return `refused with status ${failure.status}`;
-
-  return failure.failure === "rate-limited" ? "Cloudflare asked to wait" : "no answer from Cloudflare";
-}
-
 /** Add a row to the run and tell the command; answers whether the row leaves nothing undone. */
 function note(work: Work, row: RemovalRow): boolean {
   work.rows.push(row);
@@ -169,7 +163,7 @@ function failed(work: Work, object: Kind, failure: CloudflareFailure, before: re
 
   if (lacksRight(failure)) return note(work, { object, state: "block", detail: `${went}${WORDS.lacks}: ${right}`, right });
 
-  return note(work, { object, state: "fail", detail: `${went}${whyOf(failure)}` });
+  return note(work, { object, state: "fail", detail: `${went}${failureWords(failure)}` });
 }
 
 /** Name what went, each name once: one that several objects carry, as two keys of one name do, says how many. */

@@ -3,10 +3,11 @@
 
 import { reset } from "cloudflare:test";
 import { sha256Of } from "@poplin/core/src/storage/storage";
-import { beforeEach, describe, expect, test, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { readShell } from "../../../../../app/tests/console/support/shell";
 import type { Bindings } from "../../../src/shared/worker/bindings";
-import { emptyAccount, TOKEN } from "../install/support/fake-install";
+import { emptyAccount, KEPT, TOKEN } from "../install/support/fake-install";
+import { markersIn, PLANTED, REFUSED_WORDS } from "../install/support/planted";
 import type { Asked } from "../install/support/replies";
 import { signer } from "../login/support/access";
 import {
@@ -41,6 +42,16 @@ const KINDS = {
 
 /** The bindings of an install whose `ACCESS` is not written yet. */
 const UNFINISHED = { ...BINDINGS, ACCESS: undefined } as Bindings;
+
+/** Every way the Worker's runtime prints a line. */
+const PRINTS = ["log", "info", "warn", "error", "debug"] as const;
+
+/** The runs of the Domain screen that write a failed row: what is sent, whether the install holds its key, and how a row of the run words what Cloudflare refused. */
+const FAILED_RUNS = [
+  { run: "a repair with a pasted token", path: "repair", body: { token: TOKEN }, keyed: false, says: REFUSED_WORDS },
+  { run: "a check with a pasted token", path: "check", body: { token: TOKEN }, keyed: false, says: REFUSED_WORDS },
+  { run: "a check with the key the install keeps", path: "check", body: {}, keyed: true, says: "the key the install holds lacks this permission" },
+] as const;
 
 /** A run that read its table, as the Domain screen is answered it. */
 interface Ran {
@@ -408,5 +419,33 @@ describe("the Domain screen", () => {
     // Drift: the link carries nine rights, so a right the plug holds optional that the page listed among the needed ones sends a person back to adding it by hand.
     expect([form.tokenRights.includes("Zone WAF: Edit"), form.tokenOptional.find((optional) => optional.right === "Zone WAF: Edit")?.adds.startsWith("Cloudflare stops"), text.includes("by hand")]).toEqual([false, true, false]);
     expect([checked.status, (await checked.json<Ran>()).ok, none, repaired.status, (await repaired.json<Ran>()).summary.tone, account.applications.length, (await stored()).includes(TOKEN)]).toEqual([200, true, [], 200, "good", 2, false]);
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  // Drift: a failed row is kept in Activity for good and in the last check of the domain, and both are answered to every admin. A writer that lets Cloudflare's sentence into a row keeps the key, the id, the email and the hostname it quotes.
+  describe.each([KINDS.domain, KINDS.account])("on an install with $kind, where Cloudflare refuses in a sentence that quotes private values", (at) => {
+    test.each(FAILED_RUNS)("$run says each refusal in its own words everywhere it is kept or answered, and no value the sentence quotes is there or in the log", async ({ path, body, keyed, says }) => {
+      const prints = PRINTS.map((name) => vi.spyOn(console, name).mockImplementation(() => undefined));
+      const bindings = { ...at.bindings, ...(keyed ? { KEPT_KEY: KEPT } : {}) } as Bindings;
+      const worker = instance(w, cloudflareOf({ ...emptyAccount(), ...PLANTED }, []));
+      const session = await accessHeaders(w);
+      const calls = api(worker, await tokenOf(w, "admin"), (input, init) => ask(worker, input, init, bindings), at.admin);
+      const whole = async (answer: { readonly status: number; readonly headers: Headers; readonly text: () => Promise<string> }): Promise<string> => `${answer.status} ${JSON.stringify([...answer.headers])} ${await answer.text()}`;
+      const sinks = [
+        ["the answer of the run", await whole(await send(worker, `${at.admin}/data/domain/${path}`, body, session, bindings))],
+        ["the Domain screen", await whole(await ask(worker, `${at.admin}/data/domain`, { headers: session }, bindings))],
+        ["the Activity screen", await whole(await ask(worker, `${at.admin}/data/activity`, { headers: session }, bindings))],
+        ["the API's last check", await whole(await calls.domain.$get({ query: {} }))],
+        ["the API's Activity", await whole(await calls.audit.$get({ query: {} }))],
+        ["the database", await stored()],
+      ] as const;
+      const logged = prints.flatMap((print) => print.mock.calls.flat().map((printed) => (printed instanceof Error ? `${printed.stack}` : JSON.stringify(printed))));
+
+      expect(sinks.map(([sink, text]) => [sink, text.includes(says), markersIn(text)])).toEqual(sinks.map(([sink]) => [sink, true, []]));
+      expect(markersIn(logged.join("\n"))).toEqual([]);
+    });
   });
 });
