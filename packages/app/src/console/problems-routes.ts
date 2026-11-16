@@ -6,11 +6,12 @@
 
 import { vValidator } from "@hono/valibot-validator";
 import { listProblems } from "@poplin/core/src/actions/problems";
-import { PROBLEM_WORDS, type Problem } from "@poplin/core/src/records/problem";
+import { asksRepair, PROBLEM_WORDS, type Problem } from "@poplin/core/src/records/problem";
 import { Hono } from "hono";
 import * as v from "valibot";
 
 import { refused, refuseInvalid, type Shared } from "./data";
+import { type Summary, toRepair } from "./domain-answers";
 import { refusalSentence } from "./notices";
 
 /** The stretches of days the list offers, the shortest first. */
@@ -34,14 +35,18 @@ interface Mark {
   readonly says: string;
 }
 
-/** What the frame holds of the problems: each kind last seen within a day, once, the newest first, and the mark of each screen that has any. */
+/**
+ * What the frame holds of the problems: each kind last seen within a day, once, the newest first, and the mark of each screen that has any.
+ * `domainAsks` counts those the Domain screen draws that say to press Repair, such as `1 to repair`, and is `null` for none: the screen says it over pieces that are all in place, so its line never says that nothing is left over such a problem.
+ */
 export interface Marked {
   readonly recent: readonly ShownProblem[];
   readonly marks: Readonly<Record<Home, Mark | null>>;
+  readonly domainAsks: Summary | null;
 }
 
 /** The frame of an install with no problem. */
-export const NOTHING_MARKED: Marked = { recent: [], marks: { usage: null, domain: null, settings: null } };
+export const NOTHING_MARKED: Marked = { recent: [], marks: { usage: null, domain: null, settings: null }, domainAsks: null };
 
 /** What to do about a problem. An update that was refused is kept under the refusal's code and what it is about, so its advice is that refusal's own sentence. */
 function todoOf(problem: Problem): string {
@@ -76,8 +81,10 @@ export function markedIn(problems: readonly Problem[], now: number, domain: { re
   // A kind seen on both sides of midnight is one problem: its newest day stands for it.
   const recent = seen.filter((problem, at) => seen.findIndex((one) => one.kind === problem.kind) === at).map((problem) => shown(problem, domain.screen));
   const also = { usage: [], settings: [], domain: domain.says === null ? [] : [domain.says] };
+  const asking = recent.filter((problem) => problem.home === "domain" && asksRepair(problem.kind)).length;
+  const marks = { usage: markOf("usage", recent, also.usage), domain: markOf("domain", recent, also.domain), settings: markOf("settings", recent, also.settings) };
 
-  return { recent, marks: { usage: markOf("usage", recent, also.usage), domain: markOf("domain", recent, also.domain), settings: markOf("settings", recent, also.settings) } };
+  return { recent, marks, domainAsks: asking === 0 ? null : toRepair(asking) };
 }
 
 /** The data route of the problems. The newest is first. */

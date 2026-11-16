@@ -141,7 +141,7 @@ const STOPS: readonly Stop[] = [
     name: "Domain, from the side",
     screen: "Domain",
     open: (page) => toSection(page, "Domain"),
-    shows: (page) => [screenHeading(page, "Domain"), domainLine(page, "Nothing to repair")],
+    shows: (page) => [screenHeading(page, "Domain"), domainLine(page, "1 to repair")],
   },
   {
     name: "the token a repair asks for",
@@ -695,7 +695,7 @@ test.describe("on a screen 1920 px wide", () => {
     const ways: readonly (readonly [string, () => Promise<void>, Locator])[] = [
       ["Users", () => toSection(page, "Access"), rows(page, true, "Users")],
       ["Tokens", () => page.getByRole("tab", { name: "Tokens", exact: true }).click(), rows(page, true, "Tokens")],
-      ["Domain", () => toSection(page, "Domain"), domainLine(page, "Nothing to repair")],
+      ["Domain", () => toSection(page, "Domain"), domainLine(page, "1 to repair")],
       ["Settings", () => toSection(page, "Settings"), page.getByRole("heading", { name: "New sites", exact: true })],
     ];
     for (const [name, open, shown] of ways) {

@@ -73,7 +73,7 @@ interface ShownRow {
 }
 
 /** The one line over the rows. */
-interface Summary {
+export interface Summary {
   /** The count, such as `2 to repair`. */
   readonly line: string;
 
@@ -134,6 +134,11 @@ interface Last {
   readonly summary: Summary;
 }
 
+/** The line of so many things that wait for a repair, such as `2 to repair`. */
+export function toRepair(waiting: number): Summary {
+  return { line: `${waiting} to repair`, tone: "bad" };
+}
+
 function count(rows: readonly DomainRow[], states: readonly DomainState[]): number {
   return rows.filter((row) => states.includes(row.state)).length;
 }
@@ -144,7 +149,7 @@ function summaryOf(run: DomainRun, rows: readonly DomainRow[], waits: boolean): 
   if (failed > 0) return { line: `${failed + count(rows, UNDONE)} not done`, tone: "bad" };
 
   const waiting = count(rows, TO_REPAIR);
-  if (waiting > 0) return { line: `${waiting} to repair`, tone: "bad" };
+  if (waiting > 0) return toRepair(waiting);
 
   if (waits) return USERS_CHANGED;
 

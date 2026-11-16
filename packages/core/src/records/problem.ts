@@ -69,6 +69,9 @@ interface ProblemWords {
 /** What to do about a limit of a day that was reached. */
 const AFTER_MIDNIGHT = "It works again after midnight UTC. To allow more, raise the limit in Settings.";
 
+/** What to do about a problem that a repair of the domain is the cure of. */
+const PRESS_REPAIR = "Open Domain and press Repair.";
+
 /** The words of every kind. A kind with no words does not compile. */
 export const PROBLEM_WORDS: Readonly<Record<ProblemKind, ProblemWords>> = {
   request_failed: { sentence: "A request failed", todo: "Try again. If it comes back, copy the details and report it.", home: "usage", setting: null },
@@ -79,11 +82,11 @@ export const PROBLEM_WORDS: Readonly<Record<ProblemKind, ProblemWords>> = {
   login_unchecked: { sentence: "The login could not be checked", todo: "Open Domain and press Check.", home: "domain", setting: null },
   update_failed: { sentence: "An update did not go as it should", todo: "The details say what went wrong. To try again, press Update now.", home: "settings", setting: null },
   update_went_back: { sentence: "An update could not change the database, so poplin went back", todo: "Nothing is lost: the install runs the version before. Report it, and update again once a later release is out.", home: "settings", setting: null },
-  users_not_carried: { sentence: "A change of the users did not reach the login page", todo: "Open Domain and press Repair.", home: "domain", setting: null },
-  rules_not_carried: { sentence: "A changed setting did not reach every rule of the domain", todo: "Open Domain and press Repair.", home: "domain", setting: null },
+  users_not_carried: { sentence: "A change of the users did not reach the login page", todo: PRESS_REPAIR, home: "domain", setting: null },
+  rules_not_carried: { sentence: "A changed setting did not reach every rule of the domain", todo: PRESS_REPAIR, home: "domain", setting: null },
   copy_failed: { sentence: "A copy of a site was not made", todo: "Duplicate the site again.", home: "usage", setting: null },
-  login_not_repaired: { sentence: "The install could not repair its own login", todo: "Open Domain and press Repair.", home: "domain", setting: null },
-  direct_upload_refused: { sentence: "The store refused files sent straight to it, so they went through the install", todo: "Open Domain and press Repair.", home: "domain", setting: null },
+  login_not_repaired: { sentence: "The install could not repair its own login", todo: PRESS_REPAIR, home: "domain", setting: null },
+  direct_upload_refused: { sentence: "The store refused files sent straight to it, so they went through the install", todo: PRESS_REPAIR, home: "domain", setting: null },
   files_limit_reached: { sentence: "The daily limit of files was reached", todo: AFTER_MIDNIGHT, home: "usage", setting: "max_files_per_day" },
   writes_limit_reached: { sentence: "The daily limit of storage writes was reached", todo: AFTER_MIDNIGHT, home: "usage", setting: "max_storage_writes_per_day" },
   requests_limit_reached: { sentence: "The daily limit of requests was reached", todo: AFTER_MIDNIGHT, home: "usage", setting: "requests_per_day" },
@@ -103,6 +106,11 @@ const ENDED_BY: Readonly<Partial<Record<ProblemKind, Mend>>> = {
 
 /** The kinds noted once a day, whatever follows: a limit that was reached stays reached until midnight. */
 export const ONCE_A_DAY: ReadonlySet<ProblemKind> = new Set(["files_limit_reached", "writes_limit_reached", "requests_limit_reached"]);
+
+/** Whether what a kind says to do is a repair of the domain: the Domain screen then says that a repair waits. */
+export function asksRepair(kind: ProblemKind): boolean {
+  return PROBLEM_WORDS[kind].todo === PRESS_REPAIR;
+}
 
 /** The kinds some mends end, in the order of the kinds. */
 export function endedBy(mends: readonly Mend[]): readonly ProblemKind[] {
