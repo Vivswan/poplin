@@ -2,8 +2,8 @@ import { afterEach, beforeEach, describe, expect, type Mock, spyOn, test } from 
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import type { DomainReading, DomainSettings } from "@poplin/app/src/console/domain/records";
-import type { InstallKey } from "@poplin/app/src/console/key/records";
 import type { Login } from "@poplin/core/src/auth/logins";
+import type { HeldKey } from "../../src/zone/key/key-state";
 import { createDomainPlug, giveKey } from "../../src/zone/zone-plug";
 import { withFake } from "./support/fake-cloudflare";
 import type { Asked } from "./support/replies";
@@ -567,25 +567,47 @@ test("every row says what its object is for, and a row refused for a missing rig
   });
 });
 
-/** The key as a Worker holds it, by what Cloudflare says of it. */
+/** The key as a Worker holds it, by what Cloudflare says of it. One that works names its token by id, as a token that verifies itself does. */
 const HELD = {
-  works: { has: () => true, verify: async () => ({ ok: true, value: { since: null } }) },
+  works: { has: () => true, verify: async () => ({ ok: true, value: { id: "held-key" } }) },
   none: { has: () => false, verify: async () => ({ ok: false, refusal: "no_key" }) },
   refused: { has: () => true, verify: async () => ({ ok: false, refusal: "key_refused" }) },
   silent: { has: () => true, verify: async () => ({ ok: false, refusal: "unreachable" }) },
-} as const satisfies Readonly<Record<string, Pick<InstallKey, "has" | "verify">>>;
+} as const satisfies Readonly<Record<string, HeldKey>>;
 
 /** An older key of the install as Cloudflare lists it. */
 const OLD_KEY = { id: "old-key", name: "poplin kept key", status: "active" };
 
-/** Every permission group the account lists, as a token's policy names one. */
-const EVERY_GROUP = emptyAccount().groups.map(({ id }) => ({ id }));
+/** The install's account and its zone, as a key made for the install names them. */
+const OWN = { account: { [`com.cloudflare.api.account.${ACCOUNT}`]: "*" }, zone: { "com.cloudflare.api.account.zone.zone-1": "*" } };
 
-/** A key that works, as Cloudflare lists it with every group. */
-const WHOLE_KEY = { ...OLD_KEY, id: "whole-key", policies: [{ effect: "allow", permission_groups: EVERY_GROUP }] };
+/** Every permission group of one scope that the account lists, as a token's policy names them. */
+function groupsOf(scope: string): { id: unknown }[] {
+  return emptyAccount().groups.flatMap((group) => ((group.scopes as string[]).includes(scope) ? [{ id: group.id }] : []));
+}
 
-/** A key that works and was made before poplin could update itself: it lacks the right to write a Worker. */
-const EARLY_KEY = { ...OLD_KEY, id: "early-key", policies: [{ effect: "allow", permission_groups: EVERY_GROUP.filter(({ id }) => !String(id).startsWith("Workers Scripts Write")) }] };
+/** The policies of a key that carries every right: the account's groups allowed on `account`, the zone's on `zone`, each a resource as Cloudflare lists one. */
+function policiesOn(account: Record<string, unknown>, zone: Record<string, unknown>): { effect: string; permission_groups: { id: unknown }[]; resources: Record<string, unknown> }[] {
+  return [
+    { effect: "allow", permission_groups: groupsOf("com.cloudflare.api.account"), resources: account },
+    { effect: "allow", permission_groups: groupsOf("com.cloudflare.api.account.zone"), resources: zone },
+  ];
+}
+
+/** The key the Worker holds, as Cloudflare lists it with every right on the install's account and zone. */
+const WHOLE_KEY = { ...OLD_KEY, id: "held-key", policies: policiesOn(OWN.account, OWN.zone) };
+
+/** The key the Worker holds, made before poplin could update itself: it lacks the right to write a Worker. */
+const EARLY_KEY = { ...WHOLE_KEY, policies: WHOLE_KEY.policies.map((policy) => ({ ...policy, permission_groups: policy.permission_groups.filter(({ id }) => !String(id).startsWith("Workers Scripts Write")) })) };
+
+/** A whole key of the name that no Worker holds: one a failed write left at Cloudflare. */
+const SPARE_KEY = { ...WHOLE_KEY, id: "spare-key" };
+
+/** The Worker's bindings once a key was written onto it, as a person's token reads them. */
+const KEY_BOUND = [...emptyAccount().bindings, { name: "KEPT_KEY", type: "secret_text" }];
+
+/** The row of a key that works and lacks a right, in any way a key can lack one. */
+const LACKS = "Key | differs | poplin kept key: the key the install holds lacks a right the install uses now";
 
 /** The one call that writes the Worker's settings. */
 const SETTINGS_WRITE = `PATCH /accounts/${ACCOUNT}/workers/scripts/poplin/settings`;
@@ -620,7 +642,7 @@ const keyRuns: readonly KeyRun[] = [
     run: "check",
     held: "works",
     account: { tokens: [EARLY_KEY] },
-    row: "Key | differs | poplin kept key: the key the install holds lacks a right the install uses now",
+    row: LACKS,
     keys: 1,
     secrets: 0,
   },
@@ -634,6 +656,105 @@ const keyRuns: readonly KeyRun[] = [
     secrets: 0,
   },
   { name: "a repair on a Worker whose key works and was made before a right was added makes a new one and deletes the old", run: "repair", held: "works", account: { tokens: [EARLY_KEY] }, row: "Key | changed | poplin kept key", keys: 1, secrets: 1 },
+  {
+    name: "a check on a Worker whose key carries the zone's rights on another zone alone",
+    run: "check",
+    held: "works",
+    account: { tokens: [{ ...WHOLE_KEY, policies: policiesOn(OWN.account, { "com.cloudflare.api.account.zone.zone-2": "*" }) }] },
+    row: LACKS,
+    keys: 1,
+    secrets: 0,
+  },
+  {
+    name: "a check on a Worker whose key carries every right in policies that deny",
+    run: "check",
+    held: "works",
+    account: { tokens: [{ ...WHOLE_KEY, policies: WHOLE_KEY.policies.map((policy) => ({ ...policy, effect: "deny" })) }] },
+    row: LACKS,
+    keys: 1,
+    secrets: 0,
+  },
+  {
+    name: "a check on a Worker whose key carries the account's rights on one Worker of the account alone",
+    run: "check",
+    held: "works",
+    account: { tokens: [{ ...WHOLE_KEY, policies: policiesOn({ [`com.cloudflare.api.account.${ACCOUNT}`]: { "com.cloudflare.edge.worker.script.poplin": "*" } }, OWN.zone) }] },
+    row: LACKS,
+    keys: 1,
+    secrets: 0,
+  },
+  {
+    name: "a check on a Worker whose key carries every right on every account, and on every zone of the install's account",
+    run: "check",
+    held: "works",
+    account: { tokens: [{ ...WHOLE_KEY, policies: policiesOn({ "com.cloudflare.api.account.*": "*" }, { [`com.cloudflare.api.account.${ACCOUNT}`]: { "com.cloudflare.api.account.zone.*": "*" } }) }] },
+    row: "Key | present | poplin kept key",
+    keys: 1,
+    secrets: 0,
+  },
+  {
+    name: "a check on a Worker whose key carries the zone's rights on every zone",
+    run: "check",
+    held: "works",
+    account: { tokens: [{ ...WHOLE_KEY, policies: policiesOn(OWN.account, { "com.cloudflare.api.account.zone.*": "*" }) }] },
+    row: "Key | present | poplin kept key",
+    keys: 1,
+    secrets: 0,
+  },
+  {
+    name: "a repair on a Worker whose key lacks a right, beside a whole key a failed write left: the Worker holds the first, so a new one is made and both go",
+    run: "repair",
+    held: "works",
+    account: { tokens: [EARLY_KEY, SPARE_KEY] },
+    row: "Key | changed | poplin kept key",
+    keys: 1,
+    secrets: 1,
+  },
+  {
+    name: "a check on a Worker whose key is whole, beside a key of the name it does not hold",
+    run: "check",
+    held: "works",
+    account: { tokens: [WHOLE_KEY, SPARE_KEY] },
+    row: "Key | differs | poplin kept key: a key of its name that the install does not hold is at Cloudflare",
+    keys: 2,
+    secrets: 0,
+  },
+  {
+    name: "a repair on a Worker whose key is whole, beside a key of the name it does not hold: that one is deleted, and no key is made",
+    run: "repair",
+    held: "works",
+    account: { tokens: [WHOLE_KEY, SPARE_KEY] },
+    row: "Key | changed | poplin kept key: a key of its name that the install does not hold was deleted",
+    keys: 1,
+    secrets: 0,
+  },
+  {
+    name: "a repair on a Worker whose key is whole, beside an ended key of the name, which Cloudflare lists only when asked for the expired: that one is deleted too",
+    run: "repair",
+    held: "works",
+    account: { tokens: [WHOLE_KEY, { ...SPARE_KEY, status: "expired" }] },
+    row: "Key | changed | poplin kept key: a key of its name that the install does not hold was deleted",
+    keys: 1,
+    secrets: 0,
+  },
+  {
+    name: "a repair that cannot delete a key the install does not hold: the key it holds stands, and a step names what is left",
+    run: "repair",
+    held: "works",
+    account: { tokens: [WHOLE_KEY, SPARE_KEY], refuse: `DELETE ${TOKENS}/spare-key` },
+    row: "Key | present | poplin kept key",
+    step: "A key named poplin kept key that the install does not hold could not be deleted at Cloudflare. Press Repair again. The keys are listed there:",
+    keys: 2,
+    secrets: 0,
+  },
+  {
+    name: "a check with a person's token alone, where one of the two active keys lacks a right: which one the Worker holds cannot be known",
+    run: "check",
+    account: { bindings: KEY_BOUND, tokens: [EARLY_KEY, SPARE_KEY] },
+    row: LACKS,
+    keys: 2,
+    secrets: 0,
+  },
   { name: "a repair on a Worker whose key works and carries every right makes none", run: "repair", held: "works", account: { tokens: [WHOLE_KEY] }, row: "Key | present | poplin kept key", keys: 1, secrets: 0 },
   {
     name: "a repair with a token that may not make a token: the row names the right, and everything else is made",

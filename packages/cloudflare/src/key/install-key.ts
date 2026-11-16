@@ -3,6 +3,7 @@
 import type { InstallKey } from "@poplin/app/src/console/key/records";
 import { BaseTokens } from "cloudflare/resources/accounts/tokens/tokens";
 import { callCloudflare } from "../zone/client";
+import type { HeldKey } from "../zone/key/key-state";
 import { type KeptKey, keyed } from "./kept-key";
 
 /** The right `verify` is asked under: Cloudflare asks none of a token that verifies itself. */
@@ -14,9 +15,10 @@ const NO_RIGHT = "";
  * @param key - the kept key, or `undefined` on an install that holds none
  * @param accountId - the account that owns the key
  * @param give - makes a new key with a token a person pasted and writes it onto the Worker
- * @returns the install's key. A key Cloudflare knows as disabled or expired, and one refused for a right, verifies as `key_refused`. A new key is read by the Worker's next instance, so this one goes on saying what it held
+ * @returns the install's key, whose `verify` also answers the id of its token. A key Cloudflare knows as disabled or expired, and one refused for a right, verifies as `key_refused`.
+ * A new key is read by the Worker's next instance, so this one goes on saying what it held
  */
-export function createInstallKey(key: KeptKey | undefined, accountId: string, give: InstallKey["give"]): InstallKey {
+export function createInstallKey(key: KeptKey | undefined, accountId: string, give: InstallKey["give"]): InstallKey & HeldKey {
   return {
     give,
 
@@ -30,7 +32,7 @@ export function createInstallKey(key: KeptKey | undefined, accountId: string, gi
 
       const since = Date.parse(verified.value.not_before ?? "");
 
-      return { ok: true, value: { since: Number.isNaN(since) ? null : since } };
+      return { ok: true, value: { since: Number.isNaN(since) ? null : since, id: verified.value.id } };
     },
   };
 }
