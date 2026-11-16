@@ -6,6 +6,7 @@
 // A day's number is of a UTC day: its line says "today" where that is the reader's date too, and names the day where it is not.
 
 import { showBytes } from "@poplin/core/src/records/settings";
+import { useMediaQuery } from "@base-ui/react/unstable-use-media-query";
 import { Link } from "@tanstack/react-router";
 import { cn } from "cn";
 import { ArrowUpRightIcon, ExternalLinkIcon, TriangleAlertIcon } from "lucide-react";
@@ -14,6 +15,7 @@ import { type ReactNode, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { httpsLink } from "@/lib/https-link";
+import { IN_BROWSER, ROOMY } from "@/lib/media";
 import { showCount } from "@/lib/sites";
 import { momentIn, useChosenTimeZone, useTimeZoneChoice } from "@/lib/timezone";
 import { settingAddress } from "@/settings/setting-address";
@@ -92,6 +94,15 @@ const NEW_KEY = "Open Domain and press Repair: it makes a new key.";
 /** The width of the last column, wide enough for a row's two icons, in pixels. */
 const ACTIONS_WIDTH = 88;
 
+/** The width of a share's bar: in the table, and in the list of a narrow screen, where a long limit beside it makes it shorter. */
+const BARS = { table: "w-40 shrink-0", list: "w-20 min-w-8 shrink" } as const;
+
+/** The widest the column of names is drawn for the names' sake, in pixels: room for the longest name with a day in it. */
+const WIDEST_NAME = 400;
+
+/** The least room a line's name keeps where the columns need more than the table has: the end of a longer name is then cut, with dots. */
+const LEAST_NAME = "12rem";
+
 /** The order of the lines: the server's, which no heading changes. */
 const AS_GIVEN = { key: "", descending: false } as const;
 
@@ -159,8 +170,8 @@ function GuideWords({ line, host }: Pick<Hosted, "line" | "host">): ReactNode {
   return hint === undefined ? null : <span className="text-[13px] text-muted-foreground">{hint}</span>;
 }
 
-/** How much of its limit a line has used: a thin bar, the percent, and words from near the limit on. Nothing for a line without a limit or without a number, and for a guide the sign alone. */
-function ShareCell({ line, name, host }: Hosted): ReactNode {
+/** How much of its limit a line has used: a thin bar where there is room for one, the percent, and words from near the limit on. Nothing for a line without a limit or without a number, and for a guide the sign alone. */
+function ShareCell({ line, name, host, bar }: Hosted & { readonly bar: keyof typeof BARS | null }): ReactNode {
   if (GUIDES.has(line.what)) return <GuideSign line={line} name={name} host={host} />;
 
   const share = line.used === null ? undefined : shareOf(line.used, line.limit);
@@ -170,11 +181,7 @@ function ShareCell({ line, name, host }: Hosted): ReactNode {
 
   return (
     <span className="flex items-center gap-3">
-      <Progress
-        value={Math.min(share.percent, 100)}
-        aria-label={`${name}: share of the limit`}
-        className={cn("w-20 shrink-0 xl:w-40", loud && "**:data-[slot=progress-indicator]:bg-warn")}
-      />
+      {bar === null ? null : <Progress value={Math.min(share.percent, 100)} aria-label={`${name}: share of the limit`} className={cn(BARS[bar], loud && "**:data-[slot=progress-indicator]:bg-warn")} />}
       <span className="w-10 shrink-0 text-right text-muted-foreground tabular-nums">{share.percent}%</span>
       {share.words === null ? null : <span className="truncate font-medium text-warn">{share.words}</span>}
     </span>
@@ -237,9 +244,20 @@ function HostLink({ line, name, host }: Hosted): ReactNode {
 }
 
 /** The columns of the Usage table. */
-function usageColumns(names: Names, host: string): readonly ColumnSpec<Line>[] {
+function usageColumns(names: Names, host: string, bar: boolean): readonly ColumnSpec<Line>[] {
   return [
-    { id: "what", header: "What", fixed: true, cell: (line) => names(line.what) },
+    {
+      id: "what",
+      header: "What",
+      fixed: true,
+      widest: WIDEST_NAME,
+      // A name cut short draws its dots itself, so the cell around it never overflows and gives no hint of its own: the name carries its whole text as its hint.
+      cell: (line) => (
+        <span data-gives title={names(line.what)} className="block truncate" style={{ minWidth: LEAST_NAME }}>
+          {names(line.what)}
+        </span>
+      ),
+    },
     { id: "used", header: "Used", numeric: true, cell: (line) => <span className="tabular-nums">{used(line)}</span> },
     {
       id: "limit",
@@ -247,27 +265,30 @@ function usageColumns(names: Names, host: string): readonly ColumnSpec<Line>[] {
       numeric: true,
       cell: (line) => <span className="text-muted-foreground tabular-nums">{line.limit === null ? "No limit" : amount(line, line.limit)}</span>,
     },
-    { id: "share", header: "Share of the limit", grows: true, cell: (line) => <ShareCell line={line} name={names(line.what)} host={host} /> },
+    { id: "share", header: "Share of the limit", grows: true, cell: (line) => <ShareCell line={line} name={names(line.what)} host={host} bar={bar ? "table" : null} /> },
   ];
 }
 
-/** The lines on a phone: the name over the number and its limit, the share under them, and the way to the host's page last. */
-function PhoneList({ usage, names }: { readonly usage: Usage; readonly names: Names }): ReactNode {
+/** The lines where the table has no room: the name beside the number, under them the share beside the limit, and the way to the host's page last. Every number ends at one edge, and every limit ends under it. */
+function NarrowList({ usage, names }: { readonly usage: Usage; readonly names: Names }): ReactNode {
   const named = usage.lines.map((line) => ({ line, name: names(line.what) }));
 
   return (
-    <ul aria-label="Usage" className="border-t md:hidden">
+    <ul aria-label="Usage" className="border-t lg:hidden">
       {named.map(({ line, name }) => (
-        <li key={line.what} className="flex min-h-16 flex-col justify-center gap-1 border-b px-4 py-2">
+        <li key={line.what} className="flex min-h-16 flex-col justify-center gap-1 border-b px-4 py-2 md:px-6">
           <span className="flex items-center gap-2">
             <span className="min-w-0 flex-1">{name}</span>
             <span className="shrink-0 tabular-nums">{used(line)}</span>
-            <span className="shrink-0 text-xs text-muted-foreground tabular-nums">{line.limit === null ? "No limit" : `of ${amount(line, line.limit)}`}</span>
             <span className="flex w-10 shrink-0 justify-end">
               <LimitLink line={line} name={name} />
             </span>
           </span>
-          {GUIDES.has(line.what) ? <GuideWords line={line} host={usage.host} /> : <ShareCell line={line} name={name} host={usage.host} />}
+          {/* The limit is read right after its number, and drawn at the end of the row under it. */}
+          <span className="flex flex-row-reverse items-start gap-2 pr-12">
+            <span className="shrink-0 text-xs leading-5 text-muted-foreground tabular-nums">{line.limit === null ? "No limit" : `of ${amount(line, line.limit)}`}</span>
+            <span className="flex min-w-0 flex-1 flex-col">{GUIDES.has(line.what) ? <GuideWords line={line} host={usage.host} /> : <ShareCell line={line} name={name} host={usage.host} bar="list" />}</span>
+          </span>
           <HostLink line={line} name={name} host={usage.host} />
         </li>
       ))}
@@ -313,15 +334,17 @@ export function UsageTable({ usage, read }: { readonly usage: Usage; readonly re
   const [choice] = useTimeZoneChoice();
   const { day, month } = spansOf(usage.day, read, choice);
   const names = useMemo(() => namesOf({ day, month }), [day, month]);
-  const columns = useMemo(() => usageColumns(names, usage.host), [names, usage.host]);
+  // A screen too narrow for the bars draws none in the table: the columns are then other ones, which the table measures anew.
+  const roomy = useMediaQuery(ROOMY, IN_BROWSER);
+  const columns = useMemo(() => usageColumns(names, usage.host, roomy), [names, usage.host, roomy]);
 
   return (
     <>
       <OfficialLine usage={usage} />
-      <div className="shrink-0 max-md:hidden">
+      <div className="shrink-0 max-lg:hidden">
         <DataTable label="Usage" columns={columns} rows={usage.lines} rowId={(line) => line.what} sort={AS_GIVEN} actions={(line) => <RowLinks line={line} name={names(line.what)} host={usage.host} />} actionsWidth={ACTIONS_WIDTH} />
       </div>
-      <PhoneList usage={usage} names={names} />
+      <NarrowList usage={usage} names={names} />
     </>
   );
 }
