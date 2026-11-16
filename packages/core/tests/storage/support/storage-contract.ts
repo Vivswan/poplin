@@ -5,6 +5,7 @@ import { describe, expect, test } from "bun:test";
 import {
   type ByteRange,
   deletePrefix,
+  HashMismatch,
   type ListOptions,
   type ListPage,
   MAX_LIST_LIMIT,
@@ -17,6 +18,9 @@ import {
 
 /** The options of a write whose content type the case does not look at. */
 const TEXT = { contentType: "text/plain" } as const;
+
+/** The SHA-256 of `<h1>hi</h1>` in base64, as `openssl dgst -sha256 -binary | base64` gives it. */
+const HI_SHA256 = "5/u2+79M4pSRPrYrU/8Dp1RmSc/cDYJNnjorRUFQL38=";
 
 /** Ten bytes, each naming its own offset, so a ranged read shows which bytes came back. */
 const DIGITS = "0123456789";
@@ -201,6 +205,50 @@ function readingAndWriting(label: string, makeStore: StoreFactory): void {
       const head = await store.head(key);
 
       expect(head.kind === "found" ? head.info.contentType : undefined).toBe("text/html");
+    });
+
+    // Drift: a publish skips a file only on the store's own hash of it; a store that kept no hash, or one it never checked, would let a file of other bytes stand for the declared one.
+    test("a write with the hash of its bytes keeps the hash for head and read, and a write without one keeps none", async () => {
+      const store = await makeStore();
+      const [hashed, bare] = [objectKey("blog/v1/index.html"), objectKey("blog/v1/app.js")];
+      const written = await store.write(hashed, { stream: streamOf("<h1>hi</h1>"), size: 11 }, { ...TEXT, sha256: HI_SHA256 });
+      await store.write(bare, bytesOf("<h1>hi</h1>"), TEXT);
+      const [head, read, other] = [await store.head(hashed), await store.read(hashed), await store.head(bare)];
+      if (read.kind === "found") await read.body.cancel();
+
+      expect([written.sha256, head.kind === "found" && head.info.sha256, read.kind === "found" && read.info.sha256]).toEqual([HI_SHA256, HI_SHA256, HI_SHA256]);
+      expect(other.kind === "found" && "sha256" in other.info && other.info.sha256 !== undefined).toBe(false);
+    });
+
+    // Drift: the size alone told a damaged file from a whole one; bytes of the right length and another hash must store nothing and leave what the key held.
+    test.each([
+      ["a buffer", (): Uint8Array => bytesOf("<h1>ho</h1>")],
+      ["a sized stream", (): { stream: ReadableStream<Uint8Array>; size: number } => ({ stream: streamOf("<h1>ho</h1>"), size: 11 })],
+    ] as const)("a write from %s whose bytes have another hash than the one given rejects as a hash mismatch, and the key keeps what it held", async (_form, body) => {
+      const store = await makeStore();
+      const [fresh, held] = [objectKey("blog/v1/index.html"), objectKey("blog/v1/held.html")];
+      await store.write(held, bytesOf("<h1>hi</h1>"), { ...TEXT, sha256: HI_SHA256 });
+
+      await expect(store.write(fresh, body(), { ...TEXT, sha256: HI_SHA256 })).rejects.toBeInstanceOf(HashMismatch);
+      await expect(store.write(held, body(), { ...TEXT, sha256: HI_SHA256 })).rejects.toBeInstanceOf(HashMismatch);
+      expect<unknown>([await store.head(fresh), await readText(store, held)]).toEqual([
+        { kind: "missing" },
+        expect.objectContaining({ kind: "found", text: "<h1>hi</h1>", info: expect.objectContaining({ sha256: HI_SHA256 }) }),
+      ]);
+    });
+
+    // Drift: a hash is compared as text; one spelled another way (hex, no pad, stray bits in its last digit) would never equal the store's own.
+    test.each([
+      ["hex", "e7fbb6fbbf4ce294913eb62b53ff03a7546649cfdc0d824d9e3a2b4541502f7f"],
+      ["base64 without its pad", HI_SHA256.slice(0, -1)],
+      ["base64 whose last digit carries bits past the hash", `${HI_SHA256.slice(0, -2)}9=`],
+      ["nothing", ""],
+    ])("a write whose hash is %s is refused, and stores nothing", async (_what, sha256) => {
+      const store = await makeStore();
+      const key = objectKey("blog/v1/index.html");
+
+      await expect(store.write(key, bytesOf("<h1>hi</h1>"), { ...TEXT, sha256 })).rejects.toBeInstanceOf(TypeError);
+      expect<unknown>(await store.head(key)).toEqual({ kind: "missing" });
     });
   });
 }

@@ -1,7 +1,10 @@
 // An object store held in memory: the test double every core test runs against, behaving as the store contract says.
 
+import { compareUint8Arrays } from "uint8array-extras";
+
 import {
   type ByteSpan,
+  checkBytes,
   checkListOptions,
   checkWriteOptions,
   type Etag,
@@ -27,18 +30,9 @@ interface StoredObject {
   readonly bytes: Uint8Array;
 }
 
-// A listing ascends by the UTF-8 bytes of its keys. The loop stands in for Node's `Buffer.compare`: core runs in a Worker, which has only Web-standard APIs.
+/** A listing ascends by the UTF-8 bytes of its keys, which is not the order of a string comparison. */
 function compareNames(left: string, right: string): number {
-  const leftBytes = UTF8.encode(left);
-  const rightBytes = UTF8.encode(right);
-  const shared = Math.min(leftBytes.length, rightBytes.length);
-
-  for (let at = 0; at < shared; at += 1) {
-    const difference = (leftBytes[at] ?? 0) - (rightBytes[at] ?? 0);
-    if (difference !== 0) return difference;
-  }
-
-  return leftBytes.length - rightBytes.length;
+  return compareUint8Arrays(UTF8.encode(left), UTF8.encode(right));
 }
 
 async function bufferBody(body: WriteBody): Promise<Uint8Array> {
@@ -113,15 +107,17 @@ export class MemoryStore implements ObjectStore {
    * Store an object, replacing whatever the key held.
    *
    * @throws {Error} a stream body ended at another length than its `size`; nothing was stored
+   * @throws {HashMismatch} the bytes are not the ones `options.sha256` names; nothing was stored
    * @throws {TypeError} `checkWriteOptions` refused the options; nothing was stored
    */
   async write(key: ObjectKey, body: WriteBody, options: WriteOptions): Promise<ObjectInfo> {
-    const { contentType } = checkWriteOptions(options);
+    const { contentType, sha256 } = checkWriteOptions(options);
     const bytes = await bufferBody(body);
+    await checkBytes(bytes, sha256);
     this.#writes += 1;
 
     // Frozen, so the one object can be handed to every reader.
-    const info: ObjectInfo = Object.freeze({ key, size: bytes.length, etag: `memory-${this.#writes}` as Etag, contentType });
+    const info: ObjectInfo = Object.freeze({ key, size: bytes.length, etag: `memory-${this.#writes}` as Etag, contentType, ...(sha256 === undefined ? {} : { sha256 }) });
     this.#objects.set(key, { info, bytes });
 
     return info;
