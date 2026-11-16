@@ -307,4 +307,30 @@ describe("the pages of the log", () => {
 
     expect([kept, window.location.search, asked.at(-1), window.localStorage.getItem("poplin.activity.page-size")]).toEqual(["?after=40&size=100", "", "?size=200", '"200"']);
   });
+
+  // Drift: which entries are shown stood only after the last row, out of sight on a full page. The words over the list are the foot's own, and the size of a page is chosen at the foot alone.
+  test("which entries the page shows is said over the list in the foot's words, and the size of a page is chosen at the foot alone", async () => {
+    await draw("/activity");
+    const words = await within(document.body).findAllByText("1 to 1 of 1,240");
+    const places = words.map((said) => (said.closest('nav[aria-label="Pages"]') === null ? "over the list" : "at the foot")).sort();
+    const pickers = within(document.body).getAllByRole("combobox", { name: "Entries per page" });
+
+    // The list is drawn twice, as a table and as a phone's list, each with its foot.
+    expect([places, pickers.map((picker) => picker.closest('nav[aria-label="Pages"]') !== null)]).toEqual([
+      ["at the foot", "at the foot", "over the list"],
+      [true, true],
+    ]);
+  });
+
+  // Drift: a page read again that is refused keeps the page before it in memory, while the refusal stands where its rows were. The words over the list would still count rows nobody sees.
+  test("a read that is refused takes the words over the list away with the rows", async () => {
+    const cache = cacheOf();
+    await draw("/activity", cache);
+    const before = (await within(document.body).findAllByText("1 to 1 of 1,240")).length;
+    answered.page = REFUSED;
+    await act(async () => void cache.invalidateQueries());
+    await within(document.body).findAllByText(REFUSED.sentence);
+
+    expect([before, within(document.body).queryAllByText("1 to 1 of 1,240").length]).toEqual([3, 0]);
+  });
 });

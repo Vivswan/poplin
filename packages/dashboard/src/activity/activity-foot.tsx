@@ -1,6 +1,8 @@
 // The foot of the Activity list: the ways to the pages around the one shown, how many entries a page holds, and which entries the page shows of how many. Under them, where a narrowed page stopped looking, the way to look further.
+// The words of which entries are shown stand a second time over the list, where they are in sight before the last row is.
 
 import { AUDIT_WINDOW } from "@poplin/core/src/database/database";
+import { cn } from "cn";
 import type { ReactNode } from "react";
 
 import type { Page, Total } from "@/activity/activity-queries";
@@ -40,6 +42,15 @@ interface ActivityFootProps {
 
   /** Shows every entry of the log: offered as the second way where a page stopped looking with none found. */
   readonly onShowAll?: () => void;
+}
+
+/** What the words of the entries shown are drawn from: the address, the total, and how many entries a page holds, as the foot takes them, and the page. */
+interface ShownEntriesProps extends Pick<ActivityFootProps, "query" | "total" | "size" | "busy"> {
+  /** The page shown; `undefined` until one is read. */
+  readonly page: Page | undefined;
+
+  /** Classes of the place the words stand at. */
+  readonly className?: string;
 }
 
 /** What the three ways are drawn from: the page, whether it is being replaced, which way a page that stopped looking goes on, and where each press leads. */
@@ -180,6 +191,28 @@ function NothingSoFar({ words, busy, onSearch, onShowAll }: NothingSoFarProps): 
   );
 }
 
+/**
+ * Say which entries the page shows of how many, in quiet words: "1 to 50 of 244".
+ *
+ * Nothing until a page is read, on a page with no entry, on one whose place nobody counted, and while the page is being replaced, since the address is ahead of the entries then.
+ */
+export function ShownEntries({ query, page, total, size, busy = false, className }: ShownEntriesProps): ReactNode {
+  if (page === undefined || page.entries.length === 0 || busy) return null;
+
+  const from = firstEntryOf(query, page, Number(size));
+  if (from === undefined) return null;
+
+  const to = from + page.entries.length - 1;
+  const of = totalWords(page, to, total);
+
+  return (
+    <span className={cn("text-muted-foreground tabular-nums", className)}>
+      {showCount(from)} to {showCount(to)}
+      {of === undefined ? null : ` of ${of}`}
+    </span>
+  );
+}
+
 /** Draw the three ways to the pages around the one shown. One that leads nowhere is dimmed, and so is the one a page that stopped looking leaves to Search further. */
 function Ways({ page, busy, stopped, onFirst, onBack, onOn }: WaysProps): ReactNode {
   return (
@@ -220,7 +253,6 @@ export function ActivityFoot({ query, page, total, size, onSize, onMove, busy = 
 
   const searched = stopped === undefined ? null : <SearchedSoFar searched={words} busy={busy} onSearch={further} />;
 
-  const of = to === undefined ? undefined : totalWords(page, to, total);
   const paged = page.previous !== null || page.next !== null;
 
   return (
@@ -243,12 +275,7 @@ export function ActivityFoot({ query, page, total, size, onSize, onMove, busy = 
             </SelectContent>
           </Select>
         ) : null}
-        {from === undefined || to === undefined || busy ? null : (
-          <span className="ml-1 text-muted-foreground tabular-nums">
-            {showCount(from)} to {showCount(to)}
-            {of === undefined ? null : ` of ${of}`}
-          </span>
-        )}
+        <ShownEntries query={query} page={page} total={total} size={size} busy={busy} className="ml-1" />
       </nav>
       {searched}
     </>
