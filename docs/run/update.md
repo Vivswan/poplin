@@ -56,7 +56,24 @@ A release is named by its version and taken by its content. The build runs no fi
 
 Every line that deploys nothing holds `Nothing was deployed.` and says what to do. A build that deploys nothing leaves the running install as it was.
 
-The website publishes a digest only for an archive that GitHub attests was packed by the project's release workflow, in a run of its main branch. It is built after a release is out, so a new release is named there, and in the notice of [A newer version](#a-newer-version), within a day of its release.
+### What a release publishes
+
+| On the release's page            | Holds                                                                         | Its SHA-256 digest is in      |
+| -------------------------------- | ----------------------------------------------------------------------------- | ----------------------------- |
+| `poplin-<version>.tar.gz`        | the source files, which a build fetches                                       | `releases.json`, as `source`  |
+| `poplin-<version>-worker.json`   | a manifest: the version, the schema, and the digest and size of each built file | `releases.json`, as `bundle`  |
+| `poplin-<version>-worker.js`     | the built Worker: the one file a deploy of that release uploads               | the manifest                  |
+| `poplin-<version>-worker.js.map` | the built Worker's source map                                                 | the manifest                  |
+
+```json
+{ "0.3.1": { "source": "<64 hex>", "bundle": "<64 hex>", "schema": 1 } }
+```
+
+- **Attested.** GitHub attests each of the four files as made by the project's release workflow, in a run of its main branch. The website names a release only when all four pass, and the built files are the ones the manifest states.
+- **Built twice.** The release workflow builds the Worker two times from the release's commit. A release whose two builds differ by one byte is not made.
+- **Schema.** `schema` counts the steps the release's database has been through. A release whose number differs from the running install's changes the database. `latest.json` carries the number too.
+
+The website is built after a release is out, so a new release is named there, and in the notice of [A newer version](#a-newer-version), within a day of its release.
 
 A deploy from Cloudflare's build or from a terminal uploads the Worker's source map with it, so an error in Cloudflare's log of the Worker names a source file and its line. No address serves the map.
 

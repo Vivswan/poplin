@@ -8,6 +8,7 @@ The checks of a deployed install: a stranger's requests over HTTPS, and a token 
 | check an install of your own                      | `bun run live`                                                            | `POPLIN_LIVE_DOMAIN`, and `POPLIN_LIVE_TOKEN` for the checks that publish |
 | check the test install                            | the `Live Checks` workflow: after a push to main that reaches it, or by hand | the `with-domain-ci-tests` environment                                    |
 | check that a build takes a release by its digest  | a release's own run of main, then the next one: `poplin-<version>.tar.gz` on the release's page, its digest under that version in the website's `releases.json`, and `poplin: deploying <version> (was asked for latest)` in an install's build | a published release |
+| check that a release publishes its built Worker   | the same two runs: both `build the Worker` jobs green and the step that compares them; `poplin-<version>-worker.json`, `-worker.js`, and `-worker.js.map` on the release's page; `gh attestation verify` passes for each; `bundle` and `schema` beside `source` in `releases.json`, and `schema` in `latest.json` | a published release |
 
 ```text
 Live Checks workflow
