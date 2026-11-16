@@ -12,9 +12,6 @@ import { AskDialog } from "@/shared/ask-dialog";
 import { Confirm, type Question } from "@/shared/confirm";
 import { type ColumnSpec, DataTable } from "@/table/data-table";
 
-/** The longest email the field takes, in characters. */
-const LONGEST_EMAIL = 254;
-
 /** The order of the list: as the settings hold it, which no heading changes. */
 const AS_LISTED = { key: "", descending: false } as const;
 
@@ -147,7 +144,6 @@ export function PeopleTab({ people, failure, actions, onRetry }: PeopleTabProps)
         label="Email"
         hint="Such as name@example.com."
         initial=""
-        maxLength={LONGEST_EMAIL}
         returnTo={adder}
         submit="Add a user"
         onSubmit={actions.addPerson}

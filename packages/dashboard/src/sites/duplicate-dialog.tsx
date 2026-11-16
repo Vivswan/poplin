@@ -2,7 +2,7 @@
 
 import { type ReactNode, type RefObject, useRef } from "react";
 
-import { LONGEST_NAME, type Site, shownName } from "@/lib/sites";
+import { type Site, shownName } from "@/lib/sites";
 import { AskDialog } from "@/shared/ask-dialog";
 import { useDuplicate } from "@/sites/use-duplicate";
 
@@ -56,7 +56,6 @@ export function DuplicateDialog({ site, onClose, returnTo }: DuplicateDialogProp
       label="Name"
       hint="The copy's link uses this name."
       initial={shown?.name ?? ""}
-      maxLength={LONGEST_NAME}
       takesInitial
       returnTo={returnTo}
       submit="Duplicate"
