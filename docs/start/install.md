@@ -369,6 +369,8 @@ A run that asks nothing logs no computer in unless `--log-in` says so. It ends b
 
 With `--json`, the value of a run, and of a run that stopped, names what to run next in `next`: a `step`, and its `command` without the answers your line gave. Where `next` names the same command again, the `command` keeps `--dry-run` of a dry run that stopped or is not ready, and a removal's keeps `--keep-data`.
 
+A repair that found kept data and no install names `npx poplin install cloudflare --adopt` in `command`: the install that takes the data up, with what it holds.
+
 | `next.step` | Run next                                                                    |
 | ----------- | --------------------------------------------------------------------------- |
 | `install`   | `npx poplin install cloudflare`, with the same answers                      |
