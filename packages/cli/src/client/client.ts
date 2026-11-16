@@ -1,6 +1,7 @@
 // The client of the HTTP API: its requests are typed from the routes the app declares, and each is answered with a checked value or a failure in words. Nothing it does throws.
 
 import { hc } from "hono/client";
+import pRetry from "p-retry";
 import * as v from "valibot";
 
 import type { Api } from "../../../app/src/api/api";
@@ -38,6 +39,12 @@ const OK = 200;
 
 /** The first status past the 200s. */
 const REDIRECT = 300;
+
+/** The codes of a connection the far end cut before any answer. Bun names the first on the error its `fetch` throws, and Node either one on that error's `cause`. */
+const CUT_CODES: ReadonlySet<unknown> = new Set(["ECONNRESET", "UND_ERR_SOCKET"]);
+
+/** The line told when a request is sent once more. */
+const SENT_AGAIN = "the connection to the install was cut before any answer: sending the request again";
 
 /** The platform's `fetch`, or a stand-in for it. */
 export type Fetch = (input: string, init: RequestInit) => Promise<Response>;
@@ -84,6 +91,9 @@ interface ClientOptions {
   /** How long one call may take, in milliseconds, in place of the two defaults. */
   readonly timeoutMs?: number;
 
+  /** Told the one line that says a request is sent once more, each time one is. */
+  readonly told?: (line: string) => void;
+
   /** What aborts when the person stops the command: every call then fails as `stopped`, the ones on their way included. A client without it takes no stop. */
   readonly stopped?: AbortSignal;
 }
@@ -108,10 +118,13 @@ type Answering<Done> = Promise<Raw & { json(): Promise<Done | ApiError> }>;
  * `download` asks for one stored file of one version of a site. Its bytes are not read here: the caller reads the stream to its end or cancels it, and a read that breaks off throws there.
  */
 export interface Client {
-  readonly call: <Form extends v.GenericSchema>(form: Form, ask: (api: ApiCalls) => Answering<v.InferOutput<Form>>) => Promise<Called<v.InferOutput<Form>>>;
+  readonly call: <Form extends v.GenericSchema>(form: Form, ask: (api: ApiCalls) => Answering<v.InferOutput<Form>>, again?: "repeatable") => Promise<Called<v.InferOutput<Form>>>;
   readonly send: (ticket: Ticket, body: ReadableStream<Uint8Array> | Uint8Array) => Promise<Called<undefined>>;
   readonly download: (file: { readonly site: string; readonly version: number; readonly path: string }) => Promise<Called<Download>>;
 }
+
+/** A request whose connection was cut, as the error its second sending is decided on. It holds nothing of what the `fetch` threw. */
+class Cut extends Error {}
 
 function failed(failure: Failure): { readonly ok: false; readonly failure: Failure } {
   return { ok: false, failure };
@@ -193,6 +206,12 @@ async function readSent(response: Raw): Promise<Called<undefined>> {
   return read.ok ? failed({ kind: "unexpected", status }) : read;
 }
 
+/** The code an error names, or the one its cause does. Nothing else of it is read: its text may quote the request. */
+function codeOf(error: unknown): unknown {
+  if (typeof error !== "object" || error === null) return undefined;
+
+  return "code" in error ? error.code : codeOf("cause" in error ? error.cause : undefined);
+}
 
 /** The media type a header holds percent-encoded; `undefined` for a header that is absent or is no such text. */
 function storedType(header: string | null): string | undefined {
@@ -230,16 +249,48 @@ async function readDownload(response: Raw): Promise<Called<Download>> {
 /**
  * Build the client of one install.
  *
- * A call waits 30 seconds for its answer, and the upload of one file 10 minutes. A download has 10 minutes from its request to its last byte. No call is sent twice, and no redirect is followed, so the token goes to the install's origin alone.
+ * A call waits 30 seconds for its answer, and the upload of one file 10 minutes. A download has 10 minutes from its request to its last byte. No redirect is followed, so the token goes to the install's origin alone.
+ * A GET, or a call marked `repeatable`, whose connection was cut before any answer is sent once more, and that is told. No other request is sent twice.
  */
 export function createClient(options: ClientOptions): Client {
   const headers = { Accept: "application/json", ...(options.token === undefined ? {} : { Authorization: `Bearer ${options.token}` }) };
 
-  const ask = async <Done>(patienceMs: number, send: (api: ApiCalls, signal: AbortSignal) => Promise<Raw>, read: (response: Raw) => Promise<Called<Done>>): Promise<Called<Done>> => {
+  const twice = (signal: AbortSignal, send: (fresh: RequestInit) => Promise<Response>): Promise<Response> => {
+    const attempt = async (sending: number): Promise<Response> => {
+      try {
+        // Bun sends a request that asks for no kept connection on a new one; Node drops the cut one by itself.
+        return await send(sending === 1 ? {} : { keepalive: false });
+      } catch (error) {
+        throw CUT_CODES.has(codeOf(error)) ? new Cut() : error;
+      }
+    };
+    const again = ({ error }: { readonly error: Error }): boolean => {
+      if (!(error instanceof Cut)) return false;
+
+      options.told?.(SENT_AGAIN);
+
+      return true;
+    };
+
+    return pRetry(attempt, { retries: 1, minTimeout: 0, signal, shouldRetry: again });
+  };
+
+  const ask = async <Done>(
+    patienceMs: number,
+    send: (api: ApiCalls, signal: AbortSignal) => Promise<Raw>,
+    read: (response: Raw) => Promise<Called<Done>>,
+    again?: "repeatable",
+  ): Promise<Called<Done>> => {
     const timeoutMs = options.timeoutMs ?? patienceMs;
     const tooLong = AbortSignal.timeout(timeoutMs);
     const signal = options.stopped === undefined ? tooLong : AbortSignal.any([tooLong, options.stopped]);
-    const routes = hc<Api>(options.server, { headers, fetch: (input: RequestInfo | URL, init?: RequestInit) => options.fetch(String(input), { ...init, redirect: "manual", signal }) });
+    const once = (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => options.fetch(String(input), { ...init, redirect: "manual", signal });
+    const safely = (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
+      if (again === undefined && init?.method !== "GET") return once(input, init);
+
+      return twice(signal, (fresh) => once(input, { ...init, ...fresh }));
+    };
+    const routes = hc<Api>(options.server, { headers, fetch: safely });
 
     try {
       return await read(await send(routes.api, signal));
@@ -253,7 +304,7 @@ export function createClient(options: ClientOptions): Client {
     }
   };
 
-  const call: Client["call"] = (form, send) => ask(CALL_TIMEOUT_MS, send, (response) => readAnswer(form, response));
+  const call: Client["call"] = (form, send, again) => ask(CALL_TIMEOUT_MS, send, (response) => readAnswer(form, response), again);
 
   const send: Client["send"] = (ticket, body) => {
     // A ticket names a whole address, or a path of the install, which is read against the address the install is reached at.
