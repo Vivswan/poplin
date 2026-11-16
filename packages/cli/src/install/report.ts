@@ -248,8 +248,8 @@ export function dryRunLines(installed: Pick<Extract<Installed, { readonly ok: tr
  * @param provider - the provider, whose name says where the token can be deleted
  * @param answers - whether the install answered at its address once it was made; `null` for a run that did not wait
  * @param ending - what a run that left nothing undone is called, what to run after one that did, and what runs this command again
- * @returns the last lines: what the run is called and the dashboard's address, or what is not done and what only a person can do. A run that never learned its address names none.
- *   One whose address gave no answer is told what to run once it does, and what to run if it does not
+ * @returns the last lines: what the run is called and the dashboard's address, what is not done and what only a person can do, or that nothing was changed by a run with no row.
+ *   A run that never learned its address names none. One whose address gave no answer is told what to run once it does, and what to run if it does not
  */
 export function runLines(installed: Pick<Extract<Installed, { readonly ok: true }>, "rows" | "steps" | "blocked" | "address" | "ready">, provider: Provider, answers: boolean | null, ending: Ending): Line[] {
   const { address } = installed;
@@ -266,9 +266,11 @@ export function runLines(installed: Pick<Extract<Installed, { readonly ok: true 
 
   if (installed.ready) return [...answer, { tone: "done", text: ending.done }, ...dashboard, stored];
 
+  const next = nextWords(ending.next, ending.again);
+  if (installed.rows.length === 0) return [...answer, ...blockedLines(installed.blocked), { tone: "error", text: `${UNCHANGED}. Run ${next} once what the lines above say is no longer so.` }, stored];
+
   const undone = installed.rows.filter((row) => UNDONE.has(row.state)).length;
   const steps = installed.steps.flatMap((step) => [`${INDENT}${step.text}`, `${INDENT}${step.address}`]);
-  const next = nextWords(ending.next, ending.again);
   const byHand = steps.length === 0 ? [] : [`Do this in your browser, then run ${next}:`, ...steps];
 
   return [...answer, ...blockedLines(installed.blocked), ...byHand.map(plain), { tone: "error", text: `${undone} not done. Run ${next}: it goes on from what stands.` }, stored];
