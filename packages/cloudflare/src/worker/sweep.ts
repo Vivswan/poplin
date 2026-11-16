@@ -5,6 +5,8 @@
 //   the day's first run   2: that, and the answer written                                        1: the website asked   3
 //   an update started     6: the address twice, the try, the answer, and the audit entry,        1: the build started   7
 //                            or the try taken back and the problem noted
+//   an update taken       5: the try, the audit entry, and the try taken back or a problem      11: the release read,   16
+//   by itself                noted                                                               fetched, and put in place
 //   users that wait       1: the kept run of the domain read, on an install that holds a key           0                      1
 //   users carried         6: that, 2 x (the mark set with the users read, the settling), a problem noted   8: 2 x 4 to Cloudflare 14
 //   one step, at most    12: a listing of what is due, 5 x (a change, a leftover gone),          150: 5 x 30 to the bucket   162
@@ -44,6 +46,9 @@ const CLOSING_CALLS = 2;
 /** The most calls to Cloudflare one carrying of the users makes: the policy and the alert, each listed and written, for a list and for one that changed meanwhile. */
 const FOLLOW_CALLS = 8;
 
+/** The most requests an update the install takes by itself sends: seven to the website and the release's page, the redirect of each file among them, and four to Cloudflare's API. */
+const SELF_UPDATE_REQUESTS = 11;
+
 /** Where a walk begins: at the sites that expired. The steps go on from there through the trash, the uploads, and the leftovers. */
 const START: NonNullable<Place> = { trash: false };
 
@@ -64,15 +69,15 @@ interface Tally {
   web: number;
 }
 
-/** Wrap a database or a bucket so every call of a method of it is counted under its name. */
-function counted<Target extends object>(target: Target, tally: Tally, under: keyof Tally): Target {
+/** Wrap a database or a bucket so every call of a method of it is counted under its name, as one call or as the many requests it stands for. */
+function counted<Target extends object>(target: Target, tally: Tally, under: keyof Tally, weight = 1): Target {
   return new Proxy(target, {
     get(inner, name) {
       const member: unknown = Reflect.get(inner, name, inner);
       if (typeof member !== "function") return member;
 
       return (...given: unknown[]): unknown => {
-        tally[under] += 1;
+        tally[under] += weight;
 
         return Reflect.apply(member, inner, given);
       };
@@ -117,7 +122,9 @@ export async function runSweep(install: Install, asking: Asking, running: Runnin
   const settled = start.settings === undefined ? {} : { knownSettings: start.settings };
   const watched: Install = { ...install, ...settled, database, store: counted(meter.store, tally, "bucket") };
   const learned = await checkForUpdate(watched, counted(asking, tally, "web"), { last: start.updateCheck });
-  const rebuilding = { ...running.rebuilding, fetch: counted({ fetch: running.rebuilding.fetch }, tally, "web").fetch };
+  const taking = running.rebuilding.self;
+  const self = taking === undefined ? undefined : counted(taking, tally, "web", SELF_UPDATE_REQUESTS);
+  const rebuilding = { ...running.rebuilding, fetch: counted({ fetch: running.rebuilding.fetch }, tally, "web").fetch, self };
   if (learned !== undefined) await startDueUpdate(watched, { ...learned, version: running.version }, rebuilding);
   await carryWaitingUsers(watched, running.follow, tally);
 
