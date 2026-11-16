@@ -62,6 +62,7 @@ import type {
   ServedAlso,
   ServedLookup,
   SettingsAndKey,
+  SettingsAndUpdateCheck,
   SettingsAndSite,
   ShownSite,
   ShownSitesPage,
@@ -1228,6 +1229,12 @@ export class SqlDatabase implements Database {
     const [read] = await this.#driver.batch([READ_SETTINGS]);
 
     return settingsIn(read);
+  }
+
+  async readSettingsAndUpdateCheck(): Promise<SettingsAndUpdateCheck> {
+    const [stored, update] = await this.#driver.batch([READ_SETTINGS, READ_UPDATE_CHECK]);
+
+    return { settings: settingsIn(stored), updateCheck: updateCheckIn(update) };
   }
 
   async readFrame(now: number): Promise<FrameRecords> {

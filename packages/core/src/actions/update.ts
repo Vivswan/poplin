@@ -7,7 +7,7 @@ import { OWN_SCHEMA } from "../database/open";
 import { isPlainVersion, UPDATE_NEWS, type UpdateCheck, type UpdateNews } from "../records/update";
 import type { SettingValues } from "../records/settings";
 import { WAY_BACK } from "./go-back";
-import { type Install, settingsOf } from "./records";
+import type { Install } from "./records";
 
 /** A release newer than the running version, as an answer holds it. */
 export const UPDATE_NOTICE = v.object({
@@ -73,15 +73,17 @@ export function updateIn(read: { readonly settings: Pick<SettingValues, "update_
 }
 
 /**
- * Say whether a newer poplin than the running one is out, from what the install last learned. Nothing is fetched: it reads the database, twice at most.
+ * Say whether a newer poplin than the running one is out, from what the install last learned. Nothing is fetched: it reads the database once at most.
  *
  * @param current - the version the install runs
- * @param known - the settings, from a caller that has read them already; read here when left out
+ * @param known - the settings, from a caller that has read them already; read here in one step with the last asking when neither it nor the install holds them
  * @returns the newer release, or `undefined` when none is known, the newest known is not strictly newer, either version is not of the form `1.2.3`, or `update_check` is off
  */
 export async function updateOf(install: Pick<Install, "database" | "knownSettings">, current: string, known?: Pick<SettingValues, "update_check">): Promise<Update | undefined> {
-  const settings = known ?? (await settingsOf(install));
-  if (settings?.update_check !== true) return undefined;
+  const settings = known ?? install.knownSettings;
+  if (settings === undefined) return updateIn(await install.database.readSettingsAndUpdateCheck(), current);
+
+  if (!settings.update_check) return undefined;
 
   return updateIn({ settings, updateCheck: await install.database.readUpdateCheck() }, current);
 }

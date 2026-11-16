@@ -239,6 +239,12 @@ export interface SettingsAndKey {
   readonly key: Uint8Array<ArrayBuffer> | undefined;
 }
 
+/** The settings and the last asking for a newer version as one read gave them; each is `undefined` where its own read gives that. */
+export interface SettingsAndUpdateCheck {
+  readonly settings: SettingValues | undefined;
+  readonly updateCheck: UpdateCheck | undefined;
+}
+
 /** The settings and one site as one read gave them: the settings are `undefined` before setup stored them, the site when no site has the id. */
 export interface SettingsAndSite {
   readonly settings: SettingValues | undefined;
@@ -959,6 +965,13 @@ export interface Database {
 
   /** The install's settings, `undefined` before setup stored them. */
   readSettings(): Promise<SettingValues | undefined>;
+
+  /**
+   * Read the settings and the last asking for a newer version together, in one step: what the notice of a newer release is made from.
+   *
+   * @returns each as its own read gives it
+   */
+  readSettingsAndUpdateCheck(): Promise<SettingsAndUpdateCheck>;
 
   /**
    * Read what the dashboard's frame is drawn from, in one step: the settings, the kept run of the domain, the last asking for a newer version, and the problems of two days.

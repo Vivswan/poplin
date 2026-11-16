@@ -164,6 +164,17 @@ function updateCheck(label: string, makeDatabase: DatabaseFactory): void {
 
       expect([empty, Object.values(each).includes(undefined), each.problems.length, await database.readFrame(NOW)]).toEqual([{ settings: undefined, domainCheck: undefined, updateCheck: undefined, problems: [] }, false, 2, each]);
     });
+
+    // Drift: the notice of a newer release is made from one read of two records. One that gave either differently from its own read would tell a token of a release the dashboard denies, or of one while the asking is switched off.
+    test("the notice's one read gives the settings and the last asking, each as its own read gives it: nothing on an empty install, then each once it is kept", async () => {
+      const database = await opened(makeDatabase);
+      const empty = await database.readSettingsAndUpdateCheck();
+      await database.initSettings(SETTINGS, BY_ADA);
+      await database.keepUpdateCheck({ checked_at: NOW, news: null });
+      const each = { settings: await database.readSettings(), updateCheck: await database.readUpdateCheck() };
+
+      expect([empty, Object.values(each).includes(undefined), await database.readSettingsAndUpdateCheck()]).toEqual([{ settings: undefined, updateCheck: undefined }, false, each]);
+    });
   });
 }
 

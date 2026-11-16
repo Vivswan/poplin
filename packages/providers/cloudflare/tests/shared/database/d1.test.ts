@@ -105,6 +105,7 @@ const ROWS: Readonly<Record<string, readonly [read: number, written: number]>> =
   "readSettingsAndKey": [2, 0],
   "keepUpdateCheck": [2, 1],
   "readUpdateCheck": [1, 0],
+  "readSettingsAndUpdateCheck": [2, 0],
   "keepAutoStart": [1, 1],
   "keepDomainCheck": [1, 2],
   "keepDomainCheck, 200 pieces over the run before": [1, 2],
@@ -741,6 +742,7 @@ describe("D1: the rows every operation of the database costs of a day's allowanc
     await cost("readSettingsAndKey", () => database.readSettingsAndKey());
     await cost("keepUpdateCheck", () => database.keepUpdateCheck({ checked_at: NOW, news: null }));
     await cost("readUpdateCheck", () => database.readUpdateCheck());
+    await cost("readSettingsAndUpdateCheck", () => database.readSettingsAndUpdateCheck());
     await cost("keepAutoStart", () => database.keepAutoStart({ version: "0.2.0", at: NOW, taken: "0.2.0" }));
     await cost("keepSweepPlace", () => database.keepSweepPlace({ trash: false }));
     await cost("readSweepPlace", () => database.readSweepPlace());
