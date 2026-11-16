@@ -8,17 +8,18 @@ import { REVIEW_PAGE } from "../../../core/src/api/routes";
 import { showUserCode } from "../../../core/src/auth/computer-logins";
 import { AUDIT_WINDOW } from "../../../core/src/database/database";
 import { PLUG_STATES, type PlugState } from "./domain-plug";
-import { ADMIN_ORIGIN, localAddress } from "./mount";
+import { parsePublicName } from "../../../core/src/names/names";
+import { localAddress } from "./mount";
 import type { World } from "./world";
 
 /** The groups of the index, in the order shown. */
 export const GROUPS = ["Dashboard", "Dashboard of an install that holds nothing", "One site in the dashboard", "Access: allow this computer", "Setup page", "The login", "Served sites", "API"] as const;
 
-/** The dashboard's mount, as an address of the install is read from one of its pages. */
-const HOME = { prefix: "", origin: ADMIN_ORIGIN, base: "" };
+/** The panel of a site that is not there, in the dashboard. */
+const NO_PANEL = "/sites/nothing--000000000000";
 
-/** Where a site that is not there would be: its panel in the dashboard, and the path of a public name no site holds. */
-const NO_PLACE: Place = { page: "/sites/nothing--000000000000", served: "/served/nobody-page/", open: "/served/nobody-page/" };
+/** A public name no sample site holds. */
+const NOBODY = "nobody";
 
 /** An id no login waits under. */
 const NO_LOGIN = "0000000000000000";
@@ -49,7 +50,7 @@ const SCREENS = [
   ["Domain", "/domain"],
 ] as const;
 
-/** Where one site is in the preview: its panel in the dashboard, the path of its label address, and the path a visitor opens, which is its public name's when it has one. */
+/** Where one site is in the preview: its panel in the dashboard, its label address, and the address a visitor opens, which is its public name's when it has one. Each is written as a page of the dashboard links to it. */
 interface Place {
   readonly page: string;
   readonly served: string;
@@ -102,16 +103,29 @@ async function seededSites(world: World): Promise<readonly SiteObject[]> {
   return lists.flatMap((listed) => (listed.ok ? listed.sites : []));
 }
 
-/** Where one site is in the preview. */
-function placeOf(site: SiteObject): Place {
-  const local = (address: string): string => localAddress(address, HOME);
+/** An address of the install as a page of the dashboard links to it. */
+function fromHome(world: World, address: string): string {
+  return localAddress(address, { here: { prefix: "", origin: world.kind.adminOrigin, base: "" }, kind: world.kind });
+}
 
-  return { page: `/sites/${site.label}`, served: local(site.addresses.site), open: local(site.addresses.public ?? site.addresses.site) };
+/** Where one site is in the preview. */
+function placeOf(world: World, site: SiteObject): Place {
+  return { page: `/sites/${site.label}`, served: fromHome(world, site.addresses.site), open: fromHome(world, site.addresses.public ?? site.addresses.site) };
+}
+
+/** Where a site that is not there would be: its panel in the dashboard, and the address of a public name no site holds. */
+function noPlace(world: World): Place {
+  const name = parsePublicName(NOBODY, world.install.reservedNames);
+  if (!name.ok) throw new Error(`the install keeps the public name ${NOBODY}`);
+
+  const served = fromHome(world, world.install.publicAddressOf(name.value));
+
+  return { page: NO_PANEL, served, open: served };
 }
 
 /** Where each seeded site is now, by its name: its panel in the dashboard, and the preview paths it is served at. A site that was deleted since is absent. */
 async function placesOf(world: World): Promise<ReadonlyMap<string, Place>> {
-  return new Map((await seededSites(world)).map((site) => [site.name, placeOf(site)]));
+  return new Map((await seededSites(world)).map((site) => [site.name, placeOf(world, site)]));
 }
 
 /** A stage that ends a sample site an hour ago, as no call of the product can, and leads to one page of it. A reset gives the site its month back. */
@@ -121,7 +135,7 @@ function runOut(to: (place: Place) => string): (stage: Stage) => Promise<Respons
     const at = world.install.now();
     if (site !== undefined) await world.install.database.changeDetails(site.id, { expires: at - HOUR_MS }, { by: world.admin.holder, at });
 
-    return new Response(null, { status: 303, headers: { Location: to(site === undefined ? NO_PLACE : placeOf(site)) } });
+    return new Response(null, { status: 303, headers: { Location: to(site === undefined ? noPlace(world) : placeOf(world, site)) } });
   };
 }
 
@@ -163,10 +177,10 @@ function setupEntries(): Entry[] {
 }
 
 /** The pages of the seeded sites: each site's panel in the dashboard, then what serving answers an admin and a stranger. */
-function siteEntries(places: ReadonlyMap<string, Place>): Entry[] {
-  const page = (name: string): string => places.get(name)?.page ?? NO_PLACE.page;
-  const served = (name: string): string => places.get(name)?.served ?? NO_PLACE.served;
-  const open = (name: string): string => places.get(name)?.open ?? NO_PLACE.served;
+function siteEntries(places: ReadonlyMap<string, Place>, none: Place): Entry[] {
+  const page = (name: string): string => places.get(name)?.page ?? none.page;
+  const served = (name: string): string => places.get(name)?.served ?? none.served;
+  const open = (name: string): string => places.get(name)?.open ?? none.served;
   const group = "One site in the dashboard" as const;
   const visitors = "Served sites" as const;
 
@@ -176,7 +190,7 @@ function siteEntries(places: ReadonlyMap<string, Place>): Entry[] {
     { group, name: "Unlisted, no frames, renamed since it was made", path: page("pricing") },
     { group, name: "Expires in two days", path: page("checkout") },
     { group, name: "Expired", path: "/state/expired/panel" },
-    { group, name: "No such site", path: NO_PLACE.page },
+    { group, name: "No such site", path: none.page },
     { group: visitors, name: "Sales report, private, as the admin", path: served("sales-report") },
     { group: visitors, name: "Sales report, private, as a stranger who came around the login", path: `${served("sales-report")}?as=visitor`, status: 404 },
     { group: visitors, name: "Launch deck, unlisted, as a stranger", path: `${served("launch-deck")}?as=visitor` },
@@ -190,7 +204,7 @@ function siteEntries(places: ReadonlyMap<string, Place>): Entry[] {
     { group: visitors, name: "A site in the trash, as a stranger", path: `${served("old-notes")}?as=visitor`, status: 404 },
     { group: visitors, name: "An expired site, as the admin", path: "/state/expired/admin", status: 404 },
     { group: visitors, name: "An expired site, as a stranger", path: "/state/expired/stranger", status: 404 },
-    { group: visitors, name: "A public name no site holds, as a stranger", path: `${NO_PLACE.served}?as=visitor`, status: 404 },
+    { group: visitors, name: "A public name no site holds, as a stranger", path: `${none.served}?as=visitor`, status: 404 },
   ];
 }
 
@@ -202,5 +216,5 @@ function siteEntries(places: ReadonlyMap<string, Place>): Entry[] {
 export async function galleryOf(world: World): Promise<readonly Entry[]> {
   const api: Entry = { group: "API", name: "A request without a token", path: "/api/whoami", status: 401 };
 
-  return [...dashboardEntries(), ...siteEntries(await placesOf(world)), ...setupEntries(), api];
+  return [...dashboardEntries(), ...siteEntries(await placesOf(world), noPlace(world)), ...setupEntries(), api];
 }

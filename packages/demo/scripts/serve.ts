@@ -1,9 +1,10 @@
-// Start the demo on this machine: `bun run preview`, with `--port <port>`, `--watch`, `--dev`, and `--gallery`.
+// Start the demo on this machine: `bun run preview`, with `--port <port>`, `--watch`, `--dev`, `--gallery`, and `--no-domain`.
 //
 //   bun run preview              the demo on http://127.0.0.1:4400, after stopping the one already there
 //   bun run preview --watch      the same, started anew whenever a source file it loads changes
 //   bun run preview --dev        the same, with the dashboard's client served hot by its dev server: an edit shows without a reload
 //   bun run preview --gallery    the same, with every page and state listed at /gallery
+//   bun run preview --no-domain  an install without a domain: the dashboard at http://poplin.localhost:4400, its sites as paths of sites.localhost and private.localhost
 //   bun run preview:stop         stop it
 //
 // This file and its neighbours start the server and keep the pid file. The demo itself is `../src/preview/`, which names no runtime.
@@ -16,6 +17,7 @@ import concurrently, { type CloseEvent } from "concurrently";
 import manifest from "../../cli/package.json" with { type: "json" };
 import type { ClientFiles } from "../../app/src/console/shell";
 import { BunSqliteDriver } from "../../core/tests/database/support/bun-sqlite-driver";
+import type { LocalOrigins } from "../src/preview/kind";
 import { createPreview } from "../src/preview/preview";
 import { buildClient, CLIENT as CONSOLE, readClient } from "../../dashboard/scripts/client-build";
 import { readSamples } from "./samples";
@@ -23,6 +25,9 @@ import { DEFAULT_PORT, HOST, markRunning, PID_PATH, pidFile, readFlags, stopRunn
 
 /** The flag of bun itself that starts a script anew whenever a file it loads changes. */
 const WATCH_FLAG = "--watch";
+
+/** The flag of this script that makes the sample install one without a domain. */
+const NO_DOMAIN_FLAG = "--no-domain";
 
 /** This script's file, as it is named from its own folder. */
 const THIS_SCRIPT = basename(import.meta.path);
@@ -44,6 +49,9 @@ const CLIENT_DEV = "POPLIN_CLIENT_DEV";
 
 /** The highest port there is. */
 const MOST_PORT = 65_535;
+
+/** The first label of each host of a preview without a domain; every name under `localhost` is this machine. */
+const LOCAL_LABELS = { admin: "poplin", sites: "sites", private: "private" } as const;
 
 /** The environment variable that tells the dev server which preview it stands in front of. */
 const PREVIEW_ORIGIN = "POPLIN_PREVIEW_ORIGIN";
@@ -117,11 +125,12 @@ function watch(args: readonly string[]): Promise<number> {
  */
 async function develop(port: number, args: readonly string[]): Promise<number> {
   const behind = port + 1;
+  const home = args.includes(NO_DOMAIN_FLAG) ? localOrigin("admin", port) : `http://${HOST}:${port}`;
   if (behind > MOST_PORT) throw new RangeError(`--dev takes a port under ${MOST_PORT}: the preview behind it listens on the next one`);
 
   // A preview already on the dev server's port gives the port up first, as a plain start does.
   await stopRunning(port);
-  console.log(`poplin local preview, hot: http://${HOST}:${port}/   (the preview behind it: http://${HOST}:${behind}/)`);
+  console.log(`poplin local preview, hot: ${home}/   (the preview behind it: http://${HOST}:${behind}/)`);
 
   return together(
     { script: "dev", flags: ["--port", String(port)], env: { [PREVIEW_ORIGIN]: `http://${HOST}:${behind}` } },
@@ -129,8 +138,22 @@ async function develop(port: number, args: readonly string[]): Promise<number> {
   );
 }
 
-async function serve(port: number, gallery: boolean): Promise<void> {
+/** One origin of a preview without a domain, on a port of this machine. */
+function localOrigin(host: keyof typeof LOCAL_LABELS, port: number): string {
+  return `http://${LOCAL_LABELS[host]}.localhost:${port}`;
+}
+
+/** The three origins of a preview without a domain that listens on a port: the dashboard's is the port a browser opens, which behind the dev server is the dev server's. */
+function localOrigins(port: number): LocalOrigins {
+  const front = process.env[CLIENT_DEV] === undefined ? port : Number(process.env[CLIENT_DEV]);
+
+  return { admin: localOrigin("admin", front), sites: localOrigin("sites", port), private: localOrigin("private", port) };
+}
+
+async function serve({ port, gallery, noDomain }: Pick<ReturnType<typeof readFlags>, "port" | "gallery" | "noDomain">): Promise<void> {
   await stopRunning(port);
+  const origins = noDomain ? localOrigins(port) : undefined;
+  const home = origins?.admin ?? `http://${HOST}:${port}`;
   if (process.env[CLIENT_WATCHED] === undefined && process.env[CLIENT_DEV] === undefined) await buildClient(CONSOLE_DIST);
 
   const preview = await createPreview({
@@ -139,6 +162,7 @@ async function serve(port: number, gallery: boolean): Promise<void> {
     version: manifest.version,
     gallery,
     client: process.env[CLIENT_DEV] === undefined ? BUILT_CLIENT : DEV_CLIENT,
+    ...(origins === undefined ? {} : { noDomain: origins }),
   });
   const server = Bun.serve({
     hostname: HOST,
@@ -156,15 +180,16 @@ async function serve(port: number, gallery: boolean): Promise<void> {
     });
   }
 
-  console.log(`poplin local preview: http://${HOST}:${port}/
-  Sample data, held in memory. Nothing leaves this machine. A restart starts it over.${gallery ? `\n  Every page and state: http://${HOST}:${port}/gallery` : ""}
+  console.log(`poplin local preview: ${home}/${origins === undefined ? "" : `\n  An install without a domain. Its open sites: ${origins.sites}/   Its private sites: ${origins.private}/`}
+  Sample data, held in memory. Nothing leaves this machine. A restart starts it over.${gallery ? `\n  Every page and state: ${home}/gallery` : ""}
   API token of the sample admin: ${preview.token()}
   Stop it: bun run preview:stop${port === DEFAULT_PORT ? "" : ` --port ${port}`}   (pid ${process.pid}, pid file ${pidFile(port)})`);
 }
 
 const flags = readFlags(process.argv.slice(2));
-if (flags.dev) process.exit(await develop(flags.port, flags.gallery ? ["--gallery"] : []));
+const passed = [...(flags.gallery ? ["--gallery"] : []), ...(flags.noDomain ? [NO_DOMAIN_FLAG] : [])];
+if (flags.dev) process.exit(await develop(flags.port, passed));
 
-if (flags.watch) process.exit(await watch(["--port", String(flags.port), ...(flags.gallery ? ["--gallery"] : [])]));
+if (flags.watch) process.exit(await watch(["--port", String(flags.port), ...passed]));
 
-await serve(flags.port, flags.gallery);
+await serve(flags);
