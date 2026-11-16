@@ -40,7 +40,7 @@ const API_ROWS = {
   not_set_up: { sentence: "the install has stored no settings", hint: "the install stores them when it starts: try again, and if this stays, deploy the install again", exit: "failed" },
   no_working_login: {
     sentence: "the change would leave no login that works",
-    hint: "keep an email that is a login now: a new one gets in only after a Repair on the dashboard's Domain tab",
+    hint: "keep one email that is a login now in the list",
     exit: "failed",
   },
   already_a_login: { sentence: "that email is a login already", hint: "poplin config logins shows the logins", exit: "failed" },
@@ -100,7 +100,7 @@ const LOCAL_ROWS = {
   setup_bad_login: { sentence: "--login takes an email address", hint: "an install with nothing set yet needs --login <email>, and --domain <domain> when it has a domain", exit: "failed" },
   setup_closed: {
     sentence: "nothing at that address takes a setup",
-    hint: "an install's setup closes for good once somebody has logged in: from then on its dashboard's Domain tab checks and repairs",
+    hint: "an install's setup closes for good once somebody has logged in: from then on its dashboard's Domain screen checks and repairs",
     exit: "failed",
   },
   file_exists: { sentence: "a file is already there", hint: "to replace it: --overwrite; to write another: --out <file>", exit: "failed" },

@@ -189,7 +189,7 @@ export const COMMANDS = [
       "The install does the work: this sends it the account token from",
       "POPLIN_SETUP_TOKEN and prints its rows. The token is never an argument and",
       "is never saved. It needs no login, and works only until somebody has",
-      "logged in to the install: from then on the dashboard's Domain tab does the",
+      "logged in to the install: from then on the dashboard's Domain screen does the",
       "same. It makes no install: the install must already answer at --server.",
       "An install with nothing set yet takes two flags more, and gets its",
       "domain, its first login, and its account from this one run:",

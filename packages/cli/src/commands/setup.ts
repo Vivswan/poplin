@@ -85,7 +85,7 @@ function shown(run: "check" | "repair", reading: Reading, token: string): Outcom
 /**
  * Run the setup of the install at `--server`.
  *
- * It makes no install: the install must already answer at the address. It works only until somebody has logged in to the install; after that the dashboard's Domain tab does the same.
+ * It makes no install: the install must already answer at the address. It works only until somebody has logged in to the install; after that the dashboard's Domain screen does the same.
  * An install with nothing set takes its first login from `--login`, and its domain from `--domain`: with no `--domain` it is set up without one, at the address `--server` names.
  * One that is set ignores `--domain`, and takes `--login` as the correction of the first login.
  *

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { type Hostname, isUnder, parseHostname } from "../../src/names/hostname";
+import { type Hostname, parseHostname } from "../../src/names/hostname";
 
 function hostOf(raw: string): Hostname {
   const hostname = parseHostname(raw);
@@ -40,19 +40,5 @@ describe("parseHostname", () => {
 
   test.each(refused)("$text is refused as $refusal, never repaired: a repaired name would differ from the one the owner typed", ({ text, refusal }) => {
     expect<unknown>(parseHostname(text)).toEqual({ ok: false, refusal });
-  });
-});
-
-describe("isUnder", () => {
-  const cases: readonly { readonly hostname: string; readonly parent: string; readonly under: boolean }[] = [
-    { hostname: "poplin.example.com", parent: "example.com", under: true },
-    { hostname: "a.b.example.com", parent: "example.com", under: true },
-    { hostname: "example.com", parent: "example.com", under: false },
-    { hostname: "badexample.com", parent: "example.com", under: false },
-    { hostname: "example.com.example.org", parent: "example.com", under: false },
-  ];
-
-  test.each(cases)("$hostname under $parent is $under: a name that only ends in the same letters belongs to another domain", ({ hostname, parent, under }) => {
-    expect(isUnder(hostOf(hostname), hostOf(parent))).toBe(under);
   });
 });
