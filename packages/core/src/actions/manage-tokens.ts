@@ -5,6 +5,7 @@ import * as v from "valibot";
 import type { Actor } from "../auth/scopes";
 import { type EndedToken, mintToken, type TokenId, type TokenRecord } from "../auth/tokens";
 import { type Holder, MOMENT, TOKEN_ID } from "../records/fields";
+import { ADDRESS_LAYOUT } from "../sites/address-layout";
 import { type Install, type Refused, refuse } from "./records";
 import { UPDATE_NOTICE } from "./update";
 
@@ -29,8 +30,8 @@ export const TOKEN_OBJECT = v.object({
 /** What revoking a token answers, and so a logout: the token as it was. */
 export const REVOKED_TOKEN = v.object({ token: TOKEN_OBJECT });
 
-/** What the API answers a token that asks who it is: the token, the version the install runs, the word its public addresses end in, and a newer release when one is known. */
-export const WHOAMI_ANSWER = v.object({ token: TOKEN_OBJECT, version: v.string(), public_word: v.string(), update: v.optional(UPDATE_NOTICE) });
+/** What the API answers a token that asks who it is: the token, the version the install runs, how its site addresses are laid out, and a newer release when one is known. */
+export const WHOAMI_ANSWER = v.object({ token: TOKEN_OBJECT, version: v.string(), layout: ADDRESS_LAYOUT, update: v.optional(UPDATE_NOTICE) });
 
 /**
  * A token as a caller sees it: never the token itself, nor its hash. Times are milliseconds since the epoch.

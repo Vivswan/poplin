@@ -3,7 +3,7 @@
 import type { SiteChanges } from "../../../core/src/actions/changes";
 import { WHOAMI_ANSWER } from "../../../core/src/actions/manage-tokens";
 import { siteLabel } from "../../../core/src/sites/labels";
-import { isOfInstall, type SettledSite, settleSite, type TypedSite } from "../../../core/src/sites/references";
+import { mayBeOfInstall, type SettledSite, settleSite, type TypedSite } from "../../../core/src/sites/references";
 import { type Problem, problem, problemOf } from "./problems";
 import type { Session } from "./records";
 import type { SiteSettings } from "./site-settings";
@@ -20,20 +20,22 @@ export function siteWord(site: SettledSite): string {
 /**
  * Read a typed site as the install of a session reads it, before anything about the site is sent.
  *
- * An address of the form of a public site's ends in a word its install chose, so the install is asked for the word: one call, and only for such an address.
+ * A public site's address and an address with a path are placed by the layout of their install, so the install is asked for its layout: one call, and only for such an address.
  *
  * @param site - the site a command names, as it was typed
- * @returns the site. `not_found` for an address under another domain or port than the install's sites, and for one that is no site's under the install's word; else why the install did not answer
+ * @returns the site. `not_found` for an address under another domain or port than the install's sites, and for one that is no site's under the install's layout; else why the install did not answer
  */
 export async function readByInstall(site: TypedSite, session: Pick<Session, "client" | "server">): Promise<SettledSite | Problem> {
-  if (!isOfInstall(site, session.server)) return problem("not_found", `the address is under ${site.under}, which is not where ${session.server} keeps its sites`);
+  if (!mayBeOfInstall(site, session.server)) return problem("not_found", `the address is under ${site.under}, which is not where ${session.server} keeps its sites`);
 
   if (site.kind !== "address") return site;
 
   const answered = await session.client.call(WHOAMI_ANSWER, (api) => api.whoami.$get());
   if (!answered.ok) return problemOf(answered.failure);
 
-  return settleSite(site, answered.value.public_word) ?? problem("not_found", `${site.label}.${site.under} is not the address of a site of ${session.server}`);
+  const address = `${site.label}.${site.under}${site.segment === undefined ? "" : `/${siteWord(site.segment)}`}`;
+
+  return settleSite(site, { server: session.server, layout: answered.value.layout }) ?? problem("not_found", `${address} is not the address of a site of ${session.server}`);
 }
 
 /**
