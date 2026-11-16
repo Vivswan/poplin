@@ -85,8 +85,13 @@ function mountedPath(mount: Pick<Mount, "prefix" | "base">, path: string): strin
   return `${mount.prefix}${path.startsWith(mount.base) ? path.slice(mount.base.length) : path}`;
 }
 
-/** The preview path of a site's hostname. */
-function servedPath(hostname: string): string {
+/**
+ * Write the preview path of a site's hostname.
+ *
+ * @param hostname - a hostname one label under the install's domain
+ * @returns the path the preview serves that site's root at, without a closing slash
+ */
+export function servedPath(hostname: string): string {
   return `${SERVED_PREFIX}/${hostname.slice(0, -DOMAIN_ENDING.length)}`;
 }
 

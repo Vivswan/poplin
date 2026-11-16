@@ -26,11 +26,11 @@ import type { SqlDriver } from "../../../core/src/database/driver";
 import { DEFAULT_PUBLIC_WORD } from "../../../core/src/names/marker";
 import type { ObjectStore } from "../../../core/src/storage/storage";
 import { changingPlug, PLUG_STATES, type PlugState, previewFirstRun, previewPlug } from "./domain-plug";
+import { addressNow } from "./address-now";
 import { type Entry, galleryOf, STAGES } from "./gallery";
 import { rebased, unbased } from "./base";
 import { ADMIN_ORIGIN, askMount, type Mount, previewValue, SERVED_PREFIX, siteOrigin } from "./mount";
 import { galleryPage, loginPage, missingPage, plainPage, terminalPage } from "./own-pages";
-import { panelNow } from "./panel-now";
 import { type RealSites, realAddresses } from "./real-sites";
 import { keepLoginsWaiting, SEEDED_DAYS, type Samples, seedWorld } from "./seed";
 import { ADDRESSES, openWorld, type World } from "./world";
@@ -315,14 +315,14 @@ function goTo(path: string, status: 302 | 303 | 308): Response {
   return new Response(null, { status, headers: { Location: path } });
 }
 
-/** The way from a panel's address of before the sample data was made anew to the site that holds the name now, on the seeded dashboard; none for every other request. */
-async function panelRedirect(request: Request, mount: Mount | undefined, scene: Scene): Promise<Response | undefined> {
-  if (request.method !== "GET" || mount !== scene.dashboard) return undefined;
+/** The way from an address of before the sample data was made anew, of a site's panel or of a served site, to the site that holds the name now; none for every other request. */
+async function redirectNow(request: Request, scene: Scene): Promise<Response | undefined> {
+  if (request.method !== "GET") return undefined;
 
   const url = new URL(request.url);
-  const panel = await panelNow(scene.seeded, url.pathname);
+  const now = await addressNow(scene.seeded, url.pathname);
 
-  return panel === undefined ? undefined : goTo(`${panel}${url.search}`, 302);
+  return now === undefined ? undefined : goTo(`${now}${url.search}`, 302);
 }
 
 /** The preview's own redirects: a site's address without its slash, and the setup page named by a query. */
@@ -365,10 +365,10 @@ export async function createPreview(host: Host): Promise<Preview> {
       return goTo("/", 303);
     }
 
-    const mount = mountOf(scene, url.pathname);
-    const panel = await panelRedirect(request, mount, scene);
-    if (panel !== undefined) return panel;
+    const now = await redirectNow(request, scene);
+    if (now !== undefined) return now;
 
+    const mount = mountOf(scene, url.pathname);
     if (mount !== undefined) return askPiece(request, mount, scene, host);
 
     if (url.pathname === "/gallery" && host.gallery === true) return own(await galleryPage({ entries: await entries(), token: scene.token, origin: url.origin }));

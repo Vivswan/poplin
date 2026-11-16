@@ -2,7 +2,7 @@
 //
 //   a navigation while no demo page is open     a new visit: the demo starts over from the seed
 //   any other request, the demo not running     the browser stopped the worker: the demo goes on from what was saved
-//   that request, and nothing was saved         a new build took the page over: the demo starts from the seed, and the open pages load anew
+//   any request, and nothing was saved          a new build took the page over: the demo starts from the seed, and each open page of the dashboard loads anew when it next asks
 //
 // A browser stops an idle worker after about half a minute, so after every answer the whole demo is written to IndexedDB.
 // The dashboard's client is no part of this script: its files sit beside it on the host, and each is read from there the first time a page asks for it.
@@ -11,12 +11,14 @@ import { createStore, del, get, set } from "idb-keyval";
 import { base64ToUint8Array } from "uint8array-extras";
 
 import type { ClientFiles } from "../../../app/src/console/shell";
+import { SERVED_PREFIX } from "../preview/mount";
 import { REAL_SITES_FILE, type RealSites, readRealSites } from "../preview/real-sites";
 import type { Samples } from "../preview/seed";
 // The first module of the bundle to run: every other one builds its requests and responses with the classes this one puts in place.
 import { plainResponse } from "./free-headers";
 import { openKeptDemo, type SavedDemo } from "./kept-demo";
 import { loadSqlite } from "./sqljs-driver";
+import { stalePages } from "./stale-pages";
 
 declare const self: ServiceWorkerGlobalScope;
 
@@ -44,6 +46,9 @@ const CLIENT_FOLDER = new URL("assets/", self.registration.scope).href;
 /** Where the host keeps the real addresses of the sample sites, if it has them: beside this script. */
 const REAL_SITES = new URL(REAL_SITES_FILE, self.registration.scope).href;
 
+/** What the address of every sample site the demo serves starts with. */
+const SERVED = new URL(`.${SERVED_PREFIX}/`, self.registration.scope).href;
+
 /** The media type of a file whose host names none. */
 const NO_TYPE = "application/octet-stream";
 
@@ -59,10 +64,11 @@ const STORE = createStore("poplin-demo", "demo");
 /** The key the demo is saved under. */
 const SAVED_KEY = "saved";
 
-/** What is written to IndexedDB: the demo, and the build that saved it. */
+/** What is written to IndexedDB: the demo, the build that saved it, and the id of each open page that still shows the data of before the seed. */
 interface Kept {
   readonly build: string;
   readonly demo: SavedDemo;
+  readonly stale: readonly string[];
 }
 
 /** The demo that answers now, or the start of it. A start that failed is tried again by the next request. */
@@ -74,11 +80,8 @@ let written: Promise<unknown> = Promise.resolve();
 /** Whether a write waits its turn: it takes the demo as it is when it starts, so one write covers every answer before it. */
 let waiting = false;
 
-/** The pages that were open when the demo last started from the seed, by the id of each: what such a page shows names the sites of the data before. */
-const stale = new Set<string>();
-
-/** The loading anew of those pages, which a request of one waits for. */
-let reloaded: Promise<unknown> = Promise.resolve();
+/** The pages drawn before the demo last started from the seed, by the id of each, and the loading anew of each one that has begun. */
+const stale = new Map<string, Promise<boolean> | undefined>();
 
 /** A browser may shut IndexedDB to a worker. The demo then runs without it, and starts over when the browser stops the worker. */
 function unkept(error: unknown): undefined {
@@ -87,12 +90,12 @@ function unkept(error: unknown): undefined {
   return undefined;
 }
 
-/** The demo a worker of this build saved, if any. */
-async function readSaved(): Promise<SavedDemo | undefined> {
+/** What a worker of this build saved, if anything. */
+async function readSaved(): Promise<Kept | undefined> {
   try {
     const saved = await get<Kept>(SAVED_KEY, STORE);
 
-    return saved?.build === BUILD ? saved.demo : undefined;
+    return saved?.build === BUILD ? saved : undefined;
   } catch (error) {
     return unkept(error);
   }
@@ -107,7 +110,7 @@ async function dropSaved(): Promise<void> {
   }
 }
 
-/** Write the demo to IndexedDB, after the write before it. */
+/** Write the demo and the pages that are stale to IndexedDB, after the write before it. */
 function save(demo: Awaited<NonNullable<typeof running>>): Promise<unknown> {
   if (waiting) return written;
 
@@ -116,7 +119,7 @@ function save(demo: Awaited<NonNullable<typeof running>>): Promise<unknown> {
     .then(() => {
       waiting = false;
 
-      return set(SAVED_KEY, { build: BUILD, demo: demo.save() } satisfies Kept, STORE);
+      return set(SAVED_KEY, { build: BUILD, demo: demo.save(), stale: [...stale.keys()] } satisfies Kept, STORE);
     })
     .catch(unkept);
 
@@ -173,43 +176,65 @@ function samples(): Samples {
   return Object.fromEntries(unpacked);
 }
 
-/** Start the demo, and save one that started from the seed: its pages name sites a second seed would name otherwise. */
+/** Start the demo: from what a worker saved, or from the seed. */
 async function start(saved: SavedDemo | undefined): ReturnType<typeof openKeptDemo> {
   const client: ClientFiles = { entry: async () => CLIENT.entry, file: clientFile };
-  const demo = await openKeptDemo({ sqlite: await loadSqlite(await wasmBytes()), samples: samples(), version: VERSION, base: BASE, client, saved, real: await realSites() });
-  if (saved === undefined) await save(demo);
 
-  return demo;
-}
-
-/** Whether a request comes from a page drawn before the demo last started from the seed. A page that asks for itself is drawn anew, whatever page it takes the place of. */
-function isStale(event: FetchEvent): boolean {
-  return event.request.mode !== "navigate" && stale.has(event.clientId);
+  return openKeptDemo({ sqlite: await loadSqlite(await wasmBytes()), samples: samples(), version: VERSION, base: BASE, client, saved, real: await realSites() });
 }
 
 /**
- * Load every open page anew: the seed gave every site another id than the one the page's rows name. A page that cannot be loaded anew is answered as it is.
+ * Whether a script of a page drawn before the demo last started from the seed made a request: only such a request names the page's own address as its referrer.
  *
- * The page that asked is loaded at the address it shows now, which its request names as its referrer: a browser may tell a worker only the address a page was first loaded at.
+ * A file such a page loads is the same over any data, and a page that asks for itself is drawn anew.
  */
-async function reloadPages(asked: FetchEvent): Promise<void> {
-  const pages = await self.clients.matchAll({ type: "window" });
-  stale.clear();
-  for (const page of pages) stale.add(page.id);
-
-  // Only a request a script made names the page as its referrer: a font names the stylesheet that asked for it.
-  const { referrer, destination } = asked.request;
-  const named = destination === "" && referrer.startsWith(self.registration.scope);
-  const shown = (page: WindowClient): string => (page.id === asked.clientId && named ? referrer : page.url);
-  const loading = pages.filter((page) => page.frameType === "top-level").map((page) => page.navigate(shown(page)).catch(() => stale.delete(page.id)));
-  reloaded = Promise.all(loading);
+function isStale(event: FetchEvent): boolean {
+  return event.request.mode !== "navigate" && event.request.destination === "" && stale.has(event.clientId);
 }
 
-/** Start the demo for a request. One that starts from the seed for a page that asks for anything but itself, as after a new build took an open page over, has every open page loaded anew. */
+/**
+ * Load anew the page a request came from, at the address it shows now, which its request names as its referrer: a browser may tell a worker only the address a page was first loaded at.
+ *
+ * @returns whether the page loads anew; one that cannot is stale no longer, and is answered as it is
+ */
+async function loadAnew(event: FetchEvent): Promise<boolean> {
+  const { referrer } = event.request;
+  const page = await self.clients.get(event.clientId).catch(() => undefined);
+  const shown = (first: string): string => (referrer.startsWith(self.registration.scope) ? referrer : first);
+  const loads = page instanceof WindowClient && (await page.navigate(shown(page.url)).then(() => true, () => false));
+  if (!loads) stale.delete(event.clientId);
+
+  return loads;
+}
+
+/** Whether the page a stale request came from loads anew: the first such request of a page begins it, and every other one waits for it. */
+function loadsAnew(event: FetchEvent): Promise<boolean> {
+  const begun = stale.get(event.clientId) ?? loadAnew(event);
+  stale.set(event.clientId, begun);
+
+  return begun;
+}
+
+/** The open pages that show sites that are gone, after a start from the seed for a request, as when a new build took an open page over. */
+async function drawnBefore(event: FetchEvent): Promise<readonly string[]> {
+  const pages = await self.clients.matchAll({ type: "window" });
+
+  return stalePages(pages, { mode: event.request.mode, clientId: event.clientId, resultingClientId: event.resultingClientId }, SERVED);
+}
+
+/**
+ * Start the demo for a request, with the pages that are stale: the ones a worker saved, or after a start from the seed the ones open now.
+ *
+ * A demo that started from the seed is saved at once: its pages name sites a second seed would name otherwise.
+ */
 async function startFor(event: FetchEvent, opensVisit: boolean): ReturnType<typeof openKeptDemo> {
   const saved = opensVisit ? undefined : await readSaved();
-  const demo = await start(saved);
-  if (saved === undefined && event.request.mode !== "navigate") await reloadPages(event);
+  const demo = await start(saved?.demo);
+  const ids = saved?.stale ?? (await drawnBefore(event));
+  stale.clear();
+  for (const id of ids) stale.set(id, undefined);
+
+  if (saved === undefined) await save(demo);
 
   return demo;
 }
@@ -232,8 +257,7 @@ async function demoFor(event: FetchEvent): ReturnType<typeof openKeptDemo> {
 async function answer(event: FetchEvent): Promise<Response> {
   const demo = await demoFor(event);
   // A page drawn from the data before is loaded anew; what it asked meanwhile is never done to the new data.
-  if (isStale(event)) await reloaded;
-  if (isStale(event)) return new Response("The demo started over. This page loads again by itself.\n", { status: 503, headers: { "Content-Type": "text/plain; charset=utf-8" } });
+  if (isStale(event) && (await loadsAnew(event))) return new Response("The demo started over. This page loads again by itself.\n", { status: 503, headers: { "Content-Type": "text/plain; charset=utf-8" } });
 
   const response = await demo.fetch(event.request);
   event.waitUntil(save(demo));
