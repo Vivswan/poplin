@@ -14,7 +14,7 @@ import { searchOf, useAddressQuery } from "@/lib/address";
 import { copy } from "@/lib/notify";
 import { addressParts, expiryOf, type Site, shownName } from "@/lib/sites";
 import { useChosenTimeZone } from "@/lib/timezone";
-import { IconButton, RefreshButton } from "@/shared/icon-button";
+import { RefreshButton } from "@/shared/icon-button";
 import { PAGE_WAY, Pages, queryWith, useFirstRowFocus, useShownPlace, useTopOfPlace } from "@/shared/pages";
 import { ResultLine, rowsSaid } from "@/shared/result-line";
 import { SearchBox } from "@/shared/search-box";
@@ -90,17 +90,21 @@ function SortSelect({ query, onChoose }: { readonly query: URLSearchParams; read
   );
 }
 
-/** The command that publishes a folder, with the way to copy it right after it. */
+/** The command that publishes a folder, with the way to copy it right after it. The way is a button with its word: the box opens with the focus on it, and a hint shown there would lie over the sentence above. */
 function PublishCommand(): ReactNode {
   return (
     <span className="flex w-fit max-w-full items-center gap-1 rounded-md border bg-muted/40 py-0.5 pr-0.5 pl-2.5">
       <code className="min-w-0 truncate text-left font-mono text-xs">{PUBLISH_COMMAND}</code>
-      <IconButton
-        label="Copy the command"
+      <Button
+        variant="ghost"
+        size="sm"
+        aria-label="Copy the command"
+        className="shrink-0 pointer-coarse:min-h-10"
         onClick={() => void copy(PUBLISH_COMMAND, { done: "Copied.", failed: "Not copied. Select the command and copy it." })}
       >
-        <CopyIcon />
-      </IconButton>
+        <CopyIcon data-icon="inline-start" />
+        Copy
+      </Button>
     </span>
   );
 }
@@ -115,7 +119,7 @@ function NewSite(): ReactNode {
       </PopoverTrigger>
       <PopoverContent align="end" className="w-72">
         <PopoverHeader>
-          <PopoverTitle>Publish a folder</PopoverTitle>
+          <PopoverTitle>New site</PopoverTitle>
           <PopoverDescription>An agent publishes a site for you, or run this where the folder is:</PopoverDescription>
         </PopoverHeader>
         <PublishCommand />
