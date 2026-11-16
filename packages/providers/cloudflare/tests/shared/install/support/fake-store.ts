@@ -6,14 +6,12 @@
 
 import type { Login } from "@poplin/core/src/auth/logins";
 import type { Database } from "@poplin/core/src/database/database";
-import type { SqlValue, Statement } from "@poplin/core/src/database/driver";
+import type { SqlValue } from "@poplin/core/src/database/driver";
 import { openDatabase } from "@poplin/core/src/database/open";
 import { SqlDatabase } from "@poplin/core/src/database/sql-database";
 import { defaultSettings } from "@poplin/core/src/records/settings";
 import { BunSqliteDriver } from "@poplin/core/tests/database/support/bun-sqlite-driver";
-
-/** A quoted text or name, which is passed over, the end of a statement, or a numbered placeholder. */
-const QUOTED_END_OR_PLACEHOLDER = /'(?:[^']|'')*'|"(?:[^"]|"")*"|;|\?(\d+)/g;
+import { statementsOf } from "../../database/support/query-statements";
 
 /** One statement's result, as the query route answers it. */
 interface Answered {
@@ -29,37 +27,6 @@ export interface Store {
 
   /** The same database as core's own store has it. */
   readonly database: Database;
-}
-
-/** The statements of a call, each with the values its placeholders name: a number is cast to a real one, and the placeholders are numbered anew from 1. */
-function statementsOf(sql: string, params: readonly SqlValue[]): Statement[] {
-  const statements: Statement[] = [];
-  let [text, values, from]: [string, SqlValue[], number] = ["", [], 0];
-  const close = (upTo: number): void => {
-    text += sql.slice(from, upTo);
-    if (text.trim() !== "") statements.push({ sql: text, params: values });
-
-    [text, values] = ["", []];
-  };
-
-  for (const found of sql.matchAll(QUOTED_END_OR_PLACEHOLDER)) {
-    const [whole, digits] = found;
-    if (whole === ";") {
-      close(found.index);
-      from = found.index + 1;
-    }
-
-    if (digits === undefined) continue;
-
-    const value = params[Number(digits) - 1] ?? null;
-    values.push(value);
-    text += `${sql.slice(from, found.index)}${typeof value === "number" ? `CAST(?${values.length} AS REAL)` : `?${values.length}`}`;
-    from = found.index + whole.length;
-  }
-
-  close(sql.length);
-
-  return statements;
 }
 
 /**
