@@ -12,6 +12,7 @@
 // An object is poplin's by the fixed name or the mark an install gives it, and one without stays.
 // Each kind is listed and then removed, so a run that stopped is run again and removes what is left.
 
+import { AllowanceSpent } from "@poplin/core/src/database/driver";
 import type { Blocked, Removable, Removal, RemovalRow, RemovalState, Removed } from "@poplin/core/src/install/installer";
 import { showBytes } from "@poplin/core/src/records/settings";
 import { BaseTokens } from "cloudflare/resources/accounts/tokens/tokens";
@@ -30,6 +31,7 @@ import { lacksRight, rightFor } from "../../../../with-domain/zone-plug";
 import { NEW_RULESET_NAMES, type NamedPhaseRules, type RuleStep, removeOwnRule, syncPhase } from "../../../../with-domain/pieces/rules/rules";
 import { addressesAt, forwarderNames } from "../../../../without-domain/address-layout";
 import { removeForwarders } from "../../../../without-domain/pieces/forwarders/forwarders";
+import { ApiRefused, apiDriver } from "../../../database/api-driver";
 import { workflowNameOf } from "../../../jobs/workflow-name";
 import { type CloudflareFailure, type CloudflareResult, callCloudflare, findZones } from "../../client";
 import { isOwn, type Place, type Where } from "../../first/find";
@@ -314,7 +316,7 @@ async function removeAccess(work: Work): Promise<void> {
   settled(work, "Access policy", policies);
 }
 
-/** Every notification policy of one of poplin's names, on an install of either kind. Each is made only with an optional permission, so a list the token may not read leaves its row as one that stays. */
+/** Every notification policy of one of poplin's names, on an install of either kind. The permission to list them is an optional one of the token, so a list the token may not read leaves its row as one that stays. */
 async function removeAlerts(work: Work): Promise<void> {
   const { connection, accountId } = work.place;
   const account = { account_id: accountId };
@@ -427,13 +429,20 @@ async function removeFiles(work: Work, why: { readonly own: boolean; readonly bo
   return settled(work, "Sites' files", bucket, held);
 }
 
-/** How many sites a database holds; `undefined` where it does not say, as one no Worker ever opened. */
+/** How many sites a database holds; `undefined` where it does not say, as one no Worker ever opened, or one whose day of free use is over. */
 async function sitesIn(work: Work, id: string): Promise<number | undefined> {
-  const asked = await callCloudflare(work.place.connection, (api) => Array.fromAsync(new BaseDatabase(api).query(id, { account_id: work.place.accountId, sql: SITES_COUNT })));
-  const [row] = asked.ok ? (asked.value[0]?.results ?? []) : [];
-  const sites = typeof row === "object" && row !== null && "sites" in row ? row.sites : undefined;
+  const driver = apiDriver(work.place.connection, { accountId: work.place.accountId, databaseId: id });
 
-  return typeof sites === "number" ? sites : undefined;
+  try {
+    const [counted] = await driver.batch([{ sql: SITES_COUNT, params: [] }]);
+    const sites = counted?.rows[0]?.sites;
+
+    return typeof sites === "number" ? sites : undefined;
+  } catch (error) {
+    if (error instanceof ApiRefused || error instanceof AllowanceSpent) return undefined;
+
+    throw error;
+  }
 }
 
 /**
