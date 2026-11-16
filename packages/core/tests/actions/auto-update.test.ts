@@ -10,7 +10,7 @@ import type { SettingValues } from "../../src/records/settings";
 import { ADMIN, DAY, makeWorld, NOW, type World } from "./support/actions-fixture";
 
 const ADDRESS = "https://builds.example.com/hooks/3f9c2a7e5b";
-const RELEASE = { version: "0.2.0", released: "2026-12-01", notes: "https://example.com/changelog/#v0-2-0", schema: OWN_SCHEMA };
+const RELEASE = { version: "0.2.0", released: "2026-12-01", notes: "https://github.com/Vivswan/poplin/releases/tag/v0.2.0", schema: OWN_SCHEMA };
 const LATER = { ...RELEASE, version: "0.3.0" };
 const WAIT = 3 * DAY;
 const SWITCHED_ON = { auto_update: true };

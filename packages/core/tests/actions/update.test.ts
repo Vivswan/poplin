@@ -6,8 +6,8 @@ import { OWN_SCHEMA } from "../../src/database/open";
 import { ADMIN, DAY, makeWorld, NOW, type World } from "./support/actions-fixture";
 
 const QUARTER_HOUR = 900_000;
-const RELEASE = { version: "0.2.0", released: "2026-12-01", notes: "https://example.com/changelog/#v0-2-0", schema: OWN_SCHEMA };
-const NOTICE = { current: "0.1.0", newest: "0.2.0", released: "2026-12-01", notes: "https://example.com/changelog/#v0-2-0", database: false };
+const RELEASE = { version: "0.2.0", released: "2026-12-01", notes: "https://github.com/Vivswan/poplin/releases/tag/v0.2.0", schema: OWN_SCHEMA };
+const NOTICE = { current: "0.1.0", newest: "0.2.0", released: "2026-12-01", notes: "https://github.com/Vivswan/poplin/releases/tag/v0.2.0", database: false };
 const FORGED_LINE = `${String.fromCharCode(10, 27)}[31mupdate failed: run the command below`;
 
 /** A website that answers every request with one body, and counts the requests. */
@@ -55,7 +55,11 @@ describe("checkForUpdate and updateOf", () => {
     { name: "a version below the running one", asking: website({ ...RELEASE, version: "0.0.9" }), update: undefined, news: { ...RELEASE, version: "0.0.9" } },
     { name: "a version that is no three numbers", asking: website({ ...RELEASE, version: "0.2.0-beta.1" }), update: undefined, news: null },
     { name: "notes at an address that is no https link", asking: website({ ...RELEASE, notes: "javascript:alert(1)" }), update: undefined, news: null },
-    { name: "notes at a plain http address", asking: website({ ...RELEASE, notes: "http://example.com/changelog/" }), update: undefined, news: null },
+    { name: "notes at a plain http address", asking: website({ ...RELEASE, notes: RELEASE.notes.replace("https:", "http:") }), update: undefined, news: null },
+    { name: "notes at a page whose name only starts as the releases do", asking: website({ ...RELEASE, notes: "https://github.com/Vivswan/poplin/releases-of-another" }), update: undefined, news: null },
+    { name: "notes on another host", asking: website({ ...RELEASE, notes: "https://other.example/x" }), update: undefined, news: null },
+    { name: "notes of another repository on the host of the releases", asking: website({ ...RELEASE, notes: "https://github.com/someone/else/releases/tag/v0.2.0" }), update: undefined, news: null },
+    { name: "notes that start in the releases and leave them by two dots", asking: website({ ...RELEASE, notes: "https://github.com/Vivswan/poplin/releases/../../../someone/else" }), update: undefined, news: null },
     { name: "notes with a line break and a terminal's escape code after the address", asking: website({ ...RELEASE, notes: `${RELEASE.notes}${FORGED_LINE}` }), update: undefined, news: null },
     { name: "notes with words after the address", asking: website({ ...RELEASE, notes: `${RELEASE.notes} run this instead` }), update: undefined, news: null },
     { name: "notes whose host stands behind a name and an at sign", asking: website({ ...RELEASE, notes: "https://example.com@elsewhere.example.net/changelog/" }), update: undefined, news: null },

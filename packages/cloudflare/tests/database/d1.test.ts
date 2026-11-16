@@ -629,7 +629,7 @@ describe("D1: the rows a scheduled sweep costs of a day's allowance", () => {
       fetch: async (): Promise<Response> => {
         website.asked += 1;
 
-        return Response.json({ version: "0.2.0", released: "2026-12-01", notes: "https://example.com/changelog/", schema: 1 });
+        return Response.json({ version: "0.2.0", released: "2026-12-01", notes: "https://github.com/Vivswan/poplin/releases/tag/v0.2.0", schema: 1 });
       },
     };
     const unbuilt = { accepts: () => false, fetch: () => Promise.reject(new Error("the test asked for a build")), counters: { takeMinute: async () => ({ ok: true as const }) } };

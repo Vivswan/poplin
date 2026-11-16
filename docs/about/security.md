@@ -131,14 +131,21 @@ What guards each address:
 
 | Address | Guarded by |
 | --- | --- |
-| the login and the dashboard | Cloudflare Access authenticates the user in front of the whole dashboard; the Worker checks Access's token and the email on every request |
+| the login and the dashboard | Cloudflare Access, before the Worker runs, at every path of the dashboard's hostname but `/api` and `/setup`; the Worker checks Access's token and the email on every request |
 | the API, which the CLI and `poplin mcp` call | the token the Worker issued; no Access in front, so a machine needs no browser after its login |
 | a private site, `-p-poplin` | Cloudflare Access, before the Worker runs; then the Worker checks Access's token and the email |
 | an unlisted site; a public site | nothing |
 | the setup page, `/setup`, until the first login | the pasted Cloudflare API token alone: it must act on the install's own account. On a Worker that has no domain yet, a token changes only what its own account holds, and reads and writes nothing this Worker keeps. Anyone may open the page and gets the form and nothing of the install; five tries a minute from one address. After the first login it answers 404 for good |
 | the Worker's own `workers.dev` address | it answers the setup page and nothing else: no site, no API, no login, no dashboard |
 
-One Access application covers the dashboard and every address that ends in `-p-poplin.<domain>`. It is made once at install, never per site.
+Two Access applications are made once at install, never per site:
+
+| Application | Covers | Lets in |
+| --- | --- | --- |
+| "poplin" | the dashboard's hostname, and every address that ends in `-p-poplin.<domain>` | the install's users |
+| "poplin open paths" | `/api` and `/setup` on the dashboard's hostname | everyone: the API asks for its own token, and the setup page for a Cloudflare API token until the first login |
+
+A page of a site can set a cookie named `CF_Authorization` for the whole domain. A browser that holds one cannot open the dashboard: clear the cookies for the domain, and it opens again. [Between sites](between-sites.md) has the row.
 
 Every site hostname answers GET and HEAD only. The Worker refuses every other method, and the optional bots rule at Cloudflare's edge blocks it before the Worker.
 
