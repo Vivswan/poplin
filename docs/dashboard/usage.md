@@ -12,7 +12,7 @@ What the install and its account used, each beside its limit, and the graph of v
 The dashboard's Usage screen sets every number Cloudflare meters for a poplin install beside what the free plan takes. Whose numbers they are depends on [the kept key](../about/security.md#the-kept-key), which the install makes:
 
 ```text
-with the key                               Cloudflare's own figures, as of 15 Nov 2026, 14:30. They run about 10 minutes behind.
+with the key                               Cloudflare's own figures, as of 15 Nov 2026, 14:30. They run about 10 minutes behind. "Account" lines count the whole account, not only poplin.
 
 What                                       Used              Limit        Share of the limit
 Storage, all sites                         1.2 GB            9 GB         13%
