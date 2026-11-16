@@ -3,7 +3,7 @@
 //   /...                     the dashboard of the seeded install, as its sample admin; `?as=` asks as somebody the provider's login would not let in
 //   /served/<host label>/... a site as serving answers it at that hostname; `?as=visitor` asks as a stranger
 //   /api/...                 the API of the seeded install
-//   /setup/<state>/...       the setup screen over a domain plug held in that state; `first` is an install with nothing set, `shut` a page that is closed
+//   /setup/<state>/...       the setup screen over a domain plug held in that state; `first` is an install with nothing set, `repair` one somebody has logged in to
 //   /empty/...               the dashboard of an install that holds nothing
 //   /gallery                 every screen and every state of it that an address can show, as a link; only when the host asks for it, and linked from nowhere
 //   /state/<name>            a screen that only a program's call reaches: the address makes the call itself and leads there
@@ -70,8 +70,8 @@ const DAY_MS = 86_400_000;
 /** Where the dashboard of the install that holds nothing is mounted. */
 const EMPTY_PREFIX = "/empty";
 
-/** The setup state whose page is shut, beside the states of the plug. */
-const SHUT = "shut";
+/** The setup state of an install somebody has logged in to, beside the states of the plug: its page takes a token alone. */
+const REPAIR = "repair";
 
 /** The setup state of an install with nothing set, which the setup screen asks its domain and first login. */
 const FIRST = "first";
@@ -238,13 +238,13 @@ function apiMount(world: World, version: string): Mount {
 }
 
 /** The setup screen over a plug held in one state, at an address of its own, under the host's path as the dashboards are. */
-function setupScreenMount(world: World, state: PlugState | typeof SHUT | typeof FIRST, host: Host): Mount {
+function setupScreenMount(world: World, state: PlugState | typeof REPAIR | typeof FIRST, host: Host): Mount {
   const prefix = `/setup/${state}`;
   const at = `${host.base ?? ""}${prefix}`;
   const setup = createSetupConsole({
     install: world.install,
-    domain: state === FIRST ? previewFirstRun() : previewPlug(state === SHUT ? "done" : state),
-    open: async () => state !== SHUT,
+    domain: state === FIRST ? previewFirstRun() : previewPlug(state === REPAIR ? "partial" : state),
+    loggedIn: async () => state === REPAIR,
     client: host.client,
     at,
     ...countsOf(world),
@@ -290,7 +290,7 @@ async function openScene(host: Host, resumed: boolean): Promise<Scene> {
 
     return pages.answer(request);
   };
-  const screens = ([...PLUG_STATES, SHUT, FIRST] as const).map((state) => setupScreenMount(seeded, state, host));
+  const screens = ([...PLUG_STATES, REPAIR, FIRST] as const).map((state) => setupScreenMount(seeded, state, host));
   const mounts = [dashboardMount(empty, EMPTY_PREFIX, host), apiMount(seeded, host.version), ...screens];
 
   return { kind, seeded, token, secrets: computers.secrets, keepLogins: computers.keep, dashboard: { ...pages, answer }, mounts };

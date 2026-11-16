@@ -172,7 +172,7 @@ function setupEntries(): Entry[] {
   return [
     ...PLUG_STATES.map((state) => ({ group, name: `Before Repair: ${SETUP_WORDS[state]}`, path: `/setup/${state}` })),
     { group, name: "An install with nothing set: its domain and first login", path: "/setup/first" },
-    { group, name: "Shut: the install is set up", path: "/setup/shut", status: 404 },
+    { group, name: "After the first login: a token alone, for a login that is broken", path: "/setup/repair" },
   ];
 }
 

@@ -55,7 +55,7 @@ function refused(said: Problem): Outcome {
   return { ok: false, problem: said };
 }
 
-/** The answer of an install whose setup page is shut, or of an address that is no install's: both are a 404 that says nothing. */
+/** The answer of an install whose setup takes no such run, or of an address that is no install's: both are a 404 that says nothing. */
 function unanswered(status: number): Outcome {
   if (status === 404) return refused(problem("setup_closed"));
 
@@ -85,9 +85,9 @@ function shown(run: "check" | "repair", reading: Reading, token: string): Outcom
 /**
  * Run the setup of the install at `--server`.
  *
- * It makes no install: the install must already answer at the address. It works only until somebody has logged in to the install; after that the dashboard's Domain screen does the same.
+ * It makes no install: the install must already answer at the address. Once somebody has logged in to the install it repairs alone: `--check` is refused, and `--login` corrects nothing.
  * An install with nothing set takes its first login from `--login`, and its domain from `--domain`: with no `--domain` it is set up without one, at the address `--server` names.
- * One that is set ignores `--domain`, and takes `--login` as the correction of the first login.
+ * One that is set ignores `--domain`, and until somebody has logged in takes `--login` as the correction of the first login.
  *
  * @returns the install's rows, worded for a person and kept whole for `--json`; with anything left to repair the command exits as a failure. The token is in no line and no value
  */
@@ -104,7 +104,7 @@ export async function runSetup(request: RequestOf<"setup">, io: Io): Promise<Out
   const init = { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ token, domain: request.domain, login: request.login }), redirect: "manual" as const, signal };
   const answer = await io.fetch(`${request.server}/setup/api/${run}`, init).catch(() => undefined);
   const body: unknown = await answer?.json().catch(() => undefined);
-  if (body === undefined && io.stopped.aborted) return refused(problem("stopped", undefined, "the install may have had the request all the same; poplin setup --check shows what is left"));
+  if (body === undefined && io.stopped.aborted) return refused(problem("stopped", undefined, "the install may have had the request all the same; run it again, and a repair changes only what is left"));
 
   if (answer === undefined) return refused(problem("unreachable", undefined, "check the address and the network"));
 

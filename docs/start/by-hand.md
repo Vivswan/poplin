@@ -144,7 +144,7 @@ Two words the steps use: a **Worker** is the program Cloudflare runs for you, an
 
    After the code, the dashboard opens on Sites, which says `No sites yet`.
 
-   This first login closes the setup page for good. Step 6 is for the computer that publishes.
+   After this first login the setup page only repairs: it takes the account token alone. Step 6 is for the computer that publishes.
 
 6. **Log a computer in, and check.** Take the LTS installer of Node.js from nodejs.org and run it. A Node.js that is already there must be version 24 or higher: `node --version` shows it. Then open a terminal, the window where you type commands:
 
