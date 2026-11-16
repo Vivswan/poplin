@@ -94,9 +94,9 @@ const LOCAL_ROWS = {
   bad_backup: { sentence: "the file is not a backup", hint: "nothing was sent to the install", exit: "failed" },
   no_settings: { sentence: "the backup holds no settings: it is the backup of one site", hint: "import it without --settings", exit: "failed" },
   not_in_backup: { sentence: "the backup holds no such site", hint: "poplin import <zip> --dry-run lists its sites", exit: "failed" },
-  unreachable: { sentence: "the install could not be reached", hint: "check the address and the network; poplin whoami shows the address", exit: "unreachable" },
+  unreachable: { sentence: "the install could not be reached", hint: "check the address and the network; to log in at another address: poplin login --server <address>", exit: "unreachable" },
   timeout: { sentence: "the install took too long to answer", hint: "try again", exit: "unreachable" },
-  not_json: { sentence: "the answer is not the install's", hint: "is the address the one of your poplin install? poplin whoami shows it", exit: "unreachable" },
+  not_json: { sentence: "the answer is not the install's", exit: "unreachable" },
   unexpected_answer: {
     sentence: "the install answered in a form this poplin does not know",
     hint: "a login page in front of the install answers this way, and so does an install of another version",
@@ -125,8 +125,8 @@ const HINTS_ABOUT: Readonly<Record<string, Readonly<Record<string, string>>>> = 
 /** What goes with a change whose answer never came: the install may have made it. */
 const MAY_HAVE_CHANGED = "the answer was lost, so the change may have been made all the same; poplin list shows the sites as they are";
 
-/** The code of each failure of a call that is no refusal. */
-const FAILURE_CODES = { unreachable: "unreachable", timeout: "timeout", "not-json": "not_json", unexpected: "unexpected_answer" } as const;
+/** What goes with a change that never left this computer: the install had nothing of it. */
+const NOTHING_SENT = "nothing was sent, so nothing was changed; check the address and the network";
 
 /** A code of the table. */
 type Code = keyof typeof API_ROWS | keyof typeof LOCAL_ROWS;
@@ -184,14 +184,17 @@ export function problemOf(failure: Failure, call: "reads" | "changes" = "reads")
 
   if (failure.kind === "timeout") return problem("timeout", `${failure.seconds} seconds`, hint);
 
-  if (failure.kind === "unreachable") return problem("unreachable", undefined, hint);
+  // The address that was tried is said: no other command can show it while the install gives no answer.
+  if (failure.kind === "unreachable") return problem("unreachable", failure.address, hint === undefined || failure.left ? hint : NOTHING_SENT);
 
   if (failure.kind === "stopped") return problem("stopped", undefined, hint);
 
   // An answer in plain text says in its own words what is wrong, as an install that cannot start does: the words are shown, and the address is not put in doubt.
   if (failure.kind === "not-json" && failure.said !== undefined) return build("not_json", { sentence: `the answer is plain text, status ${failure.status}`, exit: LOCAL_ROWS.not_json.exit }, failure.said, hint);
 
-  if (failure.kind !== "refused") return problem(FAILURE_CODES[failure.kind], `status ${failure.status}`, hint);
+  if (failure.kind === "not-json") return problem("not_json", `status ${failure.status} from ${failure.address}`, hint ?? "is that the address of your poplin install?");
+
+  if (failure.kind !== "refused") return problem("unexpected_answer", `status ${failure.status}`, hint);
 
   const rows: Readonly<Record<string, Row>> = API_ROWS;
   const row = Object.hasOwn(rows, failure.code) ? rows[failure.code] : undefined;

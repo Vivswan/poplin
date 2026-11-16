@@ -257,8 +257,31 @@ async function duplicate(request: Asked<"duplicate">, session: Session): Promise
   }
 }
 
-/** Remove a site for good, once its label is typed on a terminal. Without a terminal to ask on, nothing is removed. */
-async function deleteForever(request: Asked<"delete">, { client, io }: Session): Promise<Outcome> {
+/**
+ * Remove a site for good, and say what is gone: the one act nothing undoes names the site, what it held, and each address that stopped working.
+ *
+ * @param site - the word the install takes for the site
+ * @returns the install's answer with those lines, or why nothing was removed. Whoever calls it has the person's word first: the command the typed label, a tool its own argument
+ */
+export async function removeForGood(site: string, { client }: Pick<Session, "client">): Promise<Outcome> {
+  const deleted = await client.call(DELETED_SITE, (api) => api.sites[":site"].$delete({ param: { site }, query: { no_trash: "true" } }));
+  if (!deleted.ok) return failed(deleted);
+
+  const { before, left } = deleted.value;
+  const notes = left.length === 0 ? [] : ["the site is gone, and some of its files are still being removed"];
+  if (before === null) return { ok: true, value: deleted.value, lines: ["deleted for good; nothing can restore it"], notes };
+
+  const addresses = [before.addresses.site];
+  if (before.addresses.public !== null) addresses.push(before.addresses.public);
+
+  const lost = `${countText(before.files, "file")} in ${countText(before.versions.length, "kept version")}`;
+
+  return { ok: true, value: deleted.value, lines: [`deleted for good  ${before.label}`, `gone: ${lost}; nothing can restore them`, `stopped working: ${addresses.join(" and ")}`], notes };
+}
+
+/** Remove a site for good, once its label is typed on a terminal. Without a terminal to ask on, and at a question the person stopped, nothing is removed. */
+async function deleteForever(request: Asked<"delete">, session: Session): Promise<Outcome> {
+  const { client, io } = session;
   if (!io.terminal.asks) return { ok: false, problem: problem("no_terminal") };
 
   const found = await client.call(SITE_ANSWER, (api) => api.sites[":site"].$get({ param: { site: siteWord(request.site) } }));
@@ -266,14 +289,11 @@ async function deleteForever(request: Asked<"delete">, { client, io }: Session):
 
   const { label } = found.value.site;
   const typed = await io.ask(`This removes ${label} and every file of it for good. Type its label to go on: `);
+  if (typed === undefined) return { ok: false, problem: problem("stopped", "nothing was deleted") };
+
   if (typed.trim() !== label) return { ok: false, problem: problem("not_confirmed") };
 
-  const deleted = await client.call(DELETED_SITE, (api) => api.sites[":site"].$delete({ param: { site: label }, query: { no_trash: "true" } }));
-  if (!deleted.ok) return failed(deleted);
-
-  const notes = deleted.value.left.length === 0 ? [] : ["the site is gone, and some of its files are still being removed"];
-
-  return { ok: true, value: deleted.value, lines: [], notes };
+  return removeForGood(label, session);
 }
 
 async function deleteSite(request: Asked<"delete">, session: Session): Promise<Outcome> {
@@ -287,7 +307,7 @@ async function deleteSite(request: Asked<"delete">, session: Session): Promise<O
 
   const gone = site.gone_on === undefined ? [] : [`gone for good on ${dayText(site.gone_on)}`];
 
-  return { ok: true, value: trashed.value, lines: [["in the trash", site.label, ...gone].join("  "), `to take it back: poplin restore ${site.label}`] };
+  return { ok: true, value: trashed.value, lines: [["in the trash", site.label, ...gone].join("  ")], steps: [`to take it back: poplin restore ${site.label}`] };
 }
 
 async function restore(request: OneSite, { client }: Session): Promise<Outcome> {

@@ -219,7 +219,7 @@ describe("the MCP server", () => {
     expect((listed.data.sites as Site[]).map((one) => one.label)).toEqual([site.label]);
     expect({ state: siteOf(trashed).state, last: trashed.text.split("\n").at(-1) }).toEqual({
       state: "trash",
-      last: `to take it back: poplin restore ${site.label}`,
+      last: `to take it back: restore_site with site ${site.label}`,
     });
     expect((trash.data.sites as Site[]).map((one) => one.label)).toEqual([site.label]);
     expect({ state: siteOf(restored).state, access: siteOf(restored).access }).toEqual({ state: "live", access: "unlisted" });
@@ -330,6 +330,31 @@ describe("the MCP server", () => {
     ]);
     expect({ site: gone.data.site, before: (gone.data.before as Site).label }).toEqual({ site: null, before: moved.label });
     expect(codeOf(after)).toBe("not_found");
+  });
+
+  // Drift: a tool answered in the command's words, so its next step was a shell command; an agent that holds only the tools was sent to a shell it may not have.
+  test("a refusal names the tool that is the next step, in the text and in the data alike, never the command a person types, and a site's own words stay as they are", async () => {
+    const { bench, site } = await withSite();
+    const titled = await bench.call("update_site", { site: site.label, title: "poplin list of 2026" });
+
+    expect(titled.text).toContain(site.label);
+    expect((await bench.call("get_site", { site: site.label })).text).toContain("poplin list of 2026");
+    const other = siteOf(await bench.call("publish_site", { path: folderOf("notes", { "index.html": "<title>Notes</title>" }), access: "public", public_name: "docs" }));
+
+    const refused = [
+      await bench.call("get_site", { site: NO_SITE }),
+      await bench.call("rollback_site", { site: site.label, version: 9 }),
+      await bench.call("update_site", { site: site.label, access: "public", public_name: "docs" }),
+      await bench.call("delete_site", { site: other.label }).then(() => bench.call("update_site", { site: other.label, title: "Notes" })),
+    ];
+
+    expect(refused.map((answer) => answer.text.split("\n"))).toEqual([
+      ["not_found: no site with that id or public name", "list_sites shows every site"],
+      ["no_such_version: the site keeps no such version", "get_site lists the versions"],
+      ["name_taken: another site holds that public name: public_name", "to pick another: update_site with access public and another public_name"],
+      ["in_trash: the site sits in the trash", "to take it back: restore_site"],
+    ]);
+    expect<unknown>(refused.map((answer) => (answer.data.error as { hint: string }).hint)).toEqual(refused.map((answer) => answer.text.split("\n")[1]));
   });
 
   // Drift: a tool and the command send a publish through one function; a tool that planned its own way would publish to an install without a domain what the command refuses.

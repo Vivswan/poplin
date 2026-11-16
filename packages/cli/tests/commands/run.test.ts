@@ -204,7 +204,7 @@ describe("run", () => {
 
     expect([listed.code, listed.out, listed.err]).toEqual([5, [], [`the answer is plain text, status 503: ${sentence}`]]);
     expect(jsonOf(json).error).toEqual({ code: "not_json", message: "the answer is plain text, status 503", about: sentence });
-    expect(page.err).toEqual(["the answer is not the install's: status 502", "is the address the one of your poplin install? poplin whoami shows it"]);
+    expect(page.err).toEqual([`the answer is not the install's: status 502 from ${ORIGIN}`, "is that the address of your poplin install?"]);
   });
 
   // Drift: a person holds the address, not the label. Each form must ask the install for the same site by its label, and an address of another install must reach no install at all.
@@ -516,9 +516,9 @@ describe("run", () => {
 
   test.each([
     ["a code the table does not hold keeps the install's sentence", () => answer(418, { error: { code: "teapot", message: "the install is a teapot" } }), "the install is a teapot", 1],
-    ["an install that cannot be reached", () => Promise.reject(new Error("no route to host")), "the install could not be reached", 5],
-    ["an answer that is no JSON", () => new Response("<html>login</html>", { status: 200 }), "the answer is not the install's: status 200", 5],
-    ["a redirect to a login page", () => new Response(null, { status: 302, headers: { Location: "https://login.example.com" } }), "the answer is not the install's: status 302", 5],
+    ["an install that cannot be reached", () => Promise.reject(new Error("no route to host")), `the install could not be reached: ${ORIGIN}`, 5],
+    ["an answer that is no JSON", () => new Response("<html>login</html>", { status: 200 }), `the answer is not the install's: status 200 from ${ORIGIN}`, 5],
+    ["a redirect to a login page", () => new Response(null, { status: 302, headers: { Location: "https://login.example.com" } }), `the answer is not the install's: status 302 from ${ORIGIN}`, 5],
     ["a done answer of another form", () => answer(200, { site: "report" }), "the install answered in a form this poplin does not know: status 200", 5],
   ])("%s is a sentence and an exit code, never a stack", async (_name, hook, sentence, code) => {
     const bench = await openBench();
@@ -544,6 +544,7 @@ describe("run", () => {
       await bench.run(`restore ${label}`),
       await bench.run(`delete ${label} --no-trash`),
       await bench.run(`delete ${label} --no-trash`, { terminal: { asks: true, progress: true }, typed: "report" }),
+      await bench.run(`delete ${label} --no-trash`, { terminal: { asks: true, progress: true }, typed: { stop: true } }),
     ];
 
     expect(refused.map((ran) => [ran.code, ran.err[0]])).toEqual([
@@ -554,18 +555,40 @@ describe("run", () => {
       [1, "the site is not in the trash"],
       [1, "delete --no-trash asks for the site's label to be typed, and there is no terminal to ask on"],
       [1, "what was typed is not the site's label, so nothing was deleted"],
+      [1, "the command was stopped: nothing was deleted"],
     ]);
     expect(await stateOf(bench)).toEqual(before);
   });
 
-  test("delete --no-trash removes the site once its label is typed, and prints nothing", async () => {
+  // Drift: the one act nothing undoes ended in silence, and the person could not tell a removed site from a command that did nothing.
+  test("delete --no-trash removes the site once its label is typed, and says what is gone in the words the agent's tool has for the same act", async () => {
     const { bench, label } = await withSite();
+    const { site } = jsonOf(await bench.run(`show ${label} --json`)) as { site: { addresses: { site: string } } };
 
     const deleted = await bench.run(`delete ${label.slice(-12)} --no-trash`, { terminal: { asks: true, progress: true }, typed: `${label}\n` });
 
-    expect(summary(deleted)).toEqual({ code: 0, out: [], err: [] });
+    expect(summary(deleted)).toEqual({ code: 0, out: [`deleted for good  ${label}`, "gone: 1 file in 1 kept version; nothing can restore them", `stopped working: ${site.addresses.site}`], err: [] });
     expect(deleted.asked).toEqual([`This removes ${label} and every file of it for good. Type its label to go on: `]);
     expect(await stateOf(bench)).toEqual([{ sites: [] }, { sites: [] }, []]);
+  });
+
+  // Drift: with the install down every command sent the person to `poplin whoami` for the address, which then failed the same way and showed none; and a change that never left this computer was said to have been made, maybe.
+  test.each<[string, string, () => Error, string[]]>([
+    ["a read", "whoami", () => new Error("no route to host"), ["check the address and the network; to log in at another address: poplin login --server <address>"]],
+    ["a change that left this computer", `set ${NO_SITE} --private`, () => new Error("socket closed"), ["the answer was lost, so the change may have been made all the same; poplin list shows the sites as they are"]],
+    [
+      "a change that never left this computer",
+      `set ${NO_SITE} --private`,
+      () => Object.assign(new TypeError("refused"), { code: "ConnectionRefused" }),
+      ["nothing was sent, so nothing was changed; check the address and the network"],
+    ],
+  ])("%s that gets no answer names the address it tried, and hints at nothing that needs the install", async (_name, line, thrown, hint) => {
+    const bench = await openBench();
+    bench.hook = () => Promise.reject(thrown());
+
+    const failed = await bench.run(line);
+
+    expect([failed.code, failed.err.slice(-2)]).toEqual([5, [`the install could not be reached: ${ORIGIN}`, ...hint]]);
   });
 
   test.each([
@@ -614,7 +637,7 @@ describe("run", () => {
     expect(summary(down)).toEqual({
       code: 5,
       out: [],
-      err: ["the install could not be reached", "the saved login was removed from this machine; if the install still stands, the token may still be live: revoke it on the install's dashboard"],
+      err: [`the install could not be reached: ${ORIGIN}`, "the saved login was removed from this machine; if the install still stands, the token may still be live: revoke it on the install's dashboard"],
     });
     expect(existsSync(file)).toBe(false);
   });
@@ -788,7 +811,7 @@ describe("run", () => {
     expect(summary(lost)).toEqual({
       code: 5,
       out: [],
-      err: ["the answer is not the install's: status 502", "the answer was lost, so the change may have been made all the same; poplin list shows the sites as they are"],
+      err: [`the answer is not the install's: status 502 from ${ORIGIN}`, "the answer was lost, so the change may have been made all the same; poplin list shows the sites as they are"],
     });
   });
 

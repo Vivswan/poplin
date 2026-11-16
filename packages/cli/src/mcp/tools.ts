@@ -3,16 +3,14 @@
 import { resolve } from "node:path";
 import type * as v from "valibot";
 
-import { DELETED_SITE } from "../../../core/src/actions/delete";
 import type { TOOL_INPUTS } from "../../../core/src/actions/tool-inputs";
 import { parsePublicName, parseSiteName } from "../../../core/src/names/names";
 import { readSiteReference, type TypedSite } from "../../../core/src/sites/references";
-import { type Problem, problem, problemOf } from "../commands/problems";
+import { type Problem, problem } from "../commands/problems";
 import { planPublish, sendPublish } from "../commands/publish";
 import type { Outcome, RequestOf, Session } from "../commands/records";
-import { runSiteCommand } from "../commands/site-commands";
+import { removeForGood, runSiteCommand } from "../commands/site-commands";
 import { readSiteSettings, type SiteSettings } from "../commands/site-settings";
-import { countText } from "../commands/text";
 import { isUsageError } from "../commands/util";
 import { readByInstall, siteWord } from "../commands/wire";
 import type { Host } from "./records";
@@ -152,31 +150,12 @@ async function onSite(host: Host, raw: string, request: (site: SiteReference) =>
   return withSite(host, typed, (site, session) => runSiteCommand(request(site), session));
 }
 
-/** Remove a site for good, and say what is gone. The command asks a person to type the label first; a tool is asked through `no_trash: true` alone. */
+/** Remove a site for good, in the command's own words. The command asks a person to type the label first; a tool is asked through `no_trash: true` alone. */
 async function deleteForever(raw: string, host: Host): Promise<Outcome> {
   const typed = readSite(raw);
   if (isProblem(typed)) return refused(typed);
 
-  return withSite(host, typed, async (site, { client }) => {
-    const deleted = await client.call(DELETED_SITE, (api) => api.sites[":site"].$delete({ param: { site: siteWord(site) }, query: { no_trash: "true" } }));
-    if (!deleted.ok) return refused(problemOf(deleted.failure, "changes"));
-
-    const { before, left } = deleted.value;
-    const notes = left.length === 0 ? [] : ["the site is gone, and some of its files are still being removed"];
-    if (before === null) return { ok: true, value: deleted.value, lines: ["deleted for good; nothing can restore it"], notes };
-
-    const addresses = [before.addresses.site];
-    if (before.addresses.public !== null) addresses.push(before.addresses.public);
-
-    const lost = `${countText(before.files, "file")} in ${countText(before.versions.length, "kept version")}`;
-
-    return {
-      ok: true,
-      value: deleted.value,
-      lines: [`deleted for good  ${before.label}`, `gone: ${lost}; nothing can restore them`, `stopped working: ${addresses.join(" and ")}`],
-      notes,
-    };
-  });
+  return withSite(host, typed, (site, session) => removeForGood(siteWord(site), session));
 }
 
 /** Whether a publish makes a new site, under which name, or updates one, which a name sent with it renames. `unread` updates a site whose address only the install can read. */

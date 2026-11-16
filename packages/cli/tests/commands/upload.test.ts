@@ -2,6 +2,7 @@ import { afterEach, describe, expect, spyOn, test } from "bun:test";
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 
+import { ORIGIN } from "../../../app/tests/api/support/install";
 import type { Io } from "../../src/commands/records";
 import { type Bench, cleanUp, folderOf, jsonOf, openBench, stateOf } from "./support/harness";
 
@@ -349,7 +350,7 @@ describe("upload", () => {
         code: 5,
         waits: [1500, 3000, 6000],
         status: [again(2, 2), again(3, 3), again(6, 4), ""],
-        err: ["the answer is not the install's: status 502", "the upload was given up and no site changed; is the address the one of your poplin install? poplin whoami shows it"],
+        err: [`the answer is not the install's: status 502 from ${ORIGIN}`, "the upload was given up and no site changed; is that the address of your poplin install?"],
         out: 0,
       },
     ],

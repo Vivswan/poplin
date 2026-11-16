@@ -2,7 +2,6 @@
 // The `poplin` command.
 
 import { hostname } from "node:os";
-import { createInterface } from "node:readline/promises";
 import { setTimeout as wait } from "node:timers/promises";
 
 import { exitCode } from "./commands/exit-codes";
@@ -11,6 +10,7 @@ import type { Io } from "./commands/records";
 import { AFTER_STOP_TIMEOUT_MS, run } from "./commands/run";
 import { openBrowser } from "./local/browser";
 import { thisMachine } from "./local/login-file";
+import { askLine } from "./local/question";
 
 /** Moves to the start of the line, writes, and clears what the line held beyond it: the one updating progress line. No color is ever written. */
 const REWRITE = { start: "\r", clearToEnd: "\u001b[K" } as const;
@@ -23,17 +23,6 @@ const STOP = new AbortController();
 
 /** How long a stopped command has to end by itself, in milliseconds: the two calls that give an upload up, and two seconds. */
 const LAST_WORDS_MS = 2 * AFTER_STOP_TIMEOUT_MS + 2000;
-
-/** Ask one question on the terminal: the question goes to stderr, so stdout holds the result alone. */
-async function ask(question: string): Promise<string> {
-  const terminal = createInterface({ input: process.stdin, output: process.stderr });
-
-  try {
-    return await terminal.question(question);
-  } finally {
-    terminal.close();
-  }
-}
 
 /** Wait, unless the person stopped the command, or stops it meanwhile. */
 async function pause(ms: number): Promise<"over" | "interrupted"> {
@@ -71,7 +60,8 @@ function thisProcess(): Io {
     fetch: (input, init) => fetch(input, init),
     machine,
     terminal: { asks: watched && process.stdin.isTTY === true, progress: watched && process.env.TERM !== PLAIN_TERMINAL },
-    ask,
+    // The question goes to stderr, so stdout holds the result alone.
+    ask: (question) => askLine(question, { input: process.stdin, output: process.stderr, stopped: STOP.signal }),
     computer: hostname(),
     open: (address) => void openBrowser(address, machine),
     pause,
