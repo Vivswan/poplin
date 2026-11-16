@@ -245,7 +245,8 @@ describe("the local preview", () => {
   });
 
   // Drift: the note of the last check of the domain can only be looked at where an install remembers one. A seed with none, or one a Check could not change, would leave the healthy and the broken state unseen.
-  test("the seeded install remembers a healthy domain, a Check on the Domain screen leaves a broken login to act on, and a reset brings the healthy one back", async () => {
+  // The sample install holds what reads its provider: a Check that waited for a token would show the dialog the screen has no more use for.
+  test("the seeded install remembers a healthy domain, a Check on the Domain screen takes no token and leaves a broken login to act on, and a reset brings the healthy one back", async () => {
     const preview = await openPreview(false);
     const note = async (): Promise<unknown> => {
       const answer = await preview.fetch(new Request(`${ORIGIN}/api/domain`, { headers: { Authorization: `Bearer ${preview.token()}` } }));
@@ -254,7 +255,7 @@ describe("the local preview", () => {
       return [answer.status, check?.run, check?.pieces.length, raised];
     };
     const seeded = await note();
-    const run = await change(preview, "/data/domain/check", { token: "sample-token" });
+    const run = await change(preview, "/data/domain/check", {});
     const checked = await note();
     await preview.fetch(new Request(`${ORIGIN}/reset`, { method: "POST" }));
 
@@ -612,7 +613,7 @@ describe("the local preview of an install without a domain", () => {
     const preview = await openLocal();
     const pieces = (rows: readonly { readonly piece: string }[]): readonly string[] => rows.map((row) => row.piece);
     const seeded = (await (await preview.fetch(new Request(`${LOCAL.admin}/data/domain`))).json()) as { form: { tokenNote: string }; last: { rows: [] } };
-    const run = await changeAt(preview, "/data/domain/check", { token: "sample-token" });
+    const run = await changeAt(preview, "/data/domain/check", {});
     const checked = pieces(((await run.json()) as { rows: [] }).rows);
     const ofDomain = pieces(((await (await change(await openPreview(false), "/data/domain/check", { token: "sample-token" })).json()) as { rows: [] }).rows);
 

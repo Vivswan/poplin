@@ -11,10 +11,35 @@ After the first login, Domain does what the setup page did.
 
 | On the screen       | What it is                                                                                     |
 | ------------------- | ---------------------------------------------------------------------------------------------- |
-| the line at the top | how the domain stands, such as `Nothing to repair` or `2 to repair`, then the last run and who made it; `Not checked yet` before any run |
+| the line at the top | how the domain stands, such as `Nothing to repair` or `2 to repair`, then the last run and who made it |
 | Check               | lists every piece and changes nothing                                                          |
 | Repair              | fixes every piece that needs it                                                                |
 | the table           | one row per piece, in the columns Piece, State, and Detail                                     |
+
+## Check needs no token
+
+An install that holds [its key](../about/security.md#the-kept-key) reads every piece with it. The screen shows the pieces with no press and no token:
+
+| You                                                    | The screen                                                             |
+| ------------------------------------------------------ | ---------------------------------------------------------------------- |
+| open Domain, and the last check is under 10 minutes old | shows that check                                                       |
+| open Domain, and the last check is older, or there is none | shows the last check at once, checks again by itself, then shows the new one |
+| press Check                                            | checks again, with no dialog                                           |
+| press Repair                                           | opens the dialog that asks for an account token                        |
+
+No other screen starts a check. A check of an install whose every piece stands sends Cloudflare about 21 requests under a domain and about 15 without: fewer where a piece is missing, more where a list fills more than one page or a request is sent again. Each only reads. A check the screen ran by itself writes no line into Activity, and a pressed one writes one.
+
+Five rows read otherwise in a check made with the key:
+
+| Row                                  | It says                                                                                                         |
+| ------------------------------------ | --------------------------------------------------------------------------------------------------------------- |
+| a piece the key has no right to read | `failed`, with the right and `Press Repair.` The other pieces are still read, and Repair makes a key with every right |
+| `D1 database`                        | `present`, with `the install is running on it`. The key holds no right to a database, so Cloudflare is not asked |
+| an optional piece that is not set up | `optional`, with the permission that switches it on                                                             |
+| `Key`                                | `present` while Cloudflare takes the key, and `differs` once Cloudflare refused it or a piece lacked a right     |
+| `Upload key`                         | `present` where the install holds one, and `missing` where it holds none. The key reads no token of the account, so Cloudflare is not asked |
+
+An install that holds no key says `Not checked yet` before any run, and its Check opens the same dialog as Repair. The OpenTofu module makes such an install: it holds a key after a Repair on this screen.
 
 Cloudflare's login page keeps its own list of users. After a user is added or removed, under Access or [another way](access.md#add-a-user), poplin writes the new list there by itself, with [the key it keeps](../about/security.md#the-kept-key).
 
@@ -22,12 +47,14 @@ On an install that holds no key, the line says `Users changed. Press Repair.` un
 
 A saved `search_engines_allowed` or `outside_pages` is written into its WAF rule the same way, with the key, and makes a rule the domain lacks: [which rule is made when](#optional-block-junk-traffic-and-crawlers). `block_bots`, the DNS records, the routes, and the redirect change only when you press Repair.
 
-Check and Repair each open a dialog that asks for an account token:
+## Repair asks for an account token
+
+The key may not change a DNS record, a route, or a redirect, so Repair opens a dialog:
 
 | Step | In the dialog         | Do                                                                                                         |
 | ---- | --------------------- | ---------------------------------------------------------------------------------------------------------- |
 | 1    | Make an account token | press Open the account token form, or take the token you kept from [step 3](../start/by-hand.md#the-steps) |
-| 2    | Paste it              | paste the token into the box Account token, then press the dialog's Check or Repair                        |
+| 2    | Paste it              | paste the token into the box Account token, then press the dialog's Repair                                 |
 
 Three rows are Cloudflare's login:
 
@@ -67,7 +94,7 @@ ok  domain    The login for private sites is missing or changed, so private site
 
 | Question          | Answer                                                                                                   |
 | ----------------- | -------------------------------------------------------------------------------------------------------- |
-| What is kept      | the last Check or Repair of the Domain screen: when it ran, who ran it, and how each piece stood            |
+| What is kept      | the last Check or Repair of the Domain screen, a check the screen ran by itself among them: when it ran, who ran it, and how each piece stood |
 | What is not kept  | the token, which is used for the one request                                                             |
 | What the row says | the most serious thing to act on: the login, then records and routes, changed users, any other piece     |
 | When there is one | only when that run left something to act on, and only for an admin; `domain` under `--json` has the same |

@@ -1167,9 +1167,10 @@ export class SqlDatabase implements Database {
     return domainCheckIn(read);
   }
 
-  async keepDomainCheck(check: DomainCheck, detail: Readonly<Record<string, unknown>>, carried?: CarriedUsers): Promise<void> {
+  async keepDomainCheck(check: DomainCheck, detail: Readonly<Record<string, unknown>> | null, carried?: CarriedUsers): Promise<void> {
     const settling = carried === undefined ? [] : [usersCarried(carried, check.ran_at)];
-    await this.#driver.batch([domainCheckKept(check), auditPlain({ by: check.by, at: check.ran_at }, "domain_synced", detail), ...settling]);
+    const entry = detail === null ? [] : [auditPlain({ by: check.by, at: check.ran_at }, "domain_synced", detail)];
+    await this.#driver.batch([domainCheckKept(check), ...entry, ...settling]);
   }
 
   async claimUsers(at: number): Promise<{ readonly logins: readonly Login[] | undefined; readonly mark: number | undefined }> {

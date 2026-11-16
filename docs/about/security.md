@@ -82,7 +82,7 @@ A public site is without `noindex` only when both are on. The bots rule is one o
 | a machine with no browser | the same kind of token | `poplin login` prints an address and a short code to open on another device, where a user allows that computer |
 | the Worker, to the bucket and the database | its bindings inside Cloudflare | no database key exists outside Cloudflare; the one bucket key is the upload key below |
 | the CLI, to the bucket, for the files of a publish | one ticket a file: a signed address that lives 10 minutes | the Worker signs it with the upload key, which never leaves the Worker; [The upload key](#the-upload-key) says what a ticket and the key can reach |
-| the person who sets the install up | a Cloudflare API token, pasted into the setup page or the Domain screen | the person makes it at Cloudflare; the Worker uses it for that one request, in which a Repair also makes the kept key, and never stores, logs, or shows it |
+| the person who sets the install up | a Cloudflare API token, pasted into the setup page or into Repair on the Domain screen | the person makes it at Cloudflare; the Worker uses it for that one request, in which a Repair also makes the kept key, and never stores, logs, or shows it |
 | the Worker, to Cloudflare's API | one kept key, an API token named "poplin kept key" that the account owns | Repair makes it with the pasted token and puts it on the Worker as an encrypted secret; [The kept key](#the-kept-key) says what it may do |
 | the Worker, to update itself | the kept key | the Worker fetches the release's built files, checks each against the digests poplin's website publishes, and uploads them in place of its own code: [Update](../upkeep/update.md#with-the-kept-key) |
 
@@ -151,6 +151,8 @@ you paste one account token  ->  Repair makes "poplin kept key" at Cloudflare  -
 | How to get a new one | once the token is deleted, press Repair on the Domain screen with an account token: it makes a new key and deletes every other token of that name |
 
 Cloudflare limits the key to the account and the domain, not to poplin's own objects: it reaches every Access application of the account and every WAF rule of the domain.
+
+The [Domain](../dashboard/domain.md#check-needs-no-token) screen reads every piece with the key, so its Check asks for no token. Repair still takes a pasted account token.
 
 **The key can replace any Worker of the account.** poplin uses that right on its own Worker alone, to update itself. Cloudflare gives the right for a whole account or not at all: a key limited to one Worker is refused on every call.
 

@@ -12,6 +12,9 @@ export const TOKEN = "token-of-account-a-0123456789";
 /** A valid token of another account, which has a zone of the same name. */
 export const OTHER_TOKEN = "token-of-account-b-0123456789";
 
+/** The key an install of that account keeps. As the kept key's rights have it, it reads the account and its zone, and is refused every change, the account's databases, and the account's tokens. */
+export const KEPT = "kept-key-of-account-a-0123456789";
+
 /** The install's zone. */
 const ZONE = "zone-1";
 
@@ -35,7 +38,10 @@ const GROUP_NAMES = {
 } as const;
 
 /** Which account each token acts on. */
-const ACCOUNT_OF: Readonly<Record<string, string>> = { [`Bearer ${TOKEN}`]: ACCOUNT, [`Bearer ${OTHER_TOKEN}`]: "account-b" };
+const ACCOUNT_OF: Readonly<Record<string, string>> = { [`Bearer ${TOKEN}`]: ACCOUNT, [`Bearer ${KEPT}`]: ACCOUNT, [`Bearer ${OTHER_TOKEN}`]: "account-b" };
+
+/** What the kept key is refused beside every change: the paths of the account's databases and of its tokens. */
+const KEPT_FROM = /\/(d1|tokens)(\/|$)/;
 
 /** Every zone the fake holds, whatever the account. */
 const ZONES = [
@@ -312,6 +318,11 @@ function inAccount(account: Account, asked: Asked, parts: readonly string[]): Re
   return switches(account, asked, parts);
 }
 
+/** Whether a request was sent with the kept key and is one the key has no right to. */
+function keptFrom(asked: Asked, path: string): boolean {
+  return asked.key === `Bearer ${KEPT}` && (asked.method !== "GET" || KEPT_FROM.test(path));
+}
+
 /**
  * Answer one request as the account's API would.
  *
@@ -332,6 +343,8 @@ export function answer(account: Account, asked: Asked): Response {
 
   // A token of another account reads its own free address, and reaches nothing of this account.
   if (owner !== ACCOUNT) return path === `/accounts/${owner}/workers/subdomain` ? reply({ subdomain: FREE_ADDRESSES[owner] }) : refusal(403, 10000, "Authentication error");
+
+  if (keptFrom(asked, path)) return refusal(403, 10000, "Authentication error");
 
   const call = `${asked.method} ${path}`;
   const refused = [account.refuse ?? []].flat().some((entry) => (entry.endsWith("*") ? call.startsWith(entry.slice(0, -1)) : entry === call));

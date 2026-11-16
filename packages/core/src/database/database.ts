@@ -921,11 +921,11 @@ export interface Database {
    * Keep a check or repair of the domain in place of the one kept before, with one `domain_synced` audit entry, in one step: two rows written, however many pieces the run holds.
    *
    * @param check - the run; its `by` and `ran_at` sign the audit entry
-   * @param detail - what the audit entry says of the run
+   * @param detail - what the audit entry says of the run; `null` writes no entry, for a check nobody pressed: one row written
    * @param carried - for a repair that wrote the users to the domain: what it came to, with the moment it began. The change of the users is settled as `settleUsers` settles it, in the same step. Left out, a change that waits keeps waiting
    * @throws {Error} a value breaks its rule
    */
-  keepDomainCheck(check: DomainCheck, detail: Readonly<Record<string, unknown>>, carried?: CarriedUsers): Promise<void>;
+  keepDomainCheck(check: DomainCheck, detail: Readonly<Record<string, unknown>> | null, carried?: CarriedUsers): Promise<void>;
 
   /**
    * Begin a try to carry the users to the domain: mark them as waiting, with a mark later than every one before it, and read the logins to carry, in one step.

@@ -7,7 +7,7 @@ import { runDone } from "../../../app/src/console/domain-answers";
 import type { Login } from "@poplin/core/src/auth/logins";
 import { createPathPlug, givePathKey } from "../../src/zone/path-plug";
 import { withFake } from "./support/fake-cloudflare";
-import { ACCOUNT, type Account, answer, emptyAccount, KEY_VALUE_START, OTHER_TOKEN, TEAM, TOKEN } from "./support/fake-install";
+import { ACCOUNT, type Account, answer, emptyAccount, KEPT, KEY_VALUE_START, OTHER_TOKEN, TEAM, TOKEN } from "./support/fake-install";
 import { ADDRESSES } from "./support/layouts";
 import type { Asked } from "./support/replies";
 
@@ -229,4 +229,78 @@ test("the token form asks for the five rights of an install without a domain and
   const link = new URL(plug.tokenLink);
 
   expect([[...plug.tokenRights].sort(), plug.tokenOptional, link.searchParams.has("zoneId"), plug.tokenNote.includes("Zone")]).toEqual([[...RIGHTS].sort(), [], false, false]);
+});
+
+/** Run a test against an account at the fake API, with the plug of an install that holds its key. */
+async function withKey(account: Account, run: (plug: ReturnType<typeof createPathPlug>, own: () => Promise<DomainReading>, asked: readonly Asked[]) => Promise<void>): Promise<void> {
+  await withFake(
+    (asked) => answer(account, asked),
+    async (connection, asked) => {
+      const plug = createPathPlug({ accountId: ACCOUNT, script: "poplin", layout: ADDRESSES, baseUrl: connection.baseUrl, uploadKeyId: "held-upload-key", kept: { connection: { key: KEPT, baseUrl: connection.baseUrl } } });
+      const own = plug.ownCheck;
+      if (own === undefined) throw new Error("a plug with a key has no check of its own");
+
+      await run(plug, () => own(SETTINGS), asked);
+    },
+  );
+}
+
+// Drift: the count is what one request of a Worker spends each time the Domain screen opens on a check that is old. With no token to prove, a call for the account's free address, to the databases, or to the tokens is one the check has no use for.
+test("an install that holds its key checks with no token: every piece a repair made reads as present in 15 calls, each a read sent with the key, and the database's row says the install runs on it", async () => {
+  const account = deployed();
+
+  await withKey(account, async (plug, own, asked) => {
+    await plug.repair(TOKEN, SETTINGS);
+    const sent = asked.length;
+    const rows = shown(await own());
+    const calls = asked.slice(sent);
+
+    expect(rows).toEqual(table({}).map((row) => (row.startsWith("D1 database") ? "D1 database | present | poplin: the install is running on it" : row)));
+    expect([calls.length, [...new Set(calls.map((call) => `${call.method} ${call.key}`))], calls.filter((call) => /\/(d1|tokens|workers\/subdomain)(\/|\?|$)/.test(call.path))]).toEqual([15, [`GET Bearer ${KEPT}`], []]);
+  });
+});
+
+// Drift: a key made before a right was added lacks it, and one deleted at Cloudflare is refused. A check that read either as a healthy install, or stopped with no word of the key, would never send the person to the repair that makes a new one.
+test.each([
+  {
+    name: "lacks the right to read the team's domain fails that row alone and names the right",
+    refuse: `GET /accounts/${ACCOUNT}/access/organizations`,
+    as: undefined,
+    rows: [
+      "Worker variable | failed | the team's domain: the key the install holds lacks this right: Access: Organizations, Identity Providers, and Groups Read. Press Repair.",
+      "Key | differs | poplin kept key: the key the install holds lacks a right the install uses now",
+      "Upload key | not-run | ",
+      "D1 database | present | poplin: the install is running on it",
+    ],
+  },
+  {
+    name: "Cloudflare refuses at the forwarders stops there",
+    refuse: `GET /accounts/${ACCOUNT}/workers/scripts*`,
+    as: { status: 401, code: 10000 },
+    rows: [
+      "Forwarder | failed | Cloudflare refused the key the install holds. Press Repair.",
+      "Access application | not-run | ",
+      "Worker variable | not-run | ",
+      "Key | differs | poplin kept key: Cloudflare refused the key the install holds",
+      "Upload key | not-run | ",
+      "D1 database | not-run | ",
+      "Workflow | not-run | ",
+    ],
+  },
+])("a key that $name: the key's row says a repair replaces it", async ({ refuse, as, rows }) => {
+  const account = deployed();
+
+  await withKey(account, async (plug, own) => {
+    await plug.repair(TOKEN, SETTINGS);
+    account.refuse = refuse;
+    if (as !== undefined) account.refuseAs = as;
+    const read = shown(await own());
+
+    expect(read.filter((row) => !table({}).includes(row))).toEqual([...rows]);
+  });
+});
+
+// Drift: first setup holds no key. A check of its own would call Cloudflare with nothing, and the screen would stop asking for the token it needs.
+test("an install that holds no key has no check of its own", async () => {
+  expect(createPathPlug({ accountId: ACCOUNT, script: "poplin", layout: ADDRESSES }).ownCheck).toBeUndefined();
 });

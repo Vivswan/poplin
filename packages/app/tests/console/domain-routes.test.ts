@@ -8,7 +8,7 @@ import type { DomainCheck } from "@poplin/core/src/records/domain-check";
 
 import { keptAnswer, runDone } from "../../src/console/domain-answers";
 import type { DomainReading, DomainRow, DomainState } from "../../src/console/domain/records";
-import { fakePlug, TOKEN, usualPlug } from "./support/fake-plug";
+import { fakePlug, selfCheckingPlug, TOKEN, usualPlug } from "./support/fake-plug";
 import { openConsole } from "./support/console";
 import { readShell } from "./support/shell";
 
@@ -59,9 +59,18 @@ describe("what the screen opens with", () => {
         tokenNote: "Choose what the account token is for.",
       },
       words: { thing: "the domain", line: null },
+      checks_alone: false,
       last: null,
     });
     expect(plug.calls).toEqual([]);
+  });
+
+  // Drift: the screen asks for a token wherever this says a check needs one. Said of an install whose plug checks by itself, the owner is asked for a token the install has no use for.
+  test("says a check needs no token on an install whose plug checks by itself, and reading that runs nothing", async () => {
+    const plug = selfCheckingPlug();
+    const opened = await openConsole("", plug);
+
+    expect([((await (await opened.get("/data/domain")).json()) as { checks_alone: boolean }).checks_alone, plug.calls]).toEqual([true, []]);
   });
 
   // Drift: the screen would open as never checked after a run, so a person who comes back cannot see what the last run found, when, or who ran it.
@@ -157,6 +166,34 @@ describe("a run", () => {
     expect(ran.summary).toEqual({ line: "1 to repair", tone: "bad" });
     expect(plug.calls).toMatchObject([{ run: "check", token: TOKEN, settings: { outside_pages: "blocked", logins: [opened.base.owner] } }]);
     expect((await opened.base.audit())[0]).toMatchObject({ action: "domain_synced", by: opened.base.owner, detail: { run: "check", from: "dashboard" } });
+  });
+
+  // Drift: a check of an install that checks by itself would wait for a token, hand a pasted one to the plug, or fill Activity with one line each time the screen opened.
+  test.each([
+    ["pressed with nothing sent", {}, 1],
+    ["pressed with a token sent all the same", { token: TOKEN }, 1],
+    ["run by the screen on opening", { unasked: true }, 0],
+  ] as const)("on an install whose plug checks by itself, a check %s runs the plug's own check with no token and is remembered; only a pressed one writes an audit entry", async (_name, sent, entries) => {
+    const plug = selfCheckingPlug();
+    const opened = await openConsole("", plug);
+    const before = (await opened.base.audit()).length;
+    const answer = await opened.change("/data/domain/check", sent);
+    const ran = (await answer.json()) as Ran;
+    const { last } = (await (await opened.get("/data/domain")).json()) as { readonly last: { readonly run: string; readonly by: string } | null };
+
+    expect([answer.status, ran.summary, plug.calls.map((call) => [call.run, call.token])]).toEqual([200, { line: "1 to repair", tone: "bad" }, [["check", null]]]);
+    expect([last?.run, last?.by, (await opened.base.audit()).length - before]).toEqual(["check", opened.base.owner, entries]);
+  });
+
+  // Drift: a repair changes the provider, which the install's own hold on it may not. A repair that ran with no token, or a check with none on an install that needs one, would be a run nobody authorised.
+  test("a repair always takes the token, and a check with none on an install that needs one is refused at the token's box with the plug never asked", async () => {
+    const [own, usual] = [selfCheckingPlug(), usualPlug()];
+    const repaired = await (await openConsole("", own)).change("/data/domain/repair", { token: TOKEN });
+    const unsent = await (await openConsole("", own)).change("/data/domain/repair", {});
+    const checked = await (await openConsole("", usual)).change("/data/domain/check", { unasked: true });
+
+    expect([repaired.status, own.calls.map((call) => [call.run, call.token]), unsent.status, usual.calls]).toEqual([200, [["repair", TOKEN]], 400, []]);
+    expect([checked.status, await checked.json()]).toEqual([403, { ok: false, code: "token", about: "token", sentence: expect.any(String) }]);
   });
 
   // Drift: the pasted token would come back in an answer, a header, or the audit log, where a screen share or a log reader finds it.

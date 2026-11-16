@@ -8,6 +8,7 @@
 //
 // The console's plug is one that changes: its first check finds pieces to repair, a repair mends them, and every run after finds them in place.
 // A repair with the token `lacking` mends one piece and fails at the other for a right the token lacks; that piece stays to repair until a token that has the right.
+// It also checks by itself, as an install that holds something to read its provider with does: its own check reads what a check with a good token reads, and takes none.
 
 import type { DomainPlug, DomainReading, DomainRow, DomainState, FirstRun, TokenFacts } from "../../../app/src/console/domain/records";
 
@@ -64,6 +65,9 @@ const REFUSED_TOKENS: Readonly<Record<string, Extract<DomainReading, { ok: false
 
 /** The token that lacks a right one piece needs: a repair with it goes on past that piece, whose row names the right. */
 const LACKING_TOKEN = "lacking";
+
+/** What the changing plug's own check is read with, in a token's place: no token a person pastes is taken for it. */
+const OWN_TOKEN = "the install's own";
 
 /** What the row a repair of the `partial` state fails at says: the piece, why, and what to add. */
 const FAILED_DETAIL = "the dashboard: the provider refused the change. Add this right to the account token: Routes: Edit";
@@ -160,7 +164,7 @@ function stateIn(piece: Piece, run: "check" | "repair", token: string): DomainSt
  * Build a plug whose install a repair mends: a check finds the pieces still broken, a repair says what it did to each, and every run after finds a mended piece in place.
  *
  * @param provider - the kind of install the plug stands for
- * @returns a plug that refuses the token `wrong`, does not answer for the token `offline`, fails one piece of a repair for the token `lacking`, and takes any other
+ * @returns a plug that refuses the token `wrong`, does not answer for the token `offline`, fails one piece of a repair for the token `lacking`, and takes any other; its own check takes none
  */
 export function changingPlug(provider: Provider): DomainPlug {
   const broken = new Set(provider.pieces.filter((piece) => piece.broken !== undefined));
@@ -178,7 +182,9 @@ export function changingPlug(provider: Provider): DomainPlug {
       return table(provider.pieces.map((piece) => changingRow(piece, states.get(piece) ?? "present")));
     };
 
-  return { ...provider.form, ...provider.says, check: answer("check"), repair: answer("repair") };
+  const check = answer("check");
+
+  return { ...provider.form, ...provider.says, check, repair: answer("repair"), ownCheck: (settings) => check(OWN_TOKEN, settings) };
 }
 
 /**

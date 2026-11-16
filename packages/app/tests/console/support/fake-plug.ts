@@ -5,10 +5,10 @@ import type { DomainPlug, DomainReading, DomainRow, DomainSettings, FirstChoice,
 /** The token the tests paste. No answer, header, or audit entry may hold it. */
 export const TOKEN = "planted-token-0123456789-abcdefghij";
 
-/** One call the plug received. `settings` is what it read, or `undefined` when it never asked or the install had none. */
+/** One call the plug received. `token` is `null` for the plug's own check, which takes none. `settings` is what it read, or `undefined` when it never asked or the install had none. */
 interface Call {
   readonly run: "check" | "repair";
-  readonly token: string;
+  readonly token: string | null;
   readonly settings: DomainSettings | undefined;
 }
 
@@ -71,6 +71,18 @@ export function fakePlug(answer: (run: "check" | "repair", token: string) => Dom
 /** A plug over the one-missing install: a check finds it, a repair fixes it. */
 export function usualPlug(): FakePlug {
   return fakePlug((run) => ({ ok: true, rows: run === "check" ? ONE_MISSING : REPAIRED, steps: [] }));
+}
+
+/** A plug over the one-missing install that also checks by itself, as an install that holds something to read its provider with does. */
+export function selfCheckingPlug(): FakePlug {
+  const plug = usualPlug();
+  const ownCheck: NonNullable<DomainPlug["ownCheck"]> = async (settings) => {
+    plug.calls.push({ run: "check", token: null, settings: await settings() });
+
+    return { ok: true, rows: ONE_MISSING, steps: [] };
+  };
+
+  return { ...plug, ownCheck };
 }
 
 /**

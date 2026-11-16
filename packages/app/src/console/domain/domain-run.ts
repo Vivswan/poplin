@@ -1,4 +1,5 @@
 // One run of the domain plug for the Domain tab or the setup page: the token goes in, the rows come out, and the install keeps the run: its pieces as the last check of the domain, and one audit entry that says what was found or done.
+// A check with no token is the plug's own, made with what the install itself holds at the provider: it is kept the same way. One nobody pressed is kept with no audit entry.
 // A repair that leaves every piece of the login and every object that holds the users standing has carried the users it read to the domain: a change of the users waits no more while those are still the stored ones.
 // A repair that wrote such an object and stopped short may have left the domain with users of an earlier moment, so the change waits.
 
@@ -40,8 +41,8 @@ interface Asked {
   /** Whether to read or to change. */
   readonly run: DomainRun;
 
-  /** The pasted key, as it was typed. It is handed to the plug and to nothing else. */
-  readonly token: string;
+  /** The pasted key, as it was typed. It is handed to the plug and to nothing else. `null` asks for the plug's own check, which takes none: a plug that has no such check is asked with an empty token, which it refuses. */
+  readonly token: string | null;
 
   /** Reads the settings the provider's side is made to match. The plug asks only once the token is proven. */
   readonly settings: ReadSettings;
@@ -51,6 +52,9 @@ interface Asked {
 
   /** The page the form was on. */
   readonly from: "dashboard" | "setup";
+
+  /** Whether the run writes no audit entry: a check nobody pressed, which only renews what the install remembers. Left out, it writes one. */
+  readonly unasked?: boolean;
 
   /** Whether the run is kept, as the last check of the domain and as an audit entry; left out, it is. A run on an install with no stored settings is not: nobody is there to name, and whoever sent it has proven nothing of this install. */
   readonly unrecorded?: boolean;
@@ -124,6 +128,13 @@ function remembered(row: DomainRow): CheckedPiece {
   return row.right === undefined ? { ...named, state: "unread", reason: "failed" } : { ...named, state: "unread", reason: "missing_right", right: row.right };
 }
 
+/** Ask the plug for one run: its own check where no token came and it has one, else the run the token is for. */
+function askPlug(plug: DomainPlug, asked: Asked, token: string, settings: ReadSettings): Promise<DomainReading> {
+  if (asked.run === "repair") return plug.repair(token, settings);
+
+  return asked.token === null && plug.ownCheck !== undefined ? plug.ownCheck(settings) : plug.check(token, settings);
+}
+
 /**
  * Run the plug once and keep the run: its pieces as the last check of the domain, in place of the run kept before, and its audit entry.
  *
@@ -142,19 +153,19 @@ export async function runDomain(plug: DomainPlug, install: Pick<Install, "databa
     return read;
   };
 
-  const answered = asked.run === "check" ? await plug.check(asked.token, settings) : await plug.repair(asked.token, settings);
-  const reading = withoutToken(answered, asked.token);
+  const token = asked.token ?? "";
+  const reading = withoutToken(await askPlug(plug, asked, token, settings), token);
   if (!reading.ok || asked.unrecorded === true) return reading;
 
   const by = asked.by ?? read?.logins[0];
   if (by === undefined) throw new Error("a table was read with no login behind it, so the audit entry has nobody to name");
 
   // An email typed on the setup page can hold the token, in whatever case, and a name cannot be scrubbed: such a run is not kept.
-  if (asked.token !== "" && by.toLowerCase().includes(asked.token.toLowerCase())) return reading;
+  if (token !== "" && by.toLowerCase().includes(token.toLowerCase())) return reading;
 
   const pieces = reading.rows.map(remembered);
   const check = { ran_at: install.now(), by, run: asked.run, pieces: keptPieces(pieces) };
-  const detail = { run: asked.run, from: asked.from, ...byState(reading) };
+  const detail = asked.unasked === true ? null : { run: asked.run, from: asked.from, ...byState(reading) };
   const carried = usersAfter(asked.run, reading.rows, pieces, read?.logins);
   await install.database.keepDomainCheck(check, detail, carried === undefined ? undefined : { logins: carried, since: began });
 
