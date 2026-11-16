@@ -1,6 +1,9 @@
 // An object store in memory whose whole content can be handed out and put back, so a host that is stopped at any moment goes on where it was.
 
+import { compareUint8Arrays } from "uint8array-extras";
+
 import {
+  checkBytes,
   checkListOptions,
   checkWriteOptions,
   type Etag,
@@ -37,16 +40,7 @@ export interface SavedStore {
 
 /** A listing ascends by the UTF-8 bytes of its keys, which is not the order of a string comparison. */
 function compareKeys(left: string, right: string): number {
-  const leftBytes = UTF8.encode(left);
-  const rightBytes = UTF8.encode(right);
-  const shared = Math.min(leftBytes.length, rightBytes.length);
-
-  for (let at = 0; at < shared; at += 1) {
-    const difference = (leftBytes[at] ?? 0) - (rightBytes[at] ?? 0);
-    if (difference !== 0) return difference;
-  }
-
-  return leftBytes.length - rightBytes.length;
+  return compareUint8Arrays(UTF8.encode(left), UTF8.encode(right));
 }
 
 async function bytesOf(body: WriteBody): Promise<Uint8Array> {
@@ -112,11 +106,12 @@ export class KeptStore implements ObjectStore {
   }
 
   async write(key: ObjectKey, body: WriteBody, options: WriteOptions): Promise<ObjectInfo> {
-    const { contentType } = checkWriteOptions(options);
+    const { contentType, sha256 } = checkWriteOptions(options);
     const bytes = await bytesOf(body);
+    await checkBytes(bytes, sha256);
     this.#writes += 1;
 
-    const info: ObjectInfo = Object.freeze({ key, size: bytes.length, etag: `kept-${this.#writes}` as Etag, contentType });
+    const info: ObjectInfo = Object.freeze({ key, size: bytes.length, etag: `kept-${this.#writes}` as Etag, contentType, ...(sha256 === undefined ? {} : { sha256 }) });
     this.#objects.set(key, { info, bytes });
 
     return info;

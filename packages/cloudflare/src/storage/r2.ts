@@ -6,6 +6,7 @@ import {
   checkListOptions,
   checkWriteOptions,
   type Etag,
+  HashMismatch,
   type HeadResult,
   type ListCursor,
   type ListOptions,
@@ -21,6 +22,7 @@ import {
   type WriteBody,
   type WriteOptions,
 } from "@poplin/core/src/storage/storage";
+import { base64ToUint8Array, uint8ArrayToBase64, uint8ArrayToHex } from "uint8array-extras";
 
 /** The most keys one R2 delete call takes. */
 const DELETE_BATCH = 1000;
@@ -30,6 +32,9 @@ const UNTYPED = "application/octet-stream";
 
 /** The characters of an etag R2 issues. R2 reads `*` as "any object" and throws on a quote, so a visitor's string with other characters is never sent. */
 const R2_ETAG = /^[\w-]+$/;
+
+/** How R2 says the bytes of a put are not the ones the hash given with it names: its error 10037, which its message ends in. */
+const BAD_DIGEST = /\(10037\)\s*$/;
 
 // R2 normalises a key to NFC and stores a lone surrogate as U+FFFD: core refuses both, so a key is listed as it was written.
 function listedKey(raw: string): ObjectKey {
@@ -43,8 +48,13 @@ function summaryOf(object: R2Object): ObjectSummary {
   return { key: listedKey(object.key), size: object.size, etag: object.etag as Etag };
 }
 
+// R2 keeps a SHA-256 only for an object whose put gave one.
 function infoOf(key: ObjectKey, object: R2Object): ObjectInfo {
-  return { key, size: object.size, etag: object.etag as Etag, contentType: object.httpMetadata?.contentType ?? UNTYPED };
+  const info = { key, size: object.size, etag: object.etag as Etag, contentType: object.httpMetadata?.contentType ?? UNTYPED };
+  const { sha256 } = object.checksums;
+  if (sha256 === undefined) return info;
+
+  return { ...info, sha256: uint8ArrayToBase64(new Uint8Array(sha256)) };
 }
 
 // R2 refuses a stream of unknown length; a fixed-length one also fails the put when the stream ends at another length.
@@ -146,14 +156,25 @@ export class R2Store implements ObjectStore {
   /**
    * Store an object, replacing whatever the key held.
    *
+   * R2 itself checks the bytes against a hash given with them, and stores nothing that differs.
+   *
    * @throws {Error} a stream body ended at another length than its `size`; nothing was stored
+   * @throws {HashMismatch} the bytes are not the ones `options.sha256` names; nothing was stored
    * @throws {TypeError} `checkWriteOptions` refused the options; nothing was stored
    */
   async write(key: ObjectKey, body: WriteBody, options: WriteOptions): Promise<ObjectInfo> {
-    const { contentType } = checkWriteOptions(options);
-    const object = await this.#bucket.put(key, putBody(body), { httpMetadata: { contentType } });
+    const { contentType, sha256 } = checkWriteOptions(options);
+    const stored: R2PutOptions = { httpMetadata: { contentType } };
+    // R2 takes a hash as bytes or as hex text.
+    if (sha256 !== undefined) stored.sha256 = uint8ArrayToHex(base64ToUint8Array(sha256));
 
-    return infoOf(key, object);
+    try {
+      return infoOf(key, await this.#bucket.put(key, putBody(body), stored));
+    } catch (error) {
+      if (sha256 !== undefined && error instanceof Error && BAD_DIGEST.test(error.message)) throw new HashMismatch();
+
+      throw error;
+    }
   }
 
   /** Remove an object. A key that holds none is not an error. */
