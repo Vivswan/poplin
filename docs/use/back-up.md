@@ -42,3 +42,18 @@ A restore is `poplin import backup.zip --settings --logins` into an install that
 | every token                     | each computer logs in again                  |
 | the activity log                | the log starts anew, with the import         |
 | a version the zip does not hold | a zip of live versions restores those alone  |
+
+## The database's own history at Cloudflare
+
+Cloudflare keeps a history of the install's database, named `poplin`, and calls it Time Travel. Its documentation says it is "always on", reaches back "7 days (Workers Free plan)", and that history and a restore "incur no additional costs". It is a second net under the export, for the records alone.
+
+| Time Travel         | Holds                                                                                                                                                             |
+| ------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| brings back         | the records: sites and their versions, the settings, the logins, the tokens, the activity log, the counts of visits, the update link, the key that signs sessions |
+| does not bring back | a file. The files are in the bucket, which has no such history                                                                                                    |
+| reaches             | any minute of the last 7 days on the free plan                                                                                                                    |
+| is run with         | Cloudflare's own tool: `wrangler d1 time-travel restore poplin --timestamp=<moment>`                                                                              |
+
+- **It overwrites the database in place.** The command prints a bookmark that undoes the restore.
+- **A site deleted for good stays gone.** Its record comes back and its files do not, so a browser that holds no copy of a page gets a 404.
+- **The export stays the backup.** It alone holds the files, and it outlasts the 7 days.
