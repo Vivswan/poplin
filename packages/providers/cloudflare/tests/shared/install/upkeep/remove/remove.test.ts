@@ -21,10 +21,11 @@ const KINDS = {
 /** A dry run, and a run that removes everything once the install's address was typed. */
 const DRY: Removal = { run: "dry-run" };
 
-/** What both kinds end with: the login, the keys, the Workflow, the Worker, and the data, then the token, which stays. */
+/** What both kinds end with: the login, the alert, the keys, the Workflow, the Worker, and the data, then the token, which stays. */
 const SHARED = [
   "Access application | remove | poplin open paths, poplin",
   "Access policy | remove | poplin open paths policy, poplin logins",
+  "Budget alert | remove | poplin: usage charges reached 1 dollar",
   "Key | remove | poplin kept key",
   "Upload key | remove | poplin upload key",
   "Workflow | remove | poplin-jobs",
@@ -42,11 +43,9 @@ const ROWS: Readonly<Record<Kind, readonly string[]>> = {
     "Redirect rule | remove | poplin_https",
     "WAF rule | remove | poplin_outside_pages, poplin_bots",
     "Rate rule | remove | poplin_rate",
-    ...SHARED.slice(0, 2),
-    "Budget alert | remove | poplin: usage charges reached 1 dollar",
-    ...SHARED.slice(2, 8),
+    ...SHARED.slice(0, -1),
     "Bot switches | stay | the domain's AI crawler block and Bot Fight Mode are settings of the domain, and stay as they are set",
-    ...SHARED.slice(8),
+    ...SHARED.slice(-1),
   ],
   "no-domain": ["Forwarder | remove | poplin-sites, poplin-private", ...SHARED],
 };
@@ -54,7 +53,7 @@ const ROWS: Readonly<Record<Kind, readonly string[]>> = {
 /** The calls each kind sends, pinned: for a dry run, and for a run, with how many of the run's remove something. */
 const CALLS: Readonly<Record<Kind, { readonly dry: number; readonly run: number; readonly removals: number }>> = {
   domain: { dry: 23, run: 45, removals: 22 },
-  "no-domain": { dry: 15, run: 29, removals: 14 },
+  "no-domain": { dry: 16, run: 31, removals: 15 },
 };
 
 /** An account that holds nothing. */
@@ -281,6 +280,15 @@ describe.each(Object.keys(KINDS) as Kind[])("an install is removed, %s", (kind) 
 
     expect([shown(run.done).filter((line) => line.startsWith(row.slice(0, row.indexOf(" | ")))).map((line) => line.split(" | ").slice(0, 3).join(" | ")), run.done.ok && run.done.ready, left(account)]).toEqual([[row], true, { ...NOTHING, ...stays }]);
   });
+
+  // Drift: the alert is made only by a token with an optional permission, on an install of either kind, so a token without it can neither list nor remove it: that is no failure of the removal.
+  test("a token without the alert's optional permission leaves the alert as a row that stays, names the permission, and the run is done", async () => {
+    const account = await installedAccount(kind, { refuse: `GET /accounts/${ACCOUNT}/alerting/v3/policies` });
+    const run = await removed(account, kind, applyOf(KINDS[kind].confirm));
+    const stays = run.done.ok ? run.done.rows.filter((row) => row.right !== undefined).map((row) => `${row.object} | ${row.state} | ${row.right}`) : [];
+
+    expect([stays, run.done.ok && run.done.ready, run.done.ok && run.done.blocked, left(account)]).toEqual([["Budget alert | stay | Notifications: Edit"], true, [], { ...NOTHING, alerts: 1 }]);
+  });
 });
 
 describe("an account that changed between the look and the removal", () => {
@@ -313,13 +321,13 @@ describe("an account that changed between the look and the removal", () => {
 });
 
 describe("what one kind alone has", () => {
-  // Drift: a rule and the alert are made only by a token with an optional permission, so a token without it can neither list nor remove them: that is no failure of the removal.
-  test("with a domain, a token without an optional permission leaves that row as one that stays, names the permission, and the run is done", async () => {
-    const account = await installedAccount("domain", { refuse: ["GET /zones/zone-1/rulesets/phases/http_request_firewall_custom/entrypoint", `GET /accounts/${ACCOUNT}/alerting/v3/policies`] });
+  // Drift: a rule is made only by a token with an optional permission, so a token without it can neither list nor remove it: that is no failure of the removal.
+  test("with a domain, a token without a rule's optional permission leaves that row as one that stays, names the permission, and the run is done", async () => {
+    const account = await installedAccount("domain", { refuse: "GET /zones/zone-1/rulesets/phases/http_request_firewall_custom/entrypoint" });
     const run = await removed(account, "domain", applyOf(KINDS.domain.confirm));
     const stays = run.done.ok ? run.done.rows.filter((row) => row.right !== undefined).map((row) => `${row.object} | ${row.state} | ${row.right}`) : [];
 
-    expect([stays, run.done.ok && run.done.ready, run.done.ok && run.done.blocked, left(account)]).toEqual([["WAF rule | stay | Zone WAF: Edit", "Budget alert | stay | Notifications: Edit"], true, [], { ...NOTHING, rules: 2, alerts: 1 }]);
+    expect([stays, run.done.ok && run.done.ready, run.done.ok && run.done.blocked, left(account)]).toEqual([["WAF rule | stay | Zone WAF: Edit"], true, [], { ...NOTHING, rules: 2 }]);
   });
 
   // Drift: the forwarders' names hold nothing of the account, and the install says where it answers. An account whose free address was renamed or taken away must still lose its install, forwarders and all.
