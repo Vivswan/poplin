@@ -90,7 +90,7 @@ export function PeopleTab({ people, failure, actions, onRetry }: PeopleTabProps)
   };
 
   return (
-    <section aria-label="Users" className="flex min-h-0 min-w-0 flex-1 flex-col">
+    <section aria-label="Users" className="flex min-w-0 flex-col">
       <div className="flex shrink-0 flex-wrap items-center gap-2 px-6 py-3 max-md:px-4">
         <p className="min-w-0 flex-1 truncate text-[13px] text-muted-foreground max-md:basis-full max-md:whitespace-normal">
           Users can log in here and change everything.
@@ -110,7 +110,7 @@ export function PeopleTab({ people, failure, actions, onRetry }: PeopleTabProps)
         <Unread title="The users could not be read" failure={failure} onRetry={onRetry} />
       ) : (
         <>
-          <div className="flex min-h-0 flex-1 flex-col max-md:hidden">
+          <div className="shrink-0 max-md:hidden">
             <DataTable
               label="Users"
               columns={COLUMNS}
@@ -121,7 +121,7 @@ export function PeopleTab({ people, failure, actions, onRetry }: PeopleTabProps)
               loading={people === undefined}
             />
           </div>
-          <div className="line-room min-h-0 flex-1 overflow-y-auto md:hidden">
+          <div className="md:hidden">
             <ul aria-label="Users" className="border-t">
               {rows.map((person) => (
                 <li key={person.email} className="group/row flex h-11 items-center gap-2 border-b px-4">

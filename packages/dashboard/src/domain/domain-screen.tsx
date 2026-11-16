@@ -24,7 +24,7 @@ import { answerOf, api, Refused } from "@/lib/api";
 import { sayDone, sayRefused } from "@/lib/notify";
 import { shortMoment, wholeMoment } from "@/lib/sites";
 import { useChosenTimeZone } from "@/lib/timezone";
-import { MiddleColumn } from "@/shared/middle-column";
+import { MiddleColumn, ScreenPage } from "@/shared/middle-column";
 import { HomeProblems } from "@/problems/home-problems";
 import { AppShell } from "@/shell/app-shell";
 
@@ -135,37 +135,39 @@ function Opened({ domain }: { readonly domain: Domain }): ReactNode {
 
   return (
     <>
-      <MiddleColumn gutters className="flex min-h-0 flex-1 flex-col">
-        <section aria-label="Domain" className="flex min-h-0 flex-1 flex-col">
-          {domain.words.line === null ? null : <p className="shrink-0 px-6 pb-3 text-muted-foreground max-md:px-4">{domain.words.line}</p>}
-          <div className="flex shrink-0 flex-wrap items-center gap-x-4 gap-y-2 px-6 pb-3 max-md:px-4">
-            <StatusLine line={line} tone={tone} beside={beside} />
-            <div className="ml-auto flex items-center gap-2">
-              {domain.checks_alone ? (
-                <Button variant="outline" disabled={checking} onClick={() => void check()}>
-                  {checking ? <Spinner data-icon="inline-start" aria-hidden="true" /> : null}
-                  Check
-                </Button>
-              ) : (
-                <DialogTrigger handle={asks} payload="check" render={<Button variant="outline" />}>
-                  Check
+      <ScreenPage>
+        <MiddleColumn gutters>
+          <section aria-label="Domain" className="flex flex-col">
+            {domain.words.line === null ? null : <p className="shrink-0 px-6 pb-3 text-muted-foreground max-md:px-4">{domain.words.line}</p>}
+            <div className="flex shrink-0 flex-wrap items-center gap-x-4 gap-y-2 px-6 pb-3 max-md:px-4">
+              <StatusLine line={line} tone={tone} beside={beside} />
+              <div className="ml-auto flex items-center gap-2">
+                {domain.checks_alone ? (
+                  <Button variant="outline" disabled={checking} onClick={() => void check()}>
+                    {checking ? <Spinner data-icon="inline-start" aria-hidden="true" /> : null}
+                    Check
+                  </Button>
+                ) : (
+                  <DialogTrigger handle={asks} payload="check" render={<Button variant="outline" />}>
+                    Check
+                  </DialogTrigger>
+                )}
+                <DialogTrigger handle={asks} payload="repair" render={<Button variant={tone === "bad" ? "default" : "outline"} />}>
+                  Repair
                 </DialogTrigger>
-              )}
-              <DialogTrigger handle={asks} payload="repair" render={<Button variant={tone === "bad" ? "default" : "outline"} />}>
-                Repair
-              </DialogTrigger>
+              </div>
             </div>
-          </div>
-          {ran === undefined || ran.steps.length === 0 ? null : (
-            <div className="shrink-0 px-6 pb-3 max-md:px-4">
-              <PersonSteps steps={ran.steps} />
-            </div>
-          )}
-          <HomeProblems home="domain" className="flex shrink-0 flex-col gap-2 px-6 pb-3 max-md:px-4" />
-          {ran === undefined ? null : <Pieces rows={ran.rows} />}
-          {ran === undefined && checking ? <Reading /> : null}
-        </section>
-      </MiddleColumn>
+            {ran === undefined || ran.steps.length === 0 ? null : (
+              <div className="shrink-0 px-6 pb-3 max-md:px-4">
+                <PersonSteps steps={ran.steps} />
+              </div>
+            )}
+            <HomeProblems home="domain" className="flex shrink-0 flex-col gap-2 px-6 pb-3 max-md:px-4" />
+            {ran === undefined ? null : <Pieces rows={ran.rows} />}
+            {ran === undefined && checking ? <Reading /> : null}
+          </section>
+        </MiddleColumn>
+      </ScreenPage>
       <RunDialog handle={asks} form={domain.form} thing={domain.words.thing} onRun={run} />
     </>
   );
