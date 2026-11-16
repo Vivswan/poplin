@@ -4,7 +4,7 @@ import type { Bench, Missing } from "./records";
 import { GHOST_ID } from "./util";
 
 /** Why a check that needs a person is skipped. */
-const NEEDS_PERSON = "a person in a browser: the manual checklist in tests/live/README.md";
+const NEEDS_PERSON = "a person in a browser: the manual checklist in packages/providers/cloudflare/live/README.md";
 
 /** Why a check of the access letter is skipped. */
 const NO_LETTERS = "an install that sends a private site's address to its letter p form";

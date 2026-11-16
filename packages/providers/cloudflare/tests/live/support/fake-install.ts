@@ -21,18 +21,18 @@
 // The fake's time stands still while requests are sent and moves on only in a pause, so its two limits count as the real ones do: by the minute and by ten seconds.
 // A pause is also when the fake's provider works with nobody asking: each job that was started runs one round in it, as one step.
 
-import { createApi } from "../../../packages/app/src/api/api";
-import type { SiteAddresses } from "../../../packages/app/src/sites/addresses";
-import { pathAddresses } from "../../../packages/app/src/sites/path-addresses";
-import { serveSite } from "../../../packages/app/src/sites/serve";
-import { type ApiInstall, INSTALL_VERSION, LIMITS, openApi } from "../../../packages/app/tests/api/support/install";
-import { ADDRESSES } from "../../../packages/app/tests/sites/support/layout";
-import type { Fetch } from "../../../packages/cli/src/client/client";
-import type { JobRun } from "../../../packages/providers/cloudflare/scripts/live/job-run";
-import type { Job, Jobs } from "../../../packages/core/src/jobs/jobs";
-import { runJob } from "../../../packages/core/src/jobs/run-job";
-import { type Hostname, parseHostname } from "../../../packages/core/src/names/hostname";
-import { type LiveAddresses, liveAddresses } from "../addresses";
+import { createApi } from "../../../../../app/src/api/api";
+import type { SiteAddresses } from "../../../../../app/src/sites/addresses";
+import { pathAddresses } from "../../../../../app/src/sites/path-addresses";
+import { serveSite } from "../../../../../app/src/sites/serve";
+import { type ApiInstall, INSTALL_VERSION, LIMITS, openApi } from "../../../../../app/tests/api/support/install";
+import { ADDRESSES } from "../../../../../app/tests/sites/support/layout";
+import type { Fetch } from "../../../../../cli/src/client/client";
+import type { JobRun } from "../../../scripts/live/job-run";
+import type { Job, Jobs } from "../../../../../core/src/jobs/jobs";
+import { runJob } from "../../../../../core/src/jobs/run-job";
+import { type Hostname, parseHostname } from "../../../../../core/src/names/hostname";
+import { type LiveAddresses, liveAddresses } from "../../../live/addresses";
 
 /** The domain the fake answers under. */
 export const FAKE_DOMAIN = "example.com";

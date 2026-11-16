@@ -11,6 +11,8 @@ const ENTRY_FIELDS = ["main", "module", "types", "bin", "exports"];
 const BUILT_ENTRY = /^(?:\.\/)?dist\/(.+)\.mjs$/;
 
 const UNMIRRORED: readonly (readonly [path: string, reason: string])[] = [
+  ["packages/providers/cloudflare/tests/live/self.test.ts", "runs every live check against an install in memory"],
+  ["packages/providers/cloudflare/tests/live/workflow.test.ts", "holds the Live Checks workflow to the pushes that start it and the steps it runs"],
   ["packages/providers/cloudflare/tests/shared/worker/request-budget.test.ts", "holds every request the Worker answers to a budget of database queries and storage calls"],
 ];
 
@@ -39,6 +41,8 @@ const CROSSING: readonly (readonly [importer: string, imported: string])[] = [
 ];
 
 const SCANNER = new Bun.Transpiler({ loader: "ts" });
+
+const MIRRORED: readonly string[] = ["/src/", "/"];
 
 /** The files of the packages a pattern takes, as sorted paths from the root. The pattern is counted from a package's own folder: a folder of `packages`, or a provider's folder of `packages/providers`. */
 function scan(root: string, pattern: string): string[] {
@@ -94,19 +98,21 @@ async function looseSources(root: string): Promise<string[]> {
   return loose.filter((path) => !entries.some((entry) => isEntry(path, entry)));
 }
 
-/** The tests that mirror no source file of their package. */
+/** The tests that mirror no file of their package: `tests/<path>/<name>.test.ts` is for `src/<path>/<name>.ts`, or for `<path>/<name>.ts` in a folder of the package beside `src`, such as `scripts`. */
 function unmirroredTests(root: string): string[] {
-  const sources = new Set(scan(root, "src/**/*.ts"));
+  const sources = new Set(scan(root, "**/*.ts"));
+  const mirrored = (path: string): boolean => MIRRORED.some((folder) => sources.has(path.replace("/tests/", folder).replace(/\.test\.ts$/, ".ts")));
 
-  return scan(root, "tests/**/*.test.ts").filter((path) => !sources.has(path.replace("/tests/", "/src/").replace(/\.test\.ts$/, ".ts")));
+  return scan(root, "tests/**/*.test.ts").filter((path) => !mirrored(path));
 }
 
-/** The files under tests/ that are no test and sit in no `support/` folder of a concept their package has. */
+/** The files under tests/ that are no test and sit in no `support/` folder of a concept their package has: a folder of `src`, or of a folder of the package beside it. */
 function strayShared(root: string): string[] {
   const shared = scan(root, "tests/**/*.ts").filter((path) => !path.endsWith(".test.ts"));
-  const concepts = new Set(scan(root, "src/**/*.ts").map((path) => path.slice(0, path.lastIndexOf("/"))));
+  const sources = scan(root, "**/*.ts").filter((path) => !path.includes("/tests/"));
+  const concepts = new Set(sources.map((path) => path.slice(0, path.lastIndexOf("/"))));
 
-  return shared.filter((path) => !concepts.has(path.replace(SUPPORT_FILE, "$1/src/$2")));
+  return shared.filter((path) => !MIRRORED.some((folder) => concepts.has(path.replace(SUPPORT_FILE, `$1${folder}$2`))));
 }
 
 /** What breaks the parts of a provider's source, one line each: the shared part loads a kind's code, a kind loads the other's, a chooser loads no kind, or a source file sits in no part. An import of types alone loads nothing. */
@@ -133,7 +139,7 @@ describe("package layout", () => {
     expect(await looseSources(ROOT)).toEqual([]);
   });
 
-  test("every test mirrors a source file of its package, tests/<path>/<name>.test.ts for src/<path>/<name>.ts: without this a moved or deleted module leaves its test behind", () => {
+  test("every test mirrors a file of its package, tests/<path>/<name>.test.ts for src/<path>/<name>.ts, or for <path>/<name>.ts in a folder beside src: without this a moved or deleted module leaves its test behind", () => {
     expect(scan(ROOT, "tests/**/*.test.ts").length).toBeGreaterThan(0);
     expect(unmirroredTests(ROOT)).toEqual(UNMIRRORED.map(([path]) => path));
   });
@@ -183,6 +189,10 @@ describe("package layout", () => {
         "packages/demo/tests/gone/support/fixture.ts": "",
         "packages/demo/tests/gone/support/scratch.ts": "",
         "packages/demo/tests/built/support/fixture.ts": "",
+        "packages/demo/scripts/tool.ts": "",
+        "packages/demo/tests/scripts/tool.test.ts": "",
+        "packages/demo/tests/scripts/gone.test.ts": "",
+        "packages/demo/tests/scripts/support/fixture.ts": "",
         "packages/providers/example/package.json": "{}",
         "packages/providers/example/src/loose.ts": "",
         "packages/providers/example/src/sites/site.ts": "",
@@ -193,7 +203,7 @@ describe("package layout", () => {
     );
 
     expect(await looseSources(tree.path)).toEqual(["packages/demo/src/loose.ts", "packages/providers/example/src/loose.ts"]);
-    expect(unmirroredTests(tree.path)).toEqual(["packages/demo/tests/sites/gone.test.ts", "packages/providers/example/tests/sites/gone.test.ts"]);
+    expect(unmirroredTests(tree.path)).toEqual(["packages/demo/tests/scripts/gone.test.ts", "packages/demo/tests/sites/gone.test.ts", "packages/providers/example/tests/sites/gone.test.ts"]);
     expect(strayShared(tree.path)).toEqual(["packages/demo/tests/gone/support/fixture.ts", "packages/providers/example/tests/gone/support/fixture.ts"]);
   });
 });

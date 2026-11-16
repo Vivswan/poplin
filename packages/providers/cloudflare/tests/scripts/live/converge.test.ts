@@ -6,19 +6,19 @@ import { mkdtempDisposableSync, readFileSync, realpathSync, writeFileSync } from
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
 
-import type { DomainRow, DomainSettings } from "../../packages/app/src/console/domain/records";
-import type { Login } from "../../packages/core/src/auth/logins";
-import { answerOf, convergeInstall, needOf, settleFreeAddress, workerConfig } from "../../packages/providers/cloudflare/scripts/live/converge";
-import { type Found, openRun } from "../../packages/providers/cloudflare/scripts/live/util";
-import { createDomainPlug } from "../../packages/providers/cloudflare/src/with-domain/zone-plug";
-import { withFake } from "../../packages/providers/cloudflare/tests/shared/install/support/fake-cloudflare";
-import { type Account, ACCOUNT as INSTALL_ACCOUNT, answer as answerInstall, emptyAccount, TOKEN } from "../../packages/providers/cloudflare/tests/shared/install/support/fake-install";
-import { ADDRESSES, LAYOUT } from "../../packages/providers/cloudflare/tests/shared/install/support/layouts";
-import { type Asked, bodyOf, page, refusal, reply } from "../../packages/providers/cloudflare/tests/shared/install/support/replies";
-import { catchStep } from "./support/step";
+import type { DomainRow, DomainSettings } from "../../../../../app/src/console/domain/records";
+import type { Login } from "../../../../../core/src/auth/logins";
+import { answerOf, convergeInstall, needOf, settleFreeAddress, workerConfig } from "../../../scripts/live/converge";
+import { type Found, openRun } from "../../../scripts/live/util";
+import { createDomainPlug } from "../../../src/with-domain/zone-plug";
+import { withFake } from "../../shared/install/support/fake-cloudflare";
+import { type Account, ACCOUNT as INSTALL_ACCOUNT, answer as answerInstall, emptyAccount, TOKEN } from "../../shared/install/support/fake-install";
+import { ADDRESSES, LAYOUT } from "../../shared/install/support/layouts";
+import { type Asked, bodyOf, page, refusal, reply } from "../../shared/install/support/replies";
+import { catchStep } from "../../live/support/step";
 
 /** The workflow that runs the live scripts. */
-const WORKFLOW = join(import.meta.dir, "..", "..", ".github", "workflows", "live-install.yml");
+const WORKFLOW = join(import.meta.dir, "..", "..", "..", "..", "..", "..", ".github", "workflows", "live-install.yml");
 
 /** A step's output as a workflow expression names it: the step's id, then the output's name. */
 const OUTPUT_READ = /steps\.([\w-]+)\.outputs\.([\w-]+)/g;
@@ -45,7 +45,7 @@ const NOT_READ = "Account plans: not read: needs the token permission Billing: R
 const NOT_READ_WARNING = "::warning::The account's plans were not read, so nothing checked that they are free: the run needs the token permission Billing: Read.";
 
 /** The package wrangler is installed in. */
-const CLOUDFLARE = join(import.meta.dir, "..", "..", "packages", "providers", "cloudflare");
+const CLOUDFLARE = join(import.meta.dir, "..", "..", "..");
 
 /** The repository's own configuration of the Worker. */
 const OWN_CONFIG = join(CLOUDFLARE, "..", "..", "..", "wrangler.jsonc");

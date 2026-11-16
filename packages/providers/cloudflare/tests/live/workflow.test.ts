@@ -5,10 +5,10 @@ import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { dirname, join, relative } from "node:path";
 
-import { repositoryFiles } from "../support/repository-files";
+import { repositoryFiles } from "../../../../../tests/support/repository-files";
 
 /** The root of the repository. */
-const ROOT = join(import.meta.dir, "..", "..");
+const ROOT = join(import.meta.dir, "..", "..", "..", "..", "..");
 
 /** The folder of the workflows, from the root. */
 const WORKFLOWS = ".github/workflows";
@@ -92,7 +92,7 @@ const PUSH_CASES: readonly (readonly [what: string, changed: readonly string[], 
   ["a test inside a product package", ["packages/core/tests/names/names.test.ts"], BOTH],
   ["a page inside a product package, which the root pattern for pages leaves alone", ["packages/cli/README.md"], BOTH],
   ["a sample site", ["demo/samples/launch-deck/index.html"], BOTH],
-  ["a live check, which runs on an install of either kind", ["tests/live/checks/edge.ts"], BOTH],
+  ["a live check, which runs on an install of either kind", ["packages/providers/cloudflare/live/checks/edge.ts"], BOTH],
   ["the steps both workflows call", [".github/workflows/live-install.yml"], BOTH],
   ["the action the steps install with", [".github/actions/setup/action.yml"], BOTH],
   ["the lockfile", ["bun.lock"], BOTH],

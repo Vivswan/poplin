@@ -3,15 +3,15 @@
 
 import { describe, expect, test } from "bun:test";
 
-import { settleDatabase } from "../../packages/providers/cloudflare/scripts/live/shape";
-import { openRun } from "../../packages/providers/cloudflare/scripts/live/util";
-import { withFake } from "../../packages/providers/cloudflare/tests/shared/install/support/fake-cloudflare";
-import { type Asked, refusal, reply } from "../../packages/providers/cloudflare/tests/shared/install/support/replies";
-import type { Login } from "../../packages/core/src/auth/logins";
-import { openDatabase } from "../../packages/core/src/database/open";
-import { defaultSettings } from "../../packages/core/src/records/settings";
-import { BunSqliteDriver } from "../../packages/core/tests/database/support/bun-sqlite-driver";
-import { catchStep } from "./support/step";
+import { settleDatabase } from "../../../scripts/live/shape";
+import { openRun } from "../../../scripts/live/util";
+import { withFake } from "../../shared/install/support/fake-cloudflare";
+import { type Asked, refusal, reply } from "../../shared/install/support/replies";
+import type { Login } from "../../../../../core/src/auth/logins";
+import { openDatabase } from "../../../../../core/src/database/open";
+import { defaultSettings } from "../../../../../core/src/records/settings";
+import { BunSqliteDriver } from "../../../../../core/tests/database/support/bun-sqlite-driver";
+import { catchStep } from "../../live/support/step";
 
 /** The account the fake holds. */
 const ACCOUNT = "0".repeat(32);

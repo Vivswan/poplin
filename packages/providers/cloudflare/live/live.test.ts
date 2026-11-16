@@ -18,11 +18,11 @@
 import { afterAll, beforeAll, describe, test } from "bun:test";
 import { writeFileSync } from "node:fs";
 
-import { CEILINGS, meterBucket } from "../../packages/providers/cloudflare/scripts/live/budget";
-import { readJobRun } from "../../packages/providers/cloudflare/scripts/live/job-run";
-import { readLoginList } from "../../packages/providers/cloudflare/scripts/live/login-list";
-import { meterRows, ROW_CEILINGS } from "../../packages/providers/cloudflare/scripts/live/rows";
-import { sendLive } from "../../packages/providers/cloudflare/scripts/live/send";
+import { CEILINGS, meterBucket } from "../scripts/live/budget";
+import { readJobRun } from "../scripts/live/job-run";
+import { readLoginList } from "../scripts/live/login-list";
+import { meterRows, ROW_CEILINGS } from "../scripts/live/rows";
+import { sendLive } from "../scripts/live/send";
 import { type LiveInstall, liveAddresses } from "./addresses";
 import { openBench } from "./bench";
 import { probeMissing } from "./capabilities";

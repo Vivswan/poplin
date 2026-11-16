@@ -2,9 +2,9 @@
 
 import { describe, expect, test } from "bun:test";
 
-import { readJobRun } from "../../packages/providers/cloudflare/scripts/live/job-run";
-import { withFake } from "../../packages/providers/cloudflare/tests/shared/install/support/fake-cloudflare";
-import { refusal, reply } from "../../packages/providers/cloudflare/tests/shared/install/support/replies";
+import { readJobRun } from "../../../scripts/live/job-run";
+import { withFake } from "../../shared/install/support/fake-cloudflare";
+import { refusal, reply } from "../../shared/install/support/replies";
 
 /** The account the fake holds. */
 const ACCOUNT = "0".repeat(32);

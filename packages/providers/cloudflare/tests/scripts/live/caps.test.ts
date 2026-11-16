@@ -3,17 +3,17 @@
 import { describe, expect, test } from "bun:test";
 import { join } from "node:path";
 
-import { buildDemo } from "../../packages/demo/scripts/build";
-import { CEILINGS } from "../../packages/providers/cloudflare/scripts/live/budget";
-import { capInstall, LIVE_CAPS } from "../../packages/providers/cloudflare/scripts/live/caps";
-import { ROW_CEILINGS } from "../../packages/providers/cloudflare/scripts/live/rows";
-import { resetInstall } from "../../packages/providers/cloudflare/scripts/live/reset";
-import type { Login } from "../../packages/core/src/auth/logins";
-import { defaultSettings, sizeBytes } from "../../packages/core/src/records/settings";
-import { FAKE_NOW, openSqlInstall } from "./support/sql-install";
+import { buildDemo } from "../../../../../demo/scripts/build";
+import { CEILINGS } from "../../../scripts/live/budget";
+import { capInstall, LIVE_CAPS } from "../../../scripts/live/caps";
+import { ROW_CEILINGS } from "../../../scripts/live/rows";
+import { resetInstall } from "../../../scripts/live/reset";
+import type { Login } from "../../../../../core/src/auth/logins";
+import { defaultSettings, sizeBytes } from "../../../../../core/src/records/settings";
+import { FAKE_NOW, openSqlInstall } from "../../live/support/sql-install";
 
 /** The repository's sample sites. */
-const SAMPLES = join(import.meta.dir, "..", "..", "demo", "samples");
+const SAMPLES = join(import.meta.dir, "..", "..", "..", "..", "..", "..", "demo", "samples");
 
 /** The most the sample sites and the demo hold together, every version a reset gives them: what the test install keeps between runs. */
 const STANDING = { sites: 12, files: 120, bytes: 4_000_000 };

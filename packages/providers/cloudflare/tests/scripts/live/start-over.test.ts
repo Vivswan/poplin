@@ -3,15 +3,15 @@
 
 import { describe, expect, test } from "bun:test";
 
-import { startOver } from "../../packages/providers/cloudflare/scripts/live/start-over";
-import { BUCKET, openRun } from "../../packages/providers/cloudflare/scripts/live/util";
-import { createDomainPlug } from "../../packages/providers/cloudflare/src/with-domain/zone-plug";
-import { withFake } from "../../packages/providers/cloudflare/tests/shared/install/support/fake-cloudflare";
-import { ACCOUNT, type Account, answer as answerInstall, emptyAccount, TOKEN } from "../../packages/providers/cloudflare/tests/shared/install/support/fake-install";
-import { LAYOUT } from "../../packages/providers/cloudflare/tests/shared/install/support/layouts";
-import { type Asked, page, refusal, reply } from "../../packages/providers/cloudflare/tests/shared/install/support/replies";
-import type { Login } from "../../packages/core/src/auth/logins";
-import { catchStep } from "./support/step";
+import { startOver } from "../../../scripts/live/start-over";
+import { BUCKET, openRun } from "../../../scripts/live/util";
+import { createDomainPlug } from "../../../src/with-domain/zone-plug";
+import { withFake } from "../../shared/install/support/fake-cloudflare";
+import { ACCOUNT, type Account, answer as answerInstall, emptyAccount, TOKEN } from "../../shared/install/support/fake-install";
+import { LAYOUT } from "../../shared/install/support/layouts";
+import { type Asked, page, refusal, reply } from "../../shared/install/support/replies";
+import type { Login } from "../../../../../core/src/auth/logins";
+import { catchStep } from "../../live/support/step";
 
 /** What the owner of the zone keeps there beside the install: none of it carries a mark of poplin's. */
 const THEIRS = {

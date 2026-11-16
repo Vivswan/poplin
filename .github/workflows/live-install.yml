@@ -5,7 +5,7 @@
 #   live-checks-account-address.yml    kind `account address`    environment without-domain-ci-tests
 #
 #   a push -> wait for that commit's `all-green` check -> build the Worker bundle
-#     -> make the standing test install match the commit -> run tests/live against it -> put the install back
+#     -> make the standing test install match the commit -> run packages/providers/cloudflare/live against it -> put the install back
 #   a run by hand with `start_over` ticked -> everything poplin made on the test account removed -> the same steps, from nothing
 #   midnight UTC -> the same steps for main as it is, with one check more: a copy too large for one request, which the install's job finishes
 #

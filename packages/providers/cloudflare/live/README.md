@@ -4,7 +4,7 @@ The checks of a deployed install: a stranger's requests over HTTPS, and a token 
 
 | To                                                | Run                                                                       | Needs                                                                     |
 | ------------------------------------------------- | ------------------------------------------------------------------------- | ------------------------------------------------------------------------- |
-| check the checks themselves, against a local fake | `bun test ./tests/live`                                                   | nothing                                                                   |
+| check the checks themselves, against a local fake | `bun test ./packages/providers/cloudflare/tests/live ./packages/providers/cloudflare/tests/scripts/live`                                                   | nothing                                                                   |
 | check an install of your own                      | `bun run live`                                                            | `POPLIN_LIVE_DOMAIN`, or `POPLIN_LIVE_ACCOUNT_ADDRESS` for an install without a domain, and `POPLIN_LIVE_TOKEN` for the checks that publish |
 | check the two test installs                       | the `Live Checks` and `Live Checks (account address)` workflows: after a push to main that reaches the install, or by hand | the `with-domain-ci-tests` and `without-domain-ci-tests` environments     |
 | check that a build takes a release by its digest  | a release's own run of main, then the next one: `poplin-<version>.tar.gz` on the release's page, its digest under that version in the website's `releases.json`, and `poplin: deploying <version> (was asked for latest)` in an install's build | a published release |
@@ -22,7 +22,7 @@ Live Checks workflows, one for each kind of install
                                                            `Worker: deployed` in its log: Cloudflare took the built bundle and the source map beside it in one upload
                                                            `Key: created` or `Key: present` in its log: the Worker has its key as a secret, and Cloudflare lists an active token of the key's name
                                                            `Upload key: created` or `Upload key: present`: the same for the key that sends files straight to the bucket
-  packages/providers/cloudflare/scripts/live/suite.ts      a token for the run -> bun test tests/live/live.test.ts -> the token removed
+  packages/providers/cloudflare/scripts/live/suite.ts      a token for the run -> bun test packages/providers/cloudflare/live/live.test.ts -> the token removed
   packages/providers/cloudflare/scripts/live/reset.ts      a token for the reset -> the install put back -> every token removed
   packages/providers/cloudflare/scripts/live/orphans.ts    after the reset: the files of the bucket no record of the database names, removed
   step summary                                             one table of the install's pieces, one of the checks, one of the reset
@@ -42,7 +42,7 @@ Each workflow runs the same steps on its own install. A push starts the one whos
 | only files of an install with a domain                                                       | that install      |
 | only files of an install without a domain                                                    | that install      |
 | any other file of `packages/**`, tests included                                              | both installs     |
-| `demo/**`, `tests/live/**`                                                                   | both installs     |
+| `demo/**`, `packages/providers/cloudflare/live/**`                                                                   | both installs     |
 | `wrangler.jsonc`, the root `package.json`, `bun.lock`, `.bun-version`, `tsconfig*`           | both installs     |
 | `.github/workflows/live-install.yml`, `.github/actions/setup/**`, `.gitattributes`           | both installs     |
 | the workflow file of one kind                                                                | that install      |
@@ -59,7 +59,7 @@ Each workflow runs the same steps on its own install. A push starts the one whos
 
 A file that code of both kinds imports is a file of both: `zone-plug.ts` is one, since the plug of an install without a domain is made of its pieces. So are the two files of a site's addresses, which the demo on every install runs, and every live check and script of `packages/providers/cloudflare/scripts/live`.
 
-The `paths` list of each workflow holds every row: the two lists are the same, and each ends with the files of the other kind, taken out. `tests/live/workflow.test.ts` holds the two kinds' files once and reads both lists beside them.
+The `paths` list of each workflow holds every row: the two lists are the same, and each ends with the files of the other kind, taken out. `packages/providers/cloudflare/tests/live/workflow.test.ts` holds the two kinds' files once and reads both lists beside them.
 
 The files are those of the one push, first commit to last. GitHub reads the first 3,000 changed files of a push, and a push of more than 1,000 commits always starts a run.
 
@@ -295,7 +295,7 @@ A product change that moves a row cost turns that test red, with the database's 
 | To measure the prices again | Then |
 | --- | --- |
 | `bun run --cwd packages/providers/cloudflare build`, then `bunx vitest run tests/shared/worker/worker.test.ts -t "the rows the live checks count"` there | set each price in `rows.ts` to the first number of its pair, and the pair in the test |
-| `bun test ./tests/live` | set the totals it prints in `self.test.ts` and `reset.test.ts`, and the figures below |
+| `bun test ./packages/providers/cloudflare/tests/live ./packages/providers/cloudflare/tests/scripts/live` | set the totals it prints in `self.test.ts` and `reset.test.ts`, and the figures below |
 
 ```text
 the checks, as the harness counts them   866 on the local fake, a few more with the demo's check: every site they publish, change, and remove
@@ -326,7 +326,7 @@ Rows written this run: 866 of at most 1100
 | remove   | each of the three, for good                                                                   |
 | import   | each zip                                                                                      |
 | export   | each of the three again                                                                       |
-| compare  | each second zip with its first, in `tests/live/compare-backups.ts`; one visit opens a site    |
+| compare  | each second zip with its first, in `packages/providers/cloudflare/live/compare-backups.ts`; one visit opens a site    |
 | clean up | each of the three removed for good, after a failure too                                       |
 
 It never reads or changes a sample site: every export and every import names one site of its own.

@@ -18,7 +18,7 @@
     "test": "bun test --pass-with-no-tests --path-ignore-patterns 'packages/providers/cloudflare/tests/shared/{worker,storage,database,limits,jobs}/**' --path-ignore-patterns 'packages/dashboard/**'",
     "test:client": "bun run --cwd packages/dashboard test",
     "test:worker": "bun run --cwd packages/providers/cloudflare test",
-    "live": "POPLIN_LIVE=1 bun test ./tests/live/live.test.ts",
+    "live": "POPLIN_LIVE=1 bun test ./packages/providers/cloudflare/live/live.test.ts",
     "knip": "knip --treat-config-hints-as-errors",
     "links": "lychee '**/*.md'",
     "hooks": "lefthook install",

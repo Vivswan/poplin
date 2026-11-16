@@ -5,16 +5,16 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
-import { answered, ORIGIN } from "../../packages/app/tests/api/support/install";
-import { readZip, writeZip, type ZipEntry } from "../../packages/cli/tests/backup/support/zips";
-import { type Bench, cleanUp, folderOf, jsonOf, openBench, published, scratch } from "../../packages/cli/tests/commands/support/harness";
-import { type Compared, compareBackups, differenceLines, IGNORED } from "./compare-backups";
+import { answered, ORIGIN } from "../../../../app/tests/api/support/install";
+import { readZip, writeZip, type ZipEntry } from "../../../../cli/tests/backup/support/zips";
+import { type Bench, cleanUp, folderOf, jsonOf, openBench, published, scratch } from "../../../../cli/tests/commands/support/harness";
+import { type Compared, compareBackups, differenceLines, IGNORED } from "../../live/compare-backups";
 
 /** The repository's root. */
-const ROOT = join(import.meta.dir, "..", "..");
+const ROOT = join(import.meta.dir, "..", "..", "..", "..", "..");
 
 /** The pages that say what the compare passes over, each in the table's own words: the one a person reads before a restore, and the one of the live checks. */
-const PAGES = ["docs/upkeep/back-up.md", "tests/live/README.md"] as const;
+const PAGES = ["docs/upkeep/back-up.md", "packages/providers/cloudflare/live/README.md"] as const;
 
 /** The export's two forms: every kept version, and the live one alone. */
 const FORMS = ["--all-versions", ""] as const;

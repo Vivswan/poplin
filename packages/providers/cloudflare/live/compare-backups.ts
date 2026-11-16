@@ -8,8 +8,8 @@
 import { createHash } from "node:crypto";
 import diff from "microdiff";
 
-import { LAYOUT, readEntryName } from "../../packages/cli/src/backup/layout";
-import { readZip } from "../../packages/cli/tests/backup/support/zips";
+import { LAYOUT, readEntryName } from "../../../cli/src/backup/layout";
+import { readZip } from "../../../cli/tests/backup/support/zips";
 
 /** What a second backup may hold other than the first, each with why it cannot be the same, in the words the pages name it by. Nothing else is passed over. */
 export const IGNORED = [{ entry: LAYOUT.manifest, field: "made_at", why: "the moment the zip was made" }] as const;

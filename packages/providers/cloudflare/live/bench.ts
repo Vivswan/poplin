@@ -4,15 +4,15 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { createClient, type Fetch } from "../../packages/cli/src/client/client";
-import type { Io } from "../../packages/cli/src/commands/records";
-import { DELETED_SITE } from "../../packages/core/src/actions/delete";
-import { LISTED_SITES } from "../../packages/core/src/actions/list";
-import { SETTINGS_ANSWER } from "../../packages/core/src/actions/store-settings";
-import { parseLogins } from "../../packages/core/src/auth/logins";
-import { run } from "../../packages/cli/src/commands/run";
-import { openSession } from "../../packages/cli/tests/mcp/support/session";
-import type { JobRun } from "../../packages/providers/cloudflare/scripts/live/job-run";
+import { createClient, type Fetch } from "../../../cli/src/client/client";
+import type { Io } from "../../../cli/src/commands/records";
+import { DELETED_SITE } from "../../../core/src/actions/delete";
+import { LISTED_SITES } from "../../../core/src/actions/list";
+import { SETTINGS_ANSWER } from "../../../core/src/actions/store-settings";
+import { parseLogins } from "../../../core/src/auth/logins";
+import { run } from "../../../cli/src/commands/run";
+import { openSession } from "../../../cli/tests/mcp/support/session";
+import type { JobRun } from "../scripts/live/job-run";
 import type { LiveAddresses } from "./addresses";
 import type { Bench, Draft, LiveSite, Missing, Ran, Shared } from "./records";
 

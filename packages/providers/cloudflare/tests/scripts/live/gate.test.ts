@@ -3,7 +3,7 @@
 
 import { describe, expect, test } from "bun:test";
 
-import { waitForGate } from "../../packages/providers/cloudflare/scripts/live/gate";
+import { waitForGate } from "../../../scripts/live/gate";
 
 /** What GitHub answers on each turn of the wait, and how the wait ends: `runs` is the CI run of the commit, `gates` the end of its `all-green` job. `!` is a turn GitHub fails on, and a turn past the list has no answer. */
 const WAIT_CASES: readonly (readonly [what: string, answers: Answers, ends: Ending])[] = [

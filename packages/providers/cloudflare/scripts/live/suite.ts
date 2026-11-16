@@ -40,7 +40,7 @@ async function runTests(run: Run, found: Found, token: string, missing: string):
   const login = liveLogin(run);
 
   try {
-    const child = Bun.spawn([process.execPath, "test", "./tests/live/live.test.ts"], {
+    const child = Bun.spawn([process.execPath, "test", "./packages/providers/cloudflare/live/live.test.ts"], {
       cwd: ROOT,
       env: {
         ...kept,

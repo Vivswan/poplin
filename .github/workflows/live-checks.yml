@@ -12,7 +12,7 @@ name: Live Checks
 on:
   # A push to this repository's main. A pull request and a fork's branch start nothing here.
   # A file in no line below starts a run: the list opens with every file, and each `!` line takes files out.
-  # The last lines take out the files of the other kind of install alone. tests/live/workflow.test.ts holds both kinds' lists and reads this one beside them.
+  # The last lines take out the files of the other kind of install alone. packages/providers/cloudflare/tests/live/workflow.test.ts holds both kinds' lists and reads this one beside them.
   push:
     branches: [main]
     paths:

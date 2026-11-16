@@ -3,15 +3,15 @@
 
 import { afterEach, describe, expect, test } from "bun:test";
 
-import { removeOrphans } from "../../packages/providers/cloudflare/scripts/live/orphans";
-import { BUCKET, openRun } from "../../packages/providers/cloudflare/scripts/live/util";
-import { withFake } from "../../packages/providers/cloudflare/tests/shared/install/support/fake-cloudflare";
-import { type Asked, refusal, reply } from "../../packages/providers/cloudflare/tests/shared/install/support/replies";
-import { parseObjectKey } from "../../packages/core/src/storage/storage";
-import { liveAddresses } from "./addresses";
-import { openBench } from "./bench";
-import { FAKE_DOMAIN } from "./support/fake-install";
-import { openSqlInstall } from "./support/sql-install";
+import { removeOrphans } from "../../../scripts/live/orphans";
+import { BUCKET, openRun } from "../../../scripts/live/util";
+import { withFake } from "../../shared/install/support/fake-cloudflare";
+import { type Asked, refusal, reply } from "../../shared/install/support/replies";
+import { parseObjectKey } from "../../../../../core/src/storage/storage";
+import { liveAddresses } from "../../../live/addresses";
+import { openBench } from "../../../live/bench";
+import { FAKE_DOMAIN } from "../../live/support/fake-install";
+import { openSqlInstall } from "../../live/support/sql-install";
 
 /** The account of the fake Cloudflare, and the token a run calls it with. */
 const [ACCOUNT, TOKEN] = ["0".repeat(32), "a-made-up-token"];

@@ -4,16 +4,16 @@ import { afterEach, describe, expect, spyOn, test } from "bun:test";
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 
-import type { Fetch } from "../../packages/cli/src/client/client";
-import { CEILINGS, meterBucket, spendsNothing } from "../../packages/providers/cloudflare/scripts/live/budget";
-import { meterRows, ROW_CEILINGS } from "../../packages/providers/cloudflare/scripts/live/rows";
-import { MemoryStore } from "../../packages/core/src/storage/memory";
-import { openBench } from "./bench";
-import { probeMissing } from "./capabilities";
-import { CHECKS } from "./checks";
-import { DRILL_COST } from "./checks/backup";
-import type { Bench, Missing, Outcome } from "./records";
-import { runCheck } from "./report";
+import type { Fetch } from "../../../../cli/src/client/client";
+import { CEILINGS, meterBucket, spendsNothing } from "../../scripts/live/budget";
+import { meterRows, ROW_CEILINGS } from "../../scripts/live/rows";
+import { MemoryStore } from "../../../../core/src/storage/memory";
+import { openBench } from "../../live/bench";
+import { probeMissing } from "../../live/capabilities";
+import { CHECKS } from "../../live/checks";
+import { DRILL_COST } from "../../live/checks/backup";
+import type { Bench, Missing, Outcome } from "../../live/records";
+import { runCheck } from "../../live/report";
 import { type FakeSwitches, openFake } from "./support/fake-install";
 
 /** Every check a person makes. */

@@ -2,7 +2,7 @@
 
 import { describe, expect, test } from "bun:test";
 
-import { meterRows } from "../../packages/providers/cloudflare/scripts/live/rows";
+import { meterRows } from "../../../scripts/live/rows";
 
 /** The origin of the install a made-up request goes to. */
 const SERVER = "https://poplin.example.com";

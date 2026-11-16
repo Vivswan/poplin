@@ -14,7 +14,7 @@
       "entry": ["src/browser/worker.ts"]
     },
     "packages/providers/cloudflare": {
-      "entry": ["src/shared/worker/worker.ts", "tests/**/*.test.ts"]
+      "entry": ["src/shared/worker/worker.ts", "tests/**/*.test.ts", "live/live.test.ts"]
     },
     "packages/dashboard": {
       "entry": ["src/main.tsx", "tests/**/*.test.{ts,tsx}"],

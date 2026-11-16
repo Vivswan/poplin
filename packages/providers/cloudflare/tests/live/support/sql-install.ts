@@ -1,18 +1,18 @@
 // A local install whose database a test also reaches with SQL, and its bucket: the real API on bun's SQLite and a store in memory, for the self-test of what the live harness does to a database and a bucket directly.
 
-import { createApi } from "../../../packages/app/src/api/api";
-import { MemoryCounters } from "../../../packages/app/src/limits/memory-counters";
-import { pathAddresses } from "../../../packages/app/src/sites/path-addresses";
-import { ADDRESSES } from "../../../packages/app/tests/sites/support/layout";
-import type { Fetch } from "../../../packages/cli/src/client/client";
-import type { Login } from "../../../packages/core/src/auth/logins";
-import { mintToken } from "../../../packages/core/src/auth/tokens";
-import { openDatabase } from "../../../packages/core/src/database/open";
-import { type Hostname, parseHostname } from "../../../packages/core/src/names/hostname";
-import { DEFAULT_PUBLIC_WORD } from "../../../packages/core/src/names/marker";
-import { defaultSettings, type SettingValues } from "../../../packages/core/src/records/settings";
-import { MemoryStore } from "../../../packages/core/src/storage/memory";
-import { BunSqliteDriver } from "../../../packages/core/tests/database/support/bun-sqlite-driver";
+import { createApi } from "../../../../../app/src/api/api";
+import { MemoryCounters } from "../../../../../app/src/limits/memory-counters";
+import { pathAddresses } from "../../../../../app/src/sites/path-addresses";
+import { ADDRESSES } from "../../../../../app/tests/sites/support/layout";
+import type { Fetch } from "../../../../../cli/src/client/client";
+import type { Login } from "../../../../../core/src/auth/logins";
+import { mintToken } from "../../../../../core/src/auth/tokens";
+import { openDatabase } from "../../../../../core/src/database/open";
+import { type Hostname, parseHostname } from "../../../../../core/src/names/hostname";
+import { DEFAULT_PUBLIC_WORD } from "../../../../../core/src/names/marker";
+import { defaultSettings, type SettingValues } from "../../../../../core/src/records/settings";
+import { MemoryStore } from "../../../../../core/src/storage/memory";
+import { BunSqliteDriver } from "../../../../../core/tests/database/support/bun-sqlite-driver";
 
 /** The moment every request arrives at. */
 export const FAKE_NOW = 1_700_000_000_000;

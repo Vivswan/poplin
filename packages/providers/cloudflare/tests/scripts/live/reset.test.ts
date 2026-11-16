@@ -5,25 +5,25 @@ import { cpSync, existsSync, mkdirSync, mkdtempDisposableSync, readFileSync, ren
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { CEILINGS } from "../../packages/providers/cloudflare/scripts/live/budget";
-import { resetInstall, runReset } from "../../packages/providers/cloudflare/scripts/live/reset";
-import { ROW_CEILINGS } from "../../packages/providers/cloudflare/scripts/live/rows";
-import { openRun } from "../../packages/providers/cloudflare/scripts/live/util";
-import { BunSqliteDriver } from "../../packages/core/tests/database/support/bun-sqlite-driver";
-import { readSamples } from "../../packages/demo/scripts/samples";
-import { createPreview } from "../../packages/demo/src/preview/preview";
-import { readRealSites } from "../../packages/demo/src/preview/real-sites";
-import { withFake } from "../../packages/providers/cloudflare/tests/shared/install/support/fake-cloudflare";
-import { type Asked, page, refusal } from "../../packages/providers/cloudflare/tests/shared/install/support/replies";
-import { liveAddresses } from "./addresses";
-import { openBench } from "./bench";
-import { FAKE_DOMAIN } from "./support/fake-install";
-import { STORED_TYPE_HEADER } from "../../packages/core/src/api/routes";
-import { FAKE_NOW, openSqlInstall } from "./support/sql-install";
-import { catchStep } from "./support/step";
+import { CEILINGS } from "../../../scripts/live/budget";
+import { resetInstall, runReset } from "../../../scripts/live/reset";
+import { ROW_CEILINGS } from "../../../scripts/live/rows";
+import { openRun } from "../../../scripts/live/util";
+import { BunSqliteDriver } from "../../../../../core/tests/database/support/bun-sqlite-driver";
+import { readSamples } from "../../../../../demo/scripts/samples";
+import { createPreview } from "../../../../../demo/src/preview/preview";
+import { readRealSites } from "../../../../../demo/src/preview/real-sites";
+import { withFake } from "../../shared/install/support/fake-cloudflare";
+import { type Asked, page, refusal } from "../../shared/install/support/replies";
+import { liveAddresses } from "../../../live/addresses";
+import { openBench } from "../../../live/bench";
+import { FAKE_DOMAIN } from "../../live/support/fake-install";
+import { STORED_TYPE_HEADER } from "../../../../../core/src/api/routes";
+import { FAKE_NOW, openSqlInstall } from "../../live/support/sql-install";
+import { catchStep } from "../../live/support/step";
 
 /** The repository's sample sites. */
-const SAMPLES = join(import.meta.dir, "..", "..", "demo", "samples");
+const SAMPLES = join(import.meta.dir, "..", "..", "..", "..", "..", "..", "demo", "samples");
 
 /** What a reset leaves, written by hand: every site by its name, who may open it, its public name, whether it is in the trash, its live version, and whether it runs out. The demo's version is the reset's own count. */
 const LEFT_SITES: readonly (readonly [name: string, access: string, publicName: string | null, trashed: 0 | 1, version: number, expires: 0 | 1])[] = [
