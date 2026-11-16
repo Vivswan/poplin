@@ -10,6 +10,9 @@ const WAITING = "build-server";
 /** What a site's panel says of a label no site has. */
 const NO_SITE = "No site is at this address. It may have been deleted, or the link is an old one.";
 
+/** How long a visitor is away from a tab before coming back to it, in milliseconds: longer than a read of the dashboard stands. */
+const MINUTE_MS = 60_000;
+
 /** Stop the demo's worker, as a browser does to an idle one. */
 async function stopWorker(page: Page): Promise<void> {
   const devtools = await page.context().newCDPSession(page);
@@ -92,8 +95,9 @@ test("when the demo starts from the seed under two tabs, the other tab comes bac
 
   await openPanel(page, name);
   await loadedAnew(page);
-  // The browser stops the idle worker before the visitor comes back to the other tab, where the dashboard then reads its data again.
+  // The browser stops the idle worker before the visitor comes back to the other tab. That is a minute later, when what the tab read has grown old, so the dashboard reads its data again.
   await stopWorker(page);
+  await other.clock.setFixedTime(Date.now() + MINUTE_MS);
   await other.evaluate(() => window.dispatchEvent(new Event("visibilitychange")));
   await loadedAnew(other);
 
