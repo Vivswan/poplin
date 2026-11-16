@@ -1,6 +1,6 @@
 // The question before a change that cannot be taken back with one press: what will happen, a button that does it, and Cancel.
 
-import { type ReactNode, useRef } from "react";
+import { type ReactNode, type RefObject, useRef } from "react";
 
 import { thenHome } from "@/lib/focus";
 import {
@@ -47,8 +47,17 @@ function actionLook(question: Question | undefined): "destructive" | "outline" |
  *
  * @param question - the question to show; `undefined` shows none
  * @param onAnswer - called once: `true` when the change is to be done. Cancel and Escape answer `false`. A press outside answers nothing: a question stays until it is answered. Once it has closed, a focus the change left on nothing goes home
+ * @param returnTo - what takes the focus when the question closes, while it is still on the page: the control that asked, for a question no trigger of the dialog opens
  */
-export function Confirm({ question, onAnswer }: { readonly question: Question | undefined; readonly onAnswer: (yes: boolean) => void }): ReactNode {
+export function Confirm({
+  question,
+  onAnswer,
+  returnTo,
+}: {
+  readonly question: Question | undefined;
+  readonly onAnswer: (yes: boolean) => void;
+  readonly returnTo?: RefObject<HTMLElement | null>;
+}): ReactNode {
   // The words stay while the dialog closes, so it does not empty as it fades.
   const last = useRef(question);
   if (question !== undefined) last.current = question;
@@ -57,7 +66,7 @@ export function Confirm({ question, onAnswer }: { readonly question: Question | 
 
   return (
     <AlertDialog open={question !== undefined} onOpenChange={(open) => (open ? undefined : onAnswer(false))}>
-      <AlertDialogContent finalFocus={thenHome()}>
+      <AlertDialogContent finalFocus={thenHome(returnTo)}>
         <AlertDialogHeader>
           <AlertDialogTitle>{shown?.title}</AlertDialogTitle>
           <AlertDialogDescription>{shown?.says}</AlertDialogDescription>

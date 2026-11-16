@@ -14,7 +14,7 @@ import {
   SettingsIcon,
   TriangleAlertIcon,
 } from "lucide-react";
-import { type ReactNode, useEffect, useState } from "react";
+import { type ReactNode, type RefObject, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/badge";
@@ -68,10 +68,13 @@ const NO_KEY = `poplin holds no key, so it cannot update itself.${GET_KEY}`;
 /** The offer of a frame with nothing to start. */
 const NO_OFFER: Offer = { update: undefined, back: undefined };
 
+/** Asks before something is started, for the button that was pressed: the question gives the focus back to that button. */
+type Asks = (asker: HTMLElement) => void;
+
 /** What can be started from the frame, each by what asks before it starts: the update to the newer release, and the way back to the version before. Either is `undefined` where there is none. */
 interface Offer {
-  readonly update: (() => void) | undefined;
-  readonly back: (() => void) | undefined;
+  readonly update: Asks | undefined;
+  readonly back: Asks | undefined;
 }
 
 /** A section's key. */
@@ -194,8 +197,46 @@ function DemoTag(): ReactNode {
   );
 }
 
+/** Where the focus goes around a question of the frame. */
+interface QuestionFocus {
+  /** What takes the focus when the question closes: the button that asked, and, once an update has started, the line that says so. */
+  readonly returnTo: RefObject<HTMLElement | null>;
+
+  /** The reference to give the line that says an update has started. */
+  readonly notice: RefObject<HTMLParagraphElement | null>;
+
+  /** Notes the button that asks, at its press. */
+  readonly noteAsker: Asks;
+}
+
+/**
+ * Keep the focus beside the version through a question of the frame: back on the button that asked, and on the line that says an update has started once it starts while this frame is drawn.
+ *
+ * The button that started an update leaves with the start. A question that had closed by then left the focus on that button, so it drops to the page: the line takes it. A question still closing gives it to the line when it has closed.
+ */
+function useQuestionFocus(started: boolean): QuestionFocus {
+  const returnTo = useRef<HTMLElement>(null);
+  const notice = useRef<HTMLParagraphElement>(null);
+  const before = useRef(started);
+
+  useEffect(() => {
+    const line = notice.current;
+    if (started && !before.current && line !== null) {
+      returnTo.current = line;
+      if (document.activeElement === document.body) line.focus();
+    }
+    before.current = started;
+  }, [started]);
+
+  const noteAsker: Asks = (asker) => {
+    returnTo.current = asker;
+  };
+
+  return { returnTo, notice, noteAsker };
+}
+
 /** The version the install runs and since when, where it came in by an update, with the way back to the version before; and, when a newer one is out, its notes and the start of the update. */
-function VersionLine({ offer, started }: { readonly offer: Offer; readonly started: boolean }): ReactNode {
+function VersionLine({ offer, started, notice }: { readonly offer: Offer; readonly started: boolean; readonly notice?: RefObject<HTMLParagraphElement | null> }): ReactNode {
   const { update, starts, back } = useFrame().data;
 
   return (
@@ -205,7 +246,7 @@ function VersionLine({ offer, started }: { readonly offer: Offer; readonly start
         {back === null ? "" : `, since ${dateIn(back.since)}`}
       </p>
       {back === null || offer.back === undefined ? null : (
-        <Button variant="ghost" size="xs" className="-ml-2" onClick={offer.back}>
+        <Button variant="ghost" size="xs" className="-ml-2" onClick={(event) => offer.back?.(event.currentTarget)}>
           Go back to {back.to}
         </Button>
       )}
@@ -222,11 +263,15 @@ function VersionLine({ offer, started }: { readonly offer: Offer; readonly start
       ) : null}
       {update !== null && !starts ? <p>{NO_KEY}</p> : null}
       {offer.update === undefined ? null : (
-        <Button variant="outline" size="xs" onClick={offer.update}>
+        <Button variant="outline" size="xs" onClick={(event) => offer.update?.(event.currentTarget)}>
           Update now
         </Button>
       )}
-      {started ? <p>Updated. Reload the page.</p> : null}
+      {started ? (
+        <p ref={notice} tabIndex={-1} className="outline-none">
+          Updated. Reload the page.
+        </p>
+      ) : null}
     </div>
   );
 }
@@ -261,12 +306,17 @@ function askedOf(asking: keyof Offer | undefined, frame: Pick<ReturnType<typeof 
 /**
  * Offer what can be started from the frame, on an install that holds its key: the update, where a newer release is known, and the way back, where there is one.
  *
- * @returns the offer for the controls that show it, with nothing in it where there is nothing to start or something was just started, and the question to draw once
+ * @returns the offer for the controls that show it, with nothing in it where there is nothing to start or something was just started, the question to draw once, and the reference to give the line that says an update has started
  */
-function useOffer(): { readonly offer: Offer; readonly started: boolean; readonly question: ReactNode } {
+function useOffer(): { readonly offer: Offer; readonly started: boolean; readonly question: ReactNode; readonly notice: QuestionFocus["notice"] } {
   const { update, starts, back } = useFrame().data;
   const [asking, setAsking] = useState<keyof Offer>();
   const [started, setStarted] = useStarted();
+  const { returnTo, notice, noteAsker } = useQuestionFocus(started);
+  const ask = (what: keyof Offer, asker: HTMLElement): void => {
+    noteAsker(asker);
+    setAsking(what);
+  };
   const client = useQueryClient();
   const answer = async (yes: boolean): Promise<void> => {
     const to = asking === "back" ? back?.to : undefined;
@@ -281,25 +331,25 @@ function useOffer(): { readonly offer: Offer; readonly started: boolean; readonl
     setStarted();
     sayDone(to === undefined ? `Updated to ${taken.to}. Reload the page.` : `Went back to ${taken.to}. Reload the page.`);
   };
-  const question = <Confirm question={askedOf(asking, { update, back })} onAnswer={(yes) => void answer(yes)} />;
+  const question = <Confirm question={askedOf(asking, { update, back })} onAnswer={(yes) => void answer(yes)} returnTo={returnTo} />;
   // A started update is not offered again from this page: it runs the client it was loaded with until it is loaded again.
-  if (!starts || started) return { offer: NO_OFFER, started, question };
+  if (!starts || started) return { offer: NO_OFFER, started, question, notice };
 
-  const offer = { update: update === null ? undefined : () => setAsking("update"), back: back === null ? undefined : () => setAsking("back") };
+  const offer: Offer = { update: update === null ? undefined : (asker) => ask("update", asker), back: back === null ? undefined : (asker) => ask("back", asker) };
 
-  return { offer, started, question };
+  return { offer, started, question, notice };
 }
 
 /** The sections on a phone: behind a button at the top, in a sheet that closes once a place is chosen or an update is asked about. */
 function PhoneSections({ current, offer, started }: { readonly current: Section; readonly offer: Offer; readonly started: boolean }): ReactNode {
   const [open, setOpen] = useState(false);
   // The question of an update is drawn over the page: the sheet makes room for it.
-  const closing = (ask: (() => void) | undefined): (() => void) | undefined => {
+  const closing = (ask: Asks | undefined): Asks | undefined => {
     if (ask === undefined) return undefined;
 
-    return () => {
+    return (asker) => {
       setOpen(false);
-      ask();
+      ask(asker);
     };
   };
   const closingOffer = { update: closing(offer.update), back: closing(offer.back) };
@@ -355,7 +405,7 @@ export function AppShell({
   readonly tools?: ReactNode;
   readonly children: ReactNode;
 }): ReactNode {
-  const { offer, started, question } = useOffer();
+  const { offer, started, question, notice } = useOffer();
   // The frame is drawn before the screen inside it, so every time of the screen is written in the time zone a person chose.
   useChosenTimeZone();
   const title = useScreenFocus(heading);
@@ -381,7 +431,7 @@ export function AppShell({
         </nav>
         <div className="mt-auto flex flex-col gap-2">
           <DomainNote />
-          <VersionLine offer={offer} started={started} />
+          <VersionLine offer={offer} started={started} notice={notice} />
           <Account />
         </div>
       </aside>
