@@ -10,12 +10,13 @@
 import lt from "semver/functions/lt";
 import * as v from "valibot";
 
+import { SWEEPER } from "../auth/scopes";
 import { OWN_SCHEMA } from "../database/open";
 import { MOMENT } from "../records/fields";
 import { LAST_UPDATE, type LastUpdate } from "../records/update";
 import { noteProblem } from "./problems";
+import { signedBy } from "./reach";
 import type { Install } from "./records";
-import { SWEEPER } from "./sweep";
 
 /** The version an install can go back to, and since when it runs the version it would leave. */
 export const WAY_BACK = v.object({ to: LAST_UPDATE.entries.from, since: MOMENT });
@@ -59,6 +60,6 @@ export function backAfterFailedStep(last: LastUpdate | undefined, failed: { read
  * @param went - the version whose step failed, and the version the install went back to
  */
 export async function noteWentBack(install: Pick<Install, "database" | "now">, went: { readonly from: string; readonly to: string }): Promise<void> {
-  await install.database.appendAudit({ action: "update_went_back", detail: went }, { by: SWEEPER.holder, at: install.now() }).catch(() => undefined);
+  await install.database.appendAudit({ action: "update_went_back", detail: went }, signedBy(SWEEPER, install.now())).catch(() => undefined);
   await noteProblem(install, "update_went_back");
 }

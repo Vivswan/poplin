@@ -200,7 +200,7 @@ describe("the data routes", () => {
 
     const { database } = opened.base.install;
     const all = await database.listSites({ trash: false, limit: 100 });
-    for (const site of all.sites) await database.changeDetails(site.id, { title: "\u0000" }, { by: opened.base.owner, at: opened.base.clock.now });
+    for (const site of all.sites) await database.changeDetails(site.id, { title: "\u0000" }, { as: "person", by: opened.base.owner, at: opened.base.clock.now });
 
     const first = (await (await opened.get("/data/sites?sort=title")).json()) as Listed;
     const second = (await (await opened.get(`/data/sites?sort=title&after=${encodeURIComponent(first.next ?? "")}`)).json()) as Listed;

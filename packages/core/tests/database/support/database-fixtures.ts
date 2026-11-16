@@ -24,7 +24,7 @@ export const ADA = "00000000000000aa" as TokenId;
 export const BO = "00000000000000bb" as TokenId;
 
 /** A change made by the first person at the fixture moment. */
-export const BY_ADA: Signed = { by: ADA, at: NOW };
+export const BY_ADA: Signed = { as: "token", by: ADA, at: NOW };
 
 /** A site name, which is a valid public name too. */
 export const REPORT = "report" as SiteName;
@@ -75,7 +75,7 @@ export const ROOMY = { own: 100, folderBytes: 1_000_000, staying: 0, totalBytes:
 const FIXTURE_ROOM = { ...ROOMY, folderBytes: Number.MAX_SAFE_INTEGER, totalBytes: Number.MAX_SAFE_INTEGER, day: "2026-01-01", dayFiles: Number.MAX_SAFE_INTEGER, writes: 0 };
 
 /** A change made by the second person a moment later. */
-export const BY_BO_LATER: Signed = { by: BO, at: NOW + 5 };
+export const BY_BO_LATER: Signed = { as: "token", by: BO, at: NOW + 5 };
 
 /** The settings of a new install. */
 export const SETTINGS = defaultSettings({ installer: "ada@example.com" as Login });

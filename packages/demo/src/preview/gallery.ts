@@ -3,6 +3,7 @@
 // A screen that only a program's call reaches is a stage: an address under `/state/` that makes the call itself and leads to the screen.
 
 import { listSites } from "../../../core/src/actions/list";
+import { signedBy } from "../../../core/src/actions/reach";
 import type { SiteObject } from "../../../core/src/actions/site-object";
 import { REVIEW_PAGE } from "../../../core/src/api/routes";
 import { showUserCode } from "../../../core/src/auth/computer-logins";
@@ -90,7 +91,7 @@ async function waitingLogins({ world, samples }: Stage): Promise<readonly Printe
 
 /** Add more logins to the log than a narrowed page looks at, and lead to the page of what happened to sites: it stops before it finds an entry, and says so. A reset takes the logins away. */
 async function longLog({ world }: Stage): Promise<Response> {
-  const signed = { by: world.admin.holder, at: world.install.now() };
+  const signed = signedBy(world.admin, world.install.now());
   for (let added = 0; added < MANY_LOGINS; added += 1) await world.install.database.appendAudit({ action: "login", detail: {} }, signed);
 
   return new Response(null, { status: 303, headers: { Location: "/activity?kind=sites" } });
@@ -133,7 +134,7 @@ function runOut(to: (place: Place) => string): (stage: Stage) => Promise<Respons
   return async ({ world }) => {
     const site = (await seededSites(world)).find((each) => each.name === RUN_OUT);
     const at = world.install.now();
-    if (site !== undefined) await world.install.database.changeDetails(site.id, { expires: at - HOUR_MS }, { by: world.admin.holder, at });
+    if (site !== undefined) await world.install.database.changeDetails(site.id, { expires: at - HOUR_MS }, signedBy(world.admin, at));
 
     return new Response(null, { status: 303, headers: { Location: to(site === undefined ? noPlace(world) : placeOf(world, site)) } });
   };

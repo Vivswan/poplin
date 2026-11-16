@@ -131,12 +131,12 @@ describe("the setup page", () => {
     const fresh = tally.calls;
 
     const { database } = await installOf(w);
-    for (let entry = 0; entry < 250; entry += 1) await database.appendAudit({ action: "domain_synced", detail: { run: "check", from: "setup" } }, { by: OWNER, at: w.clock.now });
+    for (let entry = 0; entry < 250; entry += 1) await database.appendAudit({ action: "domain_synced", detail: { run: "check", from: "setup" } }, { as: "person", by: OWNER, at: w.clock.now });
 
     tally.calls = 0;
     const open = await ask(worker, `${ADMIN}/setup`, {}, counted);
     const after = tally.calls;
-    await database.appendAudit({ action: "login", detail: {} }, { by: OWNER, at: w.clock.now });
+    await database.appendAudit({ action: "login", detail: {} }, { as: "person", by: OWNER, at: w.clock.now });
     tally.calls = 0;
     const entered = await ask(worker, `${ADMIN}/setup`, {}, counted);
     const first = tally.calls;

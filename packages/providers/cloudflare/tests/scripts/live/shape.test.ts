@@ -65,7 +65,7 @@ async function databaseOf(drift: string | null): Promise<BunSqliteDriver> {
   const opened = await openDatabase(driver, NOW);
   if (opened.kind !== "open") throw new Error(`the fake's database did not open: ${opened.kind}`);
 
-  await opened.database.initSettings(defaultSettings({ installer: INSTALLER }), { by: INSTALLER, at: NOW });
+  await opened.database.initSettings(defaultSettings({ installer: INSTALLER }), { as: "first_login", by: INSTALLER, at: NOW });
   await driver.batch([{ sql: drift, params: [] }]);
 
   return driver;

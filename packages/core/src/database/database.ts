@@ -42,11 +42,13 @@ export interface SiteNow extends SiteNamed {
   readonly id: SiteId;
 }
 
-/** Who makes a change and when, in milliseconds since the epoch. */
-export interface Signed {
-  readonly by: Holder;
-  readonly at: number;
-}
+/**
+ * Who makes a change and when, in milliseconds since the epoch.
+ *
+ * `as` says what signs: a `token`, a `person` who came in by email, the `first_login` that is the email of an install nobody has logged in to and is no stored login yet, or the `sweeper` that is the install's own scheduled work.
+ * A token and a person change the settings, the logins, and the tokens only while they stand: see `changeSettings` and `addToken`.
+ */
+export type Signed = { readonly at: number } & ({ readonly as: "token"; readonly by: TokenId } | { readonly as: "person" | "first_login" | "sweeper"; readonly by: Login });
 
 /**
  * What a new site is made from.
@@ -774,7 +776,7 @@ export interface Database {
   /**
    * Store the record of a new token. The user behind it is `signed.by`, or for a token that signs, the user behind that token.
    *
-   * @returns `signer_gone` for a token that signs and was removed, or whose user is no user any more, as when that user was removed while it asked
+   * @returns `signer_gone` for a signer who no longer stands: a token that was removed or whose user is no user any more, or a person whose email is no login any more, as when that user was removed while the request waited
    */
   addToken(token: TokenRecord, signed: Signed): Promise<{ readonly kind: "done" } | Refused<"id_taken" | "signer_gone">>;
 
@@ -976,7 +978,7 @@ export interface Database {
    *
    * Logins that add or drop a user, or that put another user first, are remembered, in the same step, as changed users by an install that keeps a check of its domain. The same users in another order behind the same first one are not.
    *
-   * @returns `signer_gone` for a token that signs and was removed, or whose user is no user any more, as when that user was removed while it asked; it writes nothing
+   * @returns `signer_gone` for a signer who no longer stands: a token that was removed or whose user is no user any more, or a person whose email is no login any more, as when that user was removed while the request waited; it writes nothing
    * @throws {Error} a value breaks its rule
    */
   changeSettings(

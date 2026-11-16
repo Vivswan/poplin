@@ -56,11 +56,27 @@ export function isUser(column: SQL): SQL {
   return fragment`EXISTS (SELECT 1 FROM ${settings}, json_each(${settings.value}, '$.logins') AS j WHERE ${settings.id} = 1 AND j.value = ${column})`;
 }
 
-/** Whether who signs may still write: a token that signs was not removed, and the user behind it is a user still, whether or not the token has run out since it was let in. */
-export function signerStands(by: string): SQL {
+/** Whether a token that signs may still write: it was not removed, and the user behind it is a user still, whether or not the token has run out since it was let in. */
+function tokenStands(id: TokenId): SQL {
   const gone = fragment`${SIGNER.removed_at} IS NOT NULL OR NOT ${isUser(fragment`${SIGNER.allowed_by}`)}`;
 
-  return fragment`NOT EXISTS (SELECT 1 FROM ${tokens} AS ${SIGNER} WHERE ${SIGNER.id} = ${by} AND (${gone}))`;
+  return fragment`NOT EXISTS (SELECT 1 FROM ${tokens} AS ${SIGNER} WHERE ${SIGNER.id} = ${id} AND (${gone}))`;
+}
+
+/**
+ * Whether who signs may still write, for the statement that writes: a token as `tokenStands` has it, and a person while their email is a stored login.
+ * The first login and the sweeper hold nothing that can be taken away, so they always stand.
+ */
+export function signerStands(signed: Signed): SQL {
+  switch (signed.as) {
+    case "token":
+      return tokenStands(signed.by);
+    case "person":
+      return isUser(fragment`${signed.by}`);
+    case "first_login":
+    case "sweeper":
+      return fragment`1`;
+  }
 }
 
 /** The tokens that work at a moment, counted by the user behind them. */
@@ -100,7 +116,7 @@ export function endTokensOfRemoved(login: string, signed: Signed): readonly [Sta
 export function endTokensOfDropped(next: readonly string[], signed: Signed): readonly [Statement, Statement] {
   const dropped = fragment`(SELECT was.value FROM ${settings}, json_each(${settings.value}, '$.logins') AS was WHERE ${settings.id} = 1 AND was.value NOT IN (SELECT value FROM json_each(${JSON.stringify(next)})))`;
 
-  return endTokensWhere(fragment`${tokens.allowed_by} IN ${dropped} AND ${tokens.id} <> ${signed.by} AND ${signerStands(signed.by)}`, signed);
+  return endTokensWhere(fragment`${tokens.allowed_by} IN ${dropped} AND ${tokens.id} <> ${signed.by} AND ${signerStands(signed)}`, signed);
 }
 
 /** End the token that signs a list of logins which leaves its own user out: it goes right after the audit entry of the list's change in a batch, and does nothing where the list was refused. */

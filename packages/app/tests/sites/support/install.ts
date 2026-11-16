@@ -1,6 +1,7 @@
 // An install the serving tests ask requests of: a real database on bun's SQLite, a store in memory that records every key it is asked for, and a login that takes a test header as its proof.
 // A key is recorded once for every request the store's contract says a call costs: twice for a read of a range that selects no byte of the object.
 
+import { signedBy } from "@poplin/core/src/actions/reach";
 import { type Login, parseLogins } from "@poplin/core/src/auth/logins";
 import type { Database, NewSite } from "@poplin/core/src/database/database";
 import { openDatabase } from "@poplin/core/src/database/open";
@@ -170,7 +171,7 @@ export async function openInstall(addresses: SiteAddresses = ADDRESSES): Promise
 
   const publish = async (draft: Draft): Promise<Site> => {
     const contents = draft.unlisted_files === true ? undefined : contentsOf(Object.keys(draft.files));
-    const made = await publishedSite(database, draftOf(draft, addresses), { by: draft.by ?? owner, at: NOW }, contents);
+    const made = await publishedSite(database, draftOf(draft, addresses), signedBy({ holder: draft.by ?? owner }, NOW), contents);
     if (made.kind !== "done") throw new Error(`the test's site was refused: ${made.kind}`);
 
     for (const [path, [body, contentType]] of Object.entries(draft.files)) {

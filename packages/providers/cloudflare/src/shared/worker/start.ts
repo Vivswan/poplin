@@ -241,7 +241,7 @@ async function ensureSettings(database: Database, binding: unknown, now: number)
   const [installer] = first.values.logins;
   if (installer === undefined) return badBinding("FIRST_SETTINGS", "missing at logins");
 
-  await database.initSettings(first.values, { by: installer, at: now });
+  await database.initSettings(first.values, { as: "first_login", by: installer, at: now });
 
   return undefined;
 }

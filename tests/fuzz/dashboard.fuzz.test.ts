@@ -41,7 +41,7 @@ const { base } = opened;
 const report = await base.publish("report");
 const shop = await base.publish("shop", "public");
 const old = await base.publish("old");
-await base.install.database.trashSite(old.id, { by: base.owner, at: base.clock.now });
+await base.install.database.trashSite(old.id, { as: "person", by: base.owner, at: base.clock.now });
 // The owner has logged in before the run: the first login ever writes its line from whatever page it opens, which is a change no request of the property asks for.
 await base.install.database.noteLogin(base.owner, { since: base.clock.now, at: base.clock.now });
 

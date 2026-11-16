@@ -17,7 +17,7 @@ describe("a visitor's request that meets a limit or a login that cannot be check
   test("the day's limit of requests, once reached, is noted as one problem however many requests it refuses", async () => {
     const site = await publish(instance(w), await tokenOf(w, "publisher"), { name: "docs", access: "public" }, [page("<p>docs</p>")]);
     const { database } = await installOf(w);
-    await database.changeSettings({ requests_per_day: 2, site_share_of_day: 100 }, { by: OWNER, at: w.clock.now });
+    await database.changeSettings({ requests_per_day: 2, site_share_of_day: 100 }, { as: "person", by: OWNER, at: w.clock.now });
     // A new instance reads the settings anew.
     const worker = instance(w);
     const statuses: number[] = [];

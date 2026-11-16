@@ -243,7 +243,7 @@ function auditWithUpload(signed: Signed, action: AuditAction, upload: UploadId, 
 }
 
 /** The audit entry of a change to no site, written only when the statement before it changed a row. */
-function auditPlain(signed: Signed, action: AuditAction, detail: Readonly<Record<string, unknown>>): Statement {
+function auditPlain(signed: Pick<Signed, "by" | "at">, action: AuditAction, detail: Readonly<Record<string, unknown>>): Statement {
   return insertFrom(audit, PLAIN_AUDIT_COLUMNS, fragment`SELECT ${signed.at}, ${signed.by}, ${action}, ${JSON.stringify(detail)} WHERE ${CHANGED}`);
 }
 
@@ -253,8 +253,8 @@ function isStoredLogin(email: string): SQL {
 }
 
 /** The settings, and whether who signs a change of them still stands. */
-function settingsAndSigner(by: string): Statement {
-  return built(BUILD.select({ value: settings.value, stands: fragment<number>`${signerStands(by)}`.as("stands") }).from(settings).where(eq(settings.id, 1)));
+function settingsAndSigner(signed: Signed): Statement {
+  return built(BUILD.select({ value: settings.value, stands: fragment<number>`${signerStands(signed)}`.as("stands") }).from(settings).where(eq(settings.id, 1)));
 }
 
 /** Whether the read of `settingsAndSigner` found a signer who no longer stands. */
@@ -963,11 +963,11 @@ export class SqlDatabase implements Database {
   async addToken(token: TokenRecord, signed: Signed): Promise<{ readonly kind: "done" } | Refused<"id_taken" | "signer_gone">> {
     const expires = token.scope === "admin" ? token.expiresAt : null;
     const idIsFree = fragment`NOT EXISTS (SELECT 1 FROM ${tokens} WHERE ${tokens.id} = ${token.id})`;
-    const made = fragment`SELECT ${token.id}, ${token.hash}, ${token.scope}, ${token.note}, ${token.createdAt}, ${expires}, ${userBehind(signed.by)} WHERE ${idIsFree} AND ${signerStands(signed.by)}`;
+    const made = fragment`SELECT ${token.id}, ${token.hash}, ${token.scope}, ${token.note}, ${token.createdAt}, ${expires}, ${userBehind(signed.by)} WHERE ${idIsFree} AND ${signerStands(signed)}`;
     const [inserted, , signer] = await this.#driver.batch([
       insertFrom(tokens, TOKEN_COLUMNS, made),
       auditPlain(signed, "token_added", { token: token.id, scope: token.scope, note: token.note }),
-      written(fragment`SELECT ${signerStands(signed.by)} AS stands`),
+      written(fragment`SELECT ${signerStands(signed)} AS stands`),
     ]);
     if (changed(inserted)) return { kind: "done" };
 
@@ -1282,7 +1282,7 @@ export class SqlDatabase implements Database {
     const checked = v.parse(SETTING_CHANGES, changes);
     // A merge patch: each key it names is replaced and every other key stays, only when a value differs.
     const patched = fragment<string>`json_patch(${settings.value}, ${JSON.stringify(checked)})`;
-    const update = built(BUILD.update(settings).set({ value: patched, updated_at: signed.at }).where(and(eq(settings.id, 1), signerStands(signed.by), fragment`json(${patched}) <> json(${settings.value})`)));
+    const update = built(BUILD.update(settings).set({ value: patched, updated_at: signed.at }).where(and(eq(settings.id, 1), signerStands(signed), fragment`json(${patched}) <> json(${settings.value})`)));
     // The marks of changed users and of changed rules read the settings as they still are, so they run before the change.
     const rules = rulesReplaced(checked, signed);
     // So do the tokens of the users the new logins leave out, which end in the same step.
@@ -1290,7 +1290,7 @@ export class SqlDatabase implements Database {
     const marks = [...users, ...(rules === undefined ? [] : [rules])];
     // The token that signs ends after the change, where the new logins leave its own user out: it stands for every statement before.
     const own = checked.logins === undefined ? [] : endSignerLeftOut(signed);
-    const answers = await this.#driver.batch([...marks, update, auditPlain(signed, "settings_changed", checked), ...own, settingsAndSigner(signed.by)]);
+    const answers = await this.#driver.batch([...marks, update, auditPlain(signed, "settings_changed", checked), ...own, settingsAndSigner(signed)]);
     const [updated, read] = [answers[marks.length], answers.at(-1)];
     const values = settingsIn(read);
     if (values === undefined) return { kind: "not_set_up" };
@@ -1302,8 +1302,8 @@ export class SqlDatabase implements Database {
 
   async addLogin(login: Login, signed: Signed): Promise<{ readonly kind: "done" | "unchanged"; readonly values: SettingValues } | Refused<"not_set_up" | "signer_gone">> {
     const added = fragment<string>`json_insert(${settings.value}, '$.logins[#]', ${v.parse(LOGIN, login)})`;
-    const add = BUILD.update(settings).set({ value: added, updated_at: signed.at }).where(and(eq(settings.id, 1), signerStands(signed.by), fragment`NOT ${isStoredLogin(login)}`));
-    const [updated, , , read] = await this.#driver.batch([built(add), auditOfLogins(signed), usersChanged(signed.at), settingsAndSigner(signed.by)]);
+    const add = BUILD.update(settings).set({ value: added, updated_at: signed.at }).where(and(eq(settings.id, 1), signerStands(signed), fragment`NOT ${isStoredLogin(login)}`));
+    const [updated, , , read] = await this.#driver.batch([built(add), auditOfLogins(signed), usersChanged(signed.at), settingsAndSigner(signed)]);
     const values = settingsIn(read);
     if (values === undefined) return { kind: "not_set_up" };
 
@@ -1317,11 +1317,11 @@ export class SqlDatabase implements Database {
     const removed = fragment<string>`json_remove(${settings.value}, '$.logins[' || ${place} || ']')`;
     // A login works when the login page is known to let it in: the signer's own email, or any login for a signer that is none.
     const keepsWorkingLogin = fragment`CASE WHEN ${isStoredLogin(signed.by)} THEN ${login} <> ${signed.by} ELSE json_array_length(${settings.value}, '$.logins') > 1 END`;
-    const lands = and(eq(settings.id, 1), signerStands(signed.by), isStoredLogin(login), keepsWorkingLogin);
+    const lands = and(eq(settings.id, 1), signerStands(signed), isStoredLogin(login), keepsWorkingLogin);
     const remove = BUILD.update(settings).set({ value: removed, updated_at: signed.at }).where(lands);
     // The mark of changed users goes first, under the removal's own condition: the tokens of the removed user end right after its audit entry.
     const mark = usersChanged(signed.at, fragment`EXISTS (SELECT 1 FROM ${settings} WHERE ${lands})`);
-    const [, updated, , , , read] = await this.#driver.batch([mark, built(remove), auditOfLogins(signed), ...endTokensOfRemoved(login, signed), settingsAndSigner(signed.by)]);
+    const [, updated, , , , read] = await this.#driver.batch([mark, built(remove), auditOfLogins(signed), ...endTokensOfRemoved(login, signed), settingsAndSigner(signed)]);
     const values = settingsIn(read);
     if (values === undefined) return { kind: "not_set_up" };
 

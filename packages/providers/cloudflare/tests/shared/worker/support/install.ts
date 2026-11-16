@@ -4,9 +4,9 @@ import { createExecutionContext, createScheduledController, waitOnExecutionConte
 import { env } from "cloudflare:workers";
 import type { Api } from "@poplin/app/src/api/api";
 import type { PUBLISH_REQUEST } from "@poplin/core/src/actions/begin-publish";
-import { issueToken } from "@poplin/core/src/actions/manage-tokens";
 import type { Install } from "@poplin/core/src/actions/records";
 import type { Login } from "@poplin/core/src/auth/logins";
+import { mintToken } from "@poplin/core/src/auth/tokens";
 import { openDatabase } from "@poplin/core/src/database/open";
 import { dayOf } from "@poplin/core/src/records/views";
 import { sha256Of } from "@poplin/core/src/storage/storage";
@@ -171,12 +171,14 @@ export async function installOf(from: World): Promise<Install> {
   };
 }
 
-/** A whole token of the given scope, issued by the owner through the rule book. */
+/** A whole token of the given scope, the owner's. It is signed as the first login, so a test may hold it before the Worker's first request stores the settings. */
 export async function tokenOf(from: World, scope: "admin" | "publisher"): Promise<string> {
-  const issued = await issueToken(await installOf(from), { scope: "admin", holder: OWNER }, { scope, note: "a test" });
-  if (!issued.ok) throw new Error(`the test's token was refused: ${issued.code}`);
+  const { database, now } = await installOf(from);
+  const minted = await mintToken({ scope, note: "a test", now: now() });
+  const added = await database.addToken(minted.record, { as: "first_login", by: OWNER, at: now() });
+  if (added.kind !== "done") throw new Error(`the test's token was refused: ${added.kind}`);
 
-  return issued.token;
+  return minted.token;
 }
 
 /**

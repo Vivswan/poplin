@@ -524,7 +524,7 @@ function queryPlans(label: string, makeDriver: DriverFactory): void {
       await database.deleteSatOutSite(id, BY_ADA, NOW - 1);
       await database.restoreSite(id, BY_ADA);
       await database.listDueSites({ expiredBy: NOW }, 10);
-      await database.trashExpiredSite(id, { by: ADA, at: NOW - 1 });
+      await database.trashExpiredSite(id, { as: "token", by: ADA, at: NOW - 1 });
       const deleted = await database.deleteSite(id, BY_ADA);
       const imported = deleted.kind === "done" ? await storedBack(database, deleted.site) : deleted;
       await database.addToken(token, BY_ADA);

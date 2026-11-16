@@ -343,7 +343,7 @@ test.each(unchanged)("$name leaves the stored login as it was, and an answer tha
 // Drift: the correction is the one change of the logins made by nobody who is a login; left open after a login it would hand the install to whoever holds a token of the account.
 test("once somebody has logged in, an email sent beside the token changes no login, even where the setup were still asked", async () => {
   const { opened, plug, call, logins } = await openSetup();
-  await opened.install.database.appendAudit({ action: "login", detail: {} }, { by: opened.owner, at: opened.install.now() });
+  await opened.install.database.appendAudit({ action: "login", detail: {} }, { as: "person", by: opened.owner, at: opened.install.now() });
   const answer = await call("repair", { token: OWN, login: MEANT });
 
   expect([answer.status, await logins(), plug.calls.at(-1)?.settings?.logins]).toEqual([200, [opened.owner], [opened.owner]]);

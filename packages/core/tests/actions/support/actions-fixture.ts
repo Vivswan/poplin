@@ -6,6 +6,7 @@ import type { Login } from "../../../src/auth/logins";
 import type { Actor } from "../../../src/auth/scopes";
 import type { TokenId } from "../../../src/auth/tokens";
 import { publishSite } from "../../../src/actions/publish";
+import { signedBy } from "../../../src/actions/reach";
 import type { Install } from "../../../src/actions/records";
 import { openDatabase } from "../../../src/database/open";
 import { defaultSettings, type SettingValues } from "../../../src/records/settings";
@@ -95,7 +96,7 @@ export async function makeWorld(overrides: Partial<SettingValues> = {}): Promise
   if (opened.kind !== "open") throw new Error(`the fixture database did not open: ${opened.kind}`);
 
   const settings = { ...defaultSettings({ installer: "ada@example.com" as Login }), ...overrides };
-  await opened.database.initSettings(settings, { by: ADMIN.holder, at: NOW });
+  await opened.database.initSettings(settings, signedBy(ADMIN, NOW));
 
   const store = new MemoryStore();
   const faults: Faults = {};

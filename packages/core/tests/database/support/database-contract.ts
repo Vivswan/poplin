@@ -281,8 +281,8 @@ function domainCheck(label: string, makeDatabase: DatabaseFactory): void {
       const beforeAnyRun = await waits();
       await database.keepDomainCheck(run("check"), {});
       const afterFirstRun = await waits();
-      await database.addLogin(cy, { by: ADMIN, at: NOW + 1 });
-      await database.addLogin(cy, { by: ADMIN, at: NOW + 2 });
+      await database.addLogin(cy, { as: "person", by: ADMIN, at: NOW + 1 });
+      await database.addLogin(cy, { as: "person", by: ADMIN, at: NOW + 2 });
       const afterAdd = await waits();
       await database.keepDomainCheck(run("check"), {});
       await database.keepDomainCheck(run("repair"), {});
@@ -295,9 +295,9 @@ function domainCheck(label: string, makeDatabase: DatabaseFactory): void {
       await database.keepDomainCheck(run("repair"), {}, { logins: null, since: NOW + 10 });
       const afterRepairThatStoppedShort = await waits();
       await database.keepDomainCheck(run("repair"), {}, { logins: [ADMIN, bo, cy], since: NOW + 9 });
-      await database.removeLogin(cy, { by: ADMIN, at: NOW + 3 });
-      await database.removeLogin(cy, { by: ADMIN, at: NOW + 4 });
-      await database.removeLogin(ADMIN, { by: ADMIN, at: NOW + 5 });
+      await database.removeLogin(cy, { as: "person", by: ADMIN, at: NOW + 3 });
+      await database.removeLogin(cy, { as: "person", by: ADMIN, at: NOW + 4 });
+      await database.removeLogin(ADMIN, { as: "person", by: ADMIN, at: NOW + 5 });
 
       // Each run that settles nothing sets a mark later than the one before, so a try that began under an earlier one can tell.
       expect([beforeAnyRun, afterFirstRun, afterAdd, afterRepairOfOtherUsers, afterRepairBegunBeforeTheChange]).toEqual([undefined, null, NOW + 1, NOW + 9, NOW + 10]);
@@ -311,8 +311,8 @@ function domainCheck(label: string, makeDatabase: DatabaseFactory): void {
       const database = await opened(makeDatabase);
       const [bo, cy] = ["bo@example.com" as Login, "cy@example.com" as Login];
       const waits = async (): Promise<number | null | undefined> => (await database.readDomainCheck())?.users_changed_at;
-      const replaced = async (logins: Login[], at: number): Promise<number | null | undefined> => {
-        await database.changeSettings({ logins, trash_days: at }, { by: ADMIN, at: NOW + at });
+      const replaced = async (logins: Login[], at: number, by = ADMIN): Promise<number | null | undefined> => {
+        await database.changeSettings({ logins, trash_days: at }, { as: "person", by, at: NOW + at });
 
         return waits();
       };
@@ -320,14 +320,15 @@ function domainCheck(label: string, makeDatabase: DatabaseFactory): void {
 
       const beforeAnyRun = await replaced([ADMIN], 1);
       await database.keepDomainCheck({ ran_at: NOW + 1, by: ADMIN, run: "repair", pieces: [] }, {});
-      await database.changeSettings({ trash_days: 30 }, { by: ADMIN, at: NOW + 2 });
+      await database.changeSettings({ trash_days: 30 }, { as: "person", by: ADMIN, at: NOW + 2 });
       const otherSetting = await waits();
       const sameUser = await replaced([ADMIN], 3);
       const added = await replaced([ADMIN, bo, cy], 4);
       const otherOrderBehind = await replaced([ADMIN, cy, bo], 5);
       const otherFirst = await replaced([bo, ADMIN, cy], 6);
       const dropped = await replaced([bo], 7);
-      const swapped = await replaced([cy], 8);
+      // The first user left with the list before: a person signs only while their email is a login.
+      const swapped = await replaced([cy], 8, bo);
 
       expect([beforeAnyRun, otherSetting, sameUser, added, otherOrderBehind, otherFirst, dropped, swapped]).toEqual([undefined, null, null, NOW + 4, NOW + 4, NOW + 6, NOW + 7, NOW + 8]);
       expect((await database.readSettings())?.logins).toEqual([cy]);
@@ -361,8 +362,8 @@ function domainCheck(label: string, makeDatabase: DatabaseFactory): void {
       await database.initSettings(SETTINGS, BY_ADA);
       const beforeAnyRun = await database.claimUsers(NOW);
       await database.keepDomainCheck({ ran_at: NOW, by: ADMIN, run: "repair", pieces: [] }, {});
-      await database.addLogin(bo, { by: ADMIN, at: NOW + 1 });
-      await database.addLogin(cy, { by: ADMIN, at: NOW + 2 });
+      await database.addLogin(bo, { as: "person", by: ADMIN, at: NOW + 1 });
+      await database.addLogin(cy, { as: "person", by: ADMIN, at: NOW + 2 });
       const settled = async (logins: Login[] | null, since: number, at: number): Promise<unknown> => {
         const { waits } = await database.settleUsers({ logins, since }, at);
 
@@ -390,7 +391,7 @@ function domainCheck(label: string, makeDatabase: DatabaseFactory): void {
       const database = await opened(makeDatabase);
       await database.initSettings(SETTINGS, BY_ADA);
       await database.keepDomainCheck({ ran_at: NOW, by: ADMIN, run: "repair", pieces: [] }, {});
-      await database.changeSettings({ outside_pages: "allowed" }, { by: ADMIN, at: NOW });
+      await database.changeSettings({ outside_pages: "allowed" }, { as: "person", by: ADMIN, at: NOW });
       const rules = { outside_pages: "allowed", search_engines_allowed: SETTINGS.search_engines_allowed } as const;
 
       const first = await database.claimRules(NOW);
@@ -410,7 +411,7 @@ function domainCheck(label: string, makeDatabase: DatabaseFactory): void {
       const database = await opened(makeDatabase);
       const waits = async (): Promise<number | null | undefined> => (await database.readDomainCheck())?.rules_changed_at;
       const changed = async (changes: Partial<SettingValues>, at: number): Promise<number | null | undefined> => {
-        await database.changeSettings(changes, { by: ADMIN, at: NOW + at });
+        await database.changeSettings(changes, { as: "person", by: ADMIN, at: NOW + at });
 
         return waits();
       };
@@ -625,7 +626,7 @@ function requestCounts(label: string, makeDatabase: DatabaseFactory): void {
       const day = new Date(NOW).toISOString().slice(0, 10);
       const before = new Date(NOW - 6 * 86_400_000).toISOString().slice(0, 10);
       const sites = [];
-      for (const [at, by] of [named.id, removed.id, unnamed.id, ADA].entries()) sites.push(await made(database, draft(`site-${at}` as SiteName), { by, at: NOW + at }));
+      for (const [at, by] of [named.id, removed.id, unnamed.id, ADA].entries()) sites.push(await made(database, draft(`site-${at}` as SiteName), { as: "token", by, at: NOW + at }));
       const [first, second] = sites.map((site) => site.id) as [SiteId, SiteId];
       await database.addRequests({ day, site: first, requests: 9, views: 7 });
       await database.addRequests({ day: before, site: first, requests: 5, views: 4 });

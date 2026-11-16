@@ -222,7 +222,7 @@ describe("a page of the log", () => {
   ])("under %p goes on %s: a full page ends with the place the next one starts after, and a short one with none", async (order, _words, inOrder) => {
     const opened = await openConsole();
     const { install, owner, clock } = opened.base;
-    for (let count = 0; count < 59; count += 1) await install.database.appendAudit({ action: "login", detail: {} }, { by: owner, at: clock.now });
+    for (let count = 0; count < 59; count += 1) await install.database.appendAudit({ action: "login", detail: {} }, { as: "person", by: owner, at: clock.now });
 
     const first = await pageOf(opened, `?${order}`);
     const second = await pageOf(opened, `?${order}&after=${first.next}`);
@@ -237,7 +237,7 @@ describe("a page of the log", () => {
   test("offers no next page when the entries end with the page", async () => {
     const opened = await openConsole();
     const { install, owner, clock } = opened.base;
-    for (let count = 0; count < 49; count += 1) await install.database.appendAudit({ action: "login", detail: {} }, { by: owner, at: clock.now });
+    for (let count = 0; count < 49; count += 1) await install.database.appendAudit({ action: "login", detail: {} }, { as: "person", by: owner, at: clock.now });
 
     const page = await pageOf(opened);
 
@@ -278,7 +278,7 @@ describe("the pages around a page of the log", () => {
   ])("under %p, %d entries a page: going on and then back shows the same pages, and only the first has none ahead of it", async (query, size, inOrder) => {
     const opened = await openConsole();
     const { install, owner, clock } = opened.base;
-    for (let count = 0; count < size * 2 + 9; count += 1) await install.database.appendAudit({ action: "login", detail: {} }, { by: owner, at: clock.now });
+    for (let count = 0; count < size * 2 + 9; count += 1) await install.database.appendAudit({ action: "login", detail: {} }, { as: "person", by: owner, at: clock.now });
 
     const first = await pageOf(opened, `?${query}`);
     const second = await pageOf(opened, `?${query}&after=${first.next}`);
@@ -333,7 +333,7 @@ describe("the total of the log", () => {
 /** Append logins to an install's log until it holds as many entries; an opened install holds one already. */
 async function fillLog(opened: Awaited<ReturnType<typeof openConsole>>, entries: number): Promise<void> {
   const { install, owner, clock } = opened.base;
-  for (let count = 1; count < entries; count += 1) await install.database.appendAudit({ action: "login", detail: {} }, { by: owner, at: clock.now });
+  for (let count = 1; count < entries; count += 1) await install.database.appendAudit({ action: "login", detail: {} }, { as: "person", by: owner, at: clock.now });
 }
 
 describe("the log as a file", () => {
@@ -497,7 +497,7 @@ describe("a narrowed log longer than one reading looks at", () => {
     const opened = await openConsole();
     const { install, owner, clock, publish } = opened.base;
     await publish("report");
-    for (let count = 0; count < AUDIT_WINDOW + 5; count += 1) await install.database.appendAudit({ action: "login", detail: {} }, { by: owner, at: clock.now });
+    for (let count = 0; count < AUDIT_WINDOW + 5; count += 1) await install.database.appendAudit({ action: "login", detail: {} }, { as: "person", by: owner, at: clock.now });
     await publish("docs");
 
     return opened;

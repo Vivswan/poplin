@@ -4,6 +4,7 @@
 //   they were not, or the install has no way to     `logins_not_ended`, about the reason; nothing is written
 
 import type { Actor } from "../auth/scopes";
+import { signedBy } from "./reach";
 import { type Install, type Refused, refuse } from "./records";
 
 /** What a refusal is about on an install that was given no way to end its logins. */
@@ -33,7 +34,7 @@ export async function signEveryoneOut(install: Install, actor: Actor, end: EndLo
   const ended = await end();
   if (!ended.ok) return refuse("logins_not_ended", ended.refusal);
 
-  await install.database.appendAudit({ action: "signed_everyone_out", detail: {} }, { by: actor.holder, at: install.now() });
+  await install.database.appendAudit({ action: "signed_everyone_out", detail: {} }, signedBy(actor, install.now()));
 
   return { ok: true };
 }

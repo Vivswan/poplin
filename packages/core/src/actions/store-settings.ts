@@ -11,6 +11,7 @@ import * as v from "valibot";
 import type { Login } from "../auth/logins";
 import type { Actor } from "../auth/scopes";
 import { SETTING_VALUES, type SettingValues } from "../records/settings";
+import { signedBy } from "./reach";
 import { type Install, type Refused, refuse } from "./records";
 
 /** What reading or changing the settings answers: every setting. */
@@ -41,10 +42,10 @@ function keepsWorkingLogin(actor: Actor, stored: readonly Login[], next: readonl
 export async function storeFirstLogin(install: Pick<Install, "database" | "now">, login: Login): Promise<Stored | Refused<"not_set_up" | "no_working_login">> {
   if (await install.database.hasLoggedIn()) return refuse("no_working_login", "logins");
 
-  const changed = await install.database.changeSettings({ logins: [login] }, { by: login, at: install.now() });
+  const changed = await install.database.changeSettings({ logins: [login] }, { as: "first_login", by: login, at: install.now() });
   if (changed.kind === "done" || changed.kind === "unchanged") return { ok: true, values: changed.values };
 
-  if (changed.kind === "signer_gone") throw new Error("the first login signs as itself, and was taken for a token");
+  if (changed.kind === "signer_gone") throw new Error("the first login always stands, and was taken for a signer that does not");
 
   return refuse("not_set_up");
 }
@@ -54,7 +55,7 @@ export async function storeFirstLogin(install: Pick<Install, "database" | "now">
  *
  * @param changes - the new typed values; each key given is replaced whole
  * @returns every setting after the change, `not_set_up` before setup stored any, or `no_working_login` about `logins` for new logins with no login that works among them.
- *   `not_allowed` for a token whose user was removed while it asked. A refusal changes nothing
+ *   `not_allowed` for a token whose user was removed while it asked, and for a person removed while they asked. A refusal changes nothing
  */
 export async function storeSettings(install: Install, actor: Actor, changes: Partial<SettingValues>): Promise<Stored | Refused<"not_set_up" | "no_working_login" | "not_allowed">> {
   if (changes.logins !== undefined) {
@@ -64,7 +65,7 @@ export async function storeSettings(install: Install, actor: Actor, changes: Par
     if (!keepsWorkingLogin(actor, stored.logins, changes.logins)) return refuse("no_working_login", "logins");
   }
 
-  const changed = await install.database.changeSettings(changes, { by: actor.holder, at: install.now() });
+  const changed = await install.database.changeSettings(changes, signedBy(actor, install.now()));
   if (changed.kind === "done" || changed.kind === "unchanged") return { ok: true, values: changed.values };
 
   return refuse(changed.kind === "signer_gone" ? "not_allowed" : "not_set_up");

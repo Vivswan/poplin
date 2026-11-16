@@ -129,7 +129,7 @@ describe("the scheduled run", () => {
     const worker = instance(w, async (input, init) => {
       const before = account.policies.length;
       const answered = await answers(input, init);
-      if (before === 1 && account.policies.length === 2) await database.addLogin("bo@example.com" as Login, { by: OWNER, at: w.clock.now });
+      if (before === 1 && account.policies.length === 2) await database.addLogin("bo@example.com" as Login, { as: "person", by: OWNER, at: w.clock.now });
 
       return answered;
     });
@@ -334,7 +334,7 @@ describe("the scheduled run", () => {
     };
     await ask(instance(w), `${ADMIN}/api/whoami`);
     const { database } = await installOf(w);
-    await database.changeSettings({ auto_update: true }, { by: OWNER, at: w.clock.now });
+    await database.changeSettings({ auto_update: true }, { as: "person", by: OWNER, at: w.clock.now });
     w.clock.now = Math.ceil(w.clock.now / DAY_MS) * DAY_MS;
 
     await run();
@@ -385,7 +385,7 @@ describe("the scheduled run", () => {
     const row = (await database.listSites({ trash: false, limit: 10 })).sites.find((site) => site.id === cut.id);
     if (row === undefined) throw new Error("the test's site is not there");
 
-    await database.deleteSite(row.id, { by: OWNER, at: w.clock.now });
+    await database.deleteSite(row.id, { as: "person", by: OWNER, at: w.clock.now });
     const before = [(await keysUnder("")).length, (await database.listLeftovers({ limit: 10 })).folders.length];
     const runs: number[] = [];
 
@@ -412,7 +412,7 @@ describe("the scheduled run", () => {
       const site = await publishSite(install, { scope: "admin", holder: OWNER }, { name: `large-${made}`, files });
       if (!site.ok) throw new Error(`the test's site was refused: ${site.code}`);
 
-      await install.database.trashSite(site.site.id, { by: OWNER, at: w.clock.now });
+      await install.database.trashSite(site.site.id, { as: "person", by: OWNER, at: w.clock.now });
     }
 
     wait(w, 8 * 24);

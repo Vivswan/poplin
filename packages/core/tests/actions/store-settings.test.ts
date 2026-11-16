@@ -57,7 +57,7 @@ describe("the first login, while nobody has logged in", () => {
   test("is replaced whole, and other settings stay; after anybody logged in it is refused and nothing changes", async () => {
     const world = await makeWorld({ logins: [ADA, BO] });
     const first = await storeFirstLogin(world.install, CY);
-    await world.install.database.appendAudit({ action: "login", detail: {} }, { by: CY, at: world.install.now() });
+    await world.install.database.appendAudit({ action: "login", detail: {} }, { as: "person", by: CY, at: world.install.now() });
     const late = await storeFirstLogin(world.install, ADA);
     const after = await readConfig(world.install, ADMIN);
 

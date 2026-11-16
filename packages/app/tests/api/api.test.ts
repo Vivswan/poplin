@@ -606,9 +606,9 @@ describe("createApi", () => {
     const [ada, bo] = ["ada@example.com" as Login, "bo@example.com" as Login];
     await answered(install.routes.config.$patch({ json: { logins: [ada, bo] }, query: {} }));
     const [laptop, agent] = await Promise.all([mintToken({ scope: "admin", note: "laptop", now: NOW }), mintToken({ scope: "publisher", note: "agent", now: NOW })]);
-    await install.database.addToken(laptop.record, { by: bo, at: NOW });
+    await install.database.addToken(laptop.record, { as: "person", by: bo, at: NOW });
     // A token made by a token is its maker's user's: the publisher token here is made by bo's admin token.
-    await install.database.addToken(agent.record, { by: laptop.record.id, at: NOW });
+    await install.database.addToken(agent.record, { as: "token", by: laptop.record.id, at: NOW });
     const all = [laptop.token, agent.token, install.tokens.admin, install.tokens.owner, install.tokens.stranger];
     const answers = (): Promise<number[]> => Promise.all(all.map(async (token) => (await install.as(token).whoami.$get({ query: {} })).status));
     const before = await answers();

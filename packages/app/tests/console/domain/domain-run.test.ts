@@ -95,7 +95,7 @@ test.each([
   });
   // A user added after the run began is one the run read no settings of: the plug adds it while it works.
   const late = addedAfter > 0;
-  const add = (): Promise<unknown> => opened.install.database.addLogin("bo@example.com" as typeof opened.owner, { by: opened.owner, at: opened.install.now() });
+  const add = (): Promise<unknown> => opened.install.database.addLogin("bo@example.com" as typeof opened.owner, { as: "person", by: opened.owner, at: opened.install.now() });
   if (addedAfter === 0) await add();
   const settings = async (): Promise<Awaited<ReturnType<typeof asked.settings>>> => {
     const read = await opened.install.database.readSettings();

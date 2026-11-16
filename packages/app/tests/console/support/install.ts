@@ -83,7 +83,7 @@ export async function openOwned(): Promise<Owned> {
     publicAddressOf: ADDRESSES.publicAddressOf,
     reservedNames: ADDRESSES.reservedNames,
   };
-  await base.database.initSettings(defaultSettings({ installer: base.owner }), { by: base.owner, at: NOW });
+  await base.database.initSettings(defaultSettings({ installer: base.owner }), { as: "first_login", by: base.owner, at: NOW });
 
   await base.database.ensureVisitorKey(new Uint8Array(32).fill(5), NOW);
 

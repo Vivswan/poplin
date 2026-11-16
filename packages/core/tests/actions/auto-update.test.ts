@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 
 import { startDueUpdate } from "../../src/actions/auto-update";
 import { type Asking, checkForUpdate } from "../../src/actions/check-update";
+import { signedBy } from "../../src/actions/reach";
 import type { Install } from "../../src/actions/records";
 import type { SelfUpdate, Updating } from "../../src/actions/start-update";
 import { OWN_SCHEMA } from "../../src/database/open";
@@ -101,7 +102,7 @@ describe("startDueUpdate", () => {
   ])("$name", async ({ settings, later, release, version, website: asking, after, expected, asked }) => {
     const world = await seen(settings, release);
     const updating = host();
-    if (later !== undefined) await world.install.database.changeSettings(later, { by: ADMIN.holder, at: FIRST_SEEN });
+    if (later !== undefined) await world.install.database.changeSettings(later, signedBy(ADMIN, FIRST_SEEN));
     world.clock.now = FIRST_SEEN + after;
 
     await run(world.install, { updating, release, version, website: asking });

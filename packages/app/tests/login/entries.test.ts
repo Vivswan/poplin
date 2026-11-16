@@ -68,7 +68,7 @@ test("a login dated ahead of the clock is written at its own moment, once", asyn
 test("a login that began over five minutes ago writes nothing, and its instance asks once whether anybody has logged in", async () => {
   const { opened, asked, entered } = await openEntries();
   const { database } = opened.install;
-  await database.appendAudit({ action: "login", detail: {} }, { by: BO, at: opened.clock.now });
+  await database.appendAudit({ action: "login", detail: {} }, { as: "person", by: BO, at: opened.clock.now });
   const has = database.hasLoggedIn.bind(database);
   let questions = 0;
   database.hasLoggedIn = () => {
@@ -194,7 +194,7 @@ test("a login whose line the sweep removed writes no second line, and a line the
   const since = clock.now;
   await database.noteLogin(owner, { since, at: since });
   clock.now += 100 * 86_400_000;
-  await database.appendAudit({ action: "domain_synced", detail: {} }, { by: owner, at: clock.now - 1000 });
+  await database.appendAudit({ action: "domain_synced", detail: {} }, { as: "person", by: owner, at: clock.now - 1000 });
   await database.sweepRunOut(clock.now);
   const kept = await loginsOf(opened);
   const entered = createEntries(opened.install, () => undefined);

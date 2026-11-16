@@ -158,7 +158,7 @@ function run(short: boolean): Step {
 async function costliestRun(stage: Stage): Promise<void> {
   const { database } = stage.install;
   const release = await ownRelease("999.0.0");
-  await database.changeSettings({ auto_update: true }, { by: OWNER, at: stage.w.clock.now });
+  await database.changeSettings({ auto_update: true }, { as: "person", by: OWNER, at: stage.w.clock.now });
   stage.w.clock.now = Math.ceil(stage.w.clock.now / DAY_MS) * DAY_MS;
   // The run that learns of the release: an update is started three days after it was first seen.
   await sweep(instance(stage.w, undefined, release.latest), stage.w);

@@ -2,7 +2,7 @@
 
 import { describe, expect, test } from "bun:test";
 
-import type { Database, NewUpload } from "../../../src/database/database";
+import type { Database, NewUpload, Signed } from "../../../src/database/database";
 import type { PublicName, SiteName } from "../../../src/names/names";
 import { mintSiteFolder, type Site } from "../../../src/records/site";
 import type { SiteId } from "../../../src/sites/ids";
@@ -172,7 +172,7 @@ export function uploads(label: string, makeDatabase: DatabaseFactory): void {
       const given = await begunImport(database, second);
       await database.abandonUpload(given.id);
 
-      const signed = { by: ADA, at: NOW + 99 };
+      const signed: Signed = { as: "token", by: ADA, at: NOW + 99 };
       const finishes = await Promise.all([database.importUploadAsSite(live.id, live.site, signed), database.importUploadAsSite(live.id, live.site, signed)]);
       const lost = await database.importUploadAsSite(given.id, given.site, signed);
       const elsewhere = await database.importUploadAsSite(given.id, { ...given.site, folder: mintSiteFolder() }, signed);

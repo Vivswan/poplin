@@ -2,7 +2,8 @@ import { describe, expect, test } from "bun:test";
 
 import { changeConfig, readConfig } from "../../src/actions/config";
 import { addLogin, removeLogin } from "../../src/actions/logins";
-import { issueToken } from "../../src/actions/manage-tokens";
+import { issueToken, listTokens } from "../../src/actions/manage-tokens";
+import type { Install } from "../../src/actions/records";
 import type { Login } from "../../src/auth/logins";
 import type { Actor } from "../../src/auth/scopes";
 import type { TokenId } from "../../src/auth/tokens";
@@ -50,20 +51,28 @@ describe("one login, added or removed", () => {
     expect<unknown>([read.ok && read.values.logins, await world.audit()]).toEqual([after, done ? ["settings_changed"] : []]);
   });
 
-  // Drift: a token is let in before its user is removed and asks after. Answered as done, it would put the removed user back; the answer must be the one a token with no right gets.
-  test.each([
-    { name: "adds the removed user", change: addLogin, request: { login: BO } },
-    { name: "removes another user", change: removeLogin, request: { login: CY } },
-    { name: "stores a list with the removed user", change: changeConfig, request: { logins: [ADA, BO] } },
-  ])("a token whose user was removed since $name: not allowed, and the logins stay", async ({ change, request }) => {
-    const world = await makeWorld({ logins: [ADA, BO, CY] });
-    const issued = await issueToken(world.install, { scope: "admin", holder: BO }, { scope: "admin", note: "laptop" });
-    if (!issued.ok) throw new Error("no token was issued");
+  // Drift: a token or a person is let in before the user is removed and asks after. Answered as done, it would put the removed user back or leave them a token; the answer must be the one a signer with no right gets.
+  describe.each([
+    { signer: "a token whose user", late: (token: TokenId): Actor => ({ scope: "admin", holder: token }) },
+    { signer: "a person who", late: (): Actor => ({ scope: "admin", holder: BO }) },
+  ])("$signer was removed since", ({ late }) => {
+    test.each([
+      { name: "adds the removed user", change: addLogin, request: { login: BO } },
+      { name: "removes another user", change: removeLogin, request: { login: CY } },
+      { name: "stores a list with the removed user", change: changeConfig, request: { logins: [ADA, BO] } },
+      { name: "stores another setting", change: changeConfig, request: { trash_days: 30 } },
+      { name: "makes a token", change: issueToken, request: { scope: "publisher", note: "late" } },
+    ])("$name: not allowed, and the logins, the tokens, and the log stay", async ({ change, request }) => {
+      const world = await makeWorld({ logins: [ADA, BO, CY] });
+      const issued = await issueToken(world.install, { scope: "admin", holder: BO }, { scope: "admin", note: "laptop" });
+      if (!issued.ok) throw new Error("no token was issued");
 
-    await removeLogin(world.install, ADMIN, { login: BO });
-    const answer = await change(world.install, { scope: "admin", holder: issued.record.id }, request);
-    const read = await readConfig(world.install, ADMIN);
+      await removeLogin(world.install, ADMIN, { login: BO });
+      const before = [await readConfig(world.install, ADMIN), await listTokens(world.install, ADMIN), await world.audit()];
+      const answer = await (change as (install: Install, actor: Actor, request: unknown) => Promise<unknown>)(world.install, late(issued.record.id), request);
 
-    expect<unknown>([answer, read.ok && read.values.logins]).toEqual([{ ok: false, code: "not_allowed" }, [ADA, CY]]);
+      expect<unknown>([answer, await readConfig(world.install, ADMIN), await listTokens(world.install, ADMIN), await world.audit()]).toEqual([{ ok: false, code: "not_allowed" }, ...before]);
+      expect(before[0]).toMatchObject({ values: { logins: [ADA, CY] } });
+    });
   });
 });

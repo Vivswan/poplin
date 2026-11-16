@@ -7,6 +7,7 @@ import type { Actor } from "../auth/scopes";
 import { type EndedToken, mintToken, type TokenId, type TokenRecord } from "../auth/tokens";
 import { type Holder, MOMENT, TOKEN_ID } from "../records/fields";
 import { ADDRESS_LAYOUT } from "../sites/address-layout";
+import { signedBy } from "./reach";
 import { type Install, type Refused, refuse } from "./records";
 import { UPDATE_NOTICE } from "./update";
 
@@ -71,7 +72,7 @@ export function tokenObject(record: TokenRecord): TokenObject {
  * An admin may issue a publisher token. An admin token is issued only by a person, an actor whose holder is a login: a token that could issue admin tokens would outlive its own expiry.
  *
  * @param request - the scope and the note; anything is taken and checked
- * @returns the token, which is shown this once, and its record. `not_allowed` for a publisher, for a token asking for an admin token, and for a token whose user was removed while it asked
+ * @returns the token, which is shown this once, and its record. `not_allowed` for a publisher, for a token asking for an admin token, for a token whose user was removed while it asked, and for a person removed while they asked
  * @throws {Error} the database failed
  */
 export async function issueToken(
@@ -88,7 +89,7 @@ export async function issueToken(
 
   const now = install.now();
   const minted = await mintToken({ ...asked.output, now });
-  const added = await install.database.addToken(minted.record, { by: actor.holder, at: now });
+  const added = await install.database.addToken(minted.record, signedBy(actor, now));
   if (added.kind === "signer_gone") return refuse("not_allowed");
 
   if (added.kind !== "done") throw new Error("a new token drew an id that is taken");
@@ -167,7 +168,7 @@ export async function revokeToken(
 
   if (actor.scope !== "admin" && actor.holder !== id) return refuse("not_allowed");
 
-  const revoked = await install.database.revokeToken(id, { by: actor.holder, at: install.now() });
+  const revoked = await install.database.revokeToken(id, signedBy(actor, install.now()));
   if (revoked.kind !== "done") return refuse("not_found");
 
   return { ok: true, token: tokenObject(revoked.token) };
