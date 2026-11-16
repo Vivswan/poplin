@@ -1,21 +1,39 @@
-// Sign everyone out: a new stored key, so every visitor's limit starts again. Tokens are untouched, and no login ends.
+// Sign everyone out: every login of the dashboard is ended where the logins are kept, and one audit entry says who did it. Tokens are untouched.
+//
+//   the logins were ended                           done, with one `signed_everyone_out` entry
+//   they were not, or the install has no way to     `logins_not_ended`, about the reason; nothing is written
 
 import type { Actor } from "../auth/scopes";
 import { type Install, type Refused, refuse } from "./records";
 
-/** How many bytes the new key holds. */
-const KEY_BYTES = 32;
+/** What a refusal is about on an install that was given no way to end its logins. */
+const NO_WAY = "no_provider";
 
 /**
- * Replace the install's stored key with 32 bytes drawn here from Web Crypto. The key is told to nobody, and the change writes one `signed_everyone_out` audit entry.
- *
- * @returns done, or `not_allowed` for anyone but an admin
- * @throws {Error} the database failed
+ * Why the logins were not ended: the install holds no key for where they are kept, the key is refused there, the key may not end logins,
+ * no usable answer came, or, as `not_made`, the login in front of the dashboard is not there.
  */
-export async function signEveryoneOut(install: Install, actor: Actor): Promise<{ readonly ok: true } | Refused<"not_allowed">> {
+type EndRefusal = "no_key" | "key_refused" | "lacks_right" | "unreachable" | "not_made";
+
+/** Ends every login of the dashboard where the logins are kept. It rejects for nothing that place answers. */
+export type EndLogins = () => Promise<{ readonly ok: true } | { readonly ok: false; readonly refusal: EndRefusal }>;
+
+/**
+ * End every login of the dashboard, and write one `signed_everyone_out` audit entry once they are ended.
+ *
+ * @param end - ends the logins; `undefined` on an install whose host has no such way
+ * @returns done, `not_allowed` for anyone but an admin, or `logins_not_ended` about the reason, which is `no_provider` with no `end`
+ * @throws {Error} the database failed, after the logins were ended
+ */
+export async function signEveryoneOut(install: Install, actor: Actor, end: EndLogins | undefined): Promise<{ readonly ok: true } | Refused<"not_allowed" | "logins_not_ended">> {
   if (actor.scope !== "admin") return refuse("not_allowed");
 
-  await install.database.rotateVisitorKey(crypto.getRandomValues(new Uint8Array(KEY_BYTES)), { by: actor.holder, at: install.now() });
+  if (end === undefined) return refuse("logins_not_ended", NO_WAY);
+
+  const ended = await end();
+  if (!ended.ok) return refuse("logins_not_ended", ended.refusal);
+
+  await install.database.appendAudit({ action: "signed_everyone_out", detail: {} }, { by: actor.holder, at: install.now() });
 
   return { ok: true };
 }

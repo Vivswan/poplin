@@ -11,6 +11,9 @@ const DECIDED = {
   denied: "Denied. The computer was not logged in.",
 } as const;
 
+/** What a sign-out of everyone says once it is done: the login in front takes some seconds to ask again, and the page works until then. */
+const SIGNED_OUT = "Everyone is logged out. This can take a few seconds.";
+
 /** How long after a login is allowed its computer has surely asked for its token, in milliseconds: it asks every five seconds. */
 const COLLECTED_AFTER_MS = 6000;
 
@@ -53,7 +56,7 @@ export interface AccessActions {
   /** Copies the command that logs a computer in, and says so. */
   readonly copyCommand: (command: string) => Promise<void>;
 
-  /** Replaces the install's stored key, which starts every visitor's limit again; the page is then asked for again. */
+  /** Ends every login of the dashboard and of private sites, this one too, and says so. The page stays: the login in front asks again within some seconds. */
   readonly signEveryoneOut: () => Promise<void>;
 }
 
@@ -150,7 +153,7 @@ export function accessActions(onChanged: () => void, onUsersChanged: () => void)
     copyCommand: (command) => copy(command, { done: "Copied.", failed: "Not copied. Select the command and copy it." }),
     signEveryoneOut: async () => {
       const done = await send(api.settings["sign-everyone-out"].$post({ json: {} }));
-      if (done !== undefined) window.location.reload();
+      if (done !== undefined) sayDone(SIGNED_OUT);
     },
   };
 }

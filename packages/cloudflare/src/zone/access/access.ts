@@ -255,6 +255,23 @@ export async function writeLogins(connection: Connection, accountId: string, log
 }
 
 /**
+ * End every login at poplin's guarded application: Access takes back each token it gave out for it, so every browser logs in again. The edge follows within some seconds.
+ *
+ * @returns `true` once Access took the request, and `false` on an account with no such application, where nothing is asked
+ */
+export async function revokeLogins(connection: Connection, accountId: string): Promise<CloudflareResult<boolean>> {
+  const applications = await callCloudflare(connection, (api) => Array.fromAsync(new BaseApplications(api).list({ account_id: accountId })));
+  if (!applications.ok) return applications;
+
+  const id = applications.value.find((candidate) => candidate.name === APPLICATION_NAME)?.id;
+  if (id === undefined) return { ok: true, value: false };
+
+  const revoked = await callCloudflare(connection, (api) => new BaseApplications(api).revokeTokens(id, { account_id: accountId }));
+
+  return revoked.ok ? { ok: true, value: true } : revoked;
+}
+
+/**
  * Make the account's Access match an install's login.
  *
  * @param mode - `plan` reads the policies and applications and sends no change

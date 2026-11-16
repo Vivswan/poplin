@@ -4,7 +4,7 @@
 //   POST /settings                         save some settings together, each as the text it is typed in: all of them, or on a refusal none; a refusal names every refused setting
 //   POST /settings/update-address          save the address that starts a rebuild
 //   POST /settings/update-address/remove   remove it
-//   POST /settings/sign-everyone-out       replace the stored key: every visitor's limit starts again
+//   POST /settings/sign-everyone-out       end every login of the dashboard at the provider; a refusal says why they are not known to have ended
 
 import { vValidator } from "@hono/valibot-validator";
 import { changeConfig, readConfig } from "@poplin/core/src/actions/config";
@@ -149,7 +149,7 @@ export const settingsRoutes = new Hono<Shared>()
   })
   .post("/settings/sign-everyone-out", vValidator("json", NOTHING, refuseInvalid), async (context) => {
     const { install, actor } = context.get("asker");
-    const signedOut = await signEveryoneOut(install, actor);
+    const signedOut = await signEveryoneOut(install, actor, context.get("endLogins"));
 
     return signedOut.ok ? context.json({ ok: true as const }) : refused(context, signedOut);
   });

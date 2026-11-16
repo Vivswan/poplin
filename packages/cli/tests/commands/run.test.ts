@@ -42,6 +42,7 @@ const CODES: Readonly<Record<Code, true>> = {
   no_update: true,
   update_refused: true,
   update_unreachable: true,
+  logins_not_ended: true,
   too_large: true,
   too_many_requests: true,
   internal: true,
