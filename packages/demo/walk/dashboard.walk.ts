@@ -1492,16 +1492,22 @@ test("in a site's panel, a span is shown as the moment it ends before it is save
 });
 
 // Drift: a site in the trash could be removed for good from a terminal alone, or one press would remove it, with its title where its name is asked for.
-test("a site in the trash is deleted for good only once its name is typed, with the focus on Cancel first; it then leaves the list with no Undo, and Activity says so", async ({ page }) => {
+test("a site in the trash is deleted for good only once its name is typed, with the focus on Cancel first and back on its button after Escape; it then leaves the list with no Undo, and Activity says so", async ({ page }) => {
   const asks = question(page, `Delete ${TRASHED.title} for good?`);
   const remove = asks.getByRole("button", { name: "Delete for good", exact: true });
   await arrive(page);
   await page.goto(TRASH);
   // The way out for good is in the site's panel, which the row's own button opens.
   await page.getByRole("row").getByRole("button", { name: `Details of ${TRASHED.title}`, exact: true }).press("Enter");
-  await page.getByRole("dialog", { name: TRASHED.title, exact: true }).getByRole("button", { name: "Delete for good", exact: true }).click();
+  const asking = page.getByRole("dialog", { name: TRASHED.title, exact: true }).getByRole("button", { name: "Delete for good", exact: true });
+  await asking.click();
   await expect(asks.getByRole("button", { name: "Cancel", exact: true })).toBeFocused();
   await expect(remove).toBeDisabled();
+  // Escape leaves the question alone: the site's panel stays open, and the button that asked has the focus again.
+  await pressEscape(page);
+  await expect(asks).toBeHidden();
+  await expect(asking).toBeFocused();
+  await asking.click();
 
   await asks.getByRole("textbox", { name: "Site's name", exact: true }).fill(TRASHED.title);
   await expect(remove).toBeDisabled();

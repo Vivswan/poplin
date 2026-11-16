@@ -46,7 +46,7 @@ interface Scene {
 }
 
 /** Draw the control and the question it asks, with the server doing every delete or refusing every one. */
-function drawn({ refuses = false, strict = false, until }: Scene = {}): Done & { readonly leave: () => void } {
+function drawn({ refuses = false, strict = false, until }: Scene = {}): Done & { readonly leave: () => void; readonly back: () => void } {
   const done: Done = { sent: [], gone: 0 };
   const Mode = strict ? StrictMode : Fragment;
   globalThis.fetch = (async (input: Request | string | URL) => {
@@ -69,7 +69,7 @@ function drawn({ refuses = false, strict = false, until }: Scene = {}): Done & {
   );
   const { rerender } = render(page(true));
 
-  return Object.assign(done, { leave: () => rerender(page(false)) });
+  return Object.assign(done, { leave: () => rerender(page(false)), back: () => rerender(page(true)) });
 }
 
 /** Press a control, and let the dialog take in what follows. */
@@ -162,5 +162,47 @@ describe("deleting a site in the trash for good", () => {
     await waitFor(() => expect(dialog.queryAllByRole("alert").map((alert) => alert.textContent)).toEqual([REFUSAL]));
 
     expect([(dialog.getByRole("textbox") as HTMLInputElement).value, done.gone, within(document.body).queryAllByText("Trip notes deleted for good.").length]).toEqual(["trip-notes", 0, 0]);
+  });
+
+  // Drift: a question asked again for the same site would still hold the name typed before and the refusal of the delete before, or Cancel would leave the focus on nothing.
+  test("after a refusal and Cancel the focus is back on the button, and the question asked again starts with an empty field and no refusal", async () => {
+    drawn({ refuses: true });
+    const first = await ask();
+    await type(first, "trip-notes");
+    await press(first.getByRole("button", { name: "Delete for good" }));
+    await waitFor(() => expect(first.queryAllByRole("alert").length).toBe(1));
+    await press(first.getByRole("button", { name: "Cancel" }));
+    await waitFor(() => expect(within(document.body).queryAllByRole("alertdialog").length).toBe(0));
+    const focus = [document.activeElement?.tagName, document.activeElement?.textContent];
+    const again = await ask();
+
+    expect([focus, (again.getByRole("textbox") as HTMLInputElement).value, again.queryAllByRole("alert").length]).toEqual([["BUTTON", "Delete for good"], "", 0]);
+  });
+
+  // Drift: two askings of one site are told apart by nothing a button hands over; a delete sent from the first and refused after it was left would be said in the second, where nothing was sent.
+  test("a delete that is refused after its question was left is not said in the question asked next for the same site", async () => {
+    const answer = Promise.withResolvers<void>();
+    drawn({ refuses: true, until: answer.promise });
+    const first = await ask();
+    await type(first, "trip-notes");
+    await press(first.getByRole("button", { name: "Delete for good" }));
+    await press(first.getByRole("button", { name: "Cancel" }));
+    await waitFor(() => expect(within(document.body).queryAllByRole("alertdialog").length).toBe(0));
+    const again = await ask();
+    await act(async () => answer.resolve());
+    await act(async () => new Promise((resolve) => setTimeout(resolve, 0)));
+
+    expect([(again.getByRole("textbox") as HTMLInputElement).value, again.queryAllByRole("alert").length]).toEqual(["", 0]);
+  });
+
+  // Drift: the question is joined to its buttons by one handle that outlives a screen; left open on a screen that is left, it would be asked again when the screen is drawn the next time.
+  test("a question left open on a screen that is left is not asked when the screen is drawn again", async () => {
+    const done = drawn();
+    await ask();
+    await act(async () => done.leave());
+    await act(async () => done.back());
+    await act(async () => new Promise((resolve) => setTimeout(resolve, 0)));
+
+    expect([within(document.body).queryAllByRole("alertdialog").length, within(document.body).getAllByRole("button", { name: "Delete for good" }).length]).toEqual([0, 1]);
   });
 });
