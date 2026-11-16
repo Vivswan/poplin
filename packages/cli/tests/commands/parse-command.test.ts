@@ -259,6 +259,17 @@ describe("parseCommand", () => {
     expect<unknown>(orders.map((line) => parseCommand(words(line), NOW))).toEqual(orders.map(() => expected));
   });
 
+  // Drift: a title the install refuses came back as "an argument is missing, unknown, or of the wrong form: title", exit 1, with no rule named, where every other flag is refused on this machine with exit 2.
+  test.each([
+    ["longer than a title may be", "x".repeat(201), "--title is 201 characters long: a title has at most 200"],
+    ["of two lines", "two\nlines", "--title holds a line break or a control character: a title is one line"],
+  ])("a title %s is refused before anything is sent, with the rule it breaks, on a publish and on a set alike", (_name, title, message) => {
+    const refused = refusal(message, 'a title is one line of at most 200 characters; "" is the page\'s own');
+
+    expect<unknown>([parseCommand(["set", LABEL, "--title", title], NOW), parseCommand(["./report", "--title", title], NOW)]).toEqual([refused, refused]);
+    expect(parseCommand(["set", LABEL, "--title", "x".repeat(200)], NOW)).toMatchObject({ kind: "set", settings: { title: "x".repeat(200) } });
+  });
+
   test("--name is the site's name wherever it is typed, a new site's or the new name of one that is updated, and --public-name alone is the public name", () => {
     const created = { ...CREATE, path: "./report", target: { kind: "create", name: "docs" }, settings: { access: "public" } };
     const renamed = { ...CREATE, path: "./report", target: { kind: "update", site: REPORT }, settings: { access: "public", name: "docs" } };

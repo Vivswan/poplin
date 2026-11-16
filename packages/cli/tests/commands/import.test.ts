@@ -154,12 +154,15 @@ describe("import", () => {
 
     // Every file after the first finished site meets a dead connection.
     into.hook = (request) => (request.method === "PUT" && into.sent.some((sent) => sent.endsWith("/finish")) ? Promise.reject(new Error("reset")) : undefined);
-    const broken = jsonOf(await into.run(`import ${zip} --json`));
+    const cut = await into.run(`import ${zip} --json`);
+    const broken = jsonOf(cut);
     into.hook = undefined;
     const made = (await answered(into.install.routes.export.sites.$get())).body.sites;
     const again = await into.run(`import ${zip} --json`);
 
     expect([broken.imported, broken.failed, broken.stopped, (broken.sites as Line[]).at(-1)?.code]).toEqual([1, 1, true, "unreachable"]);
+    // Drift: an install that stopped answering in the middle of an import exited 1, where every other command exits 5 for the same cause.
+    expect(cut.code).toBe(5);
     expect(made).toHaveLength(1);
     expect([again.code, jsonOf(again).imported, jsonOf(again).skipped, jsonOf(again).failed]).toEqual([0, 4, 1, 0]);
     expect((jsonOf(again).sites as Line[]).filter((site) => site.result === "skipped").map((site) => site.code)).toEqual(["id_taken"]);
@@ -285,6 +288,11 @@ describe("import", () => {
 
     expect(Object.fromEntries(Object.entries(runs).map(([code, ran]) => [code, ran.code]))).toEqual({ name_taken: 1, too_many_sites: 1, bad_argument: 1, backup_too_new: 1 });
     expect(linesOf(jsonOf(runs.name_taken))).toEqual({ demo: "imported", docs: "name_taken", notes: "imported", old: "imported", typed: "imported" });
+    // Drift: a site failed on a taken public name with no next step, and no flag imports it under another name.
+    expect([runs.name_taken.err, runs.too_many_sites.err.some((line) => line.includes("public name"))]).toEqual([
+      ["another site of this install holds that public name, and keeps it in the trash too: free the name there (poplin set <that site> --unlisted, after poplin restore <that site> if it is in the trash), then: poplin import <zip> --site <label>"],
+      false,
+    ]);
     expect(linesOf(jsonOf(runs.bad_argument)).docs).toBe("bad_argument");
     expect(Object.values(linesOf(jsonOf(runs.too_many_sites))).sort()).toEqual(["imported", "imported", "too_many_sites", "too_many_sites", "too_many_sites"]);
     expect(Object.values(linesOf(jsonOf(runs.backup_too_new)))).toEqual(Array(5).fill("backup_too_new"));
@@ -343,7 +351,9 @@ describe("import", () => {
     const byId = jsonOf(await into.run(`import ${zip} --site ${notes.split("--")[1]} --json`));
     const absent = await into.run(`import ${zip} --site zzzzzzzzzzzz`);
 
-    expect([dry.code, dry.out.length, dry.out[0], dry.out.at(-1)]).toEqual([0, 8, "would restore the settings, but for the logins", "the backup passed every check; nothing was sent: --dry-run calls no install"]);
+    expect([dry.code, dry.out.length, dry.out[0], dry.out.at(-1)]).toEqual([0, 8, "would restore the settings, but for the logins", "the backup passed every check of the zip; nothing was sent: --dry-run calls no install"]);
+    // Drift: a dry run that "passed every check" was read as a promise that the import would go through, and a public name the install held then failed it.
+    expect(dry.err).toEqual(["an id or a public name the install already holds shows only once a site is sent"]);
     expect([one, byWideName].map((ran) => (ran.sites as Line[]).map((site) => site.label))).toEqual([[docs], [wide]]);
     expect([byId.imported, (byId.sites as Line[])[0]?.label]).toEqual([1, notes]);
     expect([absent.code, absent.err[0]]).toEqual([1, "the backup holds no such site: zzzzzzzzzzzz"]);

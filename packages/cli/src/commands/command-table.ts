@@ -202,7 +202,7 @@ export const COMMANDS = [
       { name: "key", about: "the setting to show; without it, every setting", required: false },
       { name: "value", about: "the value to give it: 7d, 9GB, 25%, on", required: false },
     ],
-    flags: installFlags("the settings"),
+    flags: installFlags("the settings, or the one named as key and value"),
     examples: ["poplin config", "poplin config versions_kept 10", "poplin config outside_pages allowed"],
     notes: [
       "outside_pages, search_engines_allowed, and block_bots also change your",

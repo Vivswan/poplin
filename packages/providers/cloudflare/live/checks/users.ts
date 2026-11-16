@@ -12,7 +12,7 @@ async function storedLogins(bench: Bench): Promise<string[]> {
   const shown = await bench.cli("config", "logins");
   expect(shown.code).toBe(0);
 
-  return (shown.value.values as { logins: string[] }).logins;
+  return shown.value.value as string[];
 }
 
 /** Look at the provider's list until an email is there, or is gone, and answer whether it came to that in time. */

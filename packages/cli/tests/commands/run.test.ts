@@ -427,7 +427,12 @@ describe("run", () => {
     expect(bench.sent.every((line) => line.startsWith("GET "))).toBe(true);
 
     expect((await bench.run("config trash_days 9")).out).toEqual(["trash_days  9"]);
-    expect(jsonOf(await bench.run("config trash_days --json"))).toMatchObject({ values: { trash_days: 9 } });
+    // Drift: with a key, `--json` printed every setting, so a script could not tell from the output which one it had read or changed.
+    expect([jsonOf(await bench.run("config trash_days --json")), jsonOf(await bench.run("config versions_kept 4 --json"))]).toEqual([
+      { key: "trash_days", value: 9 },
+      { key: "versions_kept", value: 4 },
+    ]);
+    expect(Object.keys(jsonOf(await bench.run("config --json")).values as object)).toContain("versions_kept");
 
     // Drift: the stored logins and the login page's own list are two lists; a change that printed the first alone would leave a new person stopped at the login with nothing saying why.
     // An install that carried the change to the login page by itself has no step left, and naming one would send a person to paste a token for nothing.
