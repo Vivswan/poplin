@@ -151,11 +151,22 @@ Nothing is removed before you type the address. Another text than the install's 
 
 | Stays                                   | When                                                         | Do                                                                    |
 | --------------------------------------- | ------------------------------------------------------------ | --------------------------------------------------------------------- |
-| the account token                       | always                                                       | delete every token named "poplin install" at Cloudflare, under My Profile, then API Tokens |
+| the account token                       | always                                                       | delete the token you used for this install at Cloudflare, under My Profile, then API Tokens. [Tell it by its account and domain](#which-token-to-delete) |
 | the budget alert, and under a domain the redirect, guard, and rate rules | when the token lacks the optional permission the row names. The command then cannot see whether the install has them | look for them [by hand](#by-hand-at-cloudflare), and delete what is there; or add the permission, and run the command again |
 | a rule set of poplin's name             | under a domain, when it holds a rule that is not poplin's: its row says so | nothing: the rule in it is yours. [The list by hand](#by-hand-at-cloudflare) names the three |
 | the two bot switches                    | under a domain                                               | [switch off what you do not want](#by-hand-at-cloudflare)             |
 | what you switched on in [step 1 of Install](../start/install.md#1-switch-on-what-no-command-can) | always: the Zero Trust team with its Free plan, R2, the payment method, and the account's `workers.dev` subdomain | nothing: they are not poplin's. They are yours, to keep or to cancel at Cloudflare |
+
+### Which token to delete
+
+| In the list, a token named "poplin install" | Do |
+| --- | --- |
+| its resources name the account of the removed install, and under a domain that domain | delete it |
+| its resources name another account or another domain | leave it: it is of another install |
+
+Every token made from poplin's link is named "poplin install", so the name alone does not say which install a token is of. A token of another account's install, such as the one a CI job holds, has the same name.
+
+Cloudflare shows with each token the resources it reaches: its accounts and its domains. A token you named otherwise is told the same way.
 
 The link the command prints makes a token without the optional permissions. [The optional part](../dashboard/domain.md#optional-block-junk-traffic-and-crawlers) names them and their boxes on the form.
 
@@ -230,7 +241,7 @@ Go from the top row down: what points at the Worker goes first, then the Worker,
 | the bucket                            | `poplin-sites`                                                                                        | the account's R2 buckets                            |
 | the budget alert, if it is there      | `poplin: usage charges reached 1 dollar`                                                              | the account's Notifications                         |
 | the two keys                          | "poplin kept key" and "poplin upload key"                                                             | Manage Account, then Account API Tokens             |
-| the account token of the install      | "poplin install", unless you named it otherwise                                                       | My Profile, then API Tokens                         |
+| the account token of the install      | "poplin install", unless you named it otherwise: [the one of this account and domain alone](#which-token-to-delete) | My Profile, then API Tokens                         |
 
 - **The three rules** are there when the token of the install or of a Repair held an [optional permission](../dashboard/domain.md#optional-block-junk-traffic-and-crawlers). The guard rules can also be there once `search_engines_allowed` or `outside_pages` was saved on an install that holds its key.
 - **A rule set** is poplin's where the domain had none before: "poplin redirect rule", "poplin guard rules", "poplin rate rule". Delete it once it is empty, after its rules. One of another name is the domain's own: leave it.
