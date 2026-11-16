@@ -41,7 +41,7 @@ async function giveUp(install: Install, actor: Actor, upload: string, cause?: un
   const abandoned = await abandonPublish(install, actor, upload);
   if (!abandoned.ok || abandoned.left.length === 0) return;
 
-  throw new Error(`the publish was not made, and its files under ${abandoned.left.join(", ")} could not all be removed`, { cause });
+  throw new Error("the publish was not made, and its files could not all be removed", { cause });
 }
 
 /**
