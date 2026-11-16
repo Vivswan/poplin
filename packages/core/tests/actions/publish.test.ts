@@ -8,6 +8,9 @@ import { publishSite } from "../../src/actions/publish";
 import { deleteSite } from "../../src/actions/delete";
 import { ADMIN, DAY, file, hashOf, made, makeWorld, NOW, OWNER, pages, type World } from "./support/actions-fixture";
 
+/** A second, in milliseconds. */
+const SECOND = 1000;
+
 type Request = Parameters<typeof publishSite>[2];
 
 /** A refused publish: the settings of the install, what is asked, and the refusal. `onto` asks for an update of the fixture site, by its id unless a reference is given. */
@@ -28,6 +31,18 @@ function unreadable(path: string, opened: { count: number }): ReturnType<typeof 
       opened.count += 1;
 
       throw new Error(`${path} cannot be read`);
+    },
+  };
+}
+
+/** An entry page whose opening moves the world's clock on by `took`: the time the reading of a publish's files takes, between its plan and its record. */
+function slowFile(world: World, took: number): ReturnType<typeof file> {
+  return {
+    ...file("index.html", "page"),
+    open: () => {
+      world.clock.now += took;
+
+      return new Blob(["page"]).stream();
     },
   };
 }
@@ -510,5 +525,37 @@ describe("publishSite", () => {
     const second = await publishSite(world.install, OWNER, { files: [file("index.html", "page")], name: "early" });
 
     expect<unknown>([first.ok, second]).toEqual([true, { ok: false, code: "too_large", about: "max_files_per_day" }]);
+  });
+
+  // Drift: an expiry counted from the moment a publish was planned had the reading of the files taken out of it, so a site asked to last one second was past its expiry, and due for the next sweep, as it went live.
+  test.each<readonly [what: string, settings: NonNullable<Parameters<typeof makeWorld>[0]>, asked: { readonly onto?: true; readonly name?: string; readonly expires?: string }, expires: number | "never"]>([
+    ["a span typed for a new site", {}, { name: "brief", expires: "1s" }, NOW + 2 * SECOND + SECOND],
+    ["the install's default span, for a new site with none typed", { default_expires: { count: 7, unit: "d" } }, { name: "brief" }, NOW + 2 * SECOND + 7 * DAY],
+    ["a span typed for an update", {}, { onto: true, expires: "1s" }, NOW + 2 * SECOND + SECOND],
+    ["a moment typed, which no clock moves", {}, { name: "brief", expires: new Date(NOW + DAY).toISOString() }, NOW + DAY],
+    ["no expiry typed for an update, which keeps the site's own", {}, { onto: true }, "never"],
+  ])("an expiry is counted from when the upload is recorded, two seconds after it was planned: %s", async (what, settings, { onto, ...asked }, expires) => {
+    const world = await makeWorld(settings);
+    const site = onto === undefined ? {} : { site: await made(world, OWNER, "report", { expires: "never" }) };
+
+    const published = await publishSite(world.install, OWNER, { files: [slowFile(world, 2 * SECOND)], ...site, ...asked });
+
+    expect<unknown>([what, published]).toMatchObject([what, { ok: true, site: { expires } }]);
+  });
+
+  // Drift: a moment that was ahead when the publish was planned and had passed once its files were read made a site that was past its expiry from its first moment.
+  test("a typed moment that passed while the files were read refuses the publish: nothing is recorded, and the next update is version 2", async () => {
+    const world = await makeWorld();
+    const id = await made(world, OWNER, "report");
+    const soon = new Date(NOW + SECOND).toISOString();
+    const refusal = { ok: false, code: "bad_argument", about: "expires" };
+
+    const created = await publishSite(world.install, OWNER, { files: [slowFile(world, 2 * SECOND)], name: "brief", expires: soon });
+    const pending = (await world.install.database.listUploads({ before: NOW + DAY, limit: 5 })).uploads.filter((upload) => upload.state === "pending");
+    world.clock.now = NOW;
+    const updated = await publishSite(world.install, OWNER, { files: [slowFile(world, 2 * SECOND)], site: id, expires: soon });
+    const next = await publishSite(world.install, OWNER, { files: pages("again"), site: id });
+
+    expect<unknown>([created, pending, updated, next.ok && next.site.live_version]).toEqual([refusal, [], refusal, 2]);
   });
 });

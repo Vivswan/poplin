@@ -11,7 +11,7 @@ import { MANIFEST_FILE, type ManifestFile, mintUploadId, type UploadPlan } from 
 import { dayOf } from "../records/views";
 import type { ProblemKind } from "../records/problem";
 import type { SiteId } from "../sites/ids";
-import { type CheckedChanges, defaultExpiry, readChanges, PAGE_TITLE_TEXT, SITE_CHANGES, type SiteChanges } from "./changes";
+import { type CheckedChanges, defaultExpiry, readChanges, readExpires, PAGE_TITLE_TEXT, SITE_CHANGES, type SiteChanges } from "./changes";
 import { checkFilePath } from "./files";
 import { noteProblem } from "./problems";
 import { enterInstall, reachSite } from "./reach";
@@ -85,8 +85,22 @@ type BeginCode =
   | "not_allowed"
   | "in_trash";
 
+/** The settings a publish asks for besides its expiry, which is kept as typed until the upload is recorded. */
+type UndatedChanges = Omit<SiteChanges, "expires">;
+
 /** A new site as its upload records it, every field stated. */
 type NewSiteDraft = Extract<UploadPlan, { readonly kind: "create" }>["site"];
+
+/** The next version of a site as its upload records it. */
+type UpdatePlan = Extract<UploadPlan, { readonly kind: "update" }>;
+
+/** Each member of a union of records, without its expiry. */
+type Undated<Dated> = Dated extends unknown ? Omit<Dated, "expires"> : never;
+
+/** What finishing a planned publish makes, with the expiry as it was asked and not yet a moment: `expires` is the text typed, or for none typed the install's `default_expires` on a new site and `undefined` on an update, which keeps the site's own. */
+type UndatedPlan =
+  | { readonly kind: "create"; readonly site: Undated<NewSiteDraft>; readonly expires: string | SettingValues["default_expires"] }
+  | (Omit<UpdatePlan, "details"> & { readonly details: Omit<UpdatePlan["details"], "expires">; readonly expires: string | undefined });
 
 /** What a manifest is held to besides its sizes: which paths can be stored, and the pages it must name. */
 interface ManifestRules {
@@ -105,7 +119,7 @@ interface Planned {
   readonly ok: true;
   readonly folder: SiteFolder;
   readonly site?: SiteId;
-  readonly plan: UploadPlan;
+  readonly plan: UndatedPlan;
   readonly room: UploadRoom;
 }
 
@@ -194,11 +208,38 @@ function pageTitleOf(sent: string | undefined): { readonly page_title?: string }
   return sent === undefined || sent === "" ? {} : { page_title: sent };
 }
 
+/** Whether an expiry as typed names no moment after `now`: it is in no known form, or its moment is not ahead. None typed is none past. */
+function isBadExpiry(typed: string | undefined, now: number): boolean {
+  return typed !== undefined && readExpires(typed, now) === undefined;
+}
+
+/**
+ * Give a planned publish its expiry: a span, typed or the install's default, is counted from `now`, and a typed moment must still lie after it.
+ *
+ * @param now - the moment the upload is recorded, in milliseconds since the epoch
+ * @returns what finishing the upload makes, or the refusal of a typed moment that is no longer ahead
+ */
+function datedPlan(planned: UndatedPlan, now: number): UploadPlan | Refused<"bad_argument"> {
+  if (planned.kind === "create") {
+    const { expires: asked, ...plan } = planned;
+    const expires = typeof asked === "string" ? readExpires(asked, now) : defaultExpiry(asked, now);
+
+    return expires === undefined ? refuse("bad_argument", "expires") : { kind: "create", site: { ...plan.site, expires } };
+  }
+
+  const { expires: asked, ...plan } = planned;
+  if (asked === undefined) return plan;
+
+  const expires = readExpires(asked, now);
+
+  return expires === undefined ? refuse("bad_argument", "expires") : { ...plan, details: { ...plan.details, expires } };
+}
+
 function draftOf(
   name: SiteName,
   changes: CheckedChanges,
-  rest: { readonly settings: SettingValues; readonly now: number; readonly listed: Listed; readonly files: number; readonly pageTitle: string | undefined },
-): NewSiteDraft {
+  rest: { readonly settings: SettingValues; readonly listed: Listed; readonly files: number; readonly pageTitle: string | undefined },
+): Undated<NewSiteDraft> {
   const { details } = changes;
   const access: SiteAccess = changes.access ?? { access: "private" };
 
@@ -209,7 +250,6 @@ function draftOf(
     title: details.title ?? null,
     search_engines: details.search_engines ?? rest.settings.default_search_engines,
     embeddable: details.embeddable ?? true,
-    expires: details.expires ?? defaultExpiry(rest.settings.default_expires, rest.now),
     bytes: rest.listed.bytes,
     files: rest.files,
     ...access,
@@ -219,7 +259,7 @@ function draftOf(
 async function planSite(
   install: Install,
   actor: Actor,
-  asked: { readonly name: string | undefined; readonly changes: SiteChanges; readonly pageTitle: string | undefined; readonly files: readonly ManifestFile[]; readonly limits: UploadLimits },
+  asked: { readonly name: string | undefined; readonly changes: UndatedChanges; readonly expires: string | undefined; readonly pageTitle: string | undefined; readonly files: readonly ManifestFile[]; readonly limits: UploadLimits },
 ): Promise<Planned | Refused<BeginCode>> {
   const entered = await enterInstall(install, actor);
   if (!entered.ok) return entered;
@@ -233,20 +273,22 @@ async function planSite(
   const changes = readChanges(asked.changes, { name: name.value, now: signed.at, reserved: install.reservedNames });
   if (!changes.ok) return changes;
 
+  if (isBadExpiry(asked.expires, signed.at)) return refuse("bad_argument", "expires");
+
   const listed = checkManifest(asked.files, { ...asked.limits, perPublish: settings.max_files_per_publish });
   if (!listed.ok) return listed;
 
   if (await isHeldByAnother(install.database, changes.access)) return refuse("name_taken", "public_name");
 
-  const site = draftOf(name.value, changes, { settings, now: signed.at, listed, files: asked.files.length, pageTitle: asked.pageTitle });
+  const site = draftOf(name.value, changes, { settings, listed, files: asked.files.length, pageTitle: asked.pageTitle });
 
-  return { ok: true, folder: site.folder, plan: { kind: "create", site }, room: roomUnder(settings, { makesSite: true, writes: asked.files.length }, signed.at) };
+  return { ok: true, folder: site.folder, plan: { kind: "create", site, expires: asked.expires ?? settings.default_expires }, room: roomUnder(settings, { makesSite: true, writes: asked.files.length }, signed.at) };
 }
 
 async function planVersion(
   install: Install,
   actor: Actor,
-  asked: { readonly reference: string; readonly changes: SiteChanges; readonly pageTitle: string | undefined; readonly files: readonly ManifestFile[]; readonly limits: UploadLimits },
+  asked: { readonly reference: string; readonly changes: UndatedChanges; readonly expires: string | undefined; readonly pageTitle: string | undefined; readonly files: readonly ManifestFile[]; readonly limits: UploadLimits },
 ): Promise<Planned | Refused<BeginCode>> {
   const reached = await reachSite(install, actor, asked.reference);
   if (!reached.ok) return reached;
@@ -257,13 +299,15 @@ async function planVersion(
   const changes = readChanges(asked.changes, { name: site.name, current: site, now: signed.at, reserved: install.reservedNames });
   if (!changes.ok) return changes;
 
+  if (isBadExpiry(asked.expires, signed.at)) return refuse("bad_argument", "expires");
+
   const listed = checkManifest(asked.files, { ...asked.limits, perPublish: settings.max_files_per_publish });
   if (!listed.ok) return listed;
 
   if (await isHeldByAnother(install.database, changes.access, site.id)) return refuse("name_taken", "public_name");
 
   const asks = changes.access === undefined ? { details: changes.details } : { access: changes.access, details: changes.details };
-  const plan: UploadPlan = { kind: "update", ...asks, ...pageTitleOf(asked.pageTitle) };
+  const plan: UndatedPlan = { kind: "update", ...asks, ...pageTitleOf(asked.pageTitle), expires: asked.expires };
 
   return { ok: true, folder: site.folder, site: site.id, plan, room: roomUnder(settings, { makesSite: false, writes: asked.files.length }, signed.at) };
 }
@@ -273,7 +317,7 @@ async function planVersion(
  *
  * @param request - what the caller sent; anything is taken and checked
  * @param limits - what one request can carry, as `beginPublish` takes it
- * @returns where the files go and what finishing makes, with the files as they were declared, or the refusal `beginPublish` answers, which leaves nothing behind
+ * @returns where the files go and what finishing makes, with the files as they were declared and the expiry as it was asked, or the refusal `beginPublish` answers, which leaves nothing behind
  * @throws {Error} the database failed
  */
 export async function planUpload(
@@ -285,33 +329,40 @@ export async function planUpload(
   const asked = v.safeParse(PUBLISH_REQUEST, request);
   if (!asked.success) return refuse("bad_argument", v.getDotPath(asked.issues[0])?.split(".")[0] ?? "request");
 
-  const { files, site: reference, name, page_title: pageTitle, ...changes } = asked.output;
+  const { files, site: reference, name, page_title: pageTitle, expires, ...changes } = asked.output;
   const renamed = name === undefined ? changes : { ...changes, name };
 
   const planned =
     reference === undefined
-      ? await planSite(install, actor, { name, changes, pageTitle, files, limits })
-      : await planVersion(install, actor, { reference, changes: renamed, pageTitle, files, limits });
+      ? await planSite(install, actor, { name, changes, expires, pageTitle, files, limits })
+      : await planVersion(install, actor, { reference, changes: renamed, expires, pageTitle, files, limits });
 
   return planned.ok ? { ...planned, files } : planned;
 }
 
 /**
  * Record a planned publish as a pending upload, in the room the install's limits leave it. The next version number of a site is set aside here, so a publish that is never recorded skips none.
+ * The site's expiry becomes a moment here: a span, typed or the install's default, is counted from this moment and not from the plan's.
  *
  * @param planned - what `planUpload` answered
  * @param hashes - the hash each planned file is recorded with, in the order of the files, for a plan made before the files were read; the planned ones when left out
- * @returns the upload, with the tickets its files are sent by when it declares at most 100, or the refusal of a limit it did not fit, which leaves nothing behind but a version number that is skipped
+ * @returns the upload, with the tickets its files are sent by when it declares at most 100, or the refusal of a limit it did not fit, which leaves nothing behind but a version number that is skipped.
+ * `bad_argument` about `expires` for a typed moment that passed since the plan, which leaves nothing behind
  * @throws {Error} the database failed, or the hashes are not as many as the files
  */
 export async function recordUpload(install: Install, actor: Actor, planned: Extract<Awaited<ReturnType<typeof planUpload>>, { readonly ok: true }>, hashes?: readonly string[]): Promise<BegunUpload | Refused<BeginCode>> {
   if (hashes !== undefined && hashes.length !== planned.files.length) throw new Error(`${hashes.length} hashes for ${planned.files.length} files`);
 
   const files = hashes === undefined ? planned.files : planned.files.map((file, at) => ({ ...file, sha256: hashes[at] as string }));
+  const now = install.now();
+  // A site's expiry is counted from here and not from the plan, which the reading of the files may lie long after.
+  const plan = datedPlan(planned.plan, now);
+  if ("ok" in plan) return plan;
+
   const reserved = planned.site === undefined ? { kind: "reserved", number: 1 } as const : await install.database.reserveVersion(planned.site);
   if (reserved.kind !== "reserved") return refuse(reserved.kind);
 
-  const upload = { id: mintUploadId(), folder: planned.folder, number: reserved.number, owner: actor.holder, plan: planned.plan, manifest: files, created_at: install.now() };
+  const upload = { id: mintUploadId(), folder: planned.folder, number: reserved.number, owner: actor.holder, plan, manifest: files, created_at: now };
   // The day's limits are those of the day the upload is recorded on, which a plan made before midnight may not be.
   const added = await install.database.addUpload(upload, { ...planned.room, day: dayOf(upload.created_at) });
   if (added.kind !== "done") return refuseFull(install, added);

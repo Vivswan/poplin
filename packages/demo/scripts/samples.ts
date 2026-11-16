@@ -29,7 +29,7 @@ export async function readSamples(): Promise<Samples> {
     const files = listing.files.map(async ({ path, contentType, open }) => ({ path, contentType, bytes: new Uint8Array(await new Response(open()).arrayBuffer()) }));
 
     const entry = listing.files.find((file) => file.path === ENTRY_PAGE);
-    const title = entry === undefined ? undefined : await readTitle(entry);
+    const title = entry === undefined ? undefined : await readTitle(entry, new AbortController().signal);
 
     return [name, { files: await Promise.all(files), ...(title === undefined ? {} : { title }) }] as const;
   });

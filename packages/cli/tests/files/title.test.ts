@@ -9,6 +9,7 @@ import { readTitle } from "../../src/files/title";
 const READ_LIMIT = 64 * 1024;
 const TITLE = "<title>Late</title>";
 const ENCODER = new TextEncoder();
+const UNSTOPPED = new AbortController().signal;
 
 /** A page that hands its bytes over in the given pieces, one piece a read. */
 function pieces(...chunks: readonly Uint8Array[]): { open(): ReadableStream<Uint8Array> } {
@@ -67,7 +68,7 @@ describe("readTitle", () => {
 
   for (const [what, source, title] of rows) {
     test(`reads ${what}`, async () => {
-      expect(await readTitle(html(source))).toBe(title as string);
+      expect(await readTitle(html(source), UNSTOPPED)).toBe(title as string);
     });
   }
 
@@ -75,7 +76,7 @@ describe("readTitle", () => {
     const bytes = ENCODER.encode("<title>\u00e9 menu</title>");
     const split = bytes.indexOf(0xc3) + 1;
 
-    expect(await readTitle(pieces(bytes.subarray(0, split), bytes.subarray(split)))).toBe("\u00e9 menu");
+    expect(await readTitle(pieces(bytes.subarray(0, split), bytes.subarray(split)), UNSTOPPED)).toBe("\u00e9 menu");
   });
 
   test("stops reading at 64 KB: without this a page that never ends is read without end", async () => {
@@ -95,7 +96,30 @@ describe("readTitle", () => {
       { highWaterMark: 0 },
     );
 
-    expect([await readTitle({ open: () => endless }), pulled, cancelled]).toEqual([undefined, READ_LIMIT, true]);
+    expect([await readTitle({ open: () => endless }, UNSTOPPED), pulled, cancelled]).toEqual([undefined, READ_LIMIT, true]);
+  });
+
+  // Drift: a page on a slow disk kept the read open after the person stopped the command, so a publish could not answer the stop until the disk did.
+  test("ends a read that is waiting when the command is stopped, and lets the page go: without this a stop is heard only once the disk answers", async () => {
+    const stop = new AbortController();
+    const cancelled: unknown[] = [];
+    const waiting = new ReadableStream<Uint8Array>({ pull: () => new Promise<void>(() => undefined), cancel: (reason) => void cancelled.push(reason) }, { highWaterMark: 0 });
+
+    const read = readTitle({ open: () => waiting }, stop.signal).then(
+      () => "read",
+      (reason: unknown) => reason,
+    );
+    stop.abort("stopped by the person");
+    const ended = await Promise.race([read, new Promise((resolve) => setTimeout(resolve, 500, "still waiting"))]);
+
+    expect([ended, cancelled]).toEqual(["stopped by the person", ["stopped by the person"]]);
+  });
+
+  test("opens no page for a command that was stopped already: without this a stop before the title is read still starts a read", async () => {
+    const opened: ReadableStream<Uint8Array>[] = [];
+    const page = { open: () => opened[opened.push(html("<title>Field notes</title>").open()) - 1] as ReadableStream<Uint8Array> };
+
+    expect([await readTitle(page, AbortSignal.abort("stopped by the person")).catch((reason: unknown) => reason), opened]).toEqual(["stopped by the person", []]);
   });
 
   test("reads the entry page of a listing: without this the two halves of a publish agree on no way to hand a page over", async () => {
@@ -107,6 +131,6 @@ describe("readTitle", () => {
     if (!listed.ok) throw new Error(listed.reason);
     const entry = listed.files.find((file) => file.path === "index.html");
 
-    expect(entry && (await readTitle(entry))).toBe("Field notes");
+    expect(entry && (await readTitle(entry, UNSTOPPED))).toBe("Field notes");
   });
 });

@@ -83,12 +83,12 @@ function progressOn(io: Io, plan: PublishPlan): Progress {
   };
 }
 
-/** The entry page's own title, which every publish sends beside a typed one; `undefined` for a page with none, or one that cannot be read. */
-async function pageTitleOf(files: readonly PublishFile[]): Promise<string | undefined> {
+/** The entry page's own title, which every publish sends beside a typed one; `undefined` for a page with none, one that cannot be read, or a read that `stopped` ended. */
+async function pageTitleOf(files: readonly PublishFile[], stopped: AbortSignal): Promise<string | undefined> {
   const entry = files.find((file) => file.path === ENTRY_PAGE);
   if (entry === undefined) return undefined;
 
-  return readTitle(entry).catch(() => undefined);
+  return readTitle(entry, stopped).catch(() => undefined);
 }
 
 /**
@@ -156,8 +156,8 @@ export async function planPublish(request: PublishRequest, stopped: AbortSignal)
   if (!hashed.ok) return hashed;
 
   const { declared } = hashed;
-  const pageTitle = await pageTitleOf(files);
-  // A stop while the entry page's title is read is heard here, so no plan goes on to be sent.
+  const pageTitle = await pageTitleOf(files, stopped);
+  // A stop while the entry page's title is read ends that read, and is answered here, so no plan goes on to be sent.
   if (stopped.aborted) return { ok: false, problem: problem("stopped", STOPPED_UNSENT) };
 
   const changes = pageTitle === undefined ? siteChanges(request.settings) : { ...siteChanges(request.settings), page_title: pageTitle };
