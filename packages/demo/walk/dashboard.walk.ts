@@ -972,6 +972,30 @@ test("a result's Undo is reached with the keys the result names, then Tab twice,
   await expect(lines(page).filter({ hasText: "Put back." })).toBeVisible();
 });
 
+// Drift: a result with a button, which has a second row that names its keys, would be higher than the header it is said in again, and lie over the screen's own controls under it for as long as it stays.
+test("a result with a button lies inside the header, at 1440 and at 1024 px", async ({ page }) => {
+  await arrive(page);
+  await openPanel(page, SAMPLE.site);
+  await panel(page).getByRole("switch", { name: "Allow embedding", exact: true }).click();
+  const saved = lines(page).filter({ hasText: "Press Alt+T to reach Undo." });
+  const header = page.locator("header").filter({ has: screenHeading(page, "Sites") });
+
+  for (const size of [VIEWPORTS[0], FITS_FROM]) {
+    await page.setViewportSize(size);
+
+    // The line slides into its place: its place counts once two frames read it alike.
+    await expect(async () => {
+      const before = await saved.boundingBox();
+      await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(resolve)));
+      const [band, line] = await Promise.all([header.boundingBox(), saved.boundingBox()]);
+
+      expect(line).toEqual(before);
+      expect(line?.y).toBeGreaterThanOrEqual(band?.y ?? Number.NaN);
+      expect((line?.y ?? Number.NaN) + (line?.height ?? Number.NaN)).toBeLessThanOrEqual((band?.y ?? Number.NaN) + (band?.height ?? Number.NaN));
+    }).toPass();
+  }
+});
+
 // Drift: a move to another screen would leave the focus on the page itself again, where no key reaches anything and nothing is said; or every screen's tab would be named alike.
 test("a screen that follows another one gives its title the focus and names the tab, on a wide screen and from a phone's sections; the first Tab stop leads past the sections", async ({ page }) => {
   await arrive(page);
