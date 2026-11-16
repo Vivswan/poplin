@@ -81,13 +81,13 @@ const ACCESS_RANKS = { private: 0, unlisted: 1, public: 2 } as const;
 const DEFAULT_DIRECTIONS = { updated: "desc", name: "asc", access: "asc", title: "asc" } as const;
 
 /**
- * A site whose name holds a text, or whose title does: the typed one, else the page's own, which is the one a listing shows; or whose public name does, which the link of a public site shows.
+ * A site whose name holds a text, or whose title does: the typed one, else the page's own, which is the one a listing shows; or whose public name does, which the link of a public site shows; or whose id is the whole text.
  * The text is looked for as it stands, with no sign read as a pattern. Only the letters A to Z match either case: the engine's `lower` changes no other.
  */
 export function holding(text: string): SQL {
   const titled = fragment`instr(lower(coalesce(${sites.title}, ${sites.page_title})), lower(${text})) > 0`;
 
-  return fragment`(instr(${sites.name}, lower(${text})) > 0 OR ${titled} OR instr(${sites.public_name}, lower(${text})) > 0)`;
+  return fragment`(instr(${sites.name}, lower(${text})) > 0 OR ${titled} OR instr(${sites.public_name}, lower(${text})) > 0 OR ${sites.id} = lower(${text}))`;
 }
 
 /** The conditions that narrow a listing to what its query asks for: the trash or not, and each filter given. */

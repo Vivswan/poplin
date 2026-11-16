@@ -13,7 +13,7 @@ import { SITE_OBJECT, siteObject } from "./site-object";
 const MAX_PAGE = 100;
 
 /** The most characters a listing looks for in a name or a title, and a cursor carries as a name or as the key of a title: no site name is longer, and a listing by title goes by no more. */
-const MAX_NAMED = 40;
+export const MAX_NAMED = 40;
 
 /** An access a site has. */
 const ACCESS = v.picklist(["private", "unlisted", "public"]);
@@ -76,7 +76,7 @@ async function readPage(install: Install, actor: Actor, query: v.InferInput<type
  * List the sites an actor may see, each with about how often its pages were opened: every site for an admin, its own for a publisher.
  *
  * @param query - `trash` lists the trash instead; `limit` is 1 to 100; `after` is the `next` of the page before, asked under the same `sort`.
- *   `named` keeps the sites whose name, title, or public name holds that text, the letters A to Z in either case and no sign read as a pattern; the title is the one a site is listed with.
+ *   `named` keeps the sites whose name, title, or public name holds that text, the letters A to Z in either case and no sign read as a pattern, and the site whose id is that text; the title is the one a site is listed with.
  *   `access` keeps those of that access, and `expires` those that delete themselves on a set day (`set`) or never do (`never`).
  *   `sort` orders by the last change (`updated`, the newest first), by `name`, by `access` from private to public,
  *   or by `title`: what a site is listed with, its title or else its name, by the first 40 characters and with A to Z in either case alike. `dir` turns the order around

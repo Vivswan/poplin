@@ -8,8 +8,7 @@ import fc from "fast-check";
 import { createConsole } from "../../packages/app/src/console/console";
 import { type ApiInstall, ORIGIN, openApi, VISITOR_HEADER } from "../../packages/app/tests/api/support/install";
 import { CLIENT } from "../../packages/app/tests/console/support/console";
-import { FREE_LIMITS, USAGE_HOST } from "../../packages/app/tests/console/support/install";
-import { ADDRESSES } from "../../packages/app/tests/sites/support/layout";
+import { FREE_LIMITS, KINDS, USAGE_HOST } from "../../packages/app/tests/console/support/install";
 import { plainComputerName } from "../../packages/core/src/actions/computer-logins";
 import { holdsSecret, mintComputerLogin, parseLoginSecret, parseUserCode, showUserCode } from "../../packages/core/src/auth/computer-logins";
 import type { Login } from "../../packages/core/src/auth/logins";
@@ -130,8 +129,9 @@ async function openDesk(): Promise<Desk> {
   const desk: Desk = {
     install,
     dashboard: createConsole({
-      install: { database, store, now: () => clock.now, addressOf: ADDRESSES.addressOf, publicAddressOf: ADDRESSES.publicAddressOf, reservedNames: ADDRESSES.reservedNames },
+      install: { database, store, now: () => clock.now, addressOf: KINDS.hostname.addresses.addressOf, publicAddressOf: KINDS.hostname.addresses.publicAddressOf, reservedNames: KINDS.hostname.addresses.reservedNames },
       version: "1.0.0",
+      layout: KINDS.hostname.layout,
       admit: async (headers) => (headers.get("Test-Login") === AS_ADA["Test-Login"] ? { ok: true, actor: { scope: "admin", holder: ADA }, since: 0 } : { ok: false, refusal: "no-proof" }),
       entered: async () => undefined,
       base: "",

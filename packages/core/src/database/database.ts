@@ -138,7 +138,7 @@ export interface SitesQuery {
   /** The `next` of the page before; absent for the first page. */
   readonly after?: SitesCursor;
 
-  /** Only the sites whose name holds this text, or whose title does: the typed one, else the page's own; or whose public name does. Every site when absent. */
+  /** Only the sites whose name holds this text, or whose title does: the typed one, else the page's own; or whose public name does; or whose id is this text. Every site when absent. */
   readonly named?: string;
 
   /** Only the sites of this access; every site when absent. */
@@ -400,7 +400,7 @@ export interface AuditSearch extends AuditQuery {
   /** Only the entries of these actions; every entry when absent. */
   readonly actions?: readonly AuditAction[];
 
-  /** Only the entries about a site this text finds: one whose name then held it, or that holds it now in its name, its listed title, or its public name, whatever the case of its letters A to Z; every entry when absent. */
+  /** Only the entries about a site this text finds: one whose name then held it, or that holds it now in its name, its listed title, or its public name, whatever the case of its letters A to Z, or has it as its id; every entry when absent. */
   readonly site?: string;
 
   /** Only the entries of the one site that has this id or once had it, those from before a new link among them; of a site gone for good, the entries that hold this very id. Every entry when absent. */
@@ -442,7 +442,7 @@ export interface AuditCountQuery {
   /** Only the entries of these actions; every entry when absent. */
   readonly actions?: readonly AuditAction[];
 
-  /** Only the entries about a site this text finds: one whose name then held it, or that holds it now in its name, its listed title, or its public name, whatever the case of its letters A to Z; every entry when absent. */
+  /** Only the entries about a site this text finds: one whose name then held it, or that holds it now in its name, its listed title, or its public name, whatever the case of its letters A to Z, or has it as its id; every entry when absent. */
   readonly site?: string;
 
   /** Only the entries of the one site that has this id or once had it, those from before a new link among them; of a site gone for good, the entries that hold this very id. Every entry when absent. */

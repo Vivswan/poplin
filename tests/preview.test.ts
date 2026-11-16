@@ -287,6 +287,23 @@ describe("the local preview", () => {
     expect(served.filter(([, , status]) => status === 200).length).toBeGreaterThan(5);
   });
 
+  // Drift: the Link column here shows a site's address on this machine. A search that took it to the app as it stands would find nothing, where the same press on an install finds the site.
+  test("a site's address on this machine, pasted into the search of the Sites screen, lists that site alone: a public, an unlisted and a private one, with its scheme and its last slash or without, under a base path too", async () => {
+    const preview = await openPreview(false);
+    const { sites } = await data<Listed>(preview, "/data/sites");
+    const urlOf = (name: string): string => sites.find((site) => site.name === name)?.url ?? "";
+    const found = async (typed: string): Promise<readonly string[]> => (await data<Listed>(preview, `/data/sites?q=${encodeURIComponent(typed)}`)).sites.map((site) => site.name);
+    const lisbon = urlOf("lisbon-trip");
+    const typed = [lisbon.replace("http://", "HTTP://"), lisbon.replace("http://", "").replace(/\/$/, ""), `${lisbon}day-two.html?x=1`, lisbon.replace("/served/", "/poplin/demo/served/"), urlOf("launch-deck"), urlOf("sales-report")];
+    const others = [lisbon.replace("4400", "4401"), "https://lisbon-page.example.org/", `${ORIGIN}/served/`, `${ORIGIN}/served/%/`];
+
+    expect(lisbon).toBe(`${ORIGIN}/served/lisbon-page/`);
+    expect(await Promise.all(typed.map(found))).toEqual([["lisbon-trip"], ["lisbon-trip"], ["lisbon-trip"], ["lisbon-trip"], ["launch-deck"], ["sales-report"]]);
+    expect(await Promise.all(others.map(found))).toEqual([[], [], [], []]);
+    // What the Link column shows of a public site is its first label alone.
+    expect(await found("lisbon-page")).toEqual(["lisbon-trip"]);
+  });
+
   // Drift: a demo beside an install that holds the same sites sends a visitor to the real ones. An address taken from the host's file as it stands, or kept for a site the visitor changed, would send them somewhere the row does not describe.
   test("a host's real addresses become the links of the sample sites they name, under a base too, one that is no https root does not, the demo's own site leads to its dashboard, and a site a visitor changed is the demo's own again", async () => {
     const real = { "sales-report": "https://sales-report--p1a2b3.example.org/", "lisbon-trip": "https://lisbon-page.example.org/", handbook: "http://handbook-page.example.org/", nobody: "https://nobody.example.org/" };
@@ -534,6 +551,19 @@ describe("the local preview of an install without a domain", () => {
     );
 
     expect(served).toEqual(rows.map(([name]) => [name, true, 200, true]));
+  });
+
+  // Drift: without a domain the Link column shows a path of one of the two site hosts. A dashboard that was not told those hosts would read no pasted address, and this kind of install alone would find nothing.
+  test("a site's address at one of the two site hosts, pasted into the search of the Sites screen, lists that site alone, and the same path at the dashboard's host lists none", async () => {
+    const preview = await openLocal();
+    const sites = await listedAt(preview);
+    const found = async (typed: string): Promise<readonly string[]> =>
+      ((await (await preview.fetch(new Request(`${LOCAL.admin}/data/sites?q=${encodeURIComponent(typed)}`))).json()) as Listed).sites.map((site) => site.name);
+    const [lisbon, deck, report] = [sites["lisbon-trip"]?.url ?? "", sites["launch-deck"]?.url ?? "", sites["sales-report"]?.url ?? ""];
+    const typed = [lisbon, lisbon.replace("http://", ""), `${lisbon}day-two.html?x=1`, deck, report, report.replace(LOCAL.private, LOCAL.admin)];
+
+    expect(lisbon).toBe(`${LOCAL.sites}/lisbon/`);
+    expect(await Promise.all(typed.map(found))).toEqual([["lisbon-trip"], ["lisbon-trip"], ["lisbon-trip"], ["launch-deck"], ["sales-report"], []]);
   });
 
   // Drift: a link handed out while a site was unlisted must still open once it is private, behind the login, and the other way round. A redirect that dropped the file or the query would land every such link on the site's first page.

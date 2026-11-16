@@ -1,6 +1,7 @@
 // An install the console's tests work on: the serving tests' install with its settings stored, and the header its one owner is known by.
 
 import type { Install } from "@poplin/core/src/actions/records";
+import { DEFAULT_PUBLIC_WORD } from "@poplin/core/src/names/marker";
 import type { AuditEntry } from "@poplin/core/src/records/audit";
 import { defaultSettings } from "@poplin/core/src/records/settings";
 import type { Site } from "@poplin/core/src/records/site";
@@ -9,7 +10,7 @@ import { MemoryStore } from "@poplin/core/src/storage/memory";
 import type { CodeTries } from "../../../src/limits/code-tries";
 import { MemoryCounters } from "../../../src/limits/memory-counters";
 import { NOW, openInstall } from "../../sites/support/install";
-import { ADDRESSES } from "../../sites/support/layout";
+import { ADDRESSES, PATH_ADDRESSES } from "../../sites/support/layout";
 
 /** The header the tests' stand-in for a provider's login reads who asks from: an email it vouches for, or one of its own refusals. No request of a real install carries it. */
 export const LOGIN_HEADER = "Test-Login";
@@ -47,6 +48,12 @@ export const USAGE_HOST = {
   links: { requests: "https://provider.example/requests", database: "https://provider.example/database", storage: "https://provider.example/storage", jobs: "https://provider.example/jobs" },
 } as const;
 
+/** The two kinds of install a test console stands on: the answers of its address layout, and that layout as a host hands it to the console. */
+export const KINDS = {
+  hostname: { addresses: ADDRESSES, layout: { kind: "hostname", public_word: DEFAULT_PUBLIC_WORD } },
+  path: { addresses: PATH_ADDRESSES, layout: { kind: "path", sites_host: "poplin-sites.example.net", private_host: "poplin-private.example.net" } },
+} as const;
+
 /** The version of poplin the test console says it runs. */
 export const VERSION = "1.0.0";
 
@@ -70,18 +77,19 @@ export function codeCounts(counters = new MemoryCounters()): CodeTries {
 /**
  * Open a fresh install with the default settings and one login.
  *
+ * @param addresses - the answers of the install's address layout; the hostname layout's when left out
  * @returns the install and its helpers: `publish` makes a site, published by the owner unless it names who, and `proof` is what a request of the owner carries
  */
-export async function openOwned(): Promise<Owned> {
+export async function openOwned(addresses: (typeof KINDS)[keyof typeof KINDS]["addresses"] = ADDRESSES): Promise<Owned> {
   const base = await openInstall();
   const clock = { now: NOW };
   const install: Install = {
     database: base.database,
     store: new MemoryStore(),
     now: () => clock.now,
-    addressOf: ADDRESSES.addressOf,
-    publicAddressOf: ADDRESSES.publicAddressOf,
-    reservedNames: ADDRESSES.reservedNames,
+    addressOf: addresses.addressOf,
+    publicAddressOf: addresses.publicAddressOf,
+    reservedNames: addresses.reservedNames,
   };
   await base.database.initSettings(defaultSettings({ installer: base.owner }), { as: "first_login", by: base.owner, at: NOW });
 
