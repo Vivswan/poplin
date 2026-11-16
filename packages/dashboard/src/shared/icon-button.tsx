@@ -1,8 +1,8 @@
 // A button that is only an icon: its label is the hint a pointer shows, and its name for a screen reader unless it is given a longer one.
 
+import type { Tooltip as TooltipPrimitive } from "@base-ui/react/tooltip";
 import { cn } from "cn";
-import { type ComponentProps, type KeyboardEvent, type ReactElement, type ReactNode, useState } from "react";
-import { flushSync } from "react-dom";
+import { type ComponentProps, type KeyboardEvent, type ReactElement, type ReactNode, useRef } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -34,17 +34,17 @@ interface IconButtonProps {
 
 /** Draw an icon button, or a link that looks like one. */
 export function IconButton({ label, name = label, children, onClick, link, className, home = false }: IconButtonProps): ReactNode {
-  const [hinting, setHinting] = useState(false);
-  // An open hint takes an Escape for itself, and the dialog or menu around the button would need a second one. The hint closes before the press goes on, so one Escape closes what is around it.
+  const hint = useRef<TooltipPrimitive.Root.Actions>(null);
+  // An open hint takes an Escape for itself, and the dialog or menu around the button would need a second one. The hint is closed by its own action before the press goes on, so one Escape closes what is around it.
   const onKeyDownCapture = (event: KeyboardEvent): void => {
-    if (event.key === "Escape" && hinting) flushSync(() => setHinting(false));
+    if (event.key === "Escape") hint.current?.close();
   };
   const shared = { variant: "ghost", size: "icon-sm", "aria-label": name, className: cn("pointer-coarse:size-10", className), onKeyDownCapture } as const;
   const button =
     link === undefined ? <Button {...shared} onClick={onClick} {...(home ? FOCUS_HOME : {})} /> : <Button {...shared} nativeButton={false} render={link} />;
 
   return (
-    <Tooltip open={hinting} onOpenChange={setHinting}>
+    <Tooltip actionsRef={hint}>
       <TooltipTrigger render={button}>{children}</TooltipTrigger>
       <TooltipContent>{label}</TooltipContent>
     </Tooltip>
