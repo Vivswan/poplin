@@ -6,11 +6,14 @@
 //
 // A group is found by its name each time a key is made, so no id of Cloudflare's is written here.
 
+/** The right the usage figures are read with. */
+export const USAGE_RIGHT = "Account Analytics Read";
+
 /** Every policy of the key, in the order a key carries them: the scope its groups have in Cloudflare's list, its rights, and what they are allowed on, or nothing for a place the install has none of. */
 const POLICIES = [
   {
     scope: "com.cloudflare.api.account",
-    rights: ["Account Analytics Read", "Access: Apps and Policies Write", "Access: Organizations, Identity Providers, and Groups Read", "Notifications Write"],
+    rights: [USAGE_RIGHT, "Access: Apps and Policies Write", "Access: Organizations, Identity Providers, and Groups Read", "Notifications Write"],
     resource: (place: KeyPlace): string | undefined => `com.cloudflare.api.account.${place.accountId}`,
   },
   {
