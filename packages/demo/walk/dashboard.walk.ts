@@ -966,10 +966,10 @@ test.describe("on a phone, after a site's panel", () => {
 });
 
 for (const size of [PHONE, FITS_FROM]) {
-  test.describe(`on a screen ${size.width} px wide, where a site's panel takes the list's place`, () => {
+  test.describe(`on a screen ${size.width} px wide, with a site's panel open`, () => {
     test.use({ viewport: size });
 
-    // Drift: a press beside the panel would leave it open again where the list is out of sight: Close and Escape alone closed it.
+    // Drift: a press beside the panel would leave it open again on a screen narrower than the widest: Close and Escape alone closed it.
     test("a press on the band over the screen closes the panel and leaves the focus on the row's button", async ({ page }) => {
       await arrive(page);
       await openPanel(page, SAMPLE.site);
@@ -991,10 +991,10 @@ for (const size of [PHONE, FITS_FROM]) {
       await expect(page.getByRole("dialog")).toHaveCount(0);
       await expect(details).toBeFocused();
 
-      // A person presses Escape after the list has left sight, which is when its button can no longer take the focus.
+      // On a phone a person presses Escape after the list has left sight, which is when its button can no longer take the focus.
       await details.press("Enter");
       await expect(panel(page).getByRole("heading", { name: SAMPLE.site, exact: true })).toBeFocused();
-      await expect(details).toBeHidden();
+      if (size === PHONE) await expect(details).toBeHidden();
       await pressEscape(page);
       await expect(details).toBeFocused();
     });

@@ -1,4 +1,4 @@
-// The panel of one thing, opened from a list. On a wide screen it lies over the end of the list, which keeps its width; on a narrower one it takes the list's place until it is closed.
+// The panel of one thing, opened from a list. It lies over the end of the list, which keeps its width; on a phone it takes the list's place until it is closed.
 // Escape and a press beside it close it either way, and the focus goes into it when it opens and back to where it came from when it closes.
 
 import { Dialog } from "@base-ui/react/dialog";
@@ -11,11 +11,8 @@ import { Field, FieldDescription, FieldLabel } from "@/components/ui/field";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
 import { FOCUS_HOME, useFocusHome } from "@/lib/focus";
-import { IN_BROWSER } from "@/lib/media";
+import { IN_BROWSER, PHONE } from "@/lib/media";
 import { IconButton } from "@/shared/icon-button";
-
-/** The width from which a panel lies over the end of its list: beside the panel the list then still shows its fixed column and one more. */
-const OVER = "(min-width: 1040px)";
 
 /** A row of the list that opens a panel, and everything in it. */
 const ROWS = "[data-opens]";
@@ -48,12 +45,12 @@ interface SidePanelProps {
 }
 
 /**
- * Whether the screen is wide enough for a panel to lie over the end of its list, with the list in sight beside it.
+ * Whether a panel lies over the end of its list, at its own width, with the start of the list in sight beside it: on every screen wider than a phone.
  *
- * Under that width the panel takes the whole row and the list is out of sight.
+ * On a phone the panel takes the whole row and the list is out of sight.
  */
 export function useLiesOver(): boolean {
-  return useMediaQuery(OVER, IN_BROWSER);
+  return !useMediaQuery(PHONE, IN_BROWSER);
 }
 
 /**
