@@ -22,7 +22,6 @@
     "knip": "knip --treat-config-hints-as-errors",
     "links": "lychee '**/*.md'",
     "hooks": "lefthook install",
-    "deploy": "bun run --cwd packages/providers/cloudflare deploy",
     "preview": "bun run --cwd packages/demo preview",
     "preview:stop": "bun run --cwd packages/demo preview:stop",
     "demo": "bun run --cwd packages/demo demo",

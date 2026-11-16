@@ -57,6 +57,7 @@ const RETIRED_NAMES: readonly RegExp[] = [
   GALLERY_SETTING,
   GALLERY_ADDRESS,
   /\bcache_(?:html|files)\b/,
+  /\bPOPLIN_(?:VERSION|COPY_CONFIG)\b/,
 ];
 
 /** The places a retired name is rightly written, each with the one name it may hold: this guard holds them all. */
@@ -232,6 +233,7 @@ describe("no old shapes outside migrations/", () => {
     ["a page of the skill", "skills/demo/references/planted.md", "Run `poplin config gallery on` to list the public sites."],
     ["a page of the docs", "docs/planted.md", "| `zone_bots` | the zone's bot switches |"],
     ["the Worker's first settings", "packages/demo/wrangler.jsonc", '      "private_sites": "single-file",'],
+    ["a page of the provider", "packages/demo/README.md", "Set the build variable `POPLIN_VERSION` to a version."],
   ])("names a retired name in %s", (_, path, line) => {
     using tree = plantedRepository({ [path]: `A planted file.\n${line}\n` });
 

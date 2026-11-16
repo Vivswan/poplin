@@ -5,7 +5,7 @@ import { describe, expect, test } from "bun:test";
 import { releaseDigest } from "@poplin/core/src/records/release";
 import { bundleFileProblem, readBundle } from "@poplin/core/src/records/release-bundle";
 
-import { bundleManifest, MAP_FILE, MODULE_FILE } from "../../../../src/shared/release/deploy/bundle-manifest";
+import { bundleManifest, MAP_FILE, MODULE_FILE } from "../../../../src/shared/release/publish/bundle-manifest";
 
 /** Turns a text into the bytes of a file. */
 const ENCODER = new TextEncoder();
@@ -19,7 +19,6 @@ const CONFIG = {
   minify: true,
   upload_source_maps: true,
   build: { command: "bun run built-client" },
-  keep_vars: true,
   triggers: { crons: ["*/15 * * * *"] },
   r2_buckets: [{ binding: "SITES", bucket_name: "example-sites" }],
   d1_databases: [{ binding: "DB", database_name: "example" }],

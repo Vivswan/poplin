@@ -42,17 +42,15 @@ const LATER_RELEASE = `## [0.2.0](https://github.com/example/poplin/compare/v0.1
 
 `;
 
-const DIGEST = "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08";
-
 const BUNDLE_DIGEST = "2c26b46b68ffc68ff99b453c1d30413413422d706483bfa0f98a5e886266e7ae";
 
 const FIRST_NEWS = { version: "0.1.0", released: "2026-11-20", notes: "https://github.com/Vivswan/poplin/releases/tag/v0.1.0", schema: 1 };
 
 const LATER_NEWS = { version: "0.2.0", released: "2026-12-04", notes: "https://github.com/Vivswan/poplin/releases/tag/v0.2.0", schema: 2 };
 
-const FIRST_PIN = { source: DIGEST, bundle: BUNDLE_DIGEST, schema: 1 };
+const FIRST_PIN = { bundle: BUNDLE_DIGEST, schema: 1 };
 
-const LATER_PIN = { source: DIGEST, bundle: BUNDLE_DIGEST, schema: 2 };
+const LATER_PIN = { bundle: BUNDLE_DIGEST, schema: 2 };
 
 const CHANGELOGS: readonly {
   readonly what: string;
@@ -84,9 +82,9 @@ const CHANGELOGS: readonly {
     read: FIRST_NEWS,
   },
   {
-    what: "two versions, the newer with the digest of its source alone and nothing of its built files",
+    what: "two versions, the newer with its schema alone and no digest of its built files",
     changelog: `# Changelog\n\n${LATER_RELEASE}${FIRST_RELEASE}`,
-    pins: { "0.2.0": { source: DIGEST }, "0.1.0": FIRST_PIN },
+    pins: { "0.2.0": { schema: 2 }, "0.1.0": FIRST_PIN },
     named: { "0.1.0": FIRST_PIN },
     foot: "poplin 0.1.0",
     latest: FIRST_NEWS,

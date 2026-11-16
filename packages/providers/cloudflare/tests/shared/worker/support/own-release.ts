@@ -2,8 +2,8 @@
 
 import { OWN_SCHEMA } from "@poplin/core/src/database/open";
 import { releaseDigest } from "@poplin/core/src/records/release";
-import { bundleManifest, MAP_FILE, MODULE_FILE } from "../../../../src/shared/release/deploy/bundle-manifest";
-import { bundleAsset, MANIFEST_FILE } from "../../../../src/shared/release/deploy/release-source";
+import { bundleManifest, MAP_FILE, MODULE_FILE } from "../../../../src/shared/release/publish/bundle-manifest";
+import { bundleAsset, MANIFEST_FILE } from "../../../../src/shared/release/publish/release-source";
 import type { Outside } from "../../../../src/shared/worker/start";
 
 /** The secret of an install that holds its key, in the form the reader takes and nothing like one Cloudflare makes. */
@@ -24,7 +24,6 @@ const CONFIG = {
   upload_source_maps: true,
   observability: { enabled: true },
   build: { command: "bun run built-client" },
-  keep_vars: true,
   triggers: { crons: ["*/15 * * * *"] },
   r2_buckets: [{ binding: "SITES" }],
   d1_databases: [{ binding: "DB" }],
@@ -84,7 +83,7 @@ export async function ownRelease(version: string): Promise<OwnRelease> {
   const encoder = new TextEncoder();
   const built = { [MODULE_FILE]: encoder.encode(MODULE), [MAP_FILE]: encoder.encode('{"version":3,"sources":[],"mappings":""}') };
   const manifest = await bundleManifest({ version, schema: OWN_SCHEMA, config: CONFIG, files: built });
-  const pins = { [version]: { source: "0".repeat(64), bundle: await releaseDigest(encoder.encode(manifest)), schema: OWN_SCHEMA } };
+  const pins = { [version]: { bundle: await releaseDigest(encoder.encode(manifest)), schema: OWN_SCHEMA } };
   const published: Readonly<Record<string, string | Uint8Array<ArrayBuffer>>> = {
     "latest.json": JSON.stringify({ version, released: "2026-12-01", notes: `https://github.com/Vivswan/poplin/releases/tag/v${version}`, schema: OWN_SCHEMA }),
     "releases.json": JSON.stringify(pins),

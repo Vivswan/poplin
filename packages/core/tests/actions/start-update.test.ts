@@ -155,7 +155,7 @@ describe("startUpdate", () => {
     { name: "a newer one is taken", to: "0.4.0", answer: { ok: true, started: true, from: "0.3.0", to: "0.4.0" } },
   ])("an install at 0.3.0 that came from 0.2.0 is asked for $to: $name", async ({ to, answer }) => {
     const world = await makeWorld();
-    const pin = { source: "a".repeat(64), bundle: "a".repeat(64), schema: OWN_SCHEMA };
+    const pin = { bundle: "a".repeat(64), schema: OWN_SCHEMA };
     const self: SelfUpdate = {
       holdsKey: () => true,
       last: { from: "0.2.0", to: "0.3.0", schema: OWN_SCHEMA, at: NOW },

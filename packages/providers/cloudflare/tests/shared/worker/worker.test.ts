@@ -68,7 +68,7 @@ const LARGE_BYTES = 5 * 1024 * 1024;
 const FIRST = BINDINGS.FIRST_SETTINGS as Readonly<Record<string, string>>;
 
 /** What every host answers on a database another build of poplin made. */
-const MADE_BY_ANOTHER_BUILD = "This install's database was made by another build of poplin, so its records are not the ones this build reads. Deploy the build that made it, or delete the database and poplin makes it anew.";
+const MADE_BY_ANOTHER_BUILD = "This install's database was made by another build of poplin, so its records are not the ones this build reads. Roll the Worker back to that build, or run `npx poplin uninstall` and install anew.";
 
 /** The most entries one file of the audit log holds. */
 const FILE_ENTRIES = 2000;

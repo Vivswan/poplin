@@ -1,6 +1,6 @@
 // Builds the Worker as a release ships it, into a folder: `bun run --cwd packages/providers/cloudflare bundle <folder>`.
 //
-//   poplin-<version>-worker.js       the one module a deploy uploads, built by wrangler exactly as `bun run build` builds it
+//   poplin-<version>-worker.js       the one module an install or an update uploads, built by wrangler exactly as `bun run build` builds it
 //   poplin-<version>-worker.js.map   its source map
 //   poplin-<version>-worker.json     the manifest: the version, the schema, each file's digest and size, and what an upload states beside them
 //
@@ -12,8 +12,8 @@ import { join, resolve } from "node:path";
 import { OWN_SCHEMA } from "@poplin/core/src/database/open";
 
 import { version } from "../../../cli/package.json";
-import { bundleManifest, MAP_FILE, MODULE_FILE } from "../src/shared/release/deploy/bundle-manifest";
-import { bundleAsset, MANIFEST_FILE } from "../src/shared/release/deploy/release-source";
+import { bundleManifest, MAP_FILE, MODULE_FILE } from "../src/shared/release/publish/bundle-manifest";
+import { bundleAsset, MANIFEST_FILE } from "../src/shared/release/publish/release-source";
 
 const PACKAGE = join(import.meta.dir, "..");
 

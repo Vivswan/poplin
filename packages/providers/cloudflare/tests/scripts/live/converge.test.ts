@@ -279,7 +279,7 @@ const CASES: readonly Case[] = [
 
 /** A world no run of these reaches: each stops before its first command. */
 const UNREACHED: World = {
-  release: { version: COMMIT, pin: { source: "0".repeat(64), bundle: "0".repeat(64), schema: 1 }, pages: new Map() },
+  release: { version: COMMIT, pin: { bundle: "0".repeat(64), schema: 1 }, pages: new Map() },
   ends: { reach: { fetch: () => Promise.reject(new Error("a command ran")), now: () => 0 }, sleep: async () => undefined },
   fetch: () => Promise.reject(new Error("the install was asked")),
 };

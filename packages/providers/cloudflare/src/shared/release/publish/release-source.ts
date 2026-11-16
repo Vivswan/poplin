@@ -1,6 +1,6 @@
-// Where a hosted build takes a release of poplin from, with no token: which releases there are and the digest of each from the project's website, the files from GitHub.
+// Where a release of poplin is read from, with no token: which releases there are and the digest of each from the project's website, the built files from GitHub.
 //
-// The website is built from the main branch alone, so only what that branch released is named there. The files are an asset of the release's page, and are trusted for nothing: the deploy takes them only when their digest is the published one.
+// The website is built from the main branch alone, so only what that branch released is named there. The files are assets of the release's page, and are trusted for nothing: an install takes them only when their digest is the published one.
 
 import { homepage } from "../../../../../../cli/package.json";
 import { textUpTo } from "@poplin/core/src/api/text-up-to";
@@ -18,16 +18,13 @@ const PINS_ADDRESS = new URL("releases.json", homepage).href;
 /** The most bytes of that file that are read. */
 const MOST_PINS_BYTES = 1_048_576;
 
-/** How long the website and GitHub may each take to answer, in milliseconds. */
+/** How long the website may take to answer, in milliseconds. */
 const ANSWER_WITHIN = 60_000;
 
-/** A place releases are taken from. */
+/** A place releases are read from. */
 export interface ReleaseSource {
   /** Reads which releases are published, each with the digest of its files; `undefined` for no answer that can be read. */
   readonly pins: () => Promise<ReleasePins | undefined>;
-
-  /** Fetches the files of one release as the bytes of its archive; `undefined` when they cannot be fetched. */
-  readonly fetch: (version: string) => Promise<Uint8Array<ArrayBuffer> | undefined>;
 }
 
 /** What the source reaches the world through: the platform's own `fetch`, or a stand-in. */
@@ -52,30 +49,6 @@ async function readPins(reach: Reach): Promise<ReleasePins | undefined> {
   }
 }
 
-async function fetchSource(reach: Reach, version: string): Promise<Uint8Array<ArrayBuffer> | undefined> {
-  try {
-    const answer = await reach.fetch(sourceAddress(version), { signal: AbortSignal.timeout(ANSWER_WITHIN) });
-    if (answer.status !== 200) {
-      await answer.body?.cancel();
-
-      return undefined;
-    }
-
-    return new Uint8Array(await answer.arrayBuffer());
-  } catch {
-    return undefined;
-  }
-}
-
-/**
- * The address of a release's source files: the archive the release workflow packs from the release's commit and adds to its page.
- *
- * @param version - a version as it is written, such as `0.2.0`
- */
-export function sourceAddress(version: string): string {
-  return `${REPOSITORY}/releases/download/v${version}/poplin-${version}.tar.gz`;
-}
-
 /**
  * The name of one asset of a release's built Worker on the release's page: the manifest, or a file the manifest names.
  *
@@ -96,13 +69,10 @@ export function bundleAddress(version: string, file: string): string {
 }
 
 /**
- * The releases of poplin, read with no token: the published digests from the project's website, the files from GitHub.
+ * The releases of poplin, read with no token: the published digests from the project's website.
  *
- * @returns a source that checks nothing itself: what it fetched is for `checkedRelease` to take or refuse
+ * @returns a source that checks nothing itself: a file fetched from a release's page is taken only by its digest
  */
 export function projectReleases(reach: Reach): ReleaseSource {
-  return {
-    pins: () => readPins(reach),
-    fetch: (version) => fetchSource(reach, version),
-  };
+  return { pins: () => readPins(reach) };
 }

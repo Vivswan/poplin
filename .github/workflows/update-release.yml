@@ -2,14 +2,13 @@
 # This file is repo-owned, seeded once by the fleet sync and never overwritten by a later sync.
 # Publishing waits for every job, and every asset uploaded here is attested at publish time.
 #
-# The assets are the release's source files, which an install's hosted build fetches and runs, and its built Worker: the
-# one module a deploy uploads, its source map, and a manifest that states the digest and size of both, the version, and
-# the schema. The website publishes the digests only when the attestation made HERE holds: by this workflow, in a run of
-# main. So every file is attested in the run that made it, never after a round trip through the draft, where a write
-# token could swap it.
+# The assets are the release's built Worker: the one module an install uploads, its source map, and a manifest that
+# states the digest and size of both, the version, and the schema. The website publishes the manifest's digest only when
+# the attestation made HERE holds: by this workflow, in a run of main. So every file is attested in the run that made
+# it, never after a round trip through the draft, where a write token could swap it.
 #
 #   build-bundle     installs the dependencies and builds the Worker, twice; holds no right to sign and reads no secret
-#   update-release   packs the source, takes the built files, attests all four, uploads them; runs nothing of the tree
+#   update-release   takes the built files, attests all three, uploads them; runs nothing of the tree
 #
 #   the tag's commit is not on main, or its files say another version than the tag -> the job fails, nothing is uploaded
 #   the two builds of the Worker differ by one byte                                -> the same
@@ -83,13 +82,9 @@ jobs:
         env:
           RELEASE_TAG: ${{ inputs.tag }}
         run: test "v$(jq -r .version packages/cli/package.json)" = "$RELEASE_TAG"
-      - name: Pack the source files of the release
-        id: pack
-        run: |
-          version="$(jq -r .version packages/cli/package.json)"
-          git archive --format=tar.gz --prefix=poplin/ --output="poplin-$version.tar.gz" HEAD
-          echo "file=poplin-$version.tar.gz" >> "$GITHUB_OUTPUT"
-          echo "version=$version" >> "$GITHUB_OUTPUT"
+      - name: Read the version the files say
+        id: tree
+        run: echo "version=$(jq -r .version packages/cli/package.json)" >> "$GITHUB_OUTPUT"
       - name: Take the built Worker of the first build
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
@@ -106,14 +101,12 @@ jobs:
       - uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
         with:
           subject-path: |
-            ${{ steps.pack.outputs.file }}
-            ${{ runner.temp }}/bundle/first/poplin-${{ steps.pack.outputs.version }}-worker.json
-            ${{ runner.temp }}/bundle/first/poplin-${{ steps.pack.outputs.version }}-worker.js
-            ${{ runner.temp }}/bundle/first/poplin-${{ steps.pack.outputs.version }}-worker.js.map
-      - name: Add the archive and the built Worker to the draft release
+            ${{ runner.temp }}/bundle/first/poplin-${{ steps.tree.outputs.version }}-worker.json
+            ${{ runner.temp }}/bundle/first/poplin-${{ steps.tree.outputs.version }}-worker.js
+            ${{ runner.temp }}/bundle/first/poplin-${{ steps.tree.outputs.version }}-worker.js.map
+      - name: Add the built Worker to the draft release
         env:
           GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ inputs.tag }}
-          ARCHIVE: ${{ steps.pack.outputs.file }}
-          BUILT: ${{ runner.temp }}/bundle/first/poplin-${{ steps.pack.outputs.version }}-worker
-        run: gh release upload "$RELEASE_TAG" "$ARCHIVE" "$BUILT.json" "$BUILT.js" "$BUILT.js.map" --clobber
+          BUILT: ${{ runner.temp }}/bundle/first/poplin-${{ steps.tree.outputs.version }}-worker
+        run: gh release upload "$RELEASE_TAG" "$BUILT.json" "$BUILT.js" "$BUILT.js.map" --clobber

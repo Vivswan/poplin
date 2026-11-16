@@ -32,7 +32,7 @@ runs:
   using: composite
   steps:
     - uses: ./.github/actions/setup
-    # Which releases an install may take, each with the digest of its files: only an archive the release workflow attested in a run of main.
+    # Which releases an install may take, each with the digest of its files: only built files the release workflow attested in a run of main.
     - name: Name the releases whose files are attested
       shell: bash
       env:

@@ -16,7 +16,7 @@ import { BaseAccounts } from "cloudflare/resources/accounts/accounts";
 import { BaseDatabase } from "cloudflare/resources/d1/database/database";
 import { BaseVersions } from "cloudflare/resources/workers/scripts/versions";
 import * as v from "valibot";
-import { projectReleases } from "../../release/deploy/release-source";
+import { projectReleases } from "../../release/publish/release-source";
 import { isAccessOff, readLoginFacts } from "../pieces/access/access";
 import { listBuckets, planBucket } from "../pieces/bucket/bucket";
 import { type CloudflareFailure, type CloudflareResult, type Connection, callCloudflare, findZones } from "../client";

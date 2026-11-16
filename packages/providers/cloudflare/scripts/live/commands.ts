@@ -21,8 +21,8 @@ import type { InstallEnds, Provider } from "../../../../cli/src/install/records"
 import { runUninstall } from "../../../../cli/src/install/remove/uninstall";
 import { runRepair } from "../../../../cli/src/install/repair/repair";
 import { installer } from "../../src/shared/install/first/installer";
-import { bundleManifest, MAP_FILE, MODULE_FILE } from "../../src/shared/release/deploy/bundle-manifest";
-import { bundleAddress, MANIFEST_FILE } from "../../src/shared/release/deploy/release-source";
+import { bundleManifest, MAP_FILE, MODULE_FILE } from "../../src/shared/release/publish/bundle-manifest";
+import { bundleAddress, MANIFEST_FILE } from "../../src/shared/release/publish/release-source";
 import type { Found, Run } from "./util";
 
 /** This package's folder. */
@@ -30,9 +30,6 @@ const PACKAGE = join(import.meta.dir, "..", "..");
 
 /** Where the project's website names every release. */
 const PINS_ADDRESS = new URL("releases.json", homepage).href;
-
-/** The digest of a source archive that is never built: a command reads the digest of the built files alone. */
-const NO_SOURCE = "0".repeat(64);
 
 /** What runs the words after each command. */
 const COMMANDS = { install: runInstall, repair: runRepair, uninstall: runUninstall } as const;
@@ -112,7 +109,7 @@ export async function readBuilt(): Promise<Built> {
 export async function publish(built: Built): Promise<Published> {
   const { version, files } = built;
   const manifest = await bundleManifest({ version, schema: OWN_SCHEMA, config: built.config, files });
-  const pin = { source: NO_SOURCE, bundle: await releaseDigest(new TextEncoder().encode(manifest)), schema: OWN_SCHEMA };
+  const pin = { bundle: await releaseDigest(new TextEncoder().encode(manifest)), schema: OWN_SCHEMA };
   const pages = new Map<string, string | Uint8Array<ArrayBuffer>>([
     [PINS_ADDRESS, JSON.stringify({ [version]: pin })],
     [bundleAddress(version, MANIFEST_FILE), manifest],

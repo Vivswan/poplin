@@ -4,7 +4,7 @@
 //   deploy                   Cloudflare's: what an upload of those files states beside them, read from the release's own wrangler.jsonc
 //
 // A binding to a thing the account holds, or to a value the install's own Worker carries, is `kept`: the bucket, the database, the Workflow, a variable.
-// One whose whole value the release decides is `stated`, with that value. The Workflow is named after the install's own Worker and made beside its deploy, so no release states it.
+// One whose whole value the release decides is `stated`, with that value. The Workflow is named after the install's own Worker and made by the install, so no release states it.
 // A setting of wrangler.jsonc this file does not know stops the build: a release cannot ship a setting its manifest leaves out.
 
 import { releaseDigest } from "@poplin/core/src/records/release";
@@ -29,7 +29,6 @@ const CONFIG = v.strictObject({
   minify: v.literal(true),
   upload_source_maps: v.literal(true),
   build: v.strictObject({ command: v.string() }),
-  keep_vars: v.literal(true),
   triggers: v.strictObject({ crons: v.array(v.string()) }),
   r2_buckets: v.array(NAMED),
   d1_databases: v.array(NAMED),

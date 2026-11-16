@@ -20,7 +20,7 @@ A refused command prints one sentence and often a hint. With `--json` it prints 
 | `bad_server`                                   | `--server` takes an `https://` address, host only  | `--server https://poplin.example.com`                         |
 | `wrong_server`                                 | the login is for another install                   | log in to this one with `--server`                            |
 | `not_allowed`                                  | this login may not do that                         | `poplin whoami` shows the login; use an admin's               |
-| `not_set_up`                                   | the install has stored no settings                 | try again; if it stays, deploy the install again              |
+| `not_set_up`                                   | the install has stored no settings                 | try again; if it stays, run `npx poplin doctor --repair`       |
 | `no_working_login`                             | the new logins would let nobody log in             | keep one email that is a login now in the list                |
 | `already_a_login`, `not_a_login`               | the email is a login already, or is none           | `poplin config logins` shows the logins                       |
 | `unreachable`, `timeout`                       | no answer came                                     | check the address and the network; `poplin list` before a retry |

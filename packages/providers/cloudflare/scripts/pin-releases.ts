@@ -6,7 +6,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { releases } from "../../../../website/src/lib/changelog";
-import { pinReleases } from "../src/shared/release/deploy/pin-releases";
+import { pinReleases } from "../src/shared/release/publish/pin-releases";
 
 const CHANGELOG = join(import.meta.dir, "..", "..", "..", "..", "CHANGELOG.md");
 

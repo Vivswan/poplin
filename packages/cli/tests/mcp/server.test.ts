@@ -205,7 +205,7 @@ describe("the MCP server", () => {
   // Drift: a tool words a failed call as its command does. An agent told `not_json` and to check the address cannot tell the user that the install itself said why it does not start.
   test("an install that cannot start is quoted to the agent: the tool error carries its sentence", async () => {
     const bench = await open();
-    const sentence = "This install's database was made by another build of poplin, so its records are not the ones this build reads. Deploy the build that made it, or delete the database and poplin makes it anew.";
+    const sentence = "This install's database was made by another build of poplin, so its records are not the ones this build reads. Roll the Worker back to that build, or run `npx poplin uninstall` and install anew.";
     bench.hook = () => new Response(sentence, { status: 503, headers: { "Content-Type": "text/plain; charset=utf-8" } });
 
     const answer = await bench.call("list_sites");

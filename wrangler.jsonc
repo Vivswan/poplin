@@ -11,15 +11,12 @@
   "observability": { "enabled": true, "head_sampling_rate": 1, "logs": { "enabled": true, "invocation_logs": false } },
   // Before the Worker is bundled: the dashboard's client is built and written into the Worker's sources as one module, which no commit holds.
   "build": { "command": "bun run --filter @poplin/cloudflare built-client" },
-  // The install's own values are written onto the Worker itself, by setup. A deploy leaves them as they are.
-  // The Worker reads one secret, KEPT_KEY. A secret is never named here, and a deploy leaves it as it is.
-  "keep_vars": true,
   // The sweep: expired sites to the trash, old trash and abandoned uploads away.
   "triggers": { "crons": ["*/15 * * * *"] },
-  // Neither has an id: a deploy creates the bucket and the database the first time.
+  // Neither has an id: the install command makes the bucket and the database, and binds each in the first upload.
   "r2_buckets": [{ "binding": "SITES", "bucket_name": "poplin-sites" }],
   "d1_databases": [{ "binding": "DB", "database_name": "poplin" }],
-  // The limit is a fixed ceiling: each request weighs the ceiling divided by the per-minute setting in force, so a setting changes with no deploy.
+  // The limit is a fixed ceiling: each request weighs the ceiling divided by the per-minute setting in force, so a setting changes with no upload.
   "ratelimits": [{ "name": "MINUTE_LIMITS", "namespace_id": "1001", "simple": { "limit": 1000000, "period": 60 } }],
   // The background work: the rounds of a copy too large for one request, one a step. Its name holds the Worker's, since an account names each Workflow once.
   "workflows": [{ "name": "poplin-jobs", "binding": "JOBS", "class_name": "PoplinJobs" }],

@@ -5,7 +5,7 @@ import { expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { OWN_SCHEMA } from "@poplin/core/src/database/open";
-import { bundleManifest, MAP_FILE, MODULE_FILE } from "../../../../src/shared/release/deploy/bundle-manifest";
+import { bundleManifest, MAP_FILE, MODULE_FILE } from "../../../../src/shared/release/publish/bundle-manifest";
 import { firstBindings } from "../../../../src/shared/install/first/first-bindings";
 
 /** The repository's own Worker configuration. */
