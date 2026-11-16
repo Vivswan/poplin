@@ -185,3 +185,26 @@ test("a refused line stops the first login ever, and after it is given up with a
     ["login_unwritten"],
   ]);
 });
+
+// Drift: the sweep removes a login's line once it is over 90 days old. An instance that then read the log as one nobody logged in to would write the old login a second time, and shut the person out where the database refuses a line.
+test("a login whose line the sweep removed writes no second line, and a line the database refuses is still given up, not the person", async () => {
+  const { opened, asked } = await openEntries();
+  const { database } = opened.install;
+  const { owner, clock } = opened;
+  const since = clock.now;
+  await database.noteLogin(owner, { since, at: since });
+  clock.now += 100 * 86_400_000;
+  await database.appendAudit({ action: "domain_synced", detail: {} }, { by: owner, at: clock.now - 1000 });
+  await database.sweepRunOut(clock.now);
+  const kept = await loginsOf(opened);
+  const entered = createEntries(opened.install, () => undefined);
+  await entered({ email: owner, since });
+  const written = asked();
+  database.noteLogin = () => Promise.reject(new Error("the database is away"));
+  const later = await createEntries(opened.install, () => undefined)({ email: BO, since: clock.now - 500 }).then(
+    () => "given up",
+    () => "refused",
+  );
+
+  expect([kept, written, later, await loginsOf(opened), await database.hasLoggedIn()]).toEqual([[], 1, "given up", [], true]);
+});

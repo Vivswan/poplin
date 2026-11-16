@@ -19,6 +19,7 @@
 // D1 answers one invocation 50 queries on Cloudflare's Free plan, a batch being one. A run with nothing due makes 6, and 7 on an install that holds a key, however many sites the install holds.
 // The settings are read once, at the start, and hold for the run. The walk's place is not written by a run whose walk began and ended in it.
 // A run with nothing due writes no row, but the first run of a UTC day, which writes the one row of the answer.
+// The call that ends a walk also removes the audit entries and the ended tokens of over 90 days ago: at most 125 rows a run, and none where nothing is that old.
 // An update is started on the day's first run alone, and only where core's rules let it: every other run, and every install with the switch off, makes no call for it.
 // A change of the users that did not reach Cloudflare is carried once a run, until it is settled.
 // A run that listed the bucket adds its listings to the day's count in one row. It may list a thousand times a day beyond `max_storage_writes_per_day`, so no other work of a day keeps it from removing files.

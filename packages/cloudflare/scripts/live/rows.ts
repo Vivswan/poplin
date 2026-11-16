@@ -17,7 +17,7 @@
 // A served site's refusal or missing file writes the same two rows and is not counted: its status is that of an address no site holds.
 // A request that would pass the ceiling is not sent, and every one after it: each is answered here as refused, with a 403, which the CLI does not send again.
 // A request that changes something on a route with no price is refused the same way, so a check that grows a new kind of write stops red until it has one.
-// The count is the harness's own, not the database's. The sweep later drops the row of each finished upload, 5 rows more, which no request of a run makes.
+// The count is the harness's own, not the database's. The sweep later drops the row of each finished upload, 5 rows more, which no request of a run makes, and up to 125 rows a run of what is over 90 days old.
 
 import type { Fetch } from "../../../cli/src/client/client";
 import type { Declared } from "./budget";

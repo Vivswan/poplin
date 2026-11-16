@@ -122,7 +122,7 @@ const ROWS: Readonly<Record<string, readonly [read: number, written: number]>> =
   "noteProblem, once a day": [1, 1],
   "noteProblem, once a day and noted": [1, 0],
   "listProblems, 7 days of 11 kinds": [77, 0],
-  "sweepRunOut, 13 problems past the days kept": [17, 13],
+  "sweepRunOut, 13 problems past the days kept": [24, 13],
   "keepSweepPlace": [1, 1],
   "readSweepPlace": [1, 0],
   "keepSweepPlace, forgotten": [0, 1],
@@ -188,9 +188,9 @@ const ROWS: Readonly<Record<string, readonly [read: number, written: number]>> =
   "listWaitingComputerLogins": [4, 0],
   "decideComputerLogin": [4, 3],
   "redeemComputerLogin": [4, 5],
-  "sweepRunOut": [4, 1],
+  "sweepRunOut": [11, 1],
   "appendAudit, a login": [0, 2],
-  "hasLoggedIn, nobody yet": [0, 0],
+  "hasLoggedIn, nobody yet": [1, 0],
   "hasLoggedIn": [1, 0],
   "noteLogin, a new login": [2, 2],
   "noteLogin, known": [2, 0],
@@ -262,6 +262,11 @@ const ROWS: Readonly<Record<string, readonly [read: number, written: number]>> =
 interface RowCounts {
   read: number;
   written: number;
+}
+
+/** Run one statement straight on the database, outside every count of rows. */
+async function straight(sql: string): Promise<void> {
+  await BINDINGS.DB.prepare(sql).run();
 }
 
 async function emptyDatabase(): Promise<D1Driver> {
@@ -648,11 +653,31 @@ describe("D1: the rows a scheduled sweep costs of a day's allowance", () => {
     await runSweep(install, latest, running);
 
     expect([first, idle, rows, website.asked]).toEqual([
-      { read: 13, written: 1 },
-      { read: 11, written: 0 },
-      { read: 11, written: 0 },
+      { read: 20, written: 1 },
+      { read: 18, written: 0 },
+      { read: 18, written: 0 },
       1,
     ]);
+  });
+
+  // Drift: a day allows 100,000 rows written, and the provider counts every row a trim removes. A trim with no bound would spend the day on a long log in one run, and one that wrote with nothing left to remove would spend it on nothing.
+  test("the end of a walk with a full trim due writes 125 rows, the 100 entries of the log and the 25 ended tokens it removes, and the one after the last of them writes none", async () => {
+    const { install, rows } = await meteredInstall();
+    const longAgo = NOW - 200 * 86_400_000;
+    await straight(`INSERT INTO audit (at, actor, action, detail) WITH RECURSIVE entry(n) AS (SELECT 1 UNION ALL SELECT n + 1 FROM entry WHERE n < 100) SELECT ${longAgo}, 'ada@example.com', 'login', '{}' FROM entry`);
+    const ended = `SELECT printf('%016x', n), 'h', 'publisher', '', ${longAgo}, ${longAgo} + n, 'ada@example.com' FROM token`;
+    await straight(`INSERT INTO tokens (id, hash, scope, note, created_at, removed_at, removed_by) WITH RECURSIVE token(n) AS (SELECT 1 UNION ALL SELECT n + 1 FROM token WHERE n < 25) ${ended}`);
+    await install.database.appendAudit({ action: "login", detail: {} }, { by: "ada@example.com" as Login, at: NOW });
+    rows.read = 0;
+    rows.written = 0;
+    await install.database.sweepRunOut(NOW);
+    const full = { ...rows };
+
+    rows.read = 0;
+    rows.written = 0;
+    await install.database.sweepRunOut(NOW);
+
+    expect([full, rows, await install.database.countAudit({ most: 1000 }), (await install.database.listTokenStates(NOW, 50)).ended]).toEqual([{ read: 709, written: 125 }, { read: 15, written: 0 }, { count: 1, whole: true }, []]);
   });
 });
 
