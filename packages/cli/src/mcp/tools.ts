@@ -152,13 +152,13 @@ async function onSite(host: Host, raw: string, request: (site: SiteReference) =>
   return withSite(host, typed, (site, session) => runSiteCommand(request(site), session));
 }
 
-/** Remove a site for good, and say what is gone. The command asks a person to type the label first; a tool is asked through `forever: true` alone. */
+/** Remove a site for good, and say what is gone. The command asks a person to type the label first; a tool is asked through `no_trash: true` alone. */
 async function deleteForever(raw: string, host: Host): Promise<Outcome> {
   const typed = readSite(raw);
   if (isProblem(typed)) return refused(typed);
 
   return withSite(host, typed, async (site, { client }) => {
-    const deleted = await client.call(DELETED_SITE, (api) => api.sites[":site"].$delete({ param: { site: siteWord(site) }, query: { forever: "true" } }));
+    const deleted = await client.call(DELETED_SITE, (api) => api.sites[":site"].$delete({ param: { site: siteWord(site) }, query: { no_trash: "true" } }));
     if (!deleted.ok) return refused(problemOf(deleted.failure, "changes"));
 
     const { before, left } = deleted.value;
@@ -289,13 +289,13 @@ export const TOOLS: { readonly [Name in ToolName]: Tool<Name> } = {
   delete_site: {
     description:
       "Move a site to the trash, where restore_site can take it back until the day the answer names. " +
-      "With forever: true the site and every file of it are removed at once and nothing can restore them: only when the user asked for exactly that.",
-    parameters: { site: SITE, forever: "true: remove the site now and for good, with no trash. Left out: it goes to the trash." },
+      "With no_trash: true the site and every file of it are removed at once and nothing can restore them: only when the user asked for exactly that.",
+    parameters: { site: SITE, no_trash: "true: remove the site now and for good, with no trash. Left out: it goes to the trash." },
     hints: { destructiveHint: true },
     run: (input, host) => {
-      if (input.forever === true) return deleteForever(input.site, host);
+      if (input.no_trash === true) return deleteForever(input.site, host);
 
-      return onSite(host, input.site, (site) => ({ kind: "delete", site, forever: false, json: false }));
+      return onSite(host, input.site, (site) => ({ kind: "delete", site, noTrash: false, json: false }));
     },
   },
   duplicate_site: {

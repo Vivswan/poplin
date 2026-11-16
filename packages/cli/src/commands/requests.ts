@@ -40,7 +40,7 @@ const BUILDERS: { readonly [Name in Exclude<CommandName, "help">]: (words: Words
   rollback,
   "new-link": (words) => oneSite("new-link", words),
   duplicate,
-  delete: (words) => withSite(words, (site, install) => ({ kind: "delete", site, forever: words.flags.has("--no-trash"), ...install })),
+  delete: (words) => withSite(words, (site, install) => ({ kind: "delete", site, noTrash: words.flags.has("--no-trash"), ...install })),
   restore: (words) => oneSite("restore", words),
   list: (words) => withInstall(words, (install) => ({ kind: "list", trash: words.flags.has("--trash"), ...install })),
   login,
@@ -89,7 +89,7 @@ type Asked<Site> =
   | ({ readonly kind: "show" | "new-link" | "restore"; readonly site: Site } & Install)
   | ({ readonly kind: "rollback"; readonly site: Site; readonly to?: number } & Install)
   | ({ readonly kind: "duplicate"; readonly site: Site; readonly name?: SiteName } & Install)
-  | ({ readonly kind: "delete"; readonly site: Site; readonly forever: boolean } & Install)
+  | ({ readonly kind: "delete"; readonly site: Site; readonly noTrash: boolean } & Install)
   | ({ readonly kind: "list"; readonly trash: boolean } & Install)
   | ({ readonly kind: "login"; readonly publisher: boolean; readonly computer?: string; readonly browser: boolean } & Install)
   | ({ readonly kind: "logout" | "whoami" | "doctor" } & Install)

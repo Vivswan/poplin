@@ -37,7 +37,7 @@ async function openWithHistory(): Promise<{ readonly opened: Awaited<ReturnType<
   const kept = await publish("field-notes");
   const gone = await publish("old-draft");
   await updateSite(install, actor, { site: kept.id, name: "trip-notes" });
-  await deleteSite(install, actor, { site: gone.id, forever: true });
+  await deleteSite(install, actor, { site: gone.id, no_trash: true });
   const issued = await issueToken(install, actor, { scope: "publisher", note: "the laptop" });
   if (!issued.ok) throw new Error("the test token was refused");
 

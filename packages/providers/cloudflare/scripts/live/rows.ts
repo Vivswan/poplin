@@ -52,7 +52,7 @@ const TURNED_BACK = 1;
 const COPIED = { begun: 21, goneOn: 16, jobRound: 1 } as const;
 
 /** The rows of a site moved to the trash, and of one removed for good with the three versions an install keeps and a day's count of its own. */
-const REMOVED = { trash: 6, forever: 13 } as const;
+const REMOVED = { trash: 6, noTrash: 13 } as const;
 
 /** The rows of a change to a site: of who may open it, and of any other setting. Both are written where a request asks for both. */
 const CHANGED = { access: 3, details: 2 } as const;
@@ -93,7 +93,7 @@ const PRICES = [
   { method: "POST", path: "/api/uploads/:upload/finish", rows: () => 0 },
   { method: "GET", path: "/api/uploads/:upload", rows: () => 1 },
   { method: "DELETE", path: "/api/uploads/:upload", rows: () => 3 },
-  { method: "DELETE", path: "/api/sites/:site", rows: (asked) => (asked.query.get("forever") === "true" ? REMOVED.forever : REMOVED.trash) },
+  { method: "DELETE", path: "/api/sites/:site", rows: (asked) => (asked.query.get("no_trash") === "true" ? REMOVED.noTrash : REMOVED.trash) },
   { method: "PATCH", path: "/api/sites/:site", rows: (asked) => changeRows(asked.body) },
   { method: "POST", path: "/api/sites/:site/restore", rows: () => 5 + EXPIRY },
   { method: "POST", path: "/api/sites/:site/new-link", rows: () => 9 },

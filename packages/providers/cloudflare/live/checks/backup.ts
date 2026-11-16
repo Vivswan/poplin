@@ -43,7 +43,7 @@ async function exportEach(bench: Bench, sites: readonly LiveSite[], round: strin
 
 /** Remove a site for good, with every file of it. */
 async function removeForGood(bench: Bench, site: LiveSite): Promise<void> {
-  expect((await bench.mcp("delete_site", { site: site.id, forever: true })).left).toEqual([]);
+  expect((await bench.mcp("delete_site", { site: site.id, no_trash: true })).left).toEqual([]);
 }
 
 /** Remove every site the drill made; answers how many removals failed. After a failed drill a site may be gone already, and its removal then fails too. */

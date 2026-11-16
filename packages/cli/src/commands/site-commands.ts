@@ -268,7 +268,7 @@ async function deleteForever(request: Asked<"delete">, { client, io }: Session):
   const typed = await io.ask(`This removes ${label} and every file of it for good. Type its label to go on: `);
   if (typed.trim() !== label) return { ok: false, problem: problem("not_confirmed") };
 
-  const deleted = await client.call(DELETED_SITE, (api) => api.sites[":site"].$delete({ param: { site: label }, query: { forever: "true" } }));
+  const deleted = await client.call(DELETED_SITE, (api) => api.sites[":site"].$delete({ param: { site: label }, query: { no_trash: "true" } }));
   if (!deleted.ok) return failed(deleted);
 
   const notes = deleted.value.left.length === 0 ? [] : ["the site is gone, and some of its files are still being removed"];
@@ -277,7 +277,7 @@ async function deleteForever(request: Asked<"delete">, { client, io }: Session):
 }
 
 async function deleteSite(request: Asked<"delete">, session: Session): Promise<Outcome> {
-  if (request.forever) return deleteForever(request, session);
+  if (request.noTrash) return deleteForever(request, session);
 
   const trashed = await session.client.call(DELETED_SITE, (api) => api.sites[":site"].$delete({ param: { site: siteWord(request.site) } }));
   if (!trashed.ok) return failed(trashed);

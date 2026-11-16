@@ -84,7 +84,7 @@ describe("sweepExpired", () => {
     };
     const [bigPrefix, oldPrefix] = [await folderOf(2 * ONE_REMOVAL + 5), await folderOf(ONE_REMOVAL + 5)];
 
-    const removed = await deleteSite(world.install, OWNER, { site: big, forever: true });
+    const removed = await deleteSite(world.install, OWNER, { site: big, no_trash: true });
     const afterDelete = (await world.keys()).length;
     world.clock.now = NOW + DAY;
     const walks = [await walk(world, 10), await walk(world, 10), await walk(world, 10)];
@@ -119,7 +119,7 @@ describe("sweepExpired", () => {
     const world = await makeWorld();
     const sites = [await sized(world, "one", 2), await sized(world, "two", 2), await sized(world, "three", 2)];
     world.faults.failRemoval = true;
-    for (const site of sites) await deleteSite(world.install, OWNER, { site, forever: true });
+    for (const site of sites) await deleteSite(world.install, OWNER, { site, no_trash: true });
 
     const down = await sweepExpired(world.install, ADMIN, { limit: 10, from: { leftovers: true } });
     world.faults.failRemoval = false;

@@ -30,8 +30,8 @@ describe("deleteSite", () => {
     expect([await world.keys(), await world.audit()]).toEqual([keys, ["create", "trash", "restore"]]);
   });
 
-  // Drift: delete forever is the way out when a secret was published; a file left in the bucket, or a public name still held, would keep it around.
-  test("a delete forever removes the row and every file of every version, from the trash or not, and frees the public name", async () => {
+  // Drift: delete for good is the way out when a secret was published; a file left in the bucket, or a public name still held, would keep it around.
+  test("a delete for good removes the row and every file of every version, from the trash or not, and frees the public name", async () => {
     const world = await makeWorld();
     const kept = await made(world, OWNER, "budget");
     const live = await made(world, OWNER, "report", { access: "public" });
@@ -39,7 +39,7 @@ describe("deleteSite", () => {
     const trashed = await made(world, OWNER, "notes");
     await deleteSite(world.install, OWNER, { site: trashed });
 
-    const gone = [await deleteSite(world.install, OWNER, { site: live, forever: true }), await deleteSite(world.install, ADMIN, { site: trashed, forever: true })];
+    const gone = [await deleteSite(world.install, OWNER, { site: live, no_trash: true }), await deleteSite(world.install, ADMIN, { site: trashed, no_trash: true })];
     const folders = new Set((await world.keys()).map((key) => key.split("/")[0]));
 
     expect(gone).toMatchObject([
@@ -58,15 +58,15 @@ describe("deleteSite", () => {
   });
 
   // Drift: the row goes first, so files that cannot be removed are garbage nothing serves; the answer must name them, and the folder must stay a leftover, or they are never found again.
-  test("a delete forever whose files cannot be removed still removes the row, names the prefix that is left, and keeps the folder as a leftover until its files are gone", async () => {
+  test("a delete for good whose files cannot be removed still removes the row, names the prefix that is left, and keeps the folder as a leftover until its files are gone", async () => {
     const world = await makeWorld();
     const id = await made(world, OWNER, "report");
     const folder = (await world.keys())[0]?.split("/")[0];
     const emptied = await made(world, OWNER, "notes");
-    await deleteSite(world.install, OWNER, { site: emptied, forever: true });
+    await deleteSite(world.install, OWNER, { site: emptied, no_trash: true });
     world.faults.failRemoval = true;
 
-    expect(await deleteSite(world.install, OWNER, { site: id, forever: true })).toMatchObject({ ok: true, left: [`${folder}/`] });
+    expect(await deleteSite(world.install, OWNER, { site: id, no_trash: true })).toMatchObject({ ok: true, left: [`${folder}/`] });
     expect(await getSite(world.install, ADMIN, id)).toEqual({ ok: false, code: "not_found" });
     expect(await world.install.database.listLeftovers({ limit: 10 })).toEqual({ folders: [folder] } as never);
   });

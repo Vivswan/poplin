@@ -23,5 +23,5 @@ The tools an agent calls, each with one example input and the command that does 
 | `duplicate_site` | `{ "site": "report--k3f9x2ab71qz" }`                      | `poplin duplicate report--k3f9x2ab71qz`       |
 
 - **`publish_site` and `update_site` take the site settings:** `name`, `access`, `public_name`, `title`, `search_engines`, `embeddable`, `expires`.
-- **`delete_site` with `"forever": true`** removes the site at once, with no trash.
+- **`delete_site` with `"no_trash": true`** removes the site at once, with no trash.
 - **The agent's rules** are in the skill: [`skills/poplin/SKILL.md`](../../skills/poplin/SKILL.md).
