@@ -249,4 +249,14 @@ describe("the table of the Usage screen", () => {
 
     expect([officialLine(), tableRows().length]).toEqual([says, OWN.lines.length + 1]);
   });
+
+  // Drift: a host named by a plain word, as the preview's is, would start the line over the table with a small letter, while its links keep the word as it is.
+  test.each([
+    [{ at: Date.UTC(2026, 10, 15, 14, 5), behind: null }, `The host's own figures, as of ${momentIn(Date.UTC(2026, 10, 15, 14, 5))}.`],
+    [{ refusal: "unreachable", right: null }, "The host did not answer. The numbers here are poplin's own count."],
+  ] as const)("a host named in plain words starts the line %j with a capital and keeps its own letters in a link", async (official, says) => {
+    await draw({ ...OWN, host: "the host", official });
+
+    expect([officialLine(), hostLinks().at(-1)?.[1]]).toEqual([says, "See it at the host"]);
+  });
 });

@@ -103,9 +103,10 @@ export function EditSiteDialog({ site, onClose, onSave, returnTo }: EditSiteDial
   const [busy, setBusy] = useState(false);
   const fields = { title: useRef<HTMLInputElement>(null), name: useRef<HTMLInputElement>(null) };
   // Every opening starts from what the site holds: what was typed and then left by Cancel, Close, or Escape is not there the next time.
-  const [asked, setAsked] = useState(site);
-  if (site !== asked) {
-    setAsked(site);
+  // An opening is told by the site's id. The same site read again while the dialog is open is no opening, so what is typed stays.
+  const [asked, setAsked] = useState(site?.id);
+  if (site?.id !== asked) {
+    setAsked(site?.id);
     if (site !== undefined) {
       setShown(site);
       setTitle(typedTitle(site));
