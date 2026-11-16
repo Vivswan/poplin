@@ -1,6 +1,6 @@
 // The plug of an install without a domain: every object of an install on the account's free address read, or made to match, with a token that lives for the one call.
 //
-//   token -> the account whose free address the install answers under -> the two forwarders, Access, the Worker's own variables and its keys, the database, the Workflow
+//   token -> the account whose free address the install answers under -> the two forwarders, Access, the Worker's own variables and its keys, the database, the budget alert, the Workflow
 //
 // With no zone to show, a token proves itself by the account: the one whose free address is the one in the install's own hostnames. Any other token is refused before anything is read.
 // Each piece is the one an install with a domain is made of. No record, route, or rule is read or written: the free address has none of them.
@@ -18,7 +18,7 @@ import { type Connection, callCloudflare } from "../shared/install/client";
 import { syncForwarders } from "./pieces/forwarders/forwarders";
 import { syncJobs } from "../shared/install/pieces/jobs/jobs";
 import type { Mode } from "../shared/install/sync";
-import { accessPiece, databasePiece, firstValues, type Known, keyGiven, type Placed, type Progress, piece, REFUSED, readingOf, TOKEN, tokenFacts, UNREACHABLE, variablesPiece } from "../with-domain/zone-plug";
+import { accessPiece, alertPiece, databasePiece, firstValues, type Known, keyGiven, type Placed, type Progress, piece, REFUSED, readingOf, TOKEN, tokenFacts, UNREACHABLE, variablesPiece } from "../with-domain/zone-plug";
 
 /** How many accounts a token of an install with nothing set is looked through for the install's: one call each, inside what one request of a Worker may send. */
 const MAX_ACCOUNTS = 10;
@@ -109,6 +109,7 @@ async function readPieces(parts: PathParts, mode: Mode, found: { readonly connec
   const { connection, placed } = found;
   const settings = await readSettings();
   const parsed = parseLogins(settings.logins);
+  const logins = parsed.ok ? parsed.value : undefined;
   const { layout } = parts;
   const answers = { [layout.sitesWorker]: `https://${layout.sitesHost} (unlisted and public sites)`, [layout.privateWorker]: `https://${layout.privateHost} (private sites)` };
 
@@ -119,8 +120,9 @@ async function readPieces(parts: PathParts, mode: Mode, found: { readonly connec
     () => syncForwarders(connection, placed.accountId, layout, mode),
   );
   progress.rows.splice(0, Number.POSITIVE_INFINITY, ...progress.rows.map((row) => forwarderRow(row, answers)));
-  await variablesPiece(progress, mode, placed, connection, await accessPiece(progress, mode, placed, connection, parsed.ok ? parsed.value : undefined));
+  await variablesPiece(progress, mode, placed, connection, await accessPiece(progress, mode, placed, connection, logins));
   await databasePiece(progress, mode, placed, connection);
+  await alertPiece(progress, mode, placed, connection, logins);
   // The Workflow comes last, as on an install with a domain: nothing else of the install waits for it.
   await piece(
     progress,

@@ -249,7 +249,7 @@ const TOKEN_FORMS = {
     for: "this account and this domain",
   },
   noDomain: {
-    pieces: ["Forwarder", "Access application", "Access policy", "Access open paths", "Worker variable", "D1 database", "Workflow", "Key", "Upload key"],
+    pieces: ["Forwarder", "Access application", "Access policy", "Access open paths", "Worker variable", "D1 database", "Workflow", "Budget alert", "Key", "Upload key"],
     zones: "",
     note: "On the form, choose your account under Account Resources, then create the account token and copy it.",
     for: "this account",
@@ -802,8 +802,8 @@ export async function variablesPiece(progress: Progress, mode: Mode, placed: Pla
   if (ready) progress.steps.push({ text: LOGIN_READY, address: `https://${placed.adminHost}` });
 }
 
-// The alert goes to the first user alone: the one who holds the Cloudflare account an install is made in.
-async function alertPiece(progress: Progress, mode: Mode, placed: Placed, connection: Connection, logins: Logins | undefined): Promise<void> {
+/** The budget alert's piece, of an install of either kind: the alert is the account's. It goes to the first user alone, the one who holds the Cloudflare account an install is made in. */
+export async function alertPiece(progress: Progress, mode: Mode, placed: Placed, connection: Connection, logins: Logins | undefined): Promise<void> {
   const [first] = logins ?? [];
   const object = (): Piece => "Budget alert";
   if (progress.stopped || first === undefined) {

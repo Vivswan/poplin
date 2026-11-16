@@ -37,18 +37,19 @@ export const WITH_DOMAIN: Provider = {
   says: { words: { thing: "the domain", line: null }, carriedSettings: ["outside_pages", "search_engines_allowed", "block_bots"], idleSettings: {} },
 };
 
-/** The provider's side of an install without a domain, as the preview alone invents it: the two addresses its sites answer at and the login, with no record, route, or rule, since such an install has none. */
+/** The provider's side of an install without a domain, as the preview alone invents it: the two addresses its sites answer at, the login, and the optional alert of the account, with no record, route, or rule, since such an install has none. */
 export const WITHOUT_DOMAIN: Provider = {
   pieces: [
     { object: "Address", detail: "the open sites", part: "reach" },
     { object: "Address", detail: "the private sites", part: "reach", broken: { found: "missing", mended: "created" } },
     { object: "Login application", detail: "the dashboard and the private sites", part: "login" },
     { object: "Login policy", detail: "your users only", part: "login", broken: { found: "differs", mended: "changed" }, lacks: "Login: Edit" },
+    { object: "Spend alert", detail: "sample-spend-alert", part: "rest", optional: "Alerts: Edit" },
   ],
   form: {
     tokenRights: ["Scripts: Edit", "Login: Edit"],
     tokenLink: "https://provider.example/tokens/new",
-    tokenOptional: [],
+    tokenOptional: [{ right: "Alerts: Edit", adds: "The provider emails your first user when the account's charges reach an amount." }],
     tokenNote: "On the form, choose the account the account token is for.",
     tokenFor: "this account",
   },

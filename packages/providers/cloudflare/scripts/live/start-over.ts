@@ -9,7 +9,7 @@
 //   Worker            the script named `poplin`, and with it the login and the first settings it was given
 //   Database          the database named `poplin`, with every record
 //   Bucket objects    every object of the test install's bucket; the bucket itself stays
-//   Budget alert      the notification policy with poplin's name                                   an install with a domain alone
+//   Budget alert      the notification policy with poplin's name
 //   Keys              every API token of the account with the name of one of the two keys an install keeps
 //
 // A record, a route, a rule, a Worker, an application, a policy, a Workflow, an alert, or a token without poplin's mark stays. The zone's bot switches are no object: they stay as they are set.
@@ -69,6 +69,9 @@ const KEPT_KINDS: readonly Kind[] = [
 
 /** The login in front of an install of either kind. */
 const ACCESS_KIND: Kind = { name: "Access applications and policies", remove: removeAccess, optional: true };
+
+/** The budget alert of an install of either kind: the account's. */
+const ALERT_KIND: Kind = { name: "Budget alert", remove: removeAlert, optional: true };
 
 /** The two keys an install of either kind keeps. */
 const KEY_KIND: Kind = { name: "Keys", remove: removeKeys, optional: true };
@@ -242,7 +245,7 @@ function kindsOf(found: Found): readonly Kind[] {
   if (found.kind === "account address") {
     const { layout } = found;
 
-    return [{ name: "Forwarders", remove: (run) => removeOwnForwarders(run, layout), optional: false }, ACCESS_KIND, ...KEPT_KINDS, KEY_KIND];
+    return [{ name: "Forwarders", remove: (run) => removeOwnForwarders(run, layout), optional: false }, ACCESS_KIND, ...KEPT_KINDS, ALERT_KIND, KEY_KIND];
   }
 
   const { zone } = found;
@@ -253,7 +256,7 @@ function kindsOf(found: Found): readonly Kind[] {
     { name: "Rules", remove: (run) => removeRules(run, zone), optional: true },
     ACCESS_KIND,
     ...KEPT_KINDS,
-    { name: "Budget alert", remove: removeAlert, optional: true },
+    ALERT_KIND,
     KEY_KIND,
   ];
 }

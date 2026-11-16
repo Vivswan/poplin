@@ -252,21 +252,22 @@ describe("the start-over of the test install, against a local fake account", () 
 
   // Drift: a forwarder is bound to the one Worker, and the second test account holds no zone. A start-over that removed the Worker first, or asked for a zone, would stop on that account alone.
   // Cloudflare keeps a Workflow whose Worker was deleted: one left on that account would stay there for good.
-  test("without a domain, the forwarder and the Workflow go before the Worker, a Worker of a forwarder's name without poplin's tag stays, and no kind of a zone is asked for", async () => {
+  test("without a domain, the forwarder and the Workflow go before the Worker, the budget alert goes as on a domain, a Worker of a forwarder's name without poplin's tag stays, and no kind of a zone is asked for", async () => {
     const theirs = { id: "poplin-private", tags: ["somebody-s-own"] };
     const world: World = { account: emptyAccount(), bucket: true, objects: ["sites/a/1/index.html"], worker: true, beside: [{ id: "poplin-sites", tags: ["poplin-forwarder"] }, theirs], gone: [] };
     world.account.databases.push({ uuid: "database-1", name: "poplin" });
     world.account.tokens.push({ id: "key-0", name: "poplin kept key", status: "active" }, { ...THEIRS.token });
     world.account.workflows.push({ name: "poplin-jobs", script_name: "poplin", class_name: "PoplinJobs" }, { ...THEIRS.workflow });
+    world.account.alerts.push({ id: "alert-1", name: "poplin: usage charges reached 1 dollar" }, { ...THEIRS.alert });
     const first = await run(world, "true", "account address");
-    const left = [[...(world.gone ?? [])], world.beside, world.account.tokens, world.account.databases, world.objects, world.zoneCalls, world.account.workflows];
+    const left = [[...(world.gone ?? [])], world.beside, world.account.tokens, world.account.databases, world.objects, world.zoneCalls, world.account.workflows, world.account.alerts];
     const second = await run(world, "true", "account address");
 
     expect(first).toEqual({
       code: 0,
-      lines: ["Forwarders: removed 1", "Access applications and policies: removed 0", "Workflow: removed 1", "Worker: removed 1", "Database: removed 1", "Bucket objects: removed 1", "Keys: removed 1"],
+      lines: ["Forwarders: removed 1", "Access applications and policies: removed 0", "Workflow: removed 1", "Worker: removed 1", "Database: removed 1", "Bucket objects: removed 1", "Budget alert: removed 1", "Keys: removed 1"],
     });
-    expect(left).toEqual([["poplin-sites", "poplin"], [theirs], [THEIRS.token], [], [], undefined, [THEIRS.workflow]]);
+    expect(left).toEqual([["poplin-sites", "poplin"], [theirs], [THEIRS.token], [], [], undefined, [THEIRS.workflow], [THEIRS.alert]]);
     expect(second.lines).toEqual(first.lines.map((line) => line.replace(/\d+$/, "0")));
   });
 });

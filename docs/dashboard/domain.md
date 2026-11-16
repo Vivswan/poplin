@@ -27,7 +27,7 @@ An install that holds [its key](../about/security.md#the-kept-key) reads every p
 | press Check                                            | checks again, with no dialog                                           |
 | press Repair                                           | opens the dialog that asks for an account token                        |
 
-No other screen starts a check. A check of an install whose every piece stands sends Cloudflare about 21 requests under a domain and about 15 without: fewer where a piece is missing, more where a list fills more than one page or a request is sent again. Each only reads. A check the screen ran by itself writes no line into Activity, and a pressed one writes one.
+No other screen starts a check. A check of an install whose every piece stands sends Cloudflare about 21 requests under a domain and about 16 without: fewer where a piece is missing, more where a list fills more than one page or a request is sent again. Each only reads. A check the screen ran by itself writes no line into Activity, and a pressed one writes one.
 
 Five rows read otherwise in a check made with the key:
 
@@ -84,9 +84,10 @@ On an install [without a domain](../start/without-a-domain.md) the screen is the
 | Key                | [the key poplin keeps](../about/security.md#the-kept-key)              |
 | Upload key         | [the key that sends files straight to the bucket](../about/security.md#the-upload-key) |
 | D1 database        | the database of the install                                            |
+| Budget alert       | [the email when charges reach 1 dollar](#optional-an-email-when-charges-reach-1-dollar): `optional` until its permission is on the token |
 | Workflow           | what runs the install's background jobs: the copy of a large site      |
 
-It has no DNS record, route, or rule, and its account token needs no permission of a zone. The optional parts below are of an install under a domain.
+It has no DNS record, route, or rule, and its account token needs no permission of a zone. The optional rules below are of an install under a domain alone. The optional email is of both kinds.
 
 ## The last check of the domain
 
@@ -158,7 +159,7 @@ Three settings save without these permissions. The dashboard has them in Setting
 
 ## Optional: an email when charges reach 1 dollar
 
-One more permission on the account token lets Repair make a budget alert in your Cloudflare account. Add it the same way, in the three steps above.
+One more permission on the account token lets Repair make a budget alert in your Cloudflare account, on an install under a domain and on one without. Add it the same way, in the three steps above.
 
 | First box | Second box    | Third box | With it, Cloudflare                                                                              | Without it         |
 | --------- | ------------- | --------- | ------------------------------------------------------------------------------------------------ | ------------------ |
