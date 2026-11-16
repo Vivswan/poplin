@@ -190,7 +190,7 @@ export async function openBench(layout?: LayoutInput): Promise<Bench> {
 }
 
 /** The one JSON value a command printed on stdout; fails when stdout holds anything else. */
-export function jsonOf(ran: Ran): Record<string, unknown> {
+export function jsonOf(ran: Pick<Ran, "out">): Record<string, unknown> {
   if (ran.out.length !== 1) throw new Error(`stdout holds ${ran.out.length} lines, not one JSON value: ${ran.out.join("\n")}`);
 
   return JSON.parse(ran.out[0] ?? "");

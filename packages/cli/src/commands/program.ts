@@ -2,7 +2,7 @@
 
 import { Command } from "commander";
 
-import { COMMANDS, type CommandSpec } from "./command-table";
+import { COMMANDS, type CommandSpec, INSTALL_COMMAND } from "./command-table";
 
 /** The word of the program. */
 const PROGRAM = "poplin";
@@ -21,7 +21,7 @@ export function argumentsOf(spec: Pick<CommandSpec, "arguments">): string {
  *
  * It prints nothing and never ends the process: a line a command refuses is thrown as a `CommanderError`. It has no flag and no help command of its own: the flags are the table's, and are read apart from it.
  *
- * @returns the program, whose commands are those of the table in its order
+ * @returns the program, whose commands are those of the table in its order, with the command that makes an install before the others about one
  */
 export function buildProgram(): Command {
   const program = new Command(PROGRAM)
@@ -32,7 +32,11 @@ export function buildProgram(): Command {
     .showSuggestionAfterError(false)
     .argument("[words...]");
 
-  for (const spec of COMMANDS satisfies readonly CommandSpec[]) {
+  const specs: readonly CommandSpec[] = COMMANDS;
+  const first = specs.findIndex((spec) => spec.group === INSTALL_COMMAND.group);
+
+  // The command that makes an install leads the group of the commands about one.
+  for (const spec of [...specs.slice(0, first), { ...INSTALL_COMMAND, flags: [], examples: [] }, ...specs.slice(first)]) {
     const command = program.command(spec.name).description(spec.about).helpGroup(spec.group).usage(`${argumentsOf(spec)} [flags]`.trimStart());
 
     for (const argument of spec.arguments) command.argument(argument.required ? `<${argument.name}>` : `[${argument.name}]`, argument.about);

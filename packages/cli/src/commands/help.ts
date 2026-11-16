@@ -2,7 +2,7 @@
 
 import type { Command, Help } from "commander";
 
-import { BARE_COMMAND, COMMANDS, type CommandName, type CommandSpec, SESSION } from "./command-table";
+import { BARE_COMMAND, COMMANDS, type CommandName, type CommandSpec, INSTALL_COMMAND, SESSION } from "./command-table";
 import { SETTING_SAMPLES } from "./install-settings";
 import { argumentsOf, buildProgram } from "./program";
 
@@ -47,7 +47,7 @@ function overview(program: Command, helper: Help): string {
   const [first, ...others]: readonly CommandSpec[] = COMMANDS;
   const everywhere = (first?.flags ?? []).filter((flag) => others.every((spec) => spec.flags.some((other) => other.name === flag.name)));
   const groups = helper.groupItems([...program.commands], helper.visibleCommands(program), (command) => command.helpGroup());
-  const term = (command: Command): string => `${command.name()} ${argumentsOf(specOf(command) ?? { arguments: [] })}`.trimEnd();
+  const term = (command: Command): string => `${command.name()} ${argumentsOf(specOf(command) ?? INSTALL_COMMAND)}`.trimEnd();
   const listing = [...groups].map(([title, commands]) => ({
     title,
     lines: commands.map((command) => helper.formatItem(term(command), TERM_WIDTH, helper.subcommandDescription(command), helper)),
