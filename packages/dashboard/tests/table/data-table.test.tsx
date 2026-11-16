@@ -176,6 +176,38 @@ describe("the table", () => {
 
     expect(seen.opened).toEqual(["apple"]);
   });
+
+  // Drift: a heading's name would carry the names of its two tools again, and a screen reader would say all three at every cell.
+  test("names each heading by its words alone, and the tools in it by their own", () => {
+    render(<Harness />);
+    // A name given as a string is matched whole, so a heading that also carried its tools' names would not be found.
+    const found = ["Name", "Colour", "Weight", "Actions"].map((name) => page().getAllByRole("columnheader", { name }).length);
+
+    expect(found).toEqual([1, 1, 1, 1]);
+    expect(page().getByRole("button", { name: "Move the Colour column" })).toBeDefined();
+    expect(page().getByRole("separator", { name: "Resize the Colour column" })).toBeDefined();
+  });
+
+  // Drift: the edge that resizes a column would be a bare button again: no value for a screen reader, or a value that is not the width drawn, and no key that puts the width back.
+  test("resizes a column from its edge by the arrow keys down to the narrowest, says the width as the edge's value, and puts it back at Enter", () => {
+    roomOf(600);
+    render(<Harness />);
+    const edge = (): HTMLElement => page().getByRole("separator", { name: "Resize the Colour column" });
+    const said = (): (string | null)[] => ["aria-valuenow", "aria-valuemin", "aria-valuetext"].map((name) => edge().getAttribute(name));
+    const first = said();
+
+    fireEvent.keyDown(edge(), { key: "ArrowRight" });
+    fireEvent.keyDown(edge(), { key: "ArrowRight" });
+    expect(seen.layout?.sizes).toEqual({ colour: 80 });
+    expect(said()).toEqual(["80", "48", "80 pixels"]);
+
+    for (let press = 0; press < 5; press += 1) fireEvent.keyDown(edge(), { key: "ArrowLeft" });
+    expect(seen.layout?.sizes).toEqual({ colour: 48 });
+
+    fireEvent.keyDown(edge(), { key: "Enter" });
+    expect(seen.layout?.sizes).toEqual({});
+    expect(said()).toEqual(first);
+  });
 });
 
 describe("a table's layout", () => {

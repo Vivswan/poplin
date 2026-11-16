@@ -161,7 +161,7 @@ const STOPS: readonly Stop[] = [
       await toSection(page, "Sites");
       await narrowSites(page, "Trash");
     },
-    shows: (page) => [page.getByRole("button", { name: "Restore", exact: true }).first()],
+    shows: (page) => [page.getByRole("button", { name: /^Restore /u }).first()],
     close: (page) => narrowSites(page, "All sites"),
   },
   {
@@ -611,6 +611,45 @@ test.describe("on a screen 1024 px wide", () => {
   });
 });
 
+test.describe("on a screen 1024 px wide, at the edge of a column", () => {
+  test.use({ viewport: FITS_FROM });
+
+  // Drift: a heading's name would carry the names of its tools again; or its edge would be a strip 10 px wide that one engine leaves out of the Tab order, that says no width, and that only a mouse puts back.
+  test("a heading is named by its words alone; its edge is the next stop after its grip, 24 px wide, says the column's width, widens it at an arrow key, and puts it back at Enter", async ({ page }) => {
+    await arrive(page);
+    await sitesFit(page);
+    const heading = page.getByRole("table", { name: "Sites", exact: true }).getByRole("columnheader", { name: "Who can open it", exact: true });
+    const edge = heading.getByRole("separator", { name: "Resize the Who can open it column", exact: true });
+    const drawn = async (): Promise<string> => String(Math.round((await heading.boundingBox())?.width ?? Number.NaN));
+    const before = await drawn();
+
+    await heading.getByRole("button", { name: "Move the Who can open it column", exact: true }).focus();
+    await page.keyboard.press("Tab");
+    await expect(edge).toBeFocused();
+    expect((await edge.boundingBox())?.width).toBe(24);
+    await expect(edge).toHaveAttribute("aria-valuenow", before);
+
+    await page.keyboard.press("ArrowRight");
+    await expect(edge).toHaveAttribute("aria-valuenow", String(Number(before) + 16));
+    expect(await drawn()).toBe(String(Number(before) + 16));
+
+    await page.keyboard.press("Enter");
+    await expect(edge).toHaveAttribute("aria-valuenow", before);
+    await sitesFit(page);
+
+    // An edge reaches 12 px into the headings at both its sides: no button there may lose a press at either of its ends to it.
+    const lost = await page.getByRole("table", { name: "Sites", exact: true }).evaluate((table) =>
+      [...table.querySelectorAll("thead button")].flatMap((button) => {
+        const box = button.getBoundingClientRect();
+        const ends = [box.left + 1, box.right - 1].filter((x) => document.elementFromPoint(x, box.top + box.height / 2)?.role === "separator");
+
+        return ends.length === 0 ? [] : [button.getAttribute("aria-label") ?? button.textContent];
+      }),
+    );
+    expect(lost).toEqual([]);
+  });
+});
+
 test.describe("on a screen 1920 px wide", () => {
   test.use({ viewport: { width: 1920, height: 1080 } });
 
@@ -735,7 +774,7 @@ test.describe("on a screen 1440 px wide, under a site's panel", () => {
     await arrive(page);
     const row = page.getByRole("row").filter({ has: page.getByRole("button", { name: `Details of ${SAMPLE.graphed}`, exact: true }) });
     const beside = row.getByRole("button", { name: `Details of ${SAMPLE.graphed}`, exact: true });
-    const under = row.getByRole("button", { name: "Open the site", exact: true });
+    const under = row.getByRole("button", { name: /^Open the site /u });
 
     await openPanel(page, SAMPLE.site);
     await beside.focus();
@@ -824,7 +863,7 @@ test.describe("on a phone, while a line says a result", () => {
     await panel(page).getByRole("button", { name: "New link", exact: true }).click({ timeout: 2000 });
     await leaveBy("Cancel")(page);
 
-    await panel(page).getByRole("button", { name: "Make live", exact: true }).first().click();
+    await panel(page).getByRole("button", { name: /^Make live: version \d+$/u }).first().click();
     await expect(lines(page).filter({ hasText: /is live now/ })).toBeVisible();
     await expect(lines(page)).toHaveCount(1);
 
@@ -962,11 +1001,11 @@ test.describe("on a phone, on Activity", () => {
     const entries = page.getByRole("list", { name: "Activity", exact: true }).getByRole("listitem");
     const ofSite = page.getByRole("link", { name: SAMPLE.site, exact: true });
 
-    await entries.filter({ has: ofSite }).first().getByRole("button", { name: "Only this site", exact: true }).click();
+    await entries.filter({ has: ofSite }).first().getByRole("button", { name: /^Only /u }).click();
     await expect(page.getByText(`Only ${SAMPLE.site}`, { exact: true })).toBeVisible();
     await expect(entries.filter({ hasNot: ofSite })).toHaveCount(0);
     await expect(entries.filter({ has: ofSite })).not.toHaveCount(0);
-    await expect(page.getByRole("button", { name: "Only this site", exact: true })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: /^Only /u })).toHaveCount(0);
   });
 
   // Drift: one engine would cut the end off a site's name again though the row has room for it: the name's link reaches past the box that cuts it by the link's own edges.
@@ -1052,7 +1091,7 @@ test("a public site is asked about before its public link ends, Cancel leaves it
 test("after a change the focus is where the next key is of use: the panel's heading, also after Undo, the refused field, the button that adds a user, another page's first row, the button of one site's mark, a reset setting's field", async ({ page }) => {
   await arrive(page);
   await openPanel(page, SAMPLE.site);
-  await panel(page).getByRole("button", { name: "Make live", exact: true }).first().click();
+  await panel(page).getByRole("button", { name: /^Make live: version \d+$/u }).first().click();
   await expect(page.getByText(/is live now/)).toBeVisible();
   await expect(panel(page).getByRole("heading", { name: SAMPLE.site, exact: true })).toBeFocused();
 
@@ -1097,14 +1136,14 @@ test("after a change the focus is where the next key is of use: the panel's head
   await log.getByRole("button", { name: "Next page", exact: true }).click();
   await expect(log.getByRole("button", { name: "First page", exact: true })).toBeEnabled();
   await expect(log.locator("tbody > tr").first()).toBeFocused();
-  await log.getByRole("button", { name: "Only this site", exact: true }).first().click();
+  await log.getByRole("button", { name: /^Only /u }).first().click();
   await expect(log.getByRole("button", { name: "Show every site", exact: true })).toBeFocused();
 
   // Reset leaves once the default is back.
   const perDay = page.getByRole("textbox", { name: "Requests per day", exact: true });
   await toSection(page, "Settings");
   await perDay.fill("1234");
-  await page.locator("#setting-requests_per_day").getByRole("button", { name: "Reset", exact: true }).click();
+  await page.locator("#setting-requests_per_day").getByRole("button", { name: "Reset Requests per day", exact: true }).click();
   await expect(perDay).toBeFocused();
 });
 
@@ -1160,11 +1199,11 @@ test("on Activity, Only this site keeps the entries of the row's site, the first
   const log = rows(page, true, "Activity").locator("tbody");
   const mark = page.getByText(`Only ${SAMPLE.site}`, { exact: true });
   const ofSite = page.getByRole("link", { name: SAMPLE.site, exact: true });
-  await log.getByRole("row").filter({ hasText: "Made a new link", has: ofSite }).getByRole("button", { name: "Only this site", exact: true }).click();
+  await log.getByRole("row").filter({ hasText: "Made a new link", has: ofSite }).getByRole("button", { name: /^Only /u }).click();
   await expect(mark).toBeVisible();
   await expect(log.getByRole("row").filter({ hasText: "Made the site" })).toHaveCount(1);
   await expect(log.getByRole("row").filter({ hasNot: ofSite })).toHaveCount(0);
-  await expect(page.getByRole("button", { name: "Only this site", exact: true })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: /^Only /u })).toHaveCount(0);
 
   await page.getByRole("button", { name: "Show every site", exact: true }).click();
   await expect(mark).toBeHidden();
@@ -1322,4 +1361,25 @@ test("a site in the trash is deleted for good only once its name is typed, with 
 
   await toSection(page, "Activity");
   await expect(page.locator(':text-is("Deleted for good"):visible').first()).toBeVisible();
+});
+
+// Drift: a search or a filter would change a list's rows with nothing said to a screen reader again; or a second search that finds as many rows would be said in the same words, which is not said at all.
+test("a list says how many rows it shows, and that it shows none, each time it is searched", async ({ page }) => {
+  await arrive(page);
+  const sites = page.locator('section[aria-label="Sites"] output');
+  const findSite = page.getByRole("searchbox", { name: "Find a site", exact: true });
+  await expect(sites).toHaveText(/^\d+ sites( on this page)?$/u);
+  await findSite.fill("zzzz");
+  await expect(sites).toHaveText('No sites match "zzzz"');
+  // Two searches that each find one site are said apart: the line names what was searched for.
+  await findSite.fill(SAMPLE.site);
+  await expect(sites).toHaveText(`1 site, "${SAMPLE.site}"`);
+  await findSite.fill(SAMPLE.graphed);
+  await expect(sites).toHaveText(`1 site, "${SAMPLE.graphed}"`);
+
+  await toSection(page, "Activity");
+  const log = page.locator('section[aria-label="Activity"] output');
+  await expect(log).toHaveText(/^\d+ entries( on this page)?$/u);
+  await page.getByRole("searchbox", { name: "Find activity by a site's title or name", exact: true }).fill("zzzz");
+  await expect(log).toHaveText('No activity for "zzzz"');
 });

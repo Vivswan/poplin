@@ -3,6 +3,7 @@
 // Where they do not fit the room, even with every value that gives cut to its shortest, the table scrolls sideways in its own area, between the first column and the rows' actions, which stay in place.
 
 import { ScrollArea as ScrollAreaParts } from "@base-ui/react/scroll-area";
+import { Separator } from "@base-ui/react/separator";
 import {
   type Announcements,
   closestCenter,
@@ -63,7 +64,7 @@ const LOADING_ROWS = 6;
 const OWN_CONTROLS = "a, button, input, [role^='menu'], [role='dialog']";
 
 /** The look of a heading's grip: it lies over the heading's far end, so it takes no room from the words, and shows when its heading is pointed at or it holds the focus. */
-const GRIP_LOOK = "absolute top-1.5 cursor-grab bg-background text-faint opacity-0 group-hover/head:opacity-100 focus-visible:opacity-100 active:cursor-grabbing";
+const GRIP_LOOK = "absolute top-1.5 z-15 cursor-grab bg-background text-faint opacity-0 group-hover/head:opacity-100 focus-visible:opacity-100 active:cursor-grabbing";
 
 /** The look of the table: columns of the widths it is told, and hairlines drawn by the cells. */
 const TABLE_LOOK = "mb-2.5 table-fixed border-separate border-spacing-0 text-sm";
@@ -87,11 +88,17 @@ const CELL_LOOK = "h-11 px-3 py-0";
 /** The look of a heading while it is dragged to another place. */
 const DRAGGED_LOOK = "flex h-9 w-fit cursor-grabbing items-center rounded-md border bg-popover px-3 text-xs text-foreground shadow-md";
 
-/** The look of a column's edge: a hairline that shows under the pointer, with the focus, and while it is dragged. */
+/** The look of a column's edge: 24 px to press, under the buttons of the headings it reaches over, and a hairline that shows under the pointer, with the focus, and while it is dragged. */
 const EDGE_LOOK = cn(
-  "absolute top-0 right-0 z-10 m-0 flex h-full w-2.5 cursor-col-resize touch-none justify-end border-0 bg-transparent p-0 outline-none",
+  "absolute top-0 z-10 flex h-full w-6 cursor-col-resize touch-none outline-none",
   "after:h-full after:w-px after:bg-transparent hover:after:bg-ring focus-visible:after:w-0.5 focus-visible:after:bg-ring",
 );
+
+/** Where a column's edge is pressed: half in its own column and half in the next, over the room beside their words. The last column's lies inside it, so the table grows no wider; so does the edge of the column that stays in place. */
+const [EDGE_BETWEEN, EDGE_INSIDE] = ["-right-3 justify-center", "right-0 justify-end"];
+
+/** What a pointer and a screen reader are told an edge does. */
+const EDGE_HINT = "Drag or use the arrow keys to resize. Double-click or Enter resets.";
 
 /** One column of a table. */
 export interface ColumnSpec<Row> extends SizedColumn {
@@ -204,9 +211,56 @@ function landingMark(over: boolean, from: number, at: number): string | false {
   return from > at ? "shadow-[inset_2px_0_0_var(--ring)]" : "shadow-[inset_-2px_0_0_var(--ring)]";
 }
 
+/** Where a heading's grip lies: over the far end of its words, clear of the edges at both sides of the column. */
+function gripPlace(numeric: boolean, ends: boolean): string {
+  if (numeric) return "left-3";
+
+  return ends ? "right-6" : "right-3";
+}
+
 /** The room after a cell's value where the cell is the last of a row that no actions follow. */
 function endRoom(cells: readonly unknown[], at: number, withoutActions: boolean): string | false {
   return withoutActions && at === cells.length - 1 && END_ROOM;
+}
+
+/** The edge of a column, which resizes it: dragged, moved by the arrow keys, and put back by a double press or Enter. A screen reader is told the column's width as its value, which has no upper bound but the table library's own. */
+function ColumnEdge({
+  header,
+  name,
+  inside,
+  onNudge,
+}: {
+  readonly header: Head;
+  readonly name: string;
+  readonly inside: boolean;
+  readonly onNudge: (by: number) => void;
+}): ReactNode {
+  const width = Math.round(header.getSize());
+  const onKey = (event: KeyboardEvent): void => {
+    if (event.key !== "ArrowLeft" && event.key !== "ArrowRight" && event.key !== "Enter") return;
+
+    event.preventDefault();
+    if (event.key === "Enter") header.column.resetSize();
+    else onNudge(event.key === "ArrowLeft" ? -NUDGE : NUDGE);
+  };
+
+  return (
+    <Separator
+      orientation="vertical"
+      tabIndex={0}
+      aria-label={`Resize the ${name} column`}
+      aria-valuenow={width}
+      aria-valuemin={NARROWEST}
+      aria-valuemax={Number.MAX_SAFE_INTEGER}
+      aria-valuetext={`${width} pixels`}
+      title={EDGE_HINT}
+      onMouseDown={header.getResizeHandler()}
+      onTouchStart={header.getResizeHandler()}
+      onDoubleClick={() => header.column.resetSize()}
+      onKeyDown={onKey}
+      className={cn(EDGE_LOOK, inside ? EDGE_INSIDE : EDGE_BETWEEN, header.column.getIsResizing() && "after:w-0.5 after:bg-ring")}
+    />
+  );
 }
 
 function HeadCell<Row>({
@@ -236,13 +290,11 @@ function HeadCell<Row>({
     const next = header.column.getNextSortingOrder();
     onSort?.(next === false ? undefined : { key: spec.id, descending: next === "desc" });
   };
-  const words = <span className="truncate">{spec.header}</span>;
-  const onEdgeKey = (event: KeyboardEvent): void => {
-    if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
-
-    event.preventDefault();
-    onNudge(spec.id, event.key === "ArrowLeft" ? -NUDGE : NUDGE);
-  };
+  const words = (
+    <span className="truncate" title={spec.header}>
+      {spec.header}
+    </span>
+  );
 
   return (
     <th
@@ -250,7 +302,7 @@ function HeadCell<Row>({
       scope="col"
       data-column={spec.id}
       aria-sort={ariaSort(sortable, spec.id, sort)}
-      title={spec.header}
+      aria-label={spec.header}
       className={cn(
         "group/head relative h-9 border-b bg-background p-0 text-left text-xs font-normal text-muted-foreground select-none",
         fixed && "sticky left-0 z-20",
@@ -268,7 +320,7 @@ function HeadCell<Row>({
             variant="ghost"
             size="xs"
             onClick={press}
-            className={cn("-mx-1 min-w-0 shrink gap-1 px-1 font-normal", sorted && "font-bold text-foreground")}
+            className={cn("relative z-15 -mx-1 min-w-0 shrink gap-1 px-1 font-normal", sorted && "font-bold text-foreground")}
           >
             {words}
             {sortArrow(sorted, sort.descending)}
@@ -285,22 +337,13 @@ function HeadCell<Row>({
             {...listeners}
             aria-label={`Move the ${spec.header} column`}
             title="Drag to move the column"
-            className={cn(GRIP_LOOK, spec.numeric === true ? "left-1" : "right-2.5")}
+            className={cn(GRIP_LOOK, gripPlace(spec.numeric === true, ends))}
           >
             <GripVerticalIcon className="size-3.5" />
           </Button>
         )}
       </div>
-      <button
-        type="button"
-        aria-label={`Resize the ${spec.header} column`}
-        title="Drag to resize; double-click to reset"
-        onMouseDown={header.getResizeHandler()}
-        onTouchStart={header.getResizeHandler()}
-        onDoubleClick={() => header.column.resetSize()}
-        onKeyDown={onEdgeKey}
-        className={cn(EDGE_LOOK, header.column.getIsResizing() && "after:w-0.5 after:bg-ring")}
-      />
+      <ColumnEdge header={header} name={spec.header} inside={ends || fixed} onNudge={(by) => onNudge(spec.id, by)} />
     </th>
   );
 }
@@ -386,7 +429,7 @@ function HeadRow<Row>({
       </SortableContext>
       {spare ? <td className="h-9 border-b bg-background p-0" /> : null}
       {withActions ? (
-        <th className={cn(PINNED_LOOK, "h-9 border-b bg-background p-0")}>
+        <th className={cn(PINNED_LOOK, "z-20 h-9 border-b bg-background p-0")}>
           <span className="sr-only">Actions</span>
         </th>
       ) : null}
