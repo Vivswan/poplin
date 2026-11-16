@@ -105,13 +105,16 @@ function AccessBlock({ site, onChoose }: { readonly site: Site; readonly onChoos
   );
 }
 
+/** Word a count of visits. A count is an estimate, so it says "about", but for none: "about 0" reads as a slip. */
+function aboutCount(count: number): string {
+  return count === 0 ? "0" : `about ${showCount(count)}`;
+}
+
 function FactsBlock({ site }: { readonly site: Site }): ReactNode {
   return (
     <PanelBlock>
       <PanelFacts>
-        <PanelFact name="Visits">
-          {site.views === null ? "Not known" : `about ${showCount(site.views.today)} today, about ${showCount(site.views.week)} in 7 days`}
-        </PanelFact>
+        <PanelFact name="Visits">{site.views === null ? "Not known" : `${aboutCount(site.views.today)} today, ${aboutCount(site.views.week)} in 7 days`}</PanelFact>
         <PanelFact name="Size">
           {showBytes(site.bytes)}, {site.files} {site.files === 1 ? "file" : "files"}
         </PanelFact>
