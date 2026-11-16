@@ -91,6 +91,17 @@ A token the Worker issues is never a Cloudflare API key. It has one of two scope
 | publisher | a computer or a script that should only publish, such as a build server or a shared machine: a user logs it in with `poplin login --publisher` and allows it in the dashboard, under Access | publish, and manage its own sites |
 | admin | a user, whose email is on the list of allowed logins; the dashboard's cookie carries the same rights | everything: every site, the settings, the tokens |
 
+The page that allows a computer's login treats what the login says of itself as a stranger's words, since anyone can begin one:
+
+| The page | So |
+| --- | --- |
+| has the fixed title `Allow this login?`, and shows the computer's name in quotes beside `Name it gave` | a login cannot write the question a user answers |
+| starts at Own sites only, whatever the login asked for | a token for everything is given only by a user who chose Everything |
+| is reached by an address that names the login and holds no part of its code | a link someone sent gives nothing to type |
+| is given no part of the code; the Worker checks the 4 letters the user types | the letters are in the terminal alone, so only its reader can allow the login |
+| opened by an address and not by a press on Review, says that anyone can start a login and send its link | a user who was sent a link is told so |
+| refuses a name with a line break, a control character, or a character that hides or turns text around | a name reads as it was written |
+
 A site belongs to the token that created it, or to the admin's email when it was duplicated on the dashboard. A publisher token updates and manages only the sites it created.
 
 What guards each address:

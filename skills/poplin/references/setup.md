@@ -214,12 +214,14 @@ Run the login with the dashboard's address. It prints a web address and a short 
 npx poplin login --server https://poplin.example.com
 ```
 
-Give the user both, each on its own line. The address opens the dashboard on a question that starts with Allow and names the computer. It shows a code.
+Give the user both, each on its own line. The address opens the dashboard on the question `Allow this login?`. The page asks for the last 4 letters of the code. Neither the page nor the address holds any of them, so the user needs the code you gave them.
 
-| The page's code | The user                                                 |
-| --------------- | -------------------------------------------------------- |
-| is the same     | ticks The codes match, then presses Allow                |
-| is another      | presses Deny: that approval would go to some other login |
+| The user                           | Does                                              |
+| ---------------------------------- | ------------------------------------------------- |
+| asked you for this login           | types the last 4 letters, then presses Allow      |
+| sees the page refuse those letters | presses Deny: that page is of some other login    |
+
+The page starts at Own sites only, which is all you need to publish and to manage the sites you publish. Do not ask the user to choose Everything.
 
 If you read output as JSON, add `--json`: the first line then carries the web address and the code.
 
