@@ -261,6 +261,8 @@ Each result comes with one line: the requests, the time, each answer's count, ea
 
 ## A request that is cut off
 
+The edge closes a connection it kept open, and a request sent on it then gets no answer. A client sends a read again by itself, and no other request. So every request of a run that is no read opens a connection of its own, in `send.ts`; reads keep the open ones.
+
 The edge's rules block with an answer: a 403. A stranger's request whose connection closes before any answer says nothing of a rule or of the install. The run sends it once more and reads the second answer, and the log holds one line for it. A request that is cut off twice reaches its check as cut off, and so does a change asked of the API, which is never sent twice.
 
 ```text
