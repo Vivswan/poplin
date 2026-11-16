@@ -369,18 +369,23 @@ The list is read with `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID`. The em
 
 ## The check of an assistant's page
 
-`crawler` sends the user agent of a crawler that reads sites in bulk. `assistant-fetch` sends the user agents of two assistants that open one page when their user asks for it, and says what the edge answered each.
+`crawler` sends the user agent of a crawler that reads sites in bulk, which the bot switches stop. `assistant-fetch` sends the user agents of two assistants that open one page when their user asks for it, which they do not stop.
 
 | The edge answered | The line says | Result |
 | ----------------- | ------------- | ------ |
-| 403               | `stopped`     | passed |
+| 403               | `stopped`     | failed |
 | anything else     | `let through` | passed |
 
 ```text
-assistant-fetch: ChatGPT-User stopped (403), Perplexity-User let through (302)
+assistant-fetch: ChatGPT-User let through (302), Perplexity-User let through (302); a run is no verified bot, so the bot switches answered, and the bots rule's pass for a verified assistant is held by the test of its expression
 ```
 
-The run's requests come from no address Cloudflare has verified as an assistant's. The bots rule reads `cf.client.bot`, which is true for a verified bot only, so it stops none of them: the answer is that of the zone's bot switches. The check is 2 requests where none is sent again, and no write to the bucket or the database.
+| What stands at the edge                | Reads                                       | Proved by                                                    |
+| -------------------------------------- | ------------------------------------------- | ------------------------------------------------------------ |
+| the bot switches, as `block_bots` says | the user agent, of any address              | `crawler` and `assistant-fetch`                              |
+| the bots rule                          | the kind of a bot Cloudflare has verified   | the test of the rule's expression, in the provider package   |
+
+A run's requests come from no address Cloudflare has verified, so the bots rule reads none of them. The check is 2 requests where none is sent again, and no write to the bucket or the database.
 
 ## The check of the rate rule
 

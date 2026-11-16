@@ -156,7 +156,7 @@ export interface FakeSwitches {
   /** A fault: the store refuses every ticket the install hands out for it. */
   readonly storeRefuses?: boolean;
 
-  /** The zone's bot block stops an assistant that opens one page for its user, as it stops a crawler. */
+  /** A fault: the zone's bot block stops an assistant that opens one page for its user, as it stops a crawler. */
   readonly stopsAssistants?: boolean;
 
   /** The store fails on the first file it is sent, as a store that is busy for a moment does, and takes every one after it. */
