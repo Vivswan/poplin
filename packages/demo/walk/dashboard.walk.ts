@@ -910,9 +910,12 @@ test("a screen that follows another one gives its title the focus and names the 
     }
   }
 
+  // One engine says a page is loaded before its frame is drawn: a Tab pressed by then finds no control.
+  const skip = page.getByRole("button", { name: "Skip to the content", exact: true });
   await page.reload();
+  await expect(skip).toBeAttached();
   await page.keyboard.press("Tab");
-  await expect(page.getByRole("button", { name: "Skip to the content", exact: true })).toBeFocused();
+  await expect(skip).toBeFocused();
   await page.keyboard.press("Enter");
   await expect(screenHeading(page, "Sites")).toBeFocused();
 });
