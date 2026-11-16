@@ -33,7 +33,7 @@ export const USER_CHECKS: readonly Check[] = [
   {
     id: "users-follow",
     name: "a user added through the install is in the login list at the provider with no repair, and a user removed is out of it",
-    needs: ["token", "kept-key", "login-list"],
+    needs: ["token", "access", "kept-key", "login-list"],
     run: async (bench) => {
       const before = await storedLogins(bench);
       const email = `${bench.prefix}@example.com`;
