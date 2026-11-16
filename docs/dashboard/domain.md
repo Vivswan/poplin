@@ -5,7 +5,7 @@ order: 50
 
 # Domain
 
-What the dashboard's Domain screen shows and does, the last check it keeps, and the optional rules an account token can switch on; the first Repair is step 4 of [By hand](../start/by-hand.md#the-steps).
+What the dashboard's Domain screen shows and does, the last check it keeps, and the optional rules at Cloudflare with what makes each; the first Repair is step 4 of [By hand](../start/by-hand.md#the-steps).
 
 After the first login, Domain does what the setup page did.
 
@@ -20,7 +20,7 @@ Cloudflare's login page keeps its own list of users. After a user is added or re
 
 On an install that holds no key, the line says `Users changed. Press Repair.` until a Repair. Where a piece is to repair or was not done, the line counts those first.
 
-A saved `search_engines_allowed` or `outside_pages` is written into its WAF rule the same way, with the key; `block_bots`, the DNS records, the routes, and the redirect change only when you press Repair.
+A saved `search_engines_allowed` or `outside_pages` is written into its WAF rule the same way, with the key, and makes a rule the domain lacks: [which rule is made when](#optional-block-junk-traffic-and-crawlers). `block_bots`, the DNS records, the routes, and the redirect change only when you press Repair.
 
 Check and Repair each open a dialog that asks for an account token:
 
@@ -57,13 +57,32 @@ ok  domain    The login for private sites is missing or changed, so private site
 
 ## Optional: block junk traffic and crawlers
 
-The install works without this part. Three more permissions on the token let Cloudflare stop unwanted requests before they reach the Worker. Add any of them, on any day.
+The install works without this part. Cloudflare can stop unwanted requests before they reach the Worker, with five rules:
 
-| First box | Second box      | Third box | With it, Cloudflare                                                           | Without it                                                                                  |
-| --------- | --------------- | --------- | ----------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
-| Zone      | Zone WAF        | Edit      | stops verified bots, scanner paths, pages of other domains, and floods        | they reach the Worker. It refuses pages of other domains while `outside_pages` is `blocked` |
-| Zone      | Single Redirect | Edit      | sends http to https                                                           | the Worker sends the same redirect                                                          |
-| Zone      | Bot Management  | Edit      | blocks AI crawlers on the whole domain, as the setting `block_bots` says    | poplin switches no such block on                                                            |
+| Rule                     | Stops                                                         | Made                                                                                      |
+| ------------------------ | ------------------------------------------------------------- | ----------------------------------------------------------------------------------------- |
+| the bots rule            | verified bots and scanner paths                               | by a Repair with Zone WAF: Edit, or when one of two settings is saved                     |
+| the outside pages rule   | pages of other domains, while `outside_pages` is `blocked`    | the same two ways                                                                         |
+| the rate rule            | floods                                                        | by a Repair with Zone WAF: Edit                                                           |
+| the redirect             | plain http, which it sends to https                           | by a Repair with Single Redirect: Edit                                                    |
+| the block of AI crawlers | AI crawlers on the whole domain, as `block_bots` says         | by a Repair with Bot Management: Edit                                                     |
+
+**A saved setting makes two of them.** On an install that holds its key, saving `search_engines_allowed` or `outside_pages` writes the bots rule, and the outside pages rule while `outside_pages` is `blocked`. A rule the domain lacks is made, and one its plan has no room for is left out.
+
+No permission is added for it, and no Repair is pressed.
+
+| An install                         | Holds its key                                                                                         |
+| ---------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| set up on the setup page           | from its first Repair: Account API Tokens: Edit is one of the nine permissions, and the key holds the right to write WAF rules whatever else the token held |
+| made by the OpenTofu module        | only after a Repair on this screen. Until then its rules are the module's, written at an apply        |
+
+Three more permissions on the token let Repair make the rules. Add any of them, on any day.
+
+| First box | Second box      | Third box | With it, Repair makes                                         | Without it                                                                                  |
+| --------- | --------------- | --------- | ------------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
+| Zone      | Zone WAF        | Edit      | the bots rule, the outside pages rule, and the rate rule      | Repair makes none of the three. Requests no rule stops reach the Worker, which refuses pages of other domains while `outside_pages` is `blocked` |
+| Zone      | Single Redirect | Edit      | the redirect                                                  | the Worker sends the same redirect                                                          |
+| Zone      | Bot Management  | Edit      | the block of AI crawlers                                      | poplin switches no such block on                                                            |
 
 | Step | Where                              | Do                                                                          |
 | ---- | ---------------------------------- | --------------------------------------------------------------------------- |
@@ -74,8 +93,6 @@ The install works without this part. Three more permissions on the token let Clo
 A row that said `optional` now says what Repair did, such as `created`.
 
 Three settings save without these permissions. The dashboard has them in Settings, under Visitors. What Cloudflare does for `block_bots` starts once you press Repair, in step 3 of this table.
-
-An install that holds its key writes the rules of the other two by itself, at their next change.
 
 | Setting                  | In the dashboard              |
 | ------------------------ | ----------------------------- |
