@@ -3,7 +3,7 @@ import { describe, expect, test } from "bun:test";
 import type { Blocked, Found, Installer, Row, Token } from "../../../../core/src/install/installer";
 import { TOKEN_VARIABLE } from "../../../src/install/ask";
 import { jsonOf } from "../../commands/support/harness";
-import { ADDRESS, type Account, accountQuestion, emptyAccount, FRESH, installedOf, type Place, type Ran, runLine, standIn, TOKEN, type Where } from "../support/stand-in";
+import { ADDRESS, type Account, accountQuestion, emptyAccount, FRESH, installedOf, type Place, type Ran, repairedOf, runLine, standIn, TOKEN, type Where } from "../support/stand-in";
 
 /** The environment of a run whose token is in its variable. */
 const HELD = { [TOKEN_VARIABLE]: TOKEN };
@@ -13,6 +13,12 @@ const RUN = "install stand-in --no-place --login you@example.com --yes";
 
 /** What runs the command again, as the one JSON value names it. */
 const AGAIN = { step: "install", command: "npx poplin install stand-in" };
+
+/** An object a repair is stopped at. */
+const STOPPED_AT: Row = { object: "Program", state: "block", detail: "the token lacks Programs: Edit" };
+
+/** The repair, as the one JSON value names it for the next step. */
+const REPAIR = { step: "repair", command: "npx poplin doctor --repair" };
 
 /** What the made-up provider found with the token. */
 const PLACE: Place = { token: TOKEN as Token };
@@ -189,24 +195,46 @@ describe("what a look finds", () => {
     expect(ran.code).toBe(1);
     expect(ran.out).toEqual(["looking for an install ... found"]);
     expect(ran.err).toEqual([
-      `This account already holds poplin 0.1.0, at ${ADDRESS}. nothing was changed. The way on is npx poplin doctor --repair.`,
+      `This account already holds poplin 0.1.0, at ${ADDRESS}, and it is as it should be. nothing was changed.`,
+      `The way on: npx poplin login --server ${ADDRESS}`,
       "  to check it   npx poplin doctor",
       "  to mend it    npx poplin doctor --repair",
       "  to update it  npx poplin update              (0.2.0 is out)",
       "  to remove it  npx poplin uninstall stand-in",
     ]);
-    expect(account.runs).toEqual([]);
+    expect<unknown>([account.runs, account.changes, account.repairs.map((asked) => [asked.where, asked.mend])]).toEqual([[], 0, [[{ kind: "none" }, { run: "dry-run", addUser: undefined }]]]);
   });
 
-  test("a whole install is the problem already_installed for a program, in a run and in a dry run: without this an agent cannot tell it from a failure", async () => {
-    const account = accountWith({ state: "whole", place: PLACE, version: undefined, address: ADDRESS, newest: undefined });
+  // Drift: the line once named the repair for every install that is there. A person whose install was whole was sent to mend it, when the way on was to log in.
+  test.each([
+    ["needs nothing mended", undefined, { mend: "nothing" }, ", and it is as it should be", [`The way on: npx poplin login --server ${ADDRESS}`], { step: "login", command: `npx poplin login --server ${ADDRESS}` }],
+    ["lacks an object a repair makes", repairedOf([{ object: "Guard rule", state: "make", detail: "bots" }]), { mend: "something" }, ", and it is not as it should be", ["The way on: npx poplin doctor --repair"], REPAIR],
+    ["has an object a repair is stopped at", repairedOf([STOPPED_AT], { ready: false }), { mend: "something" }, ", and it is not as it should be", ["The way on: npx poplin doctor --repair"], REPAIR],
+    [
+      "answers at another place than the one named",
+      { ok: false, why: "elsewhere", words: "The install here is at a place: give --place example.com." },
+      { mend: "unread", unread: "The install here is at a place: give --place example.com." },
+      "",
+      ["Whether it is as it should be was not read: The install here is at a place: give --place example.com.", "To see: npx poplin doctor --repair --dry-run"],
+      REPAIR,
+    ],
+    [
+      "holds records of another version",
+      { ok: false, why: "another", words: "The install's records are of a newer poplin." },
+      { mend: "unread", unread: "The install's records are of a newer poplin." },
+      "",
+      ["Whether it is as it should be was not read: The install's records are of a newer poplin.", "To see: npx poplin@latest doctor --repair --dry-run"],
+      { step: "repair", command: "npx poplin@latest doctor --repair" },
+    ],
+  ] as const)("a whole install that %s is the problem already_installed with the way on that is true of it, in a run and in a dry run: without this an agent cannot tell it from a failure", async (_name, repaired, mend, state, way, next) => {
+    const account = { ...accountWith({ state: "whole", place: PLACE, version: undefined, address: ADDRESS, newest: undefined }), repaired };
     const run = await runLine(`${RUN} --json`, account, { env: HELD });
     const dry = await runLine(`${RUN} --dry-run --json`, account, { env: HELD });
 
     expect([run.code, dry.code]).toEqual([1, 1]);
-    expect(jsonOf(run)).toEqual({ ok: false, problem: "already_installed", next: { step: "repair", command: "npx poplin doctor --repair" }, found: { version: null, address: ADDRESS, newest: null }, run: "apply", ready: false });
-    expect(jsonOf(dry)).toMatchObject({ problem: "already_installed", run: "dry-run", ready: false });
-    expect(run.err[0]).toBe(`This account already holds poplin (version not read), at ${ADDRESS}. nothing was changed. The way on is npx poplin doctor --repair.`);
+    expect(jsonOf(run)).toEqual({ ok: false, problem: "already_installed", next, found: { version: null, address: ADDRESS, newest: null, ...mend }, run: "apply", ready: false });
+    expect(jsonOf(dry)).toMatchObject({ problem: "already_installed", next, run: "dry-run", ready: false });
+    expect(run.err.slice(0, 1 + way.length)).toEqual([`This account already holds poplin (version not read), at ${ADDRESS}${state}. nothing was changed.`, ...way]);
   });
 
   test("something left behind stops a run that asks nothing, and names --adopt: without this a run would take another install's records silently", async () => {
@@ -217,7 +245,7 @@ describe("what a look finds", () => {
     expect(run.code).toBe(1);
     expect(run.err).toEqual([
       "Records named poplin are in this account, and no poplin runs.",
-      "To use it, with what it holds: run this again with --adopt. To set it aside, rename or delete it here:",
+      "To use it, with what it holds: run this again with --adopt. To start without it, delete it here first, with what it holds:",
       "  https://host.example.com/records",
       "nothing was changed",
     ]);
@@ -329,16 +357,24 @@ describe("what a run comes to", () => {
     expect(await lastLines({ state: "started", place: PLACE, notes: [] })).toEqual(["1", "Do this in your browser, then run this command again:", "1 not done. Run this command again: it goes on from what stands."]);
   });
 
-  test("an install that does not answer in 5 minutes exits 1 and offers no login: without this a person is sent to an address that shows nothing", async () => {
+  test("an install that does not answer in 5 minutes exits 1, is called made and not installed, and offers no login: without this a person is told of an install at an address that shows nothing", async () => {
     const ran = await runLine(`${RUN} --log-in --json`, emptyAccount(), { env: HELD, statuses: [503] });
     const plain = await runLine(RUN, emptyAccount(), { env: HELD, statuses: [503] });
 
     expect(ran.code).toBe(1);
-    expect(jsonOf(ran)).toMatchObject({ ok: false, ready: true, answers: false });
+    expect(jsonOf(ran)).toMatchObject({ ok: false, ready: true, answers: false, next: { step: "login", command: `npx poplin login --server ${ADDRESS}` } });
     expect([ran.reached.length, ran.slept.length, new Set(ran.slept)]).toEqual([60, 59, new Set([5000])]);
     expect(plain.code).toBe(1);
     expect(ran.fetched).toEqual([]);
-    expect(plain.out).toContain(`no answer yet at ${ADDRESS}: it can take a few more minutes`);
+    expect(plain.out.slice(MADE.length + 1)).toEqual([
+      `waiting for ${ADDRESS} to answer`,
+      `no answer yet at ${ADDRESS}: it can take a few more minutes`,
+      "poplin 0.1.0 is made, and its address does not answer yet.",
+      `Your dashboard: ${ADDRESS}`,
+      `Once it answers, log in: npx poplin login --server ${ADDRESS}`,
+      "If it still does not: npx poplin doctor --repair",
+      "The token was used for this run and is stored nowhere. You can delete it at Stand-In Host.",
+    ]);
   });
 
   test("the wait asks again every 5 seconds until the install answers 401, and takes a redirect or a failure as no answer yet: without this a login page in front of a new name reads as the install", async () => {

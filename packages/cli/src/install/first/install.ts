@@ -4,7 +4,7 @@
 //
 // A dry run goes the same way and changes nothing. Nothing is kept on this computer, and the token is in no line and no value.
 
-import type { Found, Installed, Startable } from "../../../../core/src/install/installer";
+import type { Found, Installed, Startable, Whole } from "../../../../core/src/install/installer";
 import { exitCode } from "../../commands/exit-codes";
 import { logIn } from "../../commands/login";
 import { problemLines } from "../../commands/problems";
@@ -15,7 +15,7 @@ import { runCommand, type Show, stopped } from "../ends";
 import { installHelp } from "./help";
 import { parseInstall } from "./parse";
 import type { InstallEnds, InstallRequest, Next, Plan, Stop } from "../records";
-import { dryRunLines, followed, NEXT, rowLine, runLines, runValue, UNCHANGED } from "../report";
+import { changesIn, dryRunLines, followed, NEXT, repairAfter, rowLine, runLines, runValue, UNCHANGED } from "../report";
 
 /** What the look for an install is called while it runs and in its line. */
 const LOOKING = "looking for an install";
@@ -35,8 +35,8 @@ const FOUND_WORDS: Readonly<Record<Found<unknown, unknown>["state"], string>> = 
 /** The command as it is typed after `poplin`, and what runs it again. */
 const COMMAND = { name: "install", again: NEXT.install } as const;
 
-/** The last line of a run that named no release: it went on with a program that was there, and uploaded none. */
-const UNCHECKED = "poplin is installed. Its code was there before this run, and this run did not check it against a release.";
+/** What follows the name of a run that named no release: it went on with a program that was there, and uploaded none. */
+const UNCHECKED = "Its code was there before this run, and this run did not check it against a release.";
 
 /** What a look came to that a run goes on from, with the place the provider was last asked about. */
 interface Ground {
@@ -50,10 +50,26 @@ interface Ended {
   readonly value: Readonly<Record<string, unknown>>;
 }
 
-/** The stop a look that found no ground to start from is. */
-function stopOf(found: Exclude<Found<unknown, unknown>, { readonly state: "none" | "started" | "leftover" | "choice" }>): Stop {
-  if (found.state === "whole") return { problem: "already_installed", exit: 1, version: found.version, address: found.address, newest: found.newest, next: NEXT.repair() };
+/**
+ * The stop of an install that is there: this command changes nothing of it, and says what goes on from it.
+ *
+ * A repair's dry run, which only reads, says whether the install needs mending: one that does not is logged in to, and one that does is mended.
+ * Where the provider refuses that read, its own sentence says why, such as an install that answers at another place than the one named.
+ *
+ * @param where - the place the provider was last asked about
+ */
+async function standing(found: Whole<unknown>, where: unknown, request: InstallRequest, ends: InstallEnds): Promise<Stop> {
+  const there = { problem: "already_installed", exit: 1, version: found.version, address: found.address, newest: found.newest } as const;
+  const read = await request.provider.repair(found, where, { run: "dry-run", addUser: undefined }, ends.reach, () => undefined);
+  if (!read.ok) return { ...there, mend: "unread", unread: read.words, next: repairAfter(read) };
 
+  if (!read.ready || changesIn(read.rows) > 0) return { ...there, mend: "something", next: NEXT.repair() };
+
+  return { ...there, mend: "nothing", next: NEXT.login(found.address) };
+}
+
+/** The stop a look that found no ground to start from is, and no install either. */
+function stopOf(found: Exclude<Found<unknown, unknown>, { readonly state: "none" | "started" | "leftover" | "choice" | "whole" }>): Stop {
   if (found.state === "held") return { problem: "name_held", exit: 1, words: found.words, address: found.address };
 
   if (found.state === "blocked") return { problem: "blocked", exit: 1, blocked: found.blocked };
@@ -108,6 +124,12 @@ async function look(request: InstallRequest, ends: InstallEnds, show: Show): Pro
   if ("problem" in looked) return looked;
 
   const { found, where } = looked;
+  if (found.state === "whole") {
+    show.working("reading whether it needs mending");
+
+    return standing(found, where, request, ends);
+  }
+
   if (found.state !== "none" && found.state !== "started" && found.state !== "leftover") return stopOf(found);
 
   const ground = await grounded(found, request, ends, show);
@@ -171,6 +193,18 @@ async function nextAfter(installed: Extract<Installed, { readonly ok: true }>, g
   return found.state === "whole" ? NEXT.repair() : NEXT.install(provider);
 }
 
+/**
+ * Say what a run that left nothing undone is called: installed, or made where its address gave no answer yet.
+ *
+ * @param release - the version the run uploaded; `undefined` for a run that went on with code that was there
+ * @param answers - whether the install answered at its address; `null` for a run that did not wait
+ */
+function doneWords(release: string | undefined, answers: boolean | null): string {
+  const state = answers === false ? "is made, and its address does not answer yet." : "is installed.";
+
+  return release === undefined ? `poplin ${state} ${UNCHECKED}` : `poplin ${release} ${state}`;
+}
+
 /** Say what a run that worked through its rows came to, and offer the login after one that left nothing undone. */
 async function ended(installed: Extract<Installed, { readonly ok: true }>, ground: Ground, request: InstallRequest, io: Io, ends: InstallEnds, show: Show): Promise<Ended> {
   const { mode } = request;
@@ -178,7 +212,7 @@ async function ended(installed: Extract<Installed, { readonly ok: true }>, groun
   const next = await nextAfter(installed, ground, request, ends);
   const value = runValue(installed, mode.mode, ground.found.state, answers, next);
   const code = exitCode({ kind: value.ok === true ? "done" : "failed" });
-  const done = installed.release === undefined ? UNCHECKED : `poplin ${installed.release} is installed.`;
+  const done = doneWords(installed.release, answers);
   const lines = mode.mode === "dry-run" ? dryRunLines(installed) : runLines(installed, request.provider, answers, { done, next, again: NEXT.install(request.provider) });
 
   for (const line of lines) show.line(line.tone, line.text);

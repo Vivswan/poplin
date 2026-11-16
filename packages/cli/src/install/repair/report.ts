@@ -1,15 +1,12 @@
 // How `poplin doctor --repair` words what it found and did: the install it found, its last lines, its help, and one JSON value for a program.
 // Each object's own line is the one `poplin install` prints for it.
 
-import type { Found, Repaired, RowState, Run, Whole } from "../../../../core/src/install/installer";
+import type { Found, Repaired, Run, Whole } from "../../../../core/src/install/installer";
 import { columns } from "../../commands/text";
 import { TOKEN_HELP } from "../ask";
 import type { Next, Provider, Stop } from "../records";
-import { DRY_RUN_HELP, dryRunLines, followed, type Line, NEXT, optionLines, rowValues, runLines, UNCHANGED } from "../report";
+import { changesIn, DRY_RUN_HELP, dryRunLines, followed, type Line, NEXT, optionLines, repairAfter, rowValues, runLines, UNCHANGED } from "../report";
 import { REPAIR_COMMAND, REPAIR_OPTIONS } from "./parse";
-
-/** The states of an object that a run changes, or a dry run would. */
-const CHANGES: ReadonlySet<RowState> = new Set(["make", "change", "remove"]);
 
 /** How far a line of a list stands in. */
 const INDENT = "  ";
@@ -30,14 +27,9 @@ function indented(lines: readonly string[]): string[] {
   return lines.map((line) => `${INDENT}${line}`);
 }
 
-/** How many objects a repair changed, or with a dry run would. */
-function changesOf(repaired: Mended): number {
-  return repaired.rows.filter((row) => CHANGES.has(row.state)).length;
-}
-
 /** What to run after a repair that worked through its rows: the login where the install is as it should be now, and the repair where a run has something to mend yet. */
 function nextOf(repaired: Mended, run: Run): Next {
-  const mended = repaired.ready && (run === "apply" || changesOf(repaired) === 0);
+  const mended = repaired.ready && (run === "apply" || changesIn(repaired.rows) === 0);
 
   return mended ? NEXT.login(repaired.address) : NEXT.repair();
 }
@@ -79,8 +71,7 @@ export function unmended(repaired: Extract<Repaired, { readonly ok: false }>): S
 
   if (repaired.why === "token") return { problem: "token_refused", exit: 1, words };
 
-  // Records of another version are mended by the poplin of that version, or the newest: this one would stop here again.
-  if (repaired.why === "another") return { problem: "another_version", exit: 1, words, next: NEXT.repair("newest") };
+  if (repaired.why === "another") return { problem: "another_version", exit: 1, words, next: repairAfter(repaired) };
 
   return { problem: PROBLEMS[repaired.why], exit: 1, words };
 }
@@ -92,7 +83,7 @@ export function unmended(repaired: Extract<Repaired, { readonly ok: false }>): S
  * @returns the last lines: of a dry run whether a run would go through and what it would do, and of a run what only a person can do and whether anything is left undone
  */
 export function repairedLines(repaired: Mended, run: Run, provider: Provider): Line[] {
-  const same = changesOf(repaired) === 0;
+  const same = changesIn(repaired.rows) === 0;
   if (run === "dry-run") return repaired.ready && same ? [{ tone: "done", text: DONE.same }] : dryRunLines(repaired);
 
   // What a person is told to do after a run that mended everything, such as where to log in, stands before its last lines.
@@ -113,7 +104,7 @@ export function repairedValue(repaired: Mended, run: Run, found: Whole<unknown>)
     ok: repaired.ready,
     run,
     ready: repaired.ready,
-    changes: changesOf(repaired),
+    changes: changesIn(repaired.rows),
     found: { state: found.state, version: found.version ?? null, address: found.address, newest: found.newest ?? null },
     rows: rowValues(repaired.rows, run),
     blocked: repaired.blocked,
