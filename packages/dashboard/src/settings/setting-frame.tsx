@@ -52,6 +52,9 @@ interface SettingFrameProps {
 
   /** `true` for a switch: on a phone it stays beside its name, where a field goes under it. */
   readonly beside?: boolean;
+
+  /** `true` for a setting that does nothing on this install: its control takes no change. */
+  readonly idle?: boolean;
 }
 
 /** The way back to the default, named for its setting: every changed row has one. */
@@ -134,6 +137,7 @@ export function SettingFrame({
   under,
   refused = false,
   beside = false,
+  idle = false,
 }: SettingFrameProps): ReactNode {
   const sentences = says.filter((sentence) => sentence !== "");
   const about = `${sentences.join(" ")}${fallback === undefined ? "" : ` (Default: ${fallback})`}`;
@@ -142,6 +146,7 @@ export function SettingFrame({
     <Field.Root
       id={anchor}
       invalid={refused}
+      disabled={idle}
       className={cn(
         "-mx-3 flex gap-x-6 gap-y-2 rounded-lg px-3 py-2.5 motion-safe:transition-colors",
         beside ? "items-center justify-between" : "flex-col",

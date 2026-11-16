@@ -31,6 +31,7 @@ export const WITH_DOMAIN: Provider = {
     tokenOptional: [{ right: "Rules: Edit", adds: "The provider stops floods before they reach a site." }],
     tokenNote: "On the form, choose the account and the domain the account token is for.",
   },
+  says: { words: { thing: "the domain", line: null }, carriedSettings: ["outside_pages", "search_engines_allowed", "block_bots"], idleSettings: {} },
 };
 
 /** The provider's side of an install without a domain, as the preview alone invents it: the two addresses its sites answer at and the login, with no record, route, or rule, since such an install has none. */
@@ -47,6 +48,7 @@ export const WITHOUT_DOMAIN: Provider = {
     tokenOptional: [],
     tokenNote: "On the form, choose the account the account token is for.",
   },
+  says: { words: { thing: "the install", line: "No domain: your sites answer at the provider's free address." }, carriedSettings: [], idleSettings: { block_bots: "Needs a domain." } },
 };
 
 /** The one thing a person does by hand in the `access-off` state. */
@@ -95,6 +97,9 @@ export interface Provider {
 
   /** What the preview says of its token and of the form that makes one. */
   readonly form: TokenFacts;
+
+  /** How the screens name this side, which settings a repair carries there, and which do nothing on this kind. */
+  readonly says: Pick<DomainPlug, "words" | "carriedSettings" | "idleSettings">;
 }
 
 /** Every object of the install under a domain in one state, but the rows `others` names by their place. */
@@ -171,7 +176,7 @@ export function changingPlug(provider: Provider): DomainPlug {
       return table(provider.pieces.map((piece) => changingRow(piece, states.get(piece) ?? "present")));
     };
 
-  return { ...provider.form, check: answer("check"), repair: answer("repair") };
+  return { ...provider.form, ...provider.says, check: answer("check"), repair: answer("repair") };
 }
 
 /**
@@ -189,7 +194,7 @@ export function standingPlug(provider: Provider): DomainPlug {
     return table(provider.pieces.map(({ object, detail, part }) => ({ object, detail, part, state: "present" })));
   };
 
-  return { ...provider.form, check: answer, repair: answer };
+  return { ...provider.form, ...provider.says, check: answer, repair: answer };
 }
 
 /**
@@ -218,5 +223,5 @@ export function previewPlug(state: PlugState): DomainPlug {
       return read(state);
     };
 
-  return { ...WITH_DOMAIN.form, check: answer(checked), repair: answer(repaired) };
+  return { ...WITH_DOMAIN.form, ...WITH_DOMAIN.says, check: answer(checked), repair: answer(repaired) };
 }

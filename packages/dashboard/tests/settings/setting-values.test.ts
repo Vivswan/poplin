@@ -6,7 +6,7 @@ import { partsOf, readOf, textOf } from "@/settings/setting-values";
 import type { Row } from "@/settings/settings-queries";
 
 function numberOf(key: string, unit: string, word: string | null = null): Row {
-  return { key: key as Row["key"], control: { kind: "number", word }, text: "", unit, fallback: "", limits: [], repair: false };
+  return { key: key as Row["key"], control: { kind: "number", word }, text: "", unit, fallback: "", limits: [], repair: false, needs: null };
 }
 
 describe("the text of a number", () => {

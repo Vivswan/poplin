@@ -21,6 +21,7 @@ const SIZE: Row = {
   fallback: "9000MB",
   limits: [],
   repair: false,
+  needs: null,
 };
 
 /** The same size with two limits of the host: 10,000 MB and 20,000 MB. */
@@ -42,6 +43,7 @@ const EXPIRY: Row = {
   fallback: "never",
   limits: [],
   repair: false,
+  needs: null,
 };
 
 /** One row of each kind of control, with the text it is refused at. */
@@ -88,6 +90,19 @@ function describedBy(key: string): (string | null)[] {
 function opened(name: string): (string | null)[] {
   return [...within(document.body).getByRole("dialog", { name }).querySelectorAll("p")].map((line) => line.textContent);
 }
+
+describe("the row of a setting that does nothing on this install", () => {
+  // Drift: a control that took a change would store a value nothing acts on, with no word of why, and a Reset would offer the same.
+  test("says what it needs under a control that takes no change, and offers no Reset", () => {
+    const [, choice] = KINDS[1] ?? [];
+    if (choice === undefined) throw new Error("the test's choice row is gone");
+    drawn({ ...choice, text: "on", needs: "Needs a domain." });
+    const control = document.getElementById("setting-block_bots-control");
+
+    expect([control?.hasAttribute("disabled") === true || control?.getAttribute("aria-disabled") === "true", document.body.textContent?.includes("Needs a domain.")]).toEqual([true, true]);
+    expect(within(document.body).queryByRole("button", { name: /Reset/ })).toBeNull();
+  });
+});
 
 describe("the row of a setting", () => {
   // Drift: a Reset, a warning's mark, or the setting's key would stand in the row of a setting that is at its default, or the default would go unsaid.

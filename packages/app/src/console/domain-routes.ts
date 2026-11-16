@@ -1,6 +1,6 @@
 // The data of the Domain screen: what a token must hold, the last run the install remembers, and the two runs themselves.
 //
-//   GET  /domain             the token form's facts, the remembered run, and whether the users changed since the last repair, on an install that does not carry them by itself
+//   GET  /domain             the token form's facts, how the screen names the provider's side of this install, the remembered run, and whether the users changed since the last repair, on an install that does not carry them by itself
 //   POST /domain/check       read every piece with the token in the body; changes nothing at the provider
 //   POST /domain/repair      make every piece match, with the stored settings a repair carries to the domain
 //
@@ -60,9 +60,9 @@ export const domainRoutes = new Hono<Shared>()
     const kept = await domainState(install, actor);
     if (!kept.ok) return refused(context, kept);
 
-    const { tokenRights, tokenLink, tokenOptional, tokenNote } = plug;
+    const { tokenRights, tokenLink, tokenOptional, tokenNote, words } = plug;
 
-    return context.json({ ok: true as const, form: { tokenRights, tokenLink, tokenOptional, tokenNote }, last: keptAnswer({ ...kept, waits: kept.waits && !selfCarried(context) }) });
+    return context.json({ ok: true as const, form: { tokenRights, tokenLink, tokenOptional, tokenNote }, words: { thing: words.thing, line: words.line }, last: keptAnswer({ ...kept, waits: kept.waits && !selfCarried(context) }) });
   })
   .post("/domain/check", vValidator("json", RUN, refuseInvalid), (context) => ran(context, "check"))
   .post("/domain/repair", vValidator("json", RUN, refuseInvalid), (context) => ran(context, "repair"));

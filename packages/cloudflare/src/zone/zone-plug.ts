@@ -704,6 +704,9 @@ export async function giveKey(parts: Extract<PlugParts, { readonly accountId: st
 export function createDomainPlug(parts: PlugParts): DomainPlug {
   return {
     ...tokenFacts("domain"),
+    words: { thing: "the domain", line: null },
+    carriedSettings: ["outside_pages", "search_engines_allowed", "block_bots"],
+    idleSettings: {},
     check: (token, settings) => read(parts, "plan", token, settings),
     repair: (token, settings) => read(parts, "apply", token, settings),
   };

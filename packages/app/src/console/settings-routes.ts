@@ -12,9 +12,10 @@ import { defaultSettings, RULE_SETTINGS, SETTING_VALUES, type SettingValues, set
 import { Hono } from "hono";
 import * as v from "valibot";
 
-import { ACCESS_SETTINGS, DOMAIN_SETTINGS } from "./settings/constants";
+import { ACCESS_SETTINGS } from "./settings/constants";
 import { type FreeLimits, type FreeMark, freeLimitMarks } from "./settings/free-limits";
 import { NOTHING, refused, refuseInvalid, type Shared } from "./data";
+import type { DomainPlug } from "./domain/records";
 import { type Control, controlOf, screenText, unitOf } from "./setting-controls";
 import { carryRules } from "./settings/rules-follow";
 
@@ -44,8 +45,11 @@ interface Row {
   /** The free limits of the host the setting can be put above: the largest count that earns no warning, the unit that count is typed in, and the host's sentence for a count above it. A size has each once for its text's unit and once for its default's. */
   readonly limits: readonly (FreeMark & { readonly unit: string })[];
 
-  /** `true` for a setting that also changes the domain, in a dashboard that has the Domain screen, where that half waits for the next repair. `false` for one the install carries to the domain by itself. */
+  /** `true` for a setting a repair carries to the provider, in a dashboard that has the Domain screen, where that half waits for the next repair. `false` for one the install carries there by itself, or that no repair carries. */
   readonly repair: boolean;
+
+  /** What the setting needs before it does anything on this install, in one short line; `null` for a setting that works. Its control takes no change while it says so. */
+  readonly needs: string | null;
 }
 
 /** Every setting's text as the screen types it. */
@@ -80,14 +84,16 @@ function isCarried(key: Key, carries: boolean): boolean {
 /**
  * The rows of the screen.
  *
- * @param facts - the host's free limits, whether the dashboard has the Domain screen, and whether the install carries the settings of the domain's rules there by itself
+ * @param facts - the host's free limits; the provider's side of the install, absent in a dashboard with no Domain screen, which says the settings a repair carries and the idle ones; and whether the install carries the rules' settings by itself
  */
-function rowsOf(values: SettingValues, facts: { readonly freeLimits: FreeLimits; readonly domain: boolean; readonly carries: boolean }): readonly Row[] {
+function rowsOf(values: SettingValues, facts: { readonly freeLimits: FreeLimits; readonly domain: Pick<DomainPlug, "carriedSettings" | "idleSettings"> | undefined; readonly carries: boolean }): readonly Row[] {
   const texts = screenTexts(values);
   const [installer] = values.logins;
   const defaults = installer === undefined ? texts : screenTexts(defaultSettings({ installer }));
   const marks = freeLimitMarks(values, facts.freeLimits);
   const shown = (Object.keys(texts) as Key[]).filter((key) => !ACCESS_SETTINGS.includes(key));
+  const carried: readonly string[] = facts.domain?.carriedSettings ?? [];
+  const idle: Readonly<Record<string, string | undefined>> = facts.domain?.idleSettings ?? {};
 
   return shown.map((key) => {
     const control = controlOf(SETTING_VALUES.entries[key]);
@@ -99,7 +105,8 @@ function rowsOf(values: SettingValues, facts: { readonly freeLimits: FreeLimits;
       unit: control.kind === "number" ? unitOf(SETTING_VALUES.entries[key], texts[key]) : "",
       fallback: defaults[key],
       limits: limitsOf(marks[key] ?? [], values[key], [texts[key], defaults[key]]),
-      repair: facts.domain && DOMAIN_SETTINGS.includes(key) && !isCarried(key, facts.carries),
+      repair: carried.includes(key) && !isCarried(key, facts.carries),
+      needs: idle[key] ?? null,
     };
   });
 }
@@ -111,7 +118,7 @@ export const settingsRoutes = new Hono<Shared>()
     const config = await readConfig(install, actor);
     if (!config.ok) return refused(context, config);
 
-    const rows = rowsOf(config.values, { freeLimits: context.get("host").freeLimits, domain: context.get("domain") !== undefined, carries: context.get("rules")?.holdsKey() === true });
+    const rows = rowsOf(config.values, { freeLimits: context.get("host").freeLimits, domain: context.get("domain"), carries: context.get("rules")?.holdsKey() === true });
 
     return context.json({ ok: true as const, rows });
   })

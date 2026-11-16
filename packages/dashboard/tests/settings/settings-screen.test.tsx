@@ -42,7 +42,7 @@ const sentTo: string[] = [];
 const held: (() => void)[] = [];
 
 function rowOf(key: string, control: Row["control"], unit = ""): Row {
-  return { key: key as Row["key"], control, text: stored[key] ?? "", unit, fallback: stored[key] ?? "", limits: [], repair: false };
+  return { key: key as Row["key"], control, text: stored[key] ?? "", unit, fallback: stored[key] ?? "", limits: [], repair: false, needs: null };
 }
 
 /**

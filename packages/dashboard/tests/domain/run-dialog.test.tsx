@@ -40,7 +40,7 @@ async function opened(run: "check" | "repair", answer: () => Promise<Refused | u
       <DialogTrigger handle={handle} payload={run}>
         Open
       </DialogTrigger>
-      <RunDialog handle={handle} form={FORM} onRun={onRun} />
+      <RunDialog handle={handle} form={FORM} thing="the install" onRun={onRun} />
     </>,
   );
   const page = within(document.body);
@@ -65,6 +65,18 @@ afterEach(() => {
   runs.length = 0;
 });
 afterAll(clearPage);
+
+describe("the title", () => {
+  // Drift: the dialog would say "the domain" on an install that has none, where the run is made on what stands in a domain's place.
+  test.each([
+    ["check", "Check the install"],
+    ["repair", "Repair the install"],
+  ] as const)("of a %s names what the server says the run is made on", async (run, title) => {
+    const page = await opened(run, async () => undefined);
+
+    expect(page.getByRole("heading", { name: title }).textContent).toBe(title);
+  });
+});
 
 describe("the token's box", () => {
   // Drift: the token would show as typed, be offered by the browser again, or stay in the page after its run, where a glance or a later script finds it.
