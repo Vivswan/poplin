@@ -21,11 +21,19 @@ const STATES: Readonly<Record<Mode, Readonly<Record<DomainRow["state"], RowState
   apply: { present: "leave", missing: "block", differs: "block", "left-out": "leave-out", optional: "leave-out", created: "make", changed: "change", removed: "remove", failed: "fail", "not-run": "not-run" },
 };
 
-/** Why a call failed, with nothing Cloudflare said but its status. */
+/**
+ * Why a call failed, with nothing Cloudflare said but its status and the numbers of its error codes.
+ *
+ * The sentence beside a code is never passed on: it may quote an id, an address, or the key it was sent with, and a row is printed, kept, and answered.
+ */
 export function failureWords(failure: CloudflareFailure): string {
-  if (failure.failure === "refused") return `refused with status ${failure.status}`;
+  if (failure.failure === "rate-limited") return "Cloudflare asked to wait";
 
-  return failure.failure === "rate-limited" ? "Cloudflare asked to wait" : "no answer from Cloudflare";
+  if (failure.failure === "network") return "no answer from Cloudflare";
+
+  const codes = failure.errors.map((error) => error.code).join(", ");
+
+  return codes === "" ? `refused with status ${failure.status}` : `refused with status ${failure.status} and codes ${codes}`;
 }
 
 /**

@@ -177,7 +177,7 @@ function tokenHelp(): string[] {
   ];
 }
 
-/** Why a call failed, with nothing Cloudflare said but its status. */
+/** Why a call failed, with nothing Cloudflare said but its status and the numbers of its codes. */
 function whyOf(failure: NotWritten): string {
   if (failure.failure === "refused" || failure.failure === "rate-limited" || failure.failure === "network") return failureWords(failure);
 

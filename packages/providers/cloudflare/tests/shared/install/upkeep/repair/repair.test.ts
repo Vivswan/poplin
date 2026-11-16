@@ -186,7 +186,7 @@ describe.each(BOTH)("a repair with the token, %s", (kind) => {
     const right = "Access: Apps and Policies: Edit";
 
     expect(shown(done).filter((row) => row.startsWith("Access application") || row.startsWith("Workflow"))).toEqual([
-      `Access application | block | refused with status 403: 10000 Authentication error. Add this permission to the account token: ${right}`,
+      `Access application | block | refused with status 403 and codes 10000. Add this permission to the account token: ${right}`,
       "Workflow | make | poplin-jobs",
     ]);
     expect(done).toMatchObject({ ok: true, ready: false, blocked: [{ what: "right_lacking", right }] });
@@ -251,12 +251,12 @@ describe.each(BOTH)("one more user, %s", (kind) => {
   });
 
   // Drift: a write the provider did not take, for whatever reason, is no proof. The user must not be stored for a later run or the install's own key to carry.
-  test("a write of the login that fails stores nothing, and the row says the status alone", async () => {
+  test("a write of the login that fails stores nothing, and the row says the status and the code alone", async () => {
     const account = await wholeInstall(kind);
     Object.assign(account, { refuse: `PUT /accounts/${ACCOUNT}/access/policies/*`, refuseAs: { status: 400, code: 12130 } });
     const { done, changes } = await repaired(account, kind, { addUser: LOST });
 
-    expect([shown(done).at(-1), changes.filter((call) => call.endsWith("/query")), (await account.store.database.readSettings())?.logins]).toEqual(["User | fail | lost@example.com: refused with status 400", [], [OWNER]]);
+    expect([shown(done).at(-1), changes.filter((call) => call.endsWith("/query")), (await account.store.database.readSettings())?.logins]).toEqual(["User | fail | lost@example.com: refused with status 400 and codes 12130", [], [OWNER]]);
   });
 
   // Drift: the three statements of the store are one call, so a store that fails keeps nothing: no user without its entry, and no entry without its user.
@@ -273,7 +273,7 @@ describe.each(BOTH)("one more user, %s", (kind) => {
     };
     const { done } = await repaired(account, kind, { addUser: LOST });
 
-    expect(shown(done).at(-1)).toBe("User | fail | lost@example.com: the login lets the email in, and the install did not store it. Run this again: refused with status 400");
+    expect(shown(done).at(-1)).toBe("User | fail | lost@example.com: the login lets the email in, and the install did not store it. Run this again: refused with status 400 and codes 7500");
     expect([letThrough(account), (await account.store.database.readSettings())?.logins, (await account.store.database.listAudit({ limit: 10 })).length]).toEqual([[LOST, OWNER], [OWNER], 1]);
   });
 

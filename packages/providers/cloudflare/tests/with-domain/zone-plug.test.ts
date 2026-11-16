@@ -353,7 +353,7 @@ test("a repair that fails half way, for another reason than a permission, stops:
       "DNS record | created | *.example.com",
       "DNS record | created | poplin.example.com",
       "Worker route | not-run | *-page.example.com/*",
-      `Worker route | failed | *-poplin.example.com/*: refused with status 500: 10000 Authentication error for Bearer ${TOKEN}`,
+      "Worker route | failed | *-poplin.example.com/*: refused with status 500 and codes 10000",
       "Worker route | not-run | poplin.example.com/*",
       "Access application | not-run | ",
       "Worker variable | not-run | ",
@@ -554,7 +554,7 @@ test("Access refused as not switched on after the policy was already made is a s
       "Access application | not-run | poplin: poplin.example.com, *-p-poplin.example.com",
       "Access policy | not-run | poplin logins",
       "Access open paths | created | poplin open paths policy",
-      "Access open paths | failed | poplin open paths: refused with status 403: 10000 access.api.error.not_enabled",
+      "Access open paths | failed | poplin open paths: refused with status 403 and codes 10000",
       "Worker variable | not-run | ",
       "Key | not-run | ",
       "Upload key | not-run | ",
@@ -661,7 +661,7 @@ const NOW = 1_700_000_000_000;
 const UNWRITTEN = "made, and deleted again when its write onto the Worker failed";
 
 /** What a row says to a token that may not make a key. */
-const NO_TOKENS_RIGHT = "refused with status 403: 10000 Authentication error. Add this permission to the account token: Account API Tokens: Edit";
+const NO_TOKENS_RIGHT = "refused with status 403 and codes 10000. Add this permission to the account token: Account API Tokens: Edit";
 
 /**
  * One run that has to do with the keys: the account it meets, the keys the Worker holds, and what the two keys' rows, the steps, and the account say after it.
@@ -989,7 +989,7 @@ const keyRuns: readonly KeyRun[] = [
     name: "a repair whose write of the Worker's settings is refused, quoting what was sent: both new keys are deleted, and no row quotes one",
     run: "repair",
     account: { refuse: SETTINGS_WRITE, refuseQuotes: true, refuseAs: { status: 400, code: 10021 } },
-    rows: [`Key | failed | poplin kept key, ${UNWRITTEN}: refused with status 400: 10021 Authentication error`, `Upload key | failed | poplin upload key, ${UNWRITTEN}: refused with status 400: 10021 Authentication error`],
+    rows: [`Key | failed | poplin kept key, ${UNWRITTEN}: refused with status 400 and codes 10021`, `Upload key | failed | poplin upload key, ${UNWRITTEN}: refused with status 400 and codes 10021`],
     keys: 0,
     secrets: ["KEPT_KEY", "UPLOAD_KEY"],
   },
@@ -998,8 +998,8 @@ const keyRuns: readonly KeyRun[] = [
     run: "repair",
     account: { refuse: [SETTINGS_WRITE, `DELETE ${TOKENS}/*`], refuseAs: { status: 400, code: 1 } },
     rows: [
-      "Key | failed | poplin kept key, made, and left at Cloudflare for you to delete when its write onto the Worker failed: refused with status 400: 1 Authentication error",
-      "Upload key | failed | poplin upload key, made, and left at Cloudflare for you to delete when its write onto the Worker failed: refused with status 400: 1 Authentication error",
+      "Key | failed | poplin kept key, made, and left at Cloudflare for you to delete when its write onto the Worker failed: refused with status 400 and codes 1",
+      "Upload key | failed | poplin upload key, made, and left at Cloudflare for you to delete when its write onto the Worker failed: refused with status 400 and codes 1",
     ],
     keys: 2,
     secrets: ["KEPT_KEY", "UPLOAD_KEY"],
@@ -1042,8 +1042,8 @@ const keyRuns: readonly KeyRun[] = [
     upload: "none",
     account: { refuse: SETTINGS_WRITE, refuseQuotes: true },
     rows: [
-      `Key | failed | poplin kept key, ${UNWRITTEN}: refused with status 403: 10000 Authentication error. Add this permission to the account token: Workers Scripts: Edit`,
-      `Upload key | failed | poplin upload key, ${UNWRITTEN}: refused with status 403: 10000 Authentication error. Add this permission to the account token: Workers Scripts: Edit`,
+      `Key | failed | poplin kept key, ${UNWRITTEN}: refused with status 403 and codes 10000. Add this permission to the account token: Workers Scripts: Edit`,
+      `Upload key | failed | poplin upload key, ${UNWRITTEN}: refused with status 403 and codes 10000. Add this permission to the account token: Workers Scripts: Edit`,
     ],
     rights: ["Workers Scripts: Edit", "Workers Scripts: Edit"],
     keys: 0,

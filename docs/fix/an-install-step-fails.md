@@ -46,7 +46,7 @@ A row says what happened to one piece. [Step 4 of Install](../start/install.md#4
 | `left out`, ending `add this permission to the account token and press Repair:` and a name | nothing is wrong: an optional permission is not on the token | nothing, or [the optional part](../dashboard/domain.md#optional-block-junk-traffic-and-crawlers) |
 | `stopped`, ending `Add this one:` or `Add this permission to the account token:` and a name | the token lacks the permission of that name | add it to the token: [the table below](#add-a-permission-to-the-token) |
 | `stopped`, saying `Access is off for the account`                  | Zero Trust is off, and the run went on without the login | pick the Free plan at the address under the rows, then [finish with the repair](#the-second-run) |
-| `failed`, ending `refused with status` and a number                | Cloudflare refused that one call                        | run the command again                                             |
+| `failed`, saying `refused with status` and a number                | Cloudflare refused that one call                        | run the command again                                             |
 | `failed`, with other words                                         | the row says why, such as a Worker of the name that is not poplin's | do what the row asks                                  |
 | `failed`, ending `Cloudflare asked to wait` or `no answer from Cloudflare` | Cloudflare was busy, or gave no answer          | run the command again in a minute                                 |
 | `not run`                                                          | an earlier row stopped the run before this piece        | fix that row first                                                |
