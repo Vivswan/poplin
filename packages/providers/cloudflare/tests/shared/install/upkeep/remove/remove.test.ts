@@ -59,6 +59,9 @@ const CALLS: Readonly<Record<Kind, { readonly dry: number; readonly run: number;
   "no-domain": { dry: 16, run: 31, removals: 15 },
 };
 
+/** The calls a dry run sends over data that was left behind, before the count of the sites a database of poplin's holds. */
+const LEFT_CALLS: Readonly<Record<Kind, number>> = { domain: 18, "no-domain": 12 };
+
 /** An account that holds nothing. */
 const NOTHING = { records: 0, routes: 0, rules: 0, rulesets: 0, applications: 0, policies: 0, alerts: 0, tokens: 0, workflows: 0, workers: 0, worker: false, buckets: 0, objects: 0, databases: 0 };
 
@@ -185,11 +188,35 @@ describe.each(Object.keys(KINDS) as Kind[])("an install is removed, %s", (kind) 
     expect([shown(kept.done).filter((row) => row.includes(" | keep | ")), kept.done.ok && kept.done.ready]).toEqual([["Sites' files | keep | poplin-sites", "Database | keep | poplin"], true]);
     expect(left(account)).toEqual({ ...NOTHING, buckets: 1, objects: 2, databases: 1 });
 
+    const still = await removed(account, kind, applyOf("poplin-sites", "keep"));
+    const byName = ["Sites' files | keep | poplin-sites (matched by its name alone)", "Database | keep | poplin (matched by its name alone)"];
+
+    expect([shown(still.done).slice(0, 2), left(account)]).toEqual([byName, { ...NOTHING, buckets: 1, objects: 2, databases: 1 }]);
+
     const again = await removed(account, kind, applyOf("poplin-sites"));
-    const data = ["Sites' files | remove | poplin-sites (files: 2, 15 B) | 2 | 15", "Database | remove | poplin (sites: 3) | 3"];
+    const data = ["Sites' files | remove | poplin-sites (files: 2, 15 B; matched by its name alone) | 2 | 15", "Database | remove | poplin (sites: 3; matched by its name alone; poplin's by its schema steps) | 3"];
 
     expect([again.found, shown(again.done).slice(0, 2), again.done.ok && again.done.confirm, left(account)]).toEqual(["leftover", data, "poplin-sites", NOTHING]);
     expect((await removed(account, kind, DRY)).found).toBe("none");
+  });
+
+  // Drift: with no Worker, a database is poplin's by its name alone, and the name is a common one. One that holds tables and none of poplin's schema steps is somebody else's records, which no run may delete.
+  test.each([
+    ["tables that are not poplin's", { tables: ["invoices"] }, "Database | skip | poplin: matched by its name alone, and it holds tables that are not poplin's: it stays", { databases: 1, counted: 0, ready: true }],
+    ["no table", { tables: [] }, "Database | remove | poplin (empty; matched by its name alone)", { databases: 0, counted: 0, ready: true }],
+    ["poplin's schema steps", {}, "Database | remove | poplin (sites: 3; matched by its name alone; poplin's by its schema steps) | 3", { databases: 0, counted: 1, ready: true }],
+    ["an answer that is no list of tables", { tables: "failed" }, "Database | fail | no answer from Cloudflare", { databases: 1, counted: 0, ready: false }],
+  ] as const)("a database of poplin's name with no Worker, holding %s: the dry run and the run say which, and only poplin's or an empty one goes", async (_holds, holds, row, { databases, counted, ready }) => {
+    const account = await installedAccount(kind);
+    await removed(account, kind, applyOf(KINDS[kind].confirm, "keep"));
+    Object.assign(account, holds);
+
+    const dry = await removed(account, kind, DRY);
+    const run = await removed(account, kind, applyOf("poplin-sites"));
+    const files = "Sites' files | remove | poplin-sites (files: 2, 15 B; matched by its name alone) | 2 | 15";
+
+    expect([dry.found, shown(dry.done).slice(0, 2), dry.writes, dry.calls]).toEqual(["leftover", [files, row], [], LEFT_CALLS[kind] + counted]);
+    expect([shown(run.done).slice(0, 2), run.done.ok && run.done.ready, left(account)]).toEqual([[files, row], ready, { ...NOTHING, databases }]);
   });
 
   // Drift: an account holds other people's work beside poplin's. A removal that went by kind, and not by poplin's names and marks, would take it; and a ruleset poplin made goes whole only while nothing but poplin's rules is in it.

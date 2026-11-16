@@ -33,11 +33,11 @@ import { removeForwarders } from "../../../../without-domain/pieces/forwarders/f
 import { workflowNameOf } from "../../../jobs/workflow-name";
 import { type CloudflareFailure, type CloudflareResult, callCloudflare, findZones } from "../../client";
 import { isOwn, type Place, type Where } from "../../first/find";
-import { INSTALL_OBJECTS } from "../../install-objects";
+import { BY_NAME, INSTALL_OBJECTS } from "../../install-objects";
 import { isAccessOff } from "../../pieces/access/access";
 import { BUDGET_ALERT } from "../../pieces/alerts/budget-alert";
 import { listBuckets, planBucket } from "../../pieces/bucket/bucket";
-import { syncDatabase } from "../../pieces/database/database";
+import { type DatabaseHolder, holderWords, readHolder, syncDatabase } from "../../pieces/database/database";
 import { type ListedBinding, readWorker } from "../../pieces/variables/variables";
 import { applySteps, type Mode, type Synced } from "../../sync";
 
@@ -85,6 +85,7 @@ const WORDS = {
   workerStands: "the Worker still stands: it goes first",
   applicationsStand: "an application still stands: it goes first",
   notOwn: "not this install's: the Worker is bound to another",
+  stays: "it stays",
   strangers: "a Worker of this name is not poplin's, and stays",
   othersRules: "it holds rules that are not poplin's, and stays",
   bots: "the domain's AI crawler block and Bot Fight Mode are settings of the domain, and stay as they are set",
@@ -386,8 +387,13 @@ function left(work: Work, object: "Sites' files" | "Database", detail: string, w
   return note(work, { object, state: "not-run", detail: `${detail}: ${WORDS.workerStands}`, ...held });
 }
 
+/** What data a run leaves without reading it is called: with no Worker bound to it, its name is all that matched it, and the row says so. */
+function unread(name: string, bound: boolean): string {
+  return bound ? name : `${name} (${BY_NAME})`;
+}
+
 /** The sites' files: every object of the bucket, counted with its bytes, then the bucket. A run that leaves the bucket does not list what it holds. */
-async function removeFiles(work: Work, why: { readonly own: boolean; readonly workerGone: boolean }): Promise<boolean> {
+async function removeFiles(work: Work, why: { readonly own: boolean; readonly bound: boolean; readonly workerGone: boolean }): Promise<boolean> {
   const { connection, accountId } = work.place;
   const name = INSTALL_OBJECTS.bucket;
   const buckets = await listBuckets(connection, accountId);
@@ -396,7 +402,7 @@ async function removeFiles(work: Work, why: { readonly own: boolean; readonly wo
   if (!planBucket(buckets.value).some((step) => step.kind === "leave")) return true;
 
   const leaves = !why.own || work.data === "keep" || !why.workerGone;
-  if (leaves && work.mode === "apply") return left(work, "Sites' files", name, why);
+  if (leaves && work.mode === "apply") return left(work, "Sites' files", unread(name, why.bound), why);
 
   const objects = await callCloudflare(connection, (api) => Array.fromAsync(new BaseObjects(api).list(name, { account_id: accountId })));
   // A bucket that went between the two reads is gone, which is no failure.
@@ -405,7 +411,7 @@ async function removeFiles(work: Work, why: { readonly own: boolean; readonly wo
   if (!objects.ok) return failed(work, "Sites' files", objects);
 
   const held = { count: objects.value.length, bytes: objects.value.reduce((sum, object) => sum + (object.size ?? 0), 0) };
-  const named = `${name} (files: ${held.count}, ${showBytes(held.bytes)})`;
+  const named = `${name} (files: ${held.count}, ${showBytes(held.bytes)}${why.bound ? "" : `; ${BY_NAME}`})`;
   if (leaves) return left(work, "Sites' files", named, why, held);
 
   const emptied = await removeOwn(
@@ -430,6 +436,21 @@ async function sitesIn(work: Work, id: string): Promise<number | undefined> {
   return typeof sites === "number" ? sites : undefined;
 }
 
+/**
+ * Read what a database says of itself before it goes.
+ *
+ * @param bound - whether a Worker stood and was bound to it; with none, the name is all that says the database is poplin's, and its tables say whether it is
+ * @returns whose it is by its tables, where no Worker was bound to it, and how many sites it holds, which only one that may be poplin's is asked; or the read that failed
+ */
+async function databaseFacts(work: Work, id: string, bound: boolean): Promise<CloudflareFailure | { readonly holder: DatabaseHolder | undefined; readonly sites: number | undefined }> {
+  const read = bound ? undefined : await readHolder(work.place.connection, work.place.accountId, id);
+  if (read?.ok === false) return read;
+
+  const holder = read?.value;
+
+  return { holder, sites: holder === "empty" || holder === "other" ? undefined : await sitesIn(work, id) };
+}
+
 /** The database, with every record, and how many sites it holds. `boundId` is the id the Worker's binding named, where a Worker stood. */
 async function removeDatabase(work: Work, why: { readonly boundId: string | undefined; readonly bound: boolean; readonly workerGone: boolean }): Promise<boolean> {
   const { connection, accountId } = work.place;
@@ -442,9 +463,17 @@ async function removeDatabase(work: Work, why: { readonly boundId: string | unde
 
   const reasons = { own: !why.bound || why.boundId === id, workerGone: why.workerGone };
   const leaves = !reasons.own || work.data === "keep" || !reasons.workerGone;
-  const sites = leaves && work.mode === "apply" ? undefined : await sitesIn(work, id);
+  if (leaves && work.mode === "apply") return left(work, "Database", unread(name, why.bound), reasons);
+
+  const read = await databaseFacts(work, id, why.bound);
+  if ("ok" in read) return failed(work, "Database", read);
+
+  const { holder, sites } = read;
+  if (holder === "other") return note(work, { object: "Database", state: "skip", detail: `${name}: ${holderWords(holder)}: ${WORDS.stays}` });
+
   const held = sites === undefined ? {} : { count: sites };
-  const named = sites === undefined ? name : `${name} (sites: ${sites})`;
+  const facts = [...(sites === undefined ? [] : [`sites: ${sites}`]), ...(holder === undefined ? [] : [holderWords(holder)])];
+  const named = facts.length === 0 ? name : `${name} (${facts.join("; ")})`;
   if (leaves) return left(work, "Database", named, reasons, held);
 
   const taken = await removeOwn(work, { ok: true, value: [named] }, (databaseName) => databaseName, () => callCloudflare(connection, (api) => new BaseDatabase(api).delete(id, { account_id: accountId })));
@@ -552,7 +581,7 @@ export async function removeInstall(found: Removable<Place>, where: Where, remov
   await removeKeys(work);
   await removeWorkflow(work);
   const workerGone = await removeWorker(work, stands);
-  await removeFiles(work, { own: !stands || bound.bucket === INSTALL_OBJECTS.bucket, workerGone });
+  await removeFiles(work, { own: !stands || bound.bucket === INSTALL_OBJECTS.bucket, bound: stands, workerGone });
   await removeDatabase(work, { boundId: bound.databaseId, bound: stands, workerGone });
 
   if (where.kind === "domain") note(work, { object: "Bot switches", state: "stay", detail: WORDS.bots });

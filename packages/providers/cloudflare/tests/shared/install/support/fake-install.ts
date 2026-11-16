@@ -124,6 +124,9 @@ export interface Account {
   /** How many sites the database named `poplin` holds; left out, it has no table of sites, as one no Worker ever opened. */
   sites?: number;
 
+  /** The tables the database named `poplin` holds; left out, the ones a Worker made where `sites` is given, and none else. `failed` answers the question for them as a statement the database did not run. */
+  tables?: readonly string[] | "failed";
+
   /** Accounts the token shows beside its own. */
   alsoShown?: Row[];
 
@@ -404,9 +407,17 @@ function workflows(account: Account, asked: Asked, name: string | undefined): Re
   return reply({ name });
 }
 
-/** A question to the database: the count of its sites is answered, and the test fails on anything that is no such read. */
+/** A question to the database: the names of its tables and the count of its sites are answered, and the test fails on anything that is no such read. */
 function queried(account: Account, asked: Asked): Response {
   const { sql } = asked.body as { readonly sql: string };
+  if (sql === "SELECT name FROM sqlite_master WHERE type = 'table'") {
+    if (account.tables === "failed") return reply([{ results: [], success: false }]);
+
+    const tables = account.tables ?? (account.sites === undefined ? [] : ["schema_steps", "sites"]);
+
+    return reply([{ results: ["_cf_KV", ...tables].map((name) => ({ name })), success: true }]);
+  }
+
   if (sql !== "SELECT count(*) AS sites FROM sites") throw new Error(`the fake database was asked something it has no answer for: ${sql}`);
 
   return account.sites === undefined ? refusal(400, 7500, "no such table: sites") : reply([{ results: [{ sites: account.sites }], success: true }]);

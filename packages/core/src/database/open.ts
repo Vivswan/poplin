@@ -1,6 +1,6 @@
 // The doorway: the one place a database is opened, and the only file outside `migrations/` that knows a database can be at another schema version.
 
-import { type Migrated, migrate, readStanding } from "../migrations/migrate";
+import { LEDGER_TABLE, type Migrated, migrate, readStanding } from "../migrations/migrate";
 import { STEPS } from "../migrations/registry";
 import type { Database } from "./database";
 import type { SqlDriver } from "./driver";
@@ -14,6 +14,16 @@ type Failed = Extract<Migrated, { kind: "failed" }> & { readonly behind: Databas
 
 /** The answer to `openDatabase`: the database ready for use with the steps this call applied, or why it cannot be used. */
 export type Opened = { readonly kind: "open"; readonly database: Database; readonly applied: readonly string[] } | Extract<Migrated, { kind: "newer" | "differs" }> | Failed;
+
+/**
+ * Tell whether a database is one `openDatabase` has stamped, from the names of its tables.
+ *
+ * @param tables - every table the database holds
+ * @returns whether the ledger of schema steps is among them, whatever version it stands at
+ */
+export function isStamped(tables: readonly string[]): boolean {
+  return tables.includes(LEDGER_TABLE);
+}
 
 /**
  * Read whether `openDatabase` would open the database. Nothing is written.

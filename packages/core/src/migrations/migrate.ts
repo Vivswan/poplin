@@ -3,9 +3,12 @@
 import { sha256Hex } from "../auth/util";
 import { AllowanceSpent, type SqlDriver, type Statement } from "../database/driver";
 
+/** The name of the ledger's table. A database that holds it is one the runner has stamped. */
+export const LEDGER_TABLE = "schema_steps";
+
 /** The ledger: one row per applied step, with the fingerprint of the statements it ran. The highest step in it is the schema version, and the table is the only one the runner makes itself. */
 const CREATE_LEDGER = `
-CREATE TABLE IF NOT EXISTS schema_steps (
+CREATE TABLE IF NOT EXISTS ${LEDGER_TABLE} (
   step INTEGER NOT NULL PRIMARY KEY CHECK (step >= 1),
   description TEXT NOT NULL,
   applied_at INTEGER NOT NULL,
@@ -13,13 +16,13 @@ CREATE TABLE IF NOT EXISTS schema_steps (
 ) STRICT`;
 
 /** Whether the ledger exists; a database no step ran on has none. It reads a row for everything the schema holds, so it is asked only once the ledger could not be read. */
-const HAS_LEDGER = "SELECT 1 AS found FROM sqlite_master WHERE type = 'table' AND name = 'schema_steps'";
+const HAS_LEDGER = `SELECT 1 AS found FROM sqlite_master WHERE type = 'table' AND name = '${LEDGER_TABLE}'`;
 
 /** Every applied step as the ledger holds it, in order. The last one is the schema version. */
-const APPLIED_STEPS = "SELECT * FROM schema_steps ORDER BY step";
+const APPLIED_STEPS = `SELECT * FROM ${LEDGER_TABLE} ORDER BY step`;
 
 /** The stamp of a step. Its primary key refuses a step another runner applied, which fails the batch before the step's own statements run. */
-const STAMP = "INSERT INTO schema_steps (step, description, applied_at, fingerprint) VALUES (?1, ?2, ?3, ?4)";
+const STAMP = `INSERT INTO ${LEDGER_TABLE} (step, description, applied_at, fingerprint) VALUES (?1, ?2, ?3, ?4)`;
 
 /** What stands between two statements where a step's fingerprint is taken. */
 const STATEMENT_END = "\n;\n";

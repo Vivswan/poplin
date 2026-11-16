@@ -1,5 +1,8 @@
 // What marks an object at Cloudflare as poplin's, and what poplin writes into each.
 
+/** What a row says of a bucket or a database that no Worker is bound to: neither carries a mark, so its name is all that matched it. */
+export const BY_NAME = "matched by its name alone";
+
 /** Every value the setup client writes. A record with a comment starting `recordMark` and a rule with one of the refs are poplin's. The last rows are the Worker's own: its Workflow, its log, its variables, and its two keys. */
 export const INSTALL_OBJECTS = {
   recordMark: "poplin: ",
