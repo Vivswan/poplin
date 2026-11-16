@@ -898,6 +898,51 @@ test.describe("on a phone, after a site's panel", () => {
   });
 });
 
+for (const size of [PHONE, FITS_FROM]) {
+  test.describe(`on a screen ${size.width} px wide, where a site's panel takes the list's place`, () => {
+    test.use({ viewport: size });
+
+    // Drift: Tab after the panel's last control would stop on a place with no name again, with the panel still open; or Escape would leave the focus on the page itself where the list is a table.
+    test("Tab after the panel's last control closes the panel and goes to the row's button, and so does Escape", async ({ page }) => {
+      await arrive(page);
+      const details = page.getByRole("button", { name: `Details of ${SAMPLE.site}`, exact: true });
+
+      await details.press("Enter");
+      await panel(page).getByRole("button", { name: "Delete", exact: true }).focus();
+      await page.keyboard.press("Tab");
+      await expect(page.getByRole("dialog")).toHaveCount(0);
+      await expect(details).toBeFocused();
+
+      // A person presses Escape after the list has left sight, which is when its button can no longer take the focus.
+      await details.press("Enter");
+      await expect(panel(page).getByRole("heading", { name: SAMPLE.site, exact: true })).toBeFocused();
+      await expect(details).toBeHidden();
+      await pressEscape(page);
+      await expect(details).toBeFocused();
+    });
+  });
+}
+
+// Drift: the keys would reach Close before Undo again, or the result would name keys that do not lead to it.
+test("a result's Undo is reached with the keys the result names, then Tab twice, and Close comes after it", async ({ page }) => {
+  await arrive(page);
+  await openPanel(page, SAMPLE.site);
+  await panel(page).getByRole("switch", { name: "Allow embedding", exact: true }).click();
+  const saved = lines(page).filter({ hasText: "Saved." });
+  await expect(saved).toContainText("Press Alt+T to reach Undo.");
+
+  await page.keyboard.press("Alt+T");
+  await page.keyboard.press("Tab");
+  await page.keyboard.press("Tab");
+  await expect(saved.getByRole("button", { name: "Undo", exact: true })).toBeFocused();
+  await page.keyboard.press("Tab");
+  await expect(saved.getByRole("button", { name: "Close", exact: true })).toBeFocused();
+
+  await page.keyboard.press("Shift+Tab");
+  await page.keyboard.press("Enter");
+  await expect(lines(page).filter({ hasText: "Put back." })).toBeVisible();
+});
+
 // Drift: a move to another screen would leave the focus on the page itself again, where no key reaches anything and nothing is said; or every screen's tab would be named alike.
 test("a screen that follows another one gives its title the focus and names the tab, on a wide screen and from a phone's sections; the first Tab stop leads past the sections", async ({ page }) => {
   await arrive(page);
