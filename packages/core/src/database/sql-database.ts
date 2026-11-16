@@ -40,6 +40,7 @@ import type {
   Address,
   AuditNote,
   CountedRequests,
+  DayUse,
   Database,
   Done,
   ExportPage,
@@ -53,6 +54,7 @@ import type {
   Published,
   Refused,
   RequestCounts,
+  RowsUsed,
   Reserved,
   ServedSite,
   ServedAlso,
@@ -204,6 +206,9 @@ const DAY_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 /** The site column of the row that counts all sites together; no site id is empty. */
 const ALL_SITES = "";
 
+/** No rows of the database: what a site's own count holds, and a count that names none. */
+const NO_ROWS: RowsUsed = { read: 0, written: 0 };
+
 /** The most sites one read of names or of views takes: a page of a listing or of the log. */
 const MOST_SITES_ASKED = 100;
 
@@ -248,15 +253,19 @@ function keepSecret(name: "session_key" | "update_address", value: string, at: n
   return built(BUILD.insert(secrets).values({ name, value, created_at: at }).onConflictDoUpdate({ target: secrets.name, set: kept }));
 }
 
-/** More requests on a day for a site, some of them page views, and the count of requests after them. */
-function addRequests(day: string, site: string, requests: number, views: number): Statement {
+/** More requests on a day for a site, some of them page views, with the rows the database used, and the count of requests after them. */
+function addRequests(counted: { readonly day: string; readonly site: string; readonly requests: number; readonly views: number; readonly rows: RowsUsed }): Statement {
+  const { day, site, requests, views, rows } = counted;
   const added = {
     requests: fragment`${bare(requestCounts.requests)} + excluded.${bare(requestCounts.requests)}`,
     views: fragment`${bare(requestCounts.views)} + excluded.${bare(requestCounts.views)}`,
+    rows_read: fragment`${bare(requestCounts.rows_read)} + excluded.${bare(requestCounts.rows_read)}`,
+    rows_written: fragment`${bare(requestCounts.rows_written)} + excluded.${bare(requestCounts.rows_written)}`,
   };
-  const counted = BUILD.insert(requestCounts).values({ day, site, requests, views }).onConflictDoUpdate({ target: [requestCounts.day, requestCounts.site], set: added });
+  const row = { day, site, requests, views, rows_read: rows.read, rows_written: rows.written };
+  const counts = BUILD.insert(requestCounts).values(row).onConflictDoUpdate({ target: [requestCounts.day, requestCounts.site], set: added });
 
-  return built(counted.returning({ requests: requestCounts.requests }));
+  return built(counts.returning({ requests: requestCounts.requests }));
 }
 
 /** The count of a day for a site; no row when nothing was counted. */
@@ -1313,11 +1322,15 @@ export class SqlDatabase implements Database {
     const views = counted.views ?? 0;
     if (!Number.isSafeInteger(views) || views < 0 || views > counted.requests) throw new RangeError(`views are counted in whole numbers from 0 to the requests, not ${views}`);
 
+    const rows = counted.rows ?? NO_ROWS;
+    requireCount("the rows read", rows.read);
+    requireCount("the rows written", rows.written);
+
     const [, site, all] = await this.#driver.batch([
       // The days before the oldest one kept are dropped, so the table holds a year.
       built(BUILD.delete(requestCounts).where(lt(requestCounts.day, daysUpTo(counted.day, KEPT_DAYS)[0] ?? counted.day))),
-      addRequests(counted.day, counted.site, counted.requests, views),
-      addRequests(counted.day, ALL_SITES, counted.requests, views),
+      addRequests({ day: counted.day, site: counted.site, requests: counted.requests, views, rows: NO_ROWS }),
+      addRequests({ day: counted.day, site: ALL_SITES, requests: counted.requests, views, rows }),
     ]);
 
     return { site: requestsIn(site), all: requestsIn(all) };
@@ -1356,6 +1369,15 @@ export class SqlDatabase implements Database {
     for (const row of read?.rows ?? []) (counts.get(String(row.site)) ?? [])[place.get(String(row.day)) ?? 0] = Number(row.views);
 
     return { days, all: counts.get(ALL_SITES) ?? [], sites: new Map(sites.map((site) => [site, counts.get(site) ?? []])) };
+  }
+
+  async readDayUse(day: string): Promise<DayUse> {
+    requireDay(day);
+    const columns = { requests: requestCounts.requests, rows_read: requestCounts.rows_read, rows_written: requestCounts.rows_written };
+    const [read] = await this.#driver.batch([built(BUILD.select(columns).from(requestCounts).where(and(eq(requestCounts.day, day), eq(requestCounts.site, ALL_SITES))))]);
+    const row = read?.rows[0];
+
+    return { requests: Number(row?.requests ?? 0), rows: { read: Number(row?.rows_read ?? 0), written: Number(row?.rows_written ?? 0) } };
   }
 
   async readRequests(day: string, site?: SiteId): Promise<RequestCounts> {

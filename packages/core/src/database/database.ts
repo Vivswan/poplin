@@ -468,6 +468,18 @@ export interface RequestCounts {
   readonly all: number;
 }
 
+/** Rows of the database: how many it read, and how many it wrote. */
+export interface RowsUsed {
+  readonly read: number;
+  readonly written: number;
+}
+
+/** What one UTC day has counted for all sites together: the requests, and the rows the database read and wrote as far as they were counted. */
+export interface DayUse {
+  readonly requests: number;
+  readonly rows: RowsUsed;
+}
+
 /** Requests to add to a day's counts. */
 export interface CountedRequests {
   /** The UTC date, such as `2026-11-13`. */
@@ -481,6 +493,9 @@ export interface CountedRequests {
 
   /** How many of them opened a page: a whole number from 0 to `requests`, and 0 when left out. */
   readonly views?: number;
+
+  /** The rows the database read and wrote since they were last added to a day: whole numbers from 0, and none when left out. They are added to the day of all sites alone. */
+  readonly rows?: RowsUsed;
 }
 
 /** The tokens at a moment: the ones that work, and the newest that ended. */
@@ -992,9 +1007,17 @@ export interface Database {
    * Add requests, and the page views among them, to a day's count of one site and of all sites together, and drop the counts of every day more than a year before it. No audit entry is written.
    *
    * @returns both request counts after the addition
-   * @throws {RangeError} `day` is not a date such as `2026-11-13`, `requests` is not a whole number of at least 1, or `views` is not a whole number from 0 to `requests`
+   * @throws {RangeError} `day` is not a date such as `2026-11-13`, `requests` is not a whole number of at least 1, `views` is not a whole number from 0 to `requests`, or a count of `rows` is not a whole number from 0
    */
   addRequests(counted: CountedRequests): Promise<RequestCounts>;
+
+  /**
+   * What a day has counted for all sites together, 0 where nothing was counted. It is one query.
+   *
+   * @param day - a UTC date, such as `2026-11-13`
+   * @throws {RangeError} `day` is not such a date
+   */
+  readDayUse(day: string): Promise<DayUse>;
 
   /**
    * A day's counts so far, 0 where nothing was counted.

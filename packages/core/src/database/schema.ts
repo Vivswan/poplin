@@ -172,7 +172,7 @@ export const audit = sqliteTable(
   ],
 );
 
-/** A day's requests, and how many of them opened a page: one row per UTC day and site, and one more per day under the empty site for all sites together. */
+/** A day's requests, and how many of them opened a page: one row per UTC day and site, and one more per day under the empty site for all sites together. That one also holds the rows the database read and wrote on the day, as far as they were counted. */
 export const requestCounts = sqliteTable(
   "request_counts",
   {
@@ -180,12 +180,16 @@ export const requestCounts = sqliteTable(
     site: text().notNull(),
     requests: integer().notNull(),
     views: integer().notNull().default(0),
+    rows_read: integer().notNull().default(0),
+    rows_written: integer().notNull().default(0),
   },
   (table) => [
     primaryKey({ columns: [table.day, table.site] }),
     check("request_counts_day", sql`${table.day} GLOB ${sql.raw(`'${DAY_FORM}'`)}`),
     check("request_counts_requests", sql`${table.requests} >= 1`),
     check("request_counts_views", sql`${table.views} >= 0 AND ${table.views} <= ${table.requests}`),
+    check("request_counts_rows_read", sql`${table.rows_read} >= 0`),
+    check("request_counts_rows_written", sql`${table.rows_written} >= 0`),
   ],
 );
 

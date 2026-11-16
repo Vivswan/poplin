@@ -1,6 +1,6 @@
 import { reset } from "cloudflare:test";
 import { env } from "cloudflare:workers";
-import type { CountedRequests, RequestCounts } from "@poplin/core/src/database/database";
+import type { CountedRequests, RequestCounts, RowsUsed } from "@poplin/core/src/database/database";
 import { openDatabase } from "@poplin/core/src/database/open";
 import type { SiteId } from "@poplin/core/src/sites/ids";
 import fc from "fast-check";
@@ -50,12 +50,14 @@ class FakeDatabase {
   readonly #sites = new Map<string, number>();
   #all = 0;
   readonly views: (number | undefined)[] = [];
+  readonly rows: (RowsUsed | undefined)[] = [];
   stored: Promise<void> = Promise.resolve();
 
   async addRequests(counted: CountedRequests): Promise<RequestCounts> {
     await this.stored;
     this.writes += 1;
     this.views.push(counted.views);
+    this.rows.push(counted.rows);
     this.#sites.set(counted.site, (this.#sites.get(counted.site) ?? 0) + counted.requests);
     this.#all += counted.requests;
 
@@ -66,6 +68,22 @@ class FakeDatabase {
     this.reads += 1;
 
     return { site: this.#sites.get(site) ?? 0, all: this.#all };
+  }
+}
+
+/** The rows a driver holds for its instance on the one day the tests count, as the counters take them and put them back. */
+class HeldRows {
+  held: RowsUsed = { read: 0, written: 0 };
+
+  takeRows(): RowsUsed {
+    const taken = this.held;
+    this.held = { read: 0, written: 0 };
+
+    return taken;
+  }
+
+  returnRows(_day: string, rows: RowsUsed): void {
+    this.held = { read: this.held.read + rows.read, written: this.held.written + rows.written };
   }
 }
 
@@ -528,5 +546,87 @@ describe("CloudflareCounters, the day's sampling", () => {
     await Promise.all(flood);
 
     expect(database.writes * 2).toBeLessThan(FREE_PLAN_ROWS_WRITTEN_A_DAY / 4);
+  });
+});
+
+describe("Cloudflare counters: the rows the database used", () => {
+  // Drift: the rows ride in the sampled write, whole. Scaled by the sample they would count 50 times over; left with the driver after a write they would be written twice; taken by a request the sample leaves out they would be lost.
+  test("a sampled request's write carries every row the instance used since its last write, once, and a request the sample leaves out writes nothing and takes none", async () => {
+    const database = new FakeDatabase();
+    const rows = new HeldRows();
+    const window = { day: TODAY, site: REPORT };
+    await database.addRequests({ day: TODAY, site: DOCS, requests: 98_000 });
+    database.rows.length = 0;
+    const counters = new CloudflareCounters({ limiter: ALWAYS_ROOM, database, rows, random: draws(0, 0.5, 0) });
+    await counters.readDay(window, NOON);
+
+    rows.held = { read: 400, written: 6 };
+    await count(counters, window, true, NOON);
+    const afterFirst = rows.held;
+    rows.held = { read: 30, written: 2 };
+    await count(counters, window, true, NOON);
+    const afterLeftOut = [rows.held, database.rows.length];
+    rows.returnRows(TODAY, { read: 5, written: 0 });
+    await count(counters, window, false, NOON);
+
+    expect([database.rows, afterFirst, afterLeftOut, rows.held]).toEqual([
+      [
+        { read: 400, written: 6 },
+        { read: 35, written: 2 },
+      ],
+      { read: 0, written: 0 },
+      [{ read: 30, written: 2 }, 1],
+      { read: 0, written: 0 },
+    ]);
+  });
+
+  // Drift: D1 names the rows of every statement of a batch, and counts its allowance by UTC day. A driver that read the last statement alone, kept the rows of a failed write, or gave a day the rows of the day before would show a day D1 never counted.
+  test("the driver adds up the rows D1 names for every statement of a day, a write the database rejects puts them back, the next sampled write stores them in their day, a new day begins at none, and a batch answered after midnight adds to neither day", async () => {
+    await reset();
+    const clock = { now: NOON };
+    const driver = new D1Driver(BINDINGS.DB, () => clock.now);
+    const opened = await openDatabase(driver, NOON);
+    if (opened.kind !== "open") throw new Error(`the database did not open: ${opened.kind}`);
+
+    await driver.batch([{ sql: "CREATE TABLE tallied (n INTEGER NOT NULL)", params: [] }]);
+    driver.takeRows(TODAY);
+    await driver.batch([
+      { sql: "INSERT INTO tallied (n) VALUES (?), (?), (?)", params: [1, 2, 3] },
+      { sql: "SELECT n FROM tallied", params: [] },
+    ]);
+    await driver.batch([{ sql: "SELECT n FROM tallied WHERE n > ?", params: [1] }]);
+    await driver.batch([{ sql: "INSERT INTO tallied (n) VALUES (NULL)", params: [] }]).catch(() => undefined);
+    const held = driver.heldRows(TODAY);
+    const away = { ...opened.database, addRequests: () => Promise.reject(new Error("the database is away")), readRequests: opened.database.readRequests.bind(opened.database) };
+    await new CloudflareCounters({ limiter: ALWAYS_ROOM, database: away, rows: driver }).countDay({ day: TODAY, site: REPORT, requests: 1, page: false }, NOON).catch(() => undefined);
+    const afterRejected = driver.heldRows(TODAY);
+    const counters = new CloudflareCounters({ limiter: ALWAYS_ROOM, database: opened.database, rows: driver, random: () => 0 });
+    await counters.countDay({ day: TODAY, site: REPORT, requests: 1, page: false }, NOON);
+    const ofWrite = driver.heldRows(TODAY);
+
+    clock.now = NOON + 24 * 60 * MINUTE;
+    await driver.batch([{ sql: "SELECT n FROM tallied", params: [] }]);
+    const nextDay = [driver.heldRows(TODAY), driver.heldRows(TOMORROW)];
+    await counters.countDay({ day: TODAY, site: REPORT, requests: 1, page: false }, clock.now);
+    await counters.countDay({ day: TOMORROW, site: REPORT, requests: 1, page: false }, clock.now);
+
+    const midnight = [NOON + 12 * 60 * MINUTE - 1, NOON + 12 * 60 * MINUTE];
+    const spanning = new D1Driver(BINDINGS.DB, () => midnight.shift() ?? NOON + 12 * 60 * MINUTE);
+    await spanning.batch([{ sql: "SELECT n FROM tallied", params: [] }]);
+
+    expect([spanning.heldRows(TODAY), spanning.heldRows(TOMORROW)]).toEqual([
+      { read: 0, written: 0 },
+      { read: 0, written: 0 },
+    ]);
+    expect([held, afterRejected, nextDay]).toEqual([
+      { read: 6, written: 3 },
+      { read: 6, written: 3 },
+      [
+        { read: 0, written: 0 },
+        { read: 3, written: 0 },
+      ],
+    ]);
+    expect([ofWrite.read > 0, ofWrite.written]).toEqual([true, 2]);
+    expect([(await opened.database.readDayUse(TODAY)).rows, (await opened.database.readDayUse(TOMORROW)).rows.written]).toEqual([{ read: 6, written: 3 }, 2]);
   });
 });
