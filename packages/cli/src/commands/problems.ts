@@ -50,7 +50,7 @@ const API_ROWS = {
   no_key: { sentence: "the install holds no key of its host, so it cannot update itself", hint: "open Domain on the dashboard and press Repair", exit: "failed" },
   key_refused: { sentence: "the install's host no longer takes the install's key", hint: "open Domain on the dashboard and press Repair", exit: "failed" },
   lacks_right: { sentence: "the install's key lacks this right at its host", hint: "open Domain on the dashboard and press Repair: it makes a key with the right", exit: "failed" },
-  release_refused: { sentence: "the release cannot be taken, and nothing was changed, for this reason", hint: "try again in a few minutes", exit: "failed" },
+  release_refused: { sentence: "the release cannot be taken, and nothing was changed, for this reason", hint: "poplin update --dry-run says which version the install runs", exit: "failed" },
   version_refused: { sentence: "the install's host refused the new version, so the install runs the version it ran before", hint: "try again; if it comes back, report it", exit: "failed" },
   logins_not_ended: { sentence: "the install's provider did not end the dashboard's logins, or gave no answer", hint: "the dashboard's Domain screen has Repair, which gives the install its key", exit: "failed" },
   too_large: { sentence: "a size limit is passed", hint: "poplin config shows the limits", exit: "failed" },
@@ -126,6 +126,19 @@ const LOCAL_ROWS = {
 /** Every row, by its code. */
 const ROWS: Readonly<Record<string, Row>> = { ...API_ROWS, ...LOCAL_ROWS };
 
+/** The hint of a code whose way out hangs on what it is about: each reason a release is refused for says what it means, and whether trying again helps. */
+const HINTS_ABOUT: Readonly<Record<string, Readonly<Record<string, string>>>> = {
+  release_refused: {
+    no_digest: "no built files are published for that version, so the install cannot take it by itself; to take the newest release: poplin update",
+    unreachable: "the release could not be fetched; try again in a few minutes",
+    digest_differs: "the files fetched for the release are not the files the project published; try again, and if it comes back, report it",
+    other_version: "the files published for the release name another version or schema than the project's website; trying again gives the same answer, so report it",
+    database: "that release changes the database, and the version asked for cannot read it; trying again gives the same answer",
+    needs_hand: "the install cannot put this release in place by itself; build the install again to take it",
+    host: "the install's host did not answer before anything was sent; try again in a few minutes",
+  },
+};
+
 /** What goes with a change whose answer never came: the install may have made it. */
 const MAY_HAVE_CHANGED = "the answer was lost, so the change may have been made all the same; poplin list shows the sites as they are";
 
@@ -158,6 +171,15 @@ function build(code: string, row: Row, about: string | undefined, hint: string |
   return problem;
 }
 
+/** The hint for what a refusal is about; none for a code with one way out, or about something the table does not name. */
+function hintAbout(code: string, about: string | undefined): string | undefined {
+  if (about === undefined || !Object.hasOwn(HINTS_ABOUT, code)) return undefined;
+
+  const hints = HINTS_ABOUT[code] ?? {};
+
+  return Object.hasOwn(hints, about) ? hints[about] : undefined;
+}
+
 /**
  * Build the problem of one code of the table.
  *
@@ -172,7 +194,7 @@ export function problem(code: Code, about?: string, hint?: string): Problem {
  * Turn the failure of a call into a problem.
  *
  * @param call - `changes` for a call that asks the install to change something: without an answer, the hint says the change may have been made
- * @returns the table's row for the API's code. A code the table does not hold keeps the API's own sentence
+ * @returns the table's row for the API's code, with the hint for what the refusal is about where the table has one. A code the table does not hold keeps the API's own sentence
  */
 export function problemOf(failure: Failure, call: "reads" | "changes" = "reads"): Problem {
   const hint = call === "changes" ? MAY_HAVE_CHANGED : undefined;
@@ -191,7 +213,7 @@ export function problemOf(failure: Failure, call: "reads" | "changes" = "reads")
   const rows: Readonly<Record<string, Row>> = API_ROWS;
   const row = Object.hasOwn(rows, failure.code) ? rows[failure.code] : undefined;
 
-  return build(failure.code, row ?? { sentence: failure.message, exit: "failed" }, failure.about, undefined);
+  return build(failure.code, row ?? { sentence: failure.message, exit: "failed" }, failure.about, hintAbout(failure.code, failure.about));
 }
 
 /**
