@@ -46,8 +46,7 @@ export const LIFECYCLE_CHECKS: readonly Check[] = [
     name: "a new private site hands a stranger nothing, and answers as an address nobody has",
     needs: ["token"],
     run: async (bench) => {
-      const text = "<p>private one</p>";
-      const site = await bench.publish({ access: "private", text });
+      const { site, text } = await bench.shared("private");
       expect(site).toMatchObject({ access: "private", state: "live", live_version: 1, url: labelAddress(bench.domain, site.label, "p").slice(0, -1) });
 
       await expectRefused(bench.domain, await bench.visit(site.url), text);
@@ -64,8 +63,7 @@ export const LIFECYCLE_CHECKS: readonly Check[] = [
     name: "an unlisted site opens for a stranger at every form of its address, with the file headers",
     needs: ["token"],
     run: async (bench) => {
-      const text = "<p>unlisted one</p>";
-      const site = await bench.publish({ access: "unlisted", text });
+      const { site, text } = await bench.shared("unlisted");
       expect(site).toMatchObject({ access: "unlisted", url: labelAddress(bench.domain, site.label, "u").slice(0, -1) });
 
       const response = await expectOpens(bench, site.url, text);

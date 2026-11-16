@@ -330,7 +330,7 @@ export const EDGE_CHECKS: readonly Check[] = [
     name: "a file loaded by a page of another domain is refused, and the same file opened directly is not",
     needs: ["token"],
     run: async (bench) => {
-      const site = await bench.publish({ access: "unlisted", text: "<p>outside page</p>" });
+      const { site } = await bench.shared("unlisted");
       expect((await bench.visit(site.url)).status).toBe(200);
       expect((await bench.visit(site.url, { headers: OUTSIDE_PAGE })).status).toBe(403);
     },

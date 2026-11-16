@@ -30,6 +30,12 @@ export interface Draft {
   readonly text: string;
 }
 
+/** A site of the run that checks only read, with its page's whole body. */
+export interface Shared {
+  readonly site: LiveSite;
+  readonly text: string;
+}
+
 /** An install as an outsider and a token holder reach it. */
 export interface Bench {
   /** The domain every hostname of the install sits under. */
@@ -61,6 +67,9 @@ export interface Bench {
 
   /** Publishes a new site through the CLI. */
   readonly publish: (draft: Draft) => Promise<LiveSite>;
+
+  /** The run's one site of an access for the checks that only read it, published at the first ask. A check that changes its site publishes its own. */
+  readonly shared: (access: "private" | "unlisted") => Promise<Shared>;
 
   /** An empty path under the bench's scratch folder, for a file a command writes. */
   readonly scratchFile: (name: string) => string;

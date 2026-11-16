@@ -144,7 +144,7 @@ one run, at its ceilings         2 (the bucket found or made) + 150 (checks) + 1
 a day of 40 such runs            40 x 302 + 150 (the midnight reset) = 12,230
 31 such days                     12,230 x 31 = 379,130 of the 1,000,000 R2 takes for free in a month
 a run with the many-files check  2 + 2,300 + 150 = 2,452, started by hand alone
-a usual run                      about 85 (checks) + 0 (a reset that keeps every sample and the demo)
+a usual run                      about 77 (checks) + 0 (a reset that keeps every sample and the demo)
 a reset that keeps nothing       about 131
 ```
 
