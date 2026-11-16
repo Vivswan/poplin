@@ -8,9 +8,13 @@ import type { Place, Where } from "../../../../src/shared/install/first/find";
 import { installer } from "../../../../src/shared/install/first/installer";
 import { ACCOUNT, type Account, emptyAccount, KEY_VALUE_START, TOKEN } from "../support/fake-install";
 import { RELEASE, worldOf } from "../support/fake-reach";
+import { type Store, storeOf } from "../support/fake-store";
 
 /** The first login of every install here. */
 const LOGIN = loginOf("owner@example.com");
+
+/** The two users a database that was kept holds, the first of them first. */
+const KEPT_USERS = [loginOf("first@example.com"), loginOf("second@example.com")] as const;
 
 /** The token, in the form the provider takes. */
 const KEY = tokenOf(TOKEN);
@@ -249,14 +253,16 @@ describe.each(Object.keys(KINDS) as (keyof typeof KINDS)[])("a new install, %s",
     ["an answer that is no list of tables", { tables: "failed" }, [], ["D1 database | fail | poplin: no answer from Cloudflare"], false, 0],
     [
       "poplin's schema steps, beside a bucket of the name",
-      { sites: 3 },
+      "records",
       ["poplin-sites"],
       ["R2 bucket | leave | poplin-sites (matched by its name alone)", "D1 database | leave | poplin (matched by its name alone; poplin's by its schema steps)"],
       true,
       1,
     ],
   ] as const)("a database of poplin's name left behind with %s: the dry run and the run say which, and only poplin's is used", async (_holds, holds, buckets, rows, ready, uploads) => {
-    const account = fresh({ databases: [{ uuid: "database-9", name: "poplin" }], buckets: buckets.map((name) => ({ name })), ...holds });
+    // A database of poplin's is read for the settings it holds, so this one holds the records of an install whose user is the first login.
+    const held = holds === "records" ? { store: await storeOf(LOGIN) } : holds;
+    const account = fresh({ databases: [{ uuid: "database-9", name: "poplin" }], buckets: buckets.map((name) => ({ name })), ...held });
     const dry = await installed(account, kind, DRY);
     const run = await installed(account, kind, APPLY);
 
@@ -270,6 +276,112 @@ describe.each(Object.keys(KINDS) as (keyof typeof KINDS)[])("a new install, %s",
     const told = JSON.stringify(done);
 
     expect([told.includes(TOKEN), told.includes(KEY_VALUE_START), done.ok]).toEqual([false, false, true]);
+  });
+});
+
+/** An account an uninstall left its data in: the bucket and the database, which holds two users and settings that are not the ones an install starts with, and no Worker. */
+async function keptData(changes: Partial<Account> = {}): Promise<Omit<Account, "store"> & { store: Store }> {
+  const [first, second] = KEPT_USERS;
+  const store = await storeOf(first);
+  const signed = { as: "person", by: first, at: 1 } as const;
+  await store.database.addLogin(second, signed);
+  await store.database.changeSettings({ block_bots: "off", outside_pages: "allowed" }, signed);
+
+  return { ...fresh({ databases: [{ uuid: "database-9", name: "poplin" }], buckets: [{ name: "poplin-sites" }], ...changes }), store };
+}
+
+/** The emails the login's policy lets through, and the address each alert is mailed to. */
+function usersAt(account: Account): { readonly login: string[]; readonly alerts: string[] } {
+  const policy = account.policies.find((candidate) => candidate.name === "poplin logins") as { readonly include?: readonly { readonly email: { readonly email: string } }[] } | undefined;
+  const alerts = account.alerts as { readonly mechanisms: { readonly email: readonly { readonly id: string }[] } }[];
+
+  return { login: (policy?.include ?? []).map((rule) => rule.email.email), alerts: alerts.flatMap((alert) => alert.mechanisms.email.map((mail) => mail.id)) };
+}
+
+describe.each(Object.keys(KINDS) as (keyof typeof KINDS)[])("an install on the data an uninstall kept, %s", (kind) => {
+  const [first, second] = KEPT_USERS;
+  const unused = `First login | leave-out | ${LOGIN}: not used. The database holds its 2 users already, and they are who logs in. To let this person in too: npx poplin doctor --repair --add-user ${LOGIN}`;
+  const alerts = kind === "domain" ? [first, first] : [first];
+
+  // Drift: the Worker stores its first settings only in a database that holds none. Mended to the first login a person typed, Cloudflare would let in an email the install turns away, and send no code to the users it knows.
+  test("the login, the alerts, and the rules are mended to the users and the settings the database holds, a row says that --login was not used, and a repair then finds nothing to change", async () => {
+    const account = await keptData();
+    const dry = await installed(account, kind, DRY);
+    const run = await installed(account, kind, APPLY);
+    const rows = shown(run.done);
+
+    // A question to the database is sent as a POST, and each one here only reads.
+    expect([shown(dry.done), dry.calls.writes.filter((call) => !call.endsWith("/query"))]).toEqual([rows, []]);
+    expect(rows.slice(0, 3)).toEqual(["R2 bucket | leave | poplin-sites (matched by its name alone)", "D1 database | leave | poplin (matched by its name alone; poplin's by its schema steps)", unused]);
+    expect([usersAt(account), run.done.ok && run.done.ready]).toEqual([{ login: [first, second], alerts }, true]);
+    expect(account.bindings.find((binding) => binding.name === "FIRST_SETTINGS")?.json).toEqual({ logins: first });
+    // The stored settings say to leave the bot switches alone and to let outside pages in: the defaults would set the one and write a rule for the other.
+    const followed = kind === "domain" ? ["Bot settings | leave-out | zone bot switches: the zone-wide bot switches are set to off"] : [];
+
+    expect([rows.filter((row) => row.startsWith("Bot settings") || row.includes("outside pages")), account.switches]).toEqual([followed, { ai_bots_protection: "disabled", fight_mode: false }]);
+
+    const world = await worldOf(account);
+    const found = await installer.find(KEY, KINDS[kind].where, world.reach);
+    const mended = found.state === "whole" ? await installer.repair(found, KINDS[kind].where, { run: DRY, addUser: undefined }, world.reach, () => undefined) : undefined;
+
+    expect(mended?.ok === true ? mended.rows.filter((row) => row.state !== "leave" && row.state !== "leave-out") : mended).toEqual([]);
+  });
+
+  // Drift: a person who types their own email again is a user already, so no row is owed; the other users the database holds must still get in.
+  test("a first login that is one of the stored users raises no row, and every stored user is let in", async () => {
+    const account = await keptData();
+    const world = await worldOf(account);
+    const found = await installer.find(KEY, KINDS[kind].where, world.reach);
+    const done = await installer.install(startable(found), KINDS[kind].where, second, APPLY, world.reach, () => undefined);
+
+    expect([shown(done).filter((row) => row.startsWith("First login")), usersAt(account)]).toEqual([[], { login: [first, second], alerts }]);
+  });
+
+  // Drift: a run that stopped after its upload is found as one that was started, with no word that its database was kept. Finished to the typed login, it would be the same wrong install by two runs.
+  test("a run on kept data that stopped after its upload is finished to the stored users by the run after it", async () => {
+    const account = await keptData({ refuse: `PUT /accounts/${ACCOUNT}/workers/scripts/poplin/schedules`, refuseAs: { status: 400, code: 10001 } });
+    await installed(account, kind, APPLY);
+    delete account.refuse;
+    const again = await installed(account, kind, APPLY);
+
+    expect([again.found.state, shown(again.done).slice(1, 3), usersAt(account), again.done.ok && again.done.ready]).toEqual(["started", ["D1 database | leave | poplin", unused], { login: [first, second], alerts }, true]);
+  });
+
+  // Drift: the users are what the run mends to. A database whose users cannot be read must not be finished as if it held none, with no word of it.
+  test("records at another schema are said to be unread in the database's row and the first login is used; a read the database refuses stops the run before anything is made", async () => {
+    const other = await keptData();
+    await other.store.call("UPDATE schema_steps SET fingerprint = ?1", ["of another build"]);
+    const { done } = await installed(other, kind, APPLY);
+    const unread =
+      "D1 database | leave | poplin (matched by its name alone; poplin's by its schema steps; its records are not at the schema of this poplin, so the users it holds were not read, and --login is used. " +
+      "Once the install answers, npx poplin doctor --repair mends the login to the users it holds)";
+
+    expect([shown(done)[1], shown(done).filter((row) => row.startsWith("First login")), usersAt(other).login]).toEqual([unread, [], [LOGIN]]);
+
+    const refused = await keptData();
+    const { call } = refused.store;
+    refused.store = {
+      ...refused.store,
+      call: async (sql, params) => {
+        if (/\bsettings\b/.test(sql)) throw new Error("You do not have permission to perform this operation.");
+
+        return call(sql, params);
+      },
+    };
+    const stopped = await installed(refused, kind, APPLY);
+
+    expect([shown(stopped.done), stopped.done.ok && stopped.done.ready, refused.uploads.length]).toEqual([["D1 database | fail | poplin: refused with status 400"], false, 0]);
+  });
+
+  // Drift: a database that holds no settings is one the Worker stores its first ones in, so the first login is then the user, and no row says otherwise.
+  test("a database of poplin's schema that holds no settings yet takes the first login, as a new one does", async () => {
+    const account = await keptData();
+    await account.store.call("DELETE FROM settings", []);
+    const { done } = await installed(account, kind, APPLY);
+    const said = shown(done).filter((row) => row.startsWith("D1 database") || row.startsWith("First login"));
+
+    expect([await account.store.database.readSettings(), said]).toEqual([undefined, ["D1 database | leave | poplin (matched by its name alone; poplin's by its schema steps)"]]);
+    expect([usersAt(account).login, account.bindings.find((binding) => binding.name === "FIRST_SETTINGS")?.json]).toEqual([[LOGIN], { logins: LOGIN }]);
   });
 });
 

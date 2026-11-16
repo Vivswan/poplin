@@ -194,6 +194,16 @@ The list before the question says `would keep` for both, the line above the ques
 | take the data up in a new install      | `npx poplin install cloudflare`: it finds the data, and asks `Use it, with what it holds?` |
 | remove the data too                    | the same `uninstall` line without `--keep-data`: it asks you to type `poplin-sites` |
 
+The new install takes its users and its settings from the kept database:
+
+| The kept database holds | Who the login lets in             | `--login`                                                                          |
+| ----------------------- | --------------------------------- | ---------------------------------------------------------------------------------- |
+| users                   | those users, and nobody else      | not used. For an email that is none of them, the row `left out  First login` says so |
+| no users yet            | the email you give for `--login`  | used                                                                               |
+| records this poplin cannot read | the email you give for `--login` | used, and the row of the database says that its users were not read          |
+
+To let one more person in afterwards: `npx poplin doctor --repair --add-user you@example.com`, with their email. The row names that line too.
+
 A dry run with `--keep-data` lists the same. The kept bucket and database stay in your account as they are: [What can cost money](cost/what-can-cost-money.md) says what stored files count toward.
 
 ## When it stops

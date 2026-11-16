@@ -14,7 +14,7 @@
 import type { Login } from "@poplin/core/src/auth/logins";
 import type { Blocked, Given, Installed, Installer, OptionRow, Question, Reach, Read, Row, Run, Startable, Step, Token } from "@poplin/core/src/install/installer";
 import { newestPinned } from "@poplin/core/src/records/release";
-import { defaultSettings } from "@poplin/core/src/records/settings";
+import { defaultSettings, type SettingValues } from "@poplin/core/src/records/settings";
 import { BaseSubdomain } from "cloudflare/resources/workers/scripts/subdomain";
 import { BaseSubdomains } from "cloudflare/resources/workers/subdomains";
 import { homepage } from "../../../../../../cli/package.json";
@@ -35,6 +35,7 @@ import { removeInstall } from "../upkeep/remove/remove";
 import { firstBindings } from "./first-bindings";
 import { failureWords, LACKS, lackingOf, rowOf, UNDONE } from "./rows";
 import { repair } from "../upkeep/repair/repair";
+import { readStored, type Untaken } from "../upkeep/repair/settings";
 
 /** The name of the install's Worker. */
 const SCRIPT = INSTALL_OBJECTS.worker;
@@ -66,6 +67,8 @@ const WORDS = {
   refusedLater: "Cloudflare refused the token before the install was finished",
   notUsed: "it is not used, and an install needs a database of this name",
   unchecked: "its code was there before this run, and this run did not check it",
+  allowance: "the database's free allowance for the day is used up",
+  unreadUsers: "its records are not at the schema of this poplin, so the users it holds were not read, and --login is used. Once the install answers, npx poplin doctor --repair mends the login to the users it holds",
 } as const;
 
 /** What a run answers that could not start its work, or lost Cloudflare on the way. */
@@ -98,7 +101,14 @@ interface Work {
 }
 
 /** A write that was not sent or not taken: Cloudflare's own failure, a release this code cannot place, or a database Cloudflare gave no id for. */
-type NotWritten = CloudflareFailure | { readonly ok: false; readonly failure: "needs-hand" | "no-id" };
+type NotWritten = Untaken | { readonly ok: false; readonly failure: "needs-hand" | "no-id" };
+
+/** A database that stood before the run: as it was found, what its row says of it, and the settings an earlier install stored in it, which the run mends to; `kept` is `undefined` for one that holds none, or none this code reads. */
+interface Stood {
+  readonly found: Awaited<ReturnType<typeof syncDatabase>>;
+  readonly detail: string;
+  readonly kept: SettingValues | undefined;
+}
 
 /** Read where an install goes from what a person typed for it: a domain, or the word for none. */
 function whereOf(text: string, account: string | undefined): Read<Where> {
@@ -163,6 +173,8 @@ function tokenHelp(): string[] {
 /** Why a call failed, with nothing Cloudflare said but its status. */
 function whyOf(failure: NotWritten): string {
   if (failure.failure === "refused" || failure.failure === "rate-limited" || failure.failure === "network") return failureWords(failure);
+
+  if (failure.failure === "allowance") return WORDS.allowance;
 
   return failure.failure === "needs-hand" ? WORDS.newerRelease : "Cloudflare named no database";
 }
@@ -310,13 +322,15 @@ async function workerPieces(work: Work, target: Target, release: Release, made: 
  * Finish the install with the repair of its kind and its first login: the code the dashboard's Domain screen runs, on a Worker with nothing set.
  *
  * The repair is given the account the token was found in, so it looks for no other.
+ * A database that stood before the run and holds an earlier install's settings is what the Worker goes on with: its login is mended to those users, its rules to those settings, and `--login` is not used.
  *
+ * @param kept - the settings such a database holds; `undefined` for a database the Worker stores its first settings in
  * @returns whether Cloudflare answered; its rows are added to the run, but the database's, which stands by now
  */
-async function finish(work: Work, target: Target, login: Login, reach: Reach): Promise<boolean> {
-  const parts = { script: SCRIPT, first: { login, accountId: work.place.accountId }, fetch: reach.fetch, now: reach.now };
+async function finish(work: Work, target: Target, login: Login, kept: SettingValues | undefined, reach: Reach): Promise<boolean> {
+  const settings = kept ?? defaultSettings({ installer: login });
+  const parts = { script: SCRIPT, first: { login: settings.logins[0] ?? login, accountId: work.place.accountId }, fetch: reach.fetch, now: reach.now };
   const plug = target.kind === "domain" ? createDomainPlug({ ...parts, layout: target.layout }) : createPathPlug({ ...parts, layout: target.layout });
-  const settings = defaultSettings({ installer: login });
   const reading = await (work.mode === "plan" ? plug.check(work.place.connection.key, async () => settings) : plug.repair(work.place.connection.key, async () => settings));
   if (!reading.ok && reading.refusal === "unreachable") return false;
 
@@ -356,11 +370,15 @@ async function prepared(work: Work, where: Where, reach: Reach): Promise<{ reado
 }
 
 /**
- * Find the database of poplin's name in an account whose data a person said to use, and read whose it is: no Worker is bound to it, so only its tables say.
+ * Find the database of poplin's name that stood before the run, and read what it holds for it.
  *
- * @returns the database as it was found, with what its row says of it; `undefined` where the account has none; or `false` once the row of a database that is not poplin's, or that could not be read, is in the run
+ * Where a person said to use data that was left behind, no Worker is bound to it, so only its tables say whose it is.
+ * One that is poplin's is read for the settings an earlier install stored: the Worker keeps those, and stores its first ones only in a database that holds none.
+ *
+ * @param adopted - whether the name alone matched the database, which its row then says
+ * @returns the database with what its row says of it and the settings it holds; `undefined` where the account has none; or `false` once the row of a database that is not poplin's, or that could not be read, is in the run
  */
-async function leftDatabase(work: Work): Promise<{ readonly found: Awaited<ReturnType<typeof syncDatabase>>; readonly detail: string } | undefined | false> {
+async function stoodDatabase(work: Work, adopted: boolean): Promise<Stood | undefined | false> {
   const { connection, accountId } = work.place;
   const name = INSTALL_OBJECTS.database;
   const found = await syncDatabase(connection, accountId, "plan");
@@ -371,19 +389,39 @@ async function leftDatabase(work: Work): Promise<{ readonly found: Awaited<Retur
   const holder = await readHolder(connection, accountId, found.id);
   if (!holder.ok) return failed(work, "D1 database", name, holder);
 
-  if (holder.value !== "other") return { found, detail: `${name} (${holderWords(holder.value)})` };
+  if (holder.value === "other") {
+    note(work, { object: "D1 database", state: "block", detail: `${name}: ${holderWords(holder.value)}: ${WORDS.notUsed}` });
 
-  note(work, { object: "D1 database", state: "block", detail: `${name}: ${holderWords(holder.value)}: ${WORDS.notUsed}` });
+    return false;
+  }
 
-  return false;
+  const stored = holder.value === "poplin" ? await readStored(connection, { accountId, databaseId: found.id }) : undefined;
+  if (stored?.state === "unread") return failed(work, "D1 database", name, stored.failure);
+
+  const said = [...(adopted ? [holderWords(holder.value)] : []), ...(stored?.state === "another" ? [WORDS.unreadUsers] : [])];
+
+  return { found, detail: said.length === 0 ? name : `${name} (${said.join("; ")})`, kept: stored?.state === "stored" ? stored.settings : undefined };
 }
 
-/** Make what the install's own repair cannot: the bucket, the database, and the Worker with its trigger and its address. Each stops the ones after it. */
-async function madeFirst(work: Work, target: Target, release: Release, stood: { readonly standing: boolean; readonly adopted: boolean }): Promise<boolean> {
+/** The row that says the first login a person gave was not used, where the database holds users and it is none of them; `undefined` where it is used, or is one of them. */
+function unusedLogin(login: Login, kept: SettingValues | undefined): Row | undefined {
+  if (kept === undefined || kept.logins.includes(login)) return undefined;
+
+  const users = kept.logins.length === 1 ? "its user" : `its ${kept.logins.length} users`;
+
+  return { object: "First login", state: "leave-out", detail: `${login}: not used. The database holds ${users} already, and they are who logs in. To let this person in too: npx poplin doctor --repair --add-user ${login}` };
+}
+
+/**
+ * Make what the install's own repair cannot: the bucket, the database, and the Worker with its trigger and its address. Each stops the ones after it.
+ *
+ * @returns `false` once a piece stopped the run; else the settings a database that stood before the run holds, which the install is finished to
+ */
+async function madeFirst(work: Work, target: Target, release: Release, login: Login, stood: { readonly standing: boolean; readonly adopted: boolean }): Promise<false | { readonly kept: SettingValues | undefined }> {
   const { connection, accountId } = work.place;
   const { standing } = stood;
-  // A database that is somebody else's stops the run before the bucket is made beside it.
-  const left = stood.adopted ? await leftDatabase(work) : undefined;
+  // A database that is somebody else's stops the run before the bucket is made beside it. One this run makes holds nothing to read.
+  const left = stood.adopted || standing ? await stoodDatabase(work, stood.adopted) : undefined;
   if (left === false) return false;
 
   const bucket = await syncBucket(connection, accountId, work.mode);
@@ -394,7 +432,10 @@ async function madeFirst(work: Work, target: Target, release: Release, stood: { 
   const database = left?.found ?? (await syncDatabase(connection, accountId, work.mode));
   if (!synced(work, "D1 database", left?.detail ?? INSTALL_OBJECTS.database, database)) return false;
 
-  return workerPieces(work, target, release, { standing, databaseId: database.ok ? database.id : undefined });
+  const unused = unusedLogin(login, left?.kept);
+  if (unused !== undefined) note(work, unused);
+
+  return (await workerPieces(work, target, release, { standing, databaseId: database.ok ? database.id : undefined })) && { kept: left?.kept };
 }
 
 /** Make the install, or with a dry run say what a run would make. */
@@ -408,9 +449,10 @@ async function install(found: Startable<Place>, where: Where, login: Login, run:
   const address = `https://${target.kind === "domain" ? target.layout.adminHostname : target.layout.adminHost}`;
   const standing = found.state === "started";
   const known = { release: standing ? undefined : release.bundle.version, address };
-  if (!(await madeFirst(work, target, release, { standing, adopted: found.state === "adopted" }))) return done(work, known);
+  const made = await madeFirst(work, target, release, login, { standing, adopted: found.state === "adopted" });
+  if (made === false) return done(work, known);
 
-  return (await finish(work, target, login, reach)) ? done(work, known) : UNREACHABLE;
+  return (await finish(work, target, login, made.kept, reach)) ? done(work, known) : UNREACHABLE;
 }
 
 /** Cloudflare, as the command works through it. */

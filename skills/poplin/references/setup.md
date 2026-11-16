@@ -180,7 +180,7 @@ Every value of a run of this command, of the repair, and of the removal names wh
 | `ready` is false, and `blocked` has entries            | 1         | the user must act first                        | the table of blocks below, then this part again       |
 | `ready` is false, `blocked` is empty, and no `problem` | 1         | a read failed, and its row says why            | run it again in a minute                              |
 | `already_installed`                                    | 1         | the account holds an install; nothing changed  | keep the address under `found`. `next.step` is `login` for an install that is as it should be: step 4. It is `repair` for the rest: part f, as `next.command` writes it |
-| `leftover`                                             | 1         | an earlier install left a bucket or a database | ask the user whether to use it; if yes, add `--adopt` |
+| `leftover`                                             | 1         | an earlier install left a bucket or a database | ask the user whether to use it; if yes, add `--adopt`. Where its database holds users, they log in: a row `First login` that was left out says `--login` was not used |
 | any other `problem`                                    | 1, 2, 5   | a stop                                         | [`refusals.md`](refusals.md)                          |
 
 Each entry of `blocked` has the address to open, and says what blocks:
