@@ -92,7 +92,12 @@ const LOCAL_ROWS = {
   setup_provider_silent: { sentence: "the install got no answer from its provider", hint: "try again", exit: "unreachable" },
   setup_no_domain: { sentence: "the account token shows no such domain", hint: "--domain takes a domain that is active at the provider, in the account the token is of", exit: "failed" },
   setup_bad_domain: { sentence: "--domain takes a domain alone", hint: "for example: --domain example.com", exit: "failed" },
-  setup_bad_login: { sentence: "--login takes an email address", hint: "an install with nothing set yet needs both: --domain <domain> --login <email>", exit: "failed" },
+  setup_bad_address: {
+    sentence: "without --domain, --server takes the address the provider gave the install",
+    hint: "an install without a domain is set up at that address; with a domain, add --domain <domain>",
+    exit: "failed",
+  },
+  setup_bad_login: { sentence: "--login takes an email address", hint: "an install with nothing set yet needs --login <email>, and --domain <domain> when it has a domain", exit: "failed" },
   setup_closed: {
     sentence: "nothing at that address takes a setup",
     hint: "an install's setup closes for good once somebody has logged in: from then on its dashboard's Domain tab checks and repairs",

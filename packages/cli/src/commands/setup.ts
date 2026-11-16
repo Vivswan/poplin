@@ -43,6 +43,7 @@ const REFUSALS: Readonly<Record<string, () => Problem>> = {
   too_many_tries: () => problem("too_many_requests"),
   no_domain: () => problem("setup_no_domain"),
   bad_domain: () => problem("setup_bad_domain"),
+  bad_address: () => problem("setup_bad_address"),
   bad_login: () => problem("setup_bad_login"),
   allowance_spent: () => problem("allowance_spent"),
 };
@@ -85,7 +86,8 @@ function shown(run: "check" | "repair", reading: Reading, token: string): Outcom
  * Run the setup of the install at `--server`.
  *
  * It makes no install: the install must already answer at the address. It works only until somebody has logged in to the install; after that the dashboard's Domain tab does the same.
- * An install with nothing set takes its domain and its first login from `--domain` and `--login`. One that has them ignores `--domain`, and takes `--login` as the correction of the first login.
+ * An install with nothing set takes its first login from `--login`, and its domain from `--domain`: with no `--domain` it is set up without one, at the address `--server` names.
+ * One that is set ignores `--domain`, and takes `--login` as the correction of the first login.
  *
  * @returns the install's rows, worded for a person and kept whole for `--json`; with anything left to repair the command exits as a failure. The token is in no line and no value
  */

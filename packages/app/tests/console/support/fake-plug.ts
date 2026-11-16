@@ -1,6 +1,6 @@
 // A domain plug written by hand for the tests: it answers what a test scripted and records what it was asked with.
 
-import type { DomainPlug, DomainReading, DomainRow, DomainSettings, FirstRun } from "../../../src/console/domain/records";
+import type { DomainPlug, DomainReading, DomainRow, DomainSettings, FirstChoice, FirstRun } from "../../../src/console/domain/records";
 
 /** The token the tests paste. No answer, header, or audit entry may hold it. */
 export const TOKEN = "planted-token-0123456789-abcdefghij";
@@ -19,6 +19,9 @@ const TOKEN_FORM = {
   tokenOptional: [{ right: "Rules: Edit", adds: "The provider stops floods first." }],
   tokenNote: "Choose what the account token is for.",
 };
+
+/** What the hostname of an install without a domain ends in at the fake provider. */
+const FREE_ADDRESS = ".provider.example";
 
 /** A plug and the calls it received. */
 export interface FakePlug extends DomainPlug {
@@ -65,16 +68,17 @@ export function usualPlug(): FakePlug {
 /**
  * Build the provider's side of an install with nothing set, over a plug a test wrote.
  *
- * @returns a first run that hands that plug out for any text with a dot in it, takes anything else as no domain, and records what it was asked for
+ * @returns a first run that hands that plug out for any text with a dot in it, and for an install without a domain at a hostname of the provider's free address; it records what it was asked for
  */
-export function firstRunOf(plug: FakePlug): FirstRun & { readonly asked: { domain: string; login: string }[] } {
-  const asked: { domain: string; login: string }[] = [];
+export function firstRunOf(plug: FakePlug): FirstRun & { readonly asked: FirstChoice[] } {
+  const asked: FirstChoice[] = [];
 
   return {
     asked,
-    ...TOKEN_FORM,
+    forms: { domain: TOKEN_FORM, "no-domain": { ...TOKEN_FORM, tokenRights: ["Login: Edit"] } },
     plugFor: (first) => {
       asked.push({ ...first });
+      if (first.kind === "no-domain") return first.host.endsWith(FREE_ADDRESS) ? plug : undefined;
 
       return first.domain.includes(".") ? plug : undefined;
     },

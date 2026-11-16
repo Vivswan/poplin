@@ -1,7 +1,7 @@
 // The entry's answer once D1's allowance for the day is used up: the same refusal in the form each address speaks.
 //
 //   a site's hostname            the small page of a paused site, which a cache may keep for a minute
-//   /setup/api/...               the setup's JSON refusal to a program's run, on every other hostname of an install that has a setup page
+//   /setup/api/...               the setup's JSON refusal to a program's run, on every other hostname
 //   <admin host>/api/...         the API's JSON refusal, code `allowance_spent`
 //   <admin host>/...             the dashboard's own answer, which names what ran out: JSON to its client, plain words for a page
 //
@@ -30,7 +30,7 @@ function answerOf(url: URL, env: Bindings, spent: AllowanceSpent, now: number): 
   const part = hosts.ok ? hosts.value.partOf(url.hostname) : "setup";
   if (part === "site") return pausedResponse(now);
 
-  if ((!hosts.ok || hosts.value.setup) && url.pathname.startsWith(SETUP_RUNS)) return spentRun(now);
+  if (url.pathname.startsWith(SETUP_RUNS)) return spentRun(now);
 
   if (part !== "admin") return pausedResponse(now);
 

@@ -80,3 +80,19 @@ export function parseAccountAddresses(raw: RawAccountAddresses, worker: string):
 
   return { ok: true, value: layout as AccountAddresses };
 }
+
+/**
+ * Read the addresses of an install without a domain from the hostname its Worker answers at.
+ *
+ * @param host - a request's hostname, in lowercase and without a port
+ * @param worker - the one Worker's name
+ * @returns the layout of the account whose free address the hostname is the Worker's own under; `undefined` for any other hostname, and for one whose layout breaks a rule
+ */
+export function addressesAt(host: string, worker: string): AccountAddresses | undefined {
+  const [first, account, ...rest] = host.split(".");
+  if (first !== worker || account === undefined || rest.join(".") !== FREE_ADDRESS) return undefined;
+
+  const layout = parseAccountAddresses({ account_address: account }, worker);
+
+  return layout.ok ? layout.value : undefined;
+}

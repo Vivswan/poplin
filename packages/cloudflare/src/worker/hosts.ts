@@ -4,14 +4,14 @@
 //   the admin host     poplin.<domain>                                 <worker>.<account>.workers.dev
 //   a site             a hostname of its own under the domain          a path on <worker>-sites or <worker>-private, under the same account
 //   setup alone        every hostname that ends in .workers.dev        no hostname
-//   the setup page     on the admin host and on those                  none
+//   the setup page     on the admin host and on those                  on the admin host
 //   any other host     no site's: serving's 404                        no site's: serving's 404
-//   at Cloudflare      the zone plug, and a new key through it         no plug, and no way to a new key
+//   at Cloudflare      the zone plug, and a new key through it         the plug of the free address, and a new key through it
 //   the guard rules    follow a changed setting with the kept key      none: there is no zone to hold a rule
 //
 // The two site hosts of the free address are Workers of their own that hand every request on, so a request for one arrives here with that host in its URL.
 
-import type { DomainPlug, DomainReading } from "@poplin/app/src/console/domain/records";
+import type { DomainPlug } from "@poplin/app/src/console/domain/records";
 import type { InstallKey } from "@poplin/app/src/console/key/records";
 import type { RulesFollow } from "@poplin/app/src/console/settings/rules-follow";
 import type { SiteAddresses } from "@poplin/app/src/sites/addresses";
@@ -26,13 +26,11 @@ import type { AccountAddresses } from "../zone/address-layout";
 import type { Connection } from "../zone/client";
 import type { DomainLayout } from "../zone/layout";
 import { type BoundInstall, readInstallBinding } from "../zone/zone-binding";
+import { createPathPlug, givePathKey } from "../zone/path-plug";
 import { createDomainPlug, giveKey } from "../zone/zone-plug";
 
 /** What the hostname of a Worker's own address ends in. Cloudflare gives every Worker one, whatever its routes. */
 const OWN_ADDRESS = ".workers.dev";
-
-/** What a pasted token is answered on an install without a domain: the way to a new key goes through a domain's zone. */
-const NO_DOMAIN: DomainReading = { ok: false, refusal: "no_domain" };
 
 /** The guard rules of an install with no zone: it carries nothing, as an install with no key carries nothing. */
 const NO_RULES: RulesFollow = { holdsKey: () => false, push: async () => ({ ok: false, refusal: "no_key" }) };
@@ -59,10 +57,10 @@ interface Own {
   readonly fetch: Connection["fetch"] | undefined;
 }
 
-/** The install's side at Cloudflare. `domain` is absent on an install whose kind has no plug: it has no Domain screen and no setup page. `rules` carries a changed setting to the zone's guard rules. */
+/** The install's side at Cloudflare: the key it keeps, the plug of its kind, which the Domain screen and the setup page run, and `rules`, which carries a changed setting to the zone's guard rules. */
 interface Side {
   readonly key: InstallKey;
-  readonly domain: DomainPlug | undefined;
+  readonly domain: DomainPlug;
   readonly rules: RulesFollow;
 }
 
@@ -82,9 +80,6 @@ export interface InstallHosts {
 
   /** Says what a request's hostname, in lowercase and without a port, is answered as. */
   readonly partOf: (hostname: string) => HostPart;
-
-  /** Whether the install has a setup page: one whose side at Cloudflare has a plug for the page to run. */
-  readonly setup: boolean;
 
   /** Builds the install's side at Cloudflare. */
   readonly sideOf: (own: Own) => Side;
@@ -108,18 +103,24 @@ function domainHosts(layout: DomainLayout): InstallHosts {
     return { key, domain: createDomainPlug({ ...placed, key }), rules: createRulesFollow(own.kept, { accountId: own.accountId, layout }) };
   }
 
-  return { kind: "domain", adminHost: layout.adminHostname, addresses: hostnameAddresses(layout), layout: { kind: "hostname", public_word: layout.publicWord }, partOf, setup: true, sideOf };
+  return { kind: "domain", adminHost: layout.adminHostname, addresses: hostnameAddresses(layout), layout: { kind: "hostname", public_word: layout.publicWord }, partOf, sideOf };
 }
 
 function accountHosts(layout: AccountAddresses): InstallHosts {
+  function sideOf(own: Own): Side {
+    const placed = { accountId: own.accountId, script: own.script, layout, fetch: own.fetch };
+    const key: InstallKey = createInstallKey(own.kept, own.accountId, (authorisation) => givePathKey({ ...placed, key }, authorisation));
+
+    return { key, domain: createPathPlug({ ...placed, key }), rules: NO_RULES };
+  }
+
   return {
     kind: "account address",
     adminHost: layout.adminHost,
     addresses: pathAddresses(layout),
     layout: { kind: "path", sites_host: layout.sitesHost, private_host: layout.privateHost },
     partOf: (hostname) => (hostname === layout.adminHost ? "admin" : "site"),
-    setup: false,
-    sideOf: (own) => ({ key: createInstallKey(own.kept, own.accountId, async () => NO_DOMAIN), domain: undefined, rules: NO_RULES }),
+    sideOf,
   };
 }
 

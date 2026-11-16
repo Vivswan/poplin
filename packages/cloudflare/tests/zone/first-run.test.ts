@@ -28,7 +28,7 @@ async function withFirstRun(account: Account, domain: string, run: (plug: NonNul
   await withFake(
     (asked) => answer(account, asked),
     async (connection, asked) => {
-      const plug = createFirstRun({ script: "poplin", baseUrl: connection.baseUrl }).plugFor({ domain, login: OWNER });
+      const plug = createFirstRun({ script: "poplin", baseUrl: connection.baseUrl }).plugFor({ kind: "domain", domain, login: OWNER });
       if (plug === undefined) throw new Error("the test's domain was refused");
 
       await run(plug, asked);
@@ -107,4 +107,57 @@ test("on an account whose Access is off the Worker still gets its domain, its fi
     expect(account.bindings.map((binding) => binding.name)).toEqual(["SITES", "DB", "WORKER_NAME", "ZONE", "FIRST_SETTINGS", "ACCOUNT_ID", "KEPT_KEY"]);
     expect(repaired).toMatchObject({ steps: [{ text: "Open Zero Trust and pick a plan (Free works): that switches Access on." }] });
   });
+});
+
+// Drift: an install without a domain has no zone to find its account by. Set up by any account the token shows, or from a hostname that is not the Worker's own free address, the install's values would be written to a Worker it does not answer at.
+test("with no domain, one repair from the Worker's own free address gives the Worker the account's name in that address, its first login, its account, its login facts, and its key in one change; any other hostname gets no plug", async () => {
+  const account = deployed();
+
+  await withFake(
+    (asked) => answer(account, asked),
+    async (connection, asked) => {
+      const first = createFirstRun({ script: "poplin", baseUrl: connection.baseUrl });
+      const plug = first.plugFor({ kind: "no-domain", host: "poplin.example.workers.dev", login: OWNER });
+      const elsewhere = ["poplin.example.com", "other.example.workers.dev", "poplin.example.workers.dev.example.com", "poplin-sites.example.workers.dev"].map((host) => first.plugFor({ kind: "no-domain", host, login: OWNER }));
+      const repaired = (await plug?.repair(TOKEN, SETTINGS)) ?? { ok: false, refusal: "bad_address" };
+
+      expect(elsewhere).toEqual([undefined, undefined, undefined, undefined]);
+      expect(repaired).toMatchObject({ ok: true, steps: [{ text: "The login is ready. Open your dashboard and log in:", address: "https://poplin.example.workers.dev" }] });
+      expect(asked.filter((entry) => entry.method === "PATCH")).toHaveLength(1);
+      expect(account.bindings.slice(3)).toEqual([
+        { name: "ZONE", type: "json", json: { account_address: "example" } },
+        { name: "FIRST_SETTINGS", type: "json", json: { logins: OWNER } },
+        { name: "ACCOUNT_ID", type: "plain_text", text: ACCOUNT },
+        { name: "ACCESS", type: "json", json: { team_domain: TEAM, audience: account.applications.find((application) => application.name === "poplin")?.aud } },
+        { name: "KEPT_KEY", type: "secret_text" },
+      ]);
+      // The account is found among the ones the token shows, and every other call goes under it.
+      expect(asked.map((entry) => entry.path).filter((path) => !path.startsWith("/accounts?") && path !== "/accounts" && !path.startsWith(`/accounts/${ACCOUNT}/`))).toEqual([]);
+      expect(asked.length).toBeLessThanOrEqual(CALLS_A_FREE_PLAN_REQUEST_MAY_SEND);
+    },
+  );
+});
+
+// Drift: the setup page is open to anyone before the first login. A token of another account must find no account whose free address is this install's, and so write nowhere.
+test("with no domain, a token of another account is refused, and this account's Worker, forwarders, and login are untouched", async () => {
+  const account = deployed();
+  const before = structuredClone(account);
+
+  await withFake(
+    (asked) => answer(account, asked),
+    async (connection, asked) => {
+      const plug = createFirstRun({ script: "poplin", baseUrl: connection.baseUrl }).plugFor({ kind: "no-domain", host: "poplin.example.workers.dev", login: OWNER });
+
+      expect([await plug?.repair(OTHER_TOKEN, SETTINGS), account]).toEqual([{ ok: false, refusal: "token" }, before]);
+      expect(asked.map((entry) => entry.path).filter((path) => path.includes(ACCOUNT))).toEqual([]);
+    },
+  );
+});
+
+// Drift: the two forms are what the setup page shows before any token exists. One list for both kinds would ask a person with no domain for a zone's rights.
+test("the first run names a token form for each kind of install: the one with no domain asks for no right of a zone", () => {
+  const { forms } = createFirstRun({ script: "poplin" });
+  const zoneRights = (rights: readonly string[]): string[] => rights.filter((right) => /^(Zone|DNS|Workers Routes)/.test(right));
+
+  expect([zoneRights(forms.domain.tokenRights).length > 0, zoneRights(forms["no-domain"].tokenRights), forms["no-domain"].tokenLink.includes("zoneId")]).toEqual([true, [], false]);
 });

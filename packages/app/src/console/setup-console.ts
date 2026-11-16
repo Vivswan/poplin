@@ -13,7 +13,7 @@ import { type Context, Hono, type MiddlewareHandler } from "hono";
 import { secureHeaders } from "hono/secure-headers";
 
 import { createSetup } from "./domain/setup";
-import type { DomainReading } from "./domain/records";
+import type { DomainReading, FirstRun, TokenFacts } from "./domain/records";
 import { POLICY } from "./console";
 import { runDone, runRefusal } from "./domain-answers";
 import { NOTHING_MARKED } from "./problems-routes";
@@ -45,12 +45,15 @@ interface SetupShared {
   Variables: { runs: (request: Request) => Promise<Response> };
 }
 
-/** What a run carries: the token, and beside it the domain and the first login of an install with nothing set, or an email that corrects the first login. */
+/** What a run carries: the token, and beside it the first login of an install with nothing set, with its domain where it has one, or an email that corrects the first login. */
 interface Sent {
   readonly token: string;
   readonly domain?: string;
   readonly login?: string;
 }
+
+/** What the setup page hands its client to start from. */
+export type SetupStart = ReturnType<typeof startOf>;
 
 /** The statuses a refused run goes out with: a refusal of the run, of a body that is no JSON or too large, and of too many tries. */
 type RefusedStatus = 400 | 403 | 413 | 415 | 429 | 502 | 503;
@@ -63,6 +66,18 @@ const carries: MiddlewareHandler<SetupShared, string, { in: { json: Sent }; out:
 
 function notFound(): Response {
   return new Response(NOT_FOUND, { status: 404, headers: { "Content-Type": "text/plain; charset=utf-8" } });
+}
+
+/** What a token must hold and where one is made, and nothing else of whatever carries it. */
+function formOf({ tokenRights, tokenLink, tokenOptional, tokenNote }: TokenFacts): TokenFacts {
+  return { tokenRights, tokenLink, tokenOptional, tokenNote };
+}
+
+/** What the page hands its client to start from: on an install with nothing set a token's form for each kind of install a person can choose, and on one nobody has logged in to the one form of its kind. */
+function startOf(domain: SetupParts["domain"]): { readonly boxes: "first"; readonly forms: FirstRun["forms"] } | { readonly boxes: "login"; readonly form: TokenFacts } {
+  if (!("plugFor" in domain)) return { boxes: "login", form: formOf(domain) };
+
+  return { boxes: "first", forms: { domain: formOf(domain.forms.domain), "no-domain": formOf(domain.forms["no-domain"]) } };
 }
 
 /** Send a repair to the setup's own handler as a program's call, and answer what it did as the screen draws it. */
@@ -95,8 +110,7 @@ export function createSetupConsole(parts: SetupConsoleParts): { readonly fetch: 
   // The gate below asks whether the page is open, once a request, before anything reaches the page's own handler: that one is told yes.
   const setup = createSetup({ ...parts, open: async () => true });
   const at = parts.at ?? SETUP_PATH;
-  const { tokenRights, tokenLink, tokenOptional, tokenNote } = parts.domain;
-  const start = { boxes: "plugFor" in parts.domain ? "first" : "login", form: { tokenRights, tokenLink, tokenOptional, tokenNote } };
+  const start = startOf(parts.domain);
   const app = new Hono<SetupShared>();
 
   const gate: MiddlewareHandler<SetupShared> = async (context, next) => {

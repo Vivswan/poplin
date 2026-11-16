@@ -1,4 +1,4 @@
-// The setup screen: what a person sees before anyone has logged in. One form takes a token, and on an install with nothing set its domain and first login; one press of Repair makes every piece.
+// The setup screen: what a person sees before anyone has logged in. One form takes a token, and on an install with nothing set the kind of install and its first login; one press of Repair makes every piece.
 //
 // It has no sections at its side and shows nothing of the install until a run's token is proven.
 
@@ -10,14 +10,15 @@ import { StatusLine } from "@/domain/status-line";
 import type { Sent } from "@/domain/token-run";
 import { answerOf, Refused } from "@/lib/api";
 import { SetupForm } from "@/setup/setup-form";
-import { type SETUP, type SetupRan, setupApi } from "@/setup/setup-start";
+import { type Kind, type SETUP, type SetupRan, type Boxes, setupApi, shownOf } from "@/setup/setup-start";
 import { BrandMark } from "@/shell/app-shell";
 
-/** What the screen says first, by the boxes its form has. */
-const LEADS = {
-  first: "Make an account token, fill in three boxes, press Repair.",
+/** What the screen says first, by the form it shows. */
+const LEADS: Readonly<Record<Boxes, string>> = {
+  domain: "Make an account token, fill in three boxes, press Repair.",
+  "no-domain": "Make an account token, fill in two boxes, press Repair.",
   login: "Make an account token, paste it, press Repair.",
-} as const;
+};
 
 /** What a repair left: the line that counts the pieces, which logins the install expects, the steps only a person can do, and one row per piece. */
 function Result({ ran, head }: { readonly ran: SetupRan; readonly head: Ref<HTMLDivElement> }): ReactNode {
@@ -36,6 +37,7 @@ function Result({ ran, head }: { readonly ran: SetupRan; readonly head: Ref<HTML
 /** Draw the setup screen. */
 export function SetupScreen({ start }: { readonly start: NonNullable<typeof SETUP> }): ReactNode {
   const [ran, setRan] = useState<SetupRan>();
+  const [kind, setKind] = useState<Kind>("domain");
   const head = useRef<HTMLDivElement>(null);
 
   // The count's line takes the focus after each run, so the result is where a keyboard and a screen reader are.
@@ -64,11 +66,11 @@ export function SetupScreen({ start }: { readonly start: NonNullable<typeof SETU
       <main className="flex w-full flex-col gap-8 pt-6 pb-16">
         <div className="flex flex-col gap-1 px-6 max-md:px-4">
           <h1 className="text-base font-bold">Setup</h1>
-          {ran === undefined ? <p className="text-muted-foreground">{LEADS[start.boxes]}</p> : null}
+          {ran === undefined ? <p className="text-muted-foreground">{LEADS[shownOf(start, kind).boxes]}</p> : null}
         </div>
         {ran === undefined ? null : <Result ran={ran} head={head} />}
         <div className="px-6 max-md:px-4">
-          <SetupForm form={start.form} boxes={start.boxes} onRepair={repair} />
+          <SetupForm start={start} kind={kind} onKind={setKind} onRepair={repair} />
         </div>
       </main>
     </div>

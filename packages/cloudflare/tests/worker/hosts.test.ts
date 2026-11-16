@@ -238,7 +238,7 @@ describe("what a request costs, by the kind of install", () => {
 
 describe("a database whose allowance for the day is used up, on an install without a domain", () => {
   // Drift: the paused answer is chosen by the admin host before any instance has started. Read by the other kind's rule, the API and the dashboard of this install would answer a site's paused page, which a cache may keep.
-  test("the API answers its code, the dashboard its refusal, both site hosts the paused page, a site's file under /setup/api/ included, and no address the refusal of a setup run", async () => {
+  test("the API answers its code, the dashboard its refusal, both site hosts the paused page, a site's file under /setup/api/ included, and the admin host's setup run its own refusal", async () => {
     using failed = vi.spyOn(console, "error").mockImplementation(() => undefined);
     const token = await tokenOf(w, "admin");
     const spent = { ...KINDS.account.bindings, DB: spentDatabase("read") } as Bindings;
@@ -259,7 +259,7 @@ describe("a database whose allowance for the day is used up, on an install witho
       [503, "public, max-age=60", "This site is paused until midnight UTC.\n"],
       [503, "public, max-age=60", "This site is paused until midnight UTC.\n"],
       [503, "public, max-age=60", "This site is paused until midnight UTC.\n"],
-      [503, "no-store", "The dashboard is paused: the free allowance of the database for reading is used up for today. It is back after midnight UTC.\n"],
+      [503, "no-store", '{"ok":false,"refusal":"allowance_spent"}'],
     ]);
     expect(failed).toHaveBeenCalledTimes(6);
   });

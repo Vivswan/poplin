@@ -1,4 +1,4 @@
-// The dashboard's zone plug for Cloudflare: every object of an install read, or made to match, with a token that lives for the one call.
+// The dashboard's zone plug for Cloudflare: every object of an install with a domain read, or made to match, with a token that lives for the one call.
 //
 //   token -> the account's zones -> the zone of the install's domain -> records, routes, Access, the Worker's own variables and its key, https redirect, guard rules, rate rule, bot switches, database, budget alert
 //
@@ -6,10 +6,12 @@
 // A token proves itself by showing the install's own zone inside the install's own account; any other token is refused before anything is read.
 // A check is the repair's own code with the changes left unsent, so the two cannot disagree on what a repair would do.
 // The link to the token form carries every permission an install needs. A piece that needs one of the others is no failure without it: its row says which to add.
+// The plug of an install without a domain is made of the same pieces: the rows, the login, the Worker's variables with its key, and the token form are exported for it.
 
 import type { DomainPlug, DomainReading, DomainRow, DomainState, DomainStep, ReadSettings, TokenFacts } from "@poplin/app/src/console/domain/records";
 import type { InstallKey } from "@poplin/app/src/console/key/records";
 import { type Login, type Logins, parseLogins } from "@poplin/core/src/auth/logins";
+import type { Hostname } from "@poplin/core/src/names/hostname";
 import { ACCESS_NOT_ENABLED, isAccessOff, readLoginFacts, syncAccess } from "./access/access";
 import { syncBudgetAlert } from "./alerts/budget-alert";
 import { syncZoneBots } from "./bots/bots";
@@ -17,7 +19,7 @@ import { type CloudflareFailure, type Connection, findZones, listZones, type Zon
 import { syncDatabase } from "./database/database";
 import { syncDns } from "./dns/dns";
 import { INSTALL_OBJECTS } from "./install-objects";
-import type { INSTALL_PIECES } from "./install-pieces";
+import { INSTALL_PIECES } from "./install-pieces";
 import { HTTPS_SWITCH, syncHttps } from "./https/https";
 import { readKeyState } from "./key/key-state";
 import { mintKey } from "./key/mint";
@@ -29,16 +31,16 @@ import { type Mode, type Report, reportOf, type Synced } from "./sync";
 import { syncVariables } from "./variables/variables";
 
 /** What a token is made of. Anything else is refused unsent, so no pasted text reaches a request header. */
-const TOKEN = /^[A-Za-z0-9_-]{20,512}$/;
+export const TOKEN = /^[A-Za-z0-9_-]{20,512}$/;
 
 /** The reading of a token that is not one, is refused, or does not show the install's zone in the install's account. */
-const REFUSED: DomainReading = { ok: false, refusal: "token" };
+export const REFUSED: DomainReading = { ok: false, refusal: "token" };
 
 /** The reading of a good token that shows no active zone of the domain typed for an install with nothing set. */
 const NO_DOMAIN: DomainReading = { ok: false, refusal: "no_domain" };
 
 /** The reading when Cloudflare did not answer, or asked to wait. */
-const UNREACHABLE: DomainReading = { ok: false, refusal: "unreachable" };
+export const UNREACHABLE: DomainReading = { ok: false, refusal: "unreachable" };
 
 /** What the WAF rule that stops verified bots also stops on a site hostname, as its row says. */
 const ALWAYS_STOPPED = "also stops every method but GET and HEAD, and the paths *.php, /.env, /.env.*, /.git/, /wp-admin/, /cgi-bin/, /phpmyadmin";
@@ -124,7 +126,8 @@ const RIGHTS = {
   "D1 database": [RIGHT.database],
   "Budget alert": [RIGHT.notifications],
   Key: [RIGHT.tokens, RIGHT.scripts],
-} as const satisfies Readonly<Record<keyof typeof INSTALL_PIECES.repair | keyof typeof INSTALL_PIECES.repairAlone, readonly Right[]>>;
+  Forwarder: [RIGHT.scripts],
+} as const satisfies Readonly<Record<keyof typeof INSTALL_PIECES.repair | keyof typeof INSTALL_PIECES.repairAlone | keyof typeof INSTALL_PIECES.noDomain, readonly Right[]>>;
 
 /** What each object is for: the login guards the dashboard and private sites; a record, a route, or the open paths make a site or the API answer at its address. A piece with no row here does not compile. */
 const PART: Readonly<Record<Piece | "Public word", DomainRow["part"]>> = {
@@ -142,6 +145,7 @@ const PART: Readonly<Record<Piece | "Public word", DomainRow["part"]>> = {
   "D1 database": "rest",
   "Budget alert": "rest",
   Key: "rest",
+  Forwarder: "reach",
   "Public word": "rest",
 };
 
@@ -151,8 +155,19 @@ const HOLDS_USERS: readonly (Piece | "Public word")[] = ["Access policy", "Budge
 /** Where Cloudflare's form for a new token is. The link asks for every account and every zone, the one scope a link can carry: the person narrows it on the form. */
 const TOKEN_FORM = "https://dash.cloudflare.com/profile/api-tokens";
 
-/** What the form still asks of the person once its permissions are chosen. */
-const TOKEN_SCOPE = "On the form, choose your account under Account Resources and your domain under Zone Resources, then create the account token and copy it.";
+/** The token form of each kind of install: the objects whose permissions it asks for, the zones its link names, and what it still asks of the person once its permissions are chosen. */
+const TOKEN_FORMS = {
+  domain: {
+    pieces: { ...INSTALL_PIECES.repair, ...INSTALL_PIECES.repairAlone },
+    zones: "&zoneId=all",
+    note: "On the form, choose your account under Account Resources and your domain under Zone Resources, then create the account token and copy it.",
+  },
+  noDomain: {
+    pieces: INSTALL_PIECES.noDomain,
+    zones: "",
+    note: "On the form, choose your account under Account Resources, then create the account token and copy it.",
+  },
+} as const;
 
 /** The name the form suggests for the token. */
 const TOKEN_NAME = "poplin setup";
@@ -167,10 +182,10 @@ const STATES: Readonly<Record<Mode, Readonly<Record<"created" | "changed" | "rem
  * Which install the plug is of.
  *
  * One that is set has `accountId`, the account the Worker runs in, never one a token's holder names.
- * One with nothing set has `first`, its first login: its account is the one the token shows the domain in, and a repair also writes the domain, this login, and that account onto the Worker.
+ * One with nothing set has `first`, its first login: its account is the one the token shows the install in, and a repair also writes where the install answers, this login, and that account onto the Worker.
  * `key` is the install's key as its own Worker holds it. Without one, how the key stands is read at Cloudflare with the token.
  */
-type Known = { readonly accountId: string; readonly first?: undefined; readonly key?: Held } | { readonly accountId?: undefined; readonly first: { readonly login: Login }; readonly key?: undefined };
+export type Known = { readonly accountId: string; readonly first?: undefined; readonly key?: Held } | { readonly accountId?: undefined; readonly first: { readonly login: Login }; readonly key?: undefined };
 
 /** The install's key as the Worker that holds it sees it. */
 type Held = Pick<InstallKey, "has" | "verify">;
@@ -193,8 +208,29 @@ type PlugParts = Known & {
 /** One permission of a token: one an install needs, with its key and level in a link to the form, or an optional one, with what it adds. */
 type Right = { readonly name: string; readonly key: string; readonly type: "read" | "edit" } | { readonly name: string; readonly adds: string };
 
-/** The parts once the token has shown the zone, and with it the account. */
-type Placed = Pick<PlugParts, "script" | "layout" | "first" | "key"> & { readonly accountId: string; readonly zoneId: string };
+/** An install once the token has shown its account: what the pieces both kinds of install share are made from. */
+export interface Placed {
+  /** The name of the install's Worker. */
+  readonly script: string;
+
+  /** The account the token showed the install in. */
+  readonly accountId: string;
+
+  /** The install's zone; an install without a domain has none. */
+  readonly zoneId: string | undefined;
+
+  /** The install's key as its own Worker holds it. */
+  readonly key: Held | undefined;
+
+  /** The dashboard's hostname. */
+  readonly adminHost: Hostname;
+
+  /** What the login guards as the private sites: a pattern of hostnames, or one host whole. */
+  readonly privateSites: string;
+
+  /** The values a repair gives a Worker with nothing set; none on an install that is set. */
+  readonly firstValues: Wanted;
+}
 
 /** The variables a run wants on the Worker. */
 type Wanted = Parameters<typeof syncVariables>[2];
@@ -221,7 +257,7 @@ interface Stopped {
 type Outcome = { readonly ok: true; readonly report: Report } | Stopped;
 
 /** The rows of a run so far, and whether a failure has stopped it. */
-interface Progress {
+export interface Progress {
   readonly rows: Found[];
   readonly steps: DomainStep[];
   stopped: boolean;
@@ -305,7 +341,7 @@ function rowsOf(outcome: Outcome, mode: Mode, objectOf: (subject: string) => Pie
 
 // One piece of the install: its rows are added, and a failure stops every piece after it, so nothing is built on a state half made.
 // A piece refused for a permission the token lacks, before it changed anything, leaves nothing half made, and the pieces after it need other permissions: the run goes on.
-async function piece<Answer extends Outcome>(
+export async function piece<Answer extends Outcome>(
   progress: Progress,
   mode: Mode,
   objectOf: (subject: string) => Piece,
@@ -345,7 +381,7 @@ function accessDetail(row: Found, covered: Readonly<Record<string, string>>): Fo
  *
  * @returns whether the application can be read from: `false` for Access that is off, and `undefined` for an application that was not made, by a run that stopped or a token with no permission for it
  */
-async function accessPiece(progress: Progress, mode: Mode, parts: Placed, connection: Connection, logins: Logins | undefined): Promise<boolean | undefined> {
+export async function accessPiece(progress: Progress, mode: Mode, placed: Placed, connection: Connection, logins: Logins | undefined): Promise<boolean | undefined> {
   if (progress.stopped || logins === undefined) {
     progress.rows.push({ object: "Access application", state: progress.stopped ? "not-run" : "failed", detail: progress.stopped ? "" : BAD_LOGINS });
     progress.stopped = true;
@@ -353,13 +389,12 @@ async function accessPiece(progress: Progress, mode: Mode, parts: Placed, connec
     return undefined;
   }
 
-  const privateSites = privateSitesPattern(parts.layout);
-  const synced = await syncAccess(connection, parts.accountId, { hostname: parts.layout.adminHostname, logins, privateSites }, mode);
+  const { adminHost: host, privateSites } = placed;
+  const synced = await syncAccess(connection, placed.accountId, { hostname: host, logins, privateSites }, mode);
   // A refusal after a step was done is a failure of the run: its rows keep what was made.
   if (synced.ok || synced.failed !== undefined || !isAccessOff(synced)) {
     const before = progress.rows.length;
     await piece(progress, mode, accessObject, async () => synced);
-    const host = parts.layout.adminHostname;
     const covered = { [INSTALL_OBJECTS.accessApplication]: `${host}, ${privateSites}`, [OPEN_PATHS]: INSTALL_OBJECTS.openPaths.map((path) => `${host}${path}`).join(", ") };
     progress.rows.splice(before, Number.POSITIVE_INFINITY, ...progress.rows.slice(before).map((row) => accessDetail(row, covered)));
 
@@ -367,19 +402,25 @@ async function accessPiece(progress: Progress, mode: Mode, parts: Placed, connec
   }
 
   progress.rows.push(...(["Access application", "Access policy", "Access open paths"] as const).map((object): Found => ({ object, state: "missing", detail: ACCESS_OFF })));
-  progress.steps.push({ text: ACCESS_STEP, address: `https://one.dash.cloudflare.com/${parts.accountId}` });
+  progress.steps.push({ text: ACCESS_STEP, address: `https://one.dash.cloudflare.com/${placed.accountId}` });
 
   return false;
 }
 
-/** The values of an install with nothing set, as a repair writes them onto the Worker: its domain, its first login, and the account the token shows the domain in. */
-function firstValues(placed: Placed): Parameters<typeof syncVariables>[2] {
-  if (placed.first === undefined) return [];
+/**
+ * Write the values of an install with nothing set, as a repair gives them to the Worker.
+ *
+ * @param zone - where the install answers, as its `ZONE` variable holds it
+ * @param accountId - the account the token showed the install in
+ * @returns that value, the first login, and the account; nothing for an install that is set
+ */
+export function firstValues(known: Known, zone: Readonly<Record<string, string>>, accountId: string): Wanted {
+  if (known.first === undefined) return [];
 
   return [
-    { name: INSTALL_OBJECTS.zoneBinding, value: { domain: placed.layout.domain } },
-    { name: INSTALL_OBJECTS.firstSettingsBinding, value: { logins: placed.first.login } },
-    { name: INSTALL_OBJECTS.accountBinding, value: placed.accountId },
+    { name: INSTALL_OBJECTS.zoneBinding, value: zone },
+    { name: INSTALL_OBJECTS.firstSettingsBinding, value: { logins: known.first.login } },
+    { name: INSTALL_OBJECTS.accountBinding, value: accountId },
   ];
 }
 
@@ -464,11 +505,11 @@ async function wantedVariables(progress: Progress, mode: Mode, placed: Placed, c
 
   const login = facts.value === undefined ? [] : [{ name, value: { team_domain: facts.value.teamDomain, audience: facts.value.audience } }];
 
-  return { variables: [...firstValues(placed), ...login], login: login.length > 0 };
+  return { variables: [...placed.firstValues, ...login], login: login.length > 0 };
 }
 
 // The Worker checks a login against the application setup made, so its audience tag is written onto the Worker once the application exists, in one change with the values of an install that has none.
-async function variablesPiece(progress: Progress, mode: Mode, placed: Placed, connection: Connection, accessReady: boolean | undefined): Promise<void> {
+export async function variablesPiece(progress: Progress, mode: Mode, placed: Placed, connection: Connection, accessReady: boolean | undefined): Promise<void> {
   const wanted = await wantedVariables(progress, mode, placed, connection, accessReady);
   if (wanted === undefined) {
     progress.rows.push({ object: "Key", state: "not-run", detail: "" });
@@ -478,7 +519,7 @@ async function variablesPiece(progress: Progress, mode: Mode, placed: Placed, co
 
   const synced = await workerPiece(progress, mode, placed, connection, wanted.variables);
   const ready = mode === "apply" && synced?.ok === true && !synced.report.changedNothing && wanted.login;
-  if (ready) progress.steps.push({ text: LOGIN_READY, address: `https://${placed.layout.adminHostname}` });
+  if (ready) progress.steps.push({ text: LOGIN_READY, address: `https://${placed.adminHost}` });
 }
 
 // The alert goes to the first user alone: the one who holds the Cloudflare account an install is made in.
@@ -513,7 +554,21 @@ async function prove(parts: PlugParts, token: string): Promise<{ readonly connec
   const zone = await findZone(parts, connection);
   if ("ok" in zone) return zone;
 
-  return { connection, zone, placed: { script: parts.script, layout: parts.layout, first: parts.first, key: parts.key, accountId: zone.accountId, zoneId: zone.id } };
+  const { layout } = parts;
+  const { accountId, id: zoneId } = zone;
+  const firsts = firstValues(parts, { domain: layout.domain }, accountId);
+  const placed: Placed = { script: parts.script, accountId, zoneId, key: parts.key, adminHost: layout.adminHostname, privateSites: privateSitesPattern(layout), firstValues: firsts };
+
+  return { connection, zone, placed };
+}
+
+/**
+ * Write the rows of a finished run as a reading.
+ *
+ * @returns every row with what its object is for, and the steps only a person can do
+ */
+export function readingOf(progress: Progress): DomainReading {
+  return { ok: true, rows: progress.rows.map((row) => ({ ...row, part: PART[row.object], ...(HOLDS_USERS.includes(row.object) ? { users: true as const } : {}) })), steps: progress.steps };
 }
 
 async function read(parts: PlugParts, mode: Mode, token: string, readSettings: ReadSettings): Promise<DomainReading> {
@@ -584,47 +639,60 @@ async function read(parts: PlugParts, mode: Mode, token: string, readSettings: R
   );
   await alertPiece(progress, mode, placed, connection, logins);
 
-  return { ok: true, rows: progress.rows.map((row) => ({ ...row, part: PART[row.object], ...(HOLDS_USERS.includes(row.object) ? { users: true as const } : {}) })), steps: progress.steps };
+  return readingOf(progress);
 }
 
 // The form reads the permissions as a JSON list of `{ key, type }`.
-function tokenLink(rights: readonly Extract<Right, { readonly key: string }>[]): string {
+function tokenLink(rights: readonly Extract<Right, { readonly key: string }>[], zones: string): string {
   const chosen = rights.map((right) => ({ key: right.key, type: right.type }));
 
-  return `${TOKEN_FORM}?permissionGroupKeys=${encodeURIComponent(JSON.stringify(chosen))}&accountId=%2A&zoneId=all&name=${encodeURIComponent(TOKEN_NAME)}`;
+  return `${TOKEN_FORM}?permissionGroupKeys=${encodeURIComponent(JSON.stringify(chosen))}&accountId=%2A${zones}&name=${encodeURIComponent(TOKEN_NAME)}`;
 }
 
 /**
  * Say what Cloudflare's form for a new token is and asks for.
  *
- * @returns every permission an install needs, the link that opens the form with all of them chosen, and the optional ones with what each adds
+ * @param kind - the kind of install the token is for: one with a domain, or one without
+ * @returns every permission such an install needs, the link that opens the form with all of them chosen, and the optional ones with what each adds
  */
-export function tokenFacts(): TokenFacts {
-  const used: readonly Right[] = [...new Set(Object.values(RIGHTS).flat())];
+export function tokenFacts(kind: keyof typeof TOKEN_FORMS): TokenFacts {
+  const form = TOKEN_FORMS[kind];
+  const pieces = (Object.keys(RIGHTS) as Piece[]).filter((object) => Object.hasOwn(form.pieces, object));
+  const used = [...new Set(pieces.flatMap((object): readonly Right[] => RIGHTS[object]))];
   const needed = used.flatMap((right) => ("key" in right ? [right] : []));
   const optional = used.flatMap((right) => ("adds" in right ? [{ right: right.name, adds: right.adds }] : []));
 
   return {
     tokenRights: needed.map((right) => right.name),
-    tokenLink: tokenLink(needed),
+    tokenLink: tokenLink(needed, form.zones),
     tokenOptional: optional,
-    tokenNote: TOKEN_SCOPE,
+    tokenNote: form.note,
   };
 }
 
 /**
- * Give an install a new key, made with a token a person pasted, and nothing else: no other object is read or changed.
+ * Give an install a new key, made with a token that has proven itself, and nothing else: no other object is read or changed.
+ *
+ * @param replaces - whether the install holds a key, which the new one stands in for
+ * @returns the key's one row, and a step for an older key that is still at Cloudflare. The older keys of the name are deleted once the new one is on the Worker
+ */
+export async function keyGiven(connection: Connection, placed: Placed, replaces: boolean): Promise<DomainReading> {
+  const { row, steps } = await mintInto(connection, placed, [], replaces);
+
+  return { ok: true, rows: [{ ...row, part: PART[row.object] }], steps };
+}
+
+/**
+ * Give an install with a domain a new key, made with a token a person pasted.
  *
  * @param parts - the install; with `key`, a key the install holds is said to be replaced
- * @returns the key's one row, and a step for an older key that is still at Cloudflare; a token that does not prove itself is refused as a check refuses it. The older keys of the name are deleted once the new one is on the Worker
+ * @returns what `keyGiven` answers; a token that does not prove itself is refused as a check refuses it
  */
 export async function giveKey(parts: Extract<PlugParts, { readonly accountId: string }>, token: string): Promise<DomainReading> {
   const proven = await prove(parts, token);
   if ("ok" in proven) return proven;
 
-  const { row, steps } = await mintInto(proven.connection, proven.placed, [], parts.key?.has() === true);
-
-  return { ok: true, rows: [{ ...row, part: PART[row.object] }], steps };
+  return keyGiven(proven.connection, proven.placed, parts.key?.has() === true);
 }
 
 /**
@@ -635,7 +703,7 @@ export async function giveKey(parts: Extract<PlugParts, { readonly accountId: st
  */
 export function createDomainPlug(parts: PlugParts): DomainPlug {
   return {
-    ...tokenFacts(),
+    ...tokenFacts("domain"),
     check: (token, settings) => read(parts, "plan", token, settings),
     repair: (token, settings) => read(parts, "apply", token, settings),
   };

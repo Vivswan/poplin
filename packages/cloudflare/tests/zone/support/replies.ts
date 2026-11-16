@@ -28,7 +28,7 @@ export function page(asked: Asked, items: readonly unknown[]): Response {
 /** What a request carried: its JSON, or for a form the JSON text of each field, read, and the whole text of each file. */
 export async function bodyOf(request: Request): Promise<unknown> {
   if (request.headers.get("content-type")?.startsWith("multipart/form-data") === true) {
-    const fields = [...(await request.formData()).entries()].map(async ([name, value]) => [name, typeof value === "string" ? JSON.parse(value) : await new Response(value).text()]);
+    const fields = [...(await request.formData()).entries()].map(async ([name, value]) => [name, typeof value === "string" ? JSON.parse(value) : await (value as Blob).text()]);
 
     return Object.fromEntries(await Promise.all(fields));
   }

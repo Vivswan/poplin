@@ -5,8 +5,8 @@
 //
 // A login is an entry of the audit log, which only ever grows, so the page never opens again.
 // The page answers on the admin hostname and, on an install with a domain, on the Worker's own workers.dev address, which is the only one that resolves before setup made the records.
-// An install whose kind has no side at Cloudflare has nothing for the page to run: there it is shut from the start.
 // A Worker with nothing set answers the page on every hostname: it has no domain yet to tell one from another.
+// There a person chooses the kind of install. One without a domain is set up from the Worker's own workers.dev address, whose account's name the install then answers under.
 
 import { createSetupConsole } from "@poplin/app/src/console/setup-console";
 import { visitorKey } from "@poplin/app/src/limits/visitor-key";
@@ -14,7 +14,6 @@ import { clientAddress } from "../limits/client-address";
 import { CLIENT_FILES } from "./client-files";
 import type { Held } from "./held";
 import type { Instance, Unset } from "./start";
-import { plain } from "./util";
 
 /** Where the setup page answers; its two runs are one level below. */
 const SETUP_PATH = "/setup";
@@ -29,7 +28,7 @@ export function isSetupPath(pathname: string): boolean {
 }
 
 /**
- * Answer a request to a Worker with nothing set: its setup page, with the two boxes for the domain and the first login, and from every other path the way there.
+ * Answer a request to a Worker with nothing set: its setup page, which asks the kind of install and the first login, and from every other path the way there.
  *
  * @param now - the clock, in milliseconds since the epoch
  * @returns the page's own answer. A run stores nothing here: what it changes is at Cloudflare, under the account of the token it was given
@@ -52,13 +51,11 @@ export function answerFirstSetup(request: Request, unset: Unset, now: () => numb
 /**
  * Answer a request to the setup page.
  *
- * @param held - reads the settings the instance holds; never asked on an install with no setup page
+ * @param held - reads the settings the instance holds
  * @param open - whether the page answers at all, asked on every request
- * @returns the page's own answer: a 404 that says nothing once the page is shut, and on an install with no side at Cloudflare
+ * @returns the page's own answer: a 404 that says nothing once the page is shut
  */
 export async function answerSetup(request: Request, instance: Instance, held: () => Promise<Held>, open: () => Promise<boolean>): Promise<Response> {
-  if (instance.domain === undefined) return plain(request, 404, "Not found.");
-
   const { visitorSecret } = await held();
   const setup = createSetupConsole({
     client: CLIENT_FILES,
