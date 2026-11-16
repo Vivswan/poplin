@@ -418,7 +418,7 @@ describe("an instance whose settings can be read no longer", () => {
       200,
       { status: 503, text: "Something went wrong. Try again.\n" },
       { status: 503, text: `${MADE_BY_ANOTHER_BUILD}\n` },
-      2,
+      3,
     ]);
   });
 });
@@ -1150,8 +1150,25 @@ describe("a request that fails", () => {
     const answers = [await ask(worker, `${site.addresses.public}/`, {}, broken), await ask(worker, `${site.addresses.public}/`, {}, broken)];
     const { database } = await installOf(w);
 
-    expect([answers.map((answer) => answer.status), await answers[0]?.text(), failed.mock.calls.length]).toEqual([[503, 503], "Something went wrong. Try again.\n", 2]);
+    expect([answers.map((answer) => answer.status), await answers[0]?.text(), failed.mock.calls.length]).toEqual([[503, 503], "Something went wrong. Try again.\n", 4]);
     expect((await database.listProblems(dayOf(w.clock.now))).map(({ kind, count, name, message }) => ({ kind, count, name, message }))).toEqual([{ kind: "request_failed", count: 1, name: "Error", message: "the bucket at ... is away" }]);
+  });
+
+  // Drift: an instance whose database threw at its start logged the places in the code alone. Cloudflare's log keeps an error's places and not the line above them, so it said neither what failed nor what the database had said.
+  test("a start at which the database throws is answered try again, and the log is given a line of what failed with the database's codes and fixed words, then the error that starts with that line", async () => {
+    using failed = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    // A ledger of schema steps this code cannot read, which is the first thing a start asks the database for.
+    await BINDINGS.DB.exec("DROP TABLE IF EXISTS schema_steps");
+    await BINDINGS.DB.exec("CREATE TABLE schema_steps (other TEXT)");
+    const line = "poplin: a request failed (Error, caused by Error): D1_ERROR, no such column, SQLITE_ERROR";
+
+    const answer = await ask(instance(w), `${ADMIN}/api/whoami`);
+    const [text, error] = failed.mock.calls.flat();
+    const [first, ...places] = error instanceof Error ? (error.stack ?? "").split("\n") : [];
+
+    expect([answer.status, await answer.text(), failed.mock.calls.length, text, first]).toEqual([503, "Something went wrong. Try again.\n", 2, line, `Error: ${line}`]);
+    // The places are the caught error's own, from the database's driver down to the start that asked.
+    expect(places.join("\n")).toMatch(/D1Driver\.batch[\s\S]+startInstance/);
   });
 });
 
@@ -1355,7 +1372,9 @@ describe("a database that takes no more writes for the day", () => {
     expect([later.status, later.headers.get("Location"), logins.length]).toEqual([200, null, 1]);
     expect(answers.map((answer) => answer.status)).toEqual(answers.map(() => 200));
     expect(warned.mock.calls).toEqual([]);
-    expect(failed.mock.calls.map(([fault]) => String(fault))).toEqual(["Error: poplin: a login was not written to the audit log (AllowanceSpent, caused by Error)"]);
+    const said = "poplin: a login was not written to the audit log (AllowanceSpent, caused by Error): D1_ERROR, daily row write limit";
+
+    expect(failed.mock.calls.map(([fault]) => String(fault))).toEqual([said, `Error: ${said}`]);
   });
 });
 
@@ -1395,8 +1414,8 @@ describe("a database whose allowance for the day is used up", () => {
       [503, "6400", "no-store", JSON.stringify({ error: { code: "allowance_spent", message: "a day's allowance of the install is used up: ask again after midnight UTC", about: "writing" } })],
       [503, "6400", "no-store", JSON.stringify({ ok: false, code: "allowance_spent", about: "writing", sentence: "The database takes no more changes today: its free allowance for writing is used up. Changes work again after midnight UTC." })],
     ]);
-    // The entry writes down each failure it answers itself. The dashboard answers the change it could not write, so the entry never sees that one.
-    expect(failed).toHaveBeenCalledTimes(7);
+    // The entry writes down each failure it answers itself. The dashboard answers the change it could not write, so the entry never sees that one. Each is written twice: a line of text, then the error.
+    expect(failed).toHaveBeenCalledTimes(14);
   });
 });
 

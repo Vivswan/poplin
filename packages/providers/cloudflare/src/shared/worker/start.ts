@@ -344,7 +344,7 @@ function failedStep(
   given: { readonly env: Bindings; readonly outside: Outside; readonly worker: Parameters<typeof goBack>[0]["worker"] },
 ): Started {
   const { env, outside, worker } = given;
-  // The step's message ends in the database's own words, which can repeat a stored value: the log gets the step's number and the kind of the failure.
+  // The step's message ends in the database's own words, which can repeat a stored value: the log gets the step's number, the kind of the failure, and the database's codes and fixed words.
   logFault(`step ${opened.step} of the database's schema failed and nothing of it was kept`, opened.failure);
   const failed = { last: env.LAST_UPDATE, failed: { version: VERSION, stored: opened.stored }, noting: { database: opened.behind, now: outside.now } };
   const key = readKeptKey(env[INSTALL_OBJECTS.keyBinding], { fetch: outside.cloudflare });

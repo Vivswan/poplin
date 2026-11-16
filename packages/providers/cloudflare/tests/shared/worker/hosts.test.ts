@@ -312,6 +312,7 @@ describe("a database whose allowance for the day is used up, on an install witho
       [503, "public, max-age=60", "This site is paused until midnight UTC.\n"],
       [503, "no-store", '{"ok":false,"refusal":"allowance_spent"}'],
     ]);
-    expect(failed).toHaveBeenCalledTimes(6);
+    // Each failure the entry answers is written twice: a line of text, then the error.
+    expect(failed).toHaveBeenCalledTimes(12);
   });
 });

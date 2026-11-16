@@ -135,7 +135,7 @@ describe("the kept key of an instance", () => {
 
 describe("a schema step that fails at the start", () => {
   // Drift: the database's own error can repeat a stored value, and an unlisted site's id is its link. A line that printed the step's message would put it in the log.
-  test("the instance does not start, and the log names the step and the kind of the failure, never the database's words", async () => {
+  test("the instance does not start, and the log names the step, the kind of the failure, and of the database's words its fixed ones alone, never what follows them", async () => {
     await reset();
     const stored = "kqzmxpwtlrvn";
     // A step is a batch of several statements; a batch of one is a read of where the schema stands, which goes on answering.
@@ -155,8 +155,10 @@ describe("a schema step that fails at the start", () => {
     error.mockRestore();
 
     expect(started).toEqual({ ok: false, failure: { kind: "failed", back: expect.any(Function) } });
-    expect(printed.map((line) => line.split("\n")[0])).toEqual(["Error: poplin: step 1 of the database's schema failed and nothing of it was kept (RangeError)"]);
-    expect(printed.filter((line) => line.includes(stored) || line.includes("UNIQUE"))).toEqual([]);
+    const said = "poplin: step 1 of the database's schema failed and nothing of it was kept (RangeError): UNIQUE constraint failed";
+
+    expect(printed.map((line) => line.split("\n")[0])).toEqual([said, `Error: ${said}`]);
+    expect(printed.filter((line) => line.includes(stored) || line.includes("failed: site"))).toEqual([]);
   });
 });
 
