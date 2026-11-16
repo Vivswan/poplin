@@ -28,6 +28,9 @@ const RELEASE_COMMANDS: readonly Ran[] = [
   { command: ["bun", "run", "deploy"], cwd: join("<scratch>", "poplin"), handed: join("<root>", "wrangler.jsonc"), config: undefined, unpacked: true },
 ];
 
+/** The archive packed for each version a scene's files say, kept for the whole run. */
+const PACKED = new Map<string, Promise<Uint8Array<ArrayBuffer>>>();
+
 /** What the website published in most scenes: three versions, each with the digest of its own files. */
 const THREE_RELEASES = { "0.2.0": "0.2.0", "0.3.0": "0.3.0", "0.3.1": "0.3.1" };
 
@@ -70,11 +73,22 @@ interface Scene {
   readonly failing?: string;
 }
 
-/** The archive of a release: its files in one folder, with the file that says its version. `says` of `none` leaves that file out. */
-async function archiveOf(says: string): Promise<Uint8Array<ArrayBuffer>> {
+async function pack(says: string): Promise<Uint8Array<ArrayBuffer>> {
   const files = { "poplin/wrangler.jsonc": OWN_CONFIG, ...(says === "none" ? {} : { "poplin/packages/cli/package.json": JSON.stringify({ name: "poplin", version: says }) }) };
 
   return new Uint8Array(await new Bun.Archive(files, { compress: "gzip" }).bytes());
+}
+
+/**
+ * The archive of a release: its files in one folder, with the file that says its version. `says` of `none` leaves that file out.
+ *
+ * An archive holds the second it was packed in, so each is packed once: the digest the website names and the bytes GitHub serves are of the same pack. Every call gets its own copy.
+ */
+async function archiveOf(says: string): Promise<Uint8Array<ArrayBuffer>> {
+  const packed = PACKED.get(says) ?? pack(says);
+  PACKED.set(says, packed);
+
+  return (await packed).slice();
 }
 
 /** The website's file for a scene: each version with the digest of the archive that says the version given for it. */
