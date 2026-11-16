@@ -13,6 +13,7 @@
     "built-client": "bun scripts/built-client.ts",
     "build": "wrangler deploy --dry-run --outdir packages/cloudflare/dist --config ../../wrangler.jsonc",
     "deploy": "bun scripts/deploy.ts",
+    "pin-releases": "bun scripts/pin-releases.ts",
     "test": "bun run build && vitest run",
     "live:start-over": "bun scripts/live/start-over.ts",
     "live:converge": "bun scripts/live/converge.ts",
