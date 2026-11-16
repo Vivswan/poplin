@@ -7,6 +7,8 @@
   "minify": true,
   // Every upload carries the bundle's source map, so an error in Cloudflare's log names a source file and its line. An upload whose map is missing stops.
   "upload_source_maps": true,
+  // Cloudflare keeps the lines the Worker writes and its errors, of every request. The record Cloudflare would make of each request by itself is off: it holds the request's address, and the address of an unlisted or a private site is its link.
+  "observability": { "enabled": true, "head_sampling_rate": 1, "logs": { "enabled": true, "invocation_logs": false } },
   // Before the Worker is bundled: the dashboard's client is built and written into the Worker's sources as one module, which no commit holds.
   "build": { "command": "bun run --filter @poplin/cloudflare built-client" },
   // The install's own values are written onto the Worker itself, by setup. A deploy leaves them as they are.
