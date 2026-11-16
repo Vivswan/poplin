@@ -433,16 +433,16 @@ describe("run", () => {
   });
 
   // Drift: `poplin update` is the one command that replaces the install's own code. A check that started an update, or a start that did not say why it was refused, would leave a person guessing.
-  test("update --check says what a start would come to and starts nothing, an install with no key is told where to get one, and update takes the release once a minute", async () => {
+  test("update --dry-run says what a start would come to and starts nothing, an install with no key is told where to get one, and update takes the release once a minute", async () => {
     const bench = await openBench();
     const notes = "https://example.com/changelog/#v7-9-0";
     await bench.install.database.keepUpdateCheck({ checked_at: NOW, news: { version: "7.9.0", released: "2026-12-01", notes, schema: OWN_SCHEMA } });
 
     bench.install.host.key = false;
-    const keyless = await bench.run("update --check");
+    const keyless = await bench.run("update --dry-run");
     const refused = await bench.run("update");
     bench.install.host.key = true;
-    const checked = await bench.run("update --check --json");
+    const checked = await bench.run("update --dry-run --json");
     const before = [...bench.install.host.put];
     const started = await bench.run("update");
     const again = await bench.run("update --json");
@@ -458,10 +458,10 @@ describe("run", () => {
   });
 
   // Drift: `--to` is the one way a terminal goes back after an update. A flag the command dropped would take the newest release, and a check that did not name the version before would leave a person to guess it.
-  test("update --check names the version an install can go back to, and update --to takes that version, not the newest", async () => {
+  test("update --dry-run names the version an install can go back to, and update --to takes that version, not the newest", async () => {
     const bench = await openBench();
     bench.install.host.last = { from: "7.7.0", to: INSTALL_VERSION, schema: OWN_SCHEMA, at: NOW };
-    const checked = await bench.run("update --check");
+    const checked = await bench.run("update --dry-run");
     const back = await bench.run("update --to 7.7.0");
 
     expect([checked.out, back.out, bench.install.host.put]).toEqual([
@@ -514,8 +514,8 @@ describe("run", () => {
       await bench.run(`new-link ${label}`, asStranger),
       await bench.run(`rollback ${label} --to 7`),
       await bench.run(`restore ${label}`),
-      await bench.run(`delete ${label} --forever`),
-      await bench.run(`delete ${label} --forever`, { terminal: { asks: true, progress: true }, typed: "report" }),
+      await bench.run(`delete ${label} --no-trash`),
+      await bench.run(`delete ${label} --no-trash`, { terminal: { asks: true, progress: true }, typed: "report" }),
     ];
 
     expect(refused.map((ran) => [ran.code, ran.err[0]])).toEqual([
@@ -524,16 +524,16 @@ describe("run", () => {
       [1, "no site with that id or public name"],
       [1, "the site keeps no such version"],
       [1, "the site is not in the trash"],
-      [1, "delete --forever asks for the site's label to be typed, and there is no terminal to ask on"],
+      [1, "delete --no-trash asks for the site's label to be typed, and there is no terminal to ask on"],
       [1, "what was typed is not the site's label, so nothing was deleted"],
     ]);
     expect(await stateOf(bench)).toEqual(before);
   });
 
-  test("delete --forever removes the site once its label is typed, and prints nothing", async () => {
+  test("delete --no-trash removes the site once its label is typed, and prints nothing", async () => {
     const { bench, label } = await withSite();
 
-    const deleted = await bench.run(`delete ${label.slice(-12)} --forever`, { terminal: { asks: true, progress: true }, typed: `${label}\n` });
+    const deleted = await bench.run(`delete ${label.slice(-12)} --no-trash`, { terminal: { asks: true, progress: true }, typed: `${label}\n` });
 
     expect(summary(deleted)).toEqual({ code: 0, out: [], err: [] });
     expect(deleted.asked).toEqual([`This removes ${label} and every file of it for good. Type its label to go on: `]);
@@ -632,12 +632,12 @@ describe("run", () => {
     expect(echoed).toMatchObject({ error: { code: "bad_argument", about: "Bearer [token]" } });
   });
 
-  test("delete --forever asks nothing about a site whose label an install filled with a token: the question would show it to whoever watches the terminal", async () => {
+  test("delete --no-trash asks nothing about a site whose label an install filled with a token: the question would show it to whoever watches the terminal", async () => {
     const { bench, label } = await withSite();
     const real = (await answered(bench.install.routes.sites[":site"].$get({ param: { site: label } }))).body as { site: object };
     bench.hook = (request) => (request.method === "GET" ? answer(200, { ...real, site: { ...real.site, label: bench.install.tokens.admin } }) : undefined);
 
-    const asked = await bench.run(`delete ${label} --forever`, { terminal: { asks: true, progress: true }, typed: label });
+    const asked = await bench.run(`delete ${label} --no-trash`, { terminal: { asks: true, progress: true }, typed: label });
 
     expect([asked.asked, asked.code]).toEqual([[], 5]);
   });

@@ -78,7 +78,7 @@ A private site needs no new link: its address opens nothing without a login.
 
 **`delete_site` moves a site to the trash; `forever` cannot be undone.** From the trash, `restore_site` brings it back until the day it is gone for good. Delete only what the user named.
 
-Leave `forever` to the user. With the command, `--forever` asks a person to type the label at a terminal, which you do not have.
+Leave `forever` to the user. With the command, `--no-trash` asks a person to type the label at a terminal, which you do not have.
 
 **What is uploaded.** Every file under the folder, except hidden files (a name starting with a dot) and anything named `node_modules`, at any depth. One HTML file is published as the site's `index.html`.
 

@@ -35,8 +35,8 @@ A refused command prints one sentence and often a hint. With `--json` it prints 
 
 | Code                 | Means                                                       | What to do                                                     |
 | -------------------- | ----------------------------------------------------------- | -------------------------------------------------------------- |
-| `no_update`          | there is no newer version the install can take              | `poplin update --check` says which version the install runs    |
-| `update_unreachable` | Cloudflare did not answer; the new version may be in         | wait a minute, then `poplin update --check`                    |
+| `no_update`          | there is no newer version the install can take              | `poplin update --dry-run` says which version the install runs    |
+| `update_unreachable` | Cloudflare did not answer; the new version may be in         | wait a minute, then `poplin update --dry-run`                    |
 | `no_key`, `key_refused` | the install holds no key, or Cloudflare no longer takes it | press Repair on the dashboard's Domain screen                  |
 | `lacks_right`        | the install's key lacks the right shown                     | press Repair on the dashboard's Domain screen: it makes a key with the right |
 | `release_refused`    | the release cannot be taken, for the reason shown; nothing was changed | [With the kept key](../upkeep/update.md#with-the-kept-key) has each reason |
@@ -54,7 +54,7 @@ A refused command prints one sentence and often a hint. With `--json` it prints 
 | `setup_bad_domain`      | `--domain` holds more than a domain, or one over 50 characters | the domain alone: `--domain example.com`                   |
 | `setup_bad_address`     | no `--domain`, and `--server` is not the Worker's own `workers.dev` address | give `--server` that address, or add `--domain <domain>`     |
 | `setup_bad_login`       | `--login` holds no email address                            | a new install needs `--login <email>`, and `--domain <domain>` with a domain |
-| `setup_closed`          | nothing at that address takes a setup                       | check the address; after the first login, leave out `--check` |
+| `setup_closed`          | nothing at that address takes a setup                       | check the address; after the first login, leave out `--dry-run` |
 
 **Naming a site**
 
@@ -70,7 +70,7 @@ A refused command prints one sentence and often a hint. With `--json` it prints 
 | `bad_argument`                | an argument is missing or malformed           | `poplin help set` shows what a command takes                  |
 | `usage-error`                 | the command line names something unknown      | `poplin help` lists every command                             |
 | `not_confirmed`               | the label you typed is not the site's         | nothing was deleted; run it again                             |
-| `no_terminal`                 | `--forever` needs a terminal to ask on        | delete without it: the site goes to the trash                 |
+| `no_terminal`                 | `--no-trash` needs a terminal to ask on        | delete without it: the site goes to the trash                 |
 
 **Publishing**
 

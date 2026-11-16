@@ -299,7 +299,7 @@ async function restore(request: OneSite, { client }: Session): Promise<Outcome> 
 /**
  * Run one command about sites against the install.
  *
- * @returns what the install answered, worded for a person and kept whole for `--json`, or the problem. `delete --forever` asks for the site's label first, and removes nothing unless it is typed
+ * @returns what the install answered, worded for a person and kept whole for `--json`, or the problem. `delete --no-trash` asks for the site's label first, and removes nothing unless it is typed
  */
 export async function runSiteCommand(request: SiteRequest, session: Session): Promise<Outcome> {
   switch (request.kind) {

@@ -34,7 +34,7 @@ describe("poplin setup", () => {
     const plug = usualPlug();
     withSetup(bench, plug);
 
-    const checked = await bench.run(`${SETUP} --check`, { env: ENV });
+    const checked = await bench.run(`${SETUP} --dry-run`, { env: ENV });
     const repaired = await bench.run(SETUP, { env: ENV });
 
     expect([checked.code, checked.out, checked.err]).toEqual([
@@ -77,8 +77,8 @@ describe("poplin setup", () => {
     const bench = await openBench();
     withSetup(bench, fakePlug(() => ({ ok: true, rows: [{ object: "Bot settings", state, detail: "Bots: Edit", part: "rest" }], steps: [] })));
 
-    const plain = await bench.run(`${SETUP} --check`, { env: ENV });
-    const json = await bench.run(`${SETUP} --check --json`, { env: ENV });
+    const plain = await bench.run(`${SETUP} --dry-run`, { env: ENV });
+    const json = await bench.run(`${SETUP} --dry-run --json`, { env: ENV });
 
     expect([plain.out[0], jsonOf(json).rows]).toEqual([`${words}  Bot settings  Bots: Edit`, [{ object: "Bot settings", state, detail: "Bots: Edit" }]]);
   });
@@ -114,7 +114,7 @@ describe("poplin setup", () => {
     };
     withSetup(bench, fakePlug(() => reading));
 
-    const ended = await bench.run(run === "check" ? `${SETUP} --check` : SETUP, { env: ENV });
+    const ended = await bench.run(run === "check" ? `${SETUP} --dry-run` : SETUP, { env: ENV });
 
     expect([ended.code, ended.out.at(-1)]).toEqual([1, run === "check" ? "1 to repair" : "1 not done"]);
   });
