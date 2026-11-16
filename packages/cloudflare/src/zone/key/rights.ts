@@ -6,16 +6,25 @@
 //
 // Cloudflare takes the right to write a Worker for a whole account alone: a key limited to one Worker is refused on every call, so the key can replace any Worker of the account.
 // A group is found by its name each time a key is made, so no id of Cloudflare's is written here.
+//
+// A token carries a right where a policy that allows it reaches the place the key acts on, in one of the forms Cloudflare writes a resource:
+//
+//   the place itself            { "<scope>.<id>": "*" }
+//   every place of the scope    { "<scope>.*": "*" }
+//   every zone of the account   { "com.cloudflare.api.account.<account id>": { "com.cloudflare.api.account.zone.*": "*" } }
 
 /** The right the usage figures are read with. */
 export const USAGE_RIGHT = "Account Analytics Read";
 
+/** The scope of an account's own permission groups, and what every resource of an account starts with. */
+const ACCOUNT_SCOPE = "com.cloudflare.api.account";
+
 /** Every policy of the key, in the order a key carries them: the scope its groups have in Cloudflare's list, its rights, and what they are allowed on, or nothing for a place the install has none of. */
 const POLICIES = [
   {
-    scope: "com.cloudflare.api.account",
+    scope: ACCOUNT_SCOPE,
     rights: [USAGE_RIGHT, "Access: Apps and Policies Write", "Access: Organizations, Identity Providers, and Groups Read", "Notifications Write", "Workers Scripts Write"],
-    resource: (place: KeyPlace): string | undefined => `com.cloudflare.api.account.${place.accountId}`,
+    resource: (place: KeyPlace): string | undefined => `${ACCOUNT_SCOPE}.${place.accountId}`,
   },
   {
     scope: "com.cloudflare.api.account.zone",
@@ -42,6 +51,23 @@ interface KeyPolicy {
   readonly effect: "allow";
   readonly permission_groups: { readonly id: string }[];
   readonly resources: Record<string, string>;
+}
+
+/** One policy of a token as Cloudflare lists it. */
+interface ListedPolicy {
+  readonly effect?: string;
+  readonly permission_groups?: readonly { readonly id?: string }[];
+  readonly resources?: Readonly<Record<string, unknown>>;
+}
+
+/** Whether a listed policy's resources reach `on`, a place of a key, by the table at the top of this file. */
+function reaches(resources: Readonly<Record<string, unknown>>, on: string, place: KeyPlace): boolean {
+  const every = `${on.slice(0, on.lastIndexOf("."))}.*`;
+  if (resources[on] === "*" || resources[every] === "*") return true;
+
+  const within = resources[`${ACCOUNT_SCOPE}.${place.accountId}`];
+
+  return typeof within === "object" && within !== null && (within as Readonly<Record<string, unknown>>)[every] === "*";
 }
 
 /**
@@ -73,4 +99,25 @@ export function keyPolicies(place: KeyPlace, groups: readonly ListedGroup[]): { 
   }
 
   return missing.length > 0 ? { ok: false, missing } : { ok: true, policies };
+}
+
+/**
+ * Say whether a token carries every right of a key where the key acts.
+ *
+ * @param wanted - the policies of a key for `place`, as `keyPolicies` writes them
+ * @param carried - the policies of the token, as Cloudflare lists them
+ * @returns whether each wanted group is in a policy of the token that allows it on the wanted place. A group allowed on another account or zone, on one Worker alone, or named in a policy that denies, is not carried
+ */
+export function carriesRights(place: KeyPlace, wanted: readonly KeyPolicy[], carried: readonly ListedPolicy[]): boolean {
+  const allowedOn = (on: string): Set<string | undefined> => {
+    const reaching = carried.filter((policy) => policy.effect === "allow" && reaches(policy.resources ?? {}, on, place));
+
+    return new Set(reaching.flatMap((policy) => (policy.permission_groups ?? []).map((group) => group.id)));
+  };
+
+  return wanted.every((policy) => {
+    const allowed = Object.keys(policy.resources).map(allowedOn);
+
+    return policy.permission_groups.every((group) => allowed.every((ids) => ids.has(group.id)));
+  });
 }

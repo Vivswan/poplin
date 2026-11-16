@@ -151,6 +151,28 @@ test("a new key replaces the one the install holds and changes nothing else: one
   });
 });
 
+// Drift: an install without a domain has no zone, so its key carries the account's rights alone. Judged as a domain's key it would be replaced at every repair; judged by any token of the name, a key a failed write left would hide the one the Worker holds.
+test("a repair judges the key the Worker holds by the account's rights alone: a whole one stands and a spare of its name goes, and one that lacks a right is replaced though a whole spare is active", async () => {
+  const groups = emptyAccount().groups.flatMap((group) => ((group.scopes as string[]).includes("com.cloudflare.api.account") ? [{ id: group.id }] : []));
+  const whole = { id: "held-key", name: "poplin kept key", status: "active", policies: [{ effect: "allow", permission_groups: groups, resources: { [`com.cloudflare.api.account.${ACCOUNT}`]: "*" } }] };
+  const early = { ...whole, policies: whole.policies.map((policy) => ({ ...policy, permission_groups: groups.filter(({ id }) => !String(id).startsWith("Workers Scripts Write")) })) };
+  const key = { has: () => true, verify: async () => ({ ok: true, value: { id: "held-key" } }) as const };
+  const rowOf = async (held: typeof whole): Promise<unknown> => {
+    const account = { ...deployed(), tokens: [held, { ...whole, id: "spare-key" }] };
+    let rows: string[] = [];
+    await withAccount(account, async (_plug, _asked, baseUrl) => {
+      rows = shown(await createPathPlug({ accountId: ACCOUNT, script: "poplin", layout: ADDRESSES, baseUrl, key }).repair(TOKEN, SETTINGS));
+    });
+
+    return [rows.filter((row) => row.startsWith("Key | ")), account.tokens.map((token) => token.id === "held-key")];
+  };
+
+  expect([await rowOf(whole), await rowOf(early)]).toEqual([
+    [["Key | changed | poplin kept key: a key of its name that the install does not hold was deleted"], [true]],
+    [["Key | changed | poplin kept key"], [false]],
+  ]);
+});
+
 // Drift: the owner's list. A right of a zone on the form would ask a person with no domain for something their account cannot give.
 test("the token form asks for the five rights of an install without a domain and names no zone", async () => {
   const plug = createPathPlug({ accountId: ACCOUNT, script: "poplin", layout: ADDRESSES });

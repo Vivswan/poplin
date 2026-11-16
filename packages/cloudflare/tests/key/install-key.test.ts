@@ -25,9 +25,9 @@ describe("createInstallKey", () => {
     {
       name: "an active key that names when it began",
       respond: () => reply({ id: "token-1", status: "active", not_before: "2026-11-01T00:00:00Z" }),
-      ends: { ok: true, value: { since: Date.UTC(2026, 10, 1) } },
+      ends: { ok: true, value: { since: Date.UTC(2026, 10, 1), id: "token-1" } },
     },
-    { name: "an active key that names no such time", respond: () => reply({ id: "token-1", status: "active" }), ends: { ok: true, value: { since: null } } },
+    { name: "an active key that names no such time", respond: () => reply({ id: "token-1", status: "active" }), ends: { ok: true, value: { since: null, id: "token-1" } } },
     { name: "a disabled key", respond: () => reply({ id: "token-1", status: "disabled" }), ends: { ok: false, refusal: "key_refused" } },
     { name: "an expired key", respond: () => reply({ id: "token-1", status: "expired", expires_on: "2026-11-02T00:00:00Z" }), ends: { ok: false, refusal: "key_refused" } },
     { name: "a deleted key, which answers 401 with code 1000", respond: () => refusal(401, 1000, `Invalid API Token ${KEY}`), ends: { ok: false, refusal: "key_refused" } },
