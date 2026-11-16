@@ -1,4 +1,4 @@
-// The shared table: what its headings say about order, which columns it draws in which order, and what it keeps of a layout.
+// The shared table: what its headings say about order, which columns it draws in which order, what it keeps of a layout, and that a table with none has nothing to arrange.
 
 import { afterAll, afterEach, describe, expect, test } from "bun:test";
 import { act, cleanup, fireEvent, render, within } from "@testing-library/react";
@@ -43,14 +43,16 @@ const KEPT_UNDER = "poplin.table.fruit";
 /** What the test last saw of the layout, and of the table's asks. */
 const seen: { layout?: TableLayout; sorted: (Sort | undefined)[]; opened: string[] } = { sorted: [], opened: [] };
 
-/** The test table, which orders its rows as it is asked to, as a screen does through its address. */
+/** The test table, which orders its rows as it is asked to, as a screen does through its address. With `plain` it is given no layout, as every table but the one of the sites. */
 function Harness({
   sort: first = UNSORTED,
   other = false,
+  plain = false,
   selected,
 }: {
   readonly sort?: Sort;
   readonly other?: boolean;
+  readonly plain?: boolean;
   readonly selected?: string;
 }): ReactNode {
   const [sort, setSort] = useState(first);
@@ -64,7 +66,7 @@ function Harness({
       columns={columns}
       rows={ROWS}
       rowId={(fruit) => fruit.name}
-      layout={layout}
+      layout={plain ? undefined : layout}
       sort={sort}
       selected={selected}
       onSort={(next) => {
@@ -207,6 +209,18 @@ describe("the table", () => {
     fireEvent.keyDown(edge(), { key: "Enter" });
     expect(seen.layout?.sizes).toEqual({});
     expect(said()).toEqual(first);
+  });
+});
+
+describe("a table with no layout", () => {
+  // Drift: a list nobody is meant to arrange would grow grips and edges again, or would draw a column that is hidden until chosen, with no menu to choose it; or its headings would stop sorting with them.
+  test("has no grip and no edge at any heading, draws no hidden column, takes no kept layout, and still sorts by its headings", () => {
+    window.localStorage.setItem(KEPT_UNDER, JSON.stringify({ order: ["name", "weight", "colour", "origin"], hidden: [], sizes: { colour: 300 } }));
+    render(<Harness plain />);
+    const tools = [page().queryAllByRole("button", { name: /^Move the / }).length, page().queryAllByRole("separator").length];
+    fireEvent.click(page().getByRole("button", { name: "Colour" }));
+
+    expect([tools, headings(), seen.sorted]).toEqual([[0, 0], ["Name", "Colour", "Weight", "Actions"], [{ key: "colour", descending: true }]]);
   });
 });
 

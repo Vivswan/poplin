@@ -15,7 +15,6 @@ import { momentIn, useChosenTimeZone } from "@/lib/timezone";
 import { settingAddress } from "@/settings/setting-address";
 import { IconButton } from "@/shared/icon-button";
 import { type ColumnSpec, DataTable } from "@/table/data-table";
-import { useTableLayout } from "@/table/layout";
 import type { Line, Usage } from "@/usage/usage-queries";
 import { shareOf } from "@/usage/usage-values";
 
@@ -199,13 +198,12 @@ function OfficialLine({ usage }: { readonly usage: Usage }): ReactNode {
  */
 export function UsageTable({ usage }: { readonly usage: Usage }): ReactNode {
   const columns = useMemo(usageColumns, []);
-  const layout = useTableLayout("usage", columns);
 
   return (
     <>
       <OfficialLine usage={usage} />
       <div className="shrink-0 max-md:hidden">
-        <DataTable label="Usage" columns={columns} rows={usage.lines} rowId={(line) => line.what} layout={layout} sort={AS_GIVEN} actions={(line) => <RowLinks line={line} host={usage.host} />} actionsWidth={ACTIONS_WIDTH} />
+        <DataTable label="Usage" columns={columns} rows={usage.lines} rowId={(line) => line.what} sort={AS_GIVEN} actions={(line) => <RowLinks line={line} host={usage.host} />} actionsWidth={ACTIONS_WIDTH} />
       </div>
       <PhoneList usage={usage} />
     </>

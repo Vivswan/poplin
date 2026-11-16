@@ -13,7 +13,6 @@ import { shortMoment, wholeMoment } from "@/lib/sites";
 import { type LoginNames, Who } from "@/shared/who";
 import type { Fitted } from "@/table/column-widths";
 import { type ColumnSpec, DataTable } from "@/table/data-table";
-import type { TableLayout } from "@/table/layout";
 
 /** The key the browser keeps under whether the removed tokens are open. */
 const OPEN_KEY = "poplin.tokens.removed";
@@ -46,9 +45,6 @@ interface RemovedTokensProps {
 
   /** The name of each token that has one, by its id: a token removed by another is said to be removed by that name. */
   readonly names: LoginNames;
-
-  /** The layout of the list above: a column moved or resized there is moved or resized here, and the other way round. */
-  readonly layout: TableLayout;
 
   /** What the list above measured of its columns; left out where no list is above. */
   readonly alongside?: Fitted;
@@ -102,7 +98,7 @@ function End({ row }: { readonly row: Row }): ReactNode {
 }
 
 /** Draw the removed tokens under the list of the ones that work: closed until a person opens them, which the browser keeps. Nothing at all is drawn where no token ended. */
-export function RemovedTokens({ ended, names, layout, alongside, endWidth, onFitted }: RemovedTokensProps): ReactNode {
+export function RemovedTokens({ ended, names, alongside, endWidth, onFitted }: RemovedTokensProps): ReactNode {
   const [kept, keep] = useLocalStorageState<unknown>(OPEN_KEY);
   if (ended.tokens.length === 0) return null;
 
@@ -127,7 +123,6 @@ export function RemovedTokens({ ended, names, layout, alongside, endWidth, onFit
             columns={COLUMNS}
             rows={rows}
             rowId={({ token }) => token.id}
-            layout={layout}
             sort={ORDER}
             alongside={alongside}
             onFitted={onFitted}

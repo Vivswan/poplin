@@ -1,5 +1,5 @@
-// The table every list of the dashboard is shown in. The server sorts and narrows the rows; the person arranges the columns: drags them into another order, drags an edge to resize, and chooses which are shown.
-// Every chosen column is drawn, as wide as its values need or as a person made it.
+// The table every list of the dashboard is shown in. The server sorts and narrows the rows. A table that is given a layout lets a person arrange its columns: drag them into another order, drag an edge to resize, and choose which are shown.
+// Every other table stands as it is given. Every shown column is drawn, as wide as its values need or as a person made it.
 // Where they do not fit the room, even with every value that gives cut to its shortest, the table scrolls sideways in its own area, between the first column and the rows' actions, which stay in place.
 
 import { ScrollArea as ScrollAreaParts } from "@base-ui/react/scroll-area";
@@ -59,6 +59,9 @@ const [ICON_ACTIONS_WIDTH, NUDGE] = [56, 16];
 
 /** How many rows stand in for the rows being read. */
 const LOADING_ROWS = 6;
+
+/** The widths a person set in a table nobody arranges: none. */
+const NO_SIZES: Readonly<Record<string, number>> = {};
 
 /** What a press on these never does: open the row. */
 const OWN_CONTROLS = "a, button, input, [role^='menu'], [role='dialog']";
@@ -147,8 +150,8 @@ interface DataTableProps<Row> {
   /** A row's key. */
   readonly rowId: (row: Row) => string;
 
-  /** The order, the hidden columns, and the widths, as the person arranged them. */
-  readonly layout: TableLayout;
+  /** The order, the hidden columns, and the widths as a person arranged them: the table's headings then move and resize. Left out, the columns stand as given: each that is not hidden, in the table's own order, as wide as its values need. */
+  readonly layout?: TableLayout;
 
   /** The order the rows are in. */
   readonly sort: Sort;
@@ -188,6 +191,33 @@ interface DataTableProps<Row> {
 }
 
 type Head = Header<typeof FEATURES, object, unknown>;
+
+/** What a heading that can be dragged to another place adds to the cell it is drawn in. */
+interface Moves {
+  /** Tells the drag which cell the heading is. */
+  readonly ref: (cell: HTMLElement | null) => void;
+
+  /** The look of the cell while it is dragged, and of the one a dragged heading would land at. */
+  readonly look: string;
+
+  /** Starts a drag from anywhere on the heading; left out for the column that stays in place. */
+  readonly onPointerDown: PointerEventHandler | undefined;
+
+  /** The grip, which the keys move too. */
+  readonly grip: ReactNode;
+}
+
+/** What a table whose columns are arranged knows of the arranging. */
+interface Arranged {
+  /** The arrangement, and the ways to change it. */
+  readonly layout: TableLayout;
+
+  /** The ids of the columns that can be moved, in the order shown. */
+  readonly movable: readonly string[];
+
+  /** Makes a column wider or narrower by as many pixels. */
+  readonly onNudge: (id: string, by: number) => void;
+}
 
 function ariaSort(sortable: boolean, id: string, sort: Sort): "ascending" | "descending" | "none" | undefined {
   if (!sortable) return undefined;
@@ -263,26 +293,27 @@ function ColumnEdge({
   );
 }
 
-function HeadCell<Row>({
-  header,
-  spec,
-  sort,
-  onSort,
-  onNudge,
-  ends,
-}: {
+/** What every heading is drawn from. */
+interface HeadCellProps<Row> {
+  /** The heading as the table library knows it. */
   readonly header: Head;
+
+  /** The column it stands over. */
   readonly spec: ColumnSpec<Row>;
+
+  /** Whether it is the last heading of a table with no column of actions. */
   readonly ends: boolean;
+
+  /** The order the rows are in. */
   readonly sort: Sort;
+
+  /** Asked for another order when the heading is pressed; left out for a table no heading orders. */
   readonly onSort: ((next: Sort | undefined) => void) | undefined;
-  readonly onNudge: (id: string, by: number) => void;
-}): ReactNode {
+}
+
+/** Draw a heading: its words, which sort the rows where the server can, and what a table whose columns are arranged adds to it. */
+function HeadCell<Row>({ header, spec, sort, onSort, ends, moves, edge }: HeadCellProps<Row> & { readonly moves?: Moves; readonly edge?: ReactNode }): ReactNode {
   const fixed = spec.fixed === true;
-  const { attributes, listeners, setNodeRef, isDragging, isOver, activeIndex, index } = useSortable({
-    id: spec.id,
-    disabled: { draggable: fixed, droppable: fixed },
-  });
   const sorted = sort.key === spec.id;
   const sortable = spec.sortable !== undefined && onSort !== undefined;
   // The table library says which order a press leads to, from the order the rows are in and the column's first direction.
@@ -298,7 +329,7 @@ function HeadCell<Row>({
 
   return (
     <th
-      ref={setNodeRef}
+      ref={moves?.ref}
       scope="col"
       data-column={spec.id}
       aria-sort={ariaSort(sortable, spec.id, sort)}
@@ -306,14 +337,10 @@ function HeadCell<Row>({
       className={cn(
         "group/head relative h-9 border-b bg-background p-0 text-left text-xs font-normal text-muted-foreground select-none",
         fixed && "sticky left-0 z-20",
-        isDragging && "opacity-40",
-        landingMark(isOver, activeIndex, index),
+        moves?.look,
       )}
     >
-      <div
-        className={cn("flex h-9 min-w-0 items-center gap-0.5 pr-3 pl-3", fixed && "pl-6", ends && END_ROOM, spec.numeric === true && "flex-row-reverse")}
-        onPointerDown={fixed ? undefined : (listeners?.onPointerDown as PointerEventHandler | undefined)}
-      >
+      <div className={cn("flex h-9 min-w-0 items-center gap-0.5 pr-3 pl-3", fixed && "pl-6", ends && END_ROOM, spec.numeric === true && "flex-row-reverse")} onPointerDown={moves?.onPointerDown}>
         {sortable ? (
           <Button
             type="button"
@@ -328,24 +355,43 @@ function HeadCell<Row>({
         ) : (
           words
         )}
-        {fixed ? null : (
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon-xs"
-            {...attributes}
-            {...listeners}
-            aria-label={`Move the ${spec.header} column`}
-            title="Drag to move the column"
-            className={cn(GRIP_LOOK, gripPlace(spec.numeric === true, ends))}
-          >
-            <GripVerticalIcon className="size-3.5" />
-          </Button>
-        )}
+        {moves?.grip}
       </div>
-      <ColumnEdge header={header} name={spec.header} inside={ends || fixed} onNudge={(by) => onNudge(spec.id, by)} />
+      {edge}
     </th>
   );
+}
+
+/** Draw a heading of a table whose columns are arranged: it is dragged to another place by its grip or from anywhere on it, and its edge resizes its column. The column that stays in place is not moved. */
+function ArrangedHeadCell<Row>({ onNudge, ...shared }: HeadCellProps<Row> & { readonly onNudge: (id: string, by: number) => void }): ReactNode {
+  const { header, spec, ends } = shared;
+  const fixed = spec.fixed === true;
+  const { attributes, listeners, setNodeRef, isDragging, isOver, activeIndex, index } = useSortable({
+    id: spec.id,
+    disabled: { draggable: fixed, droppable: fixed },
+  });
+  const grip = fixed ? null : (
+    <Button
+      type="button"
+      variant="ghost"
+      size="icon-xs"
+      {...attributes}
+      {...listeners}
+      aria-label={`Move the ${spec.header} column`}
+      title="Drag to move the column"
+      className={cn(GRIP_LOOK, gripPlace(spec.numeric === true, ends))}
+    >
+      <GripVerticalIcon className="size-3.5" />
+    </Button>
+  );
+  const moves: Moves = {
+    ref: setNodeRef,
+    look: cn(isDragging && "opacity-40", landingMark(isOver, activeIndex, index)),
+    onPointerDown: fixed ? undefined : (listeners?.onPointerDown as PointerEventHandler | undefined),
+    grip,
+  };
+
+  return <HeadCell {...shared} moves={moves} edge={<ColumnEdge header={header} name={spec.header} inside={ends || fixed} onNudge={(by) => onNudge(spec.id, by)} />} />;
 }
 
 function BodyRow<Row>({
@@ -396,37 +442,42 @@ function BodyRow<Row>({
   );
 }
 
-/** The row of headings: one for each shown column, then the room the columns leave empty, then the place over the rows' actions. */
+/** The row of headings: one for each shown column, which move and resize where the table's columns are arranged, then the room the columns leave empty, then the place over the rows' actions. */
 function HeadRow<Row>({
   headers,
   specs,
-  movable,
+  arranged,
   sort,
   onSort,
-  onNudge,
   spare,
   withActions,
 }: {
   readonly headers: readonly Head[];
   readonly specs: ReadonlyMap<string, ColumnSpec<Row>>;
-  readonly movable: readonly string[];
+  readonly arranged: Arranged | undefined;
   readonly sort: Sort;
   readonly onSort: ((next: Sort | undefined) => void) | undefined;
-  readonly onNudge: (id: string, by: number) => void;
   readonly spare: boolean;
   readonly withActions: boolean;
 }): ReactNode {
+  const cells = headers.map((header) => {
+    const spec = specs.get(header.column.id);
+    if (spec === undefined) return null;
+
+    const shared = { header, spec, sort, onSort, ends: !withActions && header === headers.at(-1) };
+
+    return arranged === undefined ? <HeadCell key={header.id} {...shared} /> : <ArrangedHeadCell key={header.id} {...shared} onNudge={arranged.onNudge} />;
+  });
+
   return (
     <tr>
-      <SortableContext items={[...movable]} strategy={horizontalListSortingStrategy}>
-        {headers.map((header) => {
-          const spec = specs.get(header.column.id);
-
-          const ends = !withActions && header === headers.at(-1);
-
-          return spec === undefined ? null : <HeadCell key={header.id} header={header} spec={spec} sort={sort} onSort={onSort} onNudge={onNudge} ends={ends} />;
-        })}
-      </SortableContext>
+      {arranged === undefined ? (
+        cells
+      ) : (
+        <SortableContext items={[...arranged.movable]} strategy={horizontalListSortingStrategy}>
+          {cells}
+        </SortableContext>
+      )}
       {spare ? <td className="h-9 border-b bg-background p-0" /> : null}
       {withActions ? (
         <th className={cn(PINNED_LOOK, "z-20 h-9 border-b bg-background p-0")}>
@@ -582,7 +633,54 @@ export function ColumnsMenu<Row>({ columns, layout }: { readonly columns: readon
   );
 }
 
-/** Draw a table: headings that sort, move, and resize, the first column and the rows' actions held in place, and one row per item. */
+/** The columns a table shows: as a person arranged them, or, where nobody arranges them, each that is not hidden, in the table's own order. */
+function shownOf<Row>(columns: readonly ColumnSpec<Row>[], specs: ReadonlyMap<string, ColumnSpec<Row>>, layout: TableLayout | undefined): readonly ColumnSpec<Row>[] {
+  if (layout === undefined) return columns.filter((column) => column.hidden !== true);
+
+  return layout.order.filter((id) => !layout.hidden.includes(id)).flatMap((id) => specs.get(id) ?? []);
+}
+
+/** Let a person drag the headings of a table into another order, by pointer or by keys, and say each step to a screen reader. Only a table whose columns are arranged is drawn inside it. */
+function ColumnMoves<Row>({
+  arranged: { layout, movable },
+  specs,
+  children,
+}: {
+  readonly arranged: Arranged;
+  readonly specs: ReadonlyMap<string, ColumnSpec<Row>>;
+  readonly children: ReactNode;
+}): ReactNode {
+  const [dragged, setDragged] = useState<string>();
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: DRAG_AFTER } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+  );
+  const onDragEnd = ({ active, over }: DragEndEvent): void => {
+    setDragged(undefined);
+    // The fixed column is no place to drop: a column let go over it stays where it was.
+    if (over === null || active.id === over.id || !movable.includes(String(over.id))) return;
+
+    const [from, to] = [layout.order.indexOf(String(active.id)), layout.order.indexOf(String(over.id))];
+    if (from !== -1 && to !== -1) layout.setOrder(arrayMove([...layout.order], from, to));
+  };
+
+  return (
+    <DndContext
+      sensors={sensors}
+      collisionDetection={closestCenter}
+      modifiers={[restrictToHorizontalAxis]}
+      onDragStart={({ active }) => setDragged(String(active.id))}
+      onDragCancel={() => setDragged(undefined)}
+      onDragEnd={onDragEnd}
+      accessibility={{ announcements: announcementsOf(specs) }}
+    >
+      {children}
+      <DragOverlay dropAnimation={null}>{dragged === undefined ? null : <div className={DRAGGED_LOOK}>{specs.get(dragged)?.header}</div>}</DragOverlay>
+    </DndContext>
+  );
+}
+
+/** Draw a table: headings that sort, and that move and resize where the table has a layout, the first column and the rows' actions held in place, and one row per item. */
 export function DataTable<Row>({
   label,
   columns,
@@ -606,14 +704,13 @@ export function DataTable<Row>({
   const definitions = useMemo(() => columns.map(definitionOf), [columns]);
   const data = useMemo(() => [...rows] as object[], [rows]);
   const [frame, room] = useRoom();
-  const shown = layout.order.filter((id) => !layout.hidden.includes(id)).flatMap((id) => specs.get(id) ?? []);
-  const sameList = list === undefined ? undefined : `${list} ${shown.map((spec) => spec.id).join(" ")}`;
-  const [sized, fitted] = useFitted([rows, columns, layout.order, layout.hidden, sort.key, loading, room > 0], sameList);
+  const shown = shownOf(columns, specs, layout);
+  const shownIds = shown.map((spec) => spec.id);
+  const [sized, fitted] = useFitted([rows, columns, shownIds.join(" "), sort.key, loading, room > 0], list === undefined ? undefined : `${list} ${shownIds.join(" ")}`);
   useTopOfPage(sized, page);
   useFittedTold(fitted, onFitted);
-  const [dragged, setDragged] = useState<string>();
   const endWidth = actions === undefined ? 0 : actionsWidth;
-  const widths = widthsForRoom(shown, alongside === undefined ? fitted : widestOf(fitted, alongside), layout.sizes, room - endWidth);
+  const widths = widthsForRoom(shown, alongside === undefined ? fitted : widestOf(fitted, alongside), layout?.sizes ?? NO_SIZES, room - endWidth);
   const { drawn, spare } = widths;
   // The table library is told the widths as drawn, so an edge that is dragged starts from where it is seen.
   const sizing = Object.fromEntries(drawn);
@@ -624,42 +721,24 @@ export function DataTable<Row>({
     manualSorting: true,
     columnResizeMode: "onChange",
     state: {
-      columnOrder: [...layout.order],
-      columnVisibility: Object.fromEntries(layout.hidden.map((id) => [id, false])),
+      columnOrder: shownIds,
+      columnVisibility: Object.fromEntries(columns.filter((column) => !shownIds.includes(column.id)).map((column) => [column.id, false])),
       columnSizing: sizing,
       sorting: [{ id: sort.key, desc: sort.descending }],
     },
-    onColumnSizingChange: (updater) => keepSizes(layout, sizing, typeof updater === "function" ? updater(sizing) : updater),
+    onColumnSizingChange: layout === undefined ? undefined : (updater) => keepSizes(layout, sizing, typeof updater === "function" ? updater(sizing) : updater),
   });
-  const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: DRAG_AFTER } }),
-    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
-  );
   const headers = (table.getHeaderGroups()[0]?.headers ?? []) as readonly Head[];
-  const movable = shown.filter((spec) => spec.fixed !== true).map((spec) => spec.id);
-
-  const onDragEnd = ({ active, over }: DragEndEvent): void => {
-    setDragged(undefined);
-    // The fixed column is no place to drop: a column let go over it stays where it was.
-    if (over === null || active.id === over.id || !movable.includes(String(over.id))) return;
-
-    const [from, to] = [layout.order.indexOf(String(active.id)), layout.order.indexOf(String(over.id))];
-    if (from !== -1 && to !== -1) layout.setOrder(arrayMove([...layout.order], from, to));
-  };
-  const onNudge = (id: string, by: number): void => {
-    if (specs.has(id)) layout.setSizes({ ...layout.sizes, [id]: Math.max(NARROWEST, (drawn.get(id) ?? NARROWEST) + by) });
-  };
-
-  return (
-    <DndContext
-      sensors={sensors}
-      collisionDetection={closestCenter}
-      modifiers={[restrictToHorizontalAxis]}
-      onDragStart={({ active }) => setDragged(String(active.id))}
-      onDragCancel={() => setDragged(undefined)}
-      onDragEnd={onDragEnd}
-      accessibility={{ announcements: announcementsOf(specs) }}
-    >
+  const arranged: Arranged | undefined =
+    layout === undefined
+      ? undefined
+      : {
+          layout,
+          movable: shown.filter((spec) => spec.fixed !== true).map((spec) => spec.id),
+          onNudge: (id, by) => layout.setSizes({ ...layout.sizes, [id]: Math.max(NARROWEST, (drawn.get(id) ?? NARROWEST) + by) }),
+        };
+  const drawnTable = (
+    <>
       {/* The library's scroll area draws its bars whenever the table is longer or wider than its room, also where the system hides its own. Its content part tells it when the table's size changes. */}
       <ScrollArea ref={frame} className="min-h-0 flex-1">
         <ScrollAreaParts.Content>
@@ -672,7 +751,7 @@ export function DataTable<Row>({
           >
             <Widths shown={shown} widths={widths} endWidth={endWidth} />
             <thead className="sticky top-0 z-30">
-              <HeadRow headers={headers} specs={specs} movable={movable} sort={sort} onSort={onSort} onNudge={onNudge} spare={spare > 0} withActions={actions !== undefined} />
+              <HeadRow headers={headers} specs={specs} arranged={arranged} sort={sort} onSort={onSort} spare={spare > 0} withActions={actions !== undefined} />
             </thead>
             <tbody>
               {loading
@@ -702,7 +781,8 @@ export function DataTable<Row>({
         </ScrollAreaParts.Content>
         <ScrollBar orientation="horizontal" />
       </ScrollArea>
-      <DragOverlay dropAnimation={null}>{dragged === undefined ? null : <div className={DRAGGED_LOOK}>{specs.get(dragged)?.header}</div>}</DragOverlay>
-    </DndContext>
+    </>
   );
+
+  return arranged === undefined ? drawnTable : <ColumnMoves arranged={arranged} specs={specs}>{drawnTable}</ColumnMoves>;
 }

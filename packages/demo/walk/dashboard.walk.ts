@@ -1383,3 +1383,28 @@ test("a list says how many rows it shows, and that it shows none, each time it i
   await page.getByRole("searchbox", { name: "Find activity by a site's title or name", exact: true }).fill("zzzz");
   await expect(log).toHaveText('No activity for "zzzz"');
 });
+
+// Drift: a list other than the sites would let its columns be dragged and resized again, which only the table of the sites does.
+test("only the table of the sites has headings to move and edges to resize: every other table stands as it is", async ({ page }) => {
+  const tools = (name: string): Promise<number[]> =>
+    Promise.all([
+      page.getByRole("table", { name, exact: true }).getByRole("separator").count(),
+      page.getByRole("table", { name, exact: true }).getByRole("button", { name: /^Move the /u }).count(),
+    ]);
+  await arrive(page);
+  await expect(page.getByRole("table", { name: "Sites", exact: true }).getByRole("separator").first()).toBeAttached();
+  const found: Record<string, number[]> = { Sites: await tools("Sites") };
+
+  for (const [section, table] of [
+    ["Activity", "Activity"],
+    ["Usage", "Usage"],
+    ["Access", "Users"],
+    ["Domain", "Pieces"],
+  ] as const) {
+    await toSection(page, section);
+    await expect(page.getByRole("table", { name: table, exact: true }).getByRole("columnheader").first()).toBeVisible();
+    found[table] = await tools(table);
+  }
+
+  expect({ ...found, Sites: found.Sites?.map((count) => count > 0) }).toEqual({ Sites: [true, true], Activity: [0, 0], Usage: [0, 0], Users: [0, 0], Pieces: [0, 0] });
+});

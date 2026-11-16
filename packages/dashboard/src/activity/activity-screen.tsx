@@ -29,7 +29,6 @@ import { SearchBox } from "@/shared/search-box";
 import { Who } from "@/shared/who";
 import { AppShell } from "@/shell/app-shell";
 import { DataTable } from "@/table/data-table";
-import { useTableLayout } from "@/table/layout";
 
 /** The screen's path. */
 const PATH = "/activity";
@@ -233,7 +232,6 @@ export function ActivityScreen(): ReactNode {
   // The screen reads the choice of time zone itself, so its rows are drawn again, in the new time zone, when the choice changes.
   const [timeZone, chooseTimeZone] = useTimeZoneChoice();
   const columns = useMemo(() => activityColumns(logins ?? {}, timeZone), [logins, timeZone]);
-  const layout = useTableLayout("activity", columns);
   const showAll = (): void => void navigate({ to: PATH });
   const instead = insteadOfRows(error?.message, page, kind, site, showAll);
   const move = (changes: Readonly<Record<string, string>>, replace = false): void =>
@@ -312,7 +310,6 @@ export function ActivityScreen(): ReactNode {
                 columns={columns}
                 rows={page?.entries ?? []}
                 rowId={(entry) => String(entry.seq)}
-                layout={layout}
                 sort={sortOf(query)}
                 onSort={(order) => void navigate({ to: PATH, search: searchOf(sortedQuery(query, order)) })}
                 actions={rowActions}
