@@ -4,20 +4,19 @@
 //
 // A dry run goes the same way and changes nothing. Nothing is kept on this computer, and the token is in no line and no value.
 
-import type { Found, Installed, Question, Run, Startable } from "../../../core/src/install/installer";
-import { exitCode } from "../commands/exit-codes";
-import { logIn } from "../commands/login";
-import { problemLines } from "../commands/problems";
-import type { Io } from "../commands/records";
-import { hide, written } from "../commands/util";
-import type { Screen, Tone } from "../local/screen";
-import { VERSION } from "../poplin";
+import type { Found, Installed, Question, Run, Startable } from "../../../../core/src/install/installer";
+import { exitCode } from "../../commands/exit-codes";
+import { logIn } from "../../commands/login";
+import { problemLines } from "../../commands/problems";
+import type { Io } from "../../commands/records";
+import { VERSION } from "../../poplin";
 import { installAnswers } from "./answers";
-import { askWhere, STOPPED, settle } from "./ask";
+import { askWhere, STOPPED, settle, TOKEN_VARIABLE } from "../ask";
+import { guarded, type Show, showOf } from "../ends";
 import { installHelp } from "./help";
-import { parseInstall, TOKEN_VARIABLE } from "./parse";
-import type { InstallEnds, InstallRequest, ParsedInstall, Plan, Provider, Stop } from "./records";
-import { dryRunLines, rowLine, runLines, runValue, stopLines, stopValue } from "./report";
+import { parseInstall } from "./parse";
+import type { InstallEnds, InstallRequest, ParsedInstall, Plan, Provider, Stop } from "../records";
+import { dryRunLines, rowLine, runLines, runValue, stopLines, stopValue } from "../report";
 
 /** What the look for an install is called while it runs and in its line. */
 const LOOKING = "looking for an install";
@@ -40,21 +39,6 @@ const NO_PROVIDER: Stop = { problem: "no_provider", exit: 1, lines: ["this build
 /** The exits of a stop, as the endings the command table knows. */
 const ENDINGS = { 1: "failed", 2: "usage-error", 5: "unreachable" } as const;
 
-/** How a command says what it does: lines for a person, or nothing but the one JSON value at its end. */
-interface Show {
-  /** One line of the result. */
-  readonly line: (tone: Tone, text: string) => void;
-
-  /** One line that is no result. */
-  readonly aside: (tone: Tone, text: string) => void;
-
-  /** What is being worked on, until the next line. */
-  readonly working: (text: string) => void;
-
-  /** The one JSON value of a run for a program. */
-  readonly value: (value: unknown) => void;
-}
-
 /** What a look came to that a run goes on from, with the place the provider was last asked about. */
 interface Ground {
   readonly found: Startable<unknown>;
@@ -65,40 +49,6 @@ interface Ground {
 interface Ended {
   readonly code: number;
   readonly value: Readonly<Record<string, unknown>>;
-}
-
-/**
- * The same screen and the same machine's ends, with every token taken out of each line, each question, and each choice before it is shown.
- *
- * Stdout is left to its writers: the screen, the one JSON value written without tokens, and the help, which holds nothing a person or a variable gave.
- */
-function guarded(io: Io, ends: InstallEnds, secrets: ReadonlySet<string>): { readonly io: Io; readonly ends: InstallEnds } {
-  const safe = (text: string): string => hide(text, secrets);
-  const { screen } = ends;
-  const hiding: Screen = {
-    line: (tone, text) => screen.line(tone, safe(text)),
-    aside: (tone, text) => screen.aside(tone, safe(text)),
-    ask: (question, secret) => screen.ask(safe(question), secret),
-    confirm: (question, initial) => screen.confirm(safe(question), initial),
-    choose: (question, picks) =>
-      screen.choose(
-        safe(question),
-        picks.map((pick) => ({ value: pick.value, label: safe(pick.label), hint: safe(pick.hint) })),
-      ),
-    working: (text) => screen.working(safe(text)),
-    rest: screen.rest,
-  };
-
-  return { io: { ...io, err: (line) => io.err(safe(line)) }, ends: { ...ends, screen: hiding } };
-}
-
-/** The ways to show for one command. With `--json` no line reaches stdout but the one value, and what is no result goes to stderr as it is. */
-function showOf(json: boolean, io: Io, ends: InstallEnds, secrets: ReadonlySet<string>): Show {
-  const value = (said: unknown): void => io.out(written(said, secrets));
-
-  if (json) return { line: () => undefined, aside: (_tone, text) => io.err(text), working: () => undefined, value };
-
-  return { line: ends.screen.line, aside: ends.screen.aside, working: ends.screen.working, value: () => undefined };
 }
 
 /** Say why the command made no install, and choose its exit code. `run` is on a stop that came after the plan: a program then reads `ready` as it does of a run. */

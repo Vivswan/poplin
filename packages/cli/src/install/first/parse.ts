@@ -7,14 +7,12 @@
 
 import { Command, CommanderError, Option } from "commander";
 
-import { type Login, parseLogin } from "../../../core/src/auth/logins";
-import type { OptionRow, Question, Token } from "../../../core/src/install/installer";
-import { HELP_FLAG, VERSION_FLAG } from "../commands/command-table";
-import { nearest } from "../commands/util";
-import type { GivenToken, InstallMode, Missing, ParsedInstall, Plan, Provider, Stop } from "./records";
-
-/** The variable the account token is read from. */
-export const TOKEN_VARIABLE = "POPLIN_INSTALL_TOKEN";
+import { type Login, parseLogin } from "../../../../core/src/auth/logins";
+import type { OptionRow, Question, Token } from "../../../../core/src/install/installer";
+import { HELP_FLAG, VERSION_FLAG } from "../../commands/command-table";
+import { nearest } from "../../commands/util";
+import { TOKEN_VARIABLE } from "../ask";
+import type { GivenToken, InstallMode, Missing, ParsedInstall, Plan, Provider, Stop } from "../records";
 
 /** The variable that answers the first login. */
 const LOGIN_VARIABLE = "POPLIN_LOGIN";

@@ -1,9 +1,9 @@
 import { describe, expect, test } from "bun:test";
 
-import type { Blocked, Found, Installer, Row, Token } from "../../../core/src/install/installer";
-import { TOKEN_VARIABLE } from "../../src/install/parse";
-import { jsonOf } from "../commands/support/harness";
-import { ADDRESS, type Account, accountQuestion, emptyAccount, FRESH, installedOf, type Place, type Ran, runLine, standIn, TOKEN, type Where } from "./support/stand-in";
+import type { Blocked, Found, Installer, Row, Token } from "../../../../core/src/install/installer";
+import { TOKEN_VARIABLE } from "../../../src/install/ask";
+import { jsonOf } from "../../commands/support/harness";
+import { ADDRESS, type Account, accountQuestion, emptyAccount, FRESH, installedOf, type Place, type Ran, runLine, standIn, TOKEN, type Where } from "../support/stand-in";
 
 /** The environment of a run whose token is in its variable. */
 const HELD = { [TOKEN_VARIABLE]: TOKEN };

@@ -1,8 +1,8 @@
 import { describe, expect, test } from "bun:test";
 
-import type { Installer } from "../../../core/src/install/installer";
-import { installHelp } from "../../src/install/help";
-import { emptyAccount, standIn } from "./support/stand-in";
+import type { Installer } from "../../../../core/src/install/installer";
+import { installHelp } from "../../../src/install/first/help";
+import { emptyAccount, standIn } from "../support/stand-in";
 
 /** The longest line of the command's own help: a terminal 80 wide shows it unbroken. */
 const MAX_LINE = 80;

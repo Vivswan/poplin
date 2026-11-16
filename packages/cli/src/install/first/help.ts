@@ -1,9 +1,10 @@
 // The two help texts of `poplin install`: the command's own, which lists the providers, and one provider's, made from what the provider declares.
 
-import type { OptionRow } from "../../../core/src/install/installer";
-import { columns } from "../commands/text";
-import { SHARED_OPTIONS, TOKEN_VARIABLE } from "./parse";
-import type { Provider } from "./records";
+import type { OptionRow } from "../../../../core/src/install/installer";
+import { columns } from "../../commands/text";
+import { TOKEN_VARIABLE } from "../ask";
+import { SHARED_OPTIONS } from "./parse";
+import type { Provider } from "../records";
 
 /** How far a line of a list stands in. */
 const INDENT = "  ";

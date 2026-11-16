@@ -9,6 +9,9 @@ import type { Screen } from "../local/screen";
 import type { InstallEnds, InstallRequest, Plan, Provider, Stop } from "./records";
 import { factsLines } from "./report";
 
+/** The variable the account token is read from. */
+export const TOKEN_VARIABLE = "POPLIN_INSTALL_TOKEN";
+
 /** The stop of a run whose person ended a question, which is before any change. */
 export const STOPPED: Stop = { problem: "stopped", exit: 1, words: "stopped: nothing was changed" };
 
