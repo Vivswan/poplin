@@ -207,6 +207,14 @@ async function visitor(request: number): Promise<VisitorKey> {
   return visitorKey(clientAddress(headers), secret, Date.now());
 }
 
+/**
+ * The declared binding, with every call weighing what that many requests weigh together. The binding lets a call in while its count is under the limit and then adds the call's weight, cut to a whole number,
+ * so one such call leaves the count that many requests leave, as long as the last of them would have been let in.
+ */
+function arrivingAsOne(requests: number): ConstructorParameters<typeof CloudflareCounters>[0]["limiter"] {
+  return { limit: ({ key, delta }) => BINDINGS.MINUTE_LIMITS.limit({ key, delta: Math.trunc(delta) * requests }) };
+}
+
 async function onBindings(): Promise<CloudflareCounters> {
   await reset();
   const opened = await openDatabase(new D1Driver(BINDINGS.DB), Date.now());
@@ -241,28 +249,38 @@ function sent(count: number, settings: typeof ROOMY, site: SiteId): Promise<stri
 }
 
 describe("CloudflareCounters on the bindings of wrangler.jsonc", () => {
-  const weights: readonly { readonly setting: number; readonly passed: number }[] = [
-    { setting: 1, passed: 1 },
-    { setting: 2, passed: 2 },
-    { setting: 30, passed: 30 },
-    { setting: 600, passed: 600 },
-    { setting: 999, passed: 999 },
-    { setting: 1000, passed: 1000 },
-    { setting: 2001, passed: 2000 },
-    { setting: 3000, passed: 2995 },
-    { setting: 6000, passed: 5989 },
+  const weights: readonly { readonly setting: number; readonly passed: number; readonly together: number }[] = [
+    { setting: 1, passed: 1, together: 0 },
+    { setting: 2, passed: 2, together: 0 },
+    { setting: 30, passed: 30, together: 0 },
+    { setting: 30, passed: 30, together: 27 },
+    { setting: 600, passed: 600, together: 597 },
+    { setting: 999, passed: 999, together: 996 },
+    { setting: 1000, passed: 1000, together: 997 },
+    { setting: 2001, passed: 2000, together: 1997 },
+    { setting: 3000, passed: 2995, together: 2992 },
+    { setting: 6000, passed: 5989, together: 5986 },
   ];
 
   // Drift: the binding's limit is fixed in wrangler.jsonc and the setting is not; a weight computed against another number makes every per-minute setting wrong at once.
-  test.each(weights)("on the declared binding, a setting of $setting lets $passed requests into a minute and never more", async ({ setting, passed }) => {
+  // Each call is a round trip to the binding's local simulation, so all but the last three requests let in arrive as one; those three, and three more that must be refused, arrive one by one.
+  // The two rows of 30 show that both ways count alike.
+  test.each(weights)("on the declared binding, a setting of $setting lets $passed requests into a minute and never more, the first $together of them arriving as one", async ({ setting, passed, together }) => {
     const taken = await withinOneMinute(async (counters) => {
-      const answers: unknown[] = [];
-      for (let request = 0; request < setting + 3; request += 1) answers.push(await counters.takeMinute({ scope: "site", key: REPORT, limit: setting }));
+      const window = { scope: "site", key: REPORT, limit: setting } as const;
+      const crowd = new CloudflareCounters({ limiter: arrivingAsOne(together), database: new FakeDatabase() });
+      const asOne = together > 0 ? [await crowd.takeMinute(window)] : [];
+      const oneByOne: unknown[] = [];
+      for (let request = together; request < passed + 3; request += 1) oneByOne.push(await counters.takeMinute(window));
 
-      return answers;
+      return { asOne, oneByOne };
     });
 
-    expect([taken.filter((answer) => (answer as { ok: boolean }).ok).length, taken.at(-1)]).toEqual([passed, { ok: false, retryAfterSeconds: 60 }]);
+    expect([taken.asOne, together + taken.oneByOne.filter((answer) => (answer as { ok: boolean }).ok).length, taken.oneByOne.slice(-3)]).toEqual([
+      together > 0 ? [{ ok: true }] : [],
+      passed,
+      Array.from({ length: 3 }, () => ({ ok: false, retryAfterSeconds: 60 })),
+    ]);
   });
 
   const cases: readonly { readonly name: string; readonly settings: typeof ROOMY; readonly expected: readonly string[] }[] = [
