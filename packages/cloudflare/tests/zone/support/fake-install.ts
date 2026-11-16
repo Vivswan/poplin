@@ -65,6 +65,9 @@ export interface Account {
   /** The account's Access applications. */
   applications: Row[];
 
+  /** The id of every application whose logins were ended, in order. */
+  revoked: string[];
+
   /** The zone's entry point ruleset of each phase that has one. */
   rulesets: Record<string, { id: string; rules: Row[] } | undefined>;
 
@@ -112,6 +115,7 @@ export function emptyAccount(): Account {
     routes: [],
     policies: [],
     applications: [],
+    revoked: [],
     rulesets: {},
     switches: { ai_bots_protection: "disabled", fight_mode: false },
     zoneRedirects: false,
@@ -169,8 +173,16 @@ function rules(account: Account, asked: Asked, parts: readonly string[]): Respon
   return stored(ruleset.rules, asked, parts[5]);
 }
 
-/** The account's Access applications. Access gives each an audience tag of 64 hexadecimal characters, here the count of tags given out, and a change keeps the tag. */
-function applications(account: Account, asked: Asked, id: string | undefined): Response {
+/** The account's Access applications. Access gives each an audience tag of 64 hexadecimal characters, here the count of tags given out, and a change keeps the tag. A call to end an application's logins is answered 202 and noted. */
+function applications(account: Account, asked: Asked, id: string | undefined, act: string | undefined): Response {
+  if (act === "revoke_tokens") {
+    if (id === undefined || !account.applications.some((application) => application.id === id)) return refusal(404, 12130, "access.api.error.not_found");
+
+    account.revoked.push(id);
+
+    return Response.json({ success: true, errors: [], messages: [], result: true }, { status: 202 });
+  }
+
   const kept = asked.method === "PUT" ? account.applications.find((application) => application.id === id)?.aud : undefined;
   const answered = stored(account.applications, asked, id);
 
@@ -229,7 +241,7 @@ function inAccount(account: Account, asked: Asked, parts: readonly string[]): Re
 
   if (kind === "access/policies") return stored(account.policies, asked, parts[4]);
 
-  if (kind === "access/apps") return applications(account, asked, parts[4]);
+  if (kind === "access/apps") return applications(account, asked, parts[4], parts[5]);
 
   if (kind === "access/organizations") return reply({ auth_domain: TEAM });
 

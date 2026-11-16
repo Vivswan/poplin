@@ -58,6 +58,7 @@ const API_ROWS = {
   lacks_right: { sentence: "the install's key lacks this right at its host", hint: "open Domain on the dashboard and press Repair: it makes a key with the right", exit: "failed" },
   release_refused: { sentence: "the release cannot be taken, and nothing was changed, for this reason", hint: "try again in a few minutes", exit: "failed" },
   version_refused: { sentence: "the install's host refused the new version, so the install runs the version it ran before", hint: "try again; if it comes back, report it", exit: "failed" },
+  logins_not_ended: { sentence: "the install's provider did not end the dashboard's logins, or gave no answer", hint: "the dashboard's Domain screen has Repair, which gives the install its key", exit: "failed" },
   too_large: { sentence: "a size limit is passed", hint: "poplin config shows the limits", exit: "failed" },
   too_many_requests: { sentence: "the install is asked too often", hint: "wait a minute, then try again", exit: "failed" },
   internal: { sentence: "the install failed to do that", hint: "try again; poplin doctor reports on the install", exit: "failed" },

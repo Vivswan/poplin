@@ -17,6 +17,7 @@ import { createSetupConsole } from "../../../app/src/console/setup-console";
 import type { ClientFiles } from "../../../app/src/console/shell";
 import { serveSite } from "../../../app/src/sites/serve";
 import { type Asking, checkForUpdate } from "../../../core/src/actions/check-update";
+import type { EndLogins } from "../../../core/src/actions/sign-out";
 import type { Rebuilding } from "../../../core/src/actions/start-update";
 import { parseLoginSecret } from "../../../core/src/auth/computer-logins";
 import type { SqlDriver } from "../../../core/src/database/driver";
@@ -63,6 +64,9 @@ const SAMPLE_REBUILD = "https://provider.example/rebuilds/sample";
 
 /** The stand-in for the provider's rebuild: it takes the sample address alone and answers every start as taken, without a request. */
 const REBUILD: Omit<Rebuilding, "counters"> = { accepts: (address) => address.href === SAMPLE_REBUILD, fetch: async () => new Response(null, { status: 204 }) };
+
+/** The stand-in for the provider's way to end every login: no login is kept here, so it answers every press as done. */
+const END_LOGINS: EndLogins = async () => ({ ok: true });
 
 /** A day in milliseconds. */
 const DAY_MS = 86_400_000;
@@ -205,6 +209,7 @@ function dashboardMount(world: World, prefix: string, host: Host): Mount {
     rebuild: REBUILD,
     demo: { reset: `${base}${RESET_PATH}` },
     domain: changingPlug(),
+    endLogins: END_LOGINS,
     ...countsOf(world),
   });
   return { prefix, origin: ADMIN_ORIGIN, base, holds: "pages", answer: dashboard.fetch };
@@ -213,7 +218,7 @@ function dashboardMount(world: World, prefix: string, host: Host): Mount {
 function apiMount(world: World, version: string): Mount {
   const { database } = world.install;
   const said = { version, layout: { kind: "hostname" as const, public_word: DEFAULT_PUBLIC_WORD }, report: (error: unknown) => console.error("preview: an API request failed", error) };
-  const api = createApi({ ...world.install, ...said, readToken: (id) => database.getToken(id), limits: API_LIMITS, rebuild: REBUILD, ...countsOf(world) });
+  const api = createApi({ ...world.install, ...said, readToken: (id) => database.getToken(id), limits: API_LIMITS, rebuild: REBUILD, endLogins: END_LOGINS, ...countsOf(world) });
 
   return { prefix: "/api", origin: ADMIN_ORIGIN, base: "/api", holds: "json", answer: api.fetch };
 }

@@ -19,6 +19,7 @@ import { createEntries } from "@poplin/app/src/login/entries";
 import { hostnameAddresses } from "@poplin/app/src/sites/hostname-addresses";
 import type { Asking } from "@poplin/core/src/actions/check-update";
 import type { Install } from "@poplin/core/src/actions/records";
+import type { EndLogins } from "@poplin/core/src/actions/sign-out";
 import type { Rebuilding } from "@poplin/core/src/actions/start-update";
 import { parseLogins } from "@poplin/core/src/auth/logins";
 import type { Database, SettingsAndKey } from "@poplin/core/src/database/database";
@@ -31,6 +32,7 @@ import { version } from "../../../cli/package.json";
 import { D1Driver } from "../database/d1";
 import { createInstallKey } from "../key/install-key";
 import { readKeptKey } from "../key/kept-key";
+import { createEndLogins } from "../key/logins-end";
 import { createUsersFollow } from "../key/users-follow";
 import { CloudflareCounters } from "../limits/counters";
 import { createUsageHost } from "../usage/usage-host";
@@ -133,6 +135,9 @@ export interface Instance {
 
   /** The users' side at Cloudflare: a change of the logins is carried there with the kept key. */
   readonly follow: UsersFollow;
+
+  /** Ends every login of the dashboard at Cloudflare, with the kept key. */
+  readonly endLogins: EndLogins;
 
   /** Cloudflare's side of the Usage screen. */
   readonly usage: UsageHost;
@@ -356,6 +361,7 @@ export async function startInstance(env: Bindings, outside: Outside, visitorOf: 
   const placed = { ...own.value, layout, fetch: outside.cloudflare };
   const key: InstallKey = createInstallKey(kept, own.value.accountId, (authorisation) => giveKey({ ...placed, key }, authorisation));
   const follow = createUsersFollow(kept, own.value.accountId);
+  const endLogins = createEndLogins(kept, own.value.accountId);
   const api = createApi({
     ...install,
     readToken: (id) => database.getToken(id),
@@ -367,6 +373,7 @@ export async function startInstance(env: Bindings, outside: Outside, visitorOf: 
     visitorOf: (request) => visitorOf(request, database),
     rebuild,
     follow,
+    endLogins,
   });
 
   const instance: Instance = {
@@ -381,6 +388,7 @@ export async function startInstance(env: Bindings, outside: Outside, visitorOf: 
     domain: createDomainPlug({ ...placed, key }),
     key,
     follow,
+    endLogins,
     usage: createUsageHost({ accountId: own.value.accountId, unwrittenRows: (day) => driver.heldRows(day), key: kept }),
     version: VERSION,
     rebuilding: { ...rebuild, counters },

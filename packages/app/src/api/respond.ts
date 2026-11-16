@@ -38,6 +38,7 @@ const STATUS = {
   no_key: 409,
   key_refused: 409,
   lacks_right: 409,
+  logins_not_ended: 409,
   too_large: 413,
   too_many_requests: 429,
   internal: 500,
@@ -87,6 +88,7 @@ const MESSAGES: Readonly<Record<Code, string>> = {
   update_refused: "the install's provider refused to start the update, with this status",
   release_refused: "the release cannot be taken, and nothing was changed, for this reason",
   version_refused: "the install's host refused the new version, so the install runs the version it ran before",
+  logins_not_ended: "the install's provider did not end the dashboard's logins, or gave no answer",
   allowance_spent: "a day's allowance of the install is used up: ask again after midnight UTC",
   update_unreachable: "the install's provider did not answer the request to update",
 };
