@@ -29,7 +29,7 @@ const LABEL = `site-1--${siteId(1)}`;
 const SOURCE = { site: siteId(1) };
 
 /** A Workflow that runs nothing: it takes every job, as Cloudflare's does, and no step of one runs beside the measured request. */
-function idleWorkflow(): Workflow<Job> {
+export function idleWorkflow(): Workflow<Job> {
   const instance: Pick<WorkflowInstance, "terminate"> = { terminate: async () => undefined };
   const workflow: Pick<Workflow<Job>, "create" | "get"> = { create: async () => instance as WorkflowInstance, get: async () => instance as WorkflowInstance };
 

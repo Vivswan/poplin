@@ -12,6 +12,7 @@ import { SETTINGS_ANSWER } from "../../packages/core/src/actions/store-settings"
 import { parseLogins } from "../../packages/core/src/auth/logins";
 import { run } from "../../packages/cli/src/commands/run";
 import { openSession } from "../../packages/cli/tests/mcp/support/session";
+import type { JobRun } from "../../packages/cloudflare/scripts/live/job-run";
 import type { LiveAddresses } from "./addresses";
 import type { Bench, Draft, LiveSite, Missing, Ran, Shared } from "./records";
 
@@ -73,6 +74,12 @@ interface BenchParts {
 
   /** How many files the folder of many small files holds. */
   readonly manyFiles: number;
+
+  /** How many files a site holds that one request of a copy does not take. */
+  readonly largeCopy: number;
+
+  /** Reads how the job of one upload went, at the provider itself; absent on a run with no key of the provider. */
+  readonly jobRun?: ((upload: string) => Promise<JobRun>) | undefined;
 
   /** A login the install is told to let in, beside the settings the suite counts on; absent, the logins stay as they are. */
   readonly login?: string | undefined;
@@ -149,7 +156,12 @@ export function openBench(parts: BenchParts): OpenBench {
     ask: async () => "",
     computer: "live-checks",
     open: () => undefined,
-    pause: async () => "over",
+    // A command that waits between two asks waits as long here: an install that copies by itself would else be asked without a rest.
+    pause: async (ms) => {
+      await parts.pause(ms);
+
+      return "over";
+    },
     stopped: new AbortController().signal,
   });
 
@@ -290,6 +302,8 @@ export function openBench(parts: BenchParts): OpenBench {
       mcp,
       folder,
       manyFiles,
+      largeCopy: parts.largeCopy,
+      jobRun: parts.jobRun ?? (async () => Promise.reject(new Error("the run holds no key to read the provider's jobs with"))),
       publish,
       shared,
       scratchFile: (name) => join(scratch, name),

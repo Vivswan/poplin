@@ -5,10 +5,11 @@
 //   POPLIN_LIVE_TOKEN     an admin's token of the install; absent, the checks that need one are skipped
 //   POPLIN_LIVE_LOGIN     a login the install is told to let in; absent, its logins stay as they are
 //   POPLIN_LIVE_MANY_FILES  1 to publish two thousand small files; any other value skips that check
+//   POPLIN_LIVE_JOB_COPY  1 to copy a site too large for one request, which the install's job finishes; any other value skips that check
 //   POPLIN_LIVE_RUN       what tells this run's sites from another's; `local` when absent
 //   POPLIN_LIVE_MISSING   a JSON object of what the install is known to lack, each with its reason
 //   POPLIN_LIVE_REPORT    a file that receives the table of outcomes
-//   CLOUDFLARE_API_TOKEN, CLOUDFLARE_ACCOUNT_ID   the key and the account the login list is read with at Cloudflare; absent, the check of the users is skipped
+//   CLOUDFLARE_API_TOKEN, CLOUDFLARE_ACCOUNT_ID   the key and the account the login list and a job are read with at Cloudflare; absent, the checks of the users and of the job are skipped
 //
 // On an install with a token, the suite first sets the two settings it counts on: `trash_days` and `visitor_requests_per_minute`.
 // Every request passes two meters: the bucket writes and lists it asks for, and the rows it makes the database write. A request past either ceiling is held back, and the run ends red with one line that says which.
@@ -18,6 +19,7 @@ import { afterAll, beforeAll, describe, test } from "bun:test";
 import { writeFileSync } from "node:fs";
 
 import { CEILINGS, meterBucket } from "../../packages/cloudflare/scripts/live/budget";
+import { readJobRun } from "../../packages/cloudflare/scripts/live/job-run";
 import { readLoginList } from "../../packages/cloudflare/scripts/live/login-list";
 import { meterRows, ROW_CEILINGS } from "../../packages/cloudflare/scripts/live/rows";
 import { sendLive } from "../../packages/cloudflare/scripts/live/send";
@@ -36,6 +38,15 @@ const CHECK_TIMEOUT_MS = 900_000;
 
 /** How many files the publish of many small files holds. */
 const MANY_FILES = 2000;
+
+/** How many files the copied site of the job's check holds: one more than the first request of a copy takes, so the install's job copies one file and makes the site. */
+const LARGE_COPY = 113;
+
+/** Why the copy the install's job finishes is skipped: it costs a run over two hundred writes to the bucket, so only the run of each midnight makes it, and one started by hand with the many-files check. */
+const NOT_SCHEDULED = "the midnight run, or a run started by hand with the many-files check switched on (POPLIN_LIVE_JOB_COPY=1)";
+
+/** Why the check of the job is skipped on a run that cannot read Cloudflare's own count of its steps. */
+const NO_JOBS_KEY = "CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID, to read the job at Cloudflare";
 
 /** Why the publish of many small files is skipped: it costs a run thousands of requests. */
 const NOT_ASKED = "a run started by hand with the many-files check switched on (POPLIN_LIVE_MANY_FILES=1)";
@@ -74,16 +85,27 @@ function knownMissing(): Missing {
 
   if (setting("POPLIN_LIVE_MANY_FILES") !== "1") known["many-files"] = NOT_ASKED;
 
+  if (setting("POPLIN_LIVE_JOB_COPY") !== "1") known["job-copy"] = NOT_SCHEDULED;
+
   if (providerOf() === undefined) known["login-list"] = NO_PROVIDER_KEY;
 
+  if (providerOf() === undefined) known.jobs ??= NO_JOBS_KEY;
+
   return known;
+}
+
+/** The most bucket writes and lists this run's checks may ask for: by the costliest check it was asked to make. */
+function bucketCeiling(): number {
+  if (setting("POPLIN_LIVE_MANY_FILES") === "1") return CEILINGS.manyFiles;
+
+  return setting("POPLIN_LIVE_JOB_COPY") === "1" ? CEILINGS.jobCopy : CEILINGS.checks;
 }
 
 describe.skipIf(!LIVE)("a deployed install", () => {
   const missing: Missing = {};
   const outcomes: Outcome[] = [];
   // A request past the ceiling of bucket writes and lists is held back, which fails its check, and the run says so in one line.
-  const meter = meterBucket(sendLive, setting("POPLIN_LIVE_MANY_FILES") === "1" ? CEILINGS.manyFiles : CEILINGS.checks);
+  const meter = meterBucket(sendLive, bucketCeiling());
   const rows = meterRows(meter.fetch, ROW_CEILINGS.checks);
   const provider = providerOf();
   const install = installOf();
@@ -101,7 +123,9 @@ describe.skipIf(!LIVE)("a deployed install", () => {
           now: () => Date.now(),
           say: (line) => console.log(line),
           manyFiles: MANY_FILES,
+          largeCopy: LARGE_COPY,
           loginList: provider === undefined ? undefined : () => readLoginList({ key: provider.key }, provider.accountId),
+          jobRun: provider === undefined ? undefined : (upload) => readJobRun({ key: provider.key }, provider.accountId, upload),
         })
       : undefined;
 

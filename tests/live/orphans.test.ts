@@ -133,7 +133,7 @@ async function filled(): Promise<World> {
   const install = await openSqlInstall();
   const addresses = liveAddresses({ kind: "domain", domain: FAKE_DOMAIN });
   const token = await install.addToken("a person's own");
-  const { bench, close } = openBench({ addresses, token, run: "orphans", missing: {}, fetch: install.fetch, pause: async () => undefined, now: () => 0, say: () => undefined, manyFiles: 1 });
+  const { bench, close } = openBench({ addresses, token, run: "orphans", missing: {}, fetch: install.fetch, pause: async () => undefined, now: () => 0, say: () => undefined, manyFiles: 1, largeCopy: 1 });
   OPENED.push(close);
 
   await bench.publish({ access: "private", text: "<p>one</p>" });

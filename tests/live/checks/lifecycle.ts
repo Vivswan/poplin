@@ -4,6 +4,7 @@ import { expect } from "bun:test";
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 
+import type { JobRun } from "../../../packages/cloudflare/scripts/live/job-run";
 import { type Bench, type Check, type LiveSite, Skip } from "../records";
 import { expectRefused, GHOST_ID, siteOf, under } from "../util";
 
@@ -28,6 +29,9 @@ const NO_DEMO = "a public site named demo, which the reset of the test install p
 /** How many files the copied site holds: more than a copy took in one request when a request copied fifteen, and few enough to cost a run little. */
 const COPIED_FILES = 16;
 
+/** How long the provider may take to say that a job ended once its copy is a site, in milliseconds, and how long one look waits for the next: it says so a moment after the last step did. */
+const JOB_ENDS_WITHIN = { ms: 30_000, pause: 2000 } as const;
+
 /** The form of a problem's code, as the CLI names its own: a code of any other form is shown as `other`, so a failure prints no text an install chose. */
 const CODE = /^[a-z_]{1,40}$/;
 
@@ -45,6 +49,65 @@ async function expectOpens(bench: Bench, address: string, text: string): Promise
   expect(await response.text()).toBe(text);
 
   return response;
+}
+
+/** The name of a page beside the first, by its place: with as many digits each, so the bucket lists the pages in that order, and the last of them is the last file a copy takes. */
+function pageName(at: number): string {
+  return `page-${String(at).padStart(4, "0")}.html`;
+}
+
+/** What a copy of a site the check published came to: the upload that held it, how many files the last answer counted as stored, the requests and the time the command took, and the bytes of the source's pages. */
+interface Copied {
+  readonly upload: string;
+  readonly stored: number | null;
+  readonly rounds: number;
+  readonly took: number;
+  readonly bytes: number;
+}
+
+/**
+ * Publish a site of so many pages, copy it with the CLI, and fail unless the copy is a private site of its own that holds the source's pages.
+ *
+ * The copy's files are read as a stranger reads them, once the copy is unlisted: its first page, and the first and the last of the others. The last is the last file a copy takes.
+ */
+async function copyOfPages(bench: Bench, site: { readonly files: number; readonly name: string; readonly text: string }): Promise<Copied> {
+  const { files, text } = site;
+  const path = bench.folder(text);
+  const pages = Array.from({ length: files - 1 }, (_page, at) => `<p>page ${at}</p>`);
+  for (const [at, page] of pages.entries()) writeFileSync(join(path, pageName(at)), page);
+
+  const source = siteOf(await bench.cli("publish", path, "--name", site.name, "--unlisted", "--expires", "1d"));
+  const [asked, began] = [bench.asked(), bench.now()];
+  const copied = await bench.cli("duplicate", source.label);
+  const [rounds, took] = [bench.asked() - asked, bench.now() - began];
+
+  // A request the host ends, as one that ran past its processing time, answers no site: the command then fails, and the code of its problem is what the failure shows.
+  const problem = (copied.value.error as { readonly code?: string } | undefined)?.code;
+  expect({ code: copied.code, problem: problem === undefined || CODE.test(problem) ? problem : "other" }).toEqual({ code: 0, problem: undefined });
+  const copy = copied.value.site as LiveSite;
+  const { upload, copied: stored, files: held } = copied.value.copy as { readonly upload: string; readonly copied: number | null; readonly files: number };
+  // Only what the check chose is compared, so a failure shows no address.
+  expect({ name: copy.name === source.name, access: copy.access, version: copy.live_version, own: copy.id !== source.id, files: held }).toEqual({ name: true, access: "private", version: 1, own: true, files });
+  await expectRefused(bench.addresses, await bench.visit(copy.url), text);
+
+  const opened = siteOf(await bench.cli("set", copy.label, "--unlisted"));
+  expect(opened.id === copy.id).toBe(true);
+  await expectOpens(bench, opened.url, text);
+  for (const at of [0, pages.length - 1]) await expectOpens(bench, under(opened.url, pageName(at)), pages[at] ?? "");
+
+  return { upload, stored, rounds, took, bytes: [text, ...pages].reduce((sum, page) => sum + page.length, 0) };
+}
+
+/** Look at the provider's account of a job until it is no longer running, or its time is up, and answer what the provider then says of it. */
+async function endedJob(bench: Bench, upload: string): Promise<JobRun> {
+  const until = bench.now() + JOB_ENDS_WITHIN.ms;
+
+  for (;;) {
+    const job = await bench.jobRun(upload);
+    if (job.state !== "running" || bench.now() >= until) return job;
+
+    await bench.pause(JOB_ENDS_WITHIN.pause);
+  }
 }
 
 /** Every check a token holder starts. */
@@ -247,40 +310,24 @@ export const LIFECYCLE_CHECKS: readonly Check[] = [
     name: "a copy of a site is a private site of its own that holds the source's pages, and the run says how long the copy took",
     needs: ["token"],
     run: async (bench) => {
-      const text = "<p>duplicate</p>";
-      const path = bench.folder(text);
-      const pages = Array.from({ length: COPIED_FILES - 1 }, (_page, at) => `<p>page ${at}</p>`);
-      for (const [at, page] of pages.entries()) writeFileSync(join(path, `page-${at}.html`), page);
+      const made = await copyOfPages(bench, { files: COPIED_FILES, name: `${bench.prefix}-copied`, text: "<p>duplicate</p>" });
+      expect(made.stored).toBe(COPIED_FILES);
 
-      const source = siteOf(await bench.cli("publish", path, "--name", `${bench.prefix}-copied`, "--unlisted", "--expires", "1d"));
-      const [asked, began] = [bench.asked(), bench.now()];
-      const copied = await bench.cli("duplicate", source.label);
-      const [rounds, took] = [bench.asked() - asked, bench.now() - began];
+      bench.say(`duplicate: ${COPIED_FILES} files, ${made.bytes} bytes, ${made.rounds} rounds, ${made.took} ms`);
+    },
+  },
+  {
+    id: "duplicate-job",
+    name: "a copy too large for one request is finished by the install's own job, and the run says how many steps it ran and how long it took",
+    needs: ["token", "jobs", "job-copy"],
+    run: async (bench) => {
+      const made = await copyOfPages(bench, { files: bench.largeCopy, name: `${bench.prefix}-copied-large`, text: "<p>duplicate by a job</p>" });
 
-      // A request the host ends, as one that ran past its processing time, answers no site: the command then fails, and the code of its problem is what the failure shows.
-      const problem = (copied.value.error as { readonly code?: string } | undefined)?.code;
-      expect({ code: copied.code, problem: problem === undefined || CODE.test(problem) ? problem : "other" }).toEqual({ code: 0, problem: undefined });
-      const copy = copied.value.site as LiveSite;
-      const { copied: stored, files } = copied.value.copy as { readonly copied: number; readonly files: number };
-      // Only what the check chose is compared, so a failure shows no address.
-      expect({ name: copy.name === source.name, access: copy.access, version: copy.live_version, own: copy.id !== source.id, stored, files }).toEqual({
-        name: true,
-        access: "private",
-        version: 1,
-        own: true,
-        stored: COPIED_FILES,
-        files: COPIED_FILES,
-      });
-      await expectRefused(bench.addresses, await bench.visit(copy.url), text);
+      // The provider's own account of the job: a copy the command's requests made has none there, and one whose job failed is told as failed.
+      const job = await endedJob(bench, made.upload);
+      expect({ state: job.state, ran: job.steps > 0 }).toEqual({ state: "done", ran: true });
 
-      // The copy's files are read as a stranger reads them, once the copy is unlisted: its first page, and the first and the last of the others.
-      const opened = siteOf(await bench.cli("set", copy.label, "--unlisted"));
-      expect(opened.id === copy.id).toBe(true);
-      await expectOpens(bench, opened.url, text);
-      for (const at of [0, pages.length - 1]) await expectOpens(bench, under(opened.url, `page-${at}.html`), pages[at] ?? "");
-
-      const bytes = [text, ...pages].reduce((sum, page) => sum + page.length, 0);
-      bench.say(`duplicate: ${COPIED_FILES} files, ${bytes} bytes, ${rounds} rounds, ${took} ms`);
+      bench.say(`duplicate-job: ${bench.largeCopy} files, ${made.bytes} bytes, ${job.steps} steps, ${made.took} ms`);
     },
   },
   {

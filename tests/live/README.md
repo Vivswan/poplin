@@ -51,7 +51,7 @@ The `paths` list of `.github/workflows/live-checks.yml` holds every row. The fil
 | the commit's `all-green` check did not end green       | a red run: nothing deployed, no call to Cloudflare                   |
 | a run ended red                                        | it stays red until it is run again by hand, or a later push starts a run |
 | a newer push while an older push's run has not started | the older run is cancelled, the newer one deploys both               |
-| 00:00 UTC                                              | the reset alone, every day; it waits its turn and replaces no run    |
+| 00:00 UTC                                              | deploy and checks of main, with the copy the install's job finishes, and the reset; each waits its turn and replaces no run |
 
 The install is made from the commit of the push, the one whose `all-green` check ended green. Running a red run again makes the install from that same commit.
 
@@ -61,7 +61,7 @@ One job touches the install at a time. The checks and the midnight reset wait in
 
 On GitHub: Actions, Live Checks, Run workflow, tick `start_over`, Run workflow.
 
-The run removes the Worker and its routes, poplin's DNS records, rules, two Access applications and their policies, the database, every file in the bucket, the budget alert, and the key. The bucket stays, and so does everything on the account that poplin did not make.
+The run removes the Worker, its Workflow, and its routes, poplin's DNS records, rules, two Access applications and their policies, the database, every file in the bucket, the budget alert, and the key. The bucket stays, and so does everything on the account that poplin did not make.
 
 On the account without a domain it removes the two forwarders first, then the Access applications and their policies, the Workflow, the Worker, the database, every file in the bucket, and the key. A Worker of a forwarder's name without poplin's tag stays.
 
@@ -197,7 +197,7 @@ Each account has its own allowances, and every ceiling below holds for each inst
 | the zone's plan is Free, where the account holds a zone, and every subscription of the account that has not ended is at a price of 0 | `plan.ts`, before anything is made | the run stops red |
 | a budget alert at 1 US dollar of usage charges, to the run's login | the repair, with the token permission Notifications: Edit | Cloudflare emails the login. Nothing is stopped |
 | caps: 200MB stored, 20MB a site, 100 sites, 2,500 files a publish, 5,000 files a day   | `caps.ts`, on every run, once the install answers | the install refuses the publish                           |
-| bucket writes and lists: 150 by the checks, 2,300 with the many-files check, 150 by a reset | `budget.ts`, around every request to the install | the request is not sent, and the step stops red       |
+| bucket writes and lists: 150 by the checks, 300 by the midnight run's, 2,300 with the many-files check, 150 by a reset | `budget.ts`, around every request to the install | the request is not sent, and the step stops red       |
 | bucket lists and deletes: 300 together by the removal of the files no record names | `orphans.ts`, around every call to Cloudflare for the bucket | the removal stops, and the next run goes on |
 | rows written to the database: 1,100 by the checks, 600 by a reset | `rows.ts`, around every request to the install | the request is not sent, and the step stops red |
 | every site the checks make is removed for good                                         | the checks' own sweep, then the reset         | the reset runs after failed checks too                        |
@@ -214,17 +214,21 @@ Account plans: free (2 subscriptions: 2 at a price of 0, 0 ended)
 
 ```text
 one run, at its ceilings         2 (the bucket found or made) + 150 (checks) + 150 (reset) + 301 (the files no record names, were every call a list) = 603 bucket writes and lists
-a day of 40 such runs            40 x 603 + 451 (the midnight reset) = 24,571
-31 such days                     24,571 x 31 = 761,701 of the 1,000,000 R2 takes for free in a month
-with a bucket of 2,000 files     3 in place of the 301: 305 a run, 12,353 a day, 382,943 a month
+the midnight run, at its ceilings  2 + 300 (checks, with the copy the install's job finishes) + 150 (reset) + 301 = 753, and 113 writes by the job itself
+a day of 40 such runs            40 x 603 + 753 + 113 + 451 (the midnight reset) = 25,437
+31 such days                     25,437 x 31 = 788,547 of the 1,000,000 R2 takes for free in a month
+with a bucket of 2,000 files     3 in place of the 301: 305 a run, 12,921 a day, 400,551 a month
 a run with the many-files check  2 + 2,300 + 150 + 301 = 2,753, started by hand alone
-a usual run                      about 77 (checks) + 0 (a reset that keeps every sample and the demo) + 2 (the bucket found, and listed once)
+a usual run                      about 97 (checks) + 0 (a reset that keeps every sample and the demo) + 2 (the bucket found, and listed once)
+the midnight run                 about 218 (checks): the copy's 113 files published, and the asks after its job
 a reset that keeps nothing       about 131
 either install                   the same sums, each against the 1,000,000 of its own account
 the files no record names        the bucket found, and 1 list for every thousand files it holds; a delete is free, and counted against the 300 all the same
 ```
 
-A run starts after a green main that changed a file reaching the install, or by hand, so 40 a day is far above what happens. The count is the harness's own, one for each request that makes the install write or list; the install lists once more for every thousand files.
+A run starts after a green main that changed a file reaching the install, at midnight, or by hand, so 40 a day is far above what happens. The count is the harness's own, one for each request that makes the install write or list; the install lists once more for every thousand files.
+
+The copy the install's job finishes is a site of 113 files: one more than the first request of a copy takes. It costs a run 226 files of the day and over two hundred bucket writes, so the midnight run alone makes it, and a run started by hand with the many-files check.
 
 ```text
 burst-rate-rule, usual   about 850 requests to the Worker: the rule blocks a few seconds after one data center passed 300
@@ -260,6 +264,7 @@ The database's free plan takes 100,000 rows written a day, every database of the
 | a change of who may open a site           | 3             | any other setting 2, both at once 5, and 1 where it is told an expiry      |
 | a new link                                | 9             | a rollback 2, a setting of the install 3, a computer's login 3             |
 | a copy of a site                          | 21            | counted at the request that begins it; 16 for each request that goes on    |
+| a copy the install's job finishes         | 21            | none for an ask while the job copies; 16 and 1 for each round of the job, with the answer that names the site |
 | a listing of the bucket                   | 1             | the files of a version, and what an upload lacks                           |
 | a page or a file a site answered          | 2             | the day's count of the site, and of all sites                              |
 
@@ -274,6 +279,7 @@ A product change that moves a row cost turns that test red, with the database's 
 
 ```text
 the checks, as the harness counts them   866 on the local fake, a few more with the demo's check: every site they publish, change, and remove
+the midnight run's checks                959: the copy the install's job finishes, 93 more
 a reset that keeps every sample          38: the trashed sample, published and trashed anew while the suite's trash holds a site for one day
 a reset that keeps none                  about 390
 the harness's own statements             18: three tokens in and out, and the caps
@@ -361,7 +367,9 @@ A run that cannot make the install answer, or cannot start the checks, fails: th
 | ------------------------------------------------------------------- | ------------------------------------------------------------------------ |
 | a token permission for a rule, the bot settings, the login, or the key | the piece of the install that permission makes, and the checks behind it |
 | the token permission Billing: Read                                  | the reading of the account's subscriptions, before anything is made      |
-| `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID`                  | `users-follow`                                                           |
+| `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID`                  | `users-follow`, `duplicate-job`                                          |
+| the Worker's Workflow, which Cloudflare did not make                | `duplicate-job`                                                          |
+| the midnight run, or a run started by hand with the many-files check | `duplicate-job`: a copy of 113 files, so once a day and not on every green main |
 | Access switched on for the account                                  | `L1`, `dashboard-login`: the edge's own redirect to the team's login from every path of the dashboard, and its own 401 to a script's call; `users-follow`: no login list exists |
 | an install that sends a private site's address to its letter p form | `L1`, `L4`, `L5`                                                         |
 | a Worker route for the public word's hostnames                      | `public-name`, `demo`                                                    |

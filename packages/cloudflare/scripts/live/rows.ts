@@ -6,7 +6,8 @@
 //   DELETE /api/sites/:site                to the trash 6, for good 13
 //   PATCH  /api/sites/:site                who may open it 3, any other setting 2, both 5, and 1 where it is told an expiry
 //   POST   /api/sites/:site/new-link 9     POST /api/sites/:site/restore 6    POST /api/sites/:site/rollback 2
-//   POST   /api/sites/:site/duplicate      the request that begins a copy 21, each one that goes on with it 16
+//   POST   /api/sites/:site/duplicate      the request that begins a copy 21, each one that goes on with it 16, once it is answered
+//                                          an ask that finds the install copying by itself 0; the rounds of that job 1 each, counted with the answer that names its site
 //   PATCH  /api/config                     6, and 3 where it names a setting of the guard rules
 //   POST   /api/logins 3                   DELETE /api/uploads/:upload 3
 //   GET    /api/uploads/:upload 1          GET /api/export/sites/:site/files 1
@@ -14,7 +15,7 @@
 //
 // D1 counts an index entry and a row a trigger writes as rows, so one new site is 8 of them. Each price is the most its request writes for a site a run made, and is counted before the request is sent.
 // A site that runs out has one entry more, in the index of expiries, written when it is told an expiry and when it leaves the trash: a restore is counted as if its site ran out, as every site of the checks does.
-// A visit is counted once it is answered, since only the answer says that a site was served, and so is a dropped version. Once a step is stopped, no further request for a site's address is sent.
+// A visit is counted once it is answered, since only the answer says that a site was served, and so are a dropped version and a request that goes on with a copy. Once a step is stopped, no further request for a site's address is sent.
 // A served site's refusal or missing file writes the same two rows and is not counted: its status is that of an address no site holds.
 // A request that would pass the ceiling is not sent, and every one after it: each is answered here as refused, with a 403, which the CLI does not send again.
 // A request that changes something on a route with no price is refused the same way, so a check that grows a new kind of write stops red until it has one.
@@ -43,8 +44,8 @@ const IMPORTED_VERSION = 2;
 /** The row a site's entry in the index of expiries is: written when a site is told an expiry, and again when one that runs out leaves the trash. */
 const EXPIRY = 1;
 
-/** The rows of a copy of a site: the request that begins it is counted as one that makes the copy whole, and each request that goes on with it as the one that finishes it. */
-const COPIED = { begun: 21, goneOn: 16 } as const;
+/** The rows of a copy of a site: the request that begins it is counted as one that makes the copy whole, and each request that goes on with it as the one that finishes it. A round the install's own job runs writes one, beside the finish. */
+const COPIED = { begun: 21, goneOn: 16, jobRound: 1 } as const;
 
 /** The rows of a site moved to the trash, and of one removed for good with the three versions an install keeps and a day's count of its own. */
 const REMOVED = { trash: 6, forever: 13 } as const;
@@ -93,7 +94,7 @@ const PRICES = [
   { method: "POST", path: "/api/sites/:site/restore", rows: () => 5 + EXPIRY },
   { method: "POST", path: "/api/sites/:site/new-link", rows: () => 9 },
   { method: "POST", path: "/api/sites/:site/rollback", rows: () => 2 },
-  { method: "POST", path: "/api/sites/:site/duplicate", rows: (asked) => (asked.body.upload === undefined ? COPIED.begun : COPIED.goneOn) },
+  { method: "POST", path: "/api/sites/:site/duplicate", rows: (asked) => (asked.body.upload === undefined ? COPIED.begun : 0) },
   { method: "PATCH", path: "/api/config", rows: (asked) => CONFIG.any + (RULE_SETTINGS.some((key) => key in asked.body) ? CONFIG.rules : 0) },
   { method: "POST", path: "/api/logins", rows: () => 3 },
   { method: "GET", path: "/api/export/sites/:site/files", rows: () => 1 },
@@ -101,6 +102,9 @@ const PRICES = [
 
 /** The route whose answer says how many versions a publish dropped. */
 const FINISH = new URLPattern({ pathname: "/api/uploads/:upload/finish" });
+
+/** The route whose answer says how far a copy is, and who copies it. */
+const COPY = new URLPattern({ pathname: "/api/sites/:site/duplicate" });
 
 /** The method and the path of each priced route, as a request is matched against them. */
 const MATCHERS = PRICES.map(({ method, path, rows }) => ({ method, path: new URLPattern({ pathname: path }), rows }));
@@ -112,6 +116,12 @@ export const ROW_CEILINGS = { checks: 1100, reset: 600 } as const;
 interface Asked {
   readonly query: URLSearchParams;
   readonly body: Readonly<Record<string, unknown>>;
+}
+
+/** The copies of a step that the install's own job runs: the rounds each still has to run once its first request is answered, and the ones an ask found the install copying by itself. */
+interface JobCopies {
+  readonly rounds: Map<string, number>;
+  readonly watched: Set<string>;
 }
 
 /** A `fetch` that counts, and what it counted. */
@@ -195,6 +205,41 @@ async function droppedRows(answer: Response): Promise<number> {
   return dropped > 0 ? DROPPED.any + DROPPED.each * dropped : 0;
 }
 
+/**
+ * The rows a request about a copy wrote, read from a copy of its answer.
+ *
+ * The request that begins a copy is counted before it is sent: its answer only says how many rounds are left, each of as many files as it copied.
+ * A request that goes on with a copy is counted as the one that finishes it, but for an ask that finds the install copying by itself, which writes nothing.
+ * The answer that names the site of such a copy also counts the rounds its job ran, which no request showed.
+ *
+ * @param goesOn - whether the request named the upload of a copy an earlier one began
+ */
+async function copyRows(answer: Response, goesOn: boolean, jobs: JobCopies): Promise<number> {
+  const told: unknown = await answer
+    .clone()
+    .json()
+    .catch(() => undefined);
+  const copy: unknown = typeof told === "object" && told !== null && "copy" in told ? told.copy : undefined;
+  if (typeof told !== "object" || told === null || !("site" in told) || typeof copy !== "object" || copy === null) return goesOn ? COPIED.goneOn : 0;
+
+  const { upload, copied, files } = copy as { readonly upload?: unknown; readonly copied?: unknown; readonly files?: unknown };
+  if (typeof upload !== "string") return goesOn ? COPIED.goneOn : 0;
+
+  if (!goesOn) {
+    if (told.site === null && typeof copied === "number" && typeof files === "number" && copied > 0) jobs.rounds.set(upload, Math.ceil((files - copied) / copied));
+
+    return 0;
+  }
+
+  if (told.site === null && copied === null) {
+    jobs.watched.add(upload);
+
+    return 0;
+  }
+
+  return COPIED.goneOn + (told.site !== null && jobs.watched.has(upload) ? COPIED.jobRound * (jobs.rounds.get(upload) ?? 0) : 0);
+}
+
 /** Whether a request may be a visit of a site: a read of an address outside the API that the edge does not answer itself. */
 function mayVisit(input: string, init: RequestInit): boolean {
   const { pathname } = new URL(input);
@@ -229,6 +274,7 @@ function rowsOf(input: string, init: RequestInit): number | undefined {
 export function meterRows(fetch: Fetch, ceiling: number): Meter {
   let written = 0;
   let stopped: string | undefined;
+  const jobs: JobCopies = { rounds: new Map(), watched: new Set() };
 
   return {
     fetch: async (input, init) => {
@@ -237,9 +283,10 @@ export function meterRows(fetch: Fetch, ceiling: number): Meter {
 
       if (rows !== undefined && written + rows > ceiling) stopped ??= `passed its ceiling of ${ceiling} rows written to the database`;
 
-      // A read of the API goes out after the stop too: the step's own listings read the install. A visit of a site would write its rows.
+      // A read of the API goes out after the stop too: the step's own listings read the install. A visit of a site would write its rows, and so would a request that goes on with a copy.
       const visit = mayVisit(input, init);
-      if (stopped !== undefined && (rows !== 0 || visit)) return refusal(`Held back: the step ${stopped}.`);
+      const goesOn = init.method === "POST" && COPY.test(input) && bodyOf(init).upload !== undefined;
+      if (stopped !== undefined && (rows !== 0 || visit || goesOn)) return refusal(`Held back: the step ${stopped}.`);
 
       written += rows ?? 0;
       const answer = await fetch(input, init);
@@ -247,7 +294,9 @@ export function meterRows(fetch: Fetch, ceiling: number): Meter {
 
       if (init.method === "POST" && FINISH.test(input) && answer.ok) written += await droppedRows(answer);
 
-      // A visit and a finish are sent before their rows are known, so the one that passes the ceiling went out: the step stops with the next request.
+      if (init.method === "POST" && COPY.test(input)) written += await copyRows(answer, goesOn, jobs);
+
+      // A visit, a finish, and a request that goes on with a copy are sent before their rows are known, so the one that passes the ceiling went out: the step stops with the next request.
       if (written > ceiling) stopped ??= `passed its ceiling of ${ceiling} rows written to the database`;
 
       return answer;
