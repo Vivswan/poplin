@@ -2,7 +2,7 @@
 
 import * as v from "valibot";
 
-import { isContentType } from "../storage/storage";
+import { isContentType, isSha256 } from "../storage/storage";
 import { COUNT, HOLDER, MOMENT, POSITIVE, SITE_ID } from "./fields";
 import { randomText } from "./random-text";
 import { NEW_SITE, SITE_ACCESS, SITE_DETAILS, SITE_FOLDER, TITLE } from "./site";
@@ -14,13 +14,13 @@ const UPLOAD_ID_PATTERN = /^[0-9a-z]{16}$/;
 const MAX_CONTENT_TYPE_LENGTH = 255;
 
 /** How many fields a declared file holds. */
-const MANIFEST_FILE_FIELDS = 3;
+const MANIFEST_FILE_FIELDS = 4;
 
 /** The id of a staged publish. */
 export const UPLOAD_ID = v.custom<UploadId>(isUploadId, "an upload id is 16 lowercase base36 characters");
 
-/** One file of a publish as it is declared before its bytes are sent: a `path`, a `size` that is a count, and a `content_type` a header can carry and a store can keep as written, and nothing besides. */
-export const MANIFEST_FILE = v.custom<ManifestFile>(isManifestFile, "a declared file holds a path, a size, and a content type");
+/** One file of a publish as it is declared before its bytes are sent: a `path`, a `size` that is a count, and a `content_type` a header can carry and a store can keep as written, the `sha256` of its bytes in base64, and nothing besides. */
+export const MANIFEST_FILE = v.custom<ManifestFile>(isManifestFile, "a declared file holds a path, a size, a content type, and the SHA-256 of its bytes");
 
 /** Whether an upload still takes files, is live, or will never be. */
 export const UPLOAD_STATE = v.picklist(["pending", "finished", "abandoned"]);
@@ -65,6 +65,9 @@ export interface ManifestFile {
 
   /** The media type it is served with. */
   readonly content_type: string;
+
+  /** The SHA-256 of its bytes in base64, which the store holds the bytes to. */
+  readonly sha256: string;
 }
 
 /** What finishing an upload makes. */
@@ -85,12 +88,12 @@ export type Upload = Readonly<v.InferOutput<typeof UPLOAD_ROW>>;
 function isManifestFile(sent: unknown): boolean {
   if (typeof sent !== "object" || sent === null) return false;
 
-  const { path, size, content_type: type } = sent as Readonly<Record<string, unknown>>;
-  if (typeof path !== "string" || typeof type !== "string") return false;
+  const { path, size, content_type: type, sha256 } = sent as Readonly<Record<string, unknown>>;
+  if (typeof path !== "string" || typeof type !== "string" || typeof sha256 !== "string") return false;
 
   if (!Number.isSafeInteger(size) || (size as number) < 0) return false;
 
-  if (type.length > MAX_CONTENT_TYPE_LENGTH || !isContentType(type)) return false;
+  if (type.length > MAX_CONTENT_TYPE_LENGTH || !isContentType(type) || !isSha256(sha256)) return false;
 
   return Object.keys(sent).length === MANIFEST_FILE_FIELDS;
 }

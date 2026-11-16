@@ -1,5 +1,6 @@
 // Import: check the whole backup, then put its sites back one at a time. A site the install refuses changes nothing there, and the next one is tried.
 
+import pMap from "p-map";
 import type * as v from "valibot";
 
 import type { ImportRequest as Begin } from "../../../core/src/actions/begin-import";
@@ -8,6 +9,7 @@ import { BEGUN_UPLOAD } from "../../../core/src/actions/uploads";
 import { showBytes } from "../../../core/src/records/settings";
 import { type Backup, type BackupSite, openBackup } from "../backup/read";
 import type { Called, Failure } from "../client/client";
+import { sha256Of } from "../files/hash";
 import { problem, problemOf } from "./problems";
 import type { Outcome, RequestOf, Session } from "./records";
 import { countText, dryRunText } from "./text";
@@ -26,6 +28,9 @@ const TOO_LARGE = "too_large";
 /** The statuses of a refusal that every other site would meet too: no login, not an admin's, an install that is asked too often, or one whose database is spent for the day. */
 const REFUSED_FOR_ALL: readonly number[] = [401, 403, 429, 503];
 
+/** How many files of a backup are read at once to be hashed. */
+const HASHED_AT_ONCE = 4;
+
 /** What goes with a zip refused after the install read the address `--site` gave. */
 const ONLY_ASKED = "nothing of the backup was sent: the install was asked only how it reads the site's address";
 
@@ -41,6 +46,12 @@ type ImportRequest = RequestOf<"import">;
 
 /** The answer to a begun import. */
 type Begun = v.InferOutput<typeof BEGUN_UPLOAD>;
+
+/** One file of a backup with the SHA-256 of its bytes. */
+type HashedFile = BackupSite["versions"][number]["files"][number] & { readonly sha256: string };
+
+/** The versions of a site of the backup, each file with its hash. */
+type HashedVersions = readonly { readonly number: number; readonly files: readonly HashedFile[] }[];
 
 /** The labels of the sites to import; `undefined` for every site of the backup. */
 type Chosen = ReadonlySet<string> | undefined;
@@ -98,18 +109,31 @@ async function chosenLabels(backup: Backup, named: ImportRequest["site"]): Promi
 /**
  * Build what one site is sent as. A file's name is `v<number>/<path>`, built here from a version's number and a path the reader checked.
  *
+ * @param hashed - the site's versions, each file with its hash
  * @param liveOnly - whether the site goes with its live version alone, its record naming no other
  */
-function sendingOf(format: number, site: BackupSite, liveOnly: boolean): Sending {
-  const versions = site.versions.filter((version) => !liveOnly || version.number === site.record.live_version);
+function sendingOf(format: number, site: BackupSite, hashed: HashedVersions, liveOnly: boolean): Sending {
+  const versions = hashed.filter((version) => !liveOnly || version.number === site.record.live_version);
   const kept = new Set(versions.map((version) => version.number));
   const record = { ...site.record, versions: site.record.versions.filter((version) => kept.has(version.number)) };
   const files = versions.flatMap((version) =>
-    version.files.map((file) => ({ path: `v${version.number}/${file.path}`, size: file.size, contentType: file.contentType, open: () => file.open() })),
+    version.files.map((file) => ({ path: `v${version.number}/${file.path}`, size: file.size, contentType: file.contentType, sha256: file.sha256, open: () => file.open() })),
   );
-  const declared = files.map((file) => ({ path: file.path, size: file.size, content_type: file.contentType }));
+  const declared = files.map((file) => ({ path: file.path, size: file.size, content_type: file.contentType, sha256: file.sha256 }));
 
   return { body: { format, site: record as unknown as Begin["site"], files: declared }, files, liveOnly };
+}
+
+/** Hash every file of a site as the zip holds it: each is read whole, a piece at a time, and four of a version at once. */
+async function hashedVersions(site: BackupSite): Promise<HashedVersions> {
+  const versions = [];
+
+  for (const version of site.versions) {
+    const files = await pMap(version.files, async (file) => ({ ...file, sha256: await sha256Of(() => file.open()) }), { concurrency: HASHED_AT_ONCE });
+    versions.push({ number: version.number, files });
+  }
+
+  return versions;
 }
 
 function isRefusedAs(failure: Failure, code: string): boolean {
@@ -119,11 +143,12 @@ function isRefusedAs(failure: Failure, code: string): boolean {
 /** Begin the import of one site with every version the backup holds; one the install finds too large is begun once more with its live version alone. */
 async function begin(session: Pick<Session, "client" | "io">, format: number, site: BackupSite): Promise<{ readonly begun: Called<Begun>; readonly sending: Sending }> {
   const send = (body: Begin): Promise<Called<Begun>> => callUnhurried(session.io, () => session.client.call(BEGUN_UPLOAD, (api) => api.import.sites.$post({ json: body })));
-  const whole = sendingOf(format, site, false);
+  const hashed = await hashedVersions(site);
+  const whole = sendingOf(format, site, hashed, false);
   const begun = await send(whole.body);
   if (begun.ok || !isRefusedAs(begun.failure, TOO_LARGE) || site.versions.length < 2) return { begun, sending: whole };
 
-  const live = sendingOf(format, site, true);
+  const live = sendingOf(format, site, hashed, true);
 
   return { begun: await send(live.body), sending: live };
 }
@@ -156,7 +181,7 @@ async function importSite(session: Session, format: number, site: BackupSite): P
   let arrived = 0;
 
   try {
-    const sent = await sendUpload(client, upload, sending.files, {
+    const sent = await sendUpload(client, begun.value, sending.files, {
       arrived: () => {
         arrived += 1;
         if (io.terminal.progress) io.status(`importing ${site.label}: ${arrived}/${sending.files.length} files`);

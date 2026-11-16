@@ -8,7 +8,8 @@ import { publishSite } from "../../src/actions/publish";
 import { getSite } from "../../src/actions/show";
 import { uploadFile } from "../../src/actions/upload-file";
 import type { SettingValues } from "../../src/records/settings";
-import { ADMIN, file, made, makeWorld, NOW, OWNER, pages, type World } from "./support/actions-fixture";
+import { sha256Of } from "../../src/storage/storage";
+import { ADMIN, file, made, makeWorld, NOW, OWNER, PAGE_SHA256, pages, type World } from "./support/actions-fixture";
 
 /** One site of a backup: what an import sends, and the bytes of each file it declares. */
 interface Entry {
@@ -36,8 +37,9 @@ async function backupOf(world: World, site: string): Promise<Entry> {
       const read = await exportFile(world.install, ADMIN, { site, version: number, path });
       if (!read.ok) throw new Error(`the fixture file was refused: ${read.code}`);
 
-      files.push({ path: `v${number}/${path}`, size, content_type: read.content_type });
-      bodies.set(`v${number}/${path}`, new Uint8Array(await new Response(read.body).arrayBuffer()));
+      const bytes = new Uint8Array(await new Response(read.body).arrayBuffer());
+      files.push({ path: `v${number}/${path}`, size, content_type: read.content_type, sha256: await sha256Of(bytes) });
+      bodies.set(`v${number}/${path}`, bytes);
     }
   }
 
@@ -129,12 +131,12 @@ describe("beginImport", () => {
     ["a field no site has", (entry: Entry) => sited(entry, { colour: "red" }), { ok: false, code: "bad_argument", about: "site" }, ADMIN],
     ["a live version the site does not keep", (entry: Entry) => sited(entry, { live_version: 9 }), { ok: false, code: "bad_argument", about: "site" }, ADMIN],
     ["a public name this install keeps for itself", (entry: Entry) => sited(entry, { access: "public", public_name: "docs-p" }), { ok: false, code: "reserved_name", about: "public_name" }, ADMIN],
-    ["a file under a version the site does not keep", (entry: Entry) => filed(entry, { path: "v4/index.html", size: 1, content_type: "text/html" }), { ok: false, code: "bad_path", about: "v4/index.html" }, ADMIN],
-    ["a file under no version", (entry: Entry) => filed(entry, { path: "index.html", size: 1, content_type: "text/html" }), { ok: false, code: "bad_path", about: "index.html" }, ADMIN],
-    ["a file whose path climbs out of its version", (entry: Entry) => filed(entry, { path: "v3/../v2/extra.html", size: 1, content_type: "text/html" }), { ok: false, code: "bad_path", about: "v3/../v2/extra.html" }, ADMIN],
+    ["a file under a version the site does not keep", (entry: Entry) => filed(entry, { path: "v4/index.html", size: 1, content_type: "text/html", sha256: PAGE_SHA256 }), { ok: false, code: "bad_path", about: "v4/index.html" }, ADMIN],
+    ["a file under no version", (entry: Entry) => filed(entry, { path: "index.html", size: 1, content_type: "text/html", sha256: PAGE_SHA256 }), { ok: false, code: "bad_path", about: "index.html" }, ADMIN],
+    ["a file whose path climbs out of its version", (entry: Entry) => filed(entry, { path: "v3/../v2/extra.html", size: 1, content_type: "text/html", sha256: PAGE_SHA256 }), { ok: false, code: "bad_path", about: "v3/../v2/extra.html" }, ADMIN],
     ["a file declared twice", (entry: Entry) => ({ ...entry.request, files: [...entry.request.files, ...entry.request.files.slice(0, 1)] }), { ok: false, code: "bad_path", about: "v1/css/site.css" }, ADMIN],
     ["a version without its entry page", (entry: Entry) => ({ ...entry.request, files: entry.request.files.filter((file) => file.path !== "v2/index.html") }), { ok: false, code: "no_index" }, ADMIN],
-    ["a version with a file more than its record counts", (entry: Entry) => filed(entry, { path: "v3/extra.html", size: 0, content_type: "text/html" }), { ok: false, code: "bad_argument", about: "files" }, ADMIN],
+    ["a version with a file more than its record counts", (entry: Entry) => filed(entry, { path: "v3/extra.html", size: 0, content_type: "text/html", sha256: PAGE_SHA256 }), { ok: false, code: "bad_argument", about: "files" }, ADMIN],
     ["a file a byte shorter than its version's record sums to", (entry: Entry) => ({ ...entry.request, files: entry.request.files.map(shortened) }), { ok: false, code: "bad_argument", about: "files" }, ADMIN],
   ] as const)("an import by or with %s is refused, and nothing is recorded", async (_what, change, refusal, actor) => {
     const world = await makeWorld();

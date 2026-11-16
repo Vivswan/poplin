@@ -91,7 +91,8 @@ property(
     const copy = await world.install.database.getUpload(upload);
     if (copy?.manifest.length !== files.length) throw new Error("the copy's manifest does not name every file");
 
-    const published = files.map((one) => ({ path: one.path, size: one.size, content_type: one.contentType }));
+    // A publish declares a hash of 44 characters for every file, whatever the file holds.
+    const published = files.map((one) => ({ path: one.path, size: one.size, content_type: one.contentType, sha256: "h".repeat(44) }));
 
     expect(manifestBytes(copy.manifest)).toBeLessThanOrEqual(manifestBytes(published));
   }),

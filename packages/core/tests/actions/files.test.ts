@@ -5,7 +5,7 @@ import { checkFilePath, fileKey, removeFiles } from "../../src/actions/files";
 import type { SiteFolder } from "../../src/records/site";
 import { MemoryStore } from "../../src/storage/memory";
 import type { ObjectKey } from "../../src/storage/storage";
-import { makeWorld, OWNER } from "./support/actions-fixture";
+import { makeWorld, OWNER, PAGE_SHA256 } from "./support/actions-fixture";
 
 const FOLDER = "0123456789abcdef" as SiteFolder;
 
@@ -42,7 +42,7 @@ describe("checkFilePath", () => {
     ["a".repeat(990), { ok: false, refusal: "too-long" }],
   ])("the path %j is %j, and a publish that declares it agrees", async (path, checked) => {
     const world = await makeWorld();
-    const files = [...new Set(["index.html", path])].map((declared) => ({ path: declared, size: 1, content_type: "text/html" }));
+    const files = [...new Set(["index.html", path])].map((declared) => ({ path: declared, size: 1, content_type: "text/html", sha256: PAGE_SHA256 }));
     const begun = await beginPublish(world.install, OWNER, { name: "report", files });
 
     expect<unknown>([checkFilePath(path), begun.ok ? "taken" : begun]).toEqual([checked, checked.ok ? "taken" : { ok: false, code: "bad_path", about: path }]);

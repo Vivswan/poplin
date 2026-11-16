@@ -7,6 +7,7 @@ import type { ExportedSite } from "@poplin/core/src/actions/export";
 import { publishSite } from "@poplin/core/src/actions/publish";
 import { settingsFromText } from "@poplin/core/src/records/settings";
 import { dayOf } from "@poplin/core/src/records/views";
+import { sha256Of } from "@poplin/core/src/storage/storage";
 import { parse } from "es-module-lexer/js";
 import type { ExtractSchema } from "hono/types";
 import { hexToUint8Array, uint8ArrayToHex } from "uint8array-extras";
@@ -98,6 +99,7 @@ const EVERY_ROUTE: { readonly [Path in keyof Routes]: { readonly [Method in keyo
   "/api/sites/:site/duplicate": { $post: (calls) => calls.sites[":site"].duplicate.$post({ ...SITE, query: {}, json: UNREAD }) },
   "/api/uploads": { $post: (calls) => calls.uploads.$post({ query: {}, json: UNREAD }) },
   "/api/uploads/:upload": { $get: (calls) => calls.uploads[":upload"].$get({ ...UPLOAD, query: {} }), $delete: (calls) => calls.uploads[":upload"].$delete({ ...UPLOAD, query: {} }) },
+  "/api/uploads/:upload/tickets": { $post: (calls) => calls.uploads[":upload"].tickets.$post({ ...UPLOAD, query: {}, json: UNREAD }) },
   "/api/uploads/:upload/file": { $put: (calls) => calls.uploads[":upload"].file.$put({ ...UPLOAD, query: { path: FILE.path } }) },
   "/api/uploads/:upload/finish": { $post: (calls) => calls.uploads[":upload"].finish.$post({ ...UPLOAD, query: {} }) },
   "/api/export/settings": { $get: (calls) => calls.export.settings.$get({ query: {} }) },
@@ -1143,7 +1145,7 @@ describe("the rows the live checks count", () => {
     const calls = api(worker, await tokenOf(w, "admin"), meter.fetch);
     const pairs: Record<string, readonly [written: number, counted: number]> = {};
     const html = page("page");
-    const declared = { path: html.path, size: html.body.byteLength, content_type: html.type };
+    const declared = { path: html.path, size: html.body.byteLength, content_type: html.type, sha256: await sha256Of(html.body) };
 
     /** Run one step, and keep what the database wrote in it beside what the harness counted. */
     const step = async <Done>(what: string, run: () => Promise<Done>): Promise<Done> => {

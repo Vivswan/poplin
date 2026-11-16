@@ -3,6 +3,8 @@
 // `String.prototype.isWellFormed` is newer than the compile target, so this file names the library that types it.
 /// <reference lib="es2024.string" />
 
+import { uint8ArrayToBase64 } from "uint8array-extras";
+
 /** The most objects one `list` call may ask for: no store is asked for a longer page. */
 export const MAX_LIST_LIMIT = 1000;
 
@@ -32,6 +34,9 @@ const BEYOND_ASCII = /\P{ASCII}/u;
 
 /** A control character, which the key rules refuse, or a surrogate left without its pair, which UTF-8 cannot carry. */
 const UNSTORABLE_CHARACTER = /[\p{Cc}\p{Cs}]/u;
+
+/** A SHA-256 in base64, in its one spelling: 43 digits and a pad, the last digit carrying no bit past the 256th. Equal hashes are then equal texts. */
+const SHA256_TEXT = /^[A-Za-z0-9+/]{42}[AEIMQUYcgkosw048]=$/;
 
 /** Measures a key as the stores do. */
 const UTF8 = new TextEncoder();
@@ -84,6 +89,9 @@ export interface ObjectSummary {
 export interface ObjectInfo extends ObjectSummary {
   /** The media type given at the write, served back as the `Content-Type` header. */
   readonly contentType: string;
+
+  /** The SHA-256 of the bytes in base64, as the write that stored them declared it. An object written without one has none. */
+  readonly sha256?: string;
 }
 
 /**
@@ -125,9 +133,13 @@ export type ReadResult =
 /** The bytes to store. A stream carries its length up front: a store may refuse one of unknown length. */
 export type WriteBody = Uint8Array | ArrayBuffer | { readonly stream: ReadableStream<Uint8Array>; readonly size: number };
 
-/** What is stored beside the bytes. `isContentType` says which content type a store keeps; it is kept as written, without trimming, case folding, or normalising. */
+/** What is stored beside the bytes, and what the bytes are held to. */
 export interface WriteOptions {
+  /** The media type. `isContentType` says which one a store keeps; it is kept as written, without trimming, case folding, or normalising. */
   readonly contentType: string;
+
+  /** The SHA-256 the bytes must have, in base64 as `isSha256` takes it. The store checks the bytes against it as they arrive, and keeps it for `head` to answer. */
+  readonly sha256?: string | undefined;
 }
 
 /** Which keys a listing returns, and how they are paged. */
@@ -175,7 +187,8 @@ export interface ObjectStore {
    * Store an object, replacing whatever the key held.
    *
    * @throws {Error} a stream body ended at another length than its `size`; nothing was stored
-   * @throws {TypeError} `checkWriteOptions` refused the options: the content type is empty, or holds a control character or a lone surrogate; nothing was stored
+   * @throws {HashMismatch} the bytes are not the ones `options.sha256` names; nothing was stored, and what the key held stays
+   * @throws {TypeError} `checkWriteOptions` refused the options: the content type is empty, or holds a control character or a lone surrogate, or the hash is no SHA-256 in base64; nothing was stored
    */
   write(key: ObjectKey, body: WriteBody, options: WriteOptions): Promise<ObjectInfo>;
 
@@ -192,6 +205,14 @@ export interface ObjectStore {
    * @throws {TypeError} `prefix` holds a lone surrogate or is not in NFC
    */
   list(options: ListOptions): Promise<ListPage>;
+}
+
+/** What a write throws when its bytes are not the ones the hash it was given names. Nothing was stored. */
+export class HashMismatch extends Error {
+  constructor() {
+    super("the bytes are not the ones the declared SHA-256 names");
+    this.name = "HashMismatch";
+  }
 }
 
 function isByteCount(value: number): boolean {
@@ -272,16 +293,48 @@ export function isContentType(text: string): boolean {
 }
 
 /**
+ * Decide whether text is a SHA-256 as a file declares it and a store keeps it: the 32 bytes in base64, in the one spelling they have.
+ *
+ * @returns `false` for any other length, for a character outside the base64 alphabet, and for a last digit that carries bits a hash has not
+ */
+export function isSha256(text: string): boolean {
+  return SHA256_TEXT.test(text);
+}
+
+/**
+ * Work out the SHA-256 of bytes held in memory, with the platform's own digest.
+ *
+ * @returns the hash in base64, as `isSha256` takes it
+ */
+export async function sha256Of(bytes: Uint8Array): Promise<string> {
+  const digest = await crypto.subtle.digest("SHA-256", bytes as Uint8Array<ArrayBuffer>);
+
+  return uint8ArrayToBase64(new Uint8Array(digest));
+}
+
+/**
+ * Hold bytes a store has in memory to the hash their write was given. A store that keeps its objects in memory calls it before it stores them.
+ *
+ * @param sha256 - the hash the write was given; none checks nothing
+ * @throws {HashMismatch} the bytes have another hash
+ */
+export async function checkBytes(bytes: Uint8Array, sha256: string | undefined): Promise<void> {
+  if (sha256 !== undefined && (await sha256Of(bytes)) !== sha256) throw new HashMismatch();
+}
+
+/**
  * Refuse what a store could not keep as written beside the bytes. Every implementation's `write` calls it first, and nowhere else decides this.
  *
  * @returns a copy of the options to store from, so a change the caller makes while the write is under way stores nothing unchecked
- * @throws {TypeError} `isContentType` refuses the content type
+ * @throws {TypeError} `isContentType` refuses the content type, or `isSha256` the hash
  */
 export function checkWriteOptions(options: WriteOptions): WriteOptions {
-  const checked = { contentType: options.contentType };
+  const checked = { contentType: options.contentType, sha256: options.sha256 };
   requireWellFormed(checked.contentType, "the content type");
 
   if (!isContentType(checked.contentType)) throw new TypeError("the content type is empty or holds a control character, which no header carries");
+
+  if (checked.sha256 !== undefined && !isSha256(checked.sha256)) throw new TypeError("the hash is no SHA-256 in base64");
 
   return checked;
 }

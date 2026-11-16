@@ -6,6 +6,7 @@ import type { SettingValues } from "../records/settings";
 import type { Site } from "../records/site";
 import type { SiteLabel } from "../sites/labels";
 import type { ObjectStore } from "../storage/storage";
+import type { Tickets } from "../storage/tickets";
 
 /** One poplin: where its records and files are kept, its clock, and how it spells its addresses. */
 export interface Install {
@@ -14,6 +15,9 @@ export interface Install {
 
   /** The bucket that holds every site's files. */
   readonly store: ObjectStore;
+
+  /** What hands out the tickets a publisher sends an upload's files by. Held only where uploads are taken from outside: with none, a begun upload answers no ticket. */
+  readonly tickets?: Tickets;
 
   /** The clock, in milliseconds since the epoch. */
   readonly now: () => number;

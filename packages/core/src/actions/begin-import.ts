@@ -12,7 +12,7 @@ import { checkManifest, ENTRY_PAGE, refuseFull, roomUnder, type UploadLimits } f
 import { BACKUP_FORMAT, type ExportedSite } from "./export";
 import { enterInstall } from "./reach";
 import { type Install, type Refused, refuse } from "./records";
-import { type BegunUpload, uploadKey, uploadObject } from "./uploads";
+import { type BegunUpload, begunUpload, uploadKey } from "./uploads";
 
 /** An import bounded by nothing but the install's own limits. */
 const UNBOUNDED: UploadLimits = { fileBytes: Number.MAX_SAFE_INTEGER, files: Number.MAX_SAFE_INTEGER };
@@ -135,7 +135,7 @@ async function findConflict(install: Install, site: Site): Promise<Refused<"id_t
  * Then it mints the folder the site's files go under and records the upload. Its files are sent, shown, finished, and given up as a publish's are; finishing stores the site as the backup held it. No site is made or changed here.
  * @param request - `site` is a site as `exportSites` gave it, and `files` every file of the versions it carries, each named `v<number>/<path>`; anything is taken and checked
  * @param limits - what one request can carry; a file, or one version's count of files, beyond it is `too_large`, as are versions that together declare over 10,000 files or a manifest over 1.5 MB
- * @returns the upload, whose id every later step names. `backup_too_new` for a format above the one this code reads; `id_taken` and `name_taken` name what another site holds, and nothing is recorded
+ * @returns the upload with its tickets, as `beginPublish` answers it. `backup_too_new` for a format above the one this code reads; `id_taken` and `name_taken` name what another site holds, and nothing is recorded
  * @throws {Error} the database failed
  */
 export async function beginImport(
@@ -172,5 +172,5 @@ export async function beginImport(
 
   const bytes = files.reduce((sum, file) => sum + file.size, 0);
 
-  return { ok: true, upload: uploadObject({ ...upload, state: "pending", bytes, files: files.length, dropped: [] }) };
+  return begunUpload(install, { ...upload, state: "pending", bytes, files: files.length, dropped: [] }, files);
 }

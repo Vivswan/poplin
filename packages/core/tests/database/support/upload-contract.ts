@@ -32,6 +32,7 @@ import {
   made,
   numberedFiles,
   opened,
+  SHA256,
 } from "./database-fixtures";
 
 export function uploadFiles(label: string, makeDatabase: DatabaseFactory): void {
@@ -40,21 +41,21 @@ export function uploadFiles(label: string, makeDatabase: DatabaseFactory): void 
     test("one file is found among 5,000 by its exact path, the first and the last alike, and each of two uploads that share a path answers its own file", async () => {
       const database = await opened(makeDatabase);
       const large = await begunFiles(database, numberedFiles(5000));
-      const small = await begunFiles(database, numberedFiles(3).map((file) => ({ ...file, size: file.size + 100, content_type: "text/plain" })));
+      const small = await begunFiles(database, numberedFiles(3).map((file) => ({ ...file, size: file.size + 100, content_type: "text/plain", sha256: SHA256 })));
       const found = async (id: UploadId, path: string): Promise<unknown> => (await database.getUploadFile(id, path))?.file ?? "none";
       const paths = ["page-0.html", "page-2.html", "page-4999.html", "page-5000.html", "page-499", "Page-2.html", "page-2.html/", ""];
 
       expect(await Promise.all(paths.map((path) => found(large, path)))).toEqual([
-        { path: "page-0.html", size: 0, content_type: "text/html" },
-        { path: "page-2.html", size: 2, content_type: "text/html" },
-        { path: "page-4999.html", size: 4999, content_type: "text/html" },
+        { path: "page-0.html", size: 0, content_type: "text/html", sha256: SHA256 },
+        { path: "page-2.html", size: 2, content_type: "text/html", sha256: SHA256 },
+        { path: "page-4999.html", size: 4999, content_type: "text/html", sha256: SHA256 },
         "none",
         "none",
         "none",
         "none",
         "none",
       ]);
-      expect([await found(small, "page-2.html"), await found(small, "page-3.html")]).toEqual([{ path: "page-2.html", size: 102, content_type: "text/plain" }, "none"]);
+      expect([await found(small, "page-2.html"), await found(small, "page-3.html")]).toEqual([{ path: "page-2.html", size: 102, content_type: "text/plain", sha256: SHA256 }, "none"]);
       expect([(await database.getUpload(large))?.manifest.length, (await database.getUploadFile(large, ""))?.upload.files]).toEqual([5000, 5000]);
     });
 
@@ -64,20 +65,36 @@ export function uploadFiles(label: string, makeDatabase: DatabaseFactory): void 
       // The second path and the last have one hash of 32 bits, 96444b56, by the FNV-1a rule.
       const signs = ["index.html", "page-2794.html", "2024", "10", "9", "$", "$.a", "$[0]", "a.b[0]", "[1]", "0/0", 'say "hi"', "it's", "100%_done"];
       const paths = [...signs, "constructor", "__proto__", "toString", "length", "\u00fc/\u{1F600}.html", " ", `${"long/".repeat(200)}page.html`, "page-64060.html"];
-      const manifest = paths.map((path, index) => ({ path, size: index, content_type: `text/x-${index}; charset="utf-8"` }));
+      const manifest = paths.map((path, index) => ({ path, size: index, content_type: `text/x-${index}; charset="utf-8"`, sha256: SHA256 }));
       const upload = await begunFiles(database, manifest);
       const each = await Promise.all(paths.map(async (path) => (await database.getUploadFile(upload, path))?.file));
       const absent = await Promise.all(["0", "$.b", "[0]", "a", "valueOf", '"index.html"', "'index.html'", "index.html ", "f96444b56"].map(async (path) => (await database.getUploadFile(upload, path))?.file));
 
       expect([(await database.getUpload(upload))?.manifest, each]).toEqual([manifest, manifest]);
       expect(absent.filter((file) => file !== undefined)).toEqual([]);
+      // Drift: tickets are asked for a hundred files in one read; a read that answered them in the engine's order, or a neighbour under a shared key, would hand a ticket for one file's place to another.
+      const asked = [...paths].reverse();
+      const several = await database.getUploadFiles(upload, [...asked, "valueOf", "f96444b56"]);
+
+      expect(several?.files).toEqual([...[...manifest].reverse(), undefined, undefined]);
+      expect([await database.getUploadFiles(mintUploadId(), ["index.html"]), (await database.getUploadFiles(upload, []))?.files]).toEqual([undefined, []]);
+    });
+
+    // Drift: a call for tickets names up to a hundred files; a read that took a value a path, or a bound parameter a path, would pass what an engine takes in one statement.
+    test("a hundred files of 5,000 are read in one statement, each as it was declared", async () => {
+      const database = await opened(makeDatabase);
+      const manifest = numberedFiles(5000);
+      const upload = await begunFiles(database, manifest);
+      const paths = manifest.slice(4900).map((file) => file.path);
+
+      expect((await database.getUploadFiles(upload, paths))?.files).toEqual(manifest.slice(4900));
     });
 
     // Drift: a path names one file; an upload recorded with a path twice would answer one size for it and hold another in its manifest.
     test("an upload whose manifest names a path twice is refused whole", async () => {
       const database = await opened(makeDatabase);
       const site = { ...draft(REPORT), embeddable: true };
-      const twice = [...MANIFEST, { path: "index.html", size: 1, content_type: "text/plain" }];
+      const twice = [...MANIFEST, { path: "index.html", size: 1, content_type: "text/plain", sha256: SHA256 }];
       const upload: NewUpload = { id: mintUploadId(), folder: site.folder, number: 1, owner: ADA, plan: { kind: "create", site }, manifest: twice, created_at: NOW };
 
       await expect(database.addUpload(upload, ROOMY)).rejects.toThrow();

@@ -23,8 +23,11 @@ const HEX_DIGIT_BITS = 4;
 /** Where a key ends in a manifest written as a flat list: the quote and comma between its last digit and its files. A quote inside a text follows a backslash, so no path and no type holds this. */
 const KEY_END = /(?<=[0-9a-f])",\[\[/g;
 
-/** One file as a stored manifest holds it: its path, size, type, and place in the manifest. */
-type StoredFile = readonly [path: string, size: number, type: string, place: number];
+/** The form of a key of a stored manifest: the letter and the hex digits of a 32-bit hash. Nothing in it ends a text or a step of a JSON path. */
+export const MANIFEST_KEY = /^f[0-9a-f]{1,8}$/;
+
+/** One file as a stored manifest holds it: its path, size, type, place in the manifest, and hash. */
+type StoredFile = readonly [path: string, size: number, type: string, place: number, sha256: string];
 
 /** Carry a 32-bit FNV-1a hash on over a path, from one of its UTF-16 units to its end. */
 function hashOn(hash: number, path: string, from: number): number {
@@ -91,7 +94,7 @@ function keyOfHash(hash: number): string {
 }
 
 /**
- * The manifest as the JSON object its row holds: under each key the files whose paths have it, each as its path, size, type, and place in the manifest.
+ * The manifest as the JSON object its row holds: under each key the files whose paths have it, each as its path, size, type, place in the manifest, and hash.
  *
  * @throws {Error} two files share a path
  */
@@ -101,12 +104,12 @@ export function manifestToText(manifest: readonly ManifestFile[]): string {
   const keyed: (string | StoredFile[])[] = [];
 
   for (let place = 0; place < manifest.length; place += 1) {
-    const { path, size, content_type: type } = manifest[place] as ManifestFile;
+    const { path, size, content_type: type, sha256 } = manifest[place] as ManifestFile;
     const hash = hashes[place] as number;
     const held = sharing.get(hash);
 
     if (held === undefined) {
-      const files: StoredFile[] = [[path, size, type, place]];
+      const files: StoredFile[] = [[path, size, type, place, sha256]];
       sharing.set(hash, files);
       keyed.push(keyOfHash(hash), files);
       continue;
@@ -114,7 +117,7 @@ export function manifestToText(manifest: readonly ManifestFile[]): string {
 
     if (held.some(([other]) => other === path)) throw new Error("two files of an upload share a path");
 
-    held.push([path, size, type, place]);
+    held.push([path, size, type, place, sha256]);
   }
 
   // One call writes every key and its files as a flat list, which costs a long manifest a fraction of what an object with as many keys does.
@@ -124,8 +127,8 @@ export function manifestToText(manifest: readonly ManifestFile[]): string {
 }
 
 /** `manifestToText` is the one writer of a stored file, so its fields are read as written, unchecked. */
-function declaredFile([path, size, type]: StoredFile): ManifestFile {
-  return { path, size, content_type: type };
+function declaredFile([path, size, type, , sha256]: StoredFile): ManifestFile {
+  return { path, size, content_type: type, sha256 };
 }
 
 /**
@@ -170,4 +173,22 @@ export function fileUnderKey(sharing: string, path: string): ManifestFile | unde
   const file = files.find(([held]) => held === path);
 
   return file === undefined ? undefined : declaredFile(file);
+}
+
+/**
+ * Find each path's file among the files stored under the keys of several paths.
+ *
+ * @param sharing - JSON lists of what a stored manifest holds under the `manifestKey` of each path: the files under a key, or `null` for a key it has not
+ * @returns the files as they were declared, in the order of the paths; `undefined` in the place of a path the manifest does not name
+ */
+export function filesUnderKeys(sharing: readonly string[], paths: readonly string[]): (ManifestFile | undefined)[] {
+  const under = sharing.flatMap((list): readonly (readonly StoredFile[] | null)[] => JSON.parse(list));
+  const stored = new Map<string, StoredFile>();
+  for (const file of under.flatMap((files) => files ?? [])) stored.set(file[0], file);
+
+  return paths.map((path) => {
+    const file = stored.get(path);
+
+    return file === undefined ? undefined : declaredFile(file);
+  });
 }

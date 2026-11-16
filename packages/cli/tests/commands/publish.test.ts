@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test";
+import { createHash } from "node:crypto";
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 
@@ -6,6 +7,11 @@ import { type Bench, cleanUp, folderOf, jsonOf, openBench, stateOf } from "./sup
 
 /** The pages of the fixture site. The test install takes files of at most 64 bytes. */
 const PAGES = { "index.html": "<title>Field notes</title><h1>notes</h1>", "css/site.css": "body{}", ".env": "KEY=1" };
+
+/** The SHA-256 of a text's bytes in base64, by the runtime's own hash. */
+function hashOf(text: string): string {
+  return createHash("sha256").update(text).digest("base64");
+}
 
 /** A JSON answer in the install's place. */
 function answer(status: number, body: unknown, headers: Readonly<Record<string, string>> = {}): Response {
@@ -109,8 +115,8 @@ describe("publish", () => {
       bytes: 46,
       skipped: 1,
       files: [
-        { path: "css/site.css", size: 6, content_type: "text/css" },
-        { path: "index.html", size: 40, content_type: "text/html" },
+        { path: "css/site.css", size: 6, content_type: "text/css", sha256: hashOf(PAGES["css/site.css"]) },
+        { path: "index.html", size: 40, content_type: "text/html", sha256: hashOf(PAGES["index.html"]) },
       ],
     });
     expect(bench.sent).toEqual([]);

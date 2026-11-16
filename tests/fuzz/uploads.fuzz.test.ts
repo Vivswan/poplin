@@ -1,4 +1,4 @@
-// A file request names its file by a path the publisher wrote: whatever characters a storable path holds, the database must answer that file and no other, and hand the manifest back as it was declared.
+// A file request names its file by a path the publisher wrote: whatever characters a storable path holds, the database must answer that file and no other, alone or among the files a call for tickets names, and hand the manifest back as it was declared.
 
 import { expect } from "bun:test";
 import fc from "fast-check";
@@ -22,7 +22,8 @@ const signs = fc.constantFrom("2024", "0", "-1", "1e3", "$", "$.a", "$[0]", "[0]
 const segments = fc.oneof(signs, fc.string({ unit: "grapheme", minLength: 1, maxLength: 8 }), fc.tuple(signs, signs).map(([one, other]) => `${one}${other}`));
 const paths = fc.array(segments, { minLength: 1, maxLength: 4 }).map((path) => path.join("/")).filter((path) => checkFilePath(path).ok);
 const types = fc.oneof(fc.constantFrom("text/html", 'text/html; charset="utf-8"', "a/b;c=[1,2]"), fc.string({ unit: "grapheme", minLength: 1, maxLength: 20 }).filter(isContentType));
-const files = fc.record({ path: paths, size: fc.oneof(fc.nat(), fc.constantFrom(0, 2 ** 40)), content_type: types });
+const hashes = fc.uint8Array({ minLength: 32, maxLength: 32 }).map((bytes) => Buffer.from(bytes).toString("base64"));
+const files = fc.record({ path: paths, size: fc.oneof(fc.nat(), fc.constantFrom(0, 2 ** 40)), content_type: types, sha256: hashes });
 const manifests = fc.uniqueArray(files, { minLength: 1, maxLength: 12, selector: (file) => file.path });
 
 async function opened(): Promise<Awaited<ReturnType<typeof openDatabase>> & { kind: "open" }> {
@@ -42,10 +43,12 @@ property(
     const declared = new Map(manifest.map((file) => [file.path, file]));
     const asked = [...declared.keys(), ...others];
     const answered = await Promise.all(asked.map(async (path) => (await database.getUploadFile(id, path))?.file));
+    const several = await database.getUploadFiles(id, asked);
     const whole = await database.getUpload(id);
     await database.abandonUpload(id);
 
     expect(answered).toEqual(asked.map((path) => declared.get(path)));
+    expect(several?.files).toEqual(answered);
     expect(whole?.manifest).toEqual(manifest);
   }),
 );

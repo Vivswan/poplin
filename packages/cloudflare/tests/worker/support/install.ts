@@ -9,6 +9,7 @@ import type { Install } from "@poplin/core/src/actions/records";
 import type { Login } from "@poplin/core/src/auth/logins";
 import { openDatabase } from "@poplin/core/src/database/open";
 import { dayOf } from "@poplin/core/src/records/views";
+import { sha256Of } from "@poplin/core/src/storage/storage";
 import { hc } from "hono/client";
 import type * as v from "valibot";
 import { D1Driver } from "../../../src/database/d1";
@@ -207,7 +208,7 @@ export async function done<Body>(response: Answer): Promise<Body> {
 /** Publish files through the API's three steps: begin, one put per file, finish. */
 export async function publish(worker: Worker, token: string, asked: Omit<v.InferInput<typeof PUBLISH_REQUEST>, "files">, files: readonly TestFile[]): Promise<Published> {
   const calls = api(worker, token);
-  const manifest = files.map((file) => ({ path: file.path, size: file.body.byteLength, content_type: file.type }));
+  const manifest = await Promise.all(files.map(async (file) => ({ path: file.path, size: file.body.byteLength, content_type: file.type, sha256: await sha256Of(file.body) })));
   const begun = await done<{ upload: { id: string } }>(await calls.uploads.$post({ query: {}, json: { ...asked, files: manifest } }));
 
   for (const file of files) await done(await sendFile(calls, begun.upload.id, file));

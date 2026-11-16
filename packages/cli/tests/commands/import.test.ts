@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test";
+import { createHash } from "node:crypto";
 import { readdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 
@@ -28,7 +29,7 @@ function answer(status: number, body: unknown): Response {
 
 /** Publish a site through the API, with the content types the test names: what no file extension gives. */
 async function publishedTyped(install: ApiInstall, name: string, files: readonly (readonly [path: string, text: string, type: string])[]): Promise<void> {
-  const declared = files.map(([path, text, type]) => ({ path, size: text.length, content_type: type }));
+  const declared = files.map(([path, text, type]) => ({ path, size: text.length, content_type: type, sha256: createHash("sha256").update(text).digest("base64") }));
   const begun = await answered(install.routes.uploads.$post({ json: { name, files: declared } }));
   const upload = (begun.body.upload as { id: string }).id;
   for (const [path, text] of files) await install.routes.uploads[":upload"].file.$put({ param: { upload }, query: { path } }, bytes(text));

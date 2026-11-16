@@ -20,7 +20,7 @@ const METHODS = ["GET", "GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTION
 const CONTENT_TYPES = ["application/json", "application/json; charset=utf-8", "application/octet-stream", "text/plain", "multipart/form-data; boundary=x", "APPLICATION/JSON", ""];
 const NO_SITE = "zzzzzzzzzzzz";
 const NO_UPLOAD = "zzzzzzzzzzzzzzzz";
-const PAGE = { path: "index.html", size: 4, content_type: "text/html" };
+const PAGE = { path: "index.html", size: 4, content_type: "text/html", sha256: "NmAxWprz3yVdjxmrB35Hl4IrQUiKDioEvGr3EhPCMnQ=" };
 const NO_TOKEN = "00000000000000aa";
 const BYTES = { "Content-Type": "application/octet-stream" };
 const RUNS_PER_INSTALL = 200;
@@ -80,6 +80,7 @@ function pathsOf({ site, upload, trash, limit, forever }: Named): Readonly<Recor
     "/api/sites/:site/duplicate": [ROUTES.sites[":site"].duplicate.$path(one)],
     "/api/uploads": [ROUTES.uploads.$path()],
     "/api/uploads/:upload": [ROUTES.uploads[":upload"].$path(held)],
+    "/api/uploads/:upload/tickets": [ROUTES.uploads[":upload"].tickets.$path(held)],
     "/api/uploads/:upload/file": [ROUTES.uploads[":upload"].file.$path({ ...held, query: { path: PAGE.path } })],
     "/api/uploads/:upload/finish": [ROUTES.uploads[":upload"].finish.$path(held)],
     "/api/export/settings": [ROUTES.export.settings.$path()],

@@ -16,6 +16,7 @@ Open this when a poplin tool or command answers with a refusal. From a tool, or 
 | `no_such_version`                                 | the install keeps no such version                | `get_site` lists the kept versions                                   |
 | `too_large`, `too_many_sites`                     | a limit of the install                           | tell the user the limit; do not delete sites to make room unasked    |
 | `stale_version`, `missing_files`, `size_mismatch` | the publish did not complete; nothing went live  | publish again, the same way                                          |
+| `hash_mismatch`                                   | a file changed while it was published; nothing went live | publish again once nothing writes to the folder              |
 | `unreachable`, `timeout`, `internal`              | no answer, or the install failed part way        | the change may have been made: `list_sites` before you try again     |
 | `stopped`                                         | the user stopped the command or the server       | the upload is given up or runs out in a day; ask before a retry      |
 | `allowance_spent`                                 | a day's allowance is used up: the database's, or the storage's writes | tell the user; do not try again before 00:00 UTC |
