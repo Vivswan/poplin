@@ -1174,10 +1174,10 @@ export class SqlDatabase implements Database {
     return { settings: settingsIn(read), mark: waitingMark(row.rules_changed_at) ?? null };
   }
 
-  async settleRules(carried: CarriedRules, at: number): Promise<{ readonly waits: boolean }> {
-    const [, kept] = await this.#driver.batch([rulesCarried(carried, at), domainCheckAsked()]);
+  async settleRules(carried: CarriedRules, at: number): Promise<{ readonly waits: boolean; readonly settings: SettingValues | undefined }> {
+    const [, read, kept] = await this.#driver.batch([rulesCarried(carried, at), READ_SETTINGS, domainCheckAsked()]);
 
-    return { waits: waitingMark(kept?.rows[0]?.rules_changed_at) !== undefined };
+    return { waits: waitingMark(kept?.rows[0]?.rules_changed_at) !== undefined, settings: settingsIn(read) };
   }
 
   async readStorageWrites(day: string): Promise<{ readonly writes: number; readonly most: number } | undefined> {

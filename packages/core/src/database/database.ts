@@ -942,9 +942,9 @@ export interface Database {
   /**
    * Settle a change of the settings of the domain's rules after a try to carry them to the domain, in one step with the comparison, as `settleUsers` settles the users.
    *
-   * @returns whether a change of those settings waits after it
+   * @returns whether a change of those settings waits after it, and the settings stored now, `undefined` before setup stored any: on an install that keeps no run of its domain nothing waits, and only they say whether the values carried are stale
    */
-  settleRules(carried: CarriedRules, at: number): Promise<{ readonly waits: boolean }>;
+  settleRules(carried: CarriedRules, at: number): Promise<{ readonly waits: boolean; readonly settings: SettingValues | undefined }>;
 
   /** The install's settings, `undefined` before setup stored them. */
   readSettings(): Promise<SettingValues | undefined>;

@@ -7,6 +7,7 @@
 //   the domain is not at the provider          waits     noted as a problem of the domain
 //   the provider gave no usable answer         waits     the scheduled run tries again
 //   the same, on an install that keeps no run of its domain: nothing remembers that the change waits, so it is noted as a problem too
+//   values that were stale when the provider took them, there: written once more, and noted as a problem if stale again
 //
 // The change is stored before any of this, with a mark that it waits, and stands whatever the provider answers.
 // A try gives that mark a later one and reads the settings in one statement, writes the rules, and settles in a second statement, which lets the mark go only while the stored values are the ones written and no mark was set since.
@@ -45,6 +46,10 @@ function rulesOf(settings: RuleSettings): RuleSettings {
   return { outside_pages: settings.outside_pages, search_engines_allowed: settings.search_engines_allowed };
 }
 
+function same(left: RuleSettings, right: RuleSettings): boolean {
+  return RULE_SETTINGS.every((key) => left[key] === right[key]);
+}
+
 /**
  * Say whether a change of the settings names one the domain's rules are written from.
  *
@@ -57,10 +62,10 @@ export function namesRule(changes: unknown): boolean {
 /**
  * Leave a change waiting after a try the provider refused, and note the one no later try mends: a refusal a person must repair, and any refusal on an install that keeps no run of its domain to remember the change by.
  *
- * @param mark - the mark the try began under, `undefined` where the install kept no run then. One may have been kept while the provider was asked, so the change is set to wait there once more
+ * A refused try may have written a part of the rules, so what they hold is unknown: the change is set to wait anew, also where a newer try had settled it meanwhile.
  */
-async function refused(install: Pick<Install, "database" | "now">, refusal: FollowRefusal, mark: number | undefined): Promise<Followed> {
-  const remembers = mark !== undefined || (await install.database.settleRules({ rules: null, since: 0 }, install.now())).waits;
+async function refused(install: Pick<Install, "database" | "now">, refusal: FollowRefusal): Promise<Followed> {
+  const remembers = (await install.database.settleRules({ rules: null, since: 0 }, install.now())).waits;
   if (!remembers || NOTED.includes(refusal)) await noteProblem(install, "rules_not_carried");
 
   return { carried: false, why: !remembers && refusal === "unreachable" ? "forgotten" : refusal };
@@ -69,26 +74,39 @@ async function refused(install: Pick<Install, "database" | "now">, refusal: Foll
 /**
  * Carry the settings of the domain's rules to the provider where a change of them waits, and settle the change where the provider took them.
  *
- * @returns whether the rules hold the stored settings now. A refusal leaves the change waiting, and one that no later try mends is noted as the problem `rules_not_carried`. An install with no key is asked nothing, and notes nothing
+ * @returns whether the rules hold the stored settings now. A refusal leaves the change waiting, and one that no later try mends is noted as the problem `rules_not_carried`.
+ *   So are values that stayed stale on an install with no run to wait in. An install with no key is asked nothing, and notes nothing
  * @throws {Error} the database failed: the change waits on
  */
 export async function followRules(install: Pick<Install, "database" | "now">, follow: RulesFollow): Promise<Followed> {
   if (!follow.holdsKey()) return { carried: false, why: "no_key" };
 
+  let waits = false;
+  let stale = false;
+
   for (let tries = 0; tries < MOST_TRIES; tries += 1) {
     const { settings, mark } = await install.database.claimRules(install.now());
-    // An install with no settings has no rules to write, and one whose change was settled meanwhile has none to carry.
-    if (settings === undefined || mark === null) return { carried: true };
+    // An install with no settings has no rules to write, and one whose change was settled meanwhile has none to carry, unless this very call wrote stale values a moment ago.
+    if (settings === undefined || (mark === null && !stale)) return { carried: true };
 
     const rules = rulesOf(settings);
     const pushed = await follow.push(rules);
-    if (!pushed.ok) return refused(install, pushed.refusal, mark);
+    if (!pushed.ok) return refused(install, pushed.refusal);
 
     // An install that kept no run of its domain at the claim may keep one by now, with a later change settled in it: the try settles all the same, and writes nothing where there is still no run.
-    if (!(await install.database.settleRules({ rules, since: mark ?? 0 }, install.now())).waits) return { carried: true };
+    const settled = await install.database.settleRules({ rules, since: mark ?? 0 }, install.now());
+    waits = settled.waits;
+    // Where no run is kept nothing waits, and only the stored settings say that the values written are those of an earlier moment.
+    stale = settled.settings !== undefined && !same(rulesOf(settled.settings), rules);
+    if (!waits && !stale) return { carried: true };
   }
 
-  return { carried: false, why: "changed_again" };
+  if (waits) return { carried: false, why: "changed_again" };
+
+  // Stale values with no run to wait in: nothing carries them later.
+  await noteProblem(install, "rules_not_carried");
+
+  return { carried: false, why: "forgotten" };
 }
 
 /**
