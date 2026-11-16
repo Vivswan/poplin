@@ -24,6 +24,7 @@ import type { AccountAddresses } from "../../src/zone/address-layout";
 import { type CloudflareFailure, callCloudflare } from "../../src/zone/client";
 import { syncDatabase } from "../../src/zone/database/database";
 import { syncForwarders } from "../../src/zone/forwarders/forwarders";
+import { syncJobs } from "../../src/zone/jobs/jobs";
 import { INSTALL_OBJECTS } from "../../src/zone/install-objects";
 import { readKeyState } from "../../src/zone/key/key-state";
 import { mintKey } from "../../src/zone/key/mint";
@@ -81,6 +82,7 @@ const CAPABILITIES: Readonly<Record<string, string>> = {
   "Access policy": "access",
   "Access open paths": "access",
   Key: "kept-key",
+  Workflow: "jobs",
 };
 
 /** An error code of Cloudflare's, as wrangler prints it. */
@@ -94,6 +96,9 @@ const KEY_PERMISSION = "Account API Tokens: Edit";
 
 /** What stops the key on an account whose list of permission groups lacks one of the key's rights. */
 const NO_GROUP = "Cloudflare lists no permission group for a right of the key";
+
+/** What an install lacks whose Workflow was not made. */
+const NO_WORKFLOW = "the Worker's Workflow, which Cloudflare did not make";
 
 /** What a run says it found of an install of each kind: where it answers. */
 const FOUND_AS = { domain: "Zone", "account address": "Free address" } as const;
@@ -296,6 +301,9 @@ export function needOf(row: DomainRow): string | undefined {
 
   if (row.state === "optional") return `the token permission for the ${row.object}`;
 
+  // An install answers without its Workflow: only a copy too large for one request needs it. One that was not made is a lack, which skips the check of that copy, and stops no run.
+  if (row.object === "Workflow" && row.state === "failed") return NO_WORKFLOW;
+
   // Cloudflare refuses the bot settings of a plan that has none through the API, whatever the token may do.
   if (row.object === "Bot settings" && REFUSAL_STATUS.test(row.detail)) return "a plan whose bot settings the API can change";
 
@@ -417,14 +425,35 @@ async function ensureKey(run: Run, progress: Progress): Promise<Stop | undefined
   return keyStopped(run, progress, keyNotMade(minted));
 }
 
+/** Make the Worker's Workflow where the deploy left none, by the call the zone plug's repair makes. One that is not made is a lack the suite skips for, and stops no run. */
+async function ensureJobs(run: Run, progress: Progress): Promise<void> {
+  const synced = await syncJobs(run.connection, { accountId: run.accountId, script: SCRIPT }, "apply");
+  const { created, changed, skipped } = synced.report;
+
+  if (synced.ok && skipped.length === 0) {
+    const kept = changed.length > 0 ? "changed" : "present";
+    note(run, progress, { piece: "Workflow", result: created.length > 0 ? "created" : kept });
+
+    return;
+  }
+
+  // Only the status of a refusal is told: Cloudflare's words may name the account.
+  const refused = !synced.ok && synced.failure === "refused" ? ` (refused with status ${synced.status})` : "";
+  note(run, progress, { piece: "Workflow", result: `${synced.ok ? "left out" : "failed"}${refused}`, needs: NO_WORKFLOW });
+  progress.missing.jobs ??= NO_WORKFLOW;
+}
+
 /**
- * Make what an install without a domain adds to its deployed Worker: the two forwarders, then the key it keeps.
+ * Make what an install without a domain adds to its deployed Worker: the two forwarders, the key it keeps, then its Workflow.
  *
  *  progress - gathers a row for each, and the things only a zone gives, whose checks the suite is told to skip
- *  what stopped the run, or `undefined`; a token that may not make the key stops nothing
+ *  what stopped the run, or `undefined`; a token that may not make the key stops nothing, and neither does a Workflow that was not made
  */
 export async function settleFreeAddress(run: Run, layout: AccountAddresses, progress: Progress): Promise<Stop | undefined> {
-  return (await ensureForwarders(run, layout, progress)) ?? (await ensureKey(run, progress));
+  const stopped = (await ensureForwarders(run, layout, progress)) ?? (await ensureKey(run, progress));
+  if (stopped === undefined) await ensureJobs(run, progress);
+
+  return stopped;
 }
 
 /** Make what the install's kind adds to its deployed Worker: the zone's objects by the Domain tab's repair, or the forwarders and the key of an install without a domain. */

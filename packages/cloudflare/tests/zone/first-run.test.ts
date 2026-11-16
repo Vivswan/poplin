@@ -70,7 +70,7 @@ test("one repair gives a deployed Worker its domain, its first login, its accoun
     // Every call but the search for the zone goes under the zone and the account the token showed the domain in, and under no other.
     expect(asked.slice(before).map((entry) => entry.path).filter((path) => !path.startsWith("/zones?") && !path.startsWith("/zones/zone-1/") && !path.startsWith(`/accounts/${ACCOUNT}/`))).toEqual([]);
     expect(asked.length - before).toBeLessThanOrEqual(CALLS_A_FREE_PLAN_REQUEST_MAY_SEND);
-    expect(asked.length - before).toBe(38);
+    expect(asked.length - before).toBe(40);
   });
 });
 

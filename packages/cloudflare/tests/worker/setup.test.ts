@@ -285,10 +285,11 @@ describe("a Worker with nothing set", () => {
     expect([stranger.status, repaired.status, ran.summary.tone, text.includes(TOKEN)]).toEqual([200, 200, "good", false]);
     expect(account.bindings.map((binding) => binding.name)).toEqual(["SITES", "DB", "ZONE", "FIRST_SETTINGS", "ACCOUNT_ID", "ACCESS", "KEPT_KEY"]);
     expect([await stored(), (await BINDINGS.SITES.list()).objects.length]).toEqual(before);
-    // The page and the run together: 39 calls to Cloudflare of the 50 a request of the Free plan may send, and 8 to the database of its 50.
-    // Two of the 39 are the budget alert: Cloudflare has no create-or-update by name, so its policies are listed and then one is made.
+    // The page and the run together: 41 calls to Cloudflare of the 50 a request of the Free plan may send, and 8 to the database of its 50.
+    // Two of the 41 are the budget alert: Cloudflare has no create-or-update by name, so its policies are listed and then one is made.
+    // Two are the Workflow: the account's Workflows are searched for its name, and it is made where a deploy left none.
     // Five are the key: the Worker's bindings read for it, the permission groups, the new token, and the two pages of the account's tokens.
-    expect([asked.length - strangers, tally.calls]).toEqual([39, 8]);
+    expect([asked.length - strangers, tally.calls]).toEqual([41, 8]);
   });
 
   // Drift: an install without a domain is found by the hostname its setup was sent to. Taken from anywhere else, its values would go to a Worker that does not answer there, and its sites would have no address.
@@ -307,8 +308,8 @@ describe("a Worker with nothing set", () => {
       "poplin-sites: https://poplin-sites.example.workers.dev (unlisted and public sites)",
     ]);
     expect([account.bindings.find((binding) => binding.name === "ZONE"), account.workers.map((made) => made.id)]).toEqual([{ name: "ZONE", type: "json", json: { account_address: "example" } }, ["poplin-sites", "poplin-private"]]);
-    // One press: 26 calls to Cloudflare of the 50 a request of the Free plan may send.
-    expect(asked.length - unasked).toBe(26);
+    // One press: 28 calls to Cloudflare of the 50 a request of the Free plan may send, the search for the Workflow and its making among them.
+    expect(asked.length - unasked).toBe(28);
   });
 
   // Drift: the page takes a secret from anyone who finds the address, before the install has a domain or a login to tell them apart by.

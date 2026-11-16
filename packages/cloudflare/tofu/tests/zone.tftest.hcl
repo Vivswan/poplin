@@ -224,8 +224,8 @@ run "worker_bindings" {
   }
 
   assert {
-    condition     = tolist([for binding in cloudflare_workers_script.poplin.bindings : "${binding.name} ${binding.type}"]) == tolist(["SITES r2_bucket", "DB d1", "MINUTE_LIMITS ratelimit", "ZONE json", "FIRST_SETTINGS json", "ACCESS json", "ACCOUNT_ID plain_text", "WORKER_NAME plain_text"])
-    error_message = "The Worker gets the bucket, the database, the minute limiter, the zone values, the first settings, the Access application, its account, and its own name, under the names its code reads."
+    condition     = tolist([for binding in cloudflare_workers_script.poplin.bindings : "${binding.name} ${binding.type}"]) == tolist(["SITES r2_bucket", "DB d1", "MINUTE_LIMITS ratelimit", "ZONE json", "FIRST_SETTINGS json", "ACCESS json", "ACCOUNT_ID plain_text", "WORKER_NAME plain_text", "JOBS workflow"])
+    error_message = "The Worker gets the bucket, the database, the minute limiter, the zone values, the first settings, the Access application, its account, its own name, and its Workflow, under the names its code reads."
   }
 
   assert {
@@ -297,6 +297,35 @@ run "access_binding_names_the_login_application" {
       audience    = "4714c1358e65fe4b408ad6d432a5f878f08194bdb4752441fd56faefa9b2b6f2"
     }
     error_message = "The ACCESS binding holds the team domain as given and the audience tag of the module's own Access application."
+  }
+}
+
+# A copy too large for one request is run by the Workflow the binding names, so the binding and the Workflow must name the same one, of the same class, on the module's own Worker.
+run "jobs_workflow" {
+  command = plan
+
+  assert {
+    condition     = cloudflare_workflow.jobs.script_name == cloudflare_workers_script.poplin.script_name
+    error_message = "The Workflow runs the code of the module's own Worker."
+  }
+
+  assert {
+    condition     = cloudflare_workers_script.poplin.bindings[8].workflow_name == cloudflare_workflow.jobs.workflow_name && cloudflare_workers_script.poplin.bindings[8].class_name == cloudflare_workflow.jobs.class_name
+    error_message = "The Worker's binding names the module's own Workflow and its class."
+  }
+}
+
+# An account names a Workflow in 64 characters at most, and a Worker's name may have 63.
+run "jobs_workflow_of_the_longest_worker_name" {
+  command = plan
+
+  variables {
+    worker_name = "a23456789b23456789c23456789d23456789e23456789f23456789g23456789"
+  }
+
+  assert {
+    condition     = cloudflare_workflow.jobs.workflow_name == "a23456789b23456789c23456789d23456789e23456789f23456789g2345-jobs"
+    error_message = "The Worker's name is cut so that the Workflow's name fits, and still ends in -jobs."
   }
 }
 

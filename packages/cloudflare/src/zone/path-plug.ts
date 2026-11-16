@@ -1,6 +1,6 @@
 // The plug of an install without a domain: every object of an install on the account's free address read, or made to match, with a token that lives for the one call.
 //
-//   token -> the account whose free address the install answers under -> the two forwarders, Access, the Worker's own variables and its key, the database
+//   token -> the account whose free address the install answers under -> the two forwarders, Access, the Worker's own variables and its key, the database, the Workflow
 //
 // With no zone to show, a token proves itself by the account: the one whose free address is the one in the install's own hostnames. Any other token is refused before anything is read.
 // Each piece is the one an install with a domain is made of. No record, route, or rule is read or written: the free address has none of them.
@@ -15,6 +15,7 @@ import type { AccountAddresses } from "./address-layout";
 import { type Connection, callCloudflare } from "./client";
 import { syncDatabase } from "./database/database";
 import { syncForwarders } from "./forwarders/forwarders";
+import { syncJobs } from "./jobs/jobs";
 import type { Mode } from "./sync";
 import { accessPiece, firstValues, type Known, keyGiven, type Placed, type Progress, piece, REFUSED, readingOf, TOKEN, tokenFacts, UNREACHABLE, variablesPiece } from "./zone-plug";
 
@@ -119,6 +120,13 @@ async function read(parts: PathParts, mode: Mode, token: string, readSettings: R
     mode,
     () => "D1 database",
     () => syncDatabase(connection, placed.accountId, mode),
+  );
+  // The Workflow comes last, as on an install with a domain: nothing else of the install waits for it.
+  await piece(
+    progress,
+    mode,
+    () => "Workflow",
+    () => syncJobs(connection, placed, mode),
   );
 
   return readingOf(progress);

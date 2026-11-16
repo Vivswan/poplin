@@ -40,6 +40,7 @@ function table(states: Readonly<Record<string, string>>): string[] {
     `Bot settings | ${state("bots", usual)} | zone bot switches`,
     `D1 database | ${state("database", usual)} | poplin`,
     `Budget alert | ${state("alert", usual)} | poplin: usage charges reached 1 dollar`,
+    `Workflow | ${state("jobs", usual)} | poplin-jobs`,
   ];
 }
 
@@ -96,7 +97,7 @@ test("a repair makes every object, a check then finds all present, and a second 
 
   await withAccount(account, async (plug, asked) => {
     expect(shown(await plug.repair(TOKEN, SETTINGS))).toEqual(table({ all: "created", bots: "changed" }));
-    expect(writes(asked)).toHaveLength(17);
+    expect(writes(asked)).toHaveLength(18);
 
     const sent = asked.length;
 
@@ -197,6 +198,7 @@ const RIGHT_OF: readonly (readonly [path: RegExp, right: string])[] = [
   [/^\/accounts\/[^/]+\/d1\/database/, "D1: Edit"],
   [/^\/accounts\/[^/]+\/alerting\/v3\/policies/, "Notifications: Edit"],
   [/^\/accounts\/[^/]+\/tokens/, "Account API Tokens: Edit"],
+  [/^\/accounts\/[^/]+\/workflows/, "Workers Scripts: Edit"],
 ];
 
 test("the rights the page names, needed and optional, are the rights a repair's calls use, no more and no fewer: a call added without its right is refused on every real install", async () => {
@@ -358,6 +360,7 @@ test("a repair that fails half way, for another reason than a permission, stops:
       "Bot settings | not-run | ",
       "D1 database | not-run | ",
       "Budget alert | not-run | ",
+      "Workflow | not-run | ",
     ]);
     expect(account.records.map((record) => record.name)).toEqual(["*.example.com", "poplin.example.com"]);
     expect([account.routes, account.policies, account.applications, account.databases, account.rulesets]).toEqual([[], [], [], [], {}]);
@@ -417,7 +420,7 @@ test("a token that may read the guard rules and not make them leaves both rules 
 
     expect(guards.map((row) => row.split(" | ")[1])).toEqual(["optional", "optional", "optional", "optional"]);
     expect(guards.filter((row) => !row.includes("add this right to the account token and press Repair: "))).toEqual([]);
-    expect(rows.slice(-2)).toEqual(["D1 database | created | poplin", "Budget alert | created | poplin: usage charges reached 1 dollar"]);
+    expect(rows.slice(-3)).toEqual(["D1 database | created | poplin", "Budget alert | created | poplin: usage charges reached 1 dollar", "Workflow | created | poplin-jobs"]);
   });
 });
 
@@ -438,13 +441,13 @@ test.each([
 /** The pieces others build on, by the call a token without their permission is refused, and what a repair still makes after each. */
 const built: readonly { readonly name: string; readonly call: string; readonly failed: string; readonly made: readonly string[] }[] = [
   { name: "the records", call: "GET /zones/zone-1/dns_records", failed: "DNS record", made: [] },
-  { name: "the login", call: `GET /accounts/${ACCOUNT}/access/policies`, failed: "Access application", made: ["Redirect rule", "WAF rule", "Rate rule", "Bot settings", "D1 database", "Budget alert"] },
+  { name: "the login", call: `GET /accounts/${ACCOUNT}/access/policies`, failed: "Access application", made: ["Redirect rule", "WAF rule", "Rate rule", "Bot settings", "D1 database", "Budget alert", "Workflow"] },
 ];
 
 // Drift: the records say whether a hostname is somebody else's, so nothing may follow a zone that was not read, and a Worker given its domain with no login behind it is half an install.
 test.each(built)("a repair with a token that may not read $name makes nothing that builds on them: the row names the right, and every piece that needs them is not run", async ({ call, failed, made }) => {
   const account = { ...emptyAccount(), refuse: call };
-  const pieces = ["DNS record", "Worker route", "Access application", "Worker variable", "Redirect rule", "WAF rule", "Rate rule", "Bot settings", "D1 database", "Budget alert"];
+  const pieces = ["DNS record", "Worker route", "Access application", "Worker variable", "Redirect rule", "WAF rule", "Rate rule", "Bot settings", "D1 database", "Budget alert", "Workflow"];
 
   await withAccount(account, async (plug, asked) => {
     const rows = shown(await plug.repair(TOKEN, SETTINGS));
@@ -472,6 +475,7 @@ const NEEDS: readonly (readonly [right: string, call: string])[] = [
   ["D1: Edit", `GET /accounts/${ACCOUNT}/d1/database`],
   ["Notifications: Edit", `GET /accounts/${ACCOUNT}/alerting/v3/policies`],
   ["Account API Tokens: Edit", `GET /accounts/${ACCOUNT}/tokens`],
+  ["Workers Scripts: Edit", `GET /accounts/${ACCOUNT}/workflows`],
 ];
 
 // Drift: a refused row used to quote Cloudflare's status alone, and the person had to guess which of eleven rows their token lacked.
@@ -492,7 +496,7 @@ test.each(NEEDS)("a token without %s gets one row that names that right in the w
 test("the rows of that table and the list of zones are every right the plug names: a right with no row here is one no refusal names", () => {
   const plug = createDomainPlug({ accountId: ACCOUNT, script: "poplin", layout: LAYOUT });
 
-  expect(["Zone: Read", ...NEEDS.map(([right]) => right)].sort()).toEqual(everyRight(plug));
+  expect([...new Set(["Zone: Read", ...NEEDS.map(([right]) => right)])].sort()).toEqual(everyRight(plug));
 });
 
 const otherwise: readonly { readonly name: string; readonly refused: Partial<Account> }[] = [

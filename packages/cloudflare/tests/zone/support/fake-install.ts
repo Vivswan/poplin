@@ -83,6 +83,9 @@ export interface Account {
   /** The account's notification policies. */
   alerts: Row[];
 
+  /** The account's Workflows. */
+  workflows: Row[];
+
   /** The bindings of the install's Worker. */
   bindings: Row[];
 
@@ -127,6 +130,7 @@ export function emptyAccount(): Account {
     zoneRedirects: false,
     databases: [],
     alerts: [],
+    workflows: [],
     bindings: [
       { name: "SITES", type: "r2_bucket", bucket_name: "poplin-sites" },
       { name: "DB", type: "d1", id: "database-1" },
@@ -256,6 +260,16 @@ function tokens(account: Account, asked: Asked, id: string | undefined): Respons
   return reply({ ...made, value: `${KEY_VALUE_START}${madeKeys}` });
 }
 
+/** The account's Workflows, each under its name: a PUT makes the one of a name, or writes it anew. */
+function workflows(account: Account, asked: Asked, name: string | undefined): Response {
+  if (asked.method === "GET") return page(asked, account.workflows);
+
+  const kept = account.workflows.filter((workflow) => workflow.name !== name);
+  account.workflows = asked.method === "DELETE" ? kept : [...kept, { name, ...(asked.body as Row) }];
+
+  return reply({ name });
+}
+
 /** The zone's own switches: Always Use HTTPS, which is only read, and the bot switches. */
 function switches(account: Account, asked: Asked, parts: readonly string[]): Response {
   if (parts[2] === "settings") return reply({ id: parts[3], value: account.zoneRedirects ? "on" : "off" });
@@ -291,6 +305,8 @@ function inAccount(account: Account, asked: Asked, parts: readonly string[]): Re
   if (parts[2] === "rulesets") return rules(account, asked, parts);
 
   if (parts[2] === "tokens") return tokens(account, asked, parts[3]);
+
+  if (parts[2] === "workflows") return workflows(account, asked, parts[3]);
 
   return switches(account, asked, parts);
 }

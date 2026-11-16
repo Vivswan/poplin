@@ -380,15 +380,15 @@ describe("the script that makes the test install, against a local fake account",
 
 describe("the forwarders and the key of an install without a domain, against a local fake account", () => {
   // Drift: the run makes both on every push. One that uploaded a forwarder or made a key each time would leave the account a new Worker version and a new token a run.
-  test("the first run makes both forwarders and the key, and a second run leaves all three", async () => {
+  test("the first run makes both forwarders, the key, and the Workflow, and a second run leaves all four", async () => {
     const world: FreeWorld = { account: emptyAccount(), workers: [] };
     const told = await settleFree(world, 2);
 
     expect(told).toEqual({
       stops: [undefined, undefined],
       rows: [
-        ["Forwarders: created 2, changed 0, left 0, not poplin's 0", "Key: created"],
-        ["Forwarders: created 0, changed 0, left 2, not poplin's 0", "Key: present"],
+        ["Forwarders: created 2, changed 0, left 0, not poplin's 0", "Key: created", "Workflow: created"],
+        ["Forwarders: created 0, changed 0, left 2, not poplin's 0", "Key: present", "Workflow: present"],
       ],
       missing: {},
     });
@@ -425,9 +425,24 @@ describe("the forwarders and the key of an install without a domain, against a l
 
     expect(told).toMatchObject({
       stops: [undefined],
-      rows: [["Forwarders: created 2, changed 0, left 0, not poplin's 0", "Key: skipped: needs the token permission Account API Tokens: Edit"]],
+      rows: [["Forwarders: created 2, changed 0, left 0, not poplin's 0", "Key: skipped: needs the token permission Account API Tokens: Edit", "Workflow: created"]],
       missing: { "kept-key": "the token permission Account API Tokens: Edit" },
     });
+  });
+});
+
+describe("the Workflow of an install without a domain, against a local fake account", () => {
+  // Drift: the second test install is made by this run alone, with no repair of a zone. A Workflow nobody made there would fail every copy too large for one request.
+  // One called a failure would stop the install for a part every other check works without.
+  test.each([
+    ["Cloudflare refuses", { refuse: `PUT /accounts/${INSTALL_ACCOUNT}/workflows/poplin-jobs` }, [], "Workflow: failed (refused with status 400): needs the Worker's Workflow, which Cloudflare did not make"],
+    ["another Worker's code runs under its name", {}, [{ name: "poplin-jobs", script_name: "shop", class_name: "Orders" }], "Workflow: left out: needs the Worker's Workflow, which Cloudflare did not make"],
+  ])("a Workflow that is not made because %s is a lack the suite skips for, and stops no run", async (_why, refusing, workflows, row) => {
+    const world: FreeWorld = { account: { ...emptyAccount(), workflows: [...workflows] }, workers: [], ...refusing };
+    const told = await settleFree(world);
+
+    expect([told.stops, told.rows[0]?.at(-1), told.missing, world.account.workflows]).toEqual([[undefined], row, { jobs: "the Worker's Workflow, which Cloudflare did not make" }, workflows]);
+    expect(JSON.stringify(told)).not.toContain(REFUSED.message);
   });
 });
 
@@ -530,7 +545,24 @@ describe("the zone's repair with the nine rights of the token link alone, agains
       "Worker variable",
       "Key",
       "D1 database",
+      "Workflow",
     ]);
+  });
+
+  // Drift: an install answers without its Workflow, which only a copy too large for one request needs. A run that called that a failure would stop the test install for a part every other check passes without.
+  test("a Workflow Cloudflare does not make is a lack the suite skips for, whatever the refusal, and never a failure of the run", async () => {
+    const account = { ...emptyAccount(), refuse: `PUT /accounts/${INSTALL_ACCOUNT}/workflows/poplin-jobs`, refuseAs: { status: 500, code: 10001 } };
+
+    await withFake(
+      (asked) => answerInstall(account, asked),
+      async (connection) => {
+        const plug = createDomainPlug({ accountId: INSTALL_ACCOUNT, script: "poplin", layout: LAYOUT, baseUrl: connection.baseUrl });
+        const reading = await plug.repair(TOKEN, async () => ({ logins: ["owner@example.com" as Login], outside_pages: "blocked", search_engines_allowed: false, block_bots: "auto" }));
+        const unsettled = (reading.ok ? reading.rows : []).filter((row) => row.state !== "present" && row.state !== "created" && row.state !== "changed");
+
+        expect(unsettled.map((row) => [row.object, row.state, needOf(row)])).toEqual([["Workflow", "failed", "the Worker's Workflow, which Cloudflare did not make"]]);
+      },
+    );
   });
 
   // Drift: the run holds no key of the install, so it reads the key's state at Cloudflare. A run that made a key on every push would leave the test install a new Worker version and a new token each time.

@@ -5,13 +5,14 @@
 //   Rules             the rule with poplin's ref in the redirect, the custom, and the rate limiting phase   an install with a domain alone
 //   Forwarders        the two Workers with poplin's tag that hand a request to the one Worker      an install without a domain alone, and before the Worker they are bound to
 //   Access            the application and the policy with poplin's names
+//   Workflow          the Workflow named after the Worker `poplin` that runs its code, or the code of a Worker that is gone, with every job it ran
 //   Worker            the script named `poplin`, and with it the login and the first settings it was given
 //   Database          the database named `poplin`, with every record
 //   Bucket objects    every object of the test install's bucket; the bucket itself stays
 //   Budget alert      the notification policy with poplin's name                                   an install with a domain alone
 //   Key               every API token of the account with the name of the key an install keeps
 //
-// A record, a route, a rule, a Worker, an application, a policy, an alert, or a token without poplin's mark stays. The zone's bot switches are no object: they stay as they are set.
+// A record, a route, a rule, a Worker, an application, a policy, a Workflow, an alert, or a token without poplin's mark stays. The zone's bot switches are no object: they stay as they are set.
 // It runs only on the test account: one that pays for nothing and holds the test install's bucket, a name no install of a person has.
 // Each kind is listed and then removed, so a run that stopped half-way is run again, and a second run removes nothing.
 
@@ -22,9 +23,11 @@ import { BaseDatabase } from "cloudflare/resources/d1/database/database";
 import { BaseObjects } from "cloudflare/resources/r2/buckets/objects";
 import { BaseRoutes } from "cloudflare/resources/workers/routes";
 import { BaseScripts } from "cloudflare/resources/workers/scripts/scripts";
+import { BaseWorkflows } from "cloudflare/resources/workflows/workflows";
 import { BaseApplications } from "cloudflare/resources/zero-trust/access/applications/applications";
 import { BasePolicies } from "cloudflare/resources/zero-trust/access/policies";
 
+import { workflowNameOf } from "../../src/jobs/workflow-name";
 import { isAccessOff } from "../../src/zone/access/access";
 import type { AccountAddresses } from "../../src/zone/address-layout";
 import { BUDGET_ALERT } from "../../src/zone/alerts/budget-alert";
@@ -56,8 +59,9 @@ const OWN_ACCESS = {
   policies: [INSTALL_OBJECTS.accessPolicy, INSTALL_OBJECTS.accessOpenPolicy] as readonly string[],
 };
 
-/** The kinds every install has, in the order removed: the Worker, then what it kept. */
+/** The kinds every install has, in the order removed: the Workflow before the Worker whose code it runs, then what the Worker kept. */
 const KEPT_KINDS: readonly Kind[] = [
+  { name: "Workflow", remove: removeWorkflow, optional: false },
   { name: "Worker", remove: removeWorker, optional: false },
   { name: "Database", remove: removeDatabase, optional: false },
   { name: "Bucket objects", remove: removeObjects, optional: true },
@@ -166,6 +170,18 @@ async function removeAccess(run: Run): Promise<Removal> {
   );
 
   return { ...policies, removed: applications.removed + policies.removed };
+}
+
+// Cloudflare keeps a Workflow whose Worker was deleted, so it goes by its own call, before the Worker it runs.
+async function removeWorkflow(run: Run): Promise<Removal> {
+  const account = { account_id: run.accountId };
+  const name = workflowNameOf(SCRIPT);
+  const listed = await callCloudflare(run.connection, (api) => Array.fromAsync(new BaseWorkflows(api).list({ ...account, search: name })));
+
+  // A Workflow of the name that runs another Worker's code is that Worker's: the repair leaves it too.
+  const own = (workflow: { readonly name: string; readonly script_name: string; readonly script_deleted?: boolean }): boolean => workflow.name === name && (workflow.script_name === SCRIPT || workflow.script_deleted === true);
+
+  return removeOwn(listed, own, () => callCloudflare(run.connection, (api) => new BaseWorkflows(api).delete(name, account)), "Workers Scripts: Edit");
 }
 
 async function removeWorker(run: Run): Promise<Removal> {

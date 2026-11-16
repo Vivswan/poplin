@@ -9,6 +9,7 @@ import { syncAccess } from "../../src/zone/access/access";
 import { syncZoneBots } from "../../src/zone/bots/bots";
 import type { Connection } from "../../src/zone/client";
 import { syncDatabase } from "../../src/zone/database/database";
+import { workflowNameOf } from "../../src/jobs/workflow-name";
 import { syncDns } from "../../src/zone/dns/dns";
 import { syncHttps } from "../../src/zone/https/https";
 import { syncGuards } from "../../src/zone/rules/guards";
@@ -84,6 +85,10 @@ const WRITTEN: Readonly<Record<SharedKey, readonly [file: string, around: string
   minuteLimitsNamespace: ["worker.tf", "namespace_id = %v"],
   minuteLimitsLimit: ["worker.tf", "simple = { limit = %v, "],
   minuteLimitsSeconds: ["worker.tf", ", period = %v }"],
+  jobsBinding: ["worker.tf", 'name = %v\n type = "workflow"'],
+  jobsClass: ["jobs.tf", "jobs_class = %v"],
+  jobsSuffix: ["jobs.tf", "jobs_suffix = %v"],
+  jobsNameLength: ["jobs.tf", "substr(var.worker_name, 0, %v - length(local.jobs_suffix))"],
   accessBinding: ["worker.tf", 'name = %v\n type = "json"\n json = jsonencode({'],
   zoneBinding: ["worker.tf", 'name = %v\n type = "json"\n json = jsonencode(local.zone_binding)'],
   firstSettingsBinding: ["worker.tf", 'name = %v\n type = "json"\n json = jsonencode(local.first_settings)'],
@@ -253,6 +258,15 @@ describe("the Worker's rate limiting binding", () => {
         simple: { limit: INSTALL_OBJECTS.minuteLimitsLimit, period: INSTALL_OBJECTS.minuteLimitsSeconds },
       },
     ]);
+  });
+});
+
+describe("the Worker's Workflow", () => {
+  // Drift: a deploy makes the Workflow wrangler.jsonc names, and a repair, the module, and the Worker's own code look for the one named after the Worker. Two names would be two Workflows, one bound and one checked.
+  test("wrangler.jsonc binds the Workflow the table holds, named after the Worker as a repair and the module name it", () => {
+    const config = Bun.JSONC.parse(readFileSync(join(MODULE, "..", "..", "..", "wrangler.jsonc"), "utf8")) as { name: string; workflows: unknown };
+
+    expect(config.workflows).toEqual([{ name: workflowNameOf(config.name), binding: INSTALL_OBJECTS.jobsBinding, class_name: INSTALL_OBJECTS.jobsClass }]);
   });
 });
 

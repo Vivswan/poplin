@@ -69,6 +69,13 @@ resource "cloudflare_workers_script" "poplin" {
       type = "plain_text"
       text = var.worker_name
     },
+    {
+      # The Workflow that runs the install's jobs. It is named here and made in jobs.tf.
+      name          = "JOBS"
+      type          = "workflow"
+      workflow_name = local.jobs_workflow
+      class_name    = local.jobs_class
+    },
   ]
 }
 
