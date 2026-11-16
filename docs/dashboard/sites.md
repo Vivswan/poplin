@@ -17,7 +17,20 @@ Find a site, over the list, keeps the sites whose title, name, or public name ho
 
 In a window a little too narrow for the table, the name in a site's link is cut short. The dots of the id and the three buttons after it stay.
 
-For a site that is not in the trash, the panel has the link, who can open it, the versions, and two switches under Settings: Show in search engines, and Allow embedding.
+| Over the list            | Does                                                                              |
+| ------------------------ | --------------------------------------------------------------------------------- |
+| All sites                | narrows the list to Private, Unlisted, or Public, or shows the Trash              |
+| Refresh the list         | reads the list again; beside it, how long ago it was read                         |
+| Columns                  | shows or hides a column; Reset the widths and Reset the layout put the table back |
+| New site                 | shows the command that publishes a folder, with a button that copies it           |
+| a heading of the table   | a press on Site, Who can open it, Updated, or Name puts the list in that order    |
+| By updated, on a phone   | the same orders as a menu: By updated, By title, By name, Who can open it         |
+
+The table starts with the columns Site, Who can open it, Link, and Updated. Columns adds Name, Published by, Visits, 7 days, Size, Versions, and Deletes itself.
+
+Every heading but Site is dragged to another place, and a heading's edge to another width. Site is always shown. The browser keeps the layout.
+
+For a site that is not in the trash, the panel has the link, who can open it, the versions, and two switches under Settings: Show in search engines, and Allow embedding. It also says the site's Visits, Size, and Updated, and when it Deletes itself. At its foot are New link, Duplicate, and Delete.
 
 | In the panel                  | Does, or says                                                                    |
 | ----------------------------- | -------------------------------------------------------------------------------- |
@@ -63,6 +76,8 @@ A copy whose job stops without a word is removed about a day after it began, and
 A Worker with no Workflow has no background job: [What one action costs](../upkeep/cost/what-one-action-costs.md) says which. There the page copies, and a tab closed half way makes no site; the files are removed in about a day, and Problems shows `copy_failed`.
 
 For a site in the trash, the panel has Restore and Delete for good. Its row has Restore alone.
+
+The table of the trash has the column Leaves the trash: the day the site is gone for good. On a phone the row says it, as `Leaves the trash on 20 Nov 2026`.
 
 | Delete for good       | Does, or says                                                             |
 | --------------------- | ------------------------------------------------------------------------- |

@@ -19,7 +19,7 @@ Entries older than 90 days are removed, a few at a time; the newest entry always
 | `Only Q3 sales`, beside the search   | names the one site whose entries are shown; Show every site, on it, takes it away |
 | UTC, Your time                       | writes every time in UTC, or in the browser's time zone                      |
 | When, or When (UTC) while UTC is on  | the heading of the times; a press on it puts the oldest first                |
-| `1 to 50 of 1,234`                   | at the foot: which entries the page shows, of how many                       |
+| `1 to 50 of 1,234`                   | over the list and at its foot: which entries the page shows, of how many     |
 | 50 per page                          | holds 100 or 200 entries a page; the browser keeps the choice                |
 | First page, Previous page, Next page | go to the pages around the one shown; a new page shows from its first entry  |
 | Search further                       | under a filtered list: looks through the next 5,000 entries                  |

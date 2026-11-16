@@ -35,7 +35,7 @@ A list changed with `poplin config logins`, or by `poplin import` with `--settin
 
 Sign out, beside your email at the foot of the side menu, ends the login of this browser alone: Cloudflare shows its own page, and the next visit asks for a code again.
 
-Sign everyone out, on the same tab, ends every login of the dashboard and of private sites: everyone logs in again at the next click, you too. It can take a few seconds. Tokens keep working. [Security](../about/security.md#hardening) says what it ends and what it leaves.
+Sign everyone out, on the tab Users, ends every login of the dashboard and of private sites: everyone logs in again at the next click, you too. It can take a few seconds. Tokens keep working. [Security](../about/security.md#hardening) says what it ends and what it leaves.
 
 | After the press | Means | What to do |
 | --- | --- | --- |
