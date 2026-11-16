@@ -127,7 +127,13 @@ describe("the states of an account", () => {
         "Keep it: it may hold the install's keys. Put the binding back on the Worker's Bindings page in your browser, then run npx poplin install cloudflare.",
       "install",
     ],
-    ["a Worker with none of poplin's name", MARKS.slice(0, 3), "A Worker named poplin is in this account and does not carry poplin's name, so nothing here touches it. Give it another name in your browser, then run this again.", "again"],
+    [
+      "a Worker with none of poplin's name",
+      MARKS.slice(0, 3),
+      "A Worker named poplin is in this account and does not carry poplin's name, so nothing here touches it. " +
+        "If you just installed or updated poplin, wait a minute and run this again. Else give it another name in your browser, then run this again.",
+      "again",
+    ],
   ] as const)("tells %s in words that never say to delete it, and names the command its words name for a program", async (_, bindings, words, after) => {
     const address = `https://dash.cloudflare.com/${ACCOUNT}/workers/services/view/poplin`;
 
