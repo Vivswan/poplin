@@ -20,6 +20,8 @@ Cloudflare's login page keeps its own list of users. After a user is added or re
 
 On an install that holds no key, the line says `Users changed. Press Repair.` until a Repair. Where a piece is to repair or was not done, the line counts those first.
 
+A saved `search_engines_allowed` or `outside_pages` is written into its WAF rule the same way, with the key; `block_bots`, the DNS records, the routes, and the redirect change only when you press Repair.
+
 Check and Repair each open a dialog that asks for an account token:
 
 | Step | In the dialog         | Do                                                                                                         |
@@ -71,7 +73,9 @@ The install works without this part. Three more permissions on the token let Clo
 
 A row that said `optional` now says what Repair did, such as `created`.
 
-Three settings save without these permissions. The dashboard has them in Settings, under Visitors. What Cloudflare does for each starts once you press Repair, in step 3 of this table.
+Three settings save without these permissions. The dashboard has them in Settings, under Visitors. What Cloudflare does for `block_bots` starts once you press Repair, in step 3 of this table.
+
+An install that holds its key writes the rules of the other two by itself, at their next change.
 
 | Setting                  | In the dashboard     |
 | ------------------------ | -------------------- |
