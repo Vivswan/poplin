@@ -158,7 +158,7 @@ export function runLines(installed: Extract<Installed, { readonly ok: true }>, p
 /**
  * Word what the account token must be, before a person is asked for it.
  *
- * @returns the permissions, the optional ones with what each adds, the form's address, and what else the form asks
+ * @returns the permissions, the optional ones with what each adds, the form's address, and what else the form asks, a permission the link cannot choose among it
  */
 export function factsLines(facts: TokenFacts): string[] {
   const optional = facts.tokenOptional.map((one) => `${INDENT}${one.right}: ${one.adds}`);
@@ -167,7 +167,7 @@ export function factsLines(facts: TokenFacts): string[] {
     `The account token needs ${countText(facts.tokenRights.length, "permission")}, for ${facts.tokenFor}:`,
     `${INDENT}${facts.tokenRights.join(", ")}`,
     ...(optional.length === 0 ? [] : ["Optional:", ...optional]),
-    "This link opens the form with them chosen:",
+    "This link opens the form with each one chosen that a link can choose:",
     `${INDENT}${facts.tokenLink}`,
     facts.tokenNote,
   ];

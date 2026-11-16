@@ -430,7 +430,7 @@ describe("on a terminal", () => {
       "  Places: Read, Programs: Edit",
       "Optional:",
       "  Rules: Edit: a guard rule",
-      "This link opens the form with them chosen:",
+      "This link opens the form with each one chosen that a link can choose:",
       "  https://host.example.com/tokens/new?rights=chosen",
       "The form asks which account the token is for.",
     ]);
