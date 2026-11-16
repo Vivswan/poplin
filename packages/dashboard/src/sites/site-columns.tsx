@@ -27,6 +27,12 @@ const LEAST_DOTS = 3;
 /** How much sooner the dots of a hidden id give than the name before them, as the weight a row of boxes shares its lack of room by. */
 const DOTS_GIVE_FIRST = 1_000_000;
 
+/** Where a part of a link may go on in the next line: after a run of dashes, but not after a single letter that stands alone between dashes, which stays with what follows it. */
+const BREAK_AFTER_DASHES = /(?<=-)(?!-)(?<!(?:^|-)[^-]-)/;
+
+/** A dash with a letter at both sides, where a browser would break a line by itself. */
+const DASH_INSIDE = /[^-]-[^-]/;
+
 /** Which sites show the id in their link, and the switch of one. */
 export interface Reveal {
   /** Whether the site's id is shown. */
@@ -65,16 +71,17 @@ function HiddenId({ length }: { readonly length: number }): ReactNode {
   );
 }
 
-/** A part of a link that may go on in the next line after any of its dashes, and nowhere else while a dash is in reach. */
+/** A part of a link that may go on in the next line after its dashes, and nowhere else while a dash is in reach. The letter an address says who can open the site with is not left alone at a line's end: "p-poplin" stays whole. */
 function AtDashes({ text }: { readonly text: string }): ReactNode {
-  const pieces = text.split(/(?<=-)(?!-)/);
+  const pieces = text.split(BREAK_AFTER_DASHES);
 
   return pieces.map((piece, at) => (
     // The pieces of one text never change places: the place is the key.
     // biome-ignore lint/suspicious/noArrayIndexKey: see above.
     <Fragment key={at}>
       {at === 0 ? null : <wbr />}
-      {piece}
+      {/* A browser goes on in the next line after any dash between letters by itself: a piece that holds one is a box of its own, which moves to the next line whole while it fits one. */}
+      {DASH_INSIDE.test(piece) ? <span className="inline-block max-w-full">{piece}</span> : piece}
     </Fragment>
   ));
 }
@@ -197,9 +204,10 @@ function PublishedBy({ site, logins }: { readonly site: Site; readonly logins: L
   return live === undefined ? null : <Who by={live.published_by} logins={logins} className="text-muted-foreground" />;
 }
 
-function Moment({ moment }: { readonly moment: number }): ReactNode {
+/** A moment in few words, quiet, with the whole moment as its hint. */
+export function Moment({ moment, className }: { readonly moment: number; readonly className?: string }): ReactNode {
   return (
-    <time dateTime={new Date(moment).toISOString()} title={wholeMoment(moment)} className="text-muted-foreground">
+    <time dateTime={new Date(moment).toISOString()} title={wholeMoment(moment)} className={cn("text-muted-foreground", className)}>
       {shortMoment(moment)}
     </time>
   );
@@ -220,8 +228,8 @@ export function siteColumns(
   logins: LoginNames,
 ): readonly ColumnSpec<Site>[] {
   const linkCell = (site: Site): ReactNode => (
-    // The buttons end at the column's right edge in every row, however long the row's link is and whether or not it has an eye.
-    <span className="flex min-w-0 items-center gap-1">
+    // The buttons end at the column's right edge in every row, however long the row's link is and whether or not it has an eye, and the longest link ends clear of them.
+    <span className="flex min-w-0 items-center gap-3">
       <span className="flex min-w-0 flex-1">
         <SiteLink site={site} whole={reveal.shows(site)} gives className="text-muted-foreground" />
       </span>
