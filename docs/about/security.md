@@ -84,7 +84,7 @@ A public site is without `noindex` only when both are on. The bots rule is one o
 | the CLI, to the bucket, for the files of a publish | one ticket a file: a signed address that lives 10 minutes | the Worker signs it with the upload key, which never leaves the Worker; [The upload key](#the-upload-key) says what a ticket and the key can reach |
 | the person who makes the install | a Cloudflare API token, read by `poplin install` on that person's own computer | the person makes it at Cloudflare; the command sends it to Cloudflare alone, uses it for that one run, in which it also makes the kept key, and never stores, logs, or prints it |
 | a person who repairs the install | a Cloudflare API token, pasted into Repair on the Domain screen, or read by `poplin doctor --repair` on that person's own computer | the Worker uses a pasted one for that one request, in which a Repair also makes the kept key, and never stores, logs, or shows it; the command sends its own to Cloudflare alone |
-| the Worker, to Cloudflare's API | one kept key, an API token named "poplin kept key" that the account owns | Repair makes it with the pasted token and puts it on the Worker as an encrypted secret; [The kept key](#the-kept-key) says what it may do |
+| the Worker, to Cloudflare's API | one kept key, an API token named "poplin kept key" that the account owns | `poplin install` makes it in its run, and puts it on the Worker as an encrypted secret. A Repair makes a new one where the install holds none, or one Cloudflare no longer takes; [The kept key](#the-kept-key) says what it may do |
 | the Worker, to update itself | the kept key | the Worker fetches the release's built files, checks each against the digests poplin's website publishes, and uploads them in place of its own code: [Update](../upkeep/update.md#with-the-kept-key) |
 
 A token the Worker issues is never a Cloudflare API key. It has one of two scopes:
@@ -121,7 +121,7 @@ A ticket is a signed address for one file. The bucket itself checks it:
 | the declared length, type, and SHA-256 | other bytes, another length, another type |
 | 10 minutes, or to within a second of the publish's own end where that is sooner | a ticket that ran out |
 
-Repair makes the key beside the kept key, as an API token named "poplin upload key" that the account owns.
+`poplin install` makes the key beside the kept key, as an API token named "poplin upload key" that the account owns. A Repair makes a new one where the install holds none.
 
 | Question | Answer |
 | --- | --- |
@@ -139,7 +139,8 @@ Without the key, or for the first minutes of a new one, every file goes through 
 ## The kept key
 
 ```text
-you paste one account token  ->  Repair makes "poplin kept key" at Cloudflare  ->  a secret on the Worker, KEPT_KEY
+you give one account token  ->  poplin install makes "poplin kept key" at Cloudflare  ->  a secret on the Worker, KEPT_KEY
+                                Repair makes a new one where the install holds none, or one Cloudflare no longer takes
 ```
 
 | Question | Answer |
