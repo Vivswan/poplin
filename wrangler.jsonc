@@ -1,7 +1,7 @@
 {
-  "$schema": "packages/cloudflare/node_modules/wrangler/config-schema.json",
+  "$schema": "packages/providers/cloudflare/node_modules/wrangler/config-schema.json",
   "name": "poplin",
-  "main": "packages/cloudflare/src/worker/worker.ts",
+  "main": "packages/providers/cloudflare/src/worker/worker.ts",
   "compatibility_date": "2026-11-01",
   // The Worker's own code and its libraries are bundled minified. Functions and classes keep their names.
   "minify": true,

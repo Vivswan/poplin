@@ -4,7 +4,7 @@
 #   a pull request            one comment, kept current: the rows that changed against the newest green run on main
 #   a pull request of a fork  the summary and the artifact alone: its token writes no comment
 #
-# The numbers come from packages/cloudflare/tests/worker/request-budget.test.ts, which fails the job when a row is over
+# The numbers come from packages/providers/cloudflare/tests/worker/request-budget.test.ts, which fails the job when a row is over
 # its budget. The comment is written all the same, so it shows the row that went over.
 #
 # This file is repo-owned. It is a workflow of its own because the comment needs pull-requests: write, which
@@ -40,7 +40,7 @@ jobs:
       - name: Measure what each action costs
         env:
           ACTION_COSTS_FILE: ${{ runner.temp }}/action-costs.json
-        run: bun run --cwd packages/cloudflare costs
+        run: bun run --cwd packages/providers/cloudflare costs
       - name: Keep the costs of this run
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -54,7 +54,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           ACTION_COSTS_FILE: ${{ runner.temp }}/action-costs.json
           COMMENT_FILE: ${{ runner.temp }}/action-costs.md
-        run: bun run --cwd packages/cloudflare costs:compare
+        run: bun run --cwd packages/providers/cloudflare costs:compare
       - name: Hand the comment to the job that writes it
         if: ${{ !cancelled() && github.event_name == 'pull_request' }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1

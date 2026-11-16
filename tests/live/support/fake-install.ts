@@ -28,7 +28,7 @@ import { serveSite } from "../../../packages/app/src/sites/serve";
 import { type ApiInstall, INSTALL_VERSION, LIMITS, openApi } from "../../../packages/app/tests/api/support/install";
 import { ADDRESSES } from "../../../packages/app/tests/sites/support/layout";
 import type { Fetch } from "../../../packages/cli/src/client/client";
-import type { JobRun } from "../../../packages/cloudflare/scripts/live/job-run";
+import type { JobRun } from "../../../packages/providers/cloudflare/scripts/live/job-run";
 import type { Job, Jobs } from "../../../packages/core/src/jobs/jobs";
 import { runJob } from "../../../packages/core/src/jobs/run-job";
 import { type Hostname, parseHostname } from "../../../packages/core/src/names/hostname";

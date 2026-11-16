@@ -5,16 +5,16 @@ import { cpSync, existsSync, mkdirSync, mkdtempDisposableSync, readFileSync, ren
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { CEILINGS } from "../../packages/cloudflare/scripts/live/budget";
-import { resetInstall, runReset } from "../../packages/cloudflare/scripts/live/reset";
-import { ROW_CEILINGS } from "../../packages/cloudflare/scripts/live/rows";
-import { openRun } from "../../packages/cloudflare/scripts/live/util";
+import { CEILINGS } from "../../packages/providers/cloudflare/scripts/live/budget";
+import { resetInstall, runReset } from "../../packages/providers/cloudflare/scripts/live/reset";
+import { ROW_CEILINGS } from "../../packages/providers/cloudflare/scripts/live/rows";
+import { openRun } from "../../packages/providers/cloudflare/scripts/live/util";
 import { BunSqliteDriver } from "../../packages/core/tests/database/support/bun-sqlite-driver";
 import { readSamples } from "../../packages/demo/scripts/samples";
 import { createPreview } from "../../packages/demo/src/preview/preview";
 import { readRealSites } from "../../packages/demo/src/preview/real-sites";
-import { withFake } from "../../packages/cloudflare/tests/zone/support/fake-cloudflare";
-import { type Asked, page, refusal } from "../../packages/cloudflare/tests/zone/support/replies";
+import { withFake } from "../../packages/providers/cloudflare/tests/zone/support/fake-cloudflare";
+import { type Asked, page, refusal } from "../../packages/providers/cloudflare/tests/zone/support/replies";
 import { liveAddresses } from "./addresses";
 import { openBench } from "./bench";
 import { FAKE_DOMAIN } from "./support/fake-install";

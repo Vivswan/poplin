@@ -12,20 +12,20 @@ The checks of a deployed install: a stranger's requests over HTTPS, and a token 
 
 ```text
 Live Checks workflows, one for each kind of install
-  the `paths` list of each workflow               the files of the push -> a run of that kind, or none
-  .github/workflows/live-install.yml             the steps below, which both workflows call
-  packages/cloudflare/scripts/live/gate.ts       the `all-green` check of the commit's CI: it ended green, or the run stops red; a job after it stops nothing
+  the `paths` list of each workflow                         the files of the push -> a run of that kind, or none
+  .github/workflows/live-install.yml                       the steps below, which both workflows call
+  packages/providers/cloudflare/scripts/live/gate.ts       the `all-green` check of the commit's CI: it ended green, or the run stops red; a job after it stops nothing
   build the Worker bundle
-  packages/cloudflare/scripts/live/start-over.ts a run by hand with `start_over` ticked: everything poplin made, removed
-  packages/cloudflare/scripts/live/converge.ts   the account's plans, bucket, database, login, wrangler deploy, the Domain tab's repair, the caps
-                                                 without a domain, in the repair's place: the two forwarders and the key
-                                                 `Worker: deployed` in its log: Cloudflare took the built bundle and the source map beside it in one upload
-                                                 `Key: created` or `Key: present` in its log: the Worker has its key as a secret, and Cloudflare lists an active token of the key's name
-                                                 `Upload key: created` or `Upload key: present`: the same for the key that sends files straight to the bucket
-  packages/cloudflare/scripts/live/suite.ts      a token for the run -> bun test tests/live/live.test.ts -> the token removed
-  packages/cloudflare/scripts/live/reset.ts      a token for the reset -> the install put back -> every token removed
-  packages/cloudflare/scripts/live/orphans.ts    after the reset: the files of the bucket no record of the database names, removed
-  step summary                                   one table of the install's pieces, one of the checks, one of the reset
+  packages/providers/cloudflare/scripts/live/start-over.ts a run by hand with `start_over` ticked: everything poplin made, removed
+  packages/providers/cloudflare/scripts/live/converge.ts   the account's plans, bucket, database, login, wrangler deploy, the Domain tab's repair, the caps
+                                                           without a domain, in the repair's place: the two forwarders and the key
+                                                           `Worker: deployed` in its log: Cloudflare took the built bundle and the source map beside it in one upload
+                                                           `Key: created` or `Key: present` in its log: the Worker has its key as a secret, and Cloudflare lists an active token of the key's name
+                                                           `Upload key: created` or `Upload key: present`: the same for the key that sends files straight to the bucket
+  packages/providers/cloudflare/scripts/live/suite.ts      a token for the run -> bun test tests/live/live.test.ts -> the token removed
+  packages/providers/cloudflare/scripts/live/reset.ts      a token for the reset -> the install put back -> every token removed
+  packages/providers/cloudflare/scripts/live/orphans.ts    after the reset: the files of the bucket no record of the database names, removed
+  step summary                                             one table of the install's pieces, one of the checks, one of the reset
 ```
 
 | Workflow                        | File                                                | Install                                  | Checks on the run                                             |
@@ -53,11 +53,11 @@ Each workflow runs the same steps on its own install. A push starts the one whos
 
 | The files of one kind of install alone                                                                                                    | Kind             |
 | ----------------------------------------------------------------------------------------------------------------------------------------- | ---------------- |
-| `packages/cloudflare/{src,tests}/zone/{bots,dns,routes,rules}/**`                                                                         | with a domain    |
-| `packages/cloudflare/{src,tests}/zone/forwarders/**`                                                                                      | without a domain |
-| `packages/cloudflare/src/zone/path-plug.ts` and its test                                                                                  | without a domain |
+| `packages/providers/cloudflare/{src,tests}/zone/{bots,dns,routes,rules}/**`                                                               | with a domain    |
+| `packages/providers/cloudflare/{src,tests}/zone/forwarders/**`                                                                            | without a domain |
+| `packages/providers/cloudflare/src/zone/path-plug.ts` and its test                                                                                  | without a domain |
 
-A file that code of both kinds imports is a file of both: `zone-plug.ts` is one, since the plug of an install without a domain is made of its pieces. So are the two files of a site's addresses, which the demo on every install runs, and every live check and script of `packages/cloudflare/scripts/live`.
+A file that code of both kinds imports is a file of both: `zone-plug.ts` is one, since the plug of an install without a domain is made of its pieces. So are the two files of a site's addresses, which the demo on every install runs, and every live check and script of `packages/providers/cloudflare/scripts/live`.
 
 The `paths` list of each workflow holds every row: the two lists are the same, and each ends with the files of the other kind, taken out. `tests/live/workflow.test.ts` holds the two kinds' files once and reads both lists beside them.
 
@@ -294,7 +294,7 @@ A product change that moves a row cost turns that test red, with the database's 
 
 | To measure the prices again | Then |
 | --- | --- |
-| `bun run --cwd packages/cloudflare build`, then `bunx vitest run tests/worker/worker.test.ts -t "the rows the live checks count"` there | set each price in `rows.ts` to the first number of its pair, and the pair in the test |
+| `bun run --cwd packages/providers/cloudflare build`, then `bunx vitest run tests/worker/worker.test.ts -t "the rows the live checks count"` there | set each price in `rows.ts` to the first number of its pair, and the pair in the test |
 | `bun test ./tests/live` | set the totals it prints in `self.test.ts` and `reset.test.ts`, and the figures below |
 
 ```text
@@ -443,7 +443,7 @@ No live check reads what a request cost: no address of an install answers it, to
 
 | What                                                        | Where it is held                                                                                                                                  |
 | ----------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
-| the database queries, rows, and storage calls of a request  | `packages/cloudflare/tests/worker/request-budget.test.ts`: every route on the local Workers runtime, through the driver the deployed Worker uses  |
+| the database queries, rows, and storage calls of a request  | `packages/providers/cloudflare/tests/worker/request-budget.test.ts`: every route on the local Workers runtime, through the driver the deployed Worker uses  |
 | the processing time of a request                            | the checks `L6` and `download` below, by hand: Cloudflare shows it in the Worker's metrics alone, and the local runtime reports none              |
 
 The test's `About ms` column is time by the clock, the local database and storage included. It is no measure of processing time, and no test fails on it.

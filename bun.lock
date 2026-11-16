@@ -60,26 +60,6 @@
         "yazl": "3.3.1",
       },
     },
-    "packages/cloudflare": {
-      "name": "@poplin/cloudflare",
-      "dependencies": {
-        "@poplin/app": "workspace:*",
-        "@poplin/core": "workspace:*",
-        "aws4fetch": "1.0.20",
-        "cloudflare": "7.3.0",
-        "jose": "6.2.17",
-        "uint8array-extras": "1.6.0",
-        "valibot": "1.5.0",
-      },
-      "devDependencies": {
-        "@actions/core": "3.0.1",
-        "@cloudflare/vitest-plugin": "1.8.2",
-        "es-module-lexer": "2.3.2",
-        "hono": "4.13.18",
-        "vitest": "5.1.0",
-        "wrangler": "4.162.0",
-      },
-    },
     "packages/core": {
       "name": "@poplin/core",
       "dependencies": {
@@ -157,6 +137,26 @@
         "@playwright/test": "1.65.1",
         "@types/sql.js": "1.4.11",
         "concurrently": "10.0.7",
+      },
+    },
+    "packages/providers/cloudflare": {
+      "name": "@poplin/cloudflare",
+      "dependencies": {
+        "@poplin/app": "workspace:*",
+        "@poplin/core": "workspace:*",
+        "aws4fetch": "1.0.20",
+        "cloudflare": "7.3.0",
+        "jose": "6.2.17",
+        "uint8array-extras": "1.6.0",
+        "valibot": "1.5.0",
+      },
+      "devDependencies": {
+        "@actions/core": "3.0.1",
+        "@cloudflare/vitest-plugin": "1.8.2",
+        "es-module-lexer": "2.3.2",
+        "hono": "4.13.18",
+        "vitest": "5.1.0",
+        "wrangler": "4.162.0",
       },
     },
     "website": {
@@ -632,7 +632,7 @@
 
     "@poplin/app": ["@poplin/app@workspace:packages/app"],
 
-    "@poplin/cloudflare": ["@poplin/cloudflare@workspace:packages/cloudflare"],
+    "@poplin/cloudflare": ["@poplin/cloudflare@workspace:packages/providers/cloudflare"],
 
     "@poplin/core": ["@poplin/core@workspace:packages/core"],
 

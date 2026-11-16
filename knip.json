@@ -13,7 +13,7 @@
     "packages/demo": {
       "entry": ["src/browser/worker.ts"]
     },
-    "packages/cloudflare": {
+    "packages/providers/cloudflare": {
       "entry": ["src/worker/worker.ts", "tests/**/*.test.ts"]
     },
     "packages/dashboard": {

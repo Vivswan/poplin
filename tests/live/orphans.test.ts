@@ -3,10 +3,10 @@
 
 import { afterEach, describe, expect, test } from "bun:test";
 
-import { removeOrphans } from "../../packages/cloudflare/scripts/live/orphans";
-import { BUCKET, openRun } from "../../packages/cloudflare/scripts/live/util";
-import { withFake } from "../../packages/cloudflare/tests/zone/support/fake-cloudflare";
-import { type Asked, refusal, reply } from "../../packages/cloudflare/tests/zone/support/replies";
+import { removeOrphans } from "../../packages/providers/cloudflare/scripts/live/orphans";
+import { BUCKET, openRun } from "../../packages/providers/cloudflare/scripts/live/util";
+import { withFake } from "../../packages/providers/cloudflare/tests/zone/support/fake-cloudflare";
+import { type Asked, refusal, reply } from "../../packages/providers/cloudflare/tests/zone/support/replies";
 import { parseObjectKey } from "../../packages/core/src/storage/storage";
 import { liveAddresses } from "./addresses";
 import { openBench } from "./bench";

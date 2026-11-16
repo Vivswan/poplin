@@ -1,6 +1,6 @@
 // What the live checks share: a check, what an install may lack, and what a check came to.
 
-import type { JobRun } from "../../packages/cloudflare/scripts/live/job-run";
+import type { JobRun } from "../../packages/providers/cloudflare/scripts/live/job-run";
 import type { LiveAddresses } from "./addresses";
 
 /** Something a check needs that an install, its account, or a run may lack. `person` is always lacking: such a check is done by hand. */

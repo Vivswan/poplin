@@ -3,7 +3,7 @@
 
 import { afterAll, describe, expect, test } from "bun:test";
 
-import { sendLive } from "../../packages/cloudflare/scripts/live/send";
+import { sendLive } from "../../packages/providers/cloudflare/scripts/live/send";
 
 /** A server that answers each request with the port its connection came from. */
 const SERVER = Bun.serve({ port: 0, hostname: "127.0.0.1", fetch: (request, server) => new Response(String(server.requestIP(request)?.port)) });

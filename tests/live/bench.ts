@@ -12,7 +12,7 @@ import { SETTINGS_ANSWER } from "../../packages/core/src/actions/store-settings"
 import { parseLogins } from "../../packages/core/src/auth/logins";
 import { run } from "../../packages/cli/src/commands/run";
 import { openSession } from "../../packages/cli/tests/mcp/support/session";
-import type { JobRun } from "../../packages/cloudflare/scripts/live/job-run";
+import type { JobRun } from "../../packages/providers/cloudflare/scripts/live/job-run";
 import type { LiveAddresses } from "./addresses";
 import type { Bench, Draft, LiveSite, Missing, Ran, Shared } from "./records";
 

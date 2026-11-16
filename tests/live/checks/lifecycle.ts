@@ -4,7 +4,7 @@ import { expect } from "bun:test";
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 
-import type { JobRun } from "../../../packages/cloudflare/scripts/live/job-run";
+import type { JobRun } from "../../../packages/providers/cloudflare/scripts/live/job-run";
 import { type Bench, type Check, type LiveSite, Skip } from "../records";
 import { expectRefused, GHOST_ID, siteOf, under } from "../util";
 

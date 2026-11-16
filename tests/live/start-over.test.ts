@@ -3,13 +3,13 @@
 
 import { describe, expect, test } from "bun:test";
 
-import { startOver } from "../../packages/cloudflare/scripts/live/start-over";
-import { BUCKET, openRun } from "../../packages/cloudflare/scripts/live/util";
-import { createDomainPlug } from "../../packages/cloudflare/src/zone/zone-plug";
-import { withFake } from "../../packages/cloudflare/tests/zone/support/fake-cloudflare";
-import { ACCOUNT, type Account, answer as answerInstall, emptyAccount, TOKEN } from "../../packages/cloudflare/tests/zone/support/fake-install";
-import { LAYOUT } from "../../packages/cloudflare/tests/zone/support/layouts";
-import { type Asked, page, refusal, reply } from "../../packages/cloudflare/tests/zone/support/replies";
+import { startOver } from "../../packages/providers/cloudflare/scripts/live/start-over";
+import { BUCKET, openRun } from "../../packages/providers/cloudflare/scripts/live/util";
+import { createDomainPlug } from "../../packages/providers/cloudflare/src/zone/zone-plug";
+import { withFake } from "../../packages/providers/cloudflare/tests/zone/support/fake-cloudflare";
+import { ACCOUNT, type Account, answer as answerInstall, emptyAccount, TOKEN } from "../../packages/providers/cloudflare/tests/zone/support/fake-install";
+import { LAYOUT } from "../../packages/providers/cloudflare/tests/zone/support/layouts";
+import { type Asked, page, refusal, reply } from "../../packages/providers/cloudflare/tests/zone/support/replies";
 import type { Login } from "../../packages/core/src/auth/logins";
 import { catchStep } from "./support/step";
 

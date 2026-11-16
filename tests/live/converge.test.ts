@@ -8,13 +8,13 @@ import { basename, join } from "node:path";
 
 import type { DomainRow, DomainSettings } from "../../packages/app/src/console/domain/records";
 import type { Login } from "../../packages/core/src/auth/logins";
-import { answerOf, convergeInstall, needOf, settleFreeAddress, workerConfig } from "../../packages/cloudflare/scripts/live/converge";
-import { type Found, openRun } from "../../packages/cloudflare/scripts/live/util";
-import { createDomainPlug } from "../../packages/cloudflare/src/zone/zone-plug";
-import { withFake } from "../../packages/cloudflare/tests/zone/support/fake-cloudflare";
-import { type Account, ACCOUNT as INSTALL_ACCOUNT, answer as answerInstall, emptyAccount, TOKEN } from "../../packages/cloudflare/tests/zone/support/fake-install";
-import { ADDRESSES, LAYOUT } from "../../packages/cloudflare/tests/zone/support/layouts";
-import { type Asked, bodyOf, page, refusal, reply } from "../../packages/cloudflare/tests/zone/support/replies";
+import { answerOf, convergeInstall, needOf, settleFreeAddress, workerConfig } from "../../packages/providers/cloudflare/scripts/live/converge";
+import { type Found, openRun } from "../../packages/providers/cloudflare/scripts/live/util";
+import { createDomainPlug } from "../../packages/providers/cloudflare/src/zone/zone-plug";
+import { withFake } from "../../packages/providers/cloudflare/tests/zone/support/fake-cloudflare";
+import { type Account, ACCOUNT as INSTALL_ACCOUNT, answer as answerInstall, emptyAccount, TOKEN } from "../../packages/providers/cloudflare/tests/zone/support/fake-install";
+import { ADDRESSES, LAYOUT } from "../../packages/providers/cloudflare/tests/zone/support/layouts";
+import { type Asked, bodyOf, page, refusal, reply } from "../../packages/providers/cloudflare/tests/zone/support/replies";
 import { catchStep } from "./support/step";
 
 /** The workflow that runs the live scripts. */
@@ -45,10 +45,10 @@ const NOT_READ = "Account plans: not read: needs the token permission Billing: R
 const NOT_READ_WARNING = "::warning::The account's plans were not read, so nothing checked that they are free: the run needs the token permission Billing: Read.";
 
 /** The package wrangler is installed in. */
-const CLOUDFLARE = join(import.meta.dir, "..", "..", "packages", "cloudflare");
+const CLOUDFLARE = join(import.meta.dir, "..", "..", "packages", "providers", "cloudflare");
 
 /** The repository's own configuration of the Worker. */
-const OWN_CONFIG = join(CLOUDFLARE, "..", "..", "wrangler.jsonc");
+const OWN_CONFIG = join(CLOUDFLARE, "..", "..", "..", "wrangler.jsonc");
 
 /** A Worker small enough to bundle in a moment, as source. It exports the class the configuration binds a Workflow to: wrangler bundles no entry that lacks it. */
 const SOURCE = { "worker.ts": 'export class PoplinJobs {}\nexport default { fetch: (): Response => new Response("ok") };\n' };

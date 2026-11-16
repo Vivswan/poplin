@@ -41,10 +41,10 @@ on:
       - "!lefthook.yml"
       - "!.release-please-manifest.json"
       - "!release-please-config.json"
-      - "!packages/cloudflare/src/zone/forwarders/**"
-      - "!packages/cloudflare/tests/zone/forwarders/**"
-      - "!packages/cloudflare/src/zone/path-plug.ts"
-      - "!packages/cloudflare/tests/zone/path-plug.test.ts"
+      - "!packages/providers/cloudflare/src/zone/forwarders/**"
+      - "!packages/providers/cloudflare/tests/zone/forwarders/**"
+      - "!packages/providers/cloudflare/src/zone/path-plug.ts"
+      - "!packages/providers/cloudflare/tests/zone/path-plug.test.ts"
   # Midnight UTC. A schedule runs the default branch's own file and nothing a pull request or a fork wrote; a fork's
   # schedule has none of this repository's secrets.
   schedule:

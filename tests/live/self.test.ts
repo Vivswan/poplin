@@ -5,8 +5,8 @@ import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 import type { Fetch } from "../../packages/cli/src/client/client";
-import { CEILINGS, meterBucket, spendsNothing } from "../../packages/cloudflare/scripts/live/budget";
-import { meterRows, ROW_CEILINGS } from "../../packages/cloudflare/scripts/live/rows";
+import { CEILINGS, meterBucket, spendsNothing } from "../../packages/providers/cloudflare/scripts/live/budget";
+import { meterRows, ROW_CEILINGS } from "../../packages/providers/cloudflare/scripts/live/rows";
 import { MemoryStore } from "../../packages/core/src/storage/memory";
 import { openBench } from "./bench";
 import { probeMissing } from "./capabilities";

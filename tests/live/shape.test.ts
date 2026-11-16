@@ -3,10 +3,10 @@
 
 import { describe, expect, test } from "bun:test";
 
-import { settleDatabase } from "../../packages/cloudflare/scripts/live/shape";
-import { openRun } from "../../packages/cloudflare/scripts/live/util";
-import { withFake } from "../../packages/cloudflare/tests/zone/support/fake-cloudflare";
-import { type Asked, refusal, reply } from "../../packages/cloudflare/tests/zone/support/replies";
+import { settleDatabase } from "../../packages/providers/cloudflare/scripts/live/shape";
+import { openRun } from "../../packages/providers/cloudflare/scripts/live/util";
+import { withFake } from "../../packages/providers/cloudflare/tests/zone/support/fake-cloudflare";
+import { type Asked, refusal, reply } from "../../packages/providers/cloudflare/tests/zone/support/replies";
 import type { Login } from "../../packages/core/src/auth/logins";
 import { openDatabase } from "../../packages/core/src/database/open";
 import { defaultSettings } from "../../packages/core/src/records/settings";

@@ -2,7 +2,7 @@
 
 import { describe, expect, test } from "bun:test";
 
-import { meterBucket } from "../../packages/cloudflare/scripts/live/budget";
+import { meterBucket } from "../../packages/providers/cloudflare/scripts/live/budget";
 
 /** The origin of the install a made-up request goes to. */
 const SERVER = "https://poplin.example.com";

@@ -19,38 +19,38 @@ const KINDS = {
     file: "live-checks.yml",
     environment: "with-domain-ci-tests",
     owns: [
-      "packages/cloudflare/src/zone/bots/**",
-      "packages/cloudflare/src/zone/dns/**",
-      "packages/cloudflare/src/zone/routes/**",
-      "packages/cloudflare/src/zone/rules/**",
-      "packages/cloudflare/tests/zone/bots/**",
-      "packages/cloudflare/tests/zone/dns/**",
-      "packages/cloudflare/tests/zone/routes/**",
-      "packages/cloudflare/tests/zone/rules/**",
+      "packages/providers/cloudflare/src/zone/bots/**",
+      "packages/providers/cloudflare/src/zone/dns/**",
+      "packages/providers/cloudflare/src/zone/routes/**",
+      "packages/providers/cloudflare/src/zone/rules/**",
+      "packages/providers/cloudflare/tests/zone/bots/**",
+      "packages/providers/cloudflare/tests/zone/dns/**",
+      "packages/providers/cloudflare/tests/zone/routes/**",
+      "packages/providers/cloudflare/tests/zone/rules/**",
     ],
   },
   "account address": {
     file: "live-checks-account-address.yml",
     environment: "without-domain-ci-tests",
     owns: [
-      "packages/cloudflare/src/zone/forwarders/**",
-      "packages/cloudflare/tests/zone/forwarders/**",
-      "packages/cloudflare/src/zone/path-plug.ts",
-      "packages/cloudflare/tests/zone/path-plug.test.ts",
+      "packages/providers/cloudflare/src/zone/forwarders/**",
+      "packages/providers/cloudflare/tests/zone/forwarders/**",
+      "packages/providers/cloudflare/src/zone/path-plug.ts",
+      "packages/providers/cloudflare/tests/zone/path-plug.test.ts",
     ],
   },
 } as const;
 
 /** The files of both kinds that import a file of one kind: each runs what it imports for an install of that kind alone, or is a test. */
 const DECIDERS: readonly string[] = [
-  "packages/cloudflare/scripts/live/converge.ts",
-  "packages/cloudflare/scripts/live/start-over.ts",
-  "packages/cloudflare/src/key/rules-follow.ts",
-  "packages/cloudflare/src/worker/hosts.ts",
-  "packages/cloudflare/src/zone/first-run.ts",
-  "packages/cloudflare/src/zone/https/https.ts",
-  "packages/cloudflare/src/zone/zone-plug.ts",
-  "packages/cloudflare/tests/key/rules-follow.test.ts",
+  "packages/providers/cloudflare/scripts/live/converge.ts",
+  "packages/providers/cloudflare/scripts/live/start-over.ts",
+  "packages/providers/cloudflare/src/key/rules-follow.ts",
+  "packages/providers/cloudflare/src/worker/hosts.ts",
+  "packages/providers/cloudflare/src/zone/first-run.ts",
+  "packages/providers/cloudflare/src/zone/https/https.ts",
+  "packages/providers/cloudflare/src/zone/zone-plug.ts",
+  "packages/providers/cloudflare/tests/key/rules-follow.test.ts",
 ];
 
 /** Both kinds, in the order of `KINDS`. */
@@ -83,8 +83,8 @@ const PUSH_CASES: readonly (readonly [what: string, changed: readonly string[], 
     [],
   ],
   ["a fuzz test and a helper the tests share", ["tests/fuzz/names.test.ts", "tests/support/markdown-page.ts"], []],
-  ["the Worker's own source", ["packages/cloudflare/src/worker/worker.ts"], BOTH],
-  ["the file that decides the kind of an install", ["packages/cloudflare/src/worker/hosts.ts"], BOTH],
+  ["the Worker's own source", ["packages/providers/cloudflare/src/worker/worker.ts"], BOTH],
+  ["the file that decides the kind of an install", ["packages/providers/cloudflare/src/worker/hosts.ts"], BOTH],
   ["a file of the core", ["packages/core/src/names/names.ts"], BOTH],
   ["a test inside a product package", ["packages/core/tests/names/names.test.ts"], BOTH],
   ["a page inside a product package, which the root pattern for pages leaves alone", ["packages/cli/README.md"], BOTH],
@@ -97,7 +97,7 @@ const PUSH_CASES: readonly (readonly [what: string, changed: readonly string[], 
   ["a folder that no line names", ["plugins/a/index.ts"], BOTH],
   ["a new folder of tests that no line names", ["tests/browser/a.test.ts"], BOTH],
   ["one file that reaches the install among pages", ["docs/sites/publish.md", "wrangler.jsonc", "README.md"], BOTH],
-  ["the plug of an install with a domain, whose pieces the plug of the other kind is made of", ["packages/cloudflare/src/zone/zone-plug.ts"], BOTH],
+  ["the plug of an install with a domain, whose pieces the plug of the other kind is made of", ["packages/providers/cloudflare/src/zone/zone-plug.ts"], BOTH],
   ["a file of an install with a domain alone", [SAMPLE.domain], ["domain"]],
   ["a file of an install without a domain alone", [SAMPLE["account address"]], ["account address"]],
   ["a file of each kind together", [SAMPLE.domain, SAMPLE["account address"]], BOTH],
@@ -272,6 +272,6 @@ describe("the lanes of the live workflows", () => {
 describe("the wait for the commit's gate", () => {
   // The platform's shell check turns CI red on a loop written into a step, and a wait written there again is one no test here drives.
   test("the step hands the whole wait to the script that the tests of the gate drive, and holds no loop of its own", () => {
-    expect({ run: WAIT.run?.trim(), loops: /\b(?:while|case|until|for)\b/.test(WAIT.run ?? "") }).toEqual({ run: "bun packages/cloudflare/scripts/live/gate.ts", loops: false });
+    expect({ run: WAIT.run?.trim(), loops: /\b(?:while|case|until|for)\b/.test(WAIT.run ?? "") }).toEqual({ run: "bun packages/providers/cloudflare/scripts/live/gate.ts", loops: false });
   });
 });

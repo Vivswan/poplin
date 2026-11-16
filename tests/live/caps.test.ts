@@ -4,10 +4,10 @@ import { describe, expect, test } from "bun:test";
 import { join } from "node:path";
 
 import { buildDemo } from "../../packages/demo/scripts/build";
-import { CEILINGS } from "../../packages/cloudflare/scripts/live/budget";
-import { capInstall, LIVE_CAPS } from "../../packages/cloudflare/scripts/live/caps";
-import { ROW_CEILINGS } from "../../packages/cloudflare/scripts/live/rows";
-import { resetInstall } from "../../packages/cloudflare/scripts/live/reset";
+import { CEILINGS } from "../../packages/providers/cloudflare/scripts/live/budget";
+import { capInstall, LIVE_CAPS } from "../../packages/providers/cloudflare/scripts/live/caps";
+import { ROW_CEILINGS } from "../../packages/providers/cloudflare/scripts/live/rows";
+import { resetInstall } from "../../packages/providers/cloudflare/scripts/live/reset";
 import type { Login } from "../../packages/core/src/auth/logins";
 import { defaultSettings, sizeBytes } from "../../packages/core/src/records/settings";
 import { FAKE_NOW, openSqlInstall } from "./support/sql-install";

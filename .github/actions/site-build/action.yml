@@ -37,7 +37,7 @@ runs:
       shell: bash
       env:
         GH_TOKEN: ${{ github.token }}
-      run: bun run --cwd packages/cloudflare pin-releases "$RUNNER_TEMP/release-pins.json"
+      run: bun run --cwd packages/providers/cloudflare pin-releases "$RUNNER_TEMP/release-pins.json"
     - id: build
       shell: bash
       env:
