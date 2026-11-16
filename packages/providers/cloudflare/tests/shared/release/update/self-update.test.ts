@@ -218,7 +218,7 @@ function apiOf(meets: Meets, calls: string[], uploads: Uploaded[]): (input: stri
 }
 
 /** Take one update, and say what it answered, what it fetched, what it asked the API, what it uploaded, and every text it left behind. */
-async function taken(meets: Meets, wanted: { readonly version: string; readonly automatic: boolean } = { version: "latest", automatic: false }): Promise<Outcome> {
+async function taken(meets: Meets, wanted: { readonly version: string; readonly automatic: boolean; readonly back?: string } = { version: "latest", automatic: false }): Promise<Outcome> {
   const prints = PRINTS.map((name) => spyOn(console, name).mockImplementation(() => undefined));
   const [fetched, calls, uploads]: [string[], string[], Uploaded[]] = [[], [], []];
   const key = readKeptKey(meets.secret, { baseUrl: API, fetch: apiOf(meets, calls, uploads) });
@@ -268,7 +268,7 @@ describe("an update the install takes by itself", () => {
   interface Row {
     readonly name: string;
     readonly meets?: (meets: Meets) => void | Promise<void>;
-    readonly wanted?: { readonly version: string; readonly automatic: boolean };
+    readonly wanted?: { readonly version: string; readonly automatic: boolean; readonly back?: string };
     readonly ready: unknown;
     readonly put?: unknown;
     readonly calls: readonly string[];
@@ -385,7 +385,7 @@ describe("an update the install takes by itself", () => {
         Object.assign(meets, await meeting("0.2.0", OWN_SCHEMA + 1));
         meets.running = "0.3.0";
       },
-      wanted: { version: "0.2.0", automatic: false },
+      wanted: { version: "0.2.0", automatic: false, back: "0.2.0" },
       ready: release_refused("database"),
       calls: [],
       assets: 0,
@@ -472,7 +472,7 @@ describe("an update the install takes by itself", () => {
     const meets = await meeting("0.2.0");
     const last = { from: "0.2.0", to: "0.3.0", schema: OWN_SCHEMA, at: NOW - 86_400_000 };
     Object.assign(meets, { running: "0.3.0", last, script: { ...meets.script, bindings: [...BINDINGS, { name: "LAST_UPDATE", type: "json" }] } });
-    const outcome = await taken(meets, { version: "0.2.0", automatic: false });
+    const outcome = await taken(meets, { version: "0.2.0", automatic: false, back: "0.2.0" });
     const stated = outcome.uploads.map((upload) => (upload.metadata as typeof METADATA).bindings.filter((binding) => binding.name === "LAST_UPDATE"));
 
     expect<unknown>({ ready: outcome.ready, put: outcome.put, calls: outcome.calls, stated }).toEqual({

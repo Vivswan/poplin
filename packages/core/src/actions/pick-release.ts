@@ -2,10 +2,11 @@
 //
 //   asked for            the release is                                    answer
 //   the newest           none published, or none above the running one     no_update
+//   one below the running one, other than the version before               no_update: going back reaches the version before alone
 //   one version          not published                                     no_digest
 //   one, by itself       not above the running one                         no_update
 //   any, by itself       one whose schema differs from this install's own  database: a person starts it
-//   one below the running one, with another schema                         database: the code of that release cannot read this database
+//   the version before, with another schema                                database: the code of that release cannot read this database
 //   all of the above passed                                                the release, and whether it changes the database
 //
 // Nothing is fetched here.
@@ -27,6 +28,9 @@ export interface WantedRelease {
 
   /** Whether the install takes it by itself, with nobody asking. */
   readonly automatic: boolean;
+
+  /** The version the install ran before its last update: the one version below the running one that is taken. Left out where there is no way back. */
+  readonly back?: string | undefined;
 }
 
 /** One release as the website publishes it. */
@@ -55,6 +59,8 @@ export function pickRelease(pins: ReleasePins, wanted: WantedRelease, running: s
 
   const version = versionOf(pins, wanted, running);
   if (version === undefined) return { ok: false, refusal: "no_update" };
+
+  if (isPlainVersion(version) && lt(version, running) && version !== wanted.back) return { ok: false, refusal: "no_update" };
 
   const pin = Object.hasOwn(pins, version) ? pins[version] : undefined;
   if (pin === undefined) return { ok: false, refusal: "no_digest" };
