@@ -90,11 +90,11 @@ describe("the row of a setting", () => {
     expect(document.body.textContent).toBe("All sites togetherThe most all sites hold, the trash included. (Default: 9,000 MB)MB");
   });
 
-  // Drift: a changed value would have no way back, Reset would put back something other than the default, or the focus would leave with Reset for whatever the page gives it, far from the setting.
+  // Drift: a changed value would have no way back, Reset would put back something other than the default or be one of many buttons of one name, or the focus would leave with Reset for whatever the page gives it, far from the setting.
   test("offers Reset beside the default of a value that differs from it, which puts the default back and leaves the focus in the setting's control", () => {
     const { page, sent } = drawn(SIZE, "12000MB");
     const line = page.getByText(/Default:/).textContent;
-    fireEvent.click(page.getByRole("button", { name: "Reset" }));
+    fireEvent.click(page.getByRole("button", { name: "Reset All sites together" }));
 
     expect([line, sent, document.activeElement?.id]).toEqual(["The most all sites hold, the trash included. (Default: 9,000 MB) Reset", ["9000MB"], "setting-max_total_size-control"]);
   });
@@ -102,7 +102,7 @@ describe("the row of a setting", () => {
   // Drift: Reset would give the focus to the field of the number, which leaves once the default, a word, is drawn: the focus would be on nothing.
   test("leaves the focus after Reset in the control that shows the default, where the value was shown by another", () => {
     const { page, sent } = drawn(EXPIRY);
-    fireEvent.click(page.getByRole("button", { name: "Reset" }));
+    fireEvent.click(page.getByRole("button", { name: /^Reset / }));
 
     expect([sent, document.activeElement?.getAttribute("role"), document.activeElement?.id]).toEqual([["never"], "combobox", "setting-default_expires-control"]);
   });
@@ -112,7 +112,7 @@ describe("the row of a setting", () => {
     const { page, sent } = drawn(SIZE, "12000MB");
     fireEvent.click(page.getByRole("button", { name: "About All sites together" }));
     const lines = opened("All sites together");
-    fireEvent.click(within(page.getByRole("dialog", { name: "All sites together" })).getByRole("button", { name: "Reset" }));
+    fireEvent.click(within(page.getByRole("dialog", { name: "All sites together" })).getByRole("button", { name: "Reset All sites together" }));
 
     expect([lines, sent]).toEqual([["The most all sites hold, the trash included.", "Default: 9,000 MBReset"], ["9000MB"]]);
   });

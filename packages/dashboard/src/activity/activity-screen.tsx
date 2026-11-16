@@ -20,6 +20,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { searchOf, useAddressQuery } from "@/lib/address";
 import { useFocusHome } from "@/lib/focus";
+import { shownName } from "@/lib/sites";
 import { ownTimeZoneName, useTimeZoneChoice, TIMEZONES, type TimeZoneChoice } from "@/lib/timezone";
 import { IconButton } from "@/shared/icon-button";
 import { useFirstRowFocus, useShownPlace, useTopOfPlace } from "@/shared/pages";
@@ -229,12 +230,13 @@ export function ActivityScreen(): ReactNode {
 
   // A log narrowed to one site already shows that site alone. The id finds the site's entries; a text is not kept beside it.
   const rowActions = (entry: Entry): ReactNode => {
-    const id = entry.site?.id;
-    if (id === undefined || site.of !== "") return null;
+    if (entry.site === null || site.of !== "") return null;
+
+    const { id } = entry.site;
 
     return (
       <span className="inline-flex opacity-60 group-focus-within/row:opacity-100 group-hover/row:opacity-100 pointer-coarse:opacity-100">
-        <IconButton label="Only this site" onClick={() => move({ of: id, site: "" })}>
+        <IconButton label="Only this site" name={`Only ${shownName(entry.site)}`} onClick={() => move({ of: id, site: "" })}>
           <ListFilterIcon />
         </IconButton>
       </span>

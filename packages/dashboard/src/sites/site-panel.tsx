@@ -139,7 +139,7 @@ function VersionsBlock({ shown, onMakeLive }: { readonly shown: Shown; readonly 
             {version.number === site.live_version ? (
               <Badge variant="secondary">Live</Badge>
             ) : (
-              <Button variant="outline" size="xs" onClick={() => onMakeLive(version.number)}>
+              <Button variant="outline" size="xs" aria-label={`Make live: version ${version.number}`} onClick={() => onMakeLive(version.number)}>
                 Make live
               </Button>
             )}

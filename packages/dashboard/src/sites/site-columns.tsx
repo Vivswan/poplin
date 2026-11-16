@@ -5,7 +5,7 @@ import { cn } from "cn";
 import { CopyIcon, ExternalLinkIcon, EyeIcon, EyeOffIcon, GlobeIcon, LinkIcon, LockIcon } from "lucide-react";
 import { Fragment, type ReactNode } from "react";
 
-import { ACCESSES, type Access, type AddressParts, addressParts, expiryOf, type Site, shortMoment, showCount, wholeMoment } from "@/lib/sites";
+import { ACCESSES, type Access, type AddressParts, addressParts, expiryOf, type Site, shortMoment, showCount, shownName, wholeMoment } from "@/lib/sites";
 import { IconButton } from "@/shared/icon-button";
 import { type LoginNames, Who } from "@/shared/who";
 import { expiryMoment } from "@/sites/expiry";
@@ -149,22 +149,44 @@ export function SiteLink({
   );
 }
 
-/** The eye after a link: it shows that one site's id, and leaves it out again. */
+/**
+ * The eye after a link: it shows that one site's id, and leaves it out again.
+ *
+ * @param inList - `true` where every row of a list has one: its name then says which site's
+ */
 export function RevealButton({
   site,
   reveal,
+  inList = false,
   className,
 }: {
-  readonly site: Pick<Site, "id">;
+  readonly site: Pick<Site, "id" | "name" | "title">;
   readonly reveal: Reveal;
+  readonly inList?: boolean;
   readonly className?: string;
 }): ReactNode {
-  const shown = reveal.shows(site);
+  const label = reveal.shows(site) ? "Hide link" : "Show link";
 
   return (
-    <IconButton label={shown ? "Hide link" : "Show link"} onClick={() => reveal.toggle(site)} className={className}>
-      {shown ? <EyeOffIcon /> : <EyeIcon />}
+    <IconButton label={label} name={inList ? `${label} of ${shownName(site)}` : undefined} onClick={() => reveal.toggle(site)} className={className}>
+      {reveal.shows(site) ? <EyeOffIcon /> : <EyeIcon />}
     </IconButton>
+  );
+}
+
+/** The two buttons after a site's link in a list: one copies the whole link, one opens the site, which a site in the trash has not. Each is named for its site, since every row has them. */
+export function LinkButtons({ site, onCopy, className }: { readonly site: Site; readonly onCopy: (site: Site) => void; readonly className?: string }): ReactNode {
+  return (
+    <>
+      <IconButton label="Copy the link" name={`Copy the link of ${shownName(site)}`} onClick={() => onCopy(site)} className={className}>
+        <CopyIcon />
+      </IconButton>
+      {site.state === "trash" ? null : (
+        <IconButton label="Open the site" name={`Open the site ${shownName(site)}`} link={<a href={site.url} target="_blank" rel="noreferrer" />} className={className}>
+          <ExternalLinkIcon />
+        </IconButton>
+      )}
+    </>
   );
 }
 
@@ -201,13 +223,8 @@ export function siteColumns(
     <span className="flex min-w-0 items-center gap-1">
       <SiteLink site={site} whole={reveal.shows(site)} gives className="text-muted-foreground" />
       <span className="flex shrink-0 items-center">
-        {addressParts(site.url, site.id).hidden === "" ? null : <RevealButton site={site} reveal={reveal} className={AFTER_LINK_LOOK} />}
-        <IconButton label="Copy the link" onClick={() => onCopy(site)} className={AFTER_LINK_LOOK}>
-          <CopyIcon />
-        </IconButton>
-        <IconButton label="Open the site" link={<a href={site.url} target="_blank" rel="noreferrer" />} className={AFTER_LINK_LOOK}>
-          <ExternalLinkIcon />
-        </IconButton>
+        {addressParts(site.url, site.id).hidden === "" ? null : <RevealButton site={site} reveal={reveal} inList className={AFTER_LINK_LOOK} />}
+        <LinkButtons site={site} onCopy={onCopy} className={AFTER_LINK_LOOK} />
       </span>
     </span>
   );
