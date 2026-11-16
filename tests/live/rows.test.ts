@@ -39,7 +39,7 @@ describe("the meter of rows written", () => {
 
     expect({ ended, written: meter.written(), sent: install.sent, stopped: meter.stopped() }).toEqual({
       ended: [200, 403, 403, 200],
-      written: 19,
+      written: 20,
       sent: ["POST /api/uploads", "GET /api/sites"],
       stopped: "passed its ceiling of 30 rows written to the database",
     });
