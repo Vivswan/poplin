@@ -192,7 +192,8 @@ export function createConsole(parts: ConsoleParts): Console {
   app.get("*", async (context) => {
     const { install, actor } = context.get("asker");
     await parts.entered({ email: context.get("email"), since: context.get("since") });
-    const frame = await frameOf(install, actor, { version: parts.version, domain: parts.domain !== undefined, selfCarried: parts.follow?.holdsKey() === true });
+    const asked = { version: parts.version, domain: parts.domain !== undefined, selfCarried: parts.follow?.holdsKey() === true, self: parts.rebuild.self !== undefined };
+    const frame = await frameOf(install, actor, asked);
 
     const boot = { ...frame, title: TITLE, base: parts.base, email: context.get("email"), version: parts.version, demo: parts.demo ?? null, domain: parts.domain !== undefined };
 

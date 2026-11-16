@@ -28,6 +28,7 @@
     "./src/actions/logins": "./src/actions/logins.ts",
     "./src/actions/manage-tokens": "./src/actions/manage-tokens.ts",
     "./src/actions/new-link": "./src/actions/new-link.ts",
+    "./src/actions/pick-release": "./src/actions/pick-release.ts",
     "./src/actions/problems": "./src/actions/problems.ts",
     "./src/actions/publish": "./src/actions/publish.ts",
     "./src/actions/records": "./src/actions/records.ts",

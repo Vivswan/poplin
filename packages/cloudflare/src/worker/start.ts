@@ -34,6 +34,7 @@ import { readKeptKey } from "../key/kept-key";
 import { createUsersFollow } from "../key/users-follow";
 import { CloudflareCounters } from "../limits/counters";
 import { createUsageHost } from "../usage/usage-host";
+import { createSelfUpdate } from "../update/self-update";
 import { accessIdentity } from "../login/access-token";
 import { accessKeys } from "../login/keys";
 import { R2Store } from "../storage/r2";
@@ -88,7 +89,7 @@ export interface Outside {
   /** Sends setup's calls to Cloudflare; the runtime's own fetch when absent. */
   readonly cloudflare?: Connection["fetch"];
 
-  /** What asks the project's website, once a day, which version of poplin is the newest. */
+  /** What asks the project's website, once a day, which version of poplin is the newest. An install that updates itself fetches the release's files through it too. */
   readonly latest: Asking;
 
   /** Sends the one request that starts a build of the Worker, to the Deploy Hook an admin saved. */
@@ -348,8 +349,10 @@ export async function startInstance(env: Bindings, outside: Outside, visitorOf: 
     reservedNames: addresses.reservedNames,
   };
   const counters = new CloudflareCounters({ limiter: env.MINUTE_LIMITS, database, rows: driver });
-  const rebuild = { accepts: isDeployHook, fetch: outside.rebuild };
   const kept = readKeptKey(env[INSTALL_OBJECTS.keyBinding], { fetch: outside.cloudflare });
+  // An install that holds its key takes a release by itself; one that holds none starts a build at the saved address.
+  const self = kept === undefined ? undefined : createSelfUpdate({ key: kept, worker: own.value, version: VERSION, fetch: outside.latest.fetch });
+  const rebuild = { accepts: isDeployHook, fetch: outside.rebuild, self };
   const placed = { ...own.value, layout, fetch: outside.cloudflare };
   const key: InstallKey = createInstallKey(kept, own.value.accountId, (authorisation) => giveKey({ ...placed, key }, authorisation));
   const follow = createUsersFollow(kept, own.value.accountId);

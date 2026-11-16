@@ -61,6 +61,11 @@ const REFUSALS: Readonly<Record<ActionCode | OwnCode, string>> = {
   too_many_requests: "An update was started in this minute already. Wait a minute.",
   update_unreachable: "The update link did not answer. The update may have started all the same: wait a minute, then try again.",
   update_refused: "The update link refused the request, so no update was started. Check the link in Settings, under Updates.",
+  no_key: "poplin holds no key, so it cannot update itself. Open Domain and press Repair.",
+  key_refused: "The host no longer takes poplin's key, so nothing was updated. Open Domain and press Repair.",
+  lacks_right: "poplin's key may not replace the install's code, so nothing was updated. Open Domain and press Repair: it makes a key that may.",
+  release_refused: "The release could not be taken. Nothing was changed.",
+  version_refused: "The host refused the new version, so the install runs the version it ran before.",
 };
 
 /** What a code says when what it is about gives it another meaning: `too_large` is a request that is too large, and about a limit a copy that does not fit it; `not_found` is a site, and about an upload a copy. `other` stands for any limit not named. */
@@ -100,6 +105,21 @@ const ABOUT_REFUSALS: Readonly<Record<string, Readonly<Record<string, string>>>>
   },
   not_found: {
     upload: "That copy can no longer be gone on with: it was cancelled, or its day to finish ran out. Unless the list of sites shows it, duplicate the site again.",
+  },
+  release_refused: {
+    no_digest: "No built files are published for that version, so poplin cannot take it by itself. Nothing was changed.",
+    unreachable: "The release could not be fetched. Nothing was changed. Try again in a few minutes.",
+    digest_differs: "The files fetched for the release are not the files poplin published. Nothing was changed. Try again; if it says this again, tell the project.",
+    other_version: "The files published for the release say they are of another version. Nothing was changed. Tell the project.",
+    database: "That release changes the database, and the version asked for cannot read it. Nothing was changed.",
+    needs_hand: "The release adds a part to the install that poplin cannot make by itself. Nothing was changed. Update by hand.",
+    host: "The host did not answer before anything was sent. Nothing was changed. Try again in a few minutes.",
+  },
+  version_refused: {
+    code: "The host refused the new version: its code stops as it starts. The install runs the version it ran before. Tell the project.",
+  },
+  update_unreachable: {
+    host: "The host did not answer. The update may be in all the same: reload in a minute.",
   },
 };
 

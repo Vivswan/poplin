@@ -13,6 +13,7 @@ import { ACCOUNT, emptyAccount, TOKEN } from "../zone/support/fake-install";
 import type { Asked } from "../zone/support/replies";
 import { ADMIN, api, ask, BINDINGS, cloudflareOf, countedBindings, done, freePlanBindings, installOf, instance, logIn, OWNER, page, problemsOf } from "./support/install";
 import { publish, refusingDatabase, send, sendFile, shortPages, sweep, tokenOf, type World, wait, world } from "./support/install";
+import { OWN_KEY, ownRelease } from "./support/own-release";
 
 /** The most database and bucket calls one scheduled invocation may make, the start of its instance included: 50 to the database, which is all D1 answers on the Free plan, and 250 to the bucket. */
 const INVOCATION_CALLS = 300;
@@ -235,6 +236,40 @@ describe("the scheduled run", () => {
 
     expect([early, built, starting - dayAfter]).toEqual([0, [hook], 5]);
     expect(started).toEqual([{ by: "sweep@poplin.invalid", detail: { from: "0.0.0", to: "999.0.0", automatic: true } }]);
+  });
+
+  // Drift: an install that holds its key has no build between a release and its running code: the scheduled run is the whole of it.
+  // A run that read no key, sent the form another way than workerd does, or cost more queries than counted here would leave the switch dead or pass what D1 answers one invocation.
+  test("with auto_update on and a kept key, the run three days after a release was first seen uploads it once inside a Free invocation, two database calls above a day's first run, and no later run does", async () => {
+    const release = await ownRelease("999.0.0");
+    const tally = { calls: 0 };
+    const run = async (): Promise<number> => {
+      tally.calls = 0;
+      await sweep(instance(w, release.cloudflare, release.latest), w, { ...freePlanBindings(tally), KEPT_KEY: OWN_KEY });
+
+      return tally.calls;
+    };
+    await ask(instance(w), `${ADMIN}/api/whoami`);
+    const { database } = await installOf(w);
+    await database.changeSettings({ auto_update: true }, { by: OWNER, at: w.clock.now });
+    w.clock.now = Math.ceil(w.clock.now / DAY_MS) * DAY_MS;
+
+    await run();
+    wait(w, 3 * 24 - 0.25);
+    await run();
+    const early = release.uploads.length;
+    wait(w, 0.25);
+    const taking = await run();
+    wait(w, 0.25);
+    await run();
+    wait(w, 24);
+    const dayAfter = await run();
+    const started = (await database.listAudit({ limit: 100 })).filter((entry) => entry.action === "update_started").map(({ by, detail }) => ({ by, detail }));
+
+    expect([early, taking - dayAfter]).toEqual([0, 2]);
+    expect(release.uploads).toEqual([release.upload]);
+    expect(started).toEqual([{ by: "sweep@poplin.invalid", detail: { from: "0.0.0", to: "999.0.0", automatic: true } }]);
+    expect(await problemsOf(w)).toEqual([]);
   });
 
   // Drift: a login nobody allowed or collected leaves the table by the sweep alone; a run that never reached the end of the walk would keep every one for good.

@@ -49,9 +49,9 @@ The dashboard's Settings screen changes the same settings, all but `logins`: cha
 | `poplin setup --check --server https://poplin.your-name.workers.dev` | lists what that would change, with the same flags; changes nothing |
 | `poplin help rollback`                                               | shows the help of one command                     |
 
-`poplin update` needs an update link saved in the install once: [Update the install](../upkeep/update.md#optional-update-with-one-command) shows how. It is read from `POPLIN_UPDATE_ADDRESS` in the environment, and no command prints it.
+On an install that holds no key, `poplin update` needs an update link saved in the install once: [Update the install](../upkeep/update.md#optional-update-with-one-command) shows how. It is read from `POPLIN_UPDATE_ADDRESS` in the environment, and no command prints it.
 
-An install made with the Deploy button has a build at Cloudflare to make the update link for. One made from a terminal or with the OpenTofu module has none: with no update link saved it answers `no_update_address`, and updates as [Update the install](../upkeep/update.md#update-the-install) says.
+An install made with the Deploy button has a build at Cloudflare to make the update link for. One made from a terminal or with the OpenTofu module has none: with no key held and no update link saved it answers `no_update_address`, and updates as [Update the install](../upkeep/update.md#update-the-install) says.
 
 `poplin setup` reads the account token from `POPLIN_SETUP_TOKEN` in the environment. A new install needs `--domain` and `--login`. On an install that has them, `--login` alone corrects a first login that was mistyped. It needs no login, and it works only until the first login to the install. [From a terminal instead](../start/from-a-terminal.md) shows where it fits.
 
