@@ -61,6 +61,7 @@ const ROWS: Readonly<Record<keyof typeof KINDS, readonly string[]>> = {
     "Rate rule | make | rate rule",
     "Bot settings | change | zone bot switches",
     "Budget alert | make | poplin: usage charges reached 1 dollar",
+    "Certificate alert | make | poplin: certificates of every domain of the account",
     "Workflow | make | poplin-jobs",
   ],
   "no-domain": [
@@ -76,7 +77,7 @@ const ROWS: Readonly<Record<keyof typeof KINDS, readonly string[]>> = {
 
 /** The calls each kind sends, pinned: to find an install, for a dry run, and for a run, with how many of the run's change something. */
 const CALLS: Readonly<Record<keyof typeof KINDS, { readonly find: number; readonly dry: number; readonly run: number; readonly writes: number }>> = {
-  domain: { find: 6, dry: 19, run: 48, writes: 23 },
+  domain: { find: 6, dry: 19, run: 49, writes: 24 },
   "no-domain": { find: 6, dry: 13, run: 37, writes: 18 },
 };
 
@@ -308,7 +309,7 @@ describe("what stops a run before it changes anything", () => {
 
   // Drift: an optional piece the token has no permission for is no failure: the install works without it, and the run is whole.
   test.each([
-    ["domain", ["Redirect rule", "WAF rule", "Rate rule", "Bot settings", "Budget alert"]],
+    ["domain", ["Redirect rule", "WAF rule", "Rate rule", "Bot settings", "Budget alert", "Certificate alert"]],
     ["no-domain", ["Budget alert"]],
   ] as const)("a token without the optional permissions leaves those pieces out of a new install, %s, in the dry run as in the run, and the run is ready", async (kind, optional) => {
     const refuse = ["GET /zones/zone-1/rulesets*", `GET /accounts/${ACCOUNT}/alerting*`, "GET /zones/zone-1/bot_management"];

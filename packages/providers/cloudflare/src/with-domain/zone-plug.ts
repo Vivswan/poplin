@@ -1,6 +1,6 @@
 // The dashboard's zone plug for Cloudflare: every object of an install with a domain read, or made to match, with a token that lives for the one call.
 //
-//   token -> the account's zones -> the zone of the install's domain -> records, routes, Access, the Worker's own variables and its keys, https redirect, guard rules, rate rule, bot switches, database, budget alert, Workflow
+//   token -> the account's zones -> the zone of the install's domain -> records, routes, Access, the Worker's own variables and its keys, https redirect, guard rules, rate rule, bot switches, database, budget alert, certificate alert, Workflow
 //
 // The two keys are all an install keeps of Cloudflare's: a repair makes each with the token where the install has none that works, and writes them onto the Worker in the same change as the variables.
 // A token proves itself by showing the install's own zone inside the install's own account; any other token is refused before anything is read.
@@ -24,7 +24,9 @@ import type { Hostname } from "@poplin/core/src/names/hostname";
 import type { TokenFacts } from "@poplin/core/src/install/token-facts";
 import { type KeptKey, keyed } from "../shared/install/key/kept-key";
 import { ACCESS_NOT_ENABLED, isAccessOff, readLoginFacts, syncAccess } from "../shared/install/pieces/access/access";
-import { syncBudgetAlert } from "../shared/install/pieces/alerts/budget-alert";
+import { type AccountAlert, listAlerts, syncAlert } from "../shared/install/pieces/alerts/account-alert";
+import { BUDGET_ALERT } from "../shared/install/pieces/alerts/budget-alert";
+import { CERTIFICATE_ALERT } from "./pieces/alerts/certificate-alert";
 import { syncZoneBots } from "./pieces/bots/bots";
 import { type CloudflareFailure, type Connection, findZones, listZones, type Zone } from "../shared/install/client";
 import { syncDatabase } from "../shared/install/pieces/database/database";
@@ -92,6 +94,9 @@ const ADD_RIGHT = "Add this right to the account token";
 /** What the row of a piece that needs an optional permission says before the permission's name, after what the piece adds; a piece that is made without the permission too says its own. */
 const SWITCH_ON = "To switch this on, add this right to the account token and press Repair";
 
+/** What the row of an alert that is not set up says in place of that: the install's key makes its alerts too. */
+const BY_ITSELF = "An install whose key Cloudflare takes makes it by itself within a day. To make it now, add this right to the account token and press Repair";
+
 /** What a repair that wrote the variable tells the person to do next. */
 const LOGIN_READY = "The login is ready. Open your dashboard and log in:";
 
@@ -149,7 +154,12 @@ const RIGHT = {
   notifications: {
     name: "Notifications: Edit",
     adds: "Cloudflare emails your first user when the account's usage charges for the billing period reach 1 US dollar.",
-    how: "An install whose key Cloudflare takes makes it by itself within a day. To make it now, add this right to the account token and press Repair",
+    how: BY_ITSELF,
+  },
+  certificates: {
+    name: "Notifications: Edit",
+    adds: "Cloudflare emails your first user when a certificate it issues for a domain fails, is renewed, or runs out: for every domain of the account, not this one alone.",
+    how: BY_ITSELF,
   },
   tokens: { name: "Account API Tokens: Edit", key: "account_api_tokens", type: "edit" },
 } as const satisfies Readonly<Record<string, Right>>;
@@ -171,6 +181,7 @@ const RIGHTS = {
   "R2 bucket": [RIGHT.bucket],
   Workflow: [RIGHT.scripts],
   "Budget alert": [RIGHT.notifications],
+  "Certificate alert": [RIGHT.certificates],
   Key: [RIGHT.tokens, RIGHT.scripts],
   "Upload key": [RIGHT.tokens, RIGHT.scripts],
   Forwarder: [RIGHT.scripts],
@@ -192,6 +203,7 @@ const KEY_RIGHT: Readonly<Record<Piece, KeyRight | undefined>> = {
   "D1 database": undefined,
   "R2 bucket": undefined,
   "Budget alert": "Notifications Write",
+  "Certificate alert": "Notifications Write",
   Key: undefined,
   "Upload key": undefined,
   Forwarder: "Workers Scripts Write",
@@ -215,14 +227,15 @@ const PART: Readonly<Record<Piece | "Public word", DomainRow["part"]>> = {
   "R2 bucket": "rest",
   Workflow: "rest",
   "Budget alert": "rest",
+  "Certificate alert": "rest",
   Key: "rest",
   "Upload key": "rest",
   Forwarder: "reach",
   "Public word": "rest",
 };
 
-/** The objects that hold the install's users: the policy lists every one of them, and the alert is mailed to the first. */
-const HOLDS_USERS: readonly (Piece | "Public word")[] = ["Access policy", "Budget alert"];
+/** The objects that hold the install's users: the policy lists every one of them, and each alert is mailed to the first. */
+const HOLDS_USERS: readonly (Piece | "Public word")[] = ["Access policy", "Budget alert", "Certificate alert"];
 
 /** Where Cloudflare's form for a new token is. The link asks for every account and every zone, the one scope a link can carry: the person narrows it on the form. */
 const TOKEN_FORM = "https://dash.cloudflare.com/profile/api-tokens";
@@ -245,6 +258,7 @@ const TOKEN_FORMS = {
       "D1 database",
       "Workflow",
       "Budget alert",
+      "Certificate alert",
       "Key",
       "Upload key",
     ],
@@ -817,17 +831,30 @@ export async function variablesPiece(progress: Progress, mode: Mode, placed: Pla
   if (ready) progress.steps.push({ text: LOGIN_READY, address: `https://${placed.adminHost}` });
 }
 
-/** The budget alert's piece, of an install of either kind: the alert is the account's. It goes to the first user alone, the one who holds the Cloudflare account an install is made in. */
-export async function alertPiece(progress: Progress, mode: Mode, placed: Placed, connection: Connection, logins: Logins | undefined): Promise<void> {
+/** The pieces of an install's alerts, each a row of its own, read from one list of the account's policies. Each alert goes to the first user alone, the one who holds the Cloudflare account an install is made in. */
+async function alertPieces(progress: Progress, mode: Mode, placed: Placed, connection: Connection, logins: Logins | undefined, kept: readonly { readonly object: Piece; readonly alert: AccountAlert }[]): Promise<void> {
   const [first] = logins ?? [];
-  const object = (): Piece => "Budget alert";
   if (progress.stopped || first === undefined) {
-    progress.rows.push({ object: object(), state: "not-run", detail: "" });
+    progress.rows.push(...kept.map(({ object }): Found => ({ object, state: "not-run", detail: "" })));
 
     return;
   }
 
-  await piece(progress, mode, object, () => syncBudgetAlert(connection, placed.accountId, first, mode));
+  const read = await answered(progress, () => listAlerts(connection, placed.accountId), NO_ANSWER);
+
+  for (const { object, alert } of kept) {
+    await piece(
+      progress,
+      mode,
+      () => object,
+      () => syncAlert(connection, placed.accountId, alert, first, mode, read),
+    );
+  }
+}
+
+/** The budget alert's piece, of an install of either kind: the alert is the account's. */
+export function alertPiece(progress: Progress, mode: Mode, placed: Placed, connection: Connection, logins: Logins | undefined): Promise<void> {
+  return alertPieces(progress, mode, placed, connection, logins, [{ object: "Budget alert", alert: BUDGET_ALERT }]);
 }
 
 /** The database's piece. A check the install makes by itself asks Cloudflare nothing of it: the key holds no right to a database, and the install read its settings from its own for this very check. */
@@ -945,7 +972,11 @@ async function readPieces(parts: PlugParts, mode: Mode, found: { readonly connec
   await fromRecords("Rate rule", () => syncWaf(connection, zone.id, { layout, plan, sharesZone }, mode));
   await fromRecords("Bot settings", () => syncZoneBots(connection, zone.id, { blockBots: settings.block_bots, plan, sharesZone }, mode));
   await databasePiece(progress, mode, placed, connection);
-  await alertPiece(progress, mode, placed, connection, logins);
+  // Cloudflare takes no zone for the certificate alert: it is of every domain of the account, and its name says so.
+  await alertPieces(progress, mode, placed, connection, logins, [
+    { object: "Budget alert", alert: BUDGET_ALERT },
+    { object: "Certificate alert", alert: CERTIFICATE_ALERT },
+  ]);
   // The Workflow comes last: nothing else of the install waits for it. Only a copy too large for one request needs it.
   await piece(
     progress,
@@ -1023,7 +1054,9 @@ export function tokenFacts(kind: keyof typeof TOKEN_FORMS, also: readonly Piece[
   const form = TOKEN_FORMS[kind];
   const used = usedRights(kind, also);
   const needed = used.filter((right) => !("adds" in right));
-  const optional = used.flatMap((right) => ("adds" in right ? [{ right: right.name, adds: right.adds }] : []));
+  const extra = used.flatMap((right): Optional[] => ("adds" in right ? [right] : []));
+  // Two pieces may need one optional permission: the form names it once, with what each adds.
+  const optional = [...new Set(extra.map((right) => right.name))].map((name) => ({ right: name, adds: extra.flatMap((right) => (right.name === name ? [right.adds] : [])).join(" ") }));
   const byHand = rightsByHand(kind, also);
 
   return {

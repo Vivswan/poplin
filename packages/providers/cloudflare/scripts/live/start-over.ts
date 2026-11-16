@@ -9,7 +9,7 @@
 //   Worker            the script named `poplin`, and with it the login and the first settings it was given
 //   Database          the database named `poplin`, with every record
 //   Bucket objects    every object of the test install's bucket; the bucket itself stays
-//   Budget alert      the notification policy with poplin's name
+//   Alerts            the notification policies with poplin's names: the budget alert, and the certificate alert of an install with a domain
 //   Keys              every API token of the account with the name of one of the two keys an install keeps
 //
 // A record, a route, a rule, a Worker, an application, a policy, a Workflow, an alert, or a token without poplin's mark stays. The zone's bot switches are no object: they stay as they are set.
@@ -31,6 +31,7 @@ import { workflowNameOf } from "../../src/shared/jobs/workflow-name";
 import { isAccessOff } from "../../src/shared/install/pieces/access/access";
 import type { AccountAddresses } from "../../src/without-domain/address-layout";
 import { BUDGET_ALERT } from "../../src/shared/install/pieces/alerts/budget-alert";
+import { CERTIFICATE_ALERT } from "../../src/with-domain/pieces/alerts/certificate-alert";
 import { type CloudflareResult, callCloudflare, type Zone } from "../../src/shared/install/client";
 import { syncDatabase } from "../../src/shared/install/pieces/database/database";
 import { removeForwarders } from "../../src/without-domain/pieces/forwarders/forwarders";
@@ -70,8 +71,11 @@ const KEPT_KINDS: readonly Kind[] = [
 /** The login in front of an install of either kind. */
 const ACCESS_KIND: Kind = { name: "Access applications and policies", remove: removeAccess, optional: true };
 
-/** The budget alert of an install of either kind: the account's. */
-const ALERT_KIND: Kind = { name: "Budget alert", remove: removeAlert, optional: true };
+/** The names of poplin's alerts. Both are the account's, so both are looked for on an install of either kind. */
+const OWN_ALERTS: readonly (string | undefined)[] = [BUDGET_ALERT.name, CERTIFICATE_ALERT.name];
+
+/** The alerts of an install of either kind. */
+const ALERT_KIND: Kind = { name: "Alerts", remove: removeAlerts, optional: true };
 
 /** The two keys an install of either kind keeps. */
 const KEY_KIND: Kind = { name: "Keys", remove: removeKeys, optional: true };
@@ -219,11 +223,11 @@ async function removeObjects(run: Run): Promise<Removal> {
   );
 }
 
-async function removeAlert(run: Run): Promise<Removal> {
+async function removeAlerts(run: Run): Promise<Removal> {
   const account = { account_id: run.accountId };
   const listed = await callCloudflare(run.connection, (api) => Array.fromAsync(new BaseAlerts(api).list(account)));
 
-  return removeOwn(listed, (policy) => policy.name === BUDGET_ALERT, (policy) => callCloudflare(run.connection, (api) => new BaseAlerts(api).delete(policy.id ?? "", account)), "Notifications: Edit");
+  return removeOwn(listed, (policy) => OWN_ALERTS.includes(policy.name), (policy) => callCloudflare(run.connection, (api) => new BaseAlerts(api).delete(policy.id ?? "", account)), "Notifications: Edit");
 }
 
 // Ended keys are listed too: a key of the name that ran out is still an object poplin made.

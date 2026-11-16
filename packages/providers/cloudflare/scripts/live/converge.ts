@@ -28,7 +28,8 @@ import { BaseBuckets } from "cloudflare/resources/r2/buckets/buckets";
 
 import { keepCopyConfig } from "../../src/shared/release/deploy/kept-config";
 import { isAccessOff, readLoginFacts, syncAccess } from "../../src/shared/install/pieces/access/access";
-import { syncBudgetAlert } from "../../src/shared/install/pieces/alerts/budget-alert";
+import { syncAlert } from "../../src/shared/install/pieces/alerts/account-alert";
+import { BUDGET_ALERT } from "../../src/shared/install/pieces/alerts/budget-alert";
 import type { AccountAddresses } from "../../src/without-domain/address-layout";
 import { type CloudflareFailure, callCloudflare } from "../../src/shared/install/client";
 import { syncDatabase } from "../../src/shared/install/pieces/database/database";
@@ -448,7 +449,7 @@ async function ensureKeys(run: Run, progress: Progress): Promise<Stop | undefine
 
 /** Make the account's budget alert, mailed to the run's login, by the call a plug's repair makes. One that is not made is a lack, and stops no run: an install answers without it. */
 async function ensureAlert(run: Run, login: string, progress: Progress): Promise<void> {
-  const synced = await syncBudgetAlert(run.connection, run.accountId, login, "apply");
+  const synced = await syncAlert(run.connection, run.accountId, BUDGET_ALERT, login, "apply");
   const { created, changed } = synced.report;
   if (synced.ok) {
     const kept = changed.length > 0 ? "changed" : "present";

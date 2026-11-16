@@ -95,7 +95,7 @@ Each row is one kind of piece, with the names of its pieces. A kind the command 
 
 Under a domain, five rows stand in place of `Forwarder`: `Worker route`, `DNS record`, `Redirect rule`, `WAF rule`, and `Rate rule`. Each kind of rule has a second row for its rule set, such as `Redirect ruleset`.
 
-A `Bot switches` row says what stays there. A run under a domain removes 17 kinds at most.
+A `Certificate alert` row follows `Budget alert`, for an install that has that alert. A `Bot switches` row says what stays there. A run under a domain removes 18 kinds at most.
 
 A rule set is Cloudflare's holder for rules of one kind. One that poplin made goes once no rule but poplin's is in it. One of the domain's own, which poplin only added a rule to, stays and has no row.
 
@@ -138,7 +138,7 @@ Type poplin.example.com to go on: poplin.example.com
 removed       Worker route          *-poplin.example.com/*, *-page.example.com/*, poplin.example.com/*
 ...
 removed       Database              poplin (sites: 3)
-the install is removed. 17 kinds removed, 0 left.
+the install is removed. 18 kinds removed, 0 left.
 On each computer that was logged in: npx poplin logout
 The token was used for this run and is stored nowhere. You can delete it at Cloudflare.
 ```
@@ -152,7 +152,7 @@ Nothing is removed before you type the address. Another text than the install's 
 | Stays                                   | When                                                         | Do                                                                    |
 | --------------------------------------- | ------------------------------------------------------------ | --------------------------------------------------------------------- |
 | the account token                       | always                                                       | delete the token you used for this install at Cloudflare, under My Profile, then API Tokens. [Tell it by its account and domain](#which-token-to-delete) |
-| the budget alert, and under a domain the redirect, guard, and rate rules | when the token lacks the optional permission the row names. The command then cannot see whether the install has them | look for them [by hand](#by-hand-at-cloudflare), and delete what is there; or add the permission, and run the command again |
+| the budget alert, and under a domain the certificate alert and the redirect, guard, and rate rules | when the token lacks the optional permission the row names. The command then cannot see whether the install has them | look for them [by hand](#by-hand-at-cloudflare), and delete what is there; or add the permission, and run the command again |
 | a rule set of poplin's name             | under a domain, when it holds a rule that is not poplin's: its row says so | nothing: the rule in it is yours. [The list by hand](#by-hand-at-cloudflare) names the three |
 | the two bot switches                    | under a domain                                               | [switch off what you do not want](#by-hand-at-cloudflare)             |
 | what you switched on in [step 1 of Install](../start/install.md#1-switch-on-what-no-command-can) | always: the Zero Trust team with its Free plan, R2, the payment method, and the account's `workers.dev` subdomain | nothing: they are not poplin's. They are yours, to keep or to cancel at Cloudflare |
@@ -240,6 +240,7 @@ Go from the top row down: what points at the Worker goes first, then the Worker,
 | the database                          | `poplin`                                                                                              | the account's D1 databases                          |
 | the bucket                            | `poplin-sites`                                                                                        | the account's R2 buckets                            |
 | the budget alert, if it is there      | `poplin: usage charges reached 1 dollar`                                                              | the account's Notifications                         |
+| the certificate alert, if it is there | `poplin: certificates of every domain of the account`                                                 | the account's Notifications                         |
 | the two keys                          | "poplin kept key" and "poplin upload key"                                                             | Manage Account, then Account API Tokens             |
 | the account token of the install      | "poplin install", unless you named it otherwise: [the one of this account and domain alone](#which-token-to-delete) | My Profile, then API Tokens                         |
 
@@ -252,7 +253,7 @@ Go from the top row down: what points at the Worker goes first, then the Worker,
 - **The Worker** takes its values, its 15-minute timer, and its `workers.dev` address with it.
 - **Without a domain** the first five rows do not exist. Two more Workers do, `poplin-sites` and `poplin-private`: delete them under Workers & Pages, before the Worker `poplin`.
 - **The bucket** holds every site's files. If Cloudflare asks for an empty bucket, empty it there, then delete it.
-- **The budget alert** is there where the install's key or a Repair made it, on an install of either kind: [Domain](../dashboard/domain.md#optional-an-email-when-charges-reach-1-dollar) says when.
+- **The budget alert** is there where the install's key or a Repair made it, on an install of either kind: [Domain](../dashboard/domain.md#optional-an-email-when-charges-reach-1-dollar) says when. **The certificate alert** is made the same way, under a domain alone.
 - **The two keys** are there from the install, on an install of either kind. They are tokens the account owns, and they stay when the Worker is deleted. A key that ran out is still in the list.
 
 **Two bot switches** belong to the whole domain and carry no name. The install and Repair can switch them on, with a token that held Bot Management: Edit. Nothing of poplin switches one off: look at the domain's bot settings, and switch off what you do not want.

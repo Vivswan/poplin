@@ -1,13 +1,13 @@
-// The users carried to Cloudflare with the key poplin keeps: the policy that lets the logins through is written, then the budget alert is sent to the first of them.
+// The users carried to Cloudflare with the key poplin keeps: the policy that lets the logins through is written, then the alerts of the install's kind are sent to the first of them.
 //
-//   the policy          every login, under "Access: Apps and Policies Write"   an account with no such policy answers `not_made`, and nothing is written
-//   the budget alert    the first login, under "Notifications Write"           an account with no such alert gets one
+//   the policy    every login, under "Access: Apps and Policies Write"   an account with no such policy answers `not_made`, and nothing is written
+//   the alerts    the first login, under "Notifications Write"           an account that lacks one gets it
 //
 // No application is read or changed, and no answer carries the key or a text Cloudflare sent.
 
 import type { UsersFollow } from "@poplin/app/src/console/access/users-follow";
 import { writeLogins } from "../pieces/access/access";
-import { keepBudgetAlert } from "../pieces/alerts/budget-alert";
+import { type AccountAlert, keepAlerts } from "../pieces/alerts/account-alert";
 import { type KeptKey, keyed } from "./kept-key";
 
 /** Cloudflare's name of the right the policy is written under. */
@@ -17,10 +17,11 @@ const POLICY_RIGHT = "Access: Apps and Policies Write";
  * Make the install's way to carry its users to Cloudflare.
  *
  * @param key - the kept key, or `undefined` on an install that holds none, which answers every try `no_key` and calls nothing
- * @param accountId - the account the policy and the alert are in
- * @returns the users' side at Cloudflare. A try is done only when the policy and the alert both took it: one that stopped at the alert has written the policy
+ * @param accountId - the account the policy and the alerts are in
+ * @param alerts - the alerts of the install's kind
+ * @returns the users' side at Cloudflare. A try is done only when the policy and every alert took it: one that stopped at an alert has written the policy
  */
-export function createUsersFollow(key: KeptKey | undefined, accountId: string): UsersFollow {
+export function createUsersFollow(key: KeptKey | undefined, accountId: string, alerts: readonly AccountAlert[]): UsersFollow {
   return {
     where: "Cloudflare",
 
@@ -35,9 +36,9 @@ export function createUsersFollow(key: KeptKey | undefined, accountId: string): 
 
       if (first === undefined) return { ok: true };
 
-      const sent = await keepBudgetAlert(key, accountId, first);
+      const sent = await keepAlerts(key, accountId, alerts, first);
 
-      return sent.ok ? { ok: true } : { ok: false, refusal: sent.refusal, written: true };
+      return sent.refusal === undefined ? { ok: true } : { ok: false, refusal: sent.refusal, written: true };
     },
   };
 }
