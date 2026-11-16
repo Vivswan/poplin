@@ -5,7 +5,7 @@ import { publishSite } from "@poplin/core/src/actions/publish";
 import { SWEEP_SPARE_WRITES } from "@poplin/core/src/actions/sweep";
 import { parseUserCode } from "@poplin/core/src/auth/computer-logins";
 import { dayOf } from "@poplin/core/src/records/views";
-import { beforeEach, describe, expect, test } from "vitest";
+import { beforeEach, describe, expect, test, vi } from "vitest";
 import { ADMIN, api, ask, BINDINGS, done, freePlanBindings, installOf, instance, OWNER, page, problemsOf, publish, refusingDatabase, sendFile, shortPages, sweep, tokenOf, type World, wait, world } from "./support/install";
 
 /** The most database and bucket calls one scheduled invocation may make, the start of its instance included: 50 to the database, which is all D1 answers on the Free plan, and 250 to the bucket. */
@@ -98,13 +98,14 @@ describe("the scheduled run", () => {
   });
 
   // Drift: a run that failed was thrown into the provider's log of the schedule, which nobody opens, so sites stayed past their expiry with no word to the owner.
-  test("a run the database fails is thrown on, and noted as a clean-up that did not finish", async () => {
+  test("a run the database fails is thrown on in fixed words, and noted as a clean-up that did not finish", async () => {
+    using failed = vi.spyOn(console, "error").mockImplementation(() => undefined);
     const locked = { ...BINDINGS, DB: refusingDatabase(/sweep_place/i) };
     await ask(instance(w), `${ADMIN}/api/whoami`);
 
     const run = await sweep(instance(w), w, locked).then(() => "ran", String);
 
-    expect(run).toBe("Error: the table is locked");
+    expect([run, failed.mock.calls.length]).toEqual(["Error: the sweep failed", 1]);
     expect(await problemsOf(w)).toEqual([["sweep_failed", 1, "the table is locked"]]);
   });
 
@@ -274,5 +275,18 @@ describe("the scheduled run", () => {
 
     expect(runs.map((run) => run.trash)).toEqual([0, 1, 1]);
     expect(Math.max(...runs.map((run) => run.calls))).toBeLessThanOrEqual(INVOCATION_CALLS);
+  });
+
+  // Drift: Cloudflare writes what a run throws into its log, message and all, and an error's message may repeat a stored value. A run that threw its own error would put that value in the log; one that swallowed it would look like a run that worked.
+  test("a run on a Worker with a wrong variable fails in fixed words, and the log names the variable, never its value, and where the run stopped", async () => {
+    using failed = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const broken = { ...BINDINGS, ZONE: { public_word: "wiki" } } as unknown as typeof BINDINGS;
+
+    const thrown = await sweep(instance(w), w, broken).catch((error: unknown) => error);
+    const lines = failed.mock.calls.map(([line]) => String(line));
+
+    expect(thrown).toEqual(new Error("the sweep failed"));
+    expect(lines.map((line) => line.split("\n")[0])).toEqual(["poplin: the sweep did not run. This poplin install cannot start. These variables of its Worker are missing or wrong:", "poplin: the sweep failed (Error)"]);
+    expect([lines[0]?.includes("  ZONE: bad-shape"), lines.join("\n").includes("wiki")]).toEqual([true, false]);
   });
 });

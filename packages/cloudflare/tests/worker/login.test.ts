@@ -26,13 +26,13 @@ describe("a login that cannot be checked or written down", () => {
 
   // Drift: a later login whose entry the log refuses still lets the person in, so nothing but a line in the provider's log said the log has a gap.
   test("a login after the first whose audit entry is refused lets the person in and is noted with the failure's message", async () => {
-    using warned = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    using failed = vi.spyOn(console, "error").mockImplementation(() => undefined);
     await logIn(instance(w), w);
     const locked = { ...BINDINGS, DB: refusingDatabase(/insert into "?audit/i) };
 
     const later = await ask(instance(w), `${ADMIN}/login`, { headers: await accessHeaders(w) }, locked);
 
-    expect([later.status, later.headers.get("Location"), warned.mock.calls.length]).toEqual([302, "/", 1]);
+    expect([later.status, later.headers.get("Location"), failed.mock.calls.length]).toEqual([302, "/", 1]);
     expect(await problemsOf(w)).toEqual([["login_unwritten", 1, "the table is locked"]]);
   });
 });

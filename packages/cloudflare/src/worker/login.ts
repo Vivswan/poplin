@@ -6,6 +6,7 @@ import { logIn } from "@poplin/app/src/login/login";
 import { noteProblem } from "@poplin/core/src/actions/problems";
 import type { Login } from "@poplin/core/src/auth/logins";
 import type { Database } from "@poplin/core/src/database/database";
+import { logFault } from "./fault";
 import type { Held } from "./held";
 import { type Instance, NO_ACCESS } from "./start";
 import { plain } from "./util";
@@ -29,7 +30,7 @@ async function record(database: Database, email: Login, now: number): Promise<vo
   } catch (error) {
     if (!(await database.hasLoggedIn())) throw error;
 
-    console.warn("poplin: a login was not written to the audit log", error);
+    logFault("a login was not written to the audit log", error);
     await noteProblem({ database, now: () => now }, "login_unwritten", error);
   }
 }

@@ -8,6 +8,16 @@ resource "cloudflare_workers_script" "poplin" {
   main_module        = "worker.js"
   compatibility_date = "2026-11-01"
 
+  # Cloudflare keeps the lines the Worker writes and its errors, of every request. The record Cloudflare would make of each request by itself is off: it holds the request's address, and the address of an unlisted or a private site is its link.
+  observability = {
+    enabled            = true
+    head_sampling_rate = 1
+    logs = {
+      enabled         = true
+      invocation_logs = false
+    }
+  }
+
   # FIRST_SETTINGS seeds the stored settings once: the Worker writes them only while no settings record exists, so a later apply never overwrites a change made on the dashboard.
   # ZONE is read as it is: the module owns the zone values and moves the records, routes, and rules with them.
   bindings = [

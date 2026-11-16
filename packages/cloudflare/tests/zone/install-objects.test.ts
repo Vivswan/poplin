@@ -88,6 +88,9 @@ const WRITTEN: Readonly<Record<SharedKey, readonly [file: string, around: string
   accountBinding: ["worker.tf", 'name = %v\n type = "plain_text"\n text = var.account_id'],
   workerBinding: ["worker.tf", 'name = %v\n type = "plain_text"\n text = var.worker_name'],
   sweepCron: ["worker.tf", "schedules = [{ cron = %v }]"],
+  logsKept: ["worker.tf", "observability = {\n enabled = %v\n"],
+  logsShare: ["worker.tf", "head_sampling_rate = %v\n logs = {\n enabled = true\n"],
+  requestRecords: ["worker.tf", "invocation_logs = %v\n"],
 };
 
 /** One file of the module with runs of spaces made one, so the alignment `tofu fmt` chooses does not matter. */
@@ -301,5 +304,18 @@ describe("a zone the OpenTofu module set up", () => {
         expect(synced).toMatchObject({ ok: true, sharesZone: false });
       },
     );
+  });
+});
+
+describe("the Worker's log", () => {
+  // Drift: with the record of each request on, the address of every unlisted and private site, which is its link, sits in Cloudflare's log; with the log off, an error leaves no trace at all.
+  test("wrangler.jsonc keeps the Worker's lines of every request and no record of the request itself, as the table holds, so a Worker a deploy made and one the module made log alike", () => {
+    const config = Bun.JSONC.parse(readFileSync(join(MODULE, "..", "..", "..", "wrangler.jsonc"), "utf8")) as { observability: unknown };
+
+    expect(config.observability).toEqual({
+      enabled: INSTALL_OBJECTS.logsKept,
+      head_sampling_rate: INSTALL_OBJECTS.logsShare,
+      logs: { enabled: INSTALL_OBJECTS.logsKept, invocation_logs: INSTALL_OBJECTS.requestRecords },
+    });
   });
 });

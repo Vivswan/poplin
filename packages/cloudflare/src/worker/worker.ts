@@ -27,6 +27,7 @@ import { FREE_LIMITS } from "../limits/free-limits";
 import { INSTALL_OBJECTS } from "../zone/install-objects";
 import type { Bindings } from "./bindings";
 import { CLIENT_FILES } from "./client-files";
+import { logFault } from "./fault";
 import { createHolding, type Held, SETTINGS_LIFETIME_MS, type SiteHeld } from "./held";
 import { answerLogin } from "./login";
 import { answerSite } from "./site";
@@ -50,6 +51,9 @@ const OWN_ADDRESS = ".workers.dev";
 
 /** The answer of an install whose database another build of poplin made: by a schema step that was not this code's, or with settings this code does not read. */
 const MADE_BY_ANOTHER_BUILD = "This install's database was made by another build of poplin, so its records are not the ones this build reads. Deploy the build that made it, or delete the database and poplin makes it anew.";
+
+/** What a scheduled run that failed is logged and thrown as. */
+const SWEEP_FAILED = "the sweep failed";
 
 /** The setup page, for a redirect from the Worker's own address. */
 const SETUP = "/setup";
@@ -110,7 +114,7 @@ async function answerDashboard(request: Request, instance: Instance, held: Held)
   try {
     return await dashboard.fetch(request);
   } finally {
-    await meter.settle().catch((error: unknown) => console.error("poplin: the day's count of writes to the bucket was not written", error));
+    await meter.settle().catch((error: unknown) => logFault("the day's count of writes to the bucket was not written", error));
   }
 }
 
@@ -135,7 +139,7 @@ async function answerAdmin(request: Request, instance: Instance, ways: Ways): Pr
   return answerDashboard(request, instance, await ways.held(FRESH));
 }
 
-/** Run the scheduled sweep of a started instance, and note a run that failed. A Worker with nothing set has no site to sweep; any other start that failed is thrown. */
+/** Run the scheduled sweep of a started instance, and note a run that failed. A Worker with nothing set has no site to sweep; any other start that failed is logged by what stopped it, and thrown. */
 async function sweep(started: Started, latest: Outside["latest"]): Promise<void> {
   if (started.ok) {
     return runSweep(started.instance.install, latest, started.instance).catch(async (error: unknown) => {
@@ -146,7 +150,22 @@ async function sweep(started: Started, latest: Outside["latest"]): Promise<void>
   }
 
   const { failure } = started;
-  if (failure.kind !== "unset") throw new Error(`the sweep did not run. ${failureText(failure)}`);
+  if (failure.kind === "unset") return;
+
+  console.error(`poplin: the sweep did not run. ${failureText(failure)}`);
+
+  throw new Error(SWEEP_FAILED);
+}
+
+/** One scheduled run, from the start of its instance. Cloudflare writes what a run throws into its log, message and all, so a run that failed is logged by its kind and thrown in fixed words. */
+async function scheduledRun(starting: () => Promise<Started>, latest: Outside["latest"]): Promise<void> {
+  try {
+    await sweep(await starting(), latest);
+  } catch (error) {
+    logFault(SWEEP_FAILED, error);
+
+    throw new Error(SWEEP_FAILED);
+  }
 }
 
 /**
@@ -155,7 +174,7 @@ async function sweep(started: Started, latest: Outside["latest"]): Promise<void>
  * @param failed - the clock's time, and the install the instance last answered from, if it has started
  */
 async function answerFailure(request: Request, env: Bindings, error: unknown, failed: { readonly now: number; readonly noting: Pick<Install, "database" | "now"> | undefined }): Promise<Response> {
-  console.error("poplin: a request failed", error);
+  logFault("a request failed", error);
   if (error instanceof AllowanceSpent) return answerSpent(request, env, error, failed.now);
 
   if (failed.noting !== undefined) await noteProblem(failed.noting, "request_failed", error);
@@ -178,7 +197,7 @@ function outsideOf(given: Partial<Outside>): Outside {
  * Make the handlers of one Worker instance.
  *
  * @param given - the clock, the fetch of the Access keys, the fetch of setup's calls to Cloudflare, the asking for the newest version, and the fetch that starts a build; the runtime's own when absent
- * @returns `fetch`, which never throws, and `scheduled`, which throws when the sweep could not run. A request or a sweep that failed is noted as a problem of the install, where its database still takes a note
+ * @returns `fetch`, which never throws, and `scheduled`, which throws in fixed words when the sweep could not run. A request or a sweep that failed is noted as a problem of the install, where its database still takes a note
  */
 export function createWorker(given: Partial<Outside> = {}): Required<Pick<ExportedHandler<Bindings>, "fetch" | "scheduled">> {
   const outside = outsideOf(given);
@@ -254,7 +273,7 @@ export function createWorker(given: Partial<Outside> = {}): Required<Pick<Export
     },
 
     async scheduled(_controller, env) {
-      await sweep(await start(env), outside.latest);
+      await scheduledRun(() => start(env), outside.latest);
     },
   };
 }
