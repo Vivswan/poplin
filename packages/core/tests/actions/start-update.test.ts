@@ -1,6 +1,8 @@
 import { describe, expect, test } from "bun:test";
 
+import { pickRelease } from "../../src/actions/pick-release";
 import { type SelfUpdate, startUpdate, type Updating } from "../../src/actions/start-update";
+import { OWN_SCHEMA } from "../../src/database/open";
 import { dayOf } from "../../src/records/views";
 import { ADMIN, makeWorld, NOW, OWNER, type World } from "./support/actions-fixture";
 
@@ -144,5 +146,27 @@ describe("startUpdate", () => {
     const third = await startUpdate(world.install, ADMIN, { version: "0.1.0" }, updating);
 
     expect<unknown>({ second, third: third.ok || third.code, asked: updating.asked.length }).toEqual({ second: { ok: false, code: "too_many_requests", about: "update" }, third: later, asked: 2 });
+  });
+
+  // Drift: a start that names a lower version is a going back, and only the version before the last update is one. Any older release taken by name brings back a fault that was mended since, and stays.
+  test.each([
+    { name: "the version before is taken", to: "0.2.0", answer: { ok: true, started: true, from: "0.3.0", to: "0.2.0" } },
+    { name: "an older one is refused, and nothing is noted", to: "0.1.0", answer: { ok: false, code: "no_update" } },
+    { name: "a newer one is taken", to: "0.4.0", answer: { ok: true, started: true, from: "0.3.0", to: "0.4.0" } },
+  ])("an install at 0.3.0 that came from 0.2.0 is asked for $to: $name", async ({ to, answer }) => {
+    const world = await makeWorld();
+    const pin = { source: "a".repeat(64), bundle: "a".repeat(64), schema: OWN_SCHEMA };
+    const self: SelfUpdate = {
+      holdsKey: () => true,
+      last: { from: "0.2.0", to: "0.3.0", schema: OWN_SCHEMA, at: NOW },
+      async ready(wanted) {
+        const picked = pickRelease({ "0.1.0": pin, "0.2.0": pin, "0.4.0": pin }, wanted, "0.3.0");
+
+        return picked.ok ? { ok: true, version: picked.version, put: async () => ({ ok: true }) } : { ok: false, code: "no_update" };
+      },
+    };
+
+    expect<unknown>(await startUpdate(world.install, ADMIN, { version: "0.3.0", to }, { ...host(() => world, {}), self })).toEqual(answer);
+    expect(await world.install.database.listProblems(dayOf(NOW))).toEqual([]);
   });
 });

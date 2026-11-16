@@ -12,7 +12,7 @@
 //
 // The audit entry is written before the files are put in place: the request after that one runs the new code, so nothing is left for the old code to write.
 // The releases are read fresh on every start. A second start in a later minute finds the new version running, and answers `no_update`.
-// A start that names one version takes that one, a lower one too: going back is such a start, and `pickRelease` refuses a lower version whose schema is another.
+// A start that names one version takes that one. A lower one is taken only when it is the version before the last update: going back is such a start, and `pickRelease` refuses every other lower version.
 // A refused start is noted as the problem `update_failed`: the refusal's code is its name, and what the refusal is about is its message.
 
 import * as v from "valibot";
@@ -20,6 +20,7 @@ import * as v from "valibot";
 import type { Actor } from "../auth/scopes";
 import { AllowanceSpent } from "../database/driver";
 import { type LastUpdate, UPDATE_NEWS } from "../records/update";
+import { wayBack } from "./go-back";
 import { NEWEST, type WantedRelease } from "./pick-release";
 import { noteProblem } from "./problems";
 import { type Install, type Refused, refuse } from "./records";
@@ -33,7 +34,7 @@ const COUNT_KEY = "start_update";
 /** What a start answers: the files of a release are in place, the version the install ran, and the version of the release. */
 export const STARTED_UPDATE = v.object({ started: v.literal(true), from: v.string(), to: v.string() });
 
-/** What a start may name: one version to take, such as `0.2.0`, in place of the newest. A lower one than the install runs is a going back. */
+/** What a start may name: one version to take, such as `0.2.0`, in place of the newest. A lower one than the install runs is a going back, and only the version before is taken. */
 export const UPDATE_REQUEST = v.strictObject({ to: v.optional(UPDATE_NEWS.entries.version) });
 
 /** Whether a start fit into its minute. */
@@ -133,7 +134,7 @@ export async function startUpdate(install: Pick<Install, "database" | "now">, ac
   const taken = await takeStart(updating, install.now());
   if (!taken.ok) return refuse("too_many_requests", "update");
 
-  const ready = await updating.self.ready({ version: asked.to ?? NEWEST, automatic: asked.automatic === true });
+  const ready = await updating.self.ready({ version: asked.to ?? NEWEST, automatic: asked.automatic === true, back: wayBack(updating.self.last, asked.version)?.to });
   if (!ready.ok) return notTaken(install, ready);
 
   const detail = asked.automatic === true ? { from: asked.version, to: ready.version, automatic: true } : { from: asked.version, to: ready.version };
