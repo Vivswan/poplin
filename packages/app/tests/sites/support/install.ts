@@ -13,8 +13,9 @@ import { siteLabel } from "@poplin/core/src/sites/labels";
 import { MemoryStore } from "@poplin/core/src/storage/memory";
 import { type HeadResult, type ObjectKey, parseObjectKey, type ReadOptions, type ReadResult, resolveRange } from "@poplin/core/src/storage/storage";
 import { BunSqliteDriver } from "@poplin/core/tests/database/support/bun-sqlite-driver";
+import type { SiteAddresses } from "../../../src/sites/addresses";
 import type { serveSite } from "../../../src/sites/serve";
-import { ADDRESSES, } from "./layout";
+import { ADDRESSES } from "./layout";
 
 /** The moment every test request arrives at. */
 export const NOW = 1_700_000_000_000;
@@ -24,6 +25,9 @@ const OWNER_EMAIL = "owner@example.com";
 
 /** The header the test install's login reads as its proof: it vouches for the email the header holds. */
 const PROOF_HEADER = "X-Test-Login";
+
+/** What every address a layout writes starts with. */
+const SCHEME = "https://";
 
 /** The letter `letterFormOf` writes, as it stands before the marker of a hostname: taken out, the address carries no letter. */
 const OPEN_LETTER = /-u(?=-[a-z]+\.example\.com$)/;
@@ -66,20 +70,42 @@ function keyOf(raw: string): ObjectKey {
   return parsed.key;
 }
 
-function draftOf(draft: Draft): NewSite {
+function draftOf(draft: Draft, addresses: SiteAddresses): NewSite {
   const name = parseSiteName(draft.name);
-  const publicName = parsePublicName(draft.name, ADDRESSES.reservedNames);
-  if (!name.ok || !publicName.ok) throw new Error(`the test's site name was refused: ${draft.name}`);
+  if (!name.ok) throw new Error(`the test's site name was refused: ${draft.name}`);
 
   const shared = { name: name.value, folder: mintSiteFolder(), title: null, search_engines: draft.search_engines ?? false, embeddable: draft.embeddable ?? true, expires: draft.expires ?? "never", bytes: 0, files: 0 };
-  if (draft.access === "public") return { ...shared, access: "public", public_name: publicName.value };
+  if (draft.access !== "public") return { ...shared, access: draft.access };
 
-  return { ...shared, access: draft.access };
+  const publicName = parsePublicName(draft.name, addresses.reservedNames);
+  if (!publicName.ok) throw new Error(`the test's public name was refused: ${draft.name}`);
+
+  return { ...shared, access: "public", public_name: publicName.value };
 }
 
 /** The hostname of a site's label address under `example.com`. */
 export function labelHost(site: Site): string {
   return new URL(ADDRESSES.addressOf(siteLabel(site.name, site.id), site.access)).hostname;
+}
+
+/**
+ * Write a label address as a visitor may type it under any layout, without its scheme and with nothing after what names the site: a hostname, or a hostname and a first segment.
+ *
+ * @param typed - the id, and the name before it when one is typed; neither is checked
+ */
+export function typedAt(addresses: SiteAddresses, typed: { readonly id: string; readonly name?: string }, letter: AccessLetter): string {
+  return addresses.letterFormOf(typed as Parameters<SiteAddresses["letterFormOf"]>[0], letter).slice(SCHEME.length);
+}
+
+/**
+ * Write the public address of a name under any layout, as `typedAt` writes a label address.
+ *
+ * @param name - the public name as typed; it is not checked
+ */
+export function publicAt(addresses: SiteAddresses, name: string): string {
+  const address = addresses.publicAddressOf(name as Parameters<SiteAddresses["publicAddressOf"]>[0]).slice(SCHEME.length);
+
+  return address.endsWith("/") ? address.slice(0, -1) : address;
 }
 
 /**
@@ -89,7 +115,7 @@ export function labelHost(site: Site): string {
  * @param letter - the letter before the marker; `undefined` writes the address with none
  */
 export function typedHost(typed: { readonly id: string; readonly name?: string }, letter: AccessLetter | undefined): string {
-  const host = new URL(ADDRESSES.letterFormOf(typed as Parameters<typeof ADDRESSES.letterFormOf>[0], letter ?? "u")).hostname;
+  const host = typedAt(ADDRESSES, typed, letter ?? "u");
 
   return letter === undefined ? host.replace(OPEN_LETTER, "") : host;
 }
@@ -97,9 +123,10 @@ export function typedHost(typed: { readonly id: string; readonly name?: string }
 /**
  * Open a fresh install with default settings and one login.
  *
+ * @param addresses - the layout the sites answer under; the hostname layout when left out
  * @returns the install; `ownerProof` is the header a request of the owner carries, and a request without it is from nobody
  */
-export async function openInstall(): Promise<Install> {
+export async function openInstall(addresses: SiteAddresses = ADDRESSES): Promise<Install> {
   const opened = await openDatabase(new BunSqliteDriver(), NOW);
   if (opened.kind !== "open") throw new Error(`the test's database did not open: ${opened.kind}`);
 
@@ -142,7 +169,7 @@ export async function openInstall(): Promise<Install> {
 
   const publish = async (draft: Draft): Promise<Site> => {
     const contents = draft.unlisted_files === true ? undefined : contentsOf(Object.keys(draft.files));
-    const made = await database.createSite(draftOf(draft), { by: draft.by ?? owner, at: NOW }, contents);
+    const made = await database.createSite(draftOf(draft, addresses), { by: draft.by ?? owner, at: NOW }, contents);
     if (made.kind !== "done") throw new Error(`the test's site was refused: ${made.kind}`);
 
     for (const [path, [body, contentType]] of Object.entries(draft.files)) {
@@ -159,7 +186,7 @@ export async function openInstall(): Promise<Install> {
     database,
     store,
     settings: defaultSettings({ installer: owner }),
-    addresses: ADDRESSES,
+    addresses,
     identify: async (headers) => ({ ok: headers.get(PROOF_HEADER) === owner }),
     now: () => NOW,
   };

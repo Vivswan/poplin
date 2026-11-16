@@ -2,9 +2,11 @@ import { beforeAll, describe, expect, test } from "bun:test";
 import type { Site } from "@poplin/core/src/records/site";
 import { UNKNOWN_CONTENTS } from "@poplin/core/src/records/version-contents";
 import { parseObjectKey } from "@poplin/core/src/storage/storage";
+import type { SiteAddresses } from "../../src/sites/addresses";
 import { DEFAULT_ICON } from "../../src/sites/default-icon";
 import { MOST_STORE_CALLS, serveSite } from "../../src/sites/serve";
-import { type Install, labelHost, NOW, openInstall, typedHost } from "./support/install";
+import { type Install, labelHost, NOW, openInstall, publicAt, typedAt, typedHost } from "./support/install";
+import { LAYOUTS, PATH_ADDRESSES } from "./support/layout";
 
 const HTML = "text/html; charset=utf-8";
 const SCRIPT = "text/javascript";
@@ -77,8 +79,8 @@ function prefixOf(site: Site): string {
   return `${site.folder}/v${site.live_version}/`;
 }
 
-async function buildWorld(): Promise<World> {
-  const install = await openInstall();
+async function buildWorld(addresses?: SiteAddresses): Promise<World> {
+  const install = await openInstall(addresses);
 
   const report = await install.publish({
     name: "report",
@@ -1332,5 +1334,174 @@ describe("three calls to the store at most", () => {
     const held = await serveSite(ask(labelHost(bound.unlisted), "/raw", { "If-None-Match": tag }), bound.install.serving);
 
     expect([whole.status, whole.headers.get("Accept-Ranges"), held.status, held.headers.get("ETag"), await held.text(), bound.install.keys.length - calls, bound.install.bodies.length - opened]).toEqual([200, "none", 304, tag, "", 3, 1]);
+  });
+});
+
+describe.each(LAYOUTS)("the same answers under %s", (_layout, addresses) => {
+  let here: World;
+
+  const at = (typed: { readonly id: string; readonly name?: string }, letter: "p" | "u"): string => typedAt(addresses, typed, letter);
+  const answer = (request: Request, changes: Partial<Serving> = {}): Promise<Response> => serveSite(request, { ...here.install.serving, ...changes });
+
+  beforeAll(async () => {
+    here = await buildWorld(addresses);
+  });
+
+  // The six outcomes of a row stand for the record states: private, unlisted, public, missing, trashed, expired.
+  const table: readonly (readonly ["p" | "u", boolean, readonly Outcome[]])[] = [
+    ["u", false, ["to p", "file", "file", "to p", "to p", "to p"]],
+    ["u", true, ["to p", "file", "file", "to p", "to p", "to p"]],
+    ["p", false, ["404", "404", "404", "404", "404", "404"]],
+    ["p", true, ["file", "to u", "to u", "404", "404", "404"]],
+  ];
+
+  // Drift: a layout would get an access rule of its own: a private site shown where no login stands, a move that tells a real private id from a made-up one or lands on another file, or a name before the id that starts to matter.
+  test.each(table)("under %s, with the owner's proof %p, the six record states answer %j, whatever name is typed", async (letter, proven, outcomes) => {
+    const sites = [here.secret, here.report, here.shop, { id: MISSING_ID, name: "nobody" }, here.trashed, here.expired];
+    const names = (site: (typeof sites)[number]): (string | undefined)[] => [site.name, "other", undefined];
+    const asked = sites.flatMap((site, index) => names(site).map((name) => ({ typed: { id: site.id, ...(name === undefined ? {} : { name }) }, outcome: outcomes[index] ?? "404", home: HOMES[index] ?? "" })));
+    const before = here.install.keys.length;
+
+    for (const { typed, outcome, home } of asked) {
+      const response = await answer(ask(at(typed, letter), "/index.html?x=1", proven ? here.install.ownerProof : {}));
+      const moved = (to: "p" | "u"): unknown => ({ status: 302, body: "", headers: { ...PLAIN_HEADERS, location: `https://${at(typed, to)}/index.html?x=1` } });
+      const answers = { file: { status: 200, body: home }, "to p": moved("p"), "to u": moved("u"), "404": NOT_FOUND };
+      const answered = await whole(response);
+
+      expect<unknown>([typed, outcome === "file" ? { status: answered.status, body: answered.body } : answered]).toEqual([typed, answers[outcome]]);
+    }
+
+    expect(here.install.keys.length - before).toBe(asked.filter(({ outcome }) => outcome === "file").length);
+  });
+
+  // Drift: a request that came around the login would cost a database query under one layout, and a flood of them would be paid for by the install.
+  test("under p, a request without the proof is refused before anything is looked up", async () => {
+    const asked: unknown[] = [];
+    const database = { findServed: async (address: unknown) => void asked.push(address) };
+
+    expect([(await answer(ask(at(here.secret, "p"), "/"), { database: database as never })).status, asked]).toEqual([404, []]);
+  });
+
+  // Drift: a move would drop the page or the query a link named, carry what names the site twice, or carry a second slash into another host.
+  test.each([
+    ["/docs/page.html?x=1&y=%2F", "/docs/page.html?x=1&y=%2F"],
+    ["//evil.example/", "//evil.example/"],
+    ["/a\\b?q=a\\b", "/a/b?q=a\\b"],
+    ["/", "/"],
+  ])("a move to the other letter keeps the path and the query: %s", async (path, kept) => {
+    const response = await answer(ask(at(here.secret, "u"), path));
+
+    expect([response.status, response.headers.get("Location")]).toEqual([302, `https://${at(here.secret, "p")}${kept}`]);
+  });
+
+  // Drift: an address with nothing after what names the site would serve the home page where its relative links leave the site, lose its query on the way, or take more than one move to get there.
+  test("an address with nothing after what names the site reaches the home page: at once where the site has a hostname of its own, else by one move to the same address and a slash", async () => {
+    const typed = `https://${at(here.report, "u")}?x=1`;
+    const expected = new URL(typed).pathname === "/" ? null : `https://${at(here.report, "u")}/?x=1`;
+    const first = await answer(new Request(typed));
+    const location = first.headers.get("Location");
+    const landed = location === null ? first : await answer(new Request(new URL(location, typed)));
+
+    expect([location === null ? null : new URL(location, typed).href, landed.status, await landed.text()]).toEqual([expected, 200, "report home"]);
+  });
+
+  const open: readonly (readonly [string, (w: World) => string, number, string])[] = [
+    ["an unlisted site at its label", (w) => at(w.report, "u"), 200, "report home"],
+    ["a public site at its label", (w) => at(w.shop, "u"), 200, "shop home"],
+    ["a public site at its public name", () => publicAt(addresses, "shop"), 200, "shop home"],
+    ["the public name of a site that is not public", () => publicAt(addresses, "report"), 404, "Not found\n"],
+    ["a public name no site holds", () => publicAt(addresses, "nobody"), 404, "Not found\n"],
+  ];
+
+  // Drift: a shared link would start asking for a login, a public site would lose one of its two addresses, or a name would open a site that is not public.
+  test.each(open)("%s answers without a session", async (_why, address, status, body) => {
+    const response = await answer(ask(address(here), "/"));
+
+    expect([response.status, await response.text()]).toEqual([status, body]);
+  });
+
+  const paths: readonly (readonly [string, number, readonly string[], string])[] = [
+    ["/", 200, ["index.html"], "report home"],
+    ["/docs/", 200, ["docs/index.html"], "docs folder"],
+    ["/about", 200, ["about.html"], "about page"],
+    ["/notes", 200, ["notes.html", "notes/index.html"], "notes folder"],
+    ["/LICENSE", 200, ["LICENSE"], "license terms"],
+    ["/app.js?v=2", 200, ["app.js"], "let a = 1;"],
+    ["/docs/%2e%2e/app.js", 200, ["app.js"], "let a = 1;"],
+    ["/nothing.txt", 404, ["nothing.txt"], "Not found\n"],
+    ["/nothing", 404, ["nothing.html", "nothing/index.html"], "Not found\n"],
+    ["/docs%2findex.html", 404, [], "Not found\n"],
+  ];
+
+  // Drift: what names the site would stay in the path a file is looked for under, so a layout would read keys no site holds, or read outside the site's own live version.
+  test.each(paths)("%s answers %d from the keys %j of the site's own live version", async (path, status, keys, body) => {
+    const before = here.install.keys.length;
+    const response = await answer(ask(at(here.report, "u"), path));
+
+    expect({ status: response.status, body: await response.text(), keys: here.install.keys.slice(before) }).toEqual({ status, body, keys: keys.map((key) => `${prefixOf(here.report)}${key}`) });
+  });
+
+  // Drift: a page would go out with a frame rule that names no host of its layout, so a site of the install could not frame another while outside pages are blocked, or a page outside could.
+  test("a page goes out with exactly its headers, and the frame rule is the layout's own", async () => {
+    const response = await answer(ask(at(here.report, "u"), "/"));
+
+    expect([response.status, fixedHeaders(response)]).toEqual([
+      200,
+      { ...HARDENING, "content-security-policy": `frame-ancestors ${addresses.frameAncestors}`, vary: BLOCKING.vary, "x-robots-tag": "noindex", "cache-control": "public, max-age=300, must-revalidate", "content-type": HTML },
+    ]);
+  });
+
+  const requesters: readonly (readonly [string, () => Record<string, string>, number])[] = [
+    ["another site of the install that names itself", () => ({ ...SAME_SITE_IMAGE, Origin: new URL(`https://${publicAt(addresses, "shop")}`).origin }), 200],
+    ["another site of the install, by its referrer", () => ({ ...SAME_SITE_IMAGE, Referer: `https://${publicAt(addresses, "shop")}/` }), 200],
+    ["a hostname that is no site of either layout, by its origin", () => ({ ...SAME_SITE_IMAGE, Origin: "https://www.example.com" }), 403],
+    ["a dashboard's hostname, by its referrer", () => ({ ...SAME_SITE_IMAGE, Referer: "https://poplin.example.net/sites" }), 403],
+    ["a page of another site altogether", () => CROSS_SITE_SUBREQUEST, 403],
+    ["a link followed from a page that is no site", () => ({ "Sec-Fetch-Site": "same-site", "Sec-Fetch-Mode": "navigate", "Sec-Fetch-Dest": "document", Referer: "https://www.example.com/" }), 200],
+  ];
+
+  // Drift: a layout would not know its own sites by their hostnames: a site's page could no longer load a file of another site of the install, or a page that is no site could.
+  test.each(requesters)("a file asked for by %s answers %3$d while outside pages are blocked, and 200 once they are allowed", async (_why, headers, blocked) => {
+    const request = (): Request => ask(at(here.report, "u"), "/app.js", headers());
+    const allowed = { settings: { ...here.install.serving.settings, outside_pages: "allowed" as const } };
+
+    expect([(await answer(request())).status, (await answer(request(), allowed)).status]).toEqual([blocked, 200]);
+  });
+});
+
+describe("an address of the path layout with no slash after what names the site", () => {
+  let paths: World;
+
+  const answer = (request: Request, changes: Partial<Serving> = {}): Promise<Response> => serveSite(request, { ...paths.install.serving, ...changes });
+  const moved = (location: string): unknown => ({ status: 302, body: "", headers: { ...PLAIN_HEADERS, location } });
+  const SITES_HOST = "https://poplin-sites.example.net";
+  const PRIVATE_HOST = "https://poplin-private.example.net";
+
+  beforeAll(async () => {
+    paths = await buildWorld(PATH_ADDRESSES);
+  });
+
+  const cases: readonly (readonly [string, (w: World) => Request, (w: World) => unknown])[] = [
+    ["an unlisted site", (w) => ask(typedAt(PATH_ADDRESSES, w.report, "u"), ""), (w) => moved(`${SITES_HOST}/report--${w.report.id}/`)],
+    ["an unlisted site, with a query", (w) => ask(typedAt(PATH_ADDRESSES, w.report, "u"), "?x=1&y=%2F"), (w) => moved(`${SITES_HOST}/report--${w.report.id}/?x=1&y=%2F`)],
+    ["an unlisted site, by HEAD", (w) => ask(typedAt(PATH_ADDRESSES, w.report, "u"), "", {}, "HEAD"), (w) => moved(`${SITES_HOST}/report--${w.report.id}/`)],
+    ["a site named by its id alone", (w) => ask(typedAt(PATH_ADDRESSES, { id: w.report.id }, "u"), ""), (w) => moved(`${SITES_HOST}/${w.report.id}/`)],
+    ["a public name", () => ask(publicAt(PATH_ADDRESSES, "shop"), ""), () => moved(`${SITES_HOST}/shop/`)],
+    ["a private site on the sites host", (w) => ask(typedAt(PATH_ADDRESSES, w.secret, "u"), ""), (w) => moved(`${SITES_HOST}/secret--${w.secret.id}/`)],
+    ["no site on the sites host", () => ask(typedAt(PATH_ADDRESSES, { id: MISSING_ID, name: "secret" }, "u"), ""), () => moved(`${SITES_HOST}/secret--${MISSING_ID}/`)],
+    ["a public name no site holds", () => ask(publicAt(PATH_ADDRESSES, "nobody"), ""), () => moved(`${SITES_HOST}/nobody/`)],
+    ["a private site, with the owner's proof", (w) => ask(typedAt(PATH_ADDRESSES, w.secret, "p"), "", withProof(w)), (w) => moved(`${PRIVATE_HOST}/secret--${w.secret.id}/`)],
+    ["a private site, without the proof", (w) => ask(typedAt(PATH_ADDRESSES, w.secret, "p"), ""), () => NOT_FOUND],
+    ["a refused method", (w) => ask(typedAt(PATH_ADDRESSES, w.report, "u"), "", {}, "POST"), () => ({ ...NOT_FOUND, status: 405, body: "Method not allowed\n", headers: { ...NOT_FOUND.headers, allow: "GET, HEAD" } })],
+    ["a subrequest of a page that is no site of the install", (w) => ask(typedAt(PATH_ADDRESSES, w.report, "u"), "", CROSS_SITE_SUBREQUEST), () => ({ ...NOT_FOUND, status: 403, body: "Forbidden\n" })],
+  ];
+
+  // Drift: a page opened without the slash resolves its relative links against the host, into other sites; and a move made after the lookup would tell a private or missing site from an open one, or pass the login.
+  test.each(cases)("%s is moved to the same address and a slash, or refused as any address is, with no lookup and no read", async (_why, request, expected) => {
+    const asked: unknown[] = [];
+    const database = { findServed: async (address: unknown) => void asked.push(address) };
+    const before = paths.install.keys.length;
+
+    expect<unknown>({ answer: await whole(await answer(request(paths), { database: database as never })), asked, reads: paths.install.keys.length - before }).toEqual({ answer: expected(paths), asked: [], reads: 0 });
   });
 });
