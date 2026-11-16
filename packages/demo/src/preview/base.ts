@@ -5,6 +5,7 @@
 //
 // Everything inside the demo writes paths from the root. This is the one place that knows the base: it is taken off on the way in and put on on the way out.
 
+import { withTicketAddresses } from "../../../core/src/storage/tickets";
 import { withAddresses } from "./addresses";
 
 /** An origin that stands for the demo's own wherever only a path is at hand; no answer ever names it. */
@@ -50,11 +51,37 @@ export async function unbased(request: Request, base: string): Promise<Request |
   return new Request(url, { method: request.method, headers: request.headers, body });
 }
 
+/** Whether an address is a path from the root of its origin, and not the two slashes that name another host. */
+function isRootPath(address: string): boolean {
+  return address.startsWith("/") && !address.startsWith("//");
+}
+
+/**
+ * Put the base on the path each ticket of a JSON answer names. A ticket of the install's own route says where a file goes as a path from the install's root, which is the base here.
+ *
+ * @param text - the body of a JSON answer
+ * @returns the body with the base on every ticket's path; a body that hands out no tickets, or is no JSON, as it was
+ */
+function withTicketPaths(text: string, base: string): string {
+  let answer: unknown;
+
+  try {
+    answer = JSON.parse(text);
+  } catch {
+    // A file of a served site may be called JSON and be none: it goes out as it is.
+    return text;
+  }
+
+  const based = withTicketAddresses(answer, (address) => (isRootPath(address) ? `${base}${address}` : address));
+
+  return based === undefined ? text : JSON.stringify(based);
+}
+
 /**
  * Put the base on every address of the demo an answer holds.
  *
  * @param origin - the origin the browser asked, which a page or a JSON answer writes whole addresses with
- * @returns the answer with the base on its `Location`, on the paths in its page's attributes, and on its own origin's addresses in a page's text or in JSON; any other body goes out as it is
+ * @returns the answer with the base on its `Location`, on the paths in its page's attributes, on its own origin's addresses in a page's text or in JSON, and on the path of every ticket a JSON answer hands out; any other body goes out as it is
  */
 export async function rebased(response: Response, base: string, origin: string): Promise<Response> {
   const headers = new Headers(response.headers);
@@ -69,7 +96,7 @@ export async function rebased(response: Response, base: string, origin: string):
 
   const host = origin.replace(/^https?:\/\//, "");
   const text = (await response.text()).replaceAll(`${host}/`, () => `${host}${base}/`);
-  const based = isPage ? withAddresses(text, (address) => (address.startsWith("/") && !address.startsWith("//") ? `${base}${address}` : address)) : text;
+  const based = isPage ? withAddresses(text, (address) => (isRootPath(address) ? `${base}${address}` : address)) : withTicketPaths(text, base);
 
   return new Response(based, { status: response.status, headers });
 }
