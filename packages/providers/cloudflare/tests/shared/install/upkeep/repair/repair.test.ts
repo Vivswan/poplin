@@ -186,7 +186,7 @@ describe.each(BOTH)("a repair with the token, %s", (kind) => {
     const right = "Access: Apps and Policies: Edit";
 
     expect(shown(done).filter((row) => row.startsWith("Access application") || row.startsWith("Workflow"))).toEqual([
-      `Access application | block | refused with status 403: 10000 Authentication error. Add this right to the account token: ${right}`,
+      `Access application | block | refused with status 403: 10000 Authentication error. Add this permission to the account token: ${right}`,
       "Workflow | make | poplin-jobs",
     ]);
     expect(done).toMatchObject({ ok: true, ready: false, blocked: [{ what: "right_lacking", right }] });

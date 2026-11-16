@@ -302,7 +302,7 @@ describe("what stops a run before it changes anything", () => {
     const { done } = await installed(fresh({ refuse: "GET /zones/zone-1/dns_records", refuseMessage: "Authentication error" }), "domain", DRY);
     const rows = shown(done).slice(6);
 
-    expect(rows[0]).toBe("DNS record | block | refused with status 403: 10000 Authentication error. Add this right to the account token: DNS: Edit");
+    expect(rows[0]).toBe("DNS record | block | refused with status 403: 10000 Authentication error. Add this permission to the account token: DNS: Edit");
     expect([...new Set(rows.slice(1).map((row) => row.split(" | ")[1]))]).toEqual(["not-run"]);
     expect(done).toMatchObject({ ok: true, ready: false, blocked: [{ what: "right_lacking", right: "DNS: Edit" }] });
   });

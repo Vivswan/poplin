@@ -15,16 +15,16 @@ function optionalRows(reading: DomainReading): string[] {
 
 // Drift: the row of the optional piece would name a right the token form does not offer, say another thing of it than the form says, or leave after a repair with a token that never had the right.
 test.each([
-  ["under a domain", WITH_DOMAIN, "Rate rule | sample-rate-rule: The provider stops floods before they reach a site. To switch this on, add this right to the account token and press Repair: Rules: Edit"],
+  ["under a domain", WITH_DOMAIN, "Rate rule | sample-rate-rule: The provider stops floods before they reach a site. To switch this on, add this permission to the account token and press Repair: Rules: Edit"],
   [
     "without a domain",
     WITHOUT_DOMAIN,
-    "Spend alert | sample-spend-alert: The provider emails your first user when the account's charges reach an amount. To switch this on, add this right to the account token and press Repair: Alerts: Edit",
+    "Spend alert | sample-spend-alert: The provider emails your first user when the account's charges reach an amount. To switch this on, add this permission to the account token and press Repair: Alerts: Edit",
   ],
 ])("an install %s has one optional piece, whose row says what the token form says of its right, on a check and after a repair", async (_kind, provider, row) => {
   const plug = changingPlug(provider);
   const read = async (): Promise<DomainSettings> => SETTINGS;
-  const ends = plug.tokenOptional.map(({ right, adds }) => row.endsWith(`: ${adds} To switch this on, add this right to the account token and press Repair: ${right}`));
+  const ends = plug.tokenOptional.map(({ right, adds }) => row.endsWith(`: ${adds} To switch this on, add this permission to the account token and press Repair: ${right}`));
 
   expect([optionalRows(await plug.check("any", read)), optionalRows(await plug.repair("any", read))]).toEqual([[row], [row]]);
   expect(ends).toEqual([true]);

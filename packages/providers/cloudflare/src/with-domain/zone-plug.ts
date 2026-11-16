@@ -89,13 +89,13 @@ const TEAM_DOMAIN = "the team's domain";
 const NOT_PERMITTED = { status: 403, code: 10000 } as const;
 
 /** What a row says after a refusal for a missing permission, before the permission's name. */
-const ADD_RIGHT = "Add this right to the account token";
+const ADD_PERMISSION = "Add this permission to the account token";
 
 /** What the row of a piece that needs an optional permission says before the permission's name, after what the piece adds; a piece that is made without the permission too says its own. */
-const SWITCH_ON = "To switch this on, add this right to the account token and press Repair";
+const SWITCH_ON = "To switch this on, add this permission to the account token and press Repair";
 
 /** What the row of an alert that is not set up says in place of that: the install's key makes its alerts too. */
-const BY_ITSELF = "An install whose key Cloudflare takes makes it by itself within a day. To make it now, add this right to the account token and press Repair";
+const BY_ITSELF = "An install whose key Cloudflare takes makes it by itself within a day. To make it now, add this permission to the account token and press Repair";
 
 /** What a repair that wrote the variable tells the person to do next. */
 const LOGIN_READY = "The login is ready. Open your dashboard and log in:";
@@ -110,7 +110,7 @@ const KEYS = {
 const KEY_KINDS = ["kept", "upload"] as const;
 
 /** What a key's row says of a key a repair replaces: one Cloudflare takes no more, and one that works and was made before a right the install uses now. */
-const KEY_DIFFERS = { refused: "Cloudflare no longer takes the key the install holds", lacking: "the key the install holds lacks a right the install uses now" } as const;
+const KEY_DIFFERS = { refused: "Cloudflare no longer takes the key the install holds", lacking: "the key the install holds lacks a permission the install uses now" } as const;
 
 /** What a key's row says of a key of the name that the install does not hold, such as a new key whose write failed: as a check finds it, and once a repair deleted it. */
 const KEY_SPARE = { left: "a key of its name that the install does not hold is at Cloudflare", removed: "a key of its name that the install does not hold was deleted" } as const;
@@ -123,7 +123,7 @@ const NO_BUCKET = "the Worker is bound to no bucket";
 
 /** What a row says of a piece the install's own key could not read, by what came of the call. */
 const KEY_SAYS: Readonly<Record<Exclude<KeyRefusal, "no_key">, string>> = {
-  lacks_right: "the key the install holds lacks this right",
+  lacks_right: "the key the install holds lacks this permission",
   key_refused: "Cloudflare refused the key the install holds",
   unreachable: "no usable answer from Cloudflare",
 };
@@ -451,7 +451,7 @@ function failedDetail(stopped: Stopped, object: Piece): string {
   const failed = stopped.failed ?? "";
   const why = failed === "" ? failureText(stopped) : `${failed}: ${failureText(stopped)}`;
 
-  return lacksRight(stopped) ? `${why}. ${ADD_RIGHT}: ${lackedRight(object, failed).name}` : why;
+  return lacksRight(stopped) ? `${why}. ${ADD_PERMISSION}: ${lackedRight(object, failed).name}` : why;
 }
 
 /** What the row of an optional piece that is not set up says: what the piece adds, then how a person gets it, with the permission's name. */
@@ -652,7 +652,7 @@ function keyFailed(kind: KeyKind, what: string, failure: CloudflareFailure | { r
   const why = `${name}${what}: ${failureText(stopped)}`;
   if (right === undefined || !lacksRight(stopped)) return { object, state: "failed", detail: why };
 
-  return { object, state: "failed", detail: `${why}. ${ADD_RIGHT}: ${right.name}`, right: right.name };
+  return { object, state: "failed", detail: `${why}. ${ADD_PERMISSION}: ${right.name}`, right: right.name };
 }
 
 /** The row of a key in a check the install makes by itself: the kept key stands, since the check is read with it, and the upload key is there where the install holds one. Cloudflare is not asked about either: the kept key reads no token of the account. */
