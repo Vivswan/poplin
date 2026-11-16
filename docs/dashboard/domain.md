@@ -7,8 +7,6 @@ order: 50
 
 What the dashboard's Domain screen shows and does, the last check it keeps, and the optional rules at Cloudflare with what makes each; the first Repair is step 4 of [Install](../start/install.md).
 
-After the first login, Domain does what the setup page did.
-
 | On the screen       | What it is                                                                                     |
 | ------------------- | ---------------------------------------------------------------------------------------------- |
 | the line at the top | how the domain stands, such as `Nothing to repair` or `2 to repair`, then the last run and who made it |
@@ -64,7 +62,7 @@ Three rows are Cloudflare's login:
 | -------------------- | ------------------------------------------------------------------------------------------------------------------ |
 | `Access application` | the login in front of every address of the dashboard and of every private site                                     |
 | `Access policy`      | who that login lets in: your users                                                                                 |
-| `Access open paths`  | the two paths of the dashboard's address that pass the login: `/api`, where a caller gives its own token, and `/setup` |
+| `Access open paths`  | the one path of the dashboard's address that passes the login: `/api`, where a caller gives its own token |
 
 The row `Key` is the key poplin keeps at Cloudflare. Repair makes one where the install has none, or one Cloudflare no longer takes: [The kept key](../about/security.md#the-kept-key).
 

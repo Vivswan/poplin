@@ -83,7 +83,7 @@ A public site is without `noindex` only when both are on. The bots rule is one o
 | the Worker, to the bucket and the database | its bindings inside Cloudflare | no database key exists outside Cloudflare; the one bucket key is the upload key below |
 | the CLI, to the bucket, for the files of a publish | one ticket a file: a signed address that lives 10 minutes | the Worker signs it with the upload key, which never leaves the Worker; [The upload key](#the-upload-key) says what a ticket and the key can reach |
 | the person who makes the install | a Cloudflare API token, read by `poplin install` on that person's own computer | the person makes it at Cloudflare; the command sends it to Cloudflare alone, uses it for that one run, in which it also makes the kept key, and never stores, logs, or prints it |
-| a person who repairs the install | a Cloudflare API token, pasted into Repair on the Domain screen or into the setup page | the Worker uses it for that one request, in which a Repair also makes the kept key, and never stores, logs, or shows it |
+| a person who repairs the install | a Cloudflare API token, pasted into Repair on the Domain screen, or read by `poplin doctor --repair` on that person's own computer | the Worker uses a pasted one for that one request, in which a Repair also makes the kept key, and never stores, logs, or shows it; the command sends its own to Cloudflare alone |
 | the Worker, to Cloudflare's API | one kept key, an API token named "poplin kept key" that the account owns | Repair makes it with the pasted token and puts it on the Worker as an encrypted secret; [The kept key](#the-kept-key) says what it may do |
 | the Worker, to update itself | the kept key | the Worker fetches the release's built files, checks each against the digests poplin's website publishes, and uploads them in place of its own code: [Update](../upkeep/update.md#with-the-kept-key) |
 
@@ -164,11 +164,11 @@ What guards each address:
 
 | Address | Guarded by |
 | --- | --- |
-| the dashboard: every address of its hostname but `/api` and `/setup` | Cloudflare Access, before the Worker runs; then the Worker checks Access's token and the email on every request |
+| the dashboard: every address of its hostname but `/api` | Cloudflare Access, before the Worker runs; then the Worker checks Access's token and the email on every request |
 | the API, `/api`, which the CLI and `poplin mcp` call | the token the Worker issued; Access lets everyone through to it, so a machine needs no browser after its login |
 | a private site, `-p-poplin` | Cloudflare Access, before the Worker runs; then the Worker checks Access's token and the email |
 | an unlisted site; a public site | nothing |
-| the setup page, `/setup` | the pasted Cloudflare API token alone: it must show the install's own zone, or without a domain the address of the install's own account, which a token that only reads can do. On a Worker with nothing set yet, a token changes only what its own account holds, and the run writes nothing to the install's own database. Anyone may open the page and gets the form; with no token that passes, nothing of the install. A run with a token that passes answers every user's email. Five tries a minute from one address. After the first login it only repairs: it takes the token and no other value, and corrects no login |
+| a Worker with no place to answer at yet: the moments between its first upload and the values `poplin install` writes | nothing to guard: it answers every address with two plain lines that name the command, opens no database and no bucket, and takes no token |
 | the Worker's own `workers.dev` address, on an install under a domain | the install switches it off: nothing answers there |
 
 Two Access applications do this, made once at install, never per site:
@@ -176,7 +176,7 @@ Two Access applications do this, made once at install, never per site:
 | Application | Covers | Lets in |
 | --- | --- | --- |
 | the login | the dashboard's whole hostname, and every address that ends in `-p-poplin.<domain>` | your users, after Cloudflare's login |
-| the open paths | `/api` and `/setup` of the dashboard's hostname | everyone: the Worker asks its own token at `/api`, and the pasted token at `/setup` |
+| the open path | `/api` of the dashboard's hostname | everyone: the Worker asks its own token there |
 
 One weakness is known. A page of a site of the same install can set a cookie for the whole domain, named like Cloudflare's login cookie. A browser that holds one before it logs in is sent back to the login each time, at the dashboard and at private sites, until its cookies for the domain are cleared.
 
@@ -187,7 +187,7 @@ Every site hostname answers GET and HEAD only. The Worker refuses every other me
 ## Without a domain
 
 ```text
-https://poplin.your-name.workers.dev                                 the dashboard, the API, the setup page
+https://poplin.your-name.workers.dev                                 the dashboard, the API
 https://poplin-sites.your-name.workers.dev/report--k3f9x2ab71qz/     every unlisted and public site, a path each
 https://poplin-private.your-name.workers.dev/report--k3f9x2ab71qz/   every private site, a path each
 ```
@@ -201,7 +201,7 @@ An install [without a domain](../start/without-a-domain.md) answers at three hos
 | a private site's address | a path on the hostname of the private sites. The hostname of the open sites sends a private or unknown label there, as a `-u-` address does |
 | a public name | a path on the hostname of the open sites: `poplin-sites.your-name.workers.dev/docs/` |
 | DNS and certificates | hold hostnames alone. A site's name and id are in the path, which neither holds |
-| the `workers.dev` address | is the dashboard's own. No hostname answers the setup page alone |
+| the `workers.dev` address | is the dashboard's own |
 | the account token | six permissions to install and five to repair, all of the account |
 | the kept key | the account's rights alone: it reads and writes nothing of a domain |
 | rules at Cloudflare's edge | none. Every request reaches the Worker, and its limits per visitor and per site count it |

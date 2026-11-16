@@ -3,7 +3,6 @@
 //   /...                     the dashboard of the seeded install, as its sample admin; `?as=` asks as somebody the provider's login would not let in
 //   /served/<host label>/... a site as serving answers it at that hostname; `?as=visitor` asks as a stranger
 //   /api/...                 the API of the seeded install
-//   /setup/<state>/...       the setup screen over a domain plug held in that state; `first` is an install with nothing set, `repair` one somebody has logged in to
 //   /empty/...               the dashboard of an install that holds nothing
 //   /gallery                 every screen and every state of it that an address can show, as a link; only when the host asks for it, and linked from nowhere
 //   /state/<name>            a screen that only a program's call reaches: the address makes the call itself and leads there
@@ -15,7 +14,6 @@
 
 import { createApi } from "../../../app/src/api/api";
 import { createConsole } from "../../../app/src/console/console";
-import { createSetupConsole } from "../../../app/src/console/setup-console";
 import type { ClientFiles } from "../../../app/src/console/shell";
 import { serveSite } from "../../../app/src/sites/serve";
 import { type Asking, checkForUpdate } from "../../../core/src/actions/check-update";
@@ -25,7 +23,7 @@ import { parseLoginSecret } from "../../../core/src/auth/computer-logins";
 import type { SqlDriver } from "../../../core/src/database/driver";
 import { OWN_SCHEMA } from "../../../core/src/database/open";
 import type { ObjectStore } from "../../../core/src/storage/storage";
-import { changingPlug, PLUG_STATES, type PlugState, previewFirstRun, previewPlug } from "./domain-plug";
+import { changingPlug } from "./domain-plug";
 import { addressNow } from "./address-now";
 import { type Entry, galleryOf, STAGES } from "./gallery";
 import { rebased, unbased } from "./base";
@@ -110,17 +108,11 @@ const DAY_MS = 86_400_000;
 /** Where the dashboard of the install that holds nothing is mounted. */
 const EMPTY_PREFIX = "/empty";
 
-/** The setup state of an install somebody has logged in to, beside the states of the plug: its page takes a token alone. */
-const REPAIR = "repair";
-
-/** The setup state of an install with nothing set, which the setup screen asks its domain and first login. */
-const FIRST = "first";
-
 /** The visitor whose every counted try is refused, so the pages of a full minute can be seen. */
 const FLOODED = "flooded";
 
 /** The first part of every path the preview answers itself: none of them is a path of the dashboard. */
-const OWN_PATHS = ["/gallery", "/state", "/reset", "/setup", "/served"];
+const OWN_PATHS = ["/gallery", "/state", "/reset", "/served"];
 
 /** Where the dashboard's "Demo" line posts to start the data over. */
 const RESET_PATH = "/reset";
@@ -278,22 +270,6 @@ function apiMount(world: World, version: string): Mount {
   return { prefix: "/api", origin: world.kind.adminOrigin, base: "/api", holds: "json", answer: api.fetch };
 }
 
-/** The setup screen over a plug held in one state, at an address of its own, under the host's path as the dashboards are. */
-function setupScreenMount(world: World, state: PlugState | typeof REPAIR | typeof FIRST, host: Host): Mount {
-  const prefix = `/setup/${state}`;
-  const at = `${host.base ?? ""}${prefix}`;
-  const setup = createSetupConsole({
-    install: world.install,
-    domain: state === FIRST ? previewFirstRun() : previewPlug(state === REPAIR ? "partial" : state),
-    loggedIn: async () => state === REPAIR,
-    client: host.client,
-    at,
-    ...countsOf(world),
-  });
-
-  return { prefix, origin: world.kind.adminOrigin, base: at, holds: "pages", answer: setup.fetch };
-}
-
 /** The mount of the sites at one place of the preview: the origin the kind names for it, asked through serving with the settings as they are now. */
 function siteMount(world: World, place: Pick<Mount, "prefix" | "origin">): Mount {
   const { database, store, now } = world.install;
@@ -331,8 +307,7 @@ async function openScene(host: Host, resumed: boolean): Promise<Scene> {
 
     return pages.answer(request);
   };
-  const screens = ([...PLUG_STATES, REPAIR, FIRST] as const).map((state) => setupScreenMount(seeded, state, host));
-  const mounts = [dashboardMount(empty, EMPTY_PREFIX, host), apiMount(seeded, host.version), ...screens];
+  const mounts = [dashboardMount(empty, EMPTY_PREFIX, host), apiMount(seeded, host.version)];
 
   return { kind, seeded, token, secrets: computers.secrets, keepLogins: computers.keep, dashboard: { ...pages, answer }, mounts };
 }
@@ -391,12 +366,10 @@ async function siteAnswer(request: Request, scene: Scene, host: Host): Promise<R
   return place === undefined ? undefined : askPiece(request, siteMount(scene.seeded, place), scene, host);
 }
 
-/** The preview's own redirects: a site's address without its slash, and the setup page named by a query. */
+/** The preview's own redirect: a site's address without its slash. */
 function redirectOf(url: URL): Response | undefined {
   // A site's pages link relatively, so its address ends in a slash.
   if (url.pathname.startsWith(`${SERVED_PREFIX}/`) && !url.pathname.endsWith("/")) return goTo(`${url.pathname}/${url.search}`, 308);
-
-  if (url.pathname === "/setup") return goTo(`/setup/${encodeURIComponent(url.searchParams.get("state") ?? "fresh")}`, 302);
 
   return undefined;
 }

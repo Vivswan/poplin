@@ -42,7 +42,7 @@ async function ran(context: Context<Shared, string, { out: { json: v.InferOutput
   const alone = run === "check" && plug.ownCheck !== undefined;
   if (!alone && sent.token === undefined) return context.json(runRefusal("token", plug.tokenFor), REFUSAL_STATUS.token);
 
-  const asked = { run, token: alone ? null : (sent.token ?? ""), unasked: alone && sent.unasked === true, settings: async () => config.values, by: actor.holder, from: "dashboard" } as const;
+  const asked = { run, token: alone ? null : (sent.token ?? ""), unasked: alone && sent.unasked === true, settings: async () => config.values, by: actor.holder } as const;
 
   try {
     const reading = await runDomain(plug, install, asked);

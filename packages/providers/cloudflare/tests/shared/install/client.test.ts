@@ -30,7 +30,7 @@ function paths(asked: readonly Asked[]): string[] {
 }
 
 describe("callCloudflare", () => {
-  test("the key rides on the call it was passed to, as a bearer token: a client that held or dropped it would break every setup", async () => {
+  test("the key rides on the call it was passed to, as a bearer token: a client that held or dropped it would break every install and repair", async () => {
     await withFake(
       () => reply({ id: "zone-1" }),
       async (connection, asked) => {

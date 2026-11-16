@@ -157,7 +157,7 @@ export function endsLogins(stage: Stage): void {
 
 /**
  * The headers Access puts on the owner's requests, for a login that began an hour ago and whose Activity line the log holds.
- * The setup page is shut from then on, and no page of that login writes or asks anything for its line.
+ * No page of that login writes or asks anything for its line.
  */
 export async function sessionOf(stage: Stage): Promise<Record<string, string>> {
   const { now } = stage.w.clock;

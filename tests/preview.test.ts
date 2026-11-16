@@ -196,12 +196,11 @@ describe("the local preview", () => {
   test.each([
     ["the seeded install", "", SCREENS],
     ["the install that holds nothing", "/empty", SCREENS],
-    ["the setup screen", "/setup/fresh", [""]],
   ] as const)("every screen of %s answers the page that loads the client under its own place, and its files and its data answer there", async (_, place, screens) => {
     const preview = await openPreview(false);
     const pages = await Promise.all(screens.map(async (screen) => shellOf(await (await open(preview, `${place}${screen}`)).text())));
     const files = await Promise.all((pages[0]?.files ?? []).map(async (file) => [file, (await open(preview, file)).status] as const));
-    const asked = place.startsWith("/setup") ? await change(preview, `${place}/data/repair`, { token: "sample-token" }) : await preview.fetch(new Request(`${ORIGIN}${place}/data/sites`));
+    const asked = await preview.fetch(new Request(`${ORIGIN}${place}/data/sites`));
 
     expect(pages.map((page) => page.boot.base)).toEqual(screens.map(() => place));
     expect(files).toEqual([
@@ -244,7 +243,6 @@ describe("the local preview", () => {
       [403, "not_a_user"],
       [503, "login_unchecked"],
     ]);
-    expect((await ask(first, `${base}/setup`)).headers.get("Location")).toBe(`${base}/setup/fresh`);
     expect((await ask(first, "/settings")).status).toBe(404);
     expect(again.sites.map((site) => site.label)).toEqual(listed.sites.map((site) => site.label));
   });
@@ -488,7 +486,7 @@ describe("the local preview of an install without a domain", () => {
     const preview = await openLocal();
     const sites = await listedAt(preview);
     const [deck, report] = [sites["launch-deck"]?.label, sites["sales-report"]?.label];
-    const others = [LOCAL.sites, LOCAL.private].flatMap((host) => ["/api/whoami", "/data/sites", "/login/", "/gallery/", "/setup/fresh", "/"].map((path) => `${host}${path}`));
+    const others = [LOCAL.sites, LOCAL.private].flatMap((host) => ["/api/whoami", "/data/sites", "/login/", "/gallery/", "/"].map((path) => `${host}${path}`));
     const asked: readonly (readonly [address: string, answer: Answered, init?: RequestInit])[] = [
       [`${LOCAL.admin}/`, [200, null, true]],
       [`${LOCAL.admin}/lisbon/`, [200, null, true]],

@@ -1,20 +1,11 @@
-// The provider's side of the preview install, written by hand: it takes any token but an empty one, calls nothing, and answers the reading its state names.
-//
-//   fresh           nothing exists yet               a repair creates every object
-//   partial         some objects missing or changed  a repair stops at a failure
-//   access-off      the login service is not on      a step only a person can do
-//   done            every object stands              nothing to repair
-//   token-refused, unreachable                       no table, only the refusal
+// The provider's side of the preview install, written by hand: it takes any token but an empty one and calls nothing.
 //
 // The console's plug is one that changes: its first check finds pieces to repair, a repair mends them, and every run after finds them in place.
 // A repair with the token `lacking` mends one piece and fails at the other for a right the token lacks; that piece stays to repair until a token that has the right.
 // It also checks by itself, as an install that holds something to read its provider with does: its own check reads what a check with a good token reads, and takes none.
 
-import type { DomainPlug, DomainReading, DomainRow, DomainState, FirstRun } from "../../../app/src/console/domain/records";
+import type { DomainPlug, DomainReading, DomainRow, DomainState } from "../../../app/src/console/domain/records";
 import type { TokenFacts } from "../../../core/src/install/token-facts";
-
-/** Every state a preview plug can be in, as the address of the setup page names it. */
-export const PLUG_STATES = ["fresh", "partial", "access-off", "done", "token-refused", "unreachable"] as const;
 
 /** The optional right of an install under a domain, and what it adds. */
 const FLOOD_RULE: OptionalRight = { right: "Rules: Edit", adds: "The provider stops floods before they reach a site." };
@@ -22,7 +13,7 @@ const FLOOD_RULE: OptionalRight = { right: "Rules: Edit", adds: "The provider st
 /** The optional right of an install without a domain, and what it adds. */
 const SPEND_ALERT: OptionalRight = { right: "Alerts: Edit", adds: "The provider emails your first user when the account's charges reach an amount." };
 
-/** The provider's side of an install under a domain. The states of the setup page name its pieces by their place. */
+/** The provider's side of an install under a domain. */
 export const WITH_DOMAIN: Provider = {
   pieces: [
     { object: "DNS record", detail: "every site", part: "reach" },
@@ -62,12 +53,6 @@ export const WITHOUT_DOMAIN: Provider = {
   says: { words: { thing: "the install", line: "No domain: your sites answer at the provider's free address." }, carriedSettings: [], idleSettings: { block_bots: "Needs a domain." } },
 };
 
-/** The one thing a person does by hand in the `access-off` state. */
-const ACCESS_STEP = { text: "Turn the login service on for the account, then check again.", address: "https://provider.example.com/sample-account" };
-
-/** The refusal of each state that reads no table. */
-const REFUSALS: Partial<Record<PlugState, Extract<DomainReading, { ok: false }>["refusal"]>> = { "token-refused": "token", unreachable: "unreachable" };
-
 /** The tokens the changing plug answers with a refusal, so that each refusal can be seen: it takes any other. */
 const REFUSED_TOKENS: Readonly<Record<string, Extract<DomainReading, { ok: false }>["refusal"]>> = { wrong: "token", offline: "unreachable" };
 
@@ -76,12 +61,6 @@ const LACKING_TOKEN = "lacking";
 
 /** What the changing plug's own check is read with, in a token's place: no token a person pastes is taken for it. */
 const OWN_TOKEN = "the install's own";
-
-/** What the row a repair of the `partial` state fails at says: the piece, why, and what to add. */
-const FAILED_DETAIL = "the dashboard: the provider refused the change. Add this right to the account token: Routes: Edit";
-
-/** One state of the preview's plug. */
-export type PlugState = (typeof PLUG_STATES)[number];
 
 /** A right the install works without, as the token form lists it. */
 type OptionalRight = TokenFacts["tokenOptional"][number];
@@ -119,37 +98,8 @@ export interface Provider {
   readonly says: Pick<DomainPlug, "words" | "carriedSettings" | "idleSettings">;
 }
 
-/** Every object of the install under a domain in one state, but the rows `others` names by their place. */
-function rows(state: DomainState, others: Readonly<Record<number, DomainState>> = {}): DomainRow[] {
-  return WITH_DOMAIN.pieces.map(({ object, detail, part }, place) => ({ object, detail, part, state: others[place] ?? state }));
-}
-
-function table(found: readonly DomainRow[], steps: readonly (typeof ACCESS_STEP)[] = []): DomainReading {
-  return { ok: true, rows: found, steps };
-}
-
-function checked(state: PlugState): DomainReading {
-  if (state === "fresh") return table(rows("missing"));
-
-  if (state === "partial") return table(rows("present", { 1: "missing", 3: "missing", 5: "differs", 6: "left-out" }));
-
-  if (state === "access-off") return table(rows("present", { 4: "missing", 5: "missing" }), [ACCESS_STEP]);
-
-  return table(rows("present"));
-}
-
-function repaired(state: PlugState): DomainReading {
-  if (state === "fresh") return table(rows("created"));
-
-  if (state === "partial") {
-    const stopped = rows("present", { 1: "created", 3: "failed", 4: "not-run", 5: "not-run", 6: "not-run" });
-
-    return table(stopped.map((row) => (row.state === "failed" ? { ...row, detail: FAILED_DETAIL } : row)));
-  }
-
-  if (state === "access-off") return table(rows("present", { 4: "missing", 5: "missing" }), [ACCESS_STEP]);
-
-  return table(rows("present"));
+function table(found: readonly DomainRow[]): DomainReading {
+  return { ok: true, rows: found, steps: [] };
 }
 
 /** The row of one piece of the changing plug in a state. A piece that failed names the right the token lacks. */
@@ -214,33 +164,4 @@ export function standingPlug(provider: Provider): DomainPlug {
   };
 
   return { ...provider.form, ...provider.says, check: answer, repair: answer };
-}
-
-/**
- * Build the provider's side of an install with nothing set.
- *
- * @returns a first run whose plug creates every object; it takes any text with a dot in it as a domain, and an install without a domain at any address
- */
-export function previewFirstRun(): FirstRun {
-  return { forms: { domain: WITH_DOMAIN.form, "no-domain": WITHOUT_DOMAIN.form }, plugFor: (first) => (first.kind === "no-domain" || first.domain.includes(".") ? previewPlug("fresh") : undefined) };
-}
-
-/**
- * Build a plug of an install under a domain that stays in one state.
- *
- * @returns a plug that reads the settings before it answers a table, as a real one does once the token is proven
- */
-export function previewPlug(state: PlugState): DomainPlug {
-  const answer =
-    (read: typeof checked): DomainPlug["check"] =>
-    async (token, settings) => {
-      const refusal = token === "" ? "token" : REFUSALS[state];
-      if (refusal !== undefined) return { ok: false, refusal };
-
-      await settings();
-
-      return read(state);
-    };
-
-  return { ...WITH_DOMAIN.form, ...WITH_DOMAIN.says, check: answer(checked), repair: answer(repaired) };
 }

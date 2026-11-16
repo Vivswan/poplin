@@ -60,7 +60,7 @@ describe("the shell page", () => {
     expect([shell.boot, shell.runs, shell.scripts]).toEqual([boot, 0, ["/assets/app-4f1c.js"]]);
   });
 
-  // Drift: one line would be written for every page a person opens, which a busy day pays for in rows, or a new login would leave no line, and the setup page would stay open after the first one.
+  // Drift: one line would be written for every page a person opens, which a busy day pays for in rows, or a new login would leave no line.
   test("writes one Activity line for each login at the provider, from a page opened within five minutes of it, and none from a data route", async () => {
     const opened = await openConsole();
     const { clock, proof } = opened.base;
@@ -103,7 +103,7 @@ describe("a request that is not admitted", () => {
     // An email the login let through stays that email until the browser's login ends: its page alone names the way out, as an address of the console itself.
     ["a verified email that is no user", "mallory@example.com", { page: 403, data: 403, code: "not_a_user", sentence: "This email is not a user of this install.", out: `To log in with another email, open ${DASHBOARD}/next/out\n`, wait: null }],
     ["a login that cannot be checked now", "keys-down", { page: 503, data: 503, code: "login_unchecked", sentence: "The login cannot be checked right now. Try again.", out: "", wait: "60" }],
-    ["an install with no login in front yet", "nothing-set", { page: 503, data: 503, code: "login_not_set_up", sentence: "The login is not set up yet. Finish the setup of this install first.", out: "", wait: null }],
+    ["an install with no login in front yet", "nothing-set", { page: 503, data: 503, code: "login_not_set_up", sentence: "The login is not set up yet. Run: npx poplin doctor --repair", out: "", wait: null }],
   ])("with %s gets its sentence and nothing of the install, on a page, a file of the client, and a data route", async (_case, login, { page, data, code, sentence, out, wait }) => {
     const opened = await openConsole("/next");
     await opened.base.publish("a-site", "private");

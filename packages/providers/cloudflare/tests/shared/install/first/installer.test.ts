@@ -32,7 +32,7 @@ function shared(host: string, sites: string): string[] {
   return [
     `Access application | make | poplin: ${host}, ${sites}`,
     "Access policy | make | poplin logins",
-    `Access open paths | make | poplin open paths: ${host}/api, ${host}/setup`,
+    `Access open paths | make | poplin open paths: ${host}/api`,
     "Access open paths | make | poplin open paths policy",
     "Worker variable | make | ACCESS",
     "Worker variable | make | ACCOUNT_ID",

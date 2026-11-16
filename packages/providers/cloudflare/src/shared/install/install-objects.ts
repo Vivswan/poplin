@@ -3,7 +3,7 @@
 /** What a row says of a bucket or a database that no Worker is bound to: neither carries a mark, so its name is all that matched it. */
 export const BY_NAME = "matched by its name alone";
 
-/** Every value the setup client writes. A record with a comment starting `recordMark` and a rule with one of the refs are poplin's. The last rows are the Worker's own: its Workflow, its log, its variables, and its two keys. */
+/** Every value an install and a repair write. A record with a comment starting `recordMark` and a rule with one of the refs are poplin's. The last rows are the Worker's own: its Workflow, its log, its variables, and its two keys. */
 export const INSTALL_OBJECTS = {
   recordMark: "poplin: ",
   wildcardComment: "poplin: every site",
@@ -14,7 +14,7 @@ export const INSTALL_OBJECTS = {
   accessPolicy: "poplin logins",
   accessOpenApplication: "poplin open paths",
   accessOpenPolicy: "poplin open paths policy",
-  openPaths: ["/api", "/setup"],
+  openPaths: ["/api"],
   privateSitesStart: "*-p-poplin.",
   accessSession: "720h",
   accessHttpOnly: true,

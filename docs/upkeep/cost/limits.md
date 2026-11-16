@@ -28,7 +28,7 @@ The limits and alerts below are the protection, and none of them is a cap on wha
 | uploads in parts that nobody finished | Cloudflare's own rule on the bucket, after seven days | Cloudflare removes them. No bucket rule deletes a stored file: a site's live files and its dropped ones sit under the same folder of random letters, so only the Worker removes dropped files |
 | the account's usage charges of a billing period: 1 US dollar | the install's key, within a day of the first Repair; or Repair: Budget alert, with the optional permission Notifications: Edit. Under a domain or without one | Cloudflare emails the first user. Nothing is stopped |
 
-Repair is the button on the setup page and the Domain screen. The budget alert exists where the install's key or a Repair made it.
+Repair is the button on the Domain screen, and the command `npx poplin doctor --repair`. The budget alert exists where the install's key or a Repair made it.
 
 **What no setting bounds.** Every request the Worker answers spends the Workers plan's requests of the day: a 404, a redirect to the login, a call of the API, and a request a limit refused with 429 too. `requests_per_day` counts the requests at the address of a live site alone.
 

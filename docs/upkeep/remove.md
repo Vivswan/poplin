@@ -246,7 +246,7 @@ Go from the top row down: what points at the Worker goes first, then the Worker,
 - **The three rules** are there when the token of the install or of a Repair held an [optional permission](../dashboard/domain.md#optional-block-junk-traffic-and-crawlers). The guard rules can also be there once `search_engines_allowed` or `outside_pages` was saved on an install that holds its key.
 - **A rule set** is poplin's where the domain had none before: "poplin redirect rule", "poplin guard rules", "poplin rate rule". Delete it once it is empty, after its rules. One of another name is the domain's own: leave it.
 - **The wildcard record** `*` is there only when the domain had none of its own. A `*` record with no `poplin: ` comment is yours: leave it.
-- **The second application** lets `/api` and `/setup` pass the login. It has a policy of its own.
+- **The second application** lets `/api` pass the login. It has a policy of its own.
 - **A policy** goes after the application that uses it.
 - **The Workflow** stays when the Worker is deleted, so it is a row of its own. It runs the copy of a large site, and holds no site's files.
 - **The Worker** takes its values, its 15-minute timer, and its `workers.dev` address with it.

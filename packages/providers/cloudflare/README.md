@@ -1,6 +1,6 @@
 # The Cloudflare package
 
-The Worker that runs a poplin install on Cloudflare, the installer `poplin install cloudflare` runs, and the setup client for a zone.
+The Worker that runs a poplin install on Cloudflare, the installer `poplin install cloudflare` runs, and the client that makes and repairs an install's objects at Cloudflare.
 
 | To | Run | Result |
 | --- | --- | --- |

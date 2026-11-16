@@ -3,8 +3,6 @@
 //                      an install with a domain                        an install on the account's free address
 //   the admin host     poplin.<domain>                                 <worker>.<account>.workers.dev
 //   a site             a hostname of its own under the domain          a path on <worker>-sites or <worker>-private, under the same account
-//   setup alone        every hostname that ends in .workers.dev        no hostname
-//   the setup page     on the admin host and on those                  on the admin host
 //   any other host     no site's: serving's 404                        no site's: serving's 404
 //   at Cloudflare      the zone plug, and a new key through it         the plug of the free address, and a new key through it
 //   the guard rules    follow a changed setting with the kept key      none: there is no zone to hold a rule, so no change of a setting waits for one
@@ -30,9 +28,6 @@ import { type BoundInstall, readInstallBinding } from "../install/kind/zone-bind
 import { createPathPlug, givePathKey } from "../../without-domain/path-plug";
 import { createDomainPlug, giveKey } from "../../with-domain/zone-plug";
 
-/** What the hostname of a Worker's own address ends in. Cloudflare gives every Worker one, whatever its routes. */
-const OWN_ADDRESS = ".workers.dev";
-
 /** The guard rules of an install with no zone: there is none to write, so a change of their settings is carried the moment it is stored. None is left waiting, and none is noted as a problem. */
 const NO_RULES: RulesFollow = { holdsKey: () => true, push: async () => ({ ok: true }) };
 
@@ -47,8 +42,8 @@ const REFUSALS = {
   "account-too-long": "Its account address is too long for the addresses of the login.",
 } as const;
 
-/** What a hostname is answered as: the dashboard and its open paths, the setup page alone, or a site. */
-type HostPart = "admin" | "setup" | "site";
+/** What a hostname is answered as: the dashboard and its open paths, or a site. */
+type HostPart = "admin" | "site";
 
 /** The Worker's own place at Cloudflare, the two keys the install keeps, and the clock a new upload key is dated by. */
 interface Own {
@@ -60,7 +55,7 @@ interface Own {
   readonly now: () => number;
 }
 
-/** The install's side at Cloudflare: the key it keeps, the plug of its kind, which the Domain screen and the setup page run, and `rules`, which carries a changed setting to the zone's guard rules. */
+/** The install's side at Cloudflare: the key it keeps, the plug of its kind, which the Domain screen runs, and `rules`, which carries a changed setting to the zone's guard rules. */
 interface Side {
   readonly key: InstallKey;
   readonly domain: DomainPlug;
@@ -72,7 +67,7 @@ export interface InstallHosts {
   /** Which kind of install this is. */
   readonly kind: BoundInstall["kind"];
 
-  /** The hostname of the dashboard, the login, the API, and the setup page. */
+  /** The hostname of the dashboard, the login, and the API. */
   readonly adminHost: Hostname;
 
   /** What the login guards as the private sites: a pattern of hostnames, or one host whole. */
@@ -102,13 +97,6 @@ function placedOf(own: Own): Pick<Own, "accountId" | "script" | "fetch" | "now">
 }
 
 function domainHosts(layout: DomainLayout): InstallHosts {
-  function partOf(hostname: string): HostPart {
-    // The Worker's own address is the one that resolves before setup made the domain's records.
-    if (hostname.endsWith(OWN_ADDRESS)) return "setup";
-
-    return hostname === layout.adminHostname ? "admin" : "site";
-  }
-
   function sideOf(own: Own): Side {
     const placed = { ...placedOf(own), layout };
     const key: ReturnType<typeof createInstallKey> = createInstallKey(own.kept, own.accountId, (authorisation) => giveKey({ ...placed, key }, authorisation));
@@ -116,7 +104,15 @@ function domainHosts(layout: DomainLayout): InstallHosts {
     return { key, domain: createDomainPlug({ ...placed, key, kept: own.kept }), rules: createRulesFollow(own.kept, { accountId: own.accountId, layout }) };
   }
 
-  return { kind: "domain", adminHost: layout.adminHostname, privateSites: privateSitesPattern(layout), addresses: hostnameAddresses(layout), layout: { kind: "hostname", public_word: layout.publicWord }, partOf, sideOf };
+  return {
+    kind: "domain",
+    adminHost: layout.adminHostname,
+    privateSites: privateSitesPattern(layout),
+    addresses: hostnameAddresses(layout),
+    layout: { kind: "hostname", public_word: layout.publicWord },
+    partOf: (hostname) => (hostname === layout.adminHostname ? "admin" : "site"),
+    sideOf,
+  };
 }
 
 function accountHosts(layout: AccountAddresses): InstallHosts {

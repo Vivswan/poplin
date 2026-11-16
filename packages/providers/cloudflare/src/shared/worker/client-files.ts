@@ -5,7 +5,7 @@ import { base64ToUint8Array } from "uint8array-extras";
 
 import { CLIENT } from "./built-client";
 
-/** The client's built files, for the dashboard and the setup page. */
+/** The dashboard's built client. */
 export const CLIENT_FILES: ClientFiles = {
   entry: async () => CLIENT.entry,
 

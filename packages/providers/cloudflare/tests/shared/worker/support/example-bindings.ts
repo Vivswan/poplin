@@ -3,7 +3,7 @@
 /** The account every test's Worker runs in, in the form of a Cloudflare account id. */
 export const EXAMPLE_ACCOUNT = "0123456789abcdef0123456789abcdef";
 
-/** The variables of an install that is set up: the three a person sets, and `ACCESS` as setup writes it. */
+/** The variables of an install that is set up: the three a person sets, and `ACCESS` as a repair writes it. */
 export const EXAMPLE_BINDINGS = {
   ACCOUNT_ID: EXAMPLE_ACCOUNT,
   ZONE: { domain: "example.com" },

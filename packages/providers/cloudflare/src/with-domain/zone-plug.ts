@@ -803,7 +803,7 @@ async function wantedVariables(progress: Progress, mode: Mode, placed: Placed, c
   return { variables: [...placed.firstValues, ...login], login: login.length > 0 };
 }
 
-// The Worker checks a login against the application setup made, so its audience tag is written onto the Worker once the application exists, in one change with the values of an install that has none.
+// The Worker checks a login against the application a repair made, so its audience tag is written onto the Worker once the application exists, in one change with the values of an install that has none.
 export async function variablesPiece(progress: Progress, mode: Mode, placed: Placed, connection: Connection, accessReady: boolean | undefined): Promise<void> {
   const wanted = await wantedVariables(progress, mode, placed, connection, accessReady);
   if (wanted === undefined) {

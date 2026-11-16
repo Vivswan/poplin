@@ -1,10 +1,10 @@
-// What the Domain screen and the setup screen are answered after a run: every piece as a row to draw, one line that counts what is left, and the steps only a person can do. A run that read no table is answered as a refusal that names the box it is about.
+// What the Domain screen is answered after a run: every piece as a row to draw, one line that counts what is left, and the steps only a person can do. A run that read no table is answered as a refusal that names the box it is about.
 //
 //   2 to repair                      or, with nothing to repair after a user was added or removed: Users changed. Press Repair.
 //   Piece         State     Detail
 //   DNS record    missing   poplin.example.com
 //
-// The words are made here, so both screens say the same and the client draws what it is given.
+// The words are made here, and the client draws what it is given.
 
 import type { DomainCheck } from "@poplin/core/src/records/domain-check";
 import { domainStateWords } from "@poplin/core/src/records/domain-states";
@@ -13,7 +13,7 @@ import { refusalSentence } from "./notices";
 import type { DomainRun } from "./domain/domain-run";
 import type { DomainReading, DomainRow, DomainState, DomainStep } from "./domain/records";
 
-/** How each state is read: `good` stands, `bad` needs work, `idle` was left as it is and is no failure. Its words are core's, the ones the setup command says. */
+/** How each state is read: `good` stands, `bad` needs work, `idle` was left as it is and is no failure. Its words are core's. */
 const TONES: Readonly<Record<DomainState, ShownRow["tone"]>> = {
   present: "good",
   missing: "bad",
@@ -55,7 +55,7 @@ const RUN_SENTENCES: Readonly<Record<string, string>> = {
 const USERS_CHANGED: Summary = { line: "Users changed. Press Repair.", tone: "bad" };
 
 /** The box of the form each refusal is about. A refusal missing here is about no box. */
-const ABOUT: Readonly<Record<string, string>> = { token: "token", no_domain: "domain", bad_domain: "domain", bad_login: "login" };
+const ABOUT: Readonly<Record<string, string>> = { token: "token" };
 
 /** One piece as a screen draws it. */
 interface ShownRow {
@@ -176,7 +176,7 @@ export function keptAnswer(kept: Kept): Last | null {
  *
  * @param code - why the run read no table, or why it was never begun, such as `too_many_tries`
  * @param tokenFor - what a token of this install must be made for, which a refused token is told
- * @returns the refusal with its sentence, about the box of the form it names: `token`, `domain`, or `login`; `null` for one about no box
+ * @returns the refusal with its sentence, about the box of the form it names, `token`; `null` for one about no box
  */
 export function runRefusal(code: string, tokenFor: string): RunRefused {
   const sentences: Readonly<Record<string, string>> = { ...RUN_SENTENCES, token: `Account token refused: paste the whole account token, made for ${tokenFor}.` };

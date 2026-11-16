@@ -3,7 +3,7 @@
   "compilerOptions": {
     // The first is what `wrangler types` writes from wrangler.jsonc: the runtime's types and the `Env` of its bindings.
     "types": ["./worker-configuration.d.ts", "@cloudflare/vitest-plugin/types"],
-    // The setup client lists Cloudflare's pages with `Array.fromAsync`, which the runtime has and the target's library does not name.
+    // The install's client lists Cloudflare's pages with `Array.fromAsync`, which the runtime has and the target's library does not name.
     "lib": ["ES2022", "DOM", "DOM.Iterable", "ESNext.Array"],
     // Core's contract suite imports its test functions from bun; here they are Vitest's, as vitest.config.ts resolves them.
     "paths": { "bun:test": ["./node_modules/vitest"] }

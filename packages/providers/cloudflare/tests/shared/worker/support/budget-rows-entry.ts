@@ -1,11 +1,10 @@
-// What a visitor's request, a login, the setup page, an instance's start, and a scheduled run may cost.
+// What a visitor's request, a login, an instance's start, and a scheduled run may cost.
 
 import { reset } from "cloudflare:test";
 import { dayOf } from "@poplin/core/src/records/views";
 import { vi } from "vitest";
-import { emptyAccount, TOKEN } from "../../install/support/fake-install";
-import { ADMIN, accessHeaders, cloudflareOf, instance, OWNER, page, shortPages, sweep, type TestFile, under } from "./install";
-import { type Budget, type BudgetRow, get, type Group, type Measured, post, published, sessionOf, sql, type Stage, type Step, unmeasured } from "./budget-stage";
+import { ADMIN, accessHeaders, instance, OWNER, page, shortPages, sweep, type TestFile, under } from "./install";
+import { type Budget, type BudgetRow, get, type Group, type Measured, published, sessionOf, sql, type Stage, type Step, unmeasured } from "./budget-stage";
 import { manyEntries, manyFiles, manySites, siteFolder } from "./budget-seeds";
 import { OWN_KEY, ownRelease } from "./own-release";
 
@@ -125,21 +124,6 @@ function again(name: string, budget: Budget, path: string): BudgetRow {
   };
 }
 
-/** A run of the setup page with a token, on an install nobody has logged in to. The run asks Cloudflare, which a stand-in answers, and keeps what it found in the database. */
-function setupRun(name: string, budget: Budget, path: string, body: Readonly<Record<string, string>>): BudgetRow {
-  return {
-    group: SCREEN,
-    name,
-    arrange: async (stage) => {
-      stage.outside.cloudflare = cloudflareOf(emptyAccount(), []);
-
-      return (measured) => post(measured, path, body, {});
-    },
-    status: 200,
-    budget,
-  };
-}
-
 /** What Cloudflare answers a call the key has no right for. */
 function noRight(): Response {
   return Response.json({ success: false, errors: [{ code: 10_000, message: "Authentication error" }], messages: [], result: null }, { status: 403 });
@@ -234,7 +218,7 @@ export const ENTRY_ROWS: readonly BudgetRow[] = [
   {
     group: SCREEN,
     name: "open the dashboard right after a login: the first login of an install",
-    // The first login is what leaves the setup page a repair alone. Its line is written to the log by the first page it opens, as every login's is: the users, the line, the frame.
+    // Its line is written to the log by the first page it opens, as every login's is: the users, the line, the frame.
     arrange: async (stage) => {
       const headers = await accessHeaders(stage.w);
 
@@ -277,45 +261,6 @@ export const ENTRY_ROWS: readonly BudgetRow[] = [
     status: 403,
     budget: { queries: 1, reads: 0, writes: 0 },
   },
-  {
-    group: SCREEN,
-    name: "the setup page, open",
-    // Whether anybody has logged in is asked on every request until somebody has: one entry of the log, found by its index.
-    arrange: async () => (measured) => get(measured, `${ADMIN}/setup`),
-    status: 200,
-    budget: { queries: 2, reads: 0, writes: 0 },
-  },
-  {
-    group: SCREEN,
-    name: "the setup page, after the first login, new instance",
-    start: "new",
-    // The way back in is opened when the dashboard is not: by an instance that has not seen the login yet.
-    arrange: async (stage) => {
-      await sessionOf(stage);
-
-      return (measured) => get(measured, `${ADMIN}/setup`);
-    },
-    status: 200,
-    budget: { queries: 4, reads: 0, writes: 0 },
-  },
-  {
-    group: SCREEN,
-    name: "the setup page: repair after the first login",
-    // Worst: the login was removed at Cloudflare, so the repair makes its pieces anew and keeps the run.
-    arrange: async (stage) => {
-      await sessionOf(stage);
-      stage.outside.cloudflare = cloudflareOf(emptyAccount(), []);
-
-      return (measured) => post(measured, "/setup/data/repair", { token: TOKEN }, {});
-    },
-    status: 200,
-    budget: { queries: 5, reads: 0, writes: 0 },
-  },
-  setupRun("the setup page: check with a token", { queries: 5, reads: 0, writes: 0 }, "/setup/api/check", { token: TOKEN }),
-  // Worst: nothing of the domain is made yet, so the page's own repair makes every piece.
-  setupRun("the setup page: repair", { queries: 5, reads: 0, writes: 0 }, "/setup/data/repair", { token: TOKEN }),
-  // Worst: a program's repair names another first login, which replaces the stored one before the pieces are made.
-  setupRun("the setup page: a program's repair with another first login", { queries: 7, reads: 0, writes: 0 }, "/setup/api/repair", { token: TOKEN, login: "meant@example.com" }),
   {
     group: SCREEN,
     name: "Sites screen: a full page, new instance",

@@ -81,7 +81,7 @@ interface Offer {
 export type Section = (typeof SECTIONS)[number]["key"];
 
 /** The product's mark. */
-export function BrandMark(): ReactNode {
+function BrandMark(): ReactNode {
   return (
     <svg viewBox="0 0 64 64" aria-hidden="true" className="size-5 shrink-0">
       <rect x="28" y="4" width="32" height="32" rx="8" fill="#3b66d6" opacity=".45" />
