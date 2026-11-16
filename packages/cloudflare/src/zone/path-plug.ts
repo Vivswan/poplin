@@ -83,6 +83,16 @@ async function prove(parts: PathParts, token: string): Promise<{ readonly connec
   return { connection, placed: { script: parts.script, accountId, zoneId: undefined, key: parts.key, adminHost: layout.adminHost, privateSites: layout.privateHost, firstValues: firsts } };
 }
 
+/**
+ * Word a forwarder's row: one that stands, or was made, names the address its sites answer at.
+ * One left out because another Worker holds its name has failed: the install needs both forwarders, and its sites reach that other Worker until it is renamed or deleted.
+ */
+function forwarderRow(row: Progress["rows"][number], answers: Readonly<Record<string, string>>): Progress["rows"][number] {
+  if (row.detail in answers) return { ...row, detail: `${row.detail}: ${answers[row.detail]}` };
+
+  return row.state === "left-out" ? { ...row, state: "failed" } : row;
+}
+
 async function read(parts: PathParts, mode: Mode, token: string, readSettings: ReadSettings): Promise<DomainReading> {
   const proven = await prove(parts, token);
   if ("ok" in proven) return proven;
@@ -102,8 +112,7 @@ async function read(parts: PathParts, mode: Mode, token: string, readSettings: R
     () => "Forwarder",
     () => syncForwarders(connection, placed.accountId, layout, mode),
   );
-  // A forwarder's row names the address its sites answer at.
-  progress.rows.splice(0, Number.POSITIVE_INFINITY, ...progress.rows.map((row) => (row.detail in answers ? { ...row, detail: `${row.detail}: ${answers[row.detail]}` } : row)));
+  progress.rows.splice(0, Number.POSITIVE_INFINITY, ...progress.rows.map((row) => forwarderRow(row, answers)));
   await variablesPiece(progress, mode, placed, connection, await accessPiece(progress, mode, placed, connection, parsed.ok ? parsed.value : undefined));
   await piece(
     progress,

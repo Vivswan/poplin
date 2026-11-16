@@ -101,6 +101,24 @@ describe("poplin setup", () => {
     expect([ended.code, ended.out.at(-1)]).toEqual([1, "1 not done"]);
   });
 
+  // Drift: a run that only failed at a piece and made nothing would be taken for an install with nothing left to do, by a person and by a script alike.
+  test.each(["check", "repair"])("a %s whose one row failed, with every other piece present, exits as a failure", async (run) => {
+    const bench = await openBench();
+    const reading: DomainReading = {
+      ok: true,
+      rows: [
+        { object: "Forwarder", state: "present", detail: "poplin-private", part: "reach" },
+        { object: "Forwarder", state: "failed", detail: "poplin-sites: a Worker of this name is not poplin's: rename or delete it", part: "reach" },
+      ],
+      steps: [],
+    };
+    withSetup(bench, fakePlug(() => reading));
+
+    const ended = await bench.run(run === "check" ? `${SETUP} --check` : SETUP, { env: ENV });
+
+    expect([ended.code, ended.out.at(-1)]).toEqual([1, run === "check" ? "1 to repair" : "1 not done"]);
+  });
+
   // Drift: a first login mistyped at setup shuts everybody out, and the terminal is one of the two places it is mended from: the line is how the person sees which email the login now expects.
   test("--login reaches a set install too, and the email the install then expects is printed and is in --json", async () => {
     const bench = await openBench();
