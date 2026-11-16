@@ -27,7 +27,7 @@ import { FREE_LIMITS } from "../limits/free-limits";
 import { INSTALL_OBJECTS } from "../zone/install-objects";
 import type { Bindings } from "./bindings";
 import { CLIENT_FILES } from "./client-files";
-import { logFault } from "./fault";
+import { faultOf, logFault } from "./fault";
 import { createHolding, type Held, SETTINGS_LIFETIME_MS, type SiteHeld } from "./held";
 import { answerLogin } from "./login";
 import { answerSite } from "./site";
@@ -52,7 +52,7 @@ const OWN_ADDRESS = ".workers.dev";
 /** The answer of an install whose database another build of poplin made: by a schema step that was not this code's, or with settings this code does not read. */
 const MADE_BY_ANOTHER_BUILD = "This install's database was made by another build of poplin, so its records are not the ones this build reads. Deploy the build that made it, or delete the database and poplin makes it anew.";
 
-/** What a scheduled run that failed is logged and thrown as. */
+/** What a scheduled run that failed is thrown as. */
 const SWEEP_FAILED = "the sweep failed";
 
 /** The setup page, for a redirect from the Worker's own address. */
@@ -158,14 +158,12 @@ async function sweep(started: Started, latest: Outside["latest"]): Promise<void>
   throw new Error(SWEEP_FAILED);
 }
 
-/** One scheduled run, from the start of its instance. Cloudflare writes what a run throws into its log, message and all, so a run that failed is logged by its kind and thrown in fixed words. */
+/** One scheduled run, from the start of its instance. Cloudflare writes what a run throws into its log, message and all, with its places mapped to the source, so a run that failed throws its fault: fixed words and the places of what was caught. */
 async function scheduledRun(starting: () => Promise<Started>, latest: Outside["latest"]): Promise<void> {
   try {
     await sweep(await starting(), latest);
   } catch (error) {
-    logFault(SWEEP_FAILED, error);
-
-    throw new Error(SWEEP_FAILED);
+    throw faultOf(SWEEP_FAILED, error);
   }
 }
 

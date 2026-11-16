@@ -99,13 +99,12 @@ describe("the scheduled run", () => {
 
   // Drift: a run that failed was thrown into the provider's log of the schedule, which nobody opens, so sites stayed past their expiry with no word to the owner.
   test("a run the database fails is thrown on in fixed words, and noted as a clean-up that did not finish", async () => {
-    using failed = vi.spyOn(console, "error").mockImplementation(() => undefined);
     const locked = { ...BINDINGS, DB: refusingDatabase(/sweep_place/i) };
     await ask(instance(w), `${ADMIN}/api/whoami`);
 
     const run = await sweep(instance(w), w, locked).then(() => "ran", String);
 
-    expect([run, failed.mock.calls.length]).toEqual(["Error: the sweep failed", 1]);
+    expect(run).toBe("Error: poplin: the sweep failed (Error)");
     expect(await problemsOf(w)).toEqual([["sweep_failed", 1, "the table is locked"]]);
   });
 
@@ -285,8 +284,8 @@ describe("the scheduled run", () => {
     const thrown = await sweep(instance(w), w, broken).catch((error: unknown) => error);
     const lines = failed.mock.calls.map(([line]) => String(line));
 
-    expect(thrown).toEqual(new Error("the sweep failed"));
-    expect(lines.map((line) => line.split("\n")[0])).toEqual(["poplin: the sweep did not run. This poplin install cannot start. These variables of its Worker are missing or wrong:", "poplin: the sweep failed (Error)"]);
-    expect([lines[0]?.includes("  ZONE: bad-shape"), lines.join("\n").includes("wiki")]).toEqual([true, false]);
+    expect(String(thrown)).toBe("Error: poplin: the sweep failed (Error)");
+    expect(lines.map((line) => line.split("\n")[0])).toEqual(["poplin: the sweep did not run. This poplin install cannot start. These variables of its Worker are missing or wrong:"]);
+    expect([lines[0]?.includes("  ZONE: bad-shape"), `${lines.join("\n")}${(thrown as Error).stack}`.includes("wiki")]).toEqual([true, false]);
   });
 });
