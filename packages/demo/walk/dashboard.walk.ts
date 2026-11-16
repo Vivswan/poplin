@@ -496,7 +496,7 @@ async function pickEverySite(page: Page): Promise<void> {
   await page.keyboard.press("Escape");
 }
 
-/** Of the names of the graph's lines: how many there are, how many show whole at once in their room, and on how many rows those stand. */
+/** Of the names of the graph's lines: how many there are, how many are whole in their room (a room that scrolls on its own, or else the list itself), and on how many rows those stand. */
 async function wholeNames(names: Locator): Promise<{ readonly all: number; readonly whole: number; readonly rows: number }> {
   return names.evaluate((list) => {
     const room = (list.closest("[data-slot='scroll-area']") ?? list).getBoundingClientRect();
@@ -1080,20 +1080,23 @@ test("a group of the settings is found by its name twice, by a count and among t
 test.describe("on a phone, on Usage", () => {
   test.use({ viewport: PHONE });
 
-  // Drift: the names of the lines would scroll in a room as low as a wide screen's again, which shows two of a dozen where a row holds one name.
-  test("with every site picked, five names of the lines or more show at once, and the rest by scrolling", async ({ page }) => {
+  // Drift: the names of many lines would stand in a room that scrolls inside the page again, with some of them out of sight until that room itself is scrolled.
+  test("with every site picked, the names of the lines stand in the page itself, which scrolls to the last of them", async ({ page }) => {
     await arrive(page);
     await toSection(page, "Usage");
     await pickEverySite(page);
     const names = page.getByRole("list", { name: "Lines", exact: true });
-    await expect(names.getByRole("listitem")).not.toHaveCount(1);
+    // The control: there are more names than a room of six rows held.
+    await expect.poll(() => names.getByRole("listitem").count()).toBeGreaterThan(8);
 
     const shown = await wholeNames(names);
-    expect({ atOnce: shown.whole >= 5, scrolls: shown.whole < shown.all }).toEqual({ atOnce: true, scrolls: true });
+    expect({ boxed: await names.evaluate((list) => list.closest("[data-slot='scroll-area']") !== null), whole: shown.whole }).toEqual({ boxed: false, whole: shown.all });
+    await names.getByRole("listitem").last().scrollIntoViewIfNeeded();
+    await expect(names.getByRole("listitem").last()).toBeInViewport({ ratio: 1 });
   });
 
-  // Drift: the room of the names would be some pixels short of six rows again, where every name takes a row of its own, and the sixth would be cut.
-  test("with nine sites of long titles picked, each name takes a row of its own, and six of them show whole at once", async ({ page }) => {
+  // Drift: two long names would share a row again and be cut for it, or a name would be cut by a room that ends in the middle of its row.
+  test("with nine sites of long titles picked, each name takes a row of its own, and every one is whole", async ({ page }) => {
     await arrive(page);
     await toSection(page, "Usage");
     await pickEverySite(page);
@@ -1111,7 +1114,7 @@ test.describe("on a phone, on Usage", () => {
     const names = page.getByRole("list", { name: "Lines", exact: true });
     await expect(names.getByText(`${LONG_TITLE} 9`, { exact: true })).toBeAttached();
 
-    expect(await wholeNames(names)).toEqual({ all: 10, whole: 6, rows: 6 });
+    expect(await wholeNames(names)).toEqual({ all: 10, whole: 10, rows: 10 });
   });
 });
 
