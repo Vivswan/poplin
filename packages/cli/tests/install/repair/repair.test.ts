@@ -183,6 +183,7 @@ describe("what a repair does not go on from", () => {
     ["data left behind", LEFTOVER, 1, "no_install", `Records named poplin are in this account. To make an install that uses it: ${install} --adopt`, MAKE],
     ["an install that was started", { state: "started", place: PLACE, notes: [] }, 1, "unfinished", `An install was started in this account and not finished. To finish it: ${install}`, MAKE],
     ["a token the provider refuses", { state: "refused", why: "token", words: "The host refused the token." }, 1, "token_refused", "The host refused the token. nothing was changed", AGAIN],
+    ["an install that was started for another place", { state: "refused", why: "other_place", words: "An install was started here for another place." }, 1, "other_place", "An install was started here for another place. nothing was changed", AGAIN],
     ["a provider that gives no answer", { state: "refused", why: "unreachable", words: "The host gave no answer." }, 5, "unreachable", "The host gave no answer. nothing was changed", AGAIN],
   ] as const)("%s is said in one line with what to run next, and nothing is repaired", async (_, scene, code, problem, line, next) => {
     const account = installed(undefined, scene);

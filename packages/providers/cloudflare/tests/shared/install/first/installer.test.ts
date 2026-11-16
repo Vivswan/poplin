@@ -173,7 +173,7 @@ describe.each(Object.keys(KINDS) as (keyof typeof KINDS)[])("a new install, %s",
   });
 
   // Drift: a first upload has nothing to inherit, so a binding left out of it is one the Worker starts without, and one named `inherit` is refused.
-  test("the first upload states the bucket, the database by its id, the Workflow, the Worker's own name, and the limiter, inherits nothing, and carries the release's version; the Worker then holds every variable and both keys", async () => {
+  test("the first upload states the bucket, the database by its id, the Workflow, the Worker's name, its place, and the limiter, inherits nothing, and carries the release's version; the Worker then holds every variable and both keys", async () => {
     const account = fresh();
     const { calls } = await installed(account, kind, APPLY);
     const [upload] = account.uploads as { metadata: { bindings: unknown[]; annotations: unknown; main_module: string }; files: string[] }[];
@@ -185,11 +185,13 @@ describe.each(Object.keys(KINDS) as (keyof typeof KINDS)[])("a new install, %s",
       { type: "d1", id: "made-0", name: "DB" },
       { type: "workflow", workflow_name: "poplin-jobs", class_name: "PoplinJobs", name: "JOBS" },
       { type: "plain_text", text: "poplin", name: "WORKER_NAME" },
+      { name: "INSTALL_PLACE", type: "plain_text", text: kind === "domain" ? "example.com" : "none" },
       { type: "ratelimit", namespace_id: "1001", simple: { limit: 1_000_000, period: 60 }, name: "MINUTE_LIMITS" },
     ]);
-    expect(account.bindings.map((binding) => `${binding.name}: ${binding.type}`).sort()).toEqual(
-      ["ACCESS: json", "ACCOUNT_ID: plain_text", "DB: d1", "FIRST_SETTINGS: json", "JOBS: workflow", "KEPT_KEY: secret_text", "MINUTE_LIMITS: ratelimit", "SITES: r2_bucket", "UPLOAD_KEY: secret_text", "WORKER_NAME: plain_text", "ZONE: json"],
-    );
+    const variables = ["ACCESS: json", "ACCOUNT_ID: plain_text", "FIRST_SETTINGS: json", "INSTALL_PLACE: plain_text", "WORKER_NAME: plain_text", "ZONE: json"];
+    const bound = ["DB: d1", "JOBS: workflow", "KEPT_KEY: secret_text", "MINUTE_LIMITS: ratelimit", "SITES: r2_bucket", "UPLOAD_KEY: secret_text"];
+
+    expect(account.bindings.map((binding) => `${binding.name}: ${binding.type}`).sort()).toEqual([...variables, ...bound].sort());
     expect([account.buckets, account.databases.length, account.crons, account.address, account.workflows]).toEqual([
       [{ name: "poplin-sites" }],
       1,
@@ -231,7 +233,7 @@ describe.each(Object.keys(KINDS) as (keyof typeof KINDS)[])("a new install, %s",
     expect(shown(run.done)).toEqual(shown(dry.done));
     expect(shown(run.done).filter((row) => row.includes(" | block | "))).toEqual(blocked);
     expect(run.done).toMatchObject({ ok: true, ready: false, blocked: [{ what: "login_off" }], steps: [{ address: `https://one.dash.cloudflare.com/${ACCOUNT}` }] });
-    expect(account.bindings.map((binding) => binding.name).sort()).toEqual(["ACCOUNT_ID", "DB", "FIRST_SETTINGS", "JOBS", "KEPT_KEY", "MINUTE_LIMITS", "SITES", "UPLOAD_KEY", "WORKER_NAME", "ZONE"]);
+    expect(account.bindings.map((binding) => binding.name).sort()).toEqual(["ACCOUNT_ID", "DB", "FIRST_SETTINGS", "INSTALL_PLACE", "JOBS", "KEPT_KEY", "MINUTE_LIMITS", "SITES", "UPLOAD_KEY", "WORKER_NAME", "ZONE"]);
   });
 
   // Drift: a database of poplin's name may hold an earlier install's records, so a run takes it only once a person said to, and then leaves what it holds.
@@ -383,6 +385,27 @@ describe.each(Object.keys(KINDS) as (keyof typeof KINDS)[])("an install on the d
     expect([await account.store.database.readSettings(), said]).toEqual([undefined, ["D1 database | leave | poplin (matched by its name alone; poplin's by its schema steps)"]]);
     expect([usersAt(account).login, account.bindings.find((binding) => binding.name === "FIRST_SETTINGS")?.json]).toEqual([[LOGIN], { logins: LOGIN }]);
   });
+});
+
+// Drift: a run that stopped after its upload has made records and routes under a domain, or forwarders without one. Gone on with as the other kind, or removed as it, those stay in the account, and no command has a row for them.
+test.each([
+  ["domain", "no-domain", "POST /zones/zone-1/workers/routes", "An install was started in this account under the domain example.com, and not finished: give --domain example.com."],
+  ["no-domain", "domain", `PUT /accounts/${ACCOUNT}/workers/scripts/poplin-private`, "An install was started in this account without a domain, and not finished: give --no-domain."],
+] as const)("a run that stopped after its upload, %s, is gone on with and removed as that kind alone: a look for the other kind (%s) is refused and changes nothing, and its own kind removes what it made", async (kind, other, refuse, words) => {
+  const account = fresh({ refuse, refuseAs: { status: 400, code: 10001 } });
+  const stopped = await installed(account, kind, APPLY);
+  delete account.refuse;
+  const made = { records: account.records.length, forwarders: account.workers.length };
+  const world = await worldOf(account);
+  const looked = await installer.find(KEY, KINDS[other].where, world.reach);
+
+  expect([stopped.done.ok && stopped.done.ready, looked, world.asked.filter((entry) => entry.method !== "GET")]).toEqual([false, { state: "refused", why: "other_place", words }, []]);
+  expect(made).toEqual(kind === "domain" ? { records: 2, forwarders: 0 } : { records: 0, forwarders: 1 });
+
+  const own = await installer.find(KEY, KINDS[kind].where, world.reach);
+  const removed = own.state === "started" ? await installer.remove(own, KINDS[kind].where, { run: "apply", confirmed: `poplin@${ACCOUNT}`, data: "remove" }, world.reach, () => undefined) : undefined;
+
+  expect([own.state, removed?.ok === true && removed.ready, account.records.length, account.workers.length, account.noWorker]).toEqual(["started", true, 0, 0, true]);
 });
 
 describe("what stops a run before it changes anything", () => {

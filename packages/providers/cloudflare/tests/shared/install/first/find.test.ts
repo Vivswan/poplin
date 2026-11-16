@@ -23,6 +23,18 @@ const MARKS = [
   { name: "WORKER_NAME", type: "plain_text", text: "poplin" },
 ];
 
+/** Where a first upload says the install was started for: under the tests' domain, or without one. */
+const STARTED_FOR = {
+  domain: { name: "INSTALL_PLACE", type: "plain_text", text: "example.com" },
+  none: { name: "INSTALL_PLACE", type: "plain_text", text: "none" },
+} as const;
+
+/** What a look answers for an install that was started for another place than the one named. */
+const ELSEWHERE = {
+  domain: { state: "refused", why: "other_place", words: "An install was started in this account under the domain example.com, and not finished: give --domain example.com." },
+  none: { state: "refused", why: "other_place", words: "An install was started in this account without a domain, and not finished: give --no-domain." },
+} as const;
+
 /** The account an install that is set runs in, as its Worker holds it. */
 const IN_ACCOUNT = { name: "ACCOUNT_ID", type: "plain_text", text: ACCOUNT };
 
@@ -59,14 +71,25 @@ describe("the states of an account", () => {
       { state: "leftover", words: "There is a database named poplin and a bucket named poplin-sites in this account, and no poplin runs. They may hold an earlier install's sites and records. They are matched by their names alone." },
     ],
     ["a database and a bucket of other names", fresh({ databases: [{ uuid: "database-9", name: "poplin-old" }], buckets: [{ name: "poplin-sites-2" }] }), { state: "none" }],
-    ["poplin's Worker with nothing set", fresh({ noWorker: false, bindings: MARKS }), { state: "started", notes: [] }],
-    ["poplin's Worker with where it answers and no account", fresh({ noWorker: false, bindings: [...MARKS, ...SET.slice(0, 1)] }), { state: "started" }],
     ["a Worker of the name with other bindings", fresh({ noWorker: false, bindings: [{ name: "SITES", type: "r2_bucket" }, { name: "DB", type: "d1" }] }), { state: "held", address: `https://dash.cloudflare.com/${ACCOUNT}/workers/services/view/poplin` }],
     ["a Worker of the name with no binding at all", fresh({ noWorker: false, bindings: [] }), { state: "held" }],
     ["a Worker that names itself otherwise", fresh({ noWorker: false, bindings: [...MARKS.slice(0, 3), { name: "WORKER_NAME", type: "plain_text", text: "other" }] }), { state: "held" }],
     ["Access switched off", fresh({ accessOff: true }), { state: "none", notes: [{ what: "login_off", address: `https://one.dash.cloudflare.com/${ACCOUNT}` }] }],
   ] as const)("finds %s", async (_, account, state) => {
     for (const where of [DOMAIN, NONE]) expect((await found(account, where)).found).toMatchObject(state);
+  });
+
+  // Drift: a run that stopped after its upload has made records and routes under a domain, or forwarders without one. Gone on with as the other kind, those stay in the account, and no removal has a row for them.
+  test.each([
+    ["under a domain, named under it", [...MARKS, STARTED_FOR.domain], DOMAIN, { state: "started", notes: [] }],
+    ["under a domain, named without one", [...MARKS, STARTED_FOR.domain], NONE, ELSEWHERE.domain],
+    ["without a domain, named without one", [...MARKS, STARTED_FOR.none], NONE, { state: "started", notes: [] }],
+    ["without a domain, named under one", [...MARKS, STARTED_FOR.none], DOMAIN, ELSEWHERE.none],
+    ["without a domain, with where it answers and no account yet", [...MARKS, STARTED_FOR.none, ...SET.slice(0, 1)], NONE, { state: "started" }],
+  ] as const)("finds an install that was started %s, and refuses the place of another kind", async (_, bindings, where, state) => {
+    const looked = await found(fresh({ noWorker: false, bindings: [...bindings] }), where);
+
+    expect([looked.shown, looked.calls.filter((call) => !call.startsWith("GET "))]).toMatchObject([state, []]);
   });
 
   // Drift: a person or an agent does what the stop says. A real install whose Worker lost a binding, told as a stranger to delete, loses both keys and leaves everything else behind.
@@ -81,8 +104,16 @@ describe("the states of an account", () => {
     [
       "a Worker that is not set and kept its name alone",
       MARKS.slice(3),
-      "A Worker named poplin is in this account. It carries poplin's name and lacks SITES (R2 bucket poplin-sites), DB (D1 database poplin), and JOBS (Workflow poplin-jobs, class PoplinJobs): it looks like an install that was deployed again by hand. " +
+      "A Worker named poplin is in this account. It carries poplin's name and lacks SITES (R2 bucket poplin-sites), DB (D1 database poplin), JOBS (Workflow poplin-jobs, class PoplinJobs), " +
+        "and INSTALL_PLACE (plain text: the domain the install was started under, or none): it looks like an install that was deployed again by hand. " +
         "Keep it: it may hold the install's keys. Put the bindings back on the Worker's Bindings page in your browser, then run poplin install again.",
+      "install",
+    ],
+    [
+      "a Worker that is not set and does not say where it was started for",
+      MARKS,
+      "A Worker named poplin is in this account. It carries poplin's name and lacks INSTALL_PLACE (plain text: the domain the install was started under, or none): it looks like an install that was deployed again by hand. " +
+        "Keep it: it may hold the install's keys. Put the binding back on the Worker's Bindings page in your browser, then run poplin install again.",
       "install",
     ],
     ["a Worker with none of poplin's name", MARKS.slice(0, 3), "A Worker named poplin is in this account and does not carry poplin's name, so nothing here touches it. Give it another name in your browser, then run this again.", "again"],

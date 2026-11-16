@@ -293,6 +293,7 @@ describe("what a look finds", () => {
     ["a block", { state: "blocked", blocked: [{ what: "storage_off", words: "Storage is not switched on for this account", address: "https://host.example.com/storage" }] }, 1, "blocked"],
     ["a refused token", { state: "refused", why: "token", words: "the account token was refused" }, 1, "token_refused"],
     ["a place the token does not show", { state: "refused", why: "no_domain", words: "the account token shows no such place" }, 1, "no_domain"],
+    ["an install that was started for another place", { state: "refused", why: "other_place", words: "an install was started here for another place" }, 1, "other_place"],
     ["a provider that gives no answer", { state: "refused", why: "unreachable", words: "the host gave no answer" }, 5, "unreachable"],
   ] as const)("%s stops the command before any change, with its own exit and problem: without this the exit code tells a script the wrong thing", async (_name, scene, code, problem) => {
     const account = accountWith(scene);

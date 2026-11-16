@@ -111,6 +111,9 @@ export function heldStop(found: Extract<Found<unknown, unknown>, { readonly stat
   return { problem: "name_held", exit: 1, words: found.words, address: found.address, next: named[found.after] };
 }
 
+/** The problem a look that the provider refused stops with, by why it was refused. */
+export const REFUSED_AS = { token: "token_refused", no_domain: "no_domain", other_place: "other_place" } as const;
+
 /** What runs a repair again that the provider refused: the newest poplin's where the install's records are of another version, which this poplin would stop at again. */
 export function repairAfter(refused: Extract<Repaired, { readonly ok: false }>): Next {
   return NEXT.repair(refused.why === "another" ? "newest" : "this");

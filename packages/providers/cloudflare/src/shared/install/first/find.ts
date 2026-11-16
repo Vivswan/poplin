@@ -2,12 +2,14 @@
 //
 //   1  the account     the one the domain's zone is in, or the one the token shows
 //   2  the Worker      `poplin`: none, poplin's own by its bindings, an install's that lost a binding, or somebody else's
+//                      one that is not set yet says where it was started for, and a place of another kind, or under another domain, is refused
 //   3  the version     of a whole install, from the tag of its latest version
 //   4  the database    `poplin`, by its name
 //   5  the bucket      `poplin-sites`, by its name; a refusal here says the token lacks the storage right, or that storage is switched off
 //   6  Access          whether the login product is switched on, which no API does
 //
 // The Worker is poplin's when `WORKER_NAME` is its own name and its bucket, database, and Workflow are bound. It is set once `ZONE` reads as an install and `ACCOUNT_ID` is there.
+// Until then it also carries `INSTALL_PLACE`, which its first upload states: without it nothing says which kind of install the run that made it was.
 // Nothing here changes anything, and no answer holds a text Cloudflare sent.
 
 import type { Blocked, Found, Question, Reach, Read, Token } from "@poplin/core/src/install/installer";
@@ -25,6 +27,7 @@ import { INSTALL_OBJECTS } from "../install-objects";
 import { workflowNameOf } from "../../jobs/workflow-name";
 import type { DomainLayout } from "../../../with-domain/layout";
 import { type ListedBinding, readWorker } from "../pieces/variables/variables";
+import { readStartedPlace } from "../kind/started-place";
 import { type BoundInstall, readInstallBinding } from "../kind/zone-binding";
 
 /** The name of the install's Worker. */
@@ -48,6 +51,9 @@ const BOUND = [
   { name: INSTALL_OBJECTS.databaseBinding, type: "d1", told: `${INSTALL_OBJECTS.databaseBinding} (D1 database ${INSTALL_OBJECTS.database})` },
   { name: INSTALL_OBJECTS.jobsBinding, type: "workflow", told: `${INSTALL_OBJECTS.jobsBinding} (Workflow ${workflowNameOf(SCRIPT)}, class ${INSTALL_OBJECTS.jobsClass})` },
 ] as const;
+
+/** What a Worker that is not set carries beside those, as a person is told it. */
+const PLACE_TOLD = `${INSTALL_OBJECTS.placeBinding} (plain text: the domain the install was started under, or none)`;
 
 /** The command that takes an install whose Worker has its bindings back, as its sentence names it. */
 const HELD_COMMANDS = { install: "poplin install again", repair: "poplin doctor --repair" } as const;
@@ -180,9 +186,12 @@ function isNamed(bindings: readonly ListedBinding[]): boolean {
   return bindings.some((binding) => binding.name === INSTALL_OBJECTS.workerBinding && binding.type === "plain_text" && binding.text === SCRIPT);
 }
 
-/** What a Worker lacks of the three things an install's Worker is bound to, each as a person is told it. */
+/** What a Worker lacks of the things an install's Worker is bound to, each as a person is told it: the three every one has, and where it was started for on one that is not set. */
 function lackedBy(bindings: readonly ListedBinding[]): string[] {
-  return BOUND.filter((mark) => !bindings.some((binding) => binding.name === mark.name && binding.type === mark.type)).map((mark) => mark.told);
+  const lacked = BOUND.filter((mark) => !bindings.some((binding) => binding.name === mark.name && binding.type === mark.type)).map((mark) => mark.told);
+  const unplaced = boundInstall(bindings) === undefined && readStartedPlace(bindings) === undefined;
+
+  return unplaced ? [...lacked, PLACE_TOLD] : lacked;
 }
 
 /**
@@ -254,6 +263,18 @@ async function versionOf(place: Place): Promise<string | undefined> {
   return typeof tag === "string" ? tag : undefined;
 }
 
+/** Say that an install that was started and not finished was started for another place than the one a person named; `undefined` where the two are one. */
+function startedElsewhere(bindings: readonly ListedBinding[], where: Where): string | undefined {
+  const started = readStartedPlace(bindings);
+  if (started === undefined) return undefined;
+
+  if (started.kind === "no-domain") return where.kind === "domain" ? "An install was started in this account without a domain, and not finished: give --no-domain." : undefined;
+
+  const named = where.kind === "domain" && where.layout.domain === started.domain;
+
+  return named ? undefined : `An install was started in this account under the domain ${started.domain}, and not finished: give --domain ${started.domain}.`;
+}
+
 /** A whole install: its version, and the newest release the project's website names. */
 async function wholeAt(place: Place, address: string, reach: Reach): Promise<FoundHere> {
   const pins = await projectReleases({ fetch: reach.fetch }).pins();
@@ -312,7 +333,7 @@ async function standing(place: Place, started: boolean, rights: Rights): Promise
  *
  * @param where - the place a person chose: its domain says which account, and its `account` picks one where the token shows several
  * @param rights - how a refusal for a lacking permission is told, and how the permission is named
- * @returns what is there, as one value; a token that is refused or shows no such domain, and an account whose storage is off or whose token lacks a needed permission, are states of their own
+ * @returns what is there, as one value; a token that is refused or shows no such domain, an install that was started for another place, and an account whose storage is off or whose token lacks a needed permission, are states of their own
  */
 export async function findInstall(token: Token, where: Where, reach: Reach, rights: Rights): Promise<Found<Where, Place>> {
   const connection: Connection = { key: token, fetch: reach.fetch };
@@ -328,6 +349,9 @@ export async function findInstall(token: Token, where: Where, reach: Reach, righ
   if (!isOwn(bindings.value)) return { state: "held", ...heldBy(bindings.value), address: pagesOf(accountId).worker };
 
   const address = dashboardOf(bindings.value);
+  if (address !== undefined) return wholeAt(place, address, reach);
 
-  return address === undefined ? standing(place, true, rights) : wholeAt(place, address, reach);
+  const other = startedElsewhere(bindings.value, where);
+
+  return other === undefined ? standing(place, true, rights) : { state: "refused", why: "other_place", words: other };
 }

@@ -5,7 +5,7 @@ import type { Found, Repaired, Run, Whole } from "../../../../core/src/install/i
 import { columns } from "../../commands/text";
 import { TOKEN_HELP } from "../ask";
 import type { Next, Provider, Stop } from "../records";
-import { changesIn, DRY_RUN_HELP, dryRunLines, followed, heldStop, type Line, NEXT, optionLines, repairAfter, rowValues, runLines, UNCHANGED } from "../report";
+import { changesIn, DRY_RUN_HELP, dryRunLines, followed, heldStop, type Line, NEXT, optionLines, REFUSED_AS, repairAfter, rowValues, runLines, UNCHANGED } from "../report";
 import { REPAIR_COMMAND, REPAIR_OPTIONS } from "./parse";
 
 /** How far a line of a list stands in. */
@@ -61,7 +61,7 @@ export function stopOf(found: NotWhole, provider: Provider): Stop {
 
   if (found.why === "unreachable") return { problem: "unreachable", exit: 5, words: followed(found.words, UNCHANGED) };
 
-  return { problem: found.why === "token" ? "token_refused" : "no_domain", exit: 1, words: followed(found.words, UNCHANGED) };
+  return { problem: REFUSED_AS[found.why], exit: 1, words: followed(found.words, UNCHANGED) };
 }
 
 /** The stop of a repair that changed nothing, in the provider's own words. */

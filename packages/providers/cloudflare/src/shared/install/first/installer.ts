@@ -3,7 +3,7 @@
 //   the release      releases.json at the project's website, then the release's files, each digest checked
 //   the bucket       made, or left
 //   the database     made, or left
-//   the Worker       the first upload of the release's files, with every binding stated; then its sweep trigger and its free address
+//   the Worker       the first upload of the release's files, with every binding stated, and where the install is started for; then its sweep trigger and its free address
 //   the rest         the repair of the install's kind, with the first login: records and routes or forwarders, the login, the variables and the keys, the rules, the Workflow
 //
 // An install is the first update: the upload is the self-update's own, and everything after it is the repair the dashboard's Domain screen runs.
@@ -33,6 +33,7 @@ import { createDomainPlug, lacksRight, rightFor, rightsByHand, TOKEN, tokenFacts
 import { findInstall, type Place, type Where } from "./find";
 import { removeInstall } from "../upkeep/remove/remove";
 import { firstBindings } from "./first-bindings";
+import { placeBinding } from "../kind/started-place";
 import { failureWords, LACKS, lackingOf, rowOf, UNDONE } from "./rows";
 import { repair } from "../upkeep/repair/repair";
 import { readStored, type Untaken } from "../upkeep/repair/settings";
@@ -292,7 +293,13 @@ async function workerPieces(work: Work, target: Target, release: Release, made: 
     work,
     { object: "Worker", detail: made.standing ? `${SCRIPT}: ${WORDS.unchecked}` : `${SCRIPT}, runs ${bundle.version}` },
     made.standing ? async () => ({ ok: true, value: true }) : undefined,
-    async () => (made.databaseId === undefined ? { ok: false, failure: "no-id" } : putFirst(connection, worker, bundle, release.first({ script: SCRIPT, bucket: INSTALL_OBJECTS.bucket, databaseId: made.databaseId }))),
+    async () => {
+      if (made.databaseId === undefined) return { ok: false, failure: "no-id" };
+
+      const place = placeBinding(target.kind === "domain" ? { kind: "domain", domain: target.layout.domain } : { kind: "no-domain" });
+
+      return putFirst(connection, worker, bundle, [...release.first({ script: SCRIPT, bucket: INSTALL_OBJECTS.bucket, databaseId: made.databaseId }), place]);
+    },
   );
   if (!uploaded) return false;
 

@@ -15,7 +15,7 @@ import { runCommand, type Show, stopped } from "../ends";
 import { installHelp } from "./help";
 import { parseInstall } from "./parse";
 import type { InstallEnds, InstallRequest, Next, Plan, Provider, Stop } from "../records";
-import { changesIn, dryRunLines, followed, heldStop, NEXT, repairAfter, rowLine, runLines, runValue, UNCHANGED } from "../report";
+import { changesIn, dryRunLines, followed, heldStop, NEXT, REFUSED_AS, repairAfter, rowLine, runLines, runValue, UNCHANGED } from "../report";
 
 /** What the look for an install is called while it runs and in its line. */
 const LOOKING = "looking for an install";
@@ -76,7 +76,7 @@ function stopOf(found: Exclude<Found<unknown, unknown>, { readonly state: "none"
 
   if (found.why === "unreachable") return { problem: "unreachable", exit: 5, words: followed(found.words, UNCHANGED) };
 
-  return { problem: found.why === "token" ? "token_refused" : "no_domain", exit: 1, words: followed(found.words, UNCHANGED) };
+  return { problem: REFUSED_AS[found.why], exit: 1, words: followed(found.words, UNCHANGED) };
 }
 
 /** Decide whether a run takes what an earlier install left behind: the option said so, or a person is asked. */
