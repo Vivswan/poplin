@@ -611,6 +611,45 @@ test.describe("on a screen 1024 px wide", () => {
   });
 });
 
+test.describe("on a screen 1024 px wide, at the edge of a column", () => {
+  test.use({ viewport: FITS_FROM });
+
+  // Drift: a heading's name would carry the names of its tools again; or its edge would be a strip 10 px wide that one engine leaves out of the Tab order, that says no width, and that only a mouse puts back.
+  test("a heading is named by its words alone; its edge is the next stop after its grip, 24 px wide, says the column's width, widens it at an arrow key, and puts it back at Enter", async ({ page }) => {
+    await arrive(page);
+    await sitesFit(page);
+    const heading = page.getByRole("table", { name: "Sites", exact: true }).getByRole("columnheader", { name: "Who can open it", exact: true });
+    const edge = heading.getByRole("separator", { name: "Resize the Who can open it column", exact: true });
+    const drawn = async (): Promise<string> => String(Math.round((await heading.boundingBox())?.width ?? Number.NaN));
+    const before = await drawn();
+
+    await heading.getByRole("button", { name: "Move the Who can open it column", exact: true }).focus();
+    await page.keyboard.press("Tab");
+    await expect(edge).toBeFocused();
+    expect((await edge.boundingBox())?.width).toBe(24);
+    await expect(edge).toHaveAttribute("aria-valuenow", before);
+
+    await page.keyboard.press("ArrowRight");
+    await expect(edge).toHaveAttribute("aria-valuenow", String(Number(before) + 16));
+    expect(await drawn()).toBe(String(Number(before) + 16));
+
+    await page.keyboard.press("Enter");
+    await expect(edge).toHaveAttribute("aria-valuenow", before);
+    await sitesFit(page);
+
+    // An edge reaches 12 px into the headings at both its sides: no button there may lose a press at either of its ends to it.
+    const lost = await page.getByRole("table", { name: "Sites", exact: true }).evaluate((table) =>
+      [...table.querySelectorAll("thead button")].flatMap((button) => {
+        const box = button.getBoundingClientRect();
+        const ends = [box.left + 1, box.right - 1].filter((x) => document.elementFromPoint(x, box.top + box.height / 2)?.role === "separator");
+
+        return ends.length === 0 ? [] : [button.getAttribute("aria-label") ?? button.textContent];
+      }),
+    );
+    expect(lost).toEqual([]);
+  });
+});
+
 test.describe("on a screen 1920 px wide", () => {
   test.use({ viewport: { width: 1920, height: 1080 } });
 
