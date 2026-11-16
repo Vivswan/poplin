@@ -1152,6 +1152,25 @@ describe("the rows the live checks count", () => {
     await more();
     await done(await calls.config.$patch({ query: {}, json: { versions_kept: 2 } }));
     await step("a fourth version, which drops two once the install keeps two", more);
+    const brief = await step("a new site that runs out", async () => finish(await calls.uploads.$post({ query: {}, json: { name: "brief", expires: "1d", files: [declared] } })));
+    const short = { site: brief.id };
+    await step("who may open it and its title changed at once", async () => done(await calls.sites[":site"].$patch({ param: short, query: {}, json: { access: "unlisted", title: "Both" } })));
+    await step("another expiry", async () => done(await calls.sites[":site"].$patch({ param: short, query: {}, json: { expires: "2d" } })));
+    await step("no expiry, and one again", async () => {
+      await done(await calls.sites[":site"].$patch({ param: short, query: {}, json: { expires: "never" } }));
+
+      return done(await calls.sites[":site"].$patch({ param: short, query: {}, json: { expires: "1d" } }));
+    });
+    await step("a site that runs out to the trash", async () => done(await calls.sites[":site"].$delete({ param: short, query: {} })));
+    await step("a site that runs out, out of the trash", async () => done(await calls.sites[":site"].restore.$post({ param: short, query: {} })));
+    const relinked = await step("a new link of a site that runs out", async () => done<{ site: Published }>(await calls.sites[":site"]["new-link"].$post({ param: short, query: {} })));
+    const backup = await done<{ format: number; site: ExportedSite }>(await calls.export.sites[":site"].$get({ param: { site: relinked.site.id }, query: {} }));
+    await step("a site that runs out removed for good", async () => done(await calls.sites[":site"].$delete({ param: { site: relinked.site.id }, query: { forever: "true" } })));
+    await step("a site that runs out put back from a backup", async () => {
+      const paths = backup.site.versions.map((version) => `v${version.number}/${html.path}`);
+
+      return finish(await calls.import.sites.$post({ query: {}, json: { ...backup, files: paths.map((path) => ({ ...declared, path })) } }), paths);
+    });
     await step("a computer's login begun", async () => done(await api(worker, null, meter.fetch).logins.$post({ query: {}, json: { scope: "publisher", computer: "laptop" } })));
 
     expect({ pairs, stopped: meter.stopped() }).toEqual({
@@ -1162,10 +1181,10 @@ describe("the rows the live checks count", () => {
         "a page opened": [2, 2],
         "a rollback": [2, 2],
         "who may open it changed": [3, 3],
-        // A new name is counted as the change of who may open the site, which shares its route and writes one row more.
-        "a new name": [2, 3],
+        "a new name": [2, 2],
         "to the trash": [6, 6],
-        "out of the trash": [5, 5],
+        // A site out of the trash is counted with the entry one that runs out gets back.
+        "out of the trash": [5, 6],
         "a new link": [9, 9],
         "the files of a version listed": [1, 1],
         "removed for good, with three versions, an earlier id, and a day's count": [13, 13],
@@ -1175,6 +1194,16 @@ describe("the rows the live checks count", () => {
         // One row more is written where the logins change after a check of the domain.
         "a setting changed": [2, 3],
         "a fourth version, which drops two once the install keeps two": [19, 19],
+        "a new site that runs out": [20, 20],
+        "who may open it and its title changed at once": [5, 5],
+        "another expiry": [3, 3],
+        "no expiry, and one again": [5, 5],
+        "a site that runs out to the trash": [6, 6],
+        "a site that runs out, out of the trash": [6, 6],
+        "a new link of a site that runs out": [9, 9],
+        // A removal for good is counted with the three versions an install keeps: this site has one.
+        "a site that runs out removed for good": [9, 13],
+        "a site that runs out put back from a backup": [20, 20],
         "a computer's login begun": [3, 3],
       },
       stopped: undefined,
