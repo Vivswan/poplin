@@ -15,13 +15,13 @@ const KNOWN: readonly Known[] = [
 
   // Cloudflare's SDK reads an empty form as text before a client's first form request.
   // That is once in each of the six tests of setup.test.ts that write a variable onto the Worker, and of the four rows of request-budget.test.ts that repair.
-  // And once in each of the two tests of sweep.test.ts that put the login back, and in the one test of start.test.ts that writes the key there.
+  // And once in each of the three tests of sweep.test.ts that put the login back, and in the one test of start.test.ts that writes the key there.
   // And once wherever a release is uploaded: in the one test of sweep.test.ts and the one of worker.test.ts, and in the three rows of request-budget.test.ts that take an update.
   {
     line:
       'console warning; message = Called .text() on an HTTP body which does not appear to be text. The body\'s Content-Type is "multipart/form-data; boundary=". ' +
       "The result will probably be corrupted. Consider checking the Content-Type header before interpreting entities as text.",
-    most: 18,
+    most: 19,
   },
 
   // A job that is stopped is terminated in the middle of a step, which the Workflow's local simulation logs as its engine aborting: up to twice for the one test of tests/shared/jobs/workflow.test.ts that cancels a copy.

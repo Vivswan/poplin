@@ -3,10 +3,11 @@
 // A repair that leaves every piece of the login and every object that holds the users standing has carried the users it read to the domain: a change of the users waits no more while those are still the stored ones.
 // A repair that wrote such an object and stopped short may have left the domain with users of an earlier moment, so the change waits.
 
+import { keepDomainRun } from "@poplin/core/src/actions/problems";
 import type { Install } from "@poplin/core/src/actions/records";
 import type { Login } from "@poplin/core/src/auth/logins";
 import type { AuditEntry } from "@poplin/core/src/records/audit";
-import { type CarriedUsers, type CheckedPiece, keptPieces } from "@poplin/core/src/records/domain-check";
+import type { CarriedUsers, CheckedPiece } from "@poplin/core/src/records/domain-check";
 
 import type { DomainPlug, DomainReading, DomainRow, DomainSettings, DomainState, ReadSettings } from "./records";
 
@@ -136,7 +137,7 @@ function askPlug(plug: DomainPlug, asked: Asked, token: string, settings: ReadSe
 }
 
 /**
- * Run the plug once and keep the run: its pieces as the last check of the domain, in place of the run kept before, and its audit entry.
+ * Run the plug once and keep the run: its pieces as the last check of the domain, in place of the run kept before, and its audit entry. A problem the run shows as mended ends with it.
  *
  * @returns the plug's reading with the token taken out of every text. A reading that is no table, such as a refused token, keeps nothing, so the run kept before stays the last one.
  *   An unrecorded run keeps nothing either, nor does one signed by a name that holds the token.
@@ -164,10 +165,9 @@ export async function runDomain(plug: DomainPlug, install: Pick<Install, "databa
   if (token !== "" && by.toLowerCase().includes(token.toLowerCase())) return reading;
 
   const pieces = reading.rows.map(remembered);
-  const check = { ran_at: install.now(), by, run: asked.run, pieces: keptPieces(pieces) };
   const detail = asked.unasked === true ? null : { run: asked.run, from: asked.from, ...byState(reading) };
   const carried = usersAfter(asked.run, reading.rows, pieces, read?.logins);
-  await install.database.keepDomainCheck(check, detail, carried === undefined ? undefined : { logins: carried, since: began });
+  await keepDomainRun(install, { ran_at: install.now(), by, run: asked.run, pieces }, detail, carried === undefined ? undefined : { logins: carried, since: began });
 
   return reading;
 }

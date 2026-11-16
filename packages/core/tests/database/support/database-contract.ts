@@ -214,7 +214,7 @@ function problems(label: string, makeDatabase: DatabaseFactory): void {
       ]);
     });
 
-    // Drift: nothing else removes a problem. A sweep that kept every day would grow the table for ever, and one that took a day too many would empty the list a person reads.
+    // Drift: nothing else forgets a problem by its age. A sweep that kept every day would grow the table for ever, and one that took a day too many would empty the list a person reads.
     test("the sweep forgets the problems of the days before the 30 kept, and keeps the thirtieth", async () => {
       const database = await opened(makeDatabase);
       const note = (at: number): ProblemNote => ({ kind: "api_failed", at, count: 1, more: false, name: null, message: null });
@@ -223,6 +223,39 @@ function problems(label: string, makeDatabase: DatabaseFactory): void {
       await database.sweepRunOut(DAY_START + 30 * DAY_MS + HOUR_MS);
 
       expect((await database.listProblems(dayOf(DAY_START))).map((problem) => problem.day)).toEqual([dayOf(DAY_START + 30 * DAY_MS), dayOf(DAY_START + DAY_MS)]);
+    });
+  });
+}
+
+function mendedProblems(label: string, makeDatabase: DatabaseFactory): void {
+  describe(`${label}: a problem that was mended`, () => {
+    // Drift: a problem that was mended would stay marked for a day, with advice that was taken already; or a mend would end a kind it does not mend, or a row of a day no screen marks from, which is the list's memory.
+    test.each([
+      ["a run that showed nothing ends nothing", [], []],
+      ["a login that stands ends what the login alone mends", ["login_stands"], ["login_not_repaired", "login_unchecked"]],
+      ["a repair that left nothing to repair ends what a repair mends", ["repaired"], ["direct_upload_refused", "rules_not_carried", "users_not_carried"]],
+      ["both end both", ["login_stands", "repaired"], ["direct_upload_refused", "login_not_repaired", "login_unchecked", "rules_not_carried", "users_not_carried"]],
+    ] as const)("kept with a run, %s, of today and the day before alone", async (_what, mends, ended) => {
+      const database = await opened(makeDatabase);
+      const kinds = ["api_failed", "direct_upload_refused", "login_not_repaired", "login_unchecked", "rules_not_carried", "users_not_carried"] as const;
+      for (const ago of [0, 1, 2]) for (const kind of kinds) await database.noteProblem({ kind, at: NOW - ago * DAY_MS, count: 1, more: false, name: null, message: null });
+
+      await database.keepDomainCheck({ ran_at: NOW, by: ADA, run: "repair", pieces: [] }, null, undefined, mends);
+      const left = (await database.listProblems(dayOf(NOW - 2 * DAY_MS))).map((problem) => `${problem.day} ${problem.kind}`).sort();
+
+      const every = [0, 1, 2].flatMap((ago) => kinds.map((kind) => ({ ago, kind })));
+      const kept = every.filter(({ ago, kind }) => ago === 2 || !(ended as readonly string[]).includes(kind));
+      expect(left).toEqual(kept.map(({ ago, kind }) => `${dayOf(NOW - ago * DAY_MS)} ${kind}`).sort());
+    });
+
+    // Drift: the install's own repair of its login keeps no run, so a problem it mended would stay; or its word that the login stands would end what only a person's repair mends.
+    test("the word that the login stands, with no run kept, ends what the login alone mends", async () => {
+      const database = await opened(makeDatabase);
+      for (const kind of ["login_not_repaired", "login_unchecked", "users_not_carried"] as const) await database.noteProblem({ kind, at: NOW, count: 1, more: false, name: null, message: null });
+
+      await database.endProblems(["login_stands"], NOW);
+
+      expect((await database.listProblems(dayOf(NOW))).map((problem) => problem.kind)).toEqual(["users_not_carried"]);
     });
   });
 }
@@ -705,6 +738,7 @@ export function describeDatabase(label: string, makeDatabase: DatabaseFactory): 
   updateCheck(label, makeDatabase);
   domainCheck(label, makeDatabase);
   problems(label, makeDatabase);
+  mendedProblems(label, makeDatabase);
   requestCounts(label, makeDatabase);
   uploads(label, makeDatabase);
   uploadFiles(label, makeDatabase);

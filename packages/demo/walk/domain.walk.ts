@@ -1,16 +1,14 @@
-// The Domain screen of an install that holds what reads its provider: what it shows as it opens, when it checks again by itself, and that Check asks for nothing.
+// The Domain screen of an install that holds what reads its provider: what it shows as it opens, when it checks again by itself, and that Check asks for nothing. And a problem a repair mends, which leaves once the repair is done.
 
 import { expect, type Locator, type Page } from "@playwright/test";
 
-import { arrive, said, test } from "./visit";
+import { arrive, said, test, toSection } from "./visit";
 
 /** How far the reader's clock is moved on between two openings of the screen: past the 10 minutes a check is gone by. */
 const PAST_FRESH = "11:00";
 
-/** Go to a section by its entry at the side. A section whose screen holds a problem says how many after its name. */
-async function toSection(page: Page, label: string): Promise<void> {
-  await page.getByRole("navigation", { name: "Sections", exact: true }).getByRole("link", { name: new RegExp(`^${label}( \\d+ problems?)?$`) }).click();
-}
+/** The sample install's problem of the domain, which a repair mends: what it says. */
+const MENDED_BY_REPAIR = "A change of the users did not reach the login page";
 
 /** The line at the top of the Domain screen, by what it says. */
 function domainLine(page: Page, says: string): Locator {
@@ -36,4 +34,27 @@ test("Domain opens on its pieces with no press and no token; opened again once t
   await page.getByRole("button", { name: "Check", exact: true }).click();
   await expect(said(page, "2 to repair.")).toBeVisible();
   await expect(asked).toHaveCount(0);
+});
+
+// Drift: a problem that says "press Repair" would stay on the screen and at the side for a day after the repair was done, asking for what a person just did; or a check, which mends nothing of it, would take it away.
+test("a problem a repair mends stays through a check, and leaves the Domain screen and the side once the repair is done", async ({ page }) => {
+  await arrive(page);
+  const sections = page.getByRole("navigation", { name: "Sections", exact: true });
+  const problem = page.getByRole("group", { name: MENDED_BY_REPAIR, exact: true });
+  await toSection(page, "Domain");
+  await expect(problem).toBeVisible();
+
+  await page.getByRole("button", { name: "Check", exact: true }).click();
+  await expect(said(page, "2 to repair.")).toBeVisible();
+  // The side counts what the check left to do beside the problem: once it says two, the screen holds what was read after the check.
+  await expect(sections.getByRole("link", { name: "Domain 2 problems", exact: true })).toBeVisible();
+  await expect(problem).toBeVisible();
+
+  const asked = page.getByRole("dialog", { name: "Repair the domain", exact: true });
+  await page.getByRole("button", { name: "Repair", exact: true }).click();
+  await asked.getByLabel("Account token", { exact: true }).fill("sample-token");
+  await asked.getByRole("button", { name: "Repair", exact: true }).click();
+
+  await expect(problem).toHaveCount(0);
+  await expect(sections.getByRole("link", { name: "Domain", exact: true })).toBeVisible();
 });

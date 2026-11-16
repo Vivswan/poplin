@@ -13,6 +13,7 @@
 import * as v from "valibot";
 
 import { HOLDER, MOMENT } from "./fields";
+import type { Mend } from "./problem";
 import type { RuleSettings } from "./settings";
 
 /** The longest name of a piece's kind that is kept. */
@@ -81,6 +82,19 @@ function weightOf(piece: CheckedPiece): number {
   if (piece.state === "ok") return WEIGHTS.length;
 
   return WEIGHTS.indexOf(piece.part);
+}
+
+/**
+ * Say what a run showed that ends problems.
+ *
+ * @returns `login_stands` for a check or a repair that read a piece of the login and left every one of them ok; `repaired` for a repair that read a piece and left none to repair and none unread. A run that read nothing shows nothing
+ */
+export function mendsOf(check: Pick<DomainCheck, "run"> & { readonly pieces: readonly CheckedPiece[] }): readonly Mend[] {
+  const login = check.pieces.filter((piece) => piece.part === "login");
+  const stands = login.length > 0 && login.every((piece) => piece.state === "ok");
+  const repaired = check.run === "repair" && check.pieces.length > 0 && check.pieces.every((piece) => piece.state === "ok" || piece.state === "not_set_up");
+
+  return [...(stands ? (["login_stands"] as const) : []), ...(repaired ? (["repaired"] as const) : [])];
 }
 
 /**

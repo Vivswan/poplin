@@ -111,10 +111,10 @@ const EARLIER: readonly Moment[] = Array.from({ length: EARLIER_DAYS }, (_day, i
   return index % CHECK_EVERY === 0 ? { ago, does: "domain", by: "mira", run: "check" } : { ago, does: "login", by: "mira" };
 });
 
-/** What went wrong in the sample install, by how many hours ago: failed requests that came in a storm, a clean-up that failed in two hours of the clock, a login that could not be checked, and a day's limit reached earlier in the week. */
+/** What went wrong in the sample install, by how many hours ago: a storm of failed requests, a clean-up that failed in two hours of the clock, a change of the users that a repair of the domain mends, and a day's limit reached earlier in the week. */
 const PROBLEMS = [
   { kind: "requests_limit_reached", hoursAgo: 50, count: 1, more: false, name: null, message: null },
-  { kind: "login_unchecked", hoursAgo: 6, count: 1, more: false, name: null, message: null },
+  { kind: "users_not_carried", hoursAgo: 6, count: 1, more: false, name: null, message: null },
   { kind: "sweep_failed", hoursAgo: 5, count: 2, more: false, name: "Error", message: "the store did not answer" },
   { kind: "sweep_failed", hoursAgo: 3, count: 1, more: false, name: "Error", message: "the store did not answer" },
   { kind: "request_failed", hoursAgo: 0.7, count: 12, more: true, name: "TypeError", message: "the store did not answer in time" },
