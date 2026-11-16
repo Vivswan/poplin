@@ -112,6 +112,16 @@ describe("pinReleases", () => {
     expect([Object.keys(made.pins as object), made.said[0], made.asked.filter((url) => url.includes("/v0.2.0/")).length]).toEqual([["0.1.0"], "release 0.2.0: no source archive is published, so it is not named", 1]);
   });
 
+  // Drift: a release that was out and lost its archive would be dropped from the file with one line, and every install would refuse it as one that was never published. The site deployed before names it still.
+  test.each([
+    { name: "between two releases that are out", versions: ["0.3.0", "0.2.0", "0.1.0"], out: ["0.3.0", "0.1.0"] },
+    { name: "behind a newest release that is not out yet", versions: ["0.3.0", "0.2.0"], out: [] },
+  ])("an older release whose page has no archive, $name, stops the run", async ({ versions, out }) => {
+    const pages = Object.fromEntries(await Promise.all(out.map(async (version) => [version, await pageOf(version)] as const)));
+
+    await expect(pinned(versions, { pages })).rejects.toThrow("release 0.2.0: no source archive is published, and a newer version is named");
+  });
+
   const refused: readonly { readonly name: string; readonly hub: (version: string) => Promise<Hub>; readonly thrown: string }[] = [
     {
       name: "an archive put on the page by hand, which no run of the release workflow attested",

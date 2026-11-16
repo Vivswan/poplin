@@ -1,8 +1,9 @@
 // Which releases the project's website names as ones an install may take, each with the SHA-256 digest of its source archive, the digest of the manifest of its built Worker, and its schema. It runs before the website's build.
 //
 //   the archive, the manifest, and every built file are on the release's page, and each one's attestation holds   named
-//   no archive on the page: a draft, or a release not made yet                                                    not named
-//   an archive with no manifest, or a manifest that names a file the page lacks                                   thrown: the site is not built, and the one deployed before stays
+//   no archive on the page of the newest version given: a draft, or a release not made yet                        not named
+//   no archive on the page of an older version: a release that was out, and lost its archive                      thrown: the site is not built, and the one deployed before stays
+//   an archive with no manifest, or a manifest that names a file the page lacks                                   thrown, the same
 //   a file whose attestation GitHub's command line does not pass                                                  thrown, the same
 //   a manifest that cannot be read, is of another version, or states another digest or size than a built file     thrown, the same
 //   any other answer of GitHub's, or none                                                                         thrown, the same
@@ -117,16 +118,20 @@ async function bundleOf(version: string, pinning: Pinning): Promise<{ readonly b
 /**
  * Make the website's file of releases: every given version whose source archive and built Worker are published and attested.
  *
- * @param versions - the versions the main branch's changelog names; one that is no plain version is never named
+ * @param versions - the versions the main branch's changelog names, the newest first; one that is no plain version is never named
  * @returns the releases to publish, by the table at the top of this file
- * @throws {Error} GitHub answered neither with a file nor that there is none, a file's attestation did not pass, or the built files are not the ones their manifest states
+ * @throws {Error} GitHub answered neither with a file nor that there is none, an older version has no archive, a file's attestation did not pass, or the built files are not the ones their manifest states
  */
 export async function pinReleases(versions: readonly string[], pinning: Pinning): Promise<ReleasePins> {
   const pins: Record<string, ReleasePins[string]> = {};
+  const plain = versions.filter(isPlainVersion);
 
-  for (const version of versions.filter(isPlainVersion)) {
+  for (const version of plain) {
     const archive = { version, name: `poplin-${version}.tar.gz`, address: sourceAddress(version), what: "source archive" };
     const bytes = await fetched(archive, pinning);
+
+    // Only the newest version may be a release that is not out yet. An older one without its archive would drop a release installs take from the file.
+    if (bytes === undefined && version !== plain[0]) throw new Error(`release ${version}: no source archive is published, and a newer version is named`);
 
     if (bytes === undefined) {
       pinning.say(`release ${version}: no source archive is published, so it is not named`);
