@@ -20,7 +20,7 @@ const SCREENS: readonly { readonly section: string; readonly controls: (page: Pa
     ],
   },
   { section: "Activity", controls: (page) => [page.getByRole("button", { name: /^Only / }), page.getByRole("button", { name: "Download", exact: true })] },
-  { section: "Usage", controls: (page) => [page.getByRole("button", { name: /^Change the limit of / })] },
+  { section: "Usage", controls: (page) => [page.getByRole("button", { name: /^Change the limit of / }), page.getByRole("button", { name: "Refresh the graph", exact: true })] },
   {
     section: "Access",
     controls: (page) => [page.getByRole("tab", { name: "Users", exact: true }), page.getByRole("tab", { name: "Tokens", exact: true }), page.getByRole("button", { name: /^More for / })],

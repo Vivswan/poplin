@@ -65,11 +65,6 @@ function inQueries({ children }: { readonly children: ReactNode }): ReactNode {
   return <QueryClientProvider client={QUERIES}>{children}</QueryClientProvider>;
 }
 
-/** Let the clock go on so far. */
-function pass(ms: number): void {
-  setSystemTime(new Date(Date.now() + ms));
-}
-
 /** Show or hide the page, as a browser does with a tab that is left or come back to. */
 function setHidden(hidden: boolean): void {
   Object.defineProperty(document, "visibilityState", { value: hidden ? "hidden" : "visible", configurable: true });
@@ -175,17 +170,26 @@ describe("a read of the dashboard", () => {
     expect([result.current[0], again.result.current[0]]).toEqual([true, true]);
   });
 
-  // Drift: the graph's reads would be kept under another key than the one that gives them five minutes, and every look at the window would walk its rows again.
+  // Drift: the graph's reads would be kept under another key than the one that gives them thirty minutes, and every look at the window would walk its rows again.
   test.each([
-    ["4 minutes 59 seconds on", 299 * SECOND, 1],
-    ["5 minutes 1 second on", 301 * SECOND, 2],
-  ] as const)("of the visits graph's days stands five minutes: %s", async (_what, later, asks) => {
+    ["29 minutes 59 seconds on", 1799 * SECOND, 1],
+    ["30 minutes 1 second on", 1801 * SECOND, 2],
+  ] as const)("of the visits graph's days stands thirty minutes: %s", async (_what, later, asks) => {
     using answering = server(200);
-    setSystemTime(new Date(Date.UTC(2026, 10, 16, 12)));
+    const read = Date.UTC(2026, 10, 16, 12);
+    setSystemTime(new Date(read));
     const first = renderHook(() => useVisits(CHOICE), { wrapper: inQueries });
     await waitFor(() => expect(first.result.current.isSuccess).toBe(true));
-    first.unmount();
-    pass(later);
+    // The screen is left for that long: the clock that drops what no screen shows runs on too.
+    jest.useFakeTimers();
+    try {
+      first.unmount();
+      jest.advanceTimersByTime(later);
+    } finally {
+      jest.useRealTimers();
+    }
+    // The real timers bring the real clock back with them: the moment the screen is come back to is set anew.
+    setSystemTime(new Date(read + later));
     const second = renderHook(() => useVisits(CHOICE), { wrapper: inQueries });
     await waitFor(() => expect(second.result.current.isFetching).toBe(false));
 
