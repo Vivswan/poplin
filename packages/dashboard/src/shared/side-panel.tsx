@@ -167,7 +167,7 @@ function covers(place: HTMLElement, control: Element): boolean {
 /**
  * Whether what the library says closed the panel closes it: Escape does, and so does a focus that left it or, where the list is in sight, a press beside it, unless it went to a place of the panel's own.
  *
- * A focus that left for nothing was taken away with its control, and stays the panel's.
+ * A focus that left for nothing was taken away with its control, and stays the panel's. So does one the list itself took at a press on a row: the press says what the panel does.
  */
 function closes({ reason, event }: Dialog.Root.ChangeEventDetails, listInSight: boolean): boolean {
   if (reason !== "outside-press" && reason !== "focus-out") return true;
@@ -175,8 +175,9 @@ function closes({ reason, event }: Dialog.Root.ChangeEventDetails, listInSight: 
   if (reason === "outside-press" && !listInSight) return false;
 
   const went = reason === "focus-out" ? (event as FocusEvent).relatedTarget : event.target;
+  if (!(went instanceof Element) || went.closest(OWN_PLACES) !== null) return false;
 
-  return went instanceof Element && went.closest(OWN_PLACES) === null;
+  return reason === "outside-press" || went.querySelector(ROWS) === null;
 }
 
 /**
