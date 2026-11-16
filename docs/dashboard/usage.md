@@ -84,7 +84,7 @@ When the key gave no figure at all, the line over the table says why and ends in
 | --- | --- |
 | `Cloudflare did not answer.` | open Usage again after a minute |
 | `The kept key no longer works.` | open Domain and press Repair: it makes a new key |
-| `The kept key has no right to read usage` | Repair leaves a key that still works as it is. Delete the token "poplin kept key" at Cloudflare, then open Domain and press Repair |
+| `The kept key has no permission to read usage` | Repair leaves a key that still works as it is. Delete the token "poplin kept key" at Cloudflare, then open Domain and press Repair |
 
 | On the screen | Is |
 | --- | --- |

@@ -126,7 +126,7 @@ Repair makes the key beside the kept key, as an API token named "poplin upload k
 | Question | Answer |
 | --- | --- |
 | Where it lives | on the Worker, as an encrypted secret, `UPLOAD_KEY`. Not in the database, a backup, or an export. What is kept is the token's id and the SHA-256 of its value: the two the bucket's API takes as its key, so whoever holds them holds the key |
-| What it reaches | the objects of the install's one bucket: it can read, write, list, and delete them. Cloudflare has no narrower right that writes |
+| What it reaches | the objects of the install's one bucket: it can read, write, list, and delete them. Cloudflare has no narrower permission that writes |
 | What it may not do | reach another bucket, the database, a Worker, the domain, or the account's settings; make another key |
 | What a publisher sees | the account's id and the bucket's name, in the address of each ticket |
 | How to end it | delete the token "poplin upload key" at Cloudflare, under Manage Account, Account API Tokens. Publishing goes on, through the Worker |
@@ -156,7 +156,7 @@ Cloudflare limits the key to the account and the domain, not to poplin's own obj
 
 The [Domain](../dashboard/domain.md#check-needs-no-token) screen reads every piece with the key, so its Check asks for no token. Repair still takes a pasted account token.
 
-**The key can replace any Worker of the account.** poplin uses that right on its own Worker alone: to update itself, to put the version before back after an update whose database step failed, and to write the login's variable. Cloudflare gives the right for a whole account or not at all: a key limited to one Worker is refused on every call.
+**The key can replace any Worker of the account.** poplin uses that permission on its own Worker alone: to update itself, to put the version before back after an update whose database step failed, and to write the login's variable. Cloudflare gives the permission for a whole account or not at all: a key limited to one Worker is refused on every call.
 
 So a bug or a bad release of poplin could reach every other Worker the account holds. poplin is best in an account that holds only poplin.
 
@@ -203,7 +203,7 @@ An install [without a domain](../start/without-a-domain.md) answers at three hos
 | DNS and certificates | hold hostnames alone. A site's name and id are in the path, which neither holds |
 | the `workers.dev` address | is the dashboard's own |
 | the account token | six permissions to install and five to repair, all of the account |
-| the kept key | the account's rights alone: it reads and writes nothing of a domain |
+| the kept key | the account's permissions alone: it reads and writes nothing of a domain |
 | rules at Cloudflare's edge | none. Every request reaches the Worker, and its limits per visitor and per site count it |
 | `block_bots` | does nothing. `search_engines_allowed` and `outside_pages` work through the Worker |
 

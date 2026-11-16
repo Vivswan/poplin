@@ -38,7 +38,7 @@ A refused command prints one sentence and often a hint. With `--json` it prints 
 | `no_update`          | there is no newer version the install can take              | `poplin update --dry-run` says which version the install runs    |
 | `update_unreachable` | Cloudflare did not answer; the new version may be in         | wait a minute, then `poplin update --dry-run`                    |
 | `no_key`, `key_refused` | the install holds no key, or Cloudflare no longer takes it | press Repair on the dashboard's Domain screen                  |
-| `lacks_right`        | the install's key lacks the right shown                     | press Repair on the dashboard's Domain screen: it makes a key with the right |
+| `lacks_right`        | the install's key lacks the permission shown                | press Repair on the dashboard's Domain screen: it makes a key with the permission |
 | `release_refused`    | the release cannot be taken, for the reason shown; nothing was changed | [With the kept key](../upkeep/update.md#with-the-kept-key) has each reason |
 | `version_refused`    | Cloudflare refused the new version; the install runs the version it ran | try again; if it comes back, report it             |
 

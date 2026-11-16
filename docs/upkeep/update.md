@@ -69,7 +69,7 @@ the install now runs 0.3.1; it ran 0.3.0
 | Cloudflare refuses the new code, such as code that stops as it starts | `version_refused` | nothing: the install runs the version it ran |
 | Cloudflare does not answer the upload                     | `update_unreachable`  | the update may be in: reload in a minute |
 
-`release_refused` comes with a word for which row it is. For `key_refused`, `no_key`, and `lacks_right`, press Repair on the Domain screen with an account token: it makes a key with every right the install uses. [When poplin refuses](../fix/poplin-refuses.md) has each code.
+`release_refused` comes with a word for which row it is. For `key_refused`, `no_key`, and `lacks_right`, press Repair on the Domain screen with an account token: it makes a key with every permission the install uses. [When poplin refuses](../fix/poplin-refuses.md) has each code.
 
 A release that changes the database is taken when you start it, never by itself. Once it ran, an older poplin cannot read the database, so the install cannot [go back](#go-back) from it.
 

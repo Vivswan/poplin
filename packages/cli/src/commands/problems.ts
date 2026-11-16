@@ -49,7 +49,7 @@ const API_ROWS = {
   update_unreachable: { sentence: "the install's host did not answer the update", hint: "the update may be in all the same: wait a minute, then poplin update --dry-run", exit: "failed" },
   no_key: { sentence: "the install holds no key of its host, so it cannot update itself", hint: "open Domain on the dashboard and press Repair", exit: "failed" },
   key_refused: { sentence: "the install's host no longer takes the install's key", hint: "open Domain on the dashboard and press Repair", exit: "failed" },
-  lacks_right: { sentence: "the install's key lacks this right at its host", hint: "open Domain on the dashboard and press Repair: it makes a key with the right", exit: "failed" },
+  lacks_right: { sentence: "the install's key lacks this permission at its host", hint: "open Domain on the dashboard and press Repair: it makes a key with the permission", exit: "failed" },
   release_refused: { sentence: "the release cannot be taken, and nothing was changed, for this reason", hint: "poplin update --dry-run says which version the install runs", exit: "failed" },
   version_refused: { sentence: "the install's host refused the new version, so the install runs the version it ran before", hint: "try again; if it comes back, report it", exit: "failed" },
   logins_not_ended: { sentence: "the install's provider did not end the dashboard's logins, or gave no answer", hint: "the dashboard's Domain screen has Repair, which gives the install its key", exit: "failed" },

@@ -45,7 +45,7 @@ describe("the way to a token", () => {
     const help = page.getByRole("dialog").textContent;
 
     expect(before).toBe(false);
-    expect(help).toContain("Add these 2 rights by hand:");
+    expect(help).toContain("Add these 2 permissions by hand:");
     expect(FORM.tokenRights.every((right) => help?.includes(right))).toBe(true);
     expect(help).toContain("Choose what the account token is for.");
     expect(help).toContain("Rules: EditThe provider stops floods first.");
