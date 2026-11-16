@@ -31,7 +31,7 @@ const WORDS: Readonly<Record<string, Words>> = {
     wordLabels: { word: "Never", number: "After" },
     start: "30",
   },
-  default_search_engines: { block: "sites", label: "Show in search engines", about: "A new public site starts with its switch on." },
+  default_search_engines: { block: "sites", label: "Show in search engines", about: "On: a new public site starts with the same switch on." },
   versions_kept: { block: "sites", label: "Keep versions", about: "How many versions a site keeps, the live one included.", unit: "versions" },
   trash_days: { block: "sites", label: "Keep deleted sites", about: "After that, a deleted site is gone for good.", unit: "days" },
   search_engines_allowed: {
@@ -48,7 +48,7 @@ const WORDS: Readonly<Record<string, Words>> = {
   block_bots: {
     block: "visitors",
     label: "Block bots",
-    about: "Automatic blocks AI crawlers if the domain is only poplin's.",
+    about: "Automatic blocks AI crawlers on a domain only poplin uses.",
     choices: { auto: "Automatic", on: "Always", off: "Never" },
   },
   max_total_size: { block: "storage", label: "All sites together", about: "The most all sites hold, the trash included." },
