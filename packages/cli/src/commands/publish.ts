@@ -1,6 +1,6 @@
 // Publish: read the folder, begin the upload, send every file, and finish. A site changes only in the last step, and an upload that cannot be finished is given up.
 
-import pMap from "p-map";
+import { pMapSettled } from "p-map";
 import type * as v from "valibot";
 
 import type { PUBLISH_REQUEST } from "../../../core/src/actions/begin-publish";
@@ -20,6 +20,9 @@ const ENTRY_PAGE = "index.html";
 
 /** How many files are read at once to be hashed. */
 const HASHED_AT_ONCE = 4;
+
+/** What became of a publish that was stopped while its files were read. */
+const STOPPED_UNSENT = "nothing was sent and no site changed";
 
 /** What became of an upload that was not finished, in words. */
 const AFTERMATH = {
@@ -90,26 +93,19 @@ async function pageTitleOf(files: readonly PublishFile[]): Promise<string | unde
 /**
  * Declare every file as a publish sends it, with the SHA-256 of its bytes. Each file is read whole for it, four at a time and a piece at a time.
  *
- * @returns the declared files in the order given, or the reason one could not be read to its end
+ * @param stopped - aborts when the person stops the command: no further file is opened, and the ones being read are let go
+ * @returns the declared files in the order given, or why there are none: a file could not be read to its end, or the command was stopped
  */
-async function declare(files: readonly PublishFile[]): Promise<{ readonly ok: true; readonly declared: Manifest["files"] } | { readonly ok: false; readonly reason: string }> {
-  let unread: string | undefined;
+async function declare(files: readonly PublishFile[], stopped: AbortSignal): Promise<{ readonly ok: true; readonly declared: Manifest["files"] } | { readonly ok: false; readonly problem: Problem }> {
+  const hashed = async (file: PublishFile): Promise<Manifest["files"][number]> => ({ path: file.path, size: file.size, content_type: file.contentType, sha256: await sha256Of(file.open, stopped) });
+  const settled = await pMapSettled(files, hashed, { concurrency: HASHED_AT_ONCE, signal: stopped }).catch(() => undefined);
+  if (settled === undefined || stopped.aborted) return { ok: false, problem: problem("stopped", STOPPED_UNSENT) };
 
-  const declared = await pMap(
-    files,
-    async (file) => {
-      const sha256 = await sha256Of(file.open).catch(() => {
-        unread ??= file.path;
+  const declared = settled.flatMap((file) => (file.status === "fulfilled" ? [file.value] : []));
+  const unread = files[settled.findIndex((file) => file.status === "rejected")];
+  if (unread !== undefined) return { ok: false, problem: problem("unreadable", `${JSON.stringify(unread.path)} cannot be read`) };
 
-        return "";
-      });
-
-      return { path: file.path, size: file.size, content_type: file.contentType, sha256 };
-    },
-    { concurrency: HASHED_AT_ONCE },
-  );
-
-  return unread === undefined ? { ok: true, declared } : { ok: false, reason: `${JSON.stringify(unread)} cannot be read` };
+  return { ok: true, declared };
 }
 
 function published(plan: PublishPlan, answer: Published): Outcome {
@@ -124,20 +120,26 @@ function published(plan: PublishPlan, answer: Published): Outcome {
 /**
  * Read the folder or the page a publish names, and decide what the install is asked to make of it. Every file is read, to be hashed. No install is called.
  *
- * @returns the plan, or why nothing can be published: the path or a file under it cannot be read, or the path gives a new site no name
+ * @param stopped - aborts when the person stops the command, which ends the reading of the files
+ * @returns the plan, or why nothing can be published: the path or a file under it cannot be read, the path gives a new site no name, or the command was stopped
  */
-export async function planPublish(request: PublishRequest): Promise<{ readonly ok: true; readonly plan: PublishPlan } | { readonly ok: false; readonly problem: Problem }> {
+export async function planPublish(request: PublishRequest, stopped: AbortSignal): Promise<{ readonly ok: true; readonly plan: PublishPlan } | { readonly ok: false; readonly problem: Problem }> {
   const listing = await readFiles(request.path);
+  if (stopped.aborted) return { ok: false, problem: problem("stopped", STOPPED_UNSENT) };
+
   if (!listing.ok) return { ok: false, problem: problem("unreadable", listing.reason) };
 
   const { files, bytes, skipped } = listing;
   if (request.target.kind === "create" && request.target.name === undefined && !listing.name.ok) return { ok: false, problem: problem("no_name", listing.name.reason) };
 
-  const hashed = await declare(files);
-  if (!hashed.ok) return { ok: false, problem: problem("unreadable", hashed.reason) };
+  const hashed = await declare(files, stopped);
+  if (!hashed.ok) return hashed;
 
   const { declared } = hashed;
   const pageTitle = await pageTitleOf(files);
+  // A stop while the entry page's title is read is heard here, so no plan goes on to be sent.
+  if (stopped.aborted) return { ok: false, problem: problem("stopped", STOPPED_UNSENT) };
+
   const changes = pageTitle === undefined ? siteChanges(request.settings) : { ...siteChanges(request.settings), page_title: pageTitle };
 
   if (request.target.kind === "update") return { ok: true, plan: { files, bytes, skipped, manifest: { ...changes, site: siteWord(request.target.site), files: declared } } };

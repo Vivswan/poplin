@@ -148,7 +148,7 @@ async function online(request: OnlineRequest, io: Io, run: (session: Session) =>
 }
 
 async function publish(request: RequestOf<"publish">, io: Io, reached?: Session): Promise<Outcome> {
-  const planned = await planPublish(request);
+  const planned = await planPublish(request, io.stopped);
   if (!planned.ok) return planned;
 
   if (request.dryRun) return previewPublish(planned.plan, reached !== undefined);

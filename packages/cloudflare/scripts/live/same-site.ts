@@ -118,19 +118,21 @@ async function sameFile(reached: Reached, at: { readonly site: string; readonly 
   return stored.value.contentType === file.contentType && Buffer.from(held).equals(local);
 }
 
-/** What a publish of a folder would send: its files, their bytes together, and the entry page's own title; `undefined` for a folder no publish takes. */
-async function planOf(folder: string): Promise<PublishPlan | undefined> {
+/** What a publish of a folder would send: its files, their bytes together, and the entry page's own title; `undefined` for a folder no publish takes, or once the run is stopped. */
+async function planOf(folder: string, stopped: AbortSignal): Promise<PublishPlan | undefined> {
   const asked = parseCommand(["publish", folder, "--name", PLANNED]);
   if (asked.kind !== "publish" || asked.target.kind !== "create") return undefined;
 
-  const planned = await planPublish({ ...asked, target: asked.target });
+  const planned = await planPublish({ ...asked, target: asked.target }, stopped);
 
   return planned.ok ? planned.plan : undefined;
 }
 
 /** Whether the site stores the folder's page title, and the versions asked about each hold the folder's files and no other: the counts say that none is beside them, and each file is read. */
 async function sameFiles(reached: Reached, site: SiteObject, wanted: Wanted): Promise<boolean | Stop> {
-  const folder = await planOf(wanted.folder);
+  const folder = await planOf(wanted.folder, reached.io.stopped);
+  if (reached.io.stopped.aborted) return stopped("the run was stopped while a folder was read", { kind: "stopped" });
+
   if (folder === undefined) return { kind: "failed", what: "a folder a site is published from could not be read" };
 
   const stored = await callUnhurried(reached.io, () => reached.client.call(STORED, (api) => api.export.sites[":site"].$get({ param: { site: site.id }, query: { all_versions: "true" } })));

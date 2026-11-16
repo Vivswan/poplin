@@ -124,13 +124,24 @@ function sendingOf(format: number, site: BackupSite, hashed: HashedVersions, liv
   return { body: { format, site: record as unknown as Begin["site"], files: declared }, files, liveOnly };
 }
 
-/** Hash every file of a site as the zip holds it: each is read whole, a piece at a time, and four of a version at once. */
-async function hashedVersions(site: BackupSite): Promise<HashedVersions> {
+/**
+ * Hash every file of a site as the zip holds it: each is read whole, a piece at a time, and four of a version at once.
+ *
+ * @param stopped - aborts when the person stops the command: no further file is opened, and the ones being read are let go
+ * @returns the versions with their hashes, or `stopped` when the stop came first
+ */
+async function hashedVersions(site: BackupSite, stopped: AbortSignal): Promise<HashedVersions | "stopped"> {
   const versions = [];
 
-  for (const version of site.versions) {
-    const files = await pMap(version.files, async (file) => ({ ...file, sha256: await sha256Of(() => file.open()) }), { concurrency: HASHED_AT_ONCE });
-    versions.push({ number: version.number, files });
+  try {
+    for (const version of site.versions) {
+      const files = await pMap(version.files, async (file) => ({ ...file, sha256: await sha256Of(() => file.open(), stopped) }), { concurrency: HASHED_AT_ONCE, signal: stopped });
+      versions.push({ number: version.number, files });
+    }
+  } catch (error) {
+    if (stopped.aborted) return "stopped";
+
+    throw error;
   }
 
   return versions;
@@ -141,9 +152,8 @@ function isRefusedAs(failure: Failure, code: string): boolean {
 }
 
 /** Begin the import of one site with every version the backup holds; one the install finds too large is begun once more with its live version alone. */
-async function begin(session: Pick<Session, "client" | "io">, format: number, site: BackupSite): Promise<{ readonly begun: Called<Begun>; readonly sending: Sending }> {
+async function begin(session: Pick<Session, "client" | "io">, format: number, site: BackupSite, hashed: HashedVersions): Promise<{ readonly begun: Called<Begun>; readonly sending: Sending }> {
   const send = (body: Begin): Promise<Called<Begun>> => callUnhurried(session.io, () => session.client.call(BEGUN_UPLOAD, (api) => api.import.sites.$post({ json: body }), "repeatable"));
-  const hashed = await hashedVersions(site);
   const whole = sendingOf(format, site, hashed, false);
   const begun = await send(whole.body);
   if (begun.ok || !isRefusedAs(begun.failure, TOO_LARGE) || site.versions.length < 2) return { begun, sending: whole };
@@ -174,7 +184,10 @@ function finished(site: BackupSite, sending: Sending): Result {
 /** Import one site: begin, send every file, finish. An import that cannot be finished, or that the person stops, is given up, and the site is then not made. */
 async function importSite(session: Session, format: number, site: BackupSite): Promise<Result> {
   const { client, io } = session;
-  const { begun, sending } = await begin(session, format, site);
+  const hashed = await hashedVersions(site, io.stopped);
+  if (hashed === "stopped") return unfinished(site, { kind: "stopped" });
+
+  const { begun, sending } = await begin(session, format, site, hashed);
   if (!begun.ok) return unfinished(site, begun.failure);
 
   const upload = begun.value.upload.id;

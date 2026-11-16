@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 
+import { planPublish } from "../../src/commands/publish";
 import { type Bench, cleanUp, folderOf, jsonOf, openBench, stateOf } from "./support/harness";
 
 /** The pages of the fixture site. The test install takes files of at most 64 bytes. */
@@ -391,5 +392,16 @@ describe("publish", () => {
     expect(bench.sent.filter((line) => line.startsWith("PUT")).length).toBe(puts);
     expect(bench.sent.at(-1)).toStartWith("DELETE /api/uploads/");
     expect(await stateOf(bench)).toEqual(before);
+  });
+
+  // Drift: a publish reads every file before it calls the install. A stop that the reading did not hear was answered only after the whole folder was hashed, and then as a plan the command went on to send.
+  test("a publish whose stop came before its files are read plans nothing, and says that nothing was sent", async () => {
+    const folder = folderOf("notes", PAGES);
+    const request = { kind: "publish", path: folder, target: { kind: "create" }, settings: {}, dryRun: false, json: false } as const;
+
+    const planned = await planPublish(request as never, AbortSignal.abort(new Error("stopped by the person")));
+    const unstopped = await planPublish(request as never, new AbortController().signal);
+
+    expect([planned.ok ? "a plan" : [planned.problem.code, planned.problem.about], unstopped.ok]).toEqual([["stopped", "nothing was sent and no site changed"], true]);
   });
 });

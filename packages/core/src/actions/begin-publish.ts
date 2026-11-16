@@ -100,11 +100,11 @@ interface Listed {
   readonly bytes: number;
 }
 
-/** What the upload is recorded with: where its files go, what finishing it makes, and the room the limits leave it. */
+/** What the upload is recorded with: where its files go, what finishing it makes, and the room the limits leave it. `site` is the site it is the next version of, whose number is set aside as the upload is recorded; a new site has none. */
 interface Planned {
   readonly ok: true;
   readonly folder: SiteFolder;
-  readonly number: number;
+  readonly site?: SiteId;
   readonly plan: UploadPlan;
   readonly room: UploadRoom;
 }
@@ -240,7 +240,7 @@ async function planSite(
 
   const site = draftOf(name.value, changes, { settings, now: signed.at, listed, files: asked.files.length, pageTitle: asked.pageTitle });
 
-  return { ok: true, folder: site.folder, number: 1, plan: { kind: "create", site }, room: roomUnder(settings, { makesSite: true, writes: asked.files.length }, signed.at) };
+  return { ok: true, folder: site.folder, plan: { kind: "create", site }, room: roomUnder(settings, { makesSite: true, writes: asked.files.length }, signed.at) };
 }
 
 async function planVersion(
@@ -262,13 +262,63 @@ async function planVersion(
 
   if (await isHeldByAnother(install.database, changes.access, site.id)) return refuse("name_taken", "public_name");
 
-  const reserved = await install.database.reserveVersion(site.id);
-  if (reserved.kind !== "reserved") return refuse(reserved.kind);
-
   const asks = changes.access === undefined ? { details: changes.details } : { access: changes.access, details: changes.details };
   const plan: UploadPlan = { kind: "update", ...asks, ...pageTitleOf(asked.pageTitle) };
 
-  return { ok: true, folder: site.folder, number: reserved.number, plan, room: roomUnder(settings, { makesSite: false, writes: asked.files.length }, signed.at) };
+  return { ok: true, folder: site.folder, site: site.id, plan, room: roomUnder(settings, { makesSite: false, writes: asked.files.length }, signed.at) };
+}
+
+/**
+ * Check a publish: everything `beginPublish` does before it writes. No version number is set aside and nothing is recorded.
+ *
+ * @param request - what the caller sent; anything is taken and checked
+ * @param limits - what one request can carry, as `beginPublish` takes it
+ * @returns where the files go and what finishing makes, with the files as they were declared, or the refusal `beginPublish` answers, which leaves nothing behind
+ * @throws {Error} the database failed
+ */
+export async function planUpload(
+  install: Install,
+  actor: Actor,
+  request: unknown,
+  limits: UploadLimits = UNBOUNDED,
+): Promise<(Planned & { readonly files: readonly ManifestFile[] }) | Refused<BeginCode>> {
+  const asked = v.safeParse(PUBLISH_REQUEST, request);
+  if (!asked.success) return refuse("bad_argument", v.getDotPath(asked.issues[0])?.split(".")[0] ?? "request");
+
+  const { files, site: reference, name, page_title: pageTitle, ...changes } = asked.output;
+  const renamed = name === undefined ? changes : { ...changes, name };
+
+  const planned =
+    reference === undefined
+      ? await planSite(install, actor, { name, changes, pageTitle, files, limits })
+      : await planVersion(install, actor, { reference, changes: renamed, pageTitle, files, limits });
+
+  return planned.ok ? { ...planned, files } : planned;
+}
+
+/**
+ * Record a planned publish as a pending upload, in the room the install's limits leave it. The next version number of a site is set aside here, so a publish that is never recorded skips none.
+ *
+ * @param planned - what `planUpload` answered
+ * @param hashes - the hash each planned file is recorded with, in the order of the files, for a plan made before the files were read; the planned ones when left out
+ * @returns the upload, with the tickets its files are sent by when it declares at most 100, or the refusal of a limit it did not fit, which leaves nothing behind but a version number that is skipped
+ * @throws {Error} the database failed, or the hashes are not as many as the files
+ */
+export async function recordUpload(install: Install, actor: Actor, planned: Extract<Awaited<ReturnType<typeof planUpload>>, { readonly ok: true }>, hashes?: readonly string[]): Promise<BegunUpload | Refused<BeginCode>> {
+  if (hashes !== undefined && hashes.length !== planned.files.length) throw new Error(`${hashes.length} hashes for ${planned.files.length} files`);
+
+  const files = hashes === undefined ? planned.files : planned.files.map((file, at) => ({ ...file, sha256: hashes[at] as string }));
+  const reserved = planned.site === undefined ? { kind: "reserved", number: 1 } as const : await install.database.reserveVersion(planned.site);
+  if (reserved.kind !== "reserved") return refuse(reserved.kind);
+
+  const upload = { id: mintUploadId(), folder: planned.folder, number: reserved.number, owner: actor.holder, plan: planned.plan, manifest: files, created_at: install.now() };
+  // The day's limits are those of the day the upload is recorded on, which a plan made before midnight may not be.
+  const added = await install.database.addUpload(upload, { ...planned.room, day: dayOf(upload.created_at) });
+  if (added.kind !== "done") return refuseFull(install, added);
+
+  const bytes = files.reduce((sum, file) => sum + file.size, 0);
+
+  return begunUpload(install, { ...upload, state: "pending", bytes, files: files.length, dropped: [] }, files);
 }
 
 /**
@@ -287,23 +337,8 @@ export async function beginPublish(
   request: unknown,
   limits: UploadLimits = UNBOUNDED,
 ): Promise<BegunUpload | Refused<BeginCode>> {
-  const asked = v.safeParse(PUBLISH_REQUEST, request);
-  if (!asked.success) return refuse("bad_argument", v.getDotPath(asked.issues[0])?.split(".")[0] ?? "request");
-
-  const { files, site: reference, name, page_title: pageTitle, ...changes } = asked.output;
-  const renamed = name === undefined ? changes : { ...changes, name };
-
-  const planned =
-    reference === undefined
-      ? await planSite(install, actor, { name, changes, pageTitle, files, limits })
-      : await planVersion(install, actor, { reference, changes: renamed, pageTitle, files, limits });
+  const planned = await planUpload(install, actor, request, limits);
   if (!planned.ok) return planned;
 
-  const upload = { id: mintUploadId(), folder: planned.folder, number: planned.number, owner: actor.holder, plan: planned.plan, manifest: files, created_at: install.now() };
-  const added = await install.database.addUpload(upload, planned.room);
-  if (added.kind !== "done") return refuseFull(install, added);
-
-  const bytes = files.reduce((sum, file) => sum + file.size, 0);
-
-  return begunUpload(install, { ...upload, state: "pending", bytes, files: files.length, dropped: [] }, files);
+  return recordUpload(install, actor, planned);
 }

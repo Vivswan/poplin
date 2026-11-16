@@ -175,4 +175,41 @@ describe("sending one file of an upload", () => {
     expect<unknown>([await heldAt(world, upload, "pages/0.html"), await heldAt(world, upload, "pages/1.html"), counted?.writes]).toEqual(["nothing", ["page", PAGE_SHA256, "text/html"], 4]);
     expect(await finishPublish(world.install, OWNER, upload)).toEqual({ ok: false, code: "missing_files", about: "index.html" });
   });
+
+  // Drift: a file was skipped on the hash and the type alone. A declared size the object does not have was then answered as stored, and every finish after it said the file was missing: a publish that could never end.
+  test("a file declared longer than the object that holds its hash is not skipped: the bytes sent are held to the declared size, and refused", async () => {
+    const world = await makeWorld();
+    const started = await beginPublish(world.install, OWNER, { name: "report", files: [{ path: "index.html", size: 5, content_type: "text/html", sha256: PAGE_SHA256 }] });
+    if (!started.ok) throw new Error(`the fixture upload was refused: ${started.code}`);
+
+    await leftAt(world, started.upload.id, "index.html", { text: "page", sha256: PAGE_SHA256 });
+    const sent = await uploadFile(world.install, OWNER, { upload: started.upload.id, path: "index.html", body: new Blob(["page"]).stream() });
+
+    expect(sent).toEqual({ ok: false, code: "size_mismatch", about: "index.html" });
+  });
+
+  // Drift: an upload recorded before files declared a hash names none, and an object stored before then holds none. Two absent hashes compared as equal, so stale bytes of any length were skipped.
+  test("a file whose record names no hash is not skipped over an object that holds none: the bytes sent are stored", async () => {
+    const world = await makeWorld();
+    const upload = await begun(world, 1);
+    await leftAt(world, upload, "index.html", { text: "old!" });
+    const database = new Proxy(world.install.database, {
+      get(target, name): unknown {
+        if (name !== "getUploadFile") return Reflect.get(target, name, target);
+
+        return async (...given: Parameters<typeof target.getUploadFile>): Promise<unknown> => {
+          const found = await target.getUploadFile(...given);
+          if (found?.file === undefined) return found;
+
+          const { sha256: _dropped, ...file } = found.file;
+
+          return { ...found, file };
+        };
+      },
+    });
+
+    const sent = await uploadFile({ ...world.install, database }, OWNER, { upload, path: "index.html", body: new Blob(["page"]).stream() });
+
+    expect<unknown>([sent, await heldAt(world, upload, "index.html")]).toEqual([{ ok: true, path: "index.html", size: 4 }, ["page", undefined, "text/html"]]);
+  });
 });
