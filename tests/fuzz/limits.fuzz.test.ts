@@ -4,7 +4,7 @@
 import { expect } from "bun:test";
 import fc from "fast-check";
 
-import { checkLimits, countRequest } from "../../packages/app/src/limits/limits";
+import { checkSiteLimits, countRequest, takeVisitorMinute } from "../../packages/app/src/limits/limits";
 import { MemoryCounters } from "../../packages/app/src/limits/memory-counters";
 import { type VisitorKey, visitorKey } from "../../packages/app/src/limits/visitor-key";
 import { parseSiteId, type SiteId } from "../../packages/core/src/sites/ids";
@@ -51,9 +51,10 @@ const arrivals = fc.array(fc.record({ site: sites, visitor: fc.constantFrom("ada
 const groups = fc.array(fc.integer({ min: 0, max: 0xffff }), { minLength: 8, maxLength: 8 });
 const addresses = hostile(fc.oneof(fc.ipV4(), fc.ipV6(), fc.constantFrom("", "::", "::ffff:192.0.2.7", "2001:db8::1")));
 
-/** A request as the Worker takes it: checked against the limits, and counted against its day once they let it through. */
-async function takeRequest(asked: Parameters<typeof checkLimits>[0], counters: Parameters<typeof checkLimits>[1]): ReturnType<typeof checkLimits> {
-  const verdict = await checkLimits(asked, counters);
+/** A request as the Worker takes it: checked against the visitor's minute, then the site's limits, and counted against its day once they let it through. */
+async function takeRequest(asked: Parameters<typeof takeVisitorMinute>[0] & Parameters<typeof checkSiteLimits>[0], counters: Parameters<typeof checkSiteLimits>[1]): ReturnType<typeof checkSiteLimits> {
+  const visitor = await takeVisitorMinute(asked, counters);
+  const verdict = visitor.ok ? await checkSiteLimits(asked, counters) : visitor;
   if (verdict.ok) await countRequest({ site: asked.site, now: asked.now, requests: verdict.requests, page: false }, counters);
 
   return verdict;

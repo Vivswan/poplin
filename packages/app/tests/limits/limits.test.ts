@@ -3,7 +3,7 @@ import { describe, expect, test } from "bun:test";
 import { defaultSettings, type SettingValues } from "@poplin/core/src/records/settings";
 import type { SiteId } from "@poplin/core/src/sites/ids";
 
-import { type Counters, checkLimits, countRequest, isPageView } from "../../src/limits/limits";
+import { type Counters, checkSiteLimits, countRequest, isPageView, takeVisitorMinute } from "../../src/limits/limits";
 import { MemoryCounters } from "../../src/limits/memory-counters";
 import type { VisitorKey } from "../../src/limits/visitor-key";
 
@@ -59,6 +59,13 @@ function arrivals(count: number, from: Omit<Arrival, "visitor"> & { readonly vis
   return Array.from({ length: count }, (_unused, at) => ({ ...from, visitor: from.visitor ?? `visitor-${at}` }));
 }
 
+/** A request against every limit in the Worker's order: the visitor's minute first, then the site's minute and the day. */
+async function checkLimits(asked: Parameters<typeof takeVisitorMinute>[0] & Parameters<typeof checkSiteLimits>[0], counters: Counters): ReturnType<typeof checkSiteLimits> {
+  const visitor = await takeVisitorMinute(asked, counters);
+
+  return visitor.ok ? checkSiteLimits(asked, counters) : visitor;
+}
+
 /** A request as the Worker takes it: checked against the limits, and counted against its day once they let it through. */
 async function takeRequest(asked: Parameters<typeof checkLimits>[0], counters: Parameters<typeof checkLimits>[1]): ReturnType<typeof checkLimits> {
   const verdict = await checkLimits(asked, counters);
@@ -83,7 +90,7 @@ function repeated(answer: string, count: number): string[] {
   return new Array<string>(count).fill(answer);
 }
 
-describe("checkLimits", () => {
+describe("the limits of a request", () => {
   // Drift: a browser asks for every file of a page within seconds, so the per-minute defaults of a new install bound how large a page can be. Defaults sized for one request per view answer the 31st file of a page 429.
   test.each([
     { name: "one visitor opening a page of 100 files", visitors: 1, files: 100 },
