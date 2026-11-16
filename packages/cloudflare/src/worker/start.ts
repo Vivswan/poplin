@@ -6,10 +6,12 @@
 //   DB                 opened, its pending schema steps applied           else `newer`, `differs`, or `failed`
 //   settings           stored from FIRST_SETTINGS over the defaults, only while none exist  else `binding`; stored ones this build cannot read are `differs`
 //   signing key        stored, only while none exists
+//   KEPT_KEY           read once; absent or no key, the install holds none   never a fault, and never quoted
 
 import { createApi } from "@poplin/app/src/api/api";
 import type { Counters } from "@poplin/app/src/limits/limits";
 import type { DomainPlug, FirstRun } from "@poplin/app/src/console/domain/records";
+import type { InstallKey } from "@poplin/app/src/console/key/records";
 import type { Identify } from "@poplin/app/src/login/login";
 import { hostnameAddresses } from "@poplin/app/src/sites/hostname-addresses";
 import type { Asking } from "@poplin/core/src/actions/check-update";
@@ -24,6 +26,8 @@ import type { SiteId } from "@poplin/core/src/sites/ids";
 import * as v from "valibot";
 import { version } from "../../../cli/package.json";
 import { D1Driver } from "../database/d1";
+import { createInstallKey } from "../key/install-key";
+import { readKeptKey } from "../key/kept-key";
 import { CloudflareCounters } from "../limits/counters";
 import { accessIdentity } from "../login/access-token";
 import { accessKeys } from "../login/keys";
@@ -110,6 +114,9 @@ export interface Instance {
 
   /** The install's side at Cloudflare, for setup and the Domain tab. */
   readonly domain: DomainPlug;
+
+  /** The key poplin keeps for Cloudflare: whether the install holds one, and whether Cloudflare still takes it. Nothing answers the key itself. */
+  readonly key: Pick<InstallKey, "has" | "verify">;
 
   /** The version of poplin the install runs. */
   readonly version: string;
@@ -299,6 +306,7 @@ export async function startInstance(env: Bindings, outside: Outside, visitorOf: 
   };
   const counters = new CloudflareCounters({ limiter: env.MINUTE_LIMITS, database });
   const rebuild = { accepts: isDeployHook, fetch: outside.rebuild };
+  const kept = readKeptKey(env[INSTALL_OBJECTS.keyBinding], { fetch: outside.cloudflare });
   const api = createApi({
     ...install,
     readToken: (id) => database.getToken(id),
@@ -320,6 +328,7 @@ export async function startInstance(env: Bindings, outside: Outside, visitorOf: 
     api,
     identify: access.ok ? accessIdentity({ keys: accessKeys({ teamDomain: access.value.teamDomain, fetch: outside.fetch }), audience: access.value.audience }) : NOBODY,
     domain: createDomainPlug({ ...own.value, layout, fetch: outside.cloudflare }),
+    key: createInstallKey(kept, own.value.accountId),
     version: VERSION,
     rebuilding: { ...rebuild, counters },
   };

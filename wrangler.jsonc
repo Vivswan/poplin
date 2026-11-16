@@ -10,6 +10,7 @@
   // Before the Worker is bundled: the dashboard's client is built and written into the Worker's sources as one module, which no commit holds.
   "build": { "command": "bun run --filter @poplin/cloudflare built-client" },
   // The install's own values are written onto the Worker itself, by setup. A deploy leaves them as they are.
+  // The Worker reads one secret, KEPT_KEY. A secret is never named here, and a deploy leaves it as it is.
   "keep_vars": true,
   // The sweep: expired sites to the trash, old trash and abandoned uploads away.
   "triggers": { "crons": ["*/15 * * * *"] },
