@@ -141,6 +141,9 @@ interface Scene {
   /** The secrets the sample computers of that install hold now. */
   readonly secrets: () => readonly string[];
 
+  /** Begins the sample logins of that install when none waits, each call after the one before it. */
+  readonly keepLogins: () => Promise<void>;
+
   /** The dashboard of the seeded install, which answers every path no other piece does. */
   readonly dashboard: Mount;
 
@@ -278,7 +281,7 @@ async function openScene(host: Host, resumed: boolean): Promise<Scene> {
   const screens = ([...PLUG_STATES, SHUT, FIRST] as const).map((state) => setupScreenMount(seeded, state, host));
   const mounts = [dashboardMount(empty, EMPTY_PREFIX, host), apiMount(seeded, host.version), ...screens];
 
-  return { seeded, token, secrets: computers.secrets, dashboard: { ...pages, answer }, mounts };
+  return { seeded, token, secrets: computers.secrets, keepLogins: computers.keep, dashboard: { ...pages, answer }, mounts };
 }
 
 /** The stage a path names; none for every other path. */
@@ -340,6 +343,8 @@ async function stagedAt(path: string, scene: Scene): Promise<Response | undefine
   const stage = stageAt(path);
   if (stage === undefined) return undefined;
 
+  // A stage may be the first thing asked of a preview, before any page of the dashboard began the sample logins.
+  await scene.keepLogins();
   const staged = await stage({ world: scene.seeded, samples: scene.secrets().flatMap((secret) => parseLoginSecret(secret) ?? []) });
 
   return staged instanceof Response ? staged : new Response(await terminalPage(staged), { headers: OWN_HEADERS });
