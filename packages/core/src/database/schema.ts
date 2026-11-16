@@ -84,7 +84,7 @@ export const earlierIds = sqliteTable(
   (table) => [index("earlier_ids_by_folder").on(table.folder)],
 );
 
-/** The hashed record of every token. Only an admin token expires. A removed token keeps its row for a time, marked with when it was removed and by whom; `end_at` is when a token ended or will: its removal, else its expiry. */
+/** The hashed record of every token; only an admin token expires. `allowed_by` is the user behind it. A removed token keeps its row for a time, with when and by whom, and `user_removed` when its user went; `end_at` is its removal, else its expiry. */
 export const tokens = sqliteTable(
   "tokens",
   {
@@ -94,18 +94,25 @@ export const tokens = sqliteTable(
     note: text().notNull(),
     created_at: integer().notNull(),
     expires_at: integer(),
+    allowed_by: text().notNull(),
     removed_at: integer(),
     removed_by: text(),
+    user_removed: integer().notNull().default(0),
     end_at: integer().generatedAlwaysAs(sql`(coalesce(removed_at, expires_at))`, { mode: "virtual" }),
   },
   (table) => [
     check("tokens_scope", sql`${table.scope} IN ('admin', 'publisher')`),
     check("tokens_admin_expires", sql`(${table.scope} = 'admin') = (${table.expires_at} IS NOT NULL)`),
     check("tokens_removed_names_who", sql`(${table.removed_at} IS NULL) = (${table.removed_by} IS NULL)`),
+    check("tokens_user_removed", sql`${table.user_removed} IN (0, 1)`),
+    check("tokens_user_removed_is_removed", sql`${table.user_removed} = 0 OR ${table.removed_at} IS NOT NULL`),
     index("tokens_by_creation")
       .on(sql`${table.created_at} DESC`, sql`${table.id} DESC`)
       .where(sql`removed_at IS NULL`),
     index("tokens_by_end").on(sql`${table.end_at} DESC`, sql`${table.id} DESC`),
+    index("tokens_by_user")
+      .on(table.allowed_by, table.expires_at)
+      .where(sql`removed_at IS NULL`),
   ],
 );
 

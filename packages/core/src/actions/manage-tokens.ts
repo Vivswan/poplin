@@ -1,4 +1,5 @@
 // The tokens of an install: issued, listed, and revoked by an admin, and a token's own to give back. A revoked token stays listed among the ended ones and works nowhere.
+// A token is its user's: the tokens a user allowed end when that user is removed.
 
 import * as v from "valibot";
 
@@ -42,10 +43,10 @@ export type TokenObject = Readonly<v.InferOutput<typeof TOKEN_OBJECT>>;
 /**
  * A token that ended as a caller sees it: when it was allowed, when it ended, and how. Times are milliseconds since the epoch.
  *
- * `by` is who removed it; a token that ran out has none.
+ * `by` is who removed it, or for `user_removed` who removed the user behind it; a token that ran out has none.
  */
 type EndedTokenObject = { readonly id: TokenId; readonly note: string; readonly created: number; readonly ended: number } & (
-  | { readonly how: "removed"; readonly scope: "publisher" | "admin"; readonly by: Holder }
+  | { readonly how: "removed" | "user_removed"; readonly scope: "publisher" | "admin"; readonly by: Holder }
   | { readonly how: "ran_out"; readonly scope: "admin" }
 );
 
@@ -53,7 +54,7 @@ type EndedTokenObject = { readonly id: TokenId; readonly note: string; readonly 
 function endedTokenObject(token: EndedToken): EndedTokenObject {
   const facts = { id: token.id, note: token.note, created: token.createdAt, ended: token.endedAt };
 
-  return token.how === "removed" ? { ...facts, how: "removed", scope: token.scope, by: token.by } : { ...facts, how: "ran_out", scope: "admin" };
+  return token.how === "ran_out" ? { ...facts, how: "ran_out", scope: "admin" } : { ...facts, how: token.how, scope: token.scope, by: token.by };
 }
 
 /** Build the token object of a stored record. */
@@ -69,7 +70,7 @@ export function tokenObject(record: TokenRecord): TokenObject {
  * An admin may issue a publisher token. An admin token is issued only by a person, an actor whose holder is a login: a token that could issue admin tokens would outlive its own expiry.
  *
  * @param request - the scope and the note; anything is taken and checked
- * @returns the token, which is shown this once, and its record. `not_allowed` for a publisher, and for a token asking for an admin token
+ * @returns the token, which is shown this once, and its record. `not_allowed` for a publisher, for a token asking for an admin token, and for a token whose user was removed while it asked
  * @throws {Error} the database failed
  */
 export async function issueToken(
@@ -87,6 +88,8 @@ export async function issueToken(
   const now = install.now();
   const minted = await mintToken({ ...asked.output, now });
   const added = await install.database.addToken(minted.record, { by: actor.holder, at: now });
+  if (added.kind === "signer_gone") return refuse("not_allowed");
+
   if (added.kind !== "done") throw new Error("a new token drew an id that is taken");
 
   return { ok: true, token: minted.token, record: tokenObject(minted.record) };
@@ -135,6 +138,17 @@ export async function listTokenStates(
   const { live, ended, more } = await install.database.listTokenStates(install.now(), MOST_ENDED);
 
   return { ok: true, tokens: live.map(tokenObject), ended: ended.map(endedTokenObject), more };
+}
+
+/**
+ * Count the tokens that work by the user behind each: what removing that user ends.
+ *
+ * @returns the count of every user behind a token, by the user's email, or `not_allowed` for anyone but an admin
+ */
+export async function countUserTokens(install: Install, actor: Actor): Promise<{ readonly ok: true; readonly counts: Readonly<Record<string, number>> } | Refused<"not_allowed">> {
+  if (actor.scope !== "admin") return refuse("not_allowed");
+
+  return { ok: true, counts: Object.fromEntries(await install.database.countUserTokens(install.now())) };
 }
 
 /**

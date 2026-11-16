@@ -18,7 +18,7 @@ Cloudflare's free plan     one request: 50 database queries
 | A visitor opens a page of a private site | 1 | 2 | 4 | 2 | 1 | 0 |
 | Publish a site of one page | 3 | 10 | 31 | 19 | 1 | 2 |
 | Open the Sites screen | 1 | 2 | 651 | 0 | 0 | 0 |
-| Open the Access screen | 3 | 5 | 257 | 0 | 0 | 0 |
+| Open the Access screen | 3 | 6 | 258 | 0 | 0 | 0 |
 | Open the Activity screen | 2 | 4 | 607 | 0 | 0 | 0 |
 | Open the Usage screen | 3 | 8 | 37,718 | 0 | 0 | 0 |
 | Open the Settings screen | 1 | 2 | 3 | 0 | 0 | 0 |

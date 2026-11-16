@@ -86,7 +86,7 @@ export async function openSqlInstall(): Promise<SqlInstall> {
     sql,
     addToken: async (note) => {
       const { token, record } = await mintToken({ scope: "admin", note, now: FAKE_NOW });
-      await sql("INSERT INTO tokens (id, hash, scope, note, created_at, expires_at) VALUES (?, ?, 'admin', ?, ?, ?)", [record.id, record.hash, record.note, FAKE_NOW, FAKE_NOW + TOKEN_MS]);
+      await sql("INSERT INTO tokens (id, hash, scope, note, created_at, expires_at, allowed_by) VALUES (?, ?, 'admin', ?, ?, ?, ?)", [record.id, record.hash, record.note, FAKE_NOW, FAKE_NOW + TOKEN_MS, record.note]);
 
       return token;
     },

@@ -369,10 +369,10 @@ function schemaRules(label: string, makeDriver: DriverFactory): void {
       ["the totals row removed", [{ sql: "DELETE FROM totals", params: [] }]],
       ["a secret that is not the visitor key", [{ sql: "INSERT INTO secrets (name, value, created_at) VALUES ('other', 'x', 0)", params: [] }]],
       ["a site moved to another folder", [{ sql: "UPDATE sites SET folder = 'folder-c' WHERE id = 'aaaaaaaaaaaa'", params: [] }]],
-      ["an admin token that never expires", [{ sql: "INSERT INTO tokens (id, hash, scope, note, created_at) VALUES ('t', 'h', 'admin', '', 0)", params: [] }]],
+      ["an admin token that never expires", [{ sql: "INSERT INTO tokens (id, hash, scope, note, created_at, allowed_by) VALUES ('t', 'h', 'admin', '', 0, 'u')", params: [] }]],
       [
         "a publisher token that expires",
-        [{ sql: "INSERT INTO tokens (id, hash, scope, note, created_at, expires_at) VALUES ('t', 'h', 'publisher', '', 0, 1)", params: [] }],
+        [{ sql: "INSERT INTO tokens (id, hash, scope, note, created_at, expires_at, allowed_by) VALUES ('t', 'h', 'publisher', '', 0, 1, 'u')", params: [] }],
       ],
       ["a second row of settings", [{ sql: "INSERT INTO settings (id, value, updated_at) VALUES (2, '{}', 0)", params: [] }]],
       ["an upload in a state that is none of the three", [upload("upload-b", "folder-b", "live")]],
@@ -532,9 +532,11 @@ function queryPlans(label: string, makeDriver: DriverFactory): void {
       await database.getToken(token.id);
       await database.listTokens();
       await database.listTokenStates(NOW, 50);
+      await database.countUserTokens(NOW);
       await database.revokeToken(token.id, BY_ADA);
       await database.readSettings();
       await database.changeSettings({ trash_days: 30 }, BY_ADA);
+      await database.changeSettings({ logins: SETTINGS.logins }, BY_ADA);
       await database.addLogin("bo@example.com" as Login, BY_ADA);
       await database.removeLogin("bo@example.com" as Login, BY_ADA);
       await database.appendAudit({ action: "login", detail: {} }, BY_ADA);
@@ -590,13 +592,14 @@ function queryPlans(label: string, makeDriver: DriverFactory): void {
         const steps = plan.map((step) => String(step.detail));
         scans.push(
           ...steps
-            .filter((step) => /\bSCAN\b/.test(step) && !/\bSCAN (CONSTANT ROW|sqlite_master|j VIRTUAL TABLE|\(subquery-1\)|page\b|cut\b|kept VIRTUAL TABLE|given\b|ends\b)/.test(step))
+            .filter((step) => /\bSCAN\b/.test(step) && !/\bSCAN (CONSTANT ROW|sqlite_master|\w+ VIRTUAL TABLE|\(subquery-1\)|page\b|cut\b|given\b|ends\b)/.test(step))
             .map((step) => `${step} <- ${statement.sql.trim().split("\n")[0]}`),
         );
       }
 
       // A listing walks `cut`, the ids of the one page it has cut already, a screen's listing `page`, that page's sites, and `kept`, the versions of one site of it: none is a table.
       // A new link walks `given`, the one row that is there only once the id was given, before it walks the days: no table either. The trim of the log walks `ends`, the one row of its two ends.
+      // A virtual table is a list a statement was given or a setting holds, such as the logins: no table. The count of each user's tokens walks the tokens that were not removed, through their index.
       // The two token lists walk the tokens that were not removed, and the sweep walks the logins, which the room keeps few. An import walks the list of versions it was given, and a new login the visitors its own count gave: neither is a table.
       // The ledger holds one row a step. A count of the log walks its newest entries, as many as it is told, and then what it read of them.
       // A search of the log by a site reads the sites once: the log holds no title, and a text finds a site by the one it has now. Each earlier id is read once with them, through its index.
@@ -622,6 +625,7 @@ function queryPlans(label: string, makeDriver: DriverFactory): void {
       expect(scans).toEqual([
         `${tokenScan} where "tokens"."removed_at" is null ${newestFirst}`,
         `${tokenScan} where ("tokens"."removed_at" is null and ("tokens"."expires_at" is null or "tokens"."expires_at" > ?)) ${newestFirst}`,
+        'SCAN tokens USING INDEX tokens_by_user <- select "allowed_by", count(*) as "held" from "tokens" where ("tokens"."removed_at" is null and ("tokens"."expires_at" is null or "tokens"."expires_at" > ?)) group by "tokens"."allowed_by"',
         `SCAN audit <- ${counted}`,
         `SCAN newest <- ${counted}`,
         ...bySite.flatMap(readOnce),

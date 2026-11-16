@@ -27,7 +27,9 @@ The change is saved in every case. `poplin config logins` shows the same list.
 
 To remove another user, choose Remove in the menu at the end of that user's row, and press Remove when asked. That user is out of the dashboard at once, and out of private sites within a minute. Your own email cannot be the one you remove.
 
-A list changed with `poplin config logins`, or by `poplin import` with `--settings --logins`, is written to Cloudflare's list the same way. `poplin config logins` prints one more step where a Repair is still needed. The budget alert is mailed to the first user, and follows when another email becomes the first.
+Every token that user allowed stops working in the same step: the logins of their computers, their agents, and their build servers. The question before the removal says how many. Adding the user again brings none of them back.
+
+A list changed with `poplin config logins`, or by `poplin import` with `--settings --logins`, is written to Cloudflare's list the same way, and a user it leaves out loses their tokens the same way. `poplin config logins` prints one more step where a Repair is still needed. The budget alert is mailed to the first user, and follows when another email becomes the first.
 
 Sign everyone out, on the same tab, replaces the install's stored key: every visitor's limit starts again, and nobody is logged out. [Security](../about/security.md#hardening) says what it ends and what it leaves.
 
@@ -64,9 +66,9 @@ A computer's login is a token. The dashboard lists them under Access, Tokens.
 | ------------------------------ | -------------------------------------------------------------------------- |
 | a token that works             | its name, what it can change, when it was allowed, when it runs out        |
 | Remove, in the menu of its row | ends it at once                                                            |
-| Removed tokens, folded         | the 50 that ended last in the past 90 days, each with `Removed by` and who did it, `Logged out`, or `Ran out` |
+| Removed tokens, folded         | the 50 that ended last in the past 90 days, each with `Removed by` and who did it, `Logged out`, `Ran out`, or `Its user was removed` |
 
-A removed token never logs in again, and nothing brings it back: `poplin login` makes a new one. `Logged out` is a token that `poplin logout` gave back. [Security](../about/security.md#hardening) says what the install stores of a token.
+A removed token never logs in again, and nothing brings it back: `poplin login` makes a new one. `Logged out` is a token that `poplin logout` gave back. `Its user was removed` is a token that ended with the user who allowed it. [Security](../about/security.md#hardening) says what the install stores of a token.
 
 `--publisher` is for a computer or a script that should only publish, such as a build server or a shared machine.
 

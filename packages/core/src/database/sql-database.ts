@@ -115,6 +115,14 @@ import {
   makeRoomOfVisitor,
   tokenById,
   tokenNames,
+  USER_TOKENS,
+  endTokensOfDropped,
+  endTokensOfRemoved,
+  isUser,
+  signerStands,
+  userBehind,
+  userTokenCounts,
+  worksAt,
 } from "./login-statements";
 import {
   A_KEPT_VERSION,
@@ -950,15 +958,18 @@ export class SqlDatabase implements Database {
     return { uploads: listedUploads, next: { created_at: last.created_at, id: last.id } };
   }
 
-  async addToken(token: TokenRecord, signed: Signed): Promise<{ readonly kind: "done" } | Refused<"id_taken">> {
+  async addToken(token: TokenRecord, signed: Signed): Promise<{ readonly kind: "done" } | Refused<"id_taken" | "signer_gone">> {
     const expires = token.scope === "admin" ? token.expiresAt : null;
     const idIsFree = fragment`NOT EXISTS (SELECT 1 FROM ${tokens} WHERE ${tokens.id} = ${token.id})`;
-    const [inserted] = await this.#driver.batch([
-      insertFrom(tokens, TOKEN_COLUMNS, fragment`SELECT ${token.id}, ${token.hash}, ${token.scope}, ${token.note}, ${token.createdAt}, ${expires} WHERE ${idIsFree}`),
+    const made = fragment`SELECT ${token.id}, ${token.hash}, ${token.scope}, ${token.note}, ${token.createdAt}, ${expires}, ${userBehind(signed.by)} WHERE ${idIsFree} AND ${signerStands(signed.by)}`;
+    const [inserted, , signer] = await this.#driver.batch([
+      insertFrom(tokens, TOKEN_COLUMNS, made),
       auditPlain(signed, "token_added", { token: token.id, scope: token.scope, note: token.note }),
+      written(fragment`SELECT ${signerStands(signed.by)} AS stands`),
     ]);
+    if (changed(inserted)) return { kind: "done" };
 
-    return { kind: changed(inserted) ? "done" : "id_taken" };
+    return { kind: signer?.rows[0]?.stands === 1 ? "id_taken" : "signer_gone" };
   }
 
   async getToken(id: TokenId): Promise<TokenRecord | undefined> {
@@ -990,14 +1001,19 @@ export class SqlDatabase implements Database {
   async listTokenStates(now: number, mostEnded: number): Promise<TokenStates> {
     requirePage(mostEnded);
 
-    const works = and(NOT_REMOVED, or(isNull(tokens.expires_at), gt(tokens.expires_at, now)));
-    const live = BUILD.select(TOKEN_FIELDS).from(tokens).where(works).orderBy(desc(tokens.created_at), desc(tokens.id));
+    const live = BUILD.select(TOKEN_FIELDS).from(tokens).where(worksAt(now)).orderBy(desc(tokens.created_at), desc(tokens.id));
     // A removal is never ahead of the clock, so `end_at` up to now holds every removed token and every one that ran out. One that ended before the days kept waits for the sweep, and is told no more.
     const ended = BUILD.select(ENDED_TOKEN_FIELDS).from(tokens).where(and(lte(tokens.end_at, now), gte(tokens.end_at, now - HISTORY_KEPT_MS))).orderBy(desc(tokens.end_at), desc(tokens.id));
     const [lived, over] = await this.#driver.batch([built(live), built(ended.limit(mostEnded + 1))]);
     const rows = over?.rows ?? [];
 
     return { live: (lived?.rows ?? []).map(tokenFromRow), ended: rows.slice(0, mostEnded).map(endedTokenFromRow), more: rows.length > mostEnded };
+  }
+
+  async countUserTokens(now: number): Promise<ReadonlyMap<string, number>> {
+    const [counted] = await this.#driver.batch([userTokenCounts(now)]);
+
+    return new Map((counted?.rows ?? []).map((row) => v.parse(USER_TOKENS, row)).map((row) => [row.allowed_by, row.held]));
   }
 
   async revokeToken(id: TokenId, signed: Signed): Promise<{ readonly kind: "done"; readonly token: TokenRecord } | Refused<"not_found">> {
@@ -1064,10 +1080,11 @@ export class SqlDatabase implements Database {
   async redeemComputerLogin(id: LoginId, token: TokenRecord): Promise<{ readonly kind: "done" } | Refused<"not_allowed">> {
     const expires = token.scope === "admin" ? token.expiresAt : null;
     const detail = JSON.stringify({ token: token.id, scope: token.scope, note: token.note });
-    // A token is stored only while the login is allowed, has not run out, and is of the token's scope.
-    const allowed = fragment`${logins.id} = ${id} AND ${logins.state} = 'allowed' AND ${logins.expires_at} > ${token.createdAt} AND ${logins.scope} = ${token.scope}`;
+    // A token is stored only while the login is allowed, has not run out, is of the token's scope, and whoever allowed it is a user still.
+    const decided = fragment`${logins.state} = 'allowed' AND ${isUser(fragment`${logins.decided_by}`)}`;
+    const allowed = fragment`${logins.id} = ${id} AND ${decided} AND ${logins.expires_at} > ${token.createdAt} AND ${logins.scope} = ${token.scope}`;
     const idIsFree = fragment`NOT EXISTS (SELECT 1 FROM ${tokens} WHERE ${tokens.id} = ${token.id})`;
-    const stored = fragment`SELECT ${token.id}, ${token.hash}, ${logins.scope}, ${token.note}, ${token.createdAt}, ${expires} FROM ${logins} WHERE ${allowed} AND ${idIsFree}`;
+    const stored = fragment`SELECT ${token.id}, ${token.hash}, ${logins.scope}, ${token.note}, ${token.createdAt}, ${expires}, ${logins.decided_by} FROM ${logins} WHERE ${allowed} AND ${idIsFree}`;
     // The entry is signed by whoever allowed the login, and the login goes only when the entry was written.
     const entry = fragment`SELECT ${token.createdAt}, ${logins.decided_by}, 'token_added', ${detail} FROM ${logins} WHERE ${logins.id} = ${id} AND ${CHANGED}`;
     const [inserted] = await this.#driver.batch([
@@ -1244,7 +1261,8 @@ export class SqlDatabase implements Database {
     const patched = fragment<string>`json_patch(${settings.value}, ${JSON.stringify(checked)})`;
     const update = built(BUILD.update(settings).set({ value: patched, updated_at: signed.at }).where(and(eq(settings.id, 1), fragment`json(${patched}) <> json(${settings.value})`)));
     // The mark of changed users reads the logins as they still are, so it runs before they are replaced.
-    const marks = checked.logins === undefined ? [] : [usersReplaced(checked.logins, signed.at)];
+    // So do the tokens of the users the new logins leave out, which end in the same step.
+    const marks = checked.logins === undefined ? [] : [usersReplaced(checked.logins, signed.at), ...endTokensOfDropped(checked.logins, signed)];
     const answers = await this.#driver.batch([...marks, update, auditPlain(signed, "settings_changed", checked), READ_SETTINGS]);
     const [updated, , read] = answers.slice(marks.length);
     const values = settingsIn(read);
@@ -1269,7 +1287,7 @@ export class SqlDatabase implements Database {
     // A login works when the login page is known to let it in: the signer's own email, or any login for a signer that is none.
     const keepsWorkingLogin = fragment`CASE WHEN ${isStoredLogin(signed.by)} THEN ${login} <> ${signed.by} ELSE json_array_length(${settings.value}, '$.logins') > 1 END`;
     const remove = BUILD.update(settings).set({ value: removed, updated_at: signed.at }).where(and(eq(settings.id, 1), isStoredLogin(login), keepsWorkingLogin));
-    const [updated, , , read] = await this.#driver.batch([built(remove), auditOfLogins(signed), usersChanged(signed.at), READ_SETTINGS]);
+    const [updated, , , read] = await this.#driver.batch([built(remove), auditOfLogins(signed), usersChanged(signed.at), READ_SETTINGS, ...endTokensOfRemoved(login, signed)]);
     const values = settingsIn(read);
     if (values === undefined) return { kind: "not_set_up" };
 

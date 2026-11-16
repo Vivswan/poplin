@@ -59,9 +59,11 @@ interface RemovedTokensProps {
   readonly onFitted?: (fitted: Fitted | undefined) => void;
 }
 
-/** Say how a token ended: that it ran out, that it gave itself back, or who removed it, written as on every screen. The remover's name gives where the row is narrow. */
+/** Say how a token ended: that it ran out, that its user was removed, that it gave itself back, or who removed it, written as on every screen. The remover's name gives where the row is narrow. */
 function How({ token, names }: Row): ReactNode {
   if (token.how === "ran_out") return "Ran out";
+
+  if (token.how === "user_removed") return "Its user was removed";
 
   if (token.by === token.id) return "Logged out";
 
