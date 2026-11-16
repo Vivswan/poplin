@@ -209,7 +209,7 @@ export const PUBLISH_ROWS: readonly BudgetRow[] = [
       return (measured) => apiOf(measured, token).uploads[":upload"].finish.$post({ param: { upload }, query: {} });
     },
     status: 200,
-    budget: { queries: 8, reads: 0, writes: 3, deletes: 1 },
+    budget: { queries: 7, reads: 0, writes: 3, deletes: 1 },
   },
   {
     group,

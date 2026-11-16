@@ -273,8 +273,9 @@ export interface Reserved {
   readonly number: number;
 }
 
-/** A publish that went live. `dropped` lists the versions no longer kept, whose files the caller removes. */
+/** A publish that went live. `before` is the site as the same step read it before the version and any setting asked with it; `dropped` lists the versions no longer kept, whose files the caller removes. */
 export interface Published extends Done {
+  readonly before: Site;
   readonly dropped: readonly number[];
 }
 
@@ -735,7 +736,7 @@ export interface Database {
    * All of it is one step: when the version is refused no setting changes, and when the public name is taken no version is added. Each setting that changes writes its own audit entry.
    * The page's title comes with the version and writes none; the typed title changes only when the details name it.
    *
-   * @returns `stale_number` when a higher version is already kept; `name_taken` as in `changeAccess`; `not_pending` as in `publishUploadAsSite`
+   * @returns the site after the publish and, read in the same step, as it was before; `stale_number` when a higher version is already kept; `name_taken` as in `changeAccess`; `not_pending` as in `publishUploadAsSite`
    * @throws {RangeError} `keep` is not a whole number from 1 up
    * @throws {Error} a detail breaks its field rule
    */

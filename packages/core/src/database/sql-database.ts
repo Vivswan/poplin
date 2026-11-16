@@ -891,7 +891,9 @@ export class SqlDatabase implements Database {
     const highest = fragment`(SELECT ${A_KEPT_VERSION.number} FROM ${versions} ${A_KEPT_VERSION} WHERE ${A_KEPT_VERSION.folder} = ${uploads.folder} ORDER BY ${A_KEPT_VERSION.number} DESC LIMIT ${version.keep})`;
     const dropped = fragment<string>`(SELECT json_group_array(${A_VERSION.number}) FROM ${versions} ${A_VERSION} WHERE ${A_VERSION.folder} = ${uploads.folder} AND ${A_VERSION.number} NOT IN ${highest})`;
     const isHeld = fragment`SELECT (EXISTS (SELECT 1 FROM ${sites} WHERE ${sites.public_name} = ${publicName} AND ${sites.folder} <> ${folderOf(id)}) OR EXISTS (SELECT 1 FROM ${sites} WHERE ${sites.id} = ${publicName})) AS held`;
+    // The site is read first, as it was before any setting asked with the version.
     const results = await this.#driver.batch([
+      sitesWhere(inFolder),
       ...settings,
       insertFrom(versions, VERSION_COLUMNS, uploaded),
       built(BUILD.update(sites).set({ live_version: number, page_title: version.page_title ?? null, updated_at: signed.at }).where(and(inFolder, CHANGED))),
@@ -902,9 +904,10 @@ export class SqlDatabase implements Database {
       uploadById(id),
       written(isHeld),
     ]);
-    const [inserted, , , , , after, finished, held] = results.slice(settings.length);
+    const before = siteIn(results[0]);
+    const [inserted, , , , , after, finished, held] = results.slice(settings.length + 1);
     const upload = uploadIn(finished);
-    if (changed(inserted) && upload !== undefined) return { ...done(after), dropped: upload.dropped };
+    if (changed(inserted) && upload !== undefined && before !== undefined) return { ...done(after), before, dropped: upload.dropped };
 
     if (upload?.state !== "pending") return { kind: "not_pending" };
 
