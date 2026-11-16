@@ -73,11 +73,11 @@ A row that said `optional` now says what Repair did, such as `created`.
 
 Three settings save without these permissions. The dashboard has them in Settings, under Visitors. What Cloudflare does for each starts once you press Repair, in step 3 of this table.
 
-| Setting                  | In the dashboard     |
-| ------------------------ | -------------------- |
-| `search_engines_allowed` | Let search engines in |
-| `outside_pages`          | Allow embedding      |
-| `block_bots`             | Block bots           |
+| Setting                  | In the dashboard              |
+| ------------------------ | ----------------------------- |
+| `search_engines_allowed` | Let search engines in         |
+| `outside_pages`          | Let outside pages embed sites |
+| `block_bots`             | Block bots                    |
 
 ## Optional: an email when charges reach 1 dollar
 
