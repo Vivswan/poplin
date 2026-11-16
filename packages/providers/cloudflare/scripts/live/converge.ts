@@ -1,16 +1,20 @@
-// Make the standing test install of the run's account match main: the bucket, the database, the login, the Worker, then what its kind adds.
+// Make the standing test install of the run's account match the commit, through the commands a person installs, mends, and removes an install with.
 //
-//   where it answers -> the account's plans, all free -> bucket, database, made anew when another build made it -> the login application -> wrangler deploy of the built bundle
-//     with a domain      -> the zone plug's repair, which makes every object of the zone as the Domain screen does
-//     without a domain   -> the two forwarders -> the key the install keeps -> the budget alert -> the Workflow
+//   where it answers -> the account's plans, all free -> what stands, and whether this commit's install would have made it
+//   -> a test account alone: nothing is made, mended, or removed on any other
+//     asked to start over, or another build made the database, bound the Worker to another bucket, or left an install unfinished
+//                         -> `poplin uninstall`, the data with it -> then as an account with no install
+//     no install          -> `poplin install`: the bucket, the database, the first upload of this commit's build, then the repair of its kind
+//     an install          -> this commit's build by the upload an install updates itself with -> `poplin doctor --repair`
+//                            a repair that refuses a database a schema step behind runs again after the first wait below, once the new Worker brought it forward
 //     -> wait for the install to answer and its database to hold this commit's schema -> wait for the new deployment to answer the run's token -> the test install's caps
 //
-// An install without a domain is not repaired by its plug here, so its forwarders, its login, its key, its budget alert, and its Workflow are made by the product's own sync of each.
-// It holds no state: every step reads what is there and changes what differs. A token that lacks a permission, or an account with a switch off, stops the piece it belongs to.
-// Every piece is printed as it is settled. A piece Cloudflare refused is printed with the step it stopped at, the status, and the error codes, and with nothing else Cloudflare said.
+// The commands run in this process and take the commit's build as the newest release: commands.ts says how. Nothing here makes, mends, or removes a piece of an install itself.
+// It holds no state: each run reads what is there. A row of a command is printed as its object and what was done, and nothing else of it: a row's detail may quote Cloudflare.
+// A piece the install answers without, lacking a token permission or an account switch only a person can flip, is told as a lack, which the live suite skips for.
 // A piece nothing answers without stops the run as an error, whether it failed or the token lacks its permission.
 //
-// The last wait asks the install who the run's token is: once, or 12 times in a row, 3 s apart, each on its own connection, where the database was made anew or brought forward.
+// The last wait asks the install who the run's token is: once, or 12 times in a row, 3 s apart, each on its own connection, where the install was made anew or its database brought forward.
 //   the new deployment                                                         200
 //   the build before, bound to the database that was deleted                   503, always: a 200 here is the new deployment's
 //   the build before, started anew on a database with a schema step it lacks   503
@@ -19,45 +23,27 @@
 //
 // Step output: `missing` (a JSON object of what the install lacks and still answers without, each with its reason, for the live suite).
 
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
-import type { DomainRow, DomainSettings } from "@poplin/app/src/console/domain/records";
-import { type Logins, parseLogins } from "@poplin/core/src/auth/logins";
-import { BaseBuckets } from "cloudflare/resources/r2/buckets/buckets";
+import { OWN_SCHEMA } from "@poplin/core/src/database/open";
+import { isPlainVersion } from "@poplin/core/src/records/update";
 
-import { keepCopyConfig } from "../../src/shared/release/deploy/kept-config";
-import { isAccessOff, readLoginFacts, syncAccess } from "../../src/shared/install/pieces/access/access";
-import { syncAlert } from "../../src/shared/install/pieces/alerts/account-alert";
-import { BUDGET_ALERT } from "../../src/shared/install/pieces/alerts/budget-alert";
-import type { AccountAddresses } from "../../src/without-domain/address-layout";
-import { type CloudflareFailure, callCloudflare } from "../../src/shared/install/client";
-import { syncDatabase } from "../../src/shared/install/pieces/database/database";
-import { syncForwarders } from "../../src/without-domain/pieces/forwarders/forwarders";
-import { syncJobs } from "../../src/shared/install/pieces/jobs/jobs";
-import { INSTALL_OBJECTS } from "../../src/shared/install/install-objects";
-import { privateSitesPattern } from "../../src/with-domain/layout";
-import type { Report } from "../../src/shared/install/sync";
-import { createDomainPlug, keysMended } from "../../src/with-domain/zone-plug";
 import type { Fetch } from "../../../../cli/src/client/client";
+import { INSTALL_OBJECTS } from "../../src/shared/install/install-objects";
+import { checkedBundle } from "../../src/shared/release/update/bundle-files";
+import { openUpload } from "../../src/shared/release/update/upload";
 import { capInstall } from "./caps";
+import { type Answer, type CommandRow, command, type Ends, type Published, placeWords, publish, reachOf, readBuilt } from "./commands";
 import { readFreePlans } from "./plan";
 import { sendLive } from "./send";
-import { holdsOwnSchema, settleDatabase } from "./shape";
-import { removeTokens, seedToken } from "./tokens";
-import { BUCKET, type Found, findInstall, isStop, liveLogin, openRun, type Run, reportStop, SCRIPT, type Stop, stopOf } from "./util";
-
-/** This package's folder. */
-const PACKAGE = join(import.meta.dir, "..", "..");
+import { holdsOwnSchema, lastAsked, readStanding } from "./shape";
+import { refuseOtherAccount } from "./test-account";
+import { findDatabase, removeTokens, seedToken } from "./tokens";
+import { type Found, findInstall, isStop, liveLogin, openRun, type Run, reportStop, SCRIPT, type Stop } from "./util";
 
 /** The login an install with no login of a person starts with: nobody can log in as it. */
 const NOBODY = "owner@example.com";
 
-/** The binding of an install with no login application: a team that does not exist, and an audience no token names. */
-const NO_ACCESS = { team_domain: "access-off.invalid", audience: "0".repeat(64) };
-
-/** The settings a live install starts with, where they differ from the defaults: a short trash, and room for the suite's own requests. */
-const LIVE_SETTINGS = { trash_days: "1", visitor_requests_per_minute: "120" };
+/** What the variable that asks for a start-over must hold: the workflow's ticked box. */
+const ASKED = "true";
 
 /** How long the install has to answer after a deploy, and how often it is asked, in milliseconds. */
 const READY = { withinMs: 300_000, everyMs: 5_000 };
@@ -65,25 +51,47 @@ const READY = { withinMs: 300_000, everyMs: 5_000 };
 /** The most characters of the install's own words a failed wait repeats. */
 const SAID_LENGTH = 200;
 
-/** The states of a row that the repair left as wanted. */
-const SETTLED: ReadonlySet<DomainRow["state"]> = new Set(["present", "created", "changed", "removed"]);
+/** What a command did to a row, or left of it, as a run tells it. */
+const TOLD: Readonly<Record<string, string>> = {
+  make: "made",
+  change: "changed",
+  remove: "removed",
+  leave: "left",
+  "leave-out": "left out",
+  block: "stopped",
+  fail: "failed",
+  "not-run": "not run",
+  gone: "gone",
+  keep: "kept",
+  stay: "stays",
+  skip: "not this install's",
+};
+
+/** The states of a row that a command left as wanted. */
+const SETTLED: ReadonlySet<string> = new Set(["make", "change", "remove", "leave"]);
+
+/** The states of a removal's row that left something the removal was to take. */
+const NOT_REMOVED: ReadonlySet<string> = new Set(["block", "fail", "not-run"]);
 
 /** The objects nothing answers without. */
-const VITAL: ReadonlySet<string> = new Set(["DNS record", "Worker route"]);
+const VITAL: ReadonlySet<string> = new Set(["R2 bucket", "D1 database", "Worker", "Sweep trigger", "Worker address", "Forwarder", "DNS record", "Worker route"]);
 
-/** How the repair words a refusal by Cloudflare, with its status. */
+/** How a row words a refusal by Cloudflare, with its status. */
 const REFUSAL_STATUS = /refused with status \d+/;
 
-/** How the repair words a refusal of a token that lacks a permission. */
+/** How a row words a refusal of a token that lacks a permission. */
 const NOT_PERMITTED = /status 40[13]/;
 
 /** What a login needs on an account whose Access is off: no API switches it on. */
 const ACCESS_OFF = "Access switched on for the account";
 
+/** How the row of the Worker's login variable starts where the login it is read from is not there. */
+const LOGIN_VARIABLE = `${INSTALL_OBJECTS.accessBinding}:`;
+
 /** The row of the key that sends files straight to the bucket. */
 const UPLOAD_KEY = "Upload key";
 
-/** What a run lacks whose repair made that key, or could not read it. */
+/** What a run lacks whose command made that key, or could not read it. */
 const FRESH_KEY = "an upload key older than two and a half minutes (this run made the key, or could not read it, and the bucket refuses a new one for about two minutes)";
 
 /** What the live suite calls the thing each optional object gives. */
@@ -100,20 +108,20 @@ const CAPABILITIES: Readonly<Record<string, string>> = {
   "Upload key": "upload-key",
 };
 
-/** An error code of Cloudflare's, as wrangler prints it. */
-const ERROR_CODE = /\[code: (\d+)\]/g;
-
-/** The code Cloudflare refuses a token with that lacks a permission. */
-const NOT_AUTHENTICATED = "10000";
-
-/** The budget alert's piece, as a repair's row names it. */
-const ALERT = "Budget alert";
-
 /** What an install lacks whose Workflow was not made. */
 const NO_WORKFLOW = "the Worker's Workflow, which Cloudflare did not make";
 
 /** What a run says it found of an install of each kind: where it answers. */
 const FOUND_AS = { domain: "Zone", "account address": "Free address" } as const;
+
+/** The problem `poplin install` stops with on an account that holds an install. */
+const ALREADY_INSTALLED = "already_installed";
+
+/** The problem `poplin doctor --repair` stops with on a database at another schema than this commit's. */
+const ANOTHER_VERSION = "another_version";
+
+/** The problem `poplin uninstall` stops with on an account that holds nothing of an install. */
+const NO_INSTALL = "no_install";
 
 /** The answer of the install to a token it knows. */
 const TOKEN_KNOWN = 200;
@@ -127,9 +135,6 @@ const ONE_NEEDED = { answers: 1, overMs: 0 } as const;
 /** How often the install is asked, how long one answer may take, and how long after the wait began the last request may start, in milliseconds. */
 const PACE = { everyMs: 3_000, answerMs: 5_000, withinMs: 180_000 } as const;
 
-/** What the Worker's `ACCESS` binding holds. */
-type AccessBinding = typeof NO_ACCESS;
-
 /** The variables a run reads. */
 type Environment = Readonly<Record<string, string | undefined>>;
 
@@ -137,7 +142,7 @@ type Environment = Readonly<Record<string, string | undefined>>;
 interface Piece {
   readonly piece: string;
   readonly result: string;
-  readonly needs?: string;
+  readonly needs?: string | undefined;
 }
 
 /** What a run gathers: the summary's rows and what the install lacks. */
@@ -146,18 +151,31 @@ interface Progress {
   readonly missing: Record<string, string>;
 }
 
+/** What a run is made with, beside the account: this commit's build as a release, what the commands reach the world through and rest by, and what sends a request to the install. */
+export interface World {
+  readonly release: Published;
+  readonly ends: Ends;
+  readonly fetch: Fetch;
+}
+
+/** The install once the commands are through with it: its database, and whether the build that ran before can no longer answer from it once it starts anew. */
+interface Made {
+  readonly id: string;
+  readonly strandsOlder: boolean;
+}
+
 /** What the wait is given. */
 interface Waiting {
   /** The origin the install's API answers on. */
   readonly server: string;
 
-  /** A token whose row the database of this run's deploy holds. */
+  /** A token whose row the database of this run's install holds. */
   readonly token: string;
 
   /** What sends a request. */
   readonly fetch: Fetch;
 
-  /** Whether the build deployed before can no longer answer from the database once it starts anew. */
+  /** Whether the build that ran before can no longer answer from the database once it starts anew. */
   readonly strandsOlder: boolean;
 
   /** The clock, in milliseconds. */
@@ -179,36 +197,13 @@ interface Arrived {
   readonly others: number;
 }
 
-/** The install as the wait for its new deployment and the caps reach it: every part of that wait but the token and what the deploy did to the database. */
+/** The install as the wait for its new deployment and the caps reach it: every part of that wait but the token and what the run did to the database. */
 type Reached = Omit<Waiting, "token" | "strandsOlder">;
 
 /** Add a piece to the summary's rows and print it, so the log shows how far a run came. */
 function note(run: Run, progress: Progress, piece: Piece): void {
   progress.pieces.push(piece);
   run.say(piece.needs === undefined ? `${piece.piece}: ${piece.result}` : `${piece.piece}: ${piece.result}: needs ${piece.needs}`);
-}
-
-/** How many objects a sync made, changed, left, and would not touch. */
-function countsOf(report: Report): string {
-  return `created ${report.created.length}, changed ${report.changed.length}, left ${report.left.length}, not poplin's ${report.skipped.length}`;
-}
-
-/**
- * Tell which piece a call to Cloudflare stopped, and at which step of its plan where the failure names one.
- *
- * @param permission - the token permission the piece needs
- * @returns the stop, told as a row: the status and the error codes of a refusal, and nothing else Cloudflare said
- */
-function stopAt(run: Run, progress: Progress, piece: string, failure: CloudflareFailure & { readonly failed?: string }, permission: string): Stop {
-  const stop = stopOf(failure, permission);
-  const stopped = failure.failed === undefined ? "stopped" : `stopped at ${failure.failed}`;
-  note(run, progress, stop.kind === "skipped" ? { piece, result: stopped, needs: stop.needs } : { piece, result: `${stopped}: ${stop.what}` });
-
-  return stop;
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 /** Stop a run on an account that pays for something, before anything is made. A token that cannot read the plans is told as a lack, and the run goes on. */
@@ -228,141 +223,23 @@ async function checkPlans(run: Run, found: Found, progress: Progress): Promise<S
   return undefined;
 }
 
-async function ensureBucket(run: Run): Promise<Stop | "created" | "present"> {
-  const listed = await callCloudflare(run.connection, (api) => new BaseBuckets(api).list({ account_id: run.accountId, name_contains: BUCKET }));
-  if (!listed.ok) return stopOf(listed, "Workers R2 Storage: Edit");
-
-  if (listed.value.buckets?.some((bucket) => bucket.name === BUCKET) === true) return "present";
-
-  const created = await callCloudflare(run.connection, (api) => new BaseBuckets(api).create({ account_id: run.accountId, name: BUCKET }));
-
-  return created.ok ? "created" : stopOf(created, "Workers R2 Storage: Edit");
-}
-
-/** The login an install wants in front of it: its whole dashboard hostname, and every address of a private site, which without a domain is one host. */
-function loginOf(found: Found, logins: Logins): Parameters<typeof syncAccess>[2] {
-  if (found.kind === "domain") return { hostname: found.layout.adminHostname, logins, privateSites: privateSitesPattern(found.layout) };
-
-  return { hostname: found.layout.adminHost, logins, privateSites: found.layout.privateHost };
-}
-
-/** Make the login application and read what the Worker checks a login against. A login the account or the token cannot give is a skip, and the Worker is bound to no team. */
-async function ensureAccess(run: Run, found: Found, login: string, progress: Progress): Promise<AccessBinding | Stop> {
-  const skip = (needs: string): AccessBinding => {
-    note(run, progress, { piece: "Login binding", result: "skipped", needs });
-    progress.missing.access = needs;
-
-    return NO_ACCESS;
-  };
-  const stopped = (stop: Stop): AccessBinding | Stop => (stop.kind === "skipped" ? skip(stop.needs) : stop);
-
-  const logins = parseLogins([login]);
-  if (!logins.ok) return skip("a login that is an email address");
-
-  const synced = await syncAccess(run.connection, run.accountId, loginOf(found, logins.value), "apply");
-  if (!synced.ok && isAccessOff(synced)) return skip(ACCESS_OFF);
-
-  if (!synced.ok) return stopped(stopAt(run, progress, "Login application", synced, "Access: Apps and Policies: Edit"));
-
-  note(run, progress, { piece: "Login application", result: countsOf(synced.report) });
-
-  // The applications were listed a moment ago to make the login, so a refusal here is of the team's domain.
-  const facts = await readLoginFacts(run.connection, run.accountId);
-  if (!facts.ok) return stopped(stopOf(facts, "Access: Organizations, Identity Providers, and Groups: Read"));
-
-  if (facts.value === undefined) return skip("the login application's audience and the team's domain");
-
-  const { teamDomain, audience } = facts.value;
-  run.hide(audience);
-  run.hide(teamDomain);
-  note(run, progress, { piece: "Login binding", result: "bound" });
-
-  return { team_domain: teamDomain, audience };
-}
-
 /**
- * The Worker's configuration for the test install: the repository's own, with the test account's id, bucket, database, login, and where the install answers.
+ * Say what a row a command did not settle needs, in words that quote nothing Cloudflare said.
  *
- * An install without a domain answers on the Worker's own free address, so that address is switched on for it, and off for one with a domain.
- *
- * @returns what wrangler uploads the built bundle by: the file as it is, already minified, so `minify` is left out; the map the build wrote beside it goes with it, as the repository's own configuration says
+ * @returns the lack of the account or the token, or `undefined` for a failure that is neither; an object that was left out is a lack, never a failure
  */
-export async function workerConfig(
-  run: Pick<Run, "accountId">,
-  found: Found,
-  bound: { readonly databaseId: string; readonly access: AccessBinding; readonly login: string },
-): Promise<Record<string, unknown>> {
-  const own: unknown = Bun.JSONC.parse(await Bun.file(join(PACKAGE, "..", "..", "..", "wrangler.jsonc")).text());
-  if (!isRecord(own)) throw new Error("wrangler.jsonc holds no configuration");
+function needOf(row: CommandRow): string | undefined {
+  if (row.state === "not-run") return "the run to reach it: an earlier object was not settled";
 
-  const zone = found.kind === "domain" ? { domain: found.layout.domain } : { account_address: found.layout.account };
+  if (row.state === "leave-out") return `the ${row.object}, which was left out: the token lacks its optional permission, or the account holds it in another form`;
 
-  // The Worker's name goes wherever an install's own name does: the Workflow is named after it. Wrangler makes the Workflow at Cloudflare right after each upload.
-  return {
-    ...keepCopyConfig(own, { name: SCRIPT }),
-    $schema: undefined,
-    minify: undefined,
-    main: join(PACKAGE, "dist", "worker.js"),
-    no_bundle: true,
-    workers_dev: found.kind === "account address",
-    preview_urls: false,
-    r2_buckets: [{ binding: "SITES", bucket_name: BUCKET }],
-    d1_databases: [{ binding: "DB", database_name: INSTALL_OBJECTS.database, database_id: bound.databaseId }],
-    vars: { ZONE: zone, ACCESS: bound.access, FIRST_SETTINGS: { ...LIVE_SETTINGS, logins: bound.login }, ACCOUNT_ID: run.accountId, WORKER_NAME: SCRIPT },
-  };
-}
-
-/** Upload the built bundle with wrangler. None of its output is printed, and its log file goes into the scratch folder that is removed. */
-async function deployWorker(run: Run, config: Record<string, unknown>): Promise<Stop | undefined> {
-  const folder = mkdtempSync(join(tmpdir(), "poplin-live-deploy-"));
-
-  try {
-    const file = join(folder, "wrangler.json");
-    writeFileSync(file, JSON.stringify(config));
-    const wrangler = Bun.spawn([join(PACKAGE, "node_modules", ".bin", "wrangler"), "deploy", "--config", file], {
-      cwd: PACKAGE,
-      env: {
-        ...process.env,
-        CLOUDFLARE_API_TOKEN: run.connection.key,
-        CLOUDFLARE_ACCOUNT_ID: run.accountId,
-        WRANGLER_SEND_METRICS: "false",
-        WRANGLER_WRITE_LOGS: "false",
-        WRANGLER_LOG_PATH: folder,
-        CI: "true",
-      },
-      stdout: "pipe",
-      stderr: "pipe",
-    });
-    const [code, out, err] = await Promise.all([wrangler.exited, new Response(wrangler.stdout).text(), new Response(wrangler.stderr).text()]);
-    if (code === 0) return undefined;
-
-    // Wrangler's own words may name the zone, an account, or the token's holder, so only the error codes Cloudflare gave leave this function.
-    const codes = [...new Set([...`${out}\n${err}`.matchAll(ERROR_CODE)].map((match) => match[1]))];
-    if (codes.includes(NOT_AUTHENTICATED)) return { kind: "skipped", needs: "the token permission Workers Scripts: Edit" };
-
-    return { kind: "failed", what: `wrangler deploy exited ${code} with codes ${codes.join(", ")}` };
-  } finally {
-    rmSync(folder, { recursive: true, force: true });
-  }
-}
-
-/**
- * Say what a row the repair did not settle needs, in words that quote nothing Cloudflare said.
- *
- * @returns the lack of the account or the token, or `undefined` for a failure that is neither; an object the token has no optional permission for is a lack, never a failure
- */
-export function needOf(row: DomainRow): string | undefined {
-  if (row.state === "not-run") return "the repair to reach it: an earlier object was skipped";
-
-  if (row.state === "left-out") return `the zone to allow it: ${row.detail.slice(row.detail.indexOf(": ") + 2)}`;
+  if (row.state === "block" && row.right !== undefined) return `the token permission ${row.right}`;
 
   // The Worker's login variable is read from the Access application, so it is missing wherever the application is.
-  if (row.state === "missing" && (row.object.startsWith("Access") || row.object === "Worker variable")) return ACCESS_OFF;
-
-  if (row.state === "optional") return `the token permission for the ${row.object}`;
+  if (row.state === "block" && (row.object.startsWith("Access") || row.detail.startsWith(LOGIN_VARIABLE))) return ACCESS_OFF;
 
   // An install answers without its Workflow: only a copy too large for one request needs it. One that was not made is a lack, which skips the check of that copy, and stops no run.
-  if (row.object === "Workflow" && row.state === "failed") return NO_WORKFLOW;
+  if (row.object === "Workflow" && row.state === "fail") return NO_WORKFLOW;
 
   // Cloudflare refuses the bot settings of a plan that has none through the API, whatever the token may do.
   if (row.object === "Bot settings" && REFUSAL_STATUS.test(row.detail)) return "a plan whose bot settings the API can change";
@@ -370,33 +247,21 @@ export function needOf(row: DomainRow): string | undefined {
   return NOT_PERMITTED.test(row.detail) ? `the token permission for the ${row.object}` : undefined;
 }
 
-/** What is told of a row the repair did not settle. Its detail may quote Cloudflare, which may name a person or the zone, so only the status of a refusal is kept. */
-function unsettledResult(row: DomainRow): string {
-  const refusal = REFUSAL_STATUS.exec(row.detail)?.[0];
+/** What is told of a row: what the command did, and of a row it did not settle the status of a refusal alone, since its detail may quote Cloudflare, which may name a person or the zone. */
+function resultOf(row: CommandRow): string {
+  const did = TOLD[row.state] ?? row.state;
+  const refusal = SETTLED.has(row.state) ? undefined : REFUSAL_STATUS.exec(row.detail)?.[0];
 
-  return refusal === undefined ? row.state : `${row.state} (${refusal})`;
+  return refusal === undefined ? did : `${did} (${refusal})`;
 }
 
 /** Whether a row is the upload key's, of a key that was not there before the run: made by it, or not read. */
-function isFreshKey(row: { readonly object: string; readonly state: string }): boolean {
-  return row.object === UPLOAD_KEY && row.state !== "present";
+function isFreshKey(row: CommandRow): boolean {
+  return row.object === UPLOAD_KEY && row.state !== "leave";
 }
 
-/** Run the zone plug's repair, the same code the Domain screen runs, and sort its rows into the summary and the lacking things. */
-async function repairZone(run: Run, found: Extract<Found, { readonly kind: "domain" }>, login: string, progress: Progress): Promise<Stop | undefined> {
-  const logins = parseLogins([login]);
-  if (!logins.ok) return { kind: "failed", what: "the first login is no email address" };
-
-  const plug = createDomainPlug({ accountId: run.accountId, script: SCRIPT, layout: found.layout });
-  const settings: DomainSettings = { logins: [...logins.value], outside_pages: "blocked", search_engines_allowed: false, block_bots: "auto" };
-  const reading = await plug.repair(run.connection.key, async () => settings);
-  if (!reading.ok) return { kind: "failed", what: `the zone plug refused the run (${reading.refusal})` };
-
-  return sortRows(run, progress, reading.rows);
-}
-
-/** Sort the rows of a repair into the summary and the lacking things, and answer what stops the run. */
-function sortRows(run: Run, progress: Progress, rows: readonly DomainRow[]): Stop | undefined {
+/** Sort the rows of an install or a repair into the summary and the lacking things, and answer what stops the run. */
+function sortRows(run: Run, progress: Progress, rows: readonly CommandRow[]): Stop | undefined {
   let failed: Stop | undefined;
   let skipped: Stop | undefined;
 
@@ -405,102 +270,87 @@ function sortRows(run: Run, progress: Progress, rows: readonly DomainRow[]): Sto
 
   for (const row of rows) {
     if (SETTLED.has(row.state)) {
-      note(run, progress, { piece: row.object, result: row.state });
+      note(run, progress, { piece: row.object, result: resultOf(row) });
       continue;
     }
 
     const needs = needOf(row);
     const capability = CAPABILITIES[row.object];
-    note(run, progress, { piece: row.object, result: unsettledResult(row), needs });
+    note(run, progress, { piece: row.object, result: resultOf(row), needs });
 
-    if (needs === undefined) failed ??= { kind: "failed", what: `the ${row.object} is ${row.state}` };
+    if (needs === undefined) failed ??= { kind: "failed", what: `the ${row.object} is ${resultOf(row)}` };
 
-    // A vital object the zone holds in another form is left out and may still answer: the wait for the install decides.
-    if (needs !== undefined && VITAL.has(row.object) && row.state !== "left-out") skipped ??= { kind: "skipped", needs };
+    // A vital object the account holds in another form is left out and may still answer: the wait for the install decides.
+    if (needs !== undefined && VITAL.has(row.object) && row.state !== "leave-out") skipped ??= { kind: "skipped", needs };
 
     if (needs !== undefined && capability !== undefined) progress.missing[capability] ??= needs;
   }
 
-  // A failure anywhere outranks a skip: the rows come sorted, so an object that was never reached may stand before the one that failed.
+  // A failure anywhere outranks a skip: the rows come in the order of the work, so an object that was never reached may stand before the one that failed.
   return failed ?? skipped;
 }
 
-/** Make the two forwarders of an install without a domain. A Worker of a forwarder's name that is not poplin's stops the run: the sites of its kind would answer nowhere. */
-async function ensureForwarders(run: Run, layout: AccountAddresses, progress: Progress): Promise<Stop | undefined> {
-  const synced = await syncForwarders(run.connection, run.accountId, layout, "apply");
-  if (!synced.ok) return stopAt(run, progress, "Forwarders", synced, "Workers Scripts: Edit");
-
-  note(run, progress, { piece: "Forwarders", result: countsOf(synced.report) });
-  if (synced.report.skipped.length === 0) return undefined;
-
-  return { kind: "failed", what: `${synced.report.skipped.length} of the 2 forwarders' names are held by a Worker without poplin's tag` };
+/** The stop of a command that came to no rows: its problem's code alone, since its own lines are in the log already. */
+function stopOf(name: string, answer: Exclude<Answer, { readonly kind: "rows" }>): Stop {
+  return { kind: "failed", what: answer.kind === "stopped" ? `poplin ${name} stopped (${answer.problem})` : `poplin ${name} printed no value a run can read (exit ${answer.code})` };
 }
 
 /**
- * Give the Worker of an install without a domain the two keys it keeps, where it holds one that Cloudflare does not list as active and whole.
+ * Take the test install off its account with `poplin uninstall`, the sites' files and the database with it.
  *
- * The keys are read, made, and written by the piece the Domain screen's repair runs; a value goes from Cloudflare onto the Worker and is never printed. A token that may not make a key is a lack the suite skips for.
+ * @param why - what the log says of it: that it was asked for, or what another build made
+ * @returns what stopped the run, or `undefined` once nothing of an install is left; a removal that left a kind stops the run, and the next run removes the rest
  */
-async function ensureKeys(run: Run, progress: Progress): Promise<Stop | undefined> {
-  const reading = await keysMended(run.connection, { script: SCRIPT, accountId: run.accountId, zoneId: undefined, key: undefined, uploadKeyId: undefined, now: undefined });
+async function startOver(run: Run, found: Found, world: World, progress: Progress, why: string): Promise<Stop | undefined> {
+  note(run, progress, { piece: "Start over", result: why });
 
-  return sortRows(run, progress, reading.rows);
-}
+  const words = ["cloudflare", ...placeWords(run, found), "--json"];
+  const listed = await command(run, "uninstall", [...words, "--dry-run"], world.ends);
+  if (listed.kind === "stopped" && listed.problem === NO_INSTALL) {
+    note(run, progress, { piece: "Removal", result: "nothing of an install is there" });
 
-/** Make the account's budget alert, mailed to the run's login, by the call a plug's repair makes. One that is not made is a lack, and stops no run: an install answers without it. */
-async function ensureAlert(run: Run, login: string, progress: Progress): Promise<void> {
-  const synced = await syncAlert(run.connection, run.accountId, BUDGET_ALERT, login, "apply");
-  const { created, changed } = synced.report;
-  if (synced.ok) {
-    const kept = changed.length > 0 ? "changed" : "present";
-    note(run, progress, { piece: ALERT, result: created.length > 0 ? "created" : kept });
-
-    return;
+    return undefined;
   }
 
-  // Only the status of a refusal is told: Cloudflare's words may name the account.
-  const refused = synced.failure === "refused" ? ` (refused with status ${synced.status})` : "";
-  note(run, progress, { piece: ALERT, result: `failed${refused}`, needs: `the token permission for the ${ALERT}` });
-}
+  if (listed.kind !== "rows") return stopOf("uninstall", listed);
 
-/** Make the Worker's Workflow where the deploy left none, by the call the zone plug's repair makes. One that is not made is a lack the suite skips for, and stops no run. */
-async function ensureJobs(run: Run, progress: Progress): Promise<void> {
-  const synced = await syncJobs(run.connection, { accountId: run.accountId, script: SCRIPT }, "apply");
-  const { created, changed, skipped } = synced.report;
+  if (listed.confirm === undefined) return { kind: "failed", what: "poplin uninstall named nothing to confirm a removal with" };
 
-  if (synced.ok && skipped.length === 0) {
-    const kept = changed.length > 0 ? "changed" : "present";
-    note(run, progress, { piece: "Workflow", result: created.length > 0 ? "created" : kept });
+  const began = world.ends.reach.now();
+  const removed = await command(run, "uninstall", [...words, `--confirm=${listed.confirm}`], world.ends);
+  if (removed.kind !== "rows") return stopOf("uninstall", removed);
 
-    return;
-  }
+  for (const row of removed.rows) note(run, progress, { piece: row.object, result: row.count === undefined ? resultOf(row) : `${resultOf(row)} (${row.count} in it)` });
 
-  // Only the status of a refusal is told: Cloudflare's words may name the account.
-  const refused = !synced.ok && synced.failure === "refused" ? ` (refused with status ${synced.status})` : "";
-  note(run, progress, { piece: "Workflow", result: `${synced.ok ? "left out" : "failed"}${refused}`, needs: NO_WORKFLOW });
-  progress.missing.jobs ??= NO_WORKFLOW;
+  const kinds = removed.rows.filter((row) => row.state === "remove").length;
+  note(run, progress, { piece: "Removal", result: `${kinds} kinds in ${Math.round((world.ends.reach.now() - began) / 1000)} seconds` });
+  const left = removed.rows.filter((row) => NOT_REMOVED.has(row.state)).map((row) => row.object);
+
+  return left.length === 0 ? undefined : { kind: "failed", what: `poplin uninstall left the ${left.join(", the ")}` };
 }
 
 /**
- * Make what an install without a domain adds to its deployed Worker: the two forwarders, the two keys it keeps, the account's budget alert, then its Workflow.
+ * Put this commit's build in place of the code a standing install runs, by the upload an install updates itself with: every binding the Worker has is kept, and the run's token stands where the kept key does.
  *
- * @param login - the run's login, which the alert is mailed to
- * @param progress - gathers a row for each, and the things only a zone gives, whose checks the suite is told to skip
- * @returns what stopped the run, or `undefined`; a token that may not make the key stops nothing, and neither does an alert or a Workflow that was not made
+ * @param from - the version the install ran, where the look for it read a released one
+ * @returns what stopped the run, or `undefined` once Cloudflare took the upload and the release's sweep trigger
  */
-export async function settleFreeAddress(run: Run, layout: AccountAddresses, login: string, progress: Progress): Promise<Stop | undefined> {
-  const stopped = (await ensureForwarders(run, layout, progress)) ?? (await ensureKeys(run, progress));
-  if (stopped !== undefined) return stopped;
+async function putCommit(run: Run, world: World, progress: Progress, from: string | undefined): Promise<Stop | undefined> {
+  const { release, ends } = world;
+  const upload = await openUpload({ connection: { ...run.connection, fetch: ends.reach.fetch } }, { accountId: run.accountId, script: SCRIPT });
+  if (!upload.ok) return { kind: "failed", what: `the Worker was not opened for an upload (${upload.refusal})` };
 
-  await ensureAlert(run, login, progress);
-  await ensureJobs(run, progress);
+  const checked = await checkedBundle({ fetch: (url, init) => ends.reach.fetch(url, init) }, release.version, release.pin);
+  if (!checked.ok) return { kind: "failed", what: `this commit's build was not taken as a release (${checked.why})` };
+
+  const put = await upload.value.put(checked.bundle, { from: from ?? release.version, to: release.version, schema: OWN_SCHEMA, at: ends.reach.now() });
+  if (!put.ok) return { kind: "failed", what: `Cloudflare did not take the upload (${put.refusal}${put.refusal === "version_refused" ? `, status ${put.status}` : ""})` };
+
+  if (put.unset !== undefined) return { kind: "failed", what: "Cloudflare took the upload and not the sweep trigger" };
+
+  note(run, progress, { piece: "Worker's code", result: `this commit's build, by the upload of an update (${from ?? "no released version"} -> ${release.version})` });
 
   return undefined;
-}
-
-/** Make what the install's kind adds to its deployed Worker: the zone's objects by the Domain screen's repair, or the forwarders and the keys of an install without a domain. */
-function settleKind(run: Run, found: Found, login: string, progress: Progress): Promise<Stop | undefined> {
-  return found.kind === "domain" ? repairZone(run, found, login, progress) : settleFreeAddress(run, found.layout, login, progress);
 }
 
 /**
@@ -525,24 +375,105 @@ export async function answerOf(asking: Promise<Response>): Promise<{ readonly st
  *
  * An instance of the build before answers that 401 too. The schema is read through Cloudflare's API: a Worker that started on that database left it there, and only then does the database take a token's row.
  */
-async function waitUntilReady(run: Run, found: Found, databaseId: string): Promise<Stop | undefined> {
+async function waitUntilReady(run: Run, found: Found, databaseId: string, world: World): Promise<Stop | undefined> {
   const address = `https://${found.adminHost}/api/whoami`;
-  const deadline = Date.now() + READY.withinMs;
+  const { reach, sleep } = world.ends;
+  const deadline = reach.now() + READY.withinMs;
   let last = { status: 0, told: "0" };
 
-  while (Date.now() < deadline) {
-    last = await answerOf(fetch(address, { redirect: "manual", signal: AbortSignal.timeout(READY.everyMs) }));
+  while (reach.now() < deadline) {
+    last = await answerOf(world.fetch(address, { redirect: "manual", signal: AbortSignal.timeout(READY.everyMs) }));
     const holds = last.status === 401 ? await holdsOwnSchema(run, databaseId) : false;
     if (holds === true) return undefined;
 
     if (holds !== false) return holds;
 
-    await Bun.sleep(READY.everyMs);
+    await sleep(READY.everyMs);
   }
 
   const behind = last.status === 401 ? ", and its database does not hold this commit's schema" : "";
 
   return { kind: "failed", what: `the install did not answer within ${READY.withinMs / 1000} seconds (last status ${last.told})${behind}` };
+}
+
+/** Find the database the install is bound to, and wait until the install answers on it at this commit's schema. */
+async function readyDatabase(run: Run, found: Found, world: World): Promise<string | Stop> {
+  const database = await findDatabase(run);
+  if (database === undefined) return { kind: "failed", what: "the account holds no database of the install" };
+
+  if (typeof database !== "string") return database;
+
+  return (await waitUntilReady(run, found, database, world)) ?? database;
+}
+
+/** Tell when the install's sweep last asked for a newer version: the one thing a run can read of a sweep trigger that fires. It stops no run. */
+async function tellSweep(run: Run, world: World, progress: Progress, database: string): Promise<void> {
+  const asked = await lastAsked(run, database);
+  if (typeof asked === "object") return;
+
+  const minutes = asked === undefined ? undefined : Math.round((world.ends.reach.now() - asked) / 60_000);
+  note(run, progress, { piece: "Sweep", result: minutes === undefined ? "has not asked for a newer version yet" : `last asked for a newer version ${minutes} minutes ago` });
+}
+
+/**
+ * Mend the install that stands: this commit's build in place of its code, `poplin doctor --repair`, then the wait for it.
+ *
+ * The repair comes first, since an install that lost a piece answers nowhere until it is mended. It reads the install's settings from its database and refuses one at another schema than this commit's:
+ * the new Worker brings such a database forward on its first request, so the run then waits for that and repairs again.
+ *
+ * @param standing - the version the install ran, where it is a released one, and whether its database held every schema step of this commit before the upload
+ */
+async function mend(run: Run, found: Found, world: World, progress: Progress, standing: { readonly version: string | undefined; readonly current: boolean }): Promise<Made | Stop> {
+  const uploaded = await putCommit(run, world, progress, standing.version);
+  if (uploaded !== undefined) return uploaded;
+
+  const repair = (): Promise<Answer> => command(run, "repair", ["--repair", ...placeWords(run, found), "--yes", "--json"], world.ends);
+  const first = await repair();
+  const behind = first.kind === "stopped" && first.problem === ANOTHER_VERSION;
+  const forward = behind ? await readyDatabase(run, found, world) : undefined;
+  if (typeof forward === "object") return forward;
+
+  const repaired = behind ? await repair() : first;
+  if (repaired.kind !== "rows") return stopOf("doctor --repair", repaired);
+
+  const stopped = sortRows(run, progress, repaired.rows);
+  if (stopped !== undefined) return stopped;
+
+  const database = forward ?? (await readyDatabase(run, found, world));
+  if (typeof database !== "string") return database;
+
+  await tellSweep(run, world, progress, database);
+
+  return { id: database, strandsOlder: !standing.current };
+}
+
+/**
+ * Bring the account to an install that runs this commit's build: `poplin install` where none is, and the upload and the repair where one is.
+ *
+ * @param login - the first login of an install the run makes
+ * @param current - whether a database that stands held every schema step of this commit
+ * @returns the install's database, and whether the build that ran before is left unable to answer; or what stopped the run
+ */
+async function settle(run: Run, found: Found, login: string, current: boolean, world: World, progress: Progress): Promise<Made | Stop> {
+  const words = ["cloudflare", ...placeWords(run, found), `--login=${login}`, "--yes", "--adopt", "--no-log-in", "--json"];
+  const installed = await command(run, "install", words, world.ends);
+  if (installed.kind === "stopped" && installed.problem === ALREADY_INSTALLED) {
+    // The version is a tag anybody with the account's token can write, so only one written as a release's is told.
+    const version = installed.version !== undefined && isPlainVersion(installed.version) ? installed.version : undefined;
+    note(run, progress, { piece: "Install", result: `found, runs ${version ?? "no released version"}` });
+
+    return mend(run, found, world, progress, { version, current });
+  }
+
+  if (installed.kind !== "rows") return stopOf("install", installed);
+
+  note(run, progress, { piece: "Install", result: "none found, so poplin install ran" });
+  const stopped = sortRows(run, progress, installed.rows);
+  if (stopped !== undefined) return stopped;
+
+  const database = await readyDatabase(run, found, world);
+
+  return typeof database === "string" ? { id: database, strandsOlder: true } : database;
 }
 
 /** Ask the install who the token is, on a connection of its own, and answer the status; 0 for no answer in time. */
@@ -595,10 +526,10 @@ function arrivalOf(arrived: Arrived): string {
  * With a token made for these calls: wait until the install answers it as the new deployment does, give the install its caps, and remove the token's row. A row that stays stops the run as caps that were refused do.
  *
  * @param install - where the install's API answers, what sends a request to it, and the clock and the pause of the wait
- * @param settled - the database the deploy bound, and whether the build before can no longer answer from it
+ * @param settled - the install's database, and whether the build before can no longer answer from it
  * @returns what stopped the run, or `undefined` once the install took its caps and holds no row of the token
  */
-export async function confirmAndCap(run: Run, install: Reached, settled: { readonly id: string; readonly strandsOlder: boolean }, progress: Progress): Promise<Stop | undefined> {
+export async function confirmAndCap(run: Run, install: Reached, settled: Made, progress: Progress): Promise<Stop | undefined> {
   const token = await seedToken(run, settled.id, Date.now());
   if (typeof token !== "string") return token;
 
@@ -614,55 +545,45 @@ export async function confirmAndCap(run: Run, install: Reached, settled: { reado
 }
 
 /** Every step in order; answers what stopped the run, or `undefined` once the install answers. */
-async function converge(run: Run, progress: Progress, env: Environment): Promise<Stop | undefined> {
+async function converge(run: Run, progress: Progress, env: Environment, world: World): Promise<Stop | undefined> {
   const found = await findInstall(run, env);
   if (isStop(found)) return found;
 
   note(run, progress, { piece: FOUND_AS[found.kind], result: "found" });
 
-  const paid = await checkPlans(run, found, progress);
-  if (paid !== undefined) return paid;
+  const refused = (await checkPlans(run, found, progress)) ?? (await refuseOtherAccount(run, found.zone));
+  if (refused !== undefined) return refused;
 
-  const login = liveLogin(run, env) ?? NOBODY;
-  const bucket = await ensureBucket(run);
-  if (typeof bucket !== "string") return bucket;
+  const standing = await readStanding(run);
+  if (isStop(standing)) return standing;
 
-  note(run, progress, { piece: "R2 bucket", result: bucket });
+  const asked = env.POPLIN_LIVE_START_OVER === ASKED ? "asked for" : undefined;
+  const why = standing.drift === undefined ? asked : `another build made it: ${standing.drift}`;
+  const stopped = why === undefined ? undefined : await startOver(run, found, world, progress, why);
+  if (stopped !== undefined) return stopped;
 
-  const database = await syncDatabase(run.connection, run.accountId, "apply");
-  if (!database.ok) return database.failure === "no-id" ? { kind: "failed", what: "Cloudflare named no database" } : stopOf(database, "D1: Edit");
+  const made = await settle(run, found, liveLogin(run, env) ?? NOBODY, why === undefined && standing.current, world, progress);
+  if (isStop(made)) return made;
 
-  if (database.id === undefined) return { kind: "failed", what: "the database has no id" };
+  return confirmAndCap(run, { server: `https://${found.adminHost}`, fetch: world.fetch, now: world.ends.reach.now, pause: world.ends.sleep }, made, progress);
+}
 
-  run.hide(database.id);
-  const settled = await settleDatabase(run, database.id);
-  if (isStop(settled)) return settled;
+/** The world of a real run: this commit's build as the release, the network as it is, and the clock. */
+async function ownWorld(): Promise<World> {
+  const release = await publish(await readBuilt());
 
-  note(run, progress, { piece: "Database", result: settled.result });
-
-  const access = await ensureAccess(run, found, login, progress);
-  if (isStop(access)) return access;
-
-  const deployed = await deployWorker(run, await workerConfig(run, found, { databaseId: settled.id, access, login }));
-  if (deployed !== undefined) return deployed;
-
-  note(run, progress, { piece: "Worker", result: "deployed" });
-
-  const unready = (await settleKind(run, found, login, progress)) ?? (await waitUntilReady(run, found, settled.id));
-  if (unready !== undefined) return unready;
-
-  return confirmAndCap(run, { server: `https://${found.adminHost}`, fetch: sendLive, now: Date.now, pause: Bun.sleep }, settled, progress);
+  return { release, ends: { reach: reachOf(release, fetch), sleep: Bun.sleep }, fetch: sendLive };
 }
 
 /**
- * Make the install match main, and tell the log, the step summary, and the step's output what came of it.
+ * Make the install match the commit, and tell the log, the step summary, and the step's output what came of it.
  *
- * @param env - where the zone's name and the login are read from: the same variables the run was opened from
+ * @param env - where the zone's name, the login, and the asking for a start-over are read from: the same variables the run was opened from
  * @returns the exit code: 0 only once the install answers
  */
-export async function convergeInstall(run: Run, env: Environment): Promise<number> {
+export async function convergeInstall(run: Run, env: Environment, world: World): Promise<number> {
   const progress: Progress = { pieces: [], missing: {} };
-  const stopped = await converge(run, progress, env);
+  const stopped = await converge(run, progress, env, world);
   const rows = progress.pieces.map((piece) => `| ${piece.piece} | ${piece.result} | ${piece.needs ?? ""} |`);
 
   run.summarize(["### The test install", "", "| Piece | Result | Skipped: needs |", "| --- | --- | --- |", ...rows, ""].join("\n"));
@@ -677,4 +598,4 @@ export async function convergeInstall(run: Run, env: Environment): Promise<numbe
   return 0;
 }
 
-if (import.meta.main) process.exitCode = await convergeInstall(openRun(), process.env);
+if (import.meta.main) process.exitCode = await convergeInstall(openRun(), process.env, await ownWorld());

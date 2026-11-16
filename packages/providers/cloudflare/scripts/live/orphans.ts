@@ -14,8 +14,12 @@ import { BaseObjects } from "cloudflare/resources/r2/buckets/objects";
 import * as v from "valibot";
 
 import { callCloudflare, type Zone } from "../../src/shared/install/client";
+import { INSTALL_OBJECTS } from "../../src/shared/install/install-objects";
 import { refuseOtherAccount } from "./test-account";
-import { BUCKET, isStop, type Run, type Stop, stopOf } from "./util";
+import { isStop, type Run, type Stop, stopOf } from "./util";
+
+/** The install's bucket: the one the product's install makes. */
+const BUCKET = INSTALL_OBJECTS.bucket;
 
 /** The most objects one list of the bucket answers. */
 const PAGE = 1000;
