@@ -1,20 +1,17 @@
-// The users carried to Cloudflare with the key poplin keeps: the policy that lets the logins through is written, then the budget alert is sent to the first of them, where the account has one.
+// The users carried to Cloudflare with the key poplin keeps: the policy that lets the logins through is written, then the budget alert is sent to the first of them.
 //
 //   the policy          every login, under "Access: Apps and Policies Write"   an account with no such policy answers `not_made`, and nothing is written
-//   the budget alert    the first login, under "Notifications Write"           an account with no such alert is left with none
+//   the budget alert    the first login, under "Notifications Write"           an account with no such alert gets one
 //
 // No application is read or changed, and no answer carries the key or a text Cloudflare sent.
 
 import type { UsersFollow } from "@poplin/app/src/console/access/users-follow";
 import { writeLogins } from "../pieces/access/access";
-import { sendBudgetAlertTo } from "../pieces/alerts/budget-alert";
+import { keepBudgetAlert } from "../pieces/alerts/budget-alert";
 import { type KeptKey, keyed } from "./kept-key";
 
 /** Cloudflare's name of the right the policy is written under. */
 const POLICY_RIGHT = "Access: Apps and Policies Write";
-
-/** Cloudflare's name of the right the alert is read and written under. */
-const ALERT_RIGHT = "Notifications Write";
 
 /**
  * Make the install's way to carry its users to Cloudflare.
@@ -38,7 +35,7 @@ export function createUsersFollow(key: KeptKey | undefined, accountId: string): 
 
       if (first === undefined) return { ok: true };
 
-      const sent = await keyed(key, ALERT_RIGHT, (connection) => sendBudgetAlertTo(connection, accountId, first));
+      const sent = await keepBudgetAlert(key, accountId, first);
 
       return sent.ok ? { ok: true } : { ok: false, refusal: sent.refusal, written: true };
     },

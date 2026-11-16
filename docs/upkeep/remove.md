@@ -59,7 +59,7 @@ Go from the top row down: what points at the Worker goes first, then the Worker,
 - **The Worker** takes its values, its 15-minute timer, and its `workers.dev` address with it.
 - **Without a domain** the first five rows do not exist. Two more Workers do, `poplin-sites` and `poplin-private`: delete them under Workers & Pages, before the Worker `poplin`.
 - **The bucket** holds every site's files. If Cloudflare asks for an empty bucket, empty it there, then delete it.
-- **The budget alert** is there when a Repair's token held [Notifications: Edit](../dashboard/domain.md#optional-an-email-when-charges-reach-1-dollar), on an install of either kind.
+- **The budget alert** is there where the install's key or a Repair made it, on an install of either kind: [Domain](../dashboard/domain.md#optional-an-email-when-charges-reach-1-dollar) says when.
 - **The two keys** are there from the first Repair, on an install of either kind. They are tokens the account owns, and they stay when the Worker is deleted. A key that ran out is still in the list.
 
 **Two bot switches** belong to the whole domain and carry no name. Repair can switch them on, with a token that held Bot Management: Edit. Repair never switches one off, and removing the rest leaves them on: switch them off in the domain's bot settings.

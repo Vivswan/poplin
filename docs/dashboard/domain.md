@@ -84,7 +84,7 @@ On an install [without a domain](../start/without-a-domain.md) the screen is the
 | Key                | [the key poplin keeps](../about/security.md#the-kept-key)              |
 | Upload key         | [the key that sends files straight to the bucket](../about/security.md#the-upload-key) |
 | D1 database        | the database of the install                                            |
-| Budget alert       | [the email when charges reach 1 dollar](#optional-an-email-when-charges-reach-1-dollar): `optional` until its permission is on the token |
+| Budget alert       | [the email when charges reach 1 dollar](#optional-an-email-when-charges-reach-1-dollar): `optional` until the key or a Repair made it |
 | Workflow           | what runs the install's background jobs: the copy of a large site      |
 
 It has no DNS record, route, or rule, and its account token needs no permission of a zone. The optional rules below are of an install under a domain alone. The optional email is of both kinds.
@@ -159,10 +159,20 @@ Three settings save without these permissions. The dashboard has them in Setting
 
 ## Optional: an email when charges reach 1 dollar
 
-One more permission on the account token lets Repair make a budget alert in your Cloudflare account, on an install under a domain and on one without. Add it the same way, in the three steps above.
+Cloudflare emails your first user when the account's usage charges for the billing period reach 1 US dollar. The install makes that budget alert by itself, with [the key it keeps](../about/security.md#the-kept-key), under a domain and without one:
 
-| First box | Second box    | Third box | With it, Cloudflare                                                                              | Without it         |
-| --------- | ------------- | --------- | ------------------------------------------------------------------------------------------------ | ------------------ |
-| Account   | Notifications | Edit      | emails your first user when the account's usage charges for the billing period reach 1 US dollar | Repair makes no alert, and leaves one it made |
+| When                                   | The install                                                         |
+| -------------------------------------- | ------------------------------------------------------------------- |
+| a user is added or removed             | makes the alert where the account has none, and sends it to the first user |
+| the first clean-up run of each UTC day | the same                                                            |
+| it holds no key, or one Cloudflare no longer takes | makes none: press Repair, which makes a key             |
+
+One more permission on the account token lets Repair make the alert at once. Add it the same way, in the three steps above.
+
+| First box | Second box    | Third box | With it, Repair                                      | Without it                                                        |
+| --------- | ------------- | --------- | ---------------------------------------------------- | ----------------------------------------------------------------- |
+| Account   | Notifications | Edit      | makes the alert, and sends it to your first user     | makes no alert, and leaves one that is there. Its row says `optional` |
 
 The alert is named `poplin: usage charges reached 1 dollar`, under Notifications in Cloudflare. It counts the whole account's charges, and it stops nothing. [Limits and cost](../upkeep/cost/what-can-cost-money.md) says what can cost money.
+
+A key that may not make the alert shows in a check: the row `Budget alert` says `failed`, with the right and `Press Repair.`
