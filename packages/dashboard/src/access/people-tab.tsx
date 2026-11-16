@@ -23,7 +23,7 @@ const COLUMNS: readonly ColumnSpec<Person>[] = [
 /** The question before every login is ended. */
 const SIGN_OUT: Question = {
   title: "Sign everyone out?",
-  says: "Everyone is logged out of the dashboard and of private sites, you too. Each one logs in again.",
+  says: "Everyone is signed out of the dashboard and of private sites, you too. Each one logs in again.",
   yes: "Sign everyone out",
   removes: true,
 };

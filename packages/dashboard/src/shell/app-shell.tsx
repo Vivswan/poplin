@@ -54,7 +54,7 @@ const SKIP_LOOK = "pointer-events-none absolute top-2 left-2 z-50 opacity-0 focu
 const EMAIL_AT_REST = "blur-xs transition-[filter] hover:blur-none focus-visible:blur-none focus-visible:ring-2 focus-visible:ring-ring pointer-coarse:focus:blur-none";
 
 /** What the way out of this browser's login is called. */
-const LOG_OUT = "Log out";
+const SIGN_OUT = "Sign out";
 
 /** The console's path that sends a browser on to where the provider ends its login. */
 const OUT_PATH = "/out";
@@ -132,7 +132,7 @@ function Account(): ReactNode {
     <div className="flex items-start gap-1">
       <Email className="px-2.5 py-1" />
       <Button variant="link" size="xs" nativeButton={false} className="mt-1 mr-2.5 ml-auto h-4 px-0 text-muted-foreground" render={<Link to={OUT_PATH} reloadDocument {...NO_OWN_MARK} />}>
-        {LOG_OUT}
+        {SIGN_OUT}
       </Button>
     </div>
   );

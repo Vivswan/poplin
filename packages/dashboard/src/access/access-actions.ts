@@ -12,7 +12,7 @@ const DECIDED = {
 } as const;
 
 /** What a sign-out of everyone says once it is done: the login in front takes some seconds to ask again, and the page works until then. */
-const SIGNED_OUT = "Everyone is logged out. This can take a few seconds.";
+const SIGNED_OUT = "Everyone is signed out. This can take a few seconds.";
 
 /** How long after a login is allowed its computer has surely asked for its token, in milliseconds: it asks every five seconds. */
 const COLLECTED_AFTER_MS = 6000;
