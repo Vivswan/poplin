@@ -178,22 +178,22 @@ export const ENTRY_ROWS: readonly BudgetRow[] = [
   // The least a request costs: late in a busy day, one that is no sample of it is written nowhere.
   view("public site: a script, warm instance, not counted", { queries: 1, written: 0, reads: 1, writes: 0 }, { path: "/app.js", uncounted: true }, 200, "warm"),
   // An instance's first request for a site, over a minute after it last read the settings: it reads both. So is every view below that names no start.
-  view("public site: the page, the instance's first request for the site", { queries: 4, reads: 1, writes: 0 }, { path: "/" }, 200),
-  view("public site: a script", { queries: 4, reads: 1, writes: 0 }, { path: "/app.js" }, 200),
+  view("public site: the page, the instance's first request for the site", { queries: 3, reads: 1, writes: 0 }, { path: "/" }, 200),
+  view("public site: a script", { queries: 3, reads: 1, writes: 0 }, { path: "/app.js" }, 200),
   // Worst hit: a path without an extension is no file's own key, so it is looked for under a second one, where the folder's page is.
-  view("public site: a page under a folder", { queries: 4, reads: 2, writes: 0 }, { path: "/about" }, 200),
+  view("public site: a page under a folder", { queries: 3, reads: 2, writes: 0 }, { path: "/about" }, 200),
   // Worst miss: the keys the path could be under hold nothing, and then the site's own page for a missing file is read. Three calls: the most serving ever makes.
-  view("public site: no such file, the site's own 404 page", { queries: 4, reads: 3, writes: 0 }, { path: "/nothing" }, 404),
-  view("public site: no such file, no 404 page", { queries: 4, reads: 2, writes: 0 }, { path: "/nothing", bare: true }, 404),
-  view("public site: part of a page under a folder", { queries: 4, reads: 2, writes: 0 }, { path: "/about", headers: { Range: "bytes=0-3" } }, 206),
-  view("public site: HEAD of no such file", { queries: 4, reads: 3, writes: 0 }, { path: "/nothing", method: "HEAD" }, 404),
+  view("public site: no such file, the site's own 404 page", { queries: 3, reads: 3, writes: 0 }, { path: "/nothing" }, 404),
+  view("public site: no such file, no 404 page", { queries: 3, reads: 2, writes: 0 }, { path: "/nothing", bare: true }, 404),
+  view("public site: part of a page under a folder", { queries: 3, reads: 2, writes: 0 }, { path: "/about", headers: { Range: "bytes=0-3" } }, 206),
+  view("public site: HEAD of no such file", { queries: 3, reads: 3, writes: 0 }, { path: "/nothing", method: "HEAD" }, 404),
   // The icon is poplin's own, answered from the Worker once the bucket has said the site holds none.
-  view("public site: the default icon", { queries: 4, reads: 1, writes: 0 }, { path: "/favicon.ico", bare: true }, 200),
-  view("public site: the page, new instance", { queries: 8, reads: 1, writes: 0 }, { path: "/" }, 200, "new"),
+  view("public site: the default icon", { queries: 3, reads: 1, writes: 0 }, { path: "/favicon.ico", bare: true }, 200),
+  view("public site: the page, new instance", { queries: 5, reads: 1, writes: 0 }, { path: "/" }, 200, "new"),
   // A page carries the tag of its site's live version, so a browser that holds it is answered with no read of the bucket.
-  again("public site: the page again, unchanged", { queries: 4, reads: 0, writes: 0 }, "/"),
+  again("public site: the page again, unchanged", { queries: 3, reads: 0, writes: 0 }, "/"),
   // Any other file carries its own tag: the bucket is asked once with it, and opens no body.
-  again("public site: a script again, unchanged", { queries: 4, reads: 1, writes: 0 }, "/app.js"),
+  again("public site: a script again, unchanged", { queries: 3, reads: 1, writes: 0 }, "/app.js"),
   {
     group: VIEW,
     name: "unlisted site: the page",
@@ -204,13 +204,13 @@ export const ENTRY_ROWS: readonly BudgetRow[] = [
       return (measured) => get(measured, `${under(site, "u")}/`);
     },
     status: 200,
-    budget: { queries: 4, reads: 1, writes: 0 },
+    budget: { queries: 2, reads: 1, writes: 0 },
   },
   // The common view: the instance served the site a moment ago, and holds the keys the login is checked against.
   privateView("private site: the page, logged in, warm instance", { queries: 2, reads: 1, writes: 0 }, { start: "warm", guide: "A visitor opens a page of a private site" }),
-  privateView("private site: the page, logged in, the instance's first request for the site", { queries: 4, reads: 1, writes: 0 }),
+  privateView("private site: the page, logged in, the instance's first request for the site", { queries: 3, reads: 1, writes: 0 }),
   // The start of the instance adds its queries to the page's.
-  privateView("private site: the page, logged in, new instance", { queries: 8, reads: 1, writes: 0 }, { start: "new" }),
+  privateView("private site: the page, logged in, new instance", { queries: 5, reads: 1, writes: 0 }, { start: "new" }),
   {
     group: VIEW,
     name: "private site: the page, not logged in",
@@ -229,7 +229,7 @@ export const ENTRY_ROWS: readonly BudgetRow[] = [
     // An address in the form of a site's that names none is sent to the address behind the login, as a private site's is: it tells nobody whether the id exists.
     arrange: async () => (measured) => get(measured, "https://nothing--zzzzzzzzzzzz-u-poplin.example.com/"),
     status: 302,
-    budget: { queries: 2, reads: 0, writes: 0 },
+    budget: { queries: 1, reads: 0, writes: 0 },
   },
   {
     group: SCREEN,
@@ -254,7 +254,7 @@ export const ENTRY_ROWS: readonly BudgetRow[] = [
       return (measured) => get(measured, `${ADMIN}/login`, headers);
     },
     status: 302,
-    budget: { queries: 6, reads: 0, writes: 0 },
+    budget: { queries: 4, reads: 0, writes: 0 },
   },
   {
     group: SCREEN,
@@ -282,7 +282,7 @@ export const ENTRY_ROWS: readonly BudgetRow[] = [
       return (measured) => get(measured, `${ADMIN}/data/sites`, session);
     },
     status: 200,
-    budget: { queries: 6, reads: 0, writes: 0 },
+    budget: { queries: 4, reads: 0, writes: 0 },
   },
   {
     group: SCREEN,
@@ -297,7 +297,7 @@ export const ENTRY_ROWS: readonly BudgetRow[] = [
       return (measured) => get(measured, `${ADMIN}/data/activity/download?part=1`, session);
     },
     status: 200,
-    budget: { queries: 8, reads: 0, writes: 0 },
+    budget: { queries: 6, reads: 0, writes: 0 },
   },
   {
     group: BACKGROUND,
@@ -310,7 +310,7 @@ export const ENTRY_ROWS: readonly BudgetRow[] = [
       return (measured) => get(measured, `${ADMIN}/api/whoami`);
     },
     status: 401,
-    budget: { queries: 6, read: 54, reads: 0, writes: 0 },
+    budget: { queries: 6, read: 57, reads: 0, writes: 0 },
   },
   {
     group: BACKGROUND,
@@ -319,7 +319,7 @@ export const ENTRY_ROWS: readonly BudgetRow[] = [
     // What a start adds to any request: the schema's step read, the settings, and the signing key.
     arrange: async () => (measured) => get(measured, `${ADMIN}/api/whoami`),
     status: 401,
-    budget: { queries: 4, read: 58, reads: 0, writes: 0 },
+    budget: { queries: 2, read: 3, reads: 0, writes: 0 },
   },
   {
     group: BACKGROUND,
@@ -332,7 +332,7 @@ export const ENTRY_ROWS: readonly BudgetRow[] = [
       return run(false);
     },
     status: undefined,
-    budget: { queries: 14, reads: 0, writes: 0 },
+    budget: { queries: 6, reads: 0, writes: 0 },
   },
   {
     group: BACKGROUND,
@@ -346,6 +346,6 @@ export const ENTRY_ROWS: readonly BudgetRow[] = [
       return run(true);
     },
     status: undefined,
-    budget: { queries: 36, reads: 0, writes: 75, deletes: 75 },
+    budget: { queries: 24, reads: 0, writes: 75, deletes: 75 },
   },
 ];

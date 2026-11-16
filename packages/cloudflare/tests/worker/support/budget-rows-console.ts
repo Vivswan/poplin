@@ -147,7 +147,7 @@ export const CONSOLE_ROWS: readonly BudgetRow[] = [
       return (measured) => data(measured, session, `/sites/${LABEL}`);
     },
     status: 200,
-    budget: { queries: 4, reads: 0, writes: 0 },
+    budget: { queries: 2, reads: 0, writes: 0 },
   },
   {
     group,
@@ -183,7 +183,7 @@ export const CONSOLE_ROWS: readonly BudgetRow[] = [
       return (measured) => post(measured, `/data/sites/${LABEL}/delete-for-good`, {}, session);
     },
     status: 200,
-    budget: { queries: 8, reads: 0, writes: 2, deletes: 2 },
+    budget: { queries: 7, reads: 0, writes: 2, deletes: 2 },
   },
   {
     group,
