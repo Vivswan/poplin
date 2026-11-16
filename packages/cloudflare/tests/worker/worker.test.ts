@@ -818,6 +818,9 @@ describe("the admin hostname", () => {
       "one site: the site, its views, and who published it": await asked(`/data/sites/${site.label}`),
       "a change to one site: the session, the settings with the site, the change": await counted(() => send(worker, `${ADMIN}/data/sites/${site.label}/naming`, { title: "Report" }, session)),
       "one site through the API: the token, the settings with the site, its views": await counted(() => ask(worker, `${ADMIN}/api/sites/${site.id}`, { headers: { Authorization: `Bearer ${token}` } })),
+      "an access and a title set together through the API: the token, the site, the one change": await counted(() =>
+        ask(worker, `${ADMIN}/api/sites/${site.id}`, { method: "PATCH", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" }, body: JSON.stringify({ access: "unlisted", title: "Both" }) }),
+      ),
     }).toEqual({
       "an address that asks nothing but who is there": [200, 1],
       "the people, who are in the settings the session read": [200, 1],
@@ -828,6 +831,7 @@ describe("the admin hostname", () => {
       "one site: the site, its views, and who published it": [200, 2],
       "a change to one site: the session, the settings with the site, the change": [200, 3],
       "one site through the API: the token, the settings with the site, its views": [200, 2],
+      "an access and a title set together through the API: the token, the site, the one change": [200, 3],
     });
   });
 
@@ -930,8 +934,8 @@ describe("the audit log as a file", () => {
 describe("a copy of a site", () => {
   // Drift: the Free plan ends a request past 50 queries of the database, 2 of them made by a request that starts an instance, and bounds the bucket apart. A copy that counts its own calls alone passes 50 on a new instance.
   test.each([
-    [130, 2, { database: [9, 11], bucket: [225, 225] }],
-    [1_001, 10, { database: [9, 11], bucket: [228, 228] }],
+    [130, 2, { database: [8, 10], bucket: [225, 225] }],
+    [1_001, 10, { database: [8, 10], bucket: [228, 228] }],
   ])(
     "of %i files takes %i requests through the API, and the request that makes the most calls stays under 44 to the database and 250 to the bucket, on an instance that runs and on one each request starts",
     async (count, requests, most) => {

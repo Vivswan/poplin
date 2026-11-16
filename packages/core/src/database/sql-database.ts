@@ -47,6 +47,7 @@ import type {
   LeftoversPage,
   LoginDecision,
   LoginRoom,
+  MadeWith,
   NewSite,
   NewUpload,
   NewVersion,
@@ -112,29 +113,25 @@ import {
 } from "./login-statements";
 import {
   A_KEPT_VERSION,
-  DEFAULT_DIRECTIONS,
   LATER_FIELDS,
   LATER_SITE,
-  LISTED_FIELDS,
   NAMED_FIELDS,
   NAMED_SITE,
   OTHER,
   SHOWN_BESIDE,
   SITE_FIELDS,
-  TITLE_KEY,
   VERSION_COLUMNS,
-  cursorPlace,
   dropOldVersions,
   insertSite,
   isFirstPending,
   isFree,
   keepEarlierId,
   moveLive,
-  narrowing,
+  pageAsked,
+  pageIn,
   pageWithBeside,
   publicNameIsFree,
   publicNameOf,
-  requireCursor,
   servedSite,
   setAccess,
   siteById,
@@ -267,43 +264,6 @@ function requestsOf(day: string, site: string): Statement {
   return built(BUILD.select({ requests: requestCounts.requests }).from(requestCounts).where(and(eq(requestCounts.day, day), eq(requestCounts.site, site))));
 }
 
-/**
- * One page of a listing as a query: one row more than the page, which shows whether another page follows. Each row names what the page is ordered by `listed_by`.
- *
- * @throws {RangeError} the limit is no page's, or the cursor lacks what its order goes by
- */
-function pageAsked(query: SitesQuery) {
-  requirePage(query.limit);
-  requireCursor(query);
-
-  // The trash is listed by when each site went there, the sites by when their content last changed.
-  const moment = query.trash ? sites.trashed_at : sites.updated_at;
-  const sort = query.sort ?? "updated";
-  const descending = (query.dir ?? DEFAULT_DIRECTIONS[sort]) === "desc";
-  const column = { updated: fragment`${moment}`, name: fragment`${sites.name}`, access: fragment`${sites.access_rank}`, title: fragment`${sites.title_key}` }[sort];
-  const conditions = narrowing(query);
-
-  if (query.after !== undefined) conditions.push(fragment`(${column}, ${sites.id}) ${descending ? fragment`<` : fragment`>`} (${cursorPlace(query.after, sort)}, ${query.after.id})`);
-
-  const fields = { ...LISTED_FIELDS, listed_by: column.as("listed_by") };
-  const page = BUILD.select(fields).from(sites).where(and(...conditions)).orderBy(descending ? desc(column) : asc(column), descending ? desc(sites.id) : asc(sites.id)).limit(query.limit + 1);
-
-  return { page, descending };
-}
-
-/** The page a listing's statement answered: its sites, and where the page after it starts when one follows. */
-function pageIn(listed: StatementResult | undefined, query: SitesQuery): SitesPage {
-  const rows = (listed?.rows ?? []).slice(0, query.limit);
-  const listedSites = rows.map(siteFromRow);
-  const last = listedSites.at(-1);
-  if (last === undefined || (listed?.rows.length ?? 0) <= query.limit) return { sites: listedSites };
-
-  // The key is read as the engine holds it: cut and lowered here, it could differ from the one the order goes by.
-  const listedBy = { updated: {}, name: { name: last.name }, access: { access: last.access }, title: { title: v.parse(TITLE_KEY, rows.at(-1)).title_key } }[query.sort ?? "updated"];
-
-  return { sites: listedSites, next: { updated_at: last.state === "trash" ? last.trashed_at : last.updated_at, id: last.id, ...listedBy } };
-}
-
 function requirePage(limit: number): void {
   if (!Number.isSafeInteger(limit) || limit < 1 || limit > MAX_PAGE) throw new RangeError(`a page holds 1 to ${MAX_PAGE} rows, not ${limit}`);
 }
@@ -340,6 +300,34 @@ function unreachable(site: Site | undefined): Refused<"not_found" | "in_trash"> 
   if (site.state === "trash") return { kind: "in_trash" };
 
   return undefined;
+}
+
+/**
+ * The update of a live site's details that changes a row only where a detail differs, with the details as they were checked; `undefined` when no detail is asked.
+ *
+ * @param also - a further condition the site must meet
+ * @throws {Error} a detail breaks its field rule
+ */
+function detailsUpdate(id: SiteId, details: SiteDetails, also?: SQL): { readonly update: Statement; readonly given: Readonly<Record<string, unknown>> } | undefined {
+  const given = v.parse(SITE_DETAILS, details);
+  const stored = storedDetails(given);
+  const columns = Object.keys(stored) as (keyof typeof stored)[];
+  if (columns.length === 0) return undefined;
+
+  const differs = or(...columns.map((column) => fragment`${sites[column]} IS NOT ${stored[column] ?? null}`));
+
+  return { update: built(BUILD.update(sites).set(stored).where(and(eq(sites.id, id), eq(sites.trashed, 0), also, differs))), given };
+}
+
+/** What an access asked for a site comes to when it changed no row, from the read of the site after: there is none, it sits in the trash, it has that access already, or its public name is taken. */
+function accessLeft(after: StatementResult | undefined, access: SiteAccess): Unchanged | Refused<"not_found" | "in_trash" | "name_taken"> {
+  const site = siteIn(after);
+  const refusal = unreachable(site);
+  if (site === undefined || refusal !== undefined) return refusal ?? { kind: "not_found" };
+
+  if (site.access === access.access && publicNameOf(site) === publicNameOf(access)) return { kind: "unchanged", site };
+
+  return { kind: "name_taken" };
 }
 
 function uploadIn(result: StatementResult | undefined): Upload | undefined {
@@ -510,12 +498,14 @@ export class SqlDatabase implements Database {
   }
 
   async listSites(query: SitesQuery): Promise<SitesPage> {
+    requirePage(query.limit);
     const [listed] = await this.#driver.batch([built(pageAsked(query).page)]);
 
     return pageIn(listed, query);
   }
 
   async listShownSites(query: SitesQuery, shown: SitesShown): Promise<ShownSitesPage> {
+    requirePage(query.limit);
     requireDay(shown.day);
     const { page, descending } = pageAsked(query);
     const [stored, listed] = await this.#driver.batch([READ_SETTINGS, pageWithBeside(fragment`${page}`, shown, descending)]);
@@ -534,26 +524,32 @@ export class SqlDatabase implements Database {
       auditOfSite(signed, "access", id, { access: access.access, public_name: publicName }),
       siteById(id),
     ]);
-    if (changed(updated)) return done(after);
 
-    const site = siteIn(after);
-    const refusal = unreachable(site);
-    if (site === undefined || refusal !== undefined) return refusal ?? { kind: "not_found" };
+    return changed(updated) ? done(after) : accessLeft(after, access);
+  }
 
-    if (site.access === access.access && publicNameOf(site) === publicName) return { kind: "unchanged", site };
+  async changeAccessAndDetails(id: SiteId, access: SiteAccess, details: SiteDetails, signed: Signed): Promise<Done | Unchanged | Refused<"not_found" | "in_trash" | "name_taken">> {
+    const publicName = publicNameOf(access);
+    // The details change only once the site has the access asked, which the statement before them gave it or it had.
+    const asked = detailsUpdate(id, details, and(eq(sites.access, access.access), fragment`${sites.public_name} IS ${publicName}`));
+    if (asked === undefined) return this.changeAccess(id, access, signed);
 
-    return { kind: "name_taken" };
+    const [opened, , detailed, , after] = await this.#driver.batch([
+      setAccess(id, access.access, publicName),
+      auditOfSite(signed, "access", id, { access: access.access, public_name: publicName }),
+      asked.update,
+      auditOfSite(signed, "details", id, asked.given),
+      siteById(id),
+    ]);
+
+    return changed(opened) || changed(detailed) ? done(after) : accessLeft(after, access);
   }
 
   async changeDetails(id: SiteId, details: SiteDetails, signed: Signed): Promise<Done | Unchanged | Refused<"not_found" | "in_trash">> {
-    const given = v.parse(SITE_DETAILS, details);
-    const stored = storedDetails(given);
-    const columns = Object.keys(stored) as (keyof typeof stored)[];
-    if (columns.length === 0) return this.#unchanged(id);
+    const asked = detailsUpdate(id, details);
+    if (asked === undefined) return this.#unchanged(id);
 
-    const differs = or(...columns.map((column) => fragment`${sites[column]} IS NOT ${stored[column] ?? null}`));
-    const update = BUILD.update(sites).set(stored).where(and(eq(sites.id, id), eq(sites.trashed, 0), differs));
-    const [updated, , after] = await this.#driver.batch([built(update), auditOfSite(signed, "details", id, given), siteById(id)]);
+    const [updated, , after] = await this.#driver.batch([asked.update, auditOfSite(signed, "details", id, asked.given), siteById(id)]);
     if (changed(updated)) return done(after);
 
     return this.#unchangedIn(after);
@@ -835,8 +831,8 @@ export class SqlDatabase implements Database {
     return { upload, file: fileUnderKey(stored, path) };
   }
 
-  publishUploadAsSite(id: UploadId, draft: NewSite, signed: Signed, contents?: VersionContents): Promise<Done | Refused<"name_taken" | "not_pending">> {
-    return this.#insertSite(draft, signed, { upload: id, contents });
+  publishUploadAsSite(id: UploadId, draft: NewSite, signed: Signed, made: MadeWith = {}): Promise<Done | Refused<"name_taken" | "not_pending">> {
+    return this.#insertSite(draft, signed, { ...made, upload: id });
   }
 
   async publishUploadAsVersion(
@@ -1425,7 +1421,7 @@ export class SqlDatabase implements Database {
   }
 
   /** Make a site under a fresh id; with `upload`, only while that upload is pending, and marking it finished in the same step. */
-  async #insertSite(draft: NewSite, signed: Signed, from: { readonly upload?: UploadId; readonly contents?: VersionContents }): Promise<Done | Refused<"name_taken" | "not_pending">> {
+  async #insertSite(draft: NewSite, signed: Signed, from: MadeWith & { readonly upload?: UploadId }): Promise<Done | Refused<"name_taken" | "not_pending">> {
     const { upload } = from;
     const site = v.parse(NEW_SITE, draft);
     const [missingPage, bareFiles] = contentsValues(from.contents);
@@ -1438,15 +1434,20 @@ export class SqlDatabase implements Database {
 
     for (let attempt = 0; attempt < MINT_ATTEMPTS; attempt += 1) {
       const id = this.#mintId();
-      const [inserted, , , , taken, made, waiting] = await this.#driver.batch([
+      // A copy's second entry follows the first, so it is written only when the site was made, and the upload is finished only after both.
+      const copied = from.copiedFrom === undefined ? [] : [auditOfSite(signed, "duplicate", id, { from: from.copiedFrom })];
+      const answers = await this.#driver.batch([
         insertSite(id, site, signed, upload),
         built(size),
         auditOfSite(signed, "create", id, detail),
+        ...copied,
         finishUpload(upload ?? null),
         written(held),
         siteById(id),
         uploadById(upload ?? null),
       ]);
+      const [inserted] = answers;
+      const [taken, made, waiting] = answers.slice(-3);
       if (changed(inserted)) return done(made);
 
       if (upload !== undefined && uploadIn(waiting)?.state !== "pending") return { kind: "not_pending" };

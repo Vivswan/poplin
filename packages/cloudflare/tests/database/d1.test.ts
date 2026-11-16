@@ -190,6 +190,9 @@ const ROWS: Readonly<Record<string, readonly [read: number, written: number]>> =
   "changeAccess": [8, 5],
   "changeAccess, the same": [7, 0],
   "changeAccess, name taken": [7, 0],
+  "changeAccessAndDetails": [10, 4],
+  "changeAccessAndDetails, the same": [10, 0],
+  "publishUploadAsSite, a copy": [17, 20],
   "changeDetails": [6, 4],
   "changeDetails, the same": [6, 0],
   "listAudit": [20, 0],
@@ -826,6 +829,10 @@ describe("D1: the rows every operation of the database costs of a day's allowanc
     await cost("keepDomainCheck, 200 pieces over the run before", () => database.keepDomainCheck({ ran_at: NOW + 1, by: BY_ADA.by, run: "repair", pieces }, { run: "repair" }));
     await cost("readDomainCheck", () => database.readDomainCheck());
     await cost("readFrame", () => database.readFrame());
+    await cost("changeAccessAndDetails", () => database.changeAccessAndDetails(first.id, { access: "unlisted" }, { title: "Both" }, BY_ADA));
+    await cost("changeAccessAndDetails, the same", () => database.changeAccessAndDetails(first.id, { access: "unlisted" }, { title: "Both" }, BY_ADA));
+    const copy = await begunSite(database, site(900));
+    await cost("publishUploadAsSite, a copy", () => database.publishUploadAsSite(copy.id, { ...copy.site, bytes: 1000, files: 2 }, BY_ADA, { copiedFrom: first.id }));
 
     // The logins change after every read of the log, so that the entries they write are read by no page of it above.
     const person = "bo@example.com" as Login;
